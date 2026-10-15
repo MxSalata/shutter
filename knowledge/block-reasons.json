@@ -1,6 +1,6 @@
 {
   "id": "block-reasons",
-  "version": "1.0",
+  "version": "1.1",
   "effective_from": "2026-10-15",
   "applies_to": ["ward-api-v1", "hl7-v2.5.1-adt"],
   "roles": {
@@ -182,6 +182,24 @@
       "text": "Something was applied to the encounter after the approval, or the ward was reset, so the approved request may no longer be right."
     },
     {
+      "code": "APPROVAL_RECEIVER_RESET",
+      "title": "The ward was reset after approval",
+      "prerequisite": "The ward epoch the approval was bound to",
+      "next_action": "Collect fresh evidence: after a reset the ward's records start again, and versions from before it don't compare.",
+      "owner": "Operator",
+      "reevaluate_when": "A new investigation completes",
+      "text": "The ward's epoch changed after the approval, so the version the approver saw belongs to records that no longer exist (WIC-1.4)."
+    },
+    {
+      "code": "APPROVAL_NOT_APPROVED",
+      "title": "The approval record isn't an approval",
+      "prerequisite": "An approval with the decision approved",
+      "next_action": "Ask an approver to decide on the current plan.",
+      "owner": "Approver",
+      "reevaluate_when": "An approver decides",
+      "text": "The record the dispatch found holds another decision, so it authorises nothing."
+    },
+    {
       "code": "NO_EXPECTED_VERSION",
       "title": "The resend has no expected version",
       "prerequisite": "expected_version set to the encounter's current version (WIC-2.3)",
@@ -218,6 +236,15 @@
       "text": "Without conditional writes, nothing makes sure the resend lands on the state the approver saw, so resending isn't offered."
     },
     {
+      "code": "CAPABILITIES_UNREADABLE",
+      "title": "The ward's capability profile couldn't be read",
+      "prerequisite": "An answer from the ward's capability profile (WIC-7)",
+      "next_action": "Collect the evidence again later. Nothing is assumed about the ward's guarantees meanwhile.",
+      "owner": "Operator",
+      "reevaluate_when": "The capability profile answers",
+      "text": "Without the profile it is unknown whether the ward still honours conditional writes and receipts, so no write is dispatched (WIC-7.2)."
+    },
+    {
       "code": "REHEARSAL_WOULD_NOT_APPLY",
       "title": "The rehearsal says the resend wouldn't apply",
       "prerequisite": "A dry run of the exact request that would apply (WIC-2.5)",
@@ -243,6 +270,24 @@
       "owner": "Operator",
       "reevaluate_when": "A new investigation completes",
       "text": "The conditional write was refused, so nothing changed."
+    },
+    {
+      "code": "ESCALATED",
+      "title": "Handed to a person",
+      "prerequisite": "A decision only a person can make",
+      "next_action": "Read the findings and the gate's notes, then decide how to recover the message by hand.",
+      "owner": "Operator",
+      "reevaluate_when": "New evidence arrives",
+      "text": "The investigation asked for a person: the evidence doesn't settle what should happen, or nothing Interlock may do would settle it."
+    },
+    {
+      "code": "BLOCKED",
+      "title": "Stopped before any write",
+      "prerequisite": "What the case's last events name",
+      "next_action": "Read the case's last events for the reason, then investigate again or escalate.",
+      "owner": "Operator",
+      "reevaluate_when": "New evidence arrives",
+      "text": "The case stopped without a gate check to name the reason; its timeline says why."
     }
   ]
 }
