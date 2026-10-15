@@ -1,3 +1,6 @@
 # Check out text files with LF on every platform, so a Windows checkout with core.autocrlf=true
 # leaves ObjectScript, Python and scripts byte for byte as committed.
 * text=auto eol=lf
+
+# HL7 v2 fixtures separate segments with a bare carriage return: keep their bytes exactly as committed.
+*.hl7 -text
