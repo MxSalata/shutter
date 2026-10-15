@@ -58,6 +58,8 @@ XData ProductionDefinition
   </Item>
   <Item Name="Interlock Approvers" Category="Recovery" ClassName="EnsLib.Workflow.Operation" PoolSize="1" Enabled="true" Foreground="false" Comment="Approval tasks for the Workflow role of the same name" LogTraceEvents="true" Schedule="">
   </Item>
+  <Item Name="Interlock API" Category="Recovery" ClassName="Interlock.Service.API" PoolSize="0" Enabled="true" Foreground="false" Comment="Requests the REST API sends into the production, so that they show in the trace" LogTraceEvents="true" Schedule="">
+  </Item>
   <Item Name="Verifier" Category="Recovery" ClassName="Interlock.Operation.Verify" PoolSize="1" Enabled="true" Foreground="false" Comment="Reads the receiver's committed history and receipts after an attempt" LogTraceEvents="true" Schedule="">
     <Setting Target="Adapter" Name="Credentials">WardsAPI</Setting>
     <Setting Target="Adapter" Name="ResponseTimeout">15</Setting>

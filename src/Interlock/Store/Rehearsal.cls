@@ -17,8 +17,14 @@ Property WouldApply As %Boolean(%JSONFIELDNAME = "wouldApply");
 
 Property Reason As %String(%JSONFIELDNAME = "reason", MAXLEN = 200);
 
-/// The receiver's version at the time, from its response.
+/// The receiver's version the dry run was checked against (encounter_before).
 Property ReceiverVersion As %Integer(%JSONFIELDNAME = "receiverVersion");
+
+/// The version the write would leave (encounter_after), when it would apply.
+Property VersionAfter As %Integer(%JSONFIELDNAME = "versionAfter");
+
+/// The receiver's epoch at the time.
+Property Epoch As %Integer(%JSONFIELDNAME = "epoch");
 
 Property ResponseJSON As %String(%JSONFIELDNAME = "response", MAXLEN = "");
 
@@ -28,8 +34,14 @@ ClassMethod Create(case As Interlock.Store.Case, plan As Interlock.Store.Plan, h
     Set r.Case = case, r.Plan = plan, r.At = ##class(Interlock.Util.Time).NowUTC(), r.HttpStatus = httpStatus
     Set r.WouldApply = ##class(Interlock.Util.Json).Bool(response, "would_apply")
     Set r.Reason = ##class(Interlock.Util.Json).Str(response, "reason")
-    Set after = response.%Get("encounter_after")
-    If $ISOBJECT(after) Set r.ReceiverVersion = ##class(Interlock.Util.Json).Str(after, "version")
+    Set before = response.%Get("encounter_before"), after = response.%Get("encounter_after")
+    If $ISOBJECT(before) Set r.ReceiverVersion = ##class(Interlock.Util.Json).Str(before, "version")
+    If $ISOBJECT(after) {
+        Set r.VersionAfter = ##class(Interlock.Util.Json).Str(after, "version")
+        If '$ISOBJECT(before) Set r.ReceiverVersion = r.VersionAfter - 1
+    }
+    Set epoch = ##class(Interlock.Util.Json).Str(response, "epoch")
+    If epoch '= "" Set r.Epoch = epoch
     Set r.ResponseJSON = ##class(Interlock.Util.Json).Text(response)
     Quit r.%Save()
 }

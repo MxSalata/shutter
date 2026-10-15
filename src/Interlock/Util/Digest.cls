@@ -49,7 +49,7 @@ ClassMethod CanonicalValue(container As %DynamicAbstractObject, key) As %String 
     If type = "null" Quit "null"
     If type = "unassigned" Quit "null"
     If type = "boolean" Quit $SELECT(container.%Get(key): "true", 1: "false")
-    If type = "number" Quit "" _ (+container.%Get(key))
+    If type = "number" { Set a = [] Do a.%Push(container.%Get(key)) Quit $EXTRACT(a.%ToJSON(), 2, * - 1) }
     Quit ..JSONString(container.%Get(key))
 }
 

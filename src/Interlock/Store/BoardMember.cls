@@ -48,7 +48,7 @@ ClassMethod MembersForMode(mode As %String, requested As %DynamicArray = "") As 
     Set out = []
     If mode = "rules" Quit out
     If mode = "single" {
-        Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT Code FROM Interlock_Store.BoardMember WHERE ""Role"" = 'generalist' AND Enabled = 1 ORDER BY Sort")
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Code FROM Interlock_Store.BoardMember WHERE ""Role"" = 'generalist' AND Enabled = 1 ORDER BY Sort")
         If rs.%Next() Do out.%Push(rs.%Get("Code"))
         Quit out
     }
@@ -60,7 +60,7 @@ ClassMethod MembersForMode(mode As %String, requested As %DynamicArray = "") As 
         }
         Quit out
     }
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT Code FROM Interlock_Store.BoardMember WHERE ""Role"" = 'specialist' AND Enabled = 1 AND InDefaultBoard = 1 ORDER BY Sort")
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Code FROM Interlock_Store.BoardMember WHERE ""Role"" = 'specialist' AND Enabled = 1 AND InDefaultBoard = 1 ORDER BY Sort")
     While rs.%Next() { Do out.%Push(rs.%Get("Code")) }
     Quit out
 }
@@ -68,7 +68,7 @@ ClassMethod MembersForMode(mode As %String, requested As %DynamicArray = "") As 
 /// The coordinator member, or "" when none is enabled.
 ClassMethod Coordinator() As Interlock.Store.BoardMember
 {
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Interlock_Store.BoardMember WHERE ""Role"" = 'coordinator' AND Enabled = 1 ORDER BY Sort")
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Interlock_Store.BoardMember WHERE ""Role"" = 'coordinator' AND Enabled = 1 ORDER BY Sort")
     If rs.%Next() Quit ..%OpenId(rs.%Get("ID"))
     Quit ""
 }

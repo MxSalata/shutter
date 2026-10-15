@@ -40,7 +40,7 @@ ClassMethod Append(runKey As %String, name As %String, arguments As %String, dur
 ClassMethod ForRun(runKey As %String) As %DynamicArray
 {
     Set out = []
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Interlock_Bridge.ToolCall WHERE RunKey = ? ORDER BY Seq", runKey)
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Interlock_Bridge.ToolCall WHERE RunKey = ? ORDER BY Seq", runKey)
     While rs.%Next() {
         Set c = ..%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(c)

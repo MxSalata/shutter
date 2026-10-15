@@ -72,9 +72,14 @@ Method Read(request As Interlock.Msg.WardOperation, response As Interlock.Msg.Wa
         Set response.Outcome = "read"
         Set response.EncounterVersion = ##class(Interlock.Util.Json).Str(parsed, "version")
         Set response.ReasonCode = ##class(Interlock.Util.Json).Str(parsed, "state")
-    } ElseIf response.HttpStatus = 404 {
+        Set epoch = ##class(Interlock.Util.Json).Str(parsed, "epoch")
+        If epoch '= "" Set response.Epoch = epoch
+    } ElseIf (response.HttpStatus = 404) && (##class(Interlock.Util.Json).Str(parsed, "error") = "unknown_encounter") {
         Set response.Outcome = "unknown_encounter"
         Set response.ReasonCode = "unknown_encounter"
+    } ElseIf response.HttpStatus = 404 {
+        Set response.Outcome = "error"
+        Set response.Error = "HTTP 404 from " _ path _ ": not the ward's answer for an unknown encounter"
     } ElseIf response.HttpStatus = "" {
         Set response.Outcome = "unavailable"
         Set response.Error = $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "no response")
@@ -94,17 +99,25 @@ Method Classify(request As Interlock.Msg.WardOperation, response As Interlock.Ms
     Set response.ReasonCode = errorCode
     If $ISOBJECT(parsed.%Get("receipt")) Set response.ReceiptJSON = parsed.%Get("receipt").%ToJSON()
     Set enc = parsed.%Get("encounter")
-    If '$ISOBJECT(enc) Set enc = parsed.%Get("encounter_after")
     If $ISOBJECT(enc) Set response.EncounterVersion = ##class(Interlock.Util.Json).Str(enc, "version")
+    Set before = parsed.%Get("encounter_before"), after = parsed.%Get("encounter_after")
+    If $ISOBJECT(before) Set response.EncounterVersion = ##class(Interlock.Util.Json).Str(before, "version")
+    If $ISOBJECT(after) {
+        Set response.VersionAfter = ##class(Interlock.Util.Json).Str(after, "version")
+        If '$ISOBJECT(before) && '$ISOBJECT(enc) Set response.EncounterVersion = response.VersionAfter - 1
+    }
     If ##class(Interlock.Util.Json).Str(parsed, "current_version") '= "" Set response.EncounterVersion = parsed.%Get("current_version")
+    Set epoch = ##class(Interlock.Util.Json).Str(parsed, "epoch")
+    If (epoch = "") && $ISOBJECT(enc) Set epoch = ##class(Interlock.Util.Json).Str(enc, "epoch")
+    If (epoch = "") && $ISOBJECT(before) Set epoch = ##class(Interlock.Util.Json).Str(before, "epoch")
+    If (epoch = "") && $ISOBJECT(parsed.%Get("receipt")) Set epoch = ##class(Interlock.Util.Json).Str(parsed.%Get("receipt"), "epoch")
+    If epoch '= "" Set response.Epoch = epoch
     If status = "" {
         // No HTTP response at all: refused connections never sent anything; anything else is unknown.
         Set msg = $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "no response")
         Set response.Error = msg
         Set lower = $ZCONVERT(msg, "L")
-        If (lower [ "refused") || (lower [ "unable to connect") || (lower [ "connect failed") || (lower [ "<READ>" ) && 0 {
-            Set response.Outcome = "unavailable"
-        } ElseIf (lower [ "refused") || (lower [ "unable to connect") || (lower [ "connect failed") || (lower [ "no route") {
+        If (lower [ "refused") || (lower [ "unable to connect") || (lower [ "connect failed") || (lower [ "no route") {
             Set response.Outcome = "unavailable"
         } Else {
             Set response.Outcome = "uncertain"

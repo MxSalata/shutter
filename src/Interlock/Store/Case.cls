@@ -211,7 +211,7 @@ Method Events() As %DynamicArray
 {
     Set out = []
     Set id = ..%Id()
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Interlock_Store.CaseEvent WHERE ""Case"" = ? ORDER BY Seq", id)
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Interlock_Store.CaseEvent WHERE ""Case"" = ? ORDER BY Seq", id)
     While rs.%Next() {
         Set ev = ##class(Interlock.Store.CaseEvent).%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(ev)

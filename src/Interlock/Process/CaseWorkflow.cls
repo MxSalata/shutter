@@ -24,6 +24,12 @@ Property AttemptId As %String(MAXLEN = 20);
 /// The receiver version the rehearsal saw, carried to the dispatch gate.
 Property ReceiverVersion As %Integer;
 
+/// The receiver's epoch as last observed.
+Property ReceiverEpoch As %Integer;
+
+/// How many times the case was re-planned after the receiver changed under an approval.
+Property Replans As %Integer [ InitialExpression = 0 ];
+
 Property EvidenceTarget As %String(MAXLEN = 128) [ InitialExpression = "Evidence Collector" ];
 
 Property GateTarget As %String(MAXLEN = 128) [ InitialExpression = "Gate" ];
@@ -146,7 +152,7 @@ Method AgentRequestFor(case As Interlock.Store.Case, m As Interlock.Store.BoardM
     Set req.TerminalTool = m.TerminalTool
     Set req.ResultClass = $SELECT(m.TerminalTool = "submit_plan": "Interlock.Schema.Plan", 1: "Interlock.Schema.Findings")
     Set req.ConfigVersion = m.ConfigVersion
-    If case.Scenario '= "" Set req.RecordKey = "scenario:" _ case.Scenario _ "|" _ m.Code _ "|" _ m.ConfigVersion
+    If case.Scenario '= "" Set req.RecordKey = "scenario:" _ case.Scenario _ "|" _ m.Code _ "|" _ m.ConfigVersion _ $SELECT(..Replans > 0: "|round" _ (..Replans + 1), 1: "")
     Set context = {}
     Set context."case_id" = case.CaseId
     Set context.evidence = ##class(%DynamicObject).%FromJSON(summaryJSON)
@@ -269,6 +275,7 @@ Method SendGate(case As Interlock.Store.Case, stage As %String, key As %String) 
     Set req.CaseId = case.CaseId, req.PlanId = ..PlanId, req.Stage = stage
     Set req.ApprovalId = ..ApprovalId
     If ..ReceiverVersion '= "" Set req.ReceiverVersion = ..ReceiverVersion
+    If ..ReceiverEpoch '= "" Set req.ReceiverEpoch = ..ReceiverEpoch
     Quit ..SendRequestAsync(..GateTarget, req, 1, key)
 }
 
@@ -279,6 +286,10 @@ Method OnGateProposal(case As Interlock.Store.Case, result As Interlock.Msg.Gate
     Set plan = ##class(Interlock.Store.Plan).%OpenId(..PlanId)
     Set sc = case.Transition("gated", "Gate at proposal: " _ result.Outcome _ ". " _ result.Summary, "gate", "gate:" _ result.DecisionId)
     Quit:$$$ISERR(sc) sc
+    // A plan that asks for a person is escalated whatever the gate found; the gate's result stays on the case.
+    If (plan.Disposition = "escalate") || (plan.Disposition = "more_evidence") {
+        Quit case.Transition("escalated", "The plan asks for a person: " _ plan.Summary _ $SELECT(result.Outcome '= "pass": " (the gate noted: " _ result.Summary _ ")", 1: ""), "system", "plan:" _ plan.%Id())
+    }
     If result.Outcome '= "pass" {
         Set case.Headline = "Blocked by the gate: " _ result.Summary
         Quit case.Transition("blocked", "The gate did not pass the plan; a person must decide", "gate", "gate:" _ result.DecisionId)
@@ -287,9 +298,6 @@ Method OnGateProposal(case As Interlock.Store.Case, result As Interlock.Msg.Gate
         Set sc = case.Transition("rehearsing", "Rehearsing the exact action as a dry run", "system")
         Quit:$$$ISERR(sc) sc
         Quit ..SendRequestAsync(..WardTarget, ..WardOperationFor(case, plan, 1), 1, "rehearsal")
-    }
-    If (plan.Disposition = "escalate") || (plan.Disposition = "more_evidence") {
-        Quit case.Transition("escalated", "The plan asks for a person: " _ plan.Summary, "system", "plan:" _ plan.%Id())
     }
     // superseded or reconcile: nothing is written; verify what the receiver holds and close.
     Set sc = case.Transition("verifying", "No write; verifying the receiver's state", "system")
@@ -316,7 +324,8 @@ Method OnRehearsal(case As Interlock.Store.Case, result As Interlock.Msg.WardRes
     Set sc = ##class(Interlock.Store.Rehearsal).Create(case, plan, result.HttpStatus, result.ResponseObject(), .r)
     Quit:$$$ISERR(sc) sc
     // A dry run that would apply validated the expected version: that is the receiver's version now.
-    If result.Outcome = "would_apply" Set ..ReceiverVersion = plan.ExpectedVersion
+    If result.Outcome = "would_apply" Set ..ReceiverVersion = $SELECT(result.EncounterVersion '= "": result.EncounterVersion, 1: plan.ExpectedVersion)
+    If result.Epoch '= "" Set ..ReceiverEpoch = result.Epoch
     Do case.Note("artifact", "Rehearsal: " _ result.Outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "") _ ", rolled back by the receiver", "system", "rehearsal:" _ r.%Id())
     If result.Outcome '= "would_apply" {
         Set case.Headline = "Rehearsal failed: " _ result.Outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "")
@@ -343,7 +352,7 @@ Method OnApproval(case As Interlock.Store.Case, result As EnsLib.Workflow.TaskRe
     Set digest = result.%FormValues.GetAt("PlanDigest")
     Set taskId = result.%Id()
     Set rehearsal = ""
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 ID FROM Interlock_Store.Rehearsal WHERE ""Case"" = ? ORDER BY ID DESC", case.%Id())
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 ID FROM Interlock_Store.Rehearsal WHERE ""Case"" = ? ORDER BY ID DESC", case.%Id())
     If rs.%Next() Set rehearsal = ##class(Interlock.Store.Rehearsal).%OpenId(rs.%Get("ID"))
     If action '= "approve" {
         Set sc = ##class(Interlock.Store.Approval).Create(case, plan, case.CurrentSnapshot, ##class(Interlock.Operation.Gate).#POLICYVERSION, rehearsal, plan.ExpectedVersion, user, "rejected", comment, taskId, ..ApprovalValidSeconds, .a)
@@ -351,10 +360,13 @@ Method OnApproval(case As Interlock.Store.Case, result As EnsLib.Workflow.TaskRe
         Set case.Headline = "Rejected by " _ user _ ": " _ case.Headline
         Quit case.Transition("blocked", "Rejected by " _ user _ $SELECT(comment '= "": ": " _ comment, 1: ""), user, "approval:" _ a.%Id())
     }
-    If (digest '= "") && (digest '= plan.Digest) {
+    If digest = "" {
+        Quit case.Transition("blocked", "The approval carried no plan digest, so it binds nothing; nothing was dispatched", user)
+    }
+    If digest '= plan.Digest {
         Quit case.Transition("blocked", "The approval named another plan digest (" _ $EXTRACT(digest, 1, 19) _ "); nothing was dispatched", user)
     }
-    Set sc = ##class(Interlock.Store.Approval).Create(case, plan, case.CurrentSnapshot, ##class(Interlock.Operation.Gate).#POLICYVERSION, rehearsal, plan.ExpectedVersion, user, "approved", comment, taskId, ..ApprovalValidSeconds, .a)
+    Set sc = ##class(Interlock.Store.Approval).Create(case, plan, case.CurrentSnapshot, ##class(Interlock.Operation.Gate).#POLICYVERSION, rehearsal, plan.ExpectedVersion, user, "approved", comment, taskId, ..ApprovalValidSeconds, .a, ..ReceiverEpoch)
     Quit:$$$ISERR(sc) sc
     Set ..ApprovalId = a.%Id()
     Set case.CurrentApproval = a
@@ -368,18 +380,36 @@ Method OnApproval(case As Interlock.Store.Case, result As EnsLib.Workflow.TaskRe
 
 Method OnPreflight(case As Interlock.Store.Case, result As Interlock.Msg.WardResult) As %Status
 {
+    If (result.Outcome = "unknown_encounter") && (case.Event = "admit") {
+        Set ..ReceiverVersion = 0
+        If result.Epoch '= "" Set ..ReceiverEpoch = result.Epoch
+        Do case.Note("note", "Preflight: the receiver has no encounter yet, as the admission expects (version 0)", "system")
+        Quit ..SendGate(case, "dispatch", "gate:dispatch")
+    }
     If result.Outcome '= "read" {
         Set case.Headline = "Blocked at dispatch: the receiver could not be read (" _ result.Outcome _ ")"
         Quit case.Transition("blocked", "The preflight read of the receiver failed: " _ result.Outcome _ $SELECT(result.Error '= "": ", " _ result.Error, 1: "") _ ". Nothing was dispatched", "system")
     }
     Set ..ReceiverVersion = result.EncounterVersion
-    Do case.Note("note", "Preflight: the receiver holds the encounter at version " _ result.EncounterVersion _ " (" _ result.ReasonCode _ ")", "system")
+    If result.Epoch '= "" Set ..ReceiverEpoch = result.Epoch
+    Do case.Note("note", "Preflight: the receiver holds the encounter at version " _ result.EncounterVersion _ " (" _ result.ReasonCode _ ")" _ $SELECT(result.Epoch '= "": ", epoch " _ result.Epoch, 1: ""), "system")
     Quit ..SendGate(case, "dispatch", "gate:dispatch")
 }
 
 Method OnGateDispatch(case As Interlock.Store.Case, result As Interlock.Msg.GateResult) As %Status
 {
     If result.Outcome '= "pass" {
+        // The receiver changed after the approval: the approval is void, and the case is planned
+        // again once, on fresh evidence. Anything else blocks for a person.
+        Set changed = (result.Summary [ "RECEIVER_CHANGED") || (result.Summary [ "RECEIVER_RESET")
+        If changed && (..Replans < 1) {
+            Set ..Replans = ..Replans + 1
+            Set approval = ##class(Interlock.Store.Approval).%OpenId(..ApprovalId)
+            If $ISOBJECT(approval) Do approval.Revoke("system: the receiver changed before dispatch")
+            Set ..PlanId = "", ..ApprovalId = "", ..ReceiverVersion = "", ..ReceiverEpoch = ""
+            Do case.Note("note", "The receiver changed after the approval (" _ result.Summary _ "). The approval is void and the case is planned again on fresh evidence", "gate", "gate:" _ result.DecisionId)
+            Quit ..StartEvidence(case)
+        }
         Set case.Headline = "Blocked at dispatch: " _ result.Summary
         Quit case.Transition("blocked", "The gate did not pass the dispatch: " _ result.Summary, "gate", "gate:" _ result.DecisionId)
     }

@@ -20,6 +20,10 @@ Property Rehearsal As Interlock.Store.Rehearsal(%JSONFIELDNAME = "rehearsalId", 
 
 Property ExpectedVersion As %Integer(%JSONFIELDNAME = "expectedVersion");
 
+/// The receiver's epoch at approval: it changes at every reset, so an approval from before a
+/// reset cannot authorise a dispatch after it even when the version numbers match.
+Property ReceiverEpoch As %Integer(%JSONFIELDNAME = "receiverEpoch");
+
 Property Approver As %String(%JSONFIELDNAME = "approver", MAXLEN = 100);
 
 Property Decision As %String(%JSONFIELDNAME = "decision", MAXLEN = 16, VALUELIST = ",approved,rejected");
@@ -39,7 +43,7 @@ Property WorkflowTaskId As %String(%JSONFIELDNAME = "workflowTaskId", MAXLEN = 5
 
 Property Comment As %String(%JSONFIELDNAME = "comment", MAXLEN = 2000);
 
-ClassMethod Create(case As Interlock.Store.Case, plan As Interlock.Store.Plan, snapshot As Interlock.Store.Snapshot, policyVersion As %String, rehearsal As Interlock.Store.Rehearsal, expectedVersion As %Integer, approver As %String, decision As %String, comment As %String, workflowTaskId As %String, validSeconds As %Integer, Output a As Interlock.Store.Approval) As %Status
+ClassMethod Create(case As Interlock.Store.Case, plan As Interlock.Store.Plan, snapshot As Interlock.Store.Snapshot, policyVersion As %String, rehearsal As Interlock.Store.Rehearsal, expectedVersion As %Integer, approver As %String, decision As %String, comment As %String, workflowTaskId As %String, validSeconds As %Integer, Output a As Interlock.Store.Approval, epoch As %Integer = "") As %Status
 {
     Set a = ..%New()
     Set a.Case = case, a.Plan = plan, a.PlanDigest = plan.Digest
@@ -47,6 +51,7 @@ ClassMethod Create(case As Interlock.Store.Case, plan As Interlock.Store.Plan, s
     Set a.PolicyVersion = policyVersion
     If $ISOBJECT(rehearsal) Set a.Rehearsal = rehearsal
     Set a.ExpectedVersion = expectedVersion
+    If epoch '= "" Set a.ReceiverEpoch = epoch
     Set a.Approver = approver, a.Decision = decision, a.Comment = $EXTRACT(comment, 1, 2000)
     Set a.DecidedAt = ##class(Interlock.Util.Time).NowUTC()
     Set a.ExpiresAt = ##class(Interlock.Util.Time).FromNow(validSeconds)
@@ -55,7 +60,7 @@ ClassMethod Create(case As Interlock.Store.Case, plan As Interlock.Store.Plan, s
 }
 
 /// Why the approval cannot authorise a dispatch now, or "" when it can.
-Method InvalidReason(plan As Interlock.Store.Plan, snapshot As Interlock.Store.Snapshot, policyVersion As %String, receiverVersion As %Integer) As %String
+Method InvalidReason(plan As Interlock.Store.Plan, snapshot As Interlock.Store.Snapshot, policyVersion As %String, receiverVersion As %Integer, receiverEpoch As %Integer = "") As %String
 {
     If ..Decision '= "approved" Quit "not_approved"
     If ..Revoked Quit "revoked"
@@ -64,6 +69,7 @@ Method InvalidReason(plan As Interlock.Store.Plan, snapshot As Interlock.Store.S
     If $ISOBJECT(snapshot) && (..SnapshotDigest '= snapshot.Digest) Quit "snapshot_changed"
     If ..PolicyVersion '= policyVersion Quit "policy_changed"
     If (..ExpectedVersion '= "") && (receiverVersion '= "") && (..ExpectedVersion '= receiverVersion) Quit "receiver_changed"
+    If (..ReceiverEpoch '= "") && (receiverEpoch '= "") && (..ReceiverEpoch '= receiverEpoch) Quit "receiver_reset"
     Quit ""
 }
 

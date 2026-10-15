@@ -64,15 +64,25 @@ Method OnEvidenceRequest(request As Interlock.Msg.EvidenceRequest, Output respon
         }
     }
 
-    // 7. The route: where this traffic goes.
+    // 7. The route, with the receiver's own capability profile (GET /wards/api/capabilities):
+    // the gate's capability check reads this, never an assumption.
+    Set caps = ..WardGet("/wards/api/capabilities", .cstatus)
     Set route = {}
     Set route.feed = "ADT In -> ADT to Ward -> Ward Out"
     Set route.connector = "Ward Out"
     Set route.receiver = "the ward system (/wards/api)"
-    Do route.%Set("conditional_writes", 1, "boolean")
-    Do route.%Set("receipts", 1, "boolean")
-    Do route.%Set("dry_run", 1, "boolean")
-    Do snap.AddItem("route", "production", now, route) Set count = count + 1
+    Set route."capabilities_http_status" = cstatus
+    If cstatus = 200 {
+        Set route.capabilities = caps
+        Do route.%Set("conditional_writes", ##class(Interlock.Util.Json).Bool(caps, "conditional_writes"), "boolean")
+        Do route.%Set("receipts", ##class(Interlock.Util.Json).Bool(caps, "receipts"), "boolean")
+        Do route.%Set("dry_run", ##class(Interlock.Util.Json).Bool(caps, "dry_run"), "boolean")
+        Set route.epoch = ##class(Interlock.Util.Json).Str(caps, "epoch")
+    } Else {
+        Do route.%Set("capabilities", "", "null")
+        Set route.note = "The receiver's capability profile could not be read; nothing is assumed about it"
+    }
+    Do snap.AddItem("route", "ward_api", now, route) Set count = count + 1
 
     // The summary the agents and the gate read.
     Set summary = {}
@@ -89,6 +99,7 @@ Method OnEvidenceRequest(request As Interlock.Msg.EvidenceRequest, Output respon
     Set summary.timeline = timeline
     Set summary."later_events" = laterCount
     Set summary.route = route
+    Set summary.epoch = ##class(Interlock.Util.Json).Str(wardState, "epoch", ##class(Interlock.Util.Json).Str(route, "epoch"))
     Set summary."observed_at" = now
     Set summary."fresh_until" = snap.FreshUntil
     Set sc = snap.Seal(summary)
@@ -199,7 +210,7 @@ Method Timeline(case As Interlock.Store.Case) As %DynamicArray [ Private ]
     Set sql = "SELECT w.ID AS WID, w.Event, w.Ward, w.EventTime, w.OperationKey, w.SourceMessageId, h.ID AS HeaderId, h.SessionId, h.TimeCreated "
         _ "FROM Interlock_Msg.WardOperation w JOIN Ens.MessageHeader h ON h.MessageBodyId = CAST(w.ID AS VARCHAR(20)) AND h.MessageBodyClassName = 'Interlock.Msg.WardOperation' "
         _ "WHERE w.EncounterId = ? AND w.Purpose = 'normal' AND h.TimeCreated >= ? ORDER BY w.EventTime, w.ID"
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, sql, case.EncounterId, since)
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, case.EncounterId, since)
     While rs.%Next() {
         Set ev = {}
         Set ev."event" = rs.%Get("Event"), ev.ward = rs.%Get("Ward"), ev."event_time" = rs.%Get("EventTime")

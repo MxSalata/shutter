@@ -45,7 +45,7 @@ ClassMethod Create(run As Interlock.Store.AgentRun, findings As %DynamicObject, 
 ClassMethod ForSnapshot(snapshot As Interlock.Store.Snapshot) As %DynamicArray
 {
     Set out = []
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Interlock_Store.Finding WHERE Snapshot = ? ORDER BY ID", snapshot.%Id())
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Interlock_Store.Finding WHERE Snapshot = ? ORDER BY ID", snapshot.%Id())
     While rs.%Next() {
         Set f = ..%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(f)

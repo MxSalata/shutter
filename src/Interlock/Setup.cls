@@ -83,6 +83,11 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1) As %Status
             Set sc = $CLASSMETHOD("Wards.Installer", "Install")
             Quit:$$$ISERR(sc)
         }
+        If (root '= "") && ##class(%File).Exists(root _ "knowledge/block-reasons.json") {
+            Set sc = ##class(Interlock.Store.BlockReason).SeedFromFile(root _ "knowledge/block-reasons.json", .reasons)
+            Quit:$$$ISERR(sc)
+            Set ^Interlock.Config("blockReasons") = reasons
+        }
         If (root '= "") && ##class(%File).DirectoryExists(root _ "fixtures/records") {
             Set sc = ##class(Interlock.Bridge.Record).ImportDir(root _ "fixtures/records", .count)
             Quit:$$$ISERR(sc)
@@ -134,6 +139,12 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     }
     If '##class(Security.Roles).Exists("Interlock_Approver") {
         Set sc = ##class(Security.Roles).Create("Interlock_Approver", "Interlock approver: everything an operator can, plus approvals", "Interlock_Operate:U,Interlock_Approve:U," _ db _ ":RW", "Interlock_Operator,%EnsRole_Operator")
+        Quit:$$$ISERR(sc) sc
+    }
+    // Every caller of the API web application gets read access to the namespace's database, so
+    // that the sign-in route can run for an anonymous session; data routes still check resources.
+    If '##class(Security.Roles).Exists("Interlock_WebApp") {
+        Set sc = ##class(Security.Roles).Create("Interlock_WebApp", "Interlock web application: read the code database (granted to every caller by the web application)", db _ ":R", "")
         Quit:$$$ISERR(sc) sc
     }
     If demo {
@@ -251,10 +262,13 @@ ClassMethod CreateWebApps(ns As %String, root As %String) As %Status
     Set props("NameSpace") = ns
     Set props("Description") = "Interlock REST API"
     Set props("Enabled") = 1
-    Set props("AutheEnabled") = 32
+    // Password (32) or unauthenticated (64): POST /session signs in; every other route checks
+    // the caller's resources itself, so an anonymous request gets a JSON 401, not a browser dialog.
+    Set props("AutheEnabled") = 96
     Set props("DispatchClass") = "Interlock.API.Dispatch"
     Set props("UseCookies") = 2
     Set props("CookiePath") = "/api/interlock/"
+    Set props("MatchRoles") = ":Interlock_WebApp"
     If ##class(Security.Applications).Exists("/api/interlock") {
         Set sc = ##class(Security.Applications).Modify("/api/interlock", .props)
     } Else {
@@ -273,6 +287,7 @@ ClassMethod CreateWebApps(ns As %String, root As %String) As %Status
         Set props("Recurse") = 1
         Set props("UseCookies") = 2
         Set props("CookiePath") = "/interlock/"
+        Set props("MatchRoles") = ":Interlock_WebApp"
         If ##class(Security.Applications).Exists("/interlock") {
             Set sc = ##class(Security.Applications).Modify("/interlock", .props)
         } Else {
@@ -383,11 +398,16 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Set r.recordings = +records
     &sql(SELECT COUNT(*) INTO :cases FROM Interlock_Store."Case")
     Set r.cases = +cases
-    New $NAMESPACE
-    Set $NAMESPACE = "%SYS"
-    Set r."api_webapp" = ''##class(Security.Applications).Exists("/api/interlock")
-    Set r."ui_webapp" = ''##class(Security.Applications).Exists("/interlock")
-    Set r."wards_webapp" = ''##class(Security.Applications).Exists("/wards/api")
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = "%SYS"
+        Set r."api_webapp" = ''##class(Security.Applications).Exists("/api/interlock")
+        Set r."ui_webapp" = ''##class(Security.Applications).Exists("/interlock")
+        Set r."wards_webapp" = ''##class(Security.Applications).Exists("/wards/api")
+    } Catch ex {
+        // A caller without %SYS access gets the rest of the report.
+        Do r.%Set("api_webapp", "", "null"), r.%Set("ui_webapp", "", "null"), r.%Set("wards_webapp", "", "null")
+    }
     Quit r.%ToJSON()
 }
 

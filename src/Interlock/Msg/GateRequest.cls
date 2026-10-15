@@ -14,4 +14,7 @@ Property ApprovalId As %String(MAXLEN = 20);
 /// The receiver's version as last observed, for the concurrency check at dispatch.
 Property ReceiverVersion As %Integer;
 
+/// The receiver's epoch as last observed (it changes at every reset).
+Property ReceiverEpoch As %Integer;
+
 }

@@ -86,7 +86,7 @@ Method Seal(summary As %DynamicObject) As %Status
 Method Items() As %DynamicArray
 {
     Set out = []
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Interlock_Store.SnapshotItem WHERE Snapshot = ? ORDER BY Seq", ..%Id())
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Interlock_Store.SnapshotItem WHERE Snapshot = ? ORDER BY Seq", ..%Id())
     While rs.%Next() {
         Set si = ##class(Interlock.Store.SnapshotItem).%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(si)

@@ -70,7 +70,7 @@ ClassMethod ExportDir(dir As %String) As %Status
 {
     Set dir = ##class(%File).NormalizeDirectory(dir)
     If '##class(%File).DirectoryExists(dir) Do ##class(%File).CreateDirectoryChain(dir)
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Interlock_Bridge.Record ORDER BY ""Key""")
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Interlock_Bridge.Record ORDER BY ""Key""")
     While rs.%Next() {
         Set r = ..%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(r)

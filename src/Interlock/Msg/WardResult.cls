@@ -16,8 +16,15 @@ Property ResponseJSON As %String(MAXLEN = "");
 
 Property ReceiptJSON As %String(MAXLEN = "");
 
-/// The encounter's version after the call, when the response carried it.
+/// The encounter's version as the receiver reported it: after an applied write, the version it
+/// checked against for a dry run (encounter_before), the current one for a read.
 Property EncounterVersion As %Integer;
+
+/// For a dry run that would apply, the version the write would leave.
+Property VersionAfter As %Integer;
+
+/// The receiver's epoch, when the response carried it.
+Property Epoch As %Integer;
 
 Property Error As %String(MAXLEN = 2000);
 

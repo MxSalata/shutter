@@ -113,7 +113,7 @@ Method OnGateRequest(request As Interlock.Msg.GateRequest, Output response As In
         If '$ISOBJECT(approval) {
             Do ..Check(checks, "authorization", "block", "NO_APPROVAL", "No approval for this plan")
         } Else {
-            Set why = approval.InvalidReason(plan, snapshot, ..#POLICYVERSION, request.ReceiverVersion)
+            Set why = approval.InvalidReason(plan, snapshot, ..#POLICYVERSION, request.ReceiverVersion, request.ReceiverEpoch)
             Do ..Check(checks, "authorization", $SELECT(why = "": "pass", 1: "block"), $SELECT(why = "": "APPROVAL_VALID", 1: "APPROVAL_" _ $ZCONVERT(why, "U")), $SELECT(why = "": "Approved by " _ approval.Approver _ " for plan digest " _ $EXTRACT(approval.PlanDigest, 1, 19), 1: "The approval no longer authorises this dispatch: " _ why))
         }
     }
@@ -141,8 +141,14 @@ Method OnGateRequest(request As Interlock.Msg.GateRequest, Output response As In
 
     // Capability: the connector enforces what the plan needs.
     Set route = summary.%Get("route")
-    Set capable = ##class(Interlock.Util.Json).Bool(route, "conditional_writes") && ##class(Interlock.Util.Json).Bool(route, "receipts")
-    Do ..Check(checks, "capability", $SELECT(capable || 'isWrite: "pass", 1: "block"), $SELECT(capable || 'isWrite: "CONNECTOR_CAPABLE", 1: "CONNECTOR_INCAPABLE"), "The connector supports conditional writes and receipts")
+    If 'isWrite {
+        Do ..Check(checks, "capability", "pass", "NOT_APPLICABLE", "No write proposed")
+    } ElseIf ##class(Interlock.Util.Json).Str(route, "capabilities_http_status") '= 200 {
+        Do ..Check(checks, "capability", "unknown", "CAPABILITIES_UNREADABLE", "The receiver's capability profile could not be read, so its guarantees are unknown")
+    } Else {
+        Set capable = ##class(Interlock.Util.Json).Bool(route, "conditional_writes") && ##class(Interlock.Util.Json).Bool(route, "receipts")
+        Do ..Check(checks, "capability", $SELECT(capable: "pass", 1: "block"), $SELECT(capable: "CONNECTOR_CAPABLE", 1: "CONNECTOR_INCAPABLE"), $SELECT(capable: "The receiver guarantees conditional writes and receipts", 1: "The receiver reports no conditional writes: a resend cannot be made safe, so only investigation and reconciliation are open"))
+    }
 
     // The outcome is the worst check.
     Set outcome = "pass"

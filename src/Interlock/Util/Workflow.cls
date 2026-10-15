@@ -7,7 +7,7 @@ Class Interlock.Util.Workflow Extends %RegisteredObject
 /// The open (incomplete) approval task for a case, or "".
 ClassMethod OpenTaskFor(caseId As %String) As EnsLib.Workflow.TaskResponse
 {
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM EnsLib_Workflow.TaskResponse WHERE ""%Subject"" LIKE ? ORDER BY ID DESC", "Interlock " _ caseId _ ":%")
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM EnsLib_Workflow.TaskResponse WHERE ""%Subject"" LIKE ? ORDER BY ID DESC", "Interlock " _ caseId _ ":%")
     While rs.%Next() {
         Set task = ##class(EnsLib.Workflow.TaskResponse).%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(task)
@@ -21,7 +21,7 @@ ClassMethod OpenTaskFor(caseId As %String) As EnsLib.Workflow.TaskResponse
 ClassMethod TasksFor(caseId As %String) As %DynamicArray
 {
     Set out = []
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM EnsLib_Workflow.TaskResponse WHERE ""%Subject"" LIKE ? ORDER BY ID DESC", "Interlock " _ caseId _ ":%")
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM EnsLib_Workflow.TaskResponse WHERE ""%Subject"" LIKE ? ORDER BY ID DESC", "Interlock " _ caseId _ ":%")
     While rs.%Next() {
         Set task = ##class(EnsLib.Workflow.TaskResponse).%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(task)
