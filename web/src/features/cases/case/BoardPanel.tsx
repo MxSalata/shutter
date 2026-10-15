@@ -59,7 +59,10 @@ function RunStats({ run, portalBase }: { run: AgentRun; portalBase: string }) {
       )}
       {run.ensMessageId ? (
         <Anchor
-          href={`${portalBase}EnsPortal.MessageContents.zen?HeaderId=${encodeURIComponent(run.ensMessageId)}`}
+          href={
+            run.messageLink ||
+            `${portalBase}EnsPortal.MessageContents.zen?HeaderId=${encodeURIComponent(run.ensMessageId)}`
+          }
           target="_blank"
           rel="noreferrer"
           size="xs"

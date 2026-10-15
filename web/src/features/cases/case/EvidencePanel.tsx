@@ -1,5 +1,5 @@
 import { Accordion, Badge, Group, Stack, Text, Tooltip } from '@mantine/core';
-import { IconCheck, IconX } from '@tabler/icons-react';
+import { IconCheck, IconQuestionMark, IconX } from '@tabler/icons-react';
 import { useSnapshot } from '@/api/hooks';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Digest } from '@/components/Digest';
@@ -23,8 +23,13 @@ const KIND_LABELS: Record<string, string> = {
   note: 'Note',
 };
 
-/** The connector's guarantees as the evidence recorded them: what the gate's capability check reads. */
+/**
+ * The receiver's guarantees as the evidence recorded them from its capability profile: what the gate's capability
+ * check reads. When the profile couldn't be read, every guarantee is unknown, never assumed.
+ */
 function CapabilityPassport({ data }: { data: Record<string, unknown> }) {
+  const status = data.capabilities_http_status;
+  const unreadable = status !== undefined && Number(status) !== 200;
   const caps: [string, string, string][] = [
     [
       'conditional_writes',
@@ -35,24 +40,46 @@ function CapabilityPassport({ data }: { data: Record<string, unknown> }) {
     ['dry_run', 'Dry runs', 'An operation can be rehearsed and rolled back'],
   ];
   return (
-    <Group gap={6}>
-      {caps.map(([key, label, hint]) => {
-        const has = data[key] === true;
-        return (
-          <Tooltip key={key} label={`${hint}: ${has ? 'guaranteed' : 'not guaranteed'}`} multiline maw={300}>
-            <Badge
-              color={has ? 'teal' : 'red'}
-              variant="light"
-              leftSection={has ? <IconCheck size={12} /> : <IconX size={12} />}
-              style={{ textTransform: 'none' }}
-              tabIndex={0}
-            >
-              {label}
-            </Badge>
-          </Tooltip>
-        );
-      })}
-    </Group>
+    <Stack gap={4}>
+      <Group gap={6}>
+        {caps.map(([key, label, hint]) => {
+          const has = data[key] === true;
+          const colour = unreadable ? 'orange' : has ? 'teal' : 'red';
+          const state = unreadable ? 'unknown' : has ? 'guaranteed' : 'not guaranteed';
+          return (
+            <Tooltip key={key} label={`${hint}: ${state}`} multiline maw={300}>
+              <Badge
+                color={colour}
+                variant="light"
+                leftSection={
+                  unreadable ? (
+                    <IconQuestionMark size={12} />
+                  ) : has ? (
+                    <IconCheck size={12} />
+                  ) : (
+                    <IconX size={12} />
+                  )
+                }
+                style={{ textTransform: 'none' }}
+                tabIndex={0}
+              >
+                {label}
+              </Badge>
+            </Tooltip>
+          );
+        })}
+      </Group>
+      {unreadable ? (
+        <Text size="xs" c="orange">
+          The receiver's capability profile could not be read (HTTP {String(status || 'none')}): nothing is
+          assumed about it.
+        </Text>
+      ) : data.epoch !== undefined && data.epoch !== '' ? (
+        <Text size="xs" c="dimmed">
+          Read from the receiver's own profile; its epoch is {String(data.epoch)}.
+        </Text>
+      ) : null}
+    </Stack>
   );
 }
 

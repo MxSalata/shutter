@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CaseEvent, SnapshotItem } from '@/api/types';
-import { checksOf, describeItem, phaseStatuses } from './derive';
+import { checksOf, describeItem, phaseStatuses, rounds } from './derive';
 
 const transition = (seq: number, fromState: string, toState: string): CaseEvent => ({
   seq,
@@ -80,6 +80,31 @@ describe('phaseStatuses', () => {
   it('stops at the gate when the gate blocks the proposal', () => {
     const states = ['detected', 'collecting', 'investigating', 'proposed', 'gated', 'blocked'];
     expect(phaseStatuses('blocked', path(states))[2]).toBe('stopped');
+  });
+
+  it('reads only the latest round after a re-plan: the first approval is not a dispatch', () => {
+    const first = [
+      'detected',
+      'collecting',
+      'investigating',
+      'proposed',
+      'gated',
+      'rehearsing',
+      'awaiting_approval',
+      'approved',
+    ];
+    const second = ['approved', 'collecting', 'investigating', 'proposed', 'gated', 'verifying', 'resolved'];
+    const events = [...path(first), ...path(second).map((e) => ({ ...e, seq: e.seq + 100 }))];
+    expect(rounds(events)).toBe(2);
+    expect(phaseStatuses('resolved', events)).toEqual([
+      'done',
+      'done',
+      'done',
+      'skipped',
+      'skipped',
+      'skipped',
+      'done',
+    ]);
   });
 
   it('shows the phase an open case is in as current', () => {

@@ -5,12 +5,75 @@ import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { Timestamp } from '@/components/Timestamp';
 import { formatInt, formatUsd, humanize } from '@/lib/format';
+import type { AgentItem } from '@/api/types';
 
 function Flag({ on, yes, no }: { on: boolean; yes: string; no: string }) {
   return (
     <Badge color={on ? 'teal' : 'gray'} variant="light" style={{ textTransform: 'none' }}>
       {on ? yes : no}
     </Badge>
+  );
+}
+
+type ItemColumn = {
+  key: 'mode' | 'model' | 'providerConfig' | 'maxIterations' | 'tokenBudget';
+  label: string;
+};
+const ITEM_COLUMNS: ItemColumn[] = [
+  { key: 'mode', label: 'Mode' },
+  { key: 'model', label: 'Model' },
+  { key: 'providerConfig', label: 'Provider' },
+  { key: 'maxIterations', label: 'Iterations' },
+  { key: 'tokenBudget', label: 'Token budget' },
+];
+
+/** The agent items, with only the settings some item has: a replaying item has no model or limits. */
+function AgentItemsTable({ items }: { items: AgentItem[] }) {
+  const columns = ITEM_COLUMNS.filter((c) => items.some((a) => a[c.key] !== undefined && a[c.key] !== ''));
+  const show = (c: ItemColumn, a: AgentItem) => {
+    const v = a[c.key];
+    if (v === undefined || v === '') return '—';
+    if (c.key === 'mode') return humanize(String(v));
+    if (c.key === 'tokenBudget') return formatInt(v);
+    return String(v);
+  };
+  return (
+    <Table.ScrollContainer minWidth={520}>
+      <Table>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Production item</Table.Th>
+            {columns.map((c) => (
+              <Table.Th key={c.key}>{c.label}</Table.Th>
+            ))}
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {items.map((a) => (
+            <Table.Tr key={a.name}>
+              <Table.Td>
+                <Text size="sm" fw={500}>
+                  {a.name}
+                  {a.enabled === false ? ' (disabled)' : ''}
+                </Text>
+                {a.agentClass ? (
+                  <Text size="xs" c="dimmed">
+                    {a.agentClass}
+                  </Text>
+                ) : null}
+              </Table.Td>
+              {columns.map((c) => (
+                <Table.Td key={c.key}>
+                  <Text size="sm" className={c.key === 'model' ? 'mono-wrap' : undefined}>
+                    {show(c, a)}
+                  </Text>
+                </Table.Td>
+              ))}
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+    </Table.ScrollContainer>
   );
 }
 
@@ -54,43 +117,7 @@ export default function SettingsPage() {
               <Title order={2} fz="lg" mb="sm">
                 Agent items
               </Title>
-              <Table.ScrollContainer minWidth={720}>
-                <Table>
-                  <Table.Thead>
-                    <Table.Tr>
-                      <Table.Th>Production item</Table.Th>
-                      <Table.Th>Mode</Table.Th>
-                      <Table.Th>Model</Table.Th>
-                      <Table.Th>Provider</Table.Th>
-                      <Table.Th>Iterations</Table.Th>
-                      <Table.Th>Token budget</Table.Th>
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {s.agentItems.map((a) => (
-                      <Table.Tr key={a.name}>
-                        <Table.Td>
-                          <Text size="sm" fw={500}>
-                            {a.name}
-                          </Text>
-                          <Text size="xs" c="dimmed">
-                            {a.agentClass}
-                          </Text>
-                        </Table.Td>
-                        <Table.Td>{humanize(a.mode)}</Table.Td>
-                        <Table.Td>
-                          <Text size="sm" className="mono-wrap">
-                            {a.model}
-                          </Text>
-                        </Table.Td>
-                        <Table.Td>{a.providerConfig || '—'}</Table.Td>
-                        <Table.Td>{a.maxIterations}</Table.Td>
-                        <Table.Td>{formatInt(a.tokenBudget)}</Table.Td>
-                      </Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                </Table>
-              </Table.ScrollContainer>
+              <AgentItemsTable items={s.agentItems} />
             </Card>
             <Card padding="md">
               <Title order={2} fz="lg" mb={4}>
@@ -126,7 +153,8 @@ export default function SettingsPage() {
                         <Table.Td>{formatUsd(p.cacheWritePerMTok)}</Table.Td>
                         <Table.Td>
                           <Text size="xs">
-                            {p.source} {p.asOf ? `(${p.asOf})` : ''}
+                            {p.source}
+                            {p.asOf && !p.source.includes(p.asOf) ? ` (${p.asOf})` : ''}
                           </Text>
                         </Table.Td>
                       </Table.Tr>

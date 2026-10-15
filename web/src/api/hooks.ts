@@ -183,14 +183,86 @@ export const useSnapshot = (id: string, open: boolean) =>
   useCasePart<Snapshot>(id, 'snapshot', '/snapshot', open);
 export const useRuns = (id: string, open: boolean) => useCasePart<AgentRun[]>(id, 'runs', '/runs', open);
 export const usePlan = (id: string, open: boolean) => useCasePart<PlanView>(id, 'plan', '/plan', open);
-export const useApprovals = (id: string, open: boolean) =>
-  useCasePart<ApprovalsView>(id, 'approvals', '/approvals', open);
+/** "2026-10-15 20:19:13.686" (the Workflow engine's UTC time) as ISO 8601; ISO values pass through. */
+export function isoUtc(value: unknown): string {
+  if (typeof value !== 'string' || !value) return '';
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(value) ? `${value.replace(' ', 'T')}Z` : value;
+}
+
+/** The approvals and the Workflow tasks; a task's fields are read in camelCase or snake_case. */
+export function useApprovals(caseId: string, open: boolean) {
+  return useQuery({
+    queryKey: keys.part(caseId, 'approvals'),
+    refetchInterval: open ? LIVE : false,
+    queryFn: async (): Promise<ApprovalsView | null> => {
+      try {
+        const raw = await api.get<{
+          approvals?: ApprovalsView['approvals'];
+          tasks?: Record<string, unknown>[];
+        }>(`/cases/${seg(caseId)}/approvals`);
+        const pick = (t: Record<string, unknown>, camel: string, snake: string) => t[camel] ?? t[snake];
+        const tasks = (raw.tasks ?? []).map((t) => ({
+          taskId: String(pick(t, 'taskId', 'task_id') ?? ''),
+          subject: String(t.subject ?? ''),
+          actions: String(t.actions ?? ''),
+          action: String(t.action ?? ''),
+          userName: String(pick(t, 'userName', 'user_name') ?? ''),
+          role: String(t.role ?? ''),
+          complete: Boolean(t.complete),
+          assignedTo: String(pick(t, 'assignedTo', 'assigned_to') ?? ''),
+          timeCreated: isoUtc(pick(t, 'timeCreated', 'time_created')),
+          timeCompleted: isoUtc(pick(t, 'timeCompleted', 'time_completed')),
+          planDigest: String(pick(t, 'planDigest', 'plan_digest') ?? ''),
+        }));
+        return { approvals: raw.approvals ?? [], tasks };
+      } catch (e) {
+        if (isApiError(e) && e.isNotFound) return null;
+        throw e;
+      }
+    },
+  });
+}
 export const useAttempts = (id: string, open: boolean) =>
   useCasePart<AttemptView[]>(id, 'attempts', '/attempts', open);
 export const useClosure = (id: string, closed: boolean) =>
   useCasePart<Closure>(id, 'closure', '/closure', false, closed);
-export const useBlockedReason = (id: string, enabled: boolean) =>
-  useCasePart<BlockedReason>(id, 'blocked-reason', '/blocked-reason', false, enabled);
+/**
+ * The blocked reason: the catalogue entry and the gate's failing checks. The API nests the entry
+ * (`{code, catalogue, failingChecks}`); the flat shape of CONTRACTS 5.3 is read too.
+ */
+export function useBlockedReason(caseId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.part(caseId, 'blocked-reason'),
+    enabled,
+    queryFn: async (): Promise<BlockedReason | null> => {
+      try {
+        const raw = await api.get<Record<string, unknown>>(`/cases/${seg(caseId)}/blocked-reason`);
+        const entry = (raw.catalogue && typeof raw.catalogue === 'object' ? raw.catalogue : raw) as Record<
+          string,
+          unknown
+        >;
+        const text = (k: string) => (typeof entry[k] === 'string' ? (entry[k] as string) : '');
+        return {
+          code: (typeof raw.code === 'string' && raw.code) || text('code'),
+          title: text('title'),
+          prerequisite: text('prerequisite'),
+          nextAction: text('nextAction'),
+          owner: text('owner'),
+          reevaluateWhen: text('reevaluateWhen'),
+          text: text('text'),
+          checks: (Array.isArray(raw.failingChecks)
+            ? raw.failingChecks
+            : Array.isArray(raw.checks)
+              ? raw.checks
+              : []) as BlockedReason['checks'],
+        };
+      } catch (e) {
+        if (isApiError(e) && e.isNotFound) return null;
+        throw e;
+      }
+    },
+  });
+}
 
 export function useDecideApproval(caseId: string) {
   const client = useQueryClient();

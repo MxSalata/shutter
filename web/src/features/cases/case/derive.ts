@@ -61,6 +61,19 @@ export const PHASES = [
 
 const phaseOf = (state: string) => PHASES.findIndex((p) => (p.states as readonly string[]).includes(state));
 
+/** Where the latest round began: the last move into collecting evidence (a re-plan starts one). */
+function latestRoundStart(events: CaseEvent[]): number {
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].kind === 'state' && events[i].toState === 'collecting') return i;
+  }
+  return 0;
+}
+
+/** How many rounds of evidence and planning the case has had: more than one after a re-plan. */
+export function rounds(events: CaseEvent[]): number {
+  return Math.max(1, events.filter((e) => e.kind === 'state' && e.toState === 'collecting').length);
+}
+
 export type PhaseStatus = 'done' | 'current' | 'skipped' | 'stopped' | 'pending';
 
 /**
@@ -71,9 +84,12 @@ export type PhaseStatus = 'done' | 'current' | 'skipped' | 'stopped' | 'pending'
 export function phaseStatuses(state: string, events: CaseEvent[]): PhaseStatus[] {
   const visited = new Set<number>();
   let stoppedAt = -1;
-  for (const e of events) {
+  // A re-plan starts a new round at the evidence: only the latest round's states count, and the move that starts
+  // it counts only for where it goes (it leaves the earlier round's approval behind)
+  const start = latestRoundStart(events);
+  for (const [i, e] of events.slice(start).entries()) {
     if (e.kind !== 'state') continue;
-    const from = phaseOf(e.fromState);
+    const from = start > 0 && i === 0 ? -1 : phaseOf(e.fromState);
     const to = phaseOf(e.toState);
     if (from >= 0) visited.add(from);
     if (to >= 0) visited.add(to);

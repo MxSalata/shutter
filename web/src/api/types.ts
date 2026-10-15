@@ -212,6 +212,8 @@ export interface AgentRun {
   member: { code: string; name: string; perspective: string } | null;
   finding: Finding | null;
   toolCalls: ToolCall[];
+  /** The run's message in the Management Portal, when the API gives it. */
+  messageLink?: string;
 }
 
 export interface Plan {
@@ -375,14 +377,16 @@ export interface LibraryMember {
   configVersion: string;
 }
 
+/** A production item that runs an agent, with the settings it has (a replaying item has no model). */
 export interface AgentItem {
   name: string;
-  agentClass: string;
-  mode: string;
-  model: string;
-  providerConfig: string;
-  maxIterations: number;
-  tokenBudget: number;
+  enabled?: boolean;
+  agentClass?: string;
+  mode?: string;
+  model?: string;
+  providerConfig?: string;
+  maxIterations?: number | string;
+  tokenBudget?: number | string;
 }
 
 export interface ModelPrice {
