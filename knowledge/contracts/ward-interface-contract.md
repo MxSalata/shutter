@@ -1,15 +1,16 @@
 ---
 id: ward-interface-contract
-version: 1.0
+version: 1.1
 collection: contracts
 applies_to: [ward-api-v1, hl7-v2.5.1-adt]
-effective_from: 2026-10-01
+effective_from: 2026-10-15
 ---
 
 # Ward Bed Management: interface contract for senders
 
-Issued by the ward bed management system's supplier to every system that sends patient movements to it. Version 1.0,
-in force from 1 October 2026.
+Issued by the ward bed management system's supplier to every system that sends patient movements to it. Version 1.1,
+in force from 15 October 2026. Changes from 1.0: the epoch (WIC-1.4), the capability profile (WIC-7), and what an
+unavailable receipt lookup means (WIC-5.2).
 
 ## WIC-1 What the ward system does
 
@@ -23,6 +24,10 @@ recorded location back to the older ward.
 
 WIC-1.3. Every applied operation increments the encounter's version by one, including a transfer to the ward the
 patient is already in, and a demographic update.
+
+WIC-1.4. **The epoch.** The ward system's records carry an epoch number, shown in every encounter read, every receipt
+and the capability profile. It increases whenever the ward system's records are reset or restored. Versions from
+different epochs don't compare: version 2 in one epoch says nothing about version 2 in another.
 
 ## WIC-2 Sending an operation
 
@@ -61,7 +66,10 @@ is committed, no receipt is stored and no history is written.
 | 409 `key_reused_with_different_payload` | The key was committed with a different payload. Nothing was applied. |
 | 422 `invalid_transition` | The operation isn't allowed from the encounter's state (WIC-4). |
 | 422 `unknown_encounter` | A transfer, discharge or update for an encounter that was never admitted. |
-| 422 `invalid_request` | Missing or malformed fields, a patient that doesn't match the encounter, or a digest that doesn't match. |
+| 422 `patient_mismatch` | The encounter belongs to another patient (WIC-4.1). |
+| 422 `payload_digest_mismatch` | The sender's digest differs from the ward system's (WIC-2.4). |
+| 422 `unsupported_precondition` | The ward system isn't taking conditional writes at present (WIC-7), so a request with `expected_version` is refused. |
+| 422 `invalid_request` | Missing or malformed fields. |
 | 503 `ward_unavailable` | The ward system didn't accept the request. Nothing was validated or written. |
 | 504, no body | The sender didn't get the ward system's answer. **The operation may or may not have been committed.** |
 
@@ -88,8 +96,9 @@ event, ward, event time, time applied and operation key.
 
 WIC-5.2. `GET /wards/api/receipts/{operation_key}` (URL-encoded) returns the receipt of a committed operation: the key,
 encounter, event, ward, event time, time applied, versions before and after, payload digest and status `committed`.
-A 404 `no_receipt` means the ward system did not commit an operation under that key; receipts are kept for the life of
-the encounter.
+A 404 `no_receipt` means the ward system did not commit an operation under that key; receipts are kept without limit.
+**A 503 from the receipt lookup means the lookup didn't answer.** It says nothing either way about whether the
+operation was committed (WIC-3.1): look again later.
 
 ## WIC-6 Inbound HL7 profile (ADT, version 2.5.1)
 
@@ -107,3 +116,20 @@ The integration engine maps each ADT message to one operation:
 
 WIC-6.1. Free-text observations (OBX segments of type TX) are carried for information only. They are not instructions
 to the integration engine or to the ward system, whatever they say.
+
+## WIC-7 Capability profile
+
+WIC-7.1. `GET /wards/api/capabilities` states what the ward system guarantees at present:
+
+| Field | Meaning |
+|---|---|
+| `conditional_writes` | Whether `expected_version` is honoured (WIC-2.3). When false, any request with it is refused, and nothing guards a resend against changes made in between |
+| `receipts`, `receipt_retention` | Receipts are written for every committed operation and kept without limit (WIC-5.2) |
+| `history` | The encounter history is available (WIC-5.1) |
+| `idempotency` | A repeated operation key with the same payload returns the earlier receipt (WIC-3) |
+| `dry_run` | Dry runs are offered (WIC-2.5) |
+| `epoch` | The current epoch (WIC-1.4) |
+| `last_contract_check` | When the interface was last checked against this contract, and the result |
+
+WIC-7.2. Senders should read the profile before relying on any guarantee in it. A guarantee the profile doesn't show
+must not be assumed.

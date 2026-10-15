@@ -19,6 +19,8 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
 <Route Url="/faults" Method="POST" Call="PostFault"/>
 <Route Url="/faults" Method="GET" Call="GetFault"/>
 <Route Url="/reset" Method="POST" Call="PostReset"/>
+<Route Url="/capabilities" Method="GET" Call="GetCapabilities"/>
+<Route Url="/capabilities" Method="POST" Call="PostCapabilities"/>
 </Routes>
 }
 
@@ -63,6 +65,22 @@ ClassMethod GetFault() As %Status
 ClassMethod PostReset() As %Status
 {
     Set body = ##class(Wards.Service).Reset(.status)
+    Quit ..Reply(status, body)
+}
+
+ClassMethod GetCapabilities() As %Status
+{
+    Set body = ##class(Wards.Service).GetCapabilities(.status)
+    Quit ..Reply(status, body)
+}
+
+ClassMethod PostCapabilities() As %Status
+{
+    Set request = ..Body(.problem)
+    If problem '= "" {
+        Quit ..Reply(422, {"error": "invalid_request", "detail": (problem)})
+    }
+    Set body = ##class(Wards.Service).SetCapabilities(request, .status)
     Quit ..Reply(status, body)
 }
 

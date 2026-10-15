@@ -240,6 +240,81 @@ Method TestPayloadDigestMismatchRefused()
     Do $$$AssertEquals(status, 201, "and the right digest is accepted")
 }
 
+Method TestCapabilities()
+{
+    Set caps = ##class(Wards.Service).GetCapabilities(.status)
+    Do $$$AssertEquals(status, 200, "the capability profile answers 200")
+    Do $$$AssertTrue(caps.receipts, "receipts are offered")
+    Do $$$AssertEquals(caps."receipt_retention", "unbounded", "kept without limit")
+    Do $$$AssertEquals(caps.idempotency, "by operation key and payload digest", "idempotent by operation key and digest")
+    Do $$$AssertTrue(caps."dry_run", "dry runs are offered")
+    Do $$$AssertTrue(caps.epoch >= 1, "the epoch is a positive number")
+}
+
+Method TestConditionalWritesOff()
+{
+    Set encounter = ..Encounter(16)
+    Do ..Admit(encounter)
+    Set before = ##class(Wards.Service).ConditionalWrites()
+    Do ##class(Wards.Service).SetCapabilities({"conditional_writes": false}, .ignore)
+    Set transfer = ..Request(encounter, "transfer", "WARD-B", "2026-10-15T09:20:00Z")
+    Do transfer.%Set("expected_version", 1)
+    Set refused = ##class(Wards.Service).Apply(transfer, .refusedStatus)
+    Do transfer.%Set("dry_run", 1, "boolean")
+    Set rehearsal = ##class(Wards.Service).Apply(transfer, .rehearsalStatus)
+    Do transfer.%Remove("expected_version")
+    Do transfer.%Remove("dry_run")
+    Set routine = ##class(Wards.Service).Apply(transfer, .routineStatus)
+    Set restore = {}
+    Do restore.%Set("conditional_writes", before, "boolean")
+    Do ##class(Wards.Service).SetCapabilities(restore, .ignore)
+    Do $$$AssertEquals(refusedStatus, 422, "with conditional writes off, an expected version is refused")
+    Do $$$AssertEquals(refused.error, "unsupported_precondition", "as unsupported_precondition")
+    Do $$$AssertEquals(rehearsal.reason, "unsupported_precondition", "and a rehearsal reports why it would not apply")
+    Do $$$AssertEquals(routineStatus, 201, "while routine traffic without a version still applies")
+}
+
+Method TestEpochInReadsAndReceipts()
+{
+    Set encounter = ..Encounter(17)
+    Set body = ..Admit(encounter)
+    Set epoch = ##class(Wards.Service).Epoch()
+    Do $$$AssertEquals(body.receipt.epoch, epoch, "the receipt carries the epoch it was committed in")
+    Do $$$AssertEquals(body.encounter.epoch, epoch, "and the encounter read carries the current epoch")
+    Do $$$AssertEquals(##class(Wards.Service).GetCapabilities(.status).epoch, epoch, "as does the capability profile")
+}
+
+Method TestReceiptLookupUnavailable()
+{
+    Set encounter = ..Encounter(18)
+    Do ..Admit(encounter)
+    Set transfer = ..Request(encounter, "transfer", "WARD-B", "2026-10-15T09:20:00Z")
+    Do ##class(Wards.Service).Apply(transfer, .status)
+    Set saved = ##class(Wards.Service).GetFault(.ignore)
+    Do ##class(Wards.Service).SetFault({"mode": "receipt_lookup_unavailable", "operation_key": (transfer."operation_key")}, .ignore)
+    Set body = ##class(Wards.Service).GetReceipt(transfer."operation_key", .lookupStatus)
+    Do ##class(Wards.Service).SetFault(saved, .ignore)
+    Do $$$AssertEquals(lookupStatus, 503, "the receipt lookup is unavailable")
+    Do $$$AssertEquals(body.error, "ward_unavailable", "as ward_unavailable")
+    Set read = ##class(Wards.Service).GetEncounter(encounter, .status)
+    Do $$$AssertEquals(read.ward, "WARD-B", "while the transfer stands committed")
+    Do ##class(Wards.Service).GetReceipt(transfer."operation_key", .status)
+    Do $$$AssertEquals(status, 200, "and the receipt is there again once the fault is off")
+}
+
+Method TestLastContractCheckRecorded()
+{
+    Set saved = $GET(^Wards.Config("contract_check"))
+    Set caps = ##class(Wards.Service).SetCapabilities({"last_contract_check": {"at": "2026-10-15T15:40:00Z", "result": "a test value"}}, .status)
+    If saved = "" { Kill ^Wards.Config("contract_check") } Else { Set ^Wards.Config("contract_check") = saved }
+    Do $$$AssertEquals(status, 200, "the last contract check is recorded")
+    Do $$$AssertEquals(caps."last_contract_check".result, "a test value", "and shown in the profile")
+    Set body = ##class(Wards.Service).SetCapabilities({"conditional_writes": "no"}, .status)
+    Do $$$AssertEquals(status, 422, "a switch that isn't true or false is refused")
+    Set body = ##class(Wards.Service).SetCapabilities({"anything_else": true}, .status)
+    Do $$$AssertEquals(status, 422, "and so is an unknown field")
+}
+
 Method TestCanonicalDigest()
 {
     Set transfer = {"operation_key": "PAS^HOSP^MRN1001^ENC-1001^transfer^2026-10-15T09:20:00Z", "encounter_id": "ENC-1001", "patient_id": "MRN1001", "patient_id_authority": "HOSP", "event": "transfer", "ward": "WARD-B", "event_time": "2026-10-15T09:20:00Z", "source_system": "PAS", "source_message_id": "MSG00002", "expected_version": 1}

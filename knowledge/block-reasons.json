@@ -1,0 +1,248 @@
+{
+  "id": "block-reasons",
+  "version": "1.0",
+  "effective_from": "2026-10-15",
+  "applies_to": ["ward-api-v1", "hl7-v2.5.1-adt"],
+  "roles": {
+    "Operator": "The integration operator working the case",
+    "Approver": "The person who approves an exact resend",
+    "Integration team": "Owns the interfaces, mappings and policies",
+    "Ward system team": "Owns the ward bed management system"
+  },
+  "reasons": [
+    {
+      "code": "PATIENT_MISMATCH",
+      "title": "The patient doesn't match the encounter",
+      "prerequisite": "One patient identity for the encounter: the message's PID-3 and the ward's record agree (ELS-3.1)",
+      "next_action": "Escalate the identity conflict to the integration team. Nothing is sent.",
+      "owner": "Integration team",
+      "reevaluate_when": "A corrected message or a confirmed identity arrives",
+      "text": "The message names a different patient or assigning authority from the one the ward holds for this encounter. An identity conflict is never a movement to apply."
+    },
+    {
+      "code": "UNKNOWN_ENCOUNTER",
+      "title": "The ward has never seen this encounter",
+      "prerequisite": "An applied admission for the encounter (WIC-4)",
+      "next_action": "Check whether the admission failed too and recover it first; otherwise escalate.",
+      "owner": "Operator",
+      "reevaluate_when": "The admission is applied or found",
+      "text": "The ward has no admission for this visit number, so a transfer, discharge or update can't apply."
+    },
+    {
+      "code": "RECEIVER_UNREADABLE",
+      "title": "The ward's record couldn't be read",
+      "prerequisite": "A successful read of the encounter and its history (WIC-5.1)",
+      "next_action": "Collect the evidence again. If the ward stays unreadable, contact the ward system team.",
+      "owner": "Operator",
+      "reevaluate_when": "The ward answers reads again",
+      "text": "Without the ward's current state and history, supersession and transitions can't be judged, so nothing is eligible."
+    },
+    {
+      "code": "PARSE_FAILED",
+      "title": "The message couldn't be mapped to an operation",
+      "prerequisite": "A message the inbound profile can map (WIC-6)",
+      "next_action": "Escalate to the integration team with the message.",
+      "owner": "Integration team",
+      "reevaluate_when": "A corrected message arrives or the mapping is fixed",
+      "text": "Fields the operation needs, such as the visit number, the event time or the patient identifier, are missing or malformed."
+    },
+    {
+      "code": "UNKNOWN_DISPOSITION",
+      "title": "The proposal named an outcome the playbooks don't have",
+      "prerequisite": "One of resend, reconcile, superseded, more evidence or escalate (RP-1)",
+      "next_action": "Run the investigation again; if it repeats, escalate.",
+      "owner": "Operator",
+      "reevaluate_when": "A new investigation completes",
+      "text": "Only the five playbook outcomes can be acted on."
+    },
+    {
+      "code": "DIFFERENT_OPERATION",
+      "title": "The plan is for a different operation",
+      "prerequisite": "The plan's operation key is the failed movement's key (WIC-2.2)",
+      "next_action": "Discard the plan and investigate again.",
+      "owner": "Operator",
+      "reevaluate_when": "A new plan for the failed operation exists",
+      "text": "A recovery may only resend the same business operation, never a different one."
+    },
+    {
+      "code": "PAYLOAD_CHANGED",
+      "title": "The payload differs from the original",
+      "prerequisite": "The same canonical payload and digest as the failed movement (WIC-2.4)",
+      "next_action": "Escalate: content that changed under the same key needs the integration team (RP-2.5).",
+      "owner": "Integration team",
+      "reevaluate_when": "The original payload is confirmed",
+      "text": "A resend must carry exactly the original movement. Changed content isn't a recovery."
+    },
+    {
+      "code": "SUPERSEDED_BY_LATER_EVENT",
+      "title": "A later event made this movement obsolete",
+      "prerequisite": "No later applied location event (ELS-2.1, ELS-2.3)",
+      "next_action": "Close the case as superseded, recording the superseding event. Nothing is sent.",
+      "owner": "Operator",
+      "reevaluate_when": "Only if the later event is itself reversed",
+      "text": "The encounter has an applied transfer or discharge with a later event time, so resending would move the patient's record backwards."
+    },
+    {
+      "code": "INVALID_TRANSITION",
+      "title": "The ward wouldn't allow this movement now",
+      "prerequisite": "A transition the ward allows from the encounter's state (WIC-4)",
+      "next_action": "Check for supersession, such as a discharge, and close; otherwise escalate.",
+      "owner": "Operator",
+      "reevaluate_when": "The encounter's state changes",
+      "text": "For example, a transfer after a discharge: the ward refuses it, and resending can't help."
+    },
+    {
+      "code": "ALREADY_COMMITTED",
+      "title": "The ward already committed this movement",
+      "prerequisite": "No receipt for the operation key, before any resend (RP-2.1)",
+      "next_action": "Reconcile: record the receipt and verify the history. Never resend.",
+      "owner": "Operator",
+      "reevaluate_when": "Not applicable",
+      "text": "A receipt with the same payload exists, so the movement happened even though the sender saw an error."
+    },
+    {
+      "code": "NO_RECEIPT",
+      "title": "No receipt for this operation",
+      "prerequisite": "A receipt for the operation key, to reconcile (RP-2.2)",
+      "next_action": "Investigate again: the movement wasn't committed, so reconciling doesn't apply.",
+      "owner": "Operator",
+      "reevaluate_when": "A receipt appears or an investigation proposes another outcome",
+      "text": "Reconciling needs proof that the ward committed the movement; there is none."
+    },
+    {
+      "code": "RECEIPT_UNREADABLE",
+      "title": "The receipt lookup didn't answer",
+      "prerequisite": "An answer from the receipt lookup (WIC-5.2)",
+      "next_action": "Collect the evidence again later. The outcome stays unknown until the lookup answers.",
+      "owner": "Operator",
+      "reevaluate_when": "The receipt lookup answers",
+      "text": "No answer isn't the same as no receipt. Until the lookup answers, nothing may be resent (RP-3.1)."
+    },
+    {
+      "code": "NO_APPROVAL",
+      "title": "Nobody has approved this plan yet",
+      "prerequisite": "An approval of exactly this plan (RP-2.1, RP-3.4)",
+      "next_action": "Send the plan to an approver.",
+      "owner": "Approver",
+      "reevaluate_when": "An approver decides",
+      "text": "A resend needs a person's approval of the exact request."
+    },
+    {
+      "code": "APPROVAL_REVOKED",
+      "title": "The approval was revoked",
+      "prerequisite": "A current approval",
+      "next_action": "Review the plan again and ask for a new approval if it still holds.",
+      "owner": "Approver",
+      "reevaluate_when": "A new approval is given",
+      "text": "The approver withdrew the approval before dispatch."
+    },
+    {
+      "code": "APPROVAL_EXPIRED",
+      "title": "The approval expired",
+      "prerequisite": "An approval within its expiry",
+      "next_action": "Collect fresh evidence and ask for a new approval.",
+      "owner": "Approver",
+      "reevaluate_when": "A new approval is given",
+      "text": "Approvals are time-limited, because the ward's state can change."
+    },
+    {
+      "code": "APPROVAL_PLAN_CHANGED",
+      "title": "The plan changed after approval",
+      "prerequisite": "An approval of this plan version",
+      "next_action": "Ask for approval of the new plan.",
+      "owner": "Approver",
+      "reevaluate_when": "The new plan is approved",
+      "text": "An approval covers one exact plan; any change needs a new one (RP-3.4)."
+    },
+    {
+      "code": "APPROVAL_SNAPSHOT_CHANGED",
+      "title": "The evidence changed after approval",
+      "prerequisite": "An approval bound to the current evidence",
+      "next_action": "Review the new evidence, and approve again if the plan still holds.",
+      "owner": "Approver",
+      "reevaluate_when": "A new approval is given",
+      "text": "New evidence arrived after the approval, so the approver hasn't seen what the plan now rests on."
+    },
+    {
+      "code": "APPROVAL_POLICY_CHANGED",
+      "title": "The policy changed after approval",
+      "prerequisite": "An approval under the current policy version",
+      "next_action": "Run the checks again under the new policy, and approve again.",
+      "owner": "Approver",
+      "reevaluate_when": "A new approval is given",
+      "text": "The rules the approval relied on have a new version."
+    },
+    {
+      "code": "APPROVAL_RECEIVER_CHANGED",
+      "title": "The ward's state changed after approval",
+      "prerequisite": "The ward version and epoch the approval was bound to",
+      "next_action": "Collect fresh evidence: a later event may have superseded the movement.",
+      "owner": "Operator",
+      "reevaluate_when": "A new investigation completes",
+      "text": "Something was applied to the encounter after the approval, or the ward was reset, so the approved request may no longer be right."
+    },
+    {
+      "code": "NO_EXPECTED_VERSION",
+      "title": "The resend has no expected version",
+      "prerequisite": "expected_version set to the encounter's current version (WIC-2.3)",
+      "next_action": "Rebuild the plan from fresh evidence.",
+      "owner": "Operator",
+      "reevaluate_when": "A new plan exists",
+      "text": "A resend must be conditional, so that the ward refuses it if anything changed in between."
+    },
+    {
+      "code": "RECEIVER_CHANGED",
+      "title": "The ward's state changed before dispatch",
+      "prerequisite": "The ward's version still matches the plan at dispatch",
+      "next_action": "Collect fresh evidence and investigate again.",
+      "owner": "Operator",
+      "reevaluate_when": "A new investigation completes",
+      "text": "The check before dispatch found a newer version, so the conditional write would be refused anyway."
+    },
+    {
+      "code": "STALE_EVIDENCE",
+      "title": "The evidence is too old",
+      "prerequisite": "Evidence within its freshness limit",
+      "next_action": "Collect the evidence again.",
+      "owner": "Operator",
+      "reevaluate_when": "A fresh snapshot exists",
+      "text": "Observations of the current state age quickly; decisions use a fresh read."
+    },
+    {
+      "code": "CONNECTOR_INCAPABLE",
+      "title": "The ward can't take a conditional write now",
+      "prerequisite": "Conditional writes shown in the ward's capability profile",
+      "next_action": "Escalate for manual handling, or wait until the capability is back. Reconcile and superseded remain possible.",
+      "owner": "Ward system team",
+      "reevaluate_when": "The ward's capability profile changes",
+      "text": "Without conditional writes, nothing makes sure the resend lands on the state the approver saw, so resending isn't offered."
+    },
+    {
+      "code": "REHEARSAL_WOULD_NOT_APPLY",
+      "title": "The rehearsal says the resend wouldn't apply",
+      "prerequisite": "A dry run of the exact request that would apply (WIC-2.5)",
+      "next_action": "Escalate with the rehearsal's reason (RP-2.5).",
+      "owner": "Operator",
+      "reevaluate_when": "The encounter's state changes",
+      "text": "The ward's dry run of the exact request reported a refusal."
+    },
+    {
+      "code": "REJECTED_BY_APPROVER",
+      "title": "The approver rejected the plan",
+      "prerequisite": "An approval",
+      "next_action": "Read the approver's reason, then investigate again or escalate.",
+      "owner": "Approver",
+      "reevaluate_when": "A new plan or new evidence exists",
+      "text": "A person declined the request."
+    },
+    {
+      "code": "DISPATCH_REFUSED",
+      "title": "The ward refused the resend",
+      "prerequisite": "The ward accepting the conditional write",
+      "next_action": "Read the ward's answer: for a version conflict, collect fresh evidence; for anything else, escalate.",
+      "owner": "Operator",
+      "reevaluate_when": "A new investigation completes",
+      "text": "The conditional write was refused, so nothing changed."
+    }
+  ]
+}

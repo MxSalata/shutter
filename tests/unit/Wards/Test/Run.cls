@@ -30,6 +30,8 @@ ClassMethod Contract(repo As %String = "/home/irisowner/dev/") As %String [ SqlP
             Do failures.%Push(rs.%Get("Name"))
         }
     }
+    // The capability profile shows the last contract check
+    Do ##class(Wards.Service).SetCapabilities({"last_contract_check": {"at": (##class(Wards.Service).Now()), "result": ("in process: " _ passed _ " of " _ (passed + failed) _ " passed")}}, .ignore)
     Quit {"run": (run), "passed": (passed), "failed": (failed), "failures": (failures)}.%ToJSON()
 }
 

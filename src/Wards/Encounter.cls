@@ -29,6 +29,7 @@ Method ToJSON() As %DynamicObject
     If ..Ward = "" { Do out.%Set("ward", "", "null") } Else { Do out.%Set("ward", ..Ward) }
     Do out.%Set("version", ..Version, "number")
     Do out.%Set("updated_at", ..UpdatedAt)
+    Do out.%Set("epoch", ##class(Wards.Service).Epoch(), "number")
     Set history = []
     Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Wards.Event WHERE EncounterId = ? ORDER BY VersionAfter", ..EncounterId)
     While rs.%Next() {

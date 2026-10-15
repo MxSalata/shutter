@@ -26,6 +26,9 @@ Property SourceMessageId As %String(MAXLEN = 64);
 
 Property Status As %String(VALUELIST = ",committed") [ InitialExpression = "committed", Required ];
 
+/// The ward's epoch when the operation was committed.
+Property Epoch As %Integer;
+
 Index OperationKeyIdx On OperationKey [ Unique ];
 
 Method %OnBeforeSave(insert As %Boolean) As %Status [ Private, ServerOnly = 1 ]
@@ -44,6 +47,11 @@ Method ToJSON() As %DynamicObject
     Do out.%Set("version_after", ..VersionAfter, "number")
     Do out.%Set("payload_digest", ..PayloadDigest)
     Do out.%Set("status", ..Status)
+    If ..Epoch = "" {
+        Do out.%Set("epoch", "", "null")
+    } Else {
+        Do out.%Set("epoch", ..Epoch, "number")
+    }
     Quit out
 }
 

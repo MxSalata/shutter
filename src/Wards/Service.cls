@@ -23,6 +23,9 @@ ClassMethod Apply(request As %DynamicObject, Output status As %Integer) As %Dyna
     If (given '= ""), (given '= digest) {
         Quit ..Refuse(dryRun, 422, {"error": "payload_digest_mismatch"}, .status)
     }
+    If '..ConditionalWrites(), request.%IsDefined("expected_version"), request.%GetTypeOf("expected_version") '= "null" {
+        Quit ..Refuse(dryRun, 422, {"error": "unsupported_precondition"}, .status)
+    }
     Set encounterId = request.%Get("encounter_id")
     Lock +^Wards.Lock(encounterId):10
     If '$TEST {
@@ -116,6 +119,7 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
         Set receipt.EventTime = history.EventTime, receipt.AppliedAt = now
         Set receipt.VersionBefore = current, receipt.VersionAfter = encounter.Version
         Set receipt.PayloadDigest = digest, receipt.SourceMessageId = request.%Get("source_message_id")
+        Set receipt.Epoch = ..Epoch()
         $$$ThrowOnError(receipt.%Save())
         If dryRun {
             // The rehearsal: everything was validated and written, and is now rolled back
@@ -241,6 +245,10 @@ ClassMethod GetEncounter(encounterId As %String, Output status As %Integer) As %
 /// Section 1.3.
 ClassMethod GetReceipt(key As %String, Output status As %Integer) As %DynamicObject
 {
+    If ..FaultFor(key) = "receipt_lookup_unavailable" {
+        Set status = 503
+        Quit {"error": "ward_unavailable"}
+    }
     Set receipt = ##class(Wards.Receipt).OperationKeyIdxOpen(key)
     If '$ISOBJECT(receipt) {
         Set status = 404
@@ -264,9 +272,9 @@ ClassMethod FaultFor(key As %String) As %String
 ClassMethod SetFault(request As %DynamicObject, Output status As %Integer) As %DynamicObject
 {
     Set mode = request.%Get("mode")
-    If '$LISTFIND($LISTBUILD("off", "fail_before_accept", "commit_drop_response", "misleading_duplicate_error"), mode) {
+    If '$LISTFIND($LISTBUILD("off", "fail_before_accept", "commit_drop_response", "misleading_duplicate_error", "receipt_lookup_unavailable"), mode) {
         Set status = 422
-        Quit {"error": "invalid_request", "detail": "mode must be off, fail_before_accept, commit_drop_response or misleading_duplicate_error"}
+        Quit {"error": "invalid_request", "detail": "mode must be off, fail_before_accept, commit_drop_response, misleading_duplicate_error or receipt_lookup_unavailable"}
     }
     Set ^Wards.Config("fault", "mode") = mode
     Set ^Wards.Config("fault", "key") = $SELECT(mode = "off": "", 1: request.%Get("operation_key"))
@@ -303,8 +311,85 @@ ClassMethod Reset(Output status As %Integer) As %DynamicObject
     Do ##class(Wards.Event).%KillExtent()
     Do ##class(Wards.Encounter).%KillExtent()
     Kill ^Wards.Config("fault")
+    Kill ^Wards.Config("capabilities", "conditional_writes")
+    Set ^Wards.Config("epoch") = ..Epoch() + 1
     Set status = 200
-    Quit {"reset": true}
+    Quit {"reset": true, "epoch": (..Epoch())}
+}
+
+/// The ward's epoch: it increases at every reset, so versions from different epochs never compare.
+ClassMethod Epoch() As %Integer
+{
+    Quit +$GET(^Wards.Config("epoch"), 1)
+}
+
+/// Whether the ward takes conditional writes (<code>expected_version</code>). On by default; a demo can switch it
+/// off, and a reset switches it back on.
+ClassMethod ConditionalWrites() As %Boolean
+{
+    Quit ''$GET(^Wards.Config("capabilities", "conditional_writes"), 1)
+}
+
+/// What the ward guarantees (CONTRACTS 1.8): the capability profile behind the connector passport.
+ClassMethod Capabilities() As %DynamicObject
+{
+    Set out = {}
+    Do out.%Set("conditional_writes", ..ConditionalWrites(), "boolean")
+    Do out.%Set("receipts", 1, "boolean")
+    Do out.%Set("receipt_retention", "unbounded")
+    Do out.%Set("history", 1, "boolean")
+    Do out.%Set("idempotency", "by operation key and payload digest")
+    Do out.%Set("dry_run", 1, "boolean")
+    Do out.%Set("epoch", ..Epoch(), "number")
+    Set check = $GET(^Wards.Config("contract_check"))
+    If check = "" {
+        Do out.%Set("last_contract_check", "", "null")
+    } Else {
+        Do out.%Set("last_contract_check", {"at": ($LISTGET(check, 1)), "result": ($LISTGET(check, 2))})
+    }
+    Quit out
+}
+
+ClassMethod GetCapabilities(Output status As %Integer) As %DynamicObject
+{
+    Set status = 200
+    Quit ..Capabilities()
+}
+
+/// The demo switch for conditional writes (CONTRACTS 1.8, demo instances only), and the record of the last contract
+/// check, which the test tools write.
+/// Accepts <code>conditional_writes</code> (a boolean) and <code>last_contract_check</code> (<code>at</code>,
+/// <code>result</code>); anything else is refused.
+ClassMethod SetCapabilities(request As %DynamicObject, Output status As %Integer) As %DynamicObject
+{
+    If '$GET(^Wards.Config("demo")) {
+        Set status = 403
+        Quit {"error": "not_a_demo_instance"}
+    }
+    Set iter = request.%GetIterator()
+    While iter.%GetNext(.name, .value) {
+        If '$LISTFIND($LISTBUILD("conditional_writes", "last_contract_check"), name) {
+            Set status = 422
+            Return {"error": "invalid_request", "detail": ("unknown capability field " _ name)}
+        }
+    }
+    If request.%IsDefined("conditional_writes") {
+        If request.%GetTypeOf("conditional_writes") '= "boolean" {
+            Set status = 422
+            Quit {"error": "invalid_request", "detail": "conditional_writes must be true or false"}
+        }
+        Set ^Wards.Config("capabilities", "conditional_writes") = request."conditional_writes"
+    }
+    If request.%IsDefined("last_contract_check") {
+        Set check = request."last_contract_check"
+        If '$ISOBJECT(check) || (check.at = "") || (check.result = "") {
+            Set status = 422
+            Quit {"error": "invalid_request", "detail": "last_contract_check needs at and result"}
+        }
+        Set ^Wards.Config("contract_check") = $LISTBUILD(check.at, check.result)
+    }
+    Set status = 200
+    Quit ..Capabilities()
 }
 
 }

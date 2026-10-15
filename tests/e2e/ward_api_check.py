@@ -57,7 +57,10 @@ def main():
     ward = Ward(args.url, args.user, args.password)
     failures = []
 
+    checks = [0]
+
     def check(name, condition, detail=""):
+        checks[0] += 1
         print(("ok   " if condition else "FAIL ") + name + ("" if condition else f"  ({detail})"))
         if not condition:
             failures.append(name)
@@ -133,6 +136,33 @@ def main():
     status, text = ward.call("POST", "/operations", late)
     check("a transfer after the discharge: 422 invalid_transition", status == 422 and (parse(text) or {}).get("error") == "invalid_transition", f"{status} {text[:160]}")
 
+    status, text = ward.call("GET", "/capabilities")
+    caps = parse(text) or {}
+    check("GET /capabilities: 200, unbounded receipts, an epoch",
+          status == 200 and caps.get("receipt_retention") == "unbounded" and isinstance(caps.get("epoch"), int)
+          and caps.get("receipts") is True and caps.get("dry_run") is True, f"{status} {text[:200]}")
+    status, text = ward.call("GET", f"/encounters/{admit['encounter_id']}")
+    check("the encounter read carries the same epoch", (parse(text) or {}).get("epoch") == caps.get("epoch"), text[:160])
+    status, text = ward.call("GET", f"/receipts/{key}")
+    check("and so does the receipt", (parse(text) or {}).get("epoch") == caps.get("epoch"), text[:160])
+
+    guarded = operation(2, "admit", "WARD-A", "09:05", expected_version=0)
+    status, text = ward.call("POST", "/capabilities", {"conditional_writes": False})
+    switched = status == 200 and (parse(text) or {}).get("conditional_writes") is False
+    status, text = ward.call("POST", "/operations", guarded)
+    refused = status == 422 and (parse(text) or {}).get("error") == "unsupported_precondition"
+    restore = ward.call("POST", "/capabilities", {"conditional_writes": True})
+    check("conditional writes switched off: an expected version gets 422 unsupported_precondition",
+          switched and refused, f"{status} {text[:160]}")
+    check("and switched back on", restore[0] == 200 and (parse(restore[1]) or {}).get("conditional_writes") is True, restore[1][:160])
+
+    ward.call("POST", "/faults", {"mode": "receipt_lookup_unavailable", "operation_key": admit["operation_key"]})
+    status, text = ward.call("GET", f"/receipts/{key}")
+    ward.call("POST", "/faults", saved)
+    check("receipt lookup unavailable: 503 ward_unavailable", status == 503 and (parse(text) or {}).get("error") == "ward_unavailable", f"{status} {text[:120]}")
+    status, text = ward.call("GET", f"/receipts/{key}")
+    check("while the receipt stands", status == 200, f"{status} {text[:120]}")
+
     status, text = ward.call("GET", "/faults")
     check("the fault setting is back as it was", parse(text) == saved, f"{text[:160]} vs {saved}")
 
@@ -140,7 +170,12 @@ def main():
         status, text = Ward(args.url, args.second_user, args.second_password).call("GET", "/faults")
         check(f"{args.second_user} (Wards_API role): GET /faults 200", status == 200, f"{status} {text[:120]}")
 
-    print(f"{len(failures)} failed" if failures else "all checks passed")
+    # The capability profile shows the last contract check (CONTRACTS 1.8)
+    total = checks[0]
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    ward.call("POST", "/capabilities", {"last_contract_check": {"at": stamp, "result": f"over HTTP: {total - len(failures)} of {total} passed"}})
+
+    print(f"{len(failures)} of {total} failed" if failures else f"all {total} checks passed")
     return 1 if failures else 0
 
 
