@@ -108,6 +108,9 @@ ClassMethod CreateFolders() As %Status
         Set ^Interlock.Config("dir", sub) = dir
     }
     Set ^Interlock.Config("adtIn") = base _ "in/"
+    Set ^Interlock.Config("adtArchive") = base _ "archive/"
+    Set root = $GET(^Interlock.Config("root"))
+    If root '= "" Set ^Interlock.Config("fixtures") = root _ "fixtures/"
     Quit $$$OK
 }
 
@@ -199,15 +202,17 @@ ClassMethod CreateWorkflowRole(demo As %Boolean) As %Status
     Try {
         Set role = "Interlock Approvers"
         If '##class(EnsLib.Workflow.RoleDefinition).%ExistsId(role) {
-            Set sc = ##class(EnsLib.Workflow.RoleDefinition).CreateRole(role, "Approve or reject Interlock recovery plans")
+            Set sc = ##class(EnsLib.Workflow.RoleDefinition).CreateRole(role)
             Quit:$$$ISERR(sc)
+            Set r = ##class(EnsLib.Workflow.RoleDefinition).%OpenId(role)
+            If $ISOBJECT(r) Set r.Description = "Approve or reject Interlock recovery plans" Do r.%Save()
         }
         If demo {
             If '##class(EnsLib.Workflow.UserDefinition).%ExistsId("approver") {
                 Set sc = ##class(EnsLib.Workflow.UserDefinition).CreateUser("approver", "Interlock demo approver")
                 Quit:$$$ISERR(sc)
             }
-            Set sc = ##class(EnsLib.Workflow.RoleDefinition).AddUserToRole(role, "approver")
+            Set sc = ##class(EnsLib.Workflow.RoleDefinition).AddUserToRole(role, "approver", 1, "Approver")
         }
     } Catch ex {
         Set sc = ex.AsStatus()
@@ -275,12 +280,49 @@ ClassMethod CreateWebApps(ns As %String, root As %String) As %Status
     Quit sc
 }
 
+/// System default settings for the production: the folders and the ward API's address, so the
+/// production definition carries no paths of its own.
+ClassMethod ApplyDefaultSettings() As %Status
+{
+    Set sc = $$$OK
+    Set values("ADT In", "FilePath") = $GET(^Interlock.Config("dir", "in"))
+    Set values("ADT In", "ArchivePath") = $GET(^Interlock.Config("dir", "archive"))
+    Set values("ADT In", "WorkPath") = $GET(^Interlock.Config("dir", "work"))
+    Set values("*", "HTTPServer") = $GET(^Interlock.Config("wardHost"), "127.0.0.1")
+    Set values("*", "HTTPPort") = $GET(^Interlock.Config("wardPort"), 52773)
+    Set item = ""
+    For {
+        Set item = $ORDER(values(item))
+        Quit:(item="")
+        Set name = ""
+        For {
+            Set name = $ORDER(values(item, name), 1, value)
+            Quit:(name="")
+            Continue:(value="")
+            Set id = "Interlock.Production||" _ item _ "||*||" _ name
+            Set d = ##class(Ens.Config.DefaultSettings).%OpenId(id)
+            If '$ISOBJECT(d) {
+                Set d = ##class(Ens.Config.DefaultSettings).%New()
+                Set d.ProductionName = "Interlock.Production", d.ItemName = item, d.HostClassName = "*", d.SettingName = name
+            }
+            Set d.SettingValue = value
+            Set d.Description = "Set by Interlock.Setup"
+            Set sc = d.%Save()
+            Quit:$$$ISERR(sc)
+        }
+        Quit:$$$ISERR(sc)
+    }
+    Quit sc
+}
+
 /// Make Interlock.Production the namespace's production and start it, when the class is compiled.
 ClassMethod StartProduction() As %Status
 {
     Set sc = $$$OK
     Set prod = "Interlock.Production"
     If '##class(%Dictionary.CompiledClass).%ExistsId(prod) Quit sc
+    Set sc = ..ApplyDefaultSettings()
+    Quit:$$$ISERR(sc) sc
     Try {
         Do ##class(Ens.Director).SetAutoStart(prod)
         Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)
