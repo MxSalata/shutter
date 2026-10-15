@@ -37,4 +37,39 @@ Method ToJSON() As %DynamicObject
     Quit out
 }
 
+Storage Default
+{
+<Data name="EventDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>EncounterId</Value>
+</Value>
+<Value name="3">
+<Value>VersionAfter</Value>
+</Value>
+<Value name="4">
+<Value>Event</Value>
+</Value>
+<Value name="5">
+<Value>Ward</Value>
+</Value>
+<Value name="6">
+<Value>EventTime</Value>
+</Value>
+<Value name="7">
+<Value>AppliedAt</Value>
+</Value>
+<Value name="8">
+<Value>OperationKey</Value>
+</Value>
+</Data>
+<DataLocation>^Wards.EventD</DataLocation>
+<DefaultData>EventDefaultData</DefaultData>
+<IdLocation>^Wards.EventD</IdLocation>
+<IndexLocation>^Wards.EventI</IndexLocation>
+<StreamLocation>^Wards.EventS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

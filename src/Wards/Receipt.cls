@@ -55,4 +55,54 @@ Method ToJSON() As %DynamicObject
     Quit out
 }
 
+Storage Default
+{
+<Data name="ReceiptDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>OperationKey</Value>
+</Value>
+<Value name="3">
+<Value>EncounterId</Value>
+</Value>
+<Value name="4">
+<Value>Event</Value>
+</Value>
+<Value name="5">
+<Value>Ward</Value>
+</Value>
+<Value name="6">
+<Value>EventTime</Value>
+</Value>
+<Value name="7">
+<Value>AppliedAt</Value>
+</Value>
+<Value name="8">
+<Value>VersionBefore</Value>
+</Value>
+<Value name="9">
+<Value>VersionAfter</Value>
+</Value>
+<Value name="10">
+<Value>PayloadDigest</Value>
+</Value>
+<Value name="11">
+<Value>SourceMessageId</Value>
+</Value>
+<Value name="12">
+<Value>Status</Value>
+</Value>
+<Value name="13">
+<Value>Epoch</Value>
+</Value>
+</Data>
+<DataLocation>^Wards.ReceiptD</DataLocation>
+<DefaultData>ReceiptDefaultData</DefaultData>
+<IdLocation>^Wards.ReceiptD</IdLocation>
+<IndexLocation>^Wards.ReceiptI</IndexLocation>
+<StreamLocation>^Wards.ReceiptS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }
