@@ -2,7 +2,10 @@
   "id": "block-reasons",
   "version": "1.0",
   "effective_from": "2026-10-15",
-  "applies_to": ["ward-api-v1", "hl7-v2.5.1-adt"],
+  "applies_to": [
+    "ward-api-v1",
+    "hl7-v2.5.1-adt"
+  ],
   "roles": {
     "Operator": "The integration operator working the case",
     "Approver": "The person who approves an exact resend",
@@ -81,6 +84,15 @@
       "owner": "Operator",
       "reevaluate_when": "Only if the later event is itself reversed",
       "text": "The encounter has an applied transfer or discharge with a later event time, so resending would move the patient's record backwards."
+    },
+    {
+      "code": "SUPERSESSION_UNSUPPORTED",
+      "title": "The claimed later event is not in the evidence",
+      "prerequisite": "A later applied transfer or discharge in the snapshot (ELS-2.1)",
+      "next_action": "Check the receiver's history for the encounter. If a later event exists, collect evidence again; otherwise the operation may still be due, so re-plan.",
+      "owner": "Operator",
+      "reevaluate_when": "After new evidence is collected",
+      "text": "The plan closes the case as superseded, but the snapshot holds no later transfer or discharge for the encounter. A supersession must be shown by the evidence, not asserted."
     },
     {
       "code": "INVALID_TRANSITION",

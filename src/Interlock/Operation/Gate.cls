@@ -67,6 +67,13 @@ Method OnGateRequest(request As Interlock.Msg.GateRequest, Output response As In
         } Else {
             Do ..Check(checks, "ordering", "block", "SUPERSEDED_BY_LATER_EVENT", "A later event was applied: " _ superseding)
         }
+    } ElseIf plan.Disposition = "superseded" {
+        Set superseding = ..Superseding(summary, case)
+        If superseding '= "" {
+            Do ..Check(checks, "ordering", "pass", "SUPERSEDED_BY_LATER_EVENT", "The evidence shows the later event: " _ superseding)
+        } Else {
+            Do ..Check(checks, "ordering", "block", "SUPERSESSION_UNSUPPORTED", "The plan calls the operation superseded, but the evidence shows no later transfer or discharge for this encounter")
+        }
     } Else {
         Do ..Check(checks, "ordering", "pass", "NOT_APPLICABLE", "No write proposed")
     }

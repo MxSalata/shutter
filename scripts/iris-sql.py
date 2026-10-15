@@ -15,6 +15,23 @@ import urllib.error
 import urllib.request
 
 
+def opener_for(url):
+    """An opener that keeps the CSP session cookie between calls, so repeated calls share one
+    licence unit instead of opening a session each (which exhausts a Community licence)."""
+    import http.cookiejar
+    import hashlib
+    cache = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "interlock")
+    os.makedirs(cache, exist_ok=True)
+    jar = http.cookiejar.MozillaCookieJar(os.path.join(cache, "cookies-" + hashlib.sha1(url.encode()).hexdigest()[:12] + ".txt"))
+    try:
+        jar.load(ignore_discard=True, ignore_expires=True)
+    except (FileNotFoundError, http.cookiejar.LoadError):
+        pass
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    return opener, jar
+
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("sql")
@@ -31,9 +48,14 @@ def main():
     body = json.dumps({"query": args.sql, "parameters": args.params}).encode()
     req = urllib.request.Request(url, data=body, method="POST",
                                  headers={"Authorization": "Basic " + token, "Content-Type": "application/json"})
+    opener, jar = opener_for(args.url)
     try:
-        with urllib.request.urlopen(req, timeout=600) as resp:
+        with opener.open(req, timeout=600) as resp:
             raw = resp.read().decode(errors="replace")
+        try:
+            jar.save(ignore_discard=True, ignore_expires=True)
+        except OSError:
+            pass
         try:
             result = json.loads(raw)
         except ValueError:

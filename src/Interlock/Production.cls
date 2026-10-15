@@ -9,7 +9,7 @@ XData ProductionDefinition
 {
 <Production Name="Interlock.Production" TestingEnabled="true" LogGeneralTraceEvents="true">
   <Description>Interlock: supervised recovery for IRIS Interoperability. A failed message is a case, not a retry.</Description>
-  <ActorPoolSize>2</ActorPoolSize>
+  <ActorPoolSize>1</ActorPoolSize>
   <Item Name="ADT In" Category="Feed" ClassName="EnsLib.HL7.Service.FileService" PoolSize="1" Enabled="true" Foreground="false" Comment="Synthetic ADT messages, one per file" LogTraceEvents="true" Schedule="">
     <Setting Target="Adapter" Name="FileSpec">*.hl7</Setting>
     <Setting Target="Adapter" Name="CallInterval">1</Setting>
@@ -21,13 +21,14 @@ XData ProductionDefinition
   </Item>
   <Item Name="ADT to Ward" Category="Feed" ClassName="Interlock.Process.ADTToWard" PoolSize="1" Enabled="true" Foreground="false" Comment="Builds the ward operation, delivers it, opens a case on failure" LogTraceEvents="true" Schedule="">
   </Item>
-  <Item Name="Ward Out" Category="Feed,Recovery" ClassName="Interlock.Operation.Ward" PoolSize="2" Enabled="true" Foreground="false" Comment="The one connector to the ward system: feed, rehearsals and recovery writes" LogTraceEvents="true" Schedule="">
+  <Item Name="Ward Out" Category="Feed,Recovery" ClassName="Interlock.Operation.Ward" PoolSize="1" Enabled="true" Foreground="false" Comment="The one connector to the ward system: feed, rehearsals and recovery writes" LogTraceEvents="true" Schedule="">
     <Setting Target="Adapter" Name="Credentials">WardsAPI</Setting>
     <Setting Target="Adapter" Name="ResponseTimeout">15</Setting>
     <Setting Target="Adapter" Name="ConnectTimeout">5</Setting>
     <Setting Target="Host" Name="FailureTimeout">0</Setting>
   </Item>
-  <Item Name="Case Workflow" Category="Recovery" ClassName="Interlock.Process.CaseWorkflow" PoolSize="2" Enabled="true" Foreground="false" Comment="One instance per case: evidence, the board, the gate, approval, execution, verification" LogTraceEvents="true" Schedule="">
+  <Item Name="Case Workflow" Category="Recovery" ClassName="Interlock.Process.CaseWorkflow" PoolSize="1" Enabled="true" Foreground="false" Comment="One instance per case: evidence, the board, the gate, approval, execution, verification" LogTraceEvents="true" Schedule="">
+    <Setting Target="Host" Name="SettleSeconds">15</Setting>
   </Item>
   <Item Name="Evidence Collector" Category="Recovery" ClassName="Interlock.Operation.Evidence" PoolSize="1" Enabled="true" Foreground="false" Comment="An immutable snapshot of the message store, the ward's state and receipts, and the route" LogTraceEvents="true" Schedule="">
     <Setting Target="Adapter" Name="Credentials">WardsAPI</Setting>
@@ -51,7 +52,7 @@ XData ProductionDefinition
     <Setting Target="Host" Name="AgentClass">Interlock.Agent.Coordinator</Setting>
     <Setting Target="Host" Name="Mode">replay</Setting>
   </Item>
-  <Item Name="Agent Board" Category="Board" ClassName="Interlock.Bridge.Operation.Agent" PoolSize="3" Enabled="true" Foreground="false" Comment="Any library member whose request names its agent class; the single investigator runs here" LogTraceEvents="true" Schedule="">
+  <Item Name="Agent Board" Category="Board" ClassName="Interlock.Bridge.Operation.Agent" PoolSize="1" Enabled="true" Foreground="false" Comment="Any library member whose request names its agent class; the single investigator runs here" LogTraceEvents="true" Schedule="">
     <Setting Target="Host" Name="Mode">replay</Setting>
   </Item>
   <Item Name="Gate" Category="Recovery" ClassName="Interlock.Operation.Gate" PoolSize="1" Enabled="true" Foreground="false" Comment="The deterministic checks: pass, block or unknown per check" LogTraceEvents="true" Schedule="">

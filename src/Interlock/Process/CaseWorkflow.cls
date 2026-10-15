@@ -43,7 +43,11 @@ Property VerifyTarget As %String(MAXLEN = 128) [ InitialExpression = "Verifier" 
 /// Seconds an approval stays valid.
 Property ApprovalValidSeconds As %Integer [ InitialExpression = 3600 ];
 
-Parameter SETTINGS = "EvidenceTarget:Targets,GateTarget:Targets,WardTarget:Targets,ApprovalTarget:Targets,VerifyTarget:Targets,ApprovalValidSeconds:Approval";
+/// How long a new case waits before the evidence is collected, so that messages still in flight
+/// for the encounter (a later transfer, a retry from the source) are in the snapshot. 0 collects at once.
+Property SettleSeconds As %Integer [ InitialExpression = 15 ];
+
+Parameter SETTINGS = "EvidenceTarget:Targets,GateTarget:Targets,WardTarget:Targets,ApprovalTarget:Targets,VerifyTarget:Targets,ApprovalValidSeconds:Approval,SettleSeconds:Timing";
 
 Method OnRequest(request As %Library.Persistent, Output response As %Library.Persistent) As %Status
 {
@@ -64,7 +68,11 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     Set case.WorkflowSessionId = ..%SessionId
     Do case.%Save()
     $$$TRACE("Case " _ case.CaseId _ " opened (" _ case.Mode _ "): " _ case.Headline)
-    Quit ..StartEvidence(case)
+    If ..SettleSeconds <= 0 Quit ..StartEvidence(case)
+    Do case.Note("note", "Waiting " _ ..SettleSeconds _ " s for the feed to settle before collecting evidence", "system", "")
+    Set alarm = ##class(Ens.AlarmRequest).%New()
+    Set alarm.Timeout = ..SettleSeconds
+    Quit ..SendRequestAsync("Ens.Alarm", alarm, 1, "settle", "Settle period before the investigation")
 }
 
 Method StartEvidence(case As Interlock.Store.Case) As %Status
@@ -97,6 +105,7 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
         Set case = ##class(Interlock.Store.Case).ByCaseId(..CaseId)
         If '$ISOBJECT(case) Quit
         If case.IsClosed() { $$$TRACE("Case " _ ..CaseId _ " is closed; ignoring " _ completionkey) Quit }
+        If completionkey = "settle" { Set sc = ..StartEvidence(case) Quit }
         If completionkey = "evidence" { Set sc = ..OnEvidence(case, callresponse) Quit }
         If $EXTRACT(completionkey, 1, 7) = "member:" { Set sc = ..OnMember(case, $EXTRACT(completionkey, 8, *), callresponse) Quit }
         If completionkey = "coordinator" { Set sc = ..OnCoordinator(case, callresponse) Quit }
