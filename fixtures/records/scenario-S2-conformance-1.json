@@ -1,0 +1,47 @@
+{
+ "key": "scenario:S2|conformance|1",
+ "agentClass": "Interlock.Agent.Conformance",
+ "configVersion": "1",
+ "memberCode": "conformance",
+ "snapshotDigest": "",
+ "correlationKey": "scenario:S2",
+ "model": "fixture",
+ "response": {
+  "status": "ok",
+  "agent_class": "Interlock.Agent.Conformance",
+  "config_version": "1",
+  "mode": "record",
+  "model": "fixture",
+  "provider_config": "",
+  "started_at": "2026-10-15T12:00:00Z",
+  "duration_ms": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cache_read_tokens": 0,
+  "cache_creation_tokens": 0,
+  "iterations": 0,
+  "tool_calls": 4,
+  "session_id": "",
+  "result": {
+   "disposition": "resend",
+   "confidence": 0.9,
+   "summary": "The A02 parses against the 2.5.1 schema, identifies the patient as MRN1002 (HOSP) and the visit as ENC-1002, names Ward B as the assigned location, and carries an event time of 09:20. Nothing in the message explains the failure; the receiver answered 503 before validating anything.",
+   "violations": [],
+   "unknowns": [
+    "The receiver's profile beyond the interface contract was not checked"
+   ],
+   "evidence_refs": [
+    "message",
+    "validation",
+    "error"
+   ]
+  },
+  "content": "",
+  "error": "",
+  "record_id": ""
+ },
+ "transcript": "",
+ "toolCalls": "[{\"name\": \"get_snapshot\"}, {\"name\": \"get_message\"}, {\"name\": \"get_validation\"}, {\"name\": \"search_contracts\"}]",
+ "recordedAt": "2026-10-15T12:00:00Z",
+ "label": "Hand-written fixture standing in for a live recording; replaced when the live agents run"
+}

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Export generator="Cache" version="25">
+  <Document name="iris-interlock-aihub.ZPM">
+    <Module>
+      <Name>iris-interlock-aihub</Name>
+      <Version>0.1.0</Version>
+      <Description>Live agents for Interlock on an InterSystems IRIS AI Hub build: the agent runner for the bridge, the board members (declarative %AI.Agent classes), their tools, policies, schemas and knowledge bases. Requires iris-interlock and an IRIS or IRIS for Health build with the AI Hub (%AI) package.</Description>
+      <Keywords>interoperability,ai agents,ai hub,recovery</Keywords>
+      <Author>
+        <Person>MxSalata</Person>
+        <CopyrightDate>2026</CopyrightDate>
+        <License>MIT</License>
+      </Author>
+      <Packaging>module</Packaging>
+      <SourcesRoot>src</SourcesRoot>
+      <Dependencies>
+        <ModuleReference>
+          <Name>iris-interlock</Name>
+          <Version>0.1.0</Version>
+        </ModuleReference>
+      </Dependencies>
+      <Resource Name="Interlock.Agent.PKG"/>
+      <Resource Name="Interlock.Tools.PKG"/>
+      <Resource Name="Interlock.Schema.PKG"/>
+      <Resource Name="Interlock.Knowledge.PKG"/>
+      <Resource Name="Interlock.Bridge.Policy.PKG"/>
+      <Resource Name="Interlock.Bridge.Monitor.CLS"/>
+      <Resource Name="Interlock.Bridge.Runner.AIHub.CLS"/>
+      <Invoke Class="Interlock.Setup" Method="InstallAIHub">
+        <Arg>${root}</Arg>
+      </Invoke>
+    </Module>
+  </Document>
+</Export>

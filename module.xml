@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Export generator="Cache" version="25">
+  <Document name="iris-interlock.ZPM">
+    <Module>
+      <Name>iris-interlock</Name>
+      <Version>0.1.0</Version>
+      <Description>Interlock: supervised recovery for InterSystems IRIS Interoperability. A failed message is a case, not a retry: a board of AI Hub agents investigates it, a deterministic gate and a person decide, IRIS carries out the exact approved action and verifies it. This core module runs on any IRIS or IRIS for Health Community 2026.2 or later and replays recorded agent runs; the companion module iris-interlock-aihub adds live agents on an AI Hub build.</Description>
+      <Keywords>interoperability,hl7,recovery,ai agents,ai hub,workflow,contest</Keywords>
+      <Author>
+        <Person>MxSalata</Person>
+        <CopyrightDate>2026</CopyrightDate>
+        <License>MIT</License>
+      </Author>
+      <Packaging>module</Packaging>
+      <SourcesRoot>src</SourcesRoot>
+      <SystemRequirements Version=">=2026.2" Interoperability="enabled"/>
+      <!-- The whole Interlock package except the parts that need AI Hub, which the aihub module adds
+           under the same package name. -->
+      <Resource Name="Interlock.PKG"/>
+      <!-- The synthetic ward system the production delivers to. -->
+      <Resource Name="Wards.PKG"/>
+      <!-- Folders, security, the library, prices, recorded runs, the web applications and the production. -->
+      <Invoke Class="Interlock.Setup" Method="Install">
+        <Arg>${root}</Arg>
+      </Invoke>
+      <!-- The web application's built files, once they exist. -->
+      <FileCopy Name="www/" Target="${cspdir}interlock/" Overlay="1"/>
+    </Module>
+  </Document>
+</Export>
