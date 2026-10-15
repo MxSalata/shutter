@@ -22,6 +22,22 @@ CLASS_RE = re.compile(r"^\s*Class\s+([A-Za-z%][\w.]*)", re.MULTILINE)
 ROUTINE_RE = re.compile(r"^\s*ROUTINE\s+([\w.]+)", re.MULTILINE)
 
 
+def opener_for(url):
+    """An opener that keeps the CSP session cookie between calls, so repeated calls share one
+    licence unit instead of opening a session each (which exhausts a Community licence)."""
+    import http.cookiejar
+    import hashlib
+    cache = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "interlock")
+    os.makedirs(cache, exist_ok=True)
+    jar = http.cookiejar.MozillaCookieJar(os.path.join(cache, "cookies-" + hashlib.sha1(url.encode()).hexdigest()[:12] + ".txt"))
+    try:
+        jar.load(ignore_discard=True, ignore_expires=True)
+    except (FileNotFoundError, http.cookiejar.LoadError):
+        pass
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    return opener, jar
+
+
 def doc_name(path, text):
     ext = os.path.splitext(path)[1].lower()
     if ext == ".cls":
@@ -54,13 +70,19 @@ class Atelier:
         self.base = url.rstrip("/") + "/api/atelier/v1/" + ns
         token = base64.b64encode(f"{user}:{password}".encode()).decode()
         self.headers = {"Authorization": "Basic " + token, "Content-Type": "application/json"}
+        self.opener, self.jar = opener_for(url)
 
     def call(self, method, path, body=None, query=""):
         req = urllib.request.Request(self.base + path + query, method=method, headers=self.headers)
         data = json.dumps(body).encode() if body is not None else None
         try:
-            with urllib.request.urlopen(req, data=data, timeout=300) as resp:
-                return json.loads(resp.read().decode())
+            with self.opener.open(req, data=data, timeout=300) as resp:
+                result = json.loads(resp.read().decode())
+            try:
+                self.jar.save(ignore_discard=True, ignore_expires=True)
+            except OSError:
+                pass
+            return result
         except urllib.error.HTTPError as e:
             payload = e.read().decode(errors="replace")
             try:

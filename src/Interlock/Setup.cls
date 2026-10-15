@@ -391,6 +391,57 @@ ClassMethod RestartProduction() As %String [ SqlProc ]
     Quit $SELECT($$$ISOK(sc): "ok", 1: $SYSTEM.Status.GetErrorText(sc))
 }
 
+/// The instance's licence counters, for the readiness report and for diagnosing refused jobs.
+ClassMethod LicenseInfo() As %String [ SqlProc ]
+{
+    Set o = {}
+    Try {
+        Set o."license_type" = $SYSTEM.License.KeyLicenseType()
+        Set o."units_consumed" = $SYSTEM.License.LUConsumed()
+        Set o."units_available" = $SYSTEM.License.LUAvailable()
+        Set o."max_connections" = $SYSTEM.License.MaxConnections()
+    } Catch ex {
+        Set o.error = ex.DisplayString()
+    }
+    Quit o.%ToJSON()
+}
+
+/// Can this process start a background job? For diagnosing a runner that cannot.
+ClassMethod TestJob() As %String [ SqlProc ]
+{
+    Set o = {}
+    Try {
+        Job ##class(Interlock.Setup).NoOp()::5
+        Do o.%Set("started", $TEST, "boolean")
+        Set o.child = $ZCHILD
+    } Catch ex {
+        Set o.error = ex.DisplayString()
+    }
+    Set o.user = $USERNAME, o.roles = $ROLES, o.namespace = $NAMESPACE
+    Quit o.%ToJSON()
+}
+
+ClassMethod NoOp()
+{
+    Hang 1
+}
+
+/// The last lines of the instance's messages.log, for diagnosis through SQL.
+ClassMethod TailLog(lines As %Integer = 40) As %String [ SqlProc ]
+{
+    Set path = ##class(%File).ManagerDirectory() _ "messages.log"
+    Set f = ##class(%Stream.FileCharacter).%New()
+    Set f.Filename = path
+    Set n = 0
+    While 'f.AtEnd { Set n = n + 1, buf(n # lines) = f.ReadLine() }
+    Set out = "", i = n # lines
+    For k = 1:1:lines {
+        Set i = (i + 1) # lines
+        If $DATA(buf(i)) Set out = out _ buf(i) _ $CHAR(10)
+    }
+    Quit out
+}
+
 /// A readiness report as JSON: what is installed, what runs, what is missing.
 ClassMethod Doctor() As %String [ SqlProc ]
 {
@@ -414,6 +465,7 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Set r.recordings = +records
     &sql(SELECT COUNT(*) INTO :cases FROM Interlock_Store."Case")
     Set r.cases = +cases
+    Set r.license = ##class(%DynamicObject).%FromJSON(..LicenseInfo())
     Try {
         New $NAMESPACE
         Set $NAMESPACE = "%SYS"

@@ -1,0 +1,52 @@
+{
+ "key": "scenario:S1|encounter|1",
+ "agentClass": "Interlock.Agent.Encounter",
+ "configVersion": "1",
+ "memberCode": "encounter",
+ "snapshotDigest": "",
+ "correlationKey": "scenario:S1",
+ "model": "fixture",
+ "response": {
+  "status": "ok",
+  "agent_class": "Interlock.Agent.Encounter",
+  "config_version": "1",
+  "mode": "record",
+  "model": "fixture",
+  "provider_config": "",
+  "started_at": "2026-10-15T12:00:00Z",
+  "duration_ms": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cache_read_tokens": 0,
+  "cache_creation_tokens": 0,
+  "iterations": 0,
+  "tool_calls": 5,
+  "session_id": "",
+  "result": {
+   "disposition": "superseded",
+   "confidence": 0.92,
+   "summary": "The receiver holds ENC-1001 admitted in Ward C at version 2: the 09:45 transfer to Ward C was applied after the failed 09:20 transfer to Ward B. Under the lifecycle policy a later transfer supersedes an earlier one, so the 09:20 intent no longer holds; resending it would move the patient back to Ward B. No receipt exists for the 09:20 operation, so nothing was applied twice.",
+   "superseding_evidence": [
+    {
+     "event": "transfer",
+     "ward": "WARD-C",
+     "event_time": "2026-10-15T09:45:00Z",
+     "source": "ward history and the feed timeline"
+    }
+   ],
+   "unknowns": [],
+   "evidence_refs": [
+    "ward_state",
+    "receipt",
+    "timeline"
+   ]
+  },
+  "content": "",
+  "error": "",
+  "record_id": ""
+ },
+ "transcript": "",
+ "toolCalls": "[{\"name\": \"get_snapshot\"}, {\"name\": \"list_encounter_events\"}, {\"name\": \"get_ward_state\"}, {\"name\": \"get_receipt\"}, {\"name\": \"search_lifecycle\"}]",
+ "recordedAt": "2026-10-15T12:00:00Z",
+ "label": "Hand-written fixture standing in for a live recording; replaced when the live agents run"
+}

@@ -1,0 +1,57 @@
+{
+ "key": "scenario:S1|coordinator|1",
+ "agentClass": "Interlock.Agent.Coordinator",
+ "configVersion": "1",
+ "memberCode": "coordinator",
+ "snapshotDigest": "",
+ "correlationKey": "scenario:S1",
+ "model": "fixture",
+ "response": {
+  "status": "ok",
+  "agent_class": "Interlock.Agent.Coordinator",
+  "config_version": "1",
+  "mode": "record",
+  "model": "fixture",
+  "provider_config": "",
+  "started_at": "2026-10-15T12:00:00Z",
+  "duration_ms": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cache_read_tokens": 0,
+  "cache_creation_tokens": 0,
+  "iterations": 0,
+  "tool_calls": 2,
+  "session_id": "",
+  "result": {
+   "disposition": "superseded",
+   "summary": "The message is valid but its intent is obsolete: the 09:45 transfer to Ward C superseded the 09:20 transfer to Ward B, and no receipt shows the 09:20 operation ever applied. Close the case as superseded with nothing resent; verify that the receiver's history shows the later transfer and no receipt for the stale operation.",
+   "action": {
+    "type": "none"
+   },
+   "preconditions": [
+    "The receiver's history shows the 09:45 transfer to Ward C",
+    "No receipt exists for the 09:20 operation"
+   ],
+   "evidence_refs": [
+    "ward_state",
+    "receipt",
+    "timeline",
+    "message"
+   ],
+   "disagreements": [
+    {
+     "member": "conformance",
+     "said": "resend",
+     "why_kept": "Conformance judged the message alone; the encounter's history settles the intent"
+    }
+   ]
+  },
+  "content": "",
+  "error": "",
+  "record_id": ""
+ },
+ "transcript": "",
+ "toolCalls": "[{\"name\": \"get_findings\"}, {\"name\": \"search_playbooks\"}]",
+ "recordedAt": "2026-10-15T12:00:00Z",
+ "label": "Hand-written fixture standing in for a live recording; replaced when the live agents run"
+}

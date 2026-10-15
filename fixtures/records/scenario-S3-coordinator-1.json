@@ -1,0 +1,56 @@
+{
+ "key": "scenario:S3|coordinator|1",
+ "agentClass": "Interlock.Agent.Coordinator",
+ "configVersion": "1",
+ "memberCode": "coordinator",
+ "snapshotDigest": "",
+ "correlationKey": "scenario:S3",
+ "model": "fixture",
+ "response": {
+  "status": "ok",
+  "agent_class": "Interlock.Agent.Coordinator",
+  "config_version": "1",
+  "mode": "record",
+  "model": "fixture",
+  "provider_config": "",
+  "started_at": "2026-10-15T12:00:00Z",
+  "duration_ms": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cache_read_tokens": 0,
+  "cache_creation_tokens": 0,
+  "iterations": 0,
+  "tool_calls": 2,
+  "session_id": "",
+  "result": {
+   "disposition": "reconcile",
+   "summary": "The operation is already committed at the receiver (receipt present, encounter in Ward B at version 2); the feed only lost the acknowledgment. Reconcile the case against the receipt and verify the committed history; resend nothing.",
+   "action": {
+    "type": "reconcile",
+    "operation_key": "PAS^HOSP^MRN1003^ENC-1003^transfer^2026-10-15T09:20:00Z"
+   },
+   "preconditions": [
+    "The receipt for the operation key is still present"
+   ],
+   "evidence_refs": [
+    "receipt",
+    "ward_state",
+    "timeline"
+   ],
+   "disagreements": [
+    {
+     "member": "conformance",
+     "said": "resend",
+     "why_kept": "Conformance judged the message alone; the receipt settles the effect"
+    }
+   ]
+  },
+  "content": "",
+  "error": "",
+  "record_id": ""
+ },
+ "transcript": "",
+ "toolCalls": "[{\"name\": \"get_findings\"}, {\"name\": \"search_playbooks\"}]",
+ "recordedAt": "2026-10-15T12:00:00Z",
+ "label": "Hand-written fixture standing in for a live recording; replaced when the live agents run"
+}

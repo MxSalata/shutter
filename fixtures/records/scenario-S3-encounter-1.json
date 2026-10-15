@@ -1,0 +1,45 @@
+{
+ "key": "scenario:S3|encounter|1",
+ "agentClass": "Interlock.Agent.Encounter",
+ "configVersion": "1",
+ "memberCode": "encounter",
+ "snapshotDigest": "",
+ "correlationKey": "scenario:S3",
+ "model": "fixture",
+ "response": {
+  "status": "ok",
+  "agent_class": "Interlock.Agent.Encounter",
+  "config_version": "1",
+  "mode": "record",
+  "model": "fixture",
+  "provider_config": "",
+  "started_at": "2026-10-15T12:00:00Z",
+  "duration_ms": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cache_read_tokens": 0,
+  "cache_creation_tokens": 0,
+  "iterations": 0,
+  "tool_calls": 4,
+  "session_id": "",
+  "result": {
+   "disposition": "reconcile",
+   "confidence": 0.93,
+   "summary": "The receiver holds a committed receipt for exactly this operation key, and ENC-1003 is admitted in Ward B at version 2: the transfer was applied and only the acknowledgment was lost. The intent is already in effect; nothing should be resent.",
+   "superseding_evidence": [],
+   "unknowns": [],
+   "evidence_refs": [
+    "receipt",
+    "ward_state",
+    "timeline"
+   ]
+  },
+  "content": "",
+  "error": "",
+  "record_id": ""
+ },
+ "transcript": "",
+ "toolCalls": "[{\"name\": \"get_snapshot\"}, {\"name\": \"get_receipt\"}, {\"name\": \"get_ward_state\"}, {\"name\": \"search_lifecycle\"}]",
+ "recordedAt": "2026-10-15T12:00:00Z",
+ "label": "Hand-written fixture standing in for a live recording; replaced when the live agents run"
+}
