@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'self'" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="description"
+      content="Interlock: failed interface messages investigated by a board of agents, checked by a deterministic gate, approved by a person and verified at the receiver."
+    />
+    <title>Interlock</title>
+    <!-- Applies the stored colour scheme, contrast and palette before the first paint (see public/color-scheme.js). -->
+    <script src="/interlock/color-scheme.js"></script>
+    <style>
+      /* Shown until React's first render replaces #root: the demo loads its API mock first. */
+      .boot {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 14px;
+        background: #ebeef2;
+        color: #495057;
+        font:
+          500 14px/1.4 ui-sans-serif,
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+      }
+      .boot-mark {
+        width: 44px;
+        height: 44px;
+        border-radius: 13px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, #095c7c, #45acd1);
+        box-shadow: 0 1px 2px rgb(0 0 0 / 0.15);
+        animation: boot-pulse 1.4s ease-in-out infinite;
+      }
+      .boot-mark::after {
+        content: '';
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 3.5px solid #fff;
+      }
+      html[data-mantine-color-scheme='dark'] .boot {
+        background: #181e26;
+        color: #b3bcc8;
+      }
+      html[data-interlock-palette='pastel'][data-mantine-color-scheme='light']:not(
+          [data-interlock-contrast='high']
+        )
+        .boot {
+        background: #f0ecf9;
+        color: #5a5577;
+      }
+      html[data-interlock-contrast='high'] .boot {
+        background: #fff;
+        color: #000;
+      }
+      html[data-interlock-contrast='high'][data-mantine-color-scheme='dark'] .boot {
+        background: #000;
+        color: #fff;
+      }
+      @keyframes boot-pulse {
+        50% {
+          transform: scale(0.92);
+          opacity: 0.85;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .boot-mark {
+          animation: none;
+        }
+      }
+    </style>
+    <script type="module" crossorigin src="/interlock/assets/index-BlD4VOT5.js"></script>
+    <link rel="modulepreload" crossorigin href="/interlock/assets/mantine-B5tKPvQf.js">
+    <link rel="modulepreload" crossorigin href="/interlock/assets/react-DAjGKCK0.js">
+    <link rel="modulepreload" crossorigin href="/interlock/assets/query-B42CfAOZ.js">
+    <link rel="stylesheet" crossorigin href="/interlock/assets/index-lptUnNkt.css">
+  </head>
+  <body>
+    <div id="root">
+      <div class="boot" role="status" aria-live="polite">
+        <div class="boot-mark"></div>
+        <div>Loading Interlock…</div>
+      </div>
+    </div>
+  </body>
+</html>

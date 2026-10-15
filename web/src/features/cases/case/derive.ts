@@ -111,3 +111,19 @@ export function phaseStatuses(state: string, events: CaseEvent[]): PhaseStatus[]
 export function checksOf(d: GateDecision): GateCheck[] {
   return asArray<GateCheck>(d.checks);
 }
+
+/**
+ * One entry of a finding's list in words: a kept disagreement ("Conformance said resend: ...") or a cited event
+ * ("transfer to WARD-C at 09:45:00, from the ward history"); anything else as JSON.
+ */
+export function describeEntry(x: unknown): string {
+  if (typeof x === 'string') return x;
+  const o = asObject(x);
+  if (!o) return JSON.stringify(x);
+  const s = (k: string) => (o[k] === undefined || o[k] === null ? '' : String(o[k]));
+  if (o.member !== undefined && o.said !== undefined)
+    return `${humanize(s('member'))} said ${humanize(s('said')).toLowerCase()}${o.why_kept || o.why ? `: ${s('why_kept') || s('why')}` : ''}`;
+  if (o.event !== undefined && (o.event_time !== undefined || o.ward !== undefined))
+    return `${humanize(s('event'))}${o.ward ? ` to ${s('ward')}` : ''}${o.event_time ? ` at ${formatTime(s('event_time'))}` : ''}${o.source ? `, from the ${s('source')}` : ''}`;
+  return JSON.stringify(x);
+}

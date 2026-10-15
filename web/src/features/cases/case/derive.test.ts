@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CaseEvent, SnapshotItem } from '@/api/types';
-import { checksOf, describeItem, phaseStatuses, rounds } from './derive';
+import { checksOf, describeEntry, describeItem, phaseStatuses, rounds } from './derive';
 
 const transition = (seq: number, fromState: string, toState: string): CaseEvent => ({
   seq,
@@ -187,5 +187,21 @@ describe('checksOf', () => {
     const d = { stage: 'proposal', outcome: 'pass', policyVersion: '1', summary: '', at: '' } as const;
     expect(checksOf({ ...d, checks: checks as never })).toHaveLength(1);
     expect(checksOf({ ...d, checks: JSON.stringify(checks) })).toHaveLength(1);
+  });
+});
+
+describe('describeEntry', () => {
+  it('reads a kept disagreement and a cited event as sentences', () => {
+    expect(
+      describeEntry({ member: 'conformance', said: 'resend', why_kept: 'it judged the message alone' }),
+    ).toBe('Conformance said resend: it judged the message alone');
+    expect(
+      describeEntry({
+        event: 'transfer',
+        ward: 'WARD-C',
+        event_time: '2026-10-15T09:45:00Z',
+        source: 'ward history',
+      }),
+    ).toBe('Transfer to WARD-C at 09:45:00, from the ward history');
   });
 });

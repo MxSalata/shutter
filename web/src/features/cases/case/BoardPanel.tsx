@@ -6,6 +6,7 @@ import { DispositionBadge } from '@/components/StateBadge';
 import { JsonBlock } from '@/components/JsonBlock';
 import { asArray, asObject } from '@/lib/json';
 import { formatDuration, formatInt, formatUsd, humanize } from '@/lib/format';
+import { describeEntry } from './derive';
 import { NotYet, Section } from './Section';
 
 const LISTS: [string, string][] = [
@@ -92,7 +93,7 @@ function ResultLists({ result }: { result: Record<string, unknown> }) {
             </Text>
             <List size="sm" spacing={2}>
               {items.map((x, i) => (
-                <List.Item key={i}>{typeof x === 'string' ? x : JSON.stringify(x)}</List.Item>
+                <List.Item key={i}>{describeEntry(x)}</List.Item>
               ))}
             </List>
           </Stack>
