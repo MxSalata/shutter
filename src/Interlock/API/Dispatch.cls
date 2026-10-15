@@ -122,6 +122,9 @@ ClassMethod Project(obj As %JSON.Adaptor) As %DynamicObject
         Set o.error = "projection failed: " _ $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "empty")
         Quit o
     }
+    // A numeric property with no value (added after the row was saved) exports as an empty value,
+    // which is not JSON: it becomes null.
+    Set json = $REPLACE($REPLACE(json, ":,", ":null,"), ":}", ":null}")
     Set o = ##class(%DynamicObject).%FromJSON(json)
     Set o.id = obj.%Id()
     Quit o
@@ -415,8 +418,16 @@ ClassMethod CaseApprovals(caseId As %String) As %Status
     Set case = ..CaseOr404(caseId)
     If '$ISOBJECT(case) Quit $$$OK
     Set o = {}
-    Set o.approvals = ..Rows("Interlock.Store.Approval", "SELECT ID FROM Interlock_Store.Approval WHERE ""Case"" = ? ORDER BY ID", case.%Id())
-    Set o.tasks = ##class(Interlock.Util.Workflow).TasksFor(caseId)
+    Try {
+        Set o.approvals = ..Rows("Interlock.Store.Approval", "SELECT ID FROM Interlock_Store.Approval WHERE ""Case"" = ? ORDER BY ID", case.%Id())
+    } Catch ex {
+        Set o.approvals = [], o.approvalsError = ex.DisplayString()
+    }
+    Try {
+        Set o.tasks = ##class(Interlock.Util.Workflow).TasksFor(caseId)
+    } Catch ex {
+        Set o.tasks = [], o.tasksError = ex.DisplayString()
+    }
     Quit ..Json(o)
 }
 
