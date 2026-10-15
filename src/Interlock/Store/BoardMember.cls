@@ -61,7 +61,7 @@ ClassMethod MembersForMode(mode As %String, requested As %DynamicArray = "") As 
         Quit out
     }
     Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT Code FROM Interlock_Store.BoardMember WHERE Role = 'specialist' AND Enabled = 1 AND InDefaultBoard = 1 ORDER BY Sort")
-    While rs.%Next() Do out.%Push(rs.%Get("Code"))
+    While rs.%Next() { Do out.%Push(rs.%Get("Code")) }
     Quit out
 }
 

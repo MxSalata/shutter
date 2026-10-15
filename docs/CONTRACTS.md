@@ -1,6 +1,6 @@
 # Contracts between Interlock's parts
 
-Version 1.2, 15 October 2026. These are the interfaces the parts of Interlock are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.3, 15 October 2026. These are the interfaces the parts of Interlock are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The ward system's API
 
@@ -113,7 +113,7 @@ Every applied operation increments the version by one. A transfer to the ward th
 
 - `fail_before_accept`: 503 before any validation or write.
 - `commit_drop_response`: the operation is committed, then the response is a 504 with no body.
-- `misleading_duplicate_error`: when `expected_version` mismatches, the ward answers 409 `{"error": "duplicate_message"}` instead of `version_conflict`, and writes nothing. (A buggy receiver that reports the wrong reason. Nothing else changes.)
+- `misleading_duplicate_error`: with an `operation_key`, the ward answers 409 `{"error": "duplicate_message"}` for that key whatever the version, and writes nothing; without a key, it answers that way when `expected_version` mismatches, instead of `version_conflict`. (A buggy receiver that reports the wrong reason. Nothing else changes.)
 
 ### 1.6 Canonical payload and digest
 
@@ -184,7 +184,10 @@ Step kinds: `file` (drop the file into the ADT In folder; `expect` is `delivered
 
 - `List() As %String`: the scenarios as JSON (the `scenarios.json` content with the fixture files resolved).
 - `Run(scenario As %String, mode As %String = "board") As %String`: resets the ward (section 1.7), sets the run mode for the case workflow (`board`, `single`, `rules`, by writing `^Interlock.Config("mode")`) and the running scenario (`^Interlock.Config("scenario")` = the scenario id, which the case intake stamps on the case, so that recorded agent runs replay by scenario on any instance), then executes the steps: faults through the ward API, files copied into the production's inbound folder (`^Interlock.Config("adtIn")`, set by `Interlock.Setup`), waits. Returns JSON `{"scenario": "S1", "started_at": "…", "files": [...]}`. It does not wait for the case; the production and the app do the rest.
-- `Reset() As %String`: the ward reset, the inbound and archive folders emptied, `^Interlock.Config("mode")` back to `board`, `^Interlock.Config("scenario")` cleared.
+- `Reset() As %String`: the ward reset, the inbound and archive folders emptied, `^Interlock.Config("mode")` back to `board`, `^Interlock.Config("scenario")` cleared, and `^Interlock.Config("resetAt")` set to the ISO UTC time of the reset. Encounter ids are fixed per scenario, so the evidence collector ignores message-store events older than `resetAt`; the ward's own history is per run already.
+- The runner may call `Wards.Service` in process for the reset and the faults; the production always goes through HTTP.
+- Settings the runner reads, all set by `Interlock.Setup`: `^Interlock.Config("fixtures")` (the fixtures directory), `("adtIn")`, `("adtArchive")`. The ADT In service takes `*.hl7` and archives what it has read.
+- The run mode (`board`, `single`, `rules`) is the investigation mode. Whether agents run live, record or replay is the production's setting on the agent items, independent of it.
 
 ## 5. The REST API for the app
 
@@ -196,6 +199,7 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.3, 15 Oct 2026: `misleading_duplicate_error` with an `operation_key` (1.5); `resetAt`, the runner's settings and the mode semantics (section 4), from the scenario work.
 - v1.2, 15 Oct 2026: the ward decisions of 15 Oct recorded (section 1.1), with `patient_mismatch` and `payload_digest_mismatch` as their own codes.
 - v1.1, 15 Oct 2026: the runner sets `^Interlock.Config("scenario")` (section 4); the repository layout.
 - v1, 15 Oct 2026: first version (sections 1 to 4).

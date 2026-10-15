@@ -34,7 +34,7 @@ ClassMethod Canonical(obj As %DynamicAbstractObject) As %String
     Set out = "", key = ""
     For {
         Set key = $ORDER(keys(key))
-        Quit:key = ""
+        Quit:(key="")
         Set out = out _ $SELECT(out = "": "", 1: ",") _ ..JSONString(key) _ ":" _ ..CanonicalValue(obj, key)
     }
     Quit "{" _ out _ "}"

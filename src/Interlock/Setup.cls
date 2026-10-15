@@ -26,8 +26,13 @@ ClassMethod CreateNamespaceStatus(ns As %String) As %Status
                 If '##class(%File).CreateDirectoryChain(dir) Set sc = $$$ERROR($$$GeneralError, "Cannot create " _ dir) Quit
             }
             If '##class(Config.Databases).Exists(ns) {
+                Set resource = "%DB_" _ ns
+                If '##class(Security.Resources).Exists(resource) {
+                    Set sc = ##class(Security.Resources).Create(resource, "The " _ ns _ " database", "")
+                    Quit:$$$ISERR(sc)
+                }
                 If '##class(%File).Exists(dir _ "IRIS.DAT") {
-                    Set sc = ##class(SYS.Database).CreateDatabase(dir)
+                    Set sc = ##class(SYS.Database).CreateDatabase(dir, , , , resource)
                     Quit:$$$ISERR(sc)
                 }
                 Kill props
@@ -119,7 +124,7 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
         }
     }
     Quit:$$$ISERR(sc) sc
-    Set db = "%DB_" _ ns
+    Set db = ..DatabaseResource(ns)
     If '##class(Security.Roles).Exists("Interlock_Operator") {
         Set sc = ##class(Security.Roles).Create("Interlock_Operator", "Interlock operator: cases, scenarios, investigations", "Interlock_Operate:U," _ db _ ":RW,%Ens_Portal:U", "")
         Quit:$$$ISERR(sc) sc
@@ -139,6 +144,27 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
         }
     }
     Quit sc
+}
+
+/// The security resource of a namespace's default database, for example %DB_INTERLOCK or
+/// %DB_%DEFAULT. Runs in %SYS.
+ClassMethod DatabaseResource(ns As %String) As %String
+{
+    Set resource = "%DB_%DEFAULT"
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = "%SYS"
+        Set sc = ##class(Config.Namespaces).Get(ns, .nsprops)
+        Quit:$$$ISERR(sc)
+        Set dbname = $GET(nsprops("Globals"))
+        Quit:(dbname="")
+        Set sc = ##class(Config.Databases).Get(dbname, .dbprops)
+        Quit:$$$ISERR(sc)
+        Set db = ##class(SYS.Database).%OpenId($GET(dbprops("Directory")))
+        If $ISOBJECT(db) && (db.ResourceName '= "") Set resource = db.ResourceName
+    } Catch ex {
+    }
+    Quit resource
 }
 
 /// The production's credentials for the ward API: a user with the Wards_API role when the ward

@@ -33,7 +33,11 @@ def main():
                                  headers={"Authorization": "Basic " + token, "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=600) as resp:
-            result = json.loads(resp.read().decode())
+            raw = resp.read().decode(errors="replace")
+        try:
+            result = json.loads(raw)
+        except ValueError:
+            raise SystemExit("not a JSON response: " + raw[:800])
     except urllib.error.HTTPError as e:
         raise SystemExit(f"HTTP {e.code}: {e.read().decode(errors='replace')[:800]}")
 
