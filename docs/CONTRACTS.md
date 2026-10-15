@@ -1,6 +1,6 @@
 # Contracts between Interlock's parts
 
-Version 1.3, 15 October 2026. These are the interfaces the parts of Interlock are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.4, 15 October 2026. These are the interfaces the parts of Interlock are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The ward system's API
 
@@ -123,7 +123,32 @@ The canonical payload is the JSON object with exactly these keys in this order, 
 
 `POST /wards/api/reset` clears encounters, events, receipts and faults. 403 `{"error": "not_a_demo_instance"}` unless the installer has marked the instance as a demo (`^Wards.Config("demo") = 1`). The web application's password authentication applies.
 
-### 1.8 Roles and credentials
+### 1.8 Capabilities (v1.4)
+
+`GET /wards/api/capabilities` says what the ward guarantees, so that the gate's connector-capability check reads something real:
+
+```json
+{
+  "conditional_writes": true,
+  "receipts": true,
+  "receipt_retention": "unbounded",
+  "history": true,
+  "idempotency": "by operation key and payload digest",
+  "dry_run": true,
+  "epoch": 7,
+  "last_contract_check": {"at": "2026-10-15T14:00:00Z", "result": "17 of 17 passed"}
+}
+```
+
+- `POST /wards/api/capabilities` `{"conditional_writes": false}` is the demo switch (demo instances only, like the reset): afterwards any operation that carries `expected_version` is refused with 422 `{"error": "unsupported_precondition"}`, and the read says `"conditional_writes": false`. `{"conditional_writes": true}` restores it; the reset restores it too.
+- `epoch` is an integer that increments at every reset. It appears here, in every encounter read (`"epoch"` beside `"version"`) and in every receipt. An approval binds the epoch it was given, so an approval from before a reset cannot authorise a dispatch after it even when the version numbers happen to match.
+- `last_contract_check` is whatever the ward recorded last (the HTTP check writes it); null when never run.
+
+### 1.9 Receipt lookup unavailable (v1.4)
+
+Fault mode `receipt_lookup_unavailable`, with an `operation_key`: `GET /wards/api/receipts/{key}` answers 503 `{"error": "ward_unavailable"}` for that key while the commit, the encounter read and the history stand. It shows that the absence of a readable receipt is not evidence that nothing was committed: the gate's effect check answers unknown, and no write is dispatched.
+
+### 1.10 Roles and credentials
 
 The web application `/wards/api` requires password authentication and the role `Wards_API` (created by the ward installer; the demo users and the production's credentials get it). The production reaches it through an `EnsLib.HTTP.OutboundAdapter` with the Ens credentials entry `WardsAPI`.
 
@@ -189,6 +214,16 @@ Step kinds: `file` (drop the file into the ADT In folder; `expect` is `delivered
 - Settings the runner reads, all set by `Interlock.Setup`: `^Interlock.Config("fixtures")` (the fixtures directory), `("adtIn")`, `("adtArchive")`. The ADT In service takes `*.hl7` and archives what it has read.
 - The run mode (`board`, `single`, `rules`) is the investigation mode. Whether agents run live, record or replay is the production's setting on the agent items, independent of it.
 
+## 4.1 Scenario steps that wait (v1.4)
+
+A step `{"wait_for_state": "awaiting_approval", "timeout": 120}` makes the runner wait until the newest case of the running scenario reaches that state (or the timeout passes, which the runner reports). The runner reads the case in the same namespace:
+
+```sql
+SELECT TOP 1 State FROM Interlock_Store."Case" WHERE Scenario = ? ORDER BY ID DESC
+```
+
+Scenario S7 (a later transfer arriving while the plan awaits approval) is written with it. The web app reads case state through the REST API instead (section 5).
+
 ## 5. The REST API for the app
 
 Version 2 of this document, once the store and the workflow exist. The shape will follow the review file's section 5.8: cases, a case's timeline and artefacts, investigations, approvals, executions, scenarios and settings, with an expected case version and an idempotency key on every change.
@@ -199,6 +234,7 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.4, 15 Oct 2026: the capabilities read and the demo switch, the epoch, the receipt-lookup fault (1.8, 1.9); scenario steps that wait for a case state (4.1). From House's triage of the owner's feature documents (T9, T10, A1, A2, A5).
 - v1.3, 15 Oct 2026: `misleading_duplicate_error` with an `operation_key` (1.5); `resetAt`, the runner's settings and the mode semantics (section 4), from the scenario work.
 - v1.2, 15 Oct 2026: the ward decisions of 15 Oct recorded (section 1.1), with `patient_mismatch` and `payload_digest_mismatch` as their own codes.
 - v1.1, 15 Oct 2026: the runner sets `^Interlock.Config("scenario")` (section 4); the repository layout.
