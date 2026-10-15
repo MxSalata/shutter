@@ -30,10 +30,13 @@ ClassMethod FromHL7(message As EnsLib.HL7.Message, Output sc As %Status) As %Dyn
         If eventTime = "" Set eventTime = message.GetValueAt("EVN:2.1")
         Set event = ..EventForTrigger(trigger)
         If event = "" Set sc = $$$ERROR($$$GeneralError, "Unsupported ADT trigger: " _ trigger) Quit
-        For required = "sourceSystem", "patientId", "authority", "encounterId", "eventTime" {
-            If @required = "" Set sc = $$$ERROR($$$GeneralError, "Missing field for the operation key: " _ required) Quit
-        }
-        Quit:$$$ISERR(sc)
+        Set missing = ""
+        If sourceSystem = "" Set missing = "MSH-3 sending application"
+        If patientId = "" Set missing = "PID-3 patient identifier"
+        If authority = "" Set missing = "PID-3 assigning authority"
+        If encounterId = "" Set missing = "PV1-19 visit number"
+        If eventTime = "" Set missing = "EVN-6 or EVN-2 event time"
+        If missing '= "" Set sc = $$$ERROR($$$GeneralError, "Missing field for the operation key: " _ missing) Quit
         Set isoTime = ##class(Interlock.Util.Time).FromHL7(eventTime)
         Set op = {}
         Set op."operation_key" = ..FromParts(sourceSystem, authority, patientId, encounterId, event, isoTime)
