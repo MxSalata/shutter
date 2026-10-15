@@ -72,8 +72,9 @@ ClassMethod Run(scenario As %String, mode As %String = "board") As %String [ Sql
 }
 
 /// Starts <var>scenario</var> and returns at once, for the app's 202 (CONTRACTS 5.2): the same checks and reset as
-/// <method>Run</method>, then a background job plays the steps; <method>Status</method> follows it. Refused while
-/// another background run is playing. Returns JSON text.
+/// <method>Run</method>, then a background job plays the steps; <method>Status</method> follows it. When no job can
+/// start, it plays the steps itself and answers when they are done (<code>"running": false</code>). Refused while
+/// another run is playing. Returns JSON text.
 ClassMethod Start(scenario As %String, mode As %String = "board") As %String [ SqlProc ]
 {
     If ..Running() {
@@ -86,12 +87,21 @@ ClassMethod Start(scenario As %String, mode As %String = "board") As %String [ S
     Kill ^Interlock.Scenarios("run")
     Set ^Interlock.Scenarios("run") = {"scenario": (scenario), "mode": (mode), "startedAt": (started), "state": "running", "files": [], "timeouts": []}.%ToJSON()
     Job ##class(Interlock.Scenarios.Runner).Background(scenario, mode, started)::10
-    If '$TEST {
-        Set ^Interlock.Scenarios("run") = {"scenario": (scenario), "mode": (mode), "startedAt": (started), "state": "failed", "files": [], "timeouts": [], "error": "the background job did not start"}.%ToJSON()
-        Quit {"error": "the background job did not start"}.%ToJSON()
+    If $TEST {
+        Set ^Interlock.Scenarios("run", "job") = $ZCHILD
+        Quit {"scenario": (scenario), "mode": (mode), "startedAt": (started), "files": [], "running": true}.%ToJSON()
     }
-    Set ^Interlock.Scenarios("run", "job") = $ZCHILD
-    Quit {"scenario": (scenario), "mode": (mode), "startedAt": (started), "files": [], "running": true}.%ToJSON()
+    // No process to spare (the Community licence caps them, and the production holds most): play the steps here,
+    // in the caller's process, and answer when they are done. Called over HTTP, the gateway is asked to wait.
+    Set duration = ..Duration(found)
+    Set:$ISOBJECT($GET(%response))&&(duration > 30) %response.Timeout = duration + 60
+    Set ^Interlock.Scenarios("run", "job") = $JOB
+    Do ..Background(scenario, mode, started)
+    Set run = {}.%FromJSON(^Interlock.Scenarios("run"))
+    If run.state '= "done" {
+        Quit {"error": (run.error), "files": (run.files)}.%ToJSON()
+    }
+    Quit {"scenario": (scenario), "mode": (mode), "startedAt": (started), "files": (run.files), "timeouts": (run.timeouts), "running": false}.%ToJSON()
 }
 
 /// The background run <method>Start</method> began, or the last one: scenario, mode, startedAt, state (running, done,
