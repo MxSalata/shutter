@@ -2,11 +2,13 @@
 """Checks the ward system's REST API over HTTP against docs/CONTRACTS.md, section 1.
 
     python3 tests/e2e/ward_api_check.py [--url http://localhost:52773] [--user _SYSTEM] [--password SYS]
-                                        [--second-user operator --second-password interlock]
+                                        [--second-user wards-client --second-password interlock]
 
 Uses its own encounter ids (ENC-HT-<time>-n), sets faults only for its own operation keys and puts the previous
-fault back, and never resets the ward, so it can run on an instance that holds other data. Exit status 1 when a
-check fails. Standard library only.
+fault back, and never resets the ward, so it can run on an instance that holds other data. The ward has one fault
+setting, so don't run it while a scenario plays: it would replace the scenario's fault for a moment. The second user
+should be the production's ward client (`wards-client`, which has the Wards_API role); the people's demo users
+don't have it, by design. Exit status 1 when a check fails. Standard library only.
 """
 import argparse
 import base64
