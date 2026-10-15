@@ -53,7 +53,9 @@ send its own digest; if it differs from the ward system's, the request is refuse
 
 WIC-2.5. **Dry run.** With `dry_run: true` the ward system validates the operation and performs it inside a
 transaction that it always rolls back, then reports whether it would apply and the encounter as it would be. Nothing
-is committed, no receipt is stored and no history is written.
+is committed, no receipt is stored and no history is written. The answer also gives the encounter as it was when
+checked (`encounter_before`, null for an encounter the ward system has never seen) and the epoch, so a sender can tell
+later whether anything changed between the dry run and the real operation.
 
 ## WIC-3 Responses
 
@@ -61,7 +63,7 @@ is committed, no receipt is stored and no history is written.
 |---|---|
 | 201 | Applied and committed. The body holds the receipt and the encounter. |
 | 200, `already_committed` | An operation with this key was committed before with the same payload. Nothing new was applied; the body holds the earlier receipt. |
-| 200, `rehearsal` | A dry run: `would_apply`, and either the encounter as it would be or the reason it would not apply. |
+| 200, `rehearsal` | A dry run: `would_apply`, the encounter as it was checked and the epoch, and either the encounter as it would be or the reason it would not apply. |
 | 409 `version_conflict` | `expected_version` differed from the current version. Nothing was applied. |
 | 409 `key_reused_with_different_payload` | The key was committed with a different payload. Nothing was applied. |
 | 422 `invalid_transition` | The operation isn't allowed from the encounter's state (WIC-4). |

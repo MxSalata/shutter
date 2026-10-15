@@ -10,23 +10,23 @@ ClassMethod Apply(request As %DynamicObject, Output status As %Integer) As %Dyna
 {
     Set dryRun = ''request.%Get("dry_run")
     Set key = request.%Get("operation_key")
+    Set encounterId = request.%Get("encounter_id")
     If 'dryRun, ..FaultFor(key) = "fail_before_accept" {
         Set status = 503
         Quit {"error": "ward_unavailable"}
     }
     Set problem = ..Validate(request)
     If problem '= "" {
-        Quit ..Refuse(dryRun, 422, {"error": "invalid_request", "detail": (problem)}, .status)
+        Quit ..Refuse(dryRun, 422, {"error": "invalid_request", "detail": (problem)}, .status, encounterId)
     }
     Set digest = ..Digest(..Canonical(request))
     Set given = request.%Get("payload_digest")
     If (given '= ""), (given '= digest) {
-        Quit ..Refuse(dryRun, 422, {"error": "payload_digest_mismatch"}, .status)
+        Quit ..Refuse(dryRun, 422, {"error": "payload_digest_mismatch"}, .status, encounterId)
     }
     If '..ConditionalWrites(), request.%IsDefined("expected_version"), request.%GetTypeOf("expected_version") '= "null" {
-        Quit ..Refuse(dryRun, 422, {"error": "unsupported_precondition"}, .status)
+        Quit ..Refuse(dryRun, 422, {"error": "unsupported_precondition"}, .status, encounterId)
     }
-    Set encounterId = request.%Get("encounter_id")
     Lock +^Wards.Lock(encounterId):10
     If '$TEST {
         Set status = 503
@@ -51,7 +51,7 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
     // Part of request validity: an encounter never changes its patient
     If $ISOBJECT(encounter) {
         If (encounter.PatientId '= request.%Get("patient_id")) || (encounter.PatientIdAuthority '= request.%Get("patient_id_authority")) {
-            Quit ..Refuse(dryRun, 422, {"error": "patient_mismatch", "encounter_id": (encounterId)}, .status)
+            Quit ..Refuse(dryRun, 422, {"error": "patient_mismatch", "encounter_id": (encounterId)}, .status, encounterId)
         }
     }
     // The misleading duplicate error set for this key answers whatever the version, and writes nothing
@@ -63,11 +63,11 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
     Set receipt = ##class(Wards.Receipt).OperationKeyIdxOpen(key)
     If $ISOBJECT(receipt) {
         If receipt.PayloadDigest '= digest {
-            Quit ..Refuse(dryRun, 409, {"error": "key_reused_with_different_payload", "operation_key": (key)}, .status)
+            Quit ..Refuse(dryRun, 409, {"error": "key_reused_with_different_payload", "operation_key": (key)}, .status, encounterId)
         }
         Set status = 200
         If dryRun {
-            Quit {"applied": false, "rehearsal": true, "would_apply": false, "reason": "already_committed", "receipt": (receipt.ToJSON())}
+            Quit ..Rehearsed({"applied": false, "rehearsal": true, "would_apply": false, "reason": "already_committed", "receipt": (receipt.ToJSON())}, ..EncounterJSON(encounterId))
         }
         Set out = {"applied": false, "reason": "already_committed", "receipt": (receipt.ToJSON())}
         Set encounter = ##class(Wards.Encounter).EncounterIdIdxOpen(receipt.EncounterId)
@@ -76,7 +76,7 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
     }
     Set current = $SELECT($ISOBJECT(encounter): encounter.Version, 1: 0)
     If '$ISOBJECT(encounter), event '= "admit" {
-        Quit ..Refuse(dryRun, 422, {"error": "unknown_encounter", "encounter_id": (encounterId)}, .status)
+        Quit ..Refuse(dryRun, 422, {"error": "unknown_encounter", "encounter_id": (encounterId)}, .status, encounterId)
     }
     Set expected = request.%Get("expected_version")
     If (expected '= ""), (+expected '= current) {
@@ -84,13 +84,15 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
             Set status = 409
             Quit {"error": "duplicate_message"}
         }
-        Quit ..Refuse(dryRun, 409, {"error": "version_conflict", "expected_version": (+expected), "current_version": (current)}, .status)
+        Quit ..Refuse(dryRun, 409, {"error": "version_conflict", "expected_version": (+expected), "current_version": (current)}, .status, encounterId)
     }
     If $ISOBJECT(encounter), (encounter.State = "discharged") || (event = "admit") {
-        Quit ..Refuse(dryRun, 422, {"error": "invalid_transition", "state": (encounter.State), "event": (event)}, .status)
+        Quit ..Refuse(dryRun, 422, {"error": "invalid_transition", "state": (encounter.State), "event": (event)}, .status, encounterId)
     }
     Set now = ..Now()
     Set ward = $SELECT((event = "admit") || (event = "transfer"): request.%Get("ward"), 1: "")
+    // What a rehearsal is checked against, read before anything changes
+    Set before = $SELECT(dryRun: ..EncounterJSON(encounterId), 1: "")
     TSTART
     Try {
         If '$ISOBJECT(encounter) {
@@ -126,7 +128,7 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
             Set after = encounter.ToJSON()
             TROLLBACK 1
             Set status = 200
-            Set result = {"applied": false, "rehearsal": true, "would_apply": true, "encounter_after": (after)}
+            Set result = ..Rehearsed({"applied": false, "rehearsal": true, "would_apply": true}, before, after)
         } Else {
             TCOMMIT
             Set status = 201
@@ -146,7 +148,7 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
 }
 
 /// A refusal: as itself for a real operation, or for a rehearsal as a result that would not apply.
-ClassMethod Refuse(dryRun As %Boolean, httpStatus As %Integer, body As %DynamicObject, Output status As %Integer) As %DynamicObject [ Private ]
+ClassMethod Refuse(dryRun As %Boolean, httpStatus As %Integer, body As %DynamicObject, Output status As %Integer, encounterId As %String = "") As %DynamicObject [ Private ]
 {
     If 'dryRun {
         Set status = httpStatus
@@ -159,7 +161,29 @@ ClassMethod Refuse(dryRun As %Boolean, httpStatus As %Integer, body As %DynamicO
         Continue:name="error"
         Do out.%Set(name, value)
     }
+    Quit ..Rehearsed(out, ..EncounterJSON(encounterId))
+}
+
+/// A rehearsal's result with what it was checked against: the encounter before it (null when the ward has never seen
+/// it), the encounter as it would be when it would apply, and the epoch.
+ClassMethod Rehearsed(out As %DynamicObject, before As %DynamicObject = "", after As %DynamicObject = "") As %DynamicObject [ Private ]
+{
+    If $ISOBJECT(before) {
+        Do out.%Set("encounter_before", before)
+    } Else {
+        Do out.%Set("encounter_before", "", "null")
+    }
+    Do:$ISOBJECT(after) out.%Set("encounter_after", after)
+    Do out.%Set("epoch", ..Epoch(), "number")
     Quit out
+}
+
+/// The encounter as the API returns it, or an empty string when the ward has never seen it.
+ClassMethod EncounterJSON(encounterId) As %DynamicObject [ Private ]
+{
+    Quit:$ISOBJECT(encounterId)||(encounterId="") ""
+    Set encounter = ##class(Wards.Encounter).EncounterIdIdxOpen(encounterId)
+    Quit $SELECT($ISOBJECT(encounter): encounter.ToJSON(), 1: "")
 }
 
 /// An empty string when the request is valid, otherwise what is wrong with it.
@@ -373,19 +397,22 @@ ClassMethod SetCapabilities(request As %DynamicObject, Output status As %Integer
             Return {"error": "invalid_request", "detail": ("unknown capability field " _ name)}
         }
     }
-    If request.%IsDefined("conditional_writes") {
-        If request.%GetTypeOf("conditional_writes") '= "boolean" {
-            Set status = 422
-            Quit {"error": "invalid_request", "detail": "conditional_writes must be true or false"}
-        }
-        Set ^Wards.Config("capabilities", "conditional_writes") = request."conditional_writes"
+    If request.%IsDefined("conditional_writes"), request.%GetTypeOf("conditional_writes") '= "boolean" {
+        Set status = 422
+        Quit {"error": "invalid_request", "detail": "conditional_writes must be true or false"}
     }
     If request.%IsDefined("last_contract_check") {
         Set check = request."last_contract_check"
-        If '$ISOBJECT(check) || (check.at = "") || (check.result = "") {
+        If (request.%GetTypeOf("last_contract_check") '= "object") || (check.at = "") || (check.result = "") {
             Set status = 422
             Quit {"error": "invalid_request", "detail": "last_contract_check needs at and result"}
         }
+    }
+    // Everything is checked first, so a refused request changes nothing
+    If request.%IsDefined("conditional_writes") {
+        Set ^Wards.Config("capabilities", "conditional_writes") = request."conditional_writes"
+    }
+    If request.%IsDefined("last_contract_check") {
         Set ^Wards.Config("contract_check") = $LISTBUILD(check.at, check.result)
     }
     Set status = 200

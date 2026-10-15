@@ -30,10 +30,11 @@ Method ToJSON() As %DynamicObject
     Do out.%Set("version", ..Version, "number")
     Do out.%Set("updated_at", ..UpdatedAt)
     Do out.%Set("epoch", ##class(Wards.Service).Epoch(), "number")
+    // Every applied operation added one version, so the history is versions 1 to Version. Read through the unique
+    // index rather than SQL: the API's users have the Wards_API role and no SQL privileges.
     Set history = []
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Wards.Event WHERE EncounterId = ? ORDER BY VersionAfter", ..EncounterId)
-    While rs.%Next() {
-        Set event = ##class(Wards.Event).%OpenId(rs.%Get("ID"))
+    For version = 1:1:..Version {
+        Set event = ##class(Wards.Event).EncounterVersionIdxOpen(..EncounterId, version)
         Do:$ISOBJECT(event) history.%Push(event.ToJSON())
     }
     Do out.%Set("history", history)

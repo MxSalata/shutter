@@ -118,6 +118,9 @@ def main():
     status, text = ward.call("POST", "/operations", rehearsal)
     body = parse(text) or {}
     check("a dry run: 200, would apply, Ward B after", status == 200 and body.get("would_apply") is True and (body.get("encounter_after") or {}).get("ward") == "WARD-B", f"{status} {text[:200]}")
+    before = body.get("encounter_before") or {}
+    check("the dry run says what it was checked against: Ward A at version 1, and the epoch",
+          before.get("ward") == "WARD-A" and before.get("version") == 1 and isinstance(body.get("epoch"), int), f"{text[:200]}")
     status, text = ward.call("GET", f"/encounters/{admit['encounter_id']}")
     check("and nothing changed", (parse(text) or {}).get("ward") == "WARD-A", text[:160])
 
@@ -167,8 +170,16 @@ def main():
     check("the fault setting is back as it was", parse(text) == saved, f"{text[:160]} vs {saved}")
 
     if args.second_user:
-        status, text = Ward(args.url, args.second_user, args.second_password).call("GET", "/faults")
+        second = Ward(args.url, args.second_user, args.second_password)
+        status, text = second.call("GET", "/faults")
         check(f"{args.second_user} (Wards_API role): GET /faults 200", status == 200, f"{status} {text[:120]}")
+        # The production reads as this user, which has no SQL privileges: the history must not depend on them
+        status, text = second.call("GET", f"/encounters/{admit['encounter_id']}")
+        body = parse(text) or {}
+        history = body.get("history", [])
+        check(f"{args.second_user}: the encounter's history has every version, the admit first",
+              status == 200 and len(history) == body.get("version") and bool(history) and history[0].get("event") == "admit",
+              f"{status} {text[:200]}")
 
     # The capability profile shows the last contract check (CONTRACTS 1.8)
     total = checks[0]
