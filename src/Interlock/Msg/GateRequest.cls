@@ -17,4 +17,30 @@ Property ReceiverVersion As %Integer;
 /// The receiver's epoch as last observed (it changes at every reset).
 Property ReceiverEpoch As %Integer;
 
+Storage Default
+{
+<Data name="GateRequestDefaultData">
+<Subscript>"GateRequest"</Subscript>
+<Value name="1">
+<Value>CaseId</Value>
+</Value>
+<Value name="2">
+<Value>PlanId</Value>
+</Value>
+<Value name="3">
+<Value>Stage</Value>
+</Value>
+<Value name="4">
+<Value>ApprovalId</Value>
+</Value>
+<Value name="5">
+<Value>ReceiverVersion</Value>
+</Value>
+<Value name="6">
+<Value>ReceiverEpoch</Value>
+</Value>
+</Data>
+<DefaultData>GateRequestDefaultData</DefaultData>
+<Type>%Storage.Persistent</Type>
+}
 }

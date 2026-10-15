@@ -91,4 +91,66 @@ Method IsWrite() As %Boolean
     Quit ..ActionType = "resend"
 }
 
+Storage Default
+{
+<Data name="PlanDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Case</Value>
+</Value>
+<Value name="3">
+<Value>Version</Value>
+</Value>
+<Value name="4">
+<Value>Snapshot</Value>
+</Value>
+<Value name="5">
+<Value>Digest</Value>
+</Value>
+<Value name="6">
+<Value>Disposition</Value>
+</Value>
+<Value name="7">
+<Value>ActionType</Value>
+</Value>
+<Value name="8">
+<Value>OperationKey</Value>
+</Value>
+<Value name="9">
+<Value>ExpectedVersion</Value>
+</Value>
+<Value name="10">
+<Value>PayloadDigest</Value>
+</Value>
+<Value name="11">
+<Value>PreconditionsJSON</Value>
+</Value>
+<Value name="12">
+<Value>EvidenceRefsJSON</Value>
+</Value>
+<Value name="13">
+<Value>DisagreementsJSON</Value>
+</Value>
+<Value name="14">
+<Value>Summary</Value>
+</Value>
+<Value name="15">
+<Value>Json</Value>
+</Value>
+<Value name="16">
+<Value>CreatedAt</Value>
+</Value>
+<Value name="17">
+<Value>CreatedBy</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock.Store.PlanD</DataLocation>
+<DefaultData>PlanDefaultData</DefaultData>
+<IdLocation>^Interlock.Store.PlanD</IdLocation>
+<IndexLocation>^Interlock.Store.PlanI</IndexLocation>
+<StreamLocation>^Interlock.Store.PlanS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

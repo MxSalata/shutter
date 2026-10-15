@@ -14,4 +14,30 @@ Property Summary As %String(MAXLEN = 2000);
 
 Property Error As %String(MAXLEN = 2000);
 
+Storage Default
+{
+<Data name="GateResultDefaultData">
+<Subscript>"GateResult"</Subscript>
+<Value name="1">
+<Value>Outcome</Value>
+</Value>
+<Value name="2">
+<Value>DecisionId</Value>
+</Value>
+<Value name="3">
+<Value>PolicyVersion</Value>
+</Value>
+<Value name="4">
+<Value>ChecksJSON</Value>
+</Value>
+<Value name="5">
+<Value>Summary</Value>
+</Value>
+<Value name="6">
+<Value>Error</Value>
+</Value>
+</Data>
+<DefaultData>GateResultDefaultData</DefaultData>
+<Type>%Storage.Persistent</Type>
+}
 }

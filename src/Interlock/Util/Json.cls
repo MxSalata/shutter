@@ -42,6 +42,17 @@ ClassMethod Text(obj As %DynamicAbstractObject) As %String
     Quit obj.%ToJSON()
 }
 
+/// The raw JSON projection of a persistent object, for diagnosis through SQL: the text, or the
+/// export's error.
+ClassMethod Export(class As %String, id As %String) As %String [ SqlProc ]
+{
+    Set obj = $CLASSMETHOD(class, "%OpenId", id)
+    If '$ISOBJECT(obj) Quit "no object " _ class _ " " _ id
+    Set sc = obj.%JSONExportToString(.json)
+    If $$$ISERR(sc) Quit "ERROR: " _ $SYSTEM.Status.GetErrorText(sc)
+    Quit json
+}
+
 /// A short, single-line preview of JSON text for logs and traces.
 ClassMethod Preview(text As %String, max As %Integer = 200) As %String
 {

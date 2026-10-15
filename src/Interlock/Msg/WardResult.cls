@@ -44,4 +44,42 @@ Method ResponseObject() As %DynamicObject
     Quit o
 }
 
+Storage Default
+{
+<Data name="WardResultDefaultData">
+<Subscript>"WardResult"</Subscript>
+<Value name="1">
+<Value>HttpStatus</Value>
+</Value>
+<Value name="2">
+<Value>Outcome</Value>
+</Value>
+<Value name="3">
+<Value>ReasonCode</Value>
+</Value>
+<Value name="4">
+<Value>ResponseJSON</Value>
+</Value>
+<Value name="5">
+<Value>ReceiptJSON</Value>
+</Value>
+<Value name="6">
+<Value>EncounterVersion</Value>
+</Value>
+<Value name="7">
+<Value>VersionAfter</Value>
+</Value>
+<Value name="8">
+<Value>Epoch</Value>
+</Value>
+<Value name="9">
+<Value>Error</Value>
+</Value>
+<Value name="10">
+<Value>DurationMs</Value>
+</Value>
+</Data>
+<DefaultData>WardResultDefaultData</DefaultData>
+<Type>%Storage.Persistent</Type>
+}
 }

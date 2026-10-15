@@ -56,4 +56,48 @@ ClassMethod ForSnapshot(snapshot As Interlock.Store.Snapshot) As %DynamicArray
     Quit out
 }
 
+Storage Default
+{
+<Data name="FindingDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Run</Value>
+</Value>
+<Value name="3">
+<Value>Case</Value>
+</Value>
+<Value name="4">
+<Value>Snapshot</Value>
+</Value>
+<Value name="5">
+<Value>Role</Value>
+</Value>
+<Value name="6">
+<Value>MemberCode</Value>
+</Value>
+<Value name="7">
+<Value>Disposition</Value>
+</Value>
+<Value name="8">
+<Value>Confidence</Value>
+</Value>
+<Value name="9">
+<Value>Summary</Value>
+</Value>
+<Value name="10">
+<Value>Json</Value>
+</Value>
+<Value name="11">
+<Value>CreatedAt</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock.Store.FindingD</DataLocation>
+<DefaultData>FindingDefaultData</DefaultData>
+<IdLocation>^Interlock.Store.FindingD</IdLocation>
+<IndexLocation>^Interlock.Store.FindingI</IndexLocation>
+<StreamLocation>^Interlock.Store.FindingS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

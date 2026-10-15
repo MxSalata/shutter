@@ -130,4 +130,57 @@ ClassMethod Seed() As %Status
     Quit sc
 }
 
+Storage Default
+{
+<Data name="BoardMemberDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Code</Value>
+</Value>
+<Value name="3">
+<Value>Name</Value>
+</Value>
+<Value name="4">
+<Value>Description</Value>
+</Value>
+<Value name="5">
+<Value>Perspective</Value>
+</Value>
+<Value name="6">
+<Value>Role</Value>
+</Value>
+<Value name="7">
+<Value>AgentClass</Value>
+</Value>
+<Value name="8">
+<Value>KnowledgeCollection</Value>
+</Value>
+<Value name="9">
+<Value>ConfigItem</Value>
+</Value>
+<Value name="10">
+<Value>TerminalTool</Value>
+</Value>
+<Value name="11">
+<Value>Enabled</Value>
+</Value>
+<Value name="12">
+<Value>InDefaultBoard</Value>
+</Value>
+<Value name="13">
+<Value>Sort</Value>
+</Value>
+<Value name="14">
+<Value>ConfigVersion</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock.Store.BoardMemberD</DataLocation>
+<DefaultData>BoardMemberDefaultData</DefaultData>
+<IdLocation>^Interlock.Store.BoardMemberD</IdLocation>
+<IndexLocation>^Interlock.Store.BoardMemberI</IndexLocation>
+<StreamLocation>^Interlock.Store.BoardMemberS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

@@ -46,4 +46,48 @@ ClassMethod Create(case As Interlock.Store.Case, plan As Interlock.Store.Plan, h
     Quit r.%Save()
 }
 
+Storage Default
+{
+<Data name="RehearsalDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Case</Value>
+</Value>
+<Value name="3">
+<Value>Plan</Value>
+</Value>
+<Value name="4">
+<Value>At</Value>
+</Value>
+<Value name="5">
+<Value>HttpStatus</Value>
+</Value>
+<Value name="6">
+<Value>WouldApply</Value>
+</Value>
+<Value name="7">
+<Value>Reason</Value>
+</Value>
+<Value name="8">
+<Value>ReceiverVersion</Value>
+</Value>
+<Value name="9">
+<Value>VersionAfter</Value>
+</Value>
+<Value name="10">
+<Value>Epoch</Value>
+</Value>
+<Value name="11">
+<Value>ResponseJSON</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock.Store.RehearsalD</DataLocation>
+<DefaultData>RehearsalDefaultData</DefaultData>
+<IdLocation>^Interlock.Store.RehearsalD</IdLocation>
+<IndexLocation>^Interlock.Store.RehearsalI</IndexLocation>
+<StreamLocation>^Interlock.Store.RehearsalS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

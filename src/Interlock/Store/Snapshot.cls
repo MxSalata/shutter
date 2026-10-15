@@ -110,4 +110,36 @@ Method IsFresh() As %Boolean
     Quit ##class(Interlock.Util.Time).NowUTC() ']] ..FreshUntil
 }
 
+Storage Default
+{
+<Data name="SnapshotDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Case</Value>
+</Value>
+<Value name="3">
+<Value>Seq</Value>
+</Value>
+<Value name="4">
+<Value>Digest</Value>
+</Value>
+<Value name="5">
+<Value>TakenAt</Value>
+</Value>
+<Value name="6">
+<Value>FreshUntil</Value>
+</Value>
+<Value name="7">
+<Value>Summary</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock.Store.SnapshotD</DataLocation>
+<DefaultData>SnapshotDefaultData</DefaultData>
+<IdLocation>^Interlock.Store.SnapshotD</IdLocation>
+<IndexLocation>^Interlock.Store.SnapshotI</IndexLocation>
+<StreamLocation>^Interlock.Store.SnapshotS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

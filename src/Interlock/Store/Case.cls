@@ -221,4 +221,102 @@ Method Events() As %DynamicArray
     Quit out
 }
 
+Storage Default
+{
+<Data name="CaseDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>CaseId</Value>
+</Value>
+<Value name="3">
+<Value>OperationKey</Value>
+</Value>
+<Value name="4">
+<Value>State</Value>
+</Value>
+<Value name="5">
+<Value>Version</Value>
+</Value>
+<Value name="6">
+<Value>Mode</Value>
+</Value>
+<Value name="7">
+<Value>FailureKind</Value>
+</Value>
+<Value name="8">
+<Value>FailureText</Value>
+</Value>
+<Value name="9">
+<Value>EncounterId</Value>
+</Value>
+<Value name="10">
+<Value>PatientId</Value>
+</Value>
+<Value name="11">
+<Value>PatientIdAuthority</Value>
+</Value>
+<Value name="12">
+<Value>SourceSystem</Value>
+</Value>
+<Value name="13">
+<Value>SourceMessageId</Value>
+</Value>
+<Value name="14">
+<Value>Event</Value>
+</Value>
+<Value name="15">
+<Value>Ward</Value>
+</Value>
+<Value name="16">
+<Value>EventTime</Value>
+</Value>
+<Value name="17">
+<Value>Scenario</Value>
+</Value>
+<Value name="18">
+<Value>EnsSessionId</Value>
+</Value>
+<Value name="19">
+<Value>SourceHeaderId</Value>
+</Value>
+<Value name="20">
+<Value>WorkflowSessionId</Value>
+</Value>
+<Value name="21">
+<Value>Disposition</Value>
+</Value>
+<Value name="22">
+<Value>Headline</Value>
+</Value>
+<Value name="23">
+<Value>Outcome</Value>
+</Value>
+<Value name="24">
+<Value>OpenedAt</Value>
+</Value>
+<Value name="25">
+<Value>UpdatedAt</Value>
+</Value>
+<Value name="26">
+<Value>ClosedAt</Value>
+</Value>
+<Value name="27">
+<Value>CurrentSnapshot</Value>
+</Value>
+<Value name="28">
+<Value>CurrentPlan</Value>
+</Value>
+<Value name="29">
+<Value>CurrentApproval</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock.Store.CaseD</DataLocation>
+<DefaultData>CaseDefaultData</DefaultData>
+<IdLocation>^Interlock.Store.CaseD</IdLocation>
+<IndexLocation>^Interlock.Store.CaseI</IndexLocation>
+<StreamLocation>^Interlock.Store.CaseS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

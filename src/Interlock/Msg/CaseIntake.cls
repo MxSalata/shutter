@@ -22,4 +22,33 @@ Property WardResultJSON As %String(MAXLEN = "");
 /// The investigation mode requested (board, single, rules); empty takes the configured default.
 Property Mode As %String(MAXLEN = 16);
 
+Storage Default
+{
+<Data name="CaseIntakeDefaultData">
+<Subscript>"CaseIntake"</Subscript>
+<Value name="1">
+<Value>OperationJSON</Value>
+</Value>
+<Value name="2">
+<Value>FailureKind</Value>
+</Value>
+<Value name="3">
+<Value>FailureText</Value>
+</Value>
+<Value name="4">
+<Value>SourceHeaderId</Value>
+</Value>
+<Value name="5">
+<Value>EnsSessionId</Value>
+</Value>
+<Value name="6">
+<Value>WardResultJSON</Value>
+</Value>
+<Value name="7">
+<Value>Mode</Value>
+</Value>
+</Data>
+<DefaultData>CaseIntakeDefaultData</DefaultData>
+<Type>%Storage.Persistent</Type>
+}
 }

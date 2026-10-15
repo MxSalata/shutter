@@ -87,4 +87,57 @@ Method ToWardJSON() As %DynamicObject
     Quit body
 }
 
+Storage Default
+{
+<Data name="WardOperationDefaultData">
+<Subscript>"WardOperation"</Subscript>
+<Value name="1">
+<Value>Purpose</Value>
+</Value>
+<Value name="2">
+<Value>OperationKey</Value>
+</Value>
+<Value name="3">
+<Value>EncounterId</Value>
+</Value>
+<Value name="4">
+<Value>PatientId</Value>
+</Value>
+<Value name="5">
+<Value>PatientIdAuthority</Value>
+</Value>
+<Value name="6">
+<Value>Event</Value>
+</Value>
+<Value name="7">
+<Value>Ward</Value>
+</Value>
+<Value name="8">
+<Value>EventTime</Value>
+</Value>
+<Value name="9">
+<Value>SourceSystem</Value>
+</Value>
+<Value name="10">
+<Value>SourceMessageId</Value>
+</Value>
+<Value name="11">
+<Value>PayloadDigest</Value>
+</Value>
+<Value name="12">
+<Value>ExpectedVersion</Value>
+</Value>
+<Value name="13">
+<Value>DryRun</Value>
+</Value>
+<Value name="14">
+<Value>CaseId</Value>
+</Value>
+<Value name="15">
+<Value>SourceHeaderId</Value>
+</Value>
+</Data>
+<DefaultData>WardOperationDefaultData</DefaultData>
+<Type>%Storage.Persistent</Type>
+}
 }

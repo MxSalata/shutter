@@ -31,4 +31,42 @@ ClassMethod Create(case As Interlock.Store.Case, plan As Interlock.Store.Plan, s
     Quit d.%Save()
 }
 
+Storage Default
+{
+<Data name="GateDecisionDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Case</Value>
+</Value>
+<Value name="3">
+<Value>Plan</Value>
+</Value>
+<Value name="4">
+<Value>Stage</Value>
+</Value>
+<Value name="5">
+<Value>PolicyVersion</Value>
+</Value>
+<Value name="6">
+<Value>Outcome</Value>
+</Value>
+<Value name="7">
+<Value>ChecksJSON</Value>
+</Value>
+<Value name="8">
+<Value>Summary</Value>
+</Value>
+<Value name="9">
+<Value>At</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock.Store.GateDecisionD</DataLocation>
+<DefaultData>GateDecisionDefaultData</DefaultData>
+<IdLocation>^Interlock.Store.GateDecisionD</IdLocation>
+<IndexLocation>^Interlock.Store.GateDecisionI</IndexLocation>
+<StreamLocation>^Interlock.Store.GateDecisionS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

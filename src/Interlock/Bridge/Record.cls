@@ -149,4 +149,54 @@ ClassMethod ImportDir(dir As %String, Output count As %Integer) As %Status
     Quit sc
 }
 
+Storage Default
+{
+<Data name="RecordDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Key</Value>
+</Value>
+<Value name="3">
+<Value>AgentClass</Value>
+</Value>
+<Value name="4">
+<Value>ConfigVersion</Value>
+</Value>
+<Value name="5">
+<Value>MemberCode</Value>
+</Value>
+<Value name="6">
+<Value>SnapshotDigest</Value>
+</Value>
+<Value name="7">
+<Value>CorrelationKey</Value>
+</Value>
+<Value name="8">
+<Value>Model</Value>
+</Value>
+<Value name="9">
+<Value>ResponseJSON</Value>
+</Value>
+<Value name="10">
+<Value>TranscriptJSON</Value>
+</Value>
+<Value name="11">
+<Value>ToolCallsJSON</Value>
+</Value>
+<Value name="12">
+<Value>RecordedAt</Value>
+</Value>
+<Value name="13">
+<Value>Label</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock.Bridge.RecordD</DataLocation>
+<DefaultData>RecordDefaultData</DefaultData>
+<IdLocation>^Interlock.Bridge.RecordD</IdLocation>
+<IndexLocation>^Interlock.Bridge.RecordI</IndexLocation>
+<StreamLocation>^Interlock.Bridge.RecordS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

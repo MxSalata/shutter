@@ -454,4 +454,60 @@ Method OnVerify(case As Interlock.Store.Case, result As Interlock.Msg.VerifyResu
     Quit case.Transition("escalated", "Not verified (" _ result.Outcome _ "): " _ result.Summary, "system", "verification:" _ result.VerificationId)
 }
 
+Storage Default
+{
+<Data name="CaseWorkflowDefaultData">
+<Subscript>"CaseWorkflow"</Subscript>
+<Value name="1">
+<Value>CaseId</Value>
+</Value>
+<Value name="2">
+<Value>Mode</Value>
+</Value>
+<Value name="3">
+<Value>PendingJSON</Value>
+</Value>
+<Value name="4">
+<Value>FailedJSON</Value>
+</Value>
+<Value name="5">
+<Value>PlanId</Value>
+</Value>
+<Value name="6">
+<Value>ApprovalId</Value>
+</Value>
+<Value name="7">
+<Value>AttemptId</Value>
+</Value>
+<Value name="8">
+<Value>ReceiverVersion</Value>
+</Value>
+<Value name="9">
+<Value>ReceiverEpoch</Value>
+</Value>
+<Value name="10">
+<Value>Replans</Value>
+</Value>
+<Value name="11">
+<Value>EvidenceTarget</Value>
+</Value>
+<Value name="12">
+<Value>GateTarget</Value>
+</Value>
+<Value name="13">
+<Value>WardTarget</Value>
+</Value>
+<Value name="14">
+<Value>ApprovalTarget</Value>
+</Value>
+<Value name="15">
+<Value>VerifyTarget</Value>
+</Value>
+<Value name="16">
+<Value>ApprovalValidSeconds</Value>
+</Value>
+</Data>
+<DefaultData>CaseWorkflowDefaultData</DefaultData>
+<Type>%Storage.Persistent</Type>
+}
 }

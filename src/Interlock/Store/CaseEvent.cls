@@ -40,4 +40,45 @@ ClassMethod Append(case As Interlock.Store.Case, kind As %String, fromState As %
     Quit ev.%Save()
 }
 
+Storage Default
+{
+<Data name="CaseEventDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Case</Value>
+</Value>
+<Value name="3">
+<Value>Seq</Value>
+</Value>
+<Value name="4">
+<Value>At</Value>
+</Value>
+<Value name="5">
+<Value>Kind</Value>
+</Value>
+<Value name="6">
+<Value>FromState</Value>
+</Value>
+<Value name="7">
+<Value>ToState</Value>
+</Value>
+<Value name="8">
+<Value>Text</Value>
+</Value>
+<Value name="9">
+<Value>Ref</Value>
+</Value>
+<Value name="10">
+<Value>Actor</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock.Store.CaseEventD</DataLocation>
+<DefaultData>CaseEventDefaultData</DefaultData>
+<IdLocation>^Interlock.Store.CaseEventD</IdLocation>
+<IndexLocation>^Interlock.Store.CaseEventI</IndexLocation>
+<StreamLocation>^Interlock.Store.CaseEventS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }
