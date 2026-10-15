@@ -28,4 +28,36 @@ ClassMethod Create(case As Interlock.Store.Case, attempt As Interlock.Store.Exec
     Quit v.%Save()
 }
 
+Storage Default
+{
+<Data name="VerificationDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Case</Value>
+</Value>
+<Value name="3">
+<Value>Attempt</Value>
+</Value>
+<Value name="4">
+<Value>At</Value>
+</Value>
+<Value name="5">
+<Value>Outcome</Value>
+</Value>
+<Value name="6">
+<Value>Summary</Value>
+</Value>
+<Value name="7">
+<Value>DetailJSON</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock.Store.VerificationD</DataLocation>
+<DefaultData>VerificationDefaultData</DefaultData>
+<IdLocation>^Interlock.Store.VerificationD</IdLocation>
+<IndexLocation>^Interlock.Store.VerificationI</IndexLocation>
+<StreamLocation>^Interlock.Store.VerificationS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

@@ -79,4 +79,69 @@ Method Revoke(by As %String) As %Status
     Quit ..%Save()
 }
 
+Storage Default
+{
+<Data name="ApprovalDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Case</Value>
+</Value>
+<Value name="3">
+<Value>Plan</Value>
+</Value>
+<Value name="4">
+<Value>PlanDigest</Value>
+</Value>
+<Value name="5">
+<Value>SnapshotDigest</Value>
+</Value>
+<Value name="6">
+<Value>PolicyVersion</Value>
+</Value>
+<Value name="7">
+<Value>Rehearsal</Value>
+</Value>
+<Value name="8">
+<Value>ExpectedVersion</Value>
+</Value>
+<Value name="9">
+<Value>ReceiverEpoch</Value>
+</Value>
+<Value name="10">
+<Value>Approver</Value>
+</Value>
+<Value name="11">
+<Value>Decision</Value>
+</Value>
+<Value name="12">
+<Value>DecidedAt</Value>
+</Value>
+<Value name="13">
+<Value>ExpiresAt</Value>
+</Value>
+<Value name="14">
+<Value>Revoked</Value>
+</Value>
+<Value name="15">
+<Value>RevokedAt</Value>
+</Value>
+<Value name="16">
+<Value>RevokedBy</Value>
+</Value>
+<Value name="17">
+<Value>WorkflowTaskId</Value>
+</Value>
+<Value name="18">
+<Value>Comment</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock.Store.ApprovalD</DataLocation>
+<DefaultData>ApprovalDefaultData</DefaultData>
+<IdLocation>^Interlock.Store.ApprovalD</IdLocation>
+<IndexLocation>^Interlock.Store.ApprovalI</IndexLocation>
+<StreamLocation>^Interlock.Store.ApprovalS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

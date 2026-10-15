@@ -46,4 +46,33 @@ ClassMethod Purge() As %Integer
     Quit $SELECT(SQLCODE = 0: %ROWCOUNT, 1: 0)
 }
 
+Storage Default
+{
+<Data name="IdempotencyDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Key</Value>
+</Value>
+<Value name="3">
+<Value>BodyDigest</Value>
+</Value>
+<Value name="4">
+<Value>Status</Value>
+</Value>
+<Value name="5">
+<Value>Response</Value>
+</Value>
+<Value name="6">
+<Value>CreatedAt</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock.Store.IdempotencyD</DataLocation>
+<DefaultData>IdempotencyDefaultData</DefaultData>
+<IdLocation>^Interlock.Store.IdempotencyD</IdLocation>
+<IndexLocation>^Interlock.Store.IdempotencyI</IndexLocation>
+<StreamLocation>^Interlock.Store.IdempotencyS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

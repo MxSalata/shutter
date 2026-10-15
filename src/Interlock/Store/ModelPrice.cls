@@ -69,4 +69,42 @@ ClassMethod Seed() As %Status
     Quit sc
 }
 
+Storage Default
+{
+<Data name="ModelPriceDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Model</Value>
+</Value>
+<Value name="3">
+<Value>InputPerMTok</Value>
+</Value>
+<Value name="4">
+<Value>OutputPerMTok</Value>
+</Value>
+<Value name="5">
+<Value>CacheReadPerMTok</Value>
+</Value>
+<Value name="6">
+<Value>CacheWritePerMTok</Value>
+</Value>
+<Value name="7">
+<Value>Currency</Value>
+</Value>
+<Value name="8">
+<Value>Source</Value>
+</Value>
+<Value name="9">
+<Value>AsOf</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock.Store.ModelPriceD</DataLocation>
+<DefaultData>ModelPriceDefaultData</DefaultData>
+<IdLocation>^Interlock.Store.ModelPriceD</IdLocation>
+<IndexLocation>^Interlock.Store.ModelPriceI</IndexLocation>
+<StreamLocation>^Interlock.Store.ModelPriceS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

@@ -79,4 +79,90 @@ ClassMethod FromResponse(case As Interlock.Store.Case, snapshot As Interlock.Sto
     Quit run.%Save()
 }
 
+Storage Default
+{
+<Data name="AgentRunDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Case</Value>
+</Value>
+<Value name="3">
+<Value>Snapshot</Value>
+</Value>
+<Value name="4">
+<Value>Role</Value>
+</Value>
+<Value name="5">
+<Value>MemberCode</Value>
+</Value>
+<Value name="6">
+<Value>AgentClass</Value>
+</Value>
+<Value name="7">
+<Value>ConfigVersion</Value>
+</Value>
+<Value name="8">
+<Value>Mode</Value>
+</Value>
+<Value name="9">
+<Value>Model</Value>
+</Value>
+<Value name="10">
+<Value>ProviderConfig</Value>
+</Value>
+<Value name="11">
+<Value>Status</Value>
+</Value>
+<Value name="12">
+<Value>StartedAt</Value>
+</Value>
+<Value name="13">
+<Value>DurationMs</Value>
+</Value>
+<Value name="14">
+<Value>PromptTokens</Value>
+</Value>
+<Value name="15">
+<Value>CompletionTokens</Value>
+</Value>
+<Value name="16">
+<Value>CacheReadTokens</Value>
+</Value>
+<Value name="17">
+<Value>CacheCreationTokens</Value>
+</Value>
+<Value name="18">
+<Value>Iterations</Value>
+</Value>
+<Value name="19">
+<Value>ToolCallCount</Value>
+</Value>
+<Value name="20">
+<Value>SessionId</Value>
+</Value>
+<Value name="21">
+<Value>EnsMessageId</Value>
+</Value>
+<Value name="22">
+<Value>ResultJSON</Value>
+</Value>
+<Value name="23">
+<Value>Content</Value>
+</Value>
+<Value name="24">
+<Value>Error</Value>
+</Value>
+<Value name="25">
+<Value>CostUSD</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock.Store.AgentRunD</DataLocation>
+<DefaultData>AgentRunDefaultData</DefaultData>
+<IdLocation>^Interlock.Store.AgentRunD</IdLocation>
+<IndexLocation>^Interlock.Store.AgentRunI</IndexLocation>
+<StreamLocation>^Interlock.Store.AgentRunS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

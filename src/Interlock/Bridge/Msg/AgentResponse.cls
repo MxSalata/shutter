@@ -94,4 +94,69 @@ Method FromObject(o As %DynamicObject) As %Status
     Quit $$$OK
 }
 
+Storage Default
+{
+<Data name="AgentResponseDefaultData">
+<Subscript>"AgentResponse"</Subscript>
+<Value name="1">
+<Value>Status</Value>
+</Value>
+<Value name="2">
+<Value>AgentClass</Value>
+</Value>
+<Value name="3">
+<Value>ConfigVersion</Value>
+</Value>
+<Value name="4">
+<Value>Mode</Value>
+</Value>
+<Value name="5">
+<Value>Model</Value>
+</Value>
+<Value name="6">
+<Value>ProviderConfig</Value>
+</Value>
+<Value name="7">
+<Value>StartedAt</Value>
+</Value>
+<Value name="8">
+<Value>DurationMs</Value>
+</Value>
+<Value name="9">
+<Value>PromptTokens</Value>
+</Value>
+<Value name="10">
+<Value>CompletionTokens</Value>
+</Value>
+<Value name="11">
+<Value>CacheReadTokens</Value>
+</Value>
+<Value name="12">
+<Value>CacheCreationTokens</Value>
+</Value>
+<Value name="13">
+<Value>Iterations</Value>
+</Value>
+<Value name="14">
+<Value>ToolCalls</Value>
+</Value>
+<Value name="15">
+<Value>SessionId</Value>
+</Value>
+<Value name="16">
+<Value>ResultJSON</Value>
+</Value>
+<Value name="17">
+<Value>Content</Value>
+</Value>
+<Value name="18">
+<Value>Error</Value>
+</Value>
+<Value name="19">
+<Value>RecordId</Value>
+</Value>
+</Data>
+<DefaultData>AgentResponseDefaultData</DefaultData>
+<Type>%Storage.Persistent</Type>
+}
 }

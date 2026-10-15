@@ -41,4 +41,51 @@ ClassMethod Create(case As Interlock.Store.Case, plan As Interlock.Store.Plan, a
     Quit e.%Save()
 }
 
+Storage Default
+{
+<Data name="ExecutionAttemptDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Case</Value>
+</Value>
+<Value name="3">
+<Value>Plan</Value>
+</Value>
+<Value name="4">
+<Value>Approval</Value>
+</Value>
+<Value name="5">
+<Value>At</Value>
+</Value>
+<Value name="6">
+<Value>OperationKey</Value>
+</Value>
+<Value name="7">
+<Value>ExpectedVersion</Value>
+</Value>
+<Value name="8">
+<Value>HttpStatus</Value>
+</Value>
+<Value name="9">
+<Value>Outcome</Value>
+</Value>
+<Value name="10">
+<Value>ReceiptJSON</Value>
+</Value>
+<Value name="11">
+<Value>ResponseJSON</Value>
+</Value>
+<Value name="12">
+<Value>Error</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock7581.ExecutionAt8F65D</DataLocation>
+<DefaultData>ExecutionAttemptDefaultData</DefaultData>
+<IdLocation>^Interlock7581.ExecutionAt8F65D</IdLocation>
+<IndexLocation>^Interlock7581.ExecutionAt8F65I</IndexLocation>
+<StreamLocation>^Interlock7581.ExecutionAt8F65S</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

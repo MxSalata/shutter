@@ -50,4 +50,45 @@ ClassMethod ForRun(runKey As %String) As %DynamicArray
     Quit out
 }
 
+Storage Default
+{
+<Data name="ToolCallDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>RunKey</Value>
+</Value>
+<Value name="3">
+<Value>Seq</Value>
+</Value>
+<Value name="4">
+<Value>At</Value>
+</Value>
+<Value name="5">
+<Value>Name</Value>
+</Value>
+<Value name="6">
+<Value>ArgumentsJSON</Value>
+</Value>
+<Value name="7">
+<Value>DurationMs</Value>
+</Value>
+<Value name="8">
+<Value>Ok</Value>
+</Value>
+<Value name="9">
+<Value>ResultPreview</Value>
+</Value>
+<Value name="10">
+<Value>Error</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock.Bridge.ToolCallD</DataLocation>
+<DefaultData>ToolCallDefaultData</DefaultData>
+<IdLocation>^Interlock.Bridge.ToolCallD</IdLocation>
+<IndexLocation>^Interlock.Bridge.ToolCallI</IndexLocation>
+<StreamLocation>^Interlock.Bridge.ToolCallS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

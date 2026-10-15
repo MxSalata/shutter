@@ -44,4 +44,51 @@ Property RecordKey As %String(MAXLEN = 300);
 /// A token budget for this run; empty uses the operation's setting.
 Property TokenBudget As %Integer;
 
+Storage Default
+{
+<Data name="AgentRequestDefaultData">
+<Subscript>"AgentRequest"</Subscript>
+<Value name="1">
+<Value>Role</Value>
+</Value>
+<Value name="2">
+<Value>MemberCode</Value>
+</Value>
+<Value name="3">
+<Value>AgentClass</Value>
+</Value>
+<Value name="4">
+<Value>Goal</Value>
+</Value>
+<Value name="5">
+<Value>Context</Value>
+</Value>
+<Value name="6">
+<Value>CorrelationKey</Value>
+</Value>
+<Value name="7">
+<Value>SnapshotDigest</Value>
+</Value>
+<Value name="8">
+<Value>ResultClass</Value>
+</Value>
+<Value name="9">
+<Value>TerminalTool</Value>
+</Value>
+<Value name="10">
+<Value>ConfigVersion</Value>
+</Value>
+<Value name="11">
+<Value>ModeOverride</Value>
+</Value>
+<Value name="12">
+<Value>RecordKey</Value>
+</Value>
+<Value name="13">
+<Value>TokenBudget</Value>
+</Value>
+</Data>
+<DefaultData>AgentRequestDefaultData</DefaultData>
+<Type>%Storage.Persistent</Type>
+}
 }

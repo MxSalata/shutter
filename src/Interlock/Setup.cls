@@ -361,6 +361,22 @@ ClassMethod StartProduction() As %Status
     Quit sc
 }
 
+/// Empty Interlock's own tables (cases and everything attached to them, recordings excepted) on a
+/// demo instance. Refused elsewhere. Returns the number of tables emptied or the error.
+ClassMethod PurgeStore() As %String [ SqlProc ]
+{
+    If '$GET(^Interlock.Config("demo")) Quit "ERROR: not a demo instance"
+    Set n = 0
+    For cls = "Interlock.Store.Verification", "Interlock.Store.ExecutionAttempt", "Interlock.Store.Approval", "Interlock.Store.Rehearsal", "Interlock.Store.GateDecision", "Interlock.Store.Plan", "Interlock.Store.Finding", "Interlock.Store.AgentRun", "Interlock.Store.SnapshotItem", "Interlock.Store.Snapshot", "Interlock.Store.CaseEvent", "Interlock.Store.Case", "Interlock.Store.Idempotency", "Interlock.Bridge.ToolCall" {
+        Set sc = $CLASSMETHOD(cls, "%KillExtent")
+        If $$$ISERR(sc) Quit
+        Set n = n + 1
+    }
+    If $$$ISERR(sc) Quit "ERROR: " _ $SYSTEM.Status.GetErrorText(sc)
+    Kill ^Interlock.Counter
+    Quit n
+}
+
 /// Restart the production so that recompiled business hosts pick up their new code. Returns "ok"
 /// or the error.
 ClassMethod RestartProduction() As %String [ SqlProc ]

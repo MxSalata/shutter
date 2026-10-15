@@ -60,4 +60,39 @@ ClassMethod SeedFromFile(path As %String, Output count As %Integer) As %Status
     Quit sc
 }
 
+Storage Default
+{
+<Data name="BlockReasonDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Code</Value>
+</Value>
+<Value name="3">
+<Value>Title</Value>
+</Value>
+<Value name="4">
+<Value>Prerequisite</Value>
+</Value>
+<Value name="5">
+<Value>NextAction</Value>
+</Value>
+<Value name="6">
+<Value>Owner</Value>
+</Value>
+<Value name="7">
+<Value>ReevaluateWhen</Value>
+</Value>
+<Value name="8">
+<Value>Text</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock.Store.BlockReasonD</DataLocation>
+<DefaultData>BlockReasonDefaultData</DefaultData>
+<IdLocation>^Interlock.Store.BlockReasonD</IdLocation>
+<IndexLocation>^Interlock.Store.BlockReasonI</IndexLocation>
+<StreamLocation>^Interlock.Store.BlockReasonS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

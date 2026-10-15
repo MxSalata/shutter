@@ -77,4 +77,21 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
     Quit $$$OK
 }
 
+Storage Default
+{
+<Data name="ADTToWardDefaultData">
+<Subscript>"ADTToWard"</Subscript>
+<Value name="1">
+<Value>WardTarget</Value>
+</Value>
+<Value name="2">
+<Value>CaseTarget</Value>
+</Value>
+<Value name="3">
+<Value>DeliveryTimeout</Value>
+</Value>
+</Data>
+<DefaultData>ADTToWardDefaultData</DefaultData>
+<Type>%Storage.Persistent</Type>
+}
 }
