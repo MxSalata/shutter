@@ -11,14 +11,14 @@ import { humanize } from '@/lib/format';
 function Value({ value }: { value: unknown }) {
   if (value === true) {
     return (
-      <ThemeIcon size="sm" radius="xl" color="teal" variant="light" aria-label="yes">
+      <ThemeIcon size="sm" radius="xl" color="teal" variant="light" role="img" aria-label="yes">
         <IconCheck size={14} />
       </ThemeIcon>
     );
   }
   if (value === false) {
     return (
-      <ThemeIcon size="sm" radius="xl" color="gray" variant="light" aria-label="no">
+      <ThemeIcon size="sm" radius="xl" color="gray" variant="light" role="img" aria-label="no">
         <IconX size={14} />
       </ThemeIcon>
     );
@@ -26,7 +26,7 @@ function Value({ value }: { value: unknown }) {
   if (value === null || value === undefined || value === '') {
     return (
       <Group gap={6}>
-        <ThemeIcon size="sm" radius="xl" color="orange" variant="light" aria-label="not reported">
+        <ThemeIcon size="sm" radius="xl" color="orange" variant="light" role="img" aria-label="not reported">
           <IconMinus size={14} />
         </ThemeIcon>
         <Text size="xs" c="dimmed">

@@ -4,8 +4,8 @@ export function BrandMark({ size = 28 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden focusable="false">
       <defs>
         <linearGradient id="interlock-mark" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#2b3a8f" />
-          <stop offset="1" stopColor="#4c6ef5" />
+          <stop offset="0" stopColor="#095c7c" />
+          <stop offset="1" stopColor="#45acd1" />
         </linearGradient>
       </defs>
       <rect width="32" height="32" rx="8" fill="url(#interlock-mark)" />

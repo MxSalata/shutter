@@ -13,8 +13,12 @@ React, Mantine and TanStack Query, built with Vite. IRIS serves the build from `
 | `npm test` | Unit and page tests (Vitest, jsdom, the same mock) |
 | `npm run lint`, `npm run typecheck`, `npm run format:check` | ESLint, TypeScript and Prettier |
 | `npm run build:www` | Builds into `../www/`, the folder IRIS serves (committed, so an install needs no Node) |
+| `npm run build:demo`, `npm run preview:demo` | The demo: recorded runs on the in-browser mock, with a "Try the demo" sign-in (`dist-demo/`, `VITE_BASE` for GitHub Pages) |
+| `npm run test:e2e` | axe-core (WCAG 2.1 A and AA) on every screen of the demo in all five appearances (Playwright, Chromium) |
 
 ## Notes
+
+- Three appearances, light, dark and pastel, plus a high-contrast mode for light and dark, chosen in the appearance menu and remembered per browser; until a choice is made the app follows the system's settings. The colour tokens are tuned for 4.5:1 text contrast on every surface, which the accessibility test checks.
 
 - Times are shown in UTC, as the HL7 messages and the scenarios carry them; tooltips give the browser's own time.
 - Routes are hash routes (`/interlock/#/cases/C-000011`): IRIS serves the files without rewriting unknown paths.

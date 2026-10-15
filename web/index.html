@@ -10,10 +10,10 @@
       content="Interlock: failed interface messages investigated by a board of agents, checked by a deterministic gate, approved by a person and verified at the receiver."
     />
     <title>Interlock</title>
-    <!-- Applies the stored colour scheme before the first paint (see public/color-scheme.js). -->
+    <!-- Applies the stored colour scheme, contrast and palette before the first paint (see public/color-scheme.js). -->
     <script src="%BASE_URL%color-scheme.js"></script>
     <style>
-      /* Shown until React's first render replaces #root. */
+      /* Shown until React's first render replaces #root: the demo loads its API mock first. */
       .boot {
         position: fixed;
         inset: 0;
@@ -21,7 +21,7 @@
         place-content: center;
         justify-items: center;
         gap: 14px;
-        background: #eef0f4;
+        background: #ebeef2;
         color: #495057;
         font:
           500 14px/1.4 ui-sans-serif,
@@ -34,14 +34,38 @@
       .boot-mark {
         width: 44px;
         height: 44px;
-        border-radius: 12px;
-        background: linear-gradient(135deg, #2b3a8f, #4c6ef5);
+        border-radius: 13px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, #095c7c, #45acd1);
         box-shadow: 0 1px 2px rgb(0 0 0 / 0.15);
         animation: boot-pulse 1.4s ease-in-out infinite;
       }
+      .boot-mark::after {
+        content: '';
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 3.5px solid #fff;
+      }
       html[data-mantine-color-scheme='dark'] .boot {
-        background: #161a21;
+        background: #181e26;
         color: #b3bcc8;
+      }
+      html[data-interlock-palette='pastel'][data-mantine-color-scheme='light']:not(
+          [data-interlock-contrast='high']
+        )
+        .boot {
+        background: #f0ecf9;
+        color: #5a5577;
+      }
+      html[data-interlock-contrast='high'] .boot {
+        background: #fff;
+        color: #000;
+      }
+      html[data-interlock-contrast='high'][data-mantine-color-scheme='dark'] .boot {
+        background: #000;
+        color: #fff;
       }
       @keyframes boot-pulse {
         50% {

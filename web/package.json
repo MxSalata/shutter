@@ -8,12 +8,15 @@
     "dev": "vite",
     "build": "npm run typecheck && vite build",
     "build:www": "npm run typecheck && vite build --mode iris --outDir ../www --emptyOutDir",
+    "build:demo": "npm run typecheck && vite build --mode demo --outDir dist-demo --emptyOutDir",
+    "preview:demo": "vite preview --outDir dist-demo --port 4174 --strictPort",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@mantine/core": "^8.3.18",
@@ -24,10 +27,13 @@
     "@tanstack/react-query": "^5.103.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router": "^7.18.4"
+    "react-router": "^7.18.4",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^9.39.0",
+    "@playwright/test": "^1.63.0",
     "@testing-library/jest-dom": "^6.10.0",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
@@ -41,6 +47,7 @@
     "globals": "^17.12.0",
     "jsdom": "^26.1.0",
     "msw": "^2.15.0",
+    "playwright-core": "^1.63.0",
     "postcss": "^8.5.28",
     "postcss-preset-mantine": "^1.18.0",
     "postcss-simple-vars": "^7.0.1",

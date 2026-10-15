@@ -52,7 +52,14 @@ function GateTable({ d }: { d: GateDecision }) {
                   </Table.Td>
                   <Table.Td>
                     <Tooltip label={r.label}>
-                      <ThemeIcon size="sm" radius="xl" color={r.colour} variant="light" aria-label={r.label}>
+                      <ThemeIcon
+                        size="sm"
+                        radius="xl"
+                        color={r.colour}
+                        variant="light"
+                        role="img"
+                        aria-label={r.label}
+                      >
                         <r.icon size={14} />
                       </ThemeIcon>
                     </Tooltip>

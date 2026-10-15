@@ -22,7 +22,13 @@ export function CaseTimeline({ events }: { events: CaseEvent[] }) {
           No events yet.
         </Text>
       ) : (
-        <ScrollArea.Autosize mah="calc(100vh - 160px)" type="auto" offsetScrollbars>
+        <ScrollArea.Autosize
+          mah="calc(100vh - 160px)"
+          type="auto"
+          offsetScrollbars
+          // A region that scrolls must take the keyboard's focus, so the keys can scroll it
+          viewportProps={{ tabIndex: 0, role: 'region', 'aria-label': 'Timeline events' }}
+        >
           <Timeline bulletSize={12} lineWidth={2} active={events.length}>
             {events.map((e) => (
               <Timeline.Item

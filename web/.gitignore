@@ -1,0 +1,4 @@
+# Builds and test output that are not committed (www/ at the repository root is)
+dist-demo/
+playwright-report/
+test-results/

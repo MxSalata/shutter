@@ -5,10 +5,12 @@ import './styles.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { DEMO } from './demo';
 
 async function bootstrap() {
-  // Development against recorded data: the in-browser mock of the REST API starts before the first request.
-  if (import.meta.env.VITE_MOCK === '1') {
+  // The demo, and development against recorded data: the in-browser mock of the REST API starts before the first
+  // request.
+  if (DEMO) {
     const { startMock } = await import('./mocks/browser');
     await startMock();
   }

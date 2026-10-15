@@ -5,6 +5,7 @@ import { useMe, useSignIn } from '@/api/hooks';
 import { describeError, isApiError } from '@/lib/errors';
 import { APP_NAME, APP_TAGLINE } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
+import { DEMO, DEMO_USER } from '@/demo';
 
 export default function LoginPage() {
   const me = useMe();
@@ -33,7 +34,7 @@ export default function LoginPage() {
         : '';
 
   return (
-    <Center mih="100vh" p="md">
+    <Center mih="100vh" p="md" style={{ background: 'var(--interlock-page)' }}>
       <Paper p="xl" w={380} shadow="sm">
         <form onSubmit={submit}>
           <Stack gap="md">
@@ -69,6 +70,18 @@ export default function LoginPage() {
             <Button type="submit" loading={signIn.isPending} fullWidth>
               Sign in
             </Button>
+            {DEMO ? (
+              <Button
+                variant="light"
+                fullWidth
+                loading={signIn.isPending}
+                onClick={() =>
+                  signIn.mutate(DEMO_USER, { onSuccess: () => navigate(from, { replace: true }) })
+                }
+              >
+                Try the demo (recorded runs)
+              </Button>
+            ) : null}
             <Text size="xs" c="dimmed">
               The demo installs two users: <b>operator</b> runs scenarios and reads cases; <b>approver</b> can
               also approve or reject plans. Their password is the installer's (<code>interlock</code> unless

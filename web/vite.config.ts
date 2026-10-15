@@ -10,6 +10,9 @@ import { resolve } from 'node:path';
 // Modes:
 //   dev    `vite`                     proxies /api/interlock to an IRIS instance (VITE_IRIS_URL)
 //   iris   `vite build --mode iris`   ../www/, the build IRIS serves at /interlock/ (npm run build:www)
+//   demo   `vite build --mode demo`   dist-demo/, recorded runs on the in-browser mock (GitHub Pages, the e2e tests)
+//
+// VITE_BASE sets the demo's base path (GitHub Pages serves /<repo>/); by default it is relative.
 
 /**
  * The Content-Security-Policy of the build IRIS serves: scripts only from the app's own files, none inline, and
@@ -23,6 +26,8 @@ function contentSecurityPolicy(): Plugin {
     "img-src 'self' data:",
     "font-src 'self' data:",
     "connect-src 'self'",
+    // The demo's mock of the API is a service worker.
+    "worker-src 'self'",
     "base-uri 'none'",
     "form-action 'self'",
   ].join('; ');
@@ -60,9 +65,13 @@ export default defineConfig(({ mode }) => {
   };
 
   return {
-    // IRIS serves the build at /interlock/; the dev server at its root.
-    base: mode === 'iris' ? '/interlock/' : '/',
-    plugins: [react(), ...(mode === 'iris' ? [contentSecurityPolicy(), withoutMockWorker()] : [])],
+    // IRIS serves the build at /interlock/; the demo is relative unless VITE_BASE says otherwise.
+    base: mode === 'iris' ? '/interlock/' : mode === 'demo' ? env.VITE_BASE || './' : '/',
+    plugins: [
+      react(),
+      ...(mode === 'iris' ? [contentSecurityPolicy(), withoutMockWorker()] : []),
+      ...(mode === 'demo' ? [contentSecurityPolicy()] : []),
+    ],
     define: { __APP_VERSION__: JSON.stringify(version) },
     resolve: {
       alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
