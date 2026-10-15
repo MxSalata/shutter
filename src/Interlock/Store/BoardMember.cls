@@ -48,7 +48,7 @@ ClassMethod MembersForMode(mode As %String, requested As %DynamicArray = "") As 
     Set out = []
     If mode = "rules" Quit out
     If mode = "single" {
-        Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT Code FROM Interlock_Store.BoardMember WHERE Role = 'generalist' AND Enabled = 1 ORDER BY Sort")
+        Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT Code FROM Interlock_Store.BoardMember WHERE ""Role"" = 'generalist' AND Enabled = 1 ORDER BY Sort")
         If rs.%Next() Do out.%Push(rs.%Get("Code"))
         Quit out
     }
@@ -60,7 +60,7 @@ ClassMethod MembersForMode(mode As %String, requested As %DynamicArray = "") As 
         }
         Quit out
     }
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT Code FROM Interlock_Store.BoardMember WHERE Role = 'specialist' AND Enabled = 1 AND InDefaultBoard = 1 ORDER BY Sort")
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT Code FROM Interlock_Store.BoardMember WHERE ""Role"" = 'specialist' AND Enabled = 1 AND InDefaultBoard = 1 ORDER BY Sort")
     While rs.%Next() { Do out.%Push(rs.%Get("Code")) }
     Quit out
 }
@@ -68,7 +68,7 @@ ClassMethod MembersForMode(mode As %String, requested As %DynamicArray = "") As 
 /// The coordinator member, or "" when none is enabled.
 ClassMethod Coordinator() As Interlock.Store.BoardMember
 {
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Interlock_Store.BoardMember WHERE Role = 'coordinator' AND Enabled = 1 ORDER BY Sort")
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Interlock_Store.BoardMember WHERE ""Role"" = 'coordinator' AND Enabled = 1 ORDER BY Sort")
     If rs.%Next() Quit ..%OpenId(rs.%Get("ID"))
     Quit ""
 }
@@ -107,15 +107,23 @@ ClassMethod Seed() As %Status
          "perspective": "Everything at once.",
          "agentClass": "Interlock.Agent.Generalist", "knowledge": "all", "terminal": "submit_plan", "default": 0}
     ]
+    Set items("conformance") = "Agent Conformance", items("encounter") = "Agent Encounter", items("impact") = "Agent Impact"
+    Set items("coordinator") = "Agent Coordinator", items("generalist") = "Agent Board"
     Set iter = defaults.%GetIterator()
     While iter.%GetNext(.i, .d) {
-        Continue:$ISOBJECT(..ByCode(d.code))
-        Set m = ..%New()
-        Set m.Code = d.code, m.Name = d.name, m.Role = d.role, m.Sort = d.sort
+        Set m = ..ByCode(d.code)
+        Set isNew = '$ISOBJECT(m)
+        If isNew {
+            Set m = ..%New()
+            Set m.Code = d.code, m.Sort = d.sort
+            Set m.InDefaultBoard = ##class(Interlock.Util.Json).Bool(d, "default", 1)
+        }
+        // The code-defined parts follow the code; the user's edits (enabled, default, order) stay.
+        Set m.Name = d.name, m.Role = d.role
         Set m.Description = d.description, m.Perspective = d.perspective
         Set m.AgentClass = d.agentClass, m.KnowledgeCollection = d.knowledge
         Set m.TerminalTool = ##class(Interlock.Util.Json).Str(d, "terminal", "submit_findings")
-        Set m.InDefaultBoard = ##class(Interlock.Util.Json).Bool(d, "default", 1)
+        Set m.ConfigItem = $GET(items(d.code), "Agent Board")
         Set sc = m.%Save()
         Quit:$$$ISERR(sc)
     }

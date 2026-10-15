@@ -212,7 +212,9 @@ ClassMethod CreateWorkflowRole(demo As %Boolean) As %Status
                 Set sc = ##class(EnsLib.Workflow.UserDefinition).CreateUser("approver", "Interlock demo approver")
                 Quit:$$$ISERR(sc)
             }
-            Set sc = ##class(EnsLib.Workflow.RoleDefinition).AddUserToRole(role, "approver", 1, "Approver")
+            If '##class(EnsLib.Workflow.RoleMembership).%ExistsId(role _ "||approver") {
+                Set sc = ##class(EnsLib.Workflow.RoleDefinition).AddUserToRole(role, "approver", 1, "Approver")
+            }
         }
     } Catch ex {
         Set sc = ex.AsStatus()

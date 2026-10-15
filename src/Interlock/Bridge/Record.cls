@@ -85,6 +85,41 @@ ClassMethod ExportDir(dir As %String) As %Status
     Quit $$$OK
 }
 
+/// Import one recording from its JSON (the export shape), replacing an existing key. Returns the
+/// key, or the error text. Callable through SQL for loading fixtures from outside the instance.
+ClassMethod ImportJSON(json As %String) As %String [ SqlProc ]
+{
+    Set json = ..Normalise(json)
+    Set r = ..%New()
+    Set sc = r.%JSONImport(json)
+    If $$$ISERR(sc) Quit "ERROR: " _ $SYSTEM.Status.GetErrorText(sc)
+    Set existing = ..Find(r.Key)
+    If $ISOBJECT(existing) {
+        Set sc = existing.%JSONImport(json)
+        If $$$ISOK(sc) Set sc = existing.%Save()
+    } Else {
+        Set sc = r.%Save()
+    }
+    If $$$ISERR(sc) Quit "ERROR: " _ $SYSTEM.Status.GetErrorText(sc)
+    Quit r.Key
+}
+
+/// A recording file may hold the response, the transcript and the tool calls as JSON objects for
+/// readability; the properties are strings, so they are serialised before the import.
+ClassMethod Normalise(json As %String) As %String
+{
+    Try {
+        Set o = ##class(%DynamicObject).%FromJSON(json)
+        For key = "response", "transcript", "toolCalls" {
+            Set type = o.%GetTypeOf(key)
+            If (type = "object") || (type = "array") Do o.%Set(key, o.%Get(key).%ToJSON())
+        }
+        Return o.%ToJSON()
+    } Catch ex {
+        Return json
+    }
+}
+
 /// Import every *.json recording in a directory, replacing existing keys. Returns the count.
 ClassMethod ImportDir(dir As %String, Output count As %Integer) As %Status
 {
@@ -97,7 +132,7 @@ ClassMethod ImportDir(dir As %String, Output count As %Integer) As %Status
         Set path = rs.Get("Name")
         Set f = ##class(%Stream.FileCharacter).%New()
         Set f.Filename = path
-        Set json = f.Read($$$MaxStringLength)
+        Set json = ..Normalise(f.Read($$$MaxStringLength))
         Set r = ..%New()
         Set sc = r.%JSONImport(json)
         Quit:$$$ISERR(sc)

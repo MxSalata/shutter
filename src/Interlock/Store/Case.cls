@@ -88,14 +88,21 @@ Property CurrentApproval As Interlock.Store.Approval(%JSONFIELDNAME = "currentAp
 
 /// Open a case for an operation, or return the open one for the same key. The operation is the
 /// ward operation as built by Interlock.Util.OperationKey.FromHL7.
-ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %String, ensSessionId As %String, sourceHeaderId As %String, mode As %String, Output case As Interlock.Store.Case) As %Status
+ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %String, ensSessionId As %String, sourceHeaderId As %String, mode As %String, Output case As Interlock.Store.Case, Output opened As %Boolean) As %Status
 {
-    Set sc = $$$OK
+    Set sc = $$$OK, opened = 0
     Set key = op."operation_key"
     Set case = ..FindOpen(key)
     If $ISOBJECT(case) {
-        Set sc = case.Note("note", "A further failure for the same operation: " _ failureText, "system", "ens:" _ sourceHeaderId)
-        Quit sc
+        // An open case from before the last scenario reset belongs to an earlier run: close it.
+        Set resetAt = $GET(^Interlock.Config("resetAt"))
+        If (resetAt '= "") && (resetAt ]] case.OpenedAt) {
+            Do case.Transition("failed", "Abandoned: a new scenario run reset the ward after this case was opened", "system")
+            Set case = ""
+        } Else {
+            Set sc = case.Note("note", "A further failure for the same operation: " _ failureText, "system", "ens:" _ sourceHeaderId)
+            Quit sc
+        }
     }
     Set case = ..%New()
     Set case.CaseId = ..NextId()
@@ -120,7 +127,12 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
     TSTART
     Set sc = case.%Save()
     If $$$ISOK(sc) Set sc = ##class(Interlock.Store.CaseEvent).Append(case, "state", "", "detected", "Case opened: " _ case.Headline, "system", "ens:" _ sourceHeaderId)
-    If $$$ISOK(sc) { TCOMMIT } Else { TROLLBACK }
+    If $$$ISOK(sc) {
+        TCOMMIT
+        Set opened = 1
+    } Else {
+        TROLLBACK
+    }
     Quit sc
 }
 

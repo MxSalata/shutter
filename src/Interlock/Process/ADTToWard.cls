@@ -38,8 +38,8 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     }
     Set kind = $CASE(result.Outcome, "uncertain": "uncertain_outcome", "unavailable": "delivery_failed", "error": "delivery_failed", : "rejected")
     Set text = "Delivery " _ result.Outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "") _ $SELECT(result.HttpStatus '= "": ", HTTP " _ result.HttpStatus, 1: "") _ $SELECT(result.Error '= "": ": " _ result.Error, 1: "")
-    Set caseId = ..OpenCase(op, kind, text, result)
-    Quit $$$ERROR($$$GeneralError, text _ $SELECT(caseId '= "": ". Case " _ caseId _ " opened", 1: ""))
+    Set sent = ..OpenCase(op, kind, text, result)
+    Quit $$$ERROR($$$GeneralError, text _ $SELECT(sent '= "": ". A case was opened", 1: ". No case could be opened"))
 }
 
 /// Send the intake to the case workflow asynchronously; returns the case id when the workflow
@@ -59,18 +59,21 @@ Method OpenCase(op As %DynamicObject, kind As %String, text As %String, result A
         Set r.response = result.ResponseObject(), r.error = result.Error
         Set intake.WardResultJSON = r.%ToJSON()
     }
-    Set sc = ..SendRequestSync(..CaseTarget, intake, .started, 10)
+    // Asynchronous on purpose: the feed must never wait for an investigation.
+    Set sc = ..SendRequestAsync(..CaseTarget, intake, 1, "intake")
     If $$$ISERR(sc) {
         $$$LOGWARNING("Could not open a case: " _ $SYSTEM.Status.GetErrorText(sc))
         Quit ""
     }
-    If '$ISOBJECT($GET(started)) Quit ""
-    $$$TRACE("Case " _ started.CaseId _ $SELECT(started.Opened: " opened", 1: " updated"))
-    Quit started.CaseId
+    $$$TRACE("Case intake sent to " _ ..CaseTarget)
+    Quit "pending"
 }
 
 Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Persistent, callrequest As %Library.Persistent, callresponse As %Library.Persistent, completionkey As %String) As %Status
 {
+    If (completionkey = "intake") && $ISOBJECT(callresponse) && callresponse.%IsA("Interlock.Msg.CaseStarted") {
+        $$$TRACE("Case " _ callresponse.CaseId _ $SELECT(callresponse.Opened: " opened", 1: " updated") _ ", state " _ callresponse.State)
+    }
     Quit $$$OK
 }
 
