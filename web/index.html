@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="description"
+      content="Interlock: failed interface messages investigated by a board of agents, checked by a deterministic gate, approved by a person and verified at the receiver."
+    />
+    <title>Interlock</title>
+    <!-- Applies the stored colour scheme before the first paint (see public/color-scheme.js). -->
+    <script src="%BASE_URL%color-scheme.js"></script>
+    <style>
+      /* Shown until React's first render replaces #root. */
+      .boot {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 14px;
+        background: #eef0f4;
+        color: #495057;
+        font:
+          500 14px/1.4 ui-sans-serif,
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+      }
+      .boot-mark {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #2b3a8f, #4c6ef5);
+        box-shadow: 0 1px 2px rgb(0 0 0 / 0.15);
+        animation: boot-pulse 1.4s ease-in-out infinite;
+      }
+      html[data-mantine-color-scheme='dark'] .boot {
+        background: #161a21;
+        color: #b3bcc8;
+      }
+      @keyframes boot-pulse {
+        50% {
+          transform: scale(0.92);
+          opacity: 0.85;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .boot-mark {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div class="boot" role="status" aria-live="polite">
+        <div class="boot-mark"></div>
+        <div>Loading Interlock…</div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

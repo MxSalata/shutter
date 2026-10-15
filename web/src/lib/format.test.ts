@@ -1,0 +1,27 @@
+import { describe, expect, it } from 'vitest';
+import { formatDateTime, formatUsd, humanize, shortDigest } from './format';
+
+describe('shortDigest', () => {
+  it('shortens a digest after its scheme', () => {
+    expect(shortDigest('sha256:c5260589ac01aa5d4358690e22f78d6101f96b348ef4370540fefc3160bd32a9')).toBe(
+      'sha256:c5260589ac01…',
+    );
+  });
+  it('leaves an operation key whole, colons and all', () => {
+    const key = 'PAS^HOSP^MRN1002^ENC-1002^transfer^2026-10-15T09:20:00Z';
+    expect(shortDigest(key, 80)).toBe(key);
+  });
+});
+
+describe('formatting', () => {
+  it('shows times in UTC, as the messages carry them', () => {
+    expect(formatDateTime('2026-10-15T09:20:00Z')).toBe('15 Oct, 09:20:00');
+  });
+  it('turns codes into words', () => {
+    expect(humanize('awaiting_approval')).toBe('Awaiting approval');
+  });
+  it('prices below a cent with four decimals', () => {
+    expect(formatUsd(0.00042)).toBe('$0.0004');
+    expect(formatUsd(1.5)).toBe('$1.50');
+  });
+});

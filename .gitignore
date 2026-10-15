@@ -23,3 +23,6 @@ iris-data/
 *.log
 .DS_Store
 Thumbs.db
+
+# TypeScript build information
+*.tsbuildinfo

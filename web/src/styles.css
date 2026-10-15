@@ -1,0 +1,24 @@
+/* The page behind the cards, one tone off the cards so they read as surfaces. */
+:root {
+  --interlock-page: #f1f3f7;
+}
+[data-mantine-color-scheme='dark'] {
+  --interlock-page: #141820;
+}
+body {
+  background: var(--interlock-page);
+}
+/* Digests, keys and other machine values wrap anywhere rather than overflow their card. */
+.mono-wrap {
+  font-family: var(--mantine-font-family-monospace);
+  overflow-wrap: anywhere;
+}
+/* Pre-formatted JSON keeps its shape and scrolls inside its box. */
+.json-block {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--mantine-font-size-xs);
+  white-space: pre;
+  overflow: auto;
+  max-height: 420px;
+  margin: 0;
+}

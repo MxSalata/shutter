@@ -1,0 +1,5 @@
+node_modules
+coverage
+public/mockServiceWorker.js
+package-lock.json
+src/mocks/fixtures.json

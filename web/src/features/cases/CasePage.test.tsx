@@ -1,0 +1,56 @@
+import { MantineProvider } from '@mantine/core';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, within } from '@testing-library/react';
+import { createMemoryRouter, RouterProvider } from 'react-router';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { server } from '@/mocks/node';
+import { resetMock } from '@/mocks/handlers';
+import { theme } from '@/theme';
+import CasePage from './CasePage';
+
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+
+function renderCase(caseId: string) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const router = createMemoryRouter([{ path: '/cases/:caseId', element: <CasePage /> }], {
+    initialEntries: [`/cases/${caseId}`],
+  });
+  return render(
+    <MantineProvider theme={theme}>
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </MantineProvider>,
+  );
+}
+
+describe('CasePage', () => {
+  beforeEach(() => resetMock('approver'));
+
+  it('tells the story of a resolved case, with the verification apart from the acknowledgement', async () => {
+    renderCase('C-000011');
+    expect(await screen.findByRole('heading', { name: 'Case C-000011' })).toBeInTheDocument();
+    expect(await screen.findByText('Closed: verified')).toBeInTheDocument();
+    const board = await screen.findByRole('region', { name: 'The board' });
+    expect(await within(board).findByText('Conformance')).toBeInTheDocument();
+    expect(await within(board).findByText('Encounter Integrity')).toBeInTheDocument();
+    expect(await within(board).findByText('Impact Analysis')).toBeInTheDocument();
+    const dispatch = await screen.findByRole('region', { name: 'Dispatch and verification' });
+    expect(await within(dispatch).findByText(/Acknowledged/)).toBeInTheDocument();
+    expect(await within(dispatch).findByText('Verified at the receiver')).toBeInTheDocument();
+  });
+
+  it('says why a blocked case stopped and what comes next', async () => {
+    renderCase('C-000008');
+    expect(await screen.findByText('Closed: blocked')).toBeInTheDocument();
+    expect(await screen.findByText('RECEIVER_CHANGED')).toBeInTheDocument();
+    expect(await screen.findByText('Collect fresh evidence and investigate again.')).toBeInTheDocument();
+  });
+
+  it('says so when there is no such case', async () => {
+    renderCase('C-999999');
+    expect(await screen.findByText('There is no case C-999999')).toBeInTheDocument();
+  });
+});
