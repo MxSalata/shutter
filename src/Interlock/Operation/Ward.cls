@@ -19,6 +19,7 @@ Parameter SETTINGS = "OperationsPath:Ward";
 Method OnWardOperation(request As Interlock.Msg.WardOperation, Output response As Interlock.Msg.WardResult) As %Status
 {
     Set response = ##class(Interlock.Msg.WardResult).%New()
+    If request.Purpose = "read" Quit ..Read(request, response)
     Set body = request.ToWardJSON()
     $$$TRACE($SELECT(request.DryRun: "Rehearsal", 1: "Operation") _ " " _ request.OperationKey _ $SELECT(request.ExpectedVersion '= "": ", expected version " _ request.ExpectedVersion, 1: ""))
     Set http = ##class(%Net.HttpRequest).%New()
@@ -42,6 +43,46 @@ Method OnWardOperation(request As Interlock.Msg.WardOperation, Output response A
     If '$ISOBJECT(parsed) || $$$ISERR(psc) Set parsed = {}
     Do ..Classify(request, response, sc, parsed)
     $$$TRACE("Outcome " _ response.Outcome _ $SELECT(response.ReasonCode '= "": " (" _ response.ReasonCode _ ")", 1: "") _ ", HTTP " _ response.HttpStatus _ ", " _ response.DurationMs _ " ms")
+    Quit $$$OK
+}
+
+/// A preflight read: GET the encounter's current state and version. Outcome read, unknown_encounter,
+/// unavailable or error; EncounterVersion carries the version.
+Method Read(request As Interlock.Msg.WardOperation, response As Interlock.Msg.WardResult) As %Status
+{
+    $$$TRACE("Preflight read of encounter " _ request.EncounterId)
+    Set http = ##class(%Net.HttpRequest).%New()
+    Set start = $ZHOROLOG
+    Set path = $PIECE(..OperationsPath, "/operations", 1) _ "/encounters/" _ $ZCONVERT(request.EncounterId, "O", "URL")
+    Set sc = ..Adapter.SendFormDataArray(.httpResponse, "GET", http, "", "", path)
+    Set response.DurationMs = (($ZHOROLOG - start) * 1000) \ 1
+    Set ..Retry = 0
+    Set text = ""
+    If $ISOBJECT($GET(httpResponse)) {
+        Set response.HttpStatus = +httpResponse.StatusCode
+        If $ISOBJECT(httpResponse.Data) {
+            Do httpResponse.Data.Rewind()
+            While 'httpResponse.Data.AtEnd { Set text = text _ httpResponse.Data.Read(32000) }
+        }
+        Set response.ResponseJSON = text
+    }
+    Set parsed = ##class(Interlock.Util.Json).Parse(text, .psc)
+    If '$ISOBJECT(parsed) || $$$ISERR(psc) Set parsed = {}
+    If response.HttpStatus = 200 {
+        Set response.Outcome = "read"
+        Set response.EncounterVersion = ##class(Interlock.Util.Json).Str(parsed, "version")
+        Set response.ReasonCode = ##class(Interlock.Util.Json).Str(parsed, "state")
+    } ElseIf response.HttpStatus = 404 {
+        Set response.Outcome = "unknown_encounter"
+        Set response.ReasonCode = "unknown_encounter"
+    } ElseIf response.HttpStatus = "" {
+        Set response.Outcome = "unavailable"
+        Set response.Error = $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "no response")
+    } Else {
+        Set response.Outcome = "error"
+        Set response.Error = "HTTP " _ response.HttpStatus
+    }
+    $$$TRACE("Preflight: " _ response.Outcome _ ", version " _ response.EncounterVersion _ ", HTTP " _ response.HttpStatus)
     Quit $$$OK
 }
 

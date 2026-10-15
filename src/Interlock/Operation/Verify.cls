@@ -33,6 +33,16 @@ Method OnVerifyRequest(request As Interlock.Msg.VerifyRequest, Output response A
             Set current = ##class(Interlock.Util.Json).Str(encounter, "ward")
             Set state = ##class(Interlock.Util.Json).Str(encounter, "state")
             Set later = ..LaterThan(encounter, case.EventTime)
+            // A receiver that reports no history at all: the receipt plus a consistent current
+            // state is the best available evidence, and the detail says so.
+            Set history = encounter.%Get("history")
+            Set noHistory = '$ISOBJECT(history) || (history.%Size() = 0)
+            If 'inHistory && noHistory {
+                Set versionAfter = +##class(Interlock.Util.Json).Str(receipt, "version_after", 0)
+                Set versionNow = +##class(Interlock.Util.Json).Str(encounter, "version", 0)
+                Set consistent = (versionNow >= versionAfter) && $CASE(case.Event, "transfer": current = case.Ward, "admit": current = case.Ward, "discharge": state = "discharged", : 1)
+                If consistent Set inHistory = 1, detail."history_note" = "The receiver reports no history; verified from the receipt and the current state"
+            }
             If inHistory {
                 If later '= "" {
                     Set outcome = "verified"

@@ -346,6 +346,20 @@ ClassMethod StartProduction() As %Status
     Quit sc
 }
 
+/// Restart the production so that recompiled business hosts pick up their new code. Returns "ok"
+/// or the error.
+ClassMethod RestartProduction() As %String [ SqlProc ]
+{
+    Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)
+    If $$$ISERR(sc) Quit $SYSTEM.Status.GetErrorText(sc)
+    If state = 1 {
+        Set sc = ##class(Ens.Director).StopProduction(60, 0)
+        If $$$ISERR(sc) Quit $SYSTEM.Status.GetErrorText(sc)
+    }
+    Set sc = ..StartProduction()
+    Quit $SELECT($$$ISOK(sc): "ok", 1: $SYSTEM.Status.GetErrorText(sc))
+}
+
 /// A readiness report as JSON: what is installed, what runs, what is missing.
 ClassMethod Doctor() As %String [ SqlProc ]
 {

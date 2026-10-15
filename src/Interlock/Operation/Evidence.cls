@@ -150,7 +150,6 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
         Set info.notes = notes
         Set info."segment_count" = msg.SegCount
         Set info."doc_type" = msg.DocType
-        Set info."raw_length" = msg.Size
         // "dm": the document type must be known and the segment structure must match the schema.
         Set sc = msg.Validate("dm")
         Do validation.%Set("parsed", $$$ISOK(sc), "boolean")

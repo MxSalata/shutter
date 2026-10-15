@@ -3,8 +3,9 @@
 Class Interlock.Msg.WardOperation Extends Ens.Request
 {
 
-/// normal (the feed), rehearsal (a dry run from a case), recovery (an approved write from a case).
-Property Purpose As %String(MAXLEN = 16, VALUELIST = ",normal,rehearsal,recovery") [ InitialExpression = "normal" ];
+/// normal (the feed), rehearsal (a dry run from a case), recovery (an approved write from a case),
+/// read (a preflight read of the encounter's current state and version; nothing is sent to write).
+Property Purpose As %String(MAXLEN = 16, VALUELIST = ",normal,rehearsal,recovery,read") [ InitialExpression = "normal" ];
 
 Property OperationKey As %String(MAXLEN = 400);
 
