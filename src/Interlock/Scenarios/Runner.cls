@@ -51,7 +51,7 @@ ClassMethod Load(Output error As %String) As %DynamicArray
     Quit scenarios
 }
 
-/// Plays <var>scenario</var> (S1 to S6). <var>mode</var> is the investigation mode, written to
+/// Plays <var>scenario</var> (S1 to S10). <var>mode</var> is the investigation mode, written to
 /// <code>^Interlock.Config("mode")</code>: board, single or rules. Whether agents run live or replay is the agent
 /// items' production setting, not this. Returns JSON text.
 ClassMethod Run(scenario As %String, mode As %String = "board") As %String [ SqlProc ]
@@ -86,7 +86,7 @@ ClassMethod Run(scenario As %String, mode As %String = "board") As %String [ Sql
     Set started = reset."reset_at"
     Set ^Interlock.Config("mode") = mode
     Set ^Interlock.Config("scenario") = scenario
-    Set files = [], error = ""
+    Set files = [], timeouts = [], error = ""
     Set steps = found.steps.%GetIterator()
     While steps.%GetNext(.j, .step) {
         If step.%IsDefined("fault") {
@@ -101,12 +101,33 @@ ClassMethod Run(scenario As %String, mode As %String = "board") As %String [ Sql
             Hang 2
         } ElseIf step.%IsDefined("wait") {
             Hang +step.wait
+        } ElseIf step.%IsDefined("wait_for_state") {
+            Set timeout = $SELECT(step.%IsDefined("timeout"): +step.timeout, 1: 120)
+            Do:'..WaitForState(scenario, step."wait_for_state", timeout) timeouts.%Push(step."wait_for_state")
+        } ElseIf step.%IsDefined("capabilities") {
+            Do ##class(Wards.Service).SetCapabilities(step.capabilities, .status)
         }
     }
     If error '= "" {
         Quit {"error": (error), "files": (files)}.%ToJSON()
     }
-    Quit {"scenario": (scenario), "mode": (mode), "started_at": (started), "files": (files)}.%ToJSON()
+    Quit {"scenario": (scenario), "mode": (mode), "started_at": (started), "files": (files), "timeouts": (timeouts)}.%ToJSON()
+}
+
+/// Waits until the newest case of <var>scenario</var> reaches <var>state</var> (CONTRACTS 4.1). Returns 1 when it
+/// did, 0 when <var>timeout</var> seconds passed or the case store can't be read.
+ClassMethod WaitForState(scenario As %String, state As %String, timeout As %Integer = 120) As %Boolean
+{
+    Set deadline = $ZHOROLOG + timeout
+    While $ZHOROLOG < deadline {
+        Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 State FROM Interlock_Store.""Case"" WHERE Scenario = ? ORDER BY ID DESC", scenario)
+        Return:rs.%SQLCODE<0 0
+        If rs.%Next(), rs.%Get("State") = state {
+            Return 1
+        }
+        Hang 1
+    }
+    Quit 0
 }
 
 /// Copies a fixture into the inbound folder under a temporary name, then renames it, so the file service never reads

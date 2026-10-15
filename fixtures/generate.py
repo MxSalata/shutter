@@ -19,6 +19,10 @@ PATIENTS = {
     "S4": ("MRN1004", "ENC-1004", "SYNTH^DEV", "19681002", "M"),
     "S5": ("MRN1005", "ENC-1005", "SYNTH^ELLA", "20010730", "F"),
     "S6": ("MRN1006", "ENC-1006", "SYNTH^FINN", "19590214", "M"),
+    "S7": ("MRN1007", "ENC-1007", "SYNTH^GRACE", "19870509", "F"),
+    "S8": ("MRN1008", "ENC-1008", "SYNTH^HARRY", "19700123", "M"),
+    "S9": ("MRN1009", "ENC-1009", "SYNTH^IRIS", "19951111", "F"),
+    "S10": ("MRN1010", "ENC-1010", "SYNTH^JUDE", "19820618", "M"),
 }
 
 LOCATIONS = {
@@ -38,11 +42,13 @@ def field_list(values, count):
     return [values.get(i, "") for i in range(1, count + 1)]
 
 
-def message(scenario, seq, trigger, time, ward=None, prior=None, admit_time="0900", note=None, phone=None):
-    mrn, encounter, name, dob, sex = PATIENTS[scenario]
+def message(scenario, seq, trigger, time, ward=None, prior=None, admit_time="0900", note=None, phone=None,
+            source="PAS", encounter=None):
+    mrn, default_encounter, name, dob, sex = PATIENTS[scenario]
+    encounter = encounter or default_encounter
     stamp = f"{DAY}{time}00"
     control_id = f"MSG{int(scenario[1:]):03d}{seq:02d}"
-    msh = "MSH|^~\\&|PAS|HOSP|WARDS|HOSP|" + stamp + "||ADT^" + trigger + "^" + STRUCTURE[trigger] + "|" + control_id + "|P|2.5.1"
+    msh = "MSH|^~\\&|" + source + "|HOSP|WARDS|HOSP|" + stamp + "||ADT^" + trigger + "^" + STRUCTURE[trigger] + "|" + control_id + "|P|2.5.1"
     evn = "EVN|" + "|".join(field_list({1: trigger, 2: stamp, 6: stamp}, 6))
     pid_fields = {1: "1", 3: f"{mrn}^^^HOSP^MR", 5: name, 7: dob, 8: sex}
     if phone:
@@ -62,7 +68,7 @@ def message(scenario, seq, trigger, time, ward=None, prior=None, admit_time="090
     name_ = f"{scenario}-{seq:02d}-{trigger}.hl7"
     key_ward = ward if trigger in ("A01", "A02") else None
     return name_, "\r".join(segments) + "\r", {
-        "operation_key": f"PAS^HOSP^{mrn}^{encounter}^{EVENT[trigger]}^2026-10-15T{time[:2]}:{time[2:]}:00Z",
+        "operation_key": f"{source}^HOSP^{mrn}^{encounter}^{EVENT[trigger]}^2026-10-15T{time[:2]}:{time[2:]}:00Z",
         "ward": key_ward,
     }
 
@@ -194,6 +200,95 @@ def scenarios():
                      "failed_operation_key": b[2]["operation_key"]},
     }, [a, b, d]))
 
+    # S7: a later transfer arrives while the plan awaits approval
+    a = message("S7", 1, "A01", "0900", ward="WARD-A")
+    b = message("S7", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
+    c = message("S7", 3, "A02", "0950", ward="WARD-C", prior="WARD-A")
+    out.append(({
+        "id": "S7",
+        "title": "Conditions change while the plan awaits approval",
+        "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; while the plan to resend it awaits "
+                   "approval, a 09:50 transfer to Ward C applies. The approval no longer matches the ward, and the "
+                   "resend is now superseded.",
+        "steps": [
+            {"file": a[0]},
+            {"fault": "fail_before_accept"},
+            {"file": b[0], "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+            {"wait_for_state": "awaiting_approval", "timeout": 180},
+            {"file": c[0]},
+        ],
+        "expected": {"disposition": "superseded", "write": False, "final_state": "admitted", "final_ward": "WARD-C",
+                     "failed_operation_key": b[2]["operation_key"], "blocked_by": "APPROVAL_RECEIVER_CHANGED"},
+    }, [a, b, c]))
+
+    # S8: event times that can't be compared
+    a = message("S8", 1, "A01", "0900", ward="WARD-A")
+    b = message("S8", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
+    c = message("S8", 3, "A02", "0920", ward="WARD-C", prior="WARD-A", source="BEDMGR")
+    out.append(({
+        "id": "S8",
+        "title": "Event times that can't be compared",
+        "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; the bed manager's own transfer to "
+                   "Ward C, also timed 09:20, applies. Neither event is later than the other, so supersession is "
+                   "unknown: nothing is resent.",
+        "steps": [
+            {"file": a[0]},
+            {"fault": "fail_before_accept"},
+            {"file": b[0], "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+            {"file": c[0]},
+        ],
+        "expected": {"disposition": "escalate", "acceptable": ["more_evidence", "escalate"], "write": False,
+                     "final_state": "admitted", "final_ward": "WARD-C", "failed_operation_key": b[2]["operation_key"]},
+    }, [a, b, c]))
+
+    # S9: one patient, two encounters
+    a = message("S9", 1, "A01", "0900", ward="WARD-A")
+    b = message("S9", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
+    d = message("S9", 3, "A01", "0930", ward="WARD-C", admit_time="0930", encounter="ENC-2009")
+    out.append(({
+        "id": "S9",
+        "title": "One patient, two encounters",
+        "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; the same patient is admitted at 09:30 "
+                   "to Ward C under another visit number. That admission belongs to another encounter and supersedes "
+                   "nothing: the transfer is still due.",
+        "steps": [
+            {"file": a[0]},
+            {"fault": "fail_before_accept"},
+            {"file": b[0], "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+            {"file": d[0]},
+        ],
+        "expected": {"disposition": "resend", "write": True, "final_state": "admitted", "final_ward": "WARD-B",
+                     "failed_operation_key": b[2]["operation_key"], "other_encounter": "ENC-2009"},
+    }, [a, b, d]))
+
+    # S10: the ward loses conditional writes
+    a = message("S10", 1, "A01", "0900", ward="WARD-A")
+    b = message("S10", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
+    out.append(({
+        "id": "S10",
+        "title": "The ward can't take a conditional write",
+        "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; then the ward's capability profile "
+                   "drops conditional writes. The transfer is still due, but a resend can no longer be guarded, so it "
+                   "isn't offered: escalate for manual handling.",
+        "steps": [
+            {"file": a[0]},
+            {"fault": "fail_before_accept"},
+            {"file": b[0], "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+            {"capabilities": {"conditional_writes": False}},
+        ],
+        "expected": {"disposition": "escalate", "acceptable": ["more_evidence", "escalate"], "write": False,
+                     "final_state": "admitted", "final_ward": "WARD-A", "failed_operation_key": b[2]["operation_key"],
+                     "blocked_by": "CONNECTOR_INCAPABLE"},
+    }, [a, b]))
+
     return out
 
 
@@ -206,9 +301,12 @@ def main():
             with open(os.path.join(folder, name), "w", encoding="utf-8", newline="") as f:
                 f.write(text)
         listing.append(scenario)
-    with open(os.path.join(HERE, "scenarios.json"), "w", encoding="utf-8") as f:
+    # The containers read scenarios.json live from this working copy: replace it in one step
+    target = os.path.join(HERE, "scenarios.json")
+    with open(target + ".tmp", "w", encoding="utf-8") as f:
         json.dump(listing, f, indent=2)
         f.write("\n")
+    os.replace(target + ".tmp", target)
     print(f"{sum(len(s['steps']) for s in listing)} steps in {len(listing)} scenarios written to {HERE}")
 
 
