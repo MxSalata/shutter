@@ -1,6 +1,7 @@
 /// Plays the demo scenarios (docs/CONTRACTS.md, section 4). <method>Run</method> resets the ward, sets the case
 /// workflow's mode, then plays a scenario's steps: faults on the ward, HL7 files into the production's inbound
-/// folder, waits. It doesn't wait for the case; the production and the app do the rest. The methods are SQL
+/// folder, waits, and for S7 a wait for the case's state. The production and the app do the rest.
+/// <method>Start</method> does the same in a background job and returns at once, for the app. The methods are SQL
 /// procedures, so scripts and the app can call them: <code>SELECT Interlock_Scenarios.Runner_Run('S2', 'board')</code>.
 Class Interlock.Scenarios.Runner
 {
@@ -54,18 +55,104 @@ ClassMethod Load(Output error As %String) As %DynamicArray
     Quit scenarios
 }
 
-/// Plays <var>scenario</var> (S1 to S10). <var>mode</var> is the investigation mode, written to
-/// <code>^Interlock.Config("mode")</code>: board, single or rules. Whether agents run live or replay is the agent
-/// items' production setting, not this. Returns JSON text.
+/// Plays <var>scenario</var> (S1 to S10) and returns when its steps are done. <var>mode</var> is the investigation
+/// mode, written to <code>^Interlock.Config("mode")</code>: board, single or rules. Whether agents run live or replay
+/// is the agent items' production setting, not this. Returns JSON text.
 ClassMethod Run(scenario As %String, mode As %String = "board") As %String [ SqlProc ]
 {
+    Set found = ..Prepare(scenario, mode, .inbound, .error)
+    Quit:error'="" {"error": (error)}.%ToJSON()
+    // Called over HTTP, a run that waits can outlast the web gateway's 60-second response timeout (S7 waits up to
+    // three minutes): ask the gateway to wait for the whole run
+    Set duration = ..Duration(found)
+    Set:$ISOBJECT($GET(%response))&&(duration > 30) %response.Timeout = duration + 60
+    Set started = ..Begin(scenario, mode, .error)
+    Quit:error'="" {"error": (error)}.%ToJSON()
+    Quit ..Play(found, scenario, mode, started, inbound, 0).%ToJSON()
+}
+
+/// Starts <var>scenario</var> and returns at once, for the app's 202 (CONTRACTS 5.2): the same checks and reset as
+/// <method>Run</method>, then a background job plays the steps; <method>Status</method> follows it. Refused while
+/// another background run is playing. Returns JSON text.
+ClassMethod Start(scenario As %String, mode As %String = "board") As %String [ SqlProc ]
+{
+    If ..Running() {
+        Quit {"error": "scenario_running", "detail": ("a run of " _ {}.%FromJSON(^Interlock.Scenarios("run")).scenario _ " is still playing")}.%ToJSON()
+    }
+    Set found = ..Prepare(scenario, mode, .inbound, .error)
+    Quit:error'="" {"error": (error)}.%ToJSON()
+    Set started = ..Begin(scenario, mode, .error)
+    Quit:error'="" {"error": (error)}.%ToJSON()
+    Kill ^Interlock.Scenarios("run")
+    Set ^Interlock.Scenarios("run") = {"scenario": (scenario), "mode": (mode), "startedAt": (started), "state": "running", "files": [], "timeouts": []}.%ToJSON()
+    Job ##class(Interlock.Scenarios.Runner).Background(scenario, mode, started)::10
+    If '$TEST {
+        Set ^Interlock.Scenarios("run") = {"scenario": (scenario), "mode": (mode), "startedAt": (started), "state": "failed", "files": [], "timeouts": [], "error": "the background job did not start"}.%ToJSON()
+        Quit {"error": "the background job did not start"}.%ToJSON()
+    }
+    Set ^Interlock.Scenarios("run", "job") = $ZCHILD
+    Quit {"scenario": (scenario), "mode": (mode), "startedAt": (started), "files": [], "running": true}.%ToJSON()
+}
+
+/// The background run <method>Start</method> began, or the last one: scenario, mode, startedAt, state (running, done,
+/// failed, or interrupted when its job is gone), files, timeouts, the step it is on while running, finishedAt and
+/// error. JSON text, <code>null</code> when nothing has run.
+ClassMethod Status() As %String [ SqlProc ]
+{
+    Set text = $GET(^Interlock.Scenarios("run"))
+    Quit:text="" "null"
+    Set run = {}.%FromJSON(text)
+    If run.state = "running" {
+        If ..Running() {
+            Set run.step = $GET(^Interlock.Scenarios("run", "step"))
+        } Else {
+            Set run.state = "interrupted"
+        }
+    }
+    Quit run.%ToJSON()
+}
+
+/// The job <method>Start</method> runs: plays the steps and records how it went.
+ClassMethod Background(scenario As %String, mode As %String, started As %String)
+{
+    Try {
+        Set found = ..Prepare(scenario, mode, .inbound, .error)
+        Set result = $SELECT(error = "": ..Play(found, scenario, mode, started, inbound, 1), 1: {"error": (error), "files": []})
+    } Catch ex {
+        Set result = {"error": (ex.DisplayString()), "files": []}
+    }
+    Set run = {}.%FromJSON($GET(^Interlock.Scenarios("run"), "{}"))
+    Set run.state = $SELECT(result.error '= "": "failed", 1: "done")
+    Set run.files = result.files
+    Set run.timeouts = $SELECT($ISOBJECT(result.timeouts): result.timeouts, 1: [])
+    Set:result.error'="" run.error = result.error
+    Set run.finishedAt = ##class(Wards.Service).Now()
+    Set ^Interlock.Scenarios("run") = run.%ToJSON()
+    Kill ^Interlock.Scenarios("run", "step")
+}
+
+/// Whether a background run is playing: its record says running and its job is alive.
+ClassMethod Running() As %Boolean
+{
+    Set text = $GET(^Interlock.Scenarios("run"))
+    Quit:text="" 0
+    Set run = {}.%FromJSON(text)
+    Quit:run.state'="running" 0
+    Set job = $GET(^Interlock.Scenarios("run", "job"))
+    Quit (job '= "") && ($DATA(^$JOB(job)) > 0)
+}
+
+/// The scenario's definition once the checks a run needs pass (the mode, the scenario, the inbound folder setting),
+/// with the inbound folder in <var>inbound</var>; otherwise an empty string and the reason in <var>error</var>.
+ClassMethod Prepare(scenario As %String, mode As %String, Output inbound As %String, Output error As %String) As %DynamicObject
+{
+    Set inbound = "", error = ""
     If '$LISTFIND($LISTBUILD("board", "single", "rules"), mode) {
-        Quit {"error": ("unknown mode " _ mode _ ": use board, single or rules")}.%ToJSON()
+        Set error = "unknown mode " _ mode _ ": use board, single or rules"
+        Quit ""
     }
     Set scenarios = ..Load(.error)
-    If error '= "" {
-        Quit {"error": (error)}.%ToJSON()
-    }
+    Quit:error'="" ""
     Set found = ""
     Set iter = scenarios.%GetIterator()
     While iter.%GetNext(.i, .candidate) {
@@ -75,27 +162,40 @@ ClassMethod Run(scenario As %String, mode As %String = "board") As %String [ Sql
         }
     }
     If '$ISOBJECT(found) {
-        Quit {"error": ("no scenario " _ scenario)}.%ToJSON()
+        Set error = "no scenario " _ scenario
+        Quit ""
     }
     Set inbound = $GET(^Interlock.Config("adtIn"))
     If inbound = "" {
-        Quit {"error": "the adtIn setting (^Interlock.Config) is not set: run Interlock.Setup first"}.%ToJSON()
+        Set error = "the adtIn setting (^Interlock.Config) is not set: run Interlock.Setup first"
+        Quit ""
     }
     Set inbound = ##class(%File).NormalizeDirectory(inbound)
-    // Called over HTTP, a run that waits can outlast the web gateway's 60-second response timeout (S7 waits up to
-    // three minutes): ask the gateway to wait for the whole run
-    Set duration = ..Duration(found)
-    Set:$ISOBJECT($GET(%response))&&(duration > 30) %response.Timeout = duration + 60
+    Quit found
+}
+
+/// The reset before a run, and the mode and scenario recorded (CONTRACTS 4). Returns the time of the reset.
+ClassMethod Begin(scenario As %String, mode As %String, Output error As %String) As %String
+{
+    Set error = ""
     Set reset = {}.%FromJSON(..Reset())
     If reset.ward.error '= "" {
-        Quit {"error": "the ward refused the reset: is the demo flag (^Wards.Config) set?"}.%ToJSON()
+        Set error = "the ward refused the reset: is the demo flag (^Wards.Config) set?"
+        Quit ""
     }
-    Set started = reset."reset_at"
     Set ^Interlock.Config("mode") = mode
     Set ^Interlock.Config("scenario") = scenario
+    Quit reset."reset_at"
+}
+
+/// Plays the steps of <var>found</var> after <method>Begin</method>. With <var>track</var>, each step is recorded for
+/// <method>Status</method> as it starts.
+ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, started As %String, inbound As %String, track As %Boolean = 0) As %DynamicObject
+{
     Set files = [], timeouts = [], error = ""
     Set steps = found.steps.%GetIterator()
     While steps.%GetNext(.j, .step) {
+        Set:track ^Interlock.Scenarios("run", "step") = ..Describe(step)
         If step.%IsDefined("fault") {
             Set request = {"mode": (step.fault)}
             Do:step.%IsDefined("operation_key") request.%Set("operation_key", step."operation_key")
@@ -123,9 +223,20 @@ ClassMethod Run(scenario As %String, mode As %String = "board") As %String [ Sql
         }
     }
     If error '= "" {
-        Quit {"error": (error), "files": (files)}.%ToJSON()
+        Quit {"error": (error), "files": (files)}
     }
-    Quit {"scenario": (scenario), "mode": (mode), "started_at": (started), "files": (files), "timeouts": (timeouts)}.%ToJSON()
+    Quit {"scenario": (scenario), "mode": (mode), "started_at": (started), "files": (files), "timeouts": (timeouts)}
+}
+
+/// A step in words, for <method>Status</method>.
+ClassMethod Describe(step As %DynamicObject) As %String
+{
+    Quit:step.%IsDefined("file") "delivering " _ step.file
+    Quit:step.%IsDefined("fault") "setting the ward's fault to " _ step.fault
+    Quit:step.%IsDefined("wait") "waiting " _ step.wait _ " s"
+    Quit:step.%IsDefined("wait_for_state") "waiting for the case to reach " _ step."wait_for_state"
+    Quit:step.%IsDefined("capabilities") "changing the ward's capabilities"
+    Quit "a step the runner doesn't know"
 }
 
 /// Waits until the newest case of <var>scenario</var> reaches <var>state</var> (CONTRACTS 4.1). Returns 1 when it
