@@ -21,7 +21,7 @@ ClassMethod Apply(request As %DynamicObject, Output status As %Integer) As %Dyna
     Set digest = ..Digest(..Canonical(request))
     Set given = request.%Get("payload_digest")
     If (given '= ""), (given '= digest) {
-        Quit ..Refuse(dryRun, 422, {"error": "invalid_request", "detail": "payload_digest does not match the canonical payload"}, .status)
+        Quit ..Refuse(dryRun, 422, {"error": "payload_digest_mismatch"}, .status)
     }
     Set encounterId = request.%Get("encounter_id")
     Lock +^Wards.Lock(encounterId):10
@@ -44,6 +44,18 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
 {
     Set encounterId = request.%Get("encounter_id")
     Set event = request.%Get("event")
+    Set encounter = ##class(Wards.Encounter).EncounterIdIdxOpen(encounterId)
+    // Part of request validity: an encounter never changes its patient
+    If $ISOBJECT(encounter) {
+        If (encounter.PatientId '= request.%Get("patient_id")) || (encounter.PatientIdAuthority '= request.%Get("patient_id_authority")) {
+            Quit ..Refuse(dryRun, 422, {"error": "patient_mismatch", "encounter_id": (encounterId)}, .status)
+        }
+    }
+    // The misleading duplicate error set for this key answers whatever the version, and writes nothing
+    If 'dryRun, ..FaultFor(key) = "misleading_duplicate_error", $GET(^Wards.Config("fault", "key")) '= "" {
+        Set status = 409
+        Quit {"error": "duplicate_message"}
+    }
     // A committed receipt for this key answers before any version check
     Set receipt = ##class(Wards.Receipt).OperationKeyIdxOpen(key)
     If $ISOBJECT(receipt) {
@@ -59,15 +71,9 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
         Do:$ISOBJECT(encounter) out.%Set("encounter", encounter.ToJSON())
         Quit out
     }
-    Set encounter = ##class(Wards.Encounter).EncounterIdIdxOpen(encounterId)
     Set current = $SELECT($ISOBJECT(encounter): encounter.Version, 1: 0)
     If '$ISOBJECT(encounter), event '= "admit" {
         Quit ..Refuse(dryRun, 422, {"error": "unknown_encounter", "encounter_id": (encounterId)}, .status)
-    }
-    If $ISOBJECT(encounter) {
-        If (encounter.PatientId '= request.%Get("patient_id")) || (encounter.PatientIdAuthority '= request.%Get("patient_id_authority")) {
-            Quit ..Refuse(dryRun, 422, {"error": "invalid_request", "detail": "the patient does not match the encounter"}, .status)
-        }
     }
     Set expected = request.%Get("expected_version")
     If (expected '= ""), (+expected '= current) {
@@ -209,7 +215,7 @@ ClassMethod Digest(canonical As %String) As %String
     Set hash = $SYSTEM.Encryption.SHAHash(256, $ZCONVERT(canonical, "O", "UTF8"))
     Set hex = ""
     For i = 1:1:$LENGTH(hash) {
-        Set hex = hex _ $ZCONVERT($RIGHT("0" _ $ZHEX($ASCII(hash, i)), 2), "L")
+        Set hex = hex _ $ZCONVERT($EXTRACT("0" _ $ZHEX($ASCII(hash, i)), *-1, *), "L")
     }
     Quit "sha256:" _ hex
 }

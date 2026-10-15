@@ -51,12 +51,13 @@ ClassMethod Load(Output error As %String) As %DynamicArray
     Quit scenarios
 }
 
-/// Plays <var>scenario</var> (S1 to S6). <var>mode</var> is the case workflow's mode, written to
-/// <code>^Interlock.Config("mode")</code>: board, single, rules or replay. Returns JSON text.
+/// Plays <var>scenario</var> (S1 to S6). <var>mode</var> is the investigation mode, written to
+/// <code>^Interlock.Config("mode")</code>: board, single or rules. Whether agents run live or replay is the agent
+/// items' production setting, not this. Returns JSON text.
 ClassMethod Run(scenario As %String, mode As %String = "board") As %String [ SqlProc ]
 {
-    If '$LISTFIND($LISTBUILD("board", "single", "rules", "replay"), mode) {
-        Quit {"error": ("unknown mode " _ mode _ ": use board, single, rules or replay")}.%ToJSON()
+    If '$LISTFIND($LISTBUILD("board", "single", "rules"), mode) {
+        Quit {"error": ("unknown mode " _ mode _ ": use board, single or rules")}.%ToJSON()
     }
     Set scenarios = ..Load(.error)
     If error '= "" {
@@ -75,15 +76,16 @@ ClassMethod Run(scenario As %String, mode As %String = "board") As %String [ Sql
     }
     Set inbound = $GET(^Interlock.Config("adtIn"))
     If inbound = "" {
-        Quit {"error": "^Interlock.Config(""adtIn"") is not set: run Interlock.Setup first"}.%ToJSON()
+        Quit {"error": "the adtIn setting (^Interlock.Config) is not set: run Interlock.Setup first"}.%ToJSON()
     }
     Set inbound = ##class(%File).NormalizeDirectory(inbound)
-    Set started = ##class(Wards.Service).Now()
-    Do ##class(Wards.Service).Reset(.status)
-    If status '= 200 {
-        Quit {"error": "the ward refused the reset: is ^Wards.Config(""demo"") set?"}.%ToJSON()
+    Set reset = {}.%FromJSON(..Reset())
+    If reset.ward.error '= "" {
+        Quit {"error": "the ward refused the reset: is the demo flag (^Wards.Config) set?"}.%ToJSON()
     }
+    Set started = reset."reset_at"
     Set ^Interlock.Config("mode") = mode
+    Set ^Interlock.Config("scenario") = scenario
     Set files = [], error = ""
     Set steps = found.steps.%GetIterator()
     While steps.%GetNext(.j, .step) {
@@ -122,9 +124,12 @@ ClassMethod Drop(source As %String, inbound As %String) As %String
     Quit ""
 }
 
-/// The ward reset, the inbound and archive folders emptied of fixtures, the mode back to board. JSON text.
+/// The ward reset, the inbound and archive folders emptied of fixtures, the mode back to board, the running scenario
+/// cleared, and <code>^Interlock.Config("resetAt")</code> set to the time of the reset: the evidence collector ignores
+/// message-store events older than it, since encounter ids are fixed per scenario. JSON text.
 ClassMethod Reset() As %String [ SqlProc ]
 {
+    Set resetAt = ##class(Wards.Service).Now()
     Set ward = ##class(Wards.Service).Reset(.status)
     Set emptied = []
     For setting = "adtIn", "adtArchive" {
@@ -138,7 +143,9 @@ ClassMethod Reset() As %String [ SqlProc ]
         }
     }
     Set ^Interlock.Config("mode") = "board"
-    Quit {"ward": (ward), "emptied": (emptied), "mode": "board"}.%ToJSON()
+    Kill ^Interlock.Config("scenario")
+    Set ^Interlock.Config("resetAt") = resetAt
+    Quit {"ward": (ward), "emptied": (emptied), "mode": "board", "reset_at": (resetAt)}.%ToJSON()
 }
 
 }

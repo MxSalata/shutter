@@ -201,6 +201,45 @@ Method TestMisleadingDuplicateError()
     Do $$$AssertEquals(read.version, 1, "and nothing was written")
 }
 
+Method TestMisleadingDuplicateWithoutVersion()
+{
+    Set encounter = ..Encounter(13)
+    Do ..Admit(encounter)
+    Set transfer = ..Request(encounter, "transfer", "WARD-B", "2026-10-15T09:20:00Z")
+    Set saved = ##class(Wards.Service).GetFault(.ignore)
+    Do ##class(Wards.Service).SetFault({"mode": "misleading_duplicate_error", "operation_key": (transfer."operation_key")}, .ignore)
+    Set body = ##class(Wards.Service).Apply(transfer, .status)
+    Do ##class(Wards.Service).SetFault(saved, .ignore)
+    Do $$$AssertEquals(status, 409, "with the fault set for its key, routine traffic with no version answers 409")
+    Do $$$AssertEquals(body.error, "duplicate_message", "as duplicate_message")
+    Do ##class(Wards.Service).GetReceipt(transfer."operation_key", .status)
+    Do $$$AssertEquals(status, 404, "and no receipt exists")
+}
+
+Method TestPatientMismatchRefused()
+{
+    Set encounter = ..Encounter(14)
+    Do ..Admit(encounter)
+    Set transfer = ..Request(encounter, "transfer", "WARD-B", "2026-10-15T09:20:00Z")
+    Do transfer.%Set("patient_id", "MRN-SOMEONE-ELSE")
+    Set body = ##class(Wards.Service).Apply(transfer, .status)
+    Do $$$AssertEquals(status, 422, "a transfer naming another patient is refused")
+    Do $$$AssertEquals(body.error, "patient_mismatch", "as patient_mismatch")
+    Do $$$AssertEquals(body."encounter_id", encounter, "naming the encounter")
+}
+
+Method TestPayloadDigestMismatchRefused()
+{
+    Set transfer = ..Request(..Encounter(15), "admit", "WARD-A", "2026-10-15T09:00:00Z")
+    Do transfer.%Set("payload_digest", "sha256:0000000000000000000000000000000000000000000000000000000000000000")
+    Set body = ##class(Wards.Service).Apply(transfer, .status)
+    Do $$$AssertEquals(status, 422, "a digest that differs from the ward's is refused")
+    Do $$$AssertEquals(body.error, "payload_digest_mismatch", "as payload_digest_mismatch")
+    Do transfer.%Set("payload_digest", ##class(Wards.Service).Digest(##class(Wards.Service).Canonical(transfer)))
+    Set body = ##class(Wards.Service).Apply(transfer, .status)
+    Do $$$AssertEquals(status, 201, "and the right digest is accepted")
+}
+
 Method TestCanonicalDigest()
 {
     Set transfer = {"operation_key": "PAS^HOSP^MRN1001^ENC-1001^transfer^2026-10-15T09:20:00Z", "encounter_id": "ENC-1001", "patient_id": "MRN1001", "patient_id_authority": "HOSP", "event": "transfer", "ward": "WARD-B", "event_time": "2026-10-15T09:20:00Z", "source_system": "PAS", "source_message_id": "MSG00002", "expected_version": 1}
