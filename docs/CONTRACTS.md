@@ -1,6 +1,6 @@
 # Contracts between Interlock's parts
 
-Version 1, 15 October 2026. These are the interfaces the parts of Interlock are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.2, 15 October 2026. These are the interfaces the parts of Interlock are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The ward system's API
 
@@ -44,11 +44,15 @@ Responses:
 | 409 | `{"error": "key_reused_with_different_payload", "operation_key": "…"}` | The key was committed with another payload digest |
 | 422 | `{"error": "invalid_transition", "state": "discharged", "event": "transfer"}` | The transition is not allowed (section 1.4) |
 | 422 | `{"error": "unknown_encounter", "encounter_id": "…"}` | `transfer`, `discharge` or `update` for an encounter the ward has never admitted |
+| 422 | `{"error": "patient_mismatch", "encounter_id": "…"}` | The encounter exists for another patient (identity never silently changes) |
+| 422 | `{"error": "payload_digest_mismatch"}` | The sender's `payload_digest` differs from the ward's own computation |
 | 422 | `{"error": "invalid_request", "detail": "…"}` | Missing or malformed fields |
 | 503 | `{"error": "ward_unavailable"}` | Fault `fail_before_accept` is on (section 1.5); nothing was validated or written |
 | 504 | empty body | Fault `commit_drop_response` is on: the operation **was committed** and the receipt stored, then the response was lost |
 
-The order of checks for a non-dry run: fault `fail_before_accept`; request validity; a committed receipt for this key (return it, 200, before any version check, so a retry of an identical committed operation never looks like a version conflict); key reuse with a different digest (409); encounter existence (422); `expected_version` (409); transition (422); then, in one transaction: update the encounter, append the event, increment the version, store the receipt, commit; then fault `commit_drop_response` (504) or the 201.
+Decided with the ward system (15 Oct): faults apply to real operations only, never to a dry run; a discharge sets `ward` to null; for an `admit`, `expected_version` 0 means "not yet seen"; the per-encounter lock waits 10 s and then answers 503 `ward_unavailable`; a reset answers 200 `{"reset": true}`; the dry run relies on a transaction rollback, so the database must be journaled (the default).
+
+The order of checks for a non-dry run: fault `fail_before_accept`; request validity (including `patient_mismatch` and `payload_digest_mismatch`); a committed receipt for this key (return it, 200, before any version check, so a retry of an identical committed operation never looks like a version conflict); key reuse with a different digest (409); encounter existence (422); `expected_version` (409); transition (422); then, in one transaction: update the encounter, append the event, increment the version, store the receipt, commit; then fault `commit_drop_response` (504) or the 201.
 
 ### 1.2 Read an encounter
 
@@ -179,13 +183,19 @@ Step kinds: `file` (drop the file into the ADT In folder; `expect` is `delivered
 `Interlock.Scenarios.Runner`, class methods marked `SqlProc` so the app and the scripts can call them through SQL:
 
 - `List() As %String`: the scenarios as JSON (the `scenarios.json` content with the fixture files resolved).
-- `Run(scenario As %String, mode As %String = "board") As %String`: resets the ward (section 1.7), sets the run mode for the case workflow (`board`, `single`, `rules`, by writing `^Interlock.Config("mode")`), then executes the steps: faults through the ward API, files copied into the production's inbound folder (`^Interlock.Config("adtIn")`, set by `Interlock.Setup`), waits. Returns JSON `{"scenario": "S1", "started_at": "…", "files": [...]}`. It does not wait for the case; the production and the app do the rest.
-- `Reset() As %String`: the ward reset, the inbound and archive folders emptied, `^Interlock.Config("mode")` back to `board`.
+- `Run(scenario As %String, mode As %String = "board") As %String`: resets the ward (section 1.7), sets the run mode for the case workflow (`board`, `single`, `rules`, by writing `^Interlock.Config("mode")`) and the running scenario (`^Interlock.Config("scenario")` = the scenario id, which the case intake stamps on the case, so that recorded agent runs replay by scenario on any instance), then executes the steps: faults through the ward API, files copied into the production's inbound folder (`^Interlock.Config("adtIn")`, set by `Interlock.Setup`), waits. Returns JSON `{"scenario": "S1", "started_at": "…", "files": [...]}`. It does not wait for the case; the production and the app do the rest.
+- `Reset() As %String`: the ward reset, the inbound and archive folders emptied, `^Interlock.Config("mode")` back to `board`, `^Interlock.Config("scenario")` cleared.
 
 ## 5. The REST API for the app
 
 Version 2 of this document, once the store and the workflow exist. The shape will follow the review file's section 5.8: cases, a case's timeline and artefacts, investigations, approvals, executions, scenarios and settings, with an expected case version and an idempotency key on every change.
 
+## Repository layout
+
+The core IPM module is the repository root (`module.xml`, sources under `src/`): it compiles on any 2026.2 Community image and replays recorded runs. The aihub module is `aihub/` (`aihub/module.xml`, sources under `aihub/src/`): the live runner, the agents, tools, schemas, policies and knowledge bases, which need the `%AI` package. Both modules contribute classes to the `Interlock` package; nothing under `src/` may reference `%AI`.
+
 ## Changes
 
+- v1.2, 15 Oct 2026: the ward decisions of 15 Oct recorded (section 1.1), with `patient_mismatch` and `payload_digest_mismatch` as their own codes.
+- v1.1, 15 Oct 2026: the runner sets `^Interlock.Config("scenario")` (section 4); the repository layout.
 - v1, 15 Oct 2026: first version (sections 1 to 4).
