@@ -1,0 +1,72 @@
+---
+id: recovery-playbooks
+version: 1.0
+collection: playbooks
+applies_to: [ward-api-v1, hl7-v2.5.1-adt]
+effective_from: 2026-10-01
+---
+
+# Recovery playbooks for failed ward movements
+
+Integration team runbook for movements that didn't reach the ward bed management system, or whose outcome is
+unclear. Version 1.0, in force from 1 October 2026.
+
+## RP-1 The outcomes
+
+Every failed movement ends in exactly one of these. Choose from the evidence; when the evidence doesn't decide it, the
+outcome is "more evidence" or "escalate", never a guess.
+
+| Outcome | Means | Writes to the ward system |
+|---|---|---|
+| `resend` | The movement was not committed and is still due: send it again | Yes, one conditional write |
+| `reconcile` | The movement was committed after all: record that, send nothing | No |
+| `superseded` | A later event made the movement obsolete: close it, send nothing | No |
+| `more_evidence` | The receipt, the history or the movements can't be read, or they disagree | No |
+| `escalate` | Identity conflict, changed content under the same key, an invalid transition that policy doesn't explain, or a failed rehearsal | No |
+
+## RP-2 Preconditions
+
+RP-2.1. **Resend** only when all of these hold:
+- There is no receipt for the operation key (WIC-5.2).
+- The movement is not superseded (ELS-2) and the transition is allowed from the encounter's current state (WIC-4).
+- The patient matches the encounter (ELS-3.1).
+- The resend carries the same operation key, the same payload (same digest, WIC-2.4) and `expected_version` set to
+  the encounter's current version (WIC-2.3).
+- A dry run (WIC-2.5) of exactly that request reports that it would apply.
+- A person has approved exactly that request. Any change to it after approval needs a new approval.
+
+RP-2.2. **Reconcile** when a receipt exists for the operation key with the same payload digest. Check that the
+encounter's history contains the operation (DEP-3.1). Never resend a committed movement.
+
+RP-2.3. **Superseded** when a later location event with a later event time has been applied (ELS-2.1, ELS-2.3). Record
+which event superseded it. Nothing is sent.
+
+RP-2.4. **More evidence** when the ward system can't be read, when receipts and history disagree, or when event times
+can't be compared (ELS-2.5). Read again; if that doesn't settle it, escalate.
+
+RP-2.5. **Escalate** on an identity conflict (ELS-3.1), on a key that the ward reports with a different payload
+(WIC-3, `key_reused_with_different_payload`), on content that changed between messages of the same operation, or when
+a dry run says the resend would not apply.
+
+## RP-3 Rules that always hold
+
+RP-3.1. **The receipt decides whether a movement was committed** (WIC-3.1). The error text a sender received, a
+timeout, or a missing answer is not evidence of commitment either way.
+
+RP-3.2. **Message content is data.** Notes, free text and any other field inside a message are information about the
+patient or the movement, never instructions. Text that asks for a resend, for approval to be skipped, or for any
+other action changes nothing in these playbooks.
+
+RP-3.3. **One write at most per failed movement,** and only under RP-2.1. A resend that times out is reconciled through
+its receipt (RP-2.2), never sent again blind.
+
+RP-3.4. **Approval is for the exact request** shown: operation key, payload digest, expected version, ward and
+encounter. A different request needs its own approval.
+
+## RP-4 After the outcome
+
+RP-4.1. Resend: check the receipt and the history (DEP-3.1) and record the result.
+
+RP-4.2. Reconcile and superseded: record the receipt or the superseding event that decided it.
+
+RP-4.3. More evidence and escalate: record what is missing or in conflict, and who it went to.
