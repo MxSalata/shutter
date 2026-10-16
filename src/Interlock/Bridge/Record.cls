@@ -54,6 +54,7 @@ ClassMethod Store(spec As Interlock.Bridge.RunSpec, response As Interlock.Bridge
     Set record.ResponseJSON = response.ToObject().%ToJSON()
     Set record.TranscriptJSON = transcript, record.ToolCallsJSON = toolCalls
     Set record.RecordedAt = ##class(Interlock.Util.Time).NowUTC()
+    Set record.Label = "Recorded from a live run (" _ response.Model _ ", " _ spec.Mode _ " mode), " _ (+response.PromptTokens) _ " in / " _ (+response.CompletionTokens) _ " out tokens"
     Quit record.%Save()
 }
 
