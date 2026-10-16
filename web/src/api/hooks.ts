@@ -88,6 +88,11 @@ export function useSignOut() {
 
 // ---- scenarios (5.2) ----
 
+/** A run that is queued for the scenario player or playing. */
+export function isPlaying(run: ScenarioRun | null | undefined): boolean {
+  return run?.state === 'running' || run?.state === 'queued';
+}
+
 /** The scenarios and, when the API reports it, the current or last background run (T13). */
 export function useScenarios() {
   return useQuery({
@@ -98,7 +103,7 @@ export function useScenarios() {
         ? { scenarios: data, run: null }
         : { scenarios: data.scenarios ?? [], run: data.run ?? null };
     },
-    refetchInterval: (query) => (query.state.data?.run?.state === 'running' ? 2_000 : CALM),
+    refetchInterval: (query) => (isPlaying(query.state.data?.run) ? 2_000 : CALM),
   });
 }
 

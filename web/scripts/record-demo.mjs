@@ -5,7 +5,9 @@
  * writes them to src/mocks/fixtures.json, which the in-browser mock serves in the demo build and the tests.
  *
  *   node scripts/record-demo.mjs [--url http://localhost:52773] [--user operator] [--out src/mocks/fixtures.json]
+ *                                [--cases C-000002,C-000008,...]
  *
+ * --cases keeps only the cases named (one per scenario and mode reads better than every rehearsal of the same run).
  * The password comes from INTERLOCK_PASSWORD (default: the demo installer's "interlock"). Only reads: nothing is
  * changed on the instance. Node 22 or later (fetch).
  */
@@ -23,6 +25,7 @@ const base = `${(args.url ?? 'http://localhost:52773').replace(/\/$/, '')}/api/i
 const user = args.user ?? 'operator';
 const password = process.env.INTERLOCK_PASSWORD ?? 'interlock';
 const out = args.out ?? 'src/mocks/fixtures.json';
+const only = args.cases ? new Set(args.cases.split(',').map((c) => c.trim())) : null;
 
 let cookie = '';
 
@@ -57,7 +60,8 @@ if (signIn.status !== 200) throw new Error(`Sign-in as ${user} failed: HTTP ${si
 const scenarios = await read('/scenarios');
 const list = await read('/cases?limit=500');
 const cases = {};
-for (const summary of list.items) {
+const kept = list.items.filter((c) => !only || only.has(c.caseId));
+for (const summary of kept) {
   const id = encodeURIComponent(summary.caseId);
   const closed = ['resolved', 'blocked', 'escalated', 'failed'].includes(summary.state);
   cases[summary.caseId] = {
@@ -77,7 +81,7 @@ for (const summary of list.items) {
 }
 const recordedAt = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
 const fixtures = {
-  source: `Recorded from Interlock's REST API at ${recordedAt}: ${list.items.length} cases played in replay on a development instance. The demo serves these answers in the browser; nothing in it reaches an IRIS instance.`,
+  source: `Recorded from Interlock's REST API at ${recordedAt}: ${kept.length} cases played in replay (the agents' answers are recordings written as fixtures) on a development instance. The demo serves these answers in the browser; nothing in it reaches an IRIS instance.`,
   recordedAt,
   scenarios: (Array.isArray(scenarios) ? scenarios : scenarios.scenarios).map((s) => ({
     ...s,
@@ -91,4 +95,4 @@ const fixtures = {
 };
 await call('DELETE', '/session');
 writeFileSync(out, `${JSON.stringify(fixtures, null, 1)}\n`);
-console.log(`wrote ${out}: ${list.items.length} cases, ${fixtures.scenarios.length} scenarios`);
+console.log(`wrote ${out}: ${kept.length} cases, ${fixtures.scenarios.length} scenarios`);

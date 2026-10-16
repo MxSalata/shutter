@@ -28,9 +28,10 @@ async function audit(page: Page) {
 const SCREENS: [path: string, heading: string][] = [
   ['/scenarios', 'Scenarios'],
   ['/cases', 'Cases'],
-  ['/cases/C-000001', 'Case C-000001'],
+  ['/cases/C-000010', 'Case C-000010'],
   ['/cases/C-000002', 'Case C-000002'],
-  ['/cases/C-000003', 'Case C-000003'],
+  ['/cases/C-000008', 'Case C-000008'],
+  ['/cases/C-000009', 'Case C-000009'],
   ['/library', 'Agent library'],
   ['/settings', 'Settings and costs'],
   ['/health', 'Health'],

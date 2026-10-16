@@ -17,7 +17,7 @@ import { notifications } from '@mantine/notifications';
 import { IconPlayerPlay, IconRefresh } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { useMe, useResetScenarios, useRunScenario, useScenarios } from '@/api/hooks';
+import { isPlaying, useMe, useResetScenarios, useRunScenario, useScenarios } from '@/api/hooks';
 import type { Mode, Scenario, ScenarioRun } from '@/api/types';
 import { PageHeader } from '@/components/PageHeader';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -45,6 +45,17 @@ const MODES: { value: Mode; label: string; hint: string }[] = [
 ];
 
 function RunBanner({ run }: { run: ScenarioRun }) {
+  if (run.state === 'queued')
+    return (
+      <Alert
+        color="blue"
+        variant="light"
+        icon={<Loader size={16} />}
+        title={`${run.scenario} is queued (${humanize(run.mode)})`}
+      >
+        <Text size="sm">The scenario player starts it in a moment.</Text>
+      </Alert>
+    );
   if (run.state === 'running')
     return (
       <Alert
@@ -202,7 +213,7 @@ export default function ScenariosPage() {
   const [mode, setMode] = useState<Mode>('board');
   const canRun = !!me?.operator;
   const current = scenarios.data?.run ?? null;
-  const busy = current?.state === 'running' ? `A run of ${current.scenario} is still playing` : '';
+  const busy = isPlaying(current) ? `A run of ${current?.scenario} is still playing` : '';
 
   const start = (s: Scenario) =>
     run.mutate(

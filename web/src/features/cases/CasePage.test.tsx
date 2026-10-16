@@ -30,8 +30,8 @@ describe('CasePage', () => {
   beforeEach(() => resetMock('approver'));
 
   it('tells the story of a resolved case, with the verification apart from the acknowledgement', async () => {
-    renderCase('C-000001');
-    expect(await screen.findByRole('heading', { name: 'Case C-000001' })).toBeInTheDocument();
+    renderCase('C-000010');
+    expect(await screen.findByRole('heading', { name: 'Case C-000010' })).toBeInTheDocument();
     expect(await screen.findByText('Closed: verified')).toBeInTheDocument();
     const board = await screen.findByRole('region', { name: 'The board' });
     expect(await within(board).findByText('Conformance')).toBeInTheDocument();
@@ -54,7 +54,7 @@ describe('CasePage', () => {
   });
 
   it('marks the steps a superseded case did not need', async () => {
-    renderCase('C-000003');
+    renderCase('C-000008');
     expect(await screen.findByText('Closed: verified')).toBeInTheDocument();
     expect((await screen.findAllByText('not needed')).length).toBe(3);
   });

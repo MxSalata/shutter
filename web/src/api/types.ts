@@ -62,7 +62,9 @@ export interface ScenarioRun {
   scenario: string;
   mode: Mode;
   startedAt: string;
-  state: 'running' | 'done' | 'failed' | 'interrupted';
+  /** queued: the scenario player has the run and will start it; then as Runner.Status reports. */
+  state: 'queued' | 'running' | 'done' | 'failed' | 'interrupted';
+  queuedAt?: string;
   files: string[];
   timeouts: string[];
   step?: string;
