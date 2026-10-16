@@ -21,6 +21,7 @@ import base64
 import http.cookiejar
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -87,12 +88,26 @@ def wait(what, check, timeout, every=2):
     raise TimeoutError(f"{what}: nothing after {timeout} s")
 
 
+def wait_until_idle(operator, timeout):
+    """Waits until no scenario run is queued or playing: one run at a time."""
+
+    def idle():
+        _, body = operator.call("GET", "/scenarios")
+        return ((body or {}).get("run") or {}).get("state") not in ("queued", "running")
+
+    wait("the previous run to finish", idle, timeout)
+
+
 def play(args, operator, approver, scenario, mode):
     """Plays one scenario in one mode and returns (as_expected, line, outcome)."""
+    wait_until_idle(operator, args.timeout)
+    before = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     status, started = operator.call("POST", f"/scenarios/{scenario['id']}/run", {"mode": mode}, idempotent=True)
     if status not in (200, 202):
         return False, f"DIFFERS {scenario['id']} {mode}: the run was refused: HTTP {status} {started}", "run refused"
-    started_at = started.get("startedAt") or started.get("started_at") or ""
+    # Only a case this run opened counts: the run answers with when it started, or with when it was queued for the
+    # scenario player; the clock before the request is the floor either way.
+    started_at = max(started.get("startedAt") or "", started.get("queuedAt") or "", before)
 
     def run_state():
         _, body = operator.call("GET", "/scenarios")
@@ -137,6 +152,10 @@ def play(args, operator, approver, scenario, mode):
         status, reason = operator.call("GET", f"/cases/{caseid}/blocked-reason")
         if status == 200 and reason:
             codes.add(reason.get("code"))
+    # A code from an earlier round (a dispatch block that led to a re-plan) is in the case's events only
+    _, events = operator.call("GET", f"/cases/{caseid}/events")
+    for event in events or []:
+        codes.update(re.findall(r"\b[A-Z][A-Z_]{5,}[A-Z]\b", event.get("text") or ""))
     ward = ward_encounter(args.url, args.ward_user, args.ward_password, final["encounterId"])
 
     differences = []
