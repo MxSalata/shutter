@@ -639,4 +639,44 @@ ClassMethod ClearProvider() As %String [ SqlProc ]
     Quit "ok: no provider configured; the agents replay recordings"
 }
 
+/// After a container starts: clears the system monitor's alerts, which Docker's health check reads, when
+/// every severe line in the messages log is one of the two known startup alerts: "failed over from node"
+/// (the image ran IRIS during its build, under the build host's name) and the AI Hub preview's own startup
+/// error (Sharding, METHOD DOES NOT EXIST). Any other severe line leaves the state as it is. Returns what
+/// it did. Called by after-start.sh.
+ClassMethod ClearStartupAlerts(lines As %Integer = 400) As %String [ SqlProc ]
+{
+    Try {
+        Set before = $SYSTEM.Monitor.State()
+        Set log = ..TailLog(lines)
+        // Only this start: the image's log also holds the lines of the IRIS run during the build.
+        Set total = $LENGTH(log, $CHAR(10)), from = 1
+        For i = 1:1:total {
+            If $PIECE(log, $CHAR(10), i) [ "Startup of InterSystems IRIS" Set from = i
+        }
+        Set severe = 0, known = 0, other = ""
+        For i = from:1:total {
+            Set line = $PIECE(log, $CHAR(10), i)
+            // "mm/dd/yy-hh:mm:ss:mmm (pid) <severity> [Source] text"
+            Set sev = $PIECE($PIECE(line, ") ", 2), " ", 1)
+            If (sev '= "2") && (sev '= "3") Continue
+            Set severe = severe + 1
+            If (line [ "failed over from node") || (line [ "Sharding") {
+                Set known = known + 1
+            } Else {
+                Set other = other _ $SELECT(other = "": "", 1: " | ") _ $EXTRACT(line, 1, 160)
+            }
+        }
+        If (severe > 0) && (known = severe) {
+            Do $SYSTEM.Monitor.Clear()
+            Do $SYSTEM.Monitor.SetState(0)
+            Return "cleared " _ known _ " known startup alert(s); state " _ before _ " -> " _ $SYSTEM.Monitor.State()
+        }
+        If severe = 0 Return "no severe lines; state " _ before
+        Return "left as is: " _ (severe - known) _ " other severe line(s): " _ other
+    } Catch ex {
+        Return "error: " _ ex.DisplayString()
+    }
+}
+
 }

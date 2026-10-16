@@ -58,7 +58,10 @@ docker compose up -d
 
 The first `up` builds the image: it creates the `INTERLOCK` namespace, installs the InterSystems Package Manager and
 loads the `iris-interlock` module (the production, the case store, the gate, the synthetic ward system, the web
-application and the recorded agent runs), then starts the production. Allow a few minutes.
+application and the recorded agent runs) and, on the contest image, the `iris-interlock-aihub` module (the live agents
+and their knowledge bases). Allow a few minutes. The production starts with the container. After the start, the
+container clears two known startup alerts (the build host's "failover" message and the preview build's own startup
+error), so Docker's health check reflects the instance's real state; any other alert stays.
 
 Then open:
 
