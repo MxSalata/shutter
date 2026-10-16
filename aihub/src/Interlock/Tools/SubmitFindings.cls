@@ -22,7 +22,7 @@ Property LastError As %String(MAXLEN = 2000);
 /// findings: the findings object
 Method SubmitFindings(caseId As %String, findings As Interlock.Schema.Findings) As %DynamicObject
 {
-    Set json = ##class(Interlock.Tools.SubmitPlan).AsJSON(.findings, .err)
+    Set json = ##class(Interlock.Schema.Argument).AsJSON(.findings, .err)
     If err '= "" Set ..LastError = err Return {"accepted": false, "error": (err)}
     If (..CaseId '= "") && (caseId '= ..CaseId) Set ..LastError = "wrong case" Return {"accepted": false, "error": ("This run is for case " _ ..CaseId)}
     Set problems = ##class(Interlock.Schema.Findings).Check(json)

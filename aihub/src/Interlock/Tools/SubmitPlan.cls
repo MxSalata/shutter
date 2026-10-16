@@ -22,34 +22,13 @@ Property LastError As %String(MAXLEN = 2000);
 /// plan: the plan object
 Method SubmitPlan(caseId As %String, plan As Interlock.Schema.Plan) As %DynamicObject
 {
-    Set json = ..AsJSON(.plan, .err)
+    Set json = ##class(Interlock.Schema.Argument).AsJSON(.plan, .err)
     If err '= "" Set ..LastError = err Return {"accepted": false, "error": (err)}
     If (..CaseId '= "") && (caseId '= ..CaseId) Set ..LastError = "wrong case" Return {"accepted": false, "error": ("This run is for case " _ ..CaseId)}
     Set problems = ##class(Interlock.Schema.Plan).Check(json)
     If problems.%Size() > 0 Set ..LastError = problems.%ToJSON() Return {"accepted": false, "problems": (problems), "hint": "Correct the fields named and call SubmitPlan again"}
     Set ..Result = json, ..Submissions = ..Submissions + 1, ..LastError = ""
     Return {"accepted": true, "next": "Submitted. Reply with one short sentence and stop; call no other tool."}
-}
-
-/// A tool argument as JSON text, whether the framework delivered it decoded into the schema class,
-/// as a dynamic object, or as JSON text.
-ClassMethod AsJSON(ByRef value, Output err As %String) As %String
-{
-    Set err = ""
-    If $ISOBJECT(value) {
-        If value.%IsA("%JSON.Adaptor") {
-            Set sc = value.%JSONExportToString(.json)
-            If $$$ISERR(sc) Set err = "The object could not be read: " _ $SYSTEM.Status.GetErrorText(sc) Return ""
-            Return json
-        }
-        If value.%IsA("%DynamicAbstractObject") Return value.%ToJSON()
-        Set err = "Unexpected argument of class " _ $CLASSNAME(value)
-        Return ""
-    }
-    Set text = $ZSTRIP($GET(value), "<>W")
-    If $EXTRACT(text) = "{" Return text
-    Set err = "The argument must be an object"
-    Return ""
 }
 
 }
