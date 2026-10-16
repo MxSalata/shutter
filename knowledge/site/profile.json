@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "receivers": [
+    {"name": "Ward Out", "system": "the ward bed-management system", "tier": 2,
+     "applies": "arrival_order", "resend_timestamp": "original", "cancels": false}
+  ],
+  "history_policy": "current",
+  "authoritative_source": "",
+  "unconditional_resend": "forbidden",
+  "policy": {
+    "1": {"single": "automatic", "ordered": "automatic", "interleaved": "board"},
+    "2": {"single": "automatic", "ordered": "approval", "interleaved": "board"},
+    "3": {"single": "approval", "ordered": "per_chain", "interleaved": "board"}
+  },
+  "approvers": {"role": "Interlock Approvers", "escalation": "the integration team's on-call"},
+  "incident": {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60}
+}
