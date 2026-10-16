@@ -75,14 +75,15 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1) As %Status
         If $GET(^Interlock.Config("mode")) = "" Set ^Interlock.Config("mode") = "board"
         Set sc = ..CreateFolders() Quit:$$$ISERR(sc)
         Set sc = ..CreateSecurity(ns, demo) Quit:$$$ISERR(sc)
-        Set sc = ..CreateCredentials(demo) Quit:$$$ISERR(sc)
-        Set sc = ..CreateWorkflowRole(demo) Quit:$$$ISERR(sc)
-        Set sc = ##class(Interlock.Store.BoardMember).Seed() Quit:$$$ISERR(sc)
-        Set sc = ##class(Interlock.Store.ModelPrice).Seed() Quit:$$$ISERR(sc)
+        // The ward system's resource and role first: the production's client user gets the role at creation.
         If ##class(%Dictionary.CompiledClass).%ExistsId("Wards.Installer") {
             Set sc = $CLASSMETHOD("Wards.Installer", "Install")
             Quit:$$$ISERR(sc)
         }
+        Set sc = ..CreateCredentials(demo) Quit:$$$ISERR(sc)
+        Set sc = ..CreateWorkflowRole(demo) Quit:$$$ISERR(sc)
+        Set sc = ##class(Interlock.Store.BoardMember).Seed() Quit:$$$ISERR(sc)
+        Set sc = ##class(Interlock.Store.ModelPrice).Seed() Quit:$$$ISERR(sc)
         If (root '= "") && ##class(%File).Exists(root _ "knowledge/block-reasons.json") {
             Set sc = ##class(Interlock.Store.BlockReason).SeedFromFile(root _ "knowledge/block-reasons.json", .reasons)
             Quit:$$$ISERR(sc)
