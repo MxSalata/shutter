@@ -639,6 +639,12 @@ ClassMethod ClearProvider() As %String [ SqlProc ]
     Quit "ok: no provider configured; the agents replay recordings"
 }
 
+/// The system monitor's state: 0 ok, 1 warn, 2 alert (what Docker's health check reads through iris qlist).
+ClassMethod MonitorState() As %Integer [ SqlProc ]
+{
+    Quit $SYSTEM.Monitor.State()
+}
+
 /// After a container starts: clears the system monitor's alerts, which Docker's health check reads, when
 /// every severe line in the messages log is one of the two known startup alerts: "failed over from node"
 /// (the image ran IRIS during its build, under the build host's name) and the AI Hub preview's own startup

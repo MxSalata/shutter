@@ -10,6 +10,12 @@ Class Interlock.Production Extends Ens.Production
 /// manual step. Replay mode needs nothing.
 ClassMethod OnStart(pTimeStarted As %String) As %Status
 {
+    // In a container, the production starts with the instance, after the two known startup alerts are
+    // logged: clear them here, so Docker's health check shows the instance's real state.
+    Try {
+        Do ##class(Interlock.Setup).ClearStartupAlerts()
+    } Catch {
+    }
     Try {
         Set key = $SYSTEM.Util.GetEnviron("ANTHROPIC_API_KEY")
         If (key '= "") && '##class(Interlock.Setup).ProviderConfigured() {
