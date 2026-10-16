@@ -1,6 +1,6 @@
 # Contracts between Interlock's parts
 
-Version 1.5, 16 October 2026. These are the interfaces the parts of Interlock are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.6, 17 October 2026. These are the interfaces the parts of Interlock are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The ward system's API
 
@@ -236,12 +236,202 @@ Scenario S7 (a later transfer arriving while the plan awaits approval) is writte
 
 The API as built is `src/Interlock/API/Dispatch.cls` (its UrlMap lists the routes; sign-in through `POST /session` and the CSP session cookie; every change carries `X-Requested-With: Interlock`, the idempotent ones an `Idempotency-Key`; errors are JSON with `error` and `detail`). The web application's notes on using it are in `web/README.md`. Workflow tasks come back in camelCase with ISO 8601 UTC times (v1.5).
 
+## 6. The scenario catalogue and the matcher (v1.6)
+
+The catalogue is the knowledge base's core: every failure pattern Interlock knows, each with a preferred outcome and its
+alternatives (`knowledge/catalogue/E<n>.md`). A deterministic matcher in the core reads each entry's front matter and
+evaluates it against a case's evidence snapshot, with no model. The board, when it runs, chooses among an entry's outcomes
+rather than inventing one.
+
+### 6.1 The condition vocabulary
+
+Every condition is computed by the core from the snapshot the evidence collector took (section 1 and the gate's checks),
+so an entry's pattern can be checked by machine and the same values are shown to people. An entry lists only the
+conditions that matter; an unlisted condition is a wildcard. A listed condition takes one value or a list of allowed values.
+
+| Condition | Values | Computed from |
+| --- | --- | --- |
+| `delivery` | `failed`, `rejected`, `uncertain` | the case's failure kind (1.1: 503 and connection failures are `failed`; 409 and 422 are `rejected`; 504 is `uncertain`) |
+| `receiver_answer` | `unavailable`, `timeout`, `duplicate`, `version_conflict`, `refused`, `none` | the error item's reason code |
+| `receipt` | `present`, `absent`, `unreadable` | the receipt lookup: 200, 404, anything else (1.9) |
+| `later_applied` | `none`, `transfer`, `discharge`, `update` | the latest applied event for the encounter whose event time is later than the failed operation's (the ward history and the timeline); `update` is an A08 |
+| `encounter_state` | `admitted`, `discharged`, `unknown` | the ward's state; `unknown` when the encounter can't be read or is unknown to the ward |
+| `transition` | `allowed`, `invalid`, `unknown` | the failed event from the encounter's current state (1.4): a transfer after a discharge is `invalid` |
+| `patient_match` | `yes`, `no`, `unknown` | the message's PID-3 against the ward's patient for the encounter |
+| `simultaneous_sources` | `yes`, `no` | an applied event for the encounter from another source system with the same event time as the failed operation (S8) |
+| `conditional_writes` | `yes`, `no`, `unknown` | the route's capability profile (1.8) |
+| `free_text` | `yes`, `no` | the message carries free text (an OBX note or an NTE) |
+| `chain` | `single`, `ordered`, `interleaved` | section 7; a case outside an incident is `single` |
+
+### 6.2 An entry's front matter
+
+```yaml
+id: E2
+version: 1
+title: Not delivered, still current
+scenarios: [S2, S9]
+pattern:
+  delivery: [failed, rejected]
+  receipt: absent
+  later_applied: none
+  transition: allowed
+  patient_match: yes
+  chain: single
+decides: policy
+preferred:
+  outcome: resend
+  why: The movement never reached the receiver and nothing later changed the encounter.
+alternatives: []
+checks: [ordering, effect, state_transition, identity, capability]
+```
+
+- `decides` says who settles a case that matches this entry alone: `policy` (the site's policy path, 6.4), `board`
+  (the board chooses among the outcomes), `person` (always escalated, with the entry named).
+- `outcome` is one of `resend` (the case's own operation, conditional on the receiver's version), `resend_chain` (every
+  item of an ordered chain, in event order), `resend_latest` (the chain's latest item only; the earlier ones are
+  superseded), `reconcile`, `none`, `escalate`, `resend_unconditional` (never automatic; needs the site flag
+  `unconditional_resend: with_approval`), `correct_history` (not implemented: always escalated with the steps named).
+- An alternative has `outcome`, `why` and `when`: a site profile condition such as `history_policy: correct` or
+  `authoritative_source: BEDMGR`, or `always` for a choice left to the board. Every alternative is decided by the board
+  or a person, never automatically.
+- `checks` names the gate checks that must pass for the preferred outcome; the gate runs them all anyway, so this is
+  documentation for the reader and the board.
+- The prose after the front matter is for the board: what the pattern means, how to tell it apart, what to cite.
+
+### 6.3 Matching
+
+The matcher runs after the evidence is collected, before any agent. It evaluates every entry at the catalogue's version
+and reports the matches.
+- **One match, `decides: policy`:** the case takes the site's policy path (6.4) with the preferred outcome. No board.
+- **One match, `decides: board`, or several matches:** the board runs; the coordinator's plan names `catalogue_entry`
+  and `outcome` (`preferred` or `alternative:<n>`) with `why`.
+- **One match, `decides: person`:** the case is escalated at once, naming the entry; the board does not run.
+- **No match:** the board runs so that the person gets an analysis, and the gate marks the plan `NEW_PATTERN`; the case
+  is escalated and flagged as a candidate entry for a reviewer.
+- The matches, with every condition's observed value, are stored on the case (`catalogue` in the snapshot summary) and
+  shown in the app.
+
+### 6.4 The site profile and the policy path
+
+The questionnaire's answers are the site profile (`knowledge/site/profile.json`, versioned; defaults shipped). The core
+reads it through `Interlock.Store.SiteProfile`.
+
+```json
+{
+  "version": 1,
+  "receivers": [
+    {"name": "Ward Out", "system": "the ward bed-management system", "tier": 2,
+     "applies": "arrival_order", "resend_timestamp": "original", "cancels": false}
+  ],
+  "history_policy": "current",
+  "authoritative_source": "",
+  "unconditional_resend": "forbidden",
+  "policy": {
+    "1": {"single": "automatic", "ordered": "automatic", "interleaved": "board"},
+    "2": {"single": "automatic", "ordered": "approval", "interleaved": "board"},
+    "3": {"single": "approval", "ordered": "per_chain", "interleaved": "board"}
+  },
+  "approvers": {"role": "Interlock Approvers", "escalation": "the integration team's on-call"},
+  "incident": {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60}
+}
+```
+
+- A tier is the receiver's; a policy is read by tier and chain kind.
+- `automatic`: the case (or the chain) is released with no Workflow task. It is still gated at the proposal and at the
+  dispatch, rehearsed and verified, exactly as an approved case. The case records an approval whose approver is
+  `policy`, with the profile's version, the tier, the chain kind and the entry, so the authorization check and the
+  closure read as for a person's approval, and the app shows "automatic by site policy".
+- `approval`: one Workflow task for the case, or for the whole incident (section 7).
+- `per_chain`: one Workflow task per chain of the incident.
+- `board` for a chain kind means the board runs whatever the match says.
+- A tier 3 receiver never takes `automatic` unless the profile says so explicitly; the shipped default does not.
+
+### 6.5 The gate's catalogue checks
+
+A new check, `catalogue`, with these reason codes (in `knowledge/block-reasons.json`):
+- `ENTRY_UNKNOWN`: the plan names an entry that is not in the catalogue at the plan's catalogue version (block);
+- `PATTERN_NOT_MATCHED`: the entry's pattern does not hold on the snapshot (block);
+- `OUTCOME_NOT_ALLOWED`: the chosen alternative's `when` does not hold for this site (block);
+- `NEW_PATTERN`: no entry matches (block; the case escalates as a candidate entry);
+- `POLICY_REQUIRES_APPROVAL`: an automatic release where the profile requires an approval (block; an internal guard).
+The plan's `catalogue_entry` and `outcome` are bound by the approval's digest like every other field of the plan.
+
+### 6.6 The board's tool
+
+`search_catalogue` is a knowledge-base tool over `knowledge/catalogue/`, attached to every member, so that the board
+cites entries by id. The coordinator's instructions say the plan names the entry and the outcome.
+
+## 7. Incidents: many failures to one receiver (v1.6)
+
+### 7.1 Detection and grouping
+
+- The connector counts delivery failures and refusals (not uncertain outcomes) per receiver in a sliding window. At the
+  profile's threshold (default 5 within 10 minutes) an incident opens for that receiver.
+- A case opened while an incident is open for its receiver joins it (case state `grouped`) instead of starting its own
+  investigation. The incident's intake closes after `quiet_seconds` with no new failure.
+- Chains form per encounter (PV1-19), oldest event time first. Chains of one patient (PID-3) are linked for the page; the
+  link imposes no order across encounters.
+- A chain's kind: `single` (one failure, nothing later applied), `ordered` (several failures, no successful delivery for
+  the encounter between them), `interleaved` (successful deliveries between the failures, or a later applied event).
+- Each case in a chain gets its own evidence snapshot as today. The matcher runs per case with `chain` set.
+
+### 7.2 Classification and the plan
+
+- A chain whose cases all match one entry with `decides: policy` is a policy chain: `single` and `ordered` chains with
+  `resend` or `resend_chain` take the policy path; `none` and `reconcile` outcomes close their cases without a write.
+- Any other chain is a board chain: the board runs for each of its cases, as today, with `chain` in the evidence.
+- The incident's plan lists every chain with its kind, entry, outcome and items in order; its digest covers the chains'
+  operation keys in order, each item's payload digest, the first item's expected version per chain, the receiver's epoch,
+  the catalogue version, the site profile version and the gate's policy version.
+
+### 7.3 Approval
+
+- The site's policy per tier and chain kind decides: `automatic` (no task), `approval` (one Workflow task for the
+  incident's policy chains), `per_chain` (one task per chain). Board chains are approved as single cases are today.
+- The task says what is bound and what is not: "resend these, in this order; each one is rehearsed, gated and verified
+  just before it goes; the chain stops at the first surprise, and the rest comes back to you".
+- The incident's approval binds the plan's digest and the rule for later items: each item after the first goes at exactly
+  the version the previous item's verified receipt reports.
+
+### 7.4 Release
+
+- The incident releases chains one at a time (or side by side, when the profile allows), and within a chain one item at
+  a time: it tells the case the version to expect, the case runs its own dispatch stage (the preflight read, the
+  dispatch gate, the rehearsal, the write, the verification) and reports back.
+- The dispatch gate's concurrency check compares the receiver's version with the expected one; any other write in
+  between stops the chain: the remaining items go to a person with the reason, and the incident's record says which
+  item stopped and why.
+- Every item keeps its own trace, approval record and closure; the incident's record lists each chain's outcome:
+  `resolved`, `stopped` (with the item), `escalated` (a board chain or a no-match).
+
+### 7.5 The API
+
+- `GET /incidents`: id, receiver, openedAt, state (`open`, `classified`, `awaiting_approval`, `releasing`, `closed`),
+  counts of chains by kind and outcome.
+- `GET /incidents/{id}`: the chains with their items (case ids, position, kind, entry, outcome, the expected version
+  rule), the plan's digest, the approvals, progress.
+- `POST /incidents/{id}/approvals` with `planDigest`, `action` (`approve` or `reject`), `comment`; `Idempotency-Key`;
+  409 `plan_changed` when the digest moved. `POST /incidents/{id}/chains/{n}/approvals` for `per_chain`.
+- `GET /incidents/{id}/events`.
+- A case carries `incidentId`, `chainId`, `chainPosition` and `chainKind`; a case's closure says whether it was
+  released automatically, by an approval, or stopped.
+
+### 7.6 Scenario S11, an outage burst
+
+Twelve failures for six patients to the ward, in one burst (the fault `fail_before_accept` on, the files, the fault off):
+P1 one failed A02 (E2, single); P2 A02 and A03 failed (E4, ordered); P3 A02 failed, A08 applied, a later A02 applied, A03
+failed (E5, interleaved, board); P4 A02 failed, then a later A02 applied (E1, superseded); P5 A02 failed after an applied
+A03 (E6); P6 a failed A01 (E2, single, admit). Expected: the policy chains resolved without the board at tier 2
+(automatic single, approval ordered), P3 by the board, and the final ward state per patient listed in
+`fixtures/scenarios.json`. Its recordings are hand-written until a key is available.
+
 ## Repository layout
 
 The core IPM module is the repository root (`module.xml`, sources under `src/`): it compiles on any 2026.2 Community image and replays recorded runs. The aihub module is `aihub/` (`aihub/module.xml`, sources under `aihub/src/`): the live runner, the agents, tools, schemas, policies and knowledge bases, which need the `%AI` package. Both modules contribute classes to the `Interlock` package; nothing under `src/` may reference `%AI`.
 
 ## Changes
 
+- v1.6, 17 Oct 2026: the scenario catalogue and the deterministic matcher, the condition vocabulary, the site profile and the policy path (automatic, approval, per chain), the gate's catalogue checks, the board's `search_catalogue` tool (6); incidents: detection, chains and their kinds, the plan and its approval binding the sequence rule, the ordered release through each case's own dispatch, the API, scenario S11 (7). From the owner's decisions of 17 Oct, all taken.
 - v1.5, 16 Oct 2026: rehearsal responses carry `encounter_before` and `epoch` (1.1); `POST /capabilities` takes `last_contract_check` (1.8); S8's second source system `BEDMGR` (2, 3); S9's second encounter `ENC-2009` (3); the `capabilities` step kind (3); the scenario player and the run states (4.2); section 5 points at the API as built. Points (a) to (e) are House's, accepted on 15 Oct.
 - v1.4, 15 Oct 2026: the capabilities read and the demo switch, the epoch, the receipt-lookup fault (1.8, 1.9); scenario steps that wait for a case state (4.1). From House's triage of the owner's feature documents (T9, T10, A1, A2, A5).
 - v1.3, 15 Oct 2026: `misleading_duplicate_error` with an `operation_key` (1.5); `resetAt`, the runner's settings and the mode semantics (section 4), from the scenario work.
