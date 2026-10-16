@@ -22,3 +22,7 @@ RUN iris start IRIS \
  && INTERLOCK_BUILD=1 iris session IRIS < /home/irisowner/dev/iris.script \
  && if [ "${WITH_AIHUB}" = "1" ]; then INTERLOCK_BUILD=1 iris session IRIS < /home/irisowner/dev/aihub.script; fi \
  && iris stop IRIS quietly
+
+# After IRIS starts in a container: clear the two known startup alerts (the build host's "failover" message,
+# the preview's own startup error), so that Docker's health check shows the instance's real state.
+CMD ["--after", "/home/irisowner/dev/after-start.sh"]
