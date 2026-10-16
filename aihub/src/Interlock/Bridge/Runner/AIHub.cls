@@ -196,10 +196,17 @@ ClassMethod TestRun(caseId As %String, memberCode As %String = "conformance", mo
         Set findings = ""
         If member.Role '= "specialist" Set findings = ##class(Interlock.Store.Finding).ForSnapshot(snap).%ToJSON()
         Set request = ##class(Interlock.Process.CaseWorkflow).BuildAgentRequest(case, member, snap.Summary, findings, 0)
-        Set op = ##class(Interlock.Bridge.Operation.Agent).%New()
-        Set spec = ##class(Interlock.Bridge.RunSpec).FromRequest(request, op)
-        Set spec.Mode = mode, spec.TokenBudget = tokenBudget, spec.RecordKey = ""
-        Set spec.EnsMessageId = "test:" _ caseId _ ":" _ memberCode, spec.EnsSessionId = ""
+        // The operation's defaults, by hand: a business host cannot be instantiated outside the production.
+        Set spec = ##class(Interlock.Bridge.RunSpec).%New()
+        Set spec.AgentClass = $SELECT(request.AgentClass '= "": request.AgentClass, 1: member.AgentClass)
+        Set spec.Role = request.Role, spec.MemberCode = request.MemberCode
+        Set spec.Goal = request.Goal, spec.Context = request.Context
+        Set spec.CorrelationKey = request.CorrelationKey, spec.SnapshotDigest = request.SnapshotDigest
+        Set spec.ResultClass = request.ResultClass, spec.TerminalTool = request.TerminalTool
+        Set spec.ConfigVersion = request.ConfigVersion
+        Set spec.Mode = mode, spec.RunnerClass = $CLASSNAME()
+        Set spec.MaxIterations = 8, spec.TokenBudget = tokenBudget, spec.RequestTimeoutSeconds = 120
+        Set spec.RecordKey = "", spec.EnsMessageId = "test:" _ caseId _ ":" _ memberCode, spec.EnsSessionId = ""
         Set response = ##class(Interlock.Bridge.Msg.AgentResponse).%New()
         Set runner = ..%New()
         Set sc = runner.Run(spec, .response)
