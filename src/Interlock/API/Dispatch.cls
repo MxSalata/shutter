@@ -122,10 +122,19 @@ ClassMethod Project(obj As %JSON.Adaptor) As %DynamicObject
         Set o.error = "projection failed: " _ $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "empty")
         Quit o
     }
-    // A numeric property with no value (added after the row was saved) exports as an empty value,
-    // which is not JSON: it becomes null.
-    Set json = $REPLACE($REPLACE(json, ":,", ":null,"), ":}", ":null}")
-    Set o = ##class(%DynamicObject).%FromJSON(json)
+    Set o = ""
+    Try {
+        Set o = ##class(%DynamicObject).%FromJSON(json)
+    } Catch {
+        // A numeric property with no value (added after the row was saved) exports as an empty value,
+        // which is not JSON: null takes its place, outside string literals only.
+        Try {
+            Set o = ##class(%DynamicObject).%FromJSON(##class(Interlock.Util.Json).NullEmptyValues(json))
+        } Catch ex {
+            Set o = {}
+            Set o.error = "projection failed: " _ ex.DisplayString()
+        }
+    }
     Set o.id = obj.%Id()
     Quit o
 }
@@ -400,9 +409,7 @@ ClassMethod CasePlan(caseId As %String) As %Status
     Set o.gateDecisions = ..Rows("Interlock.Store.GateDecision", "SELECT ID FROM Interlock_Store.GateDecision WHERE Plan = ? ORDER BY ID", plan.%Id())
     Set iter = o.gateDecisions.%GetIterator()
     While iter.%GetNext(.i, .d) { If d.%GetTypeOf("checks") = "string" Set d.checks = ##class(Interlock.Util.Json).Parse(d.checks, .psc) }
-    Set rid = ""
-    &sql(SELECT TOP 1 ID INTO :rid FROM Interlock_Store.Rehearsal WHERE Plan = :planId ORDER BY ID DESC)
-    Set planId = plan.%Id()
+    Set rid = "", planId = plan.%Id()
     &sql(SELECT TOP 1 ID INTO :rid FROM Interlock_Store.Rehearsal WHERE Plan = :planId ORDER BY ID DESC)
     If (SQLCODE = 0) && (rid '= "") {
         Set r = ..Project(##class(Interlock.Store.Rehearsal).%OpenId(rid))
@@ -530,7 +537,7 @@ ClassMethod CaseClosure(caseId As %String) As %Status
     Do unverified.%Push("Consumers downstream of the ward system are outside the production's view and are not verified")
     Set o.verifiedEffects = verified, o.unverified = unverified
     Set actors = []
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT DISTINCT Actor FROM Interlock_Store.CaseEvent WHERE ""Case"" = ? ORDER BY Actor", id)
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT DISTINCT %EXACT(Actor) AS Actor FROM Interlock_Store.CaseEvent WHERE ""Case"" = ? ORDER BY Actor", id)
     While rs.%Next() { Do actors.%Push(rs.%Get("Actor")) }
     Set o.actors = actors
     Set pv = ""

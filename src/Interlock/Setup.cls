@@ -257,6 +257,7 @@ ClassMethod CreateWebApps(ns As %String, root As %String) As %Status
             Set sc = ##class(Security.Applications).Create("/wards/api", .props)
         }
         Quit:$$$ISERR(sc) sc
+        Set ^Interlock.Config("webapp", "/wards/api") = 1
     }
     Kill props
     Set props("NameSpace") = ns
@@ -275,6 +276,7 @@ ClassMethod CreateWebApps(ns As %String, root As %String) As %Status
         Set sc = ##class(Security.Applications).Create("/api/interlock", .props)
     }
     Quit:$$$ISERR(sc) sc
+    Set ^Interlock.Config("webapp", "/api/interlock") = 1
     Set www = $SELECT(root = "": "", 1: root _ "www/")
     If (www '= "") && ##class(%File).DirectoryExists(www) {
         Kill props
@@ -293,6 +295,7 @@ ClassMethod CreateWebApps(ns As %String, root As %String) As %Status
         } Else {
             Set sc = ##class(Security.Applications).Create("/interlock", .props)
         }
+        Set:$$$ISOK(sc) ^Interlock.Config("webapp", "/interlock") = 1
     }
     Quit sc
 }
@@ -449,16 +452,16 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Set r.namespace = $NAMESPACE
     Set r.version = $GET(^Interlock.Config("version"))
     Set r."installed_at" = $GET(^Interlock.Config("installedAt"))
-    Set r.demo = ''$GET(^Interlock.Config("demo"))
+    Do r.%Set("demo", ''$GET(^Interlock.Config("demo")), "boolean")
     Set r.mode = $GET(^Interlock.Config("mode"))
     Set r."adt_in" = $GET(^Interlock.Config("adtIn"))
-    Set r.interoperability = ''##class(%EnsembleMgr).IsEnsembleNamespace($NAMESPACE)
-    Set r."production_class" = ''##class(%Dictionary.CompiledClass).%ExistsId("Interlock.Production")
+    Do r.%Set("interoperability", ''##class(%EnsembleMgr).IsEnsembleNamespace($NAMESPACE), "boolean")
+    Do r.%Set("production_class", ''##class(%Dictionary.CompiledClass).%ExistsId("Interlock.Production"), "boolean")
     Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)
     Set r.production = name, r."production_state" = $CASE(state, 1: "running", 2: "stopped", 3: "suspended", 4: "troubled", 5: "network stopped", : state)
-    Set r."ward_classes" = ''##class(%Dictionary.CompiledClass).%ExistsId("Wards.API")
-    Set r."aihub_runner" = ''##class(%Dictionary.CompiledClass).%ExistsId("Interlock.Bridge.Runner.AIHub")
-    Set r."ai_hub_present" = ''##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent")
+    Do r.%Set("ward_classes", ''##class(%Dictionary.CompiledClass).%ExistsId("Wards.API"), "boolean")
+    Do r.%Set("aihub_runner", ''##class(%Dictionary.CompiledClass).%ExistsId("Interlock.Bridge.Runner.AIHub"), "boolean")
+    Do r.%Set("ai_hub_present", ''##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent"), "boolean")
     &sql(SELECT COUNT(*) INTO :members FROM Interlock_Store.BoardMember WHERE Enabled = 1)
     Set r."board_members" = +members
     &sql(SELECT COUNT(*) INTO :records FROM Interlock_Bridge.Record)
@@ -469,12 +472,16 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Try {
         New $NAMESPACE
         Set $NAMESPACE = "%SYS"
-        Set r."api_webapp" = ''##class(Security.Applications).Exists("/api/interlock")
-        Set r."ui_webapp" = ''##class(Security.Applications).Exists("/interlock")
-        Set r."wards_webapp" = ''##class(Security.Applications).Exists("/wards/api")
+        Do r.%Set("api_webapp", ''##class(Security.Applications).Exists("/api/interlock"), "boolean")
+        Do r.%Set("ui_webapp", ''##class(Security.Applications).Exists("/interlock"), "boolean")
+        Do r.%Set("wards_webapp", ''##class(Security.Applications).Exists("/wards/api"), "boolean")
+        Set r."webapps_checked" = "live"
     } Catch ex {
-        // A caller without %SYS access gets the rest of the report.
-        Do r.%Set("api_webapp", "", "null"), r.%Set("ui_webapp", "", "null"), r.%Set("wards_webapp", "", "null")
+        // A caller without %SYS access gets what the install recorded.
+        Do r.%Set("api_webapp", ''$GET(^Interlock.Config("webapp", "/api/interlock")), "boolean")
+        Do r.%Set("ui_webapp", ''$GET(^Interlock.Config("webapp", "/interlock")), "boolean")
+        Do r.%Set("wards_webapp", ''$GET(^Interlock.Config("webapp", "/wards/api")), "boolean")
+        Set r."webapps_checked" = "install record"
     }
     Quit r.%ToJSON()
 }
