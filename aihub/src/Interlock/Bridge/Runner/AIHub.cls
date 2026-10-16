@@ -53,9 +53,14 @@ Method Run(spec As Interlock.Bridge.RunSpec, ByRef response As Interlock.Bridge.
                 $$$TRACE("Running " _ spec.AgentClass _ " for " _ spec.CorrelationKey _ ": up to " _ turns _ " turns, budget " _ (+spec.TokenBudget) _ " tokens")
                 // Run(session, goal, callback) on build 154; the turn limit is the MaxIterations property.
                 Set final = agent.Run(session, prompt, monitor)
-                If $ISOBJECT(final) Set response.Content = $EXTRACT(final.Content, 1, 20000)
+                If $ISOBJECT(final) && '$ISOBJECT(final.Content) Set response.Content = $EXTRACT(final.Content, 1, 20000)
                 If submit.Result '= "" {
                     Set response.ResultJSON = submit.Result, response.Status = "ok"
+                    // The budget is judged after the run: the framework's loop cannot be stopped from outside.
+                    If (+spec.TokenBudget > 0) && (monitor.TotalTokens > +spec.TokenBudget) {
+                        Set response.Status = "budget_exceeded"
+                        Set response.Error = "The run used " _ monitor.TotalTokens _ " tokens, over its budget of " _ (+spec.TokenBudget) _ "; its result is kept for inspection but not used"
+                    }
                 } Else {
                     Set response.Status = "schema_failed"
                     Set response.Error = "The agent finished without an accepted " _ terminal _ $SELECT(submit.LastError '= "": ": " _ submit.LastError, 1: "")
@@ -96,7 +101,7 @@ Method FillStats(response As Interlock.Bridge.Msg.AgentResponse, agent, session,
         } Catch { }
     }
     If $ISOBJECT(monitor) {
-        Set response.Iterations = monitor.Iterations
+        Set response.Iterations = $SELECT(monitor.Iterations > 0: monitor.Iterations, 1: "")
         If +response.PromptTokens = 0 Set response.PromptTokens = monitor.PromptTokens
         If +response.CompletionTokens = 0 Set response.CompletionTokens = monitor.CompletionTokens
         Set response.CacheReadTokens = monitor.CacheReadTokens
@@ -217,6 +222,32 @@ ClassMethod TestRun(caseId As %String, memberCode As %String = "conformance", mo
         Set out = response.ToObject()
         If $$$ISERR(sc) Set out."run_error" = $SYSTEM.Status.GetErrorText(sc)
         Set out."tool_calls_detail" = ##class(Interlock.Bridge.ToolCall).ForRun(spec.EnsMessageId)
+        Return out.%ToJSON()
+    } Catch ex {
+        Return {"error": (ex.DisplayString())}.%ToJSON()
+    }
+}
+
+/// A saved session's statistics and its last message, as the framework reports them. For checks over SQL.
+ClassMethod SessionStats(id As %String) As %String [ SqlProc ]
+{
+    Try {
+        Set session = ##class(%AI.Agent.Session).%OpenId(id, , .sc)
+        If '$ISOBJECT(session) Return {"error": ($SYSTEM.Status.GetErrorText(sc))}.%ToJSON()
+        // A saved session answers only once attached to an agent.
+        Set agent = ##class(Interlock.Agent.Conformance).%New()
+        Set sc = agent.%InitWithSession(session)
+        If $$$ISERR(sc) Return {"error": ($SYSTEM.Status.GetErrorText(sc))}.%ToJSON()
+        Set out = {}
+        Set out.stats = session.GetStats()
+        Set messages = session.GetContext()
+        Set out."message_count" = $SELECT($ISOBJECT(messages): messages.%Size(), 1: 0)
+        Set roles = []
+        If $ISOBJECT(messages) {
+            Set iter = messages.%GetIterator()
+            While iter.%GetNext(.i, .m) { Do roles.%Push(##class(Interlock.Util.Json).Str(m, "role") _ ":" _ $LENGTH($SELECT($ISOBJECT(m.%Get("content")): m.%Get("content").%ToJSON(), 1: $GET(m.content)))) }
+        }
+        Set out.roles = roles
         Return out.%ToJSON()
     } Catch ex {
         Return {"error": (ex.DisplayString())}.%ToJSON()
