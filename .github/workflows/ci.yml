@@ -123,11 +123,41 @@ jobs:
           python3 scripts/iris-sql.py --url "$IRIS_URL" --ns INTERLOCK "SELECT Interlock.Setup_Doctor() AS r" || true
           docker logs iris 2>&1 | tail -80 || true
 
+  # The judges' path: the Dockerfile, its build script and the IPM module, built from the public IRIS for Health
+  # Community 2026.2 image (the contest's AI Hub build is not on a registry CI can pull from), then started as
+  # `docker compose up` would start it, with scenario S2 played end to end on it.
+  image:
+    name: Image (Dockerfile, iris.script, the IPM module)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build the image from the public base
+        run: docker build --progress plain --build-arg IRIS_IMAGE=intersystemsdc/irishealth-community:2026.2 -t interlock:ci .
+      - name: Start it
+        run: docker run -d --name interlock -p 52773:52773 interlock:ci
+      - name: Wait for the web application
+        run: |
+          code=
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:52773/interlock/index.html || true)
+            if [ "$code" = "200" ]; then echo "The web application answered after $((i*5)) s"; exit 0; fi
+            sleep 5
+          done
+          echo "The web application did not come up (last HTTP status: '$code')"
+          docker logs interlock 2>&1 | tail -100
+          exit 1
+      - name: Scenario S2 end to end on the built image
+        run: python3 tests/e2e/scenario_check.py --url http://localhost:52773 --approve S2
+      - name: IRIS log
+        if: always()
+        run: docker logs interlock 2>&1 | tail -100 || true
+
   # Publishes the demo to GitHub Pages. Skipped (not failed) until the repository is public, Pages is enabled
   # (Settings, Pages, Source: GitHub Actions) and the repository variable DEPLOY_DEMO is 'true'.
   deploy-demo:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_DEMO == 'true'
-    needs: [web, iris]
+    needs: [web, iris, image]
     runs-on: ubuntu-latest
     permissions:
       contents: read
