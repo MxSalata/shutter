@@ -714,15 +714,21 @@ ClassMethod Costs() As %Status
     If since '= "" Set where = where _ " AND StartedAt >= ?", args = args + 1, args(args) = since
     If until '= "" Set where = where _ " AND StartedAt <= ?", args = args + 1, args(args) = until
     Set o = {}
+    // Live and record runs spend money; a replay copies a recording's tokens and spends nothing, so the
+    // rows carry the mode and replays sit apart, with their recorded tokens and a cost of 0.
     Set byModel = []
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT %EXACT(Model) AS Model, COUNT(*) AS Runs, SUM(PromptTokens) AS P, SUM(CompletionTokens) AS C, SUM(CacheReadTokens) AS R, SUM(CostUSD) AS Cost FROM Interlock_Store.AgentRun WHERE 1=1" _ where _ " GROUP BY %EXACT(Model) ORDER BY %EXACT(Model)", args...)
-    While rs.%Next() { Set r = {} Set r.model = rs.%Get("Model"), r.runs = +rs.%Get("Runs"), r.promptTokens = +rs.%Get("P"), r.completionTokens = +rs.%Get("C"), r.cacheReadTokens = +rs.%Get("R"), r.costUsd = +rs.%Get("Cost") Do byModel.%Push(r) }
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT %EXACT(Model) AS Model, %EXACT(Mode) AS Mode, COUNT(*) AS Runs, SUM(PromptTokens) AS P, SUM(CompletionTokens) AS C, SUM(CacheReadTokens) AS R, SUM(CostUSD) AS Cost FROM Interlock_Store.AgentRun WHERE 1=1" _ where _ " GROUP BY %EXACT(Model), %EXACT(Mode) ORDER BY %EXACT(Model), %EXACT(Mode)", args...)
+    While rs.%Next() { Set r = {} Set r.model = rs.%Get("Model"), r.mode = rs.%Get("Mode"), r.runs = +rs.%Get("Runs"), r.promptTokens = +rs.%Get("P"), r.completionTokens = +rs.%Get("C"), r.cacheReadTokens = +rs.%Get("R"), r.costUsd = $SELECT(rs.%Get("Mode") = "replay": 0, 1: +rs.%Get("Cost")) Do byModel.%Push(r) }
+    Set totals = {}
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT SUM(CASE WHEN Mode = 'replay' THEN 0 ELSE CostUSD END) AS Spent, SUM(CASE WHEN Mode = 'replay' THEN 1 ELSE 0 END) AS Replays, SUM(CASE WHEN Mode = 'replay' THEN 0 ELSE 1 END) AS Live FROM Interlock_Store.AgentRun WHERE 1=1" _ where, args...)
+    If rs.%Next() Set totals.spentUsd = +rs.%Get("Spent"), totals.liveRuns = +rs.%Get("Live"), totals.replayedRuns = +rs.%Get("Replays")
+    Set o.totals = totals
     Set byDay = []
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT SUBSTRING(StartedAt,1,10) AS Day, COUNT(*) AS Runs, SUM(CostUSD) AS Cost FROM Interlock_Store.AgentRun WHERE 1=1" _ where _ " GROUP BY SUBSTRING(StartedAt,1,10) ORDER BY Day", args...)
-    While rs.%Next() { Set r = {} Set r.day = rs.%Get("Day"), r.runs = +rs.%Get("Runs"), r.costUsd = +rs.%Get("Cost") Do byDay.%Push(r) }
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT SUBSTRING(StartedAt,1,10) AS Day, COUNT(*) AS Runs, SUM(CASE WHEN Mode = 'replay' THEN 1 ELSE 0 END) AS Replays, SUM(CASE WHEN Mode = 'replay' THEN 0 ELSE CostUSD END) AS Cost FROM Interlock_Store.AgentRun WHERE 1=1" _ where _ " GROUP BY SUBSTRING(StartedAt,1,10) ORDER BY Day", args...)
+    While rs.%Next() { Set r = {} Set r.day = rs.%Get("Day"), r.runs = +rs.%Get("Runs"), r.replayedRuns = +rs.%Get("Replays"), r.costUsd = +rs.%Get("Cost") Do byDay.%Push(r) }
     Set byCase = []
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT %EXACT(c.CaseId) AS CaseId, COUNT(*) AS Runs, SUM(a.CostUSD) AS Cost FROM Interlock_Store.AgentRun a JOIN Interlock_Store.""Case"" c ON a.""Case"" = c.ID WHERE 1=1" _ where _ " GROUP BY %EXACT(c.CaseId) ORDER BY %EXACT(c.CaseId) DESC", args...)
-    While rs.%Next() { Set r = {} Set r.caseId = rs.%Get("CaseId"), r.runs = +rs.%Get("Runs"), r.costUsd = +rs.%Get("Cost") Do byCase.%Push(r) }
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT %EXACT(c.CaseId) AS CaseId, COUNT(*) AS Runs, SUM(CASE WHEN a.Mode = 'replay' THEN 1 ELSE 0 END) AS Replays, SUM(CASE WHEN a.Mode = 'replay' THEN 0 ELSE a.CostUSD END) AS Cost FROM Interlock_Store.AgentRun a JOIN Interlock_Store.""Case"" c ON a.""Case"" = c.ID WHERE 1=1" _ where _ " GROUP BY %EXACT(c.CaseId) ORDER BY %EXACT(c.CaseId) DESC", args...)
+    While rs.%Next() { Set r = {} Set r.caseId = rs.%Get("CaseId"), r.runs = +rs.%Get("Runs"), r.replayedRuns = +rs.%Get("Replays"), r.costUsd = +rs.%Get("Cost") Do byCase.%Push(r) }
     Set o.byModel = byModel, o.byDay = byDay, o.byCase = byCase
     Quit ..Json(o)
 }
