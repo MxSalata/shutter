@@ -14,6 +14,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # InterSystems' own IRIS for Health Community 2026.2, pinned by digest. The community image
+  # intersystemsdc/irishealth-community:2026.2 stopped IRIS in CI on 16 October 2026: its post-start step (creating the
+  # USER namespace through Python) failed on the runner. The official image has no such step.
+  IRIS_IMAGE: containers.intersystems.com/intersystems/irishealth-community:2026.2@sha256:7c06b6b3d950bc25f3e353b0a65db0c4045f251fb9103eade63514302b662cf3
+
 jobs:
   # The web application: types, lint, format, unit and page tests, the committed www/ build, and axe-core on every
   # screen in every appearance against the demo build. The demo build is kept as an artifact.
@@ -86,7 +92,7 @@ jobs:
           [ "$code" = "0" ] || exit "$code"
           if echo "$out" | grep -q ': missing '; then echo "A scenario lacks recordings for its board"; exit 1; fi
 
-  # The ObjectScript side on a real IRIS for Health Community 2026.2 (the public image; the AI Hub build is not on a
+  # The ObjectScript side on a real IRIS for Health Community 2026.2 (InterSystems' image; the AI Hub build is not on a
   # registry CI can pull from, and the core needs none of it): the namespace, a full load and compile, the installer,
   # the ward's contract tests in process and over HTTP, and scenarios S1 to S3 end to end with their recorded runs.
   iris:
@@ -95,13 +101,22 @@ jobs:
     timeout-minutes: 30
     env:
       IRIS_URL: http://localhost:52773
-      IRIS_IMAGE: intersystemsdc/irishealth-community:2026.2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Start IRIS with the repository mounted
-        run: docker run -d --name iris -p 52773:52773 -v "$GITHUB_WORKSPACE:/home/irisowner/dev:ro" "$IRIS_IMAGE"
-      - name: Wait for the Atelier API
+        run: >-
+          docker run -d --name iris -p 52773:52773 -v "$GITHUB_WORKSPACE:/home/irisowner/dev:ro" "$IRIS_IMAGE"
+          --check-caps false --ISCAgent false
+      # The official image ships its accounts' passwords expired; the demonstration password SYS stays.
+      - name: Wait for IRIS, lift the expired passwords, and wait for the Atelier API
         run: |
+          for i in $(seq 1 60); do
+            if docker exec iris iris session IRIS -U %SYS '##class(Security.Users).UnExpireUserPasswords("*")' > /dev/null 2>&1; then
+              echo "IRIS took commands after $((i*5)) s"
+              break
+            fi
+            sleep 5
+          done
           code=
           for i in $(seq 1 60); do
             code=$(curl -s -o /dev/null -w '%{http_code}' -u _SYSTEM:SYS "$IRIS_URL/api/atelier/" || true)
@@ -154,11 +169,11 @@ jobs:
         # The public base has no AI Hub package, so the image gets the core (replay) edition: WITH_AIHUB=0.
         run: >-
           docker build --progress plain
-          --build-arg IRIS_IMAGE=intersystemsdc/irishealth-community:2026.2
+          --build-arg IRIS_IMAGE="$IRIS_IMAGE"
           --build-arg WITH_AIHUB=0
           -t interlock:ci .
       - name: Start it
-        run: docker run -d --name interlock -p 52773:52773 interlock:ci
+        run: docker run -d --name interlock -p 52773:52773 interlock:ci --check-caps false --ISCAgent false
       - name: Wait for the web application
         run: |
           code=
