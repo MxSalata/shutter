@@ -8,8 +8,9 @@ when the live agents run in record mode under the same keys.
 Each finding keeps to the fields the live agents submit (Interlock.Schema.Findings: disposition, confidence, summary,
 violations, unknowns, evidence_refs) and each plan to Interlock.Schema.Plan (disposition, summary, action,
 preconditions, evidence_refs, disagreements). Evidence references name snapshot item kinds. A resend's
-expected_version is the ward's version when the case collects its evidence, after the settle period. Standard
-library only.
+expected_version is the ward's version when the case collects its evidence, after the settle period. A file recorded
+from a live run (scripts/iris-pull-records.py labels it "Recorded from a live run ...") is kept, never overwritten.
+Standard library only.
 """
 import json
 import os
@@ -222,16 +223,29 @@ def record(scenario, member, result, round_=1):
     }
 
 
+def recorded_live(path):
+    """Whether the file holds a live run's recording, which the hand-written fixtures never replace."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return str(json.load(f).get("label", "")).startswith("Recorded from a live run")
+    except (OSError, ValueError):
+        return False
+
+
 def main():
-    written = 0
+    written, kept = 0, 0
     for spec, result in RECORDS.items():
         scenario, member = spec[0], spec[1]
         round_ = spec[2] if len(spec) > 2 else 1
         name = f"scenario-{scenario}-{member}-1{'-round' + str(round_) if round_ > 1 else ''}.json"
-        with open(os.path.join(OUT, name), "w", encoding="utf-8") as f:
+        path = os.path.join(OUT, name)
+        if recorded_live(path):
+            kept += 1
+            continue
+        with open(path, "w", encoding="utf-8") as f:
             f.write(json.dumps(record(scenario, member, result, round_), indent=1, ensure_ascii=False) + "\n")
         written += 1
-    print(f"wrote {written} records into {OUT}")
+    print(f"wrote {written} records into {OUT}" + (f"; kept {kept} recorded from live runs" if kept else ""))
 
 
 if __name__ == "__main__":
