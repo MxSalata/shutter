@@ -75,7 +75,8 @@ ClassMethod FromResponse(case As Interlock.Store.Case, snapshot As Interlock.Sto
     Set run.Iterations = response.Iterations, run.ToolCallCount = response.ToolCalls
     Set run.SessionId = response.SessionId, run.EnsMessageId = ensMessageId
     Set run.ResultJSON = response.ResultJSON, run.Content = response.Content, run.Error = response.Error
-    Set run.CostUSD = ##class(Interlock.Store.ModelPrice).Cost(response.Model, response.PromptTokens, response.CompletionTokens, response.CacheReadTokens, response.CacheCreationTokens)
+    // A replayed run spends nothing: its tokens are the recording's, kept for the record, and cost 0.
+    Set run.CostUSD = $SELECT(response.Mode = "replay": 0, 1: ##class(Interlock.Store.ModelPrice).Cost(response.Model, response.PromptTokens, response.CompletionTokens, response.CacheReadTokens, response.CacheCreationTokens))
     Quit run.%Save()
 }
 

@@ -95,6 +95,8 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1) As %Status
             Set ^Interlock.Config("recordsImported") = count
         }
         Set sc = ..CreateWebApps(ns, root) Quit:$$$ISERR(sc)
+        // Replayed runs spend nothing; rows written before this rule held a recording's price.
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "UPDATE Interlock_Store.AgentRun SET CostUSD = 0 WHERE Mode = 'replay' AND CostUSD <> 0")
         Set sc = ..StartProduction() Quit:$$$ISERR(sc)
     } Catch ex {
         Set sc = ex.AsStatus()
