@@ -133,7 +133,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build the image from the public base
-        run: docker build --progress plain --build-arg IRIS_IMAGE=intersystemsdc/irishealth-community:2026.2 -t interlock:ci .
+        # The public base has no AI Hub package, so the image gets the core (replay) edition: WITH_AIHUB=0.
+        run: >-
+          docker build --progress plain
+          --build-arg IRIS_IMAGE=intersystemsdc/irishealth-community:2026.2
+          --build-arg WITH_AIHUB=0
+          -t interlock:ci .
       - name: Start it
         run: docker run -d --name interlock -p 52773:52773 interlock:ci
       - name: Wait for the web application
