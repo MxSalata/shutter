@@ -130,11 +130,11 @@ jobs:
           exit 1
       # The namespace and the installer run in an IRIS terminal session, as iris.script runs them in the image: IRIS for
       # Health's installer and the production's start write their progress to the current device, which over the SQL
-      # route would land in the HTTP response.
+      # route would land in the HTTP response. The result is printed after the call, on a line of its own.
       - name: Create the INTERLOCK namespace
         run: |
           python3 scripts/iris-load.py --url "$IRIS_URL" --ns USER src/Interlock/Setup.cls
-          out=$(printf '%s\n' 'Write !,"RESULT: ",##class(Interlock.Setup).CreateNamespace("INTERLOCK"),!' 'Halt' \
+          out=$(printf '%s\n' 'Set r = ##class(Interlock.Setup).CreateNamespace("INTERLOCK") Write !,"RESULT: ",r,!' 'Halt' \
             | docker exec -i iris iris session IRIS -U USER)
           echo "$out" | tail -20
           echo "$out" | grep -q '^RESULT: ok'
@@ -142,7 +142,7 @@ jobs:
         run: python3 scripts/iris-load.py --url "$IRIS_URL" --ns INTERLOCK src tests/unit/Wards
       - name: Install (roles, demo users, web applications, the production)
         run: |
-          out=$(printf '%s\n' 'Write !,"RESULT: ",##class(Interlock.Setup).Install("/home/irisowner/dev/"),!' 'Halt' \
+          out=$(printf '%s\n' 'Set r = ##class(Interlock.Setup).Install("/home/irisowner/dev/") Write !,"RESULT: ",r,!' 'Halt' \
             | docker exec -i iris iris session IRIS -U INTERLOCK)
           echo "$out" | tail -30
           echo "$out" | grep -q '^RESULT: ok'
