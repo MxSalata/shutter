@@ -32,3 +32,7 @@ operation unchanged at the observed version, and the gate alone decides.
   later than the other, so every mechanical check passes; rules alone resend, the approval goes through, and the
   write moves the patient to Ward B over the bed manager's placement in Ward C. The board sees that the evidence
   can't decide which movement is current and escalates to a person.
+
+The board's column was reproduced on the contest image itself (irishealth-community:2026.3.0AI.154.0, built from
+scratch with this repository's Dockerfile on 16 October 2026): `scenario_check.py --approve` over S1 to S10 reported
+all ten as expected, in replay mode.
