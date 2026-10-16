@@ -128,17 +128,24 @@ jobs:
           echo "The Atelier API did not come up (last HTTP status: '$code')"
           docker logs iris 2>&1 | tail -80
           exit 1
+      # The namespace and the installer run in an IRIS terminal session, as iris.script runs them in the image: IRIS for
+      # Health's installer and the production's start write their progress to the current device, which over the SQL
+      # route would land in the HTTP response.
       - name: Create the INTERLOCK namespace
         run: |
           python3 scripts/iris-load.py --url "$IRIS_URL" --ns USER src/Interlock/Setup.cls
-          python3 scripts/iris-sql.py --url "$IRIS_URL" --ns USER "SELECT Interlock.Setup_CreateNamespace('INTERLOCK') AS r"
+          out=$(printf '%s\n' 'Write !,"RESULT: ",##class(Interlock.Setup).CreateNamespace("INTERLOCK"),!' 'Halt' \
+            | docker exec -i iris iris session IRIS -U USER)
+          echo "$out" | tail -20
+          echo "$out" | grep -q '^RESULT: ok'
       - name: Load and compile the core, the ward system and its tests
         run: python3 scripts/iris-load.py --url "$IRIS_URL" --ns INTERLOCK src tests/unit/Wards
       - name: Install (roles, demo users, web applications, the production)
         run: |
-          out=$(python3 scripts/iris-sql.py --url "$IRIS_URL" --ns INTERLOCK --json "SELECT Interlock.Setup_Install('/home/irisowner/dev/') AS r")
-          echo "$out"
-          echo "$out" | python3 -c 'import json, sys; r = json.load(sys.stdin)[0]["r"]; sys.exit(0 if str(r).startswith("ok") else 1)'
+          out=$(printf '%s\n' 'Write !,"RESULT: ",##class(Interlock.Setup).Install("/home/irisowner/dev/"),!' 'Halt' \
+            | docker exec -i iris iris session IRIS -U INTERLOCK)
+          echo "$out" | tail -30
+          echo "$out" | grep -q '^RESULT: ok'
       - name: The ward's contract tests, in process
         run: |
           out=$(python3 scripts/iris-sql.py --url "$IRIS_URL" --ns INTERLOCK --json "SELECT Wards_Test.Run_Contract() AS r")
