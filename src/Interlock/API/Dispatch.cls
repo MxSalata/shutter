@@ -254,6 +254,21 @@ ClassMethod Scenarios() As %Status
     Quit ..Json(out)
 }
 
+/// True when the running production has the Scenario Player item enabled.
+ClassMethod PlayerEnabled() As %Boolean
+{
+    Set n = 0
+    Try {
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT COUNT(*) AS N FROM Ens_Config.Item WHERE Production = ? AND Name = ? AND Enabled = 1", "Interlock.Production", "Scenario Player")
+        If rs.%Next() Set n = +rs.%Get("N")
+    } Catch {
+        Set n = 0
+    }
+    If n = 0 Quit 0
+    Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)
+    Quit (state = 1) && (name = "Interlock.Production")
+}
+
 ClassMethod ScenarioRun(id As %String) As %Status
 {
     If '..Allow("Interlock_Operate", 1) Quit $$$OK
@@ -265,12 +280,36 @@ ClassMethod ScenarioRun(id As %String) As %Status
     If '$LISTFIND($LISTBUILD("board", "single", "rules"), mode) Quit ..Fail("400 Bad Request", "bad_request", "mode must be board, single or rules")
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
-    // Start plays the steps in a background job and returns at once; Run is the synchronous fallback.
-    Set method = $SELECT(##class(%Dictionary.CompiledMethod).%ExistsId("Interlock.Scenarios.Runner||Start"): "Start", 1: "Run")
-    Set result = $CLASSMETHOD("Interlock.Scenarios.Runner", method, id, mode)
-    Set out = ##class(Interlock.Util.Json).Parse(result, .sc)
-    If '$ISOBJECT(out) Set out = {"result": (result)}
-    If out.%GetTypeOf("error") '= "unassigned" Quit ..Fail("409 Conflict", "wrong_state", ##class(Interlock.Util.Json).Str(out, "detail", out.error), out)
+    If ..PlayerEnabled() {
+        // The production's own player plays the steps (one run at a time); the run record says queued
+        // until it starts, then running, done or failed (GET /scenarios).
+        Set status = ##class(Interlock.Scenarios.Runner).Status()
+        Set run = ##class(Interlock.Util.Json).Parse(status, .psc)
+        If $ISOBJECT(run) && (run.state = "queued") Quit ..Fail("409 Conflict", "wrong_state", "a run of " _ run.scenario _ " is queued", run)
+        If ##class(Interlock.Scenarios.Runner).Running() Quit ..Fail("409 Conflict", "wrong_state", "a run of " _ run.scenario _ " is still playing", run)
+        Set out = {"scenario": (id), "mode": (mode), "state": "queued", "files": [], "timeouts": []}
+        Do out.%Set("running", 1, "boolean")
+        Set out.queuedAt = ##class(Interlock.Util.Time).NowUTC()
+        Set ^Interlock.Scenarios("run") = out.%ToJSON()
+        Kill ^Interlock.Scenarios("run", "job")
+        Set msg = ##class(Interlock.Msg.ScenarioRun).%New()
+        Set msg.Scenario = id, msg.Mode = mode, msg.RequestedBy = $USERNAME
+        Set sc = ##class(Ens.Director).CreateBusinessService("Interlock API", .service)
+        If $$$ISERR(sc) || '$ISOBJECT(service) Quit ..Fail("503 Service Unavailable", "no_service", "The API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
+        Set service.Target = "Scenario Player", service.Async = 1
+        Set sc = service.ProcessInput(msg)
+        If $$$ISERR(sc) {
+            Kill ^Interlock.Scenarios("run")
+            Quit ..Fail("503 Service Unavailable", "not_queued", "The run could not be queued: " _ $SYSTEM.Status.GetErrorText(sc))
+        }
+    } Else {
+        // Without the player: Start plays the steps in a background job and returns at once; Run is the synchronous fallback.
+        Set method = $SELECT(##class(%Dictionary.CompiledMethod).%ExistsId("Interlock.Scenarios.Runner||Start"): "Start", 1: "Run")
+        Set result = $CLASSMETHOD("Interlock.Scenarios.Runner", method, id, mode)
+        Set out = ##class(Interlock.Util.Json).Parse(result, .sc)
+        If '$ISOBJECT(out) Set out = {"result": (result)}
+        If out.%GetTypeOf("error") '= "unassigned" Quit ..Fail("409 Conflict", "wrong_state", ##class(Interlock.Util.Json).Str(out, "detail", out.error), out)
+    }
     Set text = out.%ToJSON()
     Do ..Remember(bodyText, "202 Accepted", text)
     Set %response.Status = "202 Accepted"
