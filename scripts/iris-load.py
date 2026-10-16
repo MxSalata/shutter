@@ -22,6 +22,22 @@ CLASS_RE = re.compile(r"^\s*Class\s+([A-Za-z%][\w.]*)", re.MULTILINE)
 ROUTINE_RE = re.compile(r"^\s*ROUTINE\s+([\w.]+)", re.MULTILINE)
 
 
+def parse_api_json(raw):
+    """The Atelier API's JSON, even when the call wrote to the console first: creating an interoperability
+    namespace on IRIS for Health, for one, prints the HealthShare foundation's setup lines into the response
+    body before the JSON. Returns (object, console_text)."""
+    try:
+        return json.loads(raw), ""
+    except ValueError:
+        pass
+    start = raw.rfind('{"status":')
+    if start < 0:
+        start = raw.find("{")
+    if start < 0:
+        raise ValueError("no JSON in the response")
+    return json.loads(raw[start:]), raw[:start].strip()
+
+
 def opener_for(url):
     """An opener that keeps the CSP session cookie between calls, so repeated calls share one
     licence unit instead of opening a session each (which exhausts a Community licence)."""
@@ -77,7 +93,9 @@ class Atelier:
         data = json.dumps(body).encode() if body is not None else None
         try:
             with self.opener.open(req, data=data, timeout=300) as resp:
-                result = json.loads(resp.read().decode())
+                result, console = parse_api_json(resp.read().decode(errors="replace"))
+            if console:
+                print(console[-2000:], file=sys.stderr)
             try:
                 self.jar.save(ignore_discard=True, ignore_expires=True)
             except OSError:

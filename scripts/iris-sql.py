@@ -15,6 +15,22 @@ import urllib.error
 import urllib.request
 
 
+def parse_api_json(raw):
+    """The Atelier API's JSON, even when the call wrote to the console first: creating an interoperability
+    namespace on IRIS for Health, for one, prints the HealthShare foundation's setup lines into the response
+    body before the JSON. Returns (object, console_text)."""
+    try:
+        return json.loads(raw), ""
+    except ValueError:
+        pass
+    start = raw.rfind('{"status":')
+    if start < 0:
+        start = raw.find("{")
+    if start < 0:
+        raise ValueError("no JSON in the response")
+    return json.loads(raw[start:]), raw[:start].strip()
+
+
 def opener_for(url):
     """An opener that keeps the CSP session cookie between calls, so repeated calls share one
     licence unit instead of opening a session each (which exhausts a Community licence)."""
@@ -57,9 +73,11 @@ def main():
         except OSError:
             pass
         try:
-            result = json.loads(raw)
+            result, console = parse_api_json(raw)
         except ValueError:
             raise SystemExit("not a JSON response: " + raw[:800])
+        if console:
+            print(console[-2000:], file=sys.stderr)
     except urllib.error.HTTPError as e:
         raise SystemExit(f"HTTP {e.code}: {e.read().decode(errors='replace')[:800]}")
 
