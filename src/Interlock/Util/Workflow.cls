@@ -26,16 +26,16 @@ ClassMethod TasksFor(caseId As %String) As %DynamicArray
         Set task = ##class(EnsLib.Workflow.TaskResponse).%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(task)
         Set t = {}
-        Set t."task_id" = task.%Id(), t.subject = task.%Subject, t.actions = task.%Actions
-        Set t.action = task.%Action, t."user_name" = task.%UserName, t.role = task.%RoleName
+        Set t.taskId = task.%Id(), t.subject = task.%Subject, t.actions = task.%Actions
+        Set t.action = task.%Action, t.userName = task.%UserName, t.role = task.%RoleName
         Set t.priority = task.%Priority
         If $ISOBJECT(task.%TaskStatus) {
             Do t.%Set("complete", ''task.%TaskStatus.IsComplete, "boolean")
-            Set t."assigned_to" = task.%TaskStatus.AssignedTo
-            Set t."time_created" = task.%TaskStatus.TimeCreated
-            Set t."time_completed" = task.%TaskStatus.TimeCompleted
+            Set t.assignedTo = task.%TaskStatus.AssignedTo
+            Do ..SetTime(t, "timeCreated", task.%TaskStatus.TimeCreated)
+            Do ..SetTime(t, "timeCompleted", task.%TaskStatus.TimeCompleted)
         }
-        Set t."plan_digest" = task.%FormValues.GetAt("PlanDigest")
+        Set t.planDigest = task.%FormValues.GetAt("PlanDigest")
         Do out.%Push(t)
     }
     Quit out
@@ -60,6 +60,14 @@ ClassMethod Decide(caseId As %String, action As %String = "Approve", user As %St
     Set r = {}
     Set r."task_id" = task.%Id(), r.action = action, r.user = user, r."case_id" = caseId
     Quit r.%ToJSON()
+}
+
+/// Sets <var>key</var> on <var>obj</var> to a Workflow timestamp (UTC, "yyyy-mm-dd hh:mm:ss.fff") as ISO 8601,
+/// or null when empty.
+ClassMethod SetTime(obj As %DynamicObject, key As %String, ts As %String)
+{
+    If ts = "" Do obj.%Set(key, "", "null") Quit
+    Do obj.%Set(key, $TRANSLATE(ts, " ", "T") _ "Z")
 }
 
 }

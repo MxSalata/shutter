@@ -122,10 +122,19 @@ ClassMethod Project(obj As %JSON.Adaptor) As %DynamicObject
         Set o.error = "projection failed: " _ $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "empty")
         Quit o
     }
-    // A numeric property with no value (added after the row was saved) exports as an empty value,
-    // which is not JSON: it becomes null.
-    Set json = $REPLACE($REPLACE(json, ":,", ":null,"), ":}", ":null}")
-    Set o = ##class(%DynamicObject).%FromJSON(json)
+    Set o = ""
+    Try {
+        Set o = ##class(%DynamicObject).%FromJSON(json)
+    } Catch {
+        // A numeric property with no value (added after the row was saved) exports as an empty value,
+        // which is not JSON: null takes its place, outside string literals only.
+        Try {
+            Set o = ##class(%DynamicObject).%FromJSON(##class(Interlock.Util.Json).NullEmptyValues(json))
+        } Catch ex {
+            Set o = {}
+            Set o.error = "projection failed: " _ ex.DisplayString()
+        }
+    }
     Set o.id = obj.%Id()
     Quit o
 }
@@ -245,6 +254,21 @@ ClassMethod Scenarios() As %Status
     Quit ..Json(out)
 }
 
+/// True when the running production has the Scenario Player item enabled.
+ClassMethod PlayerEnabled() As %Boolean
+{
+    Set n = 0
+    Try {
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT COUNT(*) AS N FROM Ens_Config.Item WHERE Production = ? AND Name = ? AND Enabled = 1", "Interlock.Production", "Scenario Player")
+        If rs.%Next() Set n = +rs.%Get("N")
+    } Catch {
+        Set n = 0
+    }
+    If n = 0 Quit 0
+    Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)
+    Quit (state = 1) && (name = "Interlock.Production")
+}
+
 ClassMethod ScenarioRun(id As %String) As %Status
 {
     If '..Allow("Interlock_Operate", 1) Quit $$$OK
@@ -256,12 +280,36 @@ ClassMethod ScenarioRun(id As %String) As %Status
     If '$LISTFIND($LISTBUILD("board", "single", "rules"), mode) Quit ..Fail("400 Bad Request", "bad_request", "mode must be board, single or rules")
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
-    // Start plays the steps in a background job and returns at once; Run is the synchronous fallback.
-    Set method = $SELECT(##class(%Dictionary.CompiledMethod).%ExistsId("Interlock.Scenarios.Runner||Start"): "Start", 1: "Run")
-    Set result = $CLASSMETHOD("Interlock.Scenarios.Runner", method, id, mode)
-    Set out = ##class(Interlock.Util.Json).Parse(result, .sc)
-    If '$ISOBJECT(out) Set out = {"result": (result)}
-    If out.%GetTypeOf("error") '= "unassigned" Quit ..Fail("409 Conflict", "wrong_state", ##class(Interlock.Util.Json).Str(out, "detail", out.error), out)
+    If ..PlayerEnabled() {
+        // The production's own player plays the steps (one run at a time); the run record says queued
+        // until it starts, then running, done or failed (GET /scenarios).
+        Set status = ##class(Interlock.Scenarios.Runner).Status()
+        Set run = ##class(Interlock.Util.Json).Parse(status, .psc)
+        If $ISOBJECT(run) && (run.state = "queued") Quit ..Fail("409 Conflict", "wrong_state", "a run of " _ run.scenario _ " is queued", run)
+        If ##class(Interlock.Scenarios.Runner).Running() Quit ..Fail("409 Conflict", "wrong_state", "a run of " _ run.scenario _ " is still playing", run)
+        Set out = {"scenario": (id), "mode": (mode), "state": "queued", "files": [], "timeouts": []}
+        Do out.%Set("running", 1, "boolean")
+        Set out.queuedAt = ##class(Interlock.Util.Time).NowUTC()
+        Set ^Interlock.Scenarios("run") = out.%ToJSON()
+        Kill ^Interlock.Scenarios("run", "job")
+        Set msg = ##class(Interlock.Msg.ScenarioRun).%New()
+        Set msg.Scenario = id, msg.Mode = mode, msg.RequestedBy = $USERNAME
+        Set sc = ##class(Ens.Director).CreateBusinessService("Interlock API", .service)
+        If $$$ISERR(sc) || '$ISOBJECT(service) Quit ..Fail("503 Service Unavailable", "no_service", "The API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
+        Set service.Target = "Scenario Player", service.Async = 1
+        Set sc = service.ProcessInput(msg)
+        If $$$ISERR(sc) {
+            Kill ^Interlock.Scenarios("run")
+            Quit ..Fail("503 Service Unavailable", "not_queued", "The run could not be queued: " _ $SYSTEM.Status.GetErrorText(sc))
+        }
+    } Else {
+        // Without the player: Start plays the steps in a background job and returns at once; Run is the synchronous fallback.
+        Set method = $SELECT(##class(%Dictionary.CompiledMethod).%ExistsId("Interlock.Scenarios.Runner||Start"): "Start", 1: "Run")
+        Set result = $CLASSMETHOD("Interlock.Scenarios.Runner", method, id, mode)
+        Set out = ##class(Interlock.Util.Json).Parse(result, .sc)
+        If '$ISOBJECT(out) Set out = {"result": (result)}
+        If out.%GetTypeOf("error") '= "unassigned" Quit ..Fail("409 Conflict", "wrong_state", ##class(Interlock.Util.Json).Str(out, "detail", out.error), out)
+    }
     Set text = out.%ToJSON()
     Do ..Remember(bodyText, "202 Accepted", text)
     Set %response.Status = "202 Accepted"
@@ -400,9 +448,7 @@ ClassMethod CasePlan(caseId As %String) As %Status
     Set o.gateDecisions = ..Rows("Interlock.Store.GateDecision", "SELECT ID FROM Interlock_Store.GateDecision WHERE Plan = ? ORDER BY ID", plan.%Id())
     Set iter = o.gateDecisions.%GetIterator()
     While iter.%GetNext(.i, .d) { If d.%GetTypeOf("checks") = "string" Set d.checks = ##class(Interlock.Util.Json).Parse(d.checks, .psc) }
-    Set rid = ""
-    &sql(SELECT TOP 1 ID INTO :rid FROM Interlock_Store.Rehearsal WHERE Plan = :planId ORDER BY ID DESC)
-    Set planId = plan.%Id()
+    Set rid = "", planId = plan.%Id()
     &sql(SELECT TOP 1 ID INTO :rid FROM Interlock_Store.Rehearsal WHERE Plan = :planId ORDER BY ID DESC)
     If (SQLCODE = 0) && (rid '= "") {
         Set r = ..Project(##class(Interlock.Store.Rehearsal).%OpenId(rid))
@@ -530,7 +576,7 @@ ClassMethod CaseClosure(caseId As %String) As %Status
     Do unverified.%Push("Consumers downstream of the ward system are outside the production's view and are not verified")
     Set o.verifiedEffects = verified, o.unverified = unverified
     Set actors = []
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT DISTINCT Actor FROM Interlock_Store.CaseEvent WHERE ""Case"" = ? ORDER BY Actor", id)
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT DISTINCT %EXACT(Actor) AS Actor FROM Interlock_Store.CaseEvent WHERE ""Case"" = ? ORDER BY Actor", id)
     While rs.%Next() { Do actors.%Push(rs.%Get("Actor")) }
     Set o.actors = actors
     Set pv = ""

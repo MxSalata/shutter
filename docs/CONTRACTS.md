@@ -1,6 +1,6 @@
 # Contracts between Interlock's parts
 
-Version 1.4, 15 October 2026. These are the interfaces the parts of Interlock are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.5, 16 October 2026. These are the interfaces the parts of Interlock are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The ward system's API
 
@@ -32,6 +32,7 @@ The synthetic ward system (`Wards.*`) stands in for a downstream bed-management 
 - `expected_version` is optional. When present, the operation applies only if the encounter's current version equals it. Normal traffic omits it; recovery always sends it.
 - `payload_digest` is the sender's SHA-256 of the canonical payload (section 1.6). The ward computes its own and compares them when an operation key is reused.
 - `dry_run: true` runs the whole validation and the write inside a transaction that is always rolled back, and reports what would have happened. Nothing is committed, no receipt is stored, no event is appended.
+- A rehearsal's response also carries what it was checked against (v1.5): `encounter_before`, the encounter as the ward held it before the dry run (null when the ward has never seen it), `encounter_after` when it would apply, and `epoch`. The case workflow takes the receiver version an approval binds from `encounter_before.version`, never from `encounter_after`.
 
 Responses:
 
@@ -143,6 +144,7 @@ The canonical payload is the JSON object with exactly these keys in this order, 
 - `POST /wards/api/capabilities` `{"conditional_writes": false}` is the demo switch (demo instances only, like the reset): afterwards any operation that carries `expected_version` is refused with 422 `{"error": "unsupported_precondition"}`, and the read says `"conditional_writes": false`. `{"conditional_writes": true}` restores it; the reset restores it too.
 - `epoch` is an integer that increments at every reset. It appears here, in every encounter read (`"epoch"` beside `"version"`) and in every receipt. An approval binds the epoch it was given, so an approval from before a reset cannot authorise a dispatch after it even when the version numbers happen to match.
 - `last_contract_check` is whatever the ward recorded last (the HTTP check writes it); null when never run.
+- `POST /wards/api/capabilities` also takes `last_contract_check` as `{"at": "<ISO 8601 UTC>", "result": "<text>"}`, both fields required (v1.5): the test tools write it after a contract check. Any other field is refused with 422 `{"error": "invalid_request"}`, and nothing changes when any part of a request is refused. On an instance that is not a demo the POST answers 403 `{"error": "not_a_demo_instance"}`.
 
 ### 1.9 Receipt lookup unavailable (v1.4)
 
@@ -170,17 +172,19 @@ From an HL7 v2.5.1 ADT message:
 | `event_time` | EVN-6 (event occurred) if present, else EVN-2 (recorded), as ISO 8601 UTC |
 | `source_message_id` | MSH-10 |
 
+Scenario S8's third message comes from a second source system, `BEDMGR` (MSH-3), for the same encounter (v1.5): its operation key starts `BEDMGR^HOSP^…`, so it is a different operation from the PAS messages even when it describes the same movement. Admit to Ward A applied; the 09:20 transfer to Ward B fails; the bed manager's own transfer to Ward C, also timed 09:20, applies. Neither event is later than the other, so supersession is unknown: nothing is resent.
+
 The DTL that builds the ward operation lives in `Interlock.DTL.ADTToWard`. The same mapping, as an ObjectScript class method, is `Interlock.Util.OperationKey.FromHL7(message)` so the evidence collector and the fixtures agree.
 
 ## 3. HL7 fixtures
 
 - HL7 v2.5.1, one message per file, segments separated by carriage returns (`\r`), files under `fixtures/<scenario>/`, named `<scenario>-<nn>-<event>.hl7` (for example `S1-02-A02.hl7`). UTF-8, ASCII content.
-- MSH-3 `PAS`, MSH-4 `HOSP`, MSH-5 `WARDS`, MSH-6 `HOSP`, MSH-9 `ADT^A02^ADT_A02`, MSH-10 unique across all fixtures (`MSG` plus five digits), MSH-11 `P`, MSH-12 `2.5.1`.
+- MSH-3 `PAS` (S8's third message: `BEDMGR`, a bed management system; v1.5), MSH-4 `HOSP`, MSH-5 `WARDS`, MSH-6 `HOSP`, MSH-9 `ADT^A02^ADT_A02`, MSH-10 unique across all fixtures (`MSG` plus five digits), MSH-11 `P`, MSH-12 `2.5.1`.
 - EVN-1 the trigger, EVN-2 the recorded time, EVN-6 the event time (both `YYYYMMDDHHMMSS`, interpreted as UTC).
 - PID-3 `MRN1001^^^HOSP^MR`; PID-5 synthetic names (no real people); PID-7 a date of birth; PID-8 a sex code.
 - PV1-2 `I`; PV1-3 `WARD-A^BAY1^01^HOSP` (point of care, room, bed, facility); PV1-19 `ENC-1001`; PV1-44 the admit time.
 - Free text that must reach the agents as data (the injected instruction in S4) goes in an OBX segment after PV1, `OBX|1|TX|NOTE^Transfer note^L||<text>||||||F`, which the ADT_A02 structure allows. No NTE segments in A02.
-- Every scenario's timeline is one patient and one encounter, except S6 if it needs a second. Times are the same day, `2026-10-15`, 09:00 onwards.
+- Every scenario's timeline is one patient and one encounter, except S9 (v1.5): its third message admits a second patient's encounter, `ENC-2009`, listed as `expected.other_encounter`, which the recovery must leave untouched. Admit to Ward A applied; the 09:20 transfer to Ward B fails; the same patient is admitted at 09:30 to Ward C under another visit number. That admission belongs to another encounter and supersedes nothing: the transfer is still due. Times are the same day, `2026-10-15`, 09:00 onwards.
 - `fixtures/scenarios.json` lists the scenarios:
 
 ```json
@@ -201,7 +205,7 @@ The DTL that builds the ward operation lives in `Interlock.DTL.ADTToWard`. The s
 ]
 ```
 
-Step kinds: `file` (drop the file into the ADT In folder; `expect` is `delivered` by default or `delivery_fails`), `fault` (section 1.5, with an optional `operation_key`), `wait` (`seconds`). The runner leaves at least two seconds between files so the production applies them in order.
+Step kinds: `file` (drop the file into the ADT In folder; `expect` is `delivered` by default or `delivery_fails`), `fault` (section 1.5, with an optional `operation_key`), `wait` (`seconds`). The runner leaves at least two seconds between files so the production applies them in order. Two more (v1.4 and v1.5): `wait_for_state` (section 4.1), and `capabilities`, an object the runner posts to `/wards/api/capabilities` (section 1.8), as S10 does with `{"capabilities": {"conditional_writes": false}}`.
 
 ## 4. The scenario runner
 
@@ -224,9 +228,13 @@ SELECT TOP 1 State FROM Interlock_Store."Case" WHERE Scenario = ? ORDER BY ID DE
 
 Scenario S7 (a later transfer arriving while the plan awaits approval) is written with it. The web app reads case state through the REST API instead (section 5).
 
+## 4.2 Running a scenario from the API (v1.5)
+
+`POST /api/interlock/scenarios/{id}/run` with `{"mode": "board" | "single" | "rules"}` answers 202 and the run record; `GET /api/interlock/scenarios` carries the current record as `run`. With the production's **Scenario Player** item enabled, the route writes a record in state `queued` and sends an `Interlock.Msg.ScenarioRun` through the `Interlock API` service to the player, which plays the steps in its own job (the same checks and reset as `Runner.Start`) and moves the record through `running` to `done` or `failed`; a run therefore never needs a new process, and it shows in the trace with the cases it causes. A second POST while a record is `queued` or `running` answers 409 `wrong_state`. Without the player the route calls `Runner.Start`, which uses a background job, or plays inline when none can start.
+
 ## 5. The REST API for the app
 
-Version 2 of this document, once the store and the workflow exist. The shape will follow the review file's section 5.8: cases, a case's timeline and artefacts, investigations, approvals, executions, scenarios and settings, with an expected case version and an idempotency key on every change.
+The API as built is `src/Interlock/API/Dispatch.cls` (its UrlMap lists the routes; sign-in through `POST /session` and the CSP session cookie; every change carries `X-Requested-With: Interlock`, the idempotent ones an `Idempotency-Key`; errors are JSON with `error` and `detail`). The web application's notes on using it are in `web/README.md`. Workflow tasks come back in camelCase with ISO 8601 UTC times (v1.5).
 
 ## Repository layout
 
@@ -234,6 +242,7 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.5, 16 Oct 2026: rehearsal responses carry `encounter_before` and `epoch` (1.1); `POST /capabilities` takes `last_contract_check` (1.8); S8's second source system `BEDMGR` (2, 3); S9's second encounter `ENC-2009` (3); the `capabilities` step kind (3); the scenario player and the run states (4.2); section 5 points at the API as built. Points (a) to (e) are House's, accepted on 15 Oct.
 - v1.4, 15 Oct 2026: the capabilities read and the demo switch, the epoch, the receipt-lookup fault (1.8, 1.9); scenario steps that wait for a case state (4.1). From House's triage of the owner's feature documents (T9, T10, A1, A2, A5).
 - v1.3, 15 Oct 2026: `misleading_duplicate_error` with an `operation_key` (1.5); `resetAt`, the runner's settings and the mode semantics (section 4), from the scenario work.
 - v1.2, 15 Oct 2026: the ward decisions of 15 Oct recorded (section 1.1), with `patient_mismatch` and `payload_digest_mismatch` as their own codes.

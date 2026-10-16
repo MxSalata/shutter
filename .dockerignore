@@ -1,0 +1,9 @@
+.git
+.gitignore
+.env
+web/node_modules
+web/dist
+web/playwright-report
+web/test-results
+tests/**/__pycache__
+**/.DS_Store

@@ -26,3 +26,4 @@ Thumbs.db
 
 # TypeScript build information
 *.tsbuildinfo
+!.env.example

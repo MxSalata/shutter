@@ -61,4 +61,25 @@ ClassMethod Preview(text As %String, max As %Integer = 200) As %String
     Quit $EXTRACT(t, 1, max - 1) _ "…"
 }
 
+/// <var>json</var> with <code>null</code> inserted wherever a value is missing (<code>:,</code>, <code>:}</code>
+/// or <code>:]</code> outside string literals), as %JSON.Adaptor writes a numeric property with no value.
+/// Text inside strings is left alone.
+ClassMethod NullEmptyValues(json As %String) As %String [ SqlProc ]
+{
+    Set out = "", start = 1, inString = 0, escaped = 0
+    For i = 1:1:$LENGTH(json) {
+        Set c = $EXTRACT(json, i)
+        If inString {
+            If escaped { Set escaped = 0 } ElseIf c = "\" { Set escaped = 1 } ElseIf c = """" { Set inString = 0 }
+            Continue
+        }
+        If c = """" { Set inString = 1 Continue }
+        If c = ":" {
+            Set next = $EXTRACT(json, i + 1)
+            If (next = ",") || (next = "}") || (next = "]") Set out = out _ $EXTRACT(json, start, i) _ "null", start = i + 1
+        }
+    }
+    Quit out _ $EXTRACT(json, start, *)
+}
+
 }
