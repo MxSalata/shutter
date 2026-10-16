@@ -63,7 +63,7 @@ ClassMethod Seed() As %Status
         Set p = ..ByModel(r.%Get(0))
         If $ISOBJECT(p) {
             Continue:(p.Source '[ "Anthropic list prices")
-            Continue:(p.AsOf ]] asOf) || (p.AsOf = asOf)
+            Continue:((p.AsOf ]] asOf) || (p.AsOf = asOf))
         } Else {
             Set p = ..%New()
             Set p.Model = r.%Get(0)
