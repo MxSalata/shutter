@@ -44,32 +44,33 @@ ClassMethod ByModel(model As %String) As Interlock.Store.ModelPrice
     Quit ..%OpenId(id)
 }
 
-/// Seed the list prices (Anthropic's published rates per million tokens, checked on 16 October 2026: Opus 5.5
-/// 4 in and 20 out). Cache reads are a tenth of the input rate and five-minute cache writes a quarter more
-/// than it, Anthropic's standard multipliers. A row already seeded is brought up to date when its AsOf is
-/// older than this seed's date; a row edited by hand (another Source) is left alone.
+/// Seed the list prices: Anthropic's pricing page, read on 16 October 2026, per million tokens. Cache reads are
+/// a twentieth of the input rate on Opus 5.5 and Sonnet 5.5 (0.20 and 0.10) and a tenth on the others; five-minute
+/// cache writes are a quarter more than input. A row from an earlier seed is brought up to date; a row edited by
+/// hand (another Source) is left alone.
 ClassMethod Seed() As %Status
 {
     Set sc = $$$OK
-    Set asOf = "2026-10-16", source = "Anthropic list prices, per million tokens, as published on " _ asOf
+    Set asOf = "2026-10-16", source = "Anthropic list prices per million tokens, from the pricing page read on " _ asOf _ " (seed 3)"
+    // model, input, output, cache read, five-minute cache write
     Set rows = [
-        ["claude-opus-5-5", 4, 20],
-        ["claude-sonnet-5-5", 2, 10],
-        ["claude-haiku-5-5", 0.1, 0.5],
-        ["claude-sonnet-4-6", 3, 15]
+        ["claude-opus-5-5", 4, 20, 0.2, 5],
+        ["claude-sonnet-5-5", 2, 10, 0.1, 2.5],
+        ["claude-haiku-5-5", 0.1, 0.5, 0.01, 0.125],
+        ["claude-sonnet-4-6", 3, 15, 0.3, 3.75]
     ]
     Set iter = rows.%GetIterator()
     While iter.%GetNext(.i, .r) {
         Set p = ..ByModel(r.%Get(0))
         If $ISOBJECT(p) {
             Continue:(p.Source '[ "Anthropic list prices")
-            Continue:((p.AsOf ]] asOf) || (p.AsOf = asOf))
+            Continue:(p.Source = source)
         } Else {
             Set p = ..%New()
             Set p.Model = r.%Get(0)
         }
         Set p.InputPerMTok = r.%Get(1), p.OutputPerMTok = r.%Get(2)
-        Set p.CacheReadPerMTok = r.%Get(1) / 10, p.CacheWritePerMTok = r.%Get(1) * 1.25
+        Set p.CacheReadPerMTok = r.%Get(3), p.CacheWritePerMTok = r.%Get(4)
         Set p.Source = source, p.AsOf = asOf
         Set sc = p.%Save()
         Quit:$$$ISERR(sc)
