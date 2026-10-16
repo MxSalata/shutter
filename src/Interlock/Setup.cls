@@ -345,6 +345,9 @@ ClassMethod StartProduction() As %Status
     Quit:$$$ISERR(sc) sc
     Try {
         Do ##class(Ens.Director).SetAutoStart(prod)
+        // While an image is built (INTERLOCK_BUILD=1) the instance stops right after: the production
+        // starts with the container instead, so nothing is started here.
+        If $SYSTEM.Util.GetEnviron("INTERLOCK_BUILD") = "1" Quit
         Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)
         Quit:$$$ISERR(sc)
         If state = 1 {

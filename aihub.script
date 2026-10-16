@@ -1,0 +1,5 @@
+// Runs during the image build after iris.script, on an image with the AI Hub package (WITH_AIHUB=1):
+// the live agents, their tools, policies, knowledge bases and the provider configuration.
+zn "INTERLOCK"
+zpm "load /home/irisowner/dev/aihub -v":1:1
+halt

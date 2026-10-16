@@ -6,8 +6,8 @@ services:
       context: .
       args:
         IRIS_IMAGE: ${INTERLOCK_IMAGE:-irishealth-community:2026.3.0AI.154.0}
-        # Password of the demo users operator, approver and wards-client, set when the image is built.
-        INTERLOCK_DEMO_PASSWORD: ${INTERLOCK_DEMO_PASSWORD:-interlock}
+        # 1 on the contest image (live agents); 0 on a plain IRIS for Health Community base (replay edition).
+        WITH_AIHUB: ${INTERLOCK_WITH_AIHUB:-1}
     image: interlock:dev
     container_name: interlock
     restart: unless-stopped

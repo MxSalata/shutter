@@ -73,7 +73,7 @@ agents replay recorded runs, so the demo needs no API key. For live agents, put 
 and the agent items, set to `auto`, then run live (`INTERLOCK_AGENT_MODE` forces `live`, `record` or `replay`).
 
 The same `Dockerfile` builds the replay edition on any IRIS for Health Community 2026.2 or later:
-`INTERLOCK_IMAGE=intersystemsdc/irishealth-community:latest docker compose up -d --build`. Other settings in
-`.env.example`: the published ports and the demo users' password.
+`INTERLOCK_IMAGE=intersystemsdc/irishealth-community:latest INTERLOCK_WITH_AIHUB=0 docker compose up -d --build`. Other
+settings in `.env.example`: the published ports, the agents' mode and model.
 
 Status: planning. The idea, the stack and the layout of this repository come next.

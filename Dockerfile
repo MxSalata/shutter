@@ -11,11 +11,14 @@ USER ${ISC_PACKAGE_MGRUSER}
 
 COPY --chown=irisowner:irisowner . /home/irisowner/dev
 
-# The demo users (operator, approver, wards-client) are created with this password when the image is built.
-ARG INTERLOCK_DEMO_PASSWORD=interlock
+# 1 loads the aihub module (live agents) too: for images with the AI Hub package. 0 for a plain
+# IRIS for Health Community base, which gets the replay edition.
+ARG WITH_AIHUB=1
 
-# Create the namespace, install the package manager and load the module while the image is built,
-# so that `docker compose up` starts an instance that is ready.
+# Create the namespace, install the package manager and load the modules while the image is built,
+# so that `docker compose up` starts an instance that is ready. The production is set to start with
+# the instance; INTERLOCK_BUILD tells the install not to start it here.
 RUN iris start IRIS \
- && INTERLOCK_DEMO_PASSWORD="${INTERLOCK_DEMO_PASSWORD}" iris session IRIS < /home/irisowner/dev/iris.script \
+ && INTERLOCK_BUILD=1 iris session IRIS < /home/irisowner/dev/iris.script \
+ && if [ "${WITH_AIHUB}" = "1" ]; then INTERLOCK_BUILD=1 iris session IRIS < /home/irisowner/dev/aihub.script; fi \
  && iris stop IRIS quietly
