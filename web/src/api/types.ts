@@ -384,7 +384,9 @@ export interface AgentItem {
   name: string;
   enabled?: boolean;
   agentClass?: string;
+  /** auto, live, record or replay as set; effectiveMode is what auto resolves to now. */
   mode?: string;
+  effectiveMode?: string;
   model?: string;
   providerConfig?: string;
   maxIterations?: number | string;
@@ -403,6 +405,9 @@ export interface ModelPrice {
 }
 
 export interface Settings {
+  /** The agent items' mode setting (auto by default) and whether a model provider is configured. */
+  agentMode?: string;
+  providerConfigured?: boolean;
   mode: Mode;
   scenario: string;
   resetAt: string;

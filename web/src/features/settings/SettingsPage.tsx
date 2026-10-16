@@ -33,7 +33,10 @@ function AgentItemsTable({ items }: { items: AgentItem[] }) {
   const show = (c: ItemColumn, a: AgentItem) => {
     const v = a[c.key];
     if (v === undefined || v === '') return '—';
-    if (c.key === 'mode') return humanize(String(v));
+    if (c.key === 'mode')
+      return a.effectiveMode && a.effectiveMode !== v
+        ? `${humanize(String(v))} (${a.effectiveMode})`
+        : humanize(String(v));
     if (c.key === 'tokenBudget') return formatInt(v);
     return String(v);
   };
@@ -102,6 +105,13 @@ export default function SettingsPage() {
               <Group gap="sm" wrap="wrap">
                 <Flag on={s.aiHubPresent} yes="AI Hub present" no="No AI Hub: recorded runs only" />
                 <Flag on={s.liveRunnerPresent} yes="Live runner installed" no="No live runner" />
+                {s.providerConfigured !== undefined ? (
+                  <Flag
+                    on={s.providerConfigured}
+                    yes="Model provider configured"
+                    no="No model provider configured"
+                  />
+                ) : null}
                 <Flag on={s.demo} yes="Demo instance" no="Not a demo instance" />
                 <Text size="sm">Mode: {humanize(s.mode)}</Text>
                 {s.scenario ? <Text size="sm">Scenario: {s.scenario}</Text> : null}
