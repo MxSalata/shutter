@@ -1,7 +1,7 @@
 {
   "id": "block-reasons",
-  "version": "1.1",
-  "effective_from": "2026-10-15",
+  "version": "1.2",
+  "effective_from": "2026-10-17",
   "applies_to": [
     "ward-api-v1",
     "hl7-v2.5.1-adt"
@@ -300,6 +300,51 @@
       "owner": "Operator",
       "reevaluate_when": "New evidence arrives",
       "text": "The case stopped without a gate check to name the reason; its timeline says why."
+    },
+    {
+      "code": "ENTRY_UNKNOWN",
+      "title": "The plan names an unknown scenario",
+      "prerequisite": "A catalogue entry that exists at the plan's catalogue version",
+      "next_action": "Investigate again so the plan names an entry from the current catalogue, or escalate.",
+      "owner": "Operator",
+      "reevaluate_when": "The catalogue changes or the case is investigated again",
+      "text": "The plan cites a catalogue entry the catalogue doesn't have, so the gate can't check its pattern or its outcomes."
+    },
+    {
+      "code": "PATTERN_NOT_MATCHED",
+      "title": "The case doesn't fit the scenario the plan names",
+      "prerequisite": "A plan whose catalogue entry matches the evidence",
+      "next_action": "Read the observed conditions on the case; investigate again or escalate.",
+      "owner": "Operator",
+      "reevaluate_when": "New evidence arrives",
+      "text": "The entry the plan names doesn't match the evidence snapshot: at least one of its conditions has another value here."
+    },
+    {
+      "code": "OUTCOME_NOT_ALLOWED",
+      "title": "This site doesn't allow the chosen outcome",
+      "prerequisite": "An outcome the site profile allows",
+      "next_action": "Choose the entry's preferred outcome, or ask the integration team to change the site profile.",
+      "owner": "Integration team",
+      "reevaluate_when": "The site profile changes",
+      "text": "The plan chose an alternative outcome whose condition doesn't hold for this site, for example history correction where the site keeps what is current."
+    },
+    {
+      "code": "NEW_PATTERN",
+      "title": "No known scenario fits",
+      "prerequisite": "A catalogue entry for this pattern",
+      "next_action": "Read the board's analysis and resolve the case by hand; flag it as a candidate catalogue entry.",
+      "owner": "Operator",
+      "reevaluate_when": "A reviewer adds an entry for the pattern",
+      "text": "No entry in the scenario catalogue matches this case's evidence. The board analysed it, but a new pattern is settled by a person, and may become a new entry."
+    },
+    {
+      "code": "POLICY_REQUIRES_APPROVAL",
+      "title": "This site's policy needs an approval",
+      "prerequisite": "A person's approval, as the site profile requires",
+      "next_action": "Approve or reject the plan in its Workflow task.",
+      "owner": "Approver",
+      "reevaluate_when": "The plan is approved",
+      "text": "An automatic release was attempted where the site profile requires a person's approval for this tier and kind of chain."
     }
   ]
 }

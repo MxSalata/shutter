@@ -1,9 +1,9 @@
 ---
 id: recovery-playbooks
-version: 1.0
+version: 1.1
 collection: playbooks
 applies_to: [ward-api-v1, hl7-v2.5.1-adt]
-effective_from: 2026-10-01
+effective_from: 2026-10-17
 ---
 
 # Recovery playbooks for failed ward movements
@@ -33,7 +33,9 @@ RP-2.1. **Resend** only when all of these hold:
 - The resend carries the same operation key, the same payload (same digest, WIC-2.4) and `expected_version` set to
   the encounter's current version (WIC-2.3).
 - A dry run (WIC-2.5) of exactly that request reports that it would apply.
-- A person has approved exactly that request. Any change to it after approval needs a new approval.
+- A person has approved exactly that request, or the site's policy released it automatically (the site profile, by
+  tier and kind of chain; the release is recorded with the catalogue entry it followed). Any change to it after
+  approval needs a new approval.
 
 RP-2.2. **Reconcile** when a receipt exists for the operation key with the same payload digest. Check that the
 encounter's history contains the operation (DEP-3.1). Never resend a committed movement.
@@ -61,7 +63,14 @@ RP-3.3. **One write at most per failed movement,** and only under RP-2.1. A rese
 its receipt (RP-2.2), never sent again blind.
 
 RP-3.4. **Approval is for the exact request** shown: operation key, payload digest, expected version, ward and
-encounter. A different request needs its own approval.
+encounter. A different request needs its own approval. For a chain, the approval is for the items in their order and
+the rule that each later item goes at exactly the version the previous item's verified receipt reports.
+
+RP-3.5. **A chain is resent in event order** (WIC-1.2), one item at a time; the next item goes only after the previous
+one is verified, and the chain stops at the first surprise, leaving the rest to a person.
+
+RP-3.6. **The scenario catalogue** (`knowledge/catalogue/`) names, for each known failure pattern, the preferred outcome
+and its alternatives. Choose among them and name the entry; a case that fits no entry goes to a person.
 
 ## RP-4 After the outcome
 
