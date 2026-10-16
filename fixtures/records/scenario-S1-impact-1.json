@@ -25,10 +25,7 @@
   "result": {
    "disposition": "superseded",
    "confidence": 0.85,
-   "summary": "A resend would be accepted by the ward only at version 2 and would overwrite the current location (Ward C) with Ward B, a documented effect of the receiver's arrival-order contract. Downstream consumers of the location are outside the route inventory, so their exposure is unknown rather than absent. Doing nothing leaves the current, correct location in place.",
-   "affected_systems": [
-    "the ward system (location)"
-   ],
+   "summary": "A resend would be accepted by the ward only at version 2 and would overwrite the current location (Ward C) with Ward B, a documented effect of the receiver's arrival-order contract. Downstream consumers of the location are outside the route inventory, so their exposure is unknown rather than absent. Doing nothing leaves the current, correct location in place. Affected systems: the ward system (location).",
    "unknowns": [
     "Consumers downstream of the ward system are not in the route inventory"
    ],

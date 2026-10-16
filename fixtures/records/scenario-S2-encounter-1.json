@@ -25,8 +25,7 @@
   "result": {
    "disposition": "resend",
    "confidence": 0.85,
-   "summary": "The receiver holds the encounter as admitted in Ward A at version 1, with no receipt for the 09:20 transfer and no later transfer or discharge in its history or in the feed. The intent of the 09:20 transfer still holds; resending it at version 1 is consistent with the lifecycle policy.",
-   "superseding_evidence": [],
+   "summary": "The receiver holds the encounter as admitted in Ward A at version 1, with no receipt for the 09:20 transfer and no later transfer or discharge in its history or in the feed. The intent of the 09:20 transfer still holds; resending it at version 1 is consistent with the lifecycle policy. Superseding evidence: [].",
    "unknowns": [],
    "evidence_refs": [
     "ward_state",

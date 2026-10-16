@@ -26,10 +26,20 @@ MEMBERS = {
 KEY_RE = re.compile(r"^scenario:(S\d+)\|([a-z]+)\|(\d+)(\|round(\d+))?$")
 
 
+FINDINGS_FIELDS = {"disposition", "confidence", "summary", "violations", "unknowns", "evidence_refs"}
+PLAN_FIELDS = {"disposition", "summary", "action", "preconditions", "evidence_refs", "disagreements"}
+
+
+def unknown_fields(r, allowed):
+    extra = sorted(set(r) - allowed)
+    return [f"fields the live agents cannot submit: {', '.join(extra)} (the schema has {', '.join(sorted(allowed))})"] if extra else []
+
+
 def check_findings(r):
     p = []
     if not isinstance(r, dict):
         return ["result must be an object"]
+    p += unknown_fields(r, FINDINGS_FIELDS)
     if r.get("disposition") not in DISPOSITIONS:
         p.append("disposition must be one of " + ", ".join(sorted(DISPOSITIONS)))
     c = r.get("confidence")
@@ -49,6 +59,7 @@ def check_plan(r):
     p = []
     if not isinstance(r, dict):
         return ["result must be an object"]
+    p += unknown_fields(r, PLAN_FIELDS)
     d = r.get("disposition")
     if d not in DISPOSITIONS:
         p.append("disposition must be one of " + ", ".join(sorted(DISPOSITIONS)))

@@ -25,10 +25,7 @@
   "result": {
    "disposition": "reconcile",
    "confidence": 0.88,
-   "summary": "A resend would reach the receiver as a repeated operation key and be answered with the earlier receipt, so no duplicate effect is possible under the contract; still, there is nothing to gain and the case is closed by reconciling against the receipt. Downstream consumers of the location are outside the inventory.",
-   "affected_systems": [
-    "the ward system (none: already applied)"
-   ],
+   "summary": "A resend would reach the receiver as a repeated operation key and be answered with the earlier receipt, so no duplicate effect is possible under the contract; still, there is nothing to gain and the case is closed by reconciling against the receipt. Downstream consumers of the location are outside the inventory. Affected systems: the ward system (none: already applied).",
    "unknowns": [
     "Consumers downstream of the ward system are not in the route inventory"
    ],

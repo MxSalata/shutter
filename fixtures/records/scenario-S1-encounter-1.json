@@ -25,15 +25,7 @@
   "result": {
    "disposition": "superseded",
    "confidence": 0.92,
-   "summary": "The receiver holds ENC-1001 admitted in Ward C at version 2: the 09:45 transfer to Ward C was applied after the failed 09:20 transfer to Ward B. Under the lifecycle policy a later transfer supersedes an earlier one, so the 09:20 intent no longer holds; resending it would move the patient back to Ward B. No receipt exists for the 09:20 operation, so nothing was applied twice.",
-   "superseding_evidence": [
-    {
-     "event": "transfer",
-     "ward": "WARD-C",
-     "event_time": "2026-10-15T09:45:00Z",
-     "source": "ward history and the feed timeline"
-    }
-   ],
+   "summary": "The receiver holds ENC-1001 admitted in Ward C at version 2: the 09:45 transfer to Ward C was applied after the failed 09:20 transfer to Ward B. Under the lifecycle policy a later transfer supersedes an earlier one, so the 09:20 intent no longer holds; resending it would move the patient back to Ward B. No receipt exists for the 09:20 operation, so nothing was applied twice. Superseding evidence: [{\"event\": \"transfer\", \"ward\": \"WARD-C\", \"event_time\": \"2026-10-15T09:45:00Z\", \"source\": \"ward history and the feed timeline\"}].",
    "unknowns": [],
    "evidence_refs": [
     "ward_state",

@@ -25,8 +25,7 @@
   "result": {
    "disposition": "reconcile",
    "confidence": 0.93,
-   "summary": "The receiver holds a committed receipt for exactly this operation key, and ENC-1003 is admitted in Ward B at version 2: the transfer was applied and only the acknowledgment was lost. The intent is already in effect; nothing should be resent.",
-   "superseding_evidence": [],
+   "summary": "The receiver holds a committed receipt for exactly this operation key, and ENC-1003 is admitted in Ward B at version 2: the transfer was applied and only the acknowledgment was lost. The intent is already in effect; nothing should be resent. Superseding evidence: [].",
    "unknowns": [],
    "evidence_refs": [
     "receipt",

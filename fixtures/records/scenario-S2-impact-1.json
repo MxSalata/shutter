@@ -25,10 +25,7 @@
   "result": {
    "disposition": "resend",
    "confidence": 0.8,
-   "summary": "A resend changes the encounter's location from Ward A to Ward B at the receiver and increments its version to 2; the connector's conditional write prevents a duplicate or a race. No downstream consumer is modelled beyond the ward system, so other effects are unknown rather than absent.",
-   "affected_systems": [
-    "the ward system"
-   ],
+   "summary": "A resend changes the encounter's location from Ward A to Ward B at the receiver and increments its version to 2; the connector's conditional write prevents a duplicate or a race. No downstream consumer is modelled beyond the ward system, so other effects are unknown rather than absent. Affected systems: the ward system.",
    "unknowns": [
     "Consumers downstream of the ward system are not in the route inventory"
    ],
