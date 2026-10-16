@@ -29,7 +29,7 @@ Property KnowledgeCollection As %String(%JSONFIELDNAME = "knowledgeCollection", 
 Property ConfigItem As %String(%JSONFIELDNAME = "configItem", MAXLEN = 128) [ InitialExpression = "Agent Board" ];
 
 /// submit_findings for specialists and the generalist's findings, submit_plan for a plan.
-Property TerminalTool As %String(%JSONFIELDNAME = "terminalTool", MAXLEN = 32) [ InitialExpression = "submit_findings" ];
+Property TerminalTool As %String(%JSONFIELDNAME = "terminalTool", MAXLEN = 32) [ InitialExpression = "SubmitFindings" ];
 
 Property Enabled As %Boolean(%JSONFIELDNAME = "enabled") [ InitialExpression = 1 ];
 
@@ -101,11 +101,11 @@ ClassMethod Seed() As %Status
         {"code": "coordinator", "name": "Coordinator", "role": "coordinator", "sort": 90,
          "description": "Reads the specialists' findings, keeps their disagreements, and proposes one exact plan from the recovery playbooks.",
          "perspective": "Given the findings, what is the one plan to put to the gate and to a person?",
-         "agentClass": "Interlock.Agent.Coordinator", "knowledge": "playbooks", "terminal": "submit_plan"},
+         "agentClass": "Interlock.Agent.Coordinator", "knowledge": "playbooks", "terminal": "SubmitPlan"},
         {"code": "generalist", "name": "Single Investigator", "role": "generalist", "sort": 95,
          "description": "One agent with every tool and every knowledge collection, used as the single-investigator mode and as the comparison baseline for the board.",
          "perspective": "Everything at once.",
-         "agentClass": "Interlock.Agent.Generalist", "knowledge": "all", "terminal": "submit_plan", "default": 0}
+         "agentClass": "Interlock.Agent.Generalist", "knowledge": "all", "terminal": "SubmitPlan", "default": 0}
     ]
     Set items("conformance") = "Agent Conformance", items("encounter") = "Agent Encounter", items("impact") = "Agent Impact"
     Set items("coordinator") = "Agent Coordinator", items("generalist") = "Agent Board"
@@ -122,7 +122,7 @@ ClassMethod Seed() As %Status
         Set m.Name = d.name, m.Role = d.role
         Set m.Description = d.description, m.Perspective = d.perspective
         Set m.AgentClass = d.agentClass, m.KnowledgeCollection = d.knowledge
-        Set m.TerminalTool = ##class(Interlock.Util.Json).Str(d, "terminal", "submit_findings")
+        Set m.TerminalTool = ##class(Interlock.Util.Json).Str(d, "terminal", "SubmitFindings")
         Set m.ConfigItem = $GET(items(d.code), "Agent Board")
         Set sc = m.%Save()
         Quit:$$$ISERR(sc)

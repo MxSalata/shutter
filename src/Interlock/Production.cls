@@ -5,6 +5,21 @@
 Class Interlock.Production Extends Ens.Production
 {
 
+/// When the container's environment carries ANTHROPIC_API_KEY and the provider configuration is
+/// not there yet (a fresh `docker compose up` with a .env), write it, so live agents need no
+/// manual step. Replay mode needs nothing.
+ClassMethod OnStart(pTimeStarted As %String) As %Status
+{
+    Try {
+        Set key = $SYSTEM.Util.GetEnviron("ANTHROPIC_API_KEY")
+        If (key '= "") && '##class(Interlock.Setup).ProviderConfigured() {
+            Do ##class(Interlock.Setup).ConfigureProvider(key, $SYSTEM.Util.GetEnviron("INTERLOCK_MODEL"))
+        }
+    } Catch {
+    }
+    Quit $$$OK
+}
+
 XData ProductionDefinition
 {
 <Production Name="Interlock.Production" TestingEnabled="true" LogGeneralTraceEvents="true">

@@ -486,4 +486,105 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Quit r.%ToJSON()
 }
 
+// ---- the aihub module ----
+
+/// Installs the aihub module's runtime pieces: the provider configuration from the environment
+/// when ANTHROPIC_API_KEY is set (the model from INTERLOCK_MODEL), and the knowledge bases from
+/// the module's knowledge/ folder. Returns JSON. Prints no secret.
+ClassMethod InstallAIHub(root As %String = "") As %String [ SqlProc ]
+{
+    Set out = {}
+    Try {
+        If root '= "" Set root = ##class(%File).NormalizeDirectory(root)
+        Do out.%Set("ai_hub_present", ''##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent"), "boolean")
+        Set key = $SYSTEM.Util.GetEnviron("ANTHROPIC_API_KEY")
+        If key '= "" {
+            Set out.provider = ..ConfigureProvider(key, $SYSTEM.Util.GetEnviron("INTERLOCK_MODEL"))
+        } Else {
+            Set out.provider = $SELECT(..ProviderConfigured(): "configured earlier", 1: "no key in the environment: the agents replay recordings")
+        }
+        Set kdir = ""
+        If (root '= "") && ##class(%File).DirectoryExists(root _ "knowledge/") Set kdir = root _ "knowledge/"
+        If (kdir = "") && ($GET(^Interlock.Config("root")) '= "") && ##class(%File).DirectoryExists(^Interlock.Config("root") _ "knowledge/") Set kdir = ^Interlock.Config("root") _ "knowledge/"
+        If (kdir '= "") && ##class(%Dictionary.CompiledClass).%ExistsId("Interlock.Knowledge.Library") {
+            Set out.knowledge = ##class(%DynamicObject).%FromJSON($CLASSMETHOD("Interlock.Knowledge.Library", "BuildAll", kdir))
+        } Else {
+            Set out.knowledge = $SELECT(kdir = "": "no knowledge folder found", 1: "no library class")
+        }
+        Set ^Interlock.Config("aihub", "installedAt") = ##class(Interlock.Util.Time).NowUTC()
+        Set ^Interlock.Config("aihub", "root") = root
+    } Catch ex {
+        Set out.error = ex.DisplayString()
+    }
+    Quit out.%ToJSON()
+}
+
+/// Puts the provider key in the IRIS wallet (collection Interlock, secret Anthropic) and writes the
+/// Config Store configuration AI.LLM.Interlock that the agents name, with the model (default
+/// claude-opus-5-5). Replaces an earlier key. Returns a short status; never the key.
+ClassMethod ConfigureProvider(key As %String, model As %String = "") As %String [ SqlProc ]
+{
+    If model = "" Set model = "claude-opus-5-5"
+    If $ZSTRIP(key, "<>W") = "" Quit "no key given"
+    Set key = $ZSTRIP(key, "<>W")
+    Try {
+        Set sc = ..EnsureSecretResource()
+        If $$$ISERR(sc) Return "resource: " _ $SYSTEM.Status.GetErrorText(sc)
+        Try {
+            Do $CLASSMETHOD("%Wallet.Collection", "Create", "Interlock", {"UseResource": "Interlock_Secrets", "EditResource": "Interlock_Secrets"})
+        } Catch {
+        }
+        Try {
+            Do $CLASSMETHOD("%Wallet.KeyValue", "Delete", "Interlock.Anthropic")
+        } Catch {
+        }
+        Set sc = $CLASSMETHOD("%Wallet.KeyValue", "Create", "Interlock.Anthropic", {"Usage": "CUSTOM", "Secret": {"key": (key)}})
+        If $$$ISERR(sc) Return "wallet: " _ $SYSTEM.Status.GetErrorText(sc)
+        Try {
+            Do $CLASSMETHOD("%ConfigStore.Configuration", "Delete", "AI.LLM.Interlock")
+        } Catch {
+        }
+        Set config = {"model_provider": "anthropic", "model": (model), "api_key": "secret://Interlock.Anthropic#key"}
+        Set sc = $CLASSMETHOD("%ConfigStore.Configuration", "Create", "AI", "LLM", "", "Interlock", config)
+        If $$$ISERR(sc) Return "config store: " _ $SYSTEM.Status.GetErrorText(sc)
+        Set ^Interlock.Config("aihub", "provider") = "AI.LLM.Interlock"
+        Set ^Interlock.Config("aihub", "model") = model
+        Set ^Interlock.Config("aihub", "providerConfiguredAt") = ##class(Interlock.Util.Time).NowUTC()
+        Return "ok: AI.LLM.Interlock, model " _ model
+    } Catch ex {
+        Return "error: " _ ex.DisplayString()
+    }
+}
+
+/// The resource guarding the wallet collection, with public Use so the production's jobs can
+/// resolve the secret through the Config Store. Tighten for a shared instance.
+ClassMethod EnsureSecretResource() As %Status [ Private ]
+{
+    Set sc = $$$OK
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = "%SYS"
+        If '##class(Security.Resources).Exists("Interlock_Secrets") {
+            Set sc = ##class(Security.Resources).Create("Interlock_Secrets", "Interlock: the provider key in the wallet", "U")
+        }
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    Quit sc
+}
+
+/// Whether AI.LLM.Interlock exists in the Config Store.
+ClassMethod ProviderConfigured() As %Boolean
+{
+    Set ok = 0
+    Try {
+        If '##class(%Dictionary.CompiledClass).%ExistsId("%ConfigStore.Configuration") Return 0
+        Set sc = $CLASSMETHOD("%ConfigStore.Configuration", "Get", "AI.LLM.Interlock", .config)
+        Set ok = $$$ISOK(sc) && $ISOBJECT($GET(config))
+    } Catch {
+        Set ok = 0
+    }
+    Quit ok
+}
+
 }

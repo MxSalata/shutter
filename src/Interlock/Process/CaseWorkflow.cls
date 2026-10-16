@@ -159,7 +159,7 @@ Method AgentRequestFor(case As Interlock.Store.Case, m As Interlock.Store.BoardM
     Set snap = case.CurrentSnapshot
     If $ISOBJECT(snap) Set req.SnapshotDigest = snap.Digest
     Set req.TerminalTool = m.TerminalTool
-    Set req.ResultClass = $SELECT(m.TerminalTool = "submit_plan": "Interlock.Schema.Plan", 1: "Interlock.Schema.Findings")
+    Set req.ResultClass = $SELECT($ZCONVERT(m.TerminalTool, "L") [ "plan": "Interlock.Schema.Plan", 1: "Interlock.Schema.Findings")
     Set req.ConfigVersion = m.ConfigVersion
     If case.Scenario '= "" Set req.RecordKey = "scenario:" _ case.Scenario _ "|" _ m.Code _ "|" _ m.ConfigVersion _ $SELECT(..Replans > 0: "|round" _ (..Replans + 1), 1: "")
     Set context = {}
@@ -168,11 +168,11 @@ Method AgentRequestFor(case As Interlock.Store.Case, m As Interlock.Store.BoardM
     If findingsJSON '= "" Set context.findings = ##class(%DynamicArray).%FromJSON(findingsJSON)
     Set req.Context = context.%ToJSON()
     If m.Role = "coordinator" {
-        Set req.Goal = "Read the specialists' findings and the evidence for case " _ case.CaseId _ ". Keep every disagreement. Propose exactly one plan with the recovery playbooks, and submit it with submit_plan."
+        Set req.Goal = "Read the specialists' findings and the evidence for case " _ case.CaseId _ ". Keep every disagreement. Propose exactly one plan with the recovery playbooks, and submit it with SubmitPlan."
     } ElseIf m.Role = "generalist" {
-        Set req.Goal = "Investigate case " _ case.CaseId _ " from every angle: conformance, the encounter's integrity, downstream impact. Propose exactly one plan and submit it with submit_plan."
+        Set req.Goal = "Investigate case " _ case.CaseId _ " from every angle: conformance, the encounter's integrity, downstream impact. Propose exactly one plan and submit it with SubmitPlan."
     } Else {
-        Set req.Goal = "Review case " _ case.CaseId _ " as the " _ m.Name _ " specialist: " _ m.Perspective _ " Cite the evidence you used by its identifiers, say what is unknown, and submit your findings with submit_findings."
+        Set req.Goal = "Review case " _ case.CaseId _ " as the " _ m.Name _ " specialist: " _ m.Perspective _ " Cite the evidence you used by its identifiers, say what is unknown, and submit your findings with SubmitFindings."
     }
     Quit req
 }

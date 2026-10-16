@@ -29,7 +29,7 @@ Property SnapshotDigest As %String(MAXLEN = 80);
 Property ResultClass As %String(MAXLEN = 200);
 
 /// The terminal tool's name: submit_findings or submit_plan.
-Property TerminalTool As %String(MAXLEN = 64) [ InitialExpression = "submit_findings" ];
+Property TerminalTool As %String(MAXLEN = 64) [ InitialExpression = "SubmitFindings" ];
 
 /// The agent configuration version in force (instructions, tools, knowledge).
 Property ConfigVersion As %String(MAXLEN = 32);
