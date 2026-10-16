@@ -1,0 +1,47 @@
+{
+ "key": "scenario:S5|conformance|1",
+ "agentClass": "Interlock.Agent.Conformance",
+ "configVersion": "1",
+ "memberCode": "conformance",
+ "snapshotDigest": "",
+ "correlationKey": "scenario:S5",
+ "model": "fixture",
+ "response": {
+  "status": "ok",
+  "agent_class": "Interlock.Agent.Conformance",
+  "config_version": "1",
+  "mode": "record",
+  "model": "fixture",
+  "provider_config": "",
+  "started_at": "2026-10-16T10:00:00Z",
+  "duration_ms": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cache_read_tokens": 0,
+  "cache_creation_tokens": 0,
+  "iterations": 0,
+  "tool_calls": 6,
+  "session_id": "",
+  "result": {
+   "disposition": "resend",
+   "confidence": 0.9,
+   "summary": "As a message, the 09:20 A02 is valid: it parses against the 2.5.1 schema, identifies MRN1005 (HOSP) and visit ENC-1005, names Ward B, and carries event time 09:20. The receiver refused it before validating anything, so nothing in the message explains the failure. Whether it should still be sent is not a conformance question.",
+   "violations": [],
+   "unknowns": [
+    "Profile rules beyond the interface contract were not checked"
+   ],
+   "evidence_refs": [
+    "message",
+    "validation",
+    "error"
+   ]
+  },
+  "content": "",
+  "error": "",
+  "record_id": ""
+ },
+ "transcript": "",
+ "toolCalls": "[{\"name\": \"GetSnapshot\"}, {\"name\": \"GetMessage\"}, {\"name\": \"GetValidation\"}, {\"name\": \"GetFailure\"}, {\"name\": \"search_contracts\"}, {\"name\": \"SubmitFindings\"}]",
+ "recordedAt": "2026-10-16T10:00:00Z",
+ "label": "Hand-written fixture standing in for a live recording; replaced when the live agents run"
+}

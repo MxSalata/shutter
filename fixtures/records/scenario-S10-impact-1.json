@@ -1,0 +1,46 @@
+{
+ "key": "scenario:S10|impact|1",
+ "agentClass": "Interlock.Agent.Impact",
+ "configVersion": "1",
+ "memberCode": "impact",
+ "snapshotDigest": "",
+ "correlationKey": "scenario:S10",
+ "model": "fixture",
+ "response": {
+  "status": "ok",
+  "agent_class": "Interlock.Agent.Impact",
+  "config_version": "1",
+  "mode": "record",
+  "model": "fixture",
+  "provider_config": "",
+  "started_at": "2026-10-16T10:00:00Z",
+  "duration_ms": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cache_read_tokens": 0,
+  "cache_creation_tokens": 0,
+  "iterations": 0,
+  "tool_calls": 5,
+  "session_id": "",
+  "result": {
+   "disposition": "escalate",
+   "confidence": 0.8,
+   "summary": "The receiver's capability profile no longer offers conditional writes. Without them a resend can't be tied to version 1, and a movement applied in between would be overwritten. A guarded resend is impossible now, and an unguarded one could misplace the patient.",
+   "violations": [],
+   "unknowns": [
+    "Consumers downstream of the ward system are not in the route inventory"
+   ],
+   "evidence_refs": [
+    "route",
+    "ward_state"
+   ]
+  },
+  "content": "",
+  "error": "",
+  "record_id": ""
+ },
+ "transcript": "",
+ "toolCalls": "[{\"name\": \"GetSnapshot\"}, {\"name\": \"GetRoute\"}, {\"name\": \"GetWardState\"}, {\"name\": \"search_effects\"}, {\"name\": \"SubmitFindings\"}]",
+ "recordedAt": "2026-10-16T10:00:00Z",
+ "label": "Hand-written fixture standing in for a live recording; replaced when the live agents run"
+}

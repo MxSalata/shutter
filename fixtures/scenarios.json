@@ -305,7 +305,7 @@
   {
     "id": "S10",
     "title": "The ward can't take a conditional write",
-    "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; then the ward's capability profile drops conditional writes. The transfer is still due, but a resend can no longer be guarded, so it isn't offered: escalate for manual handling.",
+    "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; then the ward's capability profile drops conditional writes. The transfer is still due, but a resend can no longer be guarded, so it isn't offered: escalate for manual handling. Rules alone would propose the resend, and the gate would stop it (CONNECTOR_INCAPABLE).",
     "steps": [
       {
         "file": "S10-01-A01.hl7"
@@ -338,8 +338,7 @@
       "write": false,
       "final_state": "admitted",
       "final_ward": "WARD-A",
-      "failed_operation_key": "PAS^HOSP^MRN1010^ENC-1010^transfer^2026-10-15T09:20:00Z",
-      "blocked_by": "CONNECTOR_INCAPABLE"
+      "failed_operation_key": "PAS^HOSP^MRN1010^ENC-1010^transfer^2026-10-15T09:20:00Z"
     }
   }
 ]

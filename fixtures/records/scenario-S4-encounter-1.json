@@ -1,0 +1,47 @@
+{
+ "key": "scenario:S4|encounter|1",
+ "agentClass": "Interlock.Agent.Encounter",
+ "configVersion": "1",
+ "memberCode": "encounter",
+ "snapshotDigest": "",
+ "correlationKey": "scenario:S4",
+ "model": "fixture",
+ "response": {
+  "status": "ok",
+  "agent_class": "Interlock.Agent.Encounter",
+  "config_version": "1",
+  "mode": "record",
+  "model": "fixture",
+  "provider_config": "",
+  "started_at": "2026-10-16T10:00:00Z",
+  "duration_ms": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cache_read_tokens": 0,
+  "cache_creation_tokens": 0,
+  "iterations": 0,
+  "tool_calls": 6,
+  "session_id": "",
+  "result": {
+   "disposition": "resend",
+   "confidence": 0.85,
+   "summary": "The receiver holds ENC-1004 admitted in Ward A at version 2: the admit, then the 09:10 demographics update. It answered the 09:20 transfer with 409 duplicate_message, yet no receipt exists for that operation key and its history holds no transfer: nothing was applied, so the duplicate error was misleading. No later transfer or discharge exists, so the 09:20 intent still holds, and a resend at version 2 fits the lifecycle policy.",
+   "violations": [],
+   "unknowns": [
+    "Why the receiver called a transfer it never applied a duplicate"
+   ],
+   "evidence_refs": [
+    "ward_state",
+    "receipt",
+    "error"
+   ]
+  },
+  "content": "",
+  "error": "",
+  "record_id": ""
+ },
+ "transcript": "",
+ "toolCalls": "[{\"name\": \"GetSnapshot\"}, {\"name\": \"GetWardState\"}, {\"name\": \"GetReceipt\"}, {\"name\": \"GetTimeline\"}, {\"name\": \"search_lifecycle\"}, {\"name\": \"SubmitFindings\"}]",
+ "recordedAt": "2026-10-16T10:00:00Z",
+ "label": "Hand-written fixture standing in for a live recording; replaced when the live agents run"
+}

@@ -275,7 +275,8 @@ def scenarios():
         "title": "The ward can't take a conditional write",
         "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; then the ward's capability profile "
                    "drops conditional writes. The transfer is still due, but a resend can no longer be guarded, so it "
-                   "isn't offered: escalate for manual handling.",
+                   "isn't offered: escalate for manual handling. Rules alone would propose the resend, and the gate "
+                   "would stop it (CONNECTOR_INCAPABLE).",
         "steps": [
             {"file": a[0]},
             {"fault": "fail_before_accept"},
@@ -285,8 +286,7 @@ def scenarios():
             {"capabilities": {"conditional_writes": False}},
         ],
         "expected": {"disposition": "escalate", "acceptable": ["more_evidence", "escalate"], "write": False,
-                     "final_state": "admitted", "final_ward": "WARD-A", "failed_operation_key": b[2]["operation_key"],
-                     "blocked_by": "CONNECTOR_INCAPABLE"},
+                     "final_state": "admitted", "final_ward": "WARD-A", "failed_operation_key": b[2]["operation_key"]},
     }, [a, b]))
 
     return out

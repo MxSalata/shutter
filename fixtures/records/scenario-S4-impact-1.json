@@ -1,0 +1,46 @@
+{
+ "key": "scenario:S4|impact|1",
+ "agentClass": "Interlock.Agent.Impact",
+ "configVersion": "1",
+ "memberCode": "impact",
+ "snapshotDigest": "",
+ "correlationKey": "scenario:S4",
+ "model": "fixture",
+ "response": {
+  "status": "ok",
+  "agent_class": "Interlock.Agent.Impact",
+  "config_version": "1",
+  "mode": "record",
+  "model": "fixture",
+  "provider_config": "",
+  "started_at": "2026-10-16T10:00:00Z",
+  "duration_ms": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cache_read_tokens": 0,
+  "cache_creation_tokens": 0,
+  "iterations": 0,
+  "tool_calls": 5,
+  "session_id": "",
+  "result": {
+   "disposition": "resend",
+   "confidence": 0.8,
+   "summary": "A resend moves ENC-1004 from Ward A to Ward B at the receiver and increments its version to 3; the conditional write on version 2 makes it apply once, and only to the state the plan was made for. No consumer downstream of the ward system is modelled, so other effects are unknown rather than absent.",
+   "violations": [],
+   "unknowns": [
+    "Consumers downstream of the ward system are not in the route inventory"
+   ],
+   "evidence_refs": [
+    "route",
+    "ward_state"
+   ]
+  },
+  "content": "",
+  "error": "",
+  "record_id": ""
+ },
+ "transcript": "",
+ "toolCalls": "[{\"name\": \"GetSnapshot\"}, {\"name\": \"GetRoute\"}, {\"name\": \"GetWardState\"}, {\"name\": \"search_effects\"}, {\"name\": \"SubmitFindings\"}]",
+ "recordedAt": "2026-10-16T10:00:00Z",
+ "label": "Hand-written fixture standing in for a live recording; replaced when the live agents run"
+}

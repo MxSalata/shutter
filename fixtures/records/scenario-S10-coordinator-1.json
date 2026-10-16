@@ -1,0 +1,55 @@
+{
+ "key": "scenario:S10|coordinator|1",
+ "agentClass": "Interlock.Agent.Coordinator",
+ "configVersion": "1",
+ "memberCode": "coordinator",
+ "snapshotDigest": "",
+ "correlationKey": "scenario:S10",
+ "model": "fixture",
+ "response": {
+  "status": "ok",
+  "agent_class": "Interlock.Agent.Coordinator",
+  "config_version": "1",
+  "mode": "record",
+  "model": "fixture",
+  "provider_config": "",
+  "started_at": "2026-10-16T10:00:00Z",
+  "duration_ms": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cache_read_tokens": 0,
+  "cache_creation_tokens": 0,
+  "iterations": 0,
+  "tool_calls": 2,
+  "session_id": "",
+  "result": {
+   "disposition": "escalate",
+   "summary": "The 09:20 transfer is still due, but the receiver no longer takes conditional writes (its capability profile), so a resend can't be held to the version the plan would name. Escalate for manual handling, or wait until conditional writes are back; resend nothing meanwhile.",
+   "action": {
+    "type": "none"
+   },
+   "preconditions": [
+    "The receiver's capability profile shows conditional writes again, or a person handles the transfer"
+   ],
+   "evidence_refs": [
+    "route",
+    "ward_state",
+    "receipt"
+   ],
+   "disagreements": [
+    {
+     "member": "encounter",
+     "said": "resend",
+     "why_kept": "The transfer is still due; the escalation is about how it can be sent, not whether"
+    }
+   ]
+  },
+  "content": "",
+  "error": "",
+  "record_id": ""
+ },
+ "transcript": "",
+ "toolCalls": "[{\"name\": \"search_playbooks\"}, {\"name\": \"SubmitPlan\"}]",
+ "recordedAt": "2026-10-16T10:00:00Z",
+ "label": "Hand-written fixture standing in for a live recording; replaced when the live agents run"
+}

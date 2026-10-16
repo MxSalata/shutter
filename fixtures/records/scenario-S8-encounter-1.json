@@ -1,0 +1,47 @@
+{
+ "key": "scenario:S8|encounter|1",
+ "agentClass": "Interlock.Agent.Encounter",
+ "configVersion": "1",
+ "memberCode": "encounter",
+ "snapshotDigest": "",
+ "correlationKey": "scenario:S8",
+ "model": "fixture",
+ "response": {
+  "status": "ok",
+  "agent_class": "Interlock.Agent.Encounter",
+  "config_version": "1",
+  "mode": "record",
+  "model": "fixture",
+  "provider_config": "",
+  "started_at": "2026-10-16T10:00:00Z",
+  "duration_ms": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cache_read_tokens": 0,
+  "cache_creation_tokens": 0,
+  "iterations": 0,
+  "tool_calls": 6,
+  "session_id": "",
+  "result": {
+   "disposition": "more_evidence",
+   "confidence": 0.6,
+   "summary": "ENC-1008 is in Ward C at version 2: after the failed 09:20 transfer to Ward B from PAS, the bed manager (BEDMGR) sent its own transfer to Ward C, also timed 09:20, and it applied. Equal event times can't order the two movements, and they come from different systems, so the evidence doesn't show whether Ward B or Ward C is where the patient is meant to be.",
+   "violations": [],
+   "unknowns": [
+    "Which movement is current: the PAS transfer to Ward B or the bed manager's to Ward C, both at 09:20"
+   ],
+   "evidence_refs": [
+    "ward_state",
+    "receipt",
+    "later_event"
+   ]
+  },
+  "content": "",
+  "error": "",
+  "record_id": ""
+ },
+ "transcript": "",
+ "toolCalls": "[{\"name\": \"GetSnapshot\"}, {\"name\": \"GetWardState\"}, {\"name\": \"GetReceipt\"}, {\"name\": \"GetTimeline\"}, {\"name\": \"search_lifecycle\"}, {\"name\": \"SubmitFindings\"}]",
+ "recordedAt": "2026-10-16T10:00:00Z",
+ "label": "Hand-written fixture standing in for a live recording; replaced when the live agents run"
+}
