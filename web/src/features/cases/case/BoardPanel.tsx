@@ -104,16 +104,16 @@ function ResultLists({ result }: { result: Record<string, unknown> }) {
 }
 
 function EvidenceRefs({ refs }: { refs: unknown }) {
-  const list = asArray<string>(refs);
+  const list = asArray(refs).map(describeEntry);
   if (!list.length) return null;
   return (
     <Group gap={4} wrap="wrap">
       <Text size="xs" c="dimmed">
         Cites
       </Text>
-      {list.map((r) => (
+      {list.map((r, i) => (
         <Badge
-          key={r}
+          key={`${i}:${r}`}
           size="xs"
           variant="outline"
           color="gray"

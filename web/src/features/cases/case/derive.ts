@@ -125,5 +125,7 @@ export function describeEntry(x: unknown): string {
     return `${humanize(s('member'))} said ${humanize(s('said')).toLowerCase()}${o.why_kept || o.why ? `: ${s('why_kept') || s('why')}` : ''}`;
   if (o.event !== undefined && (o.event_time !== undefined || o.ward !== undefined))
     return `${humanize(s('event'))}${o.ward ? ` to ${s('ward')}` : ''}${o.event_time ? ` at ${formatTime(s('event_time'))}` : ''}${o.source ? `, from the ${s('source')}` : ''}`;
+  // An observation or a free-text note, as the evidence collector records them: { observation_id, text }
+  if (typeof o.text === 'string') return o.text;
   return JSON.stringify(x);
 }

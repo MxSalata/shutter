@@ -8,7 +8,7 @@ import { Timestamp } from '@/components/Timestamp';
 import { asArray, asObject } from '@/lib/json';
 import { formatTime, humanize, parseTime } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
-import { describeItem } from './derive';
+import { describeEntry, describeItem } from './derive';
 import { NotYet, Section } from './Section';
 
 const KIND_LABELS: Record<string, string> = {
@@ -129,7 +129,7 @@ export function EvidencePanel({ caseId, open }: { caseId: string; open: boolean 
           <Accordion variant="separated" multiple chevronPosition="left">
             {s.items.map((item) => {
               const data = asObject(item.data) ?? {};
-              const notes = item.kind === 'message' ? asArray<string>(data.notes) : [];
+              const notes = item.kind === 'message' ? asArray(data.notes).map(describeEntry) : [];
               return (
                 <Accordion.Item key={item.seq} value={String(item.seq)} id={`evidence-${item.kind}`}>
                   <Accordion.Control>
