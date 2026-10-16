@@ -68,6 +68,24 @@ jobs:
         with:
           path: web/dist-demo
 
+  # The board's recorded runs, offline: each file's key, member, agent class and result shape within the schemas the
+  # live agents submit, and a full board set for every scenario.
+  fixtures:
+    name: Recordings and scenarios
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Every recording keeps to the schemas, and every scenario has a full board set
+        run: |
+          set +e
+          out=$(python3 scripts/check-records.py fixtures/records --scenarios fixtures/scenarios.json)
+          code=$?
+          set -e
+          echo "$out"
+          [ "$code" = "0" ] || exit "$code"
+          if echo "$out" | grep -q ': missing '; then echo "A scenario lacks recordings for its board"; exit 1; fi
+
   # The ObjectScript side on a real IRIS for Health Community 2026.2 (the public image; the AI Hub build is not on a
   # registry CI can pull from, and the core needs none of it): the namespace, a full load and compile, the installer,
   # the ward's contract tests in process and over HTTP, and scenarios S1 to S3 end to end with their recorded runs.
@@ -162,7 +180,7 @@ jobs:
   # (Settings, Pages, Source: GitHub Actions) and the repository variable DEPLOY_DEMO is 'true'.
   deploy-demo:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_DEMO == 'true'
-    needs: [web, iris, image]
+    needs: [web, fixtures, iris, image]
     runs-on: ubuntu-latest
     permissions:
       contents: read
