@@ -69,7 +69,8 @@ Then open:
 To watch a case unfold, run a scenario from the web application's Scenarios page (S1 to S10): each one feeds synthetic
 ADT messages into the production, makes one delivery fail in a particular way, and opens a case. Out of the box the
 agents replay recorded runs, so the demo needs no API key. For live agents, put an `ANTHROPIC_API_KEY` in a `.env` file
-(copy `.env.example`) before `docker compose up`; the `aihub` module reads it.
+(copy `.env.example`) before `docker compose up`: the production writes the provider configuration from it when it starts,
+and the agent items, set to `auto`, then run live (`INTERLOCK_AGENT_MODE` forces `live`, `record` or `replay`).
 
 The same `Dockerfile` builds the replay edition on any IRIS for Health Community 2026.2 or later:
 `INTERLOCK_IMAGE=intersystemsdc/irishealth-community:latest docker compose up -d --build`. Other settings in

@@ -693,10 +693,13 @@ ClassMethod Settings() As %Status
                 Set name = st.Name
                 Do a.%Set($ZCONVERT($EXTRACT(name, 1), "L") _ $EXTRACT(name, 2, *), st.Value)
             }
+            Set a.effectiveMode = ##class(Interlock.Bridge.Operation.Agent).ResolveMode(##class(Interlock.Util.Json).Str(a, "mode", "auto"))
             Do items.%Push(a)
         }
     }
     Set o.agentItems = items
+    Set o.agentMode = $GET(^Interlock.Config("aihub", "mode"), "auto")
+    Do o.%Set("providerConfigured", ''##class(Interlock.Setup).ProviderConfigured(), "boolean")
     Set o.prices = ..Rows("Interlock.Store.ModelPrice", "SELECT ID FROM Interlock_Store.ModelPrice ORDER BY Model")
     Do o.%Set("aiHubPresent", ''##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent"), "boolean")
     Do o.%Set("liveRunnerPresent", ''##class(%Dictionary.CompiledClass).%ExistsId("Interlock.Bridge.Runner.AIHub"), "boolean")

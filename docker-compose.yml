@@ -18,6 +18,10 @@ services:
     environment:
       # Empty: the agents replay recorded runs. Set it for live agents (the aihub module).
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # live, record or replay; empty lets the instance decide (live when a key is set, else replay).
+      - INTERLOCK_AGENT_MODE=${INTERLOCK_AGENT_MODE:-}
+      # The model for live agents (default claude-opus-5-5).
+      - INTERLOCK_MODEL=${INTERLOCK_MODEL:-}
     volumes:
       # Drop HL7 files here to feed the production by hand; the scenarios do it for you.
       - interlock-mgr:/usr/irissys/mgr/interlock

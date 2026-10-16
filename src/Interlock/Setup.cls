@@ -511,6 +511,7 @@ ClassMethod InstallAIHub(root As %String = "") As %String [ SqlProc ]
         } Else {
             Set out.knowledge = $SELECT(kdir = "": "no knowledge folder found", 1: "no library class")
         }
+        Set out.mode = ..RecordAgentMode($SYSTEM.Util.GetEnviron("INTERLOCK_AGENT_MODE"))
         Set ^Interlock.Config("aihub", "installedAt") = ##class(Interlock.Util.Time).NowUTC()
         Set ^Interlock.Config("aihub", "root") = root
     } Catch ex {
@@ -571,6 +572,19 @@ ClassMethod EnsureSecretResource() As %Status [ Private ]
         Set sc = ex.AsStatus()
     }
     Quit sc
+}
+
+/// Records the agents' mode for items set to auto (live, record or replay); anything else leaves auto
+/// to decide (live when a provider is configured, else replay). Returns what applies.
+ClassMethod RecordAgentMode(mode As %String) As %String
+{
+    Set mode = $ZCONVERT($ZSTRIP(mode, "<>W"), "L")
+    If $LISTFIND($LISTBUILD("live", "record", "replay"), mode) {
+        Set ^Interlock.Config("aihub", "mode") = mode
+        Quit mode
+    }
+    Kill ^Interlock.Config("aihub", "mode")
+    Quit "auto"
 }
 
 /// Whether AI.LLM.Interlock exists in the Config Store.

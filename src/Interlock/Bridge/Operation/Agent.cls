@@ -19,8 +19,10 @@ Property AgentClass As %String(MAXLEN = 200);
 /// The runner for live and record modes (the aihub module's Interlock.Bridge.Runner.AIHub).
 Property Runner As %String(MAXLEN = 200) [ InitialExpression = "Interlock.Bridge.Runner.AIHub" ];
 
-/// replay answers from recordings and needs no model; record runs live and stores the recording.
-Property Mode As %String(MAXLEN = 16, VALUELIST = ",live,record,replay") [ InitialExpression = "replay" ];
+/// replay answers from recordings and needs no model; record runs live and stores the recording; auto
+/// (the default) is what the instance says: INTERLOCK_AGENT_MODE when set, else live when a provider is
+/// configured and the live runner is installed, else replay.
+Property Mode As %String(MAXLEN = 16, VALUELIST = ",auto,live,record,replay") [ InitialExpression = "auto" ];
 
 /// A Config Store configuration name (AI.LLM.<name>) that overrides the agent class's provider.
 Property ProviderConfig As %String(MAXLEN = 100);
@@ -38,6 +40,18 @@ Property TokenBudget As %Integer [ InitialExpression = 120000 ];
 Property RequestTimeoutSeconds As %Integer [ InitialExpression = 120 ];
 
 Parameter SETTINGS = "AgentClass:Agent,Runner:Agent,Mode:Agent,ProviderConfig:Agent,Model:Agent,MaxIterations:Agent,TokenBudget:Agent,RequestTimeoutSeconds:Agent";
+
+/// The mode a setting means: itself, or for auto what the instance says (^Interlock.Config("aihub","mode")
+/// from INTERLOCK_AGENT_MODE), else live when a provider is configured and the live runner exists, else replay.
+ClassMethod ResolveMode(mode As %String) As %String
+{
+    Set mode = $ZCONVERT(mode, "L")
+    If (mode '= "") && (mode '= "auto") Quit mode
+    Set m = $ZCONVERT($GET(^Interlock.Config("aihub", "mode")), "L")
+    If $LISTFIND($LISTBUILD("live", "record", "replay"), m) Quit m
+    If '##class(%Dictionary.CompiledClass).%ExistsId("Interlock.Bridge.Runner.AIHub") Quit "replay"
+    Quit $SELECT(##class(Interlock.Setup).ProviderConfigured(): "live", 1: "replay")
+}
 
 Method OnAgentRequest(request As Interlock.Bridge.Msg.AgentRequest, Output response As Interlock.Bridge.Msg.AgentResponse) As %Status
 {

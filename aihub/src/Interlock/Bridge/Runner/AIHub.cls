@@ -186,6 +186,8 @@ ClassMethod Probe(agentClass As %String = "Interlock.Agent.Conformance") As %Str
 /// over SQL once a provider is configured; the tool calls are keyed "test:<case>:<member>".
 ClassMethod TestRun(caseId As %String, memberCode As %String = "conformance", mode As %String = "live", tokenBudget As %Integer = 60000) As %String [ SqlProc ]
 {
+    // A live run costs money: only a caller who may operate Interlock gets one.
+    If '$SYSTEM.Security.Check("Interlock_Operate", "USE") Quit {"error": "TestRun needs the Interlock_Operate resource"}.%ToJSON()
     Try {
         Set case = ##class(Interlock.Store.Case).ByCaseId(caseId)
         If '$ISOBJECT(case) Return {"error": ("Unknown case " _ caseId)}.%ToJSON()

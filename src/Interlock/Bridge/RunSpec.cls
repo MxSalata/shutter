@@ -63,7 +63,7 @@ ClassMethod FromRequest(request As Interlock.Bridge.Msg.AgentRequest, op As Inte
     Set s.CorrelationKey = request.CorrelationKey, s.SnapshotDigest = request.SnapshotDigest
     Set s.ResultClass = request.ResultClass, s.TerminalTool = request.TerminalTool
     Set s.ConfigVersion = request.ConfigVersion
-    Set s.Mode = $SELECT(request.ModeOverride '= "": request.ModeOverride, 1: op.Mode)
+    Set s.Mode = $SELECT(request.ModeOverride '= "": request.ModeOverride, 1: ##class(Interlock.Bridge.Operation.Agent).ResolveMode(op.Mode))
     Set s.RunnerClass = op.Runner
     Set s.ProviderConfig = op.ProviderConfig, s.Model = op.Model
     Set s.MaxIterations = op.MaxIterations

@@ -15,6 +15,7 @@ ClassMethod OnStart(pTimeStarted As %String) As %Status
         If (key '= "") && '##class(Interlock.Setup).ProviderConfigured() {
             Do ##class(Interlock.Setup).ConfigureProvider(key, $SYSTEM.Util.GetEnviron("INTERLOCK_MODEL"))
         }
+        Do ##class(Interlock.Setup).RecordAgentMode($SYSTEM.Util.GetEnviron("INTERLOCK_AGENT_MODE"))
     } Catch {
     }
     Quit $$$OK
@@ -53,22 +54,22 @@ XData ProductionDefinition
   </Item>
   <Item Name="Agent Conformance" Category="Board" ClassName="Interlock.Bridge.Operation.Agent" PoolSize="1" Enabled="true" Foreground="false" Comment="Conformance specialist" LogTraceEvents="true" Schedule="">
     <Setting Target="Host" Name="AgentClass">Interlock.Agent.Conformance</Setting>
-    <Setting Target="Host" Name="Mode">replay</Setting>
+    <Setting Target="Host" Name="Mode">auto</Setting>
   </Item>
   <Item Name="Agent Encounter" Category="Board" ClassName="Interlock.Bridge.Operation.Agent" PoolSize="1" Enabled="true" Foreground="false" Comment="Encounter integrity specialist" LogTraceEvents="true" Schedule="">
     <Setting Target="Host" Name="AgentClass">Interlock.Agent.Encounter</Setting>
-    <Setting Target="Host" Name="Mode">replay</Setting>
+    <Setting Target="Host" Name="Mode">auto</Setting>
   </Item>
   <Item Name="Agent Impact" Category="Board" ClassName="Interlock.Bridge.Operation.Agent" PoolSize="1" Enabled="true" Foreground="false" Comment="Impact analysis specialist" LogTraceEvents="true" Schedule="">
     <Setting Target="Host" Name="AgentClass">Interlock.Agent.Impact</Setting>
-    <Setting Target="Host" Name="Mode">replay</Setting>
+    <Setting Target="Host" Name="Mode">auto</Setting>
   </Item>
   <Item Name="Agent Coordinator" Category="Board" ClassName="Interlock.Bridge.Operation.Agent" PoolSize="1" Enabled="true" Foreground="false" Comment="The coordinator: one plan from the findings" LogTraceEvents="true" Schedule="">
     <Setting Target="Host" Name="AgentClass">Interlock.Agent.Coordinator</Setting>
-    <Setting Target="Host" Name="Mode">replay</Setting>
+    <Setting Target="Host" Name="Mode">auto</Setting>
   </Item>
   <Item Name="Agent Board" Category="Board" ClassName="Interlock.Bridge.Operation.Agent" PoolSize="1" Enabled="true" Foreground="false" Comment="Any library member whose request names its agent class; the single investigator runs here" LogTraceEvents="true" Schedule="">
-    <Setting Target="Host" Name="Mode">replay</Setting>
+    <Setting Target="Host" Name="Mode">auto</Setting>
   </Item>
   <Item Name="Gate" Category="Recovery" ClassName="Interlock.Operation.Gate" PoolSize="1" Enabled="true" Foreground="false" Comment="The deterministic checks: pass, block or unknown per check" LogTraceEvents="true" Schedule="">
   </Item>
