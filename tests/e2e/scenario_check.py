@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Plays scenarios through Interlock's REST API and compares each case's outcome with the scenario's expected outcome.
 
-    python3 tests/e2e/scenario_check.py [--url http://localhost:52773] [--mode board] [--approve] S1 S2 S3
+    python3 tests/e2e/scenario_check.py [--url http://localhost:52773] [--modes board,rules] [--approve]
+                                        [--markdown comparison.md] S1 S2 S3
+
+Each scenario is played once per mode (board, single, rules; default board), so the same failures can be compared
+across the board of specialists, the single investigator and rules alone. --markdown writes the comparison as a
+table.
 
 Signs in as the demo users `operator` and `approver` (password from INTERLOCK_PASSWORD, default "interlock"). With
 --approve, a plan waiting for approval is approved as the approver once the scenario's own steps have finished (S7
@@ -82,11 +87,11 @@ def wait(what, check, timeout, every=2):
     raise TimeoutError(f"{what}: nothing after {timeout} s")
 
 
-def play(args, operator, approver, scenario):
-    """Plays one scenario and returns (as_expected, line)."""
-    status, started = operator.call("POST", f"/scenarios/{scenario['id']}/run", {"mode": args.mode}, idempotent=True)
+def play(args, operator, approver, scenario, mode):
+    """Plays one scenario in one mode and returns (as_expected, line, outcome)."""
+    status, started = operator.call("POST", f"/scenarios/{scenario['id']}/run", {"mode": mode}, idempotent=True)
     if status not in (200, 202):
-        return False, f"{scenario['id']}: the run was refused: HTTP {status} {started}"
+        return False, f"DIFFERS {scenario['id']} {mode}: the run was refused: HTTP {status} {started}", "run refused"
     started_at = started.get("startedAt") or started.get("started_at") or ""
 
     def run_state():
@@ -145,18 +150,34 @@ def play(args, operator, approver, scenario):
                            f"{expected['final_ward']}")
     if expected.get("blocked_by") and expected["blocked_by"] not in codes:
         differences.append(f"no {expected['blocked_by']} among {sorted(c for c in codes if c) or 'no reason codes'}")
-    summary = (f"{scenario['id']} {args.mode}: {final['caseId']} {final['state']}, {final.get('disposition') or 'no plan'}, "
-               f"{'one write' if wrote else 'no write'}, ward {ward.get('state')} {ward.get('ward')}")
+    outcome = (f"{final['state']}, {final.get('disposition') or 'no plan'}, {'one write' if wrote else 'no write'}, "
+               f"ward {ward.get('state')} {ward.get('ward')}")
+    summary = f"{scenario['id']} {mode}: {final['caseId']} {outcome}"
     if differences:
-        return False, f"DIFFERS {summary}: " + "; ".join(differences)
-    return True, f"ok      {summary}"
+        return False, f"DIFFERS {summary}: " + "; ".join(differences), outcome + " (" + "; ".join(differences) + ")"
+    return True, f"ok      {summary}", outcome
+
+
+def write_markdown(path, modes, rows):
+    """The comparison as a table: one row per scenario, its expected outcome, then each mode's outcome."""
+    names = {"board": "Board of specialists", "single": "Single investigator", "rules": "Rules only"}
+    lines = ["| Scenario | Expected | " + " | ".join(names[m] for m in modes) + " |",
+             "| --- | --- | " + " | ".join("---" for _ in modes) + " |"]
+    for row in rows:
+        s, e = row["scenario"], row["scenario"]["expected"]
+        expected = f"{e['disposition']}, {'one write' if e['write'] else 'no write'}, ward {e['final_state']} {e['final_ward'] or ''}".strip()
+        cells = [("as expected: " if ok else "**differs**: ") + outcome for ok, outcome in (row["results"][m] for m in modes)]
+        lines.append(f"| {s['id']} {s['title']} | {expected} | " + " | ".join(cells) + " |")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("scenarios", nargs="+")
     p.add_argument("--url", default="http://localhost:52773")
-    p.add_argument("--mode", default="board", choices=["board", "single", "rules"])
+    p.add_argument("--modes", default="board", help="comma-separated: board, single, rules")
+    p.add_argument("--markdown", help="write the comparison to this file as a Markdown table")
     p.add_argument("--approve", action="store_true", help="approve plans that wait for approval, as the approver")
     p.add_argument("--timeout", type=int, default=240, help="seconds to wait for each case")
     p.add_argument("--ward-user", default="_SYSTEM")
@@ -168,19 +189,30 @@ def main():
     approver = Session(args.url).sign_in("approver", password)
     _, listing = operator.call("GET", "/scenarios")
     known = {s["id"]: s for s in (listing or {}).get("scenarios", [])}
-    failures = 0
+    modes = [m.strip() for m in args.modes.split(",") if m.strip()]
+    unknown_modes = [m for m in modes if m not in ("board", "single", "rules")]
+    if unknown_modes:
+        raise SystemExit(f"unknown mode {', '.join(unknown_modes)}: use board, single or rules")
+    failures, rows = 0, []
     for scenario_id in args.scenarios:
         if scenario_id not in known:
             print(f"DIFFERS {scenario_id}: no such scenario")
             failures += 1
             continue
-        try:
-            ok, line = play(args, operator, approver, known[scenario_id])
-        except (TimeoutError, RuntimeError) as error:
-            ok, line = False, f"DIFFERS {scenario_id}: {error}"
-        print(line, flush=True)
-        failures += 0 if ok else 1
-    print(f"{failures} of {len(args.scenarios)} differ" if failures else f"all {len(args.scenarios)} as expected")
+        row = {"scenario": known[scenario_id], "results": {}}
+        for mode in modes:
+            try:
+                ok, line, outcome = play(args, operator, approver, known[scenario_id], mode)
+            except (TimeoutError, RuntimeError) as error:
+                ok, line, outcome = False, f"DIFFERS {scenario_id} {mode}: {error}", str(error)
+            print(line, flush=True)
+            failures += 0 if ok else 1
+            row["results"][mode] = (ok, outcome)
+        rows.append(row)
+    if args.markdown:
+        write_markdown(args.markdown, modes, rows)
+    runs = len(args.scenarios) * len(modes)
+    print(f"{failures} of {runs} differ" if failures else f"all {runs} as expected")
     return 1 if failures else 0
 
 
