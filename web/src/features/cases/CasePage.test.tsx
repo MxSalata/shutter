@@ -43,12 +43,12 @@ describe('CasePage', () => {
   });
 
   it('says why an escalated case stopped and what comes next', async () => {
-    renderCase('C-000002');
+    renderCase('C-000009');
     expect(await screen.findByText('Closed: handed to a person')).toBeInTheDocument();
-    expect(await screen.findByText('Stopped before any write')).toBeInTheDocument();
+    expect(await screen.findByText('Handed to a person')).toBeInTheDocument();
     expect(
       await screen.findByText(
-        "Read the case's last events for the reason, then investigate again or escalate.",
+        "Read the findings and the gate's notes, then decide how to recover the message by hand.",
       ),
     ).toBeInTheDocument();
   });

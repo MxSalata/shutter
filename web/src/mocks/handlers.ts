@@ -19,11 +19,14 @@ const USERS: Record<string, Me> = {
 
 let session: Me | null = null;
 let run: ScenarioRun | null = null;
+/** The mode each scenario was last played in here: a real run opens a case in that mode, which its card then shows. */
+let played: Record<string, string> = {};
 
 /** For tests: start signed in (or not), with no run playing. */
 export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
   session = signedInAs ? USERS[signedInAs] : null;
   run = null;
+  played = {};
 }
 
 const error = (status: number, code: string, detail: string) =>
@@ -36,10 +39,13 @@ const csrf = (request: Request) =>
     ? null
     : error(400, 'csrf', 'Missing X-Requested-With');
 
+/** The scenario's latest recorded case in the mode it was last played in (the board's until then), else any. */
 function latestCase(scenario: string) {
-  const c = Object.values(cases)
+  const mode = played[scenario] ?? 'board';
+  const all = Object.values(cases)
     .filter((x) => x.summary.scenario === scenario)
-    .sort((a, b) => b.summary.openedAt.localeCompare(a.summary.openedAt))[0];
+    .sort((a, b) => b.summary.openedAt.localeCompare(a.summary.openedAt));
+  const c = all.find((x) => x.summary.mode === mode) ?? all[0];
   return c
     ? {
         caseId: c.summary.caseId,
@@ -98,6 +104,7 @@ export const handlers = [
     if (run?.state === 'running')
       return error(409, 'wrong_state', `A run of ${run.scenario} is still playing`);
     const { mode } = (await request.json()) as { mode: ScenarioRun['mode'] };
+    played[String(params.id)] = mode;
     run = {
       scenario: String(params.id),
       mode,
