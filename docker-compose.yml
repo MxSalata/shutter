@@ -11,9 +11,10 @@ services:
     image: interlock:dev
     container_name: interlock
     restart: unless-stopped
+    # Published on the loopback interface only: the demo instance has well-known passwords.
     ports:
-      - "${INTERLOCK_WEB_PORT:-52773}:52773"
-      - "${INTERLOCK_SUPERSERVER_PORT:-1972}:1972"
+      - "127.0.0.1:${INTERLOCK_WEB_PORT:-52773}:52773"
+      - "127.0.0.1:${INTERLOCK_SUPERSERVER_PORT:-1972}:1972"
     environment:
       # Empty: the agents replay recorded runs. Set it for live agents (the aihub module).
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}

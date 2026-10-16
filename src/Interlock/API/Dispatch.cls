@@ -634,7 +634,7 @@ ClassMethod CaseBlockedReason(caseId As %String) As %Status
     If code = "" {
         Set text = ""
         &sql(SELECT TOP 1 Text INTO :text FROM Interlock_Store.CaseEvent WHERE "Case" = :id AND ToState IN ('blocked','escalated') ORDER BY Seq DESC)
-        Set code = $SELECT(text [ "Rejected by": "REJECTED_BY_APPROVER", text [ "rehearsal": "REHEARSAL_WOULD_NOT_APPLY", text [ "refused": "DISPATCH_REFUSED", text [ "person": "ESCALATED", 1: "BLOCKED")
+        Set code = $SELECT(text [ "Rejected by": "REJECTED_BY_APPROVER", text [ "rehearsal": "REHEARSAL_WOULD_NOT_APPLY", text [ "refused": "DISPATCH_REFUSED", text [ "person": "ESCALATED", case.State = "escalated": "ESCALATED", 1: "BLOCKED")
     }
     Set o = {}
     Set o.code = code

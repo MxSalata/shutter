@@ -3,6 +3,7 @@
 .env
 web/node_modules
 web/dist
+web/dist-demo
 web/playwright-report
 web/test-results
 tests/**/__pycache__

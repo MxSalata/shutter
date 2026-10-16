@@ -16,6 +16,15 @@ XData Manifest [ XMLNamespace = INSTALLER ]
 </Manifest>
 }
 
+/// Runs the manifest for <var>ns</var> and returns "ok" or the error text; callable over SQL
+/// (SELECT Interlock.Installer_Run('INTERLOCK')) for an instance reached only through its REST API.
+ClassMethod Run(ns As %String = "INTERLOCK") As %String [ SqlProc ]
+{
+    Set vars("NAMESPACE") = $ZCONVERT(ns, "U")
+    Set sc = ..setup(.vars)
+    Quit $SELECT($$$ISOK(sc): "ok", 1: $SYSTEM.Status.GetErrorText(sc))
+}
+
 /// Runs the manifest. Variables: NAMESPACE (default INTERLOCK).
 ClassMethod setup(ByRef pVars, pLogLevel As %Integer = 3, pInstaller As %Installer.Installer, pLogger As %Installer.AbstractLogger) As %Status [ CodeMode = objectgenerator, Internal ]
 {

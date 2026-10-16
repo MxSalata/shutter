@@ -257,7 +257,7 @@ ClassMethod CreateWebApps(ns As %String, root As %String) As %Status
             Set sc = ##class(Security.Applications).Create("/wards/api", .props)
         }
         Quit:$$$ISERR(sc) sc
-        Set ^Interlock.Config("webapp", "/wards/api") = 1
+        Set ^|ns|Interlock.Config("webapp", "/wards/api") = 1
     }
     Kill props
     Set props("NameSpace") = ns
@@ -276,7 +276,7 @@ ClassMethod CreateWebApps(ns As %String, root As %String) As %Status
         Set sc = ##class(Security.Applications).Create("/api/interlock", .props)
     }
     Quit:$$$ISERR(sc) sc
-    Set ^Interlock.Config("webapp", "/api/interlock") = 1
+    Set ^|ns|Interlock.Config("webapp", "/api/interlock") = 1
     Set www = $SELECT(root = "": "", 1: root _ "www/")
     If (www '= "") && ##class(%File).DirectoryExists(www) {
         Kill props
@@ -295,7 +295,7 @@ ClassMethod CreateWebApps(ns As %String, root As %String) As %Status
         } Else {
             Set sc = ##class(Security.Applications).Create("/interlock", .props)
         }
-        Set:$$$ISOK(sc) ^Interlock.Config("webapp", "/interlock") = 1
+        Set:$$$ISOK(sc) ^|ns|Interlock.Config("webapp", "/interlock") = 1
     }
     Quit sc
 }
