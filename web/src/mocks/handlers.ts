@@ -3,9 +3,10 @@ import fixtures from './fixtures.json';
 import type { CaseState, Me, ScenarioRun } from '@/api/types';
 
 /**
- * An in-browser stand-in for Interlock's REST API (CONTRACTS 5), for development (`VITE_MOCK=1 npm run dev`) and the
- * component tests. Its data was recorded from the store (fixtures.json says from where); playing a scenario only
- * pretends, and a decision is accepted without changing the recorded case.
+ * An in-browser stand-in for Interlock's REST API (CONTRACTS 5), for the demo build, development
+ * (`VITE_MOCK=1 npm run dev`) and the tests. It serves answers recorded from the real API (scripts/record-demo.mjs;
+ * fixtures.json says when); playing a scenario only pretends, and a decision is accepted without changing the
+ * recorded case.
  */
 const BASE = '/api/interlock';
 type CaseFixture = (typeof fixtures.cases)[keyof typeof fixtures.cases];
@@ -36,7 +37,9 @@ const csrf = (request: Request) =>
     : error(400, 'csrf', 'Missing X-Requested-With');
 
 function latestCase(scenario: string) {
-  const c = Object.values(cases).find((x) => x.summary.scenario === scenario);
+  const c = Object.values(cases)
+    .filter((x) => x.summary.scenario === scenario)
+    .sort((a, b) => b.summary.openedAt.localeCompare(a.summary.openedAt))[0];
   return c
     ? {
         caseId: c.summary.caseId,
@@ -181,47 +184,9 @@ export const handlers = [
     Object.assign(m, (await request.json()) as object);
     return HttpResponse.json(m);
   }),
-  http.get(`${BASE}/settings`, () =>
-    session
-      ? HttpResponse.json({
-          mode: 'board',
-          scenario: 'S2',
-          resetAt: '2026-10-15T19:37:59Z',
-          demo: true,
-          agentItems: fixtures.library.map((m) => ({
-            name: m.configItem,
-            agentClass: m.agentClass,
-            mode: 'replay',
-            model: 'fixture',
-            providerConfig: '',
-            maxIterations: 8,
-            tokenBudget: 20000,
-          })),
-          prices: fixtures.prices,
-          aiHubPresent: false,
-          liveRunnerPresent: false,
-        })
-      : signedOut(),
-  ),
-  http.get(`${BASE}/costs`, () =>
-    session
-      ? HttpResponse.json({
-          byModel: [
-            {
-              model: 'fixture',
-              runs: 16,
-              promptTokens: 0,
-              completionTokens: 0,
-              cacheReadTokens: 0,
-              costUsd: 0,
-            },
-          ],
-          byDay: [],
-          byCase: [],
-        })
-      : signedOut(),
-  ),
+  http.get(`${BASE}/settings`, () => (session ? HttpResponse.json(fixtures.settings) : signedOut())),
+  http.get(`${BASE}/costs`, () => (session ? HttpResponse.json(fixtures.costs) : signedOut())),
   http.get(`${BASE}/health`, () =>
-    session ? HttpResponse.json({ source: fixtures.source, ok: true }) : signedOut(),
+    session ? HttpResponse.json({ recorded: fixtures.source, ...fixtures.health }) : signedOut(),
   ),
 ];

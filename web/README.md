@@ -9,11 +9,12 @@ React, Mantine and TanStack Query, built with Vite. IRIS serves the build from `
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | The app on `http://localhost:5173`, with `/api/interlock` proxied to IRIS (`VITE_IRIS_URL`, default `http://192.168.0.10:52775`) |
-| `VITE_MOCK=1 npm run dev` | The same against an in-browser mock of the API, with cases recorded from a real run (`src/mocks/fixtures.json`) |
+| `VITE_MOCK=1 npm run dev` | The same against an in-browser mock of the API, which serves answers recorded from the real one (`src/mocks/fixtures.json`) |
 | `npm test` | Unit and page tests (Vitest, jsdom, the same mock) |
 | `npm run lint`, `npm run typecheck`, `npm run format:check` | ESLint, TypeScript and Prettier |
 | `npm run build:www` | Builds into `../www/`, the folder IRIS serves (committed, so an install needs no Node) |
 | `npm run build:demo`, `npm run preview:demo` | The demo: recorded runs on the in-browser mock, with a "Try the demo" sign-in (`dist-demo/`, `VITE_BASE` for GitHub Pages) |
+| `npm run record:demo -- --url http://host:52773` | Records the demo's data from a running Interlock's API into `src/mocks/fixtures.json` (reads only; `INTERLOCK_PASSWORD` for the operator's password) |
 | `npm run test:e2e` | axe-core (WCAG 2.1 A and AA) on every screen of the demo in all five appearances (Playwright, Chromium) |
 
 ## Notes

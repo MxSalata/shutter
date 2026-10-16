@@ -30,8 +30,8 @@ describe('CasePage', () => {
   beforeEach(() => resetMock('approver'));
 
   it('tells the story of a resolved case, with the verification apart from the acknowledgement', async () => {
-    renderCase('C-000011');
-    expect(await screen.findByRole('heading', { name: 'Case C-000011' })).toBeInTheDocument();
+    renderCase('C-000001');
+    expect(await screen.findByRole('heading', { name: 'Case C-000001' })).toBeInTheDocument();
     expect(await screen.findByText('Closed: verified')).toBeInTheDocument();
     const board = await screen.findByRole('region', { name: 'The board' });
     expect(await within(board).findByText('Conformance')).toBeInTheDocument();
@@ -42,11 +42,21 @@ describe('CasePage', () => {
     expect(await within(dispatch).findByText('Verified at the receiver')).toBeInTheDocument();
   });
 
-  it('says why a blocked case stopped and what comes next', async () => {
-    renderCase('C-000008');
-    expect(await screen.findByText('Closed: blocked')).toBeInTheDocument();
-    expect(await screen.findByText('RECEIVER_CHANGED')).toBeInTheDocument();
-    expect(await screen.findByText('Collect fresh evidence and investigate again.')).toBeInTheDocument();
+  it('says why an escalated case stopped and what comes next', async () => {
+    renderCase('C-000002');
+    expect(await screen.findByText('Closed: handed to a person')).toBeInTheDocument();
+    expect(await screen.findByText('Stopped before any write')).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "Read the case's last events for the reason, then investigate again or escalate.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('marks the steps a superseded case did not need', async () => {
+    renderCase('C-000003');
+    expect(await screen.findByText('Closed: verified')).toBeInTheDocument();
+    expect((await screen.findAllByText('not needed')).length).toBe(3);
   });
 
   it('says so when there is no such case', async () => {
