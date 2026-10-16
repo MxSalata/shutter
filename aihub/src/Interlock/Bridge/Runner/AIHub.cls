@@ -245,7 +245,10 @@ ClassMethod SessionStats(id As %String) As %String [ SqlProc ]
         Set roles = []
         If $ISOBJECT(messages) {
             Set iter = messages.%GetIterator()
-            While iter.%GetNext(.i, .m) { Do roles.%Push(##class(Interlock.Util.Json).Str(m, "role") _ ":" _ $LENGTH($SELECT($ISOBJECT(m.%Get("content")): m.%Get("content").%ToJSON(), 1: $GET(m.content)))) }
+            While iter.%GetNext(.i, .m) {
+                Set content = m.%Get("content")
+                Do roles.%Push(##class(Interlock.Util.Json).Str(m, "role") _ ":" _ $LENGTH($SELECT($ISOBJECT(content): content.%ToJSON(), 1: content)))
+            }
         }
         Set out.roles = roles
         Return out.%ToJSON()
