@@ -51,7 +51,8 @@ Method Run(spec As Interlock.Bridge.RunSpec, ByRef response As Interlock.Bridge.
                 If +spec.RequestTimeoutSeconds > 0 Set monitor.Deadline = $ZHOROLOG + (spec.RequestTimeoutSeconds * turns)
                 Set prompt = spec.Goal _ $CHAR(10, 10) _ "<evidence case=""" _ spec.CorrelationKey _ """>" _ $CHAR(10) _ spec.Context _ $CHAR(10) _ "</evidence>"
                 $$$TRACE("Running " _ spec.AgentClass _ " for " _ spec.CorrelationKey _ ": up to " _ turns _ " turns, budget " _ (+spec.TokenBudget) _ " tokens")
-                Set final = agent.Run(session, prompt, turns, monitor)
+                // Run(session, goal, callback) on build 154; the turn limit is the MaxIterations property.
+                Set final = agent.Run(session, prompt, monitor)
                 If $ISOBJECT(final) Set response.Content = $EXTRACT(final.Content, 1, 20000)
                 If submit.Result '= "" {
                     Set response.ResultJSON = submit.Result, response.Status = "ok"

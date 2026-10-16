@@ -508,6 +508,7 @@ ClassMethod InstallAIHub(root As %String = "") As %String [ SqlProc ]
     Try {
         If root '= "" Set root = ##class(%File).NormalizeDirectory(root)
         Do out.%Set("ai_hub_present", ''##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent"), "boolean")
+        Do out.%Set("descriptor_registry", ..RebuildDescriptorRegistry(), "boolean")
         Set key = $SYSTEM.Util.GetEnviron("ANTHROPIC_API_KEY")
         If key '= "" {
             Set out.provider = ..ConfigureProvider(key, $SYSTEM.Util.GetEnviron("INTERLOCK_MODEL"))
@@ -542,6 +543,9 @@ ClassMethod ConfigureProvider(key As %String, model As %String = "") As %String 
     Try {
         Set sc = ..EnsureSecretResource()
         If $$$ISERR(sc) Return "resource: " _ $SYSTEM.Status.GetErrorText(sc)
+        // A fresh AI Hub instance has an empty Config Store descriptor registry, and AI.LLM configurations
+        // fail validation ("No descriptor found for AI.LLM") until it is rebuilt.
+        Do ..RebuildDescriptorRegistry()
         Try {
             Do $CLASSMETHOD("%Wallet.Collection", "Create", "Interlock", {"UseResource": "Interlock_Secrets", "EditResource": "Interlock_Secrets"})
         } Catch {
@@ -565,6 +569,19 @@ ClassMethod ConfigureProvider(key As %String, model As %String = "") As %String 
         Return "ok: AI.LLM.Interlock, model " _ model
     } Catch ex {
         Return "error: " _ ex.DisplayString()
+    }
+}
+
+/// Registers the Config Store descriptors AI Hub ships (AI.LLM, AI.MCP) in this namespace; a fresh
+/// instance has none. Harmless when they are there already or when the class is absent.
+ClassMethod RebuildDescriptorRegistry() As %Boolean
+{
+    Try {
+        If '##class(%Dictionary.CompiledClass).%ExistsId("%ConfigStore.DescriptorManager") Return 0
+        Do $CLASSMETHOD("%ConfigStore.DescriptorManager", "RebuildRegistry")
+        Return 1
+    } Catch ex {
+        Return 0
     }
 }
 
@@ -598,18 +615,28 @@ ClassMethod RecordAgentMode(mode As %String) As %String
     Quit "auto"
 }
 
-/// Whether AI.LLM.Interlock exists in the Config Store.
+/// Whether ConfigureProvider has written AI.LLM.Interlock. Read from the module's own record, so that
+/// callers without the right to read the Config Store (the API's users, the production's jobs) get the
+/// same answer as those with it.
 ClassMethod ProviderConfigured() As %Boolean
 {
-    Set ok = 0
+    Quit $GET(^Interlock.Config("aihub", "provider")) '= ""
+}
+
+/// Forgets the provider configuration: removes AI.LLM.Interlock and the wallet secret, and the record.
+/// The agents replay recordings again. Returns a short status.
+ClassMethod ClearProvider() As %String [ SqlProc ]
+{
     Try {
-        If '##class(%Dictionary.CompiledClass).%ExistsId("%ConfigStore.Configuration") Return 0
-        Set sc = $CLASSMETHOD("%ConfigStore.Configuration", "Get", "AI.LLM.Interlock", .config)
-        Set ok = $$$ISOK(sc) && $ISOBJECT($GET(config))
+        Do $CLASSMETHOD("%ConfigStore.Configuration", "Delete", "AI.LLM.Interlock")
     } Catch {
-        Set ok = 0
     }
-    Quit ok
+    Try {
+        Do $CLASSMETHOD("%Wallet.KeyValue", "Delete", "Interlock.Anthropic")
+    } Catch {
+    }
+    Kill ^Interlock.Config("aihub", "provider"), ^Interlock.Config("aihub", "model"), ^Interlock.Config("aihub", "providerConfiguredAt")
+    Quit "ok: no provider configured; the agents replay recordings"
 }
 
 }
