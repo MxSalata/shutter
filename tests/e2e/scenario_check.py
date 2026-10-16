@@ -141,6 +141,11 @@ def play(args, operator, approver, scenario, mode):
         return None
 
     final = wait(f"{scenario['id']} {case['caseId']}: the outcome", settled, args.timeout)
+    return judge(args, operator, scenario, mode, final)
+
+
+def judge(args, operator, scenario, mode, final):
+    """Compares a settled case with the scenario's expected outcome; returns (as_expected, line, outcome)."""
     expected = scenario["expected"]
     caseid = urllib.parse.quote(final["caseId"])
     _, attempts = operator.call("GET", f"/cases/{caseid}/attempts")
