@@ -303,8 +303,9 @@ ClassMethod Drop(source As %String, inbound As %String) As %String
 }
 
 /// The ward reset, the inbound and archive folders emptied of fixtures, the mode back to board, the running scenario
-/// cleared, and <code>^Interlock.Config("resetAt")</code> set to the time of the reset: the evidence collector ignores
-/// message-store events older than it, since encounter ids are fixed per scenario. JSON text.
+/// and any run record that isn't playing cleared, and <code>^Interlock.Config("resetAt")</code> set to the time of the
+/// reset: the evidence collector ignores message-store events older than it, since encounter ids are fixed per
+/// scenario. JSON text.
 ClassMethod Reset() As %String [ SqlProc ]
 {
     Set resetAt = ##class(Wards.Service).Now()
@@ -323,6 +324,9 @@ ClassMethod Reset() As %String [ SqlProc ]
     Set ^Interlock.Config("mode") = "board"
     Kill ^Interlock.Config("scenario")
     Set ^Interlock.Config("resetAt") = resetAt
+    // A run record left queued or finished goes with the reset (a queued run whose player stopped would otherwise
+    // refuse every later run); one that is playing stays, since that run's own reset comes through here
+    Kill:'..Running() ^Interlock.Scenarios("run")
     Quit {"ward": (ward), "emptied": (emptied), "mode": "board", "reset_at": (resetAt)}.%ToJSON()
 }
 
