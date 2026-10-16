@@ -142,6 +142,12 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
         Set sc = ##class(Security.Roles).Create("Interlock_Approver", "Interlock approver: everything an operator can, plus approvals", "Interlock_Operate:U,Interlock_Approve:U," _ db _ ":RW", "Interlock_Operator,%EnsRole_Operator")
         Quit:$$$ISERR(sc) sc
     }
+    // The production's client of the ward API needs the database as well as the ward's own resource
+    // (the Wards_API role carries only that), or the web application answers 403.
+    If '##class(Security.Roles).Exists("Interlock_WardClient") {
+        Set sc = ##class(Security.Roles).Create("Interlock_WardClient", "Interlock: the production's client of the ward API, with the namespace's database", db _ ":RW", "")
+        Quit:$$$ISERR(sc) sc
+    }
     // Every caller of the API web application gets read access to the namespace's database, so
     // that the sign-in route can run for an anonymous session; data routes still check resources.
     If '##class(Security.Roles).Exists("Interlock_WebApp") {
@@ -193,12 +199,13 @@ ClassMethod CreateCredentials(demo As %Boolean) As %Status
     New $NAMESPACE
     Set ns = $NAMESPACE
     Set $NAMESPACE = "%SYS"
+    Set roles = $SELECT(##class(Security.Roles).Exists("Interlock_WardClient"): "Interlock_WardClient", 1: "Interlock_Operator")
+    If ##class(Security.Roles).Exists("Wards_API") Set roles = "Wards_API," _ roles
     If '##class(Security.Users).Exists(user) {
-        Set roles = $SELECT(##class(Security.Roles).Exists("Wards_API"): "Wards_API", 1: "Interlock_Operator")
         Set sc = ##class(Security.Users).Create(user, roles, password, "Interlock production client for the ward API", ns, "", "", 0, 1, "Used by the production's HTTP operation")
         Quit:$$$ISERR(sc) sc
-    } ElseIf ##class(Security.Roles).Exists("Wards_API") {
-        Do ##class(Security.Users).AddRoles(user, "Wards_API")
+    } Else {
+        Do ##class(Security.Users).AddRoles(user, roles)
     }
     Set $NAMESPACE = ns
     If '##class(Ens.Config.Credentials).%ExistsId("WardsAPI") {
