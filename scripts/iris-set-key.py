@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Put the provider key into an IRIS instance's wallet and Config Store (AI.LLM.Interlock), from a file.
 
-    python3 scripts/iris-set-key.py --url http://host:52773 --ns INTERLOCK --key-file ~/.secrets/<name> [--model claude-opus-5-5]
+    python3 scripts/iris-set-key.py --url http://host:52773 --ns INTERLOCK [--key-file <file>] [--model claude-opus-5-5]
 
 The key travels as a SQL parameter in the request body, never in the query text or on the screen;
 the instance's Interlock.Setup_ConfigureProvider stores it and answers with a status line only.
@@ -23,7 +23,7 @@ def main():
     ap.add_argument("--ns", default="INTERLOCK")
     ap.add_argument("--user", default=os.environ.get("IRIS_USER", "_SYSTEM"))
     ap.add_argument("--password", default=os.environ.get("IRIS_PASSWORD", "SYS"))
-    ap.add_argument("--key-file", required=True, help="file holding the key (first line)")
+    ap.add_argument("--key-file", default="~/.secrets/anthropic-api-key", help="file holding the key (first line); default ~/.secrets/anthropic-api-key")
     ap.add_argument("--model", default="claude-opus-5-5")
     args = ap.parse_args()
     with open(os.path.expanduser(args.key_file), encoding="utf-8") as f:

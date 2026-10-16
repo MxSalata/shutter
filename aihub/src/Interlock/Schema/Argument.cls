@@ -8,13 +8,19 @@ ClassMethod AsJSON(ByRef value, Output err As %String) As %String
 {
     Set err = ""
     If $ISOBJECT(value) {
-        If value.%IsA("%JSON.Adaptor") {
+        // The framework decodes a class-typed argument into an instance of the schema class (measured on
+        // build 154); %IsA is not relied on, the export methods are tried in turn.
+        Try {
             Set sc = value.%JSONExportToString(.json)
-            If $$$ISERR(sc) Set err = "The object could not be read: " _ $SYSTEM.Status.GetErrorText(sc) Return ""
-            Return json
+            If $$$ISOK(sc) && ($GET(json) '= "") Return json
+            Set err = "The object could not be exported: " _ $SYSTEM.Status.GetErrorText(sc)
+        } Catch {
         }
-        If value.%IsA("%DynamicAbstractObject") Return value.%ToJSON()
-        Set err = "Unexpected argument of class " _ $CLASSNAME(value)
+        Try {
+            Return value.%ToJSON()
+        } Catch {
+        }
+        If err = "" Set err = "Unexpected argument of class " _ $CLASSNAME(value)
         Return ""
     }
     Set text = $ZSTRIP($GET(value), "<>W")
