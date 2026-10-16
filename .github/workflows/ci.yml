@@ -18,7 +18,7 @@ env:
   # InterSystems' own IRIS for Health Community 2026.2, pinned by digest. The community image
   # intersystemsdc/irishealth-community:2026.2 stopped IRIS in CI on 16 October 2026: its post-start step (creating the
   # USER namespace through Python) failed on the runner. The official image has no such step.
-  IRIS_IMAGE: containers.intersystems.com/intersystems/irishealth-community:2026.2@sha256:7c06b6b3d950bc25f3e353b0a65db0c4045f251fb9103eade63514302b662cf3
+  IRIS_IMAGE: containers.intersystems.com/intersystems/irishealth-community:2026.2@sha256:e21e53e2bedf8d79dd9a3d38dd1dc5689c032601fb7acdea783dc5b5e1b7460b
 
 jobs:
   # The web application: types, lint, format, unit and page tests, the committed www/ build, and axe-core on every
