@@ -604,7 +604,7 @@ ClassMethod EnsureSecretResource() As %Status [ Private ]
 
 /// Records the agents' mode for items set to auto (live, record or replay); anything else leaves auto
 /// to decide (live when a provider is configured, else replay). Returns what applies.
-ClassMethod RecordAgentMode(mode As %String) As %String
+ClassMethod RecordAgentMode(mode As %String) As %String [ SqlProc ]
 {
     Set mode = $ZCONVERT($ZSTRIP(mode, "<>W"), "L")
     If $LISTFIND($LISTBUILD("live", "record", "replay"), mode) {
