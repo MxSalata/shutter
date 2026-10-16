@@ -89,6 +89,11 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1) As %Status
             Quit:$$$ISERR(sc)
             Set ^Interlock.Config("blockReasons") = reasons
         }
+        If root '= "" {
+            Set sc = ##class(Interlock.Store.SiteProfile).SeedFromFile(root _ "knowledge/site/profile.json") Quit:$$$ISERR(sc)
+            Set sc = ##class(Interlock.Catalogue.Entry).SeedFromFile(root _ "knowledge/catalogue/catalogue.json", .entries) Quit:$$$ISERR(sc)
+            Set ^Interlock.Config("catalogue", "entries") = $GET(entries, 0)
+        }
         If (root '= "") && ##class(%File).DirectoryExists(root _ "fixtures/records") {
             Set sc = ##class(Interlock.Bridge.Record).ImportDir(root _ "fixtures/records", .count)
             Quit:$$$ISERR(sc)

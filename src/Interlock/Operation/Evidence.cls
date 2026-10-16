@@ -101,6 +101,12 @@ Method OnEvidenceRequest(request As Interlock.Msg.EvidenceRequest, Output respon
     Set summary.route = route
     Set summary.epoch = ##class(Interlock.Util.Json).Str(wardState, "epoch", ##class(Interlock.Util.Json).Str(route, "epoch"))
     Set summary."observed_at" = now
+    // The catalogue: the condition vocabulary this snapshot shows, and the entries whose pattern holds (CONTRACTS 6).
+    Try {
+        Set summary.catalogue = ##class(Interlock.Catalogue.Matcher).Match(##class(Interlock.Catalogue.Matcher).Conditions(case, summary, "single"))
+    } Catch ex {
+        Set summary.catalogue = {"decision": "error", "error": (ex.DisplayString())}
+    }
     Set summary."fresh_until" = snap.FreshUntil
     Set sc = snap.Seal(summary)
     If $$$ISERR(sc) Set response.Error = $SYSTEM.Status.GetErrorText(sc) Quit $$$OK
