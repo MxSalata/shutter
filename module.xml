@@ -14,9 +14,26 @@
       <Packaging>module</Packaging>
       <SourcesRoot>src</SourcesRoot>
       <SystemRequirements Version=">=2026.2" Interoperability="enabled"/>
-      <!-- The whole Interlock package except the parts that need AI Hub, which the aihub module adds
-           under the same package name. -->
-      <Resource Name="Interlock.PKG"/>
+      <!-- The core's classes, listed so that the aihub module can add its own under the same package
+           (Interlock.Agent, Interlock.Tools, Interlock.Schema, Interlock.Knowledge, Interlock.Bridge.Policy,
+           Interlock.Bridge.Monitor, Interlock.Bridge.Runner.AIHub) without the two modules claiming one resource. -->
+      <Resource Name="Interlock.API.PKG"/>
+      <Resource Name="Interlock.Bridge.Msg.PKG"/>
+      <Resource Name="Interlock.Bridge.Operation.PKG"/>
+      <Resource Name="Interlock.Bridge.Record.CLS"/>
+      <Resource Name="Interlock.Bridge.RunSpec.CLS"/>
+      <Resource Name="Interlock.Bridge.Runner.Replay.CLS"/>
+      <Resource Name="Interlock.Bridge.Runner.CLS"/>
+      <Resource Name="Interlock.Bridge.ToolCall.CLS"/>
+      <Resource Name="Interlock.Msg.PKG"/>
+      <Resource Name="Interlock.Operation.PKG"/>
+      <Resource Name="Interlock.Process.PKG"/>
+      <Resource Name="Interlock.Production.CLS"/>
+      <Resource Name="Interlock.Scenarios.PKG"/>
+      <Resource Name="Interlock.Service.PKG"/>
+      <Resource Name="Interlock.Setup.CLS"/>
+      <Resource Name="Interlock.Store.PKG"/>
+      <Resource Name="Interlock.Util.PKG"/>
       <!-- The synthetic ward system the production delivers to. -->
       <Resource Name="Wards.PKG"/>
       <!-- Folders, security, the library, prices, recorded runs, the web applications and the production. -->
