@@ -151,7 +151,10 @@ Method OnEvidence(case As Interlock.Store.Case, result As Interlock.Msg.Evidence
     Quit $$$OK
 }
 
-Method AgentRequestFor(case As Interlock.Store.Case, m As Interlock.Store.BoardMember, summaryJSON As %String, findingsJSON As %String) As Interlock.Bridge.Msg.AgentRequest
+/// The request the case workflow sends a board member, built from the case, its current snapshot's summary,
+/// the specialists' findings (for the coordinator) and the re-plan round. A class method, so a test can
+/// build the same request outside the production.
+ClassMethod BuildAgentRequest(case As Interlock.Store.Case, m As Interlock.Store.BoardMember, summaryJSON As %String, findingsJSON As %String, replans As %Integer = 0) As Interlock.Bridge.Msg.AgentRequest
 {
     Set req = ##class(Interlock.Bridge.Msg.AgentRequest).%New()
     Set req.Role = m.Role, req.MemberCode = m.Code, req.AgentClass = m.AgentClass
@@ -161,7 +164,7 @@ Method AgentRequestFor(case As Interlock.Store.Case, m As Interlock.Store.BoardM
     Set req.TerminalTool = m.TerminalTool
     Set req.ResultClass = $SELECT($ZCONVERT(m.TerminalTool, "L") [ "plan": "Interlock.Schema.Plan", 1: "Interlock.Schema.Findings")
     Set req.ConfigVersion = m.ConfigVersion
-    If case.Scenario '= "" Set req.RecordKey = "scenario:" _ case.Scenario _ "|" _ m.Code _ "|" _ m.ConfigVersion _ $SELECT(..Replans > 0: "|round" _ (..Replans + 1), 1: "")
+    If case.Scenario '= "" Set req.RecordKey = "scenario:" _ case.Scenario _ "|" _ m.Code _ "|" _ m.ConfigVersion _ $SELECT(replans > 0: "|round" _ (replans + 1), 1: "")
     Set context = {}
     Set context."case_id" = case.CaseId
     Set context.evidence = ##class(%DynamicObject).%FromJSON(summaryJSON)
@@ -175,6 +178,11 @@ Method AgentRequestFor(case As Interlock.Store.Case, m As Interlock.Store.BoardM
         Set req.Goal = "Review case " _ case.CaseId _ " as the " _ m.Name _ " specialist: " _ m.Perspective _ " Cite the evidence you used by its identifiers, say what is unknown, and submit your findings with SubmitFindings."
     }
     Quit req
+}
+
+Method AgentRequestFor(case As Interlock.Store.Case, m As Interlock.Store.BoardMember, summaryJSON As %String, findingsJSON As %String) As Interlock.Bridge.Msg.AgentRequest
+{
+    Quit ..BuildAgentRequest(case, m, summaryJSON, findingsJSON, ..Replans)
 }
 
 Method OnMember(case As Interlock.Store.Case, code As %String, result As Interlock.Bridge.Msg.AgentResponse) As %Status

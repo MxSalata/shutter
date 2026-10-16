@@ -180,4 +180,37 @@ ClassMethod Probe(agentClass As %String = "Interlock.Agent.Conformance") As %Str
     Quit out.%ToJSON()
 }
 
+/// Run one board member live for an existing case, outside the production: builds the request the
+/// case workflow would build (the snapshot summary, and the specialists' findings for the coordinator),
+/// runs this runner in <var>mode</var> (live or record) and returns the response as JSON. For checks
+/// over SQL once a provider is configured; the tool calls are keyed "test:<case>:<member>".
+ClassMethod TestRun(caseId As %String, memberCode As %String = "conformance", mode As %String = "live", tokenBudget As %Integer = 60000) As %String [ SqlProc ]
+{
+    Try {
+        Set case = ##class(Interlock.Store.Case).ByCaseId(caseId)
+        If '$ISOBJECT(case) Return {"error": ("Unknown case " _ caseId)}.%ToJSON()
+        Set member = ##class(Interlock.Store.BoardMember).ByCode(memberCode)
+        If '$ISOBJECT(member) Return {"error": ("Unknown board member " _ memberCode)}.%ToJSON()
+        Set snap = case.CurrentSnapshot
+        If '$ISOBJECT(snap) Return {"error": "The case has no evidence snapshot"}.%ToJSON()
+        Set findings = ""
+        If member.Role '= "specialist" Set findings = ##class(Interlock.Store.Finding).ForSnapshot(snap).%ToJSON()
+        Set request = ##class(Interlock.Process.CaseWorkflow).BuildAgentRequest(case, member, snap.Summary, findings, 0)
+        Set op = ##class(Interlock.Bridge.Operation.Agent).%New()
+        Set spec = ##class(Interlock.Bridge.RunSpec).FromRequest(request, op)
+        Set spec.Mode = mode, spec.TokenBudget = tokenBudget, spec.RecordKey = ""
+        Set spec.EnsMessageId = "test:" _ caseId _ ":" _ memberCode, spec.EnsSessionId = ""
+        Set response = ##class(Interlock.Bridge.Msg.AgentResponse).%New()
+        Set runner = ..%New()
+        Set sc = runner.Run(spec, .response)
+        Do ##class(Interlock.Bridge.Runner).Stamp(spec, response)
+        Set out = response.ToObject()
+        If $$$ISERR(sc) Set out."run_error" = $SYSTEM.Status.GetErrorText(sc)
+        Set out."tool_calls_detail" = ##class(Interlock.Bridge.ToolCall).ForRun(spec.EnsMessageId)
+        Return out.%ToJSON()
+    } Catch ex {
+        Return {"error": (ex.DisplayString())}.%ToJSON()
+    }
+}
+
 }
