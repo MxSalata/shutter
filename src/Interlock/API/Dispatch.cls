@@ -188,7 +188,15 @@ ClassMethod Rows(class As %String, sql As %String, args...) As %DynamicArray
 
 ClassMethod PortalPath() As %String
 {
-    Quit "/csp/" _ $ZCONVERT($NAMESPACE, "L") _ "/"
+    // The namespace's default web application: /csp/healthshare/<ns>/ on IRIS for Health, /csp/<ns>/ elsewhere.
+    Set app = ""
+    Try {
+        Set app = $SYSTEM.CSP.GetDefaultApp($NAMESPACE)
+    } Catch {
+    }
+    If app = "" Set app = "/csp/" _ $ZCONVERT($NAMESPACE, "L")
+    If $EXTRACT(app, *) '= "/" Set app = app _ "/"
+    Quit app
 }
 
 // ---- session ----
