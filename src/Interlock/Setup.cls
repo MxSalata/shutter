@@ -649,8 +649,13 @@ ClassMethod ClearStartupAlerts(lines As %Integer = 400) As %String [ SqlProc ]
     Try {
         Set before = $SYSTEM.Monitor.State()
         Set log = ..TailLog(lines)
+        // Only this start: the image's log also holds the lines of the IRIS run during the build.
+        Set total = $LENGTH(log, $CHAR(10)), from = 1
+        For i = 1:1:total {
+            If $PIECE(log, $CHAR(10), i) [ "Startup of InterSystems IRIS" Set from = i
+        }
         Set severe = 0, known = 0, other = ""
-        For i = 1:1:$LENGTH(log, $CHAR(10)) {
+        For i = from:1:total {
             Set line = $PIECE(log, $CHAR(10), i)
             // "mm/dd/yy-hh:mm:ss:mmm (pid) <severity> [Source] text"
             Set sev = $PIECE($PIECE(line, ") ", 2), " ", 1)
