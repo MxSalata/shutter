@@ -1,0 +1,52 @@
+{
+ "key": "scenario:S9|coordinator|1",
+ "agentClass": "Interlock.Agent.Coordinator",
+ "configVersion": "1",
+ "memberCode": "coordinator",
+ "snapshotDigest": "",
+ "correlationKey": "scenario:S9",
+ "model": "fixture",
+ "response": {
+  "status": "ok",
+  "agent_class": "Interlock.Agent.Coordinator",
+  "config_version": "1",
+  "mode": "record",
+  "model": "fixture",
+  "provider_config": "",
+  "started_at": "2026-10-16T10:00:00Z",
+  "duration_ms": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cache_read_tokens": 0,
+  "cache_creation_tokens": 0,
+  "iterations": 0,
+  "tool_calls": 2,
+  "session_id": "",
+  "result": {
+   "disposition": "resend",
+   "summary": "The message is valid, nothing has happened to ENC-1009 since the failure, and the effect is bounded. Resend the 09:20 transfer unchanged, conditional on receiver version 1, after a rehearsal and an approval.",
+   "action": {
+    "type": "resend",
+    "operation_key": "PAS^HOSP^MRN1009^ENC-1009^transfer^2026-10-15T09:20:00Z",
+    "expected_version": 1
+   },
+   "preconditions": [
+    "The receiver's version is still 1 at dispatch",
+    "No later transfer or discharge appears before dispatch"
+   ],
+   "evidence_refs": [
+    "ward_state",
+    "receipt",
+    "message"
+   ],
+   "disagreements": []
+  },
+  "content": "",
+  "error": "",
+  "record_id": ""
+ },
+ "transcript": "",
+ "toolCalls": "[{\"name\": \"search_playbooks\"}, {\"name\": \"SubmitPlan\"}]",
+ "recordedAt": "2026-10-16T10:00:00Z",
+ "label": "Hand-written fixture standing in for a live recording; replaced when the live agents run"
+}

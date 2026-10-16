@@ -1,0 +1,56 @@
+{
+ "key": "scenario:S6|coordinator|1",
+ "agentClass": "Interlock.Agent.Coordinator",
+ "configVersion": "1",
+ "memberCode": "coordinator",
+ "snapshotDigest": "",
+ "correlationKey": "scenario:S6",
+ "model": "fixture",
+ "response": {
+  "status": "ok",
+  "agent_class": "Interlock.Agent.Coordinator",
+  "config_version": "1",
+  "mode": "record",
+  "model": "fixture",
+  "provider_config": "",
+  "started_at": "2026-10-16T10:00:00Z",
+  "duration_ms": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cache_read_tokens": 0,
+  "cache_creation_tokens": 0,
+  "iterations": 0,
+  "tool_calls": 2,
+  "session_id": "",
+  "result": {
+   "disposition": "superseded",
+   "summary": "The 11:00 discharge ended the stay after the failed 09:20 transfer, and a transfer after a discharge is an invalid transition. Close the case as superseded with nothing resent; verify that the receiver's history shows the discharge and no receipt for the 09:20 operation.",
+   "action": {
+    "type": "none"
+   },
+   "preconditions": [
+    "The receiver's history shows the 11:00 discharge",
+    "No receipt exists for the 09:20 operation"
+   ],
+   "evidence_refs": [
+    "ward_state",
+    "receipt",
+    "later_event"
+   ],
+   "disagreements": [
+    {
+     "member": "conformance",
+     "said": "resend",
+     "why_kept": "Conformance judged the message alone; the discharge settles the intent"
+    }
+   ]
+  },
+  "content": "",
+  "error": "",
+  "record_id": ""
+ },
+ "transcript": "",
+ "toolCalls": "[{\"name\": \"search_playbooks\"}, {\"name\": \"SubmitPlan\"}]",
+ "recordedAt": "2026-10-16T10:00:00Z",
+ "label": "Hand-written fixture standing in for a live recording; replaced when the live agents run"
+}
