@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'core/**', 'house/**']
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege by default; the Pages deployment raises what it needs.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The web application: types, lint, format, unit and page tests, the committed www/ build, and axe-core on every
+  # screen in every appearance against the demo build. The demo build is kept as an artifact.
+  web:
+    name: Web application
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+      - name: www/ is current (IRIS serves the committed build)
+        run: |
+          npm run build:www
+          if [ -n "$(git status --porcelain -- ../www)" ]; then
+            echo "www/ is stale: run 'npm run build:www' in web/ and commit the result"
+            git status --porcelain -- ../www
+            exit 1
+          fi
+      - name: Install Playwright's Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Accessibility of every screen in every appearance (axe-core, WCAG 2.1 A/AA)
+        run: npm run test:e2e
+        env:
+          CI: 'true'
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: playwright-report
+          path: web/playwright-report
+      - name: Build the online demo (recorded runs on the in-browser mock)
+        run: npm run build:demo
+      # Every run keeps the demo as a plain artifact (unzip and serve with any static server). The Pages artifact and
+      # the deployment below are opt-in through the repository variable DEPLOY_DEMO: Pages needs a public repository.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: demo-site
+          path: web/dist-demo
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        if: vars.DEPLOY_DEMO == 'true' && github.ref == 'refs/heads/main'
+        with:
+          path: web/dist-demo
+
+  # The ObjectScript side on a real IRIS for Health Community 2026.2 (the public image; the AI Hub build is not on a
+  # registry CI can pull from, and the core needs none of it): the namespace, a full load and compile, the installer,
+  # the ward's contract tests in process and over HTTP, and scenarios S1 to S3 end to end with their recorded runs.
+  iris:
+    name: IRIS (the ward's contract, scenarios in replay)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      IRIS_URL: http://localhost:52773
+      IRIS_IMAGE: intersystemsdc/irishealth-community:2026.2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Start IRIS with the repository mounted
+        run: docker run -d --name iris -p 52773:52773 -v "$GITHUB_WORKSPACE:/home/irisowner/dev:ro" "$IRIS_IMAGE"
+      - name: Wait for the Atelier API
+        run: |
+          code=
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -u _SYSTEM:SYS "$IRIS_URL/api/atelier/" || true)
+            if [ "$code" = "200" ]; then echo "IRIS answered after $((i*5)) s"; exit 0; fi
+            sleep 5
+          done
+          echo "The Atelier API did not come up (last HTTP status: '$code')"
+          docker logs iris 2>&1 | tail -80
+          exit 1
+      - name: Create the INTERLOCK namespace
+        run: |
+          python3 scripts/iris-load.py --url "$IRIS_URL" --ns USER src/Interlock/Setup.cls
+          python3 scripts/iris-sql.py --url "$IRIS_URL" --ns USER "SELECT Interlock.Setup_CreateNamespace('INTERLOCK') AS r"
+      - name: Load and compile the core, the ward system and its tests
+        run: python3 scripts/iris-load.py --url "$IRIS_URL" --ns INTERLOCK src tests/unit/Wards
+      - name: Install (roles, demo users, web applications, the production)
+        run: |
+          out=$(python3 scripts/iris-sql.py --url "$IRIS_URL" --ns INTERLOCK --json "SELECT Interlock.Setup_Install('/home/irisowner/dev/') AS r")
+          echo "$out"
+          echo "$out" | python3 -c 'import json, sys; r = json.load(sys.stdin)[0]["r"]; sys.exit(0 if str(r).startswith("ok") else 1)'
+      - name: The ward's contract tests, in process
+        run: |
+          out=$(python3 scripts/iris-sql.py --url "$IRIS_URL" --ns INTERLOCK --json "SELECT Wards_Test.Run_Contract() AS r")
+          echo "$out"
+          echo "$out" | python3 -c '
+          import json, sys
+          r = json.load(sys.stdin)[0]["r"]
+          r = json.loads(r) if isinstance(r, str) else r
+          sys.exit(0 if r["failed"] == 0 and r["passed"] > 0 else 1)'
+      - name: The ward's API over HTTP
+        run: python3 tests/e2e/ward_api_check.py --url "$IRIS_URL" --second-user wards-client --second-password interlock
+      - name: Scenarios S1 to S3 end to end in replay (superseded, resend after approval, reconcile)
+        run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --approve S1 S2 S3
+      - name: Readiness report and the IRIS log
+        if: always()
+        run: |
+          python3 scripts/iris-sql.py --url "$IRIS_URL" --ns INTERLOCK "SELECT Interlock.Setup_Doctor() AS r" || true
+          docker logs iris 2>&1 | tail -80 || true
+
+  # Publishes the demo to GitHub Pages. Skipped (not failed) until the repository is public, Pages is enabled
+  # (Settings, Pages, Source: GitHub Actions) and the repository variable DEPLOY_DEMO is 'true'.
+  deploy-demo:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_DEMO == 'true'
+    needs: [web, iris]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    # Pages deployments must never be interrupted, so this job keeps its own serial queue.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
