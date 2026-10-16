@@ -5,6 +5,9 @@
 
 The key travels as a SQL parameter in the request body, never in the query text or on the screen;
 the instance's Interlock.Setup_ConfigureProvider stores it and answers with a status line only.
+Caveat: with SQL statement auditing switched on (off by default) IRIS would log the parameter value;
+on such an instance set ANTHROPIC_API_KEY in the container's environment instead and restart the
+production (Interlock.Production.OnStart writes the configuration from it).
 """
 import argparse
 import base64
