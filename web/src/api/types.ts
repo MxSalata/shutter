@@ -419,16 +419,20 @@ export interface Settings {
 }
 
 export interface Costs {
+  /** What was spent: live and record runs. A replay reuses a recording's tokens and costs nothing. */
+  totals?: { spentUsd: number; liveRuns: number; replayedRuns: number };
   byModel: {
     model: string;
+    /** live, record or replay: replays have their own rows, at no cost. */
+    mode?: string;
     runs: number;
     promptTokens: number;
     completionTokens: number;
     cacheReadTokens: number;
     costUsd: number;
   }[];
-  byDay: { day: string; runs: number; costUsd: number }[];
-  byCase: { caseId: string; runs: number; costUsd: number }[];
+  byDay: { day: string; runs: number; replayedRuns?: number; costUsd: number }[];
+  byCase: { caseId: string; runs: number; replayedRuns?: number; costUsd: number }[];
 }
 
 export type Health = Record<string, unknown>;

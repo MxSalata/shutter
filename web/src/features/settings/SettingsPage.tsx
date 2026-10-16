@@ -180,6 +180,19 @@ export default function SettingsPage() {
             Costs
           </Title>
           {costs.isError ? <ErrorAlert error={costs.error} title="The costs could not be read" /> : null}
+          {costs.data?.totals ? (
+            <Text size="sm" mb="sm">
+              <Text span fw={700}>
+                {formatUsd(costs.data.totals.spentUsd)}
+              </Text>{' '}
+              spent on {formatInt(costs.data.totals.liveRuns)} live agent{' '}
+              {costs.data.totals.liveRuns === 1 ? 'run' : 'runs'}
+              {costs.data.totals.replayedRuns
+                ? `; ${formatInt(costs.data.totals.replayedRuns)} replayed ${costs.data.totals.replayedRuns === 1 ? 'run' : 'runs'} cost nothing, since a replay reuses a recorded run`
+                : ''}
+              .
+            </Text>
+          ) : null}
           {costs.data ? (
             <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
               <Stack gap={4}>
@@ -202,8 +215,16 @@ export default function SettingsPage() {
                     </Table.Thead>
                     <Table.Tbody>
                       {costs.data.byModel.map((m) => (
-                        <Table.Tr key={m.model}>
-                          <Table.Td>{m.model}</Table.Td>
+                        <Table.Tr key={`${m.model}|${m.mode ?? ''}`}>
+                          <Table.Td>
+                            {m.model}
+                            {m.mode ? (
+                              <Text span size="xs" c="dimmed">
+                                {' '}
+                                · {m.mode === 'replay' ? 'replayed' : 'live'}
+                              </Text>
+                            ) : null}
+                          </Table.Td>
                           <Table.Td>{m.runs}</Table.Td>
                           <Table.Td>
                             {formatInt(m.promptTokens)} / {formatInt(m.completionTokens)}
@@ -236,7 +257,10 @@ export default function SettingsPage() {
                       {costs.data.byCase.map((c) => (
                         <Table.Tr key={c.caseId}>
                           <Table.Td>{c.caseId}</Table.Td>
-                          <Table.Td>{c.runs}</Table.Td>
+                          <Table.Td>
+                            {c.runs}
+                            {c.replayedRuns ? ` (${c.replayedRuns} replayed)` : ''}
+                          </Table.Td>
                           <Table.Td>{formatUsd(c.costUsd)}</Table.Td>
                         </Table.Tr>
                       ))}
