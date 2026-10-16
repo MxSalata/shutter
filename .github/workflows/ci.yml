@@ -173,7 +173,10 @@ jobs:
           --build-arg WITH_AIHUB=0
           -t interlock:ci .
       - name: Start it
-        run: docker run -d --name interlock -p 52773:52773 interlock:ci --check-caps false --ISCAgent false
+        # Arguments replace the image's CMD, so its --after script (the startup alerts it clears) is passed on too.
+        run: >-
+          docker run -d --name interlock -p 52773:52773 interlock:ci
+          --check-caps false --ISCAgent false --after /home/irisowner/dev/after-start.sh
       - name: Wait for the web application
         run: |
           code=
