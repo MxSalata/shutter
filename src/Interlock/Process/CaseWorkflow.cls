@@ -89,12 +89,16 @@ Property BoardTimeoutSeconds As %Integer [ InitialExpression = 600 ];
 
 Property CoordinatorPending As %Boolean [ InitialExpression = 0 ];
 
+/// Set on an instance that reopened a closed case: it runs alone, even when an incident once held the case.
+Property Reopened As %Boolean [ InitialExpression = 0 ];
+
 Parameter SETTINGS = "EvidenceTarget:Targets,GateTarget:Targets,WardTarget:Targets,ApprovalTarget:Targets,VerifyTarget:Targets,IncidentTarget:Targets,ApprovalValidSeconds:Approval,SettleSeconds:Timing,BoardTimeoutSeconds:Timing";
 
 Method OnRequest(request As %Library.Persistent, Output response As %Library.Persistent) As %Status
 {
     Set response = ""
     If request.%IsA("Interlock.Msg.CaseRelease") Quit ..OnRelease(request, .response)
+    If request.%IsA("Interlock.Msg.Reinvestigate") Quit ..OnReinvestigate(request, .response)
     If 'request.%IsA("Interlock.Msg.CaseIntake") Quit $$$ERROR($$$GeneralError, "Case Workflow expects a case intake or a case release, got " _ $CLASSNAME(request))
     Set op = ##class(Interlock.Util.Json).Parse(request.OperationJSON, .sc)
     If $$$ISERR(sc) Quit sc
@@ -201,7 +205,7 @@ Method OnEvidence(case As Interlock.Store.Case, result As Interlock.Msg.Evidence
     Quit:$$$ISERR(sc) sc
     // A case an incident holds parks here, its evidence and match in the store: the incident decides when it is
     // released (CONTRACTS 7.1).
-    If '..Release && $ISOBJECT(case.Incident) Quit ..Park(case)
+    If '..Release && '..Reopened && $ISOBJECT(case.Incident) Quit ..Park(case)
     Set summary = ##class(Interlock.Util.Json).Parse(result.SummaryJSON, .psc)
     Set cat = $SELECT($ISOBJECT(summary): summary.%Get("catalogue"), 1: "")
     Set decision = $SELECT($ISOBJECT(cat): ##class(Interlock.Util.Json).Str(cat, "decision"), 1: "")
@@ -495,7 +499,7 @@ Method AdoptPlan(case As Interlock.Store.Case, plan As %DynamicObject, createdBy
     Set sc = case.Transition("proposed", "Plan v" _ p.Version _ " (" _ p.Disposition _ "): " _ p.Summary, createdBy, "plan:" _ p.%Id())
     Quit:$$$ISERR(sc) sc
     // A case its incident adopted while the board sat parks here: the plan is on the case, the release re-plans.
-    If '..Release && $ISOBJECT(case.Incident) Quit ..Park(case)
+    If '..Release && '..Reopened && $ISOBJECT(case.Incident) Quit ..Park(case)
     Quit ..SendGate(case, "proposal", "gate:proposal")
 }
 
@@ -665,6 +669,29 @@ Method OnRelease(request As Interlock.Msg.CaseRelease, Output response As %Libra
     Set how = $CASE(..ReleasePolicy, "automatic": "automatic by site policy", "incident": "under the incident's approval by " _ ..IncidentApprover, : "on its own path")
     Do case.Note("note", "Released by incident " _ ..IncidentId _ ": chain " _ ..ChainSeq _ " item " _ ..ChainPosition _ " (" _ ..ChainKind _ ", " _ ..ChainDecides _ " decides, " _ how _ ")" _ $SELECT(..ExpectedVersion '= "": "; expected receiver version " _ ..ExpectedVersion, 1: "; fresh evidence decides"), "system", "incident:" _ ..IncidentId)
     $$$TRACE("Case " _ case.CaseId _ " released by incident " _ ..IncidentId)
+    Quit ..StartEvidence(case)
+}
+
+/// A closed case reopened by a person: fresh evidence, a new plan version, the old plan and approval kept as
+/// history. A case an incident once held runs alone from here.
+Method OnReinvestigate(request As Interlock.Msg.Reinvestigate, Output response As %Library.Persistent) As %Status
+{
+    Set case = ##class(Interlock.Store.Case).ByCaseId(request.CaseId)
+    If '$ISOBJECT(case) Quit $$$ERROR($$$GeneralError, "No case " _ request.CaseId _ " to reopen")
+    Set started = ##class(Interlock.Msg.CaseStarted).%New()
+    Set started.CaseId = case.CaseId, started.Opened = 0, started.State = case.State
+    Set response = started
+    If 'case.IsClosed() || (case.State = "resolved") {
+        $$$LOGWARNING("Case " _ case.CaseId _ " is " _ case.State _ "; only a blocked, escalated or failed case can be reopened")
+        Quit $$$OK
+    }
+    Set ..CaseId = case.CaseId, ..Mode = case.Mode, ..Reopened = 1
+    Set case.WorkflowSessionId = ..%SessionId, case.ClosedAt = ""
+    If $ISOBJECT(case.CurrentApproval) && 'case.CurrentApproval.Revoked Do case.CurrentApproval.Revoke(request.RequestedBy _ ": the case was reopened")
+    Do case.%Save()
+    Set who = $SELECT(request.RequestedBy = "": "a person", 1: request.RequestedBy)
+    Do case.Note("note", "Reopened by " _ who _ $SELECT(request.Reason '= "": ": " _ request.Reason, 1: "") _ ". Fresh evidence; the earlier plan and approval stay as history", who)
+    $$$TRACE("Case " _ case.CaseId _ " reopened by " _ who)
     Quit ..StartEvidence(case)
 }
 
@@ -901,6 +928,9 @@ Storage Default
 </Value>
 <Value name="34">
 <Value>CoordinatorPending</Value>
+</Value>
+<Value name="35">
+<Value>Reopened</Value>
 </Value>
 </Data>
 <DefaultData>CaseWorkflowDefaultData</DefaultData>

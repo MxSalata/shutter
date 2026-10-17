@@ -34,6 +34,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/cases/:caseId/closure" Method="GET" Call="CaseClosure"/>
   <Route Url="/cases/:caseId/preview-blind-resend" Method="POST" Call="CasePreview"/>
   <Route Url="/cases/:caseId/blocked-reason" Method="GET" Call="CaseBlockedReason"/>
+  <Route Url="/cases/:caseId/reinvestigate" Method="POST" Call="CaseReinvestigate"/>
   <Route Url="/library" Method="GET" Call="Library"/>
   <Route Url="/library/:code" Method="PATCH" Call="LibraryPatch"/>
   <Route Url="/settings" Method="GET" Call="Settings"/>
@@ -671,6 +672,34 @@ ClassMethod CaseBlockedReason(caseId As %String) As %Status
 }
 
 // ---- library, settings, costs ----
+
+/// Reopen a blocked, escalated or failed case: a fresh instance collects fresh evidence and plans again.
+ClassMethod CaseReinvestigate(caseId As %String) As %Status
+{
+    If '..Allow("Interlock_Operate", 1) Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    Set body = ##class(Interlock.Util.Json).Parse(bodyText, .psc)
+    If '$ISOBJECT(body) Set body = {}
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    If 'case.IsClosed() || (case.State = "resolved") Quit ..Fail("409 Conflict", "wrong_state", "The case is " _ case.State _ "; only a blocked, escalated or failed case can be reopened")
+    Set msg = ##class(Interlock.Msg.Reinvestigate).%New()
+    Set msg.CaseId = caseId, msg.RequestedBy = ..User(), msg.Reason = $EXTRACT(##class(Interlock.Util.Json).Str(body, "reason"), 1, 2000)
+    Set sc = ##class(Ens.Director).CreateBusinessService("Interlock API", .service)
+    If $$$ISERR(sc) || '$ISOBJECT(service) Quit ..Fail("503 Service Unavailable", "no_service", "The API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
+    Set service.Target = "Case Workflow", service.Async = 1
+    Set sc = service.ProcessInput(msg)
+    If $$$ISERR(sc) Quit ..Fail("503 Service Unavailable", "not_queued", "The case could not be reopened: " _ $SYSTEM.Status.GetErrorText(sc))
+    Set reply = {}
+    Set reply.caseId = caseId, reply.state = "reopening", reply.requestedBy = ..User()
+    Set text = reply.%ToJSON()
+    Do ..Remember(bodyText, "202 Accepted", text)
+    Set %response.Status = "202 Accepted"
+    Write text
+    Quit $$$OK
+}
 
 ClassMethod Library() As %Status
 {
