@@ -389,13 +389,13 @@ ClassMethod PurgeStore() As %String [ SqlProc ]
     If '$SYSTEM.Security.Check("Interlock_Operate", "USE") Quit "Interlock_Operate is required"
     If '$GET(^Interlock.Config("demo")) Quit "ERROR: not a demo instance"
     Set n = 0
-    For cls = "Interlock.Store.Verification", "Interlock.Store.ExecutionAttempt", "Interlock.Store.Approval", "Interlock.Store.Rehearsal", "Interlock.Store.GateDecision", "Interlock.Store.Plan", "Interlock.Store.Finding", "Interlock.Store.AgentRun", "Interlock.Store.SnapshotItem", "Interlock.Store.Snapshot", "Interlock.Store.CaseEvent", "Interlock.Store.Case", "Interlock.Store.Idempotency", "Interlock.Bridge.ToolCall" {
+    For cls = "Interlock.Store.ChainItem", "Interlock.Store.Chain", "Interlock.Store.IncidentEvent", "Interlock.Store.Incident", "Interlock.Store.Verification", "Interlock.Store.ExecutionAttempt", "Interlock.Store.Approval", "Interlock.Store.Rehearsal", "Interlock.Store.GateDecision", "Interlock.Store.Plan", "Interlock.Store.Finding", "Interlock.Store.AgentRun", "Interlock.Store.SnapshotItem", "Interlock.Store.Snapshot", "Interlock.Store.CaseEvent", "Interlock.Store.Case", "Interlock.Store.Idempotency", "Interlock.Bridge.ToolCall" {
         Set sc = $CLASSMETHOD(cls, "%KillExtent")
         If $$$ISERR(sc) Quit
         Set n = n + 1
     }
     If $$$ISERR(sc) Quit "ERROR: " _ $SYSTEM.Status.GetErrorText(sc)
-    Kill ^Interlock.Counter
+    Kill ^Interlock.Counter, ^Interlock.Scenarios
     Quit n
 }
 

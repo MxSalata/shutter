@@ -142,13 +142,23 @@ ClassMethod Classify(chain As Interlock.Store.Chain) As %Status
     } Else {
         Set chain.Kind = "ordered"
     }
-    Set entries = "", decides = "policy", firstCase = ""
+    Set entries = "", decides = "policy", firstCase = "", proj = "", projWard = ""
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Interlock_Store.ChainItem WHERE Chain = ? ORDER BY Position", chain.%Id())
     While rs.%Next() {
         Set it = ##class(Interlock.Store.ChainItem).%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(it)
         Set c = it.Case
-        Set cat = ..Rematch(c, chain.Kind)
+        // In an ordered chain the earlier items go first, so a later item is matched against the state they leave
+        // (a transfer behind a lost admission sees "admitted", not the receiver's 404), when that state is known.
+        If (chain.Kind = "ordered") && (it.Position > 1) && (proj '= "") {
+            Set cat = ..Rematch(c, chain.Kind, proj, projWard)
+            Do chain.Incident.Note("note", "Chain " _ chain.Seq _ " item " _ it.Position _ " (" _ c.CaseId _ ") matched against the state the earlier items leave: " _ proj _ $SELECT(projWard '= "": " at " _ projWard, 1: ""), "system")
+        } Else {
+            Set cat = ..Rematch(c, chain.Kind)
+        }
+        If it.Position = 1 Set proj = ..StateOf(c)
+        Set proj = $CASE(c.Event, "admit": "admitted", "transfer": $SELECT(proj = "": "", 1: "admitted"), "discharge": $SELECT(proj = "": "", 1: "discharged"), : proj)
+        If (c.Event = "admit") || (c.Event = "transfer") Set projWard = c.Ward
         If $ISOBJECT(cat) {
             Set it.Entry = ##class(Interlock.Util.Json).Str(cat, "entry"), it.CatalogueOutcome = ##class(Interlock.Util.Json).Str(cat, "outcome")
             Set it.Decides = ##class(Interlock.Util.Json).Str(cat, "decision")
@@ -175,12 +185,21 @@ ClassMethod Classify(chain As Interlock.Store.Chain) As %Status
     Quit chain.%Save()
 }
 
-/// The case's snapshot matched again with the chain condition set; the snapshot's own match when the matcher fails.
-ClassMethod Rematch(case As Interlock.Store.Case, chainKind As %String) As %DynamicObject
+/// The case's snapshot matched again with the chain condition set, and, when a projected state is given, with the
+/// receiver's state replaced by the one the chain's earlier items leave; the snapshot's own match when the matcher fails.
+ClassMethod Rematch(case As Interlock.Store.Case, chainKind As %String, projectedState As %String = "", projectedWard As %String = "") As %DynamicObject
 {
     If '$ISOBJECT(case) || '$ISOBJECT(case.CurrentSnapshot) Quit ""
     Set summary = case.CurrentSnapshot.SummaryObject()
     If '$ISOBJECT(summary) Quit ""
+    If projectedState '= "" {
+        Set summary = ##class(%DynamicObject).%FromJSON(summary.%ToJSON())
+        Do summary.%Set("ward_state_http_status", 200, "number")
+        Set ws = {}
+        Set ws.state = projectedState, ws.ward = projectedWard, ws."patient_id" = case.PatientId, ws."patient_id_authority" = case.PatientIdAuthority
+        Do ws.%Set("projected", 1, "boolean")
+        Set summary."ward_state" = ws
+    }
     Try {
         Set cat = ##class(Interlock.Catalogue.Matcher).Match(##class(Interlock.Catalogue.Matcher).Conditions(case, summary, chainKind), ##class(Interlock.Catalogue.Matcher).Facts(summary, case))
     } Catch ex {
@@ -226,6 +245,18 @@ ClassMethod VersionOf(case As Interlock.Store.Case) As %String
     Set ward = case.CurrentSnapshot.SummaryObject().%Get("ward_state")
     If '$ISOBJECT(ward) Quit ""
     Quit ##class(Interlock.Util.Json).Str(ward, "version")
+}
+
+/// The receiver's encounter state in the case's snapshot (admitted, discharged), or "" when it could not be read or
+/// the receiver does not know the encounter.
+ClassMethod StateOf(case As Interlock.Store.Case) As %String
+{
+    If '$ISOBJECT(case) || '$ISOBJECT(case.CurrentSnapshot) Quit ""
+    Set summary = case.CurrentSnapshot.SummaryObject()
+    If ##class(Interlock.Util.Json).Str(summary, "ward_state_http_status") '= 200 Quit ""
+    Set ward = summary.%Get("ward_state")
+    If '$ISOBJECT(ward) Quit ""
+    Quit ##class(Interlock.Util.Json).Str(ward, "state")
 }
 
 /// The receiver's epoch in the case's snapshot, or "".
