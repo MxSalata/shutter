@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Writes the HL7 fixtures and scenarios.json for the scenarios S1 to S11 (docs/CONTRACTS.md, sections 3 and 7.6).
+"""Writes the HL7 fixtures and scenarios.json for the scenarios S1 to S12 (docs/CONTRACTS.md, sections 3 and 7.6).
 
     python3 fixtures/generate.py
 
@@ -30,6 +30,11 @@ PATIENTS = {
     "S11-P4": ("MRN1104", "ENC-1104", "SYNTH^NINA", "19651230", "F"),
     "S11-P5": ("MRN1105", "ENC-1105", "SYNTH^OSCAR", "19771006", "M"),
     "S11-P6": ("MRN1106", "ENC-1106", "SYNTH^PIA", "20000512", "F"),
+    # S12, a lost admission at the head of a chain
+    "S12-P1": ("MRN1201", "ENC-1201", "SYNTH^RUBY", "19900301", "F"),
+    "S12-P2": ("MRN1202", "ENC-1202", "SYNTH^SAM", "19720615", "M"),
+    "S12-P3": ("MRN1203", "ENC-1203", "SYNTH^TESS", "19850920", "F"),
+    "S12-P4": ("MRN1204", "ENC-1204", "SYNTH^URI", "19691111", "M"),
 }
 
 LOCATIONS = {
@@ -351,6 +356,46 @@ def scenarios():
             "failed_operation_keys": [m[2]["operation_key"] for m in first_burst + second_burst],
         },
     }, messages))
+
+    # S12: a lost admission at the head of a chain (the review's E-03). The outage takes P1's admission and its
+    # transfer, and three other patients' transfers: five failures, so an incident opens.
+    def q(n, seq, trigger, time, **kw):
+        return message("S12", seq, trigger, time, patient=f"S12-P{n}", **kw)
+
+    applied = [q(n, n - 1, "A01", "0900", ward="WARD-A") for n in range(2, 5)]
+    lost = [
+        q(1, 4, "A01", "0900", ward="WARD-A"),
+        q(1, 5, "A02", "0920", ward="WARD-B", prior="WARD-A"),
+        q(2, 6, "A02", "0920", ward="WARD-B", prior="WARD-A"),
+        q(3, 7, "A02", "0920", ward="WARD-B", prior="WARD-A"),
+        q(4, 8, "A02", "0920", ward="WARD-B", prior="WARD-A"),
+    ]
+    out.append(({
+        "id": "S12",
+        "title": "A lost admission at the head of a chain",
+        "summary": "The ward goes down while a new patient is admitted and moved, and three other patients are moved: "
+                   "five deliveries fail, so an incident opens. The new patient's transfer can't apply to an encounter "
+                   "the ward has never seen, so the chain is matched against the state its admission leaves: the "
+                   "admission goes first, then the transfer at the version the admission verified.",
+        "patients": ["S12-P1", "S12-P2", "S12-P3", "S12-P4"],
+        "steps": [{"file": m[0]} for m in applied] + [{"fault": "fail_before_accept"}]
+                 + [{"file": m[0], "expect": "delivery_fails"} for m in lost] + [{"wait": 5}, {"fault": "off"}],
+        "expected": {
+            "incident": True,
+            "modes": ["policy"],
+            "encounters": [
+                {"encounter": "ENC-1201", "entries": ["E4"], "chain": "ordered", "path": "approval", "writes": 2,
+                 "final_state": "admitted", "final_ward": "WARD-B"},
+                {"encounter": "ENC-1202", "entries": ["E2"], "chain": "single", "path": "automatic", "writes": 1,
+                 "final_state": "admitted", "final_ward": "WARD-B"},
+                {"encounter": "ENC-1203", "entries": ["E2"], "chain": "single", "path": "automatic", "writes": 1,
+                 "final_state": "admitted", "final_ward": "WARD-B"},
+                {"encounter": "ENC-1204", "entries": ["E2"], "chain": "single", "path": "automatic", "writes": 1,
+                 "final_state": "admitted", "final_ward": "WARD-B"},
+            ],
+            "failed_operation_keys": [m[2]["operation_key"] for m in lost],
+        },
+    }, applied + lost))
 
     return out
 

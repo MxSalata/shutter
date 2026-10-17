@@ -518,5 +518,115 @@
         "PAS^HOSP^MRN1103^ENC-1103^discharge^2026-10-15T10:30:00Z"
       ]
     }
+  },
+  {
+    "id": "S12",
+    "title": "A lost admission at the head of a chain",
+    "summary": "The ward goes down while a new patient is admitted and moved, and three other patients are moved: five deliveries fail, so an incident opens. The new patient's transfer can't apply to an encounter the ward has never seen, so the chain is matched against the state its admission leaves: the admission goes first, then the transfer at the version the admission verified.",
+    "patients": [
+      "S12-P1",
+      "S12-P2",
+      "S12-P3",
+      "S12-P4"
+    ],
+    "steps": [
+      {
+        "file": "S12-01-A01.hl7"
+      },
+      {
+        "file": "S12-02-A01.hl7"
+      },
+      {
+        "file": "S12-03-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S12-04-A01.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "file": "S12-05-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "file": "S12-06-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "file": "S12-07-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "file": "S12-08-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      }
+    ],
+    "expected": {
+      "incident": true,
+      "modes": [
+        "policy"
+      ],
+      "encounters": [
+        {
+          "encounter": "ENC-1201",
+          "entries": [
+            "E4"
+          ],
+          "chain": "ordered",
+          "path": "approval",
+          "writes": 2,
+          "final_state": "admitted",
+          "final_ward": "WARD-B"
+        },
+        {
+          "encounter": "ENC-1202",
+          "entries": [
+            "E2"
+          ],
+          "chain": "single",
+          "path": "automatic",
+          "writes": 1,
+          "final_state": "admitted",
+          "final_ward": "WARD-B"
+        },
+        {
+          "encounter": "ENC-1203",
+          "entries": [
+            "E2"
+          ],
+          "chain": "single",
+          "path": "automatic",
+          "writes": 1,
+          "final_state": "admitted",
+          "final_ward": "WARD-B"
+        },
+        {
+          "encounter": "ENC-1204",
+          "entries": [
+            "E2"
+          ],
+          "chain": "single",
+          "path": "automatic",
+          "writes": 1,
+          "final_state": "admitted",
+          "final_ward": "WARD-B"
+        }
+      ],
+      "failed_operation_keys": [
+        "PAS^HOSP^MRN1201^ENC-1201^admit^2026-10-15T09:00:00Z",
+        "PAS^HOSP^MRN1201^ENC-1201^transfer^2026-10-15T09:20:00Z",
+        "PAS^HOSP^MRN1202^ENC-1202^transfer^2026-10-15T09:20:00Z",
+        "PAS^HOSP^MRN1203^ENC-1203^transfer^2026-10-15T09:20:00Z",
+        "PAS^HOSP^MRN1204^ENC-1204^transfer^2026-10-15T09:20:00Z"
+      ]
+    }
   }
 ]
