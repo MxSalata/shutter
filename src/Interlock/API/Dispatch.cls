@@ -237,7 +237,12 @@ ClassMethod Me() As %Status
 
 ClassMethod Health() As %Status
 {
-    Quit ..Json(##class(%DynamicObject).%FromJSON(##class(Interlock.Setup).Doctor()))
+    Set full = ##class(%DynamicObject).%FromJSON(##class(Interlock.Setup).Doctor())
+    If $SYSTEM.Security.Check("Interlock_Operate", "USE") Quit ..Json(full)
+    // Anyone may ask whether the instance is up and whether it is the demo; the rest is for signed-in users.
+    Set o = {}
+    For key = "status", "ok", "demo", "version", "production", "mode" { If full.%IsDefined(key) Do o.%Set(key, full.%Get(key), $SELECT(full.%GetTypeOf(key) = "boolean": "boolean", 1: "")) }
+    Quit ..Json(o)
 }
 
 // ---- scenarios ----

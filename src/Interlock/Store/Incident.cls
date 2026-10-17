@@ -220,6 +220,7 @@ Method Abandon(why As %String, actor As %String = "operator") As %Status
 /// Abandon an incident by its public id (for the terminal and SQL); returns the status text.
 ClassMethod AbandonById(id As %String, why As %String, actor As %String = "operator") As %String [ SqlProc ]
 {
+    If '$SYSTEM.Security.Check("Interlock_Operate", "USE") Quit "Interlock_Operate is required"
     Set inc = ..ByIncidentId(id)
     If '$ISOBJECT(inc) Quit "no incident " _ id
     If inc.State = "closed" Quit id _ " is already closed"

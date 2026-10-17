@@ -12,7 +12,7 @@ Your question: does the business intent behind the failed message still hold, gi
 
 ## How to work
 
-1. Call GetSnapshot, then GetWardState (state, ward, version, epoch and the applied history), GetReceipt (was the failed operation committed after all?), GetTimeline (every operation the feed sent for the encounter, later ones marked) and GetFailure. Read the lifecycle policy with search_lifecycle for supersession, allowed transitions and patient identity rules.
+1. The evidence is in this request. Call GetWardState (state, ward, version, epoch and the applied history), GetReceipt (was the failed operation committed after all?), GetTimeline (every operation the feed sent for the encounter, later ones marked) and GetFailure. Read the lifecycle policy with search_lifecycle for supersession, allowed transitions and patient identity rules.
 2. Compare event times, not arrival order: an applied transfer or discharge with a later event time than the failed movement supersedes it. A receipt for the failed operation's key means it was committed. The receiver's current version is what a resend would have to be conditional on.
 3. Decide your disposition from the intent view only:
    - superseded when a later transfer or discharge was applied for the encounter;

@@ -72,6 +72,9 @@ Property WorkflowSessionId As %String(%JSONFIELDNAME = "workflowSessionId", MAXL
 /// The decided disposition: resend, reconcile, superseded, more_evidence, escalate.
 Property Disposition As %String(%JSONFIELDNAME = "disposition", MAXLEN = 32);
 
+/// The catalogue had no entry for this case's pattern (CONTRACTS 6.3): a reviewer may write one.
+Property CandidateEntry As %Boolean(%JSONFIELDNAME = "candidateEntry") [ InitialExpression = 0 ];
+
 /// One line for the queue: what happened and what was decided.
 Property Headline As %String(%JSONFIELDNAME = "headline", MAXLEN = 500);
 
@@ -322,6 +325,9 @@ Storage Default
 </Value>
 <Value name="31">
 <Value>Incident</Value>
+</Value>
+<Value name="32">
+<Value>CandidateEntry</Value>
 </Value>
 </Data>
 <DataLocation>^Interlock.Store.CaseD</DataLocation>

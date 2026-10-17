@@ -51,6 +51,10 @@ Method OnRunComplete(response As %AI.LLM.Response, session As %AI.Agent.Session)
             Set ..TotalTokens = ..PromptTokens + ..CompletionTokens
             Set ..ToolCalls = ..Value(stats, "total_tool_calls")
             Set ..Iterations = ..Value(stats, "total_interactions")
+            // The session's cache totals cover every call of the run; Account() saw only the final response.
+            Set cr = ..Value(stats, "total_cache_read_tokens"), cc = ..Value(stats, "total_cache_creation_tokens")
+            If cr > ..CacheReadTokens Set ..CacheReadTokens = cr
+            If cc > ..CacheCreationTokens Set ..CacheCreationTokens = cc
         }
     } Catch {
     }

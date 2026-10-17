@@ -84,7 +84,12 @@ Property IncidentPlanDigest As %String(MAXLEN = 80);
 
 Property IncidentTarget As %String(MAXLEN = 128) [ InitialExpression = "Incident Workflow" ];
 
-Parameter SETTINGS = "EvidenceTarget:Targets,GateTarget:Targets,WardTarget:Targets,ApprovalTarget:Targets,VerifyTarget:Targets,IncidentTarget:Targets,ApprovalValidSeconds:Approval,SettleSeconds:Timing";
+/// Seconds a board round, or the coordinator, may take before the case goes on without the missing answers.
+Property BoardTimeoutSeconds As %Integer [ InitialExpression = 600 ];
+
+Property CoordinatorPending As %Boolean [ InitialExpression = 0 ];
+
+Parameter SETTINGS = "EvidenceTarget:Targets,GateTarget:Targets,WardTarget:Targets,ApprovalTarget:Targets,VerifyTarget:Targets,IncidentTarget:Targets,ApprovalValidSeconds:Approval,SettleSeconds:Timing,BoardTimeoutSeconds:Timing";
 
 Method OnRequest(request As %Library.Persistent, Output response As %Library.Persistent) As %Status
 {
@@ -153,7 +158,18 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
     Try {
         Set case = ##class(Interlock.Store.Case).ByCaseId(..CaseId)
         If '$ISOBJECT(case) Quit
-        If case.IsClosed() { $$$TRACE("Case " _ ..CaseId _ " is closed; ignoring " _ completionkey) Quit }
+        If case.IsClosed() {
+            // A late agent answer still has a cost: record the run, then ignore it.
+            If $ISOBJECT(callresponse) && (($EXTRACT(completionkey, 1, 7) = "member:") || (completionkey = "coordinator")) {
+                Set code = $SELECT(completionkey = "coordinator": "coordinator", 1: $EXTRACT(completionkey, 8, *))
+                Set m = ##class(Interlock.Store.BoardMember).ByCode(code)
+                Do ##class(Interlock.Store.AgentRun).FromResponse(case, case.CurrentSnapshot, $SELECT(completionkey = "coordinator": "coordinator", $ISOBJECT(m): m.Role, 1: ""), code, callresponse, ..HeaderIdOf(..%LastCallRequest), .run)
+            }
+            $$$TRACE("Case " _ ..CaseId _ " is closed; ignoring " _ completionkey)
+            Quit
+        }
+        If completionkey = "board:timeout" { Set sc = ..OnBoardTimeout(case) Quit }
+        If completionkey = "coordinator:timeout" { Set sc = ..OnCoordinatorTimeout(case) Quit }
         If completionkey = "settle" { Set sc = ..StartEvidence(case) Quit }
         If completionkey = "evidence" { Set sc = ..OnEvidence(case, callresponse) Quit }
         If $EXTRACT(completionkey, 1, 7) = "member:" { Set sc = ..OnMember(case, $EXTRACT(completionkey, 8, *), callresponse) Quit }
@@ -232,7 +248,7 @@ Method OnEvidence(case As Interlock.Store.Case, result As Interlock.Msg.Evidence
     Quit:$$$ISERR(sc) sc
     Set ..PendingJSON = pending.%ToJSON()
     Do case.Note("note", "Board convened: " _ $REPLACE($REPLACE(pending.%ToJSON(), "[", ""), "]", ""), "system")
-    Quit $$$OK
+    Quit ..ArmTimeout("board:timeout")
 }
 
 /// The request the case workflow sends a board member, built from the case, its current snapshot's summary,
@@ -297,25 +313,67 @@ Method OnMember(case As Interlock.Store.Case, code As %String, result As Interlo
         Set ..FailedJSON = failed.%ToJSON()
         Do case.Note("error", $SELECT($ISOBJECT(m): m.Name, 1: code) _ " gave no usable findings: " _ result.Status _ $SELECT(result.Error '= "": ", " _ result.Error, 1: ""), "agent:" _ code, "run:" _ run.%Id())
     }
-    // Remove from the pending list.
+    // Remove from the pending list; an answer after the board's time was up is recorded and changes nothing.
     Set pending = ##class(%DynamicArray).%FromJSON(..PendingJSON)
-    Set rest = []
+    Set rest = [], was = 0
     Set iter = pending.%GetIterator()
-    While iter.%GetNext(.i, .c) { If c '= code Do rest.%Push(c) }
+    While iter.%GetNext(.i, .c) { If c '= code { Do rest.%Push(c) } Else { Set was = 1 } }
+    If 'was {
+        Do case.Note("note", $SELECT($ISOBJECT(m): m.Name, 1: code) _ " answered after the board's time was up; the answer is recorded and not used", "system", "run:" _ run.%Id())
+        Quit $$$OK
+    }
     Set ..PendingJSON = rest.%ToJSON()
     If rest.%Size() > 0 Quit $$$OK
-    // Everyone answered: the coordinator, or an escalation when no findings are usable.
+    Quit ..AfterBoard(case)
+}
+
+/// Everyone answered, or the board's time is up: the coordinator takes the findings in hand, or the case is
+/// escalated when there are none.
+Method AfterBoard(case As Interlock.Store.Case) As %Status
+{
     Set all = ##class(Interlock.Store.Finding).ForSnapshot(case.CurrentSnapshot)
     If all.%Size() = 0 Quit case.Transition("escalated", "No board member produced usable findings; a person must look", "system")
     Set coordinator = ##class(Interlock.Store.BoardMember).Coordinator()
     If '$ISOBJECT(coordinator) Quit case.Transition("escalated", "No coordinator is enabled; the findings are on the case for a person", "system")
     Set snap = case.CurrentSnapshot
     Set req = ..AgentRequestFor(case, coordinator, snap.Summary, all.%ToJSON())
-    Quit ..SendRequestAsync(coordinator.ConfigItem, req, 1, "coordinator")
+    Set sc = ..SendRequestAsync(coordinator.ConfigItem, req, 1, "coordinator")
+    Quit:$$$ISERR(sc) sc
+    Set ..CoordinatorPending = 1
+    Quit ..ArmTimeout("coordinator:timeout")
+}
+
+/// A timer on a board round or on the coordinator: a member that never answers must not hang the case.
+Method ArmTimeout(key As %String) As %Status
+{
+    If ..BoardTimeoutSeconds <= 0 Quit $$$OK
+    Set alarm = ##class(Ens.AlarmRequest).%New()
+    Set alarm.Timeout = ..BoardTimeoutSeconds
+    Quit ..SendRequestAsync("Ens.Alarm", alarm, 1, key)
+}
+
+Method OnBoardTimeout(case As Interlock.Store.Case) As %Status
+{
+    Set pending = ##class(%DynamicArray).%FromJSON(..PendingJSON)
+    If pending.%Size() = 0 Quit $$$OK
+    Set failed = ##class(%DynamicArray).%FromJSON(..FailedJSON)
+    Set iter = pending.%GetIterator()
+    While iter.%GetNext(.i, .code) { Do failed.%Push(code) }
+    Set ..FailedJSON = failed.%ToJSON(), ..PendingJSON = "[]"
+    Do case.Note("error", "The board's time is up after " _ ..BoardTimeoutSeconds _ " s; no answer from " _ $REPLACE($REPLACE(pending.%ToJSON(), "[", ""), "]", "") _ ". The findings in hand go on", "system")
+    Quit ..AfterBoard(case)
+}
+
+Method OnCoordinatorTimeout(case As Interlock.Store.Case) As %Status
+{
+    If '..CoordinatorPending Quit $$$OK
+    Set ..CoordinatorPending = 0
+    Quit case.Transition("escalated", "The coordinator did not answer within " _ ..BoardTimeoutSeconds _ " s; the findings are on the case for a person", "system")
 }
 
 Method OnCoordinator(case As Interlock.Store.Case, result As Interlock.Bridge.Msg.AgentResponse) As %Status
 {
+    Set ..CoordinatorPending = 0
     Set sc = ##class(Interlock.Store.AgentRun).FromResponse(case, case.CurrentSnapshot, "coordinator", "coordinator", result, ..HeaderIdOf(..%LastCallRequest), .run)
     Quit:$$$ISERR(sc) sc
     If (result.Status '= "ok") || (result.ResultJSON = "") {
@@ -359,7 +417,7 @@ Method PolicyPath(case As Interlock.Store.Case, summary As %DynamicObject, cat A
         }
         Set ..PendingJSON = pending.%ToJSON()
         Do case.Note("note", "Board convened by site policy: " _ $REPLACE($REPLACE(pending.%ToJSON(), "[", ""), "]", ""), "system")
-        Quit $$$OK
+        Quit ..ArmTimeout("board:timeout")
     }
     Set ward = summary.%Get("ward_state")
     Set version = $SELECT($ISOBJECT(ward): $CLASSMETHOD(json, "Str", ward, "version", 0), 1: 0)
@@ -475,6 +533,19 @@ Method OnGateProposal(case As Interlock.Store.Case, result As Interlock.Msg.Gate
         Quit case.Transition("escalated", "The plan asks for a person: " _ plan.Summary _ $SELECT(result.Outcome '= "pass": " (the gate noted: " _ result.Summary _ ")", 1: ""), "system", "plan:" _ plan.%Id())
     }
     If result.Outcome '= "pass" {
+        // An unknown pattern alone is no reason to block (CONTRACTS 6.3): a plan that writes nothing closes as usual,
+        // flagged as a candidate entry; a plan that writes is escalated to a person with the flag.
+        If ..OnlyNewPattern(result) {
+            Set case.CandidateEntry = 1
+            Do case.Note("note", "The catalogue has no entry for this pattern; the case is flagged as a candidate entry for a reviewer", "gate", "gate:" _ result.DecisionId)
+            If 'plan.IsWrite() {
+                Set sc = case.Transition("verifying", "No write; verifying the receiver's state (new pattern, candidate entry)", "system")
+                Quit:$$$ISERR(sc) sc
+                Quit ..SendVerify(case)
+            }
+            Set case.Headline = "New pattern, a person decides: " _ $EXTRACT(plan.Summary, 1, 200)
+            Quit case.Transition("escalated", "The catalogue has no entry for this pattern and the plan writes; a person decides (candidate entry)", "gate", "gate:" _ result.DecisionId)
+        }
         Set case.Headline = "Blocked by the gate: " _ result.Summary
         Quit case.Transition("blocked", "The gate did not pass the plan; a person must decide", "gate", "gate:" _ result.DecisionId)
     }
@@ -487,6 +558,21 @@ Method OnGateProposal(case As Interlock.Store.Case, result As Interlock.Msg.Gate
     Set sc = case.Transition("verifying", "No write; verifying the receiver's state", "system")
     Quit:$$$ISERR(sc) sc
     Quit ..SendVerify(case)
+}
+
+/// Whether the only checks that did not pass are the catalogue's NEW_PATTERN.
+Method OnlyNewPattern(result As Interlock.Msg.GateResult) As %Boolean
+{
+    Set checks = ##class(Interlock.Util.Json).Parse(result.ChecksJSON, .psc)
+    If '$ISOBJECT(checks) || (checks.%Size() = 0) Quit 0
+    Set found = 0
+    Set iter = checks.%GetIterator()
+    While iter.%GetNext(.i, .c) {
+        Continue:(##class(Interlock.Util.Json).Str(c, "result") = "pass")
+        If ##class(Interlock.Util.Json).Str(c, "reason_code") '= "NEW_PATTERN" Return 0
+        Set found = 1
+    }
+    Quit found
 }
 
 Method WardOperationFor(case As Interlock.Store.Case, plan As Interlock.Store.Plan, dryRun As %Boolean) As Interlock.Msg.WardOperation
@@ -809,6 +895,12 @@ Storage Default
 </Value>
 <Value name="32">
 <Value>IncidentTarget</Value>
+</Value>
+<Value name="33">
+<Value>BoardTimeoutSeconds</Value>
+</Value>
+<Value name="34">
+<Value>CoordinatorPending</Value>
 </Value>
 </Data>
 <DefaultData>CaseWorkflowDefaultData</DefaultData>
