@@ -227,7 +227,6 @@ Method Timeline(case As Interlock.Store.Case) As %DynamicArray [ Private ]
         Do ev.%Set("this_case", rs.%Get("OperationKey") = case.OperationKey, "boolean")
         Set ev.outcome = "unknown"
         Set rid = ""
-        &sql(SELECT TOP 1 MessageBodyId INTO :rid FROM Ens.MessageHeader WHERE CorrespondingMessageId = :headerId AND MessageBodyClassName = 'Interlock.Msg.WardResult')
         Set headerId = rs.%Get("HeaderId")
         &sql(SELECT TOP 1 MessageBodyId INTO :rid FROM Ens.MessageHeader WHERE CorrespondingMessageId = :headerId AND MessageBodyClassName = 'Interlock.Msg.WardResult')
         If (SQLCODE = 0) && (rid '= "") {
