@@ -13,7 +13,7 @@ const SettingsPage = lazy(() => import('./features/settings/SettingsPage'));
 const HealthPage = lazy(() => import('./features/health/HealthPage'));
 const NotFoundPage = lazy(() => import('./features/shell/NotFoundPage'));
 
-// Hash routing: IRIS serves the files at /interlock/ without rewriting unknown paths to index.html, so a deep link
+// Hash routing: IRIS serves the files at /shutter/ without rewriting unknown paths to index.html, so a deep link
 // must not depend on the server.
 export const router = createHashRouter([
   { path: '/login', element: <LoginPage />, errorElement: <RouteError /> },

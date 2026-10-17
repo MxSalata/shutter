@@ -26,8 +26,8 @@ export function useResolvedContrast(): 'normal' | 'high' {
 }
 
 /**
- * Writes the resolved contrast to `<html data-interlock-contrast>` and the palette setting to
- * `<html data-interlock-palette>`, the siblings of Mantine's `data-mantine-color-scheme`, which
+ * Writes the resolved contrast to `<html data-shutter-contrast>` and the palette setting to
+ * `<html data-shutter-palette>`, the siblings of Mantine's `data-mantine-color-scheme`, which
  * `styles.css` keys its high-contrast layer and the Pastel tokens on. The palette is written as
  * chosen: the stylesheet applies it only to the light scheme at normal contrast, so a stored
  * Pastel stays inert in dark or high contrast and returns with the light scheme. Mounted above
@@ -37,10 +37,10 @@ export function useApplyAppearance(): 'normal' | 'high' {
   const contrast = useResolvedContrast();
   const palette = useAppearance((s) => s.palette);
   useEffect(() => {
-    document.documentElement.dataset.interlockContrast = contrast;
+    document.documentElement.dataset.shutterContrast = contrast;
   }, [contrast]);
   useEffect(() => {
-    document.documentElement.dataset.interlockPalette = palette;
+    document.documentElement.dataset.shutterPalette = palette;
   }, [palette]);
   return contrast;
 }

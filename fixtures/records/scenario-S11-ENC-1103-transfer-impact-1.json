@@ -1,6 +1,6 @@
 {
  "key": "scenario:S11:ENC-1103:transfer|impact|1",
- "agentClass": "Interlock.Agent.Impact",
+ "agentClass": "Shutter.Agent.Impact",
  "configVersion": "1",
  "memberCode": "impact",
  "snapshotDigest": "",
@@ -8,7 +8,7 @@
  "model": "fixture",
  "response": {
   "status": "ok",
-  "agent_class": "Interlock.Agent.Impact",
+  "agent_class": "Shutter.Agent.Impact",
   "config_version": "1",
   "mode": "record",
   "model": "fixture",

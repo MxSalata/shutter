@@ -9,7 +9,7 @@ import { persist } from 'zustand/middleware';
 export type ContrastSetting = 'auto' | 'normal' | 'high';
 /**
  * Which light theme: the default, or Pastel (pale blue). The setting is stored as chosen and
- * written to `<html data-interlock-palette>`; styles.css applies it only while the scheme resolves
+ * written to `<html data-shutter-palette>`; styles.css applies it only while the scheme resolves
  * to light at normal contrast, so it does nothing in dark or high contrast.
  */
 export type PaletteSetting = 'default' | 'pastel';
@@ -30,6 +30,6 @@ export const useAppearance = create<AppearanceState>()(
       setContrast: (contrast) => set({ contrast }),
       setPalette: (palette) => set({ palette }),
     }),
-    { name: 'interlock.appearance' },
+    { name: 'shutter.appearance' },
   ),
 );

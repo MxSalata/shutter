@@ -1,11 +1,11 @@
 // Runs once, during the image build (Dockerfile): the namespace, the package manager and the module.
 zn "USER"
 do $SYSTEM.OBJ.Load("/home/irisowner/dev/Installer.cls", "ck")
-set vars("NAMESPACE") = "INTERLOCK"
-do ##class(Interlock.Installer).setup(.vars)
+set vars("NAMESPACE") = "SHUTTER"
+do ##class(Shutter.Installer).setup(.vars)
 zn "%SYS"
 do ##class(Security.Users).UnExpireUserPasswords("*")
-zn "INTERLOCK"
+zn "SHUTTER"
 // InterSystems Package Manager, when the base image doesn't ship it
 set r = ##class(%Net.HttpRequest).%New(), r.Server = "pm.community.intersystems.com", r.SSLConfiguration = "ISC.FeatureTracker.SSL.Config" do r.Get("/packages/zpm/latest/installer"), $SYSTEM.OBJ.LoadStream(r.HttpResponse.Data, "c")
 // The core module: the production, the store, the gate, the ward system, the web app and the recorded runs

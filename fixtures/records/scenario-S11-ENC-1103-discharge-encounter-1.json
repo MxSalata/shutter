@@ -1,6 +1,6 @@
 {
  "key": "scenario:S11:ENC-1103:discharge|encounter|1",
- "agentClass": "Interlock.Agent.Encounter",
+ "agentClass": "Shutter.Agent.Encounter",
  "configVersion": "1",
  "memberCode": "encounter",
  "snapshotDigest": "",
@@ -8,7 +8,7 @@
  "model": "fixture",
  "response": {
   "status": "ok",
-  "agent_class": "Interlock.Agent.Encounter",
+  "agent_class": "Shutter.Agent.Encounter",
   "config_version": "1",
   "mode": "record",
   "model": "fixture",

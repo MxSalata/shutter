@@ -35,7 +35,7 @@ export default function LoginPage() {
         : '';
 
   return (
-    <Center mih="100vh" p="md" style={{ background: 'var(--interlock-page)' }}>
+    <Center mih="100vh" p="md" style={{ background: 'var(--shutter-page)' }}>
       <Paper p="xl" w={380} shadow="sm">
         <form onSubmit={submit}>
           <Stack gap="md">
@@ -87,7 +87,7 @@ export default function LoginPage() {
             {DEMO || health.data?.demo === true ? (
               <Text size="xs" c="dimmed">
                 The demo installs two users: <b>operator</b> runs scenarios and reads cases; <b>approver</b>{' '}
-                can also approve or reject plans. Their password is the installer's (<code>interlock</code>{' '}
+                can also approve or reject plans. Their password is the installer's (<code>shutter</code>{' '}
                 unless it was changed).
               </Text>
             ) : null}

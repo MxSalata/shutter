@@ -3,7 +3,7 @@
 shape (response as an object; transcript and toolCalls as JSON text), named scenario-<S>-<member>-<cfg>[-roundN].json, or
 scenario-<S>-<encounter>-<event>-<member>-<cfg>[-roundN].json for the keys that name the case's encounter and event.
 
-    python3 scripts/iris-pull-records.py --url http://host:52773 --ns INTERLOCK [--like 'scenario:S2|%'] [--dir fixtures/records]
+    python3 scripts/iris-pull-records.py --url http://host:52773 --ns SHUTTER [--like 'scenario:S2|%'] [--dir fixtures/records]
 
 Only recordings whose key starts with "scenario:" are written (the demo scenarios); others are listed.
 """
@@ -43,14 +43,14 @@ def query(url, ns, user, password, sql, params):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--url", default=os.environ.get("IRIS_URL", "http://localhost:52773"))
-    ap.add_argument("--ns", default="INTERLOCK")
+    ap.add_argument("--ns", default="SHUTTER")
     ap.add_argument("--user", default=os.environ.get("IRIS_USER", "_SYSTEM"))
     ap.add_argument("--password", default=os.environ.get("IRIS_PASSWORD", "SYS"))
     ap.add_argument("--like", default="scenario:%", help="SQL LIKE pattern on the key")
     ap.add_argument("--dir", default="fixtures/records")
     args = ap.parse_args()
     rows = query(args.url, args.ns, args.user, args.password,
-                 'SELECT ID, "Key" FROM Interlock_Bridge.Record WHERE "Key" LIKE ? ORDER BY "Key"', [args.like])
+                 'SELECT ID, "Key" FROM Shutter_Bridge.Record WHERE "Key" LIKE ? ORDER BY "Key"', [args.like])
     os.makedirs(args.dir, exist_ok=True)
     written, skipped = [], []
     for row in rows:
@@ -59,7 +59,7 @@ def main():
             skipped.append(row["Key"])
             continue
         out = query(args.url, args.ns, args.user, args.password,
-                    "SELECT Interlock_Util.Json_Export('Interlock.Bridge.Record', ?) AS j", [str(row["ID"])])
+                    "SELECT Shutter_Util.Json_Export('Shutter.Bridge.Record', ?) AS j", [str(row["ID"])])
         j = out[0]["j"]
         d = json.loads(j) if isinstance(j, str) else j
         if isinstance(d.get("response"), str):

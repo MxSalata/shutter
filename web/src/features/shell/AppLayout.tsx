@@ -46,14 +46,14 @@ const NAV = [
     label: 'Scenarios',
     icon: IconFlask2,
     color: 'violet',
-    hint: 'Play a failure and watch Interlock handle it',
+    hint: 'Play a failure and watch Shutter handle it',
   },
   {
     to: '/cases',
     label: 'Cases',
     icon: IconListDetails,
-    color: 'interlock',
-    hint: 'Every failed message Interlock has opened',
+    color: 'shutter',
+    hint: 'Every failed message Shutter has opened',
   },
   {
     to: '/library',
@@ -213,9 +213,9 @@ export function AppLayout() {
       navbar={{ width: 230, breakpoint: 'sm', collapsed: { mobile: !opened } }}
       padding="md"
       styles={{
-        main: { background: 'var(--interlock-page)' },
-        navbar: { background: 'var(--interlock-navbar)' },
-        header: { background: 'var(--interlock-header)' },
+        main: { background: 'var(--shutter-page)' },
+        navbar: { background: 'var(--shutter-navbar)' },
+        header: { background: 'var(--shutter-header)' },
       }}
     >
       <SkipLink />

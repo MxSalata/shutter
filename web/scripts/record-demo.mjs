@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Records the demo's data from a running Interlock: signs in to the REST API (docs/CONTRACTS.md, section 5), reads
+ * Records the demo's data from a running Shutter: signs in to the REST API (docs/CONTRACTS.md, section 5), reads
  * every read route for the scenarios, every case, the library, the settings, the costs and the health report, and
  * writes them to src/mocks/fixtures.json, which the in-browser mock serves in the demo build and the tests.
  *
@@ -9,7 +9,7 @@
  *
  * --cases keeps only the cases named (one per scenario and mode reads better than every rehearsal of the same run),
  * and the costs are then those of the kept cases' runs.
- * The password comes from INTERLOCK_PASSWORD (default: the demo installer's "interlock"). Only reads: nothing is
+ * The password comes from SHUTTER_PASSWORD (default: the demo installer's "shutter"). Only reads: nothing is
  * changed on the instance. Node 22 or later (fetch).
  */
 import { writeFileSync } from 'node:fs';
@@ -22,9 +22,9 @@ const args = Object.fromEntries(
       [],
     ),
 );
-const base = `${(args.url ?? 'http://localhost:52773').replace(/\/$/, '')}/api/interlock`;
+const base = `${(args.url ?? 'http://localhost:52773').replace(/\/$/, '')}/api/shutter`;
 const user = args.user ?? 'operator';
-const password = process.env.INTERLOCK_PASSWORD ?? 'interlock';
+const password = process.env.SHUTTER_PASSWORD ?? 'shutter';
 const out = args.out ?? 'src/mocks/fixtures.json';
 const only = args.cases ? new Set(args.cases.split(',').map((c) => c.trim())) : null;
 
@@ -34,7 +34,7 @@ async function call(method, path, body) {
   const headers = { Accept: 'application/json' };
   if (cookie) headers.Cookie = cookie;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  if (method !== 'GET') headers['X-Requested-With'] = 'Interlock';
+  if (method !== 'GET') headers['X-Requested-With'] = 'Shutter';
   const response = await fetch(base + path, {
     method,
     headers,
@@ -161,7 +161,7 @@ function costsOfKept() {
 }
 
 const fixtures = {
-  source: `Recorded from Interlock's REST API at ${recordedAt}: ${kept.length} cases, ${byBoard} by the board of specialists and ${kept.length - byBoard} by rules alone; ${agents}. The demo serves these answers in the browser; nothing in it reaches an IRIS instance.`,
+  source: `Recorded from Shutter's REST API at ${recordedAt}: ${kept.length} cases, ${byBoard} by the board of specialists and ${kept.length - byBoard} by rules alone; ${agents}. The demo serves these answers in the browser; nothing in it reaches an IRIS instance.`,
   recordedAt,
   scenarios: (Array.isArray(scenarios) ? scenarios : scenarios.scenarios).map((s) => ({
     ...s,

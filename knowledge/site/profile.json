@@ -12,6 +12,6 @@
     "2": {"single": "automatic", "ordered": "approval", "interleaved": "board"},
     "3": {"single": "approval", "ordered": "per_chain", "interleaved": "board"}
   },
-  "approvers": {"role": "Interlock Approvers", "escalation": "the integration team's on-call"},
+  "approvers": {"role": "Shutter Approvers", "escalation": "the integration team's on-call"},
   "incident": {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60}
 }

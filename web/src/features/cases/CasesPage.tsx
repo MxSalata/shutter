@@ -26,7 +26,7 @@ export default function CasesPage() {
 
   return (
     <>
-      <PageHeader title="Cases" subtitle="Every failed delivery Interlock opened a case for, newest first." />
+      <PageHeader title="Cases" subtitle="Every failed delivery Shutter opened a case for, newest first." />
       <Card padding="md">
         <Group gap="sm" mb="sm" wrap="wrap">
           <Select

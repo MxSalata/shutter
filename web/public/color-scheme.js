@@ -15,16 +15,16 @@
     /* storage unavailable: Mantine decides after boot */
   }
   try {
-    var raw = localStorage.getItem('interlock.appearance');
+    var raw = localStorage.getItem('shutter.appearance');
     var state = (raw && JSON.parse(raw).state) || {};
     var setting = state.contrast || 'auto';
     var high =
       setting === 'high' ||
       (setting !== 'normal' && window.matchMedia && matchMedia('(prefers-contrast: more)').matches);
-    document.documentElement.setAttribute('data-interlock-contrast', high ? 'high' : 'normal');
+    document.documentElement.setAttribute('data-shutter-contrast', high ? 'high' : 'normal');
     // Stored as chosen; styles.css applies it only to the light scheme at normal contrast.
     document.documentElement.setAttribute(
-      'data-interlock-palette',
+      'data-shutter-palette',
       state.palette === 'pastel' ? 'pastel' : 'default',
     );
   } catch (e) {

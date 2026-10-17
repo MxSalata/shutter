@@ -106,7 +106,7 @@ export function ExecutionPanel({ caseId, open, write }: { caseId: string; open: 
     <Section
       id="execution"
       title={write ? 'Dispatch and verification' : 'Verification'}
-      note="An acknowledgement only says the ward answered. Verified means Interlock read the ward's committed history and the receipt afterwards and found the effect there."
+      note="An acknowledgement only says the ward answered. Verified means Shutter read the ward's committed history and the receipt afterwards and found the effect there."
     >
       {attempts.isError ? <ErrorAlert error={attempts.error} title="The attempts could not be read" /> : null}
       {attempts.isSuccess && list.length === 0 ? (

@@ -2,7 +2,7 @@
 """Copy the compiled Storage definition of each persistent class from an IRIS namespace back into its
 source file, so that later property additions keep existing rows' columns in place.
 
-    python3 scripts/iris-pull-storage.py [--url http://localhost:52773] [--ns INTERLOCK] PATH...
+    python3 scripts/iris-pull-storage.py [--url http://localhost:52773] [--ns SHUTTER] PATH...
 
 Without a Storage block in the source, every load regenerates the storage map in property order,
 and a property added in the middle of a class shifts the data of rows saved before it. With the
@@ -41,7 +41,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("paths", nargs="+")
     ap.add_argument("--url", default=os.environ.get("IRIS_URL", "http://localhost:52773"))
-    ap.add_argument("--ns", default=os.environ.get("IRIS_NAMESPACE", "INTERLOCK"))
+    ap.add_argument("--ns", default=os.environ.get("IRIS_NAMESPACE", "SHUTTER"))
     args = ap.parse_args()
     user, password = os.environ.get("IRIS_USER", "_SYSTEM"), os.environ.get("IRIS_PASSWORD", "SYS")
 

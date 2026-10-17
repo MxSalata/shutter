@@ -55,7 +55,7 @@ for (const { colorScheme, contrast, palette } of MODES) {
       test.beforeEach(({ page }) =>
         page.addInitScript(() =>
           localStorage.setItem(
-            'interlock.appearance',
+            'shutter.appearance',
             JSON.stringify({ state: { contrast: 'auto', palette: 'pastel' }, version: 0 }),
           ),
         ),

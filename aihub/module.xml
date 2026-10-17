@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Export generator="Cache" version="25">
-  <Document name="iris-interlock-aihub.ZPM">
+  <Document name="iris-shutter-aihub.ZPM">
     <Module>
-      <Name>iris-interlock-aihub</Name>
+      <Name>iris-shutter-aihub</Name>
       <Version>0.1.0</Version>
-      <Description>Live agents for Interlock on an InterSystems IRIS AI Hub build: the agent runner for the bridge, the board members (declarative %AI.Agent classes), their tools, policies, schemas and knowledge bases. Requires iris-interlock and an IRIS or IRIS for Health build with the AI Hub (%AI) package.</Description>
+      <Description>Live agents for Shutter on an InterSystems IRIS AI Hub build: the agent runner for the bridge, the board members (declarative %AI.Agent classes), their tools, policies, schemas and knowledge bases. Requires iris-shutter and an IRIS or IRIS for Health build with the AI Hub (%AI) package.</Description>
       <Keywords>interoperability,ai agents,ai hub,recovery</Keywords>
       <Author>
         <Person>MxSalata</Person>
@@ -15,18 +15,18 @@
       <SourcesRoot>src</SourcesRoot>
       <Dependencies>
         <ModuleReference>
-          <Name>iris-interlock</Name>
+          <Name>iris-shutter</Name>
           <Version>0.1.0</Version>
         </ModuleReference>
       </Dependencies>
-      <Resource Name="Interlock.Agent.PKG"/>
-      <Resource Name="Interlock.Tools.PKG"/>
-      <Resource Name="Interlock.Schema.PKG"/>
-      <Resource Name="Interlock.Knowledge.PKG"/>
-      <Resource Name="Interlock.Bridge.Policy.PKG"/>
-      <Resource Name="Interlock.Bridge.Monitor.CLS"/>
-      <Resource Name="Interlock.Bridge.Runner.AIHub.CLS"/>
-      <Invoke Class="Interlock.Setup" Method="InstallAIHub">
+      <Resource Name="Shutter.Agent.PKG"/>
+      <Resource Name="Shutter.Tools.PKG"/>
+      <Resource Name="Shutter.Schema.PKG"/>
+      <Resource Name="Shutter.Knowledge.PKG"/>
+      <Resource Name="Shutter.Bridge.Policy.PKG"/>
+      <Resource Name="Shutter.Bridge.Monitor.CLS"/>
+      <Resource Name="Shutter.Bridge.Runner.AIHub.CLS"/>
+      <Invoke Class="Shutter.Setup" Method="InstallAIHub">
         <Arg>${root}</Arg>
       </Invoke>
     </Module>

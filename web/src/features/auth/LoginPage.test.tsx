@@ -15,7 +15,7 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
 function renderLogin(demo: boolean) {
-  server.use(http.get('/api/interlock/health', () => HttpResponse.json({ ok: true, demo })));
+  server.use(http.get('/api/shutter/health', () => HttpResponse.json({ ok: true, demo })));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter([{ path: '/login', element: <LoginPage /> }], {
     initialEntries: ['/login'],

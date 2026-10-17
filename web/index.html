@@ -7,9 +7,9 @@
     <meta name="color-scheme" content="light dark" />
     <meta
       name="description"
-      content="Interlock: failed interface messages investigated by a board of agents, checked by a deterministic gate, approved by a person and verified at the receiver."
+      content="Shutter: failed interface messages investigated by a board of agents, checked by a deterministic gate, approved by a person and verified at the receiver."
     />
-    <title>Interlock</title>
+    <title>Shutter</title>
     <!-- Applies the stored colour scheme, contrast and palette before the first paint (see public/color-scheme.js). -->
     <script src="%BASE_URL%color-scheme.js"></script>
     <style>
@@ -52,18 +52,18 @@
         background: #181e26;
         color: #b3bcc8;
       }
-      html[data-interlock-palette='pastel'][data-mantine-color-scheme='light']:not(
-          [data-interlock-contrast='high']
+      html[data-shutter-palette='pastel'][data-mantine-color-scheme='light']:not(
+          [data-shutter-contrast='high']
         )
         .boot {
         background: #f0ecf9;
         color: #5a5577;
       }
-      html[data-interlock-contrast='high'] .boot {
+      html[data-shutter-contrast='high'] .boot {
         background: #fff;
         color: #000;
       }
-      html[data-interlock-contrast='high'][data-mantine-color-scheme='dark'] .boot {
+      html[data-shutter-contrast='high'][data-mantine-color-scheme='dark'] .boot {
         background: #000;
         color: #fff;
       }
@@ -84,7 +84,7 @@
     <div id="root">
       <div class="boot" role="status" aria-live="polite">
         <div class="boot-mark"></div>
-        <div>Loading Interlock…</div>
+        <div>Loading Shutter…</div>
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Build knowledge/catalogue/catalogue.json from the entries' Markdown (knowledge/catalogue/E*.md): the front matter
-(CONTRACTS 6.2) checked against the condition vocabulary (6.1), plus the prose. The core seeds Interlock.Catalogue.Entry
+(CONTRACTS 6.2) checked against the condition vocabulary (6.1), plus the prose. The core seeds Shutter.Catalogue.Entry
 from the JSON at install; the board's knowledge base indexes the Markdown.
 
     python3 scripts/build-catalogue.py [knowledge/catalogue] [--check]

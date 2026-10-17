@@ -114,7 +114,7 @@ export function EvidencePanel({ caseId, open }: { caseId: string; open: boolean 
     <Section
       id="evidence"
       title="Evidence"
-      note="What Interlock observed before anyone decided: one snapshot, each observation with its source, time and digest. The agents read only this; the gate checks the plan against it."
+      note="What Shutter observed before anyone decided: one snapshot, each observation with its source, time and digest. The agents read only this; the gate checks the plan against it."
       aside={
         s ? (
           <Tooltip label={`Observations count as fresh until ${s.freshUntil}; a write needs fresh evidence`}>

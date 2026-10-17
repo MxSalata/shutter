@@ -1,6 +1,6 @@
-# Contracts between Interlock's parts
+# Contracts between Shutter's parts
 
-Version 1.7, 17 October 2026. These are the interfaces the parts of Interlock are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.7, 17 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The ward system's API
 
@@ -174,7 +174,7 @@ From an HL7 v2.5.1 ADT message:
 
 Scenario S8's third message comes from a second source system, `BEDMGR` (MSH-3), for the same encounter (v1.5): its operation key starts `BEDMGR^HOSP^…`, so it is a different operation from the PAS messages even when it describes the same movement. Admit to Ward A applied; the 09:20 transfer to Ward B fails; the bed manager's own transfer to Ward C, also timed 09:20, applies. Neither event is later than the other, so supersession is unknown: nothing is resent.
 
-The DTL that builds the ward operation lives in `Interlock.DTL.ADTToWard`. The same mapping, as an ObjectScript class method, is `Interlock.Util.OperationKey.FromHL7(message)` so the evidence collector and the fixtures agree.
+The DTL that builds the ward operation lives in `Shutter.DTL.ADTToWard`. The same mapping, as an ObjectScript class method, is `Shutter.Util.OperationKey.FromHL7(message)` so the evidence collector and the fixtures agree.
 
 ## 3. HL7 fixtures
 
@@ -209,13 +209,13 @@ Step kinds: `file` (drop the file into the ADT In folder; `expect` is `delivered
 
 ## 4. The scenario runner
 
-`Interlock.Scenarios.Runner`, class methods marked `SqlProc` so the app and the scripts can call them through SQL:
+`Shutter.Scenarios.Runner`, class methods marked `SqlProc` so the app and the scripts can call them through SQL:
 
 - `List() As %String`: the scenarios as JSON (the `scenarios.json` content with the fixture files resolved).
-- `Run(scenario As %String, mode As %String = "board") As %String`: resets the ward (section 1.7), sets the run mode for the case workflow (`board`, `single`, `rules`, by writing `^Interlock.Config("mode")`) and the running scenario (`^Interlock.Config("scenario")` = the scenario id, which the case intake stamps on the case, so that recorded agent runs replay by scenario on any instance), then executes the steps: faults through the ward API, files copied into the production's inbound folder (`^Interlock.Config("adtIn")`, set by `Interlock.Setup`), waits. Returns JSON `{"scenario": "S1", "started_at": "…", "files": [...]}`. It does not wait for the case; the production and the app do the rest.
-- `Reset() As %String`: the ward reset, the inbound and archive folders emptied, `^Interlock.Config("mode")` back to `board`, `^Interlock.Config("scenario")` cleared, and `^Interlock.Config("resetAt")` set to the ISO UTC time of the reset. Encounter ids are fixed per scenario, so the evidence collector ignores message-store events older than `resetAt`; the ward's own history is per run already.
+- `Run(scenario As %String, mode As %String = "board") As %String`: resets the ward (section 1.7), sets the run mode for the case workflow (`board`, `single`, `rules`, by writing `^Shutter.Config("mode")`) and the running scenario (`^Shutter.Config("scenario")` = the scenario id, which the case intake stamps on the case, so that recorded agent runs replay by scenario on any instance), then executes the steps: faults through the ward API, files copied into the production's inbound folder (`^Shutter.Config("adtIn")`, set by `Shutter.Setup`), waits. Returns JSON `{"scenario": "S1", "started_at": "…", "files": [...]}`. It does not wait for the case; the production and the app do the rest.
+- `Reset() As %String`: the ward reset, the inbound and archive folders emptied, `^Shutter.Config("mode")` back to `board`, `^Shutter.Config("scenario")` cleared, and `^Shutter.Config("resetAt")` set to the ISO UTC time of the reset. Encounter ids are fixed per scenario, so the evidence collector ignores message-store events older than `resetAt`; the ward's own history is per run already.
 - The runner may call `Wards.Service` in process for the reset and the faults; the production always goes through HTTP.
-- Settings the runner reads, all set by `Interlock.Setup`: `^Interlock.Config("fixtures")` (the fixtures directory), `("adtIn")`, `("adtArchive")`. The ADT In service takes `*.hl7` and archives what it has read.
+- Settings the runner reads, all set by `Shutter.Setup`: `^Shutter.Config("fixtures")` (the fixtures directory), `("adtIn")`, `("adtArchive")`. The ADT In service takes `*.hl7` and archives what it has read.
 - The run mode (`board`, `single`, `rules`) is the investigation mode. Whether agents run live, record or replay is the production's setting on the agent items, independent of it.
 
 ## 4.1 Scenario steps that wait (v1.4)
@@ -223,22 +223,22 @@ Step kinds: `file` (drop the file into the ADT In folder; `expect` is `delivered
 A step `{"wait_for_state": "awaiting_approval", "timeout": 120}` makes the runner wait until the newest case of the running scenario reaches that state (or the timeout passes, which the runner reports). The runner reads the case in the same namespace:
 
 ```sql
-SELECT TOP 1 State FROM Interlock_Store."Case" WHERE Scenario = ? ORDER BY ID DESC
+SELECT TOP 1 State FROM Shutter_Store."Case" WHERE Scenario = ? ORDER BY ID DESC
 ```
 
 Scenario S7 (a later transfer arriving while the plan awaits approval) is written with it. The web app reads case state through the REST API instead (section 5).
 
 ## 4.2 Running a scenario from the API (v1.5)
 
-`POST /api/interlock/scenarios/{id}/run` with `{"mode": "board" | "single" | "rules"}` answers 202 and the run record; `GET /api/interlock/scenarios` carries the current record as `run`. With the production's **Scenario Player** item enabled, the route writes a record in state `queued` and sends an `Interlock.Msg.ScenarioRun` through the `Interlock API` service to the player, which plays the steps in its own job (the same checks and reset as `Runner.Start`) and moves the record through `running` to `done` or `failed`; a run therefore never needs a new process, and it shows in the trace with the cases it causes. A second POST while a record is `queued` or `running` answers 409 `wrong_state`. Without the player the route calls `Runner.Start`, which uses a background job, or plays inline when none can start.
+`POST /api/shutter/scenarios/{id}/run` with `{"mode": "board" | "single" | "rules"}` answers 202 and the run record; `GET /api/shutter/scenarios` carries the current record as `run`. With the production's **Scenario Player** item enabled, the route writes a record in state `queued` and sends an `Shutter.Msg.ScenarioRun` through the `Shutter API` service to the player, which plays the steps in its own job (the same checks and reset as `Runner.Start`) and moves the record through `running` to `done` or `failed`; a run therefore never needs a new process, and it shows in the trace with the cases it causes. A second POST while a record is `queued` or `running` answers 409 `wrong_state`. Without the player the route calls `Runner.Start`, which uses a background job, or plays inline when none can start.
 
 ## 5. The REST API for the app
 
-The API as built is `src/Interlock/API/Dispatch.cls` (its UrlMap lists the routes; sign-in through `POST /session` and the CSP session cookie; every change carries `X-Requested-With: Interlock`, the idempotent ones an `Idempotency-Key`; errors are JSON with `error` and `detail`). The web application's notes on using it are in `web/README.md`. Workflow tasks come back in camelCase with ISO 8601 UTC times (v1.5).
+The API as built is `src/Shutter/API/Dispatch.cls` (its UrlMap lists the routes; sign-in through `POST /session` and the CSP session cookie; every change carries `X-Requested-With: Shutter`, the idempotent ones an `Idempotency-Key`; errors are JSON with `error` and `detail`). The web application's notes on using it are in `web/README.md`. Workflow tasks come back in camelCase with ISO 8601 UTC times (v1.5).
 
 ## 6. The scenario catalogue and the matcher (v1.6)
 
-The catalogue is the knowledge base's core: every failure pattern Interlock knows, each with a preferred outcome and its
+The catalogue is the knowledge base's core: every failure pattern Shutter knows, each with a preferred outcome and its
 alternatives (`knowledge/catalogue/E<n>.md`). A deterministic matcher in the core reads each entry's front matter and
 evaluates it against a case's evidence snapshot, with no model. The board, when it runs, chooses among an entry's outcomes
 rather than inventing one.
@@ -325,7 +325,7 @@ In `policy` mode the matcher's decision is:
 ### 6.4 The site profile and the policy path
 
 The questionnaire's answers are the site profile (`knowledge/site/profile.json`, versioned; defaults shipped). The core
-reads it through `Interlock.Store.SiteProfile`.
+reads it through `Shutter.Store.SiteProfile`.
 
 ```json
 {
@@ -342,7 +342,7 @@ reads it through `Interlock.Store.SiteProfile`.
     "2": {"single": "automatic", "ordered": "approval", "interleaved": "board"},
     "3": {"single": "approval", "ordered": "per_chain", "interleaved": "board"}
   },
-  "approvers": {"role": "Interlock Approvers", "escalation": "the integration team's on-call"},
+  "approvers": {"role": "Shutter Approvers", "escalation": "the integration team's on-call"},
   "incident": {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60}
 }
 ```
@@ -413,8 +413,8 @@ cites entries by id. The coordinator's instructions say the plan names the entry
   just before it goes; the chain stops at the first surprise, and the rest comes back to you".
 - The incident's approval binds the plan's digest and the rule for later items: each item after the first goes at exactly
   the version the previous item's verified receipt reports.
-- Task subjects: `Interlock I-nnnnnn: approve the release of N chain(s) to <receiver>` for the shared approval, and
-  `Interlock I-nnnnnn/<seq>: ...` per chain; both carry the `PlanDigest` and `Comment` form fields. An approval with
+- Task subjects: `Shutter I-nnnnnn: approve the release of N chain(s) to <receiver>` for the shared approval, and
+  `Shutter I-nnnnnn/<seq>: ...` per chain; both carry the `PlanDigest` and `Comment` form fields. An approval with
   another digest, or none, rejects the chains it covers: their cases are escalated with the reason.
 
 ### 7.4 Release
@@ -451,7 +451,7 @@ cites entries by id. The coordinator's instructions say the plan names the entry
   `decides`, `chain_policy`, `item_state`, `expected_version`); its events say whether it was released automatically,
   under the incident's approval, or stopped.
 - `GET /site-profile` (any signed-in user) returns the current profile with its version; `PUT /site-profile`
-  (`Interlock_Approve`, `X-Requested-With`) replaces it with the body, which must have the shape of 6.4, and answers the
+  (`Shutter_Approve`, `X-Requested-With`) replaces it with the body, which must have the shape of 6.4, and answers the
   new version; the questionnaire page writes it. Every change is recorded as a case-independent event with the user.
 
 ### 7.6 Scenario S11, an outage burst
@@ -465,7 +465,7 @@ A03 (E6); P6 a failed A01 (E2, single, admit). Expected: the policy chains resol
 
 ## Repository layout
 
-The core IPM module is the repository root (`module.xml`, sources under `src/`): it compiles on any 2026.2 Community image and replays recorded runs. The aihub module is `aihub/` (`aihub/module.xml`, sources under `aihub/src/`): the live runner, the agents, tools, schemas, policies and knowledge bases, which need the `%AI` package. Both modules contribute classes to the `Interlock` package; nothing under `src/` may reference `%AI`.
+The core IPM module is the repository root (`module.xml`, sources under `src/`): it compiles on any 2026.2 Community image and replays recorded runs. The aihub module is `aihub/` (`aihub/module.xml`, sources under `aihub/src/`): the live runner, the agents, tools, schemas, policies and knowledge bases, which need the `%AI` package. Both modules contribute classes to the `Shutter` package; nothing under `src/` may reference `%AI`.
 
 ## Changes
 
@@ -478,5 +478,5 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 - v1.4, 15 Oct 2026: the capabilities read and the demo switch, the epoch, the receipt-lookup fault (1.8, 1.9); scenario steps that wait for a case state (4.1). From House's triage of the owner's feature documents (T9, T10, A1, A2, A5).
 - v1.3, 15 Oct 2026: `misleading_duplicate_error` with an `operation_key` (1.5); `resetAt`, the runner's settings and the mode semantics (section 4), from the scenario work.
 - v1.2, 15 Oct 2026: the ward decisions of 15 Oct recorded (section 1.1), with `patient_mismatch` and `payload_digest_mismatch` as their own codes.
-- v1.1, 15 Oct 2026: the runner sets `^Interlock.Config("scenario")` (section 4); the repository layout.
+- v1.1, 15 Oct 2026: the runner sets `^Shutter.Config("scenario")` (section 4); the repository layout.
 - v1, 15 Oct 2026: first version (sections 1 to 4).

@@ -1,29 +1,29 @@
-# Interlock: `docker compose up -d`, then http://localhost:52773/interlock/index.html (operator / interlock).
+# Shutter: `docker compose up -d`, then http://localhost:52773/shutter/index.html (operator / shutter).
 # The base image is the contest's irishealth-community:2026.3.0AI.154.0; see the README to load and tag it.
 services:
-  interlock:
+  shutter:
     build:
       context: .
       args:
-        IRIS_IMAGE: ${INTERLOCK_IMAGE:-irishealth-community:2026.3.0AI.154.0}
+        IRIS_IMAGE: ${SHUTTER_IMAGE:-irishealth-community:2026.3.0AI.154.0}
         # 1 on the contest image (live agents); 0 on a plain IRIS for Health Community base (replay edition).
-        WITH_AIHUB: ${INTERLOCK_WITH_AIHUB:-1}
-    image: interlock:dev
-    container_name: interlock
+        WITH_AIHUB: ${SHUTTER_WITH_AIHUB:-1}
+    image: shutter:dev
+    container_name: shutter
     restart: unless-stopped
     # Published on the loopback interface only: the demo instance has well-known passwords.
     ports:
-      - "127.0.0.1:${INTERLOCK_WEB_PORT:-52773}:52773"
-      - "127.0.0.1:${INTERLOCK_SUPERSERVER_PORT:-1972}:1972"
+      - "127.0.0.1:${SHUTTER_WEB_PORT:-52773}:52773"
+      - "127.0.0.1:${SHUTTER_SUPERSERVER_PORT:-1972}:1972"
     environment:
       # Empty: the agents replay recorded runs. Set it for live agents (the aihub module).
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       # live, record or replay; empty lets the instance decide (live when a key is set, else replay).
-      - INTERLOCK_AGENT_MODE=${INTERLOCK_AGENT_MODE:-}
+      - SHUTTER_AGENT_MODE=${SHUTTER_AGENT_MODE:-}
       # The model for live agents (default claude-opus-5-5).
-      - INTERLOCK_MODEL=${INTERLOCK_MODEL:-}
+      - SHUTTER_MODEL=${SHUTTER_MODEL:-}
     volumes:
       # Drop HL7 files here to feed the production by hand; the scenarios do it for you.
-      - interlock-mgr:/usr/irissys/mgr/interlock
+      - shutter-mgr:/usr/irissys/mgr/shutter
 volumes:
-  interlock-mgr:
+  shutter-mgr:

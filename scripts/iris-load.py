@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Load ObjectScript sources into an IRIS namespace through the Atelier REST API and compile them.
 
-    python3 scripts/iris-load.py [--url http://localhost:52773] [--ns INTERLOCK] [--flags cuk] PATH...
+    python3 scripts/iris-load.py [--url http://localhost:52773] [--ns SHUTTER] [--flags cuk] PATH...
 
 Each PATH is a file or a directory searched for *.cls, *.inc and *.mac files. The document name comes from the
 file's first `Class`, `ROUTINE` or `Include`-style header; a .cls file must start its class line with
@@ -43,7 +43,7 @@ def opener_for(url):
     licence unit instead of opening a session each (which exhausts a Community licence)."""
     import http.cookiejar
     import hashlib
-    cache = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "interlock")
+    cache = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "shutter")
     os.makedirs(cache, exist_ok=True)
     jar = http.cookiejar.MozillaCookieJar(os.path.join(cache, "cookies-" + hashlib.sha1(url.encode()).hexdigest()[:12] + ".txt"))
     try:
@@ -120,7 +120,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("paths", nargs="+")
     ap.add_argument("--url", default=os.environ.get("IRIS_URL", "http://localhost:52773"))
-    ap.add_argument("--ns", default=os.environ.get("IRIS_NAMESPACE", "INTERLOCK"))
+    ap.add_argument("--ns", default=os.environ.get("IRIS_NAMESPACE", "SHUTTER"))
     ap.add_argument("--flags", default="cuk", help="compile flags (default cuk)")
     ap.add_argument("--no-compile", action="store_true")
     args = ap.parse_args()

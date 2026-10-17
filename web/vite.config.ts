@@ -5,11 +5,11 @@ import { fileURLToPath, URL } from 'node:url';
 import { readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-// Interlock's web application - Vite configuration.
+// Shutter's web application - Vite configuration.
 //
 // Modes:
-//   dev    `vite`                     proxies /api/interlock to an IRIS instance (VITE_IRIS_URL)
-//   iris   `vite build --mode iris`   ../www/, the build IRIS serves at /interlock/ (npm run build:www)
+//   dev    `vite`                     proxies /api/shutter to an IRIS instance (VITE_IRIS_URL)
+//   iris   `vite build --mode iris`   ../www/, the build IRIS serves at /shutter/ (npm run build:www)
 //   demo   `vite build --mode demo`   dist-demo/, recorded runs on the in-browser mock (GitHub Pages, the e2e tests)
 //
 // VITE_BASE sets the demo's base path (GitHub Pages serves /<repo>/); by default it is relative.
@@ -32,7 +32,7 @@ function contentSecurityPolicy(): Plugin {
     "form-action 'self'",
   ].join('; ');
   return {
-    name: 'interlock-content-security-policy',
+    name: 'shutter-content-security-policy',
     apply: 'build',
     transformIndexHtml: (html) =>
       html.replace(
@@ -46,7 +46,7 @@ function contentSecurityPolicy(): Plugin {
 function withoutMockWorker(): Plugin {
   let outDir = '';
   return {
-    name: 'interlock-without-mock-worker',
+    name: 'shutter-without-mock-worker',
     apply: 'build',
     configResolved(config) {
       outDir = resolve(config.root, config.build.outDir);
@@ -65,8 +65,8 @@ export default defineConfig(({ mode }) => {
   };
 
   return {
-    // IRIS serves the build at /interlock/; the demo is relative unless VITE_BASE says otherwise.
-    base: mode === 'iris' ? '/interlock/' : mode === 'demo' ? env.VITE_BASE || './' : '/',
+    // IRIS serves the build at /shutter/; the demo is relative unless VITE_BASE says otherwise.
+    base: mode === 'iris' ? '/shutter/' : mode === 'demo' ? env.VITE_BASE || './' : '/',
     plugins: [
       react(),
       ...(mode === 'iris' ? [contentSecurityPolicy(), withoutMockWorker()] : []),
@@ -82,7 +82,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         // The browser talks to Vite, Vite to IRIS: same origin, so the session cookie works as it will when IRIS
         // serves the app. A Basic challenge on a 401 would open the browser's own login dialog.
-        '/api/interlock': {
+        '/api/shutter': {
           target: irisUrl,
           changeOrigin: true,
           configure: (proxy) => {

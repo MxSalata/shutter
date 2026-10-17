@@ -1,15 +1,15 @@
 :root {
-  --interlock-mono: ui-monospace, Menlo, Consolas, 'Liberation Mono', monospace;
+  --shutter-mono: ui-monospace, Menlo, Consolas, 'Liberation Mono', monospace;
   /* The page behind the cards: a cool grey in light mode (the cards are off white, see below), a
      step darker than the cards in dark. */
-  --interlock-page: #ebeef2;
+  --shutter-page: #ebeef2;
   /* Secondary text tokens: no inline opacity anywhere, so a contrast layer can raise them. */
-  --interlock-muted: var(--mantine-color-gray-7);
-  --interlock-muted-soft: var(--mantine-color-gray-6);
+  --shutter-muted: var(--mantine-color-gray-7);
+  --shutter-muted-soft: var(--mantine-color-gray-6);
   /* The navbar and the header: the card colour, except where a theme gives them tones of their
      own (Pastel). */
-  --interlock-navbar: var(--mantine-color-body);
-  --interlock-header: var(--mantine-color-body);
+  --shutter-navbar: var(--mantine-color-body);
+  --shutter-header: var(--mantine-color-body);
 }
 
 /* Mantine's light "dimmed" is gray-6 (#868e96, 3.3:1 on white); gray-7 reads at 7:1 and still looks secondary. */
@@ -22,19 +22,19 @@
  * on the cool grey page (#f9fafb on #ebeef2), with a gray-4 edge so two cards still part where
  * they meet; the same tokens sit behind tables, inputs, menus, modals, the navbar and the sign-in
  * page. Body text stays black; dimmed text (gray-7) reads at 7.0:1 on a card and 6.2:1 on the
- * page, links (interlock-8) at 6.4:1 on the page, and the sort icons take a grey that keeps 3:1 on
+ * page, links (shutter-8) at 6.4:1 on the page, and the sort icons take a grey that keeps 3:1 on
  * the page tone (gray-6 fell to 2.85:1). High contrast is an accessibility mode, not a style: it
  * keeps its pure white body, so these rules leave it out.
  */
-:root[data-mantine-color-scheme='light']:not([data-interlock-contrast='high']) {
+:root[data-mantine-color-scheme='light']:not([data-shutter-contrast='high']) {
   --mantine-color-body: #f9fafb;
-  --interlock-muted-soft: #7a828a;
+  --shutter-muted-soft: #7a828a;
 }
-:root[data-mantine-color-scheme='light']:not([data-interlock-contrast='high']) .mantine-Paper-root {
+:root[data-mantine-color-scheme='light']:not([data-shutter-contrast='high']) .mantine-Paper-root {
   --paper-border-color: var(--mantine-color-gray-4);
 }
 /* Stripes and hovered rows: gray-0 vanished on the off-white card, so each moves one step down. */
-:root[data-mantine-color-scheme='light']:not([data-interlock-contrast='high']) .mantine-Table-table {
+:root[data-mantine-color-scheme='light']:not([data-shutter-contrast='high']) .mantine-Table-table {
   --table-striped-color: var(--mantine-color-gray-1);
   --table-hover-color: var(--mantine-color-gray-2);
 }
@@ -56,8 +56,8 @@
  */
 :root:root[data-mantine-color-scheme='light'],
 :root:root[data-mantine-color-scheme='dark'] {
-  --mantine-color-interlock-filled: var(--mantine-color-interlock-7);
-  --mantine-color-interlock-filled-hover: var(--mantine-color-interlock-8);
+  --mantine-color-shutter-filled: var(--mantine-color-shutter-7);
+  --mantine-color-shutter-filled-hover: var(--mantine-color-shutter-8);
   --mantine-color-gray-filled: var(--mantine-color-gray-7);
   --mantine-color-gray-filled-hover: var(--mantine-color-gray-8);
   --mantine-color-red-filled: var(--mantine-color-red-9);
@@ -88,9 +88,9 @@
 
 :root:root[data-mantine-color-scheme='light'] {
   --mantine-color-anchor: var(--mantine-primary-color-8);
-  --mantine-color-interlock-text: var(--mantine-color-interlock-8);
-  --mantine-color-interlock-outline: var(--mantine-color-interlock-8);
-  --mantine-color-interlock-light-color: var(--mantine-color-interlock-9);
+  --mantine-color-shutter-text: var(--mantine-color-shutter-8);
+  --mantine-color-shutter-outline: var(--mantine-color-shutter-8);
+  --mantine-color-shutter-light-color: var(--mantine-color-shutter-9);
   --mantine-color-gray-text: var(--mantine-color-gray-7);
   --mantine-color-gray-outline: var(--mantine-color-gray-7);
   --mantine-color-gray-light-color: var(--mantine-color-gray-7);
@@ -139,7 +139,7 @@
  * hue, tuned to 4.6:1 so that the badge on a hovered row, which axe-core sees in every audit,
  * keeps a margin. High contrast keeps the values above: its surfaces are white.
  */
-:root:root[data-mantine-color-scheme='light']:not([data-interlock-contrast='high']) {
+:root:root[data-mantine-color-scheme='light']:not([data-shutter-contrast='high']) {
   --mantine-color-red-light-color: #bc2727;
   --mantine-color-cyan-light-color: #0b6d7f;
   --mantine-color-teal-text: #087856;
@@ -162,8 +162,8 @@
 /* Mantine's dark "dimmed" is dark-2; dark-1 of the slate scale reads at 7.9:1 on the dark-7 body. */
 :root:root[data-mantine-color-scheme='dark'] {
   --mantine-color-dimmed: var(--mantine-color-dark-1);
-  --mantine-color-interlock-text: var(--mantine-color-interlock-3);
-  --mantine-color-interlock-light-color: var(--mantine-color-interlock-3);
+  --mantine-color-shutter-text: var(--mantine-color-shutter-3);
+  --mantine-color-shutter-light-color: var(--mantine-color-shutter-3);
   --mantine-color-anchor: var(--mantine-primary-color-3);
   --mantine-color-grape-text: var(--mantine-color-grape-3);
   --mantine-color-violet-text: var(--mantine-color-violet-3);
@@ -172,21 +172,21 @@
 }
 
 :root[data-mantine-color-scheme='dark'] {
-  --interlock-page: var(--mantine-color-dark-8);
-  --interlock-muted: var(--mantine-color-dark-1);
+  --shutter-page: var(--mantine-color-dark-8);
+  --shutter-muted: var(--mantine-color-dark-1);
   /* Icons only (3:1 for graphics): dark-2 is 4.0:1, dark-3 was 2.8:1. */
-  --interlock-muted-soft: var(--mantine-color-dark-2);
+  --shutter-muted-soft: var(--mantine-color-dark-2);
 }
 
 .muted {
-  color: var(--interlock-muted);
+  color: var(--shutter-muted);
 }
 
 .muted-soft {
-  color: var(--interlock-muted-soft);
+  color: var(--shutter-muted-soft);
 }
 
-/* ---- Pastel (data-interlock-palette, set before first paint by color-scheme.js and kept in sync
+/* ---- Pastel (data-shutter-palette, set before first paint by color-scheme.js and kept in sync
    by useApplyAppearance): a theme of its own, colourful and gentle. Several soft hues work
    together: a lavender page, a sky navbar, a peach header, and the cards each in a pastel of
    their own, in turn (lavender, mint, peach, butter, sky, rose), with a border a step deeper than
@@ -195,20 +195,18 @@
    Pastel is inert in dark, and high contrast keeps its pure white body.
 
    Meaning survives: the status colours (green healthy, amber warning, red critical) are the
-   contrast-tuned tokens above, untouched; the primary is swapped by redefining the `interlock`
-   scale and its light tint, so every `color="interlock"` follows. The grey scale is re-tinted
+   contrast-tuned tokens above, untouched; the primary is swapped by redefining the `shutter`
+   scale and its light tint, so every `color="shutter"` follows. The grey scale is re-tinted
    towards lavender, so kbd, code, dividers, disabled controls and chart labels follow without
    per-component rules. Contrast, checked against every fill, stripe, hover and frame surface:
-   body text 12:1 or more, dimmed text 5.9:1, links (interlock-8) 7.0:1, icons and control borders
-   (gray-6) 4.1:1, white on the filled accent (interlock-7) 6.4:1, and each status badge 4.6:1 or
+   body text 12:1 or more, dimmed text 5.9:1, links (shutter-8) 7.0:1, icons and control borders
+   (gray-6) 4.1:1, white on the filled accent (shutter-7) 6.4:1, and each status badge 4.6:1 or
    more on a 10 % tint over the darkest of them (the hovers keep 0.845 luminance for that;
    axe-core sees a hovered row on every screen). */
-:root[data-interlock-palette='pastel'][data-mantine-color-scheme='light']:not(
-    [data-interlock-contrast='high']
-  ) {
-  --interlock-page: #f0ecf9;
-  --interlock-navbar: #e3edf8;
-  --interlock-header: #fbeee3;
+:root[data-shutter-palette='pastel'][data-mantine-color-scheme='light']:not([data-shutter-contrast='high']) {
+  --shutter-page: #f0ecf9;
+  --shutter-navbar: #e3edf8;
+  --shutter-header: #fbeee3;
   --mantine-color-body: #faf8fe;
   --mantine-color-text: #282442;
   --mantine-color-gray-0: #f5f2fb;
@@ -221,23 +219,23 @@
   --mantine-color-gray-7: #5a5577;
   --mantine-color-gray-8: #403c58;
   --mantine-color-gray-9: #2a2740;
-  --interlock-muted-soft: var(--mantine-color-gray-6);
+  --shutter-muted-soft: var(--mantine-color-gray-6);
   /* Borders of controls (inputs, default buttons) reach 3:1 on every fill; card edges stay soft. */
   --mantine-color-default-border: var(--mantine-color-gray-6);
   /* The accent: a periwinkle scale in place of the ocean blue-teal. Shades 7 to 9 carry white
      text (6.4:1 and more); 8 is the link, 9 the text of the light variant. */
-  --mantine-color-interlock-0: #f1eefc;
-  --mantine-color-interlock-1: #e3dcf8;
-  --mantine-color-interlock-2: #cdc2f0;
-  --mantine-color-interlock-3: #b3a3e7;
-  --mantine-color-interlock-4: #9a87dd;
-  --mantine-color-interlock-5: #8470d2;
-  --mantine-color-interlock-6: #7160c5;
-  --mantine-color-interlock-7: #6050b3;
-  --mantine-color-interlock-8: #4f4197;
-  --mantine-color-interlock-9: #3e3378;
-  --mantine-color-interlock-light: rgba(113, 96, 197, 0.12);
-  --mantine-color-interlock-light-hover: rgba(113, 96, 197, 0.2);
+  --mantine-color-shutter-0: #f1eefc;
+  --mantine-color-shutter-1: #e3dcf8;
+  --mantine-color-shutter-2: #cdc2f0;
+  --mantine-color-shutter-3: #b3a3e7;
+  --mantine-color-shutter-4: #9a87dd;
+  --mantine-color-shutter-5: #8470d2;
+  --mantine-color-shutter-6: #7160c5;
+  --mantine-color-shutter-7: #6050b3;
+  --mantine-color-shutter-8: #4f4197;
+  --mantine-color-shutter-9: #3e3378;
+  --mantine-color-shutter-light: rgba(113, 96, 197, 0.12);
+  --mantine-color-shutter-light-hover: rgba(113, 96, 197, 0.2);
   /* The six card hues: fill, stripe, hovered row, edge. */
   --pastel-fill-1: #f3f0fc;
   --pastel-stripe-1: #f2effc;
@@ -265,9 +263,7 @@
   --pastel-edge-6: #efbccd;
 }
 /* Inputs take the same 3:1 border as the other controls. */
-:root[data-interlock-palette='pastel'][data-mantine-color-scheme='light']:not(
-    [data-interlock-contrast='high']
-  )
+:root[data-shutter-palette='pastel'][data-mantine-color-scheme='light']:not([data-shutter-contrast='high'])
   .mantine-Input-input {
   --input-bd: var(--mantine-color-gray-6);
 }
@@ -275,9 +271,7 @@
    inherited); one outside a card takes the lavender of the page. Both keep 0.845 luminance or
    more, where every status badge holds 4.5:1; the tinted gray-1 and gray-2 of the Light rule
    above would not. */
-:root[data-interlock-palette='pastel'][data-mantine-color-scheme='light']:not(
-    [data-interlock-contrast='high']
-  )
+:root[data-shutter-palette='pastel'][data-mantine-color-scheme='light']:not([data-shutter-contrast='high'])
   .mantine-Table-table {
   --table-striped-color: var(--card-stripe, var(--pastel-stripe-1));
   --table-hover-color: var(--card-hover, var(--pastel-hover-1));
@@ -286,9 +280,7 @@
    gauges of a grid, the sections of a stack) or the card of the n-th grid column (the charts).
    A card that names its own background keeps it. Whatever sits inside a card, its table's
    stripes and hovered rows and a sticky header, takes the card's hue. */
-:root[data-interlock-palette='pastel'][data-mantine-color-scheme='light']:not(
-    [data-interlock-contrast='high']
-  )
+:root[data-shutter-palette='pastel'][data-mantine-color-scheme='light']:not([data-shutter-contrast='high'])
   .mantine-Paper-root {
   --card-fill: var(--pastel-fill-1);
   --card-stripe: var(--pastel-stripe-1);
@@ -297,90 +289,76 @@
   --paper-border-color: var(--card-edge);
   background-color: var(--card-fill);
 }
-:root[data-interlock-palette='pastel'][data-mantine-color-scheme='light']:not(
-    [data-interlock-contrast='high']
-  )
+:root[data-shutter-palette='pastel'][data-mantine-color-scheme='light']:not([data-shutter-contrast='high'])
   :is(.mantine-Paper-root:nth-child(6n + 2), .mantine-Grid-col:nth-child(6n + 2) > .mantine-Paper-root) {
   --card-fill: var(--pastel-fill-2);
   --card-stripe: var(--pastel-stripe-2);
   --card-hover: var(--pastel-hover-2);
   --card-edge: var(--pastel-edge-2);
 }
-:root[data-interlock-palette='pastel'][data-mantine-color-scheme='light']:not(
-    [data-interlock-contrast='high']
-  )
+:root[data-shutter-palette='pastel'][data-mantine-color-scheme='light']:not([data-shutter-contrast='high'])
   :is(.mantine-Paper-root:nth-child(6n + 3), .mantine-Grid-col:nth-child(6n + 3) > .mantine-Paper-root) {
   --card-fill: var(--pastel-fill-3);
   --card-stripe: var(--pastel-stripe-3);
   --card-hover: var(--pastel-hover-3);
   --card-edge: var(--pastel-edge-3);
 }
-:root[data-interlock-palette='pastel'][data-mantine-color-scheme='light']:not(
-    [data-interlock-contrast='high']
-  )
+:root[data-shutter-palette='pastel'][data-mantine-color-scheme='light']:not([data-shutter-contrast='high'])
   :is(.mantine-Paper-root:nth-child(6n + 4), .mantine-Grid-col:nth-child(6n + 4) > .mantine-Paper-root) {
   --card-fill: var(--pastel-fill-4);
   --card-stripe: var(--pastel-stripe-4);
   --card-hover: var(--pastel-hover-4);
   --card-edge: var(--pastel-edge-4);
 }
-:root[data-interlock-palette='pastel'][data-mantine-color-scheme='light']:not(
-    [data-interlock-contrast='high']
-  )
+:root[data-shutter-palette='pastel'][data-mantine-color-scheme='light']:not([data-shutter-contrast='high'])
   :is(.mantine-Paper-root:nth-child(6n + 5), .mantine-Grid-col:nth-child(6n + 5) > .mantine-Paper-root) {
   --card-fill: var(--pastel-fill-5);
   --card-stripe: var(--pastel-stripe-5);
   --card-hover: var(--pastel-hover-5);
   --card-edge: var(--pastel-edge-5);
 }
-:root[data-interlock-palette='pastel'][data-mantine-color-scheme='light']:not(
-    [data-interlock-contrast='high']
-  )
+:root[data-shutter-palette='pastel'][data-mantine-color-scheme='light']:not([data-shutter-contrast='high'])
   :is(.mantine-Paper-root:nth-child(6n), .mantine-Grid-col:nth-child(6n) > .mantine-Paper-root) {
   --card-fill: var(--pastel-fill-6);
   --card-stripe: var(--pastel-stripe-6);
   --card-hover: var(--pastel-hover-6);
   --card-edge: var(--pastel-edge-6);
 }
-:root[data-interlock-palette='pastel'][data-mantine-color-scheme='light']:not(
-    [data-interlock-contrast='high']
-  )
-  :root[data-interlock-palette='pastel'][data-mantine-color-scheme='light']:not(
-    [data-interlock-contrast='high']
-  )
+:root[data-shutter-palette='pastel'][data-mantine-color-scheme='light']:not([data-shutter-contrast='high'])
+  :root[data-shutter-palette='pastel'][data-mantine-color-scheme='light']:not([data-shutter-contrast='high'])
   .mantine-Paper-root
   .sticky-thead
   thead {
   background: var(--card-fill);
 }
 
-/* ---- High-contrast axis (data-interlock-contrast, set before first paint by color-scheme.js
+/* ---- High-contrast axis (data-shutter-contrast, set before first paint by color-scheme.js
    and kept in sync by useApplyAppearance). Independent of light/dark: four combinations, and
    it overrides Pastel. */
-:root[data-interlock-contrast='high'] {
-  --interlock-border-width: 2px;
-  --interlock-page: var(--mantine-color-body);
+:root[data-shutter-contrast='high'] {
+  --shutter-border-width: 2px;
+  --shutter-page: var(--mantine-color-body);
   --mantine-color-default-border: currentColor;
 }
-:root[data-interlock-contrast='high'][data-mantine-color-scheme='light'] {
+:root[data-shutter-contrast='high'][data-mantine-color-scheme='light'] {
   --mantine-color-text: #000;
   --mantine-color-body: #fff;
   --mantine-color-dimmed: var(--mantine-color-gray-8);
-  --interlock-muted: var(--mantine-color-gray-8);
-  --interlock-muted-soft: var(--mantine-color-gray-7);
+  --shutter-muted: var(--mantine-color-gray-8);
+  --shutter-muted-soft: var(--mantine-color-gray-7);
 }
-:root[data-interlock-contrast='high'][data-mantine-color-scheme='dark'] {
+:root[data-shutter-contrast='high'][data-mantine-color-scheme='dark'] {
   --mantine-color-text: #fff;
   --mantine-color-body: #000;
   --mantine-color-dimmed: var(--mantine-color-gray-4);
-  --interlock-muted: var(--mantine-color-gray-4);
-  --interlock-muted-soft: var(--mantine-color-gray-5);
+  --shutter-muted: var(--mantine-color-gray-4);
+  --shutter-muted-soft: var(--mantine-color-gray-5);
 }
-:root[data-interlock-contrast='high']
+:root[data-shutter-contrast='high']
   :where(.mantine-Paper-root, .mantine-Table-td, .mantine-Table-th, .mantine-Input-input) {
-  border-width: var(--interlock-border-width);
+  border-width: var(--shutter-border-width);
 }
-:root[data-interlock-contrast='high'] :focus-visible {
+:root[data-shutter-contrast='high'] :focus-visible {
   outline: 3px solid var(--mantine-color-text);
   outline-offset: 2px;
 }
@@ -391,7 +369,7 @@
 .nav-icon {
   color: var(--nav-icon, currentColor);
 }
-:root[data-interlock-contrast='high'] .nav-icon {
+:root[data-shutter-contrast='high'] .nav-icon {
   color: currentColor;
 }
 
@@ -435,7 +413,7 @@ body {
 }
 
 .mono {
-  font-family: var(--interlock-mono);
+  font-family: var(--shutter-mono);
   font-size: 0.85em;
 }
 
@@ -465,7 +443,7 @@ body {
   background: var(--mantine-color-body);
 }
 
-/* ---- Interlock's own ---- */
+/* ---- Shutter's own ---- */
 
 /* Digests, keys and other machine values wrap anywhere rather than overflow their card. */
 .mono-wrap {

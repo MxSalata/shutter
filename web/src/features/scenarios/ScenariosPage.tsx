@@ -239,7 +239,7 @@ export default function ScenariosPage() {
     <>
       <PageHeader
         title="Scenarios"
-        subtitle="Each scenario plays a real failure into the production: HL7 files into the ADT folder and faults on the ward. Interlock opens a case, investigates, checks the plan at the gate, asks a person, and verifies the result at the receiver."
+        subtitle="Each scenario plays a real failure into the production: HL7 files into the ADT folder and faults on the ward. Shutter opens a case, investigates, checks the plan at the gate, asks a person, and verifies the result at the receiver."
         actions={
           <Tooltip
             label={

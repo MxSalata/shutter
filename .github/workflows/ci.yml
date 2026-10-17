@@ -133,24 +133,24 @@ jobs:
       # The namespace and the installer run in an IRIS terminal session, as iris.script runs them in the image: IRIS for
       # Health's installer and the production's start write their progress to the current device, which over the SQL
       # route would land in the HTTP response. The result is printed after the call, on a line of its own.
-      - name: Create the INTERLOCK namespace
+      - name: Create the SHUTTER namespace
         run: |
-          python3 scripts/iris-load.py --url "$IRIS_URL" --ns USER src/Interlock/Setup.cls
-          out=$(printf '%s\n' 'Set r = ##class(Interlock.Setup).CreateNamespace("INTERLOCK") Write !,"RESULT: ",r,!' 'Halt' \
+          python3 scripts/iris-load.py --url "$IRIS_URL" --ns USER src/Shutter/Setup.cls
+          out=$(printf '%s\n' 'Set r = ##class(Shutter.Setup).CreateNamespace("SHUTTER") Write !,"RESULT: ",r,!' 'Halt' \
             | docker exec -i iris iris session IRIS -U USER)
           echo "$out" | tail -20
           echo "$out" | grep -q '^RESULT: ok'
       - name: Load and compile the core, the ward system and its tests
-        run: python3 scripts/iris-load.py --url "$IRIS_URL" --ns INTERLOCK src tests/unit/Wards
+        run: python3 scripts/iris-load.py --url "$IRIS_URL" --ns SHUTTER src tests/unit/Wards
       - name: Install (roles, demo users, web applications, the production)
         run: |
-          out=$(printf '%s\n' 'Set r = ##class(Interlock.Setup).Install("/home/irisowner/dev/") Write !,"RESULT: ",r,!' 'Halt' \
-            | docker exec -i iris iris session IRIS -U INTERLOCK)
+          out=$(printf '%s\n' 'Set r = ##class(Shutter.Setup).Install("/home/irisowner/dev/") Write !,"RESULT: ",r,!' 'Halt' \
+            | docker exec -i iris iris session IRIS -U SHUTTER)
           echo "$out" | tail -30
           echo "$out" | grep -q '^RESULT: ok'
       - name: The ward's contract tests, in process
         run: |
-          out=$(python3 scripts/iris-sql.py --url "$IRIS_URL" --ns INTERLOCK --json "SELECT Wards_Test.Run_Contract() AS r")
+          out=$(python3 scripts/iris-sql.py --url "$IRIS_URL" --ns SHUTTER --json "SELECT Wards_Test.Run_Contract() AS r")
           echo "$out"
           echo "$out" | python3 -c '
           import json, sys
@@ -158,13 +158,13 @@ jobs:
           r = json.loads(r) if isinstance(r, str) else r
           sys.exit(0 if r["failed"] == 0 and r["passed"] > 0 else 1)'
       - name: The ward's API over HTTP
-        run: python3 tests/e2e/ward_api_check.py --url "$IRIS_URL" --second-user wards-client --second-password interlock
+        run: python3 tests/e2e/ward_api_check.py --url "$IRIS_URL" --second-user wards-client --second-password shutter
       - name: Scenarios S1 to S3 end to end in replay (superseded, resend after approval, reconcile)
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --approve S1 S2 S3
       - name: Readiness report and the IRIS log
         if: always()
         run: |
-          python3 scripts/iris-sql.py --url "$IRIS_URL" --ns INTERLOCK "SELECT Interlock.Setup_Doctor() AS r" || true
+          python3 scripts/iris-sql.py --url "$IRIS_URL" --ns SHUTTER "SELECT Shutter.Setup_Doctor() AS r" || true
           docker logs iris 2>&1 | tail -80 || true
 
   # The judges' path: the Dockerfile, its build script and the IPM module, built from the public IRIS for Health
@@ -182,28 +182,28 @@ jobs:
           docker build --progress plain
           --build-arg IRIS_IMAGE="$IRIS_IMAGE"
           --build-arg WITH_AIHUB=0
-          -t interlock:ci .
+          -t shutter:ci .
       - name: Start it
         # The startup alerts are cleared by the production's own start; no after-start script is needed.
         run: >-
-          docker run -d --name interlock -p 52773:52773 interlock:ci
+          docker run -d --name shutter -p 52773:52773 shutter:ci
           --check-caps false --ISCAgent false
       - name: Wait for the web application
         run: |
           code=
           for i in $(seq 1 60); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:52773/interlock/index.html || true)
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:52773/shutter/index.html || true)
             if [ "$code" = "200" ]; then echo "The web application answered after $((i*5)) s"; exit 0; fi
             sleep 5
           done
           echo "The web application did not come up (last HTTP status: '$code')"
-          docker logs interlock 2>&1 | tail -100
+          docker logs shutter 2>&1 | tail -100
           exit 1
       - name: Scenario S2 end to end on the built image
         run: python3 tests/e2e/scenario_check.py --url http://localhost:52773 --approve S2
       - name: IRIS log
         if: always()
-        run: docker logs interlock 2>&1 | tail -100 || true
+        run: docker logs shutter 2>&1 | tail -100 || true
 
   # Publishes the demo to GitHub Pages. Skipped (not failed) until the repository is public, Pages is enabled
   # (Settings, Pages, Source: GitHub Actions) and the repository variable DEPLOY_DEMO is 'true'.

@@ -6,8 +6,8 @@ has several cases, so its keys name the case's encounter and event (scenario:S11
 
     python3 fixtures/generate_records.py
 
-Each finding keeps to the fields the live agents submit (Interlock.Schema.Findings: disposition, confidence, summary,
-violations, unknowns, evidence_refs) and each plan to Interlock.Schema.Plan (disposition, summary, action,
+Each finding keeps to the fields the live agents submit (Shutter.Schema.Findings: disposition, confidence, summary,
+violations, unknowns, evidence_refs) and each plan to Shutter.Schema.Plan (disposition, summary, action,
 preconditions, evidence_refs, disagreements). Evidence references name snapshot item kinds. A resend's
 expected_version is the ward's version when the case collects its evidence, after the settle period. A file recorded
 from a live run (scripts/iris-pull-records.py labels it "Recorded from a live run ...") is kept, never overwritten.
@@ -21,10 +21,10 @@ OUT = os.path.join(HERE, "records")
 WHEN = "2026-10-16T10:00:00Z"
 LABEL = "Hand-written fixture standing in for a live recording; replaced when the live agents run"
 CLASSES = {
-    "conformance": "Interlock.Agent.Conformance",
-    "encounter": "Interlock.Agent.Encounter",
-    "impact": "Interlock.Agent.Impact",
-    "coordinator": "Interlock.Agent.Coordinator",
+    "conformance": "Shutter.Agent.Conformance",
+    "encounter": "Shutter.Agent.Encounter",
+    "impact": "Shutter.Agent.Impact",
+    "coordinator": "Shutter.Agent.Coordinator",
 }
 # The tools each member calls, as the live module names them, ending with its terminal tool.
 TOOLS = {
@@ -175,7 +175,7 @@ RECORDS = {
         [disagree("conformance", "resend", "Conformance judged the message alone; two sources at the same time leave the "
                   "intent open"),
          disagree("encounter", "more_evidence", "The missing evidence is the ward's own knowledge of the patient, which "
-                  "Interlock can't collect")]),
+                  "Shutter can't collect")]),
 
     # S9: the same patient's other visit (ENC-2009) is another encounter, outside this case's evidence.
     ("S9", "conformance"): conformance_valid(9),

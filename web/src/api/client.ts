@@ -1,7 +1,7 @@
 import { ApiError } from '@/lib/errors';
 
 /** The REST API's base path (CONTRACTS 5). The app is served from the same origin, by IRIS or the Vite proxy. */
-export const API_BASE = '/api/interlock';
+export const API_BASE = '/api/shutter';
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
@@ -29,7 +29,7 @@ export async function request<T>(method: Method, path: string, options: RequestO
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
   // The CSRF guard: every change carries it (CONTRACTS 5.1).
-  if (method !== 'GET') headers['X-Requested-With'] = 'Interlock';
+  if (method !== 'GET') headers['X-Requested-With'] = 'Shutter';
   if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
   let response: Response;
   try {

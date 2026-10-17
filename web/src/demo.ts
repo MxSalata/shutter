@@ -5,4 +5,4 @@
 export const DEMO = import.meta.env.MODE === 'demo' || import.meta.env.VITE_MOCK === '1';
 
 /** The demo's sign-in: the mock's approver, who can do everything the screens show. */
-export const DEMO_USER = { username: 'approver', password: 'interlock' };
+export const DEMO_USER = { username: 'approver', password: 'shutter' };

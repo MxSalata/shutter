@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Check recording files (fixtures/records/*.json) offline: the key, the member, the agent class, and the
-result's shape as the core stores it (Interlock.Schema.Findings for specialists, Interlock.Schema.Plan for the
+result's shape as the core stores it (Shutter.Schema.Findings for specialists, Shutter.Schema.Plan for the
 coordinator and the generalist). Mirrors the schema classes' Check methods.
 
     python3 scripts/check-records.py [fixtures/records] [--scenarios fixtures/scenarios.json]
@@ -19,14 +19,14 @@ import sys
 
 DISPOSITIONS = {"resend", "reconcile", "superseded", "more_evidence", "escalate"}
 MEMBERS = {
-    "conformance": ("Interlock.Agent.Conformance", "findings"),
-    "encounter": ("Interlock.Agent.Encounter", "findings"),
-    "impact": ("Interlock.Agent.Impact", "findings"),
-    "coordinator": ("Interlock.Agent.Coordinator", "plan"),
-    "generalist": ("Interlock.Agent.Generalist", "plan"),
+    "conformance": ("Shutter.Agent.Conformance", "findings"),
+    "encounter": ("Shutter.Agent.Encounter", "findings"),
+    "impact": ("Shutter.Agent.Impact", "findings"),
+    "coordinator": ("Shutter.Agent.Coordinator", "plan"),
+    "generalist": ("Shutter.Agent.Generalist", "plan"),
 }
 # scenario:<S>[:<encounter>:<event>]|<member>|<configVersion>[|round<n>]: the core writes the long form since the
-# incident work (CaseWorkflow), and Interlock.Bridge.Record falls back to the short one the first recordings use.
+# incident work (CaseWorkflow), and Shutter.Bridge.Record falls back to the short one the first recordings use.
 KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+)(?::(?P<encounter>[^:|]+):(?P<event>[^:|]+))?"
                     r"\|(?P<member>[a-z]+)\|(?P<cfg>\d+)(?:\|round(?P<round>\d+))?$")
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Run a SQL statement in an IRIS namespace through the Atelier REST API and print the rows.
 
-    python3 scripts/iris-sql.py [--url http://localhost:52773] [--ns INTERLOCK] [--json] "SELECT ..." [param ...]
+    python3 scripts/iris-sql.py [--url http://localhost:52773] [--ns SHUTTER] [--json] "SELECT ..." [param ...]
 
-Class methods marked [ SqlProc ] are called as functions: "SELECT Interlock.Setup_Install() AS result".
+Class methods marked [ SqlProc ] are called as functions: "SELECT Shutter.Setup_Install() AS result".
 Credentials come from IRIS_USER and IRIS_PASSWORD (defaults _SYSTEM / SYS).
 """
 import argparse
@@ -36,7 +36,7 @@ def opener_for(url):
     licence unit instead of opening a session each (which exhausts a Community licence)."""
     import http.cookiejar
     import hashlib
-    cache = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "interlock")
+    cache = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "shutter")
     os.makedirs(cache, exist_ok=True)
     jar = http.cookiejar.MozillaCookieJar(os.path.join(cache, "cookies-" + hashlib.sha1(url.encode()).hexdigest()[:12] + ".txt"))
     try:
@@ -53,7 +53,7 @@ def main():
     ap.add_argument("sql")
     ap.add_argument("params", nargs="*")
     ap.add_argument("--url", default=os.environ.get("IRIS_URL", "http://localhost:52773"))
-    ap.add_argument("--ns", default=os.environ.get("IRIS_NAMESPACE", "INTERLOCK"))
+    ap.add_argument("--ns", default=os.environ.get("IRIS_NAMESPACE", "SHUTTER"))
     ap.add_argument("--json", action="store_true", help="print the result rows as JSON")
     args = ap.parse_args()
 

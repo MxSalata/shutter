@@ -8,7 +8,7 @@ case's outcome and the receiving system's final state with the scenario's expect
   (irishealth-community:2026.3.0AI.154.0) in record mode: for each case the three specialists in parallel, then the
   coordinator. 44 agent runs in all (S7 was planned twice), 1,005,417 input and 56,829 output tokens: 5.18 USD at
   $4 and $20 per million tokens, as the instance's own costs page reports. Each cell gives the case's cost.
-- **Board, replay:** the same board replaying those live runs' recordings, as Interlock does without an API key (the
+- **Board, replay:** the same board replaying those live runs' recordings, as Shutter does without an API key (the
   recordings in `fixtures/records` are these runs, one per board member and case). Played on the same instance in
   replay mode, with no model calls.
 - **Rules only:** no agents. It proposes resending the operation unchanged at the observed version, and the gate alone

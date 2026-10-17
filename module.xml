@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Export generator="Cache" version="25">
-  <Document name="iris-interlock.ZPM">
+  <Document name="iris-shutter.ZPM">
     <Module>
-      <Name>iris-interlock</Name>
+      <Name>iris-shutter</Name>
       <Version>0.1.0</Version>
-      <Description>Interlock: supervised recovery for InterSystems IRIS Interoperability. A failed message is a case, not a retry: a board of AI Hub agents investigates it, a deterministic gate and a person decide, IRIS carries out the exact approved action and verifies it. This core module runs on any IRIS or IRIS for Health Community 2026.2 or later and replays recorded agent runs; the companion module iris-interlock-aihub adds live agents on an AI Hub build.</Description>
+      <Description>Shutter: supervised recovery for InterSystems IRIS Interoperability. A failed message is a case, not a retry: a board of AI Hub agents investigates it, a deterministic gate and a person decide, IRIS carries out the exact approved action and verifies it. This core module runs on any IRIS or IRIS for Health Community 2026.2 or later and replays recorded agent runs; the companion module iris-shutter-aihub adds live agents on an AI Hub build.</Description>
       <Keywords>interoperability,hl7,recovery,ai agents,ai hub,workflow,contest</Keywords>
       <Author>
         <Person>MxSalata</Person>
@@ -15,35 +15,35 @@
       <SourcesRoot>src</SourcesRoot>
       <SystemRequirements Version=">=2026.2" Interoperability="enabled"/>
       <!-- The core's classes, listed so that the aihub module can add its own under the same package
-           (Interlock.Agent, Interlock.Tools, Interlock.Schema, Interlock.Knowledge, Interlock.Bridge.Policy,
-           Interlock.Bridge.Monitor, Interlock.Bridge.Runner.AIHub) without the two modules claiming one resource. -->
-      <Resource Name="Interlock.API.PKG"/>
-      <Resource Name="Interlock.Bridge.Msg.PKG"/>
-      <Resource Name="Interlock.Bridge.Operation.PKG"/>
-      <Resource Name="Interlock.Bridge.Record.CLS"/>
-      <Resource Name="Interlock.Bridge.RunSpec.CLS"/>
-      <Resource Name="Interlock.Bridge.Runner.Replay.CLS"/>
-      <Resource Name="Interlock.Bridge.Runner.CLS"/>
-      <Resource Name="Interlock.Bridge.ToolCall.CLS"/>
-      <Resource Name="Interlock.Catalogue.PKG"/>
-      <Resource Name="Interlock.Knowledge.Text.CLS"/>
-      <Resource Name="Interlock.Msg.PKG"/>
-      <Resource Name="Interlock.Operation.PKG"/>
-      <Resource Name="Interlock.Process.PKG"/>
-      <Resource Name="Interlock.Production.CLS"/>
-      <Resource Name="Interlock.Scenarios.PKG"/>
-      <Resource Name="Interlock.Service.PKG"/>
-      <Resource Name="Interlock.Setup.CLS"/>
-      <Resource Name="Interlock.Store.PKG"/>
-      <Resource Name="Interlock.Util.PKG"/>
+           (Shutter.Agent, Shutter.Tools, Shutter.Schema, Shutter.Knowledge, Shutter.Bridge.Policy,
+           Shutter.Bridge.Monitor, Shutter.Bridge.Runner.AIHub) without the two modules claiming one resource. -->
+      <Resource Name="Shutter.API.PKG"/>
+      <Resource Name="Shutter.Bridge.Msg.PKG"/>
+      <Resource Name="Shutter.Bridge.Operation.PKG"/>
+      <Resource Name="Shutter.Bridge.Record.CLS"/>
+      <Resource Name="Shutter.Bridge.RunSpec.CLS"/>
+      <Resource Name="Shutter.Bridge.Runner.Replay.CLS"/>
+      <Resource Name="Shutter.Bridge.Runner.CLS"/>
+      <Resource Name="Shutter.Bridge.ToolCall.CLS"/>
+      <Resource Name="Shutter.Catalogue.PKG"/>
+      <Resource Name="Shutter.Knowledge.Text.CLS"/>
+      <Resource Name="Shutter.Msg.PKG"/>
+      <Resource Name="Shutter.Operation.PKG"/>
+      <Resource Name="Shutter.Process.PKG"/>
+      <Resource Name="Shutter.Production.CLS"/>
+      <Resource Name="Shutter.Scenarios.PKG"/>
+      <Resource Name="Shutter.Service.PKG"/>
+      <Resource Name="Shutter.Setup.CLS"/>
+      <Resource Name="Shutter.Store.PKG"/>
+      <Resource Name="Shutter.Util.PKG"/>
       <!-- The synthetic ward system the production delivers to. -->
       <Resource Name="Wards.PKG"/>
       <!-- Folders, security, the library, prices, recorded runs, the web applications and the production. -->
-      <Invoke Class="Interlock.Setup" Method="Install">
+      <Invoke Class="Shutter.Setup" Method="Install">
         <Arg>${root}</Arg>
       </Invoke>
       <!-- The web application's built files, once they exist. -->
-      <FileCopy Name="www/" Target="${cspdir}interlock/" Overlay="1"/>
+      <FileCopy Name="www/" Target="${cspdir}shutter/" Overlay="1"/>
     </Module>
   </Document>
 </Export>

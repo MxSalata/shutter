@@ -1,6 +1,6 @@
 {
  "key": "scenario:S11:ENC-1103:discharge|conformance|1",
- "agentClass": "Interlock.Agent.Conformance",
+ "agentClass": "Shutter.Agent.Conformance",
  "configVersion": "1",
  "memberCode": "conformance",
  "snapshotDigest": "",
@@ -8,7 +8,7 @@
  "model": "fixture",
  "response": {
   "status": "ok",
-  "agent_class": "Interlock.Agent.Conformance",
+  "agent_class": "Shutter.Agent.Conformance",
   "config_version": "1",
   "mode": "record",
   "model": "fixture",

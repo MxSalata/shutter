@@ -12,7 +12,7 @@ export function RequireAuth() {
   if (me.isError)
     return (
       <Container size="sm" py={80}>
-        <ErrorAlert title="Cannot reach Interlock's API" error={me.error} onRetry={() => void me.refetch()} />
+        <ErrorAlert title="Cannot reach Shutter's API" error={me.error} onRetry={() => void me.refetch()} />
       </Container>
     );
   if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;

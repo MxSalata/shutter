@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plays scenarios through Interlock's REST API and compares each case's outcome with the scenario's expected outcome.
+"""Plays scenarios through Shutter's REST API and compares each case's outcome with the scenario's expected outcome.
 
     python3 tests/e2e/scenario_check.py [--url http://localhost:52773] [--modes board,rules] [--approve]
                                         [--markdown comparison.md] S1 S2 S3
@@ -8,7 +8,7 @@ Each scenario is played once per mode (board, single, rules; default board), so 
 across the board of specialists, the single investigator and rules alone. --markdown writes the comparison as a
 table.
 
-Signs in as the demo users `operator` and `approver` (password from INTERLOCK_PASSWORD, default "interlock"). With
+Signs in as the demo users `operator` and `approver` (password from SHUTTER_PASSWORD, default "shutter"). With
 --approve, a plan waiting for approval is approved as the approver once the scenario's own steps have finished (S7
 changes the ward while its plan waits). The ward's final state is read through the ward's API (--ward-user and
 --ward-password, default _SYSTEM / SYS). The expected outcomes are in fixtures/scenarios.json. Prints one line per
@@ -41,7 +41,7 @@ class Session:
     """One signed-in user of the REST API: a cookie jar and JSON in and out."""
 
     def __init__(self, url):
-        self.base = url.rstrip("/") + "/api/interlock"
+        self.base = url.rstrip("/") + "/api/shutter"
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 
     def call(self, method, path, body=None, idempotent=False):
@@ -51,7 +51,7 @@ class Session:
         if body is not None:
             request.add_header("Content-Type", "application/json")
         if method != "GET":
-            request.add_header("X-Requested-With", "Interlock")
+            request.add_header("X-Requested-With", "Shutter")
         if idempotent:
             request.add_header("Idempotency-Key", str(uuid.uuid4()))
         try:
@@ -321,7 +321,7 @@ def main():
     p.add_argument("--ward-password", default="SYS")
     args = p.parse_args()
 
-    password = os.environ.get("INTERLOCK_PASSWORD", "interlock")
+    password = os.environ.get("SHUTTER_PASSWORD", "shutter")
     operator = Session(args.url).sign_in("operator", password)
     approver = Session(args.url).sign_in("approver", password)
     _, listing = operator.call("GET", "/scenarios")

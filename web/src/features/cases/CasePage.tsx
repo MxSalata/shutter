@@ -20,7 +20,7 @@ import { CaseTimeline } from './case/CaseTimeline';
 /** The portal's base path (/csp/<namespace>/) for links to messages, read from the case's trace link. */
 function portalBase(visualTrace: string | undefined): string {
   const m = visualTrace ? /^(.*\/)EnsPortal\./.exec(visualTrace) : null;
-  return m ? m[1] : '/csp/interlock/';
+  return m ? m[1] : '/csp/shutter/';
 }
 
 export default function CasePage() {

@@ -2,7 +2,7 @@
 """Checks the ward system's REST API over HTTP against docs/CONTRACTS.md, section 1.
 
     python3 tests/e2e/ward_api_check.py [--url http://localhost:52773] [--user _SYSTEM] [--password SYS]
-                                        [--second-user wards-client --second-password interlock]
+                                        [--second-user wards-client --second-password shutter]
 
 Uses its own encounter ids (ENC-HT-<time>-n), sets faults only for its own operation keys and puts the previous
 fault back, and never resets the ward, so it can run on an instance that holds other data. The ward has one fault

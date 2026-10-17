@@ -3,12 +3,12 @@ import fixtures from './fixtures.json';
 import type { CaseState, Me, ScenarioRun } from '@/api/types';
 
 /**
- * An in-browser stand-in for Interlock's REST API (CONTRACTS 5), for the demo build, development
+ * An in-browser stand-in for Shutter's REST API (CONTRACTS 5), for the demo build, development
  * (`VITE_MOCK=1 npm run dev`) and the tests. It serves answers recorded from the real API (scripts/record-demo.mjs;
  * fixtures.json says when); playing a scenario only pretends, and a decision is accepted without changing the
  * recorded case.
  */
-const BASE = '/api/interlock';
+const BASE = '/api/shutter';
 type CaseFixture = (typeof fixtures.cases)[keyof typeof fixtures.cases];
 const cases = fixtures.cases as unknown as Record<string, CaseFixture>;
 
@@ -35,7 +35,7 @@ const signedOut = () => error(401, 'unauthorized', 'Sign in first');
 const guard = (role: 'operator' | 'approver') =>
   !session ? signedOut() : !session[role] ? error(403, 'forbidden', `Needs the ${role} role`) : null;
 const csrf = (request: Request) =>
-  request.headers.get('X-Requested-With') === 'Interlock'
+  request.headers.get('X-Requested-With') === 'Shutter'
     ? null
     : error(400, 'csrf', 'Missing X-Requested-With');
 
@@ -72,7 +72,7 @@ export const handlers = [
     if (bad) return bad;
     const body = (await request.json()) as { username?: string; password?: string };
     const user = USERS[body.username ?? ''];
-    if (!user || body.password !== 'interlock')
+    if (!user || body.password !== 'shutter')
       return error(401, 'unauthorized', 'Wrong user name or password');
     session = user;
     return HttpResponse.json(user);

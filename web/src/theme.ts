@@ -1,6 +1,6 @@
 import { createTheme, rem, type MantineColorsTuple, type MantineThemeOverride } from '@mantine/core';
 
-export const APP_NAME = 'Interlock';
+export const APP_NAME = 'Shutter';
 export const APP_TAGLINE = 'Failed messages, investigated, gated, approved and verified';
 
 /**
@@ -8,7 +8,7 @@ export const APP_TAGLINE = 'Failed messages, investigated, gated, approved and v
  * white text and text on white or on the page tone at 5.4:1 and more; shades 3 and 4 carry text
  * on the dark surfaces (styles.css picks, per role, the shade that reaches 4.5:1).
  */
-const interlock: MantineColorsTuple = [
+const shutter: MantineColorsTuple = [
   '#e7f5fa',
   '#cdeaf3',
   '#a1d6e8',
@@ -40,8 +40,8 @@ const dark: MantineColorsTuple = [
 
 /** Base theme; App.tsx derives the contrast-aware variant from it. Fonts are the system stacks, which is what actually renders (nothing is web-loaded). */
 export const themeBase: MantineThemeOverride = {
-  colors: { interlock, dark },
-  primaryColor: 'interlock',
+  colors: { shutter, dark },
+  primaryColor: 'shutter',
   primaryShade: { light: 7, dark: 5 },
   defaultRadius: 'md',
   fontFamily:
@@ -51,7 +51,7 @@ export const themeBase: MantineThemeOverride = {
   fontSizes: { xs: rem(12), sm: rem(13.5), md: rem(15), lg: rem(17), xl: rem(20) },
   components: {
     Table: { defaultProps: { highlightOnHover: true, verticalSpacing: 'xs', fz: 'sm' } },
-    // Cards sit on the page tone (styles.css --interlock-page) with a hairline shadow.
+    // Cards sit on the page tone (styles.css --shutter-page) with a hairline shadow.
     Paper: { defaultProps: { withBorder: true, radius: 'md', shadow: 'xs' } },
     Card: { defaultProps: { withBorder: true, radius: 'md', shadow: 'xs' } },
     Badge: { defaultProps: { variant: 'light' } },
