@@ -93,6 +93,8 @@ jobs:
           echo "$out"
           [ "$code" = "0" ] || exit "$code"
           if echo "$out" | grep -q ': missing '; then echo "A scenario lacks recordings for its board"; exit 1; fi
+      - name: The scenario catalogue keeps to the condition vocabulary, and catalogue.json is built from it
+        run: python3 scripts/build-catalogue.py knowledge/catalogue --check
 
   # The ObjectScript side on a real IRIS for Health Community 2026.2 (InterSystems' image; the AI Hub build is not on a
   # registry CI can pull from, and the core needs none of it): the namespace, a full load and compile, the installer,
