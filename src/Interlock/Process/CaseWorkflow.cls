@@ -762,6 +762,54 @@ Storage Default
 <Value name="16">
 <Value>ApprovalValidSeconds</Value>
 </Value>
+<Value name="17">
+<Value>Policy</Value>
+</Value>
+<Value name="18">
+<Value>CatalogueEntry</Value>
+</Value>
+<Value name="19">
+<Value>CatalogueOutcome</Value>
+</Value>
+<Value name="20">
+<Value>SettleSeconds</Value>
+</Value>
+<Value name="21">
+<Value>Release</Value>
+</Value>
+<Value name="22">
+<Value>IncidentId</Value>
+</Value>
+<Value name="23">
+<Value>ChainSeq</Value>
+</Value>
+<Value name="24">
+<Value>ChainPosition</Value>
+</Value>
+<Value name="25">
+<Value>ChainKind</Value>
+</Value>
+<Value name="26">
+<Value>ChainDecides</Value>
+</Value>
+<Value name="27">
+<Value>ExpectedVersion</Value>
+</Value>
+<Value name="28">
+<Value>ReleasePolicy</Value>
+</Value>
+<Value name="29">
+<Value>IncidentApprover</Value>
+</Value>
+<Value name="30">
+<Value>IncidentApprovalRef</Value>
+</Value>
+<Value name="31">
+<Value>IncidentPlanDigest</Value>
+</Value>
+<Value name="32">
+<Value>IncidentTarget</Value>
+</Value>
 </Data>
 <DefaultData>CaseWorkflowDefaultData</DefaultData>
 <Type>%Storage.Persistent</Type>

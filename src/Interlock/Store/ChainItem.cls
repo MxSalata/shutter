@@ -79,4 +79,51 @@ Method ToObject() As %DynamicObject
     Quit o
 }
 
+Storage Default
+{
+<Data name="ChainItemDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Chain</Value>
+</Value>
+<Value name="3">
+<Value>Position</Value>
+</Value>
+<Value name="4">
+<Value>Case</Value>
+</Value>
+<Value name="5">
+<Value>Entry</Value>
+</Value>
+<Value name="6">
+<Value>CatalogueOutcome</Value>
+</Value>
+<Value name="7">
+<Value>Decides</Value>
+</Value>
+<Value name="8">
+<Value>ExpectedVersion</Value>
+</Value>
+<Value name="9">
+<Value>VerifiedVersion</Value>
+</Value>
+<Value name="10">
+<Value>State</Value>
+</Value>
+<Value name="11">
+<Value>ReleasedAt</Value>
+</Value>
+<Value name="12">
+<Value>ClosedAt</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock.Store.ChainItemD</DataLocation>
+<DefaultData>ChainItemDefaultData</DefaultData>
+<IdLocation>^Interlock.Store.ChainItemD</IdLocation>
+<IndexLocation>^Interlock.Store.ChainItemI</IndexLocation>
+<StreamLocation>^Interlock.Store.ChainItemS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

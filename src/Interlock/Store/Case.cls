@@ -317,6 +317,12 @@ Storage Default
 <Value name="29">
 <Value>CurrentApproval</Value>
 </Value>
+<Value name="30">
+<Value>Receiver</Value>
+</Value>
+<Value name="31">
+<Value>Incident</Value>
+</Value>
 </Data>
 <DataLocation>^Interlock.Store.CaseD</DataLocation>
 <DefaultData>CaseDefaultData</DefaultData>

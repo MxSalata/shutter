@@ -124,4 +124,72 @@ Method ToObject() As %DynamicObject
     Quit o
 }
 
+Storage Default
+{
+<Data name="ChainDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Incident</Value>
+</Value>
+<Value name="3">
+<Value>Seq</Value>
+</Value>
+<Value name="4">
+<Value>EncounterId</Value>
+</Value>
+<Value name="5">
+<Value>PatientId</Value>
+</Value>
+<Value name="6">
+<Value>PatientIdAuthority</Value>
+</Value>
+<Value name="7">
+<Value>Kind</Value>
+</Value>
+<Value name="8">
+<Value>Decides</Value>
+</Value>
+<Value name="9">
+<Value>Policy</Value>
+</Value>
+<Value name="10">
+<Value>Entries</Value>
+</Value>
+<Value name="11">
+<Value>State</Value>
+</Value>
+<Value name="12">
+<Value>Outcome</Value>
+</Value>
+<Value name="13">
+<Value>FirstExpectedVersion</Value>
+</Value>
+<Value name="14">
+<Value>StoppedAt</Value>
+</Value>
+<Value name="15">
+<Value>ApprovedBy</Value>
+</Value>
+<Value name="16">
+<Value>ApprovedAt</Value>
+</Value>
+<Value name="17">
+<Value>ApprovalDecision</Value>
+</Value>
+<Value name="18">
+<Value>ApprovalComment</Value>
+</Value>
+<Value name="19">
+<Value>ApprovalTaskId</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock.Store.ChainD</DataLocation>
+<DefaultData>ChainDefaultData</DefaultData>
+<IdLocation>^Interlock.Store.ChainD</IdLocation>
+<IndexLocation>^Interlock.Store.ChainI</IndexLocation>
+<StreamLocation>^Interlock.Store.ChainS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

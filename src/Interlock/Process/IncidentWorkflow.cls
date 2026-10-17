@@ -450,4 +450,48 @@ Method Close(incident As Interlock.Store.Incident, why As %String) As %Status
     Quit incident.Transition("closed", "Closed: " _ incident.Summary, "system")
 }
 
+Storage Default
+{
+<Data name="IncidentWorkflowDefaultData">
+<Subscript>"IncidentWorkflow"</Subscript>
+<Value name="1">
+<Value>IncidentId</Value>
+</Value>
+<Value name="2">
+<Value>Phase</Value>
+</Value>
+<Value name="3">
+<Value>CurrentChainId</Value>
+</Value>
+<Value name="4">
+<Value>CurrentItemId</Value>
+</Value>
+<Value name="5">
+<Value>CurrentCaseId</Value>
+</Value>
+<Value name="6">
+<Value>Polls</Value>
+</Value>
+<Value name="7">
+<Value>ReadyPolls</Value>
+</Value>
+<Value name="8">
+<Value>PendingTasks</Value>
+</Value>
+<Value name="9">
+<Value>CaseTarget</Value>
+</Value>
+<Value name="10">
+<Value>ApprovalTarget</Value>
+</Value>
+<Value name="11">
+<Value>PollSeconds</Value>
+</Value>
+<Value name="12">
+<Value>ReadyTimeoutSeconds</Value>
+</Value>
+</Data>
+<DefaultData>IncidentWorkflowDefaultData</DefaultData>
+<Type>%Storage.Persistent</Type>
+}
 }

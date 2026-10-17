@@ -201,4 +201,96 @@ Method Events() As %DynamicArray
     Quit out
 }
 
+Storage Default
+{
+<Data name="IncidentDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>IncidentId</Value>
+</Value>
+<Value name="3">
+<Value>Receiver</Value>
+</Value>
+<Value name="4">
+<Value>Mode</Value>
+</Value>
+<Value name="5">
+<Value>State</Value>
+</Value>
+<Value name="6">
+<Value>OpenedAt</Value>
+</Value>
+<Value name="7">
+<Value>IntakeClosedAt</Value>
+</Value>
+<Value name="8">
+<Value>ClosedAt</Value>
+</Value>
+<Value name="9">
+<Value>Threshold</Value>
+</Value>
+<Value name="10">
+<Value>WindowMinutes</Value>
+</Value>
+<Value name="11">
+<Value>QuietSeconds</Value>
+</Value>
+<Value name="12">
+<Value>LastFailureAt</Value>
+</Value>
+<Value name="13">
+<Value>PlanDigest</Value>
+</Value>
+<Value name="14">
+<Value>PlanJSON</Value>
+</Value>
+<Value name="15">
+<Value>ReceiverEpoch</Value>
+</Value>
+<Value name="16">
+<Value>CatalogueVersion</Value>
+</Value>
+<Value name="17">
+<Value>ProfileVersion</Value>
+</Value>
+<Value name="18">
+<Value>PolicyVersion</Value>
+</Value>
+<Value name="19">
+<Value>Policy</Value>
+</Value>
+<Value name="20">
+<Value>ApprovedBy</Value>
+</Value>
+<Value name="21">
+<Value>ApprovedAt</Value>
+</Value>
+<Value name="22">
+<Value>ApprovalDecision</Value>
+</Value>
+<Value name="23">
+<Value>ApprovalComment</Value>
+</Value>
+<Value name="24">
+<Value>ApprovalTaskId</Value>
+</Value>
+<Value name="25">
+<Value>WorkflowSessionId</Value>
+</Value>
+<Value name="26">
+<Value>Summary</Value>
+</Value>
+<Value name="27">
+<Value>Version</Value>
+</Value>
+</Data>
+<DataLocation>^Interlock.Store.IncidentD</DataLocation>
+<DefaultData>IncidentDefaultData</DefaultData>
+<IdLocation>^Interlock.Store.IncidentD</IdLocation>
+<IndexLocation>^Interlock.Store.IncidentI</IndexLocation>
+<StreamLocation>^Interlock.Store.IncidentS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }
