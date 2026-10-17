@@ -1,6 +1,11 @@
-import { Alert, List, Stack, Text } from '@mantine/core';
-import { useBlockedReason, useClosure } from '@/api/hooks';
+import { Alert, Button, Group, List, Modal, Stack, Text, Textarea } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import { useState } from 'react';
+import { newIdempotencyKey } from '@/api/client';
+import { useBlockedReason, useClosure, useMe, useReinvestigate } from '@/api/hooks';
 import type { CaseDetail } from '@/api/types';
+import { DEMO } from '@/demo';
+import { describeError } from '@/lib/errors';
 import { KeyValueList } from '@/components/KeyValueList';
 import { Timestamp } from '@/components/Timestamp';
 import { asArray } from '@/lib/json';
@@ -15,6 +20,79 @@ const TITLES: Record<string, string> = {
 };
 
 const text = (x: unknown) => (typeof x === 'string' ? x : JSON.stringify(x));
+
+/**
+ * Reopens a case that stopped (blocked, escalated or failed) once its cause may have changed: the case collects fresh
+ * evidence and gets a new plan version, and the earlier plan and approval stay as history. For operators; the
+ * recorded demo can't start new work, so it doesn't offer it.
+ */
+function Reinvestigate({ c }: { c: CaseDetail }) {
+  const me = useMe().data;
+  const reopen = useReinvestigate(c.caseId);
+  const [opened, setOpened] = useState(false);
+  const [reason, setReason] = useState('');
+  const [key, setKey] = useState('');
+  if (DEMO || !me?.operator) return null;
+  const open = () => {
+    setReason('');
+    setKey(newIdempotencyKey());
+    reopen.reset();
+    setOpened(true);
+  };
+  const submit = () =>
+    reopen.mutate(
+      { reason: reason.trim(), idempotencyKey: key },
+      {
+        onSuccess: () => {
+          setOpened(false);
+          notifications.show({
+            color: 'blue',
+            title: 'Reopened',
+            message: 'Fresh evidence is being collected and the case is investigated again.',
+          });
+        },
+      },
+    );
+  return (
+    <>
+      <Group gap="sm" wrap="wrap">
+        <Button variant="light" onClick={open}>
+          Reinvestigate
+        </Button>
+        <Text size="xs" c="dimmed">
+          Reopens the case with fresh evidence and a new plan version; the earlier plan and approval stay as
+          history.
+        </Text>
+      </Group>
+      <Modal opened={opened} onClose={() => setOpened(false)} title={`Reinvestigate ${c.caseId}`}>
+        <Stack gap="sm">
+          <Textarea
+            label="Why look again"
+            description="Recorded on the case with your name"
+            value={reason}
+            onChange={(e) => setReason(e.currentTarget.value)}
+            autosize
+            minRows={2}
+            data-autofocus
+          />
+          {reopen.error ? (
+            <Text size="sm" c="red">
+              {describeError(reopen.error)}
+            </Text>
+          ) : null}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setOpened(false)}>
+              Cancel
+            </Button>
+            <Button onClick={submit} loading={reopen.isPending} disabled={!reason.trim()}>
+              Reopen the case
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </>
+  );
+}
 
 /** The closing record (the closure receipt) and, for a blocked or escalated case, what it waits for. */
 export function OutcomePanel({ c }: { c: CaseDetail }) {
@@ -52,6 +130,7 @@ export function OutcomePanel({ c }: { c: CaseDetail }) {
           </Stack>
         </Alert>
       ) : null}
+      {c.state !== 'resolved' ? <Reinvestigate c={c} /> : null}
       {cl ? (
         <Stack gap="xs">
           <KeyValueList

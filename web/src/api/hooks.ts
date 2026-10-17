@@ -245,6 +245,22 @@ export function useDecideApproval(caseId: string) {
   });
 }
 
+/** Reopen a blocked, escalated or failed case: fresh evidence and a new plan version (CONTRACTS 5.3, A3). */
+export function useReinvestigate(caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ reason, idempotencyKey }: { reason: string; idempotencyKey: string }) =>
+      api.post<{ caseId: string; state: string }>(
+        `/cases/${seg(caseId)}/reinvestigate`,
+        { reason },
+        { idempotencyKey },
+      ),
+    onSettled: async () => {
+      await client.invalidateQueries({ queryKey: keys.case(caseId) });
+    },
+  });
+}
+
 export function usePreviewBlindResend(caseId: string) {
   return useMutation({
     mutationFn: () => api.post<BlindResendPreview>(`/cases/${seg(caseId)}/preview-blind-resend`),

@@ -167,6 +167,15 @@ export const handlers = [
       return error(409, 'wrong_state', `The case is ${c.summary.state}`);
     return HttpResponse.json({ taskId: '1', decision: 'approve' }, { status: 202 });
   }),
+  http.post(`${BASE}/cases/:id/reinvestigate`, ({ request, params }) => {
+    const denied = csrf(request) ?? guard('operator');
+    if (denied) return denied;
+    const c = cases[String(params.id)];
+    if (!c) return error(404, 'not_found', 'No such case');
+    if (!['blocked', 'escalated', 'failed'].includes(c.summary.state))
+      return error(409, 'wrong_state', `The case is ${c.summary.state}`);
+    return HttpResponse.json({ caseId: String(params.id), state: 'reopening' }, { status: 202 });
+  }),
   http.post(`${BASE}/cases/:id/preview-blind-resend`, ({ request, params }) => {
     const denied = csrf(request) ?? guard('operator');
     if (denied) return denied;

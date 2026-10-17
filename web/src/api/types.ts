@@ -121,6 +121,8 @@ export interface CaseList {
 
 export interface CaseDetail extends CaseSummary {
   operationKey: string;
+  /** No catalogue entry fitted the case: it is flagged as a candidate for a new entry (CONTRACTS 6.3). */
+  candidateEntry?: boolean;
   failureKind: string;
   failureText: string;
   patientId: string;

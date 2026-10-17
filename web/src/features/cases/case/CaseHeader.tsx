@@ -1,4 +1,4 @@
-import { Anchor, Group, Stack, Text, Title } from '@mantine/core';
+import { Anchor, Badge, Group, Stack, Text, Title, Tooltip } from '@mantine/core';
 import { IconExternalLink } from '@tabler/icons-react';
 import type { CaseDetail } from '@/api/types';
 import { DispositionBadge, StateBadge } from '@/components/StateBadge';
@@ -24,6 +24,17 @@ export function CaseHeader({ c }: { c: CaseDetail }) {
         <Title order={1}>Case {c.caseId}</Title>
         <StateBadge state={c.state} size="lg" />
         <DispositionBadge disposition={c.disposition} />
+        {c.candidateEntry ? (
+          <Tooltip
+            label="No entry of the scenario catalogue fits this case, so it is flagged as a candidate for a new one"
+            multiline
+            maw={300}
+          >
+            <Badge color="violet" variant="light" tabIndex={0} style={{ textTransform: 'none' }}>
+              New pattern
+            </Badge>
+          </Tooltip>
+        ) : null}
       </Group>
       {c.headline ? (
         <Text size="md" fw={500}>

@@ -89,6 +89,22 @@ describe('CasePage', () => {
     expect(within(approval).queryByText(/^Approved by/)).not.toBeInTheDocument();
   });
 
+  it('offers to reinvestigate a case that stopped, and sends the reason', async () => {
+    renderCase('C-000009');
+    const outcome = await screen.findByRole('region', { name: 'Closed: handed to a person' });
+    await userEvent.click(await within(outcome).findByRole('button', { name: 'Reinvestigate' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Reinvestigate C-000009' });
+    await userEvent.type(within(dialog).getByRole('textbox', { name: /Why look again/ }), 'The ward is back');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Reopen the case' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('does not offer to reinvestigate a verified case', async () => {
+    renderCase('C-000010');
+    expect(await screen.findByText('Closed: verified')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reinvestigate' })).not.toBeInTheDocument();
+  });
+
   it.each(Object.keys(fixtures.cases))('shows recorded case %s', async (caseId) => {
     renderCase(caseId);
     expect(await screen.findByRole('heading', { name: `Case ${caseId}` })).toBeInTheDocument();
