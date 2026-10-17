@@ -25,6 +25,8 @@
       <Resource Name="Interlock.Bridge.Runner.Replay.CLS"/>
       <Resource Name="Interlock.Bridge.Runner.CLS"/>
       <Resource Name="Interlock.Bridge.ToolCall.CLS"/>
+      <Resource Name="Interlock.Catalogue.PKG"/>
+      <Resource Name="Interlock.Knowledge.Text.CLS"/>
       <Resource Name="Interlock.Msg.PKG"/>
       <Resource Name="Interlock.Operation.PKG"/>
       <Resource Name="Interlock.Process.PKG"/>
