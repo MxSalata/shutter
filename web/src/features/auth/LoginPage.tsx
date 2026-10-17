@@ -1,7 +1,7 @@
 import { Alert, Button, Center, Paper, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core';
 import { useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router';
-import { useMe, useSignIn } from '@/api/hooks';
+import { useHealth, useMe, useSignIn } from '@/api/hooks';
 import { describeError, isApiError } from '@/lib/errors';
 import { APP_NAME, APP_TAGLINE } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
@@ -9,6 +9,7 @@ import { DEMO, DEMO_USER } from '@/demo';
 
 export default function LoginPage() {
   const me = useMe();
+  const health = useHealth();
   const signIn = useSignIn();
   const navigate = useNavigate();
   const location = useLocation();
@@ -82,11 +83,14 @@ export default function LoginPage() {
                 Try the demo (recorded runs)
               </Button>
             ) : null}
-            <Text size="xs" c="dimmed">
-              The demo installs two users: <b>operator</b> runs scenarios and reads cases; <b>approver</b> can
-              also approve or reject plans. Their password is the installer's (<code>interlock</code> unless
-              it was changed).
-            </Text>
+            {/* The demo users and their password only on a demo instance (the server's flag) or the recorded demo. */}
+            {DEMO || health.data?.demo === true ? (
+              <Text size="xs" c="dimmed">
+                The demo installs two users: <b>operator</b> runs scenarios and reads cases; <b>approver</b>{' '}
+                can also approve or reject plans. Their password is the installer's (<code>interlock</code>{' '}
+                unless it was changed).
+              </Text>
+            ) : null}
           </Stack>
         </form>
       </Paper>

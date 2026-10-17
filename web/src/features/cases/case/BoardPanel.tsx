@@ -7,6 +7,7 @@ import { JsonBlock } from '@/components/JsonBlock';
 import { asArray, asObject } from '@/lib/json';
 import { formatDuration, formatInt, formatUsd, humanize } from '@/lib/format';
 import { describeEntry } from './derive';
+import { showEvidence } from './evidenceLinks';
 import { NotYet, Section } from './Section';
 
 const LISTS: [string, string][] = [
@@ -117,8 +118,9 @@ function EvidenceRefs({ refs }: { refs: unknown }) {
           size="xs"
           variant="outline"
           color="gray"
-          component="a"
-          href={`#evidence-${r}`}
+          component="button"
+          type="button"
+          onClick={() => showEvidence(r)}
           style={{ textTransform: 'none', cursor: 'pointer' }}
         >
           {humanize(r)}

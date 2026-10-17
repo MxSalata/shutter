@@ -133,7 +133,7 @@ const item = (kind: string, data: unknown): SnapshotItem => ({
   seq: 1,
   kind,
   source: 'ward_api',
-  observedAt: '',
+  observed_at: '',
   digest: '',
   data,
 });

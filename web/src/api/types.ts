@@ -154,8 +154,10 @@ export interface SnapshotItem {
   seq: number;
   kind: string;
   source: string;
-  observedAt: string;
-  digest: string;
+  /** Snake case, as Interlock.Store.Snapshot.Items() sends it. */
+  observed_at: string;
+  /** The observation's own digest, shown when the API sends one. */
+  digest?: string;
   data: unknown;
 }
 

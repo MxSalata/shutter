@@ -1,5 +1,6 @@
 import { Accordion, Badge, Group, Stack, Text, Tooltip } from '@mantine/core';
 import { IconCheck, IconQuestionMark, IconX } from '@tabler/icons-react';
+import { useEffect, useState } from 'react';
 import { useSnapshot } from '@/api/hooks';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Digest } from '@/components/Digest';
@@ -9,6 +10,7 @@ import { asArray, asObject } from '@/lib/json';
 import { formatTime, humanize, parseTime } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
 import { describeEntry, describeItem } from './derive';
+import { SHOW_EVIDENCE } from './evidenceLinks';
 import { NotYet, Section } from './Section';
 
 const KIND_LABELS: Record<string, string> = {
@@ -88,6 +90,26 @@ export function EvidencePanel({ caseId, open }: { caseId: string; open: boolean 
   const s = snap.data;
   const now = useNow();
   const expired = s && parseTime(s.freshUntil) ? parseTime(s.freshUntil)!.getTime() < now : false;
+  const [opened, setOpened] = useState<string[]>([]);
+  // A finding's "Cites" badge (BoardPanel) opens every item of the cited kind and focuses the first.
+  useEffect(() => {
+    const show = (e: Event) => {
+      const kind = (e as CustomEvent<string>).detail;
+      const seqs = (s?.items ?? []).filter((item) => item.kind === kind).map((item) => String(item.seq));
+      if (!seqs.length) {
+        document.getElementById('evidence')?.scrollIntoView?.({ block: 'start' });
+        return;
+      }
+      setOpened((open) => [...new Set([...open, ...seqs])]);
+      window.setTimeout(() => {
+        const target = document.getElementById(`evidence-${kind}`);
+        target?.scrollIntoView?.({ block: 'start' });
+        target?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
+      }, 0);
+    };
+    window.addEventListener(SHOW_EVIDENCE, show);
+    return () => window.removeEventListener(SHOW_EVIDENCE, show);
+  }, [s]);
   return (
     <Section
       id="evidence"
@@ -126,12 +148,18 @@ export function EvidencePanel({ caseId, open }: { caseId: string; open: boolean 
               <Digest value={s.digest} label="snapshot digest" />
             </Group>
           </Group>
-          <Accordion variant="separated" multiple chevronPosition="left">
-            {s.items.map((item) => {
+          <Accordion variant="separated" multiple chevronPosition="left" value={opened} onChange={setOpened}>
+            {s.items.map((item, index) => {
               const data = asObject(item.data) ?? {};
               const notes = item.kind === 'message' ? asArray(data.notes).map(describeEntry) : [];
+              // The first item of a kind is the one citations land on; ids stay unique when a kind repeats.
+              const first = s.items.findIndex((x) => x.kind === item.kind) === index;
               return (
-                <Accordion.Item key={item.seq} value={String(item.seq)} id={`evidence-${item.kind}`}>
+                <Accordion.Item
+                  key={item.seq}
+                  value={String(item.seq)}
+                  id={first ? `evidence-${item.kind}` : `evidence-${item.kind}-${item.seq}`}
+                >
                   <Accordion.Control>
                     <Stack gap={0}>
                       <Text size="sm" fw={600}>
@@ -162,7 +190,7 @@ export function EvidencePanel({ caseId, open }: { caseId: string; open: boolean 
                           Source: {humanize(item.source)}
                         </Text>
                         <Text size="xs" c="dimmed">
-                          Observed {formatTime(item.observedAt)}
+                          Observed {formatTime(item.observed_at)}
                         </Text>
                         {item.digest ? <Digest value={item.digest} label="observation digest" /> : null}
                       </Group>
