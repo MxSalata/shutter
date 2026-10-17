@@ -214,9 +214,9 @@ def main():
     _, listing = operator.call("GET", "/scenarios")
     known = {s["id"]: s for s in (listing or {}).get("scenarios", [])}
     modes = [m.strip() for m in args.modes.split(",") if m.strip()]
-    unknown_modes = [m for m in modes if m not in ("board", "single", "rules")]
+    unknown_modes = [m for m in modes if m not in ("board", "single", "rules", "policy")]
     if unknown_modes:
-        raise SystemExit(f"unknown mode {', '.join(unknown_modes)}: use board, single or rules")
+        raise SystemExit(f"unknown mode {', '.join(unknown_modes)}: use board, single, rules or policy")
     failures, rows = 0, []
     for scenario_id in args.scenarios:
         if scenario_id not in known:
