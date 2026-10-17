@@ -210,23 +210,34 @@ export function BoardPanel({
   const specialists = list.filter((r) => r.role === 'specialist');
   const coordinator = list.filter((r) => r.role === 'coordinator').at(-1);
   const generalist = list.filter((r) => r.role === 'generalist').at(-1);
+  // In policy mode the board runs only for the cases the catalogue and the site's profile leave to it.
+  const settledByPolicy = mode === 'policy' && runs.isSuccess && list.length === 0;
   const title =
     mode === 'rules'
       ? 'Investigation: rules only'
       : mode === 'single'
         ? 'Investigation: one agent'
-        : 'The board';
+        : settledByPolicy
+          ? 'Investigation: site policy'
+          : 'The board';
   const note =
     mode === 'rules'
       ? 'No agents: the rules propose resending the operation unchanged at the observed version, and the gate alone decides.'
       : mode === 'single'
         ? 'One generalist agent reads the whole snapshot and proposes the plan itself.'
-        : 'Three specialists read the same evidence in parallel, each from one perspective, and cite what they used. The coordinator keeps their disagreements and proposes one plan.';
+        : settledByPolicy
+          ? "The scenario catalogue matched the case and the site's profile says who decides it. A case it leaves to the board shows the board's findings here."
+          : 'Three specialists read the same evidence in parallel, each from one perspective, and cite what they used. The coordinator keeps their disagreements and proposes one plan.';
   return (
     <Section id="board" title={title} note={note}>
       {runs.isError ? <ErrorAlert error={runs.error} title="The agent runs could not be read" /> : null}
       {mode === 'rules' ? <NotYet>No agent runs in this mode.</NotYet> : null}
-      {mode !== 'rules' && runs.isSuccess && list.length === 0 ? (
+      {settledByPolicy ? (
+        <NotYet>
+          No agents ran: the catalogue and the site's policy settle this case, or the board hasn't been asked
+          yet.
+        </NotYet>
+      ) : mode !== 'rules' && runs.isSuccess && list.length === 0 ? (
         <NotYet>No agent has answered yet.</NotYet>
       ) : null}
       {specialists.length ? (

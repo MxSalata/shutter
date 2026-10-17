@@ -33,6 +33,11 @@ const MODES: { value: Mode; label: string; hint: string }[] = [
     hint: 'Three specialists review the evidence in parallel; a coordinator proposes one plan',
   },
   {
+    value: 'policy',
+    label: 'Site policy',
+    hint: "The scenario catalogue and the site's profile settle the cases they know, still gated, rehearsed and verified; the rest go to the board",
+  },
+  {
     value: 'single',
     label: 'Single investigator',
     hint: 'One generalist agent looks at everything and proposes the plan',

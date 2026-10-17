@@ -22,7 +22,7 @@ export type CaseState =
 
 export const CLOSED_STATES: readonly CaseState[] = ['resolved', 'blocked', 'escalated', 'failed'];
 
-export type Mode = 'board' | 'single' | 'rules';
+export type Mode = 'board' | 'single' | 'rules' | 'policy';
 
 export type Disposition = 'resend' | 'reconcile' | 'superseded' | 'more_evidence' | 'escalate';
 
@@ -236,6 +236,11 @@ export interface Plan {
   plan: unknown;
   createdAt: string;
   createdBy: string;
+  /** The scenario catalogue's entry the plan follows, when it names one (E1 to E10). */
+  catalogueEntry?: string;
+  /** "preferred", or the alternative taken, with the reason. */
+  outcome?: string;
+  why?: string;
 }
 
 export interface GateCheck {

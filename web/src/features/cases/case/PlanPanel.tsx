@@ -126,8 +126,22 @@ export function PlanPanel({ view, loading }: { view: PlanView | null | undefined
               ],
               ['Plan digest', <Digest key="d" value={p.digest} label="plan digest" />],
               [
+                'Catalogue entry',
+                p.catalogueEntry
+                  ? `${p.catalogueEntry}, ${p.outcome === 'preferred' || !p.outcome ? 'the preferred outcome' : humanize(p.outcome).toLowerCase()}${p.why ? `: ${p.why}` : ''}`
+                  : '',
+              ],
+              [
                 'Plan version',
-                `v${p.version}, by ${p.createdBy?.startsWith('run:') ? 'the coordinator' : p.createdBy === 'rules' ? 'the rules' : p.createdBy}`,
+                `v${p.version}, by ${
+                  p.createdBy?.startsWith('run:')
+                    ? 'the coordinator'
+                    : p.createdBy === 'rules'
+                      ? 'the rules'
+                      : p.createdBy?.startsWith('policy:')
+                        ? `the site's policy for ${p.createdBy.slice('policy:'.length)}`
+                        : p.createdBy
+                }`,
               ],
             ]}
           />
