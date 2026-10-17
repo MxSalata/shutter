@@ -11,6 +11,9 @@ Index IncidentIdx On IncidentId [ Unique ];
 /// The production item the failures went to.
 Property Receiver As %String(%JSONFIELDNAME = "receiver", MAXLEN = 128);
 
+/// The investigation mode of the cases (board, single, rules, policy): only policy lets the catalogue settle chains.
+Property Mode As %String(%JSONFIELDNAME = "mode", MAXLEN = 16);
+
 /// open (taking cases), classified, awaiting_approval, releasing, closed.
 Property State As %String(%JSONFIELDNAME = "state", MAXLEN = 32, VALUELIST = ",open,classified,awaiting_approval,releasing,closed") [ InitialExpression = "open" ];
 
@@ -33,12 +36,29 @@ Property LastFailureAt As %String(%JSONFIELDNAME = "lastFailureAt", MAXLEN = 30)
 /// expected version, the receiver's epoch, the catalogue, site profile and gate policy versions.
 Property PlanDigest As %String(%JSONFIELDNAME = "planDigest", MAXLEN = 80);
 
-Property PlanJSON As %String(%JSONFIELDNAME = "plan", MAXLEN = "");
+Property PlanJSON As %String(%JSONINCLUDE = "none", MAXLEN = "");
 
 Property ReceiverEpoch As %Integer(%JSONFIELDNAME = "receiverEpoch");
 
-/// The policy the site applied to the incident's policy chains: automatic, approval or per_chain.
-Property Policy As %String(%JSONFIELDNAME = "policy", MAXLEN = 16);
+Property CatalogueVersion As %String(%JSONFIELDNAME = "catalogueVersion", MAXLEN = 32);
+
+Property ProfileVersion As %String(%JSONFIELDNAME = "profileVersion", MAXLEN = 32);
+
+Property PolicyVersion As %String(%JSONFIELDNAME = "policyVersion", MAXLEN = 32);
+
+/// How the policy chains were authorised: automatic, approval, per_chain, approval+per_chain, or none (no policy chain).
+Property Policy As %String(%JSONFIELDNAME = "policy", MAXLEN = 24);
+
+/// The approval of the incident's policy chains (policy approval): who, when, what they said.
+Property ApprovedBy As %String(%JSONFIELDNAME = "approvedBy", MAXLEN = 100);
+
+Property ApprovedAt As %String(%JSONFIELDNAME = "approvedAt", MAXLEN = 30);
+
+Property ApprovalDecision As %String(%JSONFIELDNAME = "approvalDecision", MAXLEN = 16);
+
+Property ApprovalComment As %String(%JSONFIELDNAME = "approvalComment", MAXLEN = 2000);
+
+Property ApprovalTaskId As %String(%JSONFIELDNAME = "approvalTaskId", MAXLEN = 50);
 
 Property WorkflowSessionId As %String(%JSONFIELDNAME = "workflowSessionId", MAXLEN = 20);
 
@@ -54,28 +74,28 @@ ClassMethod ByIncidentId(id As %String) As Interlock.Store.Incident
     Quit ..%OpenId(rid)
 }
 
-/// The open incident for a receiver (still taking cases), or "".
+/// The incident still taking cases for a receiver (open, intake not closed), or "".
 ClassMethod OpenFor(receiver As %String) As Interlock.Store.Incident
 {
     Set rid = ""
-    &sql(SELECT TOP 1 ID INTO :rid FROM Interlock_Store.Incident WHERE Receiver = :receiver AND State = 'open' ORDER BY ID DESC)
+    &sql(SELECT TOP 1 ID INTO :rid FROM Interlock_Store.Incident WHERE Receiver = :receiver AND State = 'open' AND IntakeClosedAt IS NULL ORDER BY ID DESC)
     If (SQLCODE '= 0) || (rid = "") Quit ""
     Quit ..%OpenId(rid)
 }
 
 /// Open an incident for a receiver with the site's settings.
-ClassMethod Open(receiver As %String, Output incident As Interlock.Store.Incident) As %Status
+ClassMethod Open(receiver As %String, mode As %String, Output incident As Interlock.Store.Incident) As %Status
 {
     Set incident = ..%New()
     Set incident.IncidentId = "I-" _ $TRANSLATE($JUSTIFY($INCREMENT(^Interlock.Counter("incident")), 6), " ", "0")
-    Set incident.Receiver = receiver, incident.State = "open"
+    Set incident.Receiver = receiver, incident.State = "open", incident.Mode = $SELECT(mode = "": "board", 1: mode)
     Set incident.OpenedAt = ##class(Interlock.Util.Time).NowUTC(), incident.LastFailureAt = incident.OpenedAt
     Set incident.Threshold = ##class(Interlock.Store.SiteProfile).IncidentSetting("threshold", 5)
     Set incident.WindowMinutes = ##class(Interlock.Store.SiteProfile).IncidentSetting("window_minutes", 10)
     Set incident.QuietSeconds = ##class(Interlock.Store.SiteProfile).IncidentSetting("quiet_seconds", 60)
     Set sc = incident.%Save()
     Quit:$$$ISERR(sc) sc
-    Quit incident.Note("state", "Incident opened for " _ receiver _ ": " _ incident.Threshold _ " failures within " _ incident.WindowMinutes _ " minutes", "system")
+    Quit incident.Note("state", "Incident opened for " _ receiver _ ": " _ incident.Threshold _ " failures within " _ incident.WindowMinutes _ " minutes (mode " _ incident.Mode _ ")", "system")
 }
 
 /// Move to a state with an event.
@@ -105,6 +125,66 @@ Method Chains() As %DynamicArray
         Set c = ##class(Interlock.Store.Chain).%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(c)
         Do out.%Push(c.ToObject())
+    }
+    Quit out
+}
+
+/// The chain objects in order (not projected).
+Method ChainList() As %ListOfObjects
+{
+    Set out = ##class(%ListOfObjects).%New()
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Interlock_Store.Chain WHERE Incident = ? ORDER BY Seq", ..%Id())
+    While rs.%Next() {
+        Set c = ##class(Interlock.Store.Chain).%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(c)
+        Do out.Insert(c)
+    }
+    Quit out
+}
+
+/// The chain at a sequence number, or "".
+Method ChainAt(seq As %Integer) As Interlock.Store.Chain
+{
+    Set iid = ..%Id(), rid = ""
+    &sql(SELECT ID INTO :rid FROM Interlock_Store.Chain WHERE Incident = :iid AND Seq = :seq)
+    If (SQLCODE '= 0) || (rid = "") Quit ""
+    Quit ##class(Interlock.Store.Chain).%OpenId(rid)
+}
+
+/// How many cases the incident holds.
+Method CaseCount() As %Integer
+{
+    Set iid = ..%Id(), n = 0
+    &sql(SELECT COUNT(*) INTO :n FROM Interlock_Store."Case" WHERE Incident = :iid)
+    Quit +n
+}
+
+/// Counts of chains by kind and by state, and of cases.
+Method Progress() As %DynamicObject
+{
+    Set o = {}, byKind = {}, byState = {}, n = 0
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Kind, State FROM Interlock_Store.Chain WHERE Incident = ?", ..%Id())
+    While rs.%Next() {
+        Set n = n + 1
+        Set k = $SELECT(rs.%Get("Kind") = "": "unclassified", 1: rs.%Get("Kind")), st = rs.%Get("State")
+        Do byKind.%Set(k, byKind.%Get(k) + 1), byState.%Set(st, byState.%Get(st) + 1)
+    }
+    Set o.chains = n, o.cases = ..CaseCount(), o.byKind = byKind, o.byState = byState
+    Quit o
+}
+
+/// The approvals given: the incident's own and each chain's.
+Method Approvals() As %DynamicArray
+{
+    Set out = []
+    If ..ApprovalDecision '= "" {
+        Do out.%Push({"scope": "incident", "by": (..ApprovedBy), "at": (..ApprovedAt), "decision": (..ApprovalDecision), "comment": (..ApprovalComment), "taskId": (..ApprovalTaskId), "planDigest": (..PlanDigest)})
+    }
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Interlock_Store.Chain WHERE Incident = ? AND ApprovalDecision IS NOT NULL ORDER BY Seq", ..%Id())
+    While rs.%Next() {
+        Set c = ##class(Interlock.Store.Chain).%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(c)
+        Do out.%Push({"scope": "chain", "seq": (c.Seq), "by": (c.ApprovedBy), "at": (c.ApprovedAt), "decision": (c.ApprovalDecision), "comment": (c.ApprovalComment), "taskId": (c.ApprovalTaskId), "planDigest": (..PlanDigest)})
     }
     Quit out
 }

@@ -9,7 +9,7 @@ Class Interlock.Operation.Gate Extends Ens.BusinessOperation
 Parameter INVOCATION = "Queue";
 
 /// Bumped whenever a check changes; recorded on every decision and bound by approvals.
-Parameter POLICYVERSION = "2026-10-17.1";
+Parameter POLICYVERSION = "2026-10-17.2";
 
 Method OnGateRequest(request As Interlock.Msg.GateRequest, Output response As Interlock.Msg.GateResult) As %Status
 {
@@ -124,8 +124,10 @@ Method OnGateRequest(request As Interlock.Msg.GateRequest, Output response As In
             // An automatic release must be what the site's policy allows for this receiver's tier (6.5).
             If (why = "") && (approval.Approver = "policy") {
                 Set tier = ##class(Interlock.Store.SiteProfile).TierOf(request.Receiver)
-                Set policy = ##class(Interlock.Store.SiteProfile).Policy(tier, "single")
+                Set policy = ##class(Interlock.Store.SiteProfile).Policy(tier, $SELECT(request.ChainKind = "": "single", 1: request.ChainKind))
                 If policy '= "automatic" Set why = "policy_requires_approval"
+                // The plan must have come from the policy path for the entry it names: a board's plan never goes by policy.
+                If (why = "") && ((plan.CatalogueEntry = "") || (plan.CreatedBy '= ("policy:" _ plan.CatalogueEntry))) Set why = "plan_origin"
             }
             Do ..Check(checks, "authorization", $SELECT(why = "": "pass", 1: "block"), $SELECT(why = "": "APPROVAL_VALID", why = "policy_requires_approval": "POLICY_REQUIRES_APPROVAL", 1: "APPROVAL_" _ $ZCONVERT(why, "U")), $SELECT(why = "": "Approved by " _ approval.Approver _ " for plan digest " _ $EXTRACT(approval.PlanDigest, 1, 19), 1: "The approval no longer authorises this dispatch: " _ why))
         }

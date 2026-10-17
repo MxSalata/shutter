@@ -55,12 +55,42 @@ Property CatalogueOutcome As %String(MAXLEN = 32);
 /// for the encounter (a later transfer, a retry from the source) are in the snapshot. 0 collects at once.
 Property SettleSeconds As %Integer [ InitialExpression = 15 ];
 
-Parameter SETTINGS = "EvidenceTarget:Targets,GateTarget:Targets,WardTarget:Targets,ApprovalTarget:Targets,VerifyTarget:Targets,ApprovalValidSeconds:Approval,SettleSeconds:Timing";
+/// Set on an instance started by a case release from an incident (CONTRACTS 7.4).
+Property Release As %Boolean [ InitialExpression = 0 ];
+
+Property IncidentId As %String(MAXLEN = 32);
+
+Property ChainSeq As %Integer;
+
+Property ChainPosition As %Integer;
+
+/// The kind of chain this case belongs to (single, ordered, interleaved); single for a case on its own.
+Property ChainKind As %String(MAXLEN = 16) [ InitialExpression = "single" ];
+
+/// policy, board or person: who decides a released case, from its chain's classification.
+Property ChainDecides As %String(MAXLEN = 16);
+
+/// The receiver version the chain expects at this item's dispatch, or "" when fresh evidence decides.
+Property ExpectedVersion As %String(MAXLEN = 20);
+
+/// automatic, incident or path: how a released policy case is authorised.
+Property ReleasePolicy As %String(MAXLEN = 16);
+
+Property IncidentApprover As %String(MAXLEN = 100);
+
+Property IncidentApprovalRef As %String(MAXLEN = 50);
+
+Property IncidentPlanDigest As %String(MAXLEN = 80);
+
+Property IncidentTarget As %String(MAXLEN = 128) [ InitialExpression = "Incident Workflow" ];
+
+Parameter SETTINGS = "EvidenceTarget:Targets,GateTarget:Targets,WardTarget:Targets,ApprovalTarget:Targets,VerifyTarget:Targets,IncidentTarget:Targets,ApprovalValidSeconds:Approval,SettleSeconds:Timing";
 
 Method OnRequest(request As %Library.Persistent, Output response As %Library.Persistent) As %Status
 {
     Set response = ""
-    If 'request.%IsA("Interlock.Msg.CaseIntake") Quit $$$ERROR($$$GeneralError, "Case Workflow expects a case intake, got " _ $CLASSNAME(request))
+    If request.%IsA("Interlock.Msg.CaseRelease") Quit ..OnRelease(request, .response)
+    If 'request.%IsA("Interlock.Msg.CaseIntake") Quit $$$ERROR($$$GeneralError, "Case Workflow expects a case intake or a case release, got " _ $CLASSNAME(request))
     Set op = ##class(Interlock.Util.Json).Parse(request.OperationJSON, .sc)
     If $$$ISERR(sc) Quit sc
     Set sc = ##class(Interlock.Store.Case).Open(op, request.FailureKind, request.FailureText, request.EnsSessionId, request.SourceHeaderId, request.Mode, .case, .opened)
@@ -73,9 +103,20 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
         Quit $$$OK
     }
     Set ..CaseId = case.CaseId, ..Mode = case.Mode
-    Set case.WorkflowSessionId = ..%SessionId
+    Set case.WorkflowSessionId = ..%SessionId, case.Receiver = ..WardTarget
     Do case.%Save()
     $$$TRACE("Case " _ case.CaseId _ " opened (" _ case.Mode _ "): " _ case.Headline)
+    // Detection (CONTRACTS 7.1): this failure counts towards an incident for the receiver; at the threshold one
+    // opens, adopts the burst's cases, and its workflow starts. A detection error never stops the case.
+    Set dsc = ##class(Interlock.Store.IncidentDetector).Register(case, ..WardTarget, .incident, .openedNow)
+    If $$$ISERR(dsc) {
+        $$$LOGWARNING("Incident detection failed for " _ case.CaseId _ ": " _ $SYSTEM.Status.GetErrorText(dsc))
+    } ElseIf $ISOBJECT(incident) && openedNow {
+        Set intake = ##class(Interlock.Msg.IncidentIntake).%New()
+        Set intake.IncidentId = incident.IncidentId, intake.CaseId = case.CaseId
+        Set dsc = ..SendRequestAsync(..IncidentTarget, intake, 0)
+        If $$$ISERR(dsc) $$$LOGWARNING("Could not start the workflow of incident " _ incident.IncidentId _ ": " _ $SYSTEM.Status.GetErrorText(dsc))
+    }
     If ..SettleSeconds <= 0 Quit ..StartEvidence(case)
     Do case.Note("note", "Waiting " _ ..SettleSeconds _ " s for the feed to settle before collecting evidence", "system", "")
     Set alarm = ##class(Ens.AlarmRequest).%New()
@@ -142,11 +183,37 @@ Method OnEvidence(case As Interlock.Store.Case, result As Interlock.Msg.Evidence
     If '$ISOBJECT(result) || (result.Error '= "") Quit $$$ERROR($$$GeneralError, "Evidence failed: " _ $SELECT($ISOBJECT(result): result.Error, 1: "no result"))
     Set sc = case.Transition("investigating", "Evidence collected: snapshot " _ result.SnapshotId _ ", digest " _ $EXTRACT(result.Digest, 1, 19), "system", "snapshot:" _ result.SnapshotId)
     Quit:$$$ISERR(sc) sc
-    // In policy mode the catalogue's match settles the easy cases (CONTRACTS 6.3); the rest go to the board.
-    If ..Mode = "policy" {
-        Set summary = ##class(Interlock.Util.Json).Parse(result.SummaryJSON, .psc)
-        Set cat = $SELECT($ISOBJECT(summary): summary.%Get("catalogue"), 1: "")
-        Set decision = $SELECT($ISOBJECT(cat): ##class(Interlock.Util.Json).Str(cat, "decision"), 1: "")
+    // A case an incident holds parks here, its evidence and match in the store: the incident decides when it is
+    // released (CONTRACTS 7.1).
+    If '..Release && $ISOBJECT(case.Incident) Quit ..Park(case)
+    Set summary = ##class(Interlock.Util.Json).Parse(result.SummaryJSON, .psc)
+    Set cat = $SELECT($ISOBJECT(summary): summary.%Get("catalogue"), 1: "")
+    Set decision = $SELECT($ISOBJECT(cat): ##class(Interlock.Util.Json).Str(cat, "decision"), 1: "")
+    // Every investigation starts clean: a policy from an earlier round never carries over to a plan the board makes.
+    Set ..Policy = "", ..CatalogueEntry = "", ..CatalogueOutcome = ""
+    If ..Release {
+        // The sequence rule (7.4): the item goes at the version the chain expects, or not at all.
+        If ..ExpectedVersion '= "" {
+            Set ward = $SELECT($ISOBJECT(summary): summary.%Get("ward_state"), 1: "")
+            Set version = $SELECT($ISOBJECT(ward): +##class(Interlock.Util.Json).Str(ward, "version", 0), 1: 0)
+            If version '= +..ExpectedVersion {
+                Set case.Headline = "Blocked by the sequence rule: the receiver is at version " _ version _ ", chain " _ ..ChainSeq _ " expected " _ ..ExpectedVersion
+                Quit case.Transition("blocked", "Sequence rule: the receiver is at version " _ version _ " but chain " _ ..ChainSeq _ " of incident " _ ..IncidentId _ " expected " _ ..ExpectedVersion _ " (the version the previous item verified). Something else wrote in between; nothing was dispatched, and a person must look", "system", "incident:" _ ..IncidentId)
+            }
+            Do case.Note("note", "Sequence rule: the receiver is at version " _ version _ ", as chain " _ ..ChainSeq _ " expected", "system")
+        }
+        // The chain's classification decides the path (7.2), not the case's own match.
+        If ..ChainDecides = "policy" {
+            If decision = "policy" Quit ..PolicyPath(case, summary, cat)
+            Do case.Note("note", "Catalogue on fresh evidence: " _ $SELECT(decision = "": "no result", 1: decision) _ " (the chain was classified policy); the board decides this item", "system")
+        } ElseIf ..ChainDecides = "person" {
+            If $ISOBJECT(cat) && (cat.%GetTypeOf("matches") = "array") && (cat.%Get("matches").%Size() > 0) Quit ..PersonByCatalogue(case, cat)
+            Quit case.Transition("escalated", "Chain " _ ..ChainSeq _ " of incident " _ ..IncidentId _ " asks for a person", "system", "incident:" _ ..IncidentId)
+        } Else {
+            Do case.Note("note", "Released on the chain's own path (" _ ..ChainDecides _ " decides)", "system")
+        }
+    } ElseIf ..Mode = "policy" {
+        // In policy mode the catalogue's match settles the easy cases (CONTRACTS 6.3); the rest go to the board.
         If decision = "policy" Quit ..PolicyPath(case, summary, cat)
         If decision = "person" Quit ..PersonByCatalogue(case, cat)
         Do case.Note("note", "Catalogue: " _ $SELECT(decision = "": "no result", 1: decision) _ "; the board decides", "system")
@@ -270,8 +337,10 @@ Method PolicyPath(case As Interlock.Store.Case, summary As %DynamicObject, cat A
     Set json = "Interlock.Util.Json"
     Set entry = $CLASSMETHOD(json, "Str", cat, "entry"), outcome = $CLASSMETHOD(json, "Str", cat, "outcome")
     Set tier = ##class(Interlock.Store.SiteProfile).TierOf(..WardTarget)
-    Set kind = $CLASSMETHOD(json, "Str", cat.%Get("conditions"), "chain", "single")
+    Set kind = $SELECT(..Release: ..ChainKind, 1: $CLASSMETHOD(json, "Str", cat.%Get("conditions"), "chain", "single"))
     Set ..Policy = ##class(Interlock.Store.SiteProfile).Policy(tier, kind)
+    // A released item is authorised by its incident (7.3): by site policy, or under the incident's approval.
+    If ..Release Set ..Policy = $SELECT(..ReleasePolicy = "incident": "incident", ..ReleasePolicy = "automatic": "automatic", 1: ..Policy)
     Set ..CatalogueEntry = entry, ..CatalogueOutcome = "preferred"
     Set m = cat.%Get("matches").%Get(0)
     Set title = $CLASSMETHOD(json, "Str", m, "title"), why = $CLASSMETHOD(json, "Str", m.%Get("preferred"), "why")
@@ -367,6 +436,8 @@ Method AdoptPlan(case As Interlock.Store.Case, plan As %DynamicObject, createdBy
     Set case.Headline = ..HeadlineFor(case, p)
     Set sc = case.Transition("proposed", "Plan v" _ p.Version _ " (" _ p.Disposition _ "): " _ p.Summary, createdBy, "plan:" _ p.%Id())
     Quit:$$$ISERR(sc) sc
+    // A case its incident adopted while the board sat parks here: the plan is on the case, the release re-plans.
+    If '..Release && $ISOBJECT(case.Incident) Quit ..Park(case)
     Quit ..SendGate(case, "proposal", "gate:proposal")
 }
 
@@ -386,7 +457,7 @@ Method SendGate(case As Interlock.Store.Case, stage As %String, key As %String) 
 {
     Set req = ##class(Interlock.Msg.GateRequest).%New()
     Set req.CaseId = case.CaseId, req.PlanId = ..PlanId, req.Stage = stage, req.Receiver = ..WardTarget
-    Set req.ApprovalId = ..ApprovalId
+    Set req.ApprovalId = ..ApprovalId, req.ChainKind = ..ChainKind
     If ..ReceiverVersion '= "" Set req.ReceiverVersion = ..ReceiverVersion
     If ..ReceiverEpoch '= "" Set req.ReceiverEpoch = ..ReceiverEpoch
     Quit ..SendRequestAsync(..GateTarget, req, 1, key)
@@ -445,6 +516,7 @@ Method OnRehearsal(case As Interlock.Store.Case, result As Interlock.Msg.WardRes
         Quit case.Transition("blocked", "The rehearsal shows the action would not apply: " _ result.Outcome _ $SELECT(result.Error '= "": ", " _ result.Error, 1: ""), "system", "rehearsal:" _ r.%Id())
     }
     If ..Policy = "automatic" Quit ..ReleaseByPolicy(case, plan, r)
+    If ..Policy = "incident" Quit ..ReleaseByIncident(case, plan, r)
     Set sc = case.Transition("awaiting_approval", "Rehearsal passed; asking an approver for the exact plan", "system", "rehearsal:" _ r.%Id())
     Quit:$$$ISERR(sc) sc
     Set task = ##class(EnsLib.Workflow.TaskRequest).%New()
@@ -463,12 +535,63 @@ Method ReleaseByPolicy(case As Interlock.Store.Case, plan As Interlock.Store.Pla
 {
     Set profile = ##class(Interlock.Store.SiteProfile).Current()
     Set tier = ##class(Interlock.Store.SiteProfile).TierOf(..WardTarget)
-    Set comment = "Automatic by site policy v" _ ##class(Interlock.Util.Json).Str(profile, "version", 0) _ ": tier " _ tier _ ", single chain; catalogue " _ ..CatalogueEntry _ " " _ ..CatalogueOutcome
+    Set comment = "Automatic by site policy v" _ ##class(Interlock.Util.Json).Str(profile, "version", 0) _ ": tier " _ tier _ ", " _ ..ChainKind _ " chain; catalogue " _ ..CatalogueEntry _ " " _ ..CatalogueOutcome
     Set sc = ##class(Interlock.Store.Approval).Create(case, plan, case.CurrentSnapshot, ##class(Interlock.Operation.Gate).#POLICYVERSION, rehearsal, plan.ExpectedVersion, "policy", "approved", comment, "", ..ApprovalValidSeconds, .a, ..ReceiverEpoch)
     Quit:$$$ISERR(sc) sc
     Set ..ApprovalId = a.%Id()
     Set case.CurrentApproval = a
     Set sc = case.Transition("approved", "Released by site policy, no approval asked: " _ comment _ "; plan digest " _ $EXTRACT(plan.Digest, 1, 19), "policy", "approval:" _ a.%Id())
+    Quit:$$$ISERR(sc) sc
+    Set read = ##class(Interlock.Msg.WardOperation).%New()
+    Set read.Purpose = "read", read.EncounterId = case.EncounterId, read.OperationKey = case.OperationKey, read.CaseId = case.CaseId
+    Quit ..SendRequestAsync(..WardTarget, read, 1, "preflight")
+}
+
+/// The case stops here, its evidence and match in the store, until its incident releases it (CONTRACTS 7.1);
+/// this instance ends.
+Method Park(case As Interlock.Store.Case) As %Status
+{
+    Set inc = case.Incident
+    Set ..PendingJSON = "[]"
+    Quit case.Transition("grouped", "Held by incident " _ inc.IncidentId _ ": the incident groups the receiver's failures into chains per encounter and decides the order of release", "system", "incident:" _ inc.IncidentId)
+}
+
+/// A case its incident releases (CONTRACTS 7.4): a fresh instance, fresh evidence with no settle period, then the
+/// chain's path. The incident's approval, when the site's policy asked for one, stands in for a person's.
+Method OnRelease(request As Interlock.Msg.CaseRelease, Output response As %Library.Persistent) As %Status
+{
+    Set case = ##class(Interlock.Store.Case).ByCaseId(request.CaseId)
+    If '$ISOBJECT(case) Quit $$$ERROR($$$GeneralError, "No case " _ request.CaseId _ " to release")
+    Set started = ##class(Interlock.Msg.CaseStarted).%New()
+    Set started.CaseId = case.CaseId, started.Opened = 0, started.State = case.State
+    Set response = started
+    If case.State '= "grouped" {
+        $$$LOGWARNING("Case " _ case.CaseId _ " is " _ case.State _ ", not grouped; the release from incident " _ request.IncidentId _ " is ignored")
+        Quit $$$OK
+    }
+    Set ..CaseId = case.CaseId, ..Mode = case.Mode, ..Release = 1
+    Set ..IncidentId = request.IncidentId, ..ChainSeq = request.ChainSeq, ..ChainPosition = request.Position
+    Set ..ChainKind = $SELECT(request.ChainKind = "": "single", 1: request.ChainKind), ..ChainDecides = request.Decides
+    Set ..ExpectedVersion = request.ExpectedVersion, ..ReleasePolicy = request.ReleasePolicy
+    Set ..IncidentApprover = request.Approver, ..IncidentApprovalRef = request.ApprovalRef, ..IncidentPlanDigest = request.PlanDigest
+    Set case.WorkflowSessionId = ..%SessionId
+    Do case.%Save()
+    Set how = $CASE(..ReleasePolicy, "automatic": "automatic by site policy", "incident": "under the incident's approval by " _ ..IncidentApprover, : "on its own path")
+    Do case.Note("note", "Released by incident " _ ..IncidentId _ ": chain " _ ..ChainSeq _ " item " _ ..ChainPosition _ " (" _ ..ChainKind _ ", " _ ..ChainDecides _ " decides, " _ how _ ")" _ $SELECT(..ExpectedVersion '= "": "; expected receiver version " _ ..ExpectedVersion, 1: "; fresh evidence decides"), "system", "incident:" _ ..IncidentId)
+    $$$TRACE("Case " _ case.CaseId _ " released by incident " _ ..IncidentId)
+    Quit ..StartEvidence(case)
+}
+
+/// A released item authorised by the incident's approval (CONTRACTS 7.3): an approval record naming the approver,
+/// the task and the incident plan digest they bound, then the preflight read and the dispatch gate as for any approval.
+Method ReleaseByIncident(case As Interlock.Store.Case, plan As Interlock.Store.Plan, rehearsal As Interlock.Store.Rehearsal) As %Status
+{
+    Set comment = "Under the approval of incident " _ ..IncidentId _ " by " _ ..IncidentApprover _ " (task " _ ..IncidentApprovalRef _ ", incident plan digest " _ $EXTRACT(..IncidentPlanDigest, 1, 19) _ "): chain " _ ..ChainSeq _ " item " _ ..ChainPosition _ ", " _ ..ChainKind _ "; catalogue " _ ..CatalogueEntry _ " " _ ..CatalogueOutcome _ $SELECT(..ExpectedVersion '= "": "; expected version " _ ..ExpectedVersion, 1: "")
+    Set sc = ##class(Interlock.Store.Approval).Create(case, plan, case.CurrentSnapshot, ##class(Interlock.Operation.Gate).#POLICYVERSION, rehearsal, plan.ExpectedVersion, ..IncidentApprover, "approved", comment, ..IncidentApprovalRef, ..ApprovalValidSeconds, .a, ..ReceiverEpoch)
+    Quit:$$$ISERR(sc) sc
+    Set ..ApprovalId = a.%Id()
+    Set case.CurrentApproval = a
+    Set sc = case.Transition("approved", "Released under incident " _ ..IncidentId _ "'s approval by " _ ..IncidentApprover _ ": " _ comment _ "; plan digest " _ $EXTRACT(plan.Digest, 1, 19), ..IncidentApprover, "approval:" _ a.%Id())
     Quit:$$$ISERR(sc) sc
     Set read = ##class(Interlock.Msg.WardOperation).%New()
     Set read.Purpose = "read", read.EncounterId = case.EncounterId, read.OperationKey = case.OperationKey, read.CaseId = case.CaseId
@@ -539,6 +662,7 @@ Method OnGateDispatch(case As Interlock.Store.Case, result As Interlock.Msg.Gate
             Set approval = ##class(Interlock.Store.Approval).%OpenId(..ApprovalId)
             If $ISOBJECT(approval) Do approval.Revoke("system: the receiver changed before dispatch")
             Set ..PlanId = "", ..ApprovalId = "", ..ReceiverVersion = "", ..ReceiverEpoch = ""
+            Set ..Policy = "", ..CatalogueEntry = "", ..CatalogueOutcome = ""
             Do case.Note("note", "The receiver changed after the approval (" _ result.Summary _ "). The approval is void and the case is planned again on fresh evidence", "gate", "gate:" _ result.DecisionId)
             Quit ..StartEvidence(case)
         }

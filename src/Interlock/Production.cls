@@ -52,6 +52,8 @@ XData ProductionDefinition
   <Item Name="Case Workflow" Category="Recovery" ClassName="Interlock.Process.CaseWorkflow" PoolSize="1" Enabled="true" Foreground="false" Comment="One instance per case: evidence, the board, the gate, approval, execution, verification" LogTraceEvents="true" Schedule="">
     <Setting Target="Host" Name="SettleSeconds">15</Setting>
   </Item>
+  <Item Name="Incident Workflow" Category="Recovery" ClassName="Interlock.Process.IncidentWorkflow" PoolSize="1" Enabled="true" Foreground="false" Comment="One instance per incident: the quiet period, chains per encounter, the plan and its approval, the ordered release through each case's own dispatch" LogTraceEvents="true" Schedule="">
+  </Item>
   <Item Name="Evidence Collector" Category="Recovery" ClassName="Interlock.Operation.Evidence" PoolSize="1" Enabled="true" Foreground="false" Comment="An immutable snapshot of the message store, the ward's state and receipts, and the route" LogTraceEvents="true" Schedule="">
     <Setting Target="Adapter" Name="Credentials">WardsAPI</Setting>
     <Setting Target="Adapter" Name="ResponseTimeout">15</Setting>

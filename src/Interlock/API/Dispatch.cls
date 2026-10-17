@@ -39,6 +39,12 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/settings" Method="GET" Call="Settings"/>
   <Route Url="/site-profile" Method="GET" Call="SiteProfileGet"/>
   <Route Url="/site-profile" Method="PUT" Call="SiteProfilePut"/>
+  <Route Url="/incidents" Method="GET" Call="Incidents"/>
+  <Route Url="/incidents/:id" Method="GET" Call="IncidentGet"/>
+  <Route Url="/incidents/:id/events" Method="GET" Call="IncidentEvents"/>
+  <Route Url="/incidents/:id/approvals" Method="GET" Call="IncidentApprovals"/>
+  <Route Url="/incidents/:id/approvals" Method="POST" Call="IncidentApprove"/>
+  <Route Url="/incidents/:id/chains/:seq/approvals" Method="POST" Call="IncidentChainApprove"/>
   <Route Url="/costs" Method="GET" Call="Costs"/>
 </Routes>
 }
@@ -361,7 +367,9 @@ ClassMethod Cases() As %Status
         If items.%Size() >= limit Quit
         Set c = ##class(Interlock.Store.Case).%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(c)
-        Do items.%Push(..Project(c))
+        Set o = ..Project(c)
+        If $ISOBJECT(c.Incident) Set o.incidentId = c.Incident.IncidentId
+        Do items.%Push(o)
     }
     Set out = {}
     Set out.items = items, out.total = total
@@ -374,6 +382,8 @@ ClassMethod CaseGet(caseId As %String) As %Status
     Set case = ..CaseOr404(caseId)
     If '$ISOBJECT(case) Quit $$$OK
     Set o = ..Project(case)
+    // The case's place in its incident (CONTRACTS 7.5), when one holds it.
+    If $ISOBJECT(case.Incident) Set o.incidentId = case.Incident.IncidentId, o.incident = ##class(Interlock.Store.ChainItem).IncidentContext(case)
     Set id = case.%Id()
     Set counts = {}
     &sql(SELECT COUNT(*) INTO :n FROM Interlock_Store.CaseEvent WHERE "Case" = :id)
@@ -707,6 +717,137 @@ ClassMethod SiteProfilePut() As %Status
     Set sc = ##class(Interlock.Store.SiteProfile).Store(body.%ToJSON(), "api", $USERNAME)
     If $$$ISERR(sc) Quit ..Fail("500 Internal Server Error", "store_failed", $SYSTEM.Status.GetErrorText(sc))
     Quit ..SiteProfileGet()
+}
+
+// ---- incidents (CONTRACTS 7.5) ----
+
+ClassMethod IncidentOr404(id As %String) As Interlock.Store.Incident
+{
+    Set inc = ##class(Interlock.Store.Incident).ByIncidentId(id)
+    If '$ISOBJECT(inc) Do ..Fail("404 Not Found", "not_found", "No incident " _ id)
+    Quit inc
+}
+
+ClassMethod IncidentSummary(inc As Interlock.Store.Incident) As %DynamicObject
+{
+    Set o = ..Project(inc)
+    Set o.progress = inc.Progress()
+    Quit o
+}
+
+/// The incidents, newest first: id, receiver, state, times, the plan's digest, and the chains counted by kind and state.
+ClassMethod Incidents() As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set state = $GET(%request.Data("state", 1))
+    Set limit = +$GET(%request.Data("limit", 1), 50)
+    If (limit < 1) || (limit > 500) Set limit = 50
+    Set where = "", args = 0
+    If state '= "" Set where = " AND State = ?", args = 1, args(1) = state
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Interlock_Store.Incident WHERE 1=1" _ where _ " ORDER BY ID DESC", args...)
+    Set items = [], total = 0
+    While rs.%Next() {
+        Set total = total + 1
+        Continue:(items.%Size() >= limit)
+        Set inc = ##class(Interlock.Store.Incident).%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(inc)
+        Do items.%Push(..IncidentSummary(inc))
+    }
+    Set out = {}
+    Set out.items = items, out.total = total
+    Quit ..Json(out)
+}
+
+/// One incident: the chains with their items, the plan, the approvals, the Workflow tasks, progress and links.
+ClassMethod IncidentGet(id As %String) As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set inc = ..IncidentOr404(id)
+    If '$ISOBJECT(inc) Quit $$$OK
+    Set o = ..IncidentSummary(inc)
+    Set o.chains = inc.Chains()
+    Set plan = ##class(Interlock.Util.Json).Parse(inc.PlanJSON, .psc)
+    If $ISOBJECT(plan) { Set o.plan = plan } Else { Do o.%Set("plan", "", "null") }
+    Set o.approvals = inc.Approvals()
+    Set tasks = ##class(Interlock.Util.Workflow).TasksFor(inc.IncidentId)
+    Set iter = o.chains.%GetIterator()
+    While iter.%GetNext(.i, .ch) {
+        Continue:(ch.%Get("policy") '= "per_chain")
+        Set more = ##class(Interlock.Util.Workflow).TasksFor(inc.IncidentId _ "/" _ ch.%Get("seq"))
+        Set it2 = more.%GetIterator()
+        While it2.%GetNext(.j, .t) { Do tasks.%Push(t) }
+    }
+    Set o.tasks = tasks
+    Set links = {}
+    Set links.workflowTrace = ..PortalPath() _ "EnsPortal.VisualTrace.zen?SESSIONID=" _ inc.WorkflowSessionId
+    Set o.links = links
+    Quit ..Json(o)
+}
+
+ClassMethod IncidentEvents(id As %String) As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set inc = ..IncidentOr404(id)
+    If '$ISOBJECT(inc) Quit $$$OK
+    Quit ..Json(inc.Events())
+}
+
+ClassMethod IncidentApprovals(id As %String) As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set inc = ..IncidentOr404(id)
+    If '$ISOBJECT(inc) Quit $$$OK
+    Quit ..Json(inc.Approvals())
+}
+
+/// Approve or reject the incident's policy chains under one approval: the body names the plan digest it binds.
+ClassMethod IncidentApprove(id As %String) As %Status
+{
+    Quit ..IncidentDecide(id, "")
+}
+
+/// Approve or reject one chain released under its own approval (policy per_chain).
+ClassMethod IncidentChainApprove(id As %String, seq As %String) As %Status
+{
+    Quit ..IncidentDecide(id, seq)
+}
+
+ClassMethod IncidentDecide(id As %String, seq As %String) As %Status
+{
+    If '..Allow("Interlock_Approve", 1) Quit $$$OK
+    Set inc = ..IncidentOr404(id)
+    If '$ISOBJECT(inc) Quit $$$OK
+    Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    Set body = ##class(Interlock.Util.Json).Parse(bodyText, .psc)
+    If '$ISOBJECT(body) Set body = {}
+    Set decision = $ZCONVERT(##class(Interlock.Util.Json).Str(body, "decision", ##class(Interlock.Util.Json).Str(body, "action")), "L")
+    If '$LISTFIND($LISTBUILD("approve", "reject"), decision) Quit ..Fail("400 Bad Request", "bad_request", "decision must be approve or reject")
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    If inc.State '= "awaiting_approval" Quit ..Fail("409 Conflict", "wrong_state", "The incident is " _ inc.State _ ", not awaiting approval")
+    If seq '= "" {
+        Set chain = inc.ChainAt(seq)
+        If '$ISOBJECT(chain) Quit ..Fail("404 Not Found", "not_found", "No chain " _ seq _ " in " _ id)
+        If (chain.State '= "awaiting_approval") || (chain.Policy '= "per_chain") Quit ..Fail("409 Conflict", "wrong_state", "Chain " _ seq _ " is " _ chain.State _ " under policy " _ chain.Policy _ ", not awaiting its own approval")
+    }
+    Set digest = ##class(Interlock.Util.Json).Str(body, "planDigest")
+    If digest '= inc.PlanDigest {
+        Set extra = {} Set extra.currentDigest = inc.PlanDigest
+        Quit ..Fail("409 Conflict", "plan_changed", "planDigest is not the incident plan's digest", extra)
+    }
+    Set comment = ##class(Interlock.Util.Json).Str(body, "comment")
+    Set result = ##class(Interlock.Util.Workflow).Decide(id _ $SELECT(seq '= "": "/" _ seq, 1: ""), $SELECT(decision = "reject": "Reject", 1: "Approve"), ..User(), comment)
+    Set out = ##class(Interlock.Util.Json).Parse(result, .psc)
+    If '$ISOBJECT(out) Set out = {"result": (result)}
+    If out.%GetTypeOf("error") '= "unassigned" Quit ..Fail("409 Conflict", "wrong_state", out.error)
+    Set reply = {}
+    Set reply.taskId = out."task_id", reply.decision = decision, reply.incidentId = id
+    If seq '= "" Set reply.chainSeq = +seq
+    Set text = reply.%ToJSON()
+    Do ..Remember(bodyText, "202 Accepted", text)
+    Set %response.Status = "202 Accepted"
+    Write text
+    Quit $$$OK
 }
 
 ClassMethod Settings() As %Status

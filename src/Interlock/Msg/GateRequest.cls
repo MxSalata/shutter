@@ -18,6 +18,9 @@ Property ReceiverVersion As %Integer;
 /// The production item the write goes to, for the site profile's tier.
 Property Receiver As %String(MAXLEN = 128);
 
+/// The chain kind the release belongs to (single, ordered, interleaved), for the policy check (CONTRACTS 6.4).
+Property ChainKind As %String(MAXLEN = 16) [ InitialExpression = "single" ];
+
 Property ReceiverEpoch As %Integer;
 
 Storage Default
@@ -44,6 +47,9 @@ Storage Default
 </Value>
 <Value name="7">
 <Value>Receiver</Value>
+</Value>
+<Value name="8">
+<Value>ChainKind</Value>
 </Value>
 </Data>
 <DefaultData>GateRequestDefaultData</DefaultData>
