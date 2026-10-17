@@ -1,6 +1,6 @@
 # Contracts between Interlock's parts
 
-Version 1.6, 17 October 2026. These are the interfaces the parts of Interlock are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.7, 17 October 2026. These are the interfaces the parts of Interlock are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The ward system's API
 
@@ -372,7 +372,7 @@ The plan's `catalogue_entry` and `outcome` are bound by the approval's digest li
 `search_catalogue` is a knowledge-base tool over `knowledge/catalogue/`, attached to every member, so that the board
 cites entries by id. The coordinator's instructions say the plan names the entry and the outcome.
 
-## 7. Incidents: many failures to one receiver (v1.6)
+## 7. Incidents: many failures to one receiver (v1.6, as built in v1.7)
 
 ### 7.1 Detection and grouping
 
@@ -382,6 +382,11 @@ cites entries by id. The coordinator's instructions say the plan names the entry
   investigation. When the incident opens, it also adopts the burst's earlier cases for that receiver that are still before
   their proposal gate (settling, collecting or investigating), so the first failures are not left outside it. The
   incident's intake closes after `quiet_seconds` with no new failure.
+- Only failures and refusals to the receiver that no incident holds count towards the threshold. A case joins with its
+  evidence still to collect and parks in `grouped` once its snapshot and match are in the store (after the board, when
+  the incident adopted it mid-investigation: the plan stays on the case, and the release plans again). Once the intake
+  has closed, the chains form when every case has parked, or after 180 s: a case still collecting then leaves the
+  incident and continues alone.
 - Chains form per encounter (PV1-19), oldest event time first. Chains of one patient (PID-3) are linked for the page; the
   link imposes no order across encounters.
 - A chain's kind: `single` (one failure, nothing later applied), `ordered` (several failures, no successful delivery for
@@ -393,6 +398,9 @@ cites entries by id. The coordinator's instructions say the plan names the entry
 - A chain whose cases all match one entry with `decides: policy` is a policy chain: `single` and `ordered` chains with
   `resend` or `resend_chain` take the policy path; `none` and `reconcile` outcomes close their cases without a write.
 - Any other chain is a board chain: the board runs for each of its cases, as today, with `chain` in the evidence.
+- Each chain carries the site's policy for the receiver's tier and its kind (`automatic`, `approval`, `per_chain`; `path`
+  for a chain whose cases run their own path). Outside policy mode every chain is a board chain (6.3), and a profile
+  policy of `board` makes a chain a board chain.
 - The incident's plan lists every chain with its kind, entry, outcome and items in order; its digest covers the chains'
   operation keys in order, each item's payload digest, the first item's expected version per chain, the receiver's epoch,
   the catalogue version, the site profile version and the gate's policy version.
@@ -405,6 +413,9 @@ cites entries by id. The coordinator's instructions say the plan names the entry
   just before it goes; the chain stops at the first surprise, and the rest comes back to you".
 - The incident's approval binds the plan's digest and the rule for later items: each item after the first goes at exactly
   the version the previous item's verified receipt reports.
+- Task subjects: `Interlock I-nnnnnn: approve the release of N chain(s) to <receiver>` for the shared approval, and
+  `Interlock I-nnnnnn/<seq>: ...` per chain; both carry the `PlanDigest` and `Comment` form fields. An approval with
+  another digest, or none, rejects the chains it covers: their cases are escalated with the reason.
 
 ### 7.4 Release
 
@@ -416,6 +427,14 @@ cites entries by id. The coordinator's instructions say the plan names the entry
   item stopped and why.
 - Every item keeps its own trace, approval record and closure; the incident's record lists each chain's outcome:
   `resolved`, `stopped` (with the item), `escalated` (a board chain or a no-match).
+- Chain states: `pending`, `awaiting_approval`, `approved`, `rejected`, `releasing`, `resolved`, `stopped`, `escalated`;
+  item states: `pending`, `released`, `resolved`, `blocked`, `escalated`, `failed`, `stopped` (never released). An item's
+  expected version is the previous item's verified version; the first item of a chain a person approved goes at the
+  chain's first expected version from the plan, and the first item of an automatic or board chain goes on fresh
+  evidence. A released case whose fresh evidence shows another version blocks (the sequence rule) and its chain stops.
+  Chains are released one at a time in sequence order; approved chains go while the others' approvals are pending. A
+  released case under the incident's approval records an approval by the approving user, naming the task and the
+  incident plan's digest, so the gate treats it as a person's.
 
 ### 7.5 The API
 
@@ -423,11 +442,14 @@ cites entries by id. The coordinator's instructions say the plan names the entry
   counts of chains by kind and outcome.
 - `GET /incidents/{id}`: the chains with their items (case ids, position, kind, entry, outcome, the expected version
   rule), the plan's digest, the approvals, progress.
-- `POST /incidents/{id}/approvals` with `planDigest`, `action` (`approve` or `reject`), `comment`; `Idempotency-Key`;
-  409 `plan_changed` when the digest moved. `POST /incidents/{id}/chains/{n}/approvals` for `per_chain`.
-- `GET /incidents/{id}/events`.
-- A case carries `incidentId`, `chainId`, `chainPosition` and `chainKind`; a case's closure says whether it was
-  released automatically, by an approval, or stopped.
+- `POST /incidents/{id}/approvals` with `planDigest`, `decision` (`approve` or `reject`; `action` is accepted too),
+  `comment`; `Idempotency-Key`; 409 `plan_changed` when the digest moved, 409 `wrong_state` when nothing awaits approval.
+  `POST /incidents/{id}/chains/{seq}/approvals` for `per_chain`.
+- `GET /incidents/{id}/events`; `GET /incidents/{id}/approvals`. `GET /incidents/{id}` also carries the plan, the
+  approvals, the Workflow tasks and the workflow trace link.
+- A case carries `incidentId` and `incident` (`incident_id`, `incident_state`, `chain_seq`, `position`, `chain_kind`,
+  `decides`, `chain_policy`, `item_state`, `expected_version`); its events say whether it was released automatically,
+  under the incident's approval, or stopped.
 - `GET /site-profile` (any signed-in user) returns the current profile with its version; `PUT /site-profile`
   (`Interlock_Approve`, `X-Requested-With`) replaces it with the body, which must have the shape of 6.4, and answers the
   new version; the questionnaire page writes it. Every change is recorded as a case-independent event with the user.
@@ -447,6 +469,10 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.7, 17 Oct 2026: incidents as built (7): adoption and the ready wait, the chain's policy, the task subjects, chain
+  and item states, the expected-version rule, the approvals route and the case's `incident` fields; the gate's
+  `APPROVAL_PLAN_ORIGIN` check (an approval by policy needs a plan from the policy path for its entry; policy version
+  2026-10-17.2) and the chain kind in its policy check (6.4).
 - v1.6, 17 Oct 2026: the scenario catalogue and the deterministic matcher, the condition vocabulary, the site profile and the policy path (automatic, approval, per chain), the gate's catalogue checks, the board's `search_catalogue` tool (6); incidents: detection, chains and their kinds, the plan and its approval binding the sequence rule, the ordered release through each case's own dispatch, the API, scenario S11 (7). From the owner's decisions of 17 Oct, all taken.
 - v1.5, 16 Oct 2026: rehearsal responses carry `encounter_before` and `epoch` (1.1); `POST /capabilities` takes `last_contract_check` (1.8); S8's second source system `BEDMGR` (2, 3); S9's second encounter `ENC-2009` (3); the `capabilities` step kind (3); the scenario player and the run states (4.2); section 5 points at the API as built. Points (a) to (e) are House's, accepted on 15 Oct.
 - v1.4, 15 Oct 2026: the capabilities read and the demo switch, the epoch, the receipt-lookup fault (1.8, 1.9); scenario steps that wait for a case state (4.1). From House's triage of the owner's feature documents (T9, T10, A1, A2, A5).

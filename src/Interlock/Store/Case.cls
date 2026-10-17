@@ -16,7 +16,7 @@ Property OperationKey As %String(%JSONFIELDNAME = "operationKey", MAXLEN = 400) 
 
 Index OperationKeyIdx On OperationKey;
 
-Property State As %String(%JSONFIELDNAME = "state", MAXLEN = 32, VALUELIST = ",detected,collecting,investigating,proposed,gated,rehearsing,awaiting_approval,approved,executing,verifying,resolved,blocked,escalated,failed") [ InitialExpression = "detected" ];
+Property State As %String(%JSONFIELDNAME = "state", MAXLEN = 32, VALUELIST = ",detected,collecting,investigating,grouped,proposed,gated,rehearsing,awaiting_approval,approved,executing,verifying,resolved,blocked,escalated,failed") [ InitialExpression = "detected" ];
 
 Index StateIdx On State;
 
@@ -46,10 +46,13 @@ Property Event As %String(%JSONFIELDNAME = "event", MAXLEN = 16);
 
 Property Ward As %String(%JSONFIELDNAME = "ward", MAXLEN = 100);
 
+/// The production item the failed delivery went to (the receiver), for incidents (CONTRACTS 7).
+Property Receiver As %String(%JSONFIELDNAME = "receiver", MAXLEN = 128);
+
 Property EventTime As %String(%JSONFIELDNAME = "eventTime", MAXLEN = 30);
 
 /// The incident the case belongs to, when many failures to the receiver were grouped (CONTRACTS 7).
-Property Incident As Interlock.Store.Incident(%JSONFIELDNAME = "incidentId", %JSONREFERENCE = "ID");
+Property Incident As Interlock.Store.Incident(%JSONINCLUDE = "none");
 
 /// The demo scenario that produced the case (S1 to S6), when the scenario runner was running one;
 /// recordings of agent runs for a scenario replay on any instance.
@@ -313,6 +316,12 @@ Storage Default
 </Value>
 <Value name="29">
 <Value>CurrentApproval</Value>
+</Value>
+<Value name="30">
+<Value>Receiver</Value>
+</Value>
+<Value name="31">
+<Value>Incident</Value>
 </Value>
 </Data>
 <DataLocation>^Interlock.Store.CaseD</DataLocation>

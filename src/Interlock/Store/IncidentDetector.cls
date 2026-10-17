@@ -3,11 +3,11 @@
 Class Interlock.Store.IncidentDetector
 {
 
-/// Register a newly opened case for its receiver. Returns the incident the case joined, or "".
-/// Uncertain outcomes keep their own cases: only delivery failures and refusals count.
-ClassMethod Register(case As Interlock.Store.Case, receiver As %String, Output incident As Interlock.Store.Incident) As %Status
+/// Register a newly opened case for its receiver. Returns the incident the case joined, or "", and whether
+/// this registration opened it. Uncertain outcomes keep their own cases: only delivery failures and refusals count.
+ClassMethod Register(case As Interlock.Store.Case, receiver As %String, Output incident As Interlock.Store.Incident, Output openedNow As %Boolean) As %Status
 {
-    Set incident = "", sc = $$$OK
+    Set incident = "", openedNow = 0, sc = $$$OK
     If (case.FailureKind '= "delivery_failed") && (case.FailureKind '= "rejected") Quit sc
     Set incident = ##class(Interlock.Store.Incident).OpenFor(receiver)
     If $ISOBJECT(incident) {
@@ -19,20 +19,25 @@ ClassMethod Register(case As Interlock.Store.Case, receiver As %String, Output i
     Set threshold = ##class(Interlock.Store.SiteProfile).IncidentSetting("threshold", 5)
     Set window = ##class(Interlock.Store.SiteProfile).IncidentSetting("window_minutes", 10)
     Set since = ##class(Interlock.Util.Time).FromNow(-60 * window)
-    // The burst's cases: opened within the window, failed or rejected, not yet past their proposal gate.
+    // The failures to this receiver within the window that no incident holds yet.
     Set n = 0
-    &sql(SELECT COUNT(*) INTO :n FROM Interlock_Store."Case" WHERE OpenedAt >= :since AND FailureKind IN ('delivery_failed', 'rejected') AND State IN ('detected', 'collecting', 'investigating', 'proposed'))
+    &sql(SELECT COUNT(*) INTO :n FROM Interlock_Store."Case" WHERE Receiver = :receiver AND OpenedAt >= :since AND FailureKind IN ('delivery_failed', 'rejected') AND Incident IS NULL)
     If +n < threshold Quit sc
-    Set sc = ##class(Interlock.Store.Incident).Open(receiver, .incident)
+    Set sc = ##class(Interlock.Store.Incident).Open(receiver, case.Mode, .incident)
     Quit:$$$ISERR(sc) sc
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Interlock_Store.""Case"" WHERE OpenedAt >= ? AND FailureKind IN ('delivery_failed', 'rejected') AND State IN ('detected', 'collecting', 'investigating', 'proposed') ORDER BY ID", since)
+    Set openedNow = 1
+    // The burst's earlier cases still before their proposal gate join too (settling, collecting or investigating);
+    // a case already past its board keeps its own path.
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Interlock_Store.""Case"" WHERE Receiver = ? AND OpenedAt >= ? AND FailureKind IN ('delivery_failed', 'rejected') AND Incident IS NULL AND State IN ('detected', 'collecting', 'investigating') ORDER BY ID", receiver, since)
     While rs.%Next() {
-        Set c = ##class(Interlock.Store.Case).%OpenId(rs.%Get("ID"))
+        Set c = $SELECT(rs.%Get("ID") = case.%Id(): case, 1: ##class(Interlock.Store.Case).%OpenId(rs.%Get("ID")))
         Continue:'$ISOBJECT(c)
         Set sc = ..Join(c, incident)
         Quit:$$$ISERR(sc)
     }
-    Quit sc
+    Quit:$$$ISERR(sc) sc
+    // The opening case joins whatever its state.
+    Quit ..Join(case, incident)
 }
 
 /// A case joins an incident: recorded on the case, noted on both.
@@ -42,9 +47,20 @@ ClassMethod Join(case As Interlock.Store.Case, incident As Interlock.Store.Incid
     Set case.Incident = incident
     Set sc = case.%Save()
     Quit:$$$ISERR(sc) sc
-    Set sc = case.Note("note", "Joined incident " _ incident.IncidentId _ " (" _ incident.Receiver _ "): the incident decides when this case is released", "system", "incident:" _ incident.%Id())
+    Set sc = case.Note("note", "Joined incident " _ incident.IncidentId _ " (" _ incident.Receiver _ "): the incident decides when this case is released", "system", "incident:" _ incident.IncidentId)
     Quit:$$$ISERR(sc) sc
-    Quit incident.Note("note", "Case " _ case.CaseId _ " joined: " _ case.Event _ " for " _ case.EncounterId _ " at " _ case.EventTime, "system")
+    Quit incident.Note("note", "Case " _ case.CaseId _ " joined: " _ case.Event _ " for " _ case.EncounterId _ " at " _ case.EventTime _ " (" _ case.FailureKind _ ")", "system")
+}
+
+/// A case leaves an incident (it was not ready when the chains formed): it continues alone.
+ClassMethod Leave(case As Interlock.Store.Case, incident As Interlock.Store.Incident, why As %String) As %Status
+{
+    Set case.Incident = ""
+    Set sc = case.%Save()
+    Quit:$$$ISERR(sc) sc
+    Set sc = case.Note("note", "Left incident " _ incident.IncidentId _ ": " _ why _ ". The case continues on its own", "system", "incident:" _ incident.IncidentId)
+    Quit:$$$ISERR(sc) sc
+    Quit incident.Note("note", "Case " _ case.CaseId _ " left: " _ why, "system")
 }
 
 /// Whether the incident's intake can close: the quiet period has passed since the last failure.
@@ -55,8 +71,18 @@ ClassMethod QuietFor(incident As Interlock.Store.Incident) As %Boolean
     Quit ##class(Interlock.Util.Time).SecondsBetween(incident.LastFailureAt, ##class(Interlock.Util.Time).NowUTC()) >= quiet
 }
 
+/// Cases of the incident not yet parked (grouped) or closed: their evidence and match are not there yet.
+ClassMethod NotReady(incident As Interlock.Store.Incident) As %DynamicArray
+{
+    Set out = []
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT CaseId FROM Interlock_Store.""Case"" WHERE Incident = ? AND State NOT IN ('grouped', 'resolved', 'blocked', 'escalated', 'failed') ORDER BY ID", incident.%Id())
+    While rs.%Next() { Do out.%Push(rs.%Get("CaseId")) }
+    Quit out
+}
+
 /// Group the incident's cases into chains per encounter, oldest event first, and classify each chain
-/// (CONTRACTS 7.1 and 7.2). Replaces earlier chains. Returns the chains.
+/// (CONTRACTS 7.1 and 7.2). Replaces earlier chains. Closed cases (resolved or escalated before the incident
+/// formed its chains) are left out.
 ClassMethod Group(incident As Interlock.Store.Incident) As %Status
 {
     Set sc = $$$OK
@@ -69,12 +95,12 @@ ClassMethod Group(incident As Interlock.Store.Incident) As %Status
         Do ##class(Interlock.Store.Chain).%DeleteId(cid)
     }
     // The cases, by encounter, in event order.
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, EncounterId FROM Interlock_Store.""Case"" WHERE Incident = ? ORDER BY EncounterId, EventTime, ID", incident.%Id())
-    Set seq = 0, last = "", chain = ""
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, EncounterId FROM Interlock_Store.""Case"" WHERE Incident = ? AND State = 'grouped' ORDER BY EncounterId, EventTime, ID", incident.%Id())
+    Set seq = 0, last = "", chain = "", position = 0
     While rs.%Next() {
         Set c = ##class(Interlock.Store.Case).%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(c)
-        If c.EncounterId '= last {
+        If (c.EncounterId '= last) || '$ISOBJECT(chain) {
             If $ISOBJECT(chain) Set sc = ..Classify(chain) Quit:$$$ISERR(sc)
             Set seq = seq + 1
             Set chain = ##class(Interlock.Store.Chain).%New()
@@ -100,22 +126,15 @@ ClassMethod Group(incident As Interlock.Store.Incident) As %Status
     Quit sc
 }
 
-/// The chain's kind and who decides it, from its items. A single item is single; several with no successful
-/// delivery for the encounter between them are ordered; otherwise interleaved. Policy when every item's match
-/// decides by policy; person when any item asks for a person; else board.
+/// The chain's kind, who decides it and the site's policy for it, from its items. A single item is single;
+/// several with no successful delivery for the encounter between them are ordered; otherwise interleaved. With the
+/// kind known, every item is matched again with the chain condition set (7.1), so an ordered chain's items can match
+/// an entry written for chains, which the first evidence (chain single) could not. Policy when the incident runs in
+/// policy mode and every item's match decides by policy (never for an interleaved chain); person when any item asks
+/// for a person; else board (the cases run their own path).
 ClassMethod Classify(chain As Interlock.Store.Chain) As %Status
 {
-    Set items = chain.Items()
-    Set n = items.%Size()
-    Set entries = "", decides = "policy", first = ""
-    Set iter = items.%GetIterator()
-    While iter.%GetNext(.i, .it) {
-        Set entries = entries _ $SELECT(entries = "": "", 1: ",") _ ##class(Interlock.Util.Json).Str(it, "entry", "?")
-        Set d = ##class(Interlock.Util.Json).Str(it, "decides")
-        If d = "person" Set decides = "person"
-        If (d '= "policy") && (decides '= "person") Set decides = "board"
-        If first = "" Set first = it
-    }
+    Set n = chain.ItemCount()
     If n <= 1 {
         Set chain.Kind = "single"
     } ElseIf ..SuccessBetween(chain) {
@@ -123,24 +142,61 @@ ClassMethod Classify(chain As Interlock.Store.Chain) As %Status
     } Else {
         Set chain.Kind = "ordered"
     }
+    Set entries = "", decides = "policy", firstCase = ""
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Interlock_Store.ChainItem WHERE Chain = ? ORDER BY Position", chain.%Id())
+    While rs.%Next() {
+        Set it = ##class(Interlock.Store.ChainItem).%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(it)
+        Set c = it.Case
+        Set cat = ..Rematch(c, chain.Kind)
+        If $ISOBJECT(cat) {
+            Set it.Entry = ##class(Interlock.Util.Json).Str(cat, "entry"), it.CatalogueOutcome = ##class(Interlock.Util.Json).Str(cat, "outcome")
+            Set it.Decides = ##class(Interlock.Util.Json).Str(cat, "decision")
+            Do it.%Save()
+        }
+        Set entries = entries _ $SELECT(entries = "": "", 1: ",") _ $SELECT(it.Entry = "": "?", 1: it.Entry)
+        If it.Decides = "person" Set decides = "person"
+        If (it.Decides '= "policy") && (decides '= "person") Set decides = "board"
+        If firstCase = "" Set firstCase = c
+    }
+    Set mode = $SELECT($ISOBJECT(chain.Incident): chain.Incident.Mode, 1: "board")
+    // Outside policy mode the cases run their own path, whatever the catalogue says (6.3).
+    If mode '= "policy" Set decides = "board"
     // Interleaved chains are the board's whatever the entries say (7.2).
     If (chain.Kind = "interleaved") && (decides = "policy") Set decides = "board"
-    Set chain.Entries = entries, chain.Decides = decides
-    If $ISOBJECT(first) {
-        Set c = ##class(Interlock.Store.Case).ByCaseId(##class(Interlock.Util.Json).Str(first, "caseId"))
-        Set chain.FirstExpectedVersion = ..VersionOf(c)
+    Set chain.Policy = "path"
+    If decides = "policy" {
+        Set tier = ##class(Interlock.Store.SiteProfile).TierOf(chain.Incident.Receiver)
+        Set policy = ##class(Interlock.Store.SiteProfile).Policy(tier, chain.Kind)
+        If policy = "board" { Set decides = "board" } Else { Set chain.Policy = policy }
     }
+    Set chain.Entries = entries, chain.Decides = decides
+    If $ISOBJECT(firstCase) Set chain.FirstExpectedVersion = ..VersionOf(firstCase)
     Quit chain.%Save()
 }
 
-/// Whether a successful delivery for the encounter sits between the chain's failures (from the first item's
+/// The case's snapshot matched again with the chain condition set; the snapshot's own match when the matcher fails.
+ClassMethod Rematch(case As Interlock.Store.Case, chainKind As %String) As %DynamicObject
+{
+    If '$ISOBJECT(case) || '$ISOBJECT(case.CurrentSnapshot) Quit ""
+    Set summary = case.CurrentSnapshot.SummaryObject()
+    If '$ISOBJECT(summary) Quit ""
+    Try {
+        Set cat = ##class(Interlock.Catalogue.Matcher).Match(##class(Interlock.Catalogue.Matcher).Conditions(case, summary, chainKind), ##class(Interlock.Catalogue.Matcher).Facts(summary, case))
+    } Catch ex {
+        Set cat = summary.%Get("catalogue")
+    }
+    Quit cat
+}
+
+/// Whether a successful delivery for the encounter sits between the chain's failures (from the last item's
 /// snapshot timeline, which lists every operation sent for the encounter with its outcome).
 ClassMethod SuccessBetween(chain As Interlock.Store.Chain) As %Boolean [ Private ]
 {
     Set items = chain.Items()
     If items.%Size() < 2 Quit 0
     Set firstAt = ##class(Interlock.Util.Json).Str(items.%Get(0), "eventTime"), lastAt = ##class(Interlock.Util.Json).Str(items.%Get(items.%Size() - 1), "eventTime")
-    Set c = ##class(Interlock.Store.Case).ByCaseId(##class(Interlock.Util.Json).Str(items.%Get(0), "caseId"))
+    Set c = ##class(Interlock.Store.Case).ByCaseId(##class(Interlock.Util.Json).Str(items.%Get(items.%Size() - 1), "caseId"))
     If '$ISOBJECT(c) || '$ISOBJECT(c.CurrentSnapshot) Quit 0
     Set timeline = c.CurrentSnapshot.SummaryObject().%Get("timeline")
     If '$ISOBJECT(timeline) Quit 0
@@ -170,6 +226,13 @@ ClassMethod VersionOf(case As Interlock.Store.Case) As %String
     Set ward = case.CurrentSnapshot.SummaryObject().%Get("ward_state")
     If '$ISOBJECT(ward) Quit ""
     Quit ##class(Interlock.Util.Json).Str(ward, "version")
+}
+
+/// The receiver's epoch in the case's snapshot, or "".
+ClassMethod EpochOf(case As Interlock.Store.Case) As %String
+{
+    If '$ISOBJECT(case) || '$ISOBJECT(case.CurrentSnapshot) Quit ""
+    Quit ##class(Interlock.Util.Json).Str(case.CurrentSnapshot.SummaryObject(), "epoch")
 }
 
 }

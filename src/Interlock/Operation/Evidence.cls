@@ -101,9 +101,12 @@ Method OnEvidenceRequest(request As Interlock.Msg.EvidenceRequest, Output respon
     Set summary.route = route
     Set summary.epoch = ##class(Interlock.Util.Json).Str(wardState, "epoch", ##class(Interlock.Util.Json).Str(route, "epoch"))
     Set summary."observed_at" = now
+    // The incident this case belongs to, when one holds it (CONTRACTS 7): the board and the matcher see the chain.
+    Set summary.incident = ##class(Interlock.Store.ChainItem).IncidentContext(case)
+    Set chainKind = ##class(Interlock.Store.ChainItem).KindFor(case)
     // The catalogue: the condition vocabulary this snapshot shows, and the entries whose pattern holds (CONTRACTS 6).
     Try {
-        Set summary.catalogue = ##class(Interlock.Catalogue.Matcher).Match(##class(Interlock.Catalogue.Matcher).Conditions(case, summary, "single"), ##class(Interlock.Catalogue.Matcher).Facts(summary, case))
+        Set summary.catalogue = ##class(Interlock.Catalogue.Matcher).Match(##class(Interlock.Catalogue.Matcher).Conditions(case, summary, chainKind), ##class(Interlock.Catalogue.Matcher).Facts(summary, case))
     } Catch ex {
         Set summary.catalogue = {"decision": "error", "error": (ex.DisplayString())}
     }
