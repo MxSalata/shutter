@@ -60,10 +60,11 @@ ClassMethod Conditions(case As Interlock.Store.Case, summary As %DynamicObject, 
 }
 
 /// Match the conditions against every catalogue entry (6.3). Returns the result the summary carries.
-ClassMethod Match(conditions As %DynamicObject) As %DynamicObject
+ClassMethod Match(conditions As %DynamicObject, facts As %DynamicObject = "") As %DynamicObject
 {
     Set out = {}
     Set out.conditions = conditions
+    Set out.facts = $SELECT($ISOBJECT($GET(facts)): facts, 1: {"other_source": ""})
     Set out."catalogue_version" = ##class(Interlock.Catalogue.Entry).CatalogueVersion()
     Set matches = []
     If ##class(Interlock.Catalogue.Entry).Count() = 0 {
@@ -118,10 +119,11 @@ ClassMethod Holds(pattern As %DynamicObject, conditions As %DynamicObject) As %B
     Quit 1
 }
 
-/// The latest applied event for the encounter later than the failed operation: transfer, discharge, update, or none.
+/// The applied events for the encounter later than the failed operation, by precedence: discharge, else
+/// transfer, else update, else none. (A later transfer followed by a later update is a transfer.)
 ClassMethod LaterApplied(summary As %DynamicObject, case As Interlock.Store.Case) As %String [ Private ]
 {
-    Set found = "", foundAt = ""
+    Set seen("discharge") = 0, seen("transfer") = 0, seen("update") = 0
     Set timeline = summary.%Get("timeline")
     If $ISOBJECT(timeline) {
         Set iter = timeline.%GetIterator()
@@ -129,8 +131,8 @@ ClassMethod LaterApplied(summary As %DynamicObject, case As Interlock.Store.Case
             Continue:'##class(Interlock.Util.Json).Bool(ev, "later")
             Set outcome = ##class(Interlock.Util.Json).Str(ev, "outcome")
             Continue:((outcome '= "applied") && (outcome '= "already_committed"))
-            Set t = ##class(Interlock.Util.Json).Str(ev, "event_time")
-            If (foundAt = "") || (t ]] foundAt) Set found = ##class(Interlock.Util.Json).Str(ev, "event"), foundAt = t
+            Set e = ##class(Interlock.Util.Json).Str(ev, "event")
+            Set seen($SELECT($DATA(seen(e)): e, 1: "update")) = 1
         }
     }
     Set ward = summary.%Get("ward_state")
@@ -140,11 +142,44 @@ ClassMethod LaterApplied(summary As %DynamicObject, case As Interlock.Store.Case
         While iter.%GetNext(.i, .h) {
             Set t = ##class(Interlock.Util.Json).Str(h, "event_time")
             Continue:'(t ]] case.EventTime)
-            If (foundAt = "") || (t ]] foundAt) Set found = ##class(Interlock.Util.Json).Str(h, "event"), foundAt = t
+            Set e = ##class(Interlock.Util.Json).Str(h, "event")
+            Set seen($SELECT($DATA(seen(e)): e, 1: "update")) = 1
         }
     }
-    If found = "" Quit "none"
-    Quit $SELECT($LISTFIND($LISTBUILD("transfer", "discharge", "update"), found): found, 1: "update")
+    Quit $SELECT(seen("discharge"): "discharge", seen("transfer"): "transfer", seen("update"): "update", 1: "none")
+}
+
+/// Facts beside the conditions, for the alternatives' "when": other_source (the other source system of a
+/// simultaneous event, or "").
+ClassMethod Facts(summary As %DynamicObject, case As Interlock.Store.Case) As %DynamicObject
+{
+    Set f = {}
+    Set f."other_source" = ""
+    Set ward = summary.%Get("ward_state")
+    Set history = $SELECT($ISOBJECT(ward): ward.%Get("history"), 1: "")
+    If $ISOBJECT(history) {
+        Set source = $PIECE(case.OperationKey, "^", 1)
+        Set iter = history.%GetIterator()
+        While iter.%GetNext(.i, .h) {
+            Continue:(##class(Interlock.Util.Json).Str(h, "event_time") '= case.EventTime)
+            Set key = ##class(Interlock.Util.Json).Str(h, "operation_key")
+            Continue:(key = case.OperationKey)
+            If $PIECE(key, "^", 1) '= source Set f."other_source" = $PIECE(key, "^", 1) Quit
+        }
+    }
+    Quit f
+}
+
+/// Whether an alternative's "when" holds for this site: "always", or "<flag>: <value>" against the site profile,
+/// where the value "other_source" stands for the fact of that name.
+ClassMethod WhenHolds(when As %String, facts As %DynamicObject) As %Boolean
+{
+    Set when = $ZSTRIP(when, "<>W")
+    If (when = "") || (when = "always") Quit 1
+    Set flag = $ZSTRIP($PIECE(when, ":", 1), "<>W"), value = $ZSTRIP($PIECE(when, ":", 2, *), "<>W")
+    If value = "other_source" Set value = $SELECT($ISOBJECT(facts): ##class(Interlock.Util.Json).Str(facts, "other_source"), 1: "")
+    If value = "" Quit 0
+    Quit ##class(Interlock.Store.SiteProfile).Flag(flag) = value
 }
 
 /// yes when the receiver applied an event for the encounter at the failed operation's own event time from
@@ -194,7 +229,7 @@ ClassMethod ForCase(caseId As %String, chainKind As %String = "single") As %Stri
     Set snap = case.CurrentSnapshot
     If '$ISOBJECT(snap) Quit {"error": "The case has no snapshot"}.%ToJSON()
     Set summary = snap.SummaryObject()
-    Set result = ..Match(..Conditions(case, summary, chainKind))
+    Set result = ..Match(..Conditions(case, summary, chainKind), ..Facts(summary, case))
     Set result."case_id" = caseId, result.scenario = case.Scenario
     Quit result.%ToJSON()
 }

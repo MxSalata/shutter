@@ -103,7 +103,7 @@ Method OnEvidenceRequest(request As Interlock.Msg.EvidenceRequest, Output respon
     Set summary."observed_at" = now
     // The catalogue: the condition vocabulary this snapshot shows, and the entries whose pattern holds (CONTRACTS 6).
     Try {
-        Set summary.catalogue = ##class(Interlock.Catalogue.Matcher).Match(##class(Interlock.Catalogue.Matcher).Conditions(case, summary, "single"))
+        Set summary.catalogue = ##class(Interlock.Catalogue.Matcher).Match(##class(Interlock.Catalogue.Matcher).Conditions(case, summary, "single"), ##class(Interlock.Catalogue.Matcher).Facts(summary, case))
     } Catch ex {
         Set summary.catalogue = {"decision": "error", "error": (ex.DisplayString())}
     }

@@ -254,7 +254,7 @@ conditions that matter; an unlisted condition is a wildcard. A listed condition 
 | `delivery` | `failed`, `rejected`, `uncertain` | the case's failure kind (1.1: 503 and connection failures are `failed`; 409 and 422 are `rejected`; 504 is `uncertain`) |
 | `receiver_answer` | `unavailable`, `timeout`, `duplicate`, `version_conflict`, `refused`, `none` | the error item's reason code |
 | `receipt` | `present`, `absent`, `unreadable` | the receipt lookup: 200, 404, anything else (1.9) |
-| `later_applied` | `none`, `transfer`, `discharge`, `update` | the latest applied event for the encounter whose event time is later than the failed operation's (the ward history and the timeline); `update` is an A08 |
+| `later_applied` | `none`, `transfer`, `discharge`, `update` | among the applied events for the encounter whose event time is later than the failed operation's (the ward history and the timeline), by precedence: `discharge` if any, else `transfer` if any, else `update` (an A08), else `none` |
 | `encounter_state` | `admitted`, `discharged`, `unknown` | the ward's state; `unknown` when the encounter can't be read or is unknown to the ward |
 | `transition` | `allowed`, `invalid`, `unknown` | the failed event from the encounter's current state (1.4): a transfer after a discharge is `invalid` |
 | `patient_match` | `yes`, `no`, `unknown` | the message's PID-3 against the ward's patient for the encounter |
@@ -291,17 +291,26 @@ checks: [ordering, effect, state_transition, identity, capability]
   item of an ordered chain, in event order), `resend_latest` (the chain's latest item only; the earlier ones are
   superseded), `reconcile`, `none`, `escalate`, `resend_unconditional` (never automatic; needs the site flag
   `unconditional_resend: with_approval`), `correct_history` (not implemented: always escalated with the steps named).
-- An alternative has `outcome`, `why` and `when`: a site profile condition such as `history_policy: correct` or
-  `authoritative_source: BEDMGR`, or `always` for a choice left to the board. Every alternative is decided by the board
-  or a person, never automatically.
+- An alternative has `outcome`, `why` and `when`: `always` for a choice left to the board, or a site profile condition
+  `<flag>: <value>` such as `history_policy: correct` or `unconditional_resend: with_approval`. The value may be the
+  symbol `other_source`, which stands for the other source system of the simultaneous event the matcher found
+  (`facts.other_source`), so `authoritative_source: other_source` holds when the site names that system as
+  authoritative. Every alternative is decided by the board or a person, never automatically.
 - `checks` names the gate checks that must pass for the preferred outcome; the gate runs them all anyway, so this is
   documentation for the reader and the board.
 - The prose after the front matter is for the board: what the pattern means, how to tell it apart, what to cite.
 
-### 6.3 Matching
+### 6.3 Matching and the investigation modes
 
-The matcher runs after the evidence is collected, before any agent. It evaluates every entry at the catalogue's version
-and reports the matches.
+The matcher runs after the evidence is collected, before any agent, in every mode: its result (the conditions, the
+facts, the matches) is part of the snapshot summary, so the board reads it and the gate checks the plan against it.
+The investigation mode decides who settles the case:
+- `policy` (the site's default once a catalogue is installed): the rules below;
+- `board`: the board always runs, the match in its evidence; the comparison's board column keeps its meaning;
+- `single`: the single investigator always runs;
+- `rules`: no agents and no catalogue path: a plain resend for the gate to judge.
+
+In `policy` mode the matcher's decision is:
 - **One match, `decides: policy`:** the case takes the site's policy path (6.4) with the preferred outcome. No board.
 - **One match, `decides: board`, or several matches:** the board runs; the coordinator's plan names `catalogue_entry`
   and `outcome` (`preferred` or `alternative:<n>`) with `why`.
@@ -415,6 +424,9 @@ cites entries by id. The coordinator's instructions say the plan names the entry
 - `GET /incidents/{id}/events`.
 - A case carries `incidentId`, `chainId`, `chainPosition` and `chainKind`; a case's closure says whether it was
   released automatically, by an approval, or stopped.
+- `GET /site-profile` (any signed-in user) returns the current profile with its version; `PUT /site-profile`
+  (`Interlock_Approve`, `X-Requested-With`) replaces it with the body, which must have the shape of 6.4, and answers the
+  new version; the questionnaire page writes it. Every change is recorded as a case-independent event with the user.
 
 ### 7.6 Scenario S11, an outage burst
 
