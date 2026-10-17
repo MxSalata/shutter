@@ -1,0 +1,46 @@
+{
+ "key": "scenario:S11:ENC-1103:transfer|encounter|1",
+ "agentClass": "Interlock.Agent.Encounter",
+ "configVersion": "1",
+ "memberCode": "encounter",
+ "snapshotDigest": "",
+ "correlationKey": "scenario:S11:ENC-1103:transfer",
+ "model": "fixture",
+ "response": {
+  "status": "ok",
+  "agent_class": "Interlock.Agent.Encounter",
+  "config_version": "1",
+  "mode": "record",
+  "model": "fixture",
+  "provider_config": "",
+  "started_at": "2026-10-16T10:00:00Z",
+  "duration_ms": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cache_read_tokens": 0,
+  "cache_creation_tokens": 0,
+  "iterations": 0,
+  "tool_calls": 6,
+  "session_id": "",
+  "result": {
+   "disposition": "superseded",
+   "confidence": 0.95,
+   "summary": "The 09:20 transfer to WARD-B was never committed (no receipt). Since then the receiver applied an update at 09:30 (version 2) and a transfer to WARD-C at 09:45 (version 3), so the encounter is admitted in WARD-C. Under ELS-2.1 the later transfer supersedes the failed one; the update does not (ELS-2.2). The failed 10:30 discharge is the chain's next item, decided on its own evidence.",
+   "violations": [],
+   "unknowns": [],
+   "evidence_refs": [
+    "ward_state",
+    "receipt",
+    "later_event",
+    "operation"
+   ]
+  },
+  "content": "",
+  "error": "",
+  "record_id": ""
+ },
+ "transcript": "",
+ "toolCalls": "[{\"name\": \"GetSnapshot\"}, {\"name\": \"GetWardState\"}, {\"name\": \"GetReceipt\"}, {\"name\": \"GetTimeline\"}, {\"name\": \"search_lifecycle\"}, {\"name\": \"SubmitFindings\"}]",
+ "recordedAt": "2026-10-16T10:00:00Z",
+ "label": "Hand-written fixture standing in for a live recording; replaced when the live agents run"
+}

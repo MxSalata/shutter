@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Writes the board's recorded runs for scenarios S4 to S10 into fixtures/records/, one file per board member (and per
-round, for a scenario whose case is planned again): hand-written fixtures standing in for live recordings, replaced
-when the live agents run in record mode under the same keys.
+"""Writes the board's recorded runs for scenarios S4 to S10, and for the S11 cases the board decides, into
+fixtures/records/, one file per board member (and per round, for a scenario whose case is planned again): hand-written
+fixtures standing in for live recordings, replaced when the live agents run in record mode under the same keys. S11
+has several cases, so its keys name the case's encounter and event (scenario:S11:ENC-1103:transfer|member|1).
 
     python3 fixtures/generate_records.py
 
@@ -206,8 +207,60 @@ RECORDS = {
 }
 
 
-def record(scenario, member, result, round_=1):
+# S11, the outage burst: only the interleaved chain of ENC-1103 goes to the board in policy mode. Its 09:20 transfer
+# was overtaken by the 09:45 transfer (version 3, after the 09:30 update); its 10:30 discharge is still due at version 3.
+S11_TRANSFER_KEY = "PAS^HOSP^MRN1103^ENC-1103^transfer^2026-10-15T09:20:00Z"
+S11_DISCHARGE_KEY = "PAS^HOSP^MRN1103^ENC-1103^discharge^2026-10-15T10:30:00Z"
+CASE_RECORDS = {
+    ("S11", "ENC-1103", "transfer", "conformance"): finding("resend", 0.8, "As a message, MSG01109 (ADT^A02, 2.5.1) "
+        "is valid: it parses against 2.5.1:ADT_A02, identifies MRN1103 (HOSP) and visit ENC-1103, names WARD-B and "
+        "carries event time 09:20. The receiver refused it with HTTP 503 ward_unavailable before reading it, and holds "
+        "no receipt for its key. Whether it is still due is for Encounter Integrity: the receiver has since applied an "
+        "update (09:30) and a transfer to WARD-C (09:45).", ["operation", "error", "message", "validation", "receipt"]),
+    ("S11", "ENC-1103", "transfer", "encounter"): finding("superseded", 0.95, "The 09:20 transfer to WARD-B was never "
+        "committed (no receipt). Since then the receiver applied an update at 09:30 (version 2) and a transfer to WARD-C "
+        "at 09:45 (version 3), so the encounter is admitted in WARD-C. Under ELS-2.1 the later transfer supersedes the "
+        "failed one; the update does not (ELS-2.2). The failed 10:30 discharge is the chain's next item, decided on its "
+        "own evidence.", ["ward_state", "receipt", "later_event", "operation"]),
+    ("S11", "ENC-1103", "transfer", "impact"): finding("superseded", 0.9, "A resend of the 09:20 transfer at version 3 "
+        "would pass the version check and move the patient from WARD-C back to WARD-B, a ward they left at 09:45: the "
+        "bed board, pharmacy and porters would act on the wrong ward (DEP-2.2). Sending nothing leaves the record in "
+        "WARD-C, which matches the latest applied movement.", ["ward_state", "later_event", "route"], [DOWNSTREAM]),
+    ("S11", "ENC-1103", "transfer", "coordinator"): {**plan("superseded", "The 09:20 transfer of ENC-1103 to WARD-B "
+        "was never committed, and a later transfer to WARD-C (09:45, version 3) has been applied since. Under ELS-2.1 and "
+        "RP-2.3 it is superseded and nothing is sent. The chain's 10:30 discharge is decided on its own evidence.",
+        {"type": "none"}, ["The receiver still holds ENC-1103 in WARD-C at version 3",
+                           "No receipt for the 09:20 transfer key", "No write is made to the ward system"],
+        ["operation", "receipt", "ward_state", "later_event"]),
+        "catalogue_entry": "E1", "outcome": "preferred",
+        "why": "A later transfer was applied after the failed one, so the failed transfer is superseded."},
+    ("S11", "ENC-1103", "discharge", "conformance"): finding("resend", 0.85, "As a message, MSG01117 (ADT^A03, 2.5.1) "
+        "is valid: it parses against 2.5.1:ADT_A03, identifies MRN1103 (HOSP) and visit ENC-1103, and carries event time "
+        "10:30. The receiver refused it with HTTP 503 ward_unavailable before reading it, and holds no receipt for its "
+        "key. Nothing in the message explains the failure.", ["operation", "error", "message", "validation", "receipt"]),
+    ("S11", "ENC-1103", "discharge", "encounter"): finding("resend", 0.9, "The receiver holds ENC-1103 admitted in "
+        "WARD-C at version 3 (admit 09:00, update 09:30, transfer 09:45), with no receipt for the 10:30 discharge and "
+        "nothing applied after 10:30. A discharge is allowed from admitted (ELS-1.1), and the chain's earlier failed "
+        "transfer was superseded, so the discharge is still due.", ["ward_state", "receipt", "operation"]),
+    ("S11", "ENC-1103", "discharge", "impact"): finding("resend", 0.85, "A discharge at version 3 frees the patient's "
+        "bed in WARD-C and closes the encounter, as the PAS recorded at 10:30. Until it is applied the bed board shows an "
+        "occupied bed and downstream systems keep the patient on the ward. The write is bounded to this encounter.",
+        ["ward_state", "route"], [DOWNSTREAM]),
+    ("S11", "ENC-1103", "discharge", "coordinator"): {**plan("resend", "The 10:30 discharge of ENC-1103 was never "
+        "committed (no receipt), nothing later was applied, and the encounter is admitted in WARD-C at version 3. Resend "
+        "the discharge unchanged, conditional on version 3, after a rehearsal and an approval; the superseded 09:20 "
+        "transfer stays unsent.", {"type": "resend", "operation_key": S11_DISCHARGE_KEY, "expected_version": 3},
+        ["No receipt for the discharge key at dispatch", "The receiver still holds ENC-1103 admitted in WARD-C at "
+         "version 3", "The rehearsal says the discharge would apply"], ["operation", "receipt", "ward_state"]),
+        "catalogue_entry": "E5", "outcome": "preferred",
+        "why": "In an interleaved chain the latest item still due is resent; the earlier transfer was overtaken."},
+}
+
+
+def record(scenario, member, result, round_=1, case=None):
+    """One recording; case = (encounter, event) gives the long key the core writes for a scenario's cases."""
     suffix = f"|round{round_}" if round_ > 1 else ""
+    head = f"scenario:{scenario}" + (f":{case[0]}:{case[1]}" if case else "")
     tools = TOOLS[member]
     response = {
         "status": "ok", "agent_class": CLASSES[member], "config_version": "1", "mode": "record", "model": "fixture",
@@ -216,8 +269,8 @@ def record(scenario, member, result, round_=1):
         "session_id": "", "result": result, "content": "", "error": "", "record_id": "",
     }
     return {
-        "key": f"scenario:{scenario}|{member}|1{suffix}", "agentClass": CLASSES[member], "configVersion": "1",
-        "memberCode": member, "snapshotDigest": "", "correlationKey": f"scenario:{scenario}", "model": "fixture",
+        "key": f"{head}|{member}|1{suffix}", "agentClass": CLASSES[member], "configVersion": "1",
+        "memberCode": member, "snapshotDigest": "", "correlationKey": head, "model": "fixture",
         "response": response, "transcript": "", "toolCalls": json.dumps([{"name": t} for t in tools]),
         "recordedAt": WHEN, "label": LABEL,
     }
@@ -244,6 +297,15 @@ def main():
             continue
         with open(path, "w", encoding="utf-8") as f:
             f.write(json.dumps(record(scenario, member, result, round_), indent=1, ensure_ascii=False) + "\n")
+        written += 1
+    for (scenario, encounter, event, member), result in CASE_RECORDS.items():
+        path = os.path.join(OUT, f"scenario-{scenario}-{encounter}-{event}-{member}-1.json")
+        if recorded_live(path):
+            kept += 1
+            continue
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(json.dumps(record(scenario, member, result, case=(encounter, event)), indent=1,
+                               ensure_ascii=False) + "\n")
         written += 1
     print(f"wrote {written} records into {OUT}" + (f"; kept {kept} recorded from live runs" if kept else ""))
 

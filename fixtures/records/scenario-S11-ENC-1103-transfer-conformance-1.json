@@ -1,0 +1,47 @@
+{
+ "key": "scenario:S11:ENC-1103:transfer|conformance|1",
+ "agentClass": "Interlock.Agent.Conformance",
+ "configVersion": "1",
+ "memberCode": "conformance",
+ "snapshotDigest": "",
+ "correlationKey": "scenario:S11:ENC-1103:transfer",
+ "model": "fixture",
+ "response": {
+  "status": "ok",
+  "agent_class": "Interlock.Agent.Conformance",
+  "config_version": "1",
+  "mode": "record",
+  "model": "fixture",
+  "provider_config": "",
+  "started_at": "2026-10-16T10:00:00Z",
+  "duration_ms": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cache_read_tokens": 0,
+  "cache_creation_tokens": 0,
+  "iterations": 0,
+  "tool_calls": 6,
+  "session_id": "",
+  "result": {
+   "disposition": "resend",
+   "confidence": 0.8,
+   "summary": "As a message, MSG01109 (ADT^A02, 2.5.1) is valid: it parses against 2.5.1:ADT_A02, identifies MRN1103 (HOSP) and visit ENC-1103, names WARD-B and carries event time 09:20. The receiver refused it with HTTP 503 ward_unavailable before reading it, and holds no receipt for its key. Whether it is still due is for Encounter Integrity: the receiver has since applied an update (09:30) and a transfer to WARD-C (09:45).",
+   "violations": [],
+   "unknowns": [],
+   "evidence_refs": [
+    "operation",
+    "error",
+    "message",
+    "validation",
+    "receipt"
+   ]
+  },
+  "content": "",
+  "error": "",
+  "record_id": ""
+ },
+ "transcript": "",
+ "toolCalls": "[{\"name\": \"GetSnapshot\"}, {\"name\": \"GetMessage\"}, {\"name\": \"GetValidation\"}, {\"name\": \"GetFailure\"}, {\"name\": \"search_contracts\"}, {\"name\": \"SubmitFindings\"}]",
+ "recordedAt": "2026-10-16T10:00:00Z",
+ "label": "Hand-written fixture standing in for a live recording; replaced when the live agents run"
+}

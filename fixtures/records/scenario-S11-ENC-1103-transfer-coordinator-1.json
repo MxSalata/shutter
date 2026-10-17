@@ -1,0 +1,55 @@
+{
+ "key": "scenario:S11:ENC-1103:transfer|coordinator|1",
+ "agentClass": "Interlock.Agent.Coordinator",
+ "configVersion": "1",
+ "memberCode": "coordinator",
+ "snapshotDigest": "",
+ "correlationKey": "scenario:S11:ENC-1103:transfer",
+ "model": "fixture",
+ "response": {
+  "status": "ok",
+  "agent_class": "Interlock.Agent.Coordinator",
+  "config_version": "1",
+  "mode": "record",
+  "model": "fixture",
+  "provider_config": "",
+  "started_at": "2026-10-16T10:00:00Z",
+  "duration_ms": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cache_read_tokens": 0,
+  "cache_creation_tokens": 0,
+  "iterations": 0,
+  "tool_calls": 2,
+  "session_id": "",
+  "result": {
+   "disposition": "superseded",
+   "summary": "The 09:20 transfer of ENC-1103 to WARD-B was never committed, and a later transfer to WARD-C (09:45, version 3) has been applied since. Under ELS-2.1 and RP-2.3 it is superseded and nothing is sent. The chain's 10:30 discharge is decided on its own evidence.",
+   "action": {
+    "type": "none"
+   },
+   "preconditions": [
+    "The receiver still holds ENC-1103 in WARD-C at version 3",
+    "No receipt for the 09:20 transfer key",
+    "No write is made to the ward system"
+   ],
+   "evidence_refs": [
+    "operation",
+    "receipt",
+    "ward_state",
+    "later_event"
+   ],
+   "disagreements": [],
+   "catalogue_entry": "E1",
+   "outcome": "preferred",
+   "why": "A later transfer was applied after the failed one, so the failed transfer is superseded."
+  },
+  "content": "",
+  "error": "",
+  "record_id": ""
+ },
+ "transcript": "",
+ "toolCalls": "[{\"name\": \"search_playbooks\"}, {\"name\": \"SubmitPlan\"}]",
+ "recordedAt": "2026-10-16T10:00:00Z",
+ "label": "Hand-written fixture standing in for a live recording; replaced when the live agents run"
+}

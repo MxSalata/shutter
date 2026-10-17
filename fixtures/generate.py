@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Writes the HL7 fixtures and scenarios.json for the scenarios S1 to S6 (docs/CONTRACTS.md, section 3).
+"""Writes the HL7 fixtures and scenarios.json for the scenarios S1 to S11 (docs/CONTRACTS.md, sections 3 and 7.6).
 
     python3 fixtures/generate.py
 
@@ -23,6 +23,13 @@ PATIENTS = {
     "S8": ("MRN1008", "ENC-1008", "SYNTH^HARRY", "19700123", "M"),
     "S9": ("MRN1009", "ENC-1009", "SYNTH^IRIS", "19951111", "F"),
     "S10": ("MRN1010", "ENC-1010", "SYNTH^JUDE", "19820618", "M"),
+    # S11, the outage burst: six patients in one scenario
+    "S11-P1": ("MRN1101", "ENC-1101", "SYNTH^KAI", "19880404", "M"),
+    "S11-P2": ("MRN1102", "ENC-1102", "SYNTH^LENA", "19790908", "F"),
+    "S11-P3": ("MRN1103", "ENC-1103", "SYNTH^MILO", "19930217", "M"),
+    "S11-P4": ("MRN1104", "ENC-1104", "SYNTH^NINA", "19651230", "F"),
+    "S11-P5": ("MRN1105", "ENC-1105", "SYNTH^OSCAR", "19771006", "M"),
+    "S11-P6": ("MRN1106", "ENC-1106", "SYNTH^PIA", "20000512", "F"),
 }
 
 LOCATIONS = {
@@ -43,8 +50,8 @@ def field_list(values, count):
 
 
 def message(scenario, seq, trigger, time, ward=None, prior=None, admit_time="0900", note=None, phone=None,
-            source="PAS", encounter=None):
-    mrn, default_encounter, name, dob, sex = PATIENTS[scenario]
+            source="PAS", encounter=None, patient=None):
+    mrn, default_encounter, name, dob, sex = PATIENTS[patient or scenario]
     encounter = encounter or default_encounter
     stamp = f"{DAY}{time}00"
     control_id = f"MSG{int(scenario[1:]):03d}{seq:02d}"
@@ -288,6 +295,62 @@ def scenarios():
         "expected": {"disposition": "escalate", "acceptable": ["more_evidence", "escalate"], "write": False,
                      "final_state": "admitted", "final_ward": "WARD-A", "failed_operation_key": b[2]["operation_key"]},
     }, [a, b]))
+
+    # S11: an outage burst, eight failures for six patients (CONTRACTS 7.6)
+    def p(n, seq, trigger, time, **kw):
+        return message("S11", seq, trigger, time, patient=f"S11-P{n}", **kw)
+
+    admits = [p(n, n, "A01", "0900", ward="WARD-A") for n in range(1, 6)]
+    p5_discharge = p(5, 6, "A03", "0930")
+    first_burst = [
+        p(1, 7, "A02", "0920", ward="WARD-B", prior="WARD-A"),
+        p(2, 8, "A02", "0920", ward="WARD-B", prior="WARD-A"),
+        p(3, 9, "A02", "0920", ward="WARD-B", prior="WARD-A"),
+        p(4, 10, "A02", "0920", ward="WARD-B", prior="WARD-A"),
+        p(6, 11, "A01", "0900", ward="WARD-A"),
+        p(5, 12, "A02", "0920", ward="WARD-B", prior="WARD-A"),
+    ]
+    between = [
+        p(3, 13, "A08", "0930"),
+        p(3, 14, "A02", "0945", ward="WARD-C", prior="WARD-A"),
+        p(4, 15, "A02", "0945", ward="WARD-C", prior="WARD-A"),
+    ]
+    second_burst = [p(2, 16, "A03", "1000"), p(3, 17, "A03", "1030")]
+    messages = admits + [p5_discharge] + first_burst + between + second_burst
+    fails = lambda batch: [{"file": m[0], "expect": "delivery_fails"} for m in batch]
+    out.append(({
+        "id": "S11",
+        "title": "An outage burst",
+        "summary": "The ward goes down twice while messages for six patients flow: eight deliveries fail, so an incident "
+                   "opens. Each patient's failures form a chain. One transfer is still due, an admission never "
+                   "arrived, a transfer and a discharge failed in order, a transfer was overtaken, a late transfer "
+                   "follows a discharge, and one patient's failures sit between movements that did apply. The plain "
+                   "chains are settled by the scenario catalogue and the site's policy, in order; only the interleaved "
+                   "chain needs the board.",
+        "patients": ["S11-P1", "S11-P2", "S11-P3", "S11-P4", "S11-P5", "S11-P6"],
+        "steps": [{"file": m[0]} for m in admits] + [{"file": p5_discharge[0]}, {"fault": "fail_before_accept"}]
+                 + fails(first_burst) + [{"wait": 5}, {"fault": "off"}] + [{"file": m[0]} for m in between]
+                 + [{"fault": "fail_before_accept"}] + fails(second_burst) + [{"wait": 5}, {"fault": "off"}],
+        "expected": {
+            "incident": True,
+            "modes": ["policy", "rules"],
+            "encounters": [
+                {"encounter": "ENC-1101", "entries": ["E2"], "chain": "single", "path": "automatic", "writes": 1,
+                 "final_state": "admitted", "final_ward": "WARD-B"},
+                {"encounter": "ENC-1102", "entries": ["E4"], "chain": "ordered", "path": "approval", "writes": 2,
+                 "final_state": "discharged", "final_ward": None},
+                {"encounter": "ENC-1103", "entries": ["E1", "E5"], "chain": "interleaved", "path": "board", "writes": 1,
+                 "final_state": "discharged", "final_ward": None},
+                {"encounter": "ENC-1104", "entries": ["E1"], "chain": "single", "path": "automatic", "writes": 0,
+                 "final_state": "admitted", "final_ward": "WARD-C"},
+                {"encounter": "ENC-1105", "entries": ["E6"], "chain": "single", "path": "automatic", "writes": 0,
+                 "final_state": "discharged", "final_ward": None},
+                {"encounter": "ENC-1106", "entries": ["E2"], "chain": "single", "path": "automatic", "writes": 1,
+                 "final_state": "admitted", "final_ward": "WARD-A"},
+            ],
+            "failed_operation_keys": [m[2]["operation_key"] for m in first_burst + second_burst],
+        },
+    }, messages))
 
     return out
 

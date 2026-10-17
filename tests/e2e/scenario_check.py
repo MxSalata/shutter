@@ -14,6 +14,11 @@ changes the ward while its plan waits). The ward's final state is read through t
 --ward-password, default _SYSTEM / SYS). The expected outcomes are in fixtures/scenarios.json. Prints one line per
 scenario and exits 1 when any differs. Standard library only.
 
+A scenario whose expected outcome says "incident" (S11) has several cases: the check follows the incident the run
+opens, approves its plan and its cases' plans with --approve, and compares each encounter's chain (kind, who decided,
+the catalogue entries), its writes and the ward's final state with expected.encounters. Such a scenario names the
+modes it is defined for (expected.modes); other modes are skipped.
+
 It plays scenarios: each run resets the ward. Don't run it on an instance someone else is using.
 """
 import argparse
@@ -100,6 +105,8 @@ def wait_until_idle(operator, timeout):
 
 def play(args, operator, approver, scenario, mode):
     """Plays one scenario in one mode and returns (as_expected, line, outcome)."""
+    if scenario["expected"].get("incident"):
+        return play_incident(args, operator, approver, scenario, mode)
     wait_until_idle(operator, args.timeout)
     before = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     status, started = operator.call("POST", f"/scenarios/{scenario['id']}/run", {"mode": mode}, idempotent=True)
@@ -144,6 +151,108 @@ def play(args, operator, approver, scenario, mode):
     return judge(args, operator, scenario, mode, final)
 
 
+def path_of(chain):
+    """Who released a chain, as expected.encounters names it: automatic, approval, per_chain or board."""
+    return chain.get("policy") if chain.get("decides") == "policy" else chain.get("decides")
+
+
+def play_incident(args, operator, approver, scenario, mode):
+    """Plays a scenario that opens an incident, approves what waits with --approve, and judges every encounter."""
+    expected = scenario["expected"]
+    if mode not in expected.get("modes", [mode]):
+        return True, f"skipped {scenario['id']} {mode}: defined for {', '.join(expected['modes'])}", "not defined"
+    wait_until_idle(operator, args.timeout)
+    before = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    status, started = operator.call("POST", f"/scenarios/{scenario['id']}/run", {"mode": mode}, idempotent=True)
+    if status not in (200, 202):
+        return False, f"DIFFERS {scenario['id']} {mode}: the run was refused: HTTP {status} {started}", "run refused"
+    started_at = max(started.get("startedAt") or "", started.get("queuedAt") or "", before)
+
+    def run_state():
+        _, body = operator.call("GET", "/scenarios")
+        run = (body or {}).get("run") or {}
+        return run.get("state") if run.get("scenario") == scenario["id"] else None
+
+    def newest_incident():
+        _, body = operator.call("GET", "/incidents?limit=5")
+        items = [i for i in (body or {}).get("items", []) if (i.get("openedAt") or "") >= started_at]
+        return items[0]["incidentId"] if items else None
+
+    incident_id = wait(f"{scenario['id']}: an incident", newest_incident, args.timeout)
+    decided = set()
+
+    def closed():
+        _, inc = operator.call("GET", f"/incidents/{urllib.parse.quote(incident_id)}")
+        if not inc:
+            return None
+        if inc.get("state") == "closed":
+            return inc
+        if not args.approve or run_state() == "running":
+            return None
+        if "incident" not in decided and any(not t.get("complete") for t in inc.get("tasks") or []):
+            body = {"planDigest": (inc.get("plan") or {}).get("digest"), "decision": "approve",
+                    "comment": "scenario check"}
+            status, out = approver.call("POST", f"/incidents/{urllib.parse.quote(incident_id)}/approvals", body,
+                                        idempotent=True)
+            if status != 202:
+                raise RuntimeError(f"the incident's approval was refused: HTTP {status} {out}")
+            decided.add("incident")
+        for chain in inc.get("chains") or []:
+            for item in chain.get("items") or []:
+                caseid = item.get("caseId")
+                if caseid in decided or item.get("caseState") != "awaiting_approval":
+                    continue
+                _, c = operator.call("GET", f"/cases/{urllib.parse.quote(caseid)}")
+                _, view = operator.call("GET", f"/cases/{urllib.parse.quote(caseid)}/plan")
+                body = {"decision": "approve", "planDigest": view["plan"]["digest"], "expectedVersion": c["version"],
+                        "comment": "scenario check"}
+                status, out = approver.call("POST", f"/cases/{urllib.parse.quote(caseid)}/approvals", body,
+                                            idempotent=True)
+                if status != 202:
+                    raise RuntimeError(f"the approval of {caseid} was refused: HTTP {status} {out}")
+                decided.add(caseid)
+        return None
+
+    # A burst and its quiet period take longer than one case: allow for every encounter.
+    incident = wait(f"{scenario['id']} {incident_id}: the incident to close", closed,
+                    args.timeout * max(1, len(expected["encounters"])))
+    chains = {c.get("encounterId"): c for c in incident.get("chains") or []}
+    differences, parts = [], []
+    for want in expected["encounters"]:
+        enc = want["encounter"]
+        chain = chains.get(enc)
+        if not chain:
+            differences.append(f"{enc}: no chain")
+            continue
+        items = chain.get("items") or []
+        entries = sorted({i.get("releaseEntry") or i.get("entry") for i in items} - {None, ""})
+        writes = 0
+        for item in items:
+            _, attempts = operator.call("GET", f"/cases/{urllib.parse.quote(item['caseId'])}/attempts")
+            writes += sum(1 for a in attempts or []
+                          if (a.get("attempt") or {}).get("outcome") in ("applied", "already_committed"))
+        ward = ward_encounter(args.url, args.ward_user, args.ward_password, enc)
+        problems = []
+        if chain.get("kind") != want["chain"]:
+            problems.append(f"chain {chain.get('kind')}, expected {want['chain']}")
+        if path_of(chain) != want["path"]:
+            problems.append(f"decided by {path_of(chain)}, expected {want['path']}")
+        if entries != sorted(want["entries"]):
+            problems.append(f"entries {','.join(entries) or 'none'}, expected {','.join(sorted(want['entries']))}")
+        if writes != want["writes"]:
+            problems.append(f"{writes} writes, expected {want['writes']}")
+        if ward.get("state") != want["final_state"] or ward.get("ward") != want["final_ward"]:
+            problems.append(f"the ward holds {ward.get('state')} {ward.get('ward')}, expected {want['final_state']} "
+                            f"{want['final_ward']}")
+        parts.append(f"{enc} {chain.get('kind')} {path_of(chain)} {','.join(entries)} {writes}w {chain.get('state')}")
+        differences += [f"{enc}: {x}" for x in problems]
+    outcome = f"{incident_id} {incident.get('state')}: " + "; ".join(parts)
+    summary = f"{scenario['id']} {mode}: {outcome}"
+    if differences:
+        return False, f"DIFFERS {summary}: " + "; ".join(differences), outcome + " (" + "; ".join(differences) + ")"
+    return True, f"ok      {summary}", outcome
+
+
 def judge(args, operator, scenario, mode, final):
     """Compares a settled case with the scenario's expected outcome; returns (as_expected, line, outcome)."""
     expected = scenario["expected"]
@@ -184,12 +293,16 @@ def judge(args, operator, scenario, mode, final):
 
 def write_markdown(path, modes, rows):
     """The comparison as a table: one row per scenario, its expected outcome, then each mode's outcome."""
-    names = {"board": "Board of specialists", "single": "Single investigator", "rules": "Rules only"}
+    names = {"board": "Board of specialists", "single": "Single investigator", "rules": "Rules only",
+             "policy": "Site policy"}
     lines = ["| Scenario | Expected | " + " | ".join(names[m] for m in modes) + " |",
              "| --- | --- | " + " | ".join("---" for _ in modes) + " |"]
     for row in rows:
         s, e = row["scenario"], row["scenario"]["expected"]
-        expected = f"{e['disposition']}, {'one write' if e['write'] else 'no write'}, ward {e['final_state']} {e['final_ward'] or ''}".strip()
+        if e.get("incident"):
+            expected = "; ".join(f"{x['encounter']} {x['chain']} {x['path']} {x['writes']}w" for x in e["encounters"])
+        else:
+            expected = f"{e['disposition']}, {'one write' if e['write'] else 'no write'}, ward {e['final_state']} {e['final_ward'] or ''}".strip()
         cells = [("as expected: " if ok else "**differs**: ") + outcome for ok, outcome in (row["results"][m] for m in modes)]
         lines.append(f"| {s['id']} {s['title']} | {expected} | " + " | ".join(cells) + " |")
     with open(path, "w", encoding="utf-8") as f:
@@ -200,7 +313,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("scenarios", nargs="+")
     p.add_argument("--url", default="http://localhost:52773")
-    p.add_argument("--modes", default="board", help="comma-separated: board, single, rules")
+    p.add_argument("--modes", default="board", help="comma-separated: board, single, rules, policy")
     p.add_argument("--markdown", help="write the comparison to this file as a Markdown table")
     p.add_argument("--approve", action="store_true", help="approve plans that wait for approval, as the approver")
     p.add_argument("--timeout", type=int, default=240, help="seconds to wait for each case")

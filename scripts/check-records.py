@@ -43,7 +43,8 @@ def case_of(m):
 
 
 FINDINGS_FIELDS = {"disposition", "confidence", "summary", "violations", "unknowns", "evidence_refs"}
-PLAN_FIELDS = {"disposition", "summary", "action", "preconditions", "evidence_refs", "disagreements"}
+PLAN_FIELDS = {"disposition", "summary", "action", "preconditions", "evidence_refs", "disagreements",
+               "catalogue_entry", "outcome", "why"}
 
 
 def unknown_fields(r, allowed):
@@ -101,6 +102,11 @@ def check_plan(r):
             p.append("action.type reconcile needs disposition reconcile")
     if not isinstance(r.get("evidence_refs"), list):
         p.append("evidence_refs must list the evidence used")
+    entry, outcome = r.get("catalogue_entry") or "", r.get("outcome") or ""
+    if entry and outcome != "preferred" and not str(outcome).startswith("alternative:"):
+        p.append("outcome must be preferred or alternative:<n> when a catalogue_entry is named")
+    if not entry and outcome:
+        p.append("outcome needs a catalogue_entry")
     dis = r.get("disagreements")
     if dis is not None:
         if not isinstance(dis, list):

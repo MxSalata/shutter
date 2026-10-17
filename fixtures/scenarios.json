@@ -340,5 +340,183 @@
       "final_ward": "WARD-A",
       "failed_operation_key": "PAS^HOSP^MRN1010^ENC-1010^transfer^2026-10-15T09:20:00Z"
     }
+  },
+  {
+    "id": "S11",
+    "title": "An outage burst",
+    "summary": "The ward goes down twice while messages for six patients flow: eight deliveries fail, so an incident opens. Each patient's failures form a chain. One transfer is still due, an admission never arrived, a transfer and a discharge failed in order, a transfer was overtaken, a late transfer follows a discharge, and one patient's failures sit between movements that did apply. The plain chains are settled by the scenario catalogue and the site's policy, in order; only the interleaved chain needs the board.",
+    "patients": [
+      "S11-P1",
+      "S11-P2",
+      "S11-P3",
+      "S11-P4",
+      "S11-P5",
+      "S11-P6"
+    ],
+    "steps": [
+      {
+        "file": "S11-01-A01.hl7"
+      },
+      {
+        "file": "S11-02-A01.hl7"
+      },
+      {
+        "file": "S11-03-A01.hl7"
+      },
+      {
+        "file": "S11-04-A01.hl7"
+      },
+      {
+        "file": "S11-05-A01.hl7"
+      },
+      {
+        "file": "S11-06-A03.hl7"
+      },
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S11-07-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "file": "S11-08-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "file": "S11-09-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "file": "S11-10-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "file": "S11-11-A01.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "file": "S11-12-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      },
+      {
+        "file": "S11-13-A08.hl7"
+      },
+      {
+        "file": "S11-14-A02.hl7"
+      },
+      {
+        "file": "S11-15-A02.hl7"
+      },
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S11-16-A03.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "file": "S11-17-A03.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      }
+    ],
+    "expected": {
+      "incident": true,
+      "modes": [
+        "policy",
+        "rules"
+      ],
+      "encounters": [
+        {
+          "encounter": "ENC-1101",
+          "entries": [
+            "E2"
+          ],
+          "chain": "single",
+          "path": "automatic",
+          "writes": 1,
+          "final_state": "admitted",
+          "final_ward": "WARD-B"
+        },
+        {
+          "encounter": "ENC-1102",
+          "entries": [
+            "E4"
+          ],
+          "chain": "ordered",
+          "path": "approval",
+          "writes": 2,
+          "final_state": "discharged",
+          "final_ward": null
+        },
+        {
+          "encounter": "ENC-1103",
+          "entries": [
+            "E1",
+            "E5"
+          ],
+          "chain": "interleaved",
+          "path": "board",
+          "writes": 1,
+          "final_state": "discharged",
+          "final_ward": null
+        },
+        {
+          "encounter": "ENC-1104",
+          "entries": [
+            "E1"
+          ],
+          "chain": "single",
+          "path": "automatic",
+          "writes": 0,
+          "final_state": "admitted",
+          "final_ward": "WARD-C"
+        },
+        {
+          "encounter": "ENC-1105",
+          "entries": [
+            "E6"
+          ],
+          "chain": "single",
+          "path": "automatic",
+          "writes": 0,
+          "final_state": "discharged",
+          "final_ward": null
+        },
+        {
+          "encounter": "ENC-1106",
+          "entries": [
+            "E2"
+          ],
+          "chain": "single",
+          "path": "automatic",
+          "writes": 1,
+          "final_state": "admitted",
+          "final_ward": "WARD-A"
+        }
+      ],
+      "failed_operation_keys": [
+        "PAS^HOSP^MRN1101^ENC-1101^transfer^2026-10-15T09:20:00Z",
+        "PAS^HOSP^MRN1102^ENC-1102^transfer^2026-10-15T09:20:00Z",
+        "PAS^HOSP^MRN1103^ENC-1103^transfer^2026-10-15T09:20:00Z",
+        "PAS^HOSP^MRN1104^ENC-1104^transfer^2026-10-15T09:20:00Z",
+        "PAS^HOSP^MRN1106^ENC-1106^admit^2026-10-15T09:00:00Z",
+        "PAS^HOSP^MRN1105^ENC-1105^transfer^2026-10-15T09:20:00Z",
+        "PAS^HOSP^MRN1102^ENC-1102^discharge^2026-10-15T10:00:00Z",
+        "PAS^HOSP^MRN1103^ENC-1103^discharge^2026-10-15T10:30:00Z"
+      ]
+    }
   }
 ]

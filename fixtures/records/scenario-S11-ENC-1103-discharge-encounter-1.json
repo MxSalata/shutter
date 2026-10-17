@@ -1,0 +1,45 @@
+{
+ "key": "scenario:S11:ENC-1103:discharge|encounter|1",
+ "agentClass": "Interlock.Agent.Encounter",
+ "configVersion": "1",
+ "memberCode": "encounter",
+ "snapshotDigest": "",
+ "correlationKey": "scenario:S11:ENC-1103:discharge",
+ "model": "fixture",
+ "response": {
+  "status": "ok",
+  "agent_class": "Interlock.Agent.Encounter",
+  "config_version": "1",
+  "mode": "record",
+  "model": "fixture",
+  "provider_config": "",
+  "started_at": "2026-10-16T10:00:00Z",
+  "duration_ms": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cache_read_tokens": 0,
+  "cache_creation_tokens": 0,
+  "iterations": 0,
+  "tool_calls": 6,
+  "session_id": "",
+  "result": {
+   "disposition": "resend",
+   "confidence": 0.9,
+   "summary": "The receiver holds ENC-1103 admitted in WARD-C at version 3 (admit 09:00, update 09:30, transfer 09:45), with no receipt for the 10:30 discharge and nothing applied after 10:30. A discharge is allowed from admitted (ELS-1.1), and the chain's earlier failed transfer was superseded, so the discharge is still due.",
+   "violations": [],
+   "unknowns": [],
+   "evidence_refs": [
+    "ward_state",
+    "receipt",
+    "operation"
+   ]
+  },
+  "content": "",
+  "error": "",
+  "record_id": ""
+ },
+ "transcript": "",
+ "toolCalls": "[{\"name\": \"GetSnapshot\"}, {\"name\": \"GetWardState\"}, {\"name\": \"GetReceipt\"}, {\"name\": \"GetTimeline\"}, {\"name\": \"search_lifecycle\"}, {\"name\": \"SubmitFindings\"}]",
+ "recordedAt": "2026-10-16T10:00:00Z",
+ "label": "Hand-written fixture standing in for a live recording; replaced when the live agents run"
+}

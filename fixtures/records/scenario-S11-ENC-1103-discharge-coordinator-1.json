@@ -1,0 +1,56 @@
+{
+ "key": "scenario:S11:ENC-1103:discharge|coordinator|1",
+ "agentClass": "Interlock.Agent.Coordinator",
+ "configVersion": "1",
+ "memberCode": "coordinator",
+ "snapshotDigest": "",
+ "correlationKey": "scenario:S11:ENC-1103:discharge",
+ "model": "fixture",
+ "response": {
+  "status": "ok",
+  "agent_class": "Interlock.Agent.Coordinator",
+  "config_version": "1",
+  "mode": "record",
+  "model": "fixture",
+  "provider_config": "",
+  "started_at": "2026-10-16T10:00:00Z",
+  "duration_ms": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cache_read_tokens": 0,
+  "cache_creation_tokens": 0,
+  "iterations": 0,
+  "tool_calls": 2,
+  "session_id": "",
+  "result": {
+   "disposition": "resend",
+   "summary": "The 10:30 discharge of ENC-1103 was never committed (no receipt), nothing later was applied, and the encounter is admitted in WARD-C at version 3. Resend the discharge unchanged, conditional on version 3, after a rehearsal and an approval; the superseded 09:20 transfer stays unsent.",
+   "action": {
+    "type": "resend",
+    "operation_key": "PAS^HOSP^MRN1103^ENC-1103^discharge^2026-10-15T10:30:00Z",
+    "expected_version": 3
+   },
+   "preconditions": [
+    "No receipt for the discharge key at dispatch",
+    "The receiver still holds ENC-1103 admitted in WARD-C at version 3",
+    "The rehearsal says the discharge would apply"
+   ],
+   "evidence_refs": [
+    "operation",
+    "receipt",
+    "ward_state"
+   ],
+   "disagreements": [],
+   "catalogue_entry": "E5",
+   "outcome": "preferred",
+   "why": "In an interleaved chain the latest item still due is resent; the earlier transfer was overtaken."
+  },
+  "content": "",
+  "error": "",
+  "record_id": ""
+ },
+ "transcript": "",
+ "toolCalls": "[{\"name\": \"search_playbooks\"}, {\"name\": \"SubmitPlan\"}]",
+ "recordedAt": "2026-10-16T10:00:00Z",
+ "label": "Hand-written fixture standing in for a live recording; replaced when the live agents run"
+}

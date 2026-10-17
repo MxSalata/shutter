@@ -1,0 +1,46 @@
+{
+ "key": "scenario:S11:ENC-1103:discharge|impact|1",
+ "agentClass": "Interlock.Agent.Impact",
+ "configVersion": "1",
+ "memberCode": "impact",
+ "snapshotDigest": "",
+ "correlationKey": "scenario:S11:ENC-1103:discharge",
+ "model": "fixture",
+ "response": {
+  "status": "ok",
+  "agent_class": "Interlock.Agent.Impact",
+  "config_version": "1",
+  "mode": "record",
+  "model": "fixture",
+  "provider_config": "",
+  "started_at": "2026-10-16T10:00:00Z",
+  "duration_ms": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cache_read_tokens": 0,
+  "cache_creation_tokens": 0,
+  "iterations": 0,
+  "tool_calls": 5,
+  "session_id": "",
+  "result": {
+   "disposition": "resend",
+   "confidence": 0.85,
+   "summary": "A discharge at version 3 frees the patient's bed in WARD-C and closes the encounter, as the PAS recorded at 10:30. Until it is applied the bed board shows an occupied bed and downstream systems keep the patient on the ward. The write is bounded to this encounter.",
+   "violations": [],
+   "unknowns": [
+    "Consumers downstream of the ward system are not in the route inventory"
+   ],
+   "evidence_refs": [
+    "ward_state",
+    "route"
+   ]
+  },
+  "content": "",
+  "error": "",
+  "record_id": ""
+ },
+ "transcript": "",
+ "toolCalls": "[{\"name\": \"GetSnapshot\"}, {\"name\": \"GetRoute\"}, {\"name\": \"GetWardState\"}, {\"name\": \"search_effects\"}, {\"name\": \"SubmitFindings\"}]",
+ "recordedAt": "2026-10-16T10:00:00Z",
+ "label": "Hand-written fixture standing in for a live recording; replaced when the live agents run"
+}
