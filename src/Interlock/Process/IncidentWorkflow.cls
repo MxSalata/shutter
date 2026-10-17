@@ -376,6 +376,9 @@ Method OnPoll(incident As Interlock.Store.Incident) As %Status
     }
     Set item = ##class(Interlock.Store.ChainItem).%OpenId(..CurrentItemId), chain = ##class(Interlock.Store.Chain).%OpenId(..CurrentChainId)
     Set item.ClosedAt = ##class(Interlock.Util.Time).NowUTC()
+    // The match on the fresh evidence, beside the chain-time one the plan was built on.
+    Set rcat = ##class(Interlock.Store.IncidentDetector).CatalogueOf(case)
+    If $ISOBJECT(rcat) Set item.ReleaseEntry = ##class(Interlock.Util.Json).Str(rcat, "entry"), item.ReleaseOutcome = ##class(Interlock.Util.Json).Str(rcat, "outcome")
     If case.State = "resolved" {
         Set item.State = "resolved", item.VerifiedVersion = ..VersionAfter(case, item)
         Set sc = item.%Save()

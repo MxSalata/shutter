@@ -190,6 +190,43 @@ Method Approvals() As %DynamicArray
     Quit out
 }
 
+/// Close an incident whose workflow is gone (it died, or the production was reset): the chains still open are
+/// stopped and the cases it holds are failed with the reason, so nothing waits forever.
+Method Abandon(why As %String, actor As %String = "operator") As %Status
+{
+    Set sc = $$$OK
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Interlock_Store.Chain WHERE Incident = ? AND State IN ('pending', 'awaiting_approval', 'approved', 'releasing')", ..%Id())
+    While rs.%Next() {
+        Set ch = ##class(Interlock.Store.Chain).%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(ch)
+        Set ch.State = "stopped", ch.Outcome = "Abandoned: " _ why
+        Set sc = ch.%Save()
+        Quit:$$$ISERR(sc)
+    }
+    Quit:$$$ISERR(sc) sc
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Interlock_Store.""Case"" WHERE Incident = ? AND State NOT IN ('resolved', 'blocked', 'escalated', 'failed')", ..%Id())
+    While rs.%Next() {
+        Set c = ##class(Interlock.Store.Case).%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(c)
+        Set c.Headline = "Abandoned with incident " _ ..IncidentId _ ": " _ why
+        Set sc = c.Transition("failed", "Abandoned with incident " _ ..IncidentId _ ": " _ why, actor, "incident:" _ ..IncidentId)
+        Quit:$$$ISERR(sc)
+    }
+    Quit:$$$ISERR(sc) sc
+    Set ..Summary = "Abandoned: " _ why
+    Quit ..Transition("closed", "Abandoned by " _ actor _ ": " _ why, actor)
+}
+
+/// Abandon an incident by its public id (for the terminal and SQL); returns the status text.
+ClassMethod AbandonById(id As %String, why As %String, actor As %String = "operator") As %String [ SqlProc ]
+{
+    Set inc = ..ByIncidentId(id)
+    If '$ISOBJECT(inc) Quit "no incident " _ id
+    If inc.State = "closed" Quit id _ " is already closed"
+    Set sc = inc.Abandon(why, actor)
+    Quit $SELECT($$$ISOK(sc): id _ " closed", 1: $SYSTEM.Status.GetErrorText(sc))
+}
+
 Method Events() As %DynamicArray
 {
     Set out = []

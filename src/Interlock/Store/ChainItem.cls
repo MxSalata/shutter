@@ -26,6 +26,11 @@ Property ExpectedVersion As %String(MAXLEN = 20);
 /// The receiver's version after this item's case resolved: the next item's expectation.
 Property VerifiedVersion As %String(MAXLEN = 20);
 
+/// The entry and outcome the released case matched on its fresh evidence (the Entry above is the chain-time match).
+Property ReleaseEntry As %String(MAXLEN = 16);
+
+Property ReleaseOutcome As %String(MAXLEN = 32);
+
 /// pending, released, resolved, blocked, escalated, failed, stopped (never released: the chain stopped before it).
 Property State As %String(MAXLEN = 16) [ InitialExpression = "pending" ];
 
@@ -74,6 +79,7 @@ Method ToObject() As %DynamicObject
     If ..ExpectedVersion '= "" { Do o.%Set("expectedVersion", +..ExpectedVersion, "number") } Else { Do o.%Set("expectedVersion", "", "null") }
     If ..VerifiedVersion '= "" { Do o.%Set("verifiedVersion", +..VerifiedVersion, "number") } Else { Do o.%Set("verifiedVersion", "", "null") }
     Set o.state = ..State, o.caseState = ..Case.State, o.caseHeadline = ..Case.Headline
+    If ..ReleaseEntry '= "" Set o.releaseEntry = ..ReleaseEntry, o.releaseOutcome = ..ReleaseOutcome
     If ..ReleasedAt '= "" Set o.releasedAt = ..ReleasedAt
     If ..ClosedAt '= "" Set o.closedAt = ..ClosedAt
     Quit o
@@ -117,6 +123,12 @@ Storage Default
 </Value>
 <Value name="12">
 <Value>ClosedAt</Value>
+</Value>
+<Value name="13">
+<Value>ReleaseEntry</Value>
+</Value>
+<Value name="14">
+<Value>ReleaseOutcome</Value>
 </Value>
 </Data>
 <DataLocation>^Interlock.Store.ChainItemD</DataLocation>
