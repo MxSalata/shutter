@@ -21,7 +21,7 @@ CONDITIONS = {
     "receiver_answer": {"unavailable", "timeout", "duplicate", "version_conflict", "refused", "none"},
     "receipt": {"present", "absent", "unreadable"},
     "later_applied": {"none", "transfer", "discharge", "update"},
-    "encounter_state": {"admitted", "discharged", "unknown"},
+    "encounter_state": {"admitted", "discharged", "not_found", "unknown"},
     "transition": {"allowed", "invalid", "unknown"},
     "patient_match": {"yes", "no", "unknown"},
     "simultaneous_sources": {"yes", "no"},

@@ -25,7 +25,8 @@ ClassMethod Conditions(case As Interlock.Store.Case, summary As %DynamicObject, 
     // encounter_state and the identity
     Set ward = summary.%Get("ward_state"), wstatus = $CLASSMETHOD(json, "Str", summary, "ward_state_http_status")
     Set state = $SELECT((wstatus = 200) && $ISOBJECT(ward): $CLASSMETHOD(json, "Str", ward, "state"), 1: "")
-    Set c."encounter_state" = $SELECT(state = "": "unknown", 1: state)
+    // A 404 is its own state: the receiver answered, and does not know the encounter (C6).
+    Set c."encounter_state" = $SELECT(wstatus = 404: "not_found", state = "": "unknown", 1: state)
     Set op = summary.%Get("operation")
     If wstatus = 200 {
         Set same = ($CLASSMETHOD(json, "Str", ward, "patient_id") = case.PatientId) && ($CLASSMETHOD(json, "Str", ward, "patient_id_authority") = case.PatientIdAuthority)
