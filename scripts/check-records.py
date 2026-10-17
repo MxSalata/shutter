@@ -7,7 +7,8 @@ coordinator and the generalist). Mirrors the schema classes' Check methods.
 
 Exit code 1 when any file has a problem. With --scenarios it also lists, per scenario in that file, the
 members whose round-1 recording is missing: per case when the keys name the encounter and event
-(scenario:S11:ENC-1101:transfer|member|cfg), per scenario for the older keys without them (scenario:S2|member|cfg).
+(scenario:S11:ENC-1101:transfer|member|cfg), per scenario for the older keys without them (scenario:S2|member|cfg). A
+scenario that opens an incident needs recordings only for the encounters whose chain the board decides.
 """
 import argparse
 import glob
@@ -192,8 +193,19 @@ def main():
             scenarios = json.load(f)
         board = {"conformance", "encounter", "impact", "coordinator"}
         for s in scenarios:
-            # every case that has recordings needs a full set; a scenario with none at all is missing the whole board
-            cases = sorted((c for c in present if c[0] == s["id"]), key=lambda c: (c[1] or "", c[2] or "")) or [(s["id"], None, None)]
+            expected = s.get("expected") or {}
+            if expected.get("incident"):
+                # an incident's cases need recordings only where the board decides their chain (expected path "board")
+                encounters = [e["encounter"] for e in expected.get("encounters", []) if e.get("path") == "board"]
+                if not encounters:
+                    print(f"{s['id']}: the board decides none of its cases")
+                    continue
+                cases = sorted((c for c in present if c[0] == s["id"] and c[1] in encounters),
+                               key=lambda c: (c[1] or "", c[2] or ""))
+                cases += [(s["id"], e, None) for e in encounters if not any(c[1] == e for c in cases)]
+            else:
+                # every case that has recordings needs a full set; a scenario with none at all is missing the whole board
+                cases = sorted((c for c in present if c[0] == s["id"]), key=lambda c: (c[1] or "", c[2] or "")) or [(s["id"], None, None)]
             for case in cases:
                 have = present.get(case, set())
                 missing = sorted(board - have)
