@@ -44,7 +44,7 @@ Method Run(spec As Interlock.Bridge.RunSpec, ByRef response As Interlock.Bridge.
                 Set trace.RunKey = spec.EnsMessageId
                 Do agent.ToolManager.SetAuditPolicy(trace)
                 // The session, with prompt caching on, and the monitor.
-                Set config = {"max_tokens": 4096, "cache": {"enabled": true, "cache_system_prompt": true, "cache_tool_definitions": true}}
+                Set config = {"max_tokens": 16000, "cache": {"enabled": true, "cache_system_prompt": true, "cache_tool_definitions": true}}
                 Set session = agent.CreateSession(config)
                 Set monitor = ##class(Interlock.Bridge.Monitor).%New()
                 Set monitor.TokenBudget = +spec.TokenBudget

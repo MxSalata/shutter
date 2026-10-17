@@ -59,6 +59,7 @@ XData ProductionDefinition
     <Setting Target="Adapter" Name="ResponseTimeout">15</Setting>
     <Setting Target="Adapter" Name="ConnectTimeout">5</Setting>
     <Setting Target="Host" Name="FailureTimeout">0</Setting>
+    <Setting Target="Host" Name="FreshSeconds">3600</Setting>
   </Item>
   <Item Name="Agent Conformance" Category="Board" ClassName="Interlock.Bridge.Operation.Agent" PoolSize="1" Enabled="true" Foreground="false" Comment="Conformance specialist" LogTraceEvents="true" Schedule="">
     <Setting Target="Host" Name="AgentClass">Interlock.Agent.Conformance</Setting>

@@ -124,6 +124,7 @@ ClassMethod SeedFromFile(path As %String, Output count As %Integer) As %Status
 /// Seed (replace) the catalogue from JSON text, for tests and tools. Returns the count or the error.
 ClassMethod SeedFromJSON(json As %String) As %String [ SqlProc ]
 {
+    If '$SYSTEM.Security.Check("Interlock_Approve", "USE") Quit "Interlock_Approve is required to replace the catalogue"
     Set path = ##class(%File).NormalizeDirectory($SYSTEM.Util.ManagerDirectory() _ "interlock") _ "catalogue-seed.json"
     Set stream = ##class(%Stream.FileCharacter).%New()
     Set stream.TranslateTable = "UTF8"

@@ -46,6 +46,7 @@ ClassMethod TasksFor(caseId As %String) As %DynamicArray
 /// task id, or an error.
 ClassMethod Decide(caseId As %String, action As %String = "Approve", user As %String = "approver", comment As %String = "") As %String [ SqlProc ]
 {
+    If '$SYSTEM.Security.Check("Interlock_Approve", "USE") Quit "{""error"": ""Interlock_Approve is required to decide a task""}"
     Set task = ..OpenTaskFor(caseId)
     If '$ISOBJECT(task) Quit "{""error"": ""no open approval task for " _ caseId _ """}"
     Set action = $SELECT($ZCONVERT(action, "L") = "reject": "Reject", 1: "Approve")

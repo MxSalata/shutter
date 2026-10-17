@@ -79,6 +79,7 @@ ClassMethod Match(conditions As %DynamicObject, facts As %DynamicObject = "") As
         If ..Holds(e.%Get("pattern"), conditions) {
             Set m = {}
             Set m.id = e.id, m.version = e.version, m.title = e.title, m.decides = e.decides
+            If e.%IsDefined("prose") Set m.prose = e.prose
             Set m.preferred = e.%Get("preferred"), m.alternatives = e.%Get("alternatives")
             Do matches.%Push(m)
         }

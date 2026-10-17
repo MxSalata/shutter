@@ -386,6 +386,7 @@ ClassMethod StartProduction() As %Status
 /// demo instance. Refused elsewhere. Returns the number of tables emptied or the error.
 ClassMethod PurgeStore() As %String [ SqlProc ]
 {
+    If '$SYSTEM.Security.Check("Interlock_Operate", "USE") Quit "Interlock_Operate is required"
     If '$GET(^Interlock.Config("demo")) Quit "ERROR: not a demo instance"
     Set n = 0
     For cls = "Interlock.Store.Verification", "Interlock.Store.ExecutionAttempt", "Interlock.Store.Approval", "Interlock.Store.Rehearsal", "Interlock.Store.GateDecision", "Interlock.Store.Plan", "Interlock.Store.Finding", "Interlock.Store.AgentRun", "Interlock.Store.SnapshotItem", "Interlock.Store.Snapshot", "Interlock.Store.CaseEvent", "Interlock.Store.Case", "Interlock.Store.Idempotency", "Interlock.Bridge.ToolCall" {
@@ -402,6 +403,7 @@ ClassMethod PurgeStore() As %String [ SqlProc ]
 /// or the error.
 ClassMethod RestartProduction() As %String [ SqlProc ]
 {
+    If '$SYSTEM.Security.Check("%Ens_ProductionRun", "USE") Quit "%Ens_ProductionRun is required"
     Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)
     If $$$ISERR(sc) Quit $SYSTEM.Status.GetErrorText(sc)
     If state = 1 {
@@ -601,7 +603,7 @@ ClassMethod EnsureSecretResource() As %Status [ Private ]
         New $NAMESPACE
         Set $NAMESPACE = "%SYS"
         If '##class(Security.Resources).Exists("Interlock_Secrets") {
-            Set sc = ##class(Security.Resources).Create("Interlock_Secrets", "Interlock: the provider key in the wallet", "U")
+            Set sc = ##class(Security.Resources).Create("Interlock_Secrets", "Interlock: the provider key in the wallet", "")
         }
     } Catch ex {
         Set sc = ex.AsStatus()
