@@ -37,6 +37,8 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/library" Method="GET" Call="Library"/>
   <Route Url="/library/:code" Method="PATCH" Call="LibraryPatch"/>
   <Route Url="/settings" Method="GET" Call="Settings"/>
+  <Route Url="/site-profile" Method="GET" Call="SiteProfileGet"/>
+  <Route Url="/site-profile" Method="PUT" Call="SiteProfilePut"/>
   <Route Url="/costs" Method="GET" Call="Costs"/>
 </Routes>
 }
@@ -285,7 +287,7 @@ ClassMethod ScenarioRun(id As %String) As %Status
     Set body = ##class(Interlock.Util.Json).Parse(bodyText, .psc)
     If '$ISOBJECT(body) Set body = {}
     Set mode = ##class(Interlock.Util.Json).Str(body, "mode", "board")
-    If '$LISTFIND($LISTBUILD("board", "single", "rules"), mode) Quit ..Fail("400 Bad Request", "bad_request", "mode must be board, single or rules")
+    If '$LISTFIND($LISTBUILD("board", "single", "rules", "policy"), mode) Quit ..Fail("400 Bad Request", "bad_request", "mode must be board, single, rules or policy")
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
     If ..PlayerEnabled() {
@@ -679,6 +681,32 @@ ClassMethod LibraryPatch(code As %String) As %Status
     Set sc = m.%Save()
     If $$$ISERR(sc) Quit ..Fail("500 Internal Server Error", "save_failed", $SYSTEM.Status.GetErrorText(sc))
     Quit ..Json(..Project(m))
+}
+
+/// The current site profile (CONTRACTS 6.4) with its version and who set it.
+ClassMethod SiteProfileGet() As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set o = {}
+    Set o.profile = ##class(Interlock.Store.SiteProfile).Current()
+    Set row = ##class(Interlock.Store.SiteProfile).Row()
+    Set o.version = $SELECT($ISOBJECT(row): row.Version, 1: 0)
+    Set o.source = $SELECT($ISOBJECT(row): row.Source, 1: "defaults"), o.updatedAt = $SELECT($ISOBJECT(row): row.UpdatedAt, 1: ""), o.updatedBy = $SELECT($ISOBJECT(row): row.UpdatedBy, 1: "")
+    Set o.catalogueEntries = ##class(Interlock.Catalogue.Entry).Count()
+    Quit ..Json(o)
+}
+
+/// Replace the site profile: the questionnaire's answers, by an approver.
+ClassMethod SiteProfilePut() As %Status
+{
+    If '..Allow("Interlock_Approve", 1) Quit $$$OK
+    Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    Set body = ##class(Interlock.Util.Json).Parse(bodyText, .psc)
+    If '$ISOBJECT(body) || $$$ISERR(psc) Quit ..Fail("400 Bad Request", "bad_request", "The body must be the profile as a JSON object")
+    If '$ISOBJECT(body.%Get("policy")) || '$ISOBJECT(body.%Get("receivers")) Quit ..Fail("400 Bad Request", "bad_request", "The profile needs receivers and policy (CONTRACTS 6.4)")
+    Set sc = ##class(Interlock.Store.SiteProfile).Store(body.%ToJSON(), "api", $USERNAME)
+    If $$$ISERR(sc) Quit ..Fail("500 Internal Server Error", "store_failed", $SYSTEM.Status.GetErrorText(sc))
+    Quit ..SiteProfileGet()
 }
 
 ClassMethod Settings() As %Status

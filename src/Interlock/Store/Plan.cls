@@ -37,6 +37,14 @@ Property DisagreementsJSON As %String(%JSONFIELDNAME = "disagreements", MAXLEN =
 
 Property Summary As %String(%JSONFIELDNAME = "summary", MAXLEN = 4000);
 
+/// The catalogue entry the plan follows (E1, E2, ...), or "".
+Property CatalogueEntry As %String(%JSONFIELDNAME = "catalogueEntry", MAXLEN = 16);
+
+/// "preferred" or "alternative:<n>", or "".
+Property Outcome As %String(%JSONFIELDNAME = "outcome", MAXLEN = 32);
+
+Property Why As %String(%JSONFIELDNAME = "why", MAXLEN = 1000);
+
 /// The whole plan as submitted and validated.
 Property Json As %String(%JSONFIELDNAME = "plan", MAXLEN = "");
 
@@ -66,6 +74,9 @@ ClassMethod Create(case As Interlock.Store.Case, snapshot As Interlock.Store.Sna
     Set p.EvidenceRefsJSON = ##class(Interlock.Util.Json).Text(plan.%Get("evidence_refs"))
     Set p.DisagreementsJSON = ##class(Interlock.Util.Json).Text(plan.%Get("disagreements"))
     Set p.Summary = $EXTRACT(##class(Interlock.Util.Json).Str(plan, "summary"), 1, 4000)
+    Set p.CatalogueEntry = ##class(Interlock.Util.Json).Str(plan, "catalogue_entry")
+    Set p.Outcome = ##class(Interlock.Util.Json).Str(plan, "outcome")
+    Set p.Why = $EXTRACT(##class(Interlock.Util.Json).Str(plan, "why"), 1, 1000)
     Set p.CreatedAt = ##class(Interlock.Util.Time).NowUTC()
     Set p.CreatedBy = createdBy
     // The digest covers the plan, its version and the snapshot it was made from.
@@ -144,6 +155,15 @@ Storage Default
 </Value>
 <Value name="17">
 <Value>CreatedBy</Value>
+</Value>
+<Value name="18">
+<Value>CatalogueEntry</Value>
+</Value>
+<Value name="19">
+<Value>Outcome</Value>
+</Value>
+<Value name="20">
+<Value>Why</Value>
 </Value>
 </Data>
 <DataLocation>^Interlock.Store.PlanD</DataLocation>

@@ -43,6 +43,14 @@ Property VerifyTarget As %String(MAXLEN = 128) [ InitialExpression = "Verifier" 
 /// Seconds an approval stays valid.
 Property ApprovalValidSeconds As %Integer [ InitialExpression = 3600 ];
 
+/// The site's policy for this case when the catalogue settled it: automatic, approval, per_chain or board.
+Property Policy As %String(MAXLEN = 16);
+
+/// The catalogue entry and outcome the policy path followed.
+Property CatalogueEntry As %String(MAXLEN = 16);
+
+Property CatalogueOutcome As %String(MAXLEN = 32);
+
 /// How long a new case waits before the evidence is collected, so that messages still in flight
 /// for the encounter (a later transfer, a retry from the source) are in the snapshot. 0 collects at once.
 Property SettleSeconds As %Integer [ InitialExpression = 15 ];
@@ -134,7 +142,16 @@ Method OnEvidence(case As Interlock.Store.Case, result As Interlock.Msg.Evidence
     If '$ISOBJECT(result) || (result.Error '= "") Quit $$$ERROR($$$GeneralError, "Evidence failed: " _ $SELECT($ISOBJECT(result): result.Error, 1: "no result"))
     Set sc = case.Transition("investigating", "Evidence collected: snapshot " _ result.SnapshotId _ ", digest " _ $EXTRACT(result.Digest, 1, 19), "system", "snapshot:" _ result.SnapshotId)
     Quit:$$$ISERR(sc) sc
-    Set members = ##class(Interlock.Store.BoardMember).MembersForMode(..Mode)
+    // In policy mode the catalogue's match settles the easy cases (CONTRACTS 6.3); the rest go to the board.
+    If ..Mode = "policy" {
+        Set summary = ##class(Interlock.Util.Json).Parse(result.SummaryJSON, .psc)
+        Set cat = $SELECT($ISOBJECT(summary): summary.%Get("catalogue"), 1: "")
+        Set decision = $SELECT($ISOBJECT(cat): ##class(Interlock.Util.Json).Str(cat, "decision"), 1: "")
+        If decision = "policy" Quit ..PolicyPath(case, summary, cat)
+        If decision = "person" Quit ..PersonByCatalogue(case, cat)
+        Do case.Note("note", "Catalogue: " _ $SELECT(decision = "": "no result", 1: decision) _ "; the board decides", "system")
+    }
+    Set members = ##class(Interlock.Store.BoardMember).MembersForMode($SELECT(..Mode = "policy": "board", 1: ..Mode))
     If members.%Size() = 0 Quit ..RulesOnly(case)
     Set pending = []
     Set iter = members.%GetIterator()
@@ -164,7 +181,9 @@ ClassMethod BuildAgentRequest(case As Interlock.Store.Case, m As Interlock.Store
     Set req.TerminalTool = m.TerminalTool
     Set req.ResultClass = $SELECT($ZCONVERT(m.TerminalTool, "L") [ "plan": "Interlock.Schema.Plan", 1: "Interlock.Schema.Findings")
     Set req.ConfigVersion = m.ConfigVersion
-    If case.Scenario '= "" Set req.RecordKey = "scenario:" _ case.Scenario _ "|" _ m.Code _ "|" _ m.ConfigVersion _ $SELECT(replans > 0: "|round" _ (replans + 1), 1: "")
+    // The key names the case within its scenario (several cases can share one); the replay runner also looks up
+    // the older form without the encounter and event.
+    If case.Scenario '= "" Set req.RecordKey = "scenario:" _ case.Scenario _ ":" _ case.EncounterId _ ":" _ case.Event _ "|" _ m.Code _ "|" _ m.ConfigVersion _ $SELECT(replans > 0: "|round" _ (replans + 1), 1: "")
     Set context = {}
     Set context."case_id" = case.CaseId
     Set context.evidence = ##class(%DynamicObject).%FromJSON(summaryJSON)
@@ -242,6 +261,83 @@ Method OnCoordinator(case As Interlock.Store.Case, result As Interlock.Bridge.Ms
 
 /// Rules-only mode: the plan is a resend of the case's own operation at the observed version,
 /// and the gate alone decides.
+/// The policy path: one catalogue entry matched and decides by policy. The plan follows the entry's preferred
+/// outcome; the site profile's policy for the receiver's tier and the chain kind says whether it is released
+/// automatically (no Workflow task; still gated, rehearsed and verified) or after an approval. A policy of board
+/// sends the case to the board after all.
+Method PolicyPath(case As Interlock.Store.Case, summary As %DynamicObject, cat As %DynamicObject) As %Status
+{
+    Set json = "Interlock.Util.Json"
+    Set entry = $CLASSMETHOD(json, "Str", cat, "entry"), outcome = $CLASSMETHOD(json, "Str", cat, "outcome")
+    Set tier = ##class(Interlock.Store.SiteProfile).TierOf(..WardTarget)
+    Set kind = $CLASSMETHOD(json, "Str", cat.%Get("conditions"), "chain", "single")
+    Set ..Policy = ##class(Interlock.Store.SiteProfile).Policy(tier, kind)
+    Set ..CatalogueEntry = entry, ..CatalogueOutcome = "preferred"
+    Set m = cat.%Get("matches").%Get(0)
+    Set title = $CLASSMETHOD(json, "Str", m, "title"), why = $CLASSMETHOD(json, "Str", m.%Get("preferred"), "why")
+    Set profile = ##class(Interlock.Store.SiteProfile).Current()
+    Do case.Note("note", "Catalogue " _ entry _ " (" _ title _ ") matched alone: " _ outcome _ ". Site policy for tier " _ tier _ ", " _ kind _ ": " _ ..Policy _ " (profile v" _ $CLASSMETHOD(json, "Str", profile, "version", 0) _ ")", "system")
+    If ..Policy = "board" {
+        Set members = ##class(Interlock.Store.BoardMember).MembersForMode("board")
+        Set pending = []
+        Set iter = members.%GetIterator()
+        While iter.%GetNext(.i, .code) {
+            Set mem = ##class(Interlock.Store.BoardMember).ByCode(code)
+            Continue:'$ISOBJECT(mem)
+            Set sc = ..SendRequestAsync(mem.ConfigItem, ..AgentRequestFor(case, mem, summary.%ToJSON(), ""), 1, "member:" _ code)
+            Quit:$$$ISERR(sc)
+            Do pending.%Push(code)
+        }
+        Set ..PendingJSON = pending.%ToJSON()
+        Do case.Note("note", "Board convened by site policy: " _ $REPLACE($REPLACE(pending.%ToJSON(), "[", ""), "]", ""), "system")
+        Quit $$$OK
+    }
+    Set ward = summary.%Get("ward_state")
+    Set version = $SELECT($ISOBJECT(ward): $CLASSMETHOD(json, "Str", ward, "version", 0), 1: 0)
+    Set plan = {}
+    Set plan."catalogue_entry" = entry, plan.outcome = "preferred", plan.why = why
+    Set plan."evidence_refs" = ["catalogue", "ward_state", "receipt", "timeline", "route"], plan.disagreements = []
+    Set action = {}
+    If (outcome = "resend") || (outcome = "resend_chain") || (outcome = "resend_latest") {
+        Set plan.disposition = "resend"
+        Set action.type = "resend", action."operation_key" = case.OperationKey, action."expected_version" = +version
+        Set action."payload_digest" = $CLASSMETHOD(json, "Str", summary.%Get("operation"), "payload_digest")
+        Set plan.preconditions = [("The receiver's version is still " _ version _ " at dispatch"), "No later event for the encounter before dispatch"]
+        Set plan.summary = "Catalogue " _ entry _ ", " _ title _ ": resend the operation unchanged at receiver version " _ version _ ", by site policy (" _ ..Policy _ ")"
+    } ElseIf outcome = "reconcile" {
+        Set plan.disposition = "reconcile"
+        Set action.type = "reconcile", action."operation_key" = case.OperationKey
+        Set plan.preconditions = [], plan.summary = "Catalogue " _ entry _ ", " _ title _ ": the receiver holds a receipt; reconcile, nothing is sent"
+    } ElseIf outcome = "none" {
+        Set plan.disposition = "superseded"
+        Set action.type = "none"
+        Set plan.preconditions = [], plan.summary = "Catalogue " _ entry _ ", " _ title _ ": nothing is sent"
+    } Else {
+        Set plan.disposition = "escalate"
+        Set action.type = "none"
+        Set plan.preconditions = [], plan.summary = "Catalogue " _ entry _ ", " _ title _ ": " _ outcome _ " needs a person"
+    }
+    Set plan.action = action
+    Quit ..AdoptPlan(case, plan, "policy:" _ entry)
+}
+
+/// One entry matched and it decides by a person: an escalate plan naming it, through the gate, to escalated.
+Method PersonByCatalogue(case As Interlock.Store.Case, cat As %DynamicObject) As %Status
+{
+    Set json = "Interlock.Util.Json"
+    Set entry = $CLASSMETHOD(json, "Str", cat, "entry")
+    Set m = cat.%Get("matches").%Get(0)
+    Set title = $CLASSMETHOD(json, "Str", m, "title"), why = $CLASSMETHOD(json, "Str", m.%Get("preferred"), "why")
+    Set ..CatalogueEntry = entry, ..CatalogueOutcome = "preferred", ..Policy = "person"
+    Do case.Note("note", "Catalogue " _ entry _ " (" _ title _ ") matched alone and asks for a person", "system")
+    Set plan = {}
+    Set plan.disposition = "escalate", plan.action = {"type": "none"}
+    Set plan."catalogue_entry" = entry, plan.outcome = "preferred", plan.why = why
+    Set plan.summary = "Catalogue " _ entry _ ", " _ title _ ": " _ why
+    Set plan.preconditions = [], plan."evidence_refs" = ["catalogue"], plan.disagreements = []
+    Quit ..AdoptPlan(case, plan, "policy:" _ entry)
+}
+
 Method RulesOnly(case As Interlock.Store.Case) As %Status
 {
     Set snap = case.CurrentSnapshot
@@ -289,7 +385,7 @@ Method HeadlineFor(case As Interlock.Store.Case, p As Interlock.Store.Plan) As %
 Method SendGate(case As Interlock.Store.Case, stage As %String, key As %String) As %Status
 {
     Set req = ##class(Interlock.Msg.GateRequest).%New()
-    Set req.CaseId = case.CaseId, req.PlanId = ..PlanId, req.Stage = stage
+    Set req.CaseId = case.CaseId, req.PlanId = ..PlanId, req.Stage = stage, req.Receiver = ..WardTarget
     Set req.ApprovalId = ..ApprovalId
     If ..ReceiverVersion '= "" Set req.ReceiverVersion = ..ReceiverVersion
     If ..ReceiverEpoch '= "" Set req.ReceiverEpoch = ..ReceiverEpoch
@@ -348,6 +444,7 @@ Method OnRehearsal(case As Interlock.Store.Case, result As Interlock.Msg.WardRes
         Set case.Headline = "Rehearsal failed: " _ result.Outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "")
         Quit case.Transition("blocked", "The rehearsal shows the action would not apply: " _ result.Outcome _ $SELECT(result.Error '= "": ", " _ result.Error, 1: ""), "system", "rehearsal:" _ r.%Id())
     }
+    If ..Policy = "automatic" Quit ..ReleaseByPolicy(case, plan, r)
     Set sc = case.Transition("awaiting_approval", "Rehearsal passed; asking an approver for the exact plan", "system", "rehearsal:" _ r.%Id())
     Quit:$$$ISERR(sc) sc
     Set task = ##class(EnsLib.Workflow.TaskRequest).%New()
@@ -358,6 +455,24 @@ Method OnRehearsal(case As Interlock.Store.Case, result As Interlock.Msg.WardRes
     Set task.%FormFields = "PlanDigest,Comment"
     Do task.%FormValues.SetAt(plan.Digest, "PlanDigest")
     Quit ..SendRequestAsync(..ApprovalTarget, task, 1, "approval")
+}
+
+/// The automatic release (CONTRACTS 6.4): no Workflow task; an approval by "policy" binds the same things a
+/// person's does, then the preflight read and the dispatch gate as for any approval.
+Method ReleaseByPolicy(case As Interlock.Store.Case, plan As Interlock.Store.Plan, rehearsal As Interlock.Store.Rehearsal) As %Status
+{
+    Set profile = ##class(Interlock.Store.SiteProfile).Current()
+    Set tier = ##class(Interlock.Store.SiteProfile).TierOf(..WardTarget)
+    Set comment = "Automatic by site policy v" _ ##class(Interlock.Util.Json).Str(profile, "version", 0) _ ": tier " _ tier _ ", single chain; catalogue " _ ..CatalogueEntry _ " " _ ..CatalogueOutcome
+    Set sc = ##class(Interlock.Store.Approval).Create(case, plan, case.CurrentSnapshot, ##class(Interlock.Operation.Gate).#POLICYVERSION, rehearsal, plan.ExpectedVersion, "policy", "approved", comment, "", ..ApprovalValidSeconds, .a, ..ReceiverEpoch)
+    Quit:$$$ISERR(sc) sc
+    Set ..ApprovalId = a.%Id()
+    Set case.CurrentApproval = a
+    Set sc = case.Transition("approved", "Released by site policy, no approval asked: " _ comment _ "; plan digest " _ $EXTRACT(plan.Digest, 1, 19), "policy", "approval:" _ a.%Id())
+    Quit:$$$ISERR(sc) sc
+    Set read = ##class(Interlock.Msg.WardOperation).%New()
+    Set read.Purpose = "read", read.EncounterId = case.EncounterId, read.OperationKey = case.OperationKey, read.CaseId = case.CaseId
+    Quit ..SendRequestAsync(..WardTarget, read, 1, "preflight")
 }
 
 Method OnApproval(case As Interlock.Store.Case, result As EnsLib.Workflow.TaskResponse) As %Status

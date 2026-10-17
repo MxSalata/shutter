@@ -24,7 +24,7 @@ Index StateIdx On State;
 Property Version As %Integer(%JSONFIELDNAME = "version") [ InitialExpression = 1 ];
 
 /// How the case is investigated: the board, a single investigator, or rules only.
-Property Mode As %String(%JSONFIELDNAME = "mode", MAXLEN = 16, VALUELIST = ",board,single,rules") [ InitialExpression = "board" ];
+Property Mode As %String(%JSONFIELDNAME = "mode", MAXLEN = 16, VALUELIST = ",board,single,rules,policy") [ InitialExpression = "board" ];
 
 Property FailureKind As %String(%JSONFIELDNAME = "failureKind", MAXLEN = 32, VALUELIST = ",delivery_failed,uncertain_outcome,rejected");
 

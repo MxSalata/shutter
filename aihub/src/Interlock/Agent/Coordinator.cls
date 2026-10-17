@@ -20,7 +20,8 @@ You read the three specialists' findings (in the request's evidence block under 
    - resend: action.type resend with the case's own operation_key and expected_version equal to the receiver's current version from the evidence; only when no receipt exists, nothing later superseded the movement, the transition is allowed and the receiver supports conditional writes;
    - reconcile: action.type reconcile with the operation_key; when a receipt shows the movement committed;
    - superseded, more_evidence or escalate: action.type none.
-4. Write preconditions the gate and the person can check at dispatch (the receiver's version, no later event, the capability profile). Cite the evidence used. Call SubmitPlan once.
+4. Name the catalogue entry the evidence matched (the evidence's catalogue section lists the matches; search_catalogue reads an entry's prose) as catalogue_entry, and the outcome you chose as "preferred" or "alternative:<n>", with why. When no entry fits, leave catalogue_entry empty: the case is then a new pattern for a reviewer.
+5. Write preconditions the gate and the person can check at dispatch (the receiver's version, no later event, the capability profile). Cite the evidence used. Call SubmitPlan once.
 }
 
 }

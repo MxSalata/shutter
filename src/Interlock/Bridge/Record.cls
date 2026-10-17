@@ -38,8 +38,16 @@ ClassMethod Find(key As %String) As Interlock.Bridge.Record
 {
     Set id = ""
     &sql(SELECT ID INTO :id FROM Interlock_Bridge.Record WHERE "Key" = :key)
-    If (SQLCODE '= 0) || (id = "") Quit ""
-    Quit ..%OpenId(id)
+    If (SQLCODE = 0) && (id '= "") Quit ..%OpenId(id)
+    // A scenario key with the encounter and event (scenario:S2:ENC-1002:transfer|member|cfg) falls back to the
+    // older form without them (scenario:S2|member|cfg), which the first recordings use.
+    Set head = $PIECE(key, "|", 1)
+    If ($PIECE(head, ":", 1) = "scenario") && ($LENGTH(head, ":") >= 4) {
+        Set short = "scenario:" _ $PIECE(head, ":", 2) _ "|" _ $PIECE(key, "|", 2, *)
+        &sql(SELECT ID INTO :id FROM Interlock_Bridge.Record WHERE "Key" = :short)
+        If (SQLCODE = 0) && (id '= "") Quit ..%OpenId(id)
+    }
+    Quit ""
 }
 
 /// Store or replace the recording of a run.

@@ -319,6 +319,8 @@ In `policy` mode the matcher's decision is:
   is escalated and flagged as a candidate entry for a reviewer.
 - The matches, with every condition's observed value, are stored on the case (`catalogue` in the snapshot summary) and
   shown in the app.
+- Recording keys for replays name the case within its scenario: `scenario:<S>:<encounter>:<event>|<member>|<cfg>[|round<n>]`;
+  the replay runner falls back to the older `scenario:<S>|<member>|<cfg>` form, which the first recordings use.
 
 ### 6.4 The site profile and the policy path
 
@@ -377,7 +379,9 @@ cites entries by id. The coordinator's instructions say the plan names the entry
 - The connector counts delivery failures and refusals (not uncertain outcomes) per receiver in a sliding window. At the
   profile's threshold (default 5 within 10 minutes) an incident opens for that receiver.
 - A case opened while an incident is open for its receiver joins it (case state `grouped`) instead of starting its own
-  investigation. The incident's intake closes after `quiet_seconds` with no new failure.
+  investigation. When the incident opens, it also adopts the burst's earlier cases for that receiver that are still before
+  their proposal gate (settling, collecting or investigating), so the first failures are not left outside it. The
+  incident's intake closes after `quiet_seconds` with no new failure.
 - Chains form per encounter (PV1-19), oldest event time first. Chains of one patient (PID-3) are linked for the page; the
   link imposes no order across encounters.
 - A chain's kind: `single` (one failure, nothing later applied), `ordered` (several failures, no successful delivery for
@@ -430,7 +434,7 @@ cites entries by id. The coordinator's instructions say the plan names the entry
 
 ### 7.6 Scenario S11, an outage burst
 
-Twelve failures for six patients to the ward, in one burst (the fault `fail_before_accept` on, the files, the fault off):
+Eight failures for six patients to the ward, in one burst (the fault `fail_before_accept` on, the files, the fault off):
 P1 one failed A02 (E2, single); P2 A02 and A03 failed (E4, ordered); P3 A02 failed, A08 applied, a later A02 applied, A03
 failed (E5, interleaved, board); P4 A02 failed, then a later A02 applied (E1, superseded); P5 A02 failed after an applied
 A03 (E6); P6 a failed A01 (E2, single, admit). Expected: the policy chains resolved without the board at tier 2

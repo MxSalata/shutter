@@ -15,6 +15,9 @@ Property ApprovalId As %String(MAXLEN = 20);
 Property ReceiverVersion As %Integer;
 
 /// The receiver's epoch as last observed (it changes at every reset).
+/// The production item the write goes to, for the site profile's tier.
+Property Receiver As %String(MAXLEN = 128);
+
 Property ReceiverEpoch As %Integer;
 
 Storage Default
@@ -38,6 +41,9 @@ Storage Default
 </Value>
 <Value name="6">
 <Value>ReceiverEpoch</Value>
+</Value>
+<Value name="7">
+<Value>Receiver</Value>
 </Value>
 </Data>
 <DefaultData>GateRequestDefaultData</DefaultData>

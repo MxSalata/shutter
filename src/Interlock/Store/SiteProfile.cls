@@ -16,6 +16,8 @@ Property Source As %String(%JSONFIELDNAME = "source", MAXLEN = 200);
 
 Property UpdatedAt As %String(%JSONFIELDNAME = "updatedAt", MAXLEN = 30);
 
+Property UpdatedBy As %String(%JSONFIELDNAME = "updatedBy", MAXLEN = 160);
+
 /// The shipped defaults: one receiver (the ward, tier 2), keep what is current, no authoritative source,
 /// unconditional resends forbidden, automatic single chains for tiers 1 and 2, approvals elsewhere.
 ClassMethod Default() As %DynamicObject
@@ -52,14 +54,14 @@ ClassMethod Row() As Interlock.Store.SiteProfile
 }
 
 /// Store a profile (JSON text) as the current one, with the next version.
-ClassMethod Store(json As %String, source As %String = "") As %Status
+ClassMethod Store(json As %String, source As %String = "", user As %String = "") As %Status
 {
     Set p = ##class(Interlock.Util.Json).Parse(json, .sc)
     If '$ISOBJECT(p) || $$$ISERR(sc) Quit $$$ERROR($$$GeneralError, "The profile is not a JSON object")
     Set row = ..Row()
     If '$ISOBJECT(row) Set row = ..%New(), row.Version = 0
     Set row.Version = row.Version + 1
-    Set row.Json = p.%ToJSON(), row.Source = source
+    Set row.Json = p.%ToJSON(), row.Source = source, row.UpdatedBy = user
     Set row.UpdatedAt = ##class(Interlock.Util.Time).NowUTC()
     Quit row.%Save()
 }
@@ -135,6 +137,9 @@ Storage Default
 </Value>
 <Value name="6">
 <Value>UpdatedAt</Value>
+</Value>
+<Value name="7">
+<Value>UpdatedBy</Value>
 </Value>
 </Data>
 <DataLocation>^Interlock.Store.SiteProfileD</DataLocation>

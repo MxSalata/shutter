@@ -157,7 +157,7 @@ ClassMethod Running() As %Boolean
 ClassMethod Prepare(scenario As %String, mode As %String, Output inbound As %String, Output error As %String) As %DynamicObject
 {
     Set inbound = "", error = ""
-    If '$LISTFIND($LISTBUILD("board", "single", "rules"), mode) {
+    If '$LISTFIND($LISTBUILD("board", "single", "rules", "policy"), mode) {
         Set error = "unknown mode " _ mode _ ": use board, single or rules"
         Quit ""
     }

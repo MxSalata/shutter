@@ -21,6 +21,15 @@ Property EvidenceRefs As list Of %String(%JSONFIELDNAME = "evidence_refs", MAXLE
 /// The specialists' views the plan does not follow, kept.
 Property Disagreements As list Of Interlock.Schema.Disagreement(%JSONFIELDNAME = "disagreements");
 
+/// The catalogue entry the plan follows (E1, E2, ...), from the evidence's catalogue matches; empty when none fits.
+Property CatalogueEntry As %String(%JSONFIELDNAME = "catalogue_entry", MAXLEN = 16);
+
+/// The entry's outcome chosen: "preferred", or "alternative:<n>" (1-based); empty when no entry is named.
+Property Outcome As %String(%JSONFIELDNAME = "outcome", MAXLEN = 32);
+
+/// Why that entry and that outcome, in a sentence.
+Property Why As %String(%JSONFIELDNAME = "why", MAXLEN = 1000);
+
 /// Problems with a plan object as JSON text, as an array of messages; empty when it is valid.
 ClassMethod Check(json As %String) As %DynamicArray
 {
@@ -46,6 +55,9 @@ ClassMethod Check(json As %String) As %DynamicArray
     }
     If o.%GetTypeOf("evidence_refs") '= "array" Do problems.%Push("evidence_refs must list the evidence used")
     If (o.%GetTypeOf("disagreements") '= "unassigned") && (o.%GetTypeOf("disagreements") '= "array") Do problems.%Push("disagreements must be an array of {member, said, why_kept}")
+    Set entry = ##class(Interlock.Util.Json).Str(o, "catalogue_entry"), outcome = ##class(Interlock.Util.Json).Str(o, "outcome")
+    If (entry '= "") && (outcome '= "preferred") && ($EXTRACT(outcome, 1, 12) '= "alternative:") Do problems.%Push("outcome must be preferred or alternative:<n> when a catalogue_entry is named")
+    If (entry = "") && (outcome '= "") Do problems.%Push("outcome needs a catalogue_entry")
     Quit problems
 }
 

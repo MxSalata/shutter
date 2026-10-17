@@ -9,7 +9,7 @@ Class Interlock.Operation.Gate Extends Ens.BusinessOperation
 Parameter INVOCATION = "Queue";
 
 /// Bumped whenever a check changes; recorded on every decision and bound by approvals.
-Parameter POLICYVERSION = "2026-10-15.1";
+Parameter POLICYVERSION = "2026-10-17.1";
 
 Method OnGateRequest(request As Interlock.Msg.GateRequest, Output response As Interlock.Msg.GateResult) As %Status
 {
@@ -121,7 +121,13 @@ Method OnGateRequest(request As Interlock.Msg.GateRequest, Output response As In
             Do ..Check(checks, "authorization", "block", "NO_APPROVAL", "No approval for this plan")
         } Else {
             Set why = approval.InvalidReason(plan, snapshot, ..#POLICYVERSION, request.ReceiverVersion, request.ReceiverEpoch)
-            Do ..Check(checks, "authorization", $SELECT(why = "": "pass", 1: "block"), $SELECT(why = "": "APPROVAL_VALID", 1: "APPROVAL_" _ $ZCONVERT(why, "U")), $SELECT(why = "": "Approved by " _ approval.Approver _ " for plan digest " _ $EXTRACT(approval.PlanDigest, 1, 19), 1: "The approval no longer authorises this dispatch: " _ why))
+            // An automatic release must be what the site's policy allows for this receiver's tier (6.5).
+            If (why = "") && (approval.Approver = "policy") {
+                Set tier = ##class(Interlock.Store.SiteProfile).TierOf(request.Receiver)
+                Set policy = ##class(Interlock.Store.SiteProfile).Policy(tier, "single")
+                If policy '= "automatic" Set why = "policy_requires_approval"
+            }
+            Do ..Check(checks, "authorization", $SELECT(why = "": "pass", 1: "block"), $SELECT(why = "": "APPROVAL_VALID", why = "policy_requires_approval": "POLICY_REQUIRES_APPROVAL", 1: "APPROVAL_" _ $ZCONVERT(why, "U")), $SELECT(why = "": "Approved by " _ approval.Approver _ " for plan digest " _ $EXTRACT(approval.PlanDigest, 1, 19), 1: "The approval no longer authorises this dispatch: " _ why))
         }
     }
 
@@ -155,6 +161,32 @@ Method OnGateRequest(request As Interlock.Msg.GateRequest, Output response As In
     } Else {
         Set capable = ##class(Interlock.Util.Json).Bool(route, "conditional_writes") && ##class(Interlock.Util.Json).Bool(route, "receipts")
         Do ..Check(checks, "capability", $SELECT(capable: "pass", 1: "block"), $SELECT(capable: "CONNECTOR_CAPABLE", 1: "CONNECTOR_INCAPABLE"), $SELECT(capable: "The receiver guarantees conditional writes and receipts", 1: "The receiver reports no conditional writes: a resend cannot be made safe, so only investigation and reconciliation are open"))
+    }
+
+    // Catalogue (CONTRACTS 6.5): the plan's entry and outcome against the matcher's result in the evidence.
+    Set cat = summary.%Get("catalogue")
+    Set decision = $SELECT($ISOBJECT(cat): ##class(Interlock.Util.Json).Str(cat, "decision"), 1: "")
+    If (decision = "") || (decision = "not_configured") || (decision = "error") {
+        Do ..Check(checks, "catalogue", "pass", "NOT_CONFIGURED", "No catalogue is installed, or the matcher gave no result")
+    } ElseIf decision = "new_pattern" {
+        Do ..Check(checks, "catalogue", "block", "NEW_PATTERN", "No catalogue entry matches this evidence: a candidate entry for a reviewer")
+    } ElseIf plan.CatalogueEntry = "" {
+        Do ..Check(checks, "catalogue", "pass", "ENTRY_NOT_NAMED", "The plan names no catalogue entry; the evidence matched " _ $SELECT(##class(Interlock.Util.Json).Str(cat, "entry") '= "": ##class(Interlock.Util.Json).Str(cat, "entry"), 1: "several entries"))
+    } Else {
+        Set matched = "", mi = cat.%Get("matches").%GetIterator()
+        While mi.%GetNext(.i, .m) { If ##class(Interlock.Util.Json).Str(m, "id") = plan.CatalogueEntry Set matched = m Quit }
+        If '$ISOBJECT(matched) {
+            Set exists = $ISOBJECT(##class(Interlock.Catalogue.Entry).ById(plan.CatalogueEntry))
+            Do ..Check(checks, "catalogue", "block", $SELECT(exists: "PATTERN_NOT_MATCHED", 1: "ENTRY_UNKNOWN"), $SELECT(exists: "The plan follows " _ plan.CatalogueEntry _ ", but its pattern does not hold on this evidence", 1: "The plan names " _ plan.CatalogueEntry _ ", which is not in the catalogue"))
+        } ElseIf $EXTRACT(plan.Outcome, 1, 12) = "alternative:" {
+            Set n = +$PIECE(plan.Outcome, ":", 2), alts = matched.%Get("alternatives")
+            Set alt = $SELECT($ISOBJECT(alts) && (n >= 1) && (n <= alts.%Size()): alts.%Get(n - 1), 1: "")
+            Set when = $SELECT($ISOBJECT(alt): ##class(Interlock.Util.Json).Str(alt, "when", "always"), 1: "")
+            Set allowed = $ISOBJECT(alt) && ##class(Interlock.Catalogue.Matcher).WhenHolds(when, cat.%Get("facts"))
+            Do ..Check(checks, "catalogue", $SELECT(allowed: "pass", 1: "block"), $SELECT(allowed: "OUTCOME_ALLOWED", 1: "OUTCOME_NOT_ALLOWED"), $SELECT(allowed: "Entry " _ plan.CatalogueEntry _ " matches and the site allows alternative " _ n, 1: "Entry " _ plan.CatalogueEntry _ "'s alternative " _ n _ " is not allowed for this site (" _ when _ ")"))
+        } Else {
+            Do ..Check(checks, "catalogue", "pass", "ENTRY_MATCHED", "Entry " _ plan.CatalogueEntry _ " matches the evidence; the preferred outcome")
+        }
     }
 
     // The outcome is the worst check.
