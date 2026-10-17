@@ -48,6 +48,9 @@ Property Ward As %String(%JSONFIELDNAME = "ward", MAXLEN = 100);
 
 Property EventTime As %String(%JSONFIELDNAME = "eventTime", MAXLEN = 30);
 
+/// The incident the case belongs to, when many failures to the receiver were grouped (CONTRACTS 7).
+Property Incident As Interlock.Store.Incident(%JSONFIELDNAME = "incidentId", %JSONREFERENCE = "ID");
+
 /// The demo scenario that produced the case (S1 to S6), when the scenario runner was running one;
 /// recordings of agent runs for a scenario replay on any instance.
 Property Scenario As %String(%JSONFIELDNAME = "scenario", MAXLEN = 32);
