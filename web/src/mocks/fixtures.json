@@ -10215,7 +10215,7 @@
        "durationMs": 1,
        "ok": false,
        "resultPreview": "{}",
-       "error": "ERROR <%AICore>ToolExecutionFailed: Tool execution failed: IRIS error [%Status]: 9406 (code: 9406) — \u0006\u0001said\f\u0001class base\u0001\u0001\u0001\u0001\u0001\u0001\u0001 at %JSONImportInternal+51^Interlock.Schema.Disagreement.1"
+       "error": "ERROR <%AICore>ToolExecutionFailed: Tool execution failed: IRIS error [%Status]: 9406 (code: 9406) - \u0006\u0001said\f\u0001class base\u0001\u0001\u0001\u0001\u0001\u0001\u0001 at %JSONImportInternal+51^Interlock.Schema.Disagreement.1"
       },
       {
        "runKey": "353",
@@ -12670,7 +12670,7 @@
        "route"
       ]
      },
-     "content": "I submitted resend for C-000009: message MSG00802 is valid and its key matches the case, and the HTTP 503 ward_unavailable failure was an outage, not a content rejection — but a separate BEDMGR transfer to WARD-C is already applied at version 2, which Encounter Integrity still needs to weigh.",
+     "content": "I submitted resend for C-000009: message MSG00802 is valid and its key matches the case, and the HTTP 503 ward_unavailable failure was an outage, not a content rejection - but a separate BEDMGR transfer to WARD-C is already applied at version 2, which Encounter Integrity still needs to weigh.",
      "costUsd": 0.100775,
      "id": "38",
      "member": {
@@ -12985,7 +12985,7 @@
        "durationMs": 1,
        "ok": false,
        "resultPreview": "{}",
-       "error": "ERROR <%AICore>ToolExecutionFailed: Tool execution failed: IRIS error [%Status]: 9406 (code: 9406) — \u0006\u0001said\f\u0001class base\u0001\u0001\u0001\u0001\u0001\u0001\u0001 at %JSONImportInternal+51^Interlock.Schema.Disagreement.1"
+       "error": "ERROR <%AICore>ToolExecutionFailed: Tool execution failed: IRIS error [%Status]: 9406 (code: 9406) - \u0006\u0001said\f\u0001class base\u0001\u0001\u0001\u0001\u0001\u0001\u0001 at %JSONImportInternal+51^Interlock.Schema.Disagreement.1"
       },
       {
        "runKey": "292",
@@ -14875,7 +14875,7 @@
        "durationMs": 1,
        "ok": false,
        "resultPreview": "{}",
-       "error": "ERROR <%AICore>ToolExecutionFailed: Tool execution failed: IRIS error [%Status]: 9406 (code: 9406) — \u0006\u0001said\f\u0001class base\u0001\u0001\u0001\u0001\u0001\u0001\u0001 at %JSONImportInternal+51^Interlock.Schema.Disagreement.1"
+       "error": "ERROR <%AICore>ToolExecutionFailed: Tool execution failed: IRIS error [%Status]: 9406 (code: 9406) - \u0006\u0001said\f\u0001class base\u0001\u0001\u0001\u0001\u0001\u0001\u0001 at %JSONImportInternal+51^Interlock.Schema.Disagreement.1"
       },
       {
        "runKey": "264",
@@ -16152,7 +16152,7 @@
        "durationMs": 1,
        "ok": false,
        "resultPreview": "{}",
-       "error": "ERROR <%AICore>ToolExecutionFailed: Tool execution failed: IRIS error [%Status]: 9406 (code: 9406) — \u0006\u0001said\f\u0001class base\u0001\u0001\u0001\u0001\u0001\u0001\u0001 at %JSONImportInternal+51^Interlock.Schema.Disagreement.1"
+       "error": "ERROR <%AICore>ToolExecutionFailed: Tool execution failed: IRIS error [%Status]: 9406 (code: 9406) - \u0006\u0001said\f\u0001class base\u0001\u0001\u0001\u0001\u0001\u0001\u0001 at %JSONImportInternal+51^Interlock.Schema.Disagreement.1"
       },
       {
        "runKey": "216",
@@ -20856,7 +20856,7 @@
        "durationMs": 0,
        "ok": false,
        "resultPreview": "{}",
-       "error": "ERROR <%AICore>ToolExecutionFailed: Tool execution failed: IRIS error [%Status]: 9406 (code: 9406) — \u0006\u0001said\f\u0001class base\u0001\u0001\u0001\u0001\u0001\u0001\u0001 at %JSONImportInternal+51^Interlock.Schema.Disagreement.1"
+       "error": "ERROR <%AICore>ToolExecutionFailed: Tool execution failed: IRIS error [%Status]: 9406 (code: 9406) - \u0006\u0001said\f\u0001class base\u0001\u0001\u0001\u0001\u0001\u0001\u0001 at %JSONImportInternal+51^Interlock.Schema.Disagreement.1"
       },
       {
        "runKey": "112",
@@ -22140,7 +22140,7 @@
        "durationMs": 0,
        "ok": false,
        "resultPreview": "{}",
-       "error": "ERROR <%AICore>ToolExecutionFailed: Tool execution failed: IRIS error [%Status]: 9406 (code: 9406) — \u0006\u0001said\f\u0001class base\u0001\u0001\u0001\u0001\u0001\u0001\u0001 at %JSONImportInternal+51^Interlock.Schema.Disagreement.1"
+       "error": "ERROR <%AICore>ToolExecutionFailed: Tool execution failed: IRIS error [%Status]: 9406 (code: 9406) - \u0006\u0001said\f\u0001class base\u0001\u0001\u0001\u0001\u0001\u0001\u0001 at %JSONImportInternal+51^Interlock.Schema.Disagreement.1"
       },
       {
        "runKey": "87",

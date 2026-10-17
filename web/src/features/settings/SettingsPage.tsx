@@ -32,7 +32,7 @@ function AgentItemsTable({ items }: { items: AgentItem[] }) {
   const columns = ITEM_COLUMNS.filter((c) => items.some((a) => a[c.key] !== undefined && a[c.key] !== ''));
   const show = (c: ItemColumn, a: AgentItem) => {
     const v = a[c.key];
-    if (v === undefined || v === '') return '—';
+    if (v === undefined || v === '') return 'not set';
     if (c.key === 'mode')
       return a.effectiveMode && a.effectiveMode !== v
         ? `${humanize(String(v))} (${a.effectiveMode})`

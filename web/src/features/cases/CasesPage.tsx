@@ -106,7 +106,7 @@ export default function CasesPage() {
                       </Text>
                     </Table.Td>
                     <Table.Td>
-                      <Text size="sm">{c.scenario || '—'}</Text>
+                      <Text size="sm">{c.scenario || 'none'}</Text>
                       <Text size="xs" c="dimmed">
                         {humanize(c.mode)}
                       </Text>

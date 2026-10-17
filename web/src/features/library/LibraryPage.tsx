@@ -74,7 +74,7 @@ export default function LibraryPage() {
                       </Badge>
                     </Table.Td>
                     <Table.Td>
-                      <Text size="sm">{m.knowledgeCollection || '—'}</Text>
+                      <Text size="sm">{m.knowledgeCollection || 'none'}</Text>
                     </Table.Td>
                     <Table.Td>
                       <Text size="xs" className="mono-wrap">

@@ -232,7 +232,7 @@ export function ApprovalPanel({
                         <Text size="sm">{t.complete ? t.action || 'done' : 'open'}</Text>
                       </Table.Td>
                       <Table.Td>
-                        <Text size="sm">{t.userName || t.assignedTo || '—'}</Text>
+                        <Text size="sm">{t.userName || t.assignedTo || 'unassigned'}</Text>
                       </Table.Td>
                       <Table.Td>
                         <Timestamp iso={t.timeCompleted} />
