@@ -101,7 +101,9 @@ export function ApprovalPanel({
         ? 'There is no plan to decide on'
         : '';
   const policy = view?.gateDecisions?.at(-1)?.policyVersion ?? '';
-  const latest = approvals?.approvals?.at(-1);
+  // A re-plan revokes the earlier approval: only one that still stands is shown as the decision.
+  const latest = approvals?.approvals?.filter((a) => !a.revoked).at(-1);
+  const revoked = !latest && Boolean(approvals?.approvals?.some((a) => a.revoked));
 
   const openDialog = (d: 'approve' | 'reject') => {
     setDecision(d);
@@ -148,6 +150,10 @@ export function ApprovalPanel({
         ) : awaiting ? (
           <Badge color="yellow" style={{ textTransform: 'none' }}>
             Waiting for an approver
+          </Badge>
+        ) : revoked ? (
+          <Badge color="gray" style={{ textTransform: 'none' }}>
+            Earlier approval revoked
           </Badge>
         ) : null
       }

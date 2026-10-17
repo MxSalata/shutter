@@ -1,6 +1,8 @@
 import { Anchor, Container, Grid, Stack } from '@mantine/core';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 import { Link, useParams } from 'react-router';
-import { isOpen, useApprovals, useCase, useCaseEvents, useMe, usePlan } from '@/api/hooks';
+import { isOpen, keys, useApprovals, useCase, useCaseEvents, useMe, usePlan } from '@/api/hooks';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { isApiError } from '@/lib/errors';
@@ -29,6 +31,13 @@ export default function CasePage() {
   const events = useCaseEvents(caseId, open);
   const plan = usePlan(caseId, open);
   const approvals = useApprovals(caseId, open);
+  const client = useQueryClient();
+  // The parts poll only while the case is open: when it closes, fetch them once more so the last events show.
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    if (wasOpen.current && !open) void client.invalidateQueries({ queryKey: keys.case(caseId) });
+    wasOpen.current = open;
+  }, [open, caseId, client]);
 
   if (c.isPending) return <PageSkeleton label={`Loading case ${caseId}…`} />;
   if (c.isError)

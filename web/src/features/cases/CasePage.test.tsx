@@ -82,6 +82,13 @@ describe('CasePage', () => {
     expect(within(evidence).getAllByText(/^Observed \d/).length).toBeGreaterThan(0);
   });
 
+  it('does not show a revoked approval as the decision', async () => {
+    renderCase('C-000008');
+    const approval = await screen.findByRole('region', { name: 'Approval' });
+    expect(await within(approval).findByText('Earlier approval revoked')).toBeInTheDocument();
+    expect(within(approval).queryByText(/^Approved by/)).not.toBeInTheDocument();
+  });
+
   it.each(Object.keys(fixtures.cases))('shows recorded case %s', async (caseId) => {
     renderCase(caseId);
     expect(await screen.findByRole('heading', { name: `Case ${caseId}` })).toBeInTheDocument();

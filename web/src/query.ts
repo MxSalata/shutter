@@ -1,7 +1,18 @@
-import { QueryClient } from '@tanstack/react-query';
+import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 import { isApiError } from '@/lib/errors';
 
+/**
+ * A 401 from any call but the session's own means the session ended (it expired, or the person signed out in
+ * another tab): forget who was signed in (keys.me), so RequireAuth sends them to sign in and back again.
+ */
+export function forgetSessionOn401(error: unknown) {
+  if (isApiError(error) && error.isUnauthorized && error.path !== '/me' && error.path !== '/session')
+    queryClient.setQueryData(['me'], null);
+}
+
 export const queryClient = new QueryClient({
+  queryCache: new QueryCache({ onError: forgetSessionOn401 }),
+  mutationCache: new MutationCache({ onError: forgetSessionOn401 }),
   defaultOptions: {
     queries: {
       staleTime: 5_000,
