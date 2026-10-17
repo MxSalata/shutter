@@ -6,7 +6,7 @@ Class Interlock.Schema.Disagreement Extends (%RegisteredObject, %JSON.Adaptor)
 Property Member As %String(%JSONFIELDNAME = "member", MAXLEN = 32) [ Required ];
 
 /// The disposition that member proposed.
-Property Said As %String(%JSONFIELDNAME = "said", MAXLEN = 32) [ Required ];
+Property Said As %String(%JSONFIELDNAME = "said", MAXLEN = 1000) [ Required ];
 
 /// Why the plan does not follow it.
 Property WhyKept As %String(%JSONFIELDNAME = "why_kept", MAXLEN = 1000) [ Required ];
