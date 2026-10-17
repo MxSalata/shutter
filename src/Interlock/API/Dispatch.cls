@@ -824,7 +824,14 @@ ClassMethod IncidentDecide(id As %String, seq As %String) As %Status
     If '$LISTFIND($LISTBUILD("approve", "reject"), decision) Quit ..Fail("400 Bad Request", "bad_request", "decision must be approve or reject")
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
-    If inc.State '= "awaiting_approval" Quit ..Fail("409 Conflict", "wrong_state", "The incident is " _ inc.State _ ", not awaiting approval")
+    // The incident keeps releasing its automatic and board chains while a task is open, so its state is not the test:
+    // a chain must be awaiting this approval.
+    If inc.State = "closed" Quit ..Fail("409 Conflict", "wrong_state", "The incident is closed")
+    If seq = "" {
+        Set waiting = 0, iid = inc.%Id()
+        &sql(SELECT COUNT(*) INTO :waiting FROM Interlock_Store.Chain WHERE Incident = :iid AND State = 'awaiting_approval' AND Policy = 'approval')
+        If +waiting = 0 Quit ..Fail("409 Conflict", "wrong_state", "No chain of " _ id _ " awaits the incident's approval (the incident is " _ inc.State _ ")")
+    }
     If seq '= "" {
         Set chain = inc.ChainAt(seq)
         If '$ISOBJECT(chain) Quit ..Fail("404 Not Found", "not_found", "No chain " _ seq _ " in " _ id)

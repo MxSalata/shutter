@@ -127,25 +127,14 @@ ClassMethod Group(incident As Interlock.Store.Incident) As %Status
 }
 
 /// The chain's kind, who decides it and the site's policy for it, from its items. A single item is single;
-/// several with no successful delivery for the encounter between them are ordered; otherwise interleaved.
-/// Policy when the incident runs in policy mode and every item's match decides by policy (never for an
-/// interleaved chain); person when any item asks for a person; else board (the cases run their own path).
+/// several with no successful delivery for the encounter between them are ordered; otherwise interleaved. With the
+/// kind known, every item is matched again with the chain condition set (7.1), so an ordered chain's items can match
+/// an entry written for chains, which the first evidence (chain single) could not. Policy when the incident runs in
+/// policy mode and every item's match decides by policy (never for an interleaved chain); person when any item asks
+/// for a person; else board (the cases run their own path).
 ClassMethod Classify(chain As Interlock.Store.Chain) As %Status
 {
-    Set items = chain.Items()
-    Set n = items.%Size()
-    Set entries = "", decides = "policy", first = ""
-    Set iter = items.%GetIterator()
-    While iter.%GetNext(.i, .it) {
-        Set entries = entries _ $SELECT(entries = "": "", 1: ",") _ ##class(Interlock.Util.Json).Str(it, "entry", "?")
-        Set d = ##class(Interlock.Util.Json).Str(it, "decides")
-        If d = "person" Set decides = "person"
-        If (d '= "policy") && (decides '= "person") Set decides = "board"
-        If first = "" Set first = it
-    }
-    Set mode = $SELECT($ISOBJECT(chain.Incident): chain.Incident.Mode, 1: "board")
-    // Outside policy mode the cases run their own path, whatever the catalogue says (6.3).
-    If mode '= "policy" Set decides = "board"
+    Set n = chain.ItemCount()
     If n <= 1 {
         Set chain.Kind = "single"
     } ElseIf ..SuccessBetween(chain) {
@@ -153,6 +142,26 @@ ClassMethod Classify(chain As Interlock.Store.Chain) As %Status
     } Else {
         Set chain.Kind = "ordered"
     }
+    Set entries = "", decides = "policy", firstCase = ""
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Interlock_Store.ChainItem WHERE Chain = ? ORDER BY Position", chain.%Id())
+    While rs.%Next() {
+        Set it = ##class(Interlock.Store.ChainItem).%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(it)
+        Set c = it.Case
+        Set cat = ..Rematch(c, chain.Kind)
+        If $ISOBJECT(cat) {
+            Set it.Entry = ##class(Interlock.Util.Json).Str(cat, "entry"), it.CatalogueOutcome = ##class(Interlock.Util.Json).Str(cat, "outcome")
+            Set it.Decides = ##class(Interlock.Util.Json).Str(cat, "decision")
+            Do it.%Save()
+        }
+        Set entries = entries _ $SELECT(entries = "": "", 1: ",") _ $SELECT(it.Entry = "": "?", 1: it.Entry)
+        If it.Decides = "person" Set decides = "person"
+        If (it.Decides '= "policy") && (decides '= "person") Set decides = "board"
+        If firstCase = "" Set firstCase = c
+    }
+    Set mode = $SELECT($ISOBJECT(chain.Incident): chain.Incident.Mode, 1: "board")
+    // Outside policy mode the cases run their own path, whatever the catalogue says (6.3).
+    If mode '= "policy" Set decides = "board"
     // Interleaved chains are the board's whatever the entries say (7.2).
     If (chain.Kind = "interleaved") && (decides = "policy") Set decides = "board"
     Set chain.Policy = "path"
@@ -162,11 +171,22 @@ ClassMethod Classify(chain As Interlock.Store.Chain) As %Status
         If policy = "board" { Set decides = "board" } Else { Set chain.Policy = policy }
     }
     Set chain.Entries = entries, chain.Decides = decides
-    If $ISOBJECT(first) {
-        Set c = ##class(Interlock.Store.Case).ByCaseId(##class(Interlock.Util.Json).Str(first, "caseId"))
-        Set chain.FirstExpectedVersion = ..VersionOf(c)
-    }
+    If $ISOBJECT(firstCase) Set chain.FirstExpectedVersion = ..VersionOf(firstCase)
     Quit chain.%Save()
+}
+
+/// The case's snapshot matched again with the chain condition set; the snapshot's own match when the matcher fails.
+ClassMethod Rematch(case As Interlock.Store.Case, chainKind As %String) As %DynamicObject
+{
+    If '$ISOBJECT(case) || '$ISOBJECT(case.CurrentSnapshot) Quit ""
+    Set summary = case.CurrentSnapshot.SummaryObject()
+    If '$ISOBJECT(summary) Quit ""
+    Try {
+        Set cat = ##class(Interlock.Catalogue.Matcher).Match(##class(Interlock.Catalogue.Matcher).Conditions(case, summary, chainKind), ##class(Interlock.Catalogue.Matcher).Facts(summary, case))
+    } Catch ex {
+        Set cat = summary.%Get("catalogue")
+    }
+    Quit cat
 }
 
 /// Whether a successful delivery for the encounter sits between the chain's failures (from the last item's

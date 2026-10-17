@@ -40,7 +40,8 @@ Property PlanJSON As %String(%JSONINCLUDE = "none", MAXLEN = "");
 
 Property ReceiverEpoch As %Integer(%JSONFIELDNAME = "receiverEpoch");
 
-Property CatalogueVersion As %String(%JSONFIELDNAME = "catalogueVersion", MAXLEN = 32);
+/// The catalogue's version string names every entry with its version (E1@1,E2@1,...), so it is long.
+Property CatalogueVersion As %String(%JSONFIELDNAME = "catalogueVersion", MAXLEN = 2000);
 
 Property ProfileVersion As %String(%JSONFIELDNAME = "profileVersion", MAXLEN = 32);
 
