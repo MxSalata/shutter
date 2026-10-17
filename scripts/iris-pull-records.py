@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Pull agent-run recordings from an IRIS instance into fixtures/records, one file per recording in the fixture
-shape (response as an object; transcript and toolCalls as JSON text), named scenario-<S>-<member>-<cfg>[-roundN].json.
+shape (response as an object; transcript and toolCalls as JSON text), named scenario-<S>-<member>-<cfg>[-roundN].json, or
+scenario-<S>-<encounter>-<event>-<member>-<cfg>[-roundN].json for the keys that name the case's encounter and event.
 
     python3 scripts/iris-pull-records.py --url http://host:52773 --ns INTERLOCK [--like 'scenario:S2|%'] [--dir fixtures/records]
 
@@ -14,7 +15,16 @@ import re
 import sys
 import urllib.request
 
-KEY_RE = re.compile(r"^scenario:(S\d+)\|([a-z]+)\|(\d+)(\|round(\d+))?$")
+# scenario:<S>[:<encounter>:<event>]|<member>|<configVersion>[|round<n>], as in scripts/check-records.py
+KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+)(?::(?P<encounter>[^:|]+):(?P<event>[^:|]+))?"
+                    r"\|(?P<member>[a-z]+)\|(?P<cfg>\d+)(?:\|round(?P<round>\d+))?$")
+
+
+def file_name(m):
+    """The fixture file for a key (the same rule as scripts/check-records.py)."""
+    case = [m["encounter"], m["event"]] if m["encounter"] else []
+    parts = [re.sub(r"[^A-Za-z0-9._-]", "_", x) for x in ["scenario", m["scenario"], *case, m["member"], m["cfg"]]]
+    return "-".join(parts) + (f"-round{m['round']}" if m["round"] else "") + ".json"
 
 
 def query(url, ns, user, password, sql, params):
@@ -59,7 +69,7 @@ def main():
         d.pop("id", None)
         ordered = {k: d[k] for k in ("key", "agentClass", "configVersion", "memberCode", "snapshotDigest", "correlationKey",
                                      "model", "response", "transcript", "toolCalls", "recordedAt", "label") if k in d}
-        name = f"scenario-{m.group(1)}-{m.group(2)}-{m.group(3)}" + (f"-round{m.group(5)}" if m.group(5) else "") + ".json"
+        name = file_name(m)
         path = os.path.join(args.dir, name)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(ordered, f, indent=1, ensure_ascii=False)

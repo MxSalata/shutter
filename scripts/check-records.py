@@ -6,7 +6,8 @@ coordinator and the generalist). Mirrors the schema classes' Check methods.
     python3 scripts/check-records.py [fixtures/records] [--scenarios fixtures/scenarios.json]
 
 Exit code 1 when any file has a problem. With --scenarios it also lists, per scenario in that file, the
-members whose round-1 recording is missing.
+members whose round-1 recording is missing: per case when the keys name the encounter and event
+(scenario:S11:ENC-1101:transfer|member|cfg), per scenario for the older keys without them (scenario:S2|member|cfg).
 """
 import argparse
 import glob
@@ -23,7 +24,22 @@ MEMBERS = {
     "coordinator": ("Interlock.Agent.Coordinator", "plan"),
     "generalist": ("Interlock.Agent.Generalist", "plan"),
 }
-KEY_RE = re.compile(r"^scenario:(S\d+)\|([a-z]+)\|(\d+)(\|round(\d+))?$")
+# scenario:<S>[:<encounter>:<event>]|<member>|<configVersion>[|round<n>]: the core writes the long form since the
+# incident work (CaseWorkflow), and Interlock.Bridge.Record falls back to the short one the first recordings use.
+KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+)(?::(?P<encounter>[^:|]+):(?P<event>[^:|]+))?"
+                    r"\|(?P<member>[a-z]+)\|(?P<cfg>\d+)(?:\|round(?P<round>\d+))?$")
+
+
+def file_name(m):
+    """The fixture file for a key: scenario-S2-coordinator-1.json, scenario-S11-ENC-1101-transfer-coordinator-1.json."""
+    case = [m["encounter"], m["event"]] if m["encounter"] else []
+    parts = [re.sub(r"[^A-Za-z0-9._-]", "_", x) for x in ["scenario", m["scenario"], *case, m["member"], m["cfg"]]]
+    return "-".join(parts) + (f"-round{m['round']}" if m["round"] else "") + ".json"
+
+
+def case_of(m):
+    """What a full board set is counted over: the case (scenario, encounter, event), or the scenario alone."""
+    return (m["scenario"], m["encounter"], m["event"])
 
 
 FINDINGS_FIELDS = {"disposition", "confidence", "summary", "violations", "unknowns", "evidence_refs"}
@@ -106,15 +122,15 @@ def check_file(path):
     key = d.get("key", "")
     m = KEY_RE.match(key)
     if not m:
-        problems.append(f"key {key!r} is not scenario:S<n>|<member>|<configVersion>[|round<n>]")
+        problems.append(f"key {key!r} is not scenario:S<n>[:<encounter>:<event>]|<member>|<configVersion>[|round<n>]")
         member = d.get("memberCode")
     else:
-        scenario, member, cfg = m.group(1), m.group(2), m.group(3)
+        member, cfg = m["member"], m["cfg"]
         if d.get("memberCode") != member:
             problems.append(f"memberCode {d.get('memberCode')!r} differs from the key's member {member!r}")
         if str(d.get("configVersion")) != cfg:
             problems.append(f"configVersion {d.get('configVersion')!r} differs from the key's {cfg!r}")
-        expected_name = f"scenario-{scenario}-{member}-{cfg}" + (f"-round{m.group(5)}" if m.group(5) else "") + ".json"
+        expected_name = file_name(m)
         if os.path.basename(path) != expected_name:
             problems.append(f"file name should be {expected_name}")
     if member not in MEMBERS:
@@ -158,7 +174,7 @@ def main():
     for path in files:
         problems, m = check_file(path)
         if m:
-            present.setdefault(m.group(1), set()).add(m.group(2) + (f"|round{m.group(5)}" if m.group(5) else ""))
+            present.setdefault(case_of(m), set()).add(m["member"] + (f"|round{m['round']}" if m["round"] else ""))
         if problems:
             bad += 1
             print(f"{path}:")
@@ -170,9 +186,15 @@ def main():
             scenarios = json.load(f)
         board = {"conformance", "encounter", "impact", "coordinator"}
         for s in scenarios:
-            have = present.get(s["id"], set())
-            missing = sorted(board - have)
-            print(f"{s['id']}: " + ("board round 1 complete" if not missing else "missing " + ", ".join(missing)) + (" (+ " + ", ".join(sorted(x for x in have if "round" in x)) + ")" if any("round" in x for x in have) else ""))
+            # every case that has recordings needs a full set; a scenario with none at all is missing the whole board
+            cases = sorted((c for c in present if c[0] == s["id"]), key=lambda c: (c[1] or "", c[2] or "")) or [(s["id"], None, None)]
+            for case in cases:
+                have = present.get(case, set())
+                missing = sorted(board - have)
+                label = " ".join(x for x in case if x)
+                rounds = sorted(x for x in have if "round" in x)
+                print(f"{label}: " + ("board round 1 complete" if not missing else "missing " + ", ".join(missing))
+                      + (" (+ " + ", ".join(rounds) + ")" if rounds else ""))
     return 1 if bad else 0
 
 
