@@ -9,8 +9,8 @@ Index VersionIdx On Version [ Unique ];
 
 Property Json As %String(%JSONFIELDNAME = "profile", MAXLEN = "");
 
-/// seed, api, install.
-Property Source As %String(%JSONFIELDNAME = "source", MAXLEN = 32);
+/// api, or the seed file's path.
+Property Source As %String(%JSONFIELDNAME = "source", MAXLEN = 500);
 
 Property UpdatedAt As %String(%JSONFIELDNAME = "updatedAt", MAXLEN = 30);
 

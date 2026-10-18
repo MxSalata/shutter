@@ -12,7 +12,7 @@ Property Version As %Integer(%JSONFIELDNAME = "version") [ InitialExpression = 1
 /// The profile as JSON (the shape in CONTRACTS 6.4).
 Property Json As %String(%JSONFIELDNAME = "profile", MAXLEN = "");
 
-Property Source As %String(%JSONFIELDNAME = "source", MAXLEN = 200);
+Property Source As %String(%JSONFIELDNAME = "source", MAXLEN = 500);
 
 Property UpdatedAt As %String(%JSONFIELDNAME = "updatedAt", MAXLEN = 30);
 
