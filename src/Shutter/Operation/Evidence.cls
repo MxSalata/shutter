@@ -13,7 +13,10 @@ Property Adapter As EnsLib.HTTP.OutboundAdapter;
 /// Seconds a live observation stays fresh.
 Property FreshSeconds As %Integer [ InitialExpression = 300 ];
 
-Parameter SETTINGS = "FreshSeconds:Evidence";
+/// The receiver whose paths are read when the case names none (the production item that delivers to it).
+Property Receiver As %String(MAXLEN = 128) [ InitialExpression = "Ward Out" ];
+
+Parameter SETTINGS = "FreshSeconds:Evidence,Receiver:Evidence";
 
 Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response As Shutter.Msg.EvidenceResult) As %Status
 {
@@ -40,14 +43,18 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     Do snap.AddItem("validation", "validator", now, validation) Set count = count + 1
 
     // 4. The ward's state and history for the encounter.
-    Set wardState = ..WardGet("/wards/api/encounters/" _ ..URLEncode(case.EncounterId), .status)
+    // The receiver's paths come from its description in the site profile (CONTRACTS 6.4), never from code.
+    Set receiver = $SELECT(case.Receiver '= "": case.Receiver, 1: ..Receiver)
+    Set wardState = ..WardGet(##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", case.EncounterId), .status)
     Set wardItem = {}
     Set wardItem."http_status" = status
     Set wardItem.body = wardState
     Do snap.AddItem("ward_state", "ward_api", now, wardItem) Set count = count + 1
 
     // 5. The receipt for the operation key, if any.
-    Set receipt = ..WardGet("/wards/api/receipts/" _ ..URLEncode(case.OperationKey), .rstatus)
+    Set receiptPath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "receipt", "", case.OperationKey)
+    Set receipt = $SELECT(receiptPath = "": {}, 1: ..WardGet(receiptPath, .rstatus))
+    If receiptPath = "" Set rstatus = 0
     Set receiptItem = {}
     Set receiptItem."http_status" = rstatus
     Set receiptItem.body = receipt
@@ -64,13 +71,23 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
         }
     }
 
-    // 7. The route, with the receiver's own capability profile (GET /wards/api/capabilities):
-    // the gate's capability check reads this, never an assumption.
-    Set caps = ..WardGet("/wards/api/capabilities", .cstatus)
+    // 7. The route, with the receiver's own capability profile (its capabilities endpoint): the gate's capability
+    // check reads this, never an assumption. A receiver without such an endpoint is described by the site profile's
+    // declared features, and the route says so.
+    Set capsPath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "capabilities")
+    Set declared = ##class(Shutter.Store.SiteProfile).ReceiverFeatures(receiver)
+    If capsPath = "" {
+        Set caps = declared, cstatus = 200
+    } Else {
+        Set caps = ..WardGet(capsPath, .cstatus)
+    }
     Set route = {}
-    Set route.feed = "ADT In -> ADT to Ward -> Ward Out"
-    Set route.connector = "Ward Out"
-    Set route.receiver = "the ward system (/wards/api)"
+    Set route.feed = "ADT In -> ADT to Ward -> " _ receiver
+    Set route.connector = receiver
+    Set route.receiver = ##class(Shutter.Store.SiteProfile).ReceiverLabel(receiver)
+    Set route.tier = ##class(Shutter.Store.SiteProfile).TierOf(receiver)
+    Set route."capabilities_source" = $SELECT(capsPath = "": "declared by the site profile", 1: "read from " _ capsPath)
+    Set route.declared = declared
     Set route."capabilities_http_status" = cstatus
     If cstatus = 200 {
         Set route.capabilities = caps

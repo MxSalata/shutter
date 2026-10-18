@@ -12,7 +12,8 @@ Parameter INVOCATION = "Queue";
 Property Adapter As EnsLib.HTTP.OutboundAdapter;
 
 /// The operations endpoint's path on the ward system.
-Property OperationsPath As %String(MAXLEN = 200) [ InitialExpression = "/wards/api/operations" ];
+/// Overrides the operations path of this item's receiver description in the site profile; empty takes the profile's.
+Property OperationsPath As %String(MAXLEN = 200);
 
 Parameter SETTINGS = "OperationsPath:Ward";
 
@@ -26,7 +27,7 @@ Method OnWardOperation(request As Shutter.Msg.WardOperation, Output response As 
     Set http.ContentType = "application/json"
     Do http.EntityBody.Write(body.%ToJSON())
     Set start = $ZHOROLOG
-    Set sc = ..Adapter.SendFormDataArray(.httpResponse, "POST", http, "", "", ..OperationsPath)
+    Set sc = ..Adapter.SendFormDataArray(.httpResponse, "POST", http, "", "", ..Path("operations"))
     Set response.DurationMs = (($ZHOROLOG - start) * 1000) \ 1
     Set ..Retry = 0
     Set text = ""
@@ -53,7 +54,7 @@ Method Read(request As Shutter.Msg.WardOperation, response As Shutter.Msg.WardRe
     $$$TRACE("Preflight read of encounter " _ request.EncounterId)
     Set http = ##class(%Net.HttpRequest).%New()
     Set start = $ZHOROLOG
-    Set path = $PIECE(..OperationsPath, "/operations", 1) _ "/encounters/" _ $ZCONVERT(request.EncounterId, "O", "URL")
+    Set path = ..Path("state", request.EncounterId)
     Set sc = ..Adapter.SendFormDataArray(.httpResponse, "GET", http, "", "", path)
     Set response.DurationMs = (($ZHOROLOG - start) * 1000) \ 1
     Set ..Retry = 0
@@ -89,6 +90,14 @@ Method Read(request As Shutter.Msg.WardOperation, response As Shutter.Msg.WardRe
     }
     $$$TRACE("Preflight: " _ response.Outcome _ ", version " _ response.EncounterVersion _ ", HTTP " _ response.HttpStatus)
     Quit $$$OK
+}
+
+/// This item's path of a kind, from its receiver description in the site profile (the item's own name is the
+/// receiver's), or the OperationsPath setting when set.
+Method Path(kind As %String, encounter As %String = "") As %String
+{
+    If (kind = "operations") && (..OperationsPath '= "") Quit ..OperationsPath
+    Quit ##class(Shutter.Store.SiteProfile).ReceiverPath(..%ConfigName, kind, encounter)
 }
 
 /// Map the HTTP status, the adapter's status and the body to an outcome.

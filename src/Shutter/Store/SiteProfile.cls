@@ -24,7 +24,7 @@ ClassMethod Default() As %DynamicObject
 {
     Set p = {}
     Set p.version = 0
-    Set p.receivers = [{"name": "Ward Out", "system": "the ward bed-management system", "tier": 2, "applies": "arrival_order", "resend_timestamp": "original", "cancels": false}]
+    Set p.receivers = [{"name": "Ward Out", "system": "the ward bed-management system", "tier": 2, "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "api": {"base": "/wards/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "/capabilities", "operations": "/operations"}, "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}}]
     Set p."history_policy" = "current"
     Set p."authoritative_source" = ""
     Set p."unconditional_resend" = "forbidden"
@@ -88,6 +88,57 @@ ClassMethod TierOf(receiver As %String) As %Integer
         If $ISOBJECT($GET(r)) && (##class(Shutter.Util.Json).Str(r, "name") = receiver) Quit +##class(Shutter.Util.Json).Str(r, "tier", 2)
     }
     Quit 2
+}
+
+/// The receiver's entry in the profile (CONTRACTS 6.4), or "" when the profile does not name it.
+ClassMethod Receiver(name As %String) As %DynamicObject
+{
+    Set p = ..Current()
+    Set list = p.%Get("receivers")
+    If '$ISOBJECT(list) Quit ""
+    Set iter = list.%GetIterator()
+    While iter.%GetNext(.i, .r) { If $ISOBJECT(r) && (##class(Shutter.Util.Json).Str(r, "name") = name) Return r }
+    Quit ""
+}
+
+/// The ward system's paths, used when a receiver's entry gives none: the shape the demo's ward speaks.
+ClassMethod DefaultApi() As %DynamicObject
+{
+    Quit {"base": "/wards/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "/capabilities", "operations": "/operations"}
+}
+
+/// One of a receiver's paths (state, receipt, capabilities, operations), with the receiver's base in front and the
+/// placeholders {encounter} and {key} filled in, URL-encoded. An empty path (the receiver has no such endpoint)
+/// stays empty: the caller then uses what the profile declares instead.
+ClassMethod ReceiverPath(name As %String, kind As %String, encounter As %String = "", key As %String = "") As %String
+{
+    Set r = ..Receiver(name), defaults = ..DefaultApi()
+    Set api = $SELECT($ISOBJECT(r) && $ISOBJECT(r.%Get("api")): r.%Get("api"), 1: defaults)
+    Set base = $SELECT(api.%IsDefined("base"): ##class(Shutter.Util.Json).Str(api, "base"), 1: ##class(Shutter.Util.Json).Str(defaults, "base"))
+    Set path = $SELECT(api.%IsDefined(kind): ##class(Shutter.Util.Json).Str(api, kind), 1: ##class(Shutter.Util.Json).Str(defaults, kind))
+    If path = "" Quit ""
+    Set path = $REPLACE(path, "{encounter}", $ZCONVERT(encounter, "O", "URL"))
+    Set path = $REPLACE(path, "{key}", $ZCONVERT(key, "O", "URL"))
+    If $EXTRACT(path, 1) '= "/" Set path = "/" _ path
+    Quit base _ path
+}
+
+/// What the profile declares the receiver can do (conditional_writes, receipts, history, dry_run), for a receiver
+/// with no capabilities endpoint and as the record of what the site believes; every flag true by default.
+ClassMethod ReceiverFeatures(name As %String) As %DynamicObject
+{
+    Set r = ..Receiver(name)
+    If $ISOBJECT(r) && $ISOBJECT(r.%Get("features")) Quit r.%Get("features")
+    Quit {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}
+}
+
+/// The receiver's description for a person: its system text and base path.
+ClassMethod ReceiverLabel(name As %String) As %String
+{
+    Set r = ..Receiver(name)
+    Set system = $SELECT($ISOBJECT(r): ##class(Shutter.Util.Json).Str(r, "system"), 1: "")
+    Set base = ##class(Shutter.Util.Json).Str($SELECT($ISOBJECT(r) && $ISOBJECT(r.%Get("api")): r.%Get("api"), 1: ..DefaultApi()), "base", "/wards/api")
+    Quit $SELECT(system = "": name, 1: system) _ " (" _ base _ ")"
 }
 
 /// The policy for a tier and a chain kind: automatic, approval, per_chain or board. Tier 3 never

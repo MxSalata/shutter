@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.7, 17 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.8, 18 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The ward system's API
 
@@ -332,7 +332,10 @@ reads it through `Shutter.Store.SiteProfile`.
   "version": 1,
   "receivers": [
     {"name": "Ward Out", "system": "the ward bed-management system", "tier": 2,
-     "applies": "arrival_order", "resend_timestamp": "original", "cancels": false}
+     "applies": "arrival_order", "resend_timestamp": "original", "cancels": false,
+     "api": {"base": "/wards/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}",
+             "capabilities": "/capabilities", "operations": "/operations"},
+     "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}}
   ],
   "history_policy": "current",
   "authoritative_source": "",
@@ -348,6 +351,13 @@ reads it through `Shutter.Store.SiteProfile`.
 ```
 
 - A tier is the receiver's; a policy is read by tier and chain kind.
+- **The receiver description** (v1.8): each receiver entry carries `api` (its `base` path and the paths of its `state`,
+  `receipt`, `capabilities` and `operations` endpoints, with the placeholders `{encounter}` and `{key}`) and
+  `features` (what the site declares it can do: `conditional_writes`, `receipts`, `history`, `dry_run`). The evidence
+  collector, the verifier and the connector read their paths from the entry named by the case's receiver (the
+  production item that delivered to it), so a second receiver is configuration, not code. A path left empty means the
+  receiver has no such endpoint: no receipt lookup, and the capabilities are the declared features, which the route
+  item records as `capabilities_source`. An entry without `api` takes the ward's paths.
 - `automatic`: the case (or the chain) is released with no Workflow task. It is still gated at the proposal and at the
   dispatch, rehearsed and verified, exactly as an approved case. The case records an approval whose approver is
   `policy`, with the profile's version, the tier, the chain kind and the entry, so the authorization check and the
@@ -469,6 +479,8 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.8, 18 Oct 2026: the receiver description in the site profile (`api`, `features`), read by the evidence collector, the
+  verifier and the connector (6.4).
 - v1.7, 17 Oct 2026: incidents as built (7): adoption and the ready wait, the chain's policy, the task subjects, chain
   and item states, the expected-version rule, the approvals route and the case's `incident` fields; the gate's
   `APPROVAL_PLAN_ORIGIN` check (an approval by policy needs a plan from the policy path for its entry; policy version

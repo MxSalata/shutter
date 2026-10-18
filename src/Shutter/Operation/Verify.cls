@@ -10,6 +10,11 @@ Parameter INVOCATION = "Queue";
 
 Property Adapter As EnsLib.HTTP.OutboundAdapter;
 
+/// The receiver whose paths are read when the case names none.
+Property Receiver As %String(MAXLEN = 128) [ InitialExpression = "Ward Out" ];
+
+Parameter SETTINGS = "Receiver:Verify";
+
 Method OnVerifyRequest(request As Shutter.Msg.VerifyRequest, Output response As Shutter.Msg.VerifyResult) As %Status
 {
     Set response = ##class(Shutter.Msg.VerifyResult).%New()
@@ -17,8 +22,11 @@ Method OnVerifyRequest(request As Shutter.Msg.VerifyRequest, Output response As 
     If '$ISOBJECT(case) Set response.Error = "Unknown case " _ request.CaseId, response.Outcome = "failed" Quit $$$OK
     Set plan = ##class(Shutter.Store.Plan).%OpenId(request.PlanId)
     Set attempt = ##class(Shutter.Store.ExecutionAttempt).%OpenId(request.AttemptId)
-    Set encounter = ..Get("/wards/api/encounters/" _ $ZCONVERT(case.EncounterId, "O", "URL"), .estatus)
-    Set receipt = ..Get("/wards/api/receipts/" _ $ZCONVERT(case.OperationKey, "O", "URL"), .rstatus)
+    Set receiver = $SELECT(case.Receiver '= "": case.Receiver, 1: ..Receiver)
+    Set encounter = ..Get(##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", case.EncounterId), .estatus)
+    Set receiptPath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "receipt", "", case.OperationKey)
+    Set receipt = $SELECT(receiptPath = "": {}, 1: ..Get(receiptPath, .rstatus))
+    If receiptPath = "" Set rstatus = 0
     Set detail = {}
     Set detail."encounter_http_status" = estatus, detail.encounter = encounter
     Set detail."receipt_http_status" = rstatus, detail.receipt = receipt
