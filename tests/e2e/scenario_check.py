@@ -173,30 +173,25 @@ def play_incident(args, operator, approver, scenario, mode):
         run = (body or {}).get("run") or {}
         return run.get("state") if run.get("scenario") == scenario["id"] else None
 
-    def newest_incident():
-        _, body = operator.call("GET", "/incidents?limit=5")
-        items = [i for i in (body or {}).get("items", []) if (i.get("openedAt") or "") >= started_at]
-        return items[0]["incidentId"] if items else None
+    def run_incidents():
+        # The incidents this run's own cases joined. One can be older than the run: failures from scenarios played
+        # just before count towards the same window, and an incident still taking cases adopts the new ones.
+        _, body = operator.call("GET", f"/cases?scenario={scenario['id']}&limit=50")
+        mine = [c for c in (body or {}).get("items", []) if (c.get("openedAt") or "") >= started_at]
+        return sorted({c["incidentId"] for c in mine if c.get("incidentId")})
 
-    incident_id = wait(f"{scenario['id']}: an incident", newest_incident, args.timeout)
+    wait(f"{scenario['id']}: an incident for its cases", run_incidents, args.timeout)
     decided = set()
 
-    def closed():
-        _, inc = operator.call("GET", f"/incidents/{urllib.parse.quote(incident_id)}")
-        if not inc:
-            return None
-        if inc.get("state") == "closed":
-            return inc
-        if not args.approve or run_state() == "running":
-            return None
-        if "incident" not in decided and any(not t.get("complete") for t in inc.get("tasks") or []):
+    def approve_waiting(incident_id, inc):
+        if incident_id not in decided and any(not t.get("complete") for t in inc.get("tasks") or []):
             body = {"planDigest": (inc.get("plan") or {}).get("digest"), "decision": "approve",
                     "comment": "scenario check"}
             status, out = approver.call("POST", f"/incidents/{urllib.parse.quote(incident_id)}/approvals", body,
                                         idempotent=True)
             if status != 202:
-                raise RuntimeError(f"the incident's approval was refused: HTTP {status} {out}")
-            decided.add("incident")
+                raise RuntimeError(f"the approval of {incident_id} was refused: HTTP {status} {out}")
+            decided.add(incident_id)
         for chain in inc.get("chains") or []:
             for item in chain.get("items") or []:
                 caseid = item.get("caseId")
@@ -211,11 +206,23 @@ def play_incident(args, operator, approver, scenario, mode):
                 if status != 202:
                     raise RuntimeError(f"the approval of {caseid} was refused: HTTP {status} {out}")
                 decided.add(caseid)
-        return None
+
+    def all_closed():
+        incidents = []
+        for incident_id in run_incidents():
+            _, inc = operator.call("GET", f"/incidents/{urllib.parse.quote(incident_id)}")
+            if not inc:
+                return None
+            if inc.get("state") != "closed" and args.approve and run_state() != "running":
+                approve_waiting(incident_id, inc)
+            incidents.append(inc)
+        return incidents if incidents and all(i.get("state") == "closed" for i in incidents) else None
 
     # A burst and its quiet period take longer than one case: allow for every encounter.
-    incident = wait(f"{scenario['id']} {incident_id}: the incident to close", closed,
-                    args.timeout * max(1, len(expected["encounters"])))
+    incidents = wait(f"{scenario['id']}: its incidents to close", all_closed,
+                     args.timeout * max(1, len(expected["encounters"])))
+    incident = {"incidentId": ",".join(i.get("incidentId") for i in incidents), "state": "closed",
+                "chains": [c for i in incidents for c in i.get("chains") or []]}
     chains = {c.get("encounterId"): c for c in incident.get("chains") or []}
     differences, parts = [], []
     for want in expected["encounters"]:
@@ -246,7 +253,7 @@ def play_incident(args, operator, approver, scenario, mode):
                             f"{want['final_ward']}")
         parts.append(f"{enc} {chain.get('kind')} {path_of(chain)} {','.join(entries)} {writes}w {chain.get('state')}")
         differences += [f"{enc}: {x}" for x in problems]
-    outcome = f"{incident_id} {incident.get('state')}: " + "; ".join(parts)
+    outcome = f"{incident['incidentId']} {incident.get('state')}: " + "; ".join(parts)
     summary = f"{scenario['id']} {mode}: {outcome}"
     if differences:
         return False, f"DIFFERS {summary}: " + "; ".join(differences), outcome + " (" + "; ".join(differences) + ")"
