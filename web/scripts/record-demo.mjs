@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 /**
  * Records the demo's data from a running Shutter: signs in to the REST API (docs/CONTRACTS.md, section 5), reads
- * every read route for the scenarios, every case, the library, the settings, the costs and the health report, and
- * writes them to src/mocks/fixtures.json, which the in-browser mock serves in the demo build and the tests.
+ * every read route for the scenarios, every case, every incident, the library, the settings, the costs and the health
+ * report, and writes them to src/mocks/fixtures.json, which the in-browser mock serves in the demo build and the tests.
  *
  *   node scripts/record-demo.mjs [--url http://localhost:52773] [--user operator] [--out src/mocks/fixtures.json]
- *                                [--cases C-000002,C-000008,...]
+ *                                [--cases C-000002,C-000008,...] [--incidents I-000001,...]
  *
  * --cases keeps only the cases named (one per scenario and mode reads better than every rehearsal of the same run),
- * and the costs are then those of the kept cases' runs.
+ * and the costs are then those of the kept cases' runs. --incidents keeps only the incidents named; the cases a kept
+ * incident holds are kept with it, so its chains link to them.
  * The password comes from SHUTTER_PASSWORD (default: the demo installer's "shutter"). Only reads: nothing is
  * changed on the instance. Node 22 or later (fetch).
  */
@@ -27,6 +28,7 @@ const user = args.user ?? 'operator';
 const password = process.env.SHUTTER_PASSWORD ?? 'shutter';
 const out = args.out ?? 'src/mocks/fixtures.json';
 const only = args.cases ? new Set(args.cases.split(',').map((c) => c.trim())) : null;
+const onlyIncidents = args.incidents ? new Set(args.incidents.split(',').map((i) => i.trim())) : null;
 
 let cookie = '';
 
@@ -59,6 +61,17 @@ const signIn = await call('POST', '/session', { username: user, password });
 if (signIn.status !== 200) throw new Error(`Sign-in as ${user} failed: HTTP ${signIn.status}`);
 
 const scenarios = await read('/scenarios');
+// The incidents first: with --cases, the cases a kept incident holds are kept too. An instance without the routes
+// answers 404, and the demo then has no incidents.
+const incidents = {};
+const incidentList = await read('/incidents?limit=500');
+for (const summary of incidentList?.items ?? []) {
+  if (onlyIncidents && !onlyIncidents.has(summary.incidentId)) continue;
+  const id = encodeURIComponent(summary.incidentId);
+  const detail = await read(`/incidents/${id}`);
+  incidents[summary.incidentId] = { summary, detail, events: await read(`/incidents/${id}/events`) };
+  for (const chain of detail?.chains ?? []) for (const item of chain.items ?? []) only?.add(item.caseId);
+}
 const list = await read('/cases?limit=500');
 const cases = {};
 const kept = list.items.filter((c) => !only || only.has(c.caseId));
@@ -86,7 +99,17 @@ const recordedAt = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
 const runs = kept.flatMap((c) => cases[c.caseId].runs ?? []);
 const liveRuns = runs.filter((r) => r.mode === 'live' || r.mode === 'record');
 const models = [...new Set(liveRuns.map((r) => r.model))].join(', ');
-const byBoard = kept.filter((c) => c.mode !== 'rules').length;
+const MODE_WORDS = {
+  board: 'by the board of specialists',
+  single: 'by one agent',
+  rules: 'by rules alone',
+  policy: 'in site-policy mode',
+};
+const modeCounts = kept.reduce((m, c) => ({ ...m, [c.mode]: (m[c.mode] ?? 0) + 1 }), {});
+const byMode = Object.entries(modeCounts)
+  .map(([mode, n]) => `${n} ${MODE_WORDS[mode] ?? mode}`)
+  .join(', ');
+const incidentCount = Object.keys(incidents).length;
 const agents =
   runs.length === 0
     ? 'no agent runs'
@@ -161,13 +184,14 @@ function costsOfKept() {
 }
 
 const fixtures = {
-  source: `Recorded from Shutter's REST API at ${recordedAt}: ${kept.length} cases, ${byBoard} by the board of specialists and ${kept.length - byBoard} by rules alone; ${agents}. The demo serves these answers in the browser; nothing in it reaches an IRIS instance.`,
+  source: `Recorded from Shutter's REST API at ${recordedAt}: ${kept.length} cases (${byMode})${incidentCount ? ` and ${incidentCount} incident${incidentCount === 1 ? '' : 's'}` : ''}; ${agents}. The demo serves these answers in the browser; nothing in it reaches an IRIS instance.`,
   recordedAt,
   scenarios: (Array.isArray(scenarios) ? scenarios : scenarios.scenarios).map((s) => ({
     ...s,
     steps: s.steps.map(({ path: _path, ...step }) => step),
   })),
   cases,
+  incidents,
   library: await read('/library'),
   settings: await read('/settings'),
   costs: only ? costsOfKept() : await read('/costs'),
@@ -175,4 +199,6 @@ const fixtures = {
 };
 await call('DELETE', '/session');
 writeFileSync(out, `${JSON.stringify(fixtures, null, 1)}\n`);
-console.log(`wrote ${out}: ${kept.length} cases, ${fixtures.scenarios.length} scenarios`);
+console.log(
+  `wrote ${out}: ${kept.length} cases, ${incidentCount} incidents, ${fixtures.scenarios.length} scenarios`,
+);

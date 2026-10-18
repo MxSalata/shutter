@@ -1,7 +1,7 @@
 import { Anchor, Card, Group, Pagination, Select, Table, Text } from '@mantine/core';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { useCases, type CaseFilters } from '@/api/hooks';
+import { useCases, useScenarios, type CaseFilters } from '@/api/hooks';
 import { PageHeader } from '@/components/PageHeader';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
@@ -23,6 +23,7 @@ export default function CasesPage() {
   };
   const cases = useCases(filters);
   const total = cases.data?.total ?? 0;
+  const scenarioIds = useScenarios().data?.scenarios.map((s) => s.id) ?? [];
 
   return (
     <>
@@ -50,7 +51,7 @@ export default function CasesPage() {
               setScenario(v);
               setPage(1);
             }}
-            data={Array.from({ length: 10 }, (_, i) => `S${i + 1}`)}
+            data={scenarioIds}
             w={160}
           />
         </Group>
@@ -104,6 +105,18 @@ export default function CasesPage() {
                         {c.headline ||
                           `${humanize(c.event)}${c.ward ? ` to ${c.ward}` : ''} for ${c.encounterId}`}
                       </Text>
+                      {c.incidentId ? (
+                        <Text size="xs" c="dimmed">
+                          In incident{' '}
+                          <Anchor
+                            component={Link}
+                            to={`/incidents/${encodeURIComponent(c.incidentId)}`}
+                            size="xs"
+                          >
+                            {c.incidentId}
+                          </Anchor>
+                        </Text>
+                      ) : null}
                     </Table.Td>
                     <Table.Td>
                       <Text size="sm">{c.scenario || 'none'}</Text>

@@ -26,6 +26,7 @@ import {
   IconMoon,
   IconPalette,
   IconSettings,
+  IconStack2,
   IconSun,
   IconUserCircle,
 } from '@tabler/icons-react';
@@ -54,6 +55,13 @@ const NAV = [
     icon: IconListDetails,
     color: 'shutter',
     hint: 'Every failed message Shutter has opened',
+  },
+  {
+    to: '/incidents',
+    label: 'Incidents',
+    icon: IconStack2,
+    color: 'orange',
+    hint: 'Many failures to one receiver, released in order',
   },
   {
     to: '/library',

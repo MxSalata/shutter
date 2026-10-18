@@ -8,6 +8,7 @@ export type CaseState =
   | 'detected'
   | 'collecting'
   | 'investigating'
+  | 'grouped'
   | 'proposed'
   | 'gated'
   | 'rehearsing'
@@ -112,6 +113,8 @@ export interface CaseSummary {
   closedAt: string;
   ensSessionId: string;
   workflowSessionId: string;
+  /** The incident that holds the case, when one does (CONTRACTS 7.5). */
+  incidentId?: string;
 }
 
 export interface CaseList {
@@ -139,6 +142,8 @@ export interface CaseDetail extends CaseSummary {
     attempts: number;
   };
   links: { visualTrace: string; workflowTrace: string };
+  /** The case's place in its incident, when one holds it. */
+  incident?: CaseIncident;
 }
 
 export interface CaseEvent {
@@ -368,6 +373,156 @@ export interface ApprovalDecision {
   planDigest: string;
   expectedVersion: number;
   comment: string;
+}
+
+// ---- incidents (CONTRACTS 7.5) ----
+
+export type IncidentState = 'open' | 'classified' | 'awaiting_approval' | 'releasing' | 'closed';
+
+export interface IncidentProgress {
+  chains: number;
+  cases: number;
+  byKind: Record<string, number>;
+  byState: Record<string, number>;
+}
+
+/** The store's projection of an incident: fields with no value are left out. */
+export interface IncidentSummary {
+  incidentId: string;
+  /** The production item the failures went to. */
+  receiver: string;
+  mode: Mode;
+  state: IncidentState;
+  openedAt: string;
+  intakeClosedAt?: string;
+  closedAt?: string;
+  threshold?: number;
+  windowMinutes?: number;
+  quietSeconds?: number;
+  lastFailureAt?: string;
+  planDigest?: string;
+  receiverEpoch?: number;
+  catalogueVersion?: string;
+  profileVersion?: string;
+  policyVersion?: string;
+  /** How the policy chains were authorised: automatic, approval, per_chain, approval+per_chain or none. */
+  policy?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  approvalDecision?: string;
+  approvalComment?: string;
+  approvalTaskId?: string;
+  workflowSessionId?: string;
+  summary?: string;
+  version?: number;
+  progress?: IncidentProgress;
+}
+
+export interface IncidentList {
+  items: IncidentSummary[];
+  total: number;
+}
+
+/** One failed operation of a chain, in event order. */
+export interface ChainItem {
+  position: number;
+  caseId: string;
+  event: string;
+  eventTime: string;
+  operationKey: string;
+  /** The catalogue entry the case matched when the chain formed, its outcome and who decides it. */
+  entry: string;
+  outcome: string;
+  decides: string;
+  /** The receiver version the item goes at: the previous item's verified version (null: fresh evidence decides). */
+  expectedVersion: number | null;
+  verifiedVersion: number | null;
+  /** pending, released, resolved, blocked, escalated, failed, stopped (never released). */
+  state: string;
+  caseState: CaseState;
+  caseHeadline: string;
+  /** What the released case matched on its fresh evidence. */
+  releaseEntry?: string;
+  releaseOutcome?: string;
+  releasedAt?: string;
+  closedAt?: string;
+}
+
+export interface ChainApproval {
+  by: string;
+  at: string;
+  decision: string;
+  comment: string;
+  taskId: string;
+}
+
+/** The failed operations for one encounter, oldest event first (CONTRACTS 7.1). */
+export interface Chain {
+  chainId?: string | number;
+  seq: number;
+  encounterId: string;
+  patientId?: string;
+  /** single, ordered or interleaved. */
+  kind: string;
+  /** policy (the catalogue settles every item), board or person. */
+  decides: string;
+  /** automatic, approval or per_chain for a policy chain; path for one whose cases run their own path. */
+  policy: string;
+  entries?: string;
+  /** pending, awaiting_approval, approved, rejected, releasing, resolved, stopped, escalated. */
+  state: string;
+  outcome?: string;
+  firstExpectedVersion?: number | string;
+  /** The item that stopped the chain. */
+  stoppedAt?: number;
+  approval?: ChainApproval;
+  items: ChainItem[];
+}
+
+export interface IncidentApproval {
+  scope: 'incident' | 'chain';
+  seq?: number;
+  by: string;
+  at: string;
+  decision: string;
+  comment: string;
+  taskId: string;
+  planDigest: string;
+}
+
+export interface IncidentDetail extends IncidentSummary {
+  chains: Chain[];
+  /** The incident's plan (CONTRACTS 7.2): every chain with its kind, entry, outcome and items in order. */
+  plan: unknown;
+  approvals: IncidentApproval[];
+  tasks: WorkflowTask[];
+  links?: { workflowTrace?: string };
+}
+
+export interface IncidentEvent {
+  at: string;
+  kind: string;
+  text: string;
+  actor: string;
+}
+
+export interface IncidentDecision {
+  decision: 'approve' | 'reject';
+  planDigest: string;
+  comment: string;
+}
+
+/** A case's place in its incident, in the store's snake case. */
+export interface CaseIncident {
+  incident_id: string;
+  incident_state: IncidentState;
+  chain_seq?: number;
+  position?: number;
+  chain_kind?: string;
+  decides?: string;
+  chain_policy?: string;
+  item_state?: string;
+  expected_version?: number;
 }
 
 // ---- library, settings, costs, health (5.4) ----

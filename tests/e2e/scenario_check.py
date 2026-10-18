@@ -35,6 +35,8 @@ import urllib.request
 import uuid
 
 CLOSED = {"resolved", "blocked", "escalated", "failed"}
+# The calls the API refused, newest last, so a wait that times out can say what it was answered.
+REFUSED = []
 
 
 class Session:
@@ -60,6 +62,7 @@ class Session:
                 return response.status, (json.loads(text) if text else None)
         except urllib.error.HTTPError as error:
             text = error.read().decode()
+            REFUSED.append(f"HTTP {error.code} {method} {path}")
             try:
                 return error.code, json.loads(text) if text else None
             except json.JSONDecodeError:
@@ -85,12 +88,15 @@ def ward_encounter(url, user, password, encounter_id):
 def wait(what, check, timeout, every=2):
     """Calls check() until it returns something truthy, or raises after timeout seconds."""
     deadline = time.monotonic() + timeout
+    refused = len(REFUSED)
     while time.monotonic() < deadline:
         value = check()
         if value:
             return value
         time.sleep(every)
-    raise TimeoutError(f"{what}: nothing after {timeout} s")
+    since = REFUSED[refused:]
+    raise TimeoutError(f"{what}: nothing after {timeout} s"
+                       + (f" (meanwhile {len(since)} refused calls, the last: {since[-1]})" if since else ""))
 
 
 def wait_until_idle(operator, timeout):

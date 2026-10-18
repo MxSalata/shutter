@@ -15,6 +15,10 @@ import {
   type Closure,
   type Costs,
   type Health,
+  type IncidentDecision,
+  type IncidentDetail,
+  type IncidentEvent,
+  type IncidentList,
   type LibraryMember,
   type Me,
   type Mode,
@@ -38,6 +42,9 @@ export const keys = {
   cases: (filters: CaseFilters) => ['cases', filters] as const,
   case: (id: string) => ['case', id] as const,
   part: (id: string, part: string) => ['case', id, part] as const,
+  incidents: (filters: IncidentFilters) => ['incidents', filters] as const,
+  incident: (id: string) => ['incident', id] as const,
+  incidentEvents: (id: string) => ['incident', id, 'events'] as const,
   library: ['library'] as const,
   settings: ['settings'] as const,
   costs: ['costs'] as const,
@@ -115,6 +122,7 @@ export function useRunScenario() {
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: keys.scenarios });
       await client.invalidateQueries({ queryKey: ['cases'] });
+      await client.invalidateQueries({ queryKey: ['incidents'] });
     },
   });
 }
@@ -126,6 +134,7 @@ export function useResetScenarios() {
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: keys.scenarios });
       await client.invalidateQueries({ queryKey: ['cases'] });
+      await client.invalidateQueries({ queryKey: ['incidents'] });
     },
   });
 }
@@ -264,6 +273,67 @@ export function useReinvestigate(caseId: string) {
 export function usePreviewBlindResend(caseId: string) {
   return useMutation({
     mutationFn: () => api.post<BlindResendPreview>(`/cases/${seg(caseId)}/preview-blind-resend`),
+  });
+}
+
+// ---- incidents (CONTRACTS 7.5) ----
+
+export interface IncidentFilters {
+  state?: string;
+  limit?: number;
+}
+
+export function useIncidents(filters: IncidentFilters) {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(filters)) if (v !== undefined && v !== '') params.set(k, String(v));
+  const query = params.toString();
+  return useQuery({
+    queryKey: keys.incidents(filters),
+    queryFn: () => api.get<IncidentList>(`/incidents${query ? `?${query}` : ''}`),
+    refetchInterval: (q) => (q.state.data?.items.some((i) => i.state !== 'closed') ? LIVE * 2 : CALM),
+  });
+}
+
+export function useIncident(incidentId: string) {
+  return useQuery({
+    queryKey: keys.incident(incidentId),
+    queryFn: () => api.get<IncidentDetail>(`/incidents/${seg(incidentId)}`),
+    refetchInterval: (q) => (q.state.data && q.state.data.state !== 'closed' ? LIVE : false),
+  });
+}
+
+export function useIncidentEvents(incidentId: string, open: boolean) {
+  return useQuery({
+    queryKey: keys.incidentEvents(incidentId),
+    queryFn: () => api.get<IncidentEvent[]>(`/incidents/${seg(incidentId)}/events`),
+    refetchInterval: open ? LIVE : false,
+  });
+}
+
+/** Approve or reject the incident's policy chains, or with chainSeq one chain released under its own approval. */
+export function useDecideIncident(incidentId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      decision,
+      chainSeq,
+      idempotencyKey,
+    }: {
+      decision: IncidentDecision;
+      chainSeq?: number;
+      idempotencyKey: string;
+    }) =>
+      api.post<{ taskId: string; decision: string; incidentId: string; chainSeq?: number }>(
+        chainSeq === undefined
+          ? `/incidents/${seg(incidentId)}/approvals`
+          : `/incidents/${seg(incidentId)}/chains/${chainSeq}/approvals`,
+        decision,
+        { idempotencyKey },
+      ),
+    onSettled: async () => {
+      await client.invalidateQueries({ queryKey: keys.incident(incidentId) });
+      await client.invalidateQueries({ queryKey: ['incidents'] });
+    },
   });
 }
 

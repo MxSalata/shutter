@@ -1,0 +1,799 @@
+{
+  "source": "Recorded from Shutter's REST API on contest49-core, 2026-10-18: incident I-000001 of scenario S11 in site-policy mode, for the incident pages' tests.",
+  "summary": {
+    "incidentId": "I-000001",
+    "receiver": "Ward Out",
+    "mode": "policy",
+    "state": "closed",
+    "openedAt": "2026-10-18T11:04:27Z",
+    "intakeClosedAt": "2026-10-18T11:05:44Z",
+    "closedAt": "2026-10-18T11:10:54Z",
+    "threshold": 5,
+    "windowMinutes": 10,
+    "quietSeconds": 60,
+    "lastFailureAt": "2026-10-18T11:04:44Z",
+    "planDigest": "sha256:f42f69be8a575e5c007692add21cecb00014e05ff7c6724b84d9b72bd6411367",
+    "receiverEpoch": 4,
+    "catalogueVersion": "E1@1,E10@1,E11@1,E2@2,E3@1,E4@1,E5@1,E6@1,E7@1,E8@1,E9@1",
+    "profileVersion": "2",
+    "policyVersion": "2026-10-17.2",
+    "policy": "approval",
+    "approvedBy": "approver",
+    "approvedAt": "2026-10-18T11:10:29Z",
+    "approvalDecision": "approved",
+    "approvalComment": "Checked the order of the two operations",
+    "approvalTaskId": "148",
+    "workflowSessionId": "103",
+    "summary": "6 chain(s): 6 resolved, 0 stopped, 0 escalated, 0 rejected",
+    "version": 4,
+    "id": "1",
+    "progress": {
+      "chains": 6,
+      "cases": 8,
+      "byKind": {
+        "single": 4,
+        "ordered": 1,
+        "interleaved": 1
+      },
+      "byState": {
+        "resolved": 6
+      }
+    }
+  },
+  "detail": {
+    "incidentId": "I-000001",
+    "receiver": "Ward Out",
+    "mode": "policy",
+    "state": "closed",
+    "openedAt": "2026-10-18T11:04:27Z",
+    "intakeClosedAt": "2026-10-18T11:05:44Z",
+    "closedAt": "2026-10-18T11:10:54Z",
+    "threshold": 5,
+    "windowMinutes": 10,
+    "quietSeconds": 60,
+    "lastFailureAt": "2026-10-18T11:04:44Z",
+    "planDigest": "sha256:f42f69be8a575e5c007692add21cecb00014e05ff7c6724b84d9b72bd6411367",
+    "receiverEpoch": 4,
+    "catalogueVersion": "E1@1,E10@1,E11@1,E2@2,E3@1,E4@1,E5@1,E6@1,E7@1,E8@1,E9@1",
+    "profileVersion": "2",
+    "policyVersion": "2026-10-17.2",
+    "policy": "approval",
+    "approvedBy": "approver",
+    "approvedAt": "2026-10-18T11:10:29Z",
+    "approvalDecision": "approved",
+    "approvalComment": "Checked the order of the two operations",
+    "approvalTaskId": "148",
+    "workflowSessionId": "103",
+    "summary": "6 chain(s): 6 resolved, 0 stopped, 0 escalated, 0 rejected",
+    "version": 4,
+    "id": "1",
+    "progress": {
+      "chains": 6,
+      "cases": 8,
+      "byKind": {
+        "single": 4,
+        "ordered": 1,
+        "interleaved": 1
+      },
+      "byState": {
+        "resolved": 6
+      }
+    },
+    "chains": [
+      {
+        "chainId": "1",
+        "seq": 1,
+        "encounterId": "ENC-1101",
+        "patientId": "MRN1101",
+        "kind": "single",
+        "decides": "policy",
+        "policy": "automatic",
+        "entries": "E2",
+        "state": "resolved",
+        "outcome": "1 item(s) resolved in order",
+        "firstExpectedVersion": 1,
+        "items": [
+          {
+            "position": 1,
+            "caseId": "C-000003",
+            "event": "transfer",
+            "eventTime": "2026-10-15T09:20:00Z",
+            "operationKey": "PAS^HOSP^MRN1101^ENC-1101^transfer^2026-10-15T09:20:00Z",
+            "entry": "E2",
+            "outcome": "resend",
+            "decides": "policy",
+            "expectedVersion": null,
+            "verifiedVersion": 2,
+            "state": "resolved",
+            "caseState": "resolved",
+            "caseHeadline": "Resend the transfer to WARD-B unchanged, after rehearsal and approval. Catalogue E2, Not delivered, still current: resend the operation unchanged at receiver version 1, by site policy (automatic)",
+            "releaseEntry": "E2",
+            "releaseOutcome": "resend",
+            "releasedAt": "2026-10-18T11:05:44Z",
+            "closedAt": "2026-10-18T11:05:47Z"
+          }
+        ]
+      },
+      {
+        "chainId": "2",
+        "seq": 2,
+        "encounterId": "ENC-1102",
+        "patientId": "MRN1102",
+        "kind": "ordered",
+        "decides": "policy",
+        "policy": "approval",
+        "entries": "E4,E4",
+        "state": "resolved",
+        "outcome": "2 item(s) resolved in order",
+        "firstExpectedVersion": 1,
+        "items": [
+          {
+            "position": 1,
+            "caseId": "C-000004",
+            "event": "transfer",
+            "eventTime": "2026-10-15T09:20:00Z",
+            "operationKey": "PAS^HOSP^MRN1102^ENC-1102^transfer^2026-10-15T09:20:00Z",
+            "entry": "E4",
+            "outcome": "resend_chain",
+            "decides": "policy",
+            "expectedVersion": 1,
+            "verifiedVersion": 2,
+            "state": "resolved",
+            "caseState": "resolved",
+            "caseHeadline": "Resend the transfer to WARD-B unchanged, after rehearsal and approval. Catalogue E4, Several failures, in order: resend the operation unchanged at receiver version 1, by site policy (incident)",
+            "releaseEntry": "E4",
+            "releaseOutcome": "resend_chain",
+            "releasedAt": "2026-10-18T11:10:38Z",
+            "closedAt": "2026-10-18T11:10:41Z"
+          },
+          {
+            "position": 2,
+            "caseId": "C-000009",
+            "event": "discharge",
+            "eventTime": "2026-10-15T10:00:00Z",
+            "operationKey": "PAS^HOSP^MRN1102^ENC-1102^discharge^2026-10-15T10:00:00Z",
+            "entry": "E4",
+            "outcome": "resend_chain",
+            "decides": "policy",
+            "expectedVersion": 2,
+            "verifiedVersion": 3,
+            "state": "resolved",
+            "caseState": "resolved",
+            "caseHeadline": "Resend the discharge unchanged, after rehearsal and approval. Catalogue E4, Several failures, in order: resend the operation unchanged at receiver version 2, by site policy (incident)",
+            "releaseEntry": "E4",
+            "releaseOutcome": "resend_chain",
+            "releasedAt": "2026-10-18T11:10:41Z",
+            "closedAt": "2026-10-18T11:10:44Z"
+          }
+        ]
+      },
+      {
+        "chainId": "3",
+        "seq": 3,
+        "encounterId": "ENC-1103",
+        "patientId": "MRN1103",
+        "kind": "interleaved",
+        "decides": "board",
+        "policy": "path",
+        "entries": "E1,E5",
+        "state": "resolved",
+        "outcome": "2 item(s) resolved in order",
+        "firstExpectedVersion": 2,
+        "items": [
+          {
+            "position": 1,
+            "caseId": "C-000005",
+            "event": "transfer",
+            "eventTime": "2026-10-15T09:20:00Z",
+            "operationKey": "PAS^HOSP^MRN1103^ENC-1103^transfer^2026-10-15T09:20:00Z",
+            "entry": "E1",
+            "outcome": "none",
+            "decides": "policy",
+            "expectedVersion": null,
+            "verifiedVersion": 3,
+            "state": "resolved",
+            "caseState": "resolved",
+            "caseHeadline": "Valid message. Do not resend: a later event moved the encounter on. The 09:20 transfer of ENC-1103 to WARD-B was never committed, and a later transfer to WARD-C (09:45, version 3) has been applied since. Under ELS-2.1 and RP-2.3 it is superseded and nothing is sent. T",
+            "releaseEntry": "E1",
+            "releaseOutcome": "none",
+            "releasedAt": "2026-10-18T11:05:47Z",
+            "closedAt": "2026-10-18T11:05:50Z"
+          },
+          {
+            "position": 2,
+            "caseId": "C-000010",
+            "event": "discharge",
+            "eventTime": "2026-10-15T10:30:00Z",
+            "operationKey": "PAS^HOSP^MRN1103^ENC-1103^discharge^2026-10-15T10:30:00Z",
+            "entry": "E5",
+            "outcome": "resend_latest",
+            "decides": "board",
+            "expectedVersion": 3,
+            "verifiedVersion": 4,
+            "state": "resolved",
+            "caseState": "resolved",
+            "caseHeadline": "Resend the discharge unchanged, after rehearsal and approval. The 10:30 discharge of ENC-1103 was never committed (no receipt), nothing later was applied, and the encounter is admitted in WARD-C at version 3. Resend the discharge unchanged, conditional on versio",
+            "releaseEntry": "E5",
+            "releaseOutcome": "resend_latest",
+            "releasedAt": "2026-10-18T11:05:50Z",
+            "closedAt": "2026-10-18T11:10:38Z"
+          }
+        ]
+      },
+      {
+        "chainId": "4",
+        "seq": 4,
+        "encounterId": "ENC-1104",
+        "patientId": "MRN1104",
+        "kind": "single",
+        "decides": "policy",
+        "policy": "automatic",
+        "entries": "E2",
+        "state": "resolved",
+        "outcome": "1 item(s) resolved in order",
+        "firstExpectedVersion": 1,
+        "items": [
+          {
+            "position": 1,
+            "caseId": "C-000006",
+            "event": "transfer",
+            "eventTime": "2026-10-15T09:20:00Z",
+            "operationKey": "PAS^HOSP^MRN1104^ENC-1104^transfer^2026-10-15T09:20:00Z",
+            "entry": "E2",
+            "outcome": "resend",
+            "decides": "policy",
+            "expectedVersion": null,
+            "verifiedVersion": 2,
+            "state": "resolved",
+            "caseState": "resolved",
+            "caseHeadline": "Valid message. Do not resend: a later event moved the encounter on. Catalogue E1, Superseded by a later transfer: nothing is sent",
+            "releaseEntry": "E1",
+            "releaseOutcome": "none",
+            "releasedAt": "2026-10-18T11:10:44Z",
+            "closedAt": "2026-10-18T11:10:47Z"
+          }
+        ]
+      },
+      {
+        "chainId": "5",
+        "seq": 5,
+        "encounterId": "ENC-1105",
+        "patientId": "MRN1105",
+        "kind": "single",
+        "decides": "policy",
+        "policy": "automatic",
+        "entries": "E6",
+        "state": "resolved",
+        "outcome": "1 item(s) resolved in order",
+        "firstExpectedVersion": 2,
+        "items": [
+          {
+            "position": 1,
+            "caseId": "C-000008",
+            "event": "transfer",
+            "eventTime": "2026-10-15T09:20:00Z",
+            "operationKey": "PAS^HOSP^MRN1105^ENC-1105^transfer^2026-10-15T09:20:00Z",
+            "entry": "E6",
+            "outcome": "none",
+            "decides": "policy",
+            "expectedVersion": null,
+            "verifiedVersion": 2,
+            "state": "resolved",
+            "caseState": "resolved",
+            "caseHeadline": "Valid message. Do not resend: a later event moved the encounter on. Catalogue E6, The encounter is discharged: nothing is sent",
+            "releaseEntry": "E6",
+            "releaseOutcome": "none",
+            "releasedAt": "2026-10-18T11:10:47Z",
+            "closedAt": "2026-10-18T11:10:50Z"
+          }
+        ]
+      },
+      {
+        "chainId": "6",
+        "seq": 6,
+        "encounterId": "ENC-1106",
+        "patientId": "MRN1106",
+        "kind": "single",
+        "decides": "policy",
+        "policy": "automatic",
+        "entries": "E2",
+        "state": "resolved",
+        "outcome": "1 item(s) resolved in order",
+        "firstExpectedVersion": "",
+        "items": [
+          {
+            "position": 1,
+            "caseId": "C-000007",
+            "event": "admit",
+            "eventTime": "2026-10-15T09:00:00Z",
+            "operationKey": "PAS^HOSP^MRN1106^ENC-1106^admit^2026-10-15T09:00:00Z",
+            "entry": "E2",
+            "outcome": "resend",
+            "decides": "policy",
+            "expectedVersion": null,
+            "verifiedVersion": 1,
+            "state": "resolved",
+            "caseState": "resolved",
+            "caseHeadline": "Resend the admission unchanged, after rehearsal and approval. Catalogue E2, Not delivered, still current: resend the operation unchanged at receiver version 0, by site policy (automatic)",
+            "releaseEntry": "E2",
+            "releaseOutcome": "resend",
+            "releasedAt": "2026-10-18T11:10:50Z",
+            "closedAt": "2026-10-18T11:10:53Z"
+          }
+        ]
+      }
+    ],
+    "plan": {
+      "incident_id": "I-000001",
+      "receiver": "Ward Out",
+      "mode": "policy",
+      "chains": [
+        {
+          "seq": 1,
+          "encounter_id": "ENC-1101",
+          "patient_id": "MRN1101",
+          "kind": "single",
+          "decides": "policy",
+          "policy": "automatic",
+          "entries": "E2",
+          "first_expected_version": 1,
+          "items": [
+            {
+              "position": 1,
+              "case_id": "C-000003",
+              "event": "transfer",
+              "event_time": "2026-10-15T09:20:00Z",
+              "operation_key": "PAS^HOSP^MRN1101^ENC-1101^transfer^2026-10-15T09:20:00Z",
+              "payload_digest": "sha256:0a8b92a8ccf3cb1105ad76fb9219f9715b031df241f47b1b8278e8b3859b5243",
+              "entry": "E2",
+              "outcome": "resend"
+            }
+          ]
+        },
+        {
+          "seq": 2,
+          "encounter_id": "ENC-1102",
+          "patient_id": "MRN1102",
+          "kind": "ordered",
+          "decides": "policy",
+          "policy": "approval",
+          "entries": "E4,E4",
+          "first_expected_version": 1,
+          "items": [
+            {
+              "position": 1,
+              "case_id": "C-000004",
+              "event": "transfer",
+              "event_time": "2026-10-15T09:20:00Z",
+              "operation_key": "PAS^HOSP^MRN1102^ENC-1102^transfer^2026-10-15T09:20:00Z",
+              "payload_digest": "sha256:9c3b6b71904d3f6fddbc5c06d6afabae9a2d49b4caeeed23d7e6033ebd23c899",
+              "entry": "E4",
+              "outcome": "resend_chain"
+            },
+            {
+              "position": 2,
+              "case_id": "C-000009",
+              "event": "discharge",
+              "event_time": "2026-10-15T10:00:00Z",
+              "operation_key": "PAS^HOSP^MRN1102^ENC-1102^discharge^2026-10-15T10:00:00Z",
+              "payload_digest": "sha256:e4c1f4691622f2190fcc264cf6a41ae9c5a5dc60773c8966b225b341867cfa32",
+              "entry": "E4",
+              "outcome": "resend_chain"
+            }
+          ]
+        },
+        {
+          "seq": 3,
+          "encounter_id": "ENC-1103",
+          "patient_id": "MRN1103",
+          "kind": "interleaved",
+          "decides": "board",
+          "policy": "path",
+          "entries": "E1,E5",
+          "first_expected_version": 2,
+          "items": [
+            {
+              "position": 1,
+              "case_id": "C-000005",
+              "event": "transfer",
+              "event_time": "2026-10-15T09:20:00Z",
+              "operation_key": "PAS^HOSP^MRN1103^ENC-1103^transfer^2026-10-15T09:20:00Z",
+              "payload_digest": "sha256:277fd8995abc05888a7fdbc7ae3c0a33038a8201ac663a96e25fe07f111a76ca",
+              "entry": "E1",
+              "outcome": "none"
+            },
+            {
+              "position": 2,
+              "case_id": "C-000010",
+              "event": "discharge",
+              "event_time": "2026-10-15T10:30:00Z",
+              "operation_key": "PAS^HOSP^MRN1103^ENC-1103^discharge^2026-10-15T10:30:00Z",
+              "payload_digest": "sha256:c053efa4eb3b73f69bd4006f5ea9d59fbc617b03803f837d419a4b22bb2ad002",
+              "entry": "E5",
+              "outcome": "resend_latest"
+            }
+          ]
+        },
+        {
+          "seq": 4,
+          "encounter_id": "ENC-1104",
+          "patient_id": "MRN1104",
+          "kind": "single",
+          "decides": "policy",
+          "policy": "automatic",
+          "entries": "E2",
+          "first_expected_version": 1,
+          "items": [
+            {
+              "position": 1,
+              "case_id": "C-000006",
+              "event": "transfer",
+              "event_time": "2026-10-15T09:20:00Z",
+              "operation_key": "PAS^HOSP^MRN1104^ENC-1104^transfer^2026-10-15T09:20:00Z",
+              "payload_digest": "sha256:df1f7a98e66863e9cf1845c0da14f3feb6c8ac2ad1971064ed20c38755f1fd69",
+              "entry": "E2",
+              "outcome": "resend"
+            }
+          ]
+        },
+        {
+          "seq": 5,
+          "encounter_id": "ENC-1105",
+          "patient_id": "MRN1105",
+          "kind": "single",
+          "decides": "policy",
+          "policy": "automatic",
+          "entries": "E6",
+          "first_expected_version": 2,
+          "items": [
+            {
+              "position": 1,
+              "case_id": "C-000008",
+              "event": "transfer",
+              "event_time": "2026-10-15T09:20:00Z",
+              "operation_key": "PAS^HOSP^MRN1105^ENC-1105^transfer^2026-10-15T09:20:00Z",
+              "payload_digest": "sha256:8f47463946471c217fb325ceeaaa32b936b3d437dd0beaf64280b45b6e7e5cd2",
+              "entry": "E6",
+              "outcome": "none"
+            }
+          ]
+        },
+        {
+          "seq": 6,
+          "encounter_id": "ENC-1106",
+          "patient_id": "MRN1106",
+          "kind": "single",
+          "decides": "policy",
+          "policy": "automatic",
+          "entries": "E2",
+          "first_expected_version": null,
+          "items": [
+            {
+              "position": 1,
+              "case_id": "C-000007",
+              "event": "admit",
+              "event_time": "2026-10-15T09:00:00Z",
+              "operation_key": "PAS^HOSP^MRN1106^ENC-1106^admit^2026-10-15T09:00:00Z",
+              "payload_digest": "sha256:86380e91a16d2b4126daaf57643435fffe3af5266ad9db4cbae7febc738f810e",
+              "entry": "E2",
+              "outcome": "resend"
+            }
+          ]
+        }
+      ],
+      "receiver_epoch": 4,
+      "catalogue_version": "E1@1,E10@1,E11@1,E2@2,E3@1,E4@1,E5@1,E6@1,E7@1,E8@1,E9@1",
+      "site_profile_version": 2,
+      "gate_policy_version": "2026-10-17.2",
+      "digest": "sha256:f42f69be8a575e5c007692add21cecb00014e05ff7c6724b84d9b72bd6411367"
+    },
+    "approvals": [
+      {
+        "scope": "incident",
+        "by": "approver",
+        "at": "2026-10-18T11:10:29Z",
+        "decision": "approved",
+        "comment": "Checked the order of the two operations",
+        "taskId": "148",
+        "planDigest": "sha256:f42f69be8a575e5c007692add21cecb00014e05ff7c6724b84d9b72bd6411367"
+      }
+    ],
+    "tasks": [
+      {
+        "taskId": "148",
+        "subject": "Shutter I-000001: approve the release of 1 chain(s) to Ward Out",
+        "actions": "Approve,Reject",
+        "action": "Approve",
+        "userName": "approver",
+        "role": "Shutter Approvers",
+        "priority": 1,
+        "complete": true,
+        "assignedTo": "approver",
+        "timeCreated": "2026-10-18T11:05:44.479Z",
+        "timeCompleted": "2026-10-18T11:10:29.014Z",
+        "planDigest": "sha256:f42f69be8a575e5c007692add21cecb00014e05ff7c6724b84d9b72bd6411367"
+      }
+    ],
+    "links": {
+      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=103"
+    }
+  },
+  "events": [
+    {
+      "at": "2026-10-18T11:04:27Z",
+      "kind": "state",
+      "text": "Incident opened for Ward Out: 5 failures within 10 minutes (mode policy)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:04:27Z",
+      "kind": "note",
+      "text": "Case C-000003 joined: transfer for ENC-1101 at 2026-10-15T09:20:00Z (delivery_failed)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:04:27Z",
+      "kind": "note",
+      "text": "Case C-000004 joined: transfer for ENC-1102 at 2026-10-15T09:20:00Z (delivery_failed)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:04:27Z",
+      "kind": "note",
+      "text": "Case C-000005 joined: transfer for ENC-1103 at 2026-10-15T09:20:00Z (delivery_failed)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:04:27Z",
+      "kind": "note",
+      "text": "Case C-000006 joined: transfer for ENC-1104 at 2026-10-15T09:20:00Z (delivery_failed)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:04:27Z",
+      "kind": "note",
+      "text": "Case C-000007 joined: admit for ENC-1106 at 2026-10-15T09:00:00Z (delivery_failed)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:04:27Z",
+      "kind": "note",
+      "text": "Intake open: the chains form after 60 s with no new failure to Ward Out",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:04:29Z",
+      "kind": "note",
+      "text": "Case C-000008 joined: transfer for ENC-1105 at 2026-10-15T09:20:00Z (delivery_failed)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:04:42Z",
+      "kind": "note",
+      "text": "Case C-000009 joined: discharge for ENC-1102 at 2026-10-15T10:00:00Z (delivery_failed)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:04:44Z",
+      "kind": "note",
+      "text": "Case C-000010 joined: discharge for ENC-1103 at 2026-10-15T10:30:00Z (delivery_failed)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:05:44Z",
+      "kind": "note",
+      "text": "Intake closed after 60 s of quiet: 8 cases. New failures to Ward Out count towards a new incident",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:05:44Z",
+      "kind": "note",
+      "text": "Chain 2 item 2 (C-000009) matched against the state the earlier items leave: admitted at WARD-B",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:05:44Z",
+      "kind": "state",
+      "text": "6 chain(s) formed; plan digest sha256:f42f69be8a57. chain 1 ENC-1101: single, 1 item(s), E2, policy decides (automatic); chain 2 ENC-1102: ordered, 2 item(s), E4,E4, policy decides (approval); chain 3 ENC-1103: interleaved, 2 item(s), E1,E5, board decides; chain 4 ENC-1104: single, 1 item(s), E2, policy decides (automatic); chain 5 ENC-1105: single, 1 item(s), E6, policy decides (automatic); chain 6 ENC-1106: single, 1 item(s), E2, policy decides (automatic)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:05:44Z",
+      "kind": "note",
+      "text": "Authorisation: 4 policy chain(s) automatic, 1 under one approval, 0 approved one by one, 1 on their own path (board or person)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:05:44Z",
+      "kind": "note",
+      "text": "Approval task raised: Shutter I-000001: approve the release of 1 chain(s) to Ward Out",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:05:44Z",
+      "kind": "state",
+      "text": "1 approval task(s) raised for the Workflow role; the automatic and board chains proceed meanwhile",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:05:44Z",
+      "kind": "state",
+      "text": "Releasing chain 1 (single, ENC-1101)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:05:44Z",
+      "kind": "release",
+      "text": "Chain 1 item 1: case C-000003 released (transfer for ENC-1101, fresh evidence decides, automatic)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:05:47Z",
+      "kind": "release",
+      "text": "Chain 1 item 1: case C-000003 resolved (resend; receiver version 2). Committed and current: receipt 2026-10-18T11:05:44, version 2; the encounter is admitted in WARD-B",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:05:47Z",
+      "kind": "release",
+      "text": "Chain 1 resolved: 1 item(s) resolved in order",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:05:47Z",
+      "kind": "release",
+      "text": "Releasing chain 3 (interleaved, ENC-1103)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:05:47Z",
+      "kind": "release",
+      "text": "Chain 3 item 1: case C-000005 released (transfer for ENC-1103, fresh evidence decides, path)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:05:50Z",
+      "kind": "release",
+      "text": "Chain 3 item 1: case C-000005 resolved (superseded; receiver version 3). Nothing was resent; the receiver's history shows the later event (transfer to WARD-C at 2026-10-15T09:45:00Z) and no receipt for the stale operation. Current state admitted in WARD-C",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:05:50Z",
+      "kind": "release",
+      "text": "Chain 3 item 2: case C-000010 released (discharge for ENC-1103, at expected version 3, path)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:29Z",
+      "kind": "approval",
+      "text": "Approved by approver (task 148, plan digest sha256:f42f69be8a57), the policy chains under one approval",
+      "actor": "approver"
+    },
+    {
+      "at": "2026-10-18T11:10:38Z",
+      "kind": "release",
+      "text": "Chain 3 item 2: case C-000010 resolved (resend; receiver version 4). Committed and current: receipt 2026-10-18T11:10:29, version 4; the encounter is discharged",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:38Z",
+      "kind": "release",
+      "text": "Chain 3 resolved: 2 item(s) resolved in order",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:38Z",
+      "kind": "release",
+      "text": "Releasing chain 2 (ordered, ENC-1102)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:38Z",
+      "kind": "release",
+      "text": "Chain 2 item 1: case C-000004 released (transfer for ENC-1102, at expected version 1, incident)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:41Z",
+      "kind": "release",
+      "text": "Chain 2 item 1: case C-000004 resolved (resend; receiver version 2). Committed and current: receipt 2026-10-18T11:10:39, version 2; the encounter is admitted in WARD-B",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:41Z",
+      "kind": "release",
+      "text": "Chain 2 item 2: case C-000009 released (discharge for ENC-1102, at expected version 2, incident)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:44Z",
+      "kind": "release",
+      "text": "Chain 2 item 2: case C-000009 resolved (resend; receiver version 3). Committed and current: receipt 2026-10-18T11:10:42, version 3; the encounter is discharged",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:44Z",
+      "kind": "release",
+      "text": "Chain 2 resolved: 2 item(s) resolved in order",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:44Z",
+      "kind": "release",
+      "text": "Releasing chain 4 (single, ENC-1104)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:44Z",
+      "kind": "release",
+      "text": "Chain 4 item 1: case C-000006 released (transfer for ENC-1104, fresh evidence decides, automatic)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:47Z",
+      "kind": "release",
+      "text": "Chain 4 item 1: case C-000006 resolved (superseded; receiver version 2). Nothing was resent; the receiver's history shows the later event (transfer to WARD-C at 2026-10-15T09:45:00Z) and no receipt for the stale operation. Current state admitted in WARD-C",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:47Z",
+      "kind": "release",
+      "text": "Chain 4 resolved: 1 item(s) resolved in order",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:47Z",
+      "kind": "release",
+      "text": "Releasing chain 5 (single, ENC-1105)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:47Z",
+      "kind": "release",
+      "text": "Chain 5 item 1: case C-000008 released (transfer for ENC-1105, fresh evidence decides, automatic)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:50Z",
+      "kind": "release",
+      "text": "Chain 5 item 1: case C-000008 resolved (superseded; receiver version 2). Nothing was resent; the receiver's history shows the later event (discharge at 2026-10-15T09:30:00Z) and no receipt for the stale operation. Current state discharged",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:50Z",
+      "kind": "release",
+      "text": "Chain 5 resolved: 1 item(s) resolved in order",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:50Z",
+      "kind": "release",
+      "text": "Releasing chain 6 (single, ENC-1106)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:50Z",
+      "kind": "release",
+      "text": "Chain 6 item 1: case C-000007 released (admit for ENC-1106, fresh evidence decides, automatic)",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:53Z",
+      "kind": "release",
+      "text": "Chain 6 item 1: case C-000007 resolved (resend; receiver version 1). Committed and current: receipt 2026-10-18T11:10:51, version 1; the encounter is admitted in WARD-A",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:53Z",
+      "kind": "release",
+      "text": "Chain 6 resolved: 1 item(s) resolved in order",
+      "actor": "system"
+    },
+    {
+      "at": "2026-10-18T11:10:54Z",
+      "kind": "state",
+      "text": "Closed: 6 chain(s): 6 resolved, 0 stopped, 0 escalated, 0 rejected",
+      "actor": "system"
+    }
+  ]
+}

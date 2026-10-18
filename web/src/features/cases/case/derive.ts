@@ -50,7 +50,8 @@ export function describeItem(item: SnapshotItem): string {
 /** The workflow's phases and the case states that belong to each (Shutter.Process.CaseWorkflow). */
 export const PHASES = [
   { key: 'evidence', label: 'Evidence', states: ['detected', 'collecting'] },
-  { key: 'investigation', label: 'Investigation', states: ['investigating'] },
+  // A case an incident holds waits in grouped until the incident releases it into its dispatch
+  { key: 'investigation', label: 'Investigation', states: ['investigating', 'grouped'] },
   { key: 'gate', label: 'Plan and gate', states: ['proposed', 'gated'] },
   { key: 'rehearsal', label: 'Rehearsal', states: ['rehearsing'] },
   { key: 'approval', label: 'Approval', states: ['awaiting_approval'] },

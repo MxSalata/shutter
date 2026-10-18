@@ -1,6 +1,6 @@
 import { delay, http, HttpResponse } from 'msw';
 import fixtures from './fixtures.json';
-import type { CaseState, Me, ScenarioRun } from '@/api/types';
+import type { CaseState, IncidentDetail, IncidentEvent, IncidentSummary, Me, ScenarioRun } from '@/api/types';
 
 /**
  * An in-browser stand-in for Shutter's REST API (CONTRACTS 5), for the demo build, development
@@ -11,6 +11,13 @@ import type { CaseState, Me, ScenarioRun } from '@/api/types';
 const BASE = '/api/shutter';
 type CaseFixture = (typeof fixtures.cases)[keyof typeof fixtures.cases];
 const cases = fixtures.cases as unknown as Record<string, CaseFixture>;
+interface IncidentFixture {
+  summary: IncidentSummary;
+  detail: IncidentDetail;
+  events: IncidentEvent[];
+}
+/** Recorded incidents (S11 and S12); a recording from before the incident routes has none. */
+const incidents = (fixtures as unknown as { incidents?: Record<string, IncidentFixture> }).incidents ?? {};
 
 const USERS: Record<string, Me> = {
   operator: { username: 'operator', operator: true, approver: false },
@@ -64,6 +71,36 @@ function part(caseId: string, pick: (c: CaseFixture) => unknown, missing: string
   return value === null || value === undefined
     ? error(404, missing, `No ${missing.replace('no_', '')} for ${caseId}`)
     : HttpResponse.json(value as object);
+}
+
+function incidentPart(id: string, pick: (i: IncidentFixture) => unknown) {
+  if (!session) return signedOut();
+  const i = incidents[id];
+  return i ? HttpResponse.json(pick(i) as object) : error(404, 'not_found', `No incident ${id}`);
+}
+
+/** As the API decides (CONTRACTS 7.5): the plan's digest must match, and something must await this approval. */
+async function decideIncident(request: Request, id: string, seq: number | null) {
+  const denied = csrf(request) ?? guard('approver');
+  if (denied) return denied;
+  const i = incidents[id];
+  if (!i) return error(404, 'not_found', `No incident ${id}`);
+  const body = (await request.json()) as { decision?: string; planDigest?: string };
+  if (body.decision !== 'approve' && body.decision !== 'reject')
+    return error(400, 'bad_request', 'decision must be approve or reject');
+  if (i.detail.state === 'closed') return error(409, 'wrong_state', 'The incident is closed');
+  const waiting = i.detail.chains.filter((c) =>
+    seq === null
+      ? c.state === 'awaiting_approval' && c.policy === 'approval'
+      : c.seq === seq && c.state === 'awaiting_approval' && c.policy === 'per_chain',
+  );
+  if (!waiting.length) return error(409, 'wrong_state', `Nothing of ${id} awaits this approval`);
+  if (body.planDigest !== i.detail.planDigest)
+    return error(409, 'plan_changed', "planDigest is not the incident plan's digest");
+  return HttpResponse.json(
+    { taskId: '1', decision: body.decision, incidentId: id, ...(seq === null ? {} : { chainSeq: seq }) },
+    { status: 202 },
+  );
 }
 
 export const handlers = [
@@ -190,6 +227,27 @@ export const handlers = [
       note: 'Recorded data: no ward to ask.',
     });
   }),
+
+  http.get(`${BASE}/incidents`, ({ request }) => {
+    if (!session) return signedOut();
+    const state = new URL(request.url).searchParams.get('state');
+    const items = Object.values(incidents)
+      .map((i) => i.summary)
+      .filter((i) => !state || i.state === state)
+      .sort((a, b) => b.openedAt.localeCompare(a.openedAt));
+    return HttpResponse.json({ items, total: items.length });
+  }),
+  http.get(`${BASE}/incidents/:id`, ({ params }) => incidentPart(String(params.id), (i) => i.detail)),
+  http.get(`${BASE}/incidents/:id/events`, ({ params }) => incidentPart(String(params.id), (i) => i.events)),
+  http.get(`${BASE}/incidents/:id/approvals`, ({ params }) =>
+    incidentPart(String(params.id), (i) => i.detail.approvals),
+  ),
+  http.post(`${BASE}/incidents/:id/approvals`, ({ request, params }) =>
+    decideIncident(request, String(params.id), null),
+  ),
+  http.post(`${BASE}/incidents/:id/chains/:seq/approvals`, ({ request, params }) =>
+    decideIncident(request, String(params.id), Number(params.seq)),
+  ),
 
   http.get(`${BASE}/library`, () => (session ? HttpResponse.json(fixtures.library) : signedOut())),
   http.patch(`${BASE}/library/:code`, async ({ request, params }) => {
