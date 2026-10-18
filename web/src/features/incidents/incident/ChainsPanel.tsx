@@ -130,7 +130,12 @@ function ChainCard({
                     <Text size="sm">{item.position}</Text>
                   </Table.Td>
                   <Table.Td>
-                    <Anchor component={Link} to={`/cases/${encodeURIComponent(item.caseId)}`} size="sm">
+                    <Anchor
+                      component={Link}
+                      to={`/cases/${encodeURIComponent(item.caseId)}`}
+                      size="sm"
+                      style={{ whiteSpace: 'nowrap' }}
+                    >
                       {item.caseId}
                     </Anchor>
                     <Text size="xs" c="dimmed">
@@ -138,13 +143,15 @@ function ChainCard({
                     </Text>
                   </Table.Td>
                   <Table.Td>
-                    <Timestamp iso={item.eventTime} />
+                    <Timestamp iso={item.eventTime} style={{ whiteSpace: 'nowrap' }} />
                   </Table.Td>
                   <Table.Td>
                     <Match item={item} />
                   </Table.Td>
                   <Table.Td>
-                    <Text size="sm">{versions(item)}</Text>
+                    <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
+                      {versions(item)}
+                    </Text>
                   </Table.Td>
                   <Table.Td maw={260}>
                     <Group gap={4}>
