@@ -523,7 +523,10 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
-- v1.9, 18 Oct 2026: the exact index (8): the custom search table, the indexer, the merged timeline, two routes.
+- v1.9, 18 Oct 2026: the exact index (8): the custom search table, the indexer, the merged timeline, two routes; a plan
+  records the catalogue version it was matched against and an approval the site profile's version, and the dispatch gate
+  voids the approval when either changed (`APPROVAL_CATALOGUE_CHANGED`, `APPROVAL_SITE_PROFILE_CHANGED`); the
+  `delivery: unmappable` condition and the `UNMAPPABLE` conformance block.
 - v1.8, 18 Oct 2026: the receiver description in the site profile (`api`, `features`), read by the evidence collector, the
   verifier and the connector (6.4).
 - v1.7, 17 Oct 2026: incidents as built (7): adoption and the ready wait, the chain's policy, the task subjects, chain
