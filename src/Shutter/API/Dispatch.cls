@@ -368,11 +368,12 @@ ClassMethod Cases() As %Status
     Set total = 0
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT COUNT(*) AS N FROM Shutter_Store.""Case"" WHERE 1=1" _ where, args...)
     If rs.%Next() Set total = rs.%Get("N")
-    // One page by row number, so a long list is not walked from the start (E8).
-    Set args = args + 2, args(args - 1) = offset + 1, args(args) = offset + limit
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM (SELECT TOP ALL ID FROM Shutter_Store.""Case"" WHERE 1=1" _ where _ " ORDER BY ID DESC) WHERE %VID BETWEEN ? AND ?", args...)
-    Set items = []
+    // One page: only the first offset + limit ids are read, newest first, and the offset is skipped (E8).
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP " _ (offset + limit) _ " ID FROM Shutter_Store.""Case"" WHERE 1=1" _ where _ " ORDER BY ID DESC", args...)
+    Set items = [], n = 0
     While rs.%Next() {
+        Set n = n + 1
+        If n <= offset Continue
         Set c = ##class(Shutter.Store.Case).%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(c)
         Set o = ..Project(c)
