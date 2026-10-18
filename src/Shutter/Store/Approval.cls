@@ -14,6 +14,9 @@ Property PlanDigest As %String(%JSONFIELDNAME = "planDigest", MAXLEN = 80);
 
 Property SnapshotDigest As %String(%JSONFIELDNAME = "snapshotDigest", MAXLEN = 80);
 
+/// The approved snapshot's material digest: a refreshed snapshot with the same one keeps the approval (A7).
+Property MaterialDigest As %String(%JSONFIELDNAME = "materialDigest", MAXLEN = 80);
+
 Property PolicyVersion As %String(%JSONFIELDNAME = "policyVersion", MAXLEN = 32);
 
 /// The site profile's version when the approval was given; a changed profile voids it (A8).
@@ -51,6 +54,7 @@ ClassMethod Create(case As Shutter.Store.Case, plan As Shutter.Store.Plan, snaps
     Set a = ..%New()
     Set a.Case = case, a.Plan = plan, a.PlanDigest = plan.Digest
     Set a.SnapshotDigest = $SELECT($ISOBJECT(snapshot): snapshot.Digest, 1: "")
+    Set a.MaterialDigest = $SELECT($ISOBJECT(snapshot): snapshot.MaterialDigest, 1: "")
     Set a.PolicyVersion = policyVersion
     Set a.SiteProfileVersion = ##class(Shutter.Util.Json).Str(##class(Shutter.Store.SiteProfile).Current(), "version", 0)
     If $ISOBJECT(rehearsal) Set a.Rehearsal = rehearsal
@@ -70,7 +74,8 @@ Method InvalidReason(plan As Shutter.Store.Plan, snapshot As Shutter.Store.Snaps
     If ..Revoked Quit "revoked"
     If ##class(Shutter.Util.Time).NowUTC() ]] ..ExpiresAt Quit "expired"
     If ..PlanDigest '= plan.Digest Quit "plan_changed"
-    If $ISOBJECT(snapshot) && (..SnapshotDigest '= snapshot.Digest) Quit "snapshot_changed"
+    // A refreshed snapshot keeps the approval when nothing material changed (A7).
+    If $ISOBJECT(snapshot) && (..SnapshotDigest '= snapshot.Digest) && ((..MaterialDigest = "") || (..MaterialDigest '= snapshot.MaterialDigest)) Quit "snapshot_changed"
     If ..PolicyVersion '= policyVersion Quit "policy_changed"
     // The catalogue and the site profile the decision rested on must still be the current ones (A8).
     If (plan.CatalogueVersion '= "") && (plan.CatalogueVersion '= ##class(Shutter.Catalogue.Entry).CatalogueVersion()) Quit "catalogue_changed"
@@ -145,6 +150,9 @@ Storage Default
 </Value>
 <Value name="19">
 <Value>SiteProfileVersion</Value>
+</Value>
+<Value name="20">
+<Value>MaterialDigest</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.ApprovalD</DataLocation>
