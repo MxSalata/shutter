@@ -18,7 +18,7 @@ ClassMethod Register(case As Shutter.Store.Case, receiver As %String, Output inc
     }
     Set threshold = ##class(Shutter.Store.SiteProfile).IncidentSetting("threshold", 5)
     Set window = ##class(Shutter.Store.SiteProfile).IncidentSetting("window_minutes", 10)
-    Set since = ##class(Shutter.Util.Time).FromNow(-60 * window)
+    Set since = ..Since(window)
     // The failures to this receiver within the window that no incident holds yet.
     Set n = 0
     &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store."Case" WHERE Receiver = :receiver AND OpenedAt >= :since AND FailureKind IN ('delivery_failed', 'rejected') AND Incident IS NULL)
@@ -38,6 +38,16 @@ ClassMethod Register(case As Shutter.Store.Case, receiver As %String, Output inc
     Quit:$$$ISERR(sc) sc
     // The opening case joins whatever its state.
     Quit ..Join(case, incident)
+}
+
+/// The start of the counting window: the later of the window's start and the last scenario reset, so a demo run never
+/// counts the failures of the scenarios before it (a site without resets keeps the plain window).
+ClassMethod Since(windowMinutes As %Integer) As %String
+{
+    Set since = ##class(Shutter.Util.Time).FromNow(-60 * windowMinutes)
+    Set resetAt = $GET(^Shutter.Config("resetAt"))
+    If (resetAt '= "") && (resetAt ]] since) Set since = resetAt
+    Quit since
 }
 
 /// A case joins an incident: recorded on the case, noted on both.

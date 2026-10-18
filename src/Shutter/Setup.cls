@@ -100,6 +100,7 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1) As %Status
             Set ^Shutter.Config("recordsImported") = count
         }
         Set sc = ..CreateWebApps(ns, root) Quit:$$$ISERR(sc)
+        Set sc = ..EnsureRetentionTasks(ns) Quit:$$$ISERR(sc)
         // Replayed runs spend nothing; rows written before this rule held a recording's price.
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "UPDATE Shutter_Store.AgentRun SET CostUSD = 0 WHERE Mode = 'replay' AND CostUSD <> 0")
         Set sc = ..StartProduction() Quit:$$$ISERR(sc)
@@ -384,6 +385,45 @@ ClassMethod StartProduction() As %Status
 
 /// Empty Shutter's own tables (cases and everything attached to them, recordings excepted) on a
 /// demo instance. Refused elsewhere. Returns the number of tables emptied or the error.
+/// The two daily housekeeping tasks (A14), created once: "Shutter message purge" (the standard Ens.Util.Tasks.Purge,
+/// 30 days, bodies too, keeping sessions whole) and "Shutter retention" (Shutter.Util.RetentionTask). Returns "ok",
+/// "exists" or the error.
+ClassMethod EnsureRetentionTasks(ns As %String = "") As %String [ SqlProc ]
+{
+    If '$SYSTEM.Security.Check("%Admin_Task", "USE") && '$SYSTEM.Security.Check("Shutter_Operate", "USE") Quit "Shutter_Operate is required"
+    If ns = "" Set ns = $NAMESPACE
+    Set out = ""
+    Set sc = ..EnsureTask("Shutter message purge", ns, "Ens.Util.Tasks.Purge", "Shutter: purge messages, logs and traces older than 30 days, sessions kept whole", $LISTBUILD("NumberOfDaysToKeep", 30, "BodiesToo", 1, "KeepIntegrity", 1, "TypesToPurge", "all"), 9600, .made)
+    If $$$ISERR(sc) Quit "ERROR: " _ $SYSTEM.Status.GetErrorText(sc)
+    Set out = out _ "message purge " _ $SELECT(made: "created", 1: "exists")
+    Set sc = ..EnsureTask("Shutter retention", ns, "Shutter.Util.RetentionTask", "Shutter: idempotency keys older than a day, and closed cases past the retention when switched on", $LISTBUILD("RetentionDays", 30, "PurgeClosedCases", 0), 9900, .made)
+    If $$$ISERR(sc) Quit "ERROR: " _ $SYSTEM.Status.GetErrorText(sc)
+    Quit out _ "; retention " _ $SELECT(made: "created", 1: "exists")
+}
+
+/// A daily task by name, created when none of that name exists (startSeconds after midnight, local time).
+ClassMethod EnsureTask(name As %String, ns As %String, class As %String, description As %String, settings As %List, startSeconds As %Integer, Output made As %Boolean) As %Status [ Private ]
+{
+    Set made = 0, sc = $$$OK
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = "%SYS"
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM %SYS.Task WHERE Name = ?", name)
+        If rs.%Next() Quit
+        Set task = ##class(%SYS.Task).%New()
+        Set task.Name = name, task.NameSpace = ns, task.TaskClass = class, task.Description = description
+        Set task.TimePeriod = 0, task.TimePeriodEvery = 1, task.DailyFrequency = 0
+        Set task.DailyStartTime = startSeconds, task.DailyEndTime = 0
+        Set task.RunAsUser = $USERNAME
+        Set task.Settings = settings
+        Set sc = task.%Save()
+        If $$$ISOK(sc) Set made = 1
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    Quit sc
+}
+
 ClassMethod PurgeStore() As %String [ SqlProc ]
 {
     If '$SYSTEM.Security.Check("Shutter_Operate", "USE") Quit "Shutter_Operate is required"

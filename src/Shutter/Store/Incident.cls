@@ -75,13 +75,27 @@ ClassMethod ByIncidentId(id As %String) As Shutter.Store.Incident
     Quit ..%OpenId(rid)
 }
 
-/// The incident still taking cases for a receiver (open, intake not closed), or "".
+/// The incident still taking cases for a receiver (open, intake not closed, opened since the last scenario reset), or "".
 ClassMethod OpenFor(receiver As %String) As Shutter.Store.Incident
 {
-    Set rid = ""
-    &sql(SELECT TOP 1 ID INTO :rid FROM Shutter_Store.Incident WHERE Receiver = :receiver AND State = 'open' AND IntakeClosedAt IS NULL ORDER BY ID DESC)
+    Set rid = "", resetAt = $GET(^Shutter.Config("resetAt"))
+    &sql(SELECT TOP 1 ID INTO :rid FROM Shutter_Store.Incident WHERE Receiver = :receiver AND State = 'open' AND IntakeClosedAt IS NULL AND (OpenedAt >= :resetAt OR :resetAt IS NULL) ORDER BY ID DESC)
     If (SQLCODE '= 0) || (rid = "") Quit ""
     Quit ..%OpenId(rid)
+}
+
+/// Close every incident still taking cases: a scenario reset is the demo's new day, and an intake left open would
+/// take the next run's failures. Returns how many were closed.
+ClassMethod AbandonOpen(why As %String, actor As %String = "system") As %Integer [ SqlProc ]
+{
+    Set n = 0
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.Incident WHERE State <> 'closed'")
+    While rs.%Next() {
+        Set inc = ..%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(inc)
+        If $$$ISOK(inc.Abandon(why, actor)) Set n = n + 1
+    }
+    Quit n
 }
 
 /// Open an incident for a receiver with the site's settings.

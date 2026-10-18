@@ -152,6 +152,37 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
     Quit sc
 }
 
+/// Delete the closed cases whose closing is older than a time, with everything that hangs off them (events, snapshots
+/// and their items, plans, approvals, rehearsals, gate decisions, attempts, verifications, agent runs and their tool
+/// calls, chain items). Cases an incident still holds stay. Returns how many cases went. Housekeeping only
+/// (Shutter.Util.RetentionTask, switched on by a site): the record is the product.
+ClassMethod PurgeClosedBefore(cutoff As %String) As %Integer
+{
+    Set n = 0
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE ClosedAt IS NOT NULL AND ClosedAt < ? AND State IN ('resolved', 'blocked', 'escalated', 'failed') AND Incident IS NULL", cutoff)
+    While rs.%Next() {
+        Set id = rs.%Get("ID"), sc = $$$OK
+        TSTART
+        For table = "Shutter_Store.ChainItem", "Shutter_Store.Verification", "Shutter_Store.ExecutionAttempt", "Shutter_Store.Approval", "Shutter_Store.Rehearsal", "Shutter_Store.GateDecision", "Shutter_Store.Finding", "Shutter_Store.AgentRun", "Shutter_Store.Plan" {
+            If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM " _ table _ " WHERE ""Case"" = ?", id)
+        }
+        If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM Shutter_Store.SnapshotItem WHERE Snapshot IN (SELECT ID FROM Shutter_Store.Snapshot WHERE ""Case"" = ?)", id)
+        If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM Shutter_Store.Snapshot WHERE ""Case"" = ?", id)
+        If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM Shutter_Store.CaseEvent WHERE ""Case"" = ?", id)
+        If $$$ISOK(sc) Set sc = ..%DeleteId(id)
+        If $$$ISOK(sc) { TCOMMIT  Set n = n + 1 } Else { TROLLBACK }
+    }
+    Quit n
+}
+
+/// One SQL statement with one argument, as a status.
+ClassMethod Exec(sql As %String, arg As %String) As %Status [ Private ]
+{
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, arg)
+    If rs.%SQLCODE < 0 Quit $$$ERROR($$$GeneralError, "SQLCODE " _ rs.%SQLCODE _ ": " _ rs.%Message)
+    Quit $$$OK
+}
+
 /// The open case for an operation key, if any (closed states are resolved, blocked, escalated, failed).
 ClassMethod FindOpen(operationKey As %String) As Shutter.Store.Case
 {
