@@ -360,7 +360,9 @@ reads it through `Shutter.Store.SiteProfile`.
   item records as `capabilities_source`. An entry without `api` takes the ward's paths.
 - `PUT /site-profile` refuses a profile that has not this shape, naming the field (unknown top-level fields and
   unknown `api` paths or `features` are refused too); every stored version is kept with who stored it and from where,
-  `GET /site-profile/history` lists them (v1.9).
+  `GET /site-profile/history` lists them (v1.9). The body may carry `expectedVersion` (the version the caller read, not
+  part of the profile): when the stored version has moved, the answer is 409 `stale_version` with `currentVersion`, so
+  a page never overwrites another person's change unseen.
 - `automatic`: the case (or the chain) is released with no Workflow task. It is still gated at the proposal and at the
   dispatch, rehearsed and verified, exactly as an approved case. The case records an approval whose approver is
   `policy`, with the profile's version, the tier, the chain kind and the entry, so the authorization check and the

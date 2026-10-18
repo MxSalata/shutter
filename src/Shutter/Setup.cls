@@ -709,7 +709,7 @@ ClassMethod LogSeconds(line As %String) As %String [ Private ]
     Set stamp = $PIECE(line, " ", 1)
     If $LENGTH(stamp, "-") '= 2 Quit ""
     Set d = $PIECE(stamp, "-", 1), t = $PIECE($PIECE(stamp, "-", 2), ":", 1, 3)
-    Set h = $ZDATETIMEH(d _ " " _ t, 1, 1, , , , , , , "")
+    Set h = $ZDATETIMEH(d _ " " _ t, 1, 1, , , , , , "")
     If h = "" Quit ""
     Quit ($PIECE(h, ",", 1) * 86400) + $PIECE(h, ",", 2)
 }

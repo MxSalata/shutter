@@ -750,6 +750,17 @@ ClassMethod SiteProfilePut() As %Status
     Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
     Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
     If '$ISOBJECT(body) || $$$ISERR(psc) Quit ..Fail("400 Bad Request", "bad_request", "The body must be the profile as a JSON object")
+    // An optional expectedVersion guards against overwriting a change someone else made meanwhile (last write
+    // would otherwise win): the stored version must still be the one the caller read.
+    Set expected = ##class(Shutter.Util.Json).Str(body, "expectedVersion")
+    If body.%IsDefined("expectedVersion") Do body.%Remove("expectedVersion")
+    If expected '= "" {
+        Set current = ##class(Shutter.Util.Json).Str(##class(Shutter.Store.SiteProfile).Current(), "version", 0)
+        If +expected '= +current {
+            Set extra = {} Set extra.currentVersion = +current
+            Quit ..Fail("409 Conflict", "stale_version", "expectedVersion is not the stored profile's version", extra)
+        }
+    }
     Set problem = ##class(Shutter.Store.SiteProfile).Validate(body)
     If problem '= "" Quit ..Fail("400 Bad Request", "bad_request", "The profile is not valid (CONTRACTS 6.4): " _ problem)
     Set sc = ##class(Shutter.Store.SiteProfile).Store(body.%ToJSON(), "api", $USERNAME)
