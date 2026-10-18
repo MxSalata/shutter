@@ -221,6 +221,9 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
     If '$ISOBJECT(result) || (result.Error '= "") Quit $$$ERROR($$$GeneralError, "Evidence failed: " _ $SELECT($ISOBJECT(result): result.Error, 1: "no result"))
     Set sc = case.Transition("investigating", "Evidence collected: snapshot " _ result.SnapshotId _ ", digest " _ $EXTRACT(result.Digest, 1, 19), "system", "snapshot:" _ result.SnapshotId)
     Quit:$$$ISERR(sc) sc
+    Set summary = ##class(Shutter.Util.Json).Parse(result.SummaryJSON, .psc)
+    Set cat = $SELECT($ISOBJECT(summary): summary.%Get("catalogue"), 1: "")
+    Set decision = $SELECT($ISOBJECT(cat): ##class(Shutter.Util.Json).Str(cat, "decision"), 1: "")
     // A refresh under an approval (A1): the approval stands when nothing material changed, and the dispatch goes on
     // from the preflight read; otherwise the approval is void and the case is planned again on the fresh evidence.
     If ..Refreshing {
@@ -253,9 +256,6 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
     // A case an incident holds parks here, its evidence and match in the store: the incident decides when it is
     // released (CONTRACTS 7.1).
     If '..Release && '..Reopened && $ISOBJECT(case.Incident) Quit ..Park(case)
-    Set summary = ##class(Shutter.Util.Json).Parse(result.SummaryJSON, .psc)
-    Set cat = $SELECT($ISOBJECT(summary): summary.%Get("catalogue"), 1: "")
-    Set decision = $SELECT($ISOBJECT(cat): ##class(Shutter.Util.Json).Str(cat, "decision"), 1: "")
     // Every investigation starts clean: a policy from an earlier round never carries over to a plan the board makes.
     Set ..Policy = "", ..CatalogueEntry = "", ..CatalogueOutcome = ""
     If ..Release {
