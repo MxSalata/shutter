@@ -703,15 +703,23 @@ ClassMethod MonitorState() As %Integer [ SqlProc ]
 /// (the image ran IRIS during its build, under the build host's name) and the AI Hub preview's own startup
 /// error (Sharding, METHOD DOES NOT EXIST). Any other severe line leaves the state as it is. Returns what
 /// it did. Called by after-start.sh.
-/// A messages.log line's time ("mm/dd/yy-hh:mm:ss:mmm ...") in seconds, or "" when it has none.
+/// A messages.log line's time ("mm/dd/yy-hh:mm:ss:mmm ...") in seconds, or "" when it has none or it cannot be read.
 ClassMethod LogSeconds(line As %String) As %String [ Private ]
 {
-    Set stamp = $PIECE(line, " ", 1)
-    If $LENGTH(stamp, "-") '= 2 Quit ""
-    Set d = $PIECE(stamp, "-", 1), t = $PIECE($PIECE(stamp, "-", 2), ":", 1, 3)
-    Set h = $ZDATETIMEH(d _ " " _ t, 1, 1, , , , , , "")
-    If h = "" Quit ""
-    Quit ($PIECE(h, ",", 1) * 86400) + $PIECE(h, ",", 2)
+    Set out = ""
+    Try {
+        Set stamp = $PIECE(line, " ", 1)
+        If $LENGTH(stamp, "-") '= 2 Quit
+        Set d = $PIECE(stamp, "-", 1), t = $PIECE($PIECE(stamp, "-", 2), ":", 1, 3)
+        Set mm = $PIECE(d, "/", 1), dd = $PIECE(d, "/", 2), yy = $PIECE(d, "/", 3)
+        If (mm = "") || (dd = "") || (yy = "") || ($LENGTH(t, ":") '= 3) Quit
+        If $LENGTH(yy) = 2 Set yy = 2000 + yy
+        Set h = $ZDATETIMEH(yy _ "-" _ $TRANSLATE($JUSTIFY(mm, 2), " ", "0") _ "-" _ $TRANSLATE($JUSTIFY(dd, 2), " ", "0") _ " " _ t, 3, 1)
+        Set out = ($PIECE(h, ",", 1) * 86400) + $PIECE(h, ",", 2)
+    } Catch ex {
+        Set out = ""
+    }
+    Quit out
 }
 
 ClassMethod ClearStartupAlerts(lines As %Integer = 400) As %String [ SqlProc ]
