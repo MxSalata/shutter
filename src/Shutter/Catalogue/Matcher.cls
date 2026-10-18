@@ -11,6 +11,7 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     Set json = "Shutter.Util.Json"
     // delivery
     Set c.delivery = $CASE(case.FailureKind, "delivery_failed": "failed", "rejected": "rejected", "uncertain_outcome": "uncertain", : "failed")
+    If case.FailureKind = "unmappable" Set c.delivery = "unmappable"
     // receiver_answer, from the error item's reason code and status
     Set error = ..Item(summary, "error")
     Set reason = $ZCONVERT($SELECT($ISOBJECT(error): $CLASSMETHOD(json, "Str", error, "reason_code"), 1: ""), "L")

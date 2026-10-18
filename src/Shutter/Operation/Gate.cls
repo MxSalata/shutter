@@ -44,6 +44,8 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
 
     // Conformance: the message parsed against its schema.
     Set parsed = ##class(Shutter.Util.Json).Bool(validation, "parsed")
+    // A message Shutter could not map to an operation has nothing to resend: the conformance check blocks it.
+    If case.FailureKind = "unmappable" Do ..Check(checks, "conformance", "block", "UNMAPPABLE", "The message could not be mapped to a ward operation: " _ $EXTRACT(case.FailureText, 1, 300))
     Do ..Check(checks, "conformance", $SELECT(parsed: "pass", 1: "block"), $SELECT(parsed: "PARSED", 1: "PARSE_FAILED"), $SELECT(parsed: "The message parses against its schema", 1: "The message does not parse: " _ ##class(Shutter.Util.Json).Str(validation, "error")))
 
     // Intent: the plan is well-formed and, for a write, is exactly the case's operation.

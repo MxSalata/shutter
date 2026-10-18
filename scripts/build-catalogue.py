@@ -17,7 +17,7 @@ import re
 import sys
 
 CONDITIONS = {
-    "delivery": {"failed", "rejected", "uncertain"},
+    "delivery": {"failed", "rejected", "uncertain", "unmappable"},
     "receiver_answer": {"unavailable", "timeout", "duplicate", "version_conflict", "refused", "none"},
     "receipt": {"present", "absent", "unreadable"},
     "later_applied": {"none", "transfer", "discharge", "update"},

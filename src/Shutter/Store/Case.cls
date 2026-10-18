@@ -26,7 +26,7 @@ Property Version As %Integer(%JSONFIELDNAME = "version") [ InitialExpression = 1
 /// How the case is investigated: the board, a single investigator, or rules only.
 Property Mode As %String(%JSONFIELDNAME = "mode", MAXLEN = 16, VALUELIST = ",board,single,rules,policy") [ InitialExpression = "board" ];
 
-Property FailureKind As %String(%JSONFIELDNAME = "failureKind", MAXLEN = 32, VALUELIST = ",delivery_failed,uncertain_outcome,rejected");
+Property FailureKind As %String(%JSONFIELDNAME = "failureKind", MAXLEN = 32, VALUELIST = ",delivery_failed,uncertain_outcome,rejected,unmappable");
 
 Property FailureText As %String(%JSONFIELDNAME = "failureText", MAXLEN = 2000);
 
@@ -209,9 +209,9 @@ ClassMethod NextId() As %String [ Private ]
 /// A one-line description of the failure for the headline.
 ClassMethod DescribeFailure(case As Shutter.Store.Case) As %String [ Private ]
 {
-    Set what = $CASE(case.Event, "admit": "admission", "transfer": "transfer to " _ case.Ward, "discharge": "discharge", "update": "update", : case.Event)
+    Set what = $CASE(case.Event, "admit": "admission", "transfer": "transfer to " _ case.Ward, "discharge": "discharge", "update": "update", "": "message", : case.Event _ " message")
     Set when = $REPLACE($PIECE(case.EventTime, "Z", 1), "T", " ")
-    Set how = $CASE(case.FailureKind, "delivery_failed": "was not delivered", "uncertain_outcome": "has an uncertain outcome", "rejected": "was rejected", : "failed")
+    Set how = $CASE(case.FailureKind, "delivery_failed": "was not delivered", "uncertain_outcome": "has an uncertain outcome", "rejected": "was rejected", "unmappable": "could not be mapped to a ward operation", : "failed")
     Quit "The " _ what _ " of " _ when _ " for encounter " _ case.EncounterId _ " " _ how
 }
 
