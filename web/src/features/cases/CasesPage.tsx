@@ -112,6 +112,7 @@ export default function CasesPage() {
                             component={Link}
                             to={`/incidents/${encodeURIComponent(c.incidentId)}`}
                             size="xs"
+                            underline="always"
                           >
                             {c.incidentId}
                           </Anchor>
@@ -135,7 +136,14 @@ export default function CasesPage() {
         ) : null}
         {total > PAGE ? (
           <Group justify="flex-end" mt="sm">
-            <Pagination total={Math.ceil(total / PAGE)} value={page} onChange={setPage} size="sm" />
+            <Pagination
+              total={Math.ceil(total / PAGE)}
+              value={page}
+              onChange={setPage}
+              size="sm"
+              getControlProps={(control) => ({ 'aria-label': `${control} page` })}
+              getItemProps={(n) => ({ 'aria-label': `Page ${n}` })}
+            />
           </Group>
         ) : null}
       </Card>

@@ -9,9 +9,11 @@ const go = (page: Page, path: string) => page.goto(`./#${path}`);
 const SCREENS: [path: string, heading: string][] = [
   ['/scenarios', 'Scenarios'],
   ['/cases', 'Cases'],
-  ['/cases/C-000010', 'Case C-000010'],
+  ['/cases/C-000009', 'Case C-000009'],
   ['/cases/C-000002', 'Case C-000002'],
-  ['/cases/C-000008', 'Case C-000008'],
+  ['/cases/C-000007', 'Case C-000007'],
+  ['/incidents', 'Incidents'],
+  ['/incidents/I-000001', 'Incident I-000001'],
   ['/library', 'Agent library'],
   ['/settings', 'Settings and costs'],
   ['/health', 'Health'],
