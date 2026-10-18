@@ -190,6 +190,7 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
         If completionkey = "board:timeout" { Set sc = ..OnBoardTimeout(case) Quit }
         If completionkey = "preflight:retry" { Set sc = ..SendPreflight(case) Quit }
         If completionkey = "refresh:retry" { Set sc = ..StartEvidence(case) Quit }
+        If completionkey = "verify:retry" { Set sc = ..SendVerify(case) Quit }
         If completionkey = "coordinator:timeout" { Set sc = ..OnCoordinatorTimeout(case) Quit }
         If completionkey = "settle" { Set sc = ..StartEvidence(case) Quit }
         If completionkey = "evidence" { Set sc = ..OnEvidence(case, callresponse) Quit }
@@ -914,6 +915,20 @@ Method OnVerify(case As Shutter.Store.Case, result As Shutter.Msg.VerifyResult) 
     If result.Outcome = "verified" {
         Set case.Outcome = result.Summary
         Quit case.Transition("resolved", "Verified: " _ result.Summary, "system", "verification:" _ result.VerificationId)
+    }
+    // A verification whose lookups failed decided nothing: it is asked again with a growing wait, up to the limit.
+    Set detail = ##class(Shutter.Util.Json).Parse(result.DetailJSON, .dsc)
+    If $ISOBJECT(detail) {
+        Set es = ##class(Shutter.Util.Json).Str(detail, "encounter_http_status"), rs = ##class(Shutter.Util.Json).Str(detail, "receipt_http_status")
+        Set unreadable = ((es '= 200) && (es '= 404)) || ((rs '= 200) && (rs '= 404))
+        If unreadable && (..Refreshes < ..MaxRefreshes) {
+            Set ..Refreshes = ..Refreshes + 1
+            Set wait = 10 * (2 ** (..Refreshes - 1))
+            Do case.Note("note", "The verification could not read the receiver (encounter HTTP " _ es _ ", receipt HTTP " _ rs _ "); verifying again in " _ wait _ " s (" _ ..Refreshes _ " of " _ ..MaxRefreshes _ ")", "system", "verification:" _ result.VerificationId)
+            Set alarm = ##class(Ens.AlarmRequest).%New()
+            Set alarm.Timeout = wait
+            Quit ..SendRequestAsync("Ens.Alarm", alarm, 1, "verify:retry")
+        }
     }
     Set case.Outcome = result.Summary
     Quit case.Transition("escalated", "Not verified (" _ result.Outcome _ "): " _ result.Summary, "system", "verification:" _ result.VerificationId)

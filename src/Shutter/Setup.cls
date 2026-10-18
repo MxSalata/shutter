@@ -100,7 +100,8 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1) As %Status
             Set ^Shutter.Config("recordsImported") = count
         }
         Set sc = ..CreateWebApps(ns, root) Quit:$$$ISERR(sc)
-        Set sc = ..EnsureRetentionTasks(ns) Quit:$$$ISERR(sc)
+        Set r = ..EnsureRetentionTasks(ns)
+        If $EXTRACT(r, 1, 6) = "ERROR:" Set sc = $$$ERROR($$$GeneralError, "Retention tasks: " _ r) Quit
         // Replayed runs spend nothing; rows written before this rule held a recording's price.
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "UPDATE Shutter_Store.AgentRun SET CostUSD = 0 WHERE Mode = 'replay' AND CostUSD <> 0")
         Set sc = ..StartProduction() Quit:$$$ISERR(sc)
