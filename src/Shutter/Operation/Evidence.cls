@@ -34,6 +34,9 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     // 2. The failure as the production saw it.
     Set failure = {}
     Set failure.kind = case.FailureKind, failure.text = case.FailureText
+    If case.FailureOutcome '= "" Set failure.outcome = case.FailureOutcome
+    If case.FailureReasonCode '= "" Set failure."reason_code" = case.FailureReasonCode
+    If case.FailureHttpStatus '= "" Do failure.%Set("http_status", case.FailureHttpStatus, "number")
     Set failure."ens_session_id" = case.EnsSessionId, failure."source_header_id" = case.SourceHeaderId
     Do snap.AddItem("error", "production", now, failure) Set count = count + 1
 

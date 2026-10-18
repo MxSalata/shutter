@@ -30,6 +30,13 @@ Property FailureKind As %String(%JSONFIELDNAME = "failureKind", MAXLEN = 32, VAL
 
 Property FailureText As %String(%JSONFIELDNAME = "failureText", MAXLEN = 2000);
 
+/// The connector's answer as recorded, not parsed from prose: its outcome, reason code and HTTP status (C3).
+Property FailureOutcome As %String(%JSONFIELDNAME = "failureOutcome", MAXLEN = 32);
+
+Property FailureReasonCode As %String(%JSONFIELDNAME = "failureReasonCode", MAXLEN = 100);
+
+Property FailureHttpStatus As %Integer(%JSONFIELDNAME = "failureHttpStatus");
+
 Property EncounterId As %String(%JSONFIELDNAME = "encounterId", MAXLEN = 100);
 
 Index EncounterIdx On EncounterId;
@@ -328,6 +335,15 @@ Storage Default
 </Value>
 <Value name="32">
 <Value>CandidateEntry</Value>
+</Value>
+<Value name="33">
+<Value>FailureOutcome</Value>
+</Value>
+<Value name="34">
+<Value>FailureReasonCode</Value>
+</Value>
+<Value name="35">
+<Value>FailureHttpStatus</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>

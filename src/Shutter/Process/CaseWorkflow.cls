@@ -113,6 +113,13 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     }
     Set ..CaseId = case.CaseId, ..Mode = case.Mode
     Set case.WorkflowSessionId = ..%SessionId, case.Receiver = ..WardTarget
+    // The connector's answer, structured, so the matcher never parses it out of the failure text.
+    Set wr = ##class(Shutter.Util.Json).Parse(request.WardResultJSON, .wsc)
+    If $ISOBJECT(wr) {
+        Set case.FailureOutcome = ##class(Shutter.Util.Json).Str(wr, "outcome"), case.FailureReasonCode = ##class(Shutter.Util.Json).Str(wr, "reason_code")
+        Set status = ##class(Shutter.Util.Json).Str(wr, "http_status")
+        If +status > 0 Set case.FailureHttpStatus = +status
+    }
     Do case.%Save()
     $$$TRACE("Case " _ case.CaseId _ " opened (" _ case.Mode _ "): " _ case.Headline)
     // Detection (CONTRACTS 7.1): this failure counts towards an incident for the receiver; at the threshold one
