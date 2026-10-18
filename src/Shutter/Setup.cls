@@ -146,26 +146,21 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     // code in the image and the data in the volume).
     Set db = ..DatabaseResource(ns), code = ..DatabaseResource(ns, 1)
     Set codeRead = $SELECT((code '= "") && (code '= db): "," _ code _ ":R", 1: "")
-    If '##class(Security.Roles).Exists("Shutter_Operator") {
-        Set sc = ##class(Security.Roles).Create("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U," _ db _ ":RW" _ codeRead _ ",%Ens_Portal:U", "")
-        Quit:$$$ISERR(sc) sc
-    }
-    If '##class(Security.Roles).Exists("Shutter_Approver") {
-        Set sc = ##class(Security.Roles).Create("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals", "Shutter_Operate:U,Shutter_Approve:U," _ db _ ":RW" _ codeRead, "Shutter_Operator,%EnsRole_Operator")
-        Quit:$$$ISERR(sc) sc
-    }
+    // Each role is created, or brought to this definition when it exists, so an upgraded instance is tightened too.
+    // The approver monitors (traces, messages, the Workflow inbox) and approves; it never starts, stops or purges:
+    // %EnsRole_Monitor with the message trace, header and content viewing resources, not %EnsRole_Operator (E2).
+    Set sc = ..EnsureRole("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U," _ db _ ":RW" _ codeRead _ ",%Ens_Portal:U", "")
+    Quit:$$$ISERR(sc) sc
+    Set sc = ..EnsureRole("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals and the Workflow inbox", "Shutter_Operate:U,Shutter_Approve:U," _ db _ ":RW" _ codeRead _ ",%Ens_MessageTrace:U,%Ens_MessageHeader:U,%Ens_MessageContent:U", "Shutter_Operator,%EnsRole_Monitor")
+    Quit:$$$ISERR(sc) sc
     // The production's client of the ward API needs the database as well as the ward's own resource
     // (the Wards_API role carries only that), or the web application answers 403.
-    If '##class(Security.Roles).Exists("Shutter_WardClient") {
-        Set sc = ##class(Security.Roles).Create("Shutter_WardClient", "Shutter: the production's client of the ward API, with the namespace's databases", db _ ":RW" _ codeRead, "")
-        Quit:$$$ISERR(sc) sc
-    }
-    // Every caller of the API web application gets read access to the namespace's database, so
+    Set sc = ..EnsureRole("Shutter_WardClient", "Shutter: the production's client of the ward API, with the namespace's databases", db _ ":RW" _ codeRead, "")
+    Quit:$$$ISERR(sc) sc
+    // Every caller of the API web application gets read access to the namespace's databases, so
     // that the sign-in route can run for an anonymous session; data routes still check resources.
-    If '##class(Security.Roles).Exists("Shutter_WebApp") {
-        Set sc = ##class(Security.Roles).Create("Shutter_WebApp", "Shutter web application: read the namespace's databases (granted to every caller by the web application)", db _ ":R" _ codeRead, "")
-        Quit:$$$ISERR(sc) sc
-    }
+    Set sc = ..EnsureRole("Shutter_WebApp", "Shutter web application: read the namespace's databases (granted to every caller by the web application)", db _ ":R" _ codeRead, "")
+    Quit:$$$ISERR(sc) sc
     If demo {
         Set password = $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_PASSWORD")
         If password = "" Set password = "shutter"
@@ -177,6 +172,24 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
         }
     }
     Quit sc
+}
+
+/// A role with exactly these resources and granted roles: created when missing, modified when it exists. Runs in %SYS.
+ClassMethod EnsureRole(name As %String, description As %String, resources As %String, grantedRoles As %String) As %Status [ Private ]
+{
+    If '##class(Security.Roles).Exists(name) Quit ##class(Security.Roles).Create(name, description, resources, grantedRoles)
+    Set props("Description") = description, props("Resources") = resources, props("GrantedRoles") = grantedRoles
+    Quit ##class(Security.Roles).Modify(name, .props)
+}
+
+/// Bring the resources, roles and demo users to the current definition on an existing instance (the installer does
+/// it on every install). Returns "ok" or the error.
+ClassMethod EnsureSecurity(ns As %String = "", demo As %Boolean = 1) As %String [ SqlProc ]
+{
+    If '$SYSTEM.Security.Check("%Admin_Secure", "USE") Quit "%Admin_Secure is required"
+    If ns = "" Set ns = $NAMESPACE
+    Set sc = ..CreateSecurity(ns, demo)
+    Quit $SELECT($$$ISOK(sc): "ok", 1: "ERROR: " _ $SYSTEM.Status.GetErrorText(sc))
 }
 
 /// The security resource of a namespace's data database (its globals), or with <var>code</var> of its code database

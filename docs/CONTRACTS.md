@@ -538,6 +538,10 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   A further failure for an open case's key whose payload digest differs blocks the case (`PAYLOAD_CHANGED`). The
   patient identifier is the PID-3 repetition typed MR, else the first. In replay mode a case with no recording for
   any member takes the rules path instead of escalating, so the gate still judges.
+  Roles (E2): the installer creates each role or brings it to its definition; `Shutter_Approver` carries `%EnsRole_Monitor`
+  with the message trace, header and content viewing resources, never `%EnsRole_Operator`, so an approver reads traces
+  and the Workflow inbox and approves, and cannot start, stop or purge the production; `Setup.EnsureSecurity` applies
+  the definitions to an existing instance.
   The image's namespace has two databases: the code in `${MGRDIR}SHUTTER` (the image) and the data in
   `${MGRDIR}shutter/db/SHUTTERDATA` (the `shutter-mgr` volume), so a recreated container keeps its cases and a rebuilt
   image brings new code to the same data; the roles read the code database and read and write the data database.
