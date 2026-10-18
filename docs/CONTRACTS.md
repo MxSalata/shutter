@@ -358,6 +358,9 @@ reads it through `Shutter.Store.SiteProfile`.
   production item that delivered to it), so a second receiver is configuration, not code. A path left empty means the
   receiver has no such endpoint: no receipt lookup, and the capabilities are the declared features, which the route
   item records as `capabilities_source`. An entry without `api` takes the ward's paths.
+- `PUT /site-profile` refuses a profile that has not this shape, naming the field (unknown top-level fields and
+  unknown `api` paths or `features` are refused too); every stored version is kept with who stored it and from where,
+  `GET /site-profile/history` lists them (v1.9).
 - `automatic`: the case (or the chain) is released with no Workflow task. It is still gated at the proposal and at the
   dispatch, rehearsed and verified, exactly as an approved case. The case records an approval whose approver is
   `policy`, with the profile's version, the tier, the chain kind and the entry, so the authorization check and the
@@ -527,6 +530,9 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   records the catalogue version it was matched against and an approval the site profile's version, and the dispatch gate
   voids the approval when either changed (`APPROVAL_CATALOGUE_CHANGED`, `APPROVAL_SITE_PROFILE_CHANGED`); the
   `delivery: unmappable` condition and the `UNMAPPABLE` conformance block.
+  The gate's catalogue check blocks `OUTCOME_MISMATCH` when the plan's disposition is not what its chosen outcome
+  calls for (resend outcomes resend; reconcile reconciles; none is superseded; escalate, resend_unconditional and
+  correct_history escalate). The profile is validated on `PUT` and its versions are kept (6.4).
 - v1.8, 18 Oct 2026: the receiver description in the site profile (`api`, `features`), read by the evidence collector, the
   verifier and the connector (6.4).
 - v1.7, 17 Oct 2026: incidents as built (7): adoption and the ready wait, the chain's policy, the task subjects, chain

@@ -188,8 +188,10 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
             Set when = $SELECT($ISOBJECT(alt): ##class(Shutter.Util.Json).Str(alt, "when", "always"), 1: "")
             Set allowed = $ISOBJECT(alt) && ##class(Shutter.Catalogue.Matcher).WhenHolds(when, cat.%Get("facts"))
             Do ..Check(checks, "catalogue", $SELECT(allowed: "pass", 1: "block"), $SELECT(allowed: "OUTCOME_ALLOWED", 1: "OUTCOME_NOT_ALLOWED"), $SELECT(allowed: "Entry " _ plan.CatalogueEntry _ " matches and the site allows alternative " _ n, 1: "Entry " _ plan.CatalogueEntry _ "'s alternative " _ n _ " is not allowed for this site (" _ when _ ")"))
+            If allowed Do ..OutcomeConsistency(checks, plan, ##class(Shutter.Util.Json).Str(alt, "outcome"))
         } Else {
             Do ..Check(checks, "catalogue", "pass", "ENTRY_MATCHED", "Entry " _ plan.CatalogueEntry _ " matches the evidence; the preferred outcome")
+            Do ..OutcomeConsistency(checks, plan, ##class(Shutter.Util.Json).Str(matched.%Get("preferred"), "outcome"))
         }
     }
 
@@ -211,6 +213,21 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     Do case.Note("artifact", "Gate (" _ request.Stage _ "): " _ text, "system", "gate:" _ response.DecisionId)
     $$$TRACE("Gate " _ request.Stage _ " for " _ case.CaseId _ " plan v" _ plan.Version _ ": " _ outcome)
     Quit $$$OK
+}
+
+/// The disposition a catalogue outcome allows (CONTRACTS 6.3): a plan that follows an entry's outcome must act
+/// accordingly, or it is blocked with OUTCOME_MISMATCH (C4).
+ClassMethod DispositionFor(outcome As %String) As %String
+{
+    Quit $CASE(outcome, "resend": "resend", "resend_chain": "resend", "resend_latest": "resend", "reconcile": "reconcile", "none": "superseded", "escalate": "escalate", "resend_unconditional": "escalate", "correct_history": "escalate", : "")
+}
+
+Method OutcomeConsistency(checks As %DynamicArray, plan As Shutter.Store.Plan, outcome As %String) [ Private ]
+{
+    Set allowed = ..DispositionFor(outcome)
+    If (allowed = "") || (plan.Disposition = allowed) Quit
+    If (allowed = "escalate") && (plan.Disposition = "more_evidence") Quit
+    Do ..Check(checks, "catalogue", "block", "OUTCOME_MISMATCH", "The outcome " _ outcome _ " calls for " _ allowed _ ", but the plan's disposition is " _ plan.Disposition)
 }
 
 /// A later applied transfer or discharge for the encounter, described, or "".

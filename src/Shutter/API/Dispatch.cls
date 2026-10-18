@@ -40,6 +40,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/settings" Method="GET" Call="Settings"/>
   <Route Url="/site-profile" Method="GET" Call="SiteProfileGet"/>
   <Route Url="/site-profile" Method="PUT" Call="SiteProfilePut"/>
+  <Route Url="/site-profile/history" Method="GET" Call="SiteProfileHistory"/>
   <Route Url="/index" Method="GET" Call="IndexStatus"/>
   <Route Url="/index/messages" Method="GET" Call="IndexMessages"/>
   <Route Url="/incidents" Method="GET" Call="Incidents"/>
@@ -749,10 +750,18 @@ ClassMethod SiteProfilePut() As %Status
     Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
     Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
     If '$ISOBJECT(body) || $$$ISERR(psc) Quit ..Fail("400 Bad Request", "bad_request", "The body must be the profile as a JSON object")
-    If '$ISOBJECT(body.%Get("policy")) || '$ISOBJECT(body.%Get("receivers")) Quit ..Fail("400 Bad Request", "bad_request", "The profile needs receivers and policy (CONTRACTS 6.4)")
+    Set problem = ##class(Shutter.Store.SiteProfile).Validate(body)
+    If problem '= "" Quit ..Fail("400 Bad Request", "bad_request", "The profile is not valid (CONTRACTS 6.4): " _ problem)
     Set sc = ##class(Shutter.Store.SiteProfile).Store(body.%ToJSON(), "api", $USERNAME)
     If $$$ISERR(sc) Quit ..Fail("500 Internal Server Error", "store_failed", $SYSTEM.Status.GetErrorText(sc))
     Quit ..SiteProfileGet()
+}
+
+/// Every version of the profile, newest first, with who stored it.
+ClassMethod SiteProfileHistory() As %Status
+{
+    If '..Allow() Quit $$$OK
+    Quit ..Json(##class(Shutter.Store.SiteProfileVersion).History(+$GET(%request.Data("limit", 1), 50)))
 }
 
 // ---- the exact index (CONTRACTS 8) ----
