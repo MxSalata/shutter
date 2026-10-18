@@ -43,6 +43,7 @@ Workflows" (Open Exchange contest 49). Private while the entry is built.
 ### Limits, plainly
 
 - Without an API key the agents replay recorded runs: the live board's own runs with `claude-opus-5-5` on 16 October 2026, one per board member and case (`fixtures/records`). The online demo is recorded from those runs too.
+- A replay answers only for the scenarios' cases. A case with no recording, such as one from an HL7 file of your own, takes the rules path: no board findings, the gate alone decides, and a resend still waits for a person's approval. The board on your own messages needs live agents (an API key, "Run it").
 - The receiving system is a synthetic ward bed-management system (`Wards.*`) built for the scenarios; its interface contract is in `knowledge/contracts/`.
 
 ## Run it

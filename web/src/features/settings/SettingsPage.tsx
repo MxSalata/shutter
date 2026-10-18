@@ -124,9 +124,16 @@ export default function SettingsPage() {
               </Group>
             </Card>
             <Card padding="md">
-              <Title order={2} fz="lg" mb="sm">
+              <Title order={2} fz="lg" mb={4}>
                 Agent items
               </Title>
+              <Text size="sm" c="dimmed" mb="sm">
+                Each item runs its agent live, records a live run, or replays a recording; auto runs live when
+                a model provider is configured and replays otherwise. A replay answers with the recorded run
+                for a scenario's case. A case with no recording, such as one from an HL7 file of your own,
+                takes the rules path instead: the gate alone decides, and a resend still waits for a person's
+                approval.
+              </Text>
               <AgentItemsTable items={s.agentItems} />
             </Card>
             <Card padding="md">

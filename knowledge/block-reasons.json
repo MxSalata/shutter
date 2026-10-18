@@ -1,7 +1,7 @@
 {
   "id": "block-reasons",
-  "version": "1.2",
-  "effective_from": "2026-10-17",
+  "version": "1.3",
+  "effective_from": "2026-10-18",
   "applies_to": [
     "ward-api-v1",
     "hl7-v2.5.1-adt"
@@ -50,6 +50,15 @@
       "text": "Fields the operation needs, such as the visit number, the event time or the patient identifier, are missing or malformed."
     },
     {
+      "code": "UNMAPPABLE",
+      "title": "The message can't become a ward operation",
+      "prerequisite": "A message the inbound profile maps to an operation (WIC-6)",
+      "next_action": "Escalate to the integration team with the message: correct it at the source and send it again.",
+      "owner": "Integration team",
+      "reevaluate_when": "A corrected message arrives or the mapping is fixed",
+      "text": "The feed couldn't map the message to an operation: a field the operation needs is missing or malformed, or the profile maps no operation for its event. Shutter opened a case so the failure isn't lost, but nothing can be resent from it."
+    },
+    {
       "code": "UNKNOWN_DISPOSITION",
       "title": "The proposal named an outcome the playbooks don't have",
       "prerequisite": "One of resend, reconcile, superseded, more evidence or escalate (RP-1)",
@@ -74,7 +83,7 @@
       "next_action": "Escalate: content that changed under the same key needs the integration team (RP-2.5).",
       "owner": "Integration team",
       "reevaluate_when": "The original payload is confirmed",
-      "text": "A resend must carry exactly the original movement. Changed content isn't a recovery."
+      "text": "A resend must carry exactly the original movement: changed content isn't a recovery. A further failure for the same operation with different content blocks the open case for the same reason."
     },
     {
       "code": "SUPERSEDED_BY_LATER_EVENT",
@@ -183,6 +192,24 @@
       "owner": "Approver",
       "reevaluate_when": "A new approval is given",
       "text": "The rules the approval relied on have a new version."
+    },
+    {
+      "code": "APPROVAL_CATALOGUE_CHANGED",
+      "title": "The catalogue changed after approval",
+      "prerequisite": "An approval given under the catalogue version the plan was matched against",
+      "next_action": "Investigate again under the current catalogue, and approve again if the plan still holds.",
+      "owner": "Approver",
+      "reevaluate_when": "A new approval is given",
+      "text": "An entry of the scenario catalogue has a new version since the approval, so the match the plan rests on may no longer hold."
+    },
+    {
+      "code": "APPROVAL_SITE_PROFILE_CHANGED",
+      "title": "The site profile changed after approval",
+      "prerequisite": "An approval given under the current site profile version",
+      "next_action": "Review the plan under the new profile, and approve again if it still applies.",
+      "owner": "Approver",
+      "reevaluate_when": "A new approval is given",
+      "text": "The site's profile (its policies, its tiers or its receiver description) has a new version since the approval, so who decides and what is allowed may have changed."
     },
     {
       "code": "APPROVAL_RECEIVER_CHANGED",
@@ -327,6 +354,15 @@
       "owner": "Integration team",
       "reevaluate_when": "The site profile changes",
       "text": "The plan chose an alternative outcome whose condition doesn't hold for this site, for example history correction where the site keeps what is current."
+    },
+    {
+      "code": "OUTCOME_MISMATCH",
+      "title": "The plan doesn't do what its catalogue outcome says",
+      "prerequisite": "A disposition that is what the outcome the plan chose from its catalogue entry calls for",
+      "next_action": "Investigate again so the plan's disposition follows the entry's outcome, or escalate.",
+      "owner": "Operator",
+      "reevaluate_when": "The case is investigated again",
+      "text": "The plan names a catalogue outcome but proposes another disposition, for example a resend where the outcome calls for no write."
     },
     {
       "code": "NEW_PATTERN",
