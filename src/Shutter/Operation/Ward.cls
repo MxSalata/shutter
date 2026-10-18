@@ -12,7 +12,8 @@ Parameter INVOCATION = "Queue";
 Property Adapter As EnsLib.HTTP.OutboundAdapter;
 
 /// The operations endpoint's path on the ward system.
-Property OperationsPath As %String(MAXLEN = 200) [ InitialExpression = "/wards/api/operations" ];
+/// Overrides the operations path of this item's receiver description in the site profile; empty takes the profile's.
+Property OperationsPath As %String(MAXLEN = 200);
 
 Parameter SETTINGS = "OperationsPath:Ward";
 
@@ -26,7 +27,7 @@ Method OnWardOperation(request As Shutter.Msg.WardOperation, Output response As 
     Set http.ContentType = "application/json"
     Do http.EntityBody.Write(body.%ToJSON())
     Set start = $ZHOROLOG
-    Set sc = ..Adapter.SendFormDataArray(.httpResponse, "POST", http, "", "", ..OperationsPath)
+    Set sc = ..Adapter.SendFormDataArray(.httpResponse, "POST", http, "", "", ..Path("operations"))
     Set response.DurationMs = (($ZHOROLOG - start) * 1000) \ 1
     Set ..Retry = 0
     Set text = ""
@@ -53,7 +54,7 @@ Method Read(request As Shutter.Msg.WardOperation, response As Shutter.Msg.WardRe
     $$$TRACE("Preflight read of encounter " _ request.EncounterId)
     Set http = ##class(%Net.HttpRequest).%New()
     Set start = $ZHOROLOG
-    Set path = $PIECE(..OperationsPath, "/operations", 1) _ "/encounters/" _ $ZCONVERT(request.EncounterId, "O", "URL")
+    Set path = ..Path("state", request.EncounterId)
     Set sc = ..Adapter.SendFormDataArray(.httpResponse, "GET", http, "", "", path)
     Set response.DurationMs = (($ZHOROLOG - start) * 1000) \ 1
     Set ..Retry = 0
@@ -91,6 +92,14 @@ Method Read(request As Shutter.Msg.WardOperation, response As Shutter.Msg.WardRe
     Quit $$$OK
 }
 
+/// This item's path of a kind, from its receiver description in the site profile (the item's own name is the
+/// receiver's), or the OperationsPath setting when set.
+Method Path(kind As %String, encounter As %String = "") As %String
+{
+    If (kind = "operations") && (..OperationsPath '= "") Quit ..OperationsPath
+    Quit ##class(Shutter.Store.SiteProfile).ReceiverPath(..%ConfigName, kind, encounter)
+}
+
 /// Map the HTTP status, the adapter's status and the body to an outcome.
 Method Classify(request As Shutter.Msg.WardOperation, response As Shutter.Msg.WardResult, sc As %Status, parsed As %DynamicObject) [ Private ]
 {
@@ -116,8 +125,13 @@ Method Classify(request As Shutter.Msg.WardOperation, response As Shutter.Msg.Wa
         // No HTTP response at all: refused connections never sent anything; anything else is unknown.
         Set msg = $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "no response")
         Set response.Error = msg
+        // The status codes first (A12): 6059 is a socket that never opened, so nothing was sent; the wording of the
+        // message is the fallback.
+        Set codes = $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorCodes(sc), 1: "")
         Set lower = $ZCONVERT(msg, "L")
-        If (lower [ "refused") || (lower [ "unable to connect") || (lower [ "connect failed") || (lower [ "no route") {
+        If $LISTFIND($LISTFROMSTRING(codes, ","), 6059) {
+            Set response.Outcome = "unavailable"
+        } ElseIf (lower [ "refused") || (lower [ "unable to connect") || (lower [ "connect failed") || (lower [ "no route") || (lower [ "unable to open tcp/ip socket") {
             Set response.Outcome = "unavailable"
         } Else {
             Set response.Outcome = "uncertain"

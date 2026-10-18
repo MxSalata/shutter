@@ -100,6 +100,8 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1) As %Status
             Set ^Shutter.Config("recordsImported") = count
         }
         Set sc = ..CreateWebApps(ns, root) Quit:$$$ISERR(sc)
+        Set r = ..EnsureRetentionTasks(ns)
+        If $EXTRACT(r, 1, 6) = "ERROR:" Set sc = $$$ERROR($$$GeneralError, "Retention tasks: " _ r) Quit
         // Replayed runs spend nothing; rows written before this rule held a recording's price.
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "UPDATE Shutter_Store.AgentRun SET CostUSD = 0 WHERE Mode = 'replay' AND CostUSD <> 0")
         Set sc = ..StartProduction() Quit:$$$ISERR(sc)
@@ -140,25 +142,28 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
         }
     }
     Quit:$$$ISERR(sc) sc
-    Set db = ..DatabaseResource(ns)
+    // The namespace's data database read-write, and its code database read when it is another one (the image keeps the
+    // code in the image and the data in the volume).
+    Set db = ..DatabaseResource(ns), code = ..DatabaseResource(ns, 1)
+    Set codeRead = $SELECT((code '= "") && (code '= db): "," _ code _ ":R", 1: "")
     If '##class(Security.Roles).Exists("Shutter_Operator") {
-        Set sc = ##class(Security.Roles).Create("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U," _ db _ ":RW,%Ens_Portal:U", "")
+        Set sc = ##class(Security.Roles).Create("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U," _ db _ ":RW" _ codeRead _ ",%Ens_Portal:U", "")
         Quit:$$$ISERR(sc) sc
     }
     If '##class(Security.Roles).Exists("Shutter_Approver") {
-        Set sc = ##class(Security.Roles).Create("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals", "Shutter_Operate:U,Shutter_Approve:U," _ db _ ":RW", "Shutter_Operator,%EnsRole_Operator")
+        Set sc = ##class(Security.Roles).Create("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals", "Shutter_Operate:U,Shutter_Approve:U," _ db _ ":RW" _ codeRead, "Shutter_Operator,%EnsRole_Operator")
         Quit:$$$ISERR(sc) sc
     }
     // The production's client of the ward API needs the database as well as the ward's own resource
     // (the Wards_API role carries only that), or the web application answers 403.
     If '##class(Security.Roles).Exists("Shutter_WardClient") {
-        Set sc = ##class(Security.Roles).Create("Shutter_WardClient", "Shutter: the production's client of the ward API, with the namespace's database", db _ ":RW", "")
+        Set sc = ##class(Security.Roles).Create("Shutter_WardClient", "Shutter: the production's client of the ward API, with the namespace's databases", db _ ":RW" _ codeRead, "")
         Quit:$$$ISERR(sc) sc
     }
     // Every caller of the API web application gets read access to the namespace's database, so
     // that the sign-in route can run for an anonymous session; data routes still check resources.
     If '##class(Security.Roles).Exists("Shutter_WebApp") {
-        Set sc = ##class(Security.Roles).Create("Shutter_WebApp", "Shutter web application: read the code database (granted to every caller by the web application)", db _ ":R", "")
+        Set sc = ##class(Security.Roles).Create("Shutter_WebApp", "Shutter web application: read the namespace's databases (granted to every caller by the web application)", db _ ":R" _ codeRead, "")
         Quit:$$$ISERR(sc) sc
     }
     If demo {
@@ -174,9 +179,9 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     Quit sc
 }
 
-/// The security resource of a namespace's default database, for example %DB_SHUTTER or
-/// %DB_%DEFAULT. Runs in %SYS.
-ClassMethod DatabaseResource(ns As %String) As %String
+/// The security resource of a namespace's data database (its globals), or with <var>code</var> of its code database
+/// (its routines), for example %DB_SHUTTERDATA, %DB_SHUTTER or %DB_%DEFAULT. Runs in %SYS.
+ClassMethod DatabaseResource(ns As %String, code As %Boolean = 0) As %String
 {
     Set resource = "%DB_%DEFAULT"
     Try {
@@ -184,7 +189,7 @@ ClassMethod DatabaseResource(ns As %String) As %String
         Set $NAMESPACE = "%SYS"
         Set sc = ##class(Config.Namespaces).Get(ns, .nsprops)
         Quit:$$$ISERR(sc)
-        Set dbname = $GET(nsprops("Globals"))
+        Set dbname = $GET(nsprops($SELECT(code: "Routines", 1: "Globals")))
         Quit:(dbname="")
         Set sc = ##class(Config.Databases).Get(dbname, .dbprops)
         Quit:$$$ISERR(sc)
@@ -384,6 +389,45 @@ ClassMethod StartProduction() As %Status
 
 /// Empty Shutter's own tables (cases and everything attached to them, recordings excepted) on a
 /// demo instance. Refused elsewhere. Returns the number of tables emptied or the error.
+/// The two daily housekeeping tasks (A14), created once: "Shutter message purge" (the standard Ens.Util.Tasks.Purge,
+/// 30 days, bodies too, keeping sessions whole) and "Shutter retention" (Shutter.Util.RetentionTask). Returns "ok",
+/// "exists" or the error.
+ClassMethod EnsureRetentionTasks(ns As %String = "") As %String [ SqlProc ]
+{
+    If '$SYSTEM.Security.Check("%Admin_Task", "USE") && '$SYSTEM.Security.Check("Shutter_Operate", "USE") Quit "Shutter_Operate is required"
+    If ns = "" Set ns = $NAMESPACE
+    Set out = ""
+    Set sc = ..EnsureTask("Shutter message purge", ns, "Ens.Util.Tasks.Purge", "Shutter: purge messages, logs and traces older than 30 days, sessions kept whole", $LISTBUILD("NumberOfDaysToKeep", 30, "BodiesToo", 1, "KeepIntegrity", 1, "TypesToPurge", "all"), 9600, .made)
+    If $$$ISERR(sc) Quit "ERROR: " _ $SYSTEM.Status.GetErrorText(sc)
+    Set out = out _ "message purge " _ $SELECT(made: "created", 1: "exists")
+    Set sc = ..EnsureTask("Shutter retention", ns, "Shutter.Util.RetentionTask", "Shutter: idempotency keys older than a day, and closed cases past the retention when switched on", $LISTBUILD("RetentionDays", 30, "PurgeClosedCases", 0), 9900, .made)
+    If $$$ISERR(sc) Quit "ERROR: " _ $SYSTEM.Status.GetErrorText(sc)
+    Quit out _ "; retention " _ $SELECT(made: "created", 1: "exists")
+}
+
+/// A daily task by name, created when none of that name exists (startSeconds after midnight, local time).
+ClassMethod EnsureTask(name As %String, ns As %String, class As %String, description As %String, settings As %List, startSeconds As %Integer, Output made As %Boolean) As %Status [ Private ]
+{
+    Set made = 0, sc = $$$OK
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = "%SYS"
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM %SYS.Task WHERE Name = ?", name)
+        If rs.%Next() Quit
+        Set task = ##class(%SYS.Task).%New()
+        Set task.Name = name, task.NameSpace = ns, task.TaskClass = class, task.Description = description
+        Set task.TimePeriod = 0, task.TimePeriodEvery = 1, task.DailyFrequency = 0
+        Set task.DailyStartTime = startSeconds, task.DailyEndTime = 0
+        Set task.RunAsUser = $USERNAME
+        Set task.Settings = settings
+        Set sc = task.%Save()
+        If $$$ISOK(sc) Set made = 1
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    Quit sc
+}
+
 ClassMethod PurgeStore() As %String [ SqlProc ]
 {
     If '$SYSTEM.Security.Check("Shutter_Operate", "USE") Quit "Shutter_Operate is required"
@@ -659,15 +703,26 @@ ClassMethod MonitorState() As %Integer [ SqlProc ]
 /// (the image ran IRIS during its build, under the build host's name) and the AI Hub preview's own startup
 /// error (Sharding, METHOD DOES NOT EXIST). Any other severe line leaves the state as it is. Returns what
 /// it did. Called by after-start.sh.
+/// A messages.log line's time ("mm/dd/yy-hh:mm:ss:mmm ...") in seconds, or "" when it has none.
+ClassMethod LogSeconds(line As %String) As %String [ Private ]
+{
+    Set stamp = $PIECE(line, " ", 1)
+    If $LENGTH(stamp, "-") '= 2 Quit ""
+    Set d = $PIECE(stamp, "-", 1), t = $PIECE($PIECE(stamp, "-", 2), ":", 1, 3)
+    Set h = $ZDATETIMEH(d _ " " _ t, 1, 1, , , , , , , "")
+    If h = "" Quit ""
+    Quit ($PIECE(h, ",", 1) * 86400) + $PIECE(h, ",", 2)
+}
+
 ClassMethod ClearStartupAlerts(lines As %Integer = 400) As %String [ SqlProc ]
 {
     Try {
         Set before = $SYSTEM.Monitor.State()
         Set log = ..TailLog(lines)
         // Only this start: the image's log also holds the lines of the IRIS run during the build.
-        Set total = $LENGTH(log, $CHAR(10)), from = 1
+        Set total = $LENGTH(log, $CHAR(10)), from = 1, startedAt = ""
         For i = 1:1:total {
-            If $PIECE(log, $CHAR(10), i) [ "Startup of InterSystems IRIS" Set from = i
+            If $PIECE(log, $CHAR(10), i) [ "Startup of InterSystems IRIS" Set from = i, startedAt = ..LogSeconds($PIECE(log, $CHAR(10), i))
         }
         Set severe = 0, known = 0, other = ""
         For i = from:1:total {
@@ -676,7 +731,10 @@ ClassMethod ClearStartupAlerts(lines As %Integer = 400) As %String [ SqlProc ]
             Set sev = $PIECE($PIECE(line, ") ", 2), " ", 1)
             If (sev '= "2") && (sev '= "3") Continue
             Set severe = severe + 1
-            If (line [ "failed over from node") || (line [ "Sharding") {
+            // Known only within three minutes of the start: a genuine failover or sharding alert later is never masked.
+            Set at = ..LogSeconds(line)
+            Set early = (startedAt = "") || (at = "") || ((at - startedAt) <= 180)
+            If early && ((line [ "failed over from node") || (line [ "Sharding")) {
                 Set known = known + 1
             } Else {
                 Set other = other _ $SELECT(other = "": "", 1: " | ") _ $EXTRACT(line, 1, 160)

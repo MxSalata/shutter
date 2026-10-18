@@ -13,6 +13,11 @@ Index CaseSeqIdx On (Case, Seq) [ Unique ];
 /// The digest of the canonical JSON of all items, in order.
 Property Digest As %String(%JSONFIELDNAME = "digest", MAXLEN = 80);
 
+/// The digest of what a decision rests on (the operation, the failure, the receiver's state and history, the receipt,
+/// the later events, the capabilities, the match), without observation times: two collections of the same evidence
+/// share it, so an approval survives a refresh that changed nothing material (A7).
+Property MaterialDigest As %String(%JSONFIELDNAME = "materialDigest", MAXLEN = 80);
+
 Index DigestIdx On Digest;
 
 Property TakenAt As %String(%JSONFIELDNAME = "takenAt", MAXLEN = 30);
@@ -34,6 +39,50 @@ ClassMethod Begin(case As Shutter.Store.Case, freshSeconds As %Integer = 300) As
     Set s.FreshUntil = ##class(Shutter.Util.Time).FromNow(freshSeconds)
     Set s.Summary = "{}"
     Quit s
+}
+
+/// The decision-relevant view of a summary (A7): what the gate, the matcher and the board decide on, with no
+/// observation times, so that the same evidence collected twice gives the same digest.
+ClassMethod Material(summary As %DynamicObject) As %DynamicObject
+{
+    Set json = "Shutter.Util.Json", m = {}
+    Set op = summary.%Get("operation")
+    If $ISOBJECT(op) Set m.operation = {"operation_key": ($CLASSMETHOD(json, "Str", op, "operation_key")), "payload_digest": ($CLASSMETHOD(json, "Str", op, "payload_digest"))}
+    Set f = summary.%Get("failure")
+    If $ISOBJECT(f) Set m.failure = {"kind": ($CLASSMETHOD(json, "Str", f, "kind")), "reason_code": ($CLASSMETHOD(json, "Str", f, "reason_code")), "http_status": ($CLASSMETHOD(json, "Str", f, "http_status"))}
+    Set w = summary.%Get("ward_state"), ws = {}
+    Set ws."http_status" = $CLASSMETHOD(json, "Str", summary, "ward_state_http_status")
+    If $ISOBJECT(w) {
+        Set ws.state = $CLASSMETHOD(json, "Str", w, "state"), ws.ward = $CLASSMETHOD(json, "Str", w, "ward"), ws.version = $CLASSMETHOD(json, "Str", w, "version")
+        Set ws."patient_id" = $CLASSMETHOD(json, "Str", w, "patient_id"), ws.epoch = $CLASSMETHOD(json, "Str", w, "epoch")
+        Set ws.history = []
+        Set h = w.%Get("history")
+        If $ISOBJECT(h) {
+            Set it = h.%GetIterator()
+            While it.%GetNext(.i, .e) { Do ws.history.%Push({"event": ($CLASSMETHOD(json, "Str", e, "event")), "event_time": ($CLASSMETHOD(json, "Str", e, "event_time")), "ward": ($CLASSMETHOD(json, "Str", e, "ward"))}) }
+        }
+    }
+    Set m."ward_state" = ws
+    Set r = summary.%Get("receipt"), rc = {}
+    Set rc."http_status" = $CLASSMETHOD(json, "Str", summary, "receipt_http_status")
+    If $ISOBJECT(r) Set rc."operation_key" = $CLASSMETHOD(json, "Str", r, "operation_key"), rc."applied_at" = $CLASSMETHOD(json, "Str", r, "applied_at"), rc."version_after" = $CLASSMETHOD(json, "Str", r, "version_after")
+    Set m.receipt = rc
+    Set m.later = []
+    Set t = summary.%Get("timeline")
+    If $ISOBJECT(t) {
+        Set it = t.%GetIterator()
+        While it.%GetNext(.i, .e) {
+            Continue:'$CLASSMETHOD(json, "Bool", e, "later")
+            Do m.later.%Push({"operation_key": ($CLASSMETHOD(json, "Str", e, "operation_key")), "event": ($CLASSMETHOD(json, "Str", e, "event")), "outcome": ($CLASSMETHOD(json, "Str", e, "outcome"))})
+        }
+    }
+    Set route = summary.%Get("route")
+    If $ISOBJECT(route) Set m.route = {"conditional_writes": ($CLASSMETHOD(json, "Str", route, "conditional_writes")), "receipts": ($CLASSMETHOD(json, "Str", route, "receipts")), "dry_run": ($CLASSMETHOD(json, "Str", route, "dry_run")), "capabilities_http_status": ($CLASSMETHOD(json, "Str", route, "capabilities_http_status"))}
+    Set cat = summary.%Get("catalogue")
+    If $ISOBJECT(cat) Set m.catalogue = {"decision": ($CLASSMETHOD(json, "Str", cat, "decision")), "entry": ($CLASSMETHOD(json, "Str", cat, "entry")), "outcome": ($CLASSMETHOD(json, "Str", cat, "outcome")), "conditions": (cat.%Get("conditions"))}
+    Set inc = summary.%Get("incident")
+    If $ISOBJECT(inc) Set m.incident = {"incident_id": ($CLASSMETHOD(json, "Str", inc, "incident_id")), "chain_seq": ($CLASSMETHOD(json, "Str", inc, "chain_seq")), "position": ($CLASSMETHOD(json, "Str", inc, "position"))}
+    Quit m
 }
 
 /// Add an observation. kind: message, validation, ward_state, receipt, later_event, route, error.
@@ -65,6 +114,7 @@ Method Seal(summary As %DynamicObject) As %Status
     Set envelope.items = all
     Set envelope.summary = summary
     Set ..Digest = ##class(Shutter.Util.Digest).OfObject(envelope)
+    Set ..MaterialDigest = ##class(Shutter.Util.Digest).OfObject(..Material(summary))
     TSTART
     Set sc = ..%Save()
     If $$$ISOK(sc) {
@@ -133,6 +183,9 @@ Storage Default
 </Value>
 <Value name="7">
 <Value>Summary</Value>
+</Value>
+<Value name="8">
+<Value>MaterialDigest</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.SnapshotD</DataLocation>

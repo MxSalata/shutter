@@ -53,6 +53,10 @@ Property CreatedAt As %String(%JSONFIELDNAME = "createdAt", MAXLEN = 30);
 /// run:<id> for an agent, rules for the rules-only mode, user:<name> for an edit.
 Property CreatedBy As %String(%JSONFIELDNAME = "createdBy", MAXLEN = 100);
 
+/// The catalogue the plan was made against (every entry with its version), from the snapshot's match; an approval
+/// is void when the catalogue changed since (A8).
+Property CatalogueVersion As %String(%JSONFIELDNAME = "catalogueVersion", MAXLEN = 2000);
+
 /// Create the next plan version for a case from a validated plan object.
 ClassMethod Create(case As Shutter.Store.Case, snapshot As Shutter.Store.Snapshot, plan As %DynamicObject, createdBy As %String, Output p As Shutter.Store.Plan) As %Status
 {
@@ -79,11 +83,16 @@ ClassMethod Create(case As Shutter.Store.Case, snapshot As Shutter.Store.Snapsho
     Set p.Why = $EXTRACT(##class(Shutter.Util.Json).Str(plan, "why"), 1, 1000)
     Set p.CreatedAt = ##class(Shutter.Util.Time).NowUTC()
     Set p.CreatedBy = createdBy
-    // The digest covers the plan, its version and the snapshot it was made from.
+    If $ISOBJECT(snapshot) {
+        Set cat = snapshot.SummaryObject().%Get("catalogue")
+        If $ISOBJECT(cat) Set p.CatalogueVersion = ##class(Shutter.Util.Json).Str(cat, "catalogue_version")
+    }
+    // The digest covers the plan, its version, the snapshot it was made from and the catalogue it was matched against.
     Set envelope = {}
     Set envelope.plan = plan
     Set envelope.version = p.Version
     Set envelope."snapshot_digest" = $SELECT($ISOBJECT(snapshot): snapshot.Digest, 1: "")
+    Set envelope."catalogue_version" = p.CatalogueVersion
     Set envelope."case_id" = case.CaseId
     Set p.Json = plan.%ToJSON()
     Set p.Digest = ##class(Shutter.Util.Digest).OfObject(envelope)
@@ -164,6 +173,9 @@ Storage Default
 </Value>
 <Value name="20">
 <Value>Why</Value>
+</Value>
+<Value name="21">
+<Value>CatalogueVersion</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.PlanD</DataLocation>

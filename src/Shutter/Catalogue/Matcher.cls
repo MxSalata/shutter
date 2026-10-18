@@ -11,6 +11,7 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     Set json = "Shutter.Util.Json"
     // delivery
     Set c.delivery = $CASE(case.FailureKind, "delivery_failed": "failed", "rejected": "rejected", "uncertain_outcome": "uncertain", : "failed")
+    If case.FailureKind = "unmappable" Set c.delivery = "unmappable"
     // receiver_answer, from the error item's reason code and status
     Set error = ..Item(summary, "error")
     Set reason = $ZCONVERT($SELECT($ISOBJECT(error): $CLASSMETHOD(json, "Str", error, "reason_code"), 1: ""), "L")
@@ -211,6 +212,14 @@ ClassMethod Item(summary As %DynamicObject, kind As %String) As %DynamicObject [
         // The failure carries the receiver's answer when the connector recorded one.
         Set err = failure.%Get("error")
         If $ISOBJECT(err) Quit err
+        // The connector's answer as the case recorded it, when the case carries it (C3).
+        Set reasonCode = ##class(Shutter.Util.Json).Str(failure, "reason_code"), httpStatus = +##class(Shutter.Util.Json).Str(failure, "http_status")
+        If (reasonCode '= "") || (httpStatus > 0) {
+            Set o = {}
+            Set o."reason_code" = reasonCode, o."http_status" = httpStatus
+            If (reasonCode = "") && (##class(Shutter.Util.Json).Str(failure, "outcome") = "uncertain") Set o."reason_code" = "timeout"
+            Quit o
+        }
         // "Delivery unavailable (ward_unavailable), HTTP 503: …", "Delivery refused (duplicate_message), HTTP 409",
         // "Delivery uncertain, HTTP 504: …": the reason code in parentheses, the status after "HTTP ".
         Set o = {}

@@ -26,9 +26,16 @@ Property Version As %Integer(%JSONFIELDNAME = "version") [ InitialExpression = 1
 /// How the case is investigated: the board, a single investigator, or rules only.
 Property Mode As %String(%JSONFIELDNAME = "mode", MAXLEN = 16, VALUELIST = ",board,single,rules,policy") [ InitialExpression = "board" ];
 
-Property FailureKind As %String(%JSONFIELDNAME = "failureKind", MAXLEN = 32, VALUELIST = ",delivery_failed,uncertain_outcome,rejected");
+Property FailureKind As %String(%JSONFIELDNAME = "failureKind", MAXLEN = 32, VALUELIST = ",delivery_failed,uncertain_outcome,rejected,unmappable");
 
 Property FailureText As %String(%JSONFIELDNAME = "failureText", MAXLEN = 2000);
+
+/// The connector's answer as recorded, not parsed from prose: its outcome, reason code and HTTP status (C3).
+Property FailureOutcome As %String(%JSONFIELDNAME = "failureOutcome", MAXLEN = 32);
+
+Property FailureReasonCode As %String(%JSONFIELDNAME = "failureReasonCode", MAXLEN = 100);
+
+Property FailureHttpStatus As %Integer(%JSONFIELDNAME = "failureHttpStatus");
 
 Property EncounterId As %String(%JSONFIELDNAME = "encounterId", MAXLEN = 100);
 
@@ -109,6 +116,13 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
             Do case.Transition("failed", "Abandoned: a new scenario run reset the ward after this case was opened", "system")
             Set case = ""
         } Else {
+            // The same key with other content (a corrected message resent with the same event time): the open case's plan
+            // carries the first content, so it must not go out; a person decides (PAYLOAD_CHANGED).
+            Set newDigest = ##class(Shutter.Util.Json).Str(op, "payload_digest"), oldDigest = case.PayloadDigest()
+            If (newDigest '= "") && (oldDigest '= "") && (newDigest '= oldDigest) && 'case.IsClosed() {
+                Set case.Headline = "Blocked: a further message for the same operation carries different content"
+                Quit case.Transition("blocked", "PAYLOAD_CHANGED: a further failure for the same operation key carries different content (payload digest " _ $EXTRACT(newDigest, 1, 19) _ " against " _ $EXTRACT(oldDigest, 1, 19) _ "); the plan would write the first content, so nothing is dispatched and a person must decide. " _ failureText, "system", "ens:" _ sourceHeaderId)
+            }
             Set sc = case.Note("note", "A further failure for the same operation: " _ failureText, "system", "ens:" _ sourceHeaderId)
             Quit sc
         }
@@ -143,6 +157,49 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
         TROLLBACK
     }
     Quit sc
+}
+
+/// Delete the closed cases whose closing is older than a time, with everything that hangs off them (events, snapshots
+/// and their items, plans, approvals, rehearsals, gate decisions, attempts, verifications, agent runs and their tool
+/// calls, chain items). Cases an incident still holds stay. Returns how many cases went. Housekeeping only
+/// (Shutter.Util.RetentionTask, switched on by a site): the record is the product.
+ClassMethod PurgeClosedBefore(cutoff As %String) As %Integer
+{
+    Set n = 0
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE ClosedAt IS NOT NULL AND ClosedAt < ? AND State IN ('resolved', 'blocked', 'escalated', 'failed') AND Incident IS NULL", cutoff)
+    While rs.%Next() {
+        Set id = rs.%Get("ID"), sc = $$$OK
+        TSTART
+        For table = "Shutter_Store.ChainItem", "Shutter_Store.Verification", "Shutter_Store.ExecutionAttempt", "Shutter_Store.Approval", "Shutter_Store.Rehearsal", "Shutter_Store.GateDecision", "Shutter_Store.Finding", "Shutter_Store.AgentRun", "Shutter_Store.Plan" {
+            If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM " _ table _ " WHERE ""Case"" = ?", id)
+        }
+        If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM Shutter_Store.SnapshotItem WHERE Snapshot IN (SELECT ID FROM Shutter_Store.Snapshot WHERE ""Case"" = ?)", id)
+        If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM Shutter_Store.Snapshot WHERE ""Case"" = ?", id)
+        If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM Shutter_Store.CaseEvent WHERE ""Case"" = ?", id)
+        If $$$ISOK(sc) Set sc = ..%DeleteId(id)
+        If $$$ISOK(sc) { TCOMMIT  Set n = n + 1 } Else { TROLLBACK }
+    }
+    Quit n
+}
+
+/// One SQL statement with one argument, as a status.
+ClassMethod Exec(sql As %String, arg As %String) As %Status [ Private ]
+{
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, arg)
+    If rs.%SQLCODE < 0 Quit $$$ERROR($$$GeneralError, "SQLCODE " _ rs.%SQLCODE _ ": " _ rs.%Message)
+    Quit $$$OK
+}
+
+/// The payload digest of the operation this case is about, from the case's own fields (as the evidence computes it).
+Method PayloadDigest() As %String
+{
+    Set op = {}
+    Set op."operation_key" = ..OperationKey, op."encounter_id" = ..EncounterId
+    Set op."patient_id" = ..PatientId, op."patient_id_authority" = ..PatientIdAuthority
+    Set op."event" = ..Event
+    If ..Ward '= "" { Set op."ward" = ..Ward } Else { Do op.%Set("ward", "", "null") }
+    Set op."event_time" = ..EventTime, op."source_system" = ..SourceSystem, op."source_message_id" = ..SourceMessageId
+    Quit ##class(Shutter.Util.Digest).WardPayloadDigest(op)
 }
 
 /// The open case for an operation key, if any (closed states are resolved, blocked, escalated, failed).
@@ -209,9 +266,9 @@ ClassMethod NextId() As %String [ Private ]
 /// A one-line description of the failure for the headline.
 ClassMethod DescribeFailure(case As Shutter.Store.Case) As %String [ Private ]
 {
-    Set what = $CASE(case.Event, "admit": "admission", "transfer": "transfer to " _ case.Ward, "discharge": "discharge", "update": "update", : case.Event)
+    Set what = $CASE(case.Event, "admit": "admission", "transfer": "transfer to " _ case.Ward, "discharge": "discharge", "update": "update", "": "message", : case.Event _ " message")
     Set when = $REPLACE($PIECE(case.EventTime, "Z", 1), "T", " ")
-    Set how = $CASE(case.FailureKind, "delivery_failed": "was not delivered", "uncertain_outcome": "has an uncertain outcome", "rejected": "was rejected", : "failed")
+    Set how = $CASE(case.FailureKind, "delivery_failed": "was not delivered", "uncertain_outcome": "has an uncertain outcome", "rejected": "was rejected", "unmappable": "could not be mapped to a ward operation", : "failed")
     Quit "The " _ what _ " of " _ when _ " for encounter " _ case.EncounterId _ " " _ how
 }
 
@@ -328,6 +385,15 @@ Storage Default
 </Value>
 <Value name="32">
 <Value>CandidateEntry</Value>
+</Value>
+<Value name="33">
+<Value>FailureOutcome</Value>
+</Value>
+<Value name="34">
+<Value>FailureReasonCode</Value>
+</Value>
+<Value name="35">
+<Value>FailureHttpStatus</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>

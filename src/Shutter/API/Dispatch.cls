@@ -40,6 +40,9 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/settings" Method="GET" Call="Settings"/>
   <Route Url="/site-profile" Method="GET" Call="SiteProfileGet"/>
   <Route Url="/site-profile" Method="PUT" Call="SiteProfilePut"/>
+  <Route Url="/site-profile/history" Method="GET" Call="SiteProfileHistory"/>
+  <Route Url="/index" Method="GET" Call="IndexStatus"/>
+  <Route Url="/index/messages" Method="GET" Call="IndexMessages"/>
   <Route Url="/incidents" Method="GET" Call="Incidents"/>
   <Route Url="/incidents/:id" Method="GET" Call="IncidentGet"/>
   <Route Url="/incidents/:id/events" Method="GET" Call="IncidentEvents"/>
@@ -365,12 +368,11 @@ ClassMethod Cases() As %Status
     Set total = 0
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT COUNT(*) AS N FROM Shutter_Store.""Case"" WHERE 1=1" _ where, args...)
     If rs.%Next() Set total = rs.%Get("N")
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE 1=1" _ where _ " ORDER BY ID DESC", args...)
-    Set items = [], n = 0
+    // One page by row number, so a long list is not walked from the start (E8).
+    Set args = args + 2, args(args - 1) = offset + 1, args(args) = offset + limit
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM (SELECT TOP ALL ID FROM Shutter_Store.""Case"" WHERE 1=1" _ where _ " ORDER BY ID DESC) WHERE %VID BETWEEN ? AND ?", args...)
+    Set items = []
     While rs.%Next() {
-        Set n = n + 1
-        If n <= offset Continue
-        If items.%Size() >= limit Quit
         Set c = ##class(Shutter.Store.Case).%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(c)
         Set o = ..Project(c)
@@ -747,10 +749,50 @@ ClassMethod SiteProfilePut() As %Status
     Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
     Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
     If '$ISOBJECT(body) || $$$ISERR(psc) Quit ..Fail("400 Bad Request", "bad_request", "The body must be the profile as a JSON object")
-    If '$ISOBJECT(body.%Get("policy")) || '$ISOBJECT(body.%Get("receivers")) Quit ..Fail("400 Bad Request", "bad_request", "The profile needs receivers and policy (CONTRACTS 6.4)")
+    Set problem = ##class(Shutter.Store.SiteProfile).Validate(body)
+    If problem '= "" Quit ..Fail("400 Bad Request", "bad_request", "The profile is not valid (CONTRACTS 6.4): " _ problem)
     Set sc = ##class(Shutter.Store.SiteProfile).Store(body.%ToJSON(), "api", $USERNAME)
     If $$$ISERR(sc) Quit ..Fail("500 Internal Server Error", "store_failed", $SYSTEM.Status.GetErrorText(sc))
     Quit ..SiteProfileGet()
+}
+
+/// Every version of the profile, newest first, with who stored it.
+ClassMethod SiteProfileHistory() As %Status
+{
+    If '..Allow() Quit $$$OK
+    Quit ..Json(##class(Shutter.Store.SiteProfileVersion).History(+$GET(%request.Data("limit", 1), 50)))
+}
+
+// ---- the exact index (CONTRACTS 8) ----
+
+/// Where the indexer's walk stands: rows, high-water mark, the newest header, the last pass.
+ClassMethod IndexStatus() As %Status
+{
+    If '..Allow() Quit $$$OK
+    Quit ..Json(##class(Shutter.Index.Indexer).Status())
+}
+
+/// The indexed messages for a visit number (?encounter=), a patient (?patient=) or an operation key (?key=), newest
+/// event last; at most 500.
+ClassMethod IndexMessages() As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set encounter = $GET(%request.Data("encounter", 1)), patient = $GET(%request.Data("patient", 1)), key = $GET(%request.Data("key", 1))
+    If (encounter = "") && (patient = "") && (key = "") Quit ..Fail("400 Bad Request", "bad_request", "Give encounter, patient or key")
+    Set where = "", args = 0
+    If encounter '= "" Set where = where _ " AND VisitNumber = ?", args = args + 1, args(args) = encounter
+    If patient '= "" Set where = where _ " AND PatientId = ?", args = args + 1, args(args) = patient
+    If key '= "" Set where = where _ " AND OperationKey = ?", args = args + 1, args(args) = key
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 500 ID FROM Shutter_Index.Message WHERE 1=1" _ where _ " ORDER BY EventTime, ID", args...)
+    Set items = []
+    While rs.%Next() {
+        Set r = ##class(Shutter.Index.Message).%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(r)
+        Do items.%Push(r.ToObject())
+    }
+    Set out = {}
+    Set out.items = items, out.total = items.%Size()
+    Quit ..Json(out)
 }
 
 // ---- incidents (CONTRACTS 7.5) ----

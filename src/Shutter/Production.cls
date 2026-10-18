@@ -41,6 +41,10 @@ XData ProductionDefinition
     <Setting Target="Host" Name="AckMode">Never</Setting>
     <Setting Target="Host" Name="UseAckCommitCodes">0</Setting>
   </Item>
+  <Item Name="HL7 Index" Category="Feed" ClassName="Shutter.Index.Indexer" PoolSize="1" Enabled="true" Foreground="false" Comment="The exact index of the watched HL7 traffic: one row per message with the visit number, patient, event, time, location, operation key and route, filled a few seconds behind the feed" LogTraceEvents="false" Schedule="">
+    <Setting Target="Adapter" Name="CallInterval">5</Setting>
+    <Setting Target="Host" Name="Routes">ADT In</Setting>
+  </Item>
   <Item Name="ADT to Ward" Category="Feed" ClassName="Shutter.Process.ADTToWard" PoolSize="1" Enabled="true" Foreground="false" Comment="Builds the ward operation, delivers it, opens a case on failure" LogTraceEvents="true" Schedule="">
   </Item>
   <Item Name="Ward Out" Category="Feed,Recovery" ClassName="Shutter.Operation.Ward" PoolSize="1" Enabled="true" Foreground="false" Comment="The one connector to the ward system: feed, rehearsals and recovery writes" LogTraceEvents="true" Schedule="">

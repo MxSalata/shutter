@@ -12,7 +12,7 @@ Property Version As %Integer(%JSONFIELDNAME = "version") [ InitialExpression = 1
 /// The profile as JSON (the shape in CONTRACTS 6.4).
 Property Json As %String(%JSONFIELDNAME = "profile", MAXLEN = "");
 
-Property Source As %String(%JSONFIELDNAME = "source", MAXLEN = 200);
+Property Source As %String(%JSONFIELDNAME = "source", MAXLEN = 500);
 
 Property UpdatedAt As %String(%JSONFIELDNAME = "updatedAt", MAXLEN = 30);
 
@@ -24,7 +24,7 @@ ClassMethod Default() As %DynamicObject
 {
     Set p = {}
     Set p.version = 0
-    Set p.receivers = [{"name": "Ward Out", "system": "the ward bed-management system", "tier": 2, "applies": "arrival_order", "resend_timestamp": "original", "cancels": false}]
+    Set p.receivers = [{"name": "Ward Out", "system": "the ward bed-management system", "tier": 2, "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "api": {"base": "/wards/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "/capabilities", "operations": "/operations"}, "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}}]
     Set p."history_policy" = "current"
     Set p."authoritative_source" = ""
     Set p."unconditional_resend" = "forbidden"
@@ -60,10 +60,92 @@ ClassMethod Store(json As %String, source As %String = "", user As %String = "")
     If '$ISOBJECT(p) || $$$ISERR(sc) Quit $$$ERROR($$$GeneralError, "The profile is not a JSON object")
     Set row = ..Row()
     If '$ISOBJECT(row) Set row = ..%New(), row.Version = 0
+    Set problem = ..Validate(p)
+    If problem '= "" Quit $$$ERROR($$$GeneralError, "The profile is not valid: " _ problem)
     Set row.Version = row.Version + 1
     Set row.Json = p.%ToJSON(), row.Source = source, row.UpdatedBy = user
     Set row.UpdatedAt = ##class(Shutter.Util.Time).NowUTC()
-    Quit row.%Save()
+    Set sc = row.%Save()
+    Quit:$$$ISERR(sc) sc
+    // Every change is kept, with who made it and from where (CONTRACTS 6.4).
+    Set v = ##class(Shutter.Store.SiteProfileVersion).%New()
+    Set v.Version = row.Version, v.Json = row.Json, v.Source = source, v.UpdatedAt = row.UpdatedAt, v.UpdatedBy = user
+    Quit v.%Save()
+}
+
+/// The validator for SQL and tests: "ok", or the problem.
+ClassMethod ValidateJSON(json As %String) As %String [ SqlProc ]
+{
+    Set p = ##class(Shutter.Util.Json).Parse(json, .sc)
+    If '$ISOBJECT(p) || $$$ISERR(sc) Quit "the profile is not a JSON object"
+    Set problem = ..Validate(p)
+    Quit $SELECT(problem = "": "ok", 1: problem)
+}
+
+/// What is wrong with a profile, with the field named, or "" when it has the shape of CONTRACTS 6.4.
+ClassMethod Validate(p As %DynamicObject) As %String
+{
+    Set json = "Shutter.Util.Json"
+    If '$ISOBJECT(p) Quit "the profile must be a JSON object"
+    Set it = p.%GetIterator()
+    While it.%GetNext(.key, .v) {
+        If '$LISTFIND($LISTBUILD("version", "receivers", "history_policy", "authoritative_source", "unconditional_resend", "policy", "approvers", "incident"), key) Return key _ ": unknown field"
+    }
+    If p.%IsDefined("version") && ((p.%Get("version") '= +p.%Get("version")) || (p.%Get("version") < 0)) Quit "version: must be a whole number"
+    Set rcv = p.%Get("receivers")
+    If '$ISOBJECT(rcv) || (rcv.%Size() = 0) Quit "receivers: must be a non-empty array"
+    Set it = rcv.%GetIterator()
+    While it.%GetNext(.i, .r) {
+        Set at = "receivers[" _ i _ "]"
+        If '$ISOBJECT(r) Return at _ ": must be an object"
+        If $CLASSMETHOD(json, "Str", r, "name") = "" Return at _ ".name: required"
+        Set tier = r.%Get("tier")
+        If (tier '= +tier) || (tier < 1) || (tier > 3) Return at _ ".tier: must be 1, 2 or 3"
+        If r.%IsDefined("cancels") && (r.%GetTypeOf("cancels") '= "boolean") Return at _ ".cancels: must be true or false"
+        If r.%IsDefined("api") {
+            Set api = r.%Get("api")
+            If '$ISOBJECT(api) Return at _ ".api: must be an object"
+            Set ai = api.%GetIterator()
+            While ai.%GetNext(.k, .path) {
+                If '$LISTFIND($LISTBUILD("base", "state", "receipt", "capabilities", "operations"), k) Return at _ ".api." _ k _ ": unknown path"
+                If api.%GetTypeOf(k) '= "string" Return at _ ".api." _ k _ ": must be a string"
+            }
+        }
+        If r.%IsDefined("features") {
+            Set f = r.%Get("features")
+            If '$ISOBJECT(f) Return at _ ".features: must be an object"
+            Set fi = f.%GetIterator()
+            While fi.%GetNext(.k, .flag) {
+                If '$LISTFIND($LISTBUILD("conditional_writes", "receipts", "history", "dry_run"), k) Return at _ ".features." _ k _ ": unknown feature"
+                If f.%GetTypeOf(k) '= "boolean" Return at _ ".features." _ k _ ": must be true or false"
+            }
+        }
+    }
+    If p.%IsDefined("unconditional_resend") && '$LISTFIND($LISTBUILD("forbidden", "allowed"), p.%Get("unconditional_resend")) Quit "unconditional_resend: must be forbidden or allowed"
+    If p.%IsDefined("history_policy") && (p.%GetTypeOf("history_policy") '= "string") Quit "history_policy: must be a string"
+    Set pol = p.%Get("policy")
+    If '$ISOBJECT(pol) Quit "policy: must be an object with the tiers 1, 2 and 3"
+    Set pi = pol.%GetIterator()
+    While pi.%GetNext(.tier, .row) {
+        If '$LISTFIND($LISTBUILD("1", "2", "3"), tier) Return "policy." _ tier _ ": the tiers are 1, 2 and 3"
+        If '$ISOBJECT(row) Return "policy." _ tier _ ": must be an object with single, ordered and interleaved"
+        Set ri = row.%GetIterator()
+        While ri.%GetNext(.kind, .value) {
+            If '$LISTFIND($LISTBUILD("single", "ordered", "interleaved"), kind) Return "policy." _ tier _ "." _ kind _ ": the chain kinds are single, ordered and interleaved"
+            If '$LISTFIND($LISTBUILD("automatic", "approval", "per_chain", "board"), value) Return "policy." _ tier _ "." _ kind _ ": must be automatic, approval, per_chain or board"
+        }
+    }
+    If p.%IsDefined("approvers") && '$ISOBJECT(p.%Get("approvers")) Quit "approvers: must be an object"
+    If p.%IsDefined("incident") {
+        Set inc = p.%Get("incident")
+        If '$ISOBJECT(inc) Quit "incident: must be an object"
+        Set ii = inc.%GetIterator()
+        While ii.%GetNext(.k, .n) {
+            If '$LISTFIND($LISTBUILD("threshold", "window_minutes", "quiet_seconds"), k) Return "incident." _ k _ ": unknown setting"
+            If (n '= +n) || (n < 0) || ((k '= "quiet_seconds") && (n < 1)) Return "incident." _ k _ ": must be a whole number" _ $SELECT(k = "quiet_seconds": "", 1: " of 1 or more")
+        }
+    }
+    Quit ""
 }
 
 /// Seed from knowledge/site/profile.json when the file exists and differs from what is stored.
@@ -88,6 +170,57 @@ ClassMethod TierOf(receiver As %String) As %Integer
         If $ISOBJECT($GET(r)) && (##class(Shutter.Util.Json).Str(r, "name") = receiver) Quit +##class(Shutter.Util.Json).Str(r, "tier", 2)
     }
     Quit 2
+}
+
+/// The receiver's entry in the profile (CONTRACTS 6.4), or "" when the profile does not name it.
+ClassMethod Receiver(name As %String) As %DynamicObject
+{
+    Set p = ..Current()
+    Set list = p.%Get("receivers")
+    If '$ISOBJECT(list) Quit ""
+    Set iter = list.%GetIterator()
+    While iter.%GetNext(.i, .r) { If $ISOBJECT(r) && (##class(Shutter.Util.Json).Str(r, "name") = name) Return r }
+    Quit ""
+}
+
+/// The ward system's paths, used when a receiver's entry gives none: the shape the demo's ward speaks.
+ClassMethod DefaultApi() As %DynamicObject
+{
+    Quit {"base": "/wards/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "/capabilities", "operations": "/operations"}
+}
+
+/// One of a receiver's paths (state, receipt, capabilities, operations), with the receiver's base in front and the
+/// placeholders {encounter} and {key} filled in, URL-encoded. An empty path (the receiver has no such endpoint)
+/// stays empty: the caller then uses what the profile declares instead.
+ClassMethod ReceiverPath(name As %String, kind As %String, encounter As %String = "", key As %String = "") As %String
+{
+    Set r = ..Receiver(name), defaults = ..DefaultApi()
+    Set api = $SELECT($ISOBJECT(r) && $ISOBJECT(r.%Get("api")): r.%Get("api"), 1: defaults)
+    Set base = $SELECT(api.%IsDefined("base"): ##class(Shutter.Util.Json).Str(api, "base"), 1: ##class(Shutter.Util.Json).Str(defaults, "base"))
+    Set path = $SELECT(api.%IsDefined(kind): ##class(Shutter.Util.Json).Str(api, kind), 1: ##class(Shutter.Util.Json).Str(defaults, kind))
+    If path = "" Quit ""
+    Set path = $REPLACE(path, "{encounter}", $ZCONVERT(encounter, "O", "URL"))
+    Set path = $REPLACE(path, "{key}", $ZCONVERT(key, "O", "URL"))
+    If $EXTRACT(path, 1) '= "/" Set path = "/" _ path
+    Quit base _ path
+}
+
+/// What the profile declares the receiver can do (conditional_writes, receipts, history, dry_run), for a receiver
+/// with no capabilities endpoint and as the record of what the site believes; every flag true by default.
+ClassMethod ReceiverFeatures(name As %String) As %DynamicObject
+{
+    Set r = ..Receiver(name)
+    If $ISOBJECT(r) && $ISOBJECT(r.%Get("features")) Quit r.%Get("features")
+    Quit {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}
+}
+
+/// The receiver's description for a person: its system text and base path.
+ClassMethod ReceiverLabel(name As %String) As %String
+{
+    Set r = ..Receiver(name)
+    Set system = $SELECT($ISOBJECT(r): ##class(Shutter.Util.Json).Str(r, "system"), 1: "")
+    Set base = ##class(Shutter.Util.Json).Str($SELECT($ISOBJECT(r) && $ISOBJECT(r.%Get("api")): r.%Get("api"), 1: ..DefaultApi()), "base", "/wards/api")
+    Quit $SELECT(system = "": name, 1: system) _ " (" _ base _ ")"
 }
 
 /// The policy for a tier and a chain kind: automatic, approval, per_chain or board. Tier 3 never
