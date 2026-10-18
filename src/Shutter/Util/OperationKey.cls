@@ -21,9 +21,12 @@ ClassMethod FromHL7(message As EnsLib.HL7.Message, Output sc As %Status) As %Dyn
         Set sourceSystem = message.GetValueAt("MSH:3.1")
         Set trigger = message.GetValueAt("MSH:9.2")
         Set controlId = message.GetValueAt("MSH:10")
-        Set patientId = message.GetValueAt("PID:3(1).1")
-        Set authority = message.GetValueAt("PID:3(1).4.1")
-        If authority = "" Set authority = message.GetValueAt("PID:3(1).4")
+        // The medical record number (PID-3.5 = MR) whichever repetition carries it, else the first repetition (D2).
+        Set reps = +message.GetValueAt("PID:3(*)"), pick = 1
+        For r = 1:1:reps { If $ZCONVERT(message.GetValueAt("PID:3(" _ r _ ").5"), "U") = "MR" Set pick = r Quit }
+        Set patientId = message.GetValueAt("PID:3(" _ pick _ ").1")
+        Set authority = message.GetValueAt("PID:3(" _ pick _ ").4.1")
+        If authority = "" Set authority = message.GetValueAt("PID:3(" _ pick _ ").4")
         Set encounterId = message.GetValueAt("PV1:19.1")
         Set ward = message.GetValueAt("PV1:3.1")
         Set eventTime = message.GetValueAt("EVN:6.1")

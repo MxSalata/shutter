@@ -49,7 +49,9 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
                 Set monitor = ##class(Shutter.Bridge.Monitor).%New()
                 Set monitor.TokenBudget = +spec.TokenBudget
                 If +spec.RequestTimeoutSeconds > 0 Set monitor.Deadline = $ZHOROLOG + (spec.RequestTimeoutSeconds * turns)
-                Set prompt = spec.Goal _ $CHAR(10, 10) _ "<evidence case=""" _ spec.CorrelationKey _ """>" _ $CHAR(10) _ spec.Context _ $CHAR(10) _ "</evidence>"
+                // The tag carries a code of this run, so text inside the evidence cannot close it (B9).
+                Set nonce = $ZHEX($RANDOM(1048576)) _ $ZHEX($RANDOM(1048576))
+                Set prompt = spec.Goal _ $CHAR(10, 10) _ "<evidence-" _ nonce _ " case=""" _ spec.CorrelationKey _ """>" _ $CHAR(10) _ spec.Context _ $CHAR(10) _ "</evidence-" _ nonce _ ">"
                 $$$TRACE("Running " _ spec.AgentClass _ " for " _ spec.CorrelationKey _ ": up to " _ turns _ " turns, budget " _ (+spec.TokenBudget) _ " tokens")
                 // Run(session, goal, callback) on build 154; the turn limit is the MaxIterations property.
                 Set final = agent.Run(session, prompt, monitor)

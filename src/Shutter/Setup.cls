@@ -700,15 +700,26 @@ ClassMethod MonitorState() As %Integer [ SqlProc ]
 /// (the image ran IRIS during its build, under the build host's name) and the AI Hub preview's own startup
 /// error (Sharding, METHOD DOES NOT EXIST). Any other severe line leaves the state as it is. Returns what
 /// it did. Called by after-start.sh.
+/// A messages.log line's time ("mm/dd/yy-hh:mm:ss:mmm ...") in seconds, or "" when it has none.
+ClassMethod LogSeconds(line As %String) As %String [ Private ]
+{
+    Set stamp = $PIECE(line, " ", 1)
+    If $LENGTH(stamp, "-") '= 2 Quit ""
+    Set d = $PIECE(stamp, "-", 1), t = $PIECE($PIECE(stamp, "-", 2), ":", 1, 3)
+    Set h = $ZDATETIMEH(d _ " " _ t, 1, 1, , , , , , , "")
+    If h = "" Quit ""
+    Quit ($PIECE(h, ",", 1) * 86400) + $PIECE(h, ",", 2)
+}
+
 ClassMethod ClearStartupAlerts(lines As %Integer = 400) As %String [ SqlProc ]
 {
     Try {
         Set before = $SYSTEM.Monitor.State()
         Set log = ..TailLog(lines)
         // Only this start: the image's log also holds the lines of the IRIS run during the build.
-        Set total = $LENGTH(log, $CHAR(10)), from = 1
+        Set total = $LENGTH(log, $CHAR(10)), from = 1, startedAt = ""
         For i = 1:1:total {
-            If $PIECE(log, $CHAR(10), i) [ "Startup of InterSystems IRIS" Set from = i
+            If $PIECE(log, $CHAR(10), i) [ "Startup of InterSystems IRIS" Set from = i, startedAt = ..LogSeconds($PIECE(log, $CHAR(10), i))
         }
         Set severe = 0, known = 0, other = ""
         For i = from:1:total {
@@ -717,7 +728,10 @@ ClassMethod ClearStartupAlerts(lines As %Integer = 400) As %String [ SqlProc ]
             Set sev = $PIECE($PIECE(line, ") ", 2), " ", 1)
             If (sev '= "2") && (sev '= "3") Continue
             Set severe = severe + 1
-            If (line [ "failed over from node") || (line [ "Sharding") {
+            // Known only within three minutes of the start: a genuine failover or sharding alert later is never masked.
+            Set at = ..LogSeconds(line)
+            Set early = (startedAt = "") || (at = "") || ((at - startedAt) <= 180)
+            If early && ((line [ "failed over from node") || (line [ "Sharding")) {
                 Set known = known + 1
             } Else {
                 Set other = other _ $SELECT(other = "": "", 1: " | ") _ $EXTRACT(line, 1, 160)

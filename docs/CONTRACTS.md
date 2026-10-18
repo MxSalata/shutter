@@ -533,6 +533,9 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   The gate's catalogue check blocks `OUTCOME_MISMATCH` when the plan's disposition is not what its chosen outcome
   calls for (resend outcomes resend; reconcile reconciles; none is superseded; escalate, resend_unconditional and
   correct_history escalate). The profile is validated on `PUT` and its versions are kept (6.4).
+  A further failure for an open case's key whose payload digest differs blocks the case (`PAYLOAD_CHANGED`). The
+  patient identifier is the PID-3 repetition typed MR, else the first. In replay mode a case with no recording for
+  any member takes the rules path instead of escalating, so the gate still judges.
 - v1.8, 18 Oct 2026: the receiver description in the site profile (`api`, `features`), read by the evidence collector, the
   verifier and the connector (6.4).
 - v1.7, 17 Oct 2026: incidents as built (7): adoption and the ready wait, the chain's policy, the task subjects, chain

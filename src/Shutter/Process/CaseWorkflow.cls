@@ -383,7 +383,15 @@ Method OnMember(case As Shutter.Store.Case, code As %String, result As Shutter.B
 Method AfterBoard(case As Shutter.Store.Case) As %Status
 {
     Set all = ##class(Shutter.Store.Finding).ForSnapshot(case.CurrentSnapshot)
-    If all.%Size() = 0 Quit case.Transition("escalated", "No board member produced usable findings; a person must look", "system")
+    If all.%Size() = 0 {
+        // In replay mode a case outside the fixtures has no recording for anyone: the rules path plans the plain
+        // resend and the gate judges it, instead of an escalation that says only "no findings" (B10).
+        If ..AllNoRecord(case) {
+            Do case.Note("note", "No board member has a recording for this case (replay mode answers the fixtures only); the rules path proposes the plain resend and the gate judges it", "system")
+            Quit ..RulesOnly(case)
+        }
+        Quit case.Transition("escalated", "No board member produced usable findings; a person must look", "system")
+    }
     Set coordinator = ##class(Shutter.Store.BoardMember).Coordinator()
     If '$ISOBJECT(coordinator) Quit case.Transition("escalated", "No coordinator is enabled; the findings are on the case for a person", "system")
     Set snap = case.CurrentSnapshot
@@ -392,6 +400,15 @@ Method AfterBoard(case As Shutter.Store.Case) As %Status
     Quit:$$$ISERR(sc) sc
     Set ..CoordinatorPending = 1
     Quit ..ArmTimeout("coordinator:timeout")
+}
+
+/// Whether every agent run of the current snapshot ended with no recording (replay mode outside the fixtures).
+Method AllNoRecord(case As Shutter.Store.Case) As %Boolean
+{
+    Set cid = case.%Id(), sid = $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.%Id(), 1: ""), n = 0, other = 0
+    &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.AgentRun WHERE "Case" = :cid AND Snapshot = :sid)
+    &sql(SELECT COUNT(*) INTO :other FROM Shutter_Store.AgentRun WHERE "Case" = :cid AND Snapshot = :sid AND Status <> 'no_record')
+    Quit (+n > 0) && (+other = 0)
 }
 
 /// A timer on a board round or on the coordinator: a member that never answers must not hang the case.
