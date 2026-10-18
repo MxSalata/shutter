@@ -365,5 +365,25 @@
   ],
   "prose": "# E11 A movement for an encounter the receiver doesn't know\n\n## Meaning\n\nA transfer or discharge failed, and the receiver answers 404 for its encounter: it has never seen the admission. Either\nthe admission was lost too, or the movement carries the wrong visit number. Resending the movement alone can only be\nrefused again, so the case goes to a person with the reason named.\n\n## Telling it apart\n\nA failed admission for an unknown encounter is E2: the admission is what creates the encounter. When the admission's\nown failure is in the same incident, the two form one ordered chain, and the chain releases the admission first. A\nreceiver that can't be read (`unknown`, no answer) is not this entry: the state is unknown, not absent.\n\n## Cite\n\nThe receiver's 404 for the encounter, the receipt lookup (404), and the timeline with no applied admission.",
   "source": "E11.md"
+ },
+ {
+  "id": "E12",
+  "version": 1,
+  "title": "A message that can't become a ward operation",
+  "scenarios": [],
+  "pattern": {
+   "delivery": "unmappable"
+  },
+  "decides": "person",
+  "preferred": {
+   "outcome": "escalate",
+   "why": "The feed couldn't map the message to an operation, so there is no operation to resend; the integration team corrects the message or the mapping at the source (WIC-6)."
+  },
+  "alternatives": [],
+  "checks": [
+   "conformance"
+  ],
+  "prose": "# E12 A message that can't become a ward operation\n\n## Meaning\n\nThe feed received an ADT message it could not map to a ward operation: a field the operation needs (the visit\nnumber, the event time, the patient identifier) is missing or malformed, or the profile maps no operation for its\nevent. Shutter opens a case for it so the failure isn't lost, with the message's fields and a key of its own, but\nthere is no operation behind the case: nothing can be resent, and the gate's conformance check blocks any plan that\ntries (UNMAPPABLE). The case goes to a person with the reason named.\n\n## Telling it apart\n\nEvery other entry starts from an operation the receiver failed, refused or may have applied. Here the receiver was\nnever asked: the message stopped at the mapping. A message that maps but fails schema validation is not this entry,\nsince it has an operation; the board reads its validation evidence.\n\n## Cite\n\nThe message and the mapping's error (the failure text), the schema validation, and the absence of an operation key\nderived from the message's fields.",
+  "source": "E12.md"
  }
 ]

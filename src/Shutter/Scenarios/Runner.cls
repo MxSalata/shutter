@@ -305,7 +305,8 @@ ClassMethod Drop(source As %String, inbound As %String) As %String
 /// The ward reset, the inbound and archive folders emptied of fixtures, the mode back to board, the running scenario
 /// and any run record that isn't playing cleared, and <code>^Shutter.Config("resetAt")</code> set to the time of the
 /// reset: the evidence collector ignores message-store events older than it, since encounter ids are fixed per
-/// scenario. JSON text.
+/// scenario. An incident still open is abandoned, since the ward it would release into has just been reset; its
+/// open cases fail with the reason. JSON text.
 ClassMethod Reset() As %String [ SqlProc ]
 {
     Set resetAt = ##class(Wards.Service).Now()
@@ -324,10 +325,11 @@ ClassMethod Reset() As %String [ SqlProc ]
     Set ^Shutter.Config("mode") = "board"
     Kill ^Shutter.Config("scenario")
     Set ^Shutter.Config("resetAt") = resetAt
+    Set abandoned = ##class(Shutter.Store.Incident).AbandonOpen("scenario reset")
     // A run record left queued or finished goes with the reset (a queued run whose player stopped would otherwise
     // refuse every later run); one that is playing stays, since that run's own reset comes through here
     Kill:'..Running() ^Shutter.Scenarios("run")
-    Quit {"ward": (ward), "emptied": (emptied), "mode": "board", "reset_at": (resetAt)}.%ToJSON()
+    Quit {"ward": (ward), "emptied": (emptied), "mode": "board", "reset_at": (resetAt), "abandoned_incidents": (abandoned)}.%ToJSON()
 }
 
 }
