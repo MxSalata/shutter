@@ -80,6 +80,12 @@ and the agent items, set to `auto`, then run live (`SHUTTER_AGENT_MODE` forces `
 on 16 October 2026 with `claude-opus-5-5`: one board pass (three specialists and the coordinator) uses about 90,000 input and
 4,000 output tokens, roughly 0.45 USD at list prices, and takes about a minute; the Settings page shows the figures per run.
 
+What you make stays: the cases, approvals, incidents, the site profile and the provider configuration live in a data
+database inside the `shutter-mgr` volume (the image keeps only the code), so `docker compose down` and `up` keep
+them, a rebuilt image brings new code to the same data, and `docker compose down -v` starts afresh. A volume made by a
+build from before 18 October 2026 has no data database: remove it once (`docker compose down -v`) before the first
+`up` of a newer build.
+
 The same `Dockerfile` builds the replay edition on any IRIS for Health Community 2026.2 or later:
 `SHUTTER_IMAGE=intersystemsdc/irishealth-community:latest SHUTTER_WITH_AIHUB=0 docker compose up -d --build`. Other
 settings in `.env.example`: the published ports, the agents' mode and model.

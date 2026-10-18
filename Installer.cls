@@ -1,5 +1,8 @@
-/// Creates the SHUTTER namespace (interoperability enabled) before the IPM module is loaded into it.
-/// Used by iris.script during the image build; not part of the module.
+/// Creates the SHUTTER namespace (interoperability enabled) before the IPM module is loaded into it: the code in a
+/// database of the image (${MGRDIR}SHUTTER), the data in a database under ${MGRDIR}shutter/db/, the directory
+/// docker-compose.yml keeps in the shutter-mgr volume, so that cases, approvals, incidents and the configuration
+/// survive `docker compose down` and `up`, and a rebuilt image brings new code to the same data (E7). Used by
+/// iris.script during the image build; not part of the module.
 Class Shutter.Installer
 {
 
@@ -8,9 +11,11 @@ XData Manifest [ XMLNamespace = INSTALLER ]
 <Manifest>
   <Default Name="NAMESPACE" Value="SHUTTER"/>
   <Default Name="DBDIR" Value="${MGRDIR}${NAMESPACE}"/>
-  <Namespace Name="${NAMESPACE}" Create="yes" Code="${NAMESPACE}" Data="${NAMESPACE}" Ensemble="1">
+  <Default Name="DATADIR" Value="${MGRDIR}shutter/db/${NAMESPACE}DATA"/>
+  <Namespace Name="${NAMESPACE}" Create="yes" Code="${NAMESPACE}" Data="${NAMESPACE}DATA" Ensemble="1">
     <Configuration>
       <Database Name="${NAMESPACE}" Dir="${DBDIR}" Create="yes" Resource="%DB_${NAMESPACE}"/>
+      <Database Name="${NAMESPACE}DATA" Dir="${DATADIR}" Create="yes" Resource="%DB_${NAMESPACE}DATA"/>
     </Configuration>
   </Namespace>
 </Manifest>

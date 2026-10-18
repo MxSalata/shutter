@@ -142,25 +142,28 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
         }
     }
     Quit:$$$ISERR(sc) sc
-    Set db = ..DatabaseResource(ns)
+    // The namespace's data database read-write, and its code database read when it is another one (the image keeps the
+    // code in the image and the data in the volume).
+    Set db = ..DatabaseResource(ns), code = ..DatabaseResource(ns, 1)
+    Set codeRead = $SELECT((code '= "") && (code '= db): "," _ code _ ":R", 1: "")
     If '##class(Security.Roles).Exists("Shutter_Operator") {
-        Set sc = ##class(Security.Roles).Create("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U," _ db _ ":RW,%Ens_Portal:U", "")
+        Set sc = ##class(Security.Roles).Create("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U," _ db _ ":RW" _ codeRead _ ",%Ens_Portal:U", "")
         Quit:$$$ISERR(sc) sc
     }
     If '##class(Security.Roles).Exists("Shutter_Approver") {
-        Set sc = ##class(Security.Roles).Create("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals", "Shutter_Operate:U,Shutter_Approve:U," _ db _ ":RW", "Shutter_Operator,%EnsRole_Operator")
+        Set sc = ##class(Security.Roles).Create("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals", "Shutter_Operate:U,Shutter_Approve:U," _ db _ ":RW" _ codeRead, "Shutter_Operator,%EnsRole_Operator")
         Quit:$$$ISERR(sc) sc
     }
     // The production's client of the ward API needs the database as well as the ward's own resource
     // (the Wards_API role carries only that), or the web application answers 403.
     If '##class(Security.Roles).Exists("Shutter_WardClient") {
-        Set sc = ##class(Security.Roles).Create("Shutter_WardClient", "Shutter: the production's client of the ward API, with the namespace's database", db _ ":RW", "")
+        Set sc = ##class(Security.Roles).Create("Shutter_WardClient", "Shutter: the production's client of the ward API, with the namespace's databases", db _ ":RW" _ codeRead, "")
         Quit:$$$ISERR(sc) sc
     }
     // Every caller of the API web application gets read access to the namespace's database, so
     // that the sign-in route can run for an anonymous session; data routes still check resources.
     If '##class(Security.Roles).Exists("Shutter_WebApp") {
-        Set sc = ##class(Security.Roles).Create("Shutter_WebApp", "Shutter web application: read the code database (granted to every caller by the web application)", db _ ":R", "")
+        Set sc = ##class(Security.Roles).Create("Shutter_WebApp", "Shutter web application: read the namespace's databases (granted to every caller by the web application)", db _ ":R" _ codeRead, "")
         Quit:$$$ISERR(sc) sc
     }
     If demo {
@@ -176,9 +179,9 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     Quit sc
 }
 
-/// The security resource of a namespace's default database, for example %DB_SHUTTER or
-/// %DB_%DEFAULT. Runs in %SYS.
-ClassMethod DatabaseResource(ns As %String) As %String
+/// The security resource of a namespace's data database (its globals), or with <var>code</var> of its code database
+/// (its routines), for example %DB_SHUTTERDATA, %DB_SHUTTER or %DB_%DEFAULT. Runs in %SYS.
+ClassMethod DatabaseResource(ns As %String, code As %Boolean = 0) As %String
 {
     Set resource = "%DB_%DEFAULT"
     Try {
@@ -186,7 +189,7 @@ ClassMethod DatabaseResource(ns As %String) As %String
         Set $NAMESPACE = "%SYS"
         Set sc = ##class(Config.Namespaces).Get(ns, .nsprops)
         Quit:$$$ISERR(sc)
-        Set dbname = $GET(nsprops("Globals"))
+        Set dbname = $GET(nsprops($SELECT(code: "Routines", 1: "Globals")))
         Quit:(dbname="")
         Set sc = ##class(Config.Databases).Get(dbname, .dbprops)
         Quit:$$$ISERR(sc)
