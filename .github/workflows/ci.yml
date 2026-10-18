@@ -98,11 +98,12 @@ jobs:
 
   # The ObjectScript side on a real IRIS for Health Community 2026.2 (InterSystems' image; the AI Hub build is not on a
   # registry CI can pull from, and the core needs none of it): the namespace, a full load and compile, the installer,
-  # the ward's contract tests in process and over HTTP, and scenarios S1 to S3 end to end with their recorded runs.
+  # the ward's contract tests in process and over HTTP, and every scenario end to end with its recorded runs: S1 to S10
+  # on the board, and the two outage scenarios, S11 and S12, in site-policy mode.
   iris:
     name: IRIS (the ward's contract, scenarios in replay)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       IRIS_URL: http://localhost:52773
     steps:
@@ -159,8 +160,12 @@ jobs:
           sys.exit(0 if r["failed"] == 0 and r["passed"] > 0 else 1)'
       - name: The ward's API over HTTP
         run: python3 tests/e2e/ward_api_check.py --url "$IRIS_URL" --second-user wards-client --second-password shutter
-      - name: Scenarios S1 to S3 end to end in replay (superseded, resend after approval, reconcile)
-        run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --approve S1 S2 S3
+      - name: Scenarios S1 to S10 end to end on the board, in replay
+        run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --approve S1 S2 S3 S4 S5 S6 S7 S8 S9 S10
+      # An outage opens an incident: each patient's chain is checked for its kind, who decided it, its catalogue
+      # entries, its writes and the ward's final state.
+      - name: The outage scenarios S11 and S12 in site-policy mode
+        run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes policy --approve S11 S12
       - name: Readiness report and the IRIS log
         if: always()
         run: |
