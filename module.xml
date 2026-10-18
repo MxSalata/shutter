@@ -26,6 +26,7 @@
       <Resource Name="Shutter.Bridge.Runner.CLS"/>
       <Resource Name="Shutter.Bridge.ToolCall.CLS"/>
       <Resource Name="Shutter.Catalogue.PKG"/>
+      <Resource Name="Shutter.Index.PKG"/>
       <Resource Name="Shutter.Knowledge.Text.CLS"/>
       <Resource Name="Shutter.Msg.PKG"/>
       <Resource Name="Shutter.Operation.PKG"/>

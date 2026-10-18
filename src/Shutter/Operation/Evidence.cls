@@ -228,37 +228,11 @@ Method WardGet(path As %String, Output status As %Integer) As %DynamicObject [ P
 
 /// Every normal operation the feed sent for the case's encounter in this run, oldest first, with
 /// its delivery outcome and whether it is later than the case's event.
+/// The operations sent for the encounter in this run, from the feed's typed messages and the exact index
+/// (Shutter.Index.Timeline, CONTRACTS 8.2).
 Method Timeline(case As Shutter.Store.Case) As %DynamicArray [ Private ]
 {
-    Set out = []
-    Set resetAt = $GET(^Shutter.Config("resetAt"))
-    Set since = $SELECT(resetAt = "": "2000-01-01 00:00:00", 1: $TRANSLATE($PIECE(resetAt, "Z", 1), "T", " "))
-    Set sql = "SELECT w.ID AS WID, w.Event, w.Ward, w.EventTime, w.OperationKey, w.SourceMessageId, h.ID AS HeaderId, h.SessionId, h.TimeCreated "
-        _ "FROM Shutter_Msg.WardOperation w JOIN Ens.MessageHeader h ON h.MessageBodyId = CAST(w.ID AS VARCHAR(20)) AND h.MessageBodyClassName = 'Shutter.Msg.WardOperation' "
-        _ "WHERE w.EncounterId = ? AND w.Purpose = 'normal' AND h.TimeCreated >= ? ORDER BY w.EventTime, w.ID"
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, case.EncounterId, since)
-    While rs.%Next() {
-        Set ev = {}
-        Set ev."event" = rs.%Get("Event"), ev.ward = rs.%Get("Ward"), ev."event_time" = rs.%Get("EventTime")
-        Set ev."operation_key" = rs.%Get("OperationKey"), ev."source_message_id" = rs.%Get("SourceMessageId")
-        Set ev."ens_header_id" = rs.%Get("HeaderId"), ev."ens_session_id" = rs.%Get("SessionId")
-        Set ev."sent_at" = rs.%Get("TimeCreated")
-        Do ev.%Set("later", rs.%Get("EventTime") ]] case.EventTime, "boolean")
-        Do ev.%Set("this_case", rs.%Get("OperationKey") = case.OperationKey, "boolean")
-        Set ev.outcome = "unknown"
-        Set rid = ""
-        Set headerId = rs.%Get("HeaderId")
-        &sql(SELECT TOP 1 MessageBodyId INTO :rid FROM Ens.MessageHeader WHERE CorrespondingMessageId = :headerId AND MessageBodyClassName = 'Shutter.Msg.WardResult')
-        If (SQLCODE = 0) && (rid '= "") {
-            Set r = ##class(Shutter.Msg.WardResult).%OpenId(rid)
-            If $ISOBJECT(r) {
-                Set ev.outcome = r.Outcome, ev."reason_code" = r.ReasonCode, ev."http_status" = r.HttpStatus
-                If r.EncounterVersion '= "" Set ev."version_after" = r.EncounterVersion
-            }
-        }
-        Do out.%Push(ev)
-    }
-    Quit out
+    Quit ##class(Shutter.Index.Timeline).ForCase(case)
 }
 
 Method URLEncode(s As %String) As %String [ Private ]

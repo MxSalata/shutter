@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.8, 18 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.9, 18 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The ward system's API
 
@@ -473,12 +473,57 @@ A03 (E6); P6 a failed A01 (E2, single, admit). Expected: the policy chains resol
 (automatic single, approval ordered), P3 by the board, and the final ward state per patient listed in
 `fixtures/scenarios.json`. Its recordings are hand-written until a key is available.
 
+## 8. The exact index (v1.9)
+
+Shutter's own index of the HL7 traffic it watches, so the evidence can find the other messages for an encounter or a
+patient without opening every message in a time range, and without touching the site's Search Table Class settings.
+A near match would be a wrong patient or a double write, so this index is exact; similarity (precedents) is a
+separate, later tool.
+
+### 8.1 The index and the indexer
+
+- `Shutter.Index.Message` is an `Ens.CustomSearchTable` over `EnsLib.HL7.Message`: one row per message body (`DocId`),
+  with `VisitNumber` (PV1-19.1), `PatientId` and `PatientIdAuthority` (PID-3), `MessageType` (MSH-9), `Event`
+  (Shutter's word, else the trigger), `ControlId` (MSH-10), `EventTime` (EVN-6, else EVN-2, else MSH-7, ISO UTC),
+  `Location` (PV1-3.1), `SourceSystem` (MSH-3), `OperationKey` (Shutter's key when the message maps), and the first
+  header's id, source, target and time. Indexed: visit number, patient, operation key, control id, event time,
+  message type and source (bitmaps). IRIS removes a row when its message is purged.
+- `Shutter.Index.Indexer` (production item "HL7 Index", a service with no adapter, `CallInterval` 5 s) walks
+  `Ens.MessageHeader` by id from a high-water mark (`^Shutter.Index("hwm")`), `BatchSize` headers a pass, only HL7
+  bodies on the `Routes` (business service config names; empty means every route), and only headers older than
+  `LagSeconds`, because an id is taken before its row is written. The first start begins at the oldest header within
+  `BackfillHours`. A body already indexed is skipped, so a site may also name the class as a host's Search Table
+  Class. `Rebuild(fromId, toId, routes)` walks a range again (SQL procedure, `Shutter_Operate`).
+- The index is a finder, never a second source of truth: every decision still opens the message or asks the receiver.
+
+### 8.2 The timeline
+
+- `Shutter.Index.Timeline.ForCase(case)` builds the snapshot's `timeline`: the feed's operations for the encounter
+  since the last reset, from Shutter's typed messages with their delivery outcome (`source: "feed"`), merged by event
+  time with the index's rows for the same visit number that the feed did not carry (`source: "index"`, with `route`,
+  `message_type` and a `note`). An indexed message's `outcome` is `unknown`: the gate's supersession check and the
+  matcher's `later_applied` count only `applied` and `already_committed`, so it supersedes nothing by itself; the
+  receiver's history decides. The board sees it and can say so.
+- Scenario S13: a later movement on a route Shutter does not own, found only by the index.
+
+### 8.3 The API
+
+- `GET /index`: rows, high-water mark, newest header, the last pass and the last indexing time, the total indexed.
+- `GET /index/messages?encounter=…|patient=…|key=…`: the indexed messages (at most 500), event time ascending.
+
+### 8.4 Limits
+
+- Messages from before the back-fill window are indexed only by `Rebuild`.
+- The Message Viewer may or may not offer the columns of a search table no host names in its setting (to check);
+  Shutter's own pages carry the search.
+
 ## Repository layout
 
 The core IPM module is the repository root (`module.xml`, sources under `src/`): it compiles on any 2026.2 Community image and replays recorded runs. The aihub module is `aihub/` (`aihub/module.xml`, sources under `aihub/src/`): the live runner, the agents, tools, schemas, policies and knowledge bases, which need the `%AI` package. Both modules contribute classes to the `Shutter` package; nothing under `src/` may reference `%AI`.
 
 ## Changes
 
+- v1.9, 18 Oct 2026: the exact index (8): the custom search table, the indexer, the merged timeline, two routes.
 - v1.8, 18 Oct 2026: the receiver description in the site profile (`api`, `features`), read by the evidence collector, the
   verifier and the connector (6.4).
 - v1.7, 17 Oct 2026: incidents as built (7): adoption and the ready wait, the chain's policy, the task subjects, chain
