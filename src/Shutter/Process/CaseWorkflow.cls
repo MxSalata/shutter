@@ -899,6 +899,17 @@ Method OnExecute(case As Shutter.Store.Case, result As Shutter.Msg.WardResult) A
         Quit:$$$ISERR(sc) sc
         Quit ..SendVerify(case)
     }
+    // A version conflict means the receiver moved between the preflight read and the write (A9): the approval is void,
+    // and the case is planned once more on fresh evidence, which shows what moved it (an update never supersedes a
+    // transfer, so the plan comes back at the new version, for approval again). Anything else blocks for a person.
+    If (outcome = "version_conflict") && (..Replans < 1) {
+        Set ..Replans = ..Replans + 1
+        If $ISOBJECT(approval) Do approval.Revoke("system: the receiver's version moved before the write")
+        Set ..PlanId = "", ..ApprovalId = "", ..ReceiverVersion = "", ..ReceiverEpoch = ""
+        Set ..Policy = "", ..CatalogueEntry = "", ..CatalogueOutcome = ""
+        Do case.Note("note", "The write was refused: the receiver's version moved between the preflight read and the write (" _ $SELECT(result.ReasonCode '= "": result.ReasonCode, 1: outcome) _ "). The approval is void and the case is planned again on fresh evidence", "system", "attempt:" _ attempt.%Id())
+        Quit ..StartEvidence(case)
+    }
     Set case.Headline = "Dispatch refused: " _ outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "")
     Quit case.Transition("blocked", "The conditional write was refused: " _ outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "") _ ". The plan is void; a person must decide", "system", "attempt:" _ attempt.%Id())
 }

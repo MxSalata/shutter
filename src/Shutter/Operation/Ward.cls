@@ -125,8 +125,13 @@ Method Classify(request As Shutter.Msg.WardOperation, response As Shutter.Msg.Wa
         // No HTTP response at all: refused connections never sent anything; anything else is unknown.
         Set msg = $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "no response")
         Set response.Error = msg
+        // The status codes first (A12): 6059 is a socket that never opened, so nothing was sent; the wording of the
+        // message is the fallback.
+        Set codes = $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorCodes(sc), 1: "")
         Set lower = $ZCONVERT(msg, "L")
-        If (lower [ "refused") || (lower [ "unable to connect") || (lower [ "connect failed") || (lower [ "no route") {
+        If $LISTFIND($LISTFROMSTRING(codes, ","), 6059) {
+            Set response.Outcome = "unavailable"
+        } ElseIf (lower [ "refused") || (lower [ "unable to connect") || (lower [ "connect failed") || (lower [ "no route") || (lower [ "unable to open tcp/ip socket") {
             Set response.Outcome = "unavailable"
         } Else {
             Set response.Outcome = "uncertain"
