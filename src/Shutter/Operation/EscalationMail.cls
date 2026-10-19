@@ -48,10 +48,17 @@ Method OnEscalationSend(request As Shutter.Msg.EscalationSend, Output response A
     Quit $$$OK
 }
 
+/// The sender: the site profile's mail.from when the site set one, else this operation's From setting.
+Method Sender() As %String
+{
+    Set from = $ZSTRIP(##class(Shutter.Util.Json).Str(##class(Shutter.Store.SiteProfile).Mail(), "from"), "<>W")
+    Quit $SELECT(from '= "": from, 1: ..From)
+}
+
 Method Mail(esc As Shutter.Store.Escalation) As %Net.MailMessage
 {
     Set mail = ##class(%Net.MailMessage).%New()
-    Set mail.From = ..From, mail.Subject = esc.Subject, mail.Charset = "UTF-8"
+    Set mail.From = ..Sender(), mail.Subject = esc.Subject, mail.Charset = "UTF-8"
     For i = 1:1:$LENGTH(esc.ToAddr, ",") { Set a = $ZSTRIP($PIECE(esc.ToAddr, ",", i), "<>W") Do:a'="" mail.To.Insert(a) }
     For i = 1:1:$LENGTH(esc.CcAddr, ",") { Set a = $ZSTRIP($PIECE(esc.CcAddr, ",", i), "<>W") Do:a'="" mail.Cc.Insert(a) }
     Do mail.TextData.Write(esc.Body)
@@ -69,7 +76,7 @@ Method WriteFile(esc As Shutter.Store.Escalation) As %String
     Set f.TranslateTable = "UTF8", f.LineTerminator = $CHAR(13, 10)
     Set sc = f.LinkToFile(path)
     $$$ThrowOnError(sc)
-    Do f.WriteLine("From: " _ ..From)
+    Do f.WriteLine("From: " _ ..Sender())
     Do f.WriteLine("To: " _ esc.ToAddr)
     Do:esc.CcAddr'="" f.WriteLine("Cc: " _ esc.CcAddr)
     Do f.WriteLine("Subject: " _ esc.Subject)

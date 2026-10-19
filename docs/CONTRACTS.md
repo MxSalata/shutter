@@ -595,9 +595,7 @@ sent, and references. No name, address or note text. A person reviews it, choose
 bound to the digest of the text the person read.
 
 - The site profile's `teams` (array of `{id, name, mailbox, cc?: [...], receivers?: [...]}`; `id`, `name` and
-  `mailbox` required, ids unique) and `mail` (`allowed_domains`: every mailbox and cc must end in one of them when set; `from` is
-  accepted and stored but not read: the sender is the `Escalation Mail` operation's `From` setting, default
-  `shutter@localhost`). The team for a case is the one whose `receivers` names the case's receiver, else the first, else the
+  `mailbox` required, ids unique) and `mail` (`allowed_domains`: every mailbox and cc must end in one of them when set, checked when the profile is saved and again at `PATCH` and at the send; `from`: the sender of the emails when set, else the `Escalation Mail` operation's `From` setting, default `shutter@localhost`). The team for a case is the one whose `receivers` names the case's receiver, else the first, else the
   profile's `approvers.escalation` text with no mailbox (the person fills one in).
 - `GET /cases/{id}/escalations`; `POST /cases/{id}/escalations` with `{teamId?}` answers 201 with the draft (409
   `wrong_state` unless the case is blocked, escalated or failed; 500 `draft_failed` when `teamId` names no team of the
@@ -605,7 +603,9 @@ bound to the digest of the text the person read.
   not a JSON object) with `{subject?, body?, to?, cc?}` edits a draft or a failed email (409 otherwise) and moves
   `bodyDigest`, the SHA-256 of `to`, `cc`, `subject` and `body` together, so a change of recipient alone moves it;
   `POST /cases/{id}/escalations/{seq}/send` with `{bodyDigest}` answers 202 with the queued escalation, 409
-  `body_changed` when the digest is not the current text's, 409 `no_recipient` when `to` is empty. All need
+  `body_changed` when the digest is not the current text's, 409 `no_recipient` when `to` is empty, and 422
+  `address_not_allowed` (with `field`: `to` or `cc`) when an address is not an address or lies outside the allowed
+  domains; `PATCH` answers the same 422 for a `to` or `cc` it is given. All need
   `Shutter_Operate`; the writes need `X-Requested-With` and take an `Idempotency-Key`.
 - The `Escalation Mail` operation (`Shutter.Operation.EscalationMail`, `EnsLib.EMail.OutboundAdapter`) sends through the
   site's mail server when the adapter's `SMTPServer` is set (first-time configuration; the NHS relay at most trusts),
@@ -620,7 +620,8 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
-- v1.12, 19 Oct 2026: the recordings re-made with the zone: the shipped seed profile says `Europe/London` (6.4), and the
+- v1.12, 19 Oct 2026: `mail.from` is the sender of escalation emails when set; the addresses a person types are checked
+  against `mail.allowed_domains` at `PATCH` and at the send (422 `address_not_allowed`). The recordings re-made with the zone: the shipped seed profile says `Europe/London` (6.4), and the
   scenario S13 (a transfer timed before its admission) exercises E13 and `EVENT_TIME_IMPLAUSIBLE`.
 - v1.11, 19 Oct 2026: what leaves IRIS for a model (9): per-case tokens for the identifiers, no demographics, no free
   text (a flag instead, and the site profile's `model_content.free_text` switch), the receiver's bodies and the failure

@@ -265,6 +265,25 @@ ClassMethod SeedFromFile(path As %String) As %Status
 
 /// The receiver's tier (the production item's name), default 2.
 /// A mailbox's problem: not an address, or outside the allowed domains when the profile names them. "" when fine.
+/// The problem with a list of addresses a person typed (comma separated) against the profile's mail.allowed_domains:
+/// "" when every address is an address inside the allowed domains (or no domains are set), else the first offending
+/// address and why.
+ClassMethod AddressesProblem(list As %String) As %String
+{
+    Set domains = "", allowed = ..Mail().%Get("allowed_domains")
+    If $ISOBJECT(allowed) {
+        Set di = allowed.%GetIterator()
+        While di.%GetNext(.j, .d) { If d '= "" Set domains = domains _ $LISTBUILD($ZCONVERT(d, "L")) }
+    }
+    For i = 1:1:$LENGTH(list, ",") {
+        Set a = $ZSTRIP($PIECE(list, ",", i), "<>W")
+        Continue:a=""
+        Set problem = ..MailboxProblem(a, domains)
+        If problem '= "" Quit
+    }
+    Quit $SELECT($GET(problem) = "": "", 1: a _ ": " _ problem)
+}
+
 ClassMethod MailboxProblem(mailbox As %String, domains As %List) As %String [ Private ]
 {
     If (mailbox '[ "@") || ($PIECE(mailbox, "@", 2) = "") || ($PIECE(mailbox, "@", 1) = "") Quit "must be an address"

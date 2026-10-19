@@ -739,6 +739,18 @@ ClassMethod CaseEscalationPatch(caseId As %String, seq As %String) As %Status
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
     Set json = "Shutter.Util.Json"
+    // The addresses a person types must be addresses inside the site's allowed domains, when it names any.
+    Set problem = ""
+    For field = "to", "cc" {
+        Continue:'body.%IsDefined(field)
+        Set problem = ##class(Shutter.Store.SiteProfile).AddressesProblem($CLASSMETHOD(json, "Str", body, field))
+        If problem '= "" {
+            Set extra = {} Set extra.field = field
+            Do ..Fail("422 Unprocessable Entity", "address_not_allowed", "The " _ field _ " address is not allowed: " _ problem, extra)
+            Quit
+        }
+    }
+    If problem '= "" Quit $$$OK
     Set sc = esc.Edit($SELECT(body.%IsDefined("subject"): $CLASSMETHOD(json, "Str", body, "subject"), 1: esc.Subject), $SELECT(body.%IsDefined("body"): $CLASSMETHOD(json, "Str", body, "body"), 1: esc.Body), $SELECT(body.%IsDefined("to"): $CLASSMETHOD(json, "Str", body, "to"), 1: esc.ToAddr), $SELECT(body.%IsDefined("cc"): $CLASSMETHOD(json, "Str", body, "cc"), 1: esc.CcAddr), ..User())
     If $$$ISERR(sc) Quit ..Fail("409 Conflict", "wrong_state", $SYSTEM.Status.GetErrorText(sc))
     Set text = esc.ToObject().%ToJSON()
@@ -765,6 +777,17 @@ ClassMethod CaseEscalationSend(caseId As %String, seq As %String) As %Status
     Set digest = ##class(Shutter.Util.Json).Str(body, "bodyDigest")
     If digest = "" Quit ..Fail("400 Bad Request", "bad_request", "bodyDigest is required: the digest of the body as read")
     If esc.ToAddr = "" Quit ..Fail("409 Conflict", "no_recipient", "The escalation has no recipient; edit it with a team mailbox first")
+    // Checked again at the send: the allowed domains may have changed since the draft was edited.
+    Set problem = ""
+    For field = "to", "cc" {
+        Set problem = ##class(Shutter.Store.SiteProfile).AddressesProblem($SELECT(field = "to": esc.ToAddr, 1: esc.CcAddr))
+        If problem '= "" {
+            Set extra = {} Set extra.field = field
+            Do ..Fail("422 Unprocessable Entity", "address_not_allowed", "The " _ field _ " address is not allowed: " _ problem, extra)
+            Quit
+        }
+    }
+    If problem '= "" Quit $$$OK
     Set sc = esc.Queue(digest, ..User())
     If $$$ISERR(sc) {
         Set why = $SYSTEM.Status.GetErrorText(sc)
