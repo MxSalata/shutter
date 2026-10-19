@@ -27,7 +27,7 @@ export function describeItem(item: SnapshotItem): string {
       const b = asObject(d.body) ?? {};
       if (status === 200)
         return `${humanize(str(b.state))}${b.ward ? ` in ${str(b.ward)}` : ''}, version ${str(b.version)}${b.epoch !== undefined ? `, epoch ${str(b.epoch)}` : ''}; ${asArray(b.history).length} operations in its history`;
-      if (status === 404) return 'The ward has no such encounter';
+      if (status === 404) return 'The downstream system has no such encounter';
       return `Could not be read (HTTP ${status || 'none'}): unknown`;
     }
     case 'receipt': {
@@ -35,7 +35,7 @@ export function describeItem(item: SnapshotItem): string {
       const b = asObject(d.body) ?? {};
       if (status === 200)
         return `Committed: version ${str(b.version_before)} to ${str(b.version_after)}, at ${formatTime(str(b.applied_at))}`;
-      if (status === 404) return 'No receipt: the ward did not commit this operation';
+      if (status === 404) return 'No receipt: the downstream system did not commit this operation';
       return `The lookup did not answer (HTTP ${status || 'none'}): committed or not is unknown`;
     }
     case 'later_event':
@@ -115,7 +115,7 @@ export function checksOf(d: GateDecision): GateCheck[] {
 
 /**
  * One entry of a finding's list in words: a kept disagreement ("Conformance said resend: ...") or a cited event
- * ("transfer to WARD-C at 09:45:00, from the ward history"); anything else as JSON.
+ * ("transfer to WARD-C at 09:45:00, from the downstream history"); anything else as JSON.
  */
 export function describeEntry(x: unknown): string {
   if (typeof x === 'string') return x;

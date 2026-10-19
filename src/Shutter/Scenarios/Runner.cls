@@ -1,6 +1,6 @@
-/// Plays the demo scenarios (docs/CONTRACTS.md, section 4). <method>Run</method> resets the ward, sets the case
-/// workflow's mode, then plays a scenario's steps: faults on the ward, HL7 files into the production's inbound
-/// folder, waits, and for S7 a wait for the case's state. The production and the app do the rest.
+/// Plays the demo scenarios (docs/CONTRACTS.md, section 4). <method>Run</method> resets the downstream system, sets
+/// the case workflow's mode, then plays a scenario's steps: faults on the downstream system, HL7 files into the
+/// production's inbound folder, waits, and for S7 a wait for the case's state. The production and the app do the rest.
 /// <method>Start</method> does the same in a background job and returns at once, for the app. The methods are SQL
 /// procedures, so scripts and the app can call them: <code>SELECT Shutter_Scenarios.Runner_Run('S2', 'board')</code>.
 Class Shutter.Scenarios.Runner
@@ -136,7 +136,7 @@ ClassMethod Background(scenario As %String, mode As %String, started As %String)
     Set run.files = result.files
     Set run.timeouts = $SELECT($ISOBJECT(result.timeouts): result.timeouts, 1: [])
     Set:result.error'="" run.error = result.error
-    Set run.finishedAt = ##class(Wards.Service).Now()
+    Set run.finishedAt = ##class(Downstream.Service).Now()
     Set ^Shutter.Scenarios("run") = run.%ToJSON()
     Kill ^Shutter.Scenarios("run", "step")
 }
@@ -190,7 +190,7 @@ ClassMethod Begin(scenario As %String, mode As %String, Output error As %String)
     Set error = ""
     Set reset = {}.%FromJSON(..Reset())
     If reset.ward.error '= "" {
-        Set error = "the ward refused the reset: is the demo flag (^Wards.Config) set?"
+        Set error = "the downstream system refused the reset: is the demo flag (^Downstream.Config) set?"
         Quit ""
     }
     Set ^Shutter.Config("mode") = mode
@@ -209,8 +209,8 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
         If step.%IsDefined("fault") {
             Set request = {"mode": (step.fault)}
             Do:step.%IsDefined("operation_key") request.%Set("operation_key", step."operation_key")
-            Set answer = ##class(Wards.Service).SetFault(request, .status)
-            Set:status'=200 error = "the ward refused the fault step: " _ answer.%ToJSON()
+            Set answer = ##class(Downstream.Service).SetFault(request, .status)
+            Set:status'=200 error = "the downstream system refused the fault step: " _ answer.%ToJSON()
             Quit:error'=""
         } ElseIf step.%IsDefined("file") {
             Set error = ..Drop(step.path, inbound)
@@ -227,8 +227,8 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
             Quit:error'=""
             Do:'reached timeouts.%Push(step."wait_for_state")
         } ElseIf step.%IsDefined("capabilities") {
-            Set answer = ##class(Wards.Service).SetCapabilities(step.capabilities, .status)
-            Set:status'=200 error = "the ward refused the capabilities step: " _ answer.%ToJSON()
+            Set answer = ##class(Downstream.Service).SetCapabilities(step.capabilities, .status)
+            Set:status'=200 error = "the downstream system refused the capabilities step: " _ answer.%ToJSON()
             Quit:error'=""
         }
     }
@@ -242,10 +242,10 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
 ClassMethod Describe(step As %DynamicObject) As %String
 {
     Quit:step.%IsDefined("file") "delivering " _ step.file
-    Quit:step.%IsDefined("fault") "setting the ward's fault to " _ step.fault
+    Quit:step.%IsDefined("fault") "setting the downstream system's fault to " _ step.fault
     Quit:step.%IsDefined("wait") "waiting " _ step.wait _ " s"
     Quit:step.%IsDefined("wait_for_state") "waiting for the case to reach " _ step."wait_for_state"
-    Quit:step.%IsDefined("capabilities") "changing the ward's capabilities"
+    Quit:step.%IsDefined("capabilities") "changing the downstream system's capabilities"
     Quit "a step the runner doesn't know"
 }
 
@@ -302,15 +302,15 @@ ClassMethod Drop(source As %String, inbound As %String) As %String
     Quit ""
 }
 
-/// The ward reset, the inbound and archive folders emptied of fixtures, the mode back to board, the running scenario
-/// and any run record that isn't playing cleared, and <code>^Shutter.Config("resetAt")</code> set to the time of the
-/// reset: the evidence collector ignores message-store events older than it, since encounter ids are fixed per
-/// scenario. An incident still open is abandoned, since the ward it would release into has just been reset; its
-/// open cases fail with the reason. JSON text.
+/// The downstream system reset, the inbound and archive folders emptied of fixtures, the mode back to board, the
+/// running scenario and any run record that isn't playing cleared, and <code>^Shutter.Config("resetAt")</code> set to
+/// the time of the reset: the evidence collector ignores message-store events older than it, since encounter ids are
+/// fixed per scenario. An incident still open is abandoned, since the downstream system it would release into has just
+/// been reset; its open cases fail with the reason. JSON text.
 ClassMethod Reset() As %String [ SqlProc ]
 {
-    Set resetAt = ##class(Wards.Service).Now()
-    Set ward = ##class(Wards.Service).Reset(.status)
+    Set resetAt = ##class(Downstream.Service).Now()
+    Set ward = ##class(Downstream.Service).Reset(.status)
     Set emptied = []
     For setting = "adtIn", "adtArchive" {
         Set dir = $GET(^Shutter.Config(setting))

@@ -1,8 +1,8 @@
-/// Runs the ward tests, for scripts that reach IRIS through SQL: <code>SELECT Wards_Test.Run_Contract()</code>.
-Class Wards.Test.Run
+/// Runs the downstream system's tests, for scripts that reach IRIS through SQL: <code>SELECT Downstream_Test.Run_Contract()</code>.
+Class Downstream.Test.Run
 {
 
-/// Loads and runs the test classes under <var>repo</var><code>tests/unit/Wards</code> (the repository as the
+/// Loads and runs the test classes under <var>repo</var><code>tests/unit/Downstream</code> (the repository as the
 /// container mounts it) with the unit test manager, keeping them loaded afterwards. Returns JSON: the result index,
 /// how many test methods passed and failed, and the names of the failures.
 ClassMethod Contract(repo As %String = "/home/irisowner/dev/") As %String [ SqlProc ]
@@ -10,7 +10,7 @@ ClassMethod Contract(repo As %String = "/home/irisowner/dev/") As %String [ SqlP
     Set root = $GET(^UnitTestRoot)
     Set ^UnitTestRoot = repo _ "tests/unit/"
     Set before = $ORDER(^UnitTest.Result(""), -1)
-    Set sc = ##class(%UnitTest.Manager).RunTest("Wards", "/nodelete")
+    Set sc = ##class(%UnitTest.Manager).RunTest("Downstream", "/nodelete")
     If root = "" {
         Kill ^UnitTestRoot
     } Else {
@@ -31,7 +31,7 @@ ClassMethod Contract(repo As %String = "/home/irisowner/dev/") As %String [ SqlP
         }
     }
     // The capability profile shows the last contract check
-    Do ##class(Wards.Service).SetCapabilities({"last_contract_check": {"at": (##class(Wards.Service).Now()), "result": ("in process: " _ passed _ " of " _ (passed + failed) _ " passed")}}, .ignore)
+    Do ##class(Downstream.Service).SetCapabilities({"last_contract_check": {"at": (##class(Downstream.Service).Now()), "result": ("in process: " _ passed _ " of " _ (passed + failed) _ " passed")}}, .ignore)
     Quit {"run": (run), "passed": (passed), "failed": (failed), "failures": (failures)}.%ToJSON()
 }
 

@@ -22,12 +22,12 @@ export const STATE_COLOURS: Record<string, string> = {
 
 export const STATE_HINTS: Record<string, string> = {
   detected: 'The failure was seen; the case is open',
-  collecting: 'Reading the message, the ward and the message store',
+  collecting: 'Reading the message, the downstream system and the message store',
   investigating: 'The board is reviewing the evidence',
   grouped: 'Held by an incident: released in order with the other failures to the same receiver',
   proposed: 'A plan was proposed',
   gated: 'The gate checked the plan',
-  rehearsing: "The ward's dry run of the exact action",
+  rehearsing: "The downstream system's dry run of the exact action",
   awaiting_approval: 'A person must approve or reject the plan',
   approved: 'Approved; the receiver is read once more before dispatch',
   executing: 'The conditional write is being sent',

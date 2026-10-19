@@ -9,17 +9,17 @@ import { Timestamp } from '@/components/Timestamp';
 import { asObject } from '@/lib/json';
 import { NotYet, Section } from './Section';
 
-/** What the ward answered. An acknowledgement is never called verified: only the verifier's read says that. */
+/** What the downstream system answered. An acknowledgement is never called verified: only the verifier's read says that. */
 const ATTEMPT: Record<string, { colour: string; label: string; hint: string }> = {
   applied: {
     colour: 'blue',
     label: 'Acknowledged',
-    hint: 'The ward answered 201; verification reads what it committed',
+    hint: 'The downstream system answered 201; verification reads what it committed',
   },
   already_committed: {
     colour: 'blue',
     label: 'Already committed',
-    hint: 'The ward had committed this operation before',
+    hint: 'The downstream system had committed this operation before',
   },
   uncertain: {
     colour: 'orange',
@@ -31,7 +31,7 @@ const ATTEMPT: Record<string, { colour: string; label: string; hint: string }> =
     label: 'Refused: the receiver changed',
     hint: 'The expected version no longer matched; nothing was written',
   },
-  refused: { colour: 'red', label: 'Refused', hint: 'The ward refused the write' },
+  refused: { colour: 'red', label: 'Refused', hint: 'The downstream system refused the write' },
   error: { colour: 'red', label: 'Error', hint: 'The write could not be sent' },
 };
 
@@ -106,7 +106,7 @@ export function ExecutionPanel({ caseId, open, write }: { caseId: string; open: 
     <Section
       id="execution"
       title={write ? 'Dispatch and verification' : 'Verification'}
-      note="An acknowledgement only says the ward answered. Verified means Shutter read the ward's committed history and the receipt afterwards and found the effect there."
+      note="An acknowledgement only says the downstream system answered. Verified means Shutter read its committed history and the receipt afterwards and found the effect there."
     >
       {attempts.isError ? <ErrorAlert error={attempts.error} title="The attempts could not be read" /> : null}
       {attempts.isSuccess && list.length === 0 ? (

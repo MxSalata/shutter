@@ -7,7 +7,7 @@ import { Digest } from '@/components/Digest';
 import { JsonBlock } from '@/components/JsonBlock';
 import { Timestamp } from '@/components/Timestamp';
 import { asArray, asObject } from '@/lib/json';
-import { formatTime, humanize, parseTime } from '@/lib/format';
+import { formatTime, keyLabel, parseTime } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
 import { describeEntry, describeItem } from './derive';
 import { SHOW_EVIDENCE } from './evidenceLinks';
@@ -18,8 +18,8 @@ const KIND_LABELS: Record<string, string> = {
   error: 'What the connector reported',
   message: 'The HL7 message',
   validation: 'Schema validation',
-  ward_state: "The ward's encounter",
-  receipt: "The ward's receipt for this operation",
+  ward_state: "The downstream system's encounter",
+  receipt: "The downstream system's receipt for this operation",
   later_event: 'A later event for the encounter',
   route: 'The route and what the connector guarantees',
   note: 'Note',
@@ -163,7 +163,7 @@ export function EvidencePanel({ caseId, open }: { caseId: string; open: boolean 
                   <Accordion.Control>
                     <Stack gap={0}>
                       <Text size="sm" fw={600}>
-                        {KIND_LABELS[item.kind] ?? humanize(item.kind)}
+                        {KIND_LABELS[item.kind] ?? keyLabel(item.kind)}
                       </Text>
                       <Text size="sm" c="dimmed" lineClamp={2}>
                         {describeItem(item)}
@@ -187,7 +187,7 @@ export function EvidencePanel({ caseId, open }: { caseId: string; open: boolean 
                       ) : null}
                       <Group gap="lg" wrap="wrap">
                         <Text size="xs" c="dimmed">
-                          Source: {humanize(item.source)}
+                          Source: {keyLabel(item.source)}
                         </Text>
                         <Text size="xs" c="dimmed">
                           Observed {formatTime(item.observed_at)}

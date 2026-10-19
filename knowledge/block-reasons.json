@@ -1,44 +1,44 @@
 {
   "id": "block-reasons",
-  "version": "1.5",
+  "version": "1.6",
   "effective_from": "2026-10-19",
   "applies_to": [
-    "ward-api-v1",
+    "downstream-api-v1",
     "hl7-v2.5.1-adt"
   ],
   "roles": {
     "Operator": "The integration operator working the case",
     "Approver": "The person who approves an exact resend",
     "Integration team": "Owns the interfaces, mappings and policies",
-    "Ward system team": "Owns the ward bed management system"
+    "Downstream system team": "Owns the demo bed-management system (the downstream system)"
   },
   "reasons": [
     {
       "code": "PATIENT_MISMATCH",
       "title": "The patient doesn't match the encounter",
-      "prerequisite": "One patient identity for the encounter: the message's PID-3 and the ward's record agree (ELS-3.1)",
+      "prerequisite": "One patient identity for the encounter: the message's PID-3 and the downstream system's record agree (ELS-3.1)",
       "next_action": "Escalate the identity conflict to the integration team. Nothing is sent.",
       "owner": "Integration team",
       "reevaluate_when": "A corrected message or a confirmed identity arrives",
-      "text": "The message names a different patient or assigning authority from the one the ward holds for this encounter. An identity conflict is never a movement to apply."
+      "text": "The message names a different patient or assigning authority from the one the downstream system holds for this encounter. An identity conflict is never a movement to apply."
     },
     {
       "code": "UNKNOWN_ENCOUNTER",
-      "title": "The ward has never seen this encounter",
+      "title": "The downstream system has never seen this encounter",
       "prerequisite": "An applied admission for the encounter (WIC-4)",
       "next_action": "Check whether the admission failed too and recover it first; otherwise escalate.",
       "owner": "Operator",
       "reevaluate_when": "The admission is applied or found",
-      "text": "The ward has no admission for this visit number, so a transfer, discharge or update can't apply."
+      "text": "The downstream system has no admission for this visit number, so a transfer, discharge or update can't apply."
     },
     {
       "code": "RECEIVER_UNREADABLE",
-      "title": "The ward's record couldn't be read",
+      "title": "The downstream system's record couldn't be read",
       "prerequisite": "A successful read of the encounter and its history (WIC-5.1)",
-      "next_action": "Collect the evidence again. If the ward stays unreadable, contact the ward system team.",
+      "next_action": "Collect the evidence again. If the downstream system stays unreadable, contact the downstream system team.",
       "owner": "Operator",
-      "reevaluate_when": "The ward answers reads again",
-      "text": "Without the ward's current state and history, supersession and transitions can't be judged, so nothing is eligible."
+      "reevaluate_when": "The downstream system answers reads again",
+      "text": "Without the downstream system's current state and history, supersession and transitions can't be judged, so nothing is eligible."
     },
     {
       "code": "PARSE_FAILED",
@@ -51,7 +51,7 @@
     },
     {
       "code": "UNMAPPABLE",
-      "title": "The message can't become a ward operation",
+      "title": "The message can't become a downstream operation",
       "prerequisite": "A message the inbound profile maps to an operation (WIC-6)",
       "next_action": "Escalate to the integration team with the message: correct it at the source and send it again.",
       "owner": "Integration team",
@@ -105,16 +105,16 @@
     },
     {
       "code": "INVALID_TRANSITION",
-      "title": "The ward wouldn't allow this movement now",
-      "prerequisite": "A transition the ward allows from the encounter's state (WIC-4)",
+      "title": "The downstream system wouldn't allow this movement now",
+      "prerequisite": "A transition the downstream system allows from the encounter's state (WIC-4)",
       "next_action": "Check for supersession, such as a discharge, and close; otherwise escalate.",
       "owner": "Operator",
       "reevaluate_when": "The encounter's state changes",
-      "text": "For example, a transfer after a discharge: the ward refuses it, and resending can't help."
+      "text": "For example, a transfer after a discharge: the downstream system refuses it, and resending can't help."
     },
     {
       "code": "ALREADY_COMMITTED",
-      "title": "The ward already committed this movement",
+      "title": "The downstream system already committed this movement",
       "prerequisite": "No receipt for the operation key, before any resend (RP-2.1)",
       "next_action": "Reconcile: record the receipt and verify the history. Never resend.",
       "owner": "Operator",
@@ -128,7 +128,7 @@
       "next_action": "Investigate again: the movement wasn't committed, so reconciling doesn't apply.",
       "owner": "Operator",
       "reevaluate_when": "A receipt appears or an investigation proposes another outcome",
-      "text": "Reconciling needs proof that the ward committed the movement; there is none."
+      "text": "Reconciling needs proof that the downstream system committed the movement; there is none."
     },
     {
       "code": "RECEIPT_UNREADABLE",
@@ -164,7 +164,7 @@
       "next_action": "Collect fresh evidence and ask for a new approval.",
       "owner": "Approver",
       "reevaluate_when": "A new approval is given",
-      "text": "Approvals are time-limited, because the ward's state can change."
+      "text": "Approvals are time-limited, because the downstream system's state can change."
     },
     {
       "code": "APPROVAL_PLAN_CHANGED",
@@ -213,21 +213,21 @@
     },
     {
       "code": "APPROVAL_RECEIVER_CHANGED",
-      "title": "The ward's state changed after approval",
-      "prerequisite": "The ward version and epoch the approval was bound to",
+      "title": "The downstream system's state changed after approval",
+      "prerequisite": "The downstream system's version and epoch the approval was bound to",
       "next_action": "Collect fresh evidence: a later event may have superseded the movement.",
       "owner": "Operator",
       "reevaluate_when": "A new investigation completes",
-      "text": "Something was applied to the encounter after the approval, or the ward was reset, so the approved request may no longer be right."
+      "text": "Something was applied to the encounter after the approval, or the downstream system was reset, so the approved request may no longer be right."
     },
     {
       "code": "APPROVAL_RECEIVER_RESET",
-      "title": "The ward was reset after approval",
-      "prerequisite": "The ward epoch the approval was bound to",
-      "next_action": "Collect fresh evidence: after a reset the ward's records start again, and versions from before it don't compare.",
+      "title": "The downstream system was reset after approval",
+      "prerequisite": "The downstream system's epoch the approval was bound to",
+      "next_action": "Collect fresh evidence: after a reset the downstream system's records start again, and versions from before it don't compare.",
       "owner": "Operator",
       "reevaluate_when": "A new investigation completes",
-      "text": "The ward's epoch changed after the approval, so the version the approver saw belongs to records that no longer exist (WIC-1.4)."
+      "text": "The downstream system's epoch changed after the approval, so the version the approver saw belongs to records that no longer exist (WIC-1.4)."
     },
     {
       "code": "APPROVAL_NOT_APPROVED",
@@ -245,12 +245,12 @@
       "next_action": "Rebuild the plan from fresh evidence.",
       "owner": "Operator",
       "reevaluate_when": "A new plan exists",
-      "text": "A resend must be conditional, so that the ward refuses it if anything changed in between."
+      "text": "A resend must be conditional, so that the downstream system refuses it if anything changed in between."
     },
     {
       "code": "RECEIVER_CHANGED",
-      "title": "The ward's state changed before dispatch",
-      "prerequisite": "The ward's version still matches the plan at dispatch",
+      "title": "The downstream system's state changed before dispatch",
+      "prerequisite": "The downstream system's version still matches the plan at dispatch",
       "next_action": "Collect fresh evidence and investigate again.",
       "owner": "Operator",
       "reevaluate_when": "A new investigation completes",
@@ -267,21 +267,21 @@
     },
     {
       "code": "CONNECTOR_INCAPABLE",
-      "title": "The ward can't take a conditional write now",
-      "prerequisite": "Conditional writes shown in the ward's capability profile",
+      "title": "The downstream system can't take a conditional write now",
+      "prerequisite": "Conditional writes shown in the downstream system's capability profile",
       "next_action": "Escalate for manual handling, or wait until the capability is back. Reconcile and superseded remain possible.",
-      "owner": "Ward system team",
-      "reevaluate_when": "The ward's capability profile changes",
+      "owner": "Downstream system team",
+      "reevaluate_when": "The downstream system's capability profile changes",
       "text": "Without conditional writes, nothing makes sure the resend lands on the state the approver saw, so resending isn't offered."
     },
     {
       "code": "CAPABILITIES_UNREADABLE",
-      "title": "The ward's capability profile couldn't be read",
-      "prerequisite": "An answer from the ward's capability profile (WIC-7)",
-      "next_action": "Collect the evidence again later. Nothing is assumed about the ward's guarantees meanwhile.",
+      "title": "The downstream system's capability profile couldn't be read",
+      "prerequisite": "An answer from the downstream system's capability profile (WIC-7)",
+      "next_action": "Collect the evidence again later. Nothing is assumed about the downstream system's guarantees meanwhile.",
       "owner": "Operator",
       "reevaluate_when": "The capability profile answers",
-      "text": "Without the profile it is unknown whether the ward still honours conditional writes and receipts, so no write is dispatched (WIC-7.2)."
+      "text": "Without the profile it is unknown whether the downstream system still honours conditional writes and receipts, so no write is dispatched (WIC-7.2)."
     },
     {
       "code": "REHEARSAL_WOULD_NOT_APPLY",
@@ -290,7 +290,7 @@
       "next_action": "Escalate with the rehearsal's reason (RP-2.5).",
       "owner": "Operator",
       "reevaluate_when": "The encounter's state changes",
-      "text": "The ward's dry run of the exact request reported a refusal."
+      "text": "The downstream system's dry run of the exact request reported a refusal."
     },
     {
       "code": "REJECTED_BY_APPROVER",
@@ -303,9 +303,9 @@
     },
     {
       "code": "DISPATCH_REFUSED",
-      "title": "The ward refused the resend",
-      "prerequisite": "The ward accepting the conditional write",
-      "next_action": "Read the ward's answer: for a version conflict, collect fresh evidence; for anything else, escalate.",
+      "title": "The downstream system refused the resend",
+      "prerequisite": "The downstream system accepting the conditional write",
+      "next_action": "Read the downstream system's answer: for a version conflict, collect fresh evidence; for anything else, escalate.",
       "owner": "Operator",
       "reevaluate_when": "A new investigation completes",
       "text": "The conditional write was refused, so nothing changed."

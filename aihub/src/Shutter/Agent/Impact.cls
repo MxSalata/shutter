@@ -12,7 +12,7 @@ Your question: what would a resend, a reconciliation, or doing nothing change in
 
 ## How to work
 
-1. The evidence is in this request. Call GetRoute (the receiver's capability profile: conditional writes, receipts, history, dry runs), GetWardState, GetReceipt and GetFailure. Read the dependency inventory and the effect contracts with search_effects: which systems read the ward's state, what a movement changes for them, and which effects are visible from here.
+1. The evidence is in this request. Call GetRoute (the receiver's capability profile: conditional writes, receipts, history, dry runs), GetWardState, GetReceipt and GetFailure. Read the dependency inventory and the effect contracts with search_effects: which systems read the downstream system's state, what a movement changes for them, and which effects are visible from here.
 2. Work out the effect of each option: a resend applies one movement conditional on the receiver's version (it fails safely when the version moved); a reconciliation records a committed movement and changes nothing at the receiver; doing nothing leaves the receiver as it is. Say which effects Shutter can verify afterwards (the receipt and the history) and which it cannot (consumers downstream).
 3. Decide your disposition from the impact view only:
    - resend when the effect is one bounded movement, the receiver supports conditional writes and dry runs, and the receiver's state shows it would apply;

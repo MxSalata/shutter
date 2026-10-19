@@ -49,7 +49,8 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
       'policy.1.single: must be automatic, approval, per_chain or board',
     ],
     [
-      (p: SiteProfile) => (p.receivers[0].api = { base: '/wards/api', state: '/encounters/{encounter}' }),
+      (p: SiteProfile) =>
+        (p.receivers[0].api = { base: '/downstream/api', state: '/encounters/{encounter}' }),
       'receivers[0].api.operations: required when api is given',
     ],
     [(p: Record<string, unknown>) => (p.feed = { time_zone: 'GMT' }), FEED_ZONE],

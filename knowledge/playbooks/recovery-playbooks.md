@@ -2,13 +2,13 @@
 id: recovery-playbooks
 version: 1.1
 collection: playbooks
-applies_to: [ward-api-v1, hl7-v2.5.1-adt]
+applies_to: [downstream-api-v1, hl7-v2.5.1-adt]
 effective_from: 2026-10-17
 ---
 
 # Recovery playbooks for failed ward movements
 
-Integration team runbook for movements that didn't reach the ward bed management system, or whose outcome is
+Integration team runbook for movements that didn't reach the downstream system, or whose outcome is
 unclear. Version 1.0, in force from 1 October 2026.
 
 ## RP-1 The outcomes
@@ -16,7 +16,7 @@ unclear. Version 1.0, in force from 1 October 2026.
 Every failed movement ends in exactly one of these. Choose from the evidence; when the evidence doesn't decide it, the
 outcome is "more evidence" or "escalate", never a guess.
 
-| Outcome | Means | Writes to the ward system |
+| Outcome | Means | Writes to the downstream system |
 |---|---|---|
 | `resend` | The movement was not committed and is still due: send it again | Yes, one conditional write |
 | `reconcile` | The movement was committed after all: record that, send nothing | No |
@@ -43,12 +43,12 @@ encounter's history contains the operation (DEP-3.1). Never resend a committed m
 RP-2.3. **Superseded** when a later location event with a later event time has been applied (ELS-2.1, ELS-2.3). Record
 which event superseded it. Nothing is sent.
 
-RP-2.4. **More evidence** when the ward system can't be read, when receipts and history disagree, or when event times
-can't be compared (ELS-2.5). Read again; if that doesn't settle it, escalate.
+RP-2.4. **More evidence** when the downstream system can't be read, when receipts and history disagree, or when event
+times can't be compared (ELS-2.5). Read again; if that doesn't settle it, escalate.
 
-RP-2.5. **Escalate** on an identity conflict (ELS-3.1), on a key that the ward reports with a different payload
-(WIC-3, `key_reused_with_different_payload`), on content that changed between messages of the same operation, or when
-a dry run says the resend would not apply.
+RP-2.5. **Escalate** on an identity conflict (ELS-3.1), on a key that the downstream system reports with a different
+payload (WIC-3, `key_reused_with_different_payload`), on content that changed between messages of the same operation, or
+when a dry run says the resend would not apply.
 
 ## RP-3 Rules that always hold
 

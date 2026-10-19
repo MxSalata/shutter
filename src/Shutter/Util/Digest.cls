@@ -62,8 +62,8 @@ ClassMethod JSONString(s As %String) As %String
     Quit $EXTRACT(j, 2, * - 1)
 }
 
-/// The canonical payload of a ward operation (docs/CONTRACTS.md, 1.6): exactly these keys, in this
-/// order, null for an absent ward. The ward computes the same string on its side.
+/// The canonical payload of a downstream operation (docs/CONTRACTS.md, 1.6): exactly these keys, in
+/// this order, null for an absent ward. The downstream system computes the same string on its side.
 ClassMethod WardPayloadCanonical(op As %DynamicObject) As %String
 {
     Set out = ""
@@ -75,7 +75,7 @@ ClassMethod WardPayloadCanonical(op As %DynamicObject) As %String
     Quit "{" _ out _ "}"
 }
 
-/// The digest of a ward operation's canonical payload.
+/// The digest of a downstream operation's canonical payload.
 ClassMethod WardPayloadDigest(op As %DynamicObject) As %String
 {
     Quit ..SHA256Hex(..WardPayloadCanonical(op))

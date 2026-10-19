@@ -1,11 +1,11 @@
-/// The feed: turns an ADT message into a ward operation, delivers it through the connector, and
+/// The feed: turns an ADT message into a downstream operation, delivers it through the connector, and
 /// opens a case when the delivery failed or its outcome is uncertain. The delivery's failure is
 /// reported as this message's error, so the trace shows it; the case is opened first.
 Class Shutter.Process.ADTToWard Extends Ens.BusinessProcess
 {
 
 /// The connector item.
-Property WardTarget As %String(MAXLEN = 128) [ InitialExpression = "Ward Out" ];
+Property WardTarget As %String(MAXLEN = 128) [ InitialExpression = {$PARAMETER("Shutter.Production", "RECEIVER")} ];
 
 /// The case workflow item.
 Property CaseTarget As %String(MAXLEN = 128) [ InitialExpression = "Case Workflow" ];
@@ -18,12 +18,12 @@ Parameter SETTINGS = "WardTarget:Basic:selector?context={Ens.ContextSearch/Produ
 Method OnRequest(request As %Library.Persistent, Output response As %Library.Persistent) As %Status
 {
     Set response = ""
-    If 'request.%IsA("EnsLib.HL7.Message") Quit $$$ERROR($$$GeneralError, "ADT to Ward expects an HL7 message, got " _ $CLASSNAME(request))
+    If 'request.%IsA("EnsLib.HL7.Message") Quit $$$ERROR($$$GeneralError, "ADT to Downstream expects an HL7 message, got " _ $CLASSNAME(request))
     Set op = ##class(Shutter.Util.OperationKey).FromHL7(request, .sc)
     If $$$ISERR(sc) {
         // A message Shutter cannot map (an unsupported trigger, a missing identifier or time) is a case too: the
         // failure stands, and a person sees it with the message's fields rather than finding it only in the event log.
-        Set text = "The message could not be mapped to a ward operation: " _ $SYSTEM.Status.GetErrorText(sc)
+        Set text = "The message could not be mapped to an operation for the downstream system: " _ $SYSTEM.Status.GetErrorText(sc)
         Do ..OpenCase(..UnmappedOperation(request), "unmappable", text, "")
         Quit sc
     }

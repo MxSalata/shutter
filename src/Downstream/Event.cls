@@ -1,5 +1,5 @@
 /// One applied operation in an encounter's history. Rows are only ever inserted: the history is immutable.
-Class Wards.Event Extends %Persistent
+Class Downstream.Event Extends %Persistent
 {
 
 Property EncounterId As %String(COLLATION = "EXACT", MAXLEN = 64) [ Required ];
@@ -14,7 +14,7 @@ Property Ward As %String(COLLATION = "EXACT", MAXLEN = 64);
 /// The source event's time, ISO 8601 UTC. Stored, never used for ordering.
 Property EventTime As %String(MAXLEN = 32) [ Required ];
 
-/// When the ward applied it, ISO 8601 UTC.
+/// When the downstream system applied it, ISO 8601 UTC.
 Property AppliedAt As %String(MAXLEN = 32) [ Required ];
 
 Property OperationKey As %String(COLLATION = "EXACT", MAXLEN = 255) [ Required ];
@@ -23,7 +23,7 @@ Index EncounterVersionIdx On (EncounterId, VersionAfter) [ Unique ];
 
 Method %OnBeforeSave(insert As %Boolean) As %Status [ Private, ServerOnly = 1 ]
 {
-    Quit:'insert $$$ERROR($$$GeneralError, "Ward events are immutable")
+    Quit:'insert $$$ERROR($$$GeneralError, "Downstream events are immutable")
     Quit $$$OK
 }
 
@@ -65,11 +65,11 @@ Storage Default
 <Value>OperationKey</Value>
 </Value>
 </Data>
-<DataLocation>^Wards.EventD</DataLocation>
+<DataLocation>^Downstream.EventD</DataLocation>
 <DefaultData>EventDefaultData</DefaultData>
-<IdLocation>^Wards.EventD</IdLocation>
-<IndexLocation>^Wards.EventI</IndexLocation>
-<StreamLocation>^Wards.EventS</StreamLocation>
+<IdLocation>^Downstream.EventD</IdLocation>
+<IndexLocation>^Downstream.EventI</IndexLocation>
+<StreamLocation>^Downstream.EventS</StreamLocation>
 <Type>%Storage.Persistent</Type>
 }
 }

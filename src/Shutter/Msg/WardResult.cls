@@ -1,4 +1,4 @@
-/// What the receiver answered to a ward operation, classified. The connector never turns an
+/// What the receiver answered to a downstream operation, classified. The connector never turns an
 /// outcome into a failed message: outcomes are data for the feed process and the case workflow.
 Class Shutter.Msg.WardResult Extends Ens.Response
 {

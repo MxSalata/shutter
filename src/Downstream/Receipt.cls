@@ -1,6 +1,6 @@
-/// The ward's record that an operation was committed under its operation key. A receipt exists only for a committed
+/// The downstream system's record that an operation was committed under its operation key. A receipt exists only for a committed
 /// operation; its absence means the operation was not committed under that key.
-Class Wards.Receipt Extends %Persistent
+Class Downstream.Receipt Extends %Persistent
 {
 
 Property OperationKey As %String(COLLATION = "EXACT", MAXLEN = 255) [ Required ];
@@ -26,14 +26,14 @@ Property SourceMessageId As %String(MAXLEN = 64);
 
 Property Status As %String(VALUELIST = ",committed") [ InitialExpression = "committed", Required ];
 
-/// The ward's epoch when the operation was committed.
+/// The downstream system's epoch when the operation was committed.
 Property Epoch As %Integer;
 
 Index OperationKeyIdx On OperationKey [ Unique ];
 
 Method %OnBeforeSave(insert As %Boolean) As %Status [ Private, ServerOnly = 1 ]
 {
-    Quit:'insert $$$ERROR($$$GeneralError, "Ward receipts are immutable")
+    Quit:'insert $$$ERROR($$$GeneralError, "Downstream receipts are immutable")
     Quit $$$OK
 }
 
@@ -98,11 +98,11 @@ Storage Default
 <Value>Epoch</Value>
 </Value>
 </Data>
-<DataLocation>^Wards.ReceiptD</DataLocation>
+<DataLocation>^Downstream.ReceiptD</DataLocation>
 <DefaultData>ReceiptDefaultData</DefaultData>
-<IdLocation>^Wards.ReceiptD</IdLocation>
-<IndexLocation>^Wards.ReceiptI</IndexLocation>
-<StreamLocation>^Wards.ReceiptS</StreamLocation>
+<IdLocation>^Downstream.ReceiptD</IdLocation>
+<IndexLocation>^Downstream.ReceiptI</IndexLocation>
+<StreamLocation>^Downstream.ReceiptS</StreamLocation>
 <Type>%Storage.Persistent</Type>
 }
 }

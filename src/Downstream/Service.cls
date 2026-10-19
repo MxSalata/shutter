@@ -1,7 +1,7 @@
-/// The synthetic ward system's behaviour, behind <class>Wards.API</class>. The contract is docs/CONTRACTS.md,
+/// The downstream system's behaviour, behind <class>Downstream.API</class>. The contract is docs/CONTRACTS.md,
 /// section 1. Each method sets the HTTP status in <var>status</var> and returns the JSON body: an empty string for
 /// the 504 that <code>commit_drop_response</code> produces.
-Class Wards.Service
+Class Downstream.Service
 {
 
 /// Apply an operation, or rehearse it when <code>dry_run</code> is true (section 1.1). Faults apply to real
@@ -27,7 +27,7 @@ ClassMethod Apply(request As %DynamicObject, Output status As %Integer) As %Dyna
     If '..ConditionalWrites(), request.%IsDefined("expected_version"), request.%GetTypeOf("expected_version") '= "null" {
         Quit ..Refuse(dryRun, 422, {"error": "unsupported_precondition"}, .status, encounterId)
     }
-    Lock +^Wards.Lock(encounterId):10
+    Lock +^Downstream.Lock(encounterId):10
     If '$TEST {
         Set status = 503
         Quit {"error": "ward_unavailable", "detail": "another operation holds the encounter"}
@@ -38,7 +38,7 @@ ClassMethod Apply(request As %DynamicObject, Output status As %Integer) As %Dyna
         Set status = 500
         Set result = {"error": "internal_error", "detail": (ex.DisplayString())}
     }
-    Lock -^Wards.Lock(encounterId)
+    Lock -^Downstream.Lock(encounterId)
     Quit result
 }
 
@@ -47,7 +47,7 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
 {
     Set encounterId = request.%Get("encounter_id")
     Set event = request.%Get("event")
-    Set encounter = ##class(Wards.Encounter).EncounterIdIdxOpen(encounterId)
+    Set encounter = ##class(Downstream.Encounter).EncounterIdIdxOpen(encounterId)
     // Part of request validity: an encounter never changes its patient
     If $ISOBJECT(encounter) {
         If (encounter.PatientId '= request.%Get("patient_id")) || (encounter.PatientIdAuthority '= request.%Get("patient_id_authority")) {
@@ -55,12 +55,12 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
         }
     }
     // The misleading duplicate error set for this key answers whatever the version, and writes nothing
-    If 'dryRun, ..FaultFor(key) = "misleading_duplicate_error", $GET(^Wards.Config("fault", "key")) '= "" {
+    If 'dryRun, ..FaultFor(key) = "misleading_duplicate_error", $GET(^Downstream.Config("fault", "key")) '= "" {
         Set status = 409
         Quit {"error": "duplicate_message"}
     }
     // A committed receipt for this key answers before any version check
-    Set receipt = ##class(Wards.Receipt).OperationKeyIdxOpen(key)
+    Set receipt = ##class(Downstream.Receipt).OperationKeyIdxOpen(key)
     If $ISOBJECT(receipt) {
         If receipt.PayloadDigest '= digest {
             Quit ..Refuse(dryRun, 409, {"error": "key_reused_with_different_payload", "operation_key": (key)}, .status, encounterId)
@@ -70,7 +70,7 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
             Quit ..Rehearsed({"applied": false, "rehearsal": true, "would_apply": false, "reason": "already_committed", "receipt": (receipt.ToJSON())}, ..EncounterJSON(encounterId))
         }
         Set out = {"applied": false, "reason": "already_committed", "receipt": (receipt.ToJSON())}
-        Set encounter = ##class(Wards.Encounter).EncounterIdIdxOpen(receipt.EncounterId)
+        Set encounter = ##class(Downstream.Encounter).EncounterIdIdxOpen(receipt.EncounterId)
         Do:$ISOBJECT(encounter) out.%Set("encounter", encounter.ToJSON())
         Quit out
     }
@@ -96,7 +96,7 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
     TSTART
     Try {
         If '$ISOBJECT(encounter) {
-            Set encounter = ##class(Wards.Encounter).%New()
+            Set encounter = ##class(Downstream.Encounter).%New()
             Set encounter.EncounterId = encounterId
             Set encounter.PatientId = request.%Get("patient_id")
             Set encounter.PatientIdAuthority = request.%Get("patient_id_authority")
@@ -111,12 +111,12 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
         Set encounter.Version = current + 1
         Set encounter.UpdatedAt = now
         $$$ThrowOnError(encounter.%Save())
-        Set history = ##class(Wards.Event).%New()
+        Set history = ##class(Downstream.Event).%New()
         Set history.EncounterId = encounterId, history.VersionAfter = encounter.Version, history.Event = event
         Set history.Ward = ward, history.EventTime = request.%Get("event_time"), history.AppliedAt = now
         Set history.OperationKey = key
         $$$ThrowOnError(history.%Save())
-        Set receipt = ##class(Wards.Receipt).%New()
+        Set receipt = ##class(Downstream.Receipt).%New()
         Set receipt.OperationKey = key, receipt.EncounterId = encounterId, receipt.Event = event, receipt.Ward = ward
         Set receipt.EventTime = history.EventTime, receipt.AppliedAt = now
         Set receipt.VersionBefore = current, receipt.VersionAfter = encounter.Version
@@ -164,8 +164,8 @@ ClassMethod Refuse(dryRun As %Boolean, httpStatus As %Integer, body As %DynamicO
     Quit ..Rehearsed(out, ..EncounterJSON(encounterId))
 }
 
-/// A rehearsal's result with what it was checked against: the encounter before it (null when the ward has never seen
-/// it), the encounter as it would be when it would apply, and the epoch.
+/// A rehearsal's result with what it was checked against: the encounter before it (null when the downstream system has
+/// never seen it), the encounter as it would be when it would apply, and the epoch.
 ClassMethod Rehearsed(out As %DynamicObject, before As %DynamicObject = "", after As %DynamicObject = "") As %DynamicObject [ Private ]
 {
     If $ISOBJECT(before) {
@@ -178,11 +178,11 @@ ClassMethod Rehearsed(out As %DynamicObject, before As %DynamicObject = "", afte
     Quit out
 }
 
-/// The encounter as the API returns it, or an empty string when the ward has never seen it.
+/// The encounter as the API returns it, or an empty string when the downstream system has never seen it.
 ClassMethod EncounterJSON(encounterId) As %DynamicObject [ Private ]
 {
     Quit:$ISOBJECT(encounterId)||(encounterId="") ""
-    Set encounter = ##class(Wards.Encounter).EncounterIdIdxOpen(encounterId)
+    Set encounter = ##class(Downstream.Encounter).EncounterIdIdxOpen(encounterId)
     Quit $SELECT($ISOBJECT(encounter): encounter.ToJSON(), 1: "")
 }
 
@@ -257,7 +257,7 @@ ClassMethod Now() As %String
 /// Section 1.2.
 ClassMethod GetEncounter(encounterId As %String, Output status As %Integer) As %DynamicObject
 {
-    Set encounter = ##class(Wards.Encounter).EncounterIdIdxOpen(encounterId)
+    Set encounter = ##class(Downstream.Encounter).EncounterIdIdxOpen(encounterId)
     If '$ISOBJECT(encounter) {
         Set status = 404
         Quit {"error": "unknown_encounter"}
@@ -273,7 +273,7 @@ ClassMethod GetReceipt(key As %String, Output status As %Integer) As %DynamicObj
         Set status = 503
         Quit {"error": "ward_unavailable"}
     }
-    Set receipt = ##class(Wards.Receipt).OperationKeyIdxOpen(key)
+    Set receipt = ##class(Downstream.Receipt).OperationKeyIdxOpen(key)
     If '$ISOBJECT(receipt) {
         Set status = 404
         Quit {"error": "no_receipt"}
@@ -285,8 +285,8 @@ ClassMethod GetReceipt(key As %String, Output status As %Integer) As %DynamicObj
 /// The fault in force for this operation key: one set for this key, or one set for every operation.
 ClassMethod FaultFor(key As %String) As %String
 {
-    Set mode = $GET(^Wards.Config("fault", "mode"), "off")
-    Set faultKey = $GET(^Wards.Config("fault", "key"))
+    Set mode = $GET(^Downstream.Config("fault", "mode"), "off")
+    Set faultKey = $GET(^Downstream.Config("fault", "key"))
     Quit:mode="off" "off"
     Quit:(faultKey'="")&&(faultKey'=key) "off"
     Quit mode
@@ -300,8 +300,8 @@ ClassMethod SetFault(request As %DynamicObject, Output status As %Integer) As %D
         Set status = 422
         Quit {"error": "invalid_request", "detail": "mode must be off, fail_before_accept, commit_drop_response, misleading_duplicate_error or receipt_lookup_unavailable"}
     }
-    Set ^Wards.Config("fault", "mode") = mode
-    Set ^Wards.Config("fault", "key") = $SELECT(mode = "off": "", 1: request.%Get("operation_key"))
+    Set ^Downstream.Config("fault", "mode") = mode
+    Set ^Downstream.Config("fault", "key") = $SELECT(mode = "off": "", 1: request.%Get("operation_key"))
     Set status = 200
     Quit ..FaultJSON()
 }
@@ -314,8 +314,8 @@ ClassMethod GetFault(Output status As %Integer) As %DynamicObject
 
 ClassMethod FaultJSON() As %DynamicObject [ Private ]
 {
-    Set out = {"mode": ($GET(^Wards.Config("fault", "mode"), "off"))}
-    Set key = $GET(^Wards.Config("fault", "key"))
+    Set out = {"mode": ($GET(^Downstream.Config("fault", "mode"), "off"))}
+    Set key = $GET(^Downstream.Config("fault", "key"))
     If key = "" {
         Do out.%Set("operation_key", "", "null")
     } Else {
@@ -327,34 +327,34 @@ ClassMethod FaultJSON() As %DynamicObject [ Private ]
 /// Section 1.7: clears encounters, events, receipts and faults, on a demo instance only.
 ClassMethod Reset(Output status As %Integer) As %DynamicObject
 {
-    If '$GET(^Wards.Config("demo")) {
+    If '$GET(^Downstream.Config("demo")) {
         Set status = 403
         Quit {"error": "not_a_demo_instance"}
     }
-    Do ##class(Wards.Receipt).%KillExtent()
-    Do ##class(Wards.Event).%KillExtent()
-    Do ##class(Wards.Encounter).%KillExtent()
-    Kill ^Wards.Config("fault")
-    Kill ^Wards.Config("capabilities", "conditional_writes")
-    Set ^Wards.Config("epoch") = ..Epoch() + 1
+    Do ##class(Downstream.Receipt).%KillExtent()
+    Do ##class(Downstream.Event).%KillExtent()
+    Do ##class(Downstream.Encounter).%KillExtent()
+    Kill ^Downstream.Config("fault")
+    Kill ^Downstream.Config("capabilities", "conditional_writes")
+    Set ^Downstream.Config("epoch") = ..Epoch() + 1
     Set status = 200
     Quit {"reset": true, "epoch": (..Epoch())}
 }
 
-/// The ward's epoch: it increases at every reset, so versions from different epochs never compare.
+/// The downstream system's epoch: it increases at every reset, so versions from different epochs never compare.
 ClassMethod Epoch() As %Integer
 {
-    Quit +$GET(^Wards.Config("epoch"), 1)
+    Quit +$GET(^Downstream.Config("epoch"), 1)
 }
 
-/// Whether the ward takes conditional writes (<code>expected_version</code>). On by default; a demo can switch it
-/// off, and a reset switches it back on.
+/// Whether the downstream system takes conditional writes (<code>expected_version</code>). On by default; a demo
+/// can switch it off, and a reset switches it back on.
 ClassMethod ConditionalWrites() As %Boolean
 {
-    Quit ''$GET(^Wards.Config("capabilities", "conditional_writes"), 1)
+    Quit ''$GET(^Downstream.Config("capabilities", "conditional_writes"), 1)
 }
 
-/// What the ward guarantees (CONTRACTS 1.8): the capability profile behind the connector passport.
+/// What the downstream system guarantees (CONTRACTS 1.8): the capability profile behind the connector passport.
 ClassMethod Capabilities() As %DynamicObject
 {
     Set out = {}
@@ -365,7 +365,7 @@ ClassMethod Capabilities() As %DynamicObject
     Do out.%Set("idempotency", "by operation key and payload digest")
     Do out.%Set("dry_run", 1, "boolean")
     Do out.%Set("epoch", ..Epoch(), "number")
-    Set check = $GET(^Wards.Config("contract_check"))
+    Set check = $GET(^Downstream.Config("contract_check"))
     If check = "" {
         Do out.%Set("last_contract_check", "", "null")
     } Else {
@@ -386,7 +386,7 @@ ClassMethod GetCapabilities(Output status As %Integer) As %DynamicObject
 /// <code>result</code>); anything else is refused.
 ClassMethod SetCapabilities(request As %DynamicObject, Output status As %Integer) As %DynamicObject
 {
-    If '$GET(^Wards.Config("demo")) {
+    If '$GET(^Downstream.Config("demo")) {
         Set status = 403
         Quit {"error": "not_a_demo_instance"}
     }
@@ -410,10 +410,10 @@ ClassMethod SetCapabilities(request As %DynamicObject, Output status As %Integer
     }
     // Everything is checked first, so a refused request changes nothing
     If request.%IsDefined("conditional_writes") {
-        Set ^Wards.Config("capabilities", "conditional_writes") = request."conditional_writes"
+        Set ^Downstream.Config("capabilities", "conditional_writes") = request."conditional_writes"
     }
     If request.%IsDefined("last_contract_check") {
-        Set ^Wards.Config("contract_check") = $LISTBUILD(check.at, check.result)
+        Set ^Downstream.Config("contract_check") = $LISTBUILD(check.at, check.result)
     }
     Set status = 200
     Quit ..Capabilities()

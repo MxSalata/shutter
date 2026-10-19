@@ -5,7 +5,7 @@ import { ErrorAlert } from '@/components/ErrorAlert';
 import { DispositionBadge } from '@/components/StateBadge';
 import { JsonBlock } from '@/components/JsonBlock';
 import { asArray, asObject } from '@/lib/json';
-import { formatDuration, formatInt, formatUsd, humanize } from '@/lib/format';
+import { formatDuration, formatInt, formatUsd, humanize, keyLabel } from '@/lib/format';
 import { describeEntry } from './derive';
 import { showEvidence } from './evidenceLinks';
 import { NotYet, Section } from './Section';
@@ -123,7 +123,7 @@ function EvidenceRefs({ refs }: { refs: unknown }) {
           onClick={() => showEvidence(r)}
           style={{ textTransform: 'none', cursor: 'pointer' }}
         >
-          {humanize(r)}
+          {keyLabel(r)}
         </Badge>
       ))}
     </Group>

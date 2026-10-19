@@ -53,9 +53,9 @@ ClassMethod CreateNamespaceStatus(ns As %String) As %Status
 }
 
 /// Install into the current namespace: resources, roles, demo users, credentials, folders, the
-/// library, prices, recordings, the ward installer when present, the web applications and the
-/// production. root is the module's directory (IPM passes ${root}); demo marks the instance as a
-/// demo (reset allowed, demo users created).
+/// library, prices, recordings, the downstream system's installer when present, the web applications and the
+/// production. The names from before the downstream system's rename are removed when they exist. root is the
+/// module's directory (IPM passes ${root}); demo marks the instance as a demo (reset allowed, demo users created).
 ClassMethod Install(root As %String = "", demo As %Boolean = 1) As %String [ SqlProc ]
 {
     Set sc = ..InstallStatus(root, demo)
@@ -75,9 +75,10 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1) As %Status
         If $GET(^Shutter.Config("mode")) = "" Set ^Shutter.Config("mode") = "board"
         Set sc = ..CreateFolders() Quit:$$$ISERR(sc)
         Set sc = ..CreateSecurity(ns, demo) Quit:$$$ISERR(sc)
-        // The ward system's resource and role first: the production's client user gets the role at creation.
-        If ##class(%Dictionary.CompiledClass).%ExistsId("Wards.Installer") {
-            Set sc = $CLASSMETHOD("Wards.Installer", "Install")
+        Set sc = ..RemoveOldReceiverNames() Quit:$$$ISERR(sc)
+        // The downstream system's resource and role first: the production's client user gets the role at creation.
+        If ##class(%Dictionary.CompiledClass).%ExistsId("Downstream.Installer") {
+            Set sc = $CLASSMETHOD("Downstream.Installer", "Install")
             Quit:$$$ISERR(sc)
         }
         Set sc = ..CreateCredentials(demo) Quit:$$$ISERR(sc)
@@ -160,9 +161,9 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     Quit:$$$ISERR(sc) sc
     Set sc = ..EnsureRole("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals and the Workflow inbox", "Shutter_Operate:U,Shutter_Approve:U," _ db _ ":RW" _ codeRead _ ",%Ens_MessageTrace:U,%Ens_MessageHeader:U,%Ens_MessageContent:U", "Shutter_Operator,%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc
-    // The production's client of the ward API needs the database as well as the ward's own resource
-    // (the Wards_API role carries only that), or the web application answers 403.
-    Set sc = ..EnsureRole("Shutter_WardClient", "Shutter: the production's client of the ward API, with the namespace's databases", db _ ":RW" _ codeRead, "")
+    // The production's client of the downstream API needs the database as well as the downstream system's own
+    // resource (the Downstream_API role carries only that), or the web application answers 403.
+    Set sc = ..EnsureRole("Shutter_DownstreamClient", "Shutter: the production's client of the downstream API, with the namespace's databases", db _ ":RW" _ codeRead, "")
     Quit:$$$ISERR(sc) sc
     // Every caller of the API web application gets read access to the namespace's databases, so
     // that the sign-in route can run for an anonymous session; data routes still check resources.
@@ -226,21 +227,21 @@ ClassMethod DatabaseResource(ns As %String, code As %Boolean = 0) As %String
     Quit resource
 }
 
-/// The production's credentials for the ward API: a user with the Wards_API role when the ward
-/// installer created it, otherwise the demo operator.
+/// The production's credentials for the downstream API: a user with the Downstream_API role when the downstream
+/// system's installer created it, otherwise the demo operator.
 ClassMethod CreateCredentials(demo As %Boolean) As %Status
 {
     Set sc = $$$OK
     Set password = $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_PASSWORD")
     If password = "" Set password = "shutter"
-    Set user = "wards-client"
+    Set user = "downstream-client"
     New $NAMESPACE
     Set ns = $NAMESPACE
     Set $NAMESPACE = "%SYS"
-    Set roles = $SELECT(##class(Security.Roles).Exists("Shutter_WardClient"): "Shutter_WardClient", 1: "Shutter_Operator")
-    If ##class(Security.Roles).Exists("Wards_API") Set roles = "Wards_API," _ roles
+    Set roles = $SELECT(##class(Security.Roles).Exists("Shutter_DownstreamClient"): "Shutter_DownstreamClient", 1: "Shutter_Operator")
+    If ##class(Security.Roles).Exists("Downstream_API") Set roles = "Downstream_API," _ roles
     If '##class(Security.Users).Exists(user) {
-        Set sc = ##class(Security.Users).Create(user, roles, password, "Shutter production client for the ward API", ns, "", "", 0, 1, "Used by the production's HTTP operation")
+        Set sc = ##class(Security.Users).Create(user, roles, password, "Shutter production client for the downstream API", ns, "", "", 0, 1, "Used by the production's HTTP operation")
         Quit:$$$ISERR(sc) sc
     } Else {
         Do ##class(Security.Users).AddRoles(user, roles)
@@ -249,10 +250,60 @@ ClassMethod CreateCredentials(demo As %Boolean) As %Status
         If demo Set sc = ..ResetDemoUser(user, password) Quit:$$$ISERR(sc) sc
     }
     Set $NAMESPACE = ns
-    If '##class(Ens.Config.Credentials).%ExistsId("WardsAPI") {
-        Set sc = ##class(Ens.Config.Credentials).SetCredential("WardsAPI", user, password, 1)
+    If '##class(Ens.Config.Credentials).%ExistsId("DownstreamAPI") {
+        Set sc = ##class(Ens.Config.Credentials).SetCredential("DownstreamAPI", user, password, 1)
     } ElseIf demo {
-        Set sc = ##class(Ens.Config.Credentials).SetCredential("WardsAPI", user, password, 1)
+        Set sc = ##class(Ens.Config.Credentials).SetCredential("DownstreamAPI", user, password, 1)
+    }
+    Quit sc
+}
+
+/// Removes what the downstream system was called before its rename, quietly when absent: the /wards/api web
+/// application and its install record, the wards-client user, the Shutter_WardClient role (taken from every user
+/// first), the WardsAPI credential and the Wards package's classes. Downstream.Installer removes the Wards_API role
+/// and resource. Data in the ^Wards.* globals is not migrated: an instance from before the rename starts afresh.
+ClassMethod RemoveOldReceiverNames() As %Status
+{
+    Set sc = $$$OK
+    Try {
+        Kill ^Shutter.Config("webapp", "/wards/api")
+        If ##class(Ens.Config.Credentials).%ExistsId("WardsAPI") {
+            Set sc = ##class(Ens.Config.Credentials).%DeleteId("WardsAPI")
+            Quit:$$$ISERR(sc)
+        }
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT COUNT(*) AS n FROM %Dictionary.ClassDefinition WHERE Name %STARTSWITH 'Wards.'")
+        If rs.%Next() && (rs.%Get("n") > 0) {
+            Set sc = $SYSTEM.OBJ.DeletePackage("Wards", "-d")
+            Quit:$$$ISERR(sc)
+        }
+        New $NAMESPACE
+        Set $NAMESPACE = "%SYS"
+        If ##class(Security.Applications).Exists("/wards/api") {
+            Set sc = ##class(Security.Applications).Delete("/wards/api")
+            Quit:$$$ISERR(sc)
+        }
+        If ##class(Security.Users).Exists("wards-client") {
+            Set sc = ##class(Security.Users).Delete("wards-client")
+            Quit:$$$ISERR(sc)
+        }
+        If ##class(Security.Roles).Exists("Shutter_WardClient") {
+            Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Name FROM Security.Users")
+            While rs.%Next() {
+                Set user = rs.%Get("Name")
+                Kill props
+                Continue:$$$ISERR(##class(Security.Users).Get(user, .props))
+                Set roles = $LISTFROMSTRING($GET(props("Roles")), ","), at = $LISTFIND(roles, "Shutter_WardClient")
+                Continue:'at
+                Kill props
+                Set props("Roles") = $LISTTOSTRING($LIST(roles, 1, at - 1) _ $LIST(roles, at + 1, *), ",")
+                Set sc = ##class(Security.Users).Modify(user, .props)
+                Quit:$$$ISERR(sc)
+            }
+            Quit:$$$ISERR(sc)
+            Set sc = ##class(Security.Roles).Delete("Shutter_WardClient")
+        }
+    } Catch ex {
+        Set sc = ex.AsStatus()
     }
     Quit sc
 }
@@ -284,31 +335,31 @@ ClassMethod CreateWorkflowRole(demo As %Boolean) As %Status
     Quit sc
 }
 
-/// /api/shutter (REST, password), /wards/api (the ward system's REST API, when its classes are
-/// installed) and /shutter (the web app's files, when root/www exists).
+/// /api/shutter (REST, password), /downstream/api (the downstream system's REST API, when its classes
+/// are installed) and /shutter (the web app's files, when root/www exists).
 ClassMethod CreateWebApps(ns As %String, root As %String) As %Status
 {
     Set sc = $$$OK
-    Set hasWards = ##class(%Dictionary.CompiledClass).%ExistsId("Wards.API")
+    Set hasDownstream = ##class(%Dictionary.CompiledClass).%ExistsId("Downstream.API")
     New $NAMESPACE
     Set $NAMESPACE = "%SYS"
-    If hasWards {
+    If hasDownstream {
         Kill props
         Set props("NameSpace") = ns
-        Set props("Description") = "Shutter: the synthetic ward system's API"
+        Set props("Description") = "Shutter: the demo bed-management system's API (the downstream system)"
         Set props("Enabled") = 1
         Set props("AutheEnabled") = 32
-        Set props("DispatchClass") = "Wards.API"
-        If ##class(Security.Resources).Exists("Wards_API") Set props("Resource") = "Wards_API"
+        Set props("DispatchClass") = "Downstream.API"
+        If ##class(Security.Resources).Exists("Downstream_API") Set props("Resource") = "Downstream_API"
         Set props("UseCookies") = 2
-        Set props("CookiePath") = "/wards/api/"
-        If ##class(Security.Applications).Exists("/wards/api") {
-            Set sc = ##class(Security.Applications).Modify("/wards/api", .props)
+        Set props("CookiePath") = "/downstream/api/"
+        If ##class(Security.Applications).Exists("/downstream/api") {
+            Set sc = ##class(Security.Applications).Modify("/downstream/api", .props)
         } Else {
-            Set sc = ##class(Security.Applications).Create("/wards/api", .props)
+            Set sc = ##class(Security.Applications).Create("/downstream/api", .props)
         }
         Quit:$$$ISERR(sc) sc
-        Set ^|ns|Shutter.Config("webapp", "/wards/api") = 1
+        Set ^|ns|Shutter.Config("webapp", "/downstream/api") = 1
     }
     Kill props
     Set props("NameSpace") = ns
@@ -351,7 +402,7 @@ ClassMethod CreateWebApps(ns As %String, root As %String) As %Status
     Quit sc
 }
 
-/// System default settings for the production: the folders and the ward API's address, so the
+/// System default settings for the production: the folders and the downstream API's address, so the
 /// production definition carries no paths of its own.
 ClassMethod ApplyDefaultSettings() As %Status
 {
@@ -359,8 +410,8 @@ ClassMethod ApplyDefaultSettings() As %Status
     Set values("ADT In", "FilePath") = $GET(^Shutter.Config("dir", "in"))
     Set values("ADT In", "ArchivePath") = $GET(^Shutter.Config("dir", "archive"))
     Set values("ADT In", "WorkPath") = $GET(^Shutter.Config("dir", "work"))
-    Set values("*", "HTTPServer") = $GET(^Shutter.Config("wardHost"), "127.0.0.1")
-    Set values("*", "HTTPPort") = $GET(^Shutter.Config("wardPort"), 52773)
+    Set values("*", "HTTPServer") = $GET(^Shutter.Config("downstreamHost"), $GET(^Shutter.Config("wardHost"), "127.0.0.1"))
+    Set values("*", "HTTPPort") = $GET(^Shutter.Config("downstreamPort"), $GET(^Shutter.Config("wardPort"), 52773))
     Set item = ""
     For {
         Set item = $ORDER(values(item))
@@ -554,7 +605,7 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Do r.%Set("production_class", ''##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Production"), "boolean")
     Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)
     Set r.production = name, r."production_state" = $CASE(state, 1: "running", 2: "stopped", 3: "suspended", 4: "troubled", 5: "network stopped", : state)
-    Do r.%Set("ward_classes", ''##class(%Dictionary.CompiledClass).%ExistsId("Wards.API"), "boolean")
+    Do r.%Set("ward_classes", ''##class(%Dictionary.CompiledClass).%ExistsId("Downstream.API"), "boolean")
     Do r.%Set("aihub_runner", ''##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Bridge.Runner.AIHub"), "boolean")
     Do r.%Set("ai_hub_present", ''##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent"), "boolean")
     &sql(SELECT COUNT(*) INTO :members FROM Shutter_Store.BoardMember WHERE Enabled = 1)
@@ -569,13 +620,13 @@ ClassMethod Doctor() As %String [ SqlProc ]
         Set $NAMESPACE = "%SYS"
         Do r.%Set("api_webapp", ''##class(Security.Applications).Exists("/api/shutter"), "boolean")
         Do r.%Set("ui_webapp", ''##class(Security.Applications).Exists("/shutter"), "boolean")
-        Do r.%Set("wards_webapp", ''##class(Security.Applications).Exists("/wards/api"), "boolean")
+        Do r.%Set("wards_webapp", ''##class(Security.Applications).Exists("/downstream/api"), "boolean")
         Set r."webapps_checked" = "live"
     } Catch ex {
         // A caller without %SYS access gets what the install recorded.
         Do r.%Set("api_webapp", ''$GET(^Shutter.Config("webapp", "/api/shutter")), "boolean")
         Do r.%Set("ui_webapp", ''$GET(^Shutter.Config("webapp", "/shutter")), "boolean")
-        Do r.%Set("wards_webapp", ''$GET(^Shutter.Config("webapp", "/wards/api")), "boolean")
+        Do r.%Set("wards_webapp", ''$GET(^Shutter.Config("webapp", "/downstream/api")), "boolean")
         Set r."webapps_checked" = "install record"
     }
     Quit r.%ToJSON()

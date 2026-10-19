@@ -24,7 +24,7 @@ Workflows" (Open Exchange contest 49). Private while the entry is built.
 4. Run **S2** again in **Site policy** mode. The scenario catalogue's entry E2 (not delivered, still current) matches, and the site's profile releases a single case at tier 2 without asking a person: the same gate, rehearsal, conditional write and verification run, with no task. The plan names the entry and the policy that released it (`knowledge/catalogue/`, `knowledge/site/profile.json`).
 5. Run **S1** in board mode, then in **Rules only** mode. The board sees the later transfer and closes the case as superseded, writing nothing. Rules alone propose a resend, and the gate blocks it. Nothing wrong reaches the receiver either way, but only the board resolves the case.
 6. Now run **S8** in **Rules only** mode and approve its plan. Two systems moved the same patient at the same minute, so no event is later than the other and every check passes: the resend goes out and overrides the bed manager's placement. In board mode the agents see that the evidence can't decide which movement is current, and escalate to a person instead. Over the eleven single-case scenarios (S1 to S10 and S13) the board gets eleven right, with live agents and in replay, and rules alone four: [docs/readme/comparison.md](docs/readme/comparison.md).
-7. Run **S11** in **Site policy** mode: the ward goes down twice, and eight deliveries for six patients fail. Instead of eight cases going their own way, an incident opens (**Incidents**): one chain per encounter, in event order. The catalogue settles the single chains automatically; the ordered chain (a transfer and a discharge for one patient) waits for one approval of the incident's plan; the interleaved chain goes to the board. Approve, and the chains are released one operation at a time, each at exactly the version the one before it verified. **S12** loses a new patient's admission before the transfer that depends on it: the admission goes first, then the transfer at the version the admission verified.
+7. Run **S11** in **Site policy** mode: the downstream system goes down twice, and eight deliveries for six patients fail. Instead of eight cases going their own way, an incident opens (**Incidents**): one chain per encounter, in event order. The catalogue settles the single chains automatically; the ordered chain (a transfer and a discharge for one patient) waits for one approval of the incident's plan; the interleaved chain goes to the board. Approve, and the chains are released one operation at a time, each at exactly the version the one before it verified. **S12** loses a new patient's admission before the transfer that depends on it: the admission goes first, then the transfer at the version the admission verified.
 8. In the Management Portal, the Visual Trace of a case shows each step as a message: the feed, the board's three lanes, the gate, the Workflow task, the dispatch and the verification.
 
 ### What to look for
@@ -48,7 +48,7 @@ Workflows" (Open Exchange contest 49). Private while the entry is built.
 
 - Without an API key the agents replay recorded runs: the live board's own runs with `claude-opus-5-5` on 19 October 2026, one per board member and case (`fixtures/records`). The online demo is recorded from those runs too.
 - A replay answers only for the scenarios' cases. A case with no recording, such as one from an HL7 file of your own, takes the rules path: no board findings, the gate alone decides, and a resend still waits for a person's approval. The board on your own messages needs live agents (an API key, "Run it").
-- The receiving system is a synthetic ward bed-management system (`Wards.*`) built for the scenarios; its interface contract is in `knowledge/contracts/`.
+- The receiving system is the downstream system, a demo bed-management system (`Downstream.*`) built for the scenarios; its interface contract is in `knowledge/contracts/`.
 
 ## Run it
 
@@ -63,7 +63,7 @@ docker compose up -d
 ```
 
 The first `up` builds the image: it creates the `SHUTTER` namespace, installs the InterSystems Package Manager and
-loads the `iris-shutter` module (the production, the case store, the gate, the synthetic ward system, the web
+loads the `iris-shutter` module (the production, the case store, the gate, the downstream system, the web
 application and the recorded agent runs) and, on the contest image, the `iris-shutter-aihub` module (the live agents
 and their knowledge bases). Allow a few minutes. The production starts with the container, and as it starts it
 clears two known startup alerts (the build host's "failover" message and the preview build's own startup error), so
@@ -86,17 +86,20 @@ on 19 October 2026 with `claude-opus-5-5`: one board pass (three specialists and
 4,500 output tokens, roughly 0.43 USD at list prices, and takes about a minute; the Settings page shows the figures per run.
 
 What you make stays: the cases, approvals, incidents, the site profile and Shutter's record of the provider configuration live in a data
-database inside the `shutter-mgr` volume (the image keeps only the code), so `docker compose down` and `up` keep
-them, a rebuilt image brings new code to the same data, and `docker compose down -v` starts afresh. A volume made by a
-build from before 18 October 2026 has no data database: remove it once (`docker compose down -v`) before the first
-`up` of a newer build. The compose file gives the container two minutes to stop (`stop_grace_period`), so IRIS writes
-its journal and write image out cleanly; a container killed mid-write recovers from the journal at the next start,
-which is what the "abnormal shutdown" alert in the console log then says. When the production starts it re-reads the
-knowledge files that changed (block reasons, catalogue, site profile seed, recordings), so a rebuilt image's knowledge
-reaches the kept data; a site profile saved from the app is never overwritten by the seed. Installing again over an
-instance that already has Shutter (a rebuilt image on the kept volume, or `zpm "load"` again) brings the roles to their
-current definition and the demo users `operator`, `approver` and `wards-client` back to the demo's role, password and
-enabled state, and rewrites the `WardsAPI` credential; a non-demo install only adds roles to users that exist.
+database inside the `shutter-mgr` volume (the image keeps only the code), so `docker compose down` and `up` keep them, a
+rebuilt image brings new code to the same data, and `docker compose down -v` starts afresh. A volume made by a build
+from before 18 October 2026 has no data database, and one from before 19 October 2026 keeps the downstream system's
+records under its earlier name, which newer builds don't read: remove such a volume once (`docker compose down -v`)
+before the first `up` of a newer build. The compose file gives the container two minutes to stop (`stop_grace_period`),
+so IRIS writes its journal and write image out cleanly; a container killed mid-write recovers from the journal at the
+next start, which is what the "abnormal shutdown" alert in the console log then says. When the production starts it
+re-reads the knowledge files that changed (block reasons, catalogue, site profile seed, recordings), so a rebuilt
+image's knowledge reaches the kept data; a site profile saved from the app is never overwritten by the seed. Installing
+again over an instance that already has Shutter (a rebuilt image on the kept volume, or `zpm "load"` again) brings the
+roles to their current definition and the demo users `operator`, `approver` and `downstream-client` back to the demo's
+role, password and enabled state, and rewrites the `DownstreamAPI` credential; a non-demo install only adds roles to
+users that exist. Every install also removes what the downstream system was called before 19 October 2026: its web
+application, resource, roles, user, credential and classes, when they are there.
 
 **What reaches the model.** Only what is needed leaves IRIS: before the evidence or a tool result goes to an agent, every
 patient and encounter identifier is replaced by a per-case token (`MRN-T1`, `ENC-T1` and the like, mapped back only inside

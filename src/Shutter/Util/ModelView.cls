@@ -26,10 +26,10 @@ Parameter VALIDATIONKEEP = ",parsed,doc_type,schema_category,spec,error,note,";
 /// What a receiver's body keeps.
 Parameter WARDKEEP = ",encounter_id,patient_id,patient_id_authority,state,ward,location,version,epoch,history,error,status,http_status,";
 
-/// What a history entry keeps (Wards.Event.ToJSON: event, ward, event_time, applied_at, version_after, operation_key).
+/// What a history entry keeps (Downstream.Event.ToJSON: event, ward, event_time, applied_at, version_after, operation_key).
 Parameter HISTORYKEEP = ",event,ward,location,event_time,applied_at,version,version_before,version_after,operation_key,source_system,";
 
-/// What a receipt keeps (Wards.Receipt.ToJSON): all of it is operational.
+/// What a receipt keeps (Downstream.Receipt.ToJSON): all of it is operational.
 Parameter RECEIPTKEEP = ",operation_key,encounter_id,event,ward,event_time,applied_at,version_before,version_after,payload_digest,source_message_id,status,epoch,error,";
 
 /// What the failure and the receiver's error keep.

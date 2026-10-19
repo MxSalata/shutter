@@ -37,8 +37,8 @@
       <Resource Name="Shutter.Setup.CLS"/>
       <Resource Name="Shutter.Store.PKG"/>
       <Resource Name="Shutter.Util.PKG"/>
-      <!-- The synthetic ward system the production delivers to. -->
-      <Resource Name="Wards.PKG"/>
+      <!-- The downstream system (the demo bed-management system) the production delivers to. -->
+      <Resource Name="Downstream.PKG"/>
       <!-- Folders, security, the library, prices, recorded runs, the web applications and the production. -->
       <Invoke Class="Shutter.Setup" Method="Install">
         <Arg>${root}</Arg>

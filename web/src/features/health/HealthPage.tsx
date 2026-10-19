@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { JsonBlock } from '@/components/JsonBlock';
-import { humanize } from '@/lib/format';
+import { keyLabel } from '@/lib/format';
 
 /** A report value: true and false as marks, nothing as "not reported", numbers and text as they are (a 1 can be a count). */
 function Value({ value }: { value: unknown }) {
@@ -50,7 +50,7 @@ export default function HealthPage() {
     <>
       <PageHeader
         title="Health"
-        subtitle="The installation's own readiness report: namespace, production, web applications, ward system, knowledge and agents."
+        subtitle="The installation's own readiness report: namespace, production, web applications, downstream system, knowledge and agents."
       />
       <Card padding="md">
         {health.isPending ? <PageSkeleton label="Checking…" /> : null}
@@ -69,7 +69,7 @@ export default function HealthPage() {
                   <Table.Tr key={k}>
                     <Table.Th w={220} style={{ fontWeight: 500 }}>
                       <Text size="sm" c="dimmed">
-                        {humanize(k)}
+                        {keyLabel(k)}
                       </Text>
                     </Table.Th>
                     <Table.Td>

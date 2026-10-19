@@ -72,10 +72,10 @@ describe('CasePage', () => {
   it('opens cited evidence on the page instead of following a link', async () => {
     renderCase('C-000009');
     const board = await screen.findByRole('region', { name: 'The board' });
-    const cites = await within(board).findAllByRole('button', { name: 'Ward state' });
+    const cites = await within(board).findAllByRole('button', { name: 'Downstream state' });
     expect(cites[0]).not.toHaveAttribute('href');
     const evidence = await screen.findByRole('region', { name: 'Evidence' });
-    const item = await within(evidence).findByRole('button', { name: /The ward's encounter/ });
+    const item = await within(evidence).findByRole('button', { name: /The downstream system's encounter/ });
     expect(item).toHaveAttribute('aria-expanded', 'false');
     await userEvent.click(cites[0]);
     await waitFor(() => expect(item).toHaveAttribute('aria-expanded', 'true'));
@@ -94,7 +94,10 @@ describe('CasePage', () => {
     const outcome = await screen.findByRole('region', { name: 'Closed: handed to a person' });
     await userEvent.click(await within(outcome).findByRole('button', { name: 'Reinvestigate' }));
     const dialog = await screen.findByRole('dialog', { name: 'Reinvestigate C-000008' });
-    await userEvent.type(within(dialog).getByRole('textbox', { name: /Why look again/ }), 'The ward is back');
+    await userEvent.type(
+      within(dialog).getByRole('textbox', { name: /Why look again/ }),
+      'The downstream system is back',
+    );
     await userEvent.click(within(dialog).getByRole('button', { name: 'Reopen the case' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });

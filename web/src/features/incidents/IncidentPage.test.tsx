@@ -103,7 +103,7 @@ describe('IncidentsPage', () => {
     expect(link).toHaveAttribute('href', '/incidents/I-000001');
     expect(screen.getByText('8 cases in 6 chains: 4 single, 1 ordered, 1 interleaved')).toBeInTheDocument();
     expect(screen.getByText('6 resolved')).toBeInTheDocument();
-    expect(screen.getByText('Ward Out')).toBeInTheDocument();
+    expect(screen.getByText('Downstream Out')).toBeInTheDocument();
     expect(
       screen.getByText("The policy chains are released under one approval of the incident's plan"),
     ).toBeInTheDocument();
@@ -148,7 +148,7 @@ describe('IncidentPage', () => {
     await userEvent.click(within(approval).getByRole('button', { name: /Approve/ }));
     const dialog = await screen.findByRole('dialog');
     expect(
-      within(dialog).getByText(/resend these 2 operations to Ward Out, in this order/),
+      within(dialog).getByText(/resend these 2 operations to Downstream Out, in this order/),
     ).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the release' }));
     expect(await screen.findByText('Approved')).toBeInTheDocument();

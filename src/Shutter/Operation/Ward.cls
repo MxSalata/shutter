@@ -1,4 +1,4 @@
-/// The connector to the ward system: one HTTP contract for normal traffic, rehearsals and
+/// The connector to the downstream system: one HTTP contract for normal traffic, rehearsals and
 /// recovery writes (docs/CONTRACTS.md, section 1). It classifies what the receiver answered and
 /// never retries on its own: an uncertain outcome is reported as such, and reconciliation by
 /// operation key is the case workflow's job.
@@ -11,11 +11,11 @@ Parameter INVOCATION = "Queue";
 
 Property Adapter As EnsLib.HTTP.OutboundAdapter;
 
-/// The operations endpoint's path on the ward system.
+/// The operations endpoint's path on the downstream system.
 /// Overrides the operations path of this item's receiver description in the site profile; empty takes the profile's.
 Property OperationsPath As %String(MAXLEN = 200);
 
-Parameter SETTINGS = "OperationsPath:Ward";
+Parameter SETTINGS = "OperationsPath:Downstream";
 
 Method OnWardOperation(request As Shutter.Msg.WardOperation, Output response As Shutter.Msg.WardResult) As %Status
 {
@@ -80,7 +80,7 @@ Method Read(request As Shutter.Msg.WardOperation, response As Shutter.Msg.WardRe
         Set response.ReasonCode = "unknown_encounter"
     } ElseIf response.HttpStatus = 404 {
         Set response.Outcome = "error"
-        Set response.Error = "HTTP 404 from " _ path _ ": not the ward's answer for an unknown encounter"
+        Set response.Error = "HTTP 404 from " _ path _ ": not the downstream system's answer for an unknown encounter"
     } ElseIf response.HttpStatus = "" {
         Set response.Outcome = "unavailable"
         Set response.Error = $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "no response")
@@ -155,11 +155,11 @@ Method Classify(request As Shutter.Msg.WardOperation, response As Shutter.Msg.Wa
         Quit
     }
     If status = 422 { Set response.Outcome = "refused" Quit }
-    If status = 503 { Set response.Outcome = "unavailable" Set response.Error = "The ward system is unavailable" Quit }
-    If status = 504 { Set response.Outcome = "uncertain" Set response.Error = "The ward system did not answer in time; the operation may have been applied" Quit }
+    If status = 503 { Set response.Outcome = "unavailable" Set response.Error = "The downstream system is unavailable" Quit }
+    If status = 504 { Set response.Outcome = "uncertain" Set response.Error = "The downstream system did not answer in time; the operation may have been applied" Quit }
     If (status = 401) || (status = 403) || (status = 404) {
         Set response.Outcome = "error"
-        Set response.Error = "HTTP " _ status _ " from the ward system: " _ $SELECT(status = 404: "endpoint not found", 1: "not authorised")
+        Set response.Error = "HTTP " _ status _ " from the downstream system: " _ $SELECT(status = 404: "endpoint not found", 1: "not authorised")
         Quit
     }
     Set response.Outcome = $SELECT(status >= 500: "uncertain", 1: "error")

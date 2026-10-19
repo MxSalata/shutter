@@ -261,13 +261,13 @@ export default function ScenariosPage() {
       {me?.approver ? <InductionPrompt /> : null}
       <PageHeader
         title="Scenarios"
-        subtitle="Each scenario plays a real failure into the production: HL7 files into the ADT folder and faults on the ward. Shutter opens a case, investigates, checks the plan at the gate, asks a person, and verifies the result at the receiver."
+        subtitle="Each scenario plays a real failure into the production: HL7 files into the ADT folder and faults on the downstream system. Shutter opens a case, investigates, checks the plan at the gate, asks a person, and verifies the result at the receiver."
         actions={
           <Tooltip
             label={
               !canRun
                 ? 'Resetting needs the operator role'
-                : busy || 'Clear the ward, the folders and the running scenario'
+                : busy || 'Clear the downstream system, the folders and the running scenario'
             }
           >
             <span>
@@ -282,7 +282,7 @@ export default function ScenariosPage() {
                       notifications.show({
                         color: 'teal',
                         title: 'Reset',
-                        message: 'The ward and the folders are clear.',
+                        message: 'The downstream system and the folders are clear.',
                       }),
                     onError: (e) =>
                       notifications.show({ color: 'red', title: 'Reset failed', message: describeError(e) }),

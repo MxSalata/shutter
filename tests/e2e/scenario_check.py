@@ -10,16 +10,16 @@ table.
 
 Signs in as the demo users `operator` and `approver` (password from SHUTTER_PASSWORD, default "shutter"). With
 --approve, a plan waiting for approval is approved as the approver once the scenario's own steps have finished (S7
-changes the ward while its plan waits). The ward's final state is read through the ward's API (--ward-user and
---ward-password, default _SYSTEM / SYS). The expected outcomes are in fixtures/scenarios.json. Prints one line per
-scenario and exits 1 when any differs. Standard library only.
+changes the downstream system while its plan waits). The downstream system's final state is read through its API
+(--downstream-user and --downstream-password, default _SYSTEM / SYS). The expected outcomes are in
+fixtures/scenarios.json. Prints one line per scenario and exits 1 when any differs. Standard library only.
 
 A scenario whose expected outcome says "incident" (S11) has several cases: the check follows the incident the run
 opens, approves its plan and its cases' plans with --approve, and compares each encounter's chain (kind, who decided,
-the catalogue entries), its writes and the ward's final state with expected.encounters. Such a scenario names the
-modes it is defined for (expected.modes); other modes are skipped.
+the catalogue entries), its writes and the downstream system's final state with expected.encounters. Such a scenario
+names the modes it is defined for (expected.modes); other modes are skipped.
 
-It plays scenarios: each run resets the ward. Don't run it on an instance someone else is using.
+It plays scenarios: each run resets the downstream system. Don't run it on an instance someone else is using.
 """
 import argparse
 import base64
@@ -75,8 +75,8 @@ class Session:
         return self
 
 
-def ward_encounter(url, user, password, encounter_id):
-    request = urllib.request.Request(url.rstrip("/") + "/wards/api/encounters/" + urllib.parse.quote(encounter_id, safe=""))
+def downstream_encounter(url, user, password, encounter_id):
+    request = urllib.request.Request(url.rstrip("/") + "/downstream/api/encounters/" + urllib.parse.quote(encounter_id, safe=""))
     request.add_header("Authorization", "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode())
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
@@ -244,7 +244,7 @@ def play_incident(args, operator, approver, scenario, mode):
             _, attempts = operator.call("GET", f"/cases/{urllib.parse.quote(item['caseId'])}/attempts")
             writes += sum(1 for a in attempts or []
                           if (a.get("attempt") or {}).get("outcome") in ("applied", "already_committed"))
-        ward = ward_encounter(args.url, args.ward_user, args.ward_password, enc)
+        held = downstream_encounter(args.url, args.downstream_user, args.downstream_password, enc)
         problems = []
         if chain.get("kind") != want["chain"]:
             problems.append(f"chain {chain.get('kind')}, expected {want['chain']}")
@@ -254,9 +254,9 @@ def play_incident(args, operator, approver, scenario, mode):
             problems.append(f"entries {','.join(entries) or 'none'}, expected {','.join(sorted(want['entries']))}")
         if writes != want["writes"]:
             problems.append(f"{writes} writes, expected {want['writes']}")
-        if ward.get("state") != want["final_state"] or ward.get("ward") != want["final_ward"]:
-            problems.append(f"the ward holds {ward.get('state')} {ward.get('ward')}, expected {want['final_state']} "
-                            f"{want['final_ward']}")
+        if held.get("state") != want["final_state"] or held.get("ward") != want["final_ward"]:
+            problems.append(f"the downstream system holds {held.get('state')} {held.get('ward')}, "
+                            f"expected {want['final_state']} {want['final_ward']}")
         parts.append(f"{enc} {chain.get('kind')} {path_of(chain)} {','.join(entries)} {writes}w {chain.get('state')}")
         differences += [f"{enc}: {x}" for x in problems]
     outcome = f"{incident['incidentId']} {incident.get('state')}: " + "; ".join(parts)
@@ -283,21 +283,21 @@ def judge(args, operator, scenario, mode, final):
     _, events = operator.call("GET", f"/cases/{caseid}/events")
     for event in events or []:
         codes.update(re.findall(r"\b[A-Z][A-Z_]{5,}[A-Z]\b", event.get("text") or ""))
-    ward = ward_encounter(args.url, args.ward_user, args.ward_password, final["encounterId"])
+    held = downstream_encounter(args.url, args.downstream_user, args.downstream_password, final["encounterId"])
 
     differences = []
     allowed = set([expected["disposition"]] + expected.get("acceptable", []))
     if final.get("disposition") not in allowed:
         differences.append(f"disposition {final.get('disposition')}, expected {' or '.join(sorted(allowed))}")
     if wrote != expected["write"]:
-        differences.append("wrote to the ward" if wrote else "wrote nothing, expected one conditional write")
-    if ward.get("state") != expected["final_state"] or ward.get("ward") != expected["final_ward"]:
-        differences.append(f"the ward holds {ward.get('state')} {ward.get('ward')}, expected {expected['final_state']} "
-                           f"{expected['final_ward']}")
+        differences.append("wrote to the downstream system" if wrote else "wrote nothing, expected one conditional write")
+    if held.get("state") != expected["final_state"] or held.get("ward") != expected["final_ward"]:
+        differences.append(f"the downstream system holds {held.get('state')} {held.get('ward')}, "
+                           f"expected {expected['final_state']} {expected['final_ward']}")
     if expected.get("blocked_by") and expected["blocked_by"] not in codes:
         differences.append(f"no {expected['blocked_by']} among {sorted(c for c in codes if c) or 'no reason codes'}")
     outcome = (f"{final['state']}, {final.get('disposition') or 'no plan'}, {'one write' if wrote else 'no write'}, "
-               f"ward {ward.get('state')} {ward.get('ward')}")
+               f"downstream {held.get('state')} {held.get('ward')}")
     summary = f"{scenario['id']} {mode}: {final['caseId']} {outcome}"
     if differences:
         return False, f"DIFFERS {summary}: " + "; ".join(differences), outcome + " (" + "; ".join(differences) + ")"
@@ -315,7 +315,7 @@ def write_markdown(path, modes, rows):
         if e.get("incident"):
             expected = "; ".join(f"{x['encounter']} {x['chain']} {x['path']} {x['writes']}w" for x in e["encounters"])
         else:
-            expected = f"{e['disposition']}, {'one write' if e['write'] else 'no write'}, ward {e['final_state']} {e['final_ward'] or ''}".strip()
+            expected = f"{e['disposition']}, {'one write' if e['write'] else 'no write'}, downstream {e['final_state']} {e['final_ward'] or ''}".strip()
         cells = [("as expected: " if ok else "**differs**: ") + outcome for ok, outcome in (row["results"][m] for m in modes)]
         lines.append(f"| {s['id']} {s['title']} | {expected} | " + " | ".join(cells) + " |")
     with open(path, "w", encoding="utf-8") as f:
@@ -330,8 +330,8 @@ def main():
     p.add_argument("--markdown", help="write the comparison to this file as a Markdown table")
     p.add_argument("--approve", action="store_true", help="approve plans that wait for approval, as the approver")
     p.add_argument("--timeout", type=int, default=240, help="seconds to wait for each case")
-    p.add_argument("--ward-user", default="_SYSTEM")
-    p.add_argument("--ward-password", default="SYS")
+    p.add_argument("--downstream-user", default="_SYSTEM")
+    p.add_argument("--downstream-password", default="SYS")
     args = p.parse_args()
 
     password = os.environ.get("SHUTTER_PASSWORD", "shutter")

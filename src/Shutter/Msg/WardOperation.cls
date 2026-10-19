@@ -1,4 +1,4 @@
-/// A ward operation as the production sends it to the receiver (docs/CONTRACTS.md, section 1.1):
+/// A downstream operation as the production sends it to the receiver (docs/CONTRACTS.md, section 1.1):
 /// the same message for normal traffic, rehearsals and recovery writes. The purpose says which.
 Class Shutter.Msg.WardOperation Extends Ens.Request
 {
@@ -40,7 +40,7 @@ Property CaseId As %String(MAXLEN = 32);
 /// The Ens.MessageHeader id of the HL7 message this operation came from.
 Property SourceHeaderId As %String(MAXLEN = 20);
 
-/// Build from a ward operation object (Shutter.Util.OperationKey.FromHL7, or a plan's action).
+/// Build from a downstream operation object (Shutter.Util.OperationKey.FromHL7, or a plan's action).
 ClassMethod FromOperation(op As %DynamicObject) As Shutter.Msg.WardOperation
 {
     Set m = ..%New()
@@ -77,7 +77,7 @@ Method ToOperation() As %DynamicObject
     Quit op
 }
 
-/// The JSON body for POST /wards/api/operations.
+/// The JSON body for POST /downstream/api/operations.
 Method ToWardJSON() As %DynamicObject
 {
     Set body = ..ToOperation()

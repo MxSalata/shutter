@@ -1,9 +1,13 @@
-/// The Shutter production: the ADT feed to the ward system, and the recovery side that opens
-/// and works cases. Paths and the ward's address come from system default settings written by
+/// The Shutter production: the ADT feed to the downstream system, and the recovery side that opens
+/// and works cases. Paths and the downstream system's address come from system default settings written by
 /// Shutter.Setup, so this definition carries none. The agent items default to replay so that the
 /// production runs without a model; the aihub module's installer switches them to live.
 Class Shutter.Production Extends Ens.Production
 {
+
+/// The connector item that delivers to the downstream system (the demo bed-management system): the receiver that
+/// the feed, the case workflow, evidence, verification and the blind-resend preview use when nothing names another.
+Parameter RECEIVER = "Downstream Out";
 
 /// When the container's environment carries ANTHROPIC_API_KEY and the provider configuration is
 /// not there yet, or was written from another key (the .env changed), write it, so live agents need
@@ -44,7 +48,7 @@ XData ProductionDefinition
     <Setting Target="Adapter" Name="FileSpec">*.hl7</Setting>
     <Setting Target="Adapter" Name="CallInterval">1</Setting>
     <Setting Target="Adapter" Name="DeleteFromServer">1</Setting>
-    <Setting Target="Host" Name="TargetConfigNames">ADT to Ward</Setting>
+    <Setting Target="Host" Name="TargetConfigNames">ADT to Downstream</Setting>
     <Setting Target="Host" Name="MessageSchemaCategory">2.5.1</Setting>
     <Setting Target="Host" Name="AckMode">Never</Setting>
     <Setting Target="Host" Name="UseAckCommitCodes">0</Setting>
@@ -53,10 +57,10 @@ XData ProductionDefinition
     <Setting Target="Adapter" Name="CallInterval">5</Setting>
     <Setting Target="Host" Name="Routes">ADT In</Setting>
   </Item>
-  <Item Name="ADT to Ward" Category="Feed" ClassName="Shutter.Process.ADTToWard" PoolSize="1" Enabled="true" Foreground="false" Comment="Builds the ward operation, delivers it, opens a case on failure" LogTraceEvents="true" Schedule="">
+  <Item Name="ADT to Downstream" Category="Feed" ClassName="Shutter.Process.ADTToWard" PoolSize="1" Enabled="true" Foreground="false" Comment="Builds the downstream operation, delivers it, opens a case on failure" LogTraceEvents="true" Schedule="">
   </Item>
-  <Item Name="Ward Out" Category="Feed,Recovery" ClassName="Shutter.Operation.Ward" PoolSize="1" Enabled="true" Foreground="false" Comment="The one connector to the ward system: feed, rehearsals and recovery writes" LogTraceEvents="true" Schedule="">
-    <Setting Target="Adapter" Name="Credentials">WardsAPI</Setting>
+  <Item Name="Downstream Out" Category="Feed,Recovery" ClassName="Shutter.Operation.Ward" PoolSize="1" Enabled="true" Foreground="false" Comment="The one connector to the downstream system (the demo bed-management system): feed, rehearsals and recovery writes" LogTraceEvents="true" Schedule="">
+    <Setting Target="Adapter" Name="Credentials">DownstreamAPI</Setting>
     <Setting Target="Adapter" Name="ResponseTimeout">15</Setting>
     <Setting Target="Adapter" Name="ConnectTimeout">5</Setting>
     <Setting Target="Host" Name="FailureTimeout">0</Setting>
@@ -69,8 +73,8 @@ XData ProductionDefinition
   </Item>
   <Item Name="Incident Workflow" Category="Recovery" ClassName="Shutter.Process.IncidentWorkflow" PoolSize="1" Enabled="true" Foreground="false" Comment="One instance per incident: the quiet period, chains per encounter, the plan and its approval, the ordered release through each case's own dispatch" LogTraceEvents="true" Schedule="">
   </Item>
-  <Item Name="Evidence Collector" Category="Recovery" ClassName="Shutter.Operation.Evidence" PoolSize="1" Enabled="true" Foreground="false" Comment="An immutable snapshot of the message store, the ward's state and receipts, and the route" LogTraceEvents="true" Schedule="">
-    <Setting Target="Adapter" Name="Credentials">WardsAPI</Setting>
+  <Item Name="Evidence Collector" Category="Recovery" ClassName="Shutter.Operation.Evidence" PoolSize="1" Enabled="true" Foreground="false" Comment="An immutable snapshot of the message store, the downstream system's state and receipts, and the route" LogTraceEvents="true" Schedule="">
+    <Setting Target="Adapter" Name="Credentials">DownstreamAPI</Setting>
     <Setting Target="Adapter" Name="ResponseTimeout">15</Setting>
     <Setting Target="Adapter" Name="ConnectTimeout">5</Setting>
     <Setting Target="Host" Name="FailureTimeout">0</Setting>
@@ -104,7 +108,7 @@ XData ProductionDefinition
   <Item Name="Scenario Player" Category="Demo" ClassName="Shutter.Operation.ScenarioPlayer" PoolSize="1" Enabled="true" Foreground="false" Comment="Plays a demo scenario's steps in its own job, so a run never needs a new process and shows in the trace" LogTraceEvents="true" Schedule="">
   </Item>
   <Item Name="Verifier" Category="Recovery" ClassName="Shutter.Operation.Verify" PoolSize="1" Enabled="true" Foreground="false" Comment="Reads the receiver's committed history and receipts after an attempt" LogTraceEvents="true" Schedule="">
-    <Setting Target="Adapter" Name="Credentials">WardsAPI</Setting>
+    <Setting Target="Adapter" Name="Credentials">DownstreamAPI</Setting>
     <Setting Target="Adapter" Name="ResponseTimeout">15</Setting>
     <Setting Target="Adapter" Name="ConnectTimeout">5</Setting>
     <Setting Target="Host" Name="FailureTimeout">0</Setting>

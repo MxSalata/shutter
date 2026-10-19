@@ -161,3 +161,20 @@ export function humanize(code: string | undefined | null): string {
   const text = code.replace(/_/g, ' ').toLowerCase();
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
+
+/**
+ * Identifiers the server keeps from before the downstream system had its name (snapshot item kinds, evidence
+ * sources, readiness keys), as the screens name them.
+ */
+const KEY_LABELS: Record<string, string> = {
+  ward_state: 'Downstream state',
+  ward_state_http_status: 'Downstream state HTTP status',
+  ward_api: 'Downstream API',
+  ward_classes: 'Downstream classes',
+  wards_webapp: 'Downstream webapp',
+};
+
+/** An identifier in words: its label when it has one, otherwise humanized. */
+export function keyLabel(code: string | undefined | null): string {
+  return (code && KEY_LABELS[code]) || humanize(code);
+}

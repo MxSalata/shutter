@@ -2,14 +2,14 @@
   "version": 1,
   "receivers": [
     {
-      "name": "Ward Out",
-      "system": "the ward bed-management system",
+      "name": "Downstream Out",
+      "system": "the demo bed-management system",
       "tier": 2,
       "applies": "arrival_order",
       "resend_timestamp": "original",
       "cancels": false,
       "api": {
-        "base": "/wards/api",
+        "base": "/downstream/api",
         "state": "/encounters/{encounter}",
         "receipt": "/receipts/{key}",
         "capabilities": "/capabilities",

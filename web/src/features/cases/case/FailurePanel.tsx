@@ -7,9 +7,9 @@ import { humanize } from '@/lib/format';
 import { Section } from './Section';
 
 const KINDS: Record<string, string> = {
-  delivery_failed: 'Not delivered: the ward did not accept it',
-  uncertain_outcome: 'Outcome unknown: the ward may or may not have applied it',
-  rejected: 'Refused by the ward',
+  delivery_failed: 'Not delivered: the downstream system did not accept it',
+  uncertain_outcome: 'Outcome unknown: the downstream system may or may not have applied it',
+  rejected: 'Refused by the downstream system',
 };
 
 export function FailurePanel({ c }: { c: CaseDetail }) {
@@ -23,7 +23,7 @@ export function FailurePanel({ c }: { c: CaseDetail }) {
         rows={[
           ['Failure', KINDS[c.failureKind] ?? humanize(c.failureKind)],
           [
-            'What the ward answered',
+            'What the downstream system answered',
             c.failureText ? (
               <Text size="sm" className="mono-wrap">
                 {c.failureText}

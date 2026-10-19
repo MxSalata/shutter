@@ -18,9 +18,9 @@ ClassMethod TableFor(collection As %String) As %String
 ClassMethod DescriptionFor(collection As %String) As %String
 {
     Quit $CASE(collection,
-        "contracts": "The ward system's interface contract: operations, identifiers, the operation key, conditional writes, receipts, dry runs, error codes",
+        "contracts": "The downstream system's interface contract: operations, identifiers, the operation key, conditional writes, receipts, dry runs, error codes",
         "lifecycle": "The encounter lifecycle policy: allowed transitions, supersession by later events, patient identity rules",
-        "effects": "The dependency inventory and effect contracts: which systems read the ward's data and what a movement changes for them",
+        "effects": "The dependency inventory and effect contracts: which systems read the downstream system's data and what a movement changes for them",
         "playbooks": "The recovery playbooks: the outcomes (resend, reconcile, superseded, more evidence, escalate), their preconditions and what each writes",
         : "Shutter knowledge: " _ collection)
 }

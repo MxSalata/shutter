@@ -1,7 +1,7 @@
 [
  {
   "id": "E1",
-  "version": 1,
+  "version": 2,
   "title": "Superseded by a later transfer",
   "scenarios": [
    "S1",
@@ -28,12 +28,12 @@
    "ordering",
    "effect"
   ],
-  "prose": "# E1 Superseded by a later transfer\n\n## Meaning\n\nThe failed transfer was overtaken: the ward has applied another transfer for the same encounter whose event happened\nlater. The patient is where the later transfer put them, and the failed one describes a place they have already left.\n\n## Telling it apart\n\nCompare event times, not arrival times (WIC-1.2): the later transfer's event time must be strictly later. Equal times\nare E7, not this. A later discharge is E6. A later demographic update is not a later movement (ELS-2.2, E10).\n\n## Cite\n\nThe superseding event from the ward's history (version, ward, event time) and the failed operation's event time.",
+  "prose": "# E1 Superseded by a later transfer\n\n## Meaning\n\nThe failed transfer was overtaken: the downstream system has applied another transfer for the same encounter whose event\nhappened later. The patient is where the later transfer put them, and the failed one describes a place they have already\nleft.\n\n## Telling it apart\n\nCompare event times, not arrival times (WIC-1.2): the later transfer's event time must be strictly later. Equal times\nare E7, not this. A later discharge is E6. A later demographic update is not a later movement (ELS-2.2, E10).\n\n## Cite\n\nThe superseding event from the downstream system's history (version, ward, event time) and the failed operation's event\ntime.",
   "source": "E1.md"
  },
  {
   "id": "E2",
-  "version": 3,
+  "version": 4,
   "title": "Not delivered, still current",
   "scenarios": [
    "S2",
@@ -80,7 +80,7 @@
    "capability",
    "concurrency"
   ],
-  "prose": "# E2 Not delivered, still current\n\n## Meaning\n\nThe receiver was down or unreachable when the movement was sent, holds no receipt for it, and nothing has happened to\nthe encounter since. The movement is still the patient's latest and is still due. An admission that never arrived is\nthis entry too: an admission is never superseded (ELS-2.4), and until it arrives the ward answers 404 for the\nencounter (`not_found`). A receiver that can't be read at all (`unknown`) is not this entry: nothing is resent\non a state nobody could see.\n\n## Telling it apart\n\nAnother encounter of the same patient doesn't count (S9): later events are read for this encounter only. A rejection\n(409 or 422) is not this entry; a duplicate answer without a receipt is E9.\n\n## Cite\n\nThe receipt lookup (404), the ward's current version and state, and the timeline with no later event.",
+  "prose": "# E2 Not delivered, still current\n\n## Meaning\n\nThe receiver was down or unreachable when the movement was sent, holds no receipt for it, and nothing has happened to\nthe encounter since. The movement is still the patient's latest and is still due. An admission that never arrived is\nthis entry too: an admission is never superseded (ELS-2.4), and until it arrives the downstream system answers 404 for\nthe encounter (`not_found`). A receiver that can't be read at all (`unknown`) is not this entry: nothing is resent on a\nstate nobody could see.\n\n## Telling it apart\n\nAnother encounter of the same patient doesn't count (S9): later events are read for this encounter only. A rejection\n(409 or 422) is not this entry; a duplicate answer without a receipt is E9.\n\n## Cite\n\nThe receipt lookup (404), the downstream system's current version and state, and the timeline with no later event.",
   "source": "E2.md"
  },
  {
@@ -151,7 +151,7 @@
  },
  {
   "id": "E5",
-  "version": 1,
+  "version": 2,
   "title": "Failures between applied movements",
   "scenarios": [
    "S11"
@@ -178,12 +178,12 @@
    "state_transition",
    "effect"
   ],
-  "prose": "# E5 Failures between applied movements\n\n## Meaning\n\nSome movements of the encounter failed while others were delivered between them: a transfer failed, an update and a\nlater transfer applied, then the discharge failed. The ward's current state is right up to the last applied movement;\nthe latest failure is still due; the earlier failures are history the ward never recorded.\n\n## Telling it apart\n\nThis entry is the chain's latest failure. The chain's earlier failures match E1 or E6 on their own, which is why the\nboard, not the policy, settles the chain.\n\n## Cite\n\nThe chain in event order with each item's outcome, the applied movements between them, and the site's history policy.",
+  "prose": "# E5 Failures between applied movements\n\n## Meaning\n\nSome movements of the encounter failed while others were delivered between them: a transfer failed, an update and a\nlater transfer applied, then the discharge failed. The downstream system's current state is right up to the last applied\nmovement; the latest failure is still due; the earlier failures are history the downstream system never recorded.\n\n## Telling it apart\n\nThis entry is the chain's latest failure. The chain's earlier failures match E1 or E6 on their own, which is why the\nboard, not the policy, settles the chain.\n\n## Cite\n\nThe chain in event order with each item's outcome, the applied movements between them, and the site's history policy.",
   "source": "E5.md"
  },
  {
   "id": "E6",
-  "version": 1,
+  "version": 2,
   "title": "The encounter is discharged",
   "scenarios": [
    "S6",
@@ -208,12 +208,12 @@
    "state_transition",
    "ordering"
   ],
-  "prose": "# E6 The encounter is discharged\n\n## Meaning\n\nThe patient has left. Whether the failed movement's event came before the discharge (it was overtaken) or after it\n(it can't apply), the ward must not move a discharged patient.\n\n## Telling it apart\n\nThe encounter's state is `discharged`. A failed discharge whose receipt exists is E3; a duplicate discharge for an\nalready discharged encounter closes here with nothing to send.\n\n## Cite\n\nThe discharge from the ward's history (version, event time) and the failed operation's event time.",
+  "prose": "# E6 The encounter is discharged\n\n## Meaning\n\nThe patient has left. Whether the failed movement's event came before the discharge (it was overtaken) or after it\n(it can't apply), the downstream system must not move a discharged patient.\n\n## Telling it apart\n\nThe encounter's state is `discharged`. A failed discharge whose receipt exists is E3; a duplicate discharge for an\nalready discharged encounter closes here with nothing to send.\n\n## Cite\n\nThe discharge from the downstream system's history (version, event time) and the failed operation's event time.",
   "source": "E6.md"
  },
  {
   "id": "E7",
-  "version": 1,
+  "version": 2,
   "title": "Two sources at the same time",
   "scenarios": [
    "S8"
@@ -236,7 +236,7 @@
   "checks": [
    "ordering"
   ],
-  "prose": "# E7 Two sources at the same time\n\n## Meaning\n\nTwo systems moved the same patient at the same recorded time, for example the patient administration system and the\nbed manager. Every mechanical check passes, so rules alone would resend, and the resend would move the patient away\nfrom the placement the other system made.\n\n## Telling it apart\n\nThe other event is from another source system (MSH-3) with exactly the same event time. A strictly later event from\nany source is E1 or E6.\n\n## Cite\n\nBoth events: source system, event time, ward, and the ward's current state set by the other system.",
+  "prose": "# E7 Two sources at the same time\n\n## Meaning\n\nTwo systems moved the same patient at the same recorded time, for example the patient administration system and the\nbed manager. Every mechanical check passes, so rules alone would resend, and the resend would move the patient away\nfrom the placement the other system made.\n\n## Telling it apart\n\nThe other event is from another source system (MSH-3) with exactly the same event time. A strictly later event from\nany source is E1 or E6.\n\n## Cite\n\nBoth events: source system, event time, ward, and the downstream system's current state set by the other system.",
   "source": "E7.md"
  },
  {
@@ -305,7 +305,7 @@
  },
  {
   "id": "E10",
-  "version": 2,
+  "version": 3,
   "title": "An update after the failed movement",
   "scenarios": [
    "S5"
@@ -343,7 +343,7 @@
    "capability",
    "concurrency"
   ],
-  "prose": "# E10 An update after the failed movement\n\n## Meaning\n\nAfter the movement failed, the patient's details were updated (an A08) and the update was applied. The update moved\nnobody, so the failed movement is still due.\n\n## Telling it apart\n\n`later_applied` reads `update` only when no later transfer or discharge was applied; those take precedence (E1, E6).\n\n## Cite\n\nThe update from the ward's history and the failed movement's receipt lookup (404).",
+  "prose": "# E10 An update after the failed movement\n\n## Meaning\n\nAfter the movement failed, the patient's details were updated (an A08) and the update was applied. The update moved\nnobody, so the failed movement is still due.\n\n## Telling it apart\n\n`later_applied` reads `update` only when no later transfer or discharge was applied; those take precedence (E1, E6).\n\n## Cite\n\nThe update from the downstream system's history and the failed movement's receipt lookup (404).",
   "source": "E10.md"
  },
  {
@@ -371,8 +371,8 @@
  },
  {
   "id": "E12",
-  "version": 1,
-  "title": "A message that can't become a ward operation",
+  "version": 2,
+  "title": "A message that can't become a downstream operation",
   "scenarios": [],
   "pattern": {
    "delivery": "unmappable"
@@ -386,7 +386,7 @@
   "checks": [
    "conformance"
   ],
-  "prose": "# E12 A message that can't become a ward operation\n\n## Meaning\n\nThe feed received an ADT message it could not map to a ward operation: a field the operation needs (the visit\nnumber, the event time, the patient identifier) is missing or malformed, or the profile maps no operation for its\nevent. Shutter opens a case for it so the failure isn't lost, with the message's fields and a key of its own, but\nthere is no operation behind the case: nothing can be resent, and the gate's conformance check blocks any plan that\ntries (UNMAPPABLE). The case goes to a person with the reason named.\n\n## Telling it apart\n\nEvery other entry starts from an operation the receiver failed, refused or may have applied. Here the receiver was\nnever asked: the message stopped at the mapping. A message that maps but fails schema validation is not this entry,\nsince it has an operation; the board reads its validation evidence.\n\n## Cite\n\nThe message and the mapping's error (the failure text), the schema validation, and the absence of an operation key\nderived from the message's fields.",
+  "prose": "# E12 A message that can't become a downstream operation\n\n## Meaning\n\nThe feed received an ADT message it could not map to a downstream operation: a field the operation needs (the visit\nnumber, the event time, the patient identifier) is missing or malformed, or the profile maps no operation for its\nevent. Shutter opens a case for it so the failure isn't lost, with the message's fields and a key of its own, but\nthere is no operation behind the case: nothing can be resent, and the gate's conformance check blocks any plan that\ntries (UNMAPPABLE). The case goes to a person with the reason named.\n\n## Telling it apart\n\nEvery other entry starts from an operation the receiver failed, refused or may have applied. Here the receiver was\nnever asked: the message stopped at the mapping. A message that maps but fails schema validation is not this entry,\nsince it has an operation; the board reads its validation evidence.\n\n## Cite\n\nThe message and the mapping's error (the failure text), the schema validation, and the absence of an operation key\nderived from the message's fields.",
   "source": "E12.md"
  },
  {

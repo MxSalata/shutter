@@ -139,7 +139,7 @@ const item = (kind: string, data: unknown): SnapshotItem => ({
 });
 
 describe('describeItem', () => {
-  it("says what the ward holds, or that it can't be read", () => {
+  it("says what the downstream system holds, or that it can't be read", () => {
     expect(
       describeItem(
         item('ward_state', {
@@ -200,8 +200,8 @@ describe('describeEntry', () => {
         event: 'transfer',
         ward: 'WARD-C',
         event_time: '2026-10-15T08:45:00Z',
-        source: 'ward history',
+        source: 'downstream history',
       }),
-    ).toBe('Transfer to WARD-C at 09:45:00, from the ward history');
+    ).toBe('Transfer to WARD-C at 09:45:00, from the downstream history');
   });
 });

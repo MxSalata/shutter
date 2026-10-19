@@ -30,6 +30,9 @@ case's outcome and the receiving system's final state with the scenario's expect
 | S10 The ward can't take a conditional write | escalate, no write, ward admitted WARD-A | as expected: escalated, escalate, no write, ward admitted WARD-A (0.45 USD) | as expected: escalated, escalate, no write, ward admitted WARD-A | **differs**: blocked, resend, no write, ward admitted WARD-A (disposition resend, expected escalate or more_evidence) |
 | S13 A transfer timed before its admission | escalate, no write, ward admitted WARD-A | as expected: escalated, escalate, no write, ward admitted WARD-A (0.51 USD) | as expected: escalated, escalate, no write, ward admitted WARD-A | **differs**: blocked, resend, no write, ward admitted WARD-A (disposition resend, expected escalate or more_evidence) |
 
+The table was played before the receiving system was named the downstream system: in its cells, "ward admitted
+WARD-C" is the downstream system's final state for the encounter, and S10's title then read "The ward" for it.
+
 ## What it shows
 
 - **The board gets all eleven right, with live agents as in replay.** Rules alone get the four plain resends right

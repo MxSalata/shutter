@@ -6,9 +6,9 @@ Class Shutter.Tools.Evidence Extends %AI.Tool
 
 Property Name As %String [ InitialExpression = "Shutter evidence" ];
 
-Property Description As %String(MAXLEN = "") [ InitialExpression = "Read-only access to a case's evidence snapshot: the failed operation, the message, its validation, the ward's state and history, the receipt lookup, the timeline and the route's capabilities" ];
+Property Description As %String(MAXLEN = "") [ InitialExpression = "Read-only access to a case's evidence snapshot: the failed operation, the message, its validation, the downstream system's state and history, the receipt lookup, the timeline and the route's capabilities" ];
 
-/// The whole evidence summary for a case: the failed operation and the failure, the message's fields and validation, the ward's state and history for the encounter, the receipt lookup, the timeline of every operation sent for the encounter (later events marked), the route's capability profile and the epoch. The case's evidence in one read.
+/// The whole evidence summary for a case: the failed operation and the failure, the message's fields and validation, the downstream system's state and history for the encounter, the receipt lookup, the timeline of every operation sent for the encounter (later events marked), the route's capability profile and the epoch. The case's evidence in one read.
 /// caseId: the case identifier, for example C-000012
 ClassMethod GetSnapshot(caseId As %String) As %DynamicObject
 {
@@ -35,14 +35,14 @@ ClassMethod GetValidation(caseId As %String) As %DynamicObject
     Return ..Item(caseId, "validation")
 }
 
-/// The ward system's record of the encounter as read for the snapshot: state, ward, version, epoch and the history of applied events, or the error when it could not be read.
+/// The downstream system's record of the encounter as read for the snapshot: state, ward, version, epoch and the history of applied events, or the error when it could not be read.
 /// caseId: the case identifier
 ClassMethod GetWardState(caseId As %String) As %DynamicObject
 {
     Return ..Item(caseId, "ward_state")
 }
 
-/// The ward system's receipt for the failed operation's key, when one exists (the operation was committed), or the 404 or error of the lookup.
+/// The downstream system's receipt for the failed operation's key, when one exists (the operation was committed), or the 404 or error of the lookup.
 /// caseId: the case identifier
 ClassMethod GetReceipt(caseId As %String) As %DynamicObject
 {

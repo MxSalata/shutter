@@ -2,7 +2,7 @@
   "source": "Recorded from Shutter's REST API on contest49-core, 2026-10-18: incident I-000001 of scenario S11 in site-policy mode, for the incident pages' tests.",
   "summary": {
     "incidentId": "I-000001",
-    "receiver": "Ward Out",
+    "receiver": "Downstream Out",
     "mode": "policy",
     "state": "closed",
     "openedAt": "2026-10-18T11:04:27Z",
@@ -42,7 +42,7 @@
   },
   "detail": {
     "incidentId": "I-000001",
-    "receiver": "Ward Out",
+    "receiver": "Downstream Out",
     "mode": "policy",
     "state": "closed",
     "openedAt": "2026-10-18T11:04:27Z",
@@ -325,7 +325,7 @@
     ],
     "plan": {
       "incident_id": "I-000001",
-      "receiver": "Ward Out",
+      "receiver": "Downstream Out",
       "mode": "policy",
       "chains": [
         {
@@ -501,7 +501,7 @@
     "tasks": [
       {
         "taskId": "148",
-        "subject": "Shutter I-000001: approve the release of 1 chain(s) to Ward Out",
+        "subject": "Shutter I-000001: approve the release of 1 chain(s) to Downstream Out",
         "actions": "Approve,Reject",
         "action": "Approve",
         "userName": "approver",
@@ -522,7 +522,7 @@
     {
       "at": "2026-10-18T11:04:27Z",
       "kind": "state",
-      "text": "Incident opened for Ward Out: 5 failures within 10 minutes (mode policy)",
+      "text": "Incident opened for Downstream Out: 5 failures within 10 minutes (mode policy)",
       "actor": "system"
     },
     {
@@ -558,7 +558,7 @@
     {
       "at": "2026-10-18T11:04:27Z",
       "kind": "note",
-      "text": "Intake open: the chains form after 60 s with no new failure to Ward Out",
+      "text": "Intake open: the chains form after 60 s with no new failure to Downstream Out",
       "actor": "system"
     },
     {
@@ -582,7 +582,7 @@
     {
       "at": "2026-10-18T11:05:44Z",
       "kind": "note",
-      "text": "Intake closed after 60 s of quiet: 8 cases. New failures to Ward Out count towards a new incident",
+      "text": "Intake closed after 60 s of quiet: 8 cases. New failures to Downstream Out count towards a new incident",
       "actor": "system"
     },
     {
@@ -606,7 +606,7 @@
     {
       "at": "2026-10-18T11:05:44Z",
       "kind": "note",
-      "text": "Approval task raised: Shutter I-000001: approve the release of 1 chain(s) to Ward Out",
+      "text": "Approval task raised: Shutter I-000001: approve the release of 1 chain(s) to Downstream Out",
       "actor": "system"
     },
     {

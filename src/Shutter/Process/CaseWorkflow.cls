@@ -34,7 +34,7 @@ Property EvidenceTarget As %String(MAXLEN = 128) [ InitialExpression = "Evidence
 
 Property GateTarget As %String(MAXLEN = 128) [ InitialExpression = "Gate" ];
 
-Property WardTarget As %String(MAXLEN = 128) [ InitialExpression = "Ward Out" ];
+Property WardTarget As %String(MAXLEN = 128) [ InitialExpression = {$PARAMETER("Shutter.Production", "RECEIVER")} ];
 
 Property ApprovalTarget As %String(MAXLEN = 128) [ InitialExpression = "Shutter Approvers" ];
 

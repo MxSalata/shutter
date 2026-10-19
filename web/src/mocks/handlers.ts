@@ -268,7 +268,7 @@ export const handlers = [
       wouldApply: true,
       reason: '',
       encounterAfter: null,
-      note: 'Recorded data: no ward to ask.',
+      note: 'Recorded data: no downstream system to ask.',
     });
   }),
 

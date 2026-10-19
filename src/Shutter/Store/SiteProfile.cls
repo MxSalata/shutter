@@ -18,13 +18,13 @@ Property UpdatedAt As %String(%JSONFIELDNAME = "updatedAt", MAXLEN = 30);
 
 Property UpdatedBy As %String(%JSONFIELDNAME = "updatedBy", MAXLEN = 160);
 
-/// The shipped defaults: one receiver (the ward, tier 2), keep what is current, no authoritative source,
+/// The shipped defaults: one receiver (the downstream system, tier 2), keep what is current, no authoritative source,
 /// unconditional resends forbidden, automatic single chains for tiers 1 and 2, approvals elsewhere.
 ClassMethod Default() As %DynamicObject
 {
     Set p = {}
     Set p.version = 0
-    Set p.receivers = [{"name": "Ward Out", "system": "the ward bed-management system", "tier": 2, "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "api": {"base": "/wards/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "/capabilities", "operations": "/operations"}, "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}}]
+    Set p.receivers = [{"name": ($PARAMETER("Shutter.Production", "RECEIVER")), "system": "the demo bed-management system", "tier": 2, "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "api": {"base": "/downstream/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "/capabilities", "operations": "/operations"}, "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}}]
     Set p."history_policy" = "current"
     Set p."authoritative_source" = ""
     Set p."unconditional_resend" = "forbidden"
@@ -356,10 +356,10 @@ ClassMethod Receiver(name As %String) As %DynamicObject
     Quit ""
 }
 
-/// The ward system's paths, used when a receiver's entry gives none: the shape the demo's ward speaks.
+/// The downstream system's paths, used when a receiver's entry gives none: the shape the demo's receiver speaks.
 ClassMethod DefaultApi() As %DynamicObject
 {
-    Quit {"base": "/wards/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "/capabilities", "operations": "/operations"}
+    Quit {"base": "/downstream/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "/capabilities", "operations": "/operations"}
 }
 
 /// One of a receiver's paths (state, receipt, capabilities, operations), with the receiver's base in front and the
@@ -392,7 +392,7 @@ ClassMethod ReceiverLabel(name As %String) As %String
 {
     Set r = ..Receiver(name)
     Set system = $SELECT($ISOBJECT(r): ##class(Shutter.Util.Json).Str(r, "system"), 1: "")
-    Set base = ##class(Shutter.Util.Json).Str($SELECT($ISOBJECT(r) && $ISOBJECT(r.%Get("api")): r.%Get("api"), 1: ..DefaultApi()), "base", "/wards/api")
+    Set base = ##class(Shutter.Util.Json).Str($SELECT($ISOBJECT(r) && $ISOBJECT(r.%Get("api")): r.%Get("api"), 1: ..DefaultApi()), "base", "/downstream/api")
     Quit $SELECT(system = "": name, 1: system) _ " (" _ base _ ")"
 }
 

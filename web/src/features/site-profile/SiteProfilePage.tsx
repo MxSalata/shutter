@@ -102,14 +102,14 @@ function ReceiverFields({
 }) {
   const err = (key: string) => (problem?.path === `receivers[${i}].${key}` ? problem.message : undefined);
   const id = (key: string) => `site-receivers-${i}-${key}`;
-  // As the core reads them: no api means the ward's paths, and no features means every feature is assumed
+  // As the core reads them: no api means the downstream system's paths, and no features means every feature is assumed
   const declared = r.features
     ? Object.entries(r.features)
         .filter(([, on]) => on)
         .map(([k]) => humanize(k).toLowerCase())
         .join(', ') || 'none'
     : 'all assumed (none declared)';
-  const endpoints = `Endpoints: ${r.api ? `at ${r.api.base ?? 'the ward\u2019s base'}` : 'the ward\u2019s defaults'}; features: ${declared}`;
+  const endpoints = `Endpoints: ${r.api ? `at ${r.api.base ?? 'the downstream system\u2019s base'}` : 'the downstream system\u2019s defaults'}; features: ${declared}`;
   return (
     <Fieldset legend={`Receiver ${i + 1}: ${r.name || 'new'}`}>
       <Stack gap="sm">
@@ -162,7 +162,7 @@ function ReceiverFields({
             [
               'arrival_order',
               'In arrival order',
-              'A late message moves the record backwards: the ward does this',
+              'A late message moves the record backwards: the downstream system does this',
             ],
             ['event_time', 'By event time', 'The receiver orders by the time the event happened'],
           ]}
@@ -441,7 +441,7 @@ function OtherSettings({ profile }: { profile: SiteProfile }) {
                     .join(' · ')}
                 </Text>
               ) : (
-                'the ward’s defaults'
+                'the downstream system’s defaults'
               ),
             ]),
           ]}

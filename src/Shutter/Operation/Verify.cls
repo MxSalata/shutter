@@ -11,7 +11,7 @@ Parameter INVOCATION = "Queue";
 Property Adapter As EnsLib.HTTP.OutboundAdapter;
 
 /// The receiver whose paths are read when the case names none.
-Property Receiver As %String(MAXLEN = 128) [ InitialExpression = "Ward Out" ];
+Property Receiver As %String(MAXLEN = 128) [ InitialExpression = {$PARAMETER("Shutter.Production", "RECEIVER")} ];
 
 Parameter SETTINGS = "Receiver:Verify";
 

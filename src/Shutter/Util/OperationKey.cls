@@ -24,7 +24,7 @@ ClassMethod PatientIdentifier(message As EnsLib.HL7.Message, Output authority As
     Quit message.GetValueAt("PID:3(" _ pick _ ").1")
 }
 
-/// The ward operation (as a dynamic object with the contract's field names) for an HL7 ADT message,
+/// The downstream operation (as a dynamic object with the contract's field names) for an HL7 ADT message,
 /// with its operation key and payload digest filled in. Returns "" with an error status when a
 /// required field is missing.
 ClassMethod FromHL7(message As EnsLib.HL7.Message, Output sc As %Status) As %DynamicObject

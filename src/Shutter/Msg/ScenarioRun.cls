@@ -1,5 +1,5 @@
 /// Asks the scenario player to play a demo scenario: the production's own job feeds the files and sets
-/// the ward's faults, so a run never needs a new process and shows in the trace.
+/// the downstream system's faults, so a run never needs a new process and shows in the trace.
 Class Shutter.Msg.ScenarioRun Extends Ens.Request
 {
 

@@ -612,12 +612,12 @@ ClassMethod CaseClosure(caseId As %String) As %Status
         Set o.verification = vp
         If (v.Outcome = "verified") && $ISOBJECT(detail) {
             Set enc = detail.%Get("encounter")
-            If $ISOBJECT(enc) Do verified.%Push("The ward system holds encounter " _ case.EncounterId _ " as " _ ##class(Shutter.Util.Json).Str(enc, "state") _ $SELECT(##class(Shutter.Util.Json).Str(enc, "ward") '= "": " in " _ enc.ward, 1: "") _ " at version " _ ##class(Shutter.Util.Json).Str(enc, "version"))
+            If $ISOBJECT(enc) Do verified.%Push("The downstream system holds encounter " _ case.EncounterId _ " as " _ ##class(Shutter.Util.Json).Str(enc, "state") _ $SELECT(##class(Shutter.Util.Json).Str(enc, "ward") '= "": " in " _ enc.ward, 1: "") _ " at version " _ ##class(Shutter.Util.Json).Str(enc, "version"))
             If detail.%GetTypeOf("receipt") = "object" && (##class(Shutter.Util.Json).Str(detail, "receipt_http_status") = 200) Do verified.%Push("A receipt exists for the operation key")
             If ##class(Shutter.Util.Json).Str(detail, "history_note") '= "" Do unverified.%Push(detail."history_note")
         }
     } Else { Do o.%Set("verification", "", "null") }
-    Do unverified.%Push("Consumers downstream of the ward system are outside the production's view and are not verified")
+    Do unverified.%Push("Consumers beyond the downstream system are outside the production's view and are not verified")
     Set o.verifiedEffects = verified, o.unverified = unverified
     Set actors = []
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT DISTINCT %EXACT(Actor) AS Actor FROM Shutter_Store.CaseEvent WHERE ""Case"" = ? ORDER BY Actor", id)
@@ -645,7 +645,7 @@ ClassMethod CasePreview(caseId As %String) As %Status
     Set w.Purpose = "rehearsal", w.DryRun = 1, w.CaseId = case.CaseId
     Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .svc)
     If $$$ISERR(sc) || '$ISOBJECT($GET(svc)) Quit ..Fail("503 Service Unavailable", "no_production", "The production's API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
-    Set svc.Target = "Ward Out"
+    Set svc.Target = $SELECT(case.Receiver '= "": case.Receiver, 1: $PARAMETER("Shutter.Production", "RECEIVER"))
     Set sc = svc.ProcessInput(w, .result)
     If $$$ISERR(sc) || '$ISOBJECT($GET(result)) Quit ..Fail("502 Bad Gateway", "ward_error", $SYSTEM.Status.GetErrorText(sc))
     Set resp = result.ResponseObject()
@@ -653,7 +653,7 @@ ClassMethod CasePreview(caseId As %String) As %Status
     Do o.%Set("wouldApply", result.Outcome = "would_apply", "boolean")
     Set o.outcome = result.Outcome, o.reason = result.ReasonCode
     Set o.encounterAfter = resp.%Get("encounter_after")
-    Set o.note = "What a blind resend with no expected version would do at the ward system now; the dry run was rolled back and nothing was written"
+    Set o.note = "What a blind resend with no expected version would do at the downstream system now; the dry run was rolled back and nothing was written"
     Do case.Note("note", "Blind-resend preview requested by " _ ..User() _ ": " _ result.Outcome, ..User())
     Quit ..Json(o)
 }

@@ -102,10 +102,10 @@ jobs:
 
   # The ObjectScript side on a real IRIS for Health Community 2026.2 (InterSystems' image; the AI Hub build is not on a
   # registry CI can pull from, and the core needs none of it): the namespace, a full load and compile, the installer,
-  # the ward's contract tests in process and over HTTP, and every scenario end to end with its recorded runs: S1 to S10
-  # and S13 on the board, and the two outage scenarios, S11 and S12, in site-policy mode.
+  # the downstream system's contract tests in process and over HTTP, and every scenario end to end with its recorded
+  # runs: S1 to S10 and S13 on the board, and the two outage scenarios, S11 and S12, in site-policy mode.
   iris:
-    name: IRIS (the ward's contract, scenarios in replay)
+    name: IRIS (the downstream system's contract, scenarios in replay)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -145,25 +145,25 @@ jobs:
             | docker exec -i iris iris session IRIS -U USER)
           echo "$out" | tail -20
           echo "$out" | grep -q '^RESULT: ok'
-      - name: Load and compile the core, the ward system and its tests
-        run: python3 scripts/iris-load.py --url "$IRIS_URL" --ns SHUTTER src tests/unit/Wards
+      - name: Load and compile the core, the downstream system and its tests
+        run: python3 scripts/iris-load.py --url "$IRIS_URL" --ns SHUTTER src tests/unit/Downstream
       - name: Install (roles, demo users, web applications, the production)
         run: |
           out=$(printf '%s\n' 'Set r = ##class(Shutter.Setup).Install("/home/irisowner/dev/") Write !,"RESULT: ",r,!' 'Halt' \
             | docker exec -i iris iris session IRIS -U SHUTTER)
           echo "$out" | tail -30
           echo "$out" | grep -q '^RESULT: ok'
-      - name: The ward's contract tests, in process
+      - name: The downstream system's contract tests, in process
         run: |
-          out=$(python3 scripts/iris-sql.py --url "$IRIS_URL" --ns SHUTTER --json "SELECT Wards_Test.Run_Contract() AS r")
+          out=$(python3 scripts/iris-sql.py --url "$IRIS_URL" --ns SHUTTER --json "SELECT Downstream_Test.Run_Contract() AS r")
           echo "$out"
           echo "$out" | python3 -c '
           import json, sys
           r = json.load(sys.stdin)[0]["r"]
           r = json.loads(r) if isinstance(r, str) else r
           sys.exit(0 if r["failed"] == 0 and r["passed"] > 0 else 1)'
-      - name: The ward's API over HTTP
-        run: python3 tests/e2e/ward_api_check.py --url "$IRIS_URL" --second-user wards-client --second-password shutter
+      - name: The downstream system's API over HTTP
+        run: python3 tests/e2e/downstream_api_check.py --url "$IRIS_URL" --second-user downstream-client --second-password shutter
       - name: Scenarios S1 to S10 and S13 end to end on the board, in replay
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --approve S1 S2 S3 S4 S5 S6 S7 S8 S9 S10 S13
       # What the model would see of a case: tokens for the hospital number and the visit number, never the values.
@@ -191,7 +191,7 @@ jobs:
           assert r["offset"]["iso"] == "2026-07-15T07:45:00Z" and r["offset"]["had_offset"] is True, r["offset"]
           assert r["utc"]["iso"] == "2026-07-15T09:45:00Z", r["utc"]'
       # An outage opens an incident: each patient's chain is checked for its kind, who decided it, its catalogue
-      # entries, its writes and the ward's final state.
+      # entries, its writes and the downstream system's final state.
       - name: The outage scenarios S11 and S12 in site-policy mode
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes policy --approve S11 S12
       - name: Readiness report and the IRIS log

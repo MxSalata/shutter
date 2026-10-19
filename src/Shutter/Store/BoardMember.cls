@@ -91,7 +91,7 @@ ClassMethod Seed() As %Status
          "perspective": "Is the message itself acceptable to the receiver?",
          "agentClass": "Shutter.Agent.Conformance", "knowledge": "contracts"},
         {"code": "encounter", "name": "Encounter Integrity", "role": "specialist", "sort": 20,
-         "description": "Reads the encounter's history on both sides, the ward's current state and version, and the lifecycle policy, to say whether the original intent still holds or a later event superseded it.",
+         "description": "Reads the encounter's history on both sides, the downstream system's current state and version, and the lifecycle policy, to say whether the original intent still holds or a later event superseded it.",
          "perspective": "Does the business intent behind the message still hold?",
          "agentClass": "Shutter.Agent.Encounter", "knowledge": "lifecycle"},
         {"code": "impact", "name": "Impact Analysis", "role": "specialist", "sort": 30,

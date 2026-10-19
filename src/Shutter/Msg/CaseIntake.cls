@@ -2,7 +2,7 @@
 Class Shutter.Msg.CaseIntake Extends Ens.Request
 {
 
-/// The ward operation as a JSON object (the contract's fields).
+/// The downstream operation as a JSON object (the contract's fields).
 Property OperationJSON As %String(MAXLEN = "");
 
 /// delivery_failed, uncertain_outcome, rejected.

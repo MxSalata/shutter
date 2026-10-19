@@ -1,14 +1,14 @@
 # Contracts between Shutter's parts
 
-Version 1.12, 19 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.13, 19 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
-## 1. The ward system's API
+## 1. The downstream system's API
 
-The synthetic ward system (`Wards.*`) stands in for a downstream bed-management system. It is the only receiver the production delivers to, for normal traffic, rehearsals and recovery alike. Base path `/wards/api`, JSON in and out, IRIS password authentication.
+The downstream system (`Downstream.*`), a demo bed-management system, stands in for a hospital's bed-management system. It is the only receiver the production delivers to, for normal traffic, rehearsals and recovery alike. Base path `/downstream/api`, JSON in and out, IRIS password authentication.
 
 ### 1.1 Apply an operation
 
-`POST /wards/api/operations`
+`POST /downstream/api/operations`
 
 ```json
 {
@@ -28,11 +28,11 @@ The synthetic ward system (`Wards.*`) stands in for a downstream bed-management 
 ```
 
 - `event` is one of `admit`, `transfer`, `discharge`, `update`. `ward` is required for `admit` and `transfer` and must be null for `discharge` and `update`.
-- `event_time` is the source event's time (see section 2), in ISO 8601 UTC with a `Z`. The ward stores it but **does not order by it**: operations are applied in arrival order. That is the receiver contract, and it is why a stale transfer applied late moves a patient backwards.
+- `event_time` is the source event's time (see section 2), in ISO 8601 UTC with a `Z`. The downstream system stores it but **does not order by it**: operations are applied in arrival order. That is the receiver contract, and it is why a stale transfer applied late moves a patient backwards.
 - `expected_version` is optional. When present, the operation applies only if the encounter's current version equals it. Normal traffic omits it; recovery always sends it.
-- `payload_digest` is the sender's SHA-256 of the canonical payload (section 1.6). The ward computes its own and compares them when an operation key is reused.
+- `payload_digest` is the sender's SHA-256 of the canonical payload (section 1.6). The downstream system computes its own and compares them when an operation key is reused.
 - `dry_run: true` runs the whole validation and the write inside a transaction that is always rolled back, and reports what would have happened. Nothing is committed, no receipt is stored, no event is appended.
-- A rehearsal's response also carries what it was checked against (v1.5): `encounter_before`, the encounter as the ward held it before the dry run (null when the ward has never seen it), `encounter_after` when it would apply, and `epoch`. The case workflow takes the receiver version an approval binds from `encounter_before.version`, never from `encounter_after`.
+- A rehearsal's response also carries what it was checked against (v1.5): `encounter_before`, the encounter as the downstream system held it before the dry run (null when the downstream system has never seen it), `encounter_after` when it would apply, and `epoch`. The case workflow takes the receiver version an approval binds from `encounter_before.version`, never from `encounter_after`.
 
 Responses:
 
@@ -44,20 +44,20 @@ Responses:
 | 409 | `{"error": "version_conflict", "expected_version": 1, "current_version": 2}` | `expected_version` present and different from the current version |
 | 409 | `{"error": "key_reused_with_different_payload", "operation_key": "…"}` | The key was committed with another payload digest |
 | 422 | `{"error": "invalid_transition", "state": "discharged", "event": "transfer"}` | The transition is not allowed (section 1.4) |
-| 422 | `{"error": "unknown_encounter", "encounter_id": "…"}` | `transfer`, `discharge` or `update` for an encounter the ward has never admitted |
+| 422 | `{"error": "unknown_encounter", "encounter_id": "…"}` | `transfer`, `discharge` or `update` for an encounter the downstream system has never admitted |
 | 422 | `{"error": "patient_mismatch", "encounter_id": "…"}` | The encounter exists for another patient (identity never silently changes) |
-| 422 | `{"error": "payload_digest_mismatch"}` | The sender's `payload_digest` differs from the ward's own computation |
+| 422 | `{"error": "payload_digest_mismatch"}` | The sender's `payload_digest` differs from the downstream system's own computation |
 | 422 | `{"error": "invalid_request", "detail": "…"}` | Missing or malformed fields |
 | 503 | `{"error": "ward_unavailable"}` | Fault `fail_before_accept` is on (section 1.5); nothing was validated or written |
 | 504 | empty body | Fault `commit_drop_response` is on: the operation **was committed** and the receipt stored, then the response was lost |
 
-Decided with the ward system (15 Oct): faults apply to real operations only, never to a dry run; a discharge sets `ward` to null; for an `admit`, `expected_version` 0 means "not yet seen"; the per-encounter lock waits 10 s and then answers 503 `ward_unavailable`; a reset answers 200 `{"reset": true}`; the dry run relies on a transaction rollback, so the database must be journaled (the default).
+Decided with the downstream system (15 Oct): faults apply to real operations only, never to a dry run; a discharge sets `ward` to null; for an `admit`, `expected_version` 0 means "not yet seen"; the per-encounter lock waits 10 s and then answers 503 `ward_unavailable`; a reset answers 200 `{"reset": true}`; the dry run relies on a transaction rollback, so the database must be journaled (the default).
 
 The order of checks for a non-dry run: fault `fail_before_accept`; request validity (including `patient_mismatch` and `payload_digest_mismatch`); a committed receipt for this key (return it, 200, before any version check, so a retry of an identical committed operation never looks like a version conflict); key reuse with a different digest (409); encounter existence (422); `expected_version` (409); transition (422); then, in one transaction: update the encounter, append the event, increment the version, store the receipt, commit; then fault `commit_drop_response` (504) or the 201.
 
 ### 1.2 Read an encounter
 
-`GET /wards/api/encounters/{encounter_id}`
+`GET /downstream/api/encounters/{encounter_id}`
 
 ```json
 {
@@ -75,11 +75,11 @@ The order of checks for a non-dry run: fault `fail_before_accept`; request valid
 }
 ```
 
-404 `{"error": "unknown_encounter"}` when the ward has never seen it. `state` is `admitted` or `discharged`. `history` is in application order, oldest first, and is immutable.
+404 `{"error": "unknown_encounter"}` when the downstream system has never seen it. `state` is `admitted` or `discharged`. `history` is in application order, oldest first, and is immutable.
 
 ### 1.3 Read a receipt
 
-`GET /wards/api/receipts/{operation_key}` (URL-encode the key)
+`GET /downstream/api/receipts/{operation_key}` (URL-encode the key)
 
 ```json
 {
@@ -96,7 +96,7 @@ The order of checks for a non-dry run: fault `fail_before_accept`; request valid
 }
 ```
 
-404 `{"error": "no_receipt"}` when nothing was committed under that key. Absence of a receipt is the ward's statement that the operation was not committed under that key, within its retention (unbounded in the demo).
+404 `{"error": "no_receipt"}` when nothing was committed under that key. Absence of a receipt is the downstream system's statement that the operation was not committed under that key, within its retention (unbounded in the demo).
 
 ### 1.4 Transitions and versions
 
@@ -110,11 +110,11 @@ Every applied operation increments the version by one. A transfer to the ward th
 
 ### 1.5 Faults, for the demos
 
-`POST /wards/api/faults` `{"mode": "off" | "fail_before_accept" | "commit_drop_response" | "misleading_duplicate_error", "operation_key": "…"}`. With `operation_key` the fault applies to that key only; without it, to every operation until `off`. Returns 200 `{"mode": …, "operation_key": …}`. `GET /wards/api/faults` returns the current setting.
+`POST /downstream/api/faults` `{"mode": "off" | "fail_before_accept" | "commit_drop_response" | "misleading_duplicate_error", "operation_key": "…"}`. With `operation_key` the fault applies to that key only; without it, to every operation until `off`. Returns 200 `{"mode": …, "operation_key": …}`. `GET /downstream/api/faults` returns the current setting.
 
 - `fail_before_accept`: 503 before any validation or write.
 - `commit_drop_response`: the operation is committed, then the response is a 504 with no body.
-- `misleading_duplicate_error`: with an `operation_key`, the ward answers 409 `{"error": "duplicate_message"}` for that key whatever the version, and writes nothing; without a key, it answers that way when `expected_version` mismatches, instead of `version_conflict`. (A buggy receiver that reports the wrong reason. Nothing else changes.)
+- `misleading_duplicate_error`: with an `operation_key`, the downstream system answers 409 `{"error": "duplicate_message"}` for that key whatever the version, and writes nothing; without a key, it answers that way when `expected_version` mismatches, instead of `version_conflict`. (A buggy receiver that reports the wrong reason. Nothing else changes.)
 
 ### 1.6 Canonical payload and digest
 
@@ -122,11 +122,11 @@ The canonical payload is the JSON object with exactly these keys in this order, 
 
 ### 1.7 Reset
 
-`POST /wards/api/reset` clears encounters, events, receipts and faults. 403 `{"error": "not_a_demo_instance"}` unless the installer has marked the instance as a demo (`^Wards.Config("demo") = 1`). The web application's password authentication applies.
+`POST /downstream/api/reset` clears encounters, events, receipts and faults. 403 `{"error": "not_a_demo_instance"}` unless the installer has marked the instance as a demo (`^Downstream.Config("demo") = 1`). The web application's password authentication applies.
 
 ### 1.8 Capabilities (v1.4)
 
-`GET /wards/api/capabilities` says what the ward guarantees, so that the gate's connector-capability check reads something real:
+`GET /downstream/api/capabilities` says what the downstream system guarantees, so that the gate's connector-capability check reads something real:
 
 ```json
 {
@@ -141,18 +141,18 @@ The canonical payload is the JSON object with exactly these keys in this order, 
 }
 ```
 
-- `POST /wards/api/capabilities` `{"conditional_writes": false}` is the demo switch (demo instances only, like the reset): afterwards any operation that carries `expected_version` is refused with 422 `{"error": "unsupported_precondition"}`, and the read says `"conditional_writes": false`. `{"conditional_writes": true}` restores it; the reset restores it too.
+- `POST /downstream/api/capabilities` `{"conditional_writes": false}` is the demo switch (demo instances only, like the reset): afterwards any operation that carries `expected_version` is refused with 422 `{"error": "unsupported_precondition"}`, and the read says `"conditional_writes": false`. `{"conditional_writes": true}` restores it; the reset restores it too.
 - `epoch` is an integer that increments at every reset. It appears here, in every encounter read (`"epoch"` beside `"version"`) and in every receipt. An approval binds the epoch it was given, so an approval from before a reset cannot authorise a dispatch after it even when the version numbers happen to match.
-- `last_contract_check` is whatever the ward recorded last (the HTTP check writes it); null when never run.
-- `POST /wards/api/capabilities` also takes `last_contract_check` as `{"at": "<ISO 8601 UTC>", "result": "<text>"}`, both fields required (v1.5): the test tools write it after a contract check. Any other field is refused with 422 `{"error": "invalid_request"}`, and nothing changes when any part of a request is refused. On an instance that is not a demo the POST answers 403 `{"error": "not_a_demo_instance"}`.
+- `last_contract_check` is whatever the downstream system recorded last (the HTTP check writes it); null when never run.
+- `POST /downstream/api/capabilities` also takes `last_contract_check` as `{"at": "<ISO 8601 UTC>", "result": "<text>"}`, both fields required (v1.5): the test tools write it after a contract check. Any other field is refused with 422 `{"error": "invalid_request"}`, and nothing changes when any part of a request is refused. On an instance that is not a demo the POST answers 403 `{"error": "not_a_demo_instance"}`.
 
 ### 1.9 Receipt lookup unavailable (v1.4)
 
-Fault mode `receipt_lookup_unavailable`, with an `operation_key`: `GET /wards/api/receipts/{key}` answers 503 `{"error": "ward_unavailable"}` for that key while the commit, the encounter read and the history stand. It shows that the absence of a readable receipt is not evidence that nothing was committed: the gate's effect check answers unknown, and no write is dispatched.
+Fault mode `receipt_lookup_unavailable`, with an `operation_key`: `GET /downstream/api/receipts/{key}` answers 503 `{"error": "ward_unavailable"}` for that key while the commit, the encounter read and the history stand. It shows that the absence of a readable receipt is not evidence that nothing was committed: the gate's effect check answers unknown, and no write is dispatched.
 
 ### 1.10 Roles and credentials
 
-The web application `/wards/api` requires password authentication and the role `Wards_API` (created by the ward installer; the demo users and the production's credentials get it). The production reaches it through an `EnsLib.HTTP.OutboundAdapter` with the Ens credentials entry `WardsAPI`.
+The web application `/downstream/api` requires password authentication and the role `Downstream_API` (created by the downstream system's installer; the demo users and the production's credentials get it). The production reaches it through an `EnsLib.HTTP.OutboundAdapter` with the Ens credentials entry `DownstreamAPI`.
 
 ## 2. The operation key and the HL7 mapping
 
@@ -174,12 +174,12 @@ From an HL7 v2.5.1 ADT message:
 
 Scenario S8's third message comes from a second source system, `BEDMGR` (MSH-3), for the same encounter (v1.5): its operation key starts `BEDMGR^HOSP^…`, so it is a different operation from the PAS messages even when it describes the same movement. Admit to Ward A applied; the 09:20 transfer to Ward B fails; the bed manager's own transfer to Ward C, also timed 09:20, applies. Neither event is later than the other, so supersession is unknown: nothing is resent.
 
-The business process that builds the ward operation and delivers it is `Shutter.Process.ADTToWard`; the mapping it uses is the class method `Shutter.Util.OperationKey.FromHL7(message)`, shared with the evidence collector, the index and the fixtures. The same mapping, as an ObjectScript class method, is `Shutter.Util.OperationKey.FromHL7(message)` so the evidence collector and the fixtures agree.
+The business process that builds the downstream operation and delivers it is `Shutter.Process.ADTToWard`; the mapping it uses is the class method `Shutter.Util.OperationKey.FromHL7(message)`, shared with the evidence collector, the index and the fixtures. The same mapping, as an ObjectScript class method, is `Shutter.Util.OperationKey.FromHL7(message)` so the evidence collector and the fixtures agree.
 
 ## 3. HL7 fixtures
 
 - HL7 v2.5.1, one message per file, segments separated by carriage returns (`\r`), files under `fixtures/<scenario>/`, named `<scenario>-<nn>-<event>.hl7` (for example `S1-02-A02.hl7`). UTF-8, ASCII content.
-- MSH-3 `PAS` (S8's third message: `BEDMGR`, a bed management system; v1.5), MSH-4 `HOSP`, MSH-5 `WARDS`, MSH-6 `HOSP`, MSH-9 `ADT^A02^ADT_A02`, MSH-10 unique across all fixtures (`MSG` plus five digits), MSH-11 `P`, MSH-12 `2.5.1`.
+- MSH-3 `PAS` (S8's third message: `BEDMGR`, a bed management system; v1.5), MSH-4 `HOSP`, MSH-5 `DOWNSTREAM`, MSH-6 `HOSP`, MSH-9 `ADT^A02^ADT_A02`, MSH-10 unique across all fixtures (`MSG` plus five digits), MSH-11 `P`, MSH-12 `2.5.1`.
 - EVN-1 the trigger, EVN-2 the recorded time, EVN-6 the event time (both `YYYYMMDDHHMMSS`; a value with an offset is shifted to UTC, one without is read in the site profile's `feed.time_zone`, v1.11).
 - PID-3 `MRN1001^^^HOSP^MR`; PID-5 synthetic names (no real people); PID-7 a date of birth; PID-8 a sex code.
 - PV1-2 `I`; PV1-3 `WARD-A^BAY1^01^HOSP` (point of care, room, bed, facility); PV1-19 `ENC-1001`; PV1-44 the admit time.
@@ -205,16 +205,16 @@ The business process that builds the ward operation and delivers it is `Shutter.
 ]
 ```
 
-Step kinds: `file` (drop the file into the ADT In folder; `expect` is `delivered` by default or `delivery_fails`), `fault` (section 1.5, with an optional `operation_key`), `wait` (`seconds`). The runner leaves at least two seconds between files so the production applies them in order. Two more (v1.4 and v1.5): `wait_for_state` (section 4.1), and `capabilities`, an object the runner posts to `/wards/api/capabilities` (section 1.8), as S10 does with `{"capabilities": {"conditional_writes": false}}`.
+Step kinds: `file` (drop the file into the ADT In folder; `expect` is `delivered` by default or `delivery_fails`), `fault` (section 1.5, with an optional `operation_key`), `wait` (`seconds`). The runner leaves at least two seconds between files so the production applies them in order. Two more (v1.4 and v1.5): `wait_for_state` (section 4.1), and `capabilities`, an object the runner posts to `/downstream/api/capabilities` (section 1.8), as S10 does with `{"capabilities": {"conditional_writes": false}}`.
 
 ## 4. The scenario runner
 
 `Shutter.Scenarios.Runner`, class methods marked `SqlProc` so the app and the scripts can call them through SQL:
 
 - `List() As %String`: the scenarios as JSON (the `scenarios.json` content with the fixture files resolved).
-- `Run(scenario As %String, mode As %String = "board") As %String`: resets the ward (section 1.7), sets the run mode for the case workflow (`board`, `single`, `rules` or `policy`, by writing `^Shutter.Config("mode")`) and the running scenario (`^Shutter.Config("scenario")` = the scenario id, which the case intake stamps on the case, so that recorded agent runs replay by scenario on any instance), then executes the steps: faults through the ward API, files copied into the production's inbound folder (`^Shutter.Config("adtIn")`, set by `Shutter.Setup`), waits. Returns JSON `{"scenario": "S1", "started_at": "…", "files": [...]}`. It does not wait for the case; the production and the app do the rest.
-- `Reset() As %String`: the ward reset, the inbound and archive folders emptied, `^Shutter.Config("mode")` back to `board`, `^Shutter.Config("scenario")` cleared, and `^Shutter.Config("resetAt")` set to the ISO UTC time of the reset. Encounter ids are fixed per scenario, so the evidence collector ignores message-store events older than `resetAt`; the ward's own history is per run already.
-- The runner may call `Wards.Service` in process for the reset and the faults; the production always goes through HTTP.
+- `Run(scenario As %String, mode As %String = "board") As %String`: resets the downstream system (section 1.7), sets the run mode for the case workflow (`board`, `single`, `rules` or `policy`, by writing `^Shutter.Config("mode")`) and the running scenario (`^Shutter.Config("scenario")` = the scenario id, which the case intake stamps on the case, so that recorded agent runs replay by scenario on any instance), then executes the steps: faults through the downstream API, files copied into the production's inbound folder (`^Shutter.Config("adtIn")`, set by `Shutter.Setup`), waits. Returns JSON `{"scenario": "S1", "started_at": "…", "files": [...]}`. It does not wait for the case; the production and the app do the rest.
+- `Reset() As %String`: the downstream system's reset, the inbound and archive folders emptied, `^Shutter.Config("mode")` back to `board`, `^Shutter.Config("scenario")` cleared, and `^Shutter.Config("resetAt")` set to the ISO UTC time of the reset. Encounter ids are fixed per scenario, so the evidence collector ignores message-store events older than `resetAt`; the downstream system's own history is per run already.
+- The runner may call `Downstream.Service` in process for the reset and the faults; the production always goes through HTTP.
 - Settings the runner reads, all set by `Shutter.Setup`: `^Shutter.Config("fixtures")` (the fixtures directory), `("adtIn")`, `("adtArchive")`. The ADT In service takes `*.hl7` and archives what it has read.
 - The run mode (`board`, `single`, `rules`) is the investigation mode. Whether agents run live, record or replay is the production's setting on the agent items, independent of it.
 
@@ -254,11 +254,11 @@ conditions that matter; an unlisted condition is a wildcard. A listed condition 
 | `delivery` | `failed`, `rejected`, `uncertain`, `unmappable` | the case's failure kind (1.1: 503 and connection failures are `failed`; 409 and 422 are `rejected`; 504 is `uncertain`; a message Shutter could not map to an operation is `unmappable`, v1.9) |
 | `receiver_answer` | `unavailable`, `timeout`, `duplicate`, `version_conflict`, `refused`, `none` | the error item's reason code, else its HTTP status (504 `timeout`, 409 and 422 `refused`, 503 `unavailable`); an uncertain delivery with no code reads `timeout` |
 | `receipt` | `present`, `absent`, `unreadable`, `none` | the receipt lookup: 200, 404, anything else (1.9); `none` when the receiver has no receipt endpoint (6.4), which is a fact about the receiver, not a failed lookup |
-| `later_applied` | `none`, `transfer`, `discharge`, `admit`, `update` | among the applied events for the encounter whose event time is later than the failed operation's (the ward history and the timeline), by precedence: `discharge` if any, else `transfer` if any, else `admit` (a later admission, v1.11), else `update` (an A08), else `none` |
+| `later_applied` | `none`, `transfer`, `discharge`, `admit`, `update` | among the applied events for the encounter whose event time is later than the failed operation's (the downstream system's history and the timeline), by precedence: `discharge` if any, else `transfer` if any, else `admit` (a later admission, v1.11), else `update` (an A08), else `none` |
 | `event_time` | `plausible`, `before_admission`, `future`, `far_from_recorded`, `clock_change` | the failed event's time (v1.11, T28): before the admission the message (PV1-44) or the receiver's first history entry names, for anything but an admission; more than five minutes after the message was sent or the evidence was taken; more than a day from the recording time (EVN-2); without an offset, read in `Europe/London`, and within an hour of a British clock change (the order of two events is then not safe); plausible otherwise |
-| `encounter_state` | `admitted`, `discharged`, `not_found`, `unknown` | the ward's state; `not_found` when the receiver answers 404 (it does not know the encounter); `unknown` when the receiver can't be read |
+| `encounter_state` | `admitted`, `discharged`, `not_found`, `unknown` | the downstream system's state; `not_found` when the receiver answers 404 (it does not know the encounter); `unknown` when the receiver can't be read |
 | `transition` | `allowed`, `invalid`, `unknown` | the failed event from the encounter's current state (1.4): a transfer after a discharge is `invalid` |
-| `patient_match` | `yes`, `no`, `unknown` | the message's PID-3 against the ward's patient for the encounter |
+| `patient_match` | `yes`, `no`, `unknown` | the message's PID-3 against the downstream system's patient for the encounter |
 | `simultaneous_sources` | `yes`, `no` | an applied event for the encounter from another source system with the same event time as the failed operation (S8) |
 | `conditional_writes` | `yes`, `no`, `unknown` | the route's capability profile (1.8) |
 | `free_text` | `yes`, `no` | the message carries free text (an OBX note or an NTE) |
@@ -331,9 +331,9 @@ reads it through `Shutter.Store.SiteProfile`.
 {
   "version": 1,
   "receivers": [
-    {"name": "Ward Out", "system": "the ward bed-management system", "tier": 2,
+    {"name": "Downstream Out", "system": "the demo bed-management system", "tier": 2,
      "applies": "arrival_order", "resend_timestamp": "original", "cancels": false,
-     "api": {"base": "/wards/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}",
+     "api": {"base": "/downstream/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}",
              "capabilities": "/capabilities", "operations": "/operations"},
      "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}}
   ],
@@ -361,7 +361,7 @@ reads it through `Shutter.Store.SiteProfile`.
   collector, the verifier and the connector read their paths from the entry named by the case's receiver (the
   production item that delivered to it), so a second receiver is configuration, not code. A path left empty means the
   receiver has no such endpoint: no receipt lookup, and the capabilities are the declared features, which the route
-  item records as `capabilities_source`. An entry without `api` takes the ward's paths.
+  item records as `capabilities_source`. An entry without `api` takes the downstream system's paths.
 - `PUT /site-profile` refuses a profile that has not this shape, naming the field (unknown top-level fields and
   unknown `api` paths or `features` are refused too); every stored version is kept with who stored it and from where,
   `GET /site-profile/history` lists them (v1.9). `feed.time_zone` (v1.11) names the zone of timestamps without an
@@ -486,12 +486,12 @@ cites entries by id. The coordinator's instructions say the plan names the entry
 
 ### 7.6 Scenario S11, an outage burst
 
-Eight failures for six patients to the ward, in one burst (the fault `fail_before_accept` on, the files, the fault off):
-P1 one failed A02 (E2, single); P2 A02 and A03 failed (E4, ordered); P3 A02 failed, A08 applied, a later A02 applied, A03
-failed (E5, interleaved, board); P4 A02 failed, then a later A02 applied (E1, superseded); P5 A02 failed after an applied
-A03 (E6); P6 a failed A01 (E2, single, admit). Expected: the policy chains resolved without the board at tier 2
-(automatic single, approval ordered), P3 by the board, and the final ward state per patient listed in
-`fixtures/scenarios.json`. Its recordings are hand-written until a key is available.
+Eight failures for six patients to the downstream system, in one burst (the fault `fail_before_accept` on, the files,
+the fault off): P1 one failed A02 (E2, single); P2 A02 and A03 failed (E4, ordered); P3 A02 failed, A08 applied, a later
+A02 applied, A03 failed (E5, interleaved, board); P4 A02 failed, then a later A02 applied (E1, superseded); P5 A02
+failed after an applied A03 (E6); P6 a failed A01 (E2, single, admit). Expected: the policy chains resolved without the
+board at tier 2 (automatic single, approval ordered), P3 by the board, and the downstream system's final state per
+patient listed in `fixtures/scenarios.json`. Its recordings are hand-written until a key is available.
 
 ## 8. The exact index (v1.9)
 
@@ -620,6 +620,16 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.13, 19 Oct 2026: the receiving system is named the downstream system (a demo bed-management system): the package
+  `Downstream.*` with its globals `^Downstream.*` (was `Wards.*`), the web application `/downstream/api`, the resource
+  and role `Downstream_API`, the role `Shutter_DownstreamClient`, the user `downstream-client`, the Ens credential
+  `DownstreamAPI`, the production items `Downstream Out` and `ADT to Downstream`, MSH-5 `DOWNSTREAM` in the fixtures
+  (3), and the knowledge ids `downstream-interface-contract` and `downstream-api-v1`. The wire codes (`ward_unavailable`,
+  `ward_error`), the snapshot keys (`ward_state`, `ward_state_http_status`, `ward_api`), the tool `GetWardState`, the
+  readiness keys and the `ward` field (the patient's location) keep their names. The installer removes the names from
+  before (`/wards/api`, `Wards_API`, `Shutter_WardClient`, `wards-client`, `WardsAPI` and the `Wards` classes) when it
+  finds them. Nothing under `^Wards.*` is migrated: a volume from before this version is removed once
+  (`docker compose down -v`) before the first `up` of a newer build.
 - v1.12, 19 Oct 2026: `mail.from` is the sender of escalation emails when set; the addresses a person types are checked
   against `mail.allowed_domains` at `PATCH` and at the send (422 `address_not_allowed`). The recordings re-made with the
   zone: the shipped seed profile says `Europe/London` (6.4), and the scenario S13 (a transfer timed before its

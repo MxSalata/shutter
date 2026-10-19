@@ -103,7 +103,7 @@ Property CurrentPlan As Shutter.Store.Plan(%JSONFIELDNAME = "currentPlanId", %JS
 Property CurrentApproval As Shutter.Store.Approval(%JSONFIELDNAME = "currentApprovalId", %JSONREFERENCE = "ID");
 
 /// Open a case for an operation, or return the open one for the same key. The operation is the
-/// ward operation as built by Shutter.Util.OperationKey.FromHL7.
+/// downstream operation as built by Shutter.Util.OperationKey.FromHL7.
 ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %String, ensSessionId As %String, sourceHeaderId As %String, mode As %String, Output case As Shutter.Store.Case, Output opened As %Boolean) As %Status
 {
     Set sc = $$$OK, opened = 0
@@ -113,7 +113,7 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
         // An open case from before the last scenario reset belongs to an earlier run: close it.
         Set resetAt = $GET(^Shutter.Config("resetAt"))
         If (resetAt '= "") && (resetAt ]] case.OpenedAt) {
-            Do case.Transition("failed", "Abandoned: a new scenario run reset the ward after this case was opened", "system")
+            Do case.Transition("failed", "Abandoned: a new scenario run reset the downstream system after this case was opened", "system")
             Set case = ""
         } Else {
             // The same key with other content (a corrected message resent with the same event time): the open case's plan
@@ -297,7 +297,7 @@ ClassMethod DescribeFailure(case As Shutter.Store.Case) As %String [ Private ]
 {
     Set what = $CASE(case.Event, "admit": "admission", "transfer": "transfer to " _ case.Ward, "discharge": "discharge", "update": "update", "": "message", : case.Event _ " message")
     Set when = $REPLACE($PIECE(case.EventTime, "Z", 1), "T", " ")
-    Set how = $CASE(case.FailureKind, "delivery_failed": "was not delivered", "uncertain_outcome": "has an uncertain outcome", "rejected": "was rejected", "unmappable": "could not be mapped to a ward operation", : "failed")
+    Set how = $CASE(case.FailureKind, "delivery_failed": "was not delivered", "uncertain_outcome": "has an uncertain outcome", "rejected": "was rejected", "unmappable": "could not be mapped to an operation for the downstream system", : "failed")
     Quit "The " _ what _ " of " _ when _ " for encounter " _ case.EncounterId _ " " _ how
 }
 

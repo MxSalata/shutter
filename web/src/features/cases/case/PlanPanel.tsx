@@ -110,7 +110,7 @@ export function PlanPanel({ view, loading }: { view: PlanView | null | undefined
                 'Exact action',
                 write
                   ? `${humanize(p.actionType || String(action.type ?? 'resend'))} the case's operation`
-                  : 'Nothing is written to the ward',
+                  : 'Nothing is written to the downstream system',
               ],
               [
                 'Conditional on receiver version',
@@ -204,7 +204,7 @@ export function PlanPanel({ view, loading }: { view: PlanView | null | undefined
   );
 }
 
-/** The ward's dry run of the exact action, read from the rehearsal's own response (CONTRACTS 1.4, WIC-2.5). */
+/** The downstream system's dry run of the exact action, read from the rehearsal's own response (CONTRACTS 1.4, WIC-2.5). */
 export function RehearsalPanel({ view, write }: { view: PlanView | null | undefined; write: boolean }) {
   const r = view?.rehearsal;
   const response = asObject(r?.response) ?? {};
@@ -213,12 +213,12 @@ export function RehearsalPanel({ view, write }: { view: PlanView | null | undefi
   const describe = (e: Record<string, unknown> | undefined) =>
     e
       ? `${humanize(String(e.state ?? ''))}${e.ward ? ` in ${String(e.ward)}` : ''}, version ${String(e.version ?? '')}`
-      : 'not known to the ward';
+      : 'not known to the downstream system';
   return (
     <Section
       id="rehearsal"
       title="Rehearsal"
-      note="A dry run of the exact action on the same ward, inside a transaction the ward rolls back. It shows the action would validate and apply against the state it read; it reserves nothing. The dispatch is a separate conditional write, checked again first."
+      note="A dry run of the exact action on the downstream system itself, inside a transaction it rolls back. It shows the action would validate and apply against the state it read; it reserves nothing. The dispatch is a separate conditional write, checked again first."
       aside={
         r ? (
           <Badge color={r.wouldApply ? 'teal' : 'red'} style={{ textTransform: 'none' }}>
@@ -239,7 +239,7 @@ export function RehearsalPanel({ view, write }: { view: PlanView | null | undefi
             ],
             ['Would leave', after ? describe(after) : ''],
             ['Epoch', response.epoch !== undefined ? String(response.epoch) : ''],
-            ['The ward answered', `HTTP ${r.httpStatus}${r.reason ? `, ${r.reason}` : ''}`],
+            ['The downstream system answered', `HTTP ${r.httpStatus}${r.reason ? `, ${r.reason}` : ''}`],
             ['Rolled back', 'Yes: nothing was committed and no receipt was stored'],
             ['When', <Timestamp key="t" iso={r.at} />],
           ]}

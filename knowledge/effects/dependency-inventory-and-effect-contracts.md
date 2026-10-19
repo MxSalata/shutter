@@ -2,27 +2,28 @@
 id: dependency-inventory-and-effect-contracts
 version: 1.0
 collection: effects
-applies_to: [ward-api-v1]
+applies_to: [downstream-api-v1]
 effective_from: 2026-10-01
 ---
 
 # Ward location: dependency inventory and effect contracts
 
-Integration team register of what depends on the ward bed management system's record, and what each operation is
+Integration team register of what depends on the downstream system's record, and what each operation is
 expected to change. Version 1.0, in force from 1 October 2026.
 
 ## DEP-1 Who consumes the ward location
 
 | Consumer | What it does with the location | How it hears | Observable from the integration engine |
 |---|---|---|---|
-| Ward bed management system | The record of where each patient is: beds, wards, history | It is the receiver | Yes: encounter history and receipts (WIC-5) |
-| Bed board (capacity) | Shows which beds are free; plans admissions | Reads the ward system every minute | No |
-| Pharmacy dispensing | Sends medicines to the patient's current ward | Notified by the ward system on every location change | No |
-| Patient transport (porters) | Creates a move task when a transfer is applied | Notified by the ward system on every applied transfer | No |
-| Electronic patient record | Shows the current location to clinicians | Reads the ward system on demand | No |
+| Demo bed-management system (the downstream system) | The record of where each patient is: beds, wards, history | It is the receiver | Yes: encounter history and receipts (WIC-5) |
+| Bed board (capacity) | Shows which beds are free; plans admissions | Reads the downstream system every minute | No |
+| Pharmacy dispensing | Sends medicines to the patient's current ward | Notified by the downstream system on every location change | No |
+| Patient transport (porters) | Creates a move task when a transfer is applied | Notified by the downstream system on every applied transfer | No |
+| Electronic patient record | Shows the current location to clinicians | Reads the downstream system on demand | No |
 
-DEP-1.1. Only the ward system's own record can be checked from the integration engine. Effects on the other consumers
-follow from the ward system's record but can't be verified here; any claim about them is an inference and must say so.
+DEP-1.1. Only the downstream system's own record can be checked from the integration engine. Effects on the other
+consumers follow from the downstream system's record but can't be verified here; any claim about them is an inference
+and must say so.
 
 ## DEP-2 Effect contracts
 

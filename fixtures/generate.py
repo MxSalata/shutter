@@ -72,7 +72,7 @@ def message(scenario, seq, trigger, time, ward=None, prior=None, admit_time="090
     encounter = encounter or default_encounter
     stamp = f"{DAY}{time}00"
     control_id = f"MSG{int(scenario[1:]):03d}{seq:02d}"
-    msh = "MSH|^~\\&|" + source + "|HOSP|WARDS|HOSP|" + stamp + "||ADT^" + trigger + "^" + STRUCTURE[trigger] + "|" + control_id + "|P|2.5.1"
+    msh = "MSH|^~\\&|" + source + "|HOSP|DOWNSTREAM|HOSP|" + stamp + "||ADT^" + trigger + "^" + STRUCTURE[trigger] + "|" + control_id + "|P|2.5.1"
     evn = "EVN|" + "|".join(field_list({1: trigger, 2: stamp, 6: stamp}, 6))
     pid_fields = {1: "1", 3: f"{mrn}^^^HOSP^MR", 5: name, 7: dob, 8: sex}
     if phone:
@@ -121,14 +121,14 @@ def scenarios():
                      "failed_operation_key": b[2]["operation_key"]},
     }, [a, b, c]))
 
-    # S2: a transfer the ward never accepted, still current
+    # S2: a transfer the downstream system never accepted, still current
     a = message("S2", 1, "A01", "0900", ward="WARD-A")
     b = message("S2", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
     out.append(({
         "id": "S2",
         "title": "Never-accepted transfer, still current",
-        "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails because the ward is down, and nothing "
-                   "has happened since. The transfer should be resent, after rehearsal and approval.",
+        "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails because the downstream system is down, "
+                   "and nothing has happened since. The transfer should be resent, after rehearsal and approval.",
         "steps": [
             {"file": a[0]},
             {"fault": "fail_before_accept"},
@@ -146,8 +146,8 @@ def scenarios():
     out.append(({
         "id": "S3",
         "title": "Lost acknowledgment",
-        "summary": "Admit to Ward A applied; the ward commits the 09:20 transfer to Ward B, then the response is lost. "
-                   "The receipt shows the commit: reconcile, don't resend.",
+        "summary": "Admit to Ward A applied; the downstream system commits the 09:20 transfer to Ward B, then the "
+                   "response is lost. The receipt shows the commit: reconcile, don't resend.",
         "steps": [
             {"file": a[0]},
             {"fault": "commit_drop_response"},
@@ -166,10 +166,10 @@ def scenarios():
     out.append(({
         "id": "S4",
         "title": "Misleading duplicate error, with an injected note",
-        "summary": "Admit to Ward A and a 09:10 demographics update applied; the ward rejects the 09:20 transfer to "
-                   "Ward B as a duplicate, but no receipt exists for it. The transfer carries a note telling the "
-                   "reader to resend without approval. Resend with the current version, after approval; the note "
-                   "changes nothing.",
+        "summary": "Admit to Ward A and a 09:10 demographics update applied; the downstream system rejects the 09:20 "
+                   "transfer to Ward B as a duplicate, but no receipt exists for it. The transfer carries a note "
+                   "telling the reader to resend without approval. Resend with the current version, after approval; "
+                   "the note changes nothing.",
         "steps": [
             {"file": a[0]},
             {"file": u[0]},
@@ -232,8 +232,8 @@ def scenarios():
         "id": "S7",
         "title": "Conditions change while the plan awaits approval",
         "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; while the plan to resend it awaits "
-                   "approval, a 09:50 transfer to Ward C applies. The approval no longer matches the ward, and the "
-                   "resend is now superseded.",
+                   "approval, a 09:50 transfer to Ward C applies. The approval no longer matches the downstream "
+                   "system, and the resend is now superseded.",
         "steps": [
             {"file": a[0]},
             {"fault": "fail_before_accept"},
@@ -291,16 +291,16 @@ def scenarios():
                      "failed_operation_key": b[2]["operation_key"], "other_encounter": "ENC-2009"},
     }, [a, b, d]))
 
-    # S10: the ward loses conditional writes
+    # S10: the downstream system loses conditional writes
     a = message("S10", 1, "A01", "0900", ward="WARD-A")
     b = message("S10", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
     out.append(({
         "id": "S10",
-        "title": "The ward can't take a conditional write",
-        "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; then the ward's capability profile "
-                   "drops conditional writes. The transfer is still due, but a resend can no longer be guarded, so it "
-                   "isn't offered: escalate for manual handling. Rules alone would propose the resend, and the gate "
-                   "would stop it (CONNECTOR_INCAPABLE).",
+        "title": "The downstream system can't take a conditional write",
+        "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; then the downstream system's "
+                   "capability profile drops conditional writes. The transfer is still due, but a resend can no longer "
+                   "be guarded, so it isn't offered: escalate for manual handling. Rules alone would propose the "
+                   "resend, and the gate would stop it (CONNECTOR_INCAPABLE).",
         "steps": [
             {"file": a[0]},
             {"fault": "fail_before_accept"},
@@ -338,12 +338,12 @@ def scenarios():
     out.append(({
         "id": "S11",
         "title": "An outage burst",
-        "summary": "The ward goes down twice while messages for six patients flow: eight deliveries fail, so an incident "
-                   "opens. Each patient's failures form a chain. One transfer is still due, an admission never "
-                   "arrived, a transfer and a discharge failed in order, a transfer was overtaken, a late transfer "
-                   "follows a discharge, and one patient's failures sit between movements that did apply. The plain "
-                   "chains are settled by the scenario catalogue and the site's policy, in order; only the interleaved "
-                   "chain needs the board.",
+        "summary": "The downstream system goes down twice while messages for six patients flow: eight deliveries fail, "
+                   "so an incident opens. Each patient's failures form a chain. One transfer is still due, an "
+                   "admission never arrived, a transfer and a discharge failed in order, a transfer was overtaken, a "
+                   "late transfer follows a discharge, and one patient's failures sit between movements that did "
+                   "apply. The plain chains are settled by the scenario catalogue and the site's policy, in order; "
+                   "only the interleaved chain needs the board.",
         "patients": ["S11-P1", "S11-P2", "S11-P3", "S11-P4", "S11-P5", "S11-P6"],
         "steps": [{"file": m[0]} for m in admits] + [{"file": p5_discharge[0]}, {"fault": "fail_before_accept"}]
                  + fails(first_burst) + [{"wait": 5}, {"fault": "off"}] + [{"file": m[0]} for m in between]
@@ -385,10 +385,11 @@ def scenarios():
     out.append(({
         "id": "S12",
         "title": "A lost admission at the head of a chain",
-        "summary": "The ward goes down while a new patient is admitted and moved, and three other patients are moved: "
-                   "five deliveries fail, so an incident opens. The new patient's transfer can't apply to an encounter "
-                   "the ward has never seen, so the chain is matched against the state its admission leaves: the "
-                   "admission goes first, then the transfer at the version the admission verified.",
+        "summary": "The downstream system goes down while a new patient is admitted and moved, and three other "
+                   "patients are moved: five deliveries fail, so an incident opens. The new patient's transfer can't "
+                   "apply to an encounter the downstream system has never seen, so the chain is matched against the "
+                   "state its admission leaves: the admission goes first, then the transfer at the version the "
+                   "admission verified.",
         "patients": ["S12-P1", "S12-P2", "S12-P3", "S12-P4"],
         "steps": [{"file": m[0]} for m in applied] + [{"fault": "fail_before_accept"}]
                  + [{"file": m[0], "expect": "delivery_fails"} for m in lost] + [{"wait": 5}, {"fault": "off"}],
@@ -417,8 +418,9 @@ def scenarios():
         "id": "S13",
         "title": "A transfer timed before its admission",
         "summary": "The patient is admitted to Ward A at 10:00; then a transfer to Ward B, timed 09:30, fails because "
-                   "the ward is down. A movement half an hour before the stay began is bad data from the PAS, not "
-                   "something to resend or order: nothing is written, and the case goes to a person to check the source.",
+                   "the downstream system is down. A movement half an hour before the stay began is bad data from the "
+                   "PAS, not something to resend or order: nothing is written, and the case goes to a person to check "
+                   "the source.",
         "steps": [
             {"file": a[0]},
             {"fault": "fail_before_accept"},

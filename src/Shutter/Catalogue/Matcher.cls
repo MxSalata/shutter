@@ -236,8 +236,8 @@ ClassMethod SimultaneousSource(summary As %DynamicObject, case As Shutter.Store.
     Quit "no"
 }
 
-/// The snapshot item of a kind from a summary's items, or "". The summary itself carries the ward state, the
-/// receipt and the route; the error is read from the snapshot through the case.
+/// The snapshot item of a kind from a summary's items, or "". The summary itself carries the downstream system's
+/// state, the receipt and the route; the error is read from the snapshot through the case.
 ClassMethod Item(summary As %DynamicObject, kind As %String) As %DynamicObject [ Private ]
 {
     Set failure = summary.%Get("failure")

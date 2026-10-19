@@ -1,6 +1,6 @@
-/// An encounter in the synthetic ward system: its state, its current ward and a version that every applied
-/// operation increments. The history of what was applied is in <class>Wards.Event</class>.
-Class Wards.Encounter Extends %Persistent
+/// An encounter in the downstream system: its state, its current ward and a version that every applied
+/// operation increments. The history of what was applied is in <class>Downstream.Event</class>.
+Class Downstream.Encounter Extends %Persistent
 {
 
 Property EncounterId As %String(COLLATION = "EXACT", MAXLEN = 64) [ Required ];
@@ -29,12 +29,12 @@ Method ToJSON() As %DynamicObject
     If ..Ward = "" { Do out.%Set("ward", "", "null") } Else { Do out.%Set("ward", ..Ward) }
     Do out.%Set("version", ..Version, "number")
     Do out.%Set("updated_at", ..UpdatedAt)
-    Do out.%Set("epoch", ##class(Wards.Service).Epoch(), "number")
+    Do out.%Set("epoch", ##class(Downstream.Service).Epoch(), "number")
     // Every applied operation added one version, so the history is versions 1 to Version. Read through the unique
-    // index rather than SQL: the API's users have the Wards_API role and no SQL privileges.
+    // index rather than SQL: the API's users have the Downstream_API role and no SQL privileges.
     Set history = []
     For version = 1:1:..Version {
-        Set event = ##class(Wards.Event).EncounterVersionIdxOpen(..EncounterId, version)
+        Set event = ##class(Downstream.Event).EncounterVersionIdxOpen(..EncounterId, version)
         Do:$ISOBJECT(event) history.%Push(event.ToJSON())
     }
     Do out.%Set("history", history)
@@ -69,11 +69,11 @@ Storage Default
 <Value>UpdatedAt</Value>
 </Value>
 </Data>
-<DataLocation>^Wards.EncounterD</DataLocation>
+<DataLocation>^Downstream.EncounterD</DataLocation>
 <DefaultData>EncounterDefaultData</DefaultData>
-<IdLocation>^Wards.EncounterD</IdLocation>
-<IndexLocation>^Wards.EncounterI</IndexLocation>
-<StreamLocation>^Wards.EncounterS</StreamLocation>
+<IdLocation>^Downstream.EncounterD</IdLocation>
+<IndexLocation>^Downstream.EncounterI</IndexLocation>
+<StreamLocation>^Downstream.EncounterS</StreamLocation>
 <Type>%Storage.Persistent</Type>
 }
 }

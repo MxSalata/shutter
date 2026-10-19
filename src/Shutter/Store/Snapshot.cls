@@ -1,5 +1,5 @@
 /// An immutable set of observations about a case at one moment: the failed message, validation
-/// results, the ward's state and receipts, later events, routes. Every agent on the board reads
+/// results, the downstream system's state and receipts, later events, routes. Every agent on the board reads
 /// the same snapshot, named by its digest; new evidence means a new snapshot.
 Class Shutter.Store.Snapshot Extends (%Persistent, %JSON.Adaptor)
 {
@@ -26,7 +26,7 @@ Property TakenAt As %String(%JSONFIELDNAME = "takenAt", MAXLEN = 30);
 Property FreshUntil As %String(%JSONFIELDNAME = "freshUntil", MAXLEN = 30);
 
 /// The normalised summary the agents and the gate read (JSON): the operation, the failure, the
-/// message's named fields, the ward state and version, receipts, later events.
+/// message's named fields, the downstream system's state and version, receipts, later events.
 Property Summary As %String(%JSONFIELDNAME = "summary", MAXLEN = "");
 
 /// Start a snapshot for a case. Add items, then Seal() to compute the digest and save.

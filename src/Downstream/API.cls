@@ -1,7 +1,7 @@
-/// The synthetic ward system's REST API at <code>/wards/api</code> (docs/CONTRACTS.md, section 1). The web
-/// application requires password authentication and the <code>Wards_API</code> resource; this class only
-/// translates between HTTP and <class>Wards.Service</class>.
-Class Wards.API Extends %CSP.REST
+/// The downstream system's REST API at <code>/downstream/api</code> (docs/CONTRACTS.md, section 1). The web
+/// application requires password authentication and the <code>Downstream_API</code> resource; this class only
+/// translates between HTTP and <class>Downstream.Service</class>.
+Class Downstream.API Extends %CSP.REST
 {
 
 Parameter CONTENTTYPE = "application/json";
@@ -30,19 +30,19 @@ ClassMethod PostOperation() As %Status
     If problem '= "" {
         Quit ..Reply(422, {"error": "invalid_request", "detail": (problem)})
     }
-    Set body = ##class(Wards.Service).Apply(request, .status)
+    Set body = ##class(Downstream.Service).Apply(request, .status)
     Quit ..Reply(status, body)
 }
 
 ClassMethod GetEncounter(id As %String) As %Status
 {
-    Set body = ##class(Wards.Service).GetEncounter(..Decode(id), .status)
+    Set body = ##class(Downstream.Service).GetEncounter(..Decode(id), .status)
     Quit ..Reply(status, body)
 }
 
 ClassMethod GetReceipt(key As %String) As %Status
 {
-    Set body = ##class(Wards.Service).GetReceipt(..Decode(key), .status)
+    Set body = ##class(Downstream.Service).GetReceipt(..Decode(key), .status)
     Quit ..Reply(status, body)
 }
 
@@ -52,25 +52,25 @@ ClassMethod PostFault() As %Status
     If problem '= "" {
         Quit ..Reply(422, {"error": "invalid_request", "detail": (problem)})
     }
-    Set body = ##class(Wards.Service).SetFault(request, .status)
+    Set body = ##class(Downstream.Service).SetFault(request, .status)
     Quit ..Reply(status, body)
 }
 
 ClassMethod GetFault() As %Status
 {
-    Set body = ##class(Wards.Service).GetFault(.status)
+    Set body = ##class(Downstream.Service).GetFault(.status)
     Quit ..Reply(status, body)
 }
 
 ClassMethod PostReset() As %Status
 {
-    Set body = ##class(Wards.Service).Reset(.status)
+    Set body = ##class(Downstream.Service).Reset(.status)
     Quit ..Reply(status, body)
 }
 
 ClassMethod GetCapabilities() As %Status
 {
-    Set body = ##class(Wards.Service).GetCapabilities(.status)
+    Set body = ##class(Downstream.Service).GetCapabilities(.status)
     Quit ..Reply(status, body)
 }
 
@@ -80,7 +80,7 @@ ClassMethod PostCapabilities() As %Status
     If problem '= "" {
         Quit ..Reply(422, {"error": "invalid_request", "detail": (problem)})
     }
-    Set body = ##class(Wards.Service).SetCapabilities(request, .status)
+    Set body = ##class(Downstream.Service).SetCapabilities(request, .status)
     Quit ..Reply(status, body)
 }
 

@@ -1,5 +1,5 @@
 /// The evidence collector: takes an immutable snapshot of what is known about a case from the
-/// message store, the ward system and the production, each observation with its source and time.
+/// message store, the downstream system and the production, each observation with its source and time.
 /// The agents and the gate read the snapshot's summary; nothing reaches them that is not in it.
 Class Shutter.Operation.Evidence Extends Ens.BusinessOperation
 {
@@ -14,7 +14,7 @@ Property Adapter As EnsLib.HTTP.OutboundAdapter;
 Property FreshSeconds As %Integer [ InitialExpression = 300 ];
 
 /// The receiver whose paths are read when the case names none (the production item that delivers to it).
-Property Receiver As %String(MAXLEN = 128) [ InitialExpression = "Ward Out" ];
+Property Receiver As %String(MAXLEN = 128) [ InitialExpression = {$PARAMETER("Shutter.Production", "RECEIVER")} ];
 
 Parameter SETTINGS = "FreshSeconds:Evidence,Receiver:Evidence";
 
@@ -49,7 +49,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     Do snap.AddItem("message", "message_store", now, msgInfo) Set count = count + 1
     Do snap.AddItem("validation", "validator", now, validation) Set count = count + 1
 
-    // 4. The ward's state and history for the encounter.
+    // 4. The downstream system's state and history for the encounter.
     // The receiver's paths come from its description in the site profile (CONTRACTS 6.4), never from code.
     Set receiver = $SELECT(case.Receiver '= "": case.Receiver, 1: ..Receiver)
     Set statePath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", case.EncounterId)
@@ -91,7 +91,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
         Set caps = ..WardGet(capsPath, .cstatus)
     }
     Set route = {}
-    Set route.feed = "ADT In -> ADT to Ward -> " _ receiver
+    Set route.feed = "ADT In -> ADT to Downstream -> " _ receiver
     Set route.connector = receiver
     Set route.receiver = ##class(Shutter.Store.SiteProfile).ReceiverLabel(receiver)
     Set route.tier = ##class(Shutter.Store.SiteProfile).TierOf(receiver)
@@ -142,7 +142,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     Set case.CurrentSnapshot = snap
     Do case.Note("artifact", "Snapshot " _ snap.Seq _ " taken: " _ count _ " observations, " _ laterCount _ " later events, digest " _ $EXTRACT(snap.Digest, 1, 19), "system", "snapshot:" _ snap.%Id())
     Set response.SnapshotId = snap.%Id(), response.Digest = snap.Digest, response.SummaryJSON = snap.Summary, response.ItemCount = count
-    $$$TRACE("Snapshot " _ snap.%Id() _ " for " _ case.CaseId _ ": ward HTTP " _ status _ ", receipt HTTP " _ rstatus _ ", " _ laterCount _ " later events")
+    $$$TRACE("Snapshot " _ snap.%Id() _ " for " _ case.CaseId _ ": downstream HTTP " _ status _ ", receipt HTTP " _ rstatus _ ", " _ laterCount _ " later events")
     Quit $$$OK
 }
 
@@ -233,7 +233,7 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
     Quit info
 }
 
-/// GET a ward path; returns the parsed body (an object) and the HTTP status (0 when no answer).
+/// GET a path on the downstream system; returns the parsed body (an object) and the HTTP status (0 when no answer).
 Method WardGet(path As %String, Output status As %Integer) As %DynamicObject [ Private ]
 {
     Set status = 0

@@ -11,7 +11,7 @@ __pycache__/
 venv/
 
 # Node
-node_modules/
+node_modules
 dist/
 coverage/
 
