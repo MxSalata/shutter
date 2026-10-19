@@ -9,7 +9,7 @@ Class Shutter.Operation.Gate Extends Ens.BusinessOperation
 Parameter INVOCATION = "Queue";
 
 /// Bumped whenever a check changes; recorded on every decision and bound by approvals.
-Parameter POLICYVERSION = "2026-10-19.2";
+Parameter POLICYVERSION = "2026-10-19.3";
 
 Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shutter.Msg.GateResult) As %Status
 {
@@ -49,10 +49,22 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     Do ..Check(checks, "conformance", $SELECT(parsed: "pass", 1: "block"), $SELECT(parsed: "PARSED", 1: "PARSE_FAILED"), $SELECT(parsed: "The message parses against its schema", 1: "The message does not parse: " _ ##class(Shutter.Util.Json).Str(validation, "error")))
 
     // Intent: the plan is well-formed and, for a write, is exactly the case's operation.
+    // A withheld operation (T31) was never sent and never will be by Shutter: a merge goes to the PAS team, and a cancel
+    // the receiver cannot reverse is corrected by hand. The check is appended whatever the plan, as UNMAPPABLE is.
+    If case.FailureKind = "withheld" Do ..Check(checks, "intent", "block", $SELECT(case.Event = "merge": "MERGE_WITHHELD", 1: "CANCEL_UNSUPPORTED"), $SELECT(case.Event = "merge": "Withheld by the site's policy: a merge goes to the PAS team", 1: "Withheld: the receiver cannot reverse the " _ ..Reversed(case.Event)))
     Set okDisp = $LISTFIND($LISTBUILD("resend", "reconcile", "superseded", "more_evidence", "escalate"), plan.Disposition) > 0
     If 'okDisp {
         Do ..Check(checks, "intent", "block", "UNKNOWN_DISPOSITION", "Disposition '" _ plan.Disposition _ "' is not one the gate knows")
     } ElseIf isWrite {
+        // The same two rules guard every write (T31), whatever the case's kind and whoever made the plan: a merge goes
+        // only when the site allows merges and the receiver's entry takes them, a cancel only to a receiver whose entry
+        // reverses. A withheld case carries the block already (above), so it is not repeated here.
+        If (case.FailureKind '= "withheld") && (case.Event = "merge") {
+            Set siteAllows = ##class(Shutter.Store.SiteProfile).MergesAllowed(), receiverTakes = ##class(Shutter.Store.SiteProfile).ReceiverFlag(case.Receiver, "merges")
+            If '(siteAllows && receiverTakes) Do ..Check(checks, "intent", "block", "MERGE_WITHHELD", "A merge is not sent through Shutter: " _ $SELECT('siteAllows: "the site's policy forbids merges (merges: forbidden)", 1: "the receiver's entry does not take merges") _ "; the PAS team decides it")
+        } ElseIf (case.FailureKind '= "withheld") && ($EXTRACT(case.Event, 1, 7) = "cancel_") {
+            If '##class(Shutter.Store.SiteProfile).ReceiverFlag(case.Receiver, "cancels") Do ..Check(checks, "intent", "block", "CANCEL_UNSUPPORTED", "The receiver's entry says it cannot reverse a " _ ..Reversed(case.Event) _ " (cancels: false)")
+        }
         Set exact = (plan.OperationKey = case.OperationKey)
         Set op = summary.%Get("operation")
         Set digestOk = (plan.PayloadDigest = "") || (plan.PayloadDigest = ##class(Shutter.Util.Json).Str(op, "payload_digest"))
@@ -305,6 +317,14 @@ Method Superseding(summary As %DynamicObject, case As Shutter.Store.Case) As %St
         }
     }
     Quit found
+}
+
+/// The event a cancel reverses, as a word for a person: cancel_admit is "admission", cancel_transfer "transfer",
+/// cancel_discharge "discharge"; any other event word is given back as it is.
+ClassMethod Reversed(event As %String) As %String
+{
+    Set base = $SELECT($EXTRACT(event, 1, 7) = "cancel_": $EXTRACT(event, 8, *), 1: event)
+    Quit $CASE(base, "admit": "admission", "": "event", : base)
 }
 
 Method Check(checks As %DynamicArray, name As %String, result As %String, code As %String, detail As %String) [ Private ]

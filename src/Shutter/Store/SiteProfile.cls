@@ -18,16 +18,18 @@ Property UpdatedAt As %String(%JSONFIELDNAME = "updatedAt", MAXLEN = 30);
 
 Property UpdatedBy As %String(%JSONFIELDNAME = "updatedBy", MAXLEN = 160);
 
-/// The shipped defaults: one receiver (the downstream system, tier 2), keep what is current, no authoritative source,
-/// unconditional resends forbidden, automatic single chains for tiers 1 and 2, approvals elsewhere.
+/// The shipped defaults: one receiver (the downstream system, tier 2, taking neither cancels nor merges), keep what is
+/// current, no authoritative source, unconditional resends forbidden, merges forbidden (they go to the PAS team, T31),
+/// automatic single chains for tiers 1 and 2, approvals elsewhere.
 ClassMethod Default() As %DynamicObject
 {
     Set p = {}
     Set p.version = 0
-    Set p.receivers = [{"name": ($PARAMETER("Shutter.Production", "RECEIVER")), "system": "the demo bed-management system", "tier": 2, "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "api": {"base": "/downstream/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "/capabilities", "operations": "/operations"}, "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}}]
+    Set p.receivers = [{"name": ($PARAMETER("Shutter.Production", "RECEIVER")), "system": "the demo bed-management system", "tier": 2, "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "merges": false, "api": {"base": "/downstream/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "/capabilities", "operations": "/operations"}, "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}}]
     Set p."history_policy" = "current"
     Set p."authoritative_source" = ""
     Set p."unconditional_resend" = "forbidden"
+    Set p.merges = "forbidden"
     Set p.policy = {"1": {"single": "automatic", "ordered": "automatic", "interleaved": "board"}, "2": {"single": "automatic", "ordered": "approval", "interleaved": "board"}, "3": {"single": "approval", "ordered": "per_chain", "interleaved": "board"}}
     Set p.approvers = {"role": "Shutter Approvers", "escalation": "the integration team's on-call"}
     Set p.incident = {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60}
@@ -112,7 +114,7 @@ ClassMethod Validate(p As %DynamicObject) As %String
     If '$ISOBJECT(p) Quit "the profile must be a JSON object"
     Set it = p.%GetIterator()
     While it.%GetNext(.key, .v) {
-        If '$LISTFIND($LISTBUILD("version", "receivers", "history_policy", "authoritative_source", "unconditional_resend", "policy", "approvers", "incident", "model_content", "teams", "mail", "feed"), key) Return key _ ": unknown field"
+        If '$LISTFIND($LISTBUILD("version", "receivers", "history_policy", "authoritative_source", "unconditional_resend", "merges", "policy", "approvers", "incident", "model_content", "teams", "mail", "feed"), key) Return key _ ": unknown field"
     }
     If p.%IsDefined("version") && ((p.%Get("version") '= +p.%Get("version")) || (p.%Get("version") < 0)) Quit "version: must be a whole number"
     Set rcv = p.%Get("receivers")
@@ -125,6 +127,8 @@ ClassMethod Validate(p As %DynamicObject) As %String
         Set tier = r.%Get("tier")
         If (tier '= +tier) || (tier < 1) || (tier > 3) Return at _ ".tier: must be 1, 2 or 3"
         If r.%IsDefined("cancels") && (r.%GetTypeOf("cancels") '= "boolean") Return at _ ".cancels: must be true or false"
+        // Whether the receiver takes merges (T31); false when absent, and a merge still needs the site's merges: allowed.
+        If r.%IsDefined("merges") && (r.%GetTypeOf("merges") '= "boolean") Return at _ ".merges: must be true or false"
         If r.%IsDefined("api") {
             Set api = r.%Get("api")
             If '$ISOBJECT(api) Return at _ ".api: must be an object"
@@ -148,6 +152,8 @@ ClassMethod Validate(p As %DynamicObject) As %String
         }
     }
     If p.%IsDefined("unconditional_resend") && '$LISTFIND($LISTBUILD("forbidden", "allowed"), p.%Get("unconditional_resend")) Quit "unconditional_resend: must be forbidden or allowed"
+    // Merges (T31): forbidden when absent; allowed lets a merge go to a receiver whose entry takes them.
+    If p.%IsDefined("merges") && '$LISTFIND($LISTBUILD("forbidden", "allowed"), p.%Get("merges")) Quit "merges: must be forbidden or allowed"
     If p.%IsDefined("history_policy") && (p.%GetTypeOf("history_policy") '= "string") Quit "history_policy: must be a string"
     Set pol = p.%Get("policy")
     If '$ISOBJECT(pol) Quit "policy: must be an object with the tiers 1, 2 and 3"
@@ -210,7 +216,7 @@ ClassMethod Validate(p As %DynamicObject) As %String
             If '$ISOBJECT(t) Return at _ ": must be an object"
             Set ki = t.%GetIterator()
             While ki.%GetNext(.k, .v) {
-                If '$LISTFIND($LISTBUILD("id", "name", "mailbox", "cc", "receivers"), k) Return at _ "." _ k _ ": unknown field"
+                If '$LISTFIND($LISTBUILD("id", "name", "mailbox", "cc", "receivers", "sources"), k) Return at _ "." _ k _ ": unknown field"
             }
             For f = "id", "name", "mailbox" { If ($CLASSMETHOD(json, "Str", t, f) = "") || (t.%GetTypeOf(f) '= "string") Return at _ "." _ f _ ": required" }
             If $LISTFIND(ids, t.%Get("id")) Return at _ ".id: must be unique"
@@ -232,6 +238,13 @@ ClassMethod Validate(p As %DynamicObject) As %String
                 If '$ISOBJECT(rl) || rl.%IsA("%DynamicObject") Return at _ ".receivers: must be an array of receiver names"
                 Set ri = rl.%GetIterator()
                 While ri.%GetNext(.j, .m) { If (rl.%GetTypeOf(j) '= "string") || (m = "") Return at _ ".receivers[" _ j _ "]: must be a receiver name" }
+            }
+            // The sending applications (MSH-3) whose merges the team decides (T31), such as PAS.
+            If t.%IsDefined("sources") {
+                Set sl = t.%Get("sources")
+                If '$ISOBJECT(sl) || sl.%IsA("%DynamicObject") Return at _ ".sources: must be an array of sending applications"
+                Set si = sl.%GetIterator()
+                While si.%GetNext(.j, .m) { If (sl.%GetTypeOf(j) '= "string") || (m = "") Return at _ ".sources[" _ j _ "]: must be a sending application (MSH-3)" }
             }
         }
     }
@@ -356,6 +369,22 @@ ClassMethod Receiver(name As %String) As %DynamicObject
     Quit ""
 }
 
+/// A boolean of the receiver's entry (cancels, merges): false when the profile does not name the receiver or the
+/// entry does not answer.
+ClassMethod ReceiverFlag(name As %String, flag As %String) As %Boolean
+{
+    Set r = ..Receiver(name)
+    If '$ISOBJECT(r) Quit 0
+    Quit ##class(Shutter.Util.Json).Bool(r, flag, 0)
+}
+
+/// Whether the site lets a merge (ADT^A40) go to a receiver at all (T31): only when the profile says merges: allowed.
+/// Absent, or anything else, is forbidden, and the receiver's own entry must take merges too (ReceiverFlag).
+ClassMethod MergesAllowed() As %Boolean
+{
+    Quit ..Flag("merges", "forbidden") = "allowed"
+}
+
 /// The downstream system's paths, used when a receiver's entry gives none: the shape the demo's receiver speaks.
 ClassMethod DefaultApi() As %DynamicObject
 {
@@ -408,7 +437,7 @@ ClassMethod Policy(tier As %Integer, chainKind As %String = "single") As %String
     Quit value
 }
 
-/// A top-level flag of the profile as a string (history_policy, authoritative_source, unconditional_resend).
+/// A top-level flag of the profile as a string (history_policy, authoritative_source, unconditional_resend, merges).
 ClassMethod Flag(name As %String, default As %String = "") As %String
 {
     Quit ##class(Shutter.Util.Json).Str(..Current(), name, default)

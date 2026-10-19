@@ -5,25 +5,27 @@
 Class Shutter.Util.EscalationDraft
 {
 
-/// The team for the case: the one named, else the one whose receivers include the case's receiver, else the first
-/// team in the site profile, else a team made of the approvers' escalation text (no mailbox: the person fills it in).
+/// The team for the case: the one named; else, for a merge, the one whose sources include the case's source system
+/// (the sending application, MSH-3: the PAS team decides a merge, T31); else the one whose receivers include the
+/// case's receiver; else the first team in the site profile; else a team made of the approvers' escalation text (no
+/// mailbox: the person fills it in).
 ClassMethod Team(case As Shutter.Store.Case, teamId As %String = "") As %DynamicObject
 {
     Set teams = ##class(Shutter.Store.SiteProfile).Current().%Get("teams")
     If $ISOBJECT(teams) && (teams.%Size() > 0) {
-        Set first = "", it = teams.%GetIterator()
+        Set first = "", bySource = "", byReceiver = "", it = teams.%GetIterator()
+        Set source = $SELECT(case.SourceSystem '= "": case.SourceSystem, 1: $PIECE(case.OperationKey, "^", 1))
         While it.%GetNext(, .t) {
             Continue:'$ISOBJECT(t)
             If first = "" Set first = t
             If teamId '= "" { Return:(##class(Shutter.Util.Json).Str(t, "id") = teamId) t  Continue }
-            Set rcv = t.%Get("receivers")
-            If $ISOBJECT(rcv) {
-                Set ri = rcv.%GetIterator()
-                While ri.%GetNext(, .name) { Return:(name = case.Receiver) t }
-            }
+            If (case.Event = "merge") && '$ISOBJECT(bySource) && ..Lists(t.%Get("sources"), source) Set bySource = t
+            If '$ISOBJECT(byReceiver) && ..Lists(t.%Get("receivers"), case.Receiver) Set byReceiver = t
         }
-        If teamId = "" Quit first
-        Quit {}
+        If teamId '= "" Quit {}
+        If $ISOBJECT(bySource) Quit bySource
+        If $ISOBJECT(byReceiver) Quit byReceiver
+        Quit first
     }
     Set approvers = ##class(Shutter.Store.SiteProfile).Current().%Get("approvers")
     Set text = $SELECT($ISOBJECT(approvers): ##class(Shutter.Util.Json).Str(approvers, "escalation"), 1: "")
@@ -54,7 +56,7 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     Set b = b _ "  Encounter (visit number): " _ case.EncounterId _ nl _ nl
 
     Set b = b _ "THE EVENT" _ nl
-    Set b = b _ "  " _ ..EventLine(case.Event, case.Ward, case.EventTime) _ nl
+    Set b = b _ "  " _ ..EventLine(case.Event, case.Ward, case.EventTime, case) _ nl
     Set b = b _ "  Source system: " _ case.SourceSystem _ ", message control id " _ case.SourceMessageId _ nl
     Set b = b _ "  Operation key: " _ case.OperationKey _ nl _ nl
 
@@ -146,13 +148,36 @@ ClassMethod Identifiers(case As Shutter.Store.Case) As %DynamicObject
     Quit o
 }
 
-/// "Transfer to WARD-B at 2026-10-15 09:20 UTC".
-ClassMethod EventLine(event As %String, location As %String, time As %String) As %String
+/// "Transfer to WARD-B at 2026-10-15 09:20 UTC". A cancel reads "Cancellation of the transfer to WARD-B at ..." (T31),
+/// and a merge "Merge of <prior identifier> into <patient identifier>" when the case is given and carries the prior
+/// patient identifier (Store.Case's PriorPatientId), else "Merge". The other indexed-only events read as plain words.
+ClassMethod EventLine(event As %String, location As %String, time As %String, case As Shutter.Store.Case = "") As %String
 {
-    Set word = $CASE(event, "admit": "Admission", "transfer": "Transfer", "discharge": "Discharge", "update": "Update", "": "An event", :$ZCONVERT(event, "W"))
-    Set where = $SELECT(location = "": "", event = "admit": " to " _ location, event = "transfer": " to " _ location, event = "discharge": " from " _ location, 1: " at " _ location)
     Set when = $SELECT(time = "": "", 1: " at " _ $TRANSLATE($EXTRACT(time, 1, 16), "T", " ") _ " UTC")
+    If event = "merge" {
+        Set prior = "", into = ""
+        If $ISOBJECT(case) {
+            Set prior = case.PriorPatientId _ $SELECT((case.PriorPatientId '= "") && (case.PriorPatientIdAuthority '= ""): " (" _ case.PriorPatientIdAuthority _ ")", 1: "")
+            Set into = case.PatientId _ $SELECT((case.PatientId '= "") && (case.PatientIdAuthority '= ""): " (" _ case.PatientIdAuthority _ ")", 1: "")
+        }
+        If (prior '= "") && (into '= "") Quit "Merge of " _ prior _ " into " _ into _ when
+        Quit "Merge" _ when
+    }
+    Set cancel = ($EXTRACT(event, 1, 7) = "cancel_")
+    Set base = $SELECT(cancel: $EXTRACT(event, 8, *), 1: event)
+    Set word = $CASE(base, "admit": "Admission", "transfer": "Transfer", "discharge": "Discharge", "update": "Update", "register": "Registration", "preadmit": "Pre-admission", "person_add": "Person added", "person_update": "Person updated", "": "An event", : $ZCONVERT(base, "W"))
+    Set where = $SELECT(location = "": "", base = "admit": " to " _ location, base = "transfer": " to " _ location, base = "discharge": " from " _ location, 1: " at " _ location)
+    If cancel Quit "Cancellation of the " _ $ZCONVERT(word, "L") _ where _ when
     Quit word _ where _ when
+}
+
+/// Whether a team's list (receivers, sources) names a value.
+ClassMethod Lists(list As %DynamicArray, value As %String) As %Boolean [ Private ]
+{
+    If '$ISOBJECT(list) || (value = "") Quit 0
+    Set it = list.%GetIterator()
+    While it.%GetNext(, .v) { If ("" _ v) = value Return 1 }
+    Quit 0
 }
 
 /// The block reason the case page shows, and the gate's failing checks (as GET /cases/:id/blocked-reason).

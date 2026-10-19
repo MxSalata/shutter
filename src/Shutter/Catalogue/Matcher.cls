@@ -1,6 +1,9 @@
 /// The deterministic matcher (CONTRACTS 6.1 and 6.3): computes the condition vocabulary from a case's evidence
 /// snapshot and finds the catalogue entries whose pattern holds. No model. Runs when the evidence is collected;
 /// its result is the snapshot summary's "catalogue" item, which the workflow, the gate and the app read.
+/// Since T31 (CONTRACTS v1.14) the vocabulary has "event" (the failed operation's event word, the three cancels folded
+/// to cancel), "delivery" takes "withheld" (an operation Shutter never sent: a merge under the site's policy, a cancel
+/// the receiver cannot reverse) with "receiver_answer: none", and "later_applied" takes "cancelled" and "merge".
 Class Shutter.Catalogue.Matcher
 {
 
@@ -12,12 +15,17 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     // delivery
     Set c.delivery = $CASE(case.FailureKind, "delivery_failed": "failed", "rejected": "rejected", "uncertain_outcome": "uncertain", : "failed")
     If case.FailureKind = "unmappable" Set c.delivery = "unmappable"
+    If case.FailureKind = "withheld" Set c.delivery = "withheld"
     // receiver_answer, from the error item's reason code and status
     Set error = ..Item(summary, "error")
     Set reason = $ZCONVERT($SELECT($ISOBJECT(error): $CLASSMETHOD(json, "Str", error, "reason_code"), 1: ""), "L")
     Set status = $SELECT($ISOBJECT(error): $CLASSMETHOD(json, "Str", error, "http_status"), 1: "")
     Set c."receiver_answer" = $SELECT(reason [ "unavailable": "unavailable", (reason [ "timeout") || (status = 504): "timeout", reason [ "duplicate": "duplicate", reason [ "version": "version_conflict", (reason '= "") || (status = 422) || (status = 409): "refused", status = 503: "unavailable", 1: "none")
     If (c."receiver_answer" = "none") && (c.delivery = "uncertain") Set c."receiver_answer" = "timeout"
+    // A withheld operation was never sent, so no receiver answered (T31).
+    If c.delivery = "withheld" Set c."receiver_answer" = "none"
+    // event (T31): the failed operation's event word; cancel_admit, cancel_transfer and cancel_discharge fold to cancel
+    Set c.event = $SELECT($EXTRACT(case.Event, 1, 7) = "cancel_": "cancel", $LISTFIND($LISTBUILD("admit", "transfer", "discharge", "update", "merge", "register"), case.Event): case.Event, 1: "other")
     // receipt
     Set rstatus = $CLASSMETHOD(json, "Str", summary, "receipt_http_status")
     Set c.receipt = $SELECT(rstatus = 200: "present", rstatus = 404: "absent", rstatus = -1: "none", 1: "unreadable")
@@ -124,20 +132,28 @@ ClassMethod Holds(pattern As %DynamicObject, conditions As %DynamicObject) As %B
     Quit 1
 }
 
-/// The applied events for the encounter later than the failed operation, by precedence: discharge, else
-/// transfer, else update, else none. (A later transfer followed by a later update is a transfer.)
+/// The applied events for the encounter later than the failed operation, by precedence (CONTRACTS 6.1): cancelled
+/// (an applied cancel at or after the failed event's time, T31), else merge (an applied merge, T31), else discharge,
+/// else transfer, else admit (a later admission, T28), else update, else none. (A later transfer followed by a later
+/// update is a transfer.) A cancel counts from the failed event's own time, not strictly after it, because a cancel
+/// carries the time of the event it reverses; the case's own operation never counts.
 ClassMethod LaterApplied(summary As %DynamicObject, case As Shutter.Store.Case) As %String [ Private ]
 {
     // A later admission is its own answer (T28): an encounter admitted again after the failed event is not an update.
-    Set seen("discharge") = 0, seen("transfer") = 0, seen("update") = 0, seen("admit") = 0
+    // So are a cancel and a merge (T31); any other word the receiver or the index reports still reads as an update.
+    Set seen("cancelled") = 0, seen("merge") = 0, seen("discharge") = 0, seen("transfer") = 0, seen("update") = 0, seen("admit") = 0
     Set timeline = summary.%Get("timeline")
     If $ISOBJECT(timeline) {
         Set iter = timeline.%GetIterator()
         While iter.%GetNext(.i, .ev) {
-            Continue:'##class(Shutter.Util.Json).Bool(ev, "later")
             Set outcome = ##class(Shutter.Util.Json).Str(ev, "outcome")
             Continue:((outcome '= "applied") && (outcome '= "already_committed"))
             Set e = ##class(Shutter.Util.Json).Str(ev, "event")
+            If $EXTRACT(e, 1, 7) = "cancel_" {
+                If ..AtOrAfter(##class(Shutter.Util.Json).Str(ev, "event_time"), ##class(Shutter.Util.Json).Str(ev, "operation_key"), case) Set seen("cancelled") = 1
+                Continue
+            }
+            Continue:'##class(Shutter.Util.Json).Bool(ev, "later")
             Set seen($SELECT($DATA(seen(e)): e, 1: "update")) = 1
         }
     }
@@ -147,12 +163,24 @@ ClassMethod LaterApplied(summary As %DynamicObject, case As Shutter.Store.Case) 
         Set iter = history.%GetIterator()
         While iter.%GetNext(.i, .h) {
             Set t = ##class(Shutter.Util.Json).Str(h, "event_time")
-            Continue:'(t ]] case.EventTime)
             Set e = ##class(Shutter.Util.Json).Str(h, "event")
+            If $EXTRACT(e, 1, 7) = "cancel_" {
+                If ..AtOrAfter(t, ##class(Shutter.Util.Json).Str(h, "operation_key"), case) Set seen("cancelled") = 1
+                Continue
+            }
+            Continue:'(t ]] case.EventTime)
             Set seen($SELECT($DATA(seen(e)): e, 1: "update")) = 1
         }
     }
-    Quit $SELECT(seen("discharge"): "discharge", seen("transfer"): "transfer", seen("admit"): "admit", seen("update"): "update", 1: "none")
+    Quit $SELECT(seen("cancelled"): "cancelled", seen("merge"): "merge", seen("discharge"): "discharge", seen("transfer"): "transfer", seen("admit"): "admit", seen("update"): "update", 1: "none")
+}
+
+/// Whether an applied event (its time and its operation key) lies at or after the failed event's time and is not the
+/// case's own operation (T31: the rule for a cancel, which carries the time of the event it reverses).
+ClassMethod AtOrAfter(time As %String, key As %String, case As Shutter.Store.Case) As %Boolean [ Private ]
+{
+    If (time = "") || (key = case.OperationKey) Quit 0
+    Quit '(case.EventTime ]] time)
 }
 
 /// Whether the failed event's time is plausible (T28): before_admission when it precedes the admission the message
