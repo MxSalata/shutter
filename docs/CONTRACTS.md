@@ -292,7 +292,7 @@ checks: [ordering, effect, state_transition, identity, capability]
   item of an ordered chain, in event order), `resend_latest` (the chain's latest item only; the earlier ones are
   superseded), `reconcile`, `none`, `escalate`, `resend_unconditional` (never automatic; needs the site flag `unconditional_resend: allowed`, the only value besides `forbidden` the profile validator accepts), `correct_history` (not implemented: always escalated with the steps named).
 - An alternative has `outcome`, `why` and `when`: `always` for a choice left to the board, or a site profile condition
-  `<flag>: <value>` such as `history_policy: correct` or `unconditional_resend: with_approval`. The value may be the
+  `<flag>: <value>` such as `history_policy: correct` or `unconditional_resend: allowed`. The value may be the
   symbol `other_source`, which stands for the other source system of the simultaneous event the matcher found
   (`facts.other_source`), so `authoritative_source: other_source` holds when the site names that system as
   authoritative. Every alternative is decided by the board or a person, never automatically.
