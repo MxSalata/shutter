@@ -309,8 +309,13 @@ export function useDraftEscalation(caseId: string) {
 
 export function useEditEscalation(caseId: string) {
   return useMutation({
-    mutationFn: ({ seq, change }: { seq: number; change: Pick<Escalation, 'subject' | 'body' | 'to' | 'cc'> }) =>
-      api.patch<Escalation>(`/cases/${seg(caseId)}/escalations/${seq}`, change),
+    mutationFn: ({
+      seq,
+      change,
+    }: {
+      seq: number;
+      change: Pick<Escalation, 'subject' | 'body' | 'to' | 'cc'>;
+    }) => api.patch<Escalation>(`/cases/${seg(caseId)}/escalations/${seq}`, change),
   });
 }
 
@@ -318,8 +323,20 @@ export function useEditEscalation(caseId: string) {
 export function useSendEscalation(caseId: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ seq, bodyDigest, idempotencyKey }: { seq: number; bodyDigest: string; idempotencyKey: string }) =>
-      api.post<Escalation>(`/cases/${seg(caseId)}/escalations/${seq}/send`, { bodyDigest }, { idempotencyKey }),
+    mutationFn: ({
+      seq,
+      bodyDigest,
+      idempotencyKey,
+    }: {
+      seq: number;
+      bodyDigest: string;
+      idempotencyKey: string;
+    }) =>
+      api.post<Escalation>(
+        `/cases/${seg(caseId)}/escalations/${seq}/send`,
+        { bodyDigest },
+        { idempotencyKey },
+      ),
     onSettled: async () => {
       await client.invalidateQueries({ queryKey: keys.escalations(caseId) });
       await client.invalidateQueries({ queryKey: keys.case(caseId) });
