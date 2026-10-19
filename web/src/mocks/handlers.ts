@@ -2,6 +2,7 @@ import { delay, http, HttpResponse } from 'msw';
 import fixtures from './fixtures.json';
 import type {
   CaseState,
+  Escalation,
   IncidentDetail,
   IncidentEvent,
   IncidentSummary,
@@ -12,6 +13,7 @@ import type {
   SiteProfileView,
 } from '@/api/types';
 import { validateProfile } from '@/features/site-profile/profile';
+import { digest, draftEscalation, teamFor } from './escalation';
 
 /**
  * An in-browser stand-in for Shutter's REST API (CONTRACTS 5), for the demo build, development
@@ -59,7 +61,11 @@ export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
   run = null;
   played = {};
   resetSiteProfile();
+  escalations = {};
 }
+
+/** Escalations drafted and sent in the demo, by case: nothing leaves the browser. */
+let escalations: Record<string, Escalation[]> = {};
 
 const error = (status: number, code: string, detail: string) =>
   HttpResponse.json({ error: code, detail }, { status });
@@ -273,6 +279,65 @@ export const handlers = [
   http.post(`${BASE}/incidents/:id/chains/:seq/approvals`, ({ request, params }) =>
     decideIncident(request, String(params.id), Number(params.seq)),
   ),
+
+  http.get(`${BASE}/cases/:id/escalations`, ({ params }) =>
+    part(String(params.id), () => escalations[String(params.id)] ?? [], 'not_found'),
+  ),
+  http.post(`${BASE}/cases/:id/escalations`, async ({ request, params }) => {
+    const denied = csrf(request) ?? guard('operator');
+    if (denied) return denied;
+    const id = String(params.id);
+    const c = cases[id];
+    if (!c) return error(404, 'not_found', `No case ${id}`);
+    if (!['blocked', 'escalated', 'failed'].includes(c.summary.state))
+      return error(
+        409,
+        'wrong_state',
+        `The case is ${c.summary.state}: only a case Shutter stopped is escalated`,
+      );
+    const { teamId } = ((await request.json().catch(() => ({}))) ?? {}) as { teamId?: string };
+    const team = teamFor(
+      siteProfile?.profile,
+      String((c.detail as { receiver?: string }).receiver ?? ''),
+      teamId,
+    );
+    if (!team) return error(400, 'bad_request', `No team ${teamId} in the site profile`);
+    const list = (escalations[id] ??= []);
+    const e = draftEscalation(c as never, team, list.length + 1, session!.username);
+    list.push(e);
+    return HttpResponse.json(e, { status: 201 });
+  }),
+  http.patch(`${BASE}/cases/:id/escalations/:seq`, async ({ request, params }) => {
+    const denied = csrf(request) ?? guard('operator');
+    if (denied) return denied;
+    const e = escalations[String(params.id)]?.find((x) => x.seq === Number(params.seq));
+    if (!e) return error(404, 'not_found', 'No such escalation');
+    if (!['draft', 'failed'].includes(e.state))
+      return error(409, 'wrong_state', `The escalation is ${e.state}`);
+    const change = (await request.json()) as Pick<Escalation, 'subject' | 'body' | 'to' | 'cc'>;
+    if (!change.to?.trim()) return error(400, 'bad_request', 'to: at least one address');
+    Object.assign(e, change, { state: 'draft', editedBy: session!.username });
+    e.bodyDigest = digest(e.to ?? '', e.cc ?? '', e.subject, e.body);
+    return HttpResponse.json(e);
+  }),
+  http.post(`${BASE}/cases/:id/escalations/:seq/send`, async ({ request, params }) => {
+    const denied = csrf(request) ?? guard('operator');
+    if (denied) return denied;
+    const e = escalations[String(params.id)]?.find((x) => x.seq === Number(params.seq));
+    if (!e) return error(404, 'not_found', 'No such escalation');
+    const { bodyDigest } = (await request.json()) as { bodyDigest?: string };
+    if (bodyDigest !== e.bodyDigest)
+      return error(409, 'body_changed', "bodyDigest is not the digest of the escalation's current text");
+    if (!e.to) return error(409, 'no_recipient', 'The escalation has no recipient');
+    Object.assign(e, {
+      state: 'sent',
+      sentBy: session!.username,
+      sentAt: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
+      transport: 'file',
+      result: `Written as ${String(params.id)}-escalation-${e.seq}.eml (the demo sends no email)`,
+    });
+    return HttpResponse.json(e, { status: 202 });
+  }),
 
   http.get(`${BASE}/site-profile`, () =>
     !session

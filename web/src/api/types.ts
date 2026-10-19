@@ -525,6 +525,44 @@ export interface CaseIncident {
   expected_version?: number;
 }
 
+// ---- escalations to the people who correct systems by hand (T29) ----
+
+export interface Escalation {
+  caseId: string;
+  seq: number;
+  /** draft, queued, sent, failed, cancelled. */
+  state: string;
+  teamId?: string;
+  teamName?: string;
+  /** Addresses separated by commas. */
+  to?: string;
+  cc?: string;
+  subject: string;
+  body: string;
+  /** What a send names, so what goes is what the person read. */
+  bodyDigest: string;
+  snapshotDigest?: string;
+  draftedBy?: string;
+  draftedAt?: string;
+  editedBy?: string;
+  editedAt?: string;
+  sentBy?: string;
+  sentAt?: string;
+  /** smtp, or file when no mail server is configured. */
+  transport?: string;
+  result?: string;
+}
+
+export interface SiteTeam {
+  id: string;
+  name: string;
+  mailbox: string;
+  cc?: string[];
+  /** The receivers (production items) whose cases this team corrects. */
+  receivers?: string[];
+  [key: string]: unknown;
+}
+
 // ---- the site profile (CONTRACTS 6.4) ----
 
 export type ChainPolicy = 'automatic' | 'approval' | 'per_chain' | 'board';
@@ -553,6 +591,9 @@ export interface SiteProfile {
   policy: Record<string, Partial<Record<ChainKind, string>>>;
   approvers?: { role?: string; escalation?: string; [key: string]: unknown };
   incident?: { threshold?: number; window_minutes?: number; quiet_seconds?: number };
+  /** Who corrects the systems by hand when Shutter can't, and where their email goes (T29). */
+  teams?: SiteTeam[];
+  mail?: { from?: string; allowed_domains?: string[] };
 }
 
 /** GET /site-profile: the profile in force and its store version, which a PUT sends back as expectedVersion. */

@@ -15,6 +15,7 @@ import {
   type Closure,
   type Costs,
   type Health,
+  type Escalation,
   type IncidentDecision,
   type IncidentDetail,
   type IncidentEvent,
@@ -48,6 +49,7 @@ export const keys = {
   incidents: (filters: IncidentFilters) => ['incidents', filters] as const,
   incident: (id: string) => ['incident', id] as const,
   incidentEvents: (id: string) => ['incident', id, 'events'] as const,
+  escalations: (id: string) => ['case', id, 'escalations'] as const,
   siteProfile: ['site-profile'] as const,
   siteProfileHistory: ['site-profile', 'history'] as const,
   library: ['library'] as const,
@@ -278,6 +280,50 @@ export function useReinvestigate(caseId: string) {
 export function usePreviewBlindResend(caseId: string) {
   return useMutation({
     mutationFn: () => api.post<BlindResendPreview>(`/cases/${seg(caseId)}/preview-blind-resend`),
+  });
+}
+
+// ---- escalations (T29) ----
+
+export function useEscalations(caseId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.escalations(caseId),
+    enabled,
+    queryFn: () => api.get<Escalation[]>(`/cases/${seg(caseId)}/escalations`),
+    // A queued email is sent by the production a moment later: look again until it has gone
+    refetchInterval: (q) => (q.state.data?.some((e) => e.state === 'queued') ? 2_000 : false),
+  });
+}
+
+/** A new draft, built by Shutter from the case for a team of the site profile (the receiver's when none is named). */
+export function useDraftEscalation(caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ teamId, idempotencyKey }: { teamId?: string; idempotencyKey: string }) =>
+      api.post<Escalation>(`/cases/${seg(caseId)}/escalations`, teamId ? { teamId } : {}, { idempotencyKey }),
+    onSettled: async () => {
+      await client.invalidateQueries({ queryKey: keys.escalations(caseId) });
+    },
+  });
+}
+
+export function useEditEscalation(caseId: string) {
+  return useMutation({
+    mutationFn: ({ seq, change }: { seq: number; change: Pick<Escalation, 'subject' | 'body' | 'to' | 'cc'> }) =>
+      api.patch<Escalation>(`/cases/${seg(caseId)}/escalations/${seq}`, change),
+  });
+}
+
+/** Sends the draft the person read: the digest binds it, as an approval binds a plan. */
+export function useSendEscalation(caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ seq, bodyDigest, idempotencyKey }: { seq: number; bodyDigest: string; idempotencyKey: string }) =>
+      api.post<Escalation>(`/cases/${seg(caseId)}/escalations/${seq}/send`, { bodyDigest }, { idempotencyKey }),
+    onSettled: async () => {
+      await client.invalidateQueries({ queryKey: keys.escalations(caseId) });
+      await client.invalidateQueries({ queryKey: keys.case(caseId) });
+    },
   });
 }
 
