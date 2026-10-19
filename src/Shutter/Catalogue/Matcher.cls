@@ -25,7 +25,7 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     // A withheld operation was never sent, so no receiver answered (T31).
     If c.delivery = "withheld" Set c."receiver_answer" = "none"
     // event (T31): the failed operation's event word; cancel_admit, cancel_transfer and cancel_discharge fold to cancel
-    Set c.event = $SELECT($EXTRACT(case.Event, 1, 7) = "cancel_": "cancel", $LISTFIND($LISTBUILD("admit", "transfer", "discharge", "update", "merge", "register"), case.Event): case.Event, 1: "other")
+    Set c.event = $SELECT($EXTRACT(case.Event, 1, 7) = "cancel_": "cancel", $LISTFIND($LISTBUILD("admit", "transfer", "discharge", "update", "merge"), case.Event): case.Event, 1: "other")
     // receipt
     Set rstatus = $CLASSMETHOD(json, "Str", summary, "receipt_http_status")
     Set c.receipt = $SELECT(rstatus = 200: "present", rstatus = 404: "absent", rstatus = -1: "none", 1: "unreadable")
@@ -47,7 +47,7 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     }
     // transition: the failed event from the receiver's current state
     If wstatus = 200 {
-        Set c.transition = $SELECT(case.Event = "admit": "invalid", state = "admitted": "allowed", 1: "invalid")
+        Set c.transition = $SELECT(case.Event = "admit": "invalid", case.Event = "merge": $SELECT(state '= "": "allowed", 1: "invalid"), case.Event = "cancel_discharge": $SELECT(state = "discharged": "allowed", 1: "invalid"), state = "admitted": "allowed", 1: "invalid")
     } ElseIf (wstatus = 404) && (case.Event = "admit") {
         Set c.transition = "allowed"
     } Else {

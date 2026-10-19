@@ -12,6 +12,9 @@ Property Reason As %String(MAXLEN = 2000);
 /// The signed-in user who marked the case handled.
 Property Actor As %String(MAXLEN = 100);
 
+/// The case version the caller saw (optional): the close is refused when the case moved on.
+Property ExpectedVersion As %Integer;
+
 Storage Default
 {
 <Data name="CaseCloseDefaultData">

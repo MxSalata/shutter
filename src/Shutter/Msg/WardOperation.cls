@@ -41,6 +41,13 @@ Property CaseId As %String(MAXLEN = 32);
 /// The Ens.MessageHeader id of the HL7 message this operation came from.
 Property SourceHeaderId As %String(MAXLEN = 20);
 
+/// A merge's prior record (CONTRACTS 1.1 and 2): sent only when the event is merge, outside the payload digest (1.6).
+Property PriorPatientId As %String(MAXLEN = 100);
+
+Property PriorPatientIdAuthority As %String(MAXLEN = 100);
+
+Property PriorEncounterId As %String(MAXLEN = 100);
+
 /// Build from a downstream operation object (Shutter.Util.OperationKey.FromHL7, or a plan's action).
 ClassMethod FromOperation(op As %DynamicObject) As Shutter.Msg.WardOperation
 {
@@ -56,6 +63,9 @@ ClassMethod FromOperation(op As %DynamicObject) As Shutter.Msg.WardOperation
     Set m.SourceMessageId = ##class(Shutter.Util.Json).Str(op, "source_message_id")
     Set m.PayloadDigest = ##class(Shutter.Util.Json).Str(op, "payload_digest")
     If m.PayloadDigest = "" Set m.PayloadDigest = ##class(Shutter.Util.Digest).WardPayloadDigest(m.ToOperation())
+    Set m.PriorPatientId = ##class(Shutter.Util.Json).Str(op, "prior_patient_id")
+    Set m.PriorPatientIdAuthority = ##class(Shutter.Util.Json).Str(op, "prior_patient_id_authority")
+    Set m.PriorEncounterId = ##class(Shutter.Util.Json).Str(op, "prior_encounter_id")
     Set ev = ##class(Shutter.Util.Json).Str(op, "expected_version")
     If ev '= "" Set m.ExpectedVersion = +ev
     Quit m
@@ -84,6 +94,7 @@ Method ToWardJSON() As %DynamicObject
     Set body = ..ToOperation()
     Set body."payload_digest" = ..PayloadDigest
     If ..ExpectedVersion '= "" Set body."expected_version" = ..ExpectedVersion
+    If ..Event = "merge" Set body."prior_patient_id" = ..PriorPatientId, body."prior_patient_id_authority" = ..PriorPatientIdAuthority, body."prior_encounter_id" = ..PriorEncounterId
     Do body.%Set("dry_run", ..DryRun, "boolean")
     Quit body
 }

@@ -852,11 +852,17 @@ ClassMethod CaseClose(caseId As %String) As %Status
     Set reason = ""
     If $LISTFIND($LISTBUILD("string", "number"), body.%GetTypeOf("reason")) Set reason = $ZSTRIP($EXTRACT(##class(Shutter.Util.Json).Str(body, "reason"), 1, 2000), "<>W")
     If reason = "" Quit ..Fail("400 Bad Request", "bad_request", "reason is required: what the team did")
+    Set expected = ##class(Shutter.Util.Json).Str(body, "expectedVersion")
+    If (expected '= "") && (+expected '= case.Version) {
+        Set extra = {} Set extra.currentVersion = case.Version
+        Quit ..Fail("409 Conflict", "stale_version", "expectedVersion is not the case's version", extra)
+    }
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
     If '$LISTFIND($LISTBUILD("escalated", "blocked", "failed"), case.State) Quit ..Fail("409 Conflict", "wrong_state", "The case is " _ case.State _ "; only an escalated, blocked or failed case can be marked handled")
     Set msg = ##class(Shutter.Msg.CaseClose).%New()
     Set msg.CaseId = caseId, msg.Reason = reason, msg.Actor = ..User()
+    If expected '= "" Set msg.ExpectedVersion = +expected
     Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
     If $$$ISERR(sc) || '$ISOBJECT(service) Quit ..Fail("503 Service Unavailable", "no_service", "The API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
     Set service.Target = "Case Workflow", service.Async = 1

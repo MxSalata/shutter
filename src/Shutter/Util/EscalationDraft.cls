@@ -43,17 +43,21 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     Set receiver = $SELECT(case.Receiver '= "": case.Receiver, 1: "the downstream system")
     Set label = ##class(Shutter.Store.SiteProfile).ReceiverLabel(receiver)
     Set ids = ..Identifiers(case)
-    Set subject = "Shutter " _ case.CaseId _ ": manual check needed, " _ receiver _ ", encounter " _ case.EncounterId
+    Set subject = "Shutter " _ case.CaseId _ ": manual check needed, " _ receiver _ $SELECT(case.EncounterId = "-": ", patient " _ case.PatientId _ " (no encounter)", 1: ", encounter " _ case.EncounterId)
 
     Set teamName = $SELECT($ISOBJECT(team): $CLASSMETHOD(json, "Str", team, "name"), 1: "")
     Set b = "To " _ $SELECT(teamName '= "": teamName, 1: "the team") _ "," _ nl _ nl
-    Set b = b _ "Shutter could not safely recover a failed message to " _ label _ ". Please compare the systems and correct them by hand; Shutter has sent nothing more for this message." _ nl _ nl
+    If case.FailureKind = "withheld" {
+        Set b = b _ "Shutter withheld a message to " _ label _ " that it never sends by itself (" _ case.FailureText _ "). Please apply or decline it by hand in the systems concerned; Shutter has sent nothing for this message." _ nl _ nl
+    } Else {
+        Set b = b _ "Shutter could not safely recover a failed message to " _ label _ ". Please compare the systems and correct them by hand; Shutter has sent nothing more for this message." _ nl _ nl
+    }
 
     Set b = b _ "PATIENT" _ nl
     Set b = b _ "  Hospital number: " _ ids.hospital _ nl
     If ids.nhs '= "" Set b = b _ "  NHS number: " _ ids.nhs _ nl
     If ids.dob '= "" Set b = b _ "  Date of birth: " _ ids.dob _ nl
-    Set b = b _ "  Encounter (visit number): " _ case.EncounterId _ nl _ nl
+    Set b = b _ "  Encounter (visit number): " _ $SELECT(case.EncounterId = "-": "none (a patient-level message)", 1: case.EncounterId) _ nl _ nl
 
     Set b = b _ "THE EVENT" _ nl
     Set b = b _ "  " _ ..EventLine(case.Event, case.Ward, case.EventTime, case) _ nl
@@ -119,7 +123,11 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     Set b = b _ "  " _ ..Attempts(case) _ nl _ nl
 
     Set b = b _ "WHEN IT IS CORRECTED" _ nl
-    Set b = b _ "  Reply to this email with what was changed, or record it on the case, then choose Reinvestigate on the case page: Shutter reads " _ receiver _ " again and verifies the correction." _ nl _ nl
+    If (case.FailureKind = "withheld") || (case.EncounterId = "-") {
+        Set b = b _ "  Reply to this email with what was changed, or record it on the case, then mark the case as handled by the team on the case page: Shutter sent nothing for this message and will send nothing, and it cannot verify a merge or a cancellation against " _ receiver _ "." _ nl _ nl
+    } Else {
+        Set b = b _ "  Reply to this email with what was changed, or record it on the case, then choose Reinvestigate on the case page: Shutter reads " _ receiver _ " again and verifies the correction." _ nl _ nl
+    }
 
     Set b = b _ "REFERENCES" _ nl
     Set b = b _ "  Case: " _ case.CaseId _ " (Shutter, /shutter/index.html#/cases/" _ case.CaseId _ ")" _ nl
@@ -141,18 +149,18 @@ ClassMethod Identifiers(case As Shutter.Store.Case) As %DynamicObject
         Quit:'$ISOBJECT(header)
         Set msg = ##class(EnsLib.HL7.Message).%OpenId(header.MessageBodyId)
         Quit:'$ISOBJECT(msg)
-        Set n = +msg.GetValueAt("PID:3(*)")
+        Set n = +##class(Shutter.Util.OperationKey).Value(msg, "PID", "3(*)")
         For i = 1:1:n {
-            If $ZCONVERT(msg.GetValueAt("PID:3(" _ i _ ").5"), "U") = "NH" Set o.nhs = msg.GetValueAt("PID:3(" _ i _ ").1") Quit
+            If $ZCONVERT(##class(Shutter.Util.OperationKey).Value(msg, "PID", "3(" _ i _ ").5"), "U") = "NH" Set o.nhs = ##class(Shutter.Util.OperationKey).Value(msg, "PID", "3(" _ i _ ").1") Quit
         }
-        Set dob = $EXTRACT(msg.GetValueAt("PID:7.1"), 1, 8)
+        Set dob = $EXTRACT(##class(Shutter.Util.OperationKey).Value(msg, "PID", "7.1"), 1, 8)
         If dob ?8N Set o.dob = $EXTRACT(dob, 1, 4) _ "-" _ $EXTRACT(dob, 5, 6) _ "-" _ $EXTRACT(dob, 7, 8)
     } Catch {
     }
     Quit o
 }
 
-/// "Transfer to WARD-B at 2026-10-15 09:20 UTC". A cancel reads "Cancellation of the transfer to WARD-B at ..." (T31),
+/// "Transfer to WARD-B at 2026-10-15 09:20 UTC". A cancel reads "Cancellation of the transfer at ..." (T31; a cancel carries no ward),
 /// and a merge "Merge of <prior identifier> into <patient identifier>" when the case is given and carries the prior
 /// patient identifier (Store.Case's PriorPatientId), else "Merge". The other indexed-only events read as plain words.
 ClassMethod EventLine(event As %String, location As %String, time As %String, case As Shutter.Store.Case = "") As %String

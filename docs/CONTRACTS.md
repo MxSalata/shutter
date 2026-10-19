@@ -107,7 +107,7 @@ The order of checks for a non-dry run: fault `fail_before_accept`; request valid
 | admitted | invalid (`invalid_transition`) | admitted, ward changes | discharged | admitted, no change except the version |
 | discharged | invalid | invalid | invalid | invalid |
 
-Every applied operation increments the version by one. A transfer to the ward the patient is already in is still an applied operation (version increments, event appended).
+For a receiver that takes them (1.1, v1.14): `cancel_admit` and `cancel_transfer` from `admitted`, `cancel_discharge` from `discharged`, `merge` from any state the receiver knows; the gate and the matcher judge a write of them by the same rule, and the demo receiver takes none. Every applied operation increments the version by one. A transfer to the ward the patient is already in is still an applied operation (version increments, event appended).
 
 ### 1.5 Faults, for the demos
 
@@ -161,7 +161,7 @@ An operation key identifies a **business operation**, not a message. The same tr
 
 `<source_system>^<patient_id_authority>^<patient_id>^<encounter_id>^<event>^<event_time>`
 
-From an HL7 v2.5.1 ADT message:
+From an HL7 v2 ADT message (2.3.1, 2.4 or 2.5.1: the fields sit at the same positions, and the route's schema category decides the parse, see the version note below):
 
 | Field | HL7 |
 |---|---|
@@ -170,7 +170,7 @@ From an HL7 v2.5.1 ADT message:
 | `encounter_id` | PV1-19 (visit number); required for the delivered events; for the indexed events and a merge, the literal `-` when absent, never empty (v1.14) |
 | `event` | MSH-9.2, by the trigger table below (v1.14): A01 `admit`, A02 `transfer`, A03 `discharge`, A04 `register`, A05 `preadmit`, A06 and A07 `update`, A08 `update`, A11 `cancel_admit`, A12 `cancel_transfer`, A13 `cancel_discharge`, A28 `person_add`, A31 `person_update`, A40 `merge`; anything else does not map (an `unmappable` case) |
 | `ward` | PV1-3.1 (assigned patient location, point of care) for `admit` and `transfer`; null otherwise |
-| `prior_patient_id`, `prior_patient_id_authority`, `prior_encounter_id`, `merge_groups` | a merge only (v1.14): MRG-1 (the repetition typed MR, else the first), MRG-5, and the number of MRG segments; carried on the case, outside the payload digest (1.6) |
+| `prior_patient_id`, `prior_patient_id_authority`, `prior_encounter_id`, `merge_groups` | a merge only (v1.14): MRG-1 (the repetition typed MR, else the first), MRG-5, and the number of MRG segments; carried on the case and, for a delivered merge, in the request body outside the payload digest (1.6); a message with several PATIENT groups is one merge case whose evidence lists every group |
 | `event_time` | EVN-6 (event occurred) if present, else EVN-2 (recorded), as ISO 8601 UTC |
 | `source_message_id` | MSH-10 |
 
@@ -184,8 +184,8 @@ The business process that builds the downstream operation and delivers it is `Sh
 
 ## 3. HL7 fixtures
 
-- HL7 v2.5.1, one message per file, segments separated by carriage returns (`\r`), files under `fixtures/<scenario>/`, named `<scenario>-<nn>-<event>.hl7` (for example `S1-02-A02.hl7`). UTF-8, ASCII content.
-- MSH-3 `PAS` (S8's third message: `BEDMGR`, a bed management system; v1.5), MSH-4 `HOSP`, MSH-5 `DOWNSTREAM`, MSH-6 `HOSP`, MSH-9 `ADT^A02^ADT_A02`, MSH-10 unique across all fixtures (`MSG` plus five digits), MSH-11 `P`, MSH-12 `2.5.1`.
+- HL7 v2.5.1 unless the scenario says otherwise (v1.14: S17 is 2.4 and S18 is 2.3.1, played through the 2.5.1 route), one message per file, segments separated by carriage returns (`\r`), files under `fixtures/<scenario>/`, named `<scenario>-<nn>-<event>.hl7` (for example `S1-02-A02.hl7`). UTF-8, ASCII content.
+- MSH-3 `PAS` (S8's third message: `BEDMGR`, a bed management system; v1.5), MSH-4 `HOSP`, MSH-5 `DOWNSTREAM`, MSH-6 `HOSP`, MSH-9 `ADT^A02^ADT_A02` (MSH-9.3 the structure name of the message's version, from `generate.py`'s table; IRIS does not read it), MSH-10 unique across all fixtures (`MSG` plus five digits), MSH-11 `P`, MSH-12 the scenario's version, `2.5.1` by default.
 - EVN-1 the trigger, EVN-2 the recorded time, EVN-6 the event time (both `YYYYMMDDHHMMSS`; a value with an offset is shifted to UTC, one without is read in the site profile's `feed.time_zone`, v1.11).
 - PID-3 `MRN1001^^^HOSP^MR`; PID-5 synthetic names (no real people); PID-7 a date of birth; PID-8 a sex code.
 - PV1-2 `I`; PV1-3 `WARD-A^BAY1^01^HOSP` (point of care, room, bed, facility); PV1-19 `ENC-1001`; PV1-44 the admit time.
@@ -242,7 +242,7 @@ Scenario S7 (a later transfer arriving while the plan awaits approval) is writte
 
 The API as built is `src/Shutter/API/Dispatch.cls` (its UrlMap lists the routes; sign-in through `POST /session` and the CSP session cookie; every change carries `X-Requested-With: Shutter`, the idempotent ones an `Idempotency-Key`; errors are JSON with `error` and `detail`). The web application's notes on using it are in `web/README.md`. Workflow tasks come back in camelCase with ISO 8601 UTC times (v1.5).
 
-`POST /cases/{id}/close` with `{reason}` (v1.14; `Shutter_Operate`, `X-Requested-With`, an `Idempotency-Key`) answers 202 `{caseId, state: "closing", requestedBy, reason}` and sends `Shutter.Msg.CaseClose` to the Case Workflow item: the case resolves with disposition `handled_by_hand`, its state event names the reason and the latest escalation, the current approval is revoked and an open approval task is cancelled; 400 `bad_request` when the body is not a JSON object or `reason` is empty, 404 `not_found`, 409 `wrong_state` unless the case is escalated, blocked or failed. It is how a case the team corrected by hand (a withheld merge or cancel, an escalation the PAS team acted on) is closed; `reinvestigate` stays for a correction the receiver's state can prove.
+`POST /cases/{id}/close` with `{reason}` (v1.14; `Shutter_Operate`, `X-Requested-With`, an `Idempotency-Key`) answers 202 `{caseId, state: "closing", requestedBy, reason}` and sends `Shutter.Msg.CaseClose` to the Case Workflow item: the case resolves with disposition `handled_by_hand`, its state event names the reason and the latest escalation, the current approval is revoked and an open approval task is cancelled; 400 `bad_request` when the body is not a JSON object or `reason` is empty, 404 `not_found`, 409 `wrong_state` unless the case is escalated, blocked or failed, and 409 `stale_version` (with `currentVersion`) when the body's optional `expectedVersion` is not the case's version. A draft or queued escalation email of the case is cancelled, so the team is not asked to correct a case already handled. It is how a case the team corrected by hand (a withheld merge or cancel, an escalation the PAS team acted on) is closed; `reinvestigate` stays for a correction the receiver's state can prove.
 
 ## 6. The scenario catalogue and the matcher (v1.6)
 
@@ -259,11 +259,11 @@ conditions that matter; an unlisted condition is a wildcard. A listed condition 
 
 | Condition | Values | Computed from |
 | --- | --- | --- |
-| `delivery` | `failed`, `rejected`, `uncertain`, `unmappable`, `withheld` | the case's failure kind (1.1: 503 and connection failures are `failed`; 409 and 422 are `rejected`; 504 is `uncertain`; a message Shutter could not map to an operation is `unmappable`, v1.9) |
+| `delivery` | `failed`, `rejected`, `uncertain`, `unmappable`, `withheld` | the case's failure kind (1.1: 503 and connection failures are `failed`; 409 and 422 are `rejected`; 504 is `uncertain`; a message Shutter could not map to an operation is `unmappable`, v1.9); a merge or a cancel the feed withheld under the site profile or the receiver's entry is `withheld` (v1.14, section 2) |
 | `receiver_answer` | `unavailable`, `timeout`, `duplicate`, `version_conflict`, `refused`, `none` | the error item's reason code, else its HTTP status (504 `timeout`, 409 and 422 `refused`, 503 `unavailable`); an uncertain delivery with no code reads `timeout` |
-| `event` | `admit`, `transfer`, `discharge`, `update`, `merge`, `cancel`, `register`, `other` | the case's event word (v1.14): the three cancel words fold to `cancel`; an unmapped trigger is `other`. A withheld case reads `delivery: withheld` and `receiver_answer: none` (no receiver was asked); `later_applied` reads `cancelled` for an applied cancel at or after the failed event's time (top of the precedence) and `merge` for a later applied merge |
+| `event` | `admit`, `transfer`, `discharge`, `update`, `merge`, `cancel`, `other` | the case's event word (v1.14): the three cancel words fold to `cancel`; an unmapped trigger is `other` (no case carries `register`: a registration is indexed only, or is an `admit`). A withheld case reads `delivery: withheld` and `receiver_answer: none` (no receiver was asked) |
 | `receipt` | `present`, `absent`, `unreadable`, `none` | the receipt lookup: 200, 404, anything else (1.9); `none` when the receiver has no receipt endpoint (6.4), which is a fact about the receiver, not a failed lookup |
-| `later_applied` | `none`, `cancelled`, `merge`, `transfer`, `discharge`, `admit`, `update` | among the applied events for the encounter whose event time is later than the failed operation's (the downstream system's history and the timeline), by precedence: `discharge` if any, else `transfer` if any, else `admit` (a later admission, v1.11), else `update` (an A08), else `none` |
+| `later_applied` | `none`, `cancelled`, `merge`, `transfer`, `discharge`, `admit`, `update` | among the applied events for the encounter whose event time is later than the failed operation's (the downstream system's history and the timeline), by precedence: `cancelled` when a `cancel_*` was applied at or after the failed event's time (v1.14: a cancel carries the time of the event it reverses, and the case's own operation never counts), else `merge` when a merge was applied later, else `discharge` if any was applied later, else `transfer`, else `admit` (a later admission, v1.11), else `update` (an A08), else `none` |
 | `event_time` | `plausible`, `before_admission`, `future`, `far_from_recorded`, `clock_change` | the failed event's time (v1.11, T28): before the admission the message (PV1-44) or the receiver's first history entry names, for anything but an admission; more than five minutes after the message was sent or the evidence was taken; more than a day from the recording time (EVN-2); without an offset, read in `Europe/London`, and within an hour of a British clock change (the order of two events is then not safe); plausible otherwise |
 | `encounter_state` | `admitted`, `discharged`, `not_found`, `unknown` | the downstream system's state; `not_found` when the receiver answers 404 (it does not know the encounter); `unknown` when the receiver can't be read |
 | `transition` | `allowed`, `invalid`, `unknown` | the failed event from the encounter's current state (1.4): a transfer after a discharge is `invalid` |
@@ -326,6 +326,9 @@ In `policy` mode the matcher's decision is:
 - **One match, `decides: person`:** the case is escalated at once, naming the entry; the board does not run.
 - **No match:** the board runs so that the person gets an analysis, and the gate marks the plan `NEW_PATTERN`; the case
   is escalated and flagged as a candidate entry for a reviewer.
+- **A withheld case (v1.14), in every mode:** no board and no investigator. One match takes the person path above; otherwise
+  the workflow adopts an escalate plan naming the feed's reason, and the gate appends `MERGE_WITHHELD` or
+  `CANCEL_UNSUPPORTED`. A withheld message costs no model run, however many arrive.
 - The matches, with every condition's observed value, are stored on the case (`catalogue` in the snapshot summary) and
   shown in the app.
 - Recording keys for replays name the case within its scenario: `scenario:<S>:<encounter>:<event>|<member>|<cfg>[|round<n>]`;
@@ -405,7 +408,7 @@ A new check, `catalogue`, with these reason codes (in `knowledge/block-reasons.j
 - `POLICY_REQUIRES_APPROVAL`: an automatic release where the profile requires an approval (block; an internal guard).
 The plan's `catalogue_entry` and `outcome` are bound by the approval's digest like every other field of the plan.
 
-Two `intent` checks for withheld cases (v1.14, policy version 2026-10-19.3), appended for every plan on a case of kind `withheld` as `UNMAPPABLE` is, and as guards on any write of a merge or a cancel: `MERGE_WITHHELD` (the case's event is `merge` and the site profile does not allow merges, or the receiver does not take them) and `CANCEL_UNSUPPORTED` (a `cancel_*` event to a receiver whose entry says `cancels: false`). The identity check answers `NO_ENCOUNTER` (pass) for a case whose encounter piece is `-`.
+Two `intent` checks for withheld cases (v1.14, policy version 2026-10-19.3), appended for every plan on a case of kind `withheld` as `UNMAPPABLE` is, and as guards on any write of a merge or a cancel: `MERGE_WITHHELD` (the case's event is `merge` and the site profile does not allow merges, or the receiver does not take them) and `CANCEL_UNSUPPORTED` (a `cancel_*` event to a receiver whose entry says `cancels: false`). The identity check answers `NO_ENCOUNTER` (pass) for a case whose encounter piece is `-`, and the state-transition and concurrency checks answer `PATIENT_LEVEL_WRITE` (block) for a write on such a case: there is no encounter state or version to check, so a person decides, and nothing is retried.
 
 ### 6.6 The board's tool
 
@@ -539,7 +542,7 @@ separate, later tool.
   matcher's `later_applied` count only `applied` and `already_committed`, so it supersedes nothing by itself; the
   receiver's history decides. The board sees it and can say so.
 - A scenario for a later movement on a route Shutter does not own, found only by the index, is planned; it is not in `fixtures/scenarios.json` yet.
-- The index row's `Event` is the key's event word (v1.14: `register`, `preadmit`, `person_add`, `person_update`, the cancel words and `merge` included, 32 characters), so registrations, pre-admissions and person updates show between the movements; its `VisitNumber` is `-` for a message with no PV1-19, and the timeline and the index answer nothing for an encounter of `-` or empty.
+- The index row's `Event` is the key's event word (v1.14: `register`, `preadmit`, `person_add`, `person_update`, the cancel words and `merge` included, 32 characters), so registrations, pre-admissions and person updates show between the movements; its `VisitNumber` is `-` for a mapped message with no PV1-19 (an unmappable message without one keeps an empty visit number), and the timeline and the index answer nothing for an encounter of `-` or empty.
 
 ### 8.3 The API
 
@@ -600,7 +603,7 @@ left IRIS. A recording made before this rule replays with real ids in its result
 it. `GetFailure` answers a fresh failure object and the error item, never the case headline. `SELECT Shutter_Util.ModelView_Preview('C-000012')`
 shows what the model would see of a case.
 
-- A merge's prior identifiers (v1.14: `prior_patient_id`, `prior_encounter_id`, `prior_patient_identifier`, `prior_visit_number`, and every MRG group's in `prior_identifiers`) are tokens like the case's own (PID or MRN or NHS by the identifier type, ENC, VISIT; the prior name's parts NAME); `merge_groups`, `patient_class` and the validation's version fields pass through.
+- A merge's prior identifiers (v1.14: `prior_patient_id`, `prior_encounter_id`, `prior_patient_identifier`, `prior_visit_number`, and every MRG group's in `prior_identifiers`, each paired with the surviving patient identifier of its PATIENT group as `into`) are tokens like the case's own (PID or MRN or NHS by the identifier type, ENC, VISIT; the prior name's parts NAME); `merge_groups`, `patient_class` and the validation's version fields pass through.
 
 ## 10. Escalation by email (v1.11)
 
@@ -611,7 +614,7 @@ checks), what the receiver holds with its history, the encounter's timeline from
 sent, and references. No name, address or note text. A person reviews it, chooses the team and sends it; the send is
 bound to the digest of the text the person read.
 
-- The site profile's `teams` (array of `{id, name, mailbox, cc?: [...], receivers?: [...], sources?: [...]}` (v1.14: `sources` lists sending applications, MSH-3, such as `PAS`; a merge goes first to the team whose `sources` lists the case's source system, then to the receiver's team, then to the first team; the draft words a merge "Merge of <prior identifier> into <patient identifier>" and a cancel "Cancellation of the transfer to WARD-B at ..."); `id`, `name` and
+- The site profile's `teams` (array of `{id, name, mailbox, cc?: [...], receivers?: [...], sources?: [...]}` (v1.14: `sources` lists sending applications, MSH-3, such as `PAS`; a merge goes first to the team whose `sources` lists the case's source system, then to the receiver's team, then to the first team; the draft words a merge "Merge of <prior identifier> into <patient identifier>" and a cancel "Cancellation of the transfer at ..."; a cancel carries no ward, section 2); a withheld case's draft says Shutter withheld the message and asks the team to mark the case handled rather than to reinvestigate; `id`, `name` and
   `mailbox` required, ids unique) and `mail` (`allowed_domains`: every mailbox and cc must end in one of them when set, checked when the profile is saved and again at `PATCH` and at the send; `from`: the sender of the emails when set, else the `Escalation Mail` operation's `From` setting, default `shutter@localhost`). The team for a case is the one whose `receivers` names the case's receiver, else the first, else the
   profile's `approvers.escalation` text with no mailbox (the person fills one in).
 - `GET /cases/{id}/escalations`; `POST /cases/{id}/escalations` with `{teamId?}` answers 201 with the draft (409
@@ -637,7 +640,7 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
-- v1.14, 19 Oct 2026: other HL7 schemas and the trigger table (section 2: the events A04, A05, A06, A07, A11 to A13, A28, A31 and A40; what is delivered, indexed only or withheld; the `-` encounter piece; fields read wherever the structure puts the segment; the version note in the evidence); the A40 rule (`merges` in the site profile and the receiver entry, 6.4; the kind `withheld`; `MERGE_WITHHELD` and `CANCEL_UNSUPPORTED`, 6.5; the merge's prior fields, 2 and 9; the escalation's `sources` routing and wording, 10); the matcher's `event`, `delivery: withheld`, `receiver_answer: none` and `later_applied: cancelled | merge` (6.1); withheld and unmappable cases outside incidents (7.1); the index's event words and the `-` visit (8.2); `POST /cases/{id}/close` (5); the gate's policy version 2026-10-19.3 and its `NO_ENCOUNTER` identity answer. The catalogue entries E14 (a patient merge) and E15 (a cancel the receiver can't reverse) and the block reasons `MERGE_WITHHELD` and `CANCEL_UNSUPPORTED` are the knowledge side of the same change.
+- v1.14, 19 Oct 2026: other HL7 schemas and the trigger table (section 2: the events A04, A05, A06, A07, A11 to A13, A28, A31 and A40; what is delivered, indexed only or withheld; the `-` encounter piece; fields read wherever the structure puts the segment; the version note in the evidence); the A40 rule (`merges` in the site profile and the receiver entry, 6.4; the kind `withheld`; `MERGE_WITHHELD` and `CANCEL_UNSUPPORTED`, 6.5; the merge's prior fields, 2 and 9; the escalation's `sources` routing and wording, 10); the matcher's `event`, `delivery: withheld`, `receiver_answer: none` and `later_applied: cancelled | merge` (6.1); withheld and unmappable cases outside incidents (7.1); the index's event words and the `-` visit (8.2); `POST /cases/{id}/close` (5); the gate's policy version 2026-10-19.3 (an approval given under 2026-10-19.2 and not yet dispatched is void at dispatch, `APPROVAL_POLICY_CHANGED`: the case blocks and a person reinvestigates), its `NO_ENCOUNTER` identity answer and `PATIENT_LEVEL_WRITE`; a withheld case never convenes the board (6.3); the close route's `expectedVersion` and the cancelled emails (5). The catalogue entries E14 (a patient merge) and E15 (a cancel the receiver can't reverse) and the block reasons `MERGE_WITHHELD` and `CANCEL_UNSUPPORTED` are the knowledge side of the same change.
 - v1.13, 19 Oct 2026: the receiving system is named the downstream system (a demo bed-management system): the package
   `Downstream.*` with its globals `^Downstream.*` (was `Wards.*`), the web application `/downstream/api`, the resource
   and role `Downstream_API`, the role `Shutter_DownstreamClient`, the user `downstream-client`, the Ens credential

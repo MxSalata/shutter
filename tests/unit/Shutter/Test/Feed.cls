@@ -1,4 +1,5 @@
-/// Development helpers for the feed, called through SQL on a test instance (never part of the product's install):
+/// Development helpers for the feed, called through SQL on a test instance (loaded by hand or by CI from tests/unit; never
+/// part of the product's install or image; Drop and Mode need the %Development resource):
 /// Map parses an HL7 text and returns the downstream operation Shutter builds from it, so the trigger table and the
 /// key can be checked without the production; Drop writes an HL7 text into the production's inbound folder, so a
 /// message can be fed by hand from a script. Segments in the text are separated by the marker <CR>.
@@ -28,6 +29,7 @@ ClassMethod Describe(text As %String, docType As %String = "") As %String [ SqlP
 /// renamed, as the scenario runner does. Returns the path written, or an error text.
 ClassMethod Drop(name As %String, text As %String) As %String [ SqlProc ]
 {
+    If '$SYSTEM.Security.Check("%Development", "USE") Quit "error: a development helper; %Development is required"
     If '$MATCH(name, "^[A-Za-z0-9_.-]+\.hl7$") Quit "error: the name must be a plain .hl7 file name"
     Set dir = $GET(^Shutter.Config("adtIn"))
     If dir = "" Quit "error: the adtIn setting is not set"
@@ -45,6 +47,7 @@ ClassMethod Drop(name As %String, text As %String) As %String [ SqlProc ]
 /// does, and returns it.
 ClassMethod Mode(mode As %String) As %String [ SqlProc ]
 {
+    If '$SYSTEM.Security.Check("%Development", "USE") Quit "error: a development helper; %Development is required"
     Set mode = $ZCONVERT($ZSTRIP(mode, "<>W"), "L")
     If '$LISTFIND($LISTBUILD("board", "single", "rules", "policy"), mode) Quit "error: unknown mode " _ mode
     Set ^Shutter.Config("mode") = mode
@@ -62,7 +65,7 @@ ClassMethod Parse(text As %String, docType As %String, Output sc As %Status) As 
 {
     Set msg = ##class(EnsLib.HL7.Message).ImportFromString(..Text(text), .sc)
     If $$$ISERR(sc) Quit ""
-    If docType = "" Set docType = ##class(EnsLib.HL7.Schema).ResolveSchemaTypeToDocType("2.5.1", msg.Name, .sc)
+    If (docType = "") || (docType = $CHAR(0)) Set docType = ##class(EnsLib.HL7.Schema).ResolveSchemaTypeToDocType("2.5.1", msg.Name, .sc)
     If $$$ISERR(sc) Quit ""
     If docType '= "" Do msg.PokeDocType(docType)
     Quit msg

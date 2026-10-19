@@ -216,14 +216,17 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
         // A merge (ADT^A40, or any message carrying MRG): what the merge discards, from every MRG segment. The first
         // group's prior identifier and visit number stand at the top; prior_identifiers lists every group's, and
         // merge_groups counts them. A bare "MRG" path would read the first group only, so the segments are walked.
-        Set trigger = msg.GetValueAt("MSH:9.2"), groups = 0, priors = [], index = ""
-        For {
-            Set mrg = msg.FindSegment("MRG", .index)
-            Quit:'$ISOBJECT(mrg)
+        Set trigger = msg.GetValueAt("MSH:9.2"), groups = 0, priors = [], lastPid = ""
+        For i = 1:1:msg.SegCount {
+            Set seg = msg.GetSegmentAt(i)
+            Continue:'$ISOBJECT(seg)
+            If seg.Name = "PID" Set lastPid = ..CXIdentifier(seg, 3)
+            Continue:(seg.Name '= "MRG")
             Set groups = groups + 1
             Set prior = {}
             Do prior.%Set("group", groups, "number")
-            Set prior."patient_identifier" = ..PriorIdentifier(mrg), prior."visit_number" = mrg.GetValueAt("5.1")
+            // Each PATIENT group of ADT_A39 is one merge: the PID before the MRG is the surviving record, the MRG what it discards.
+            Set prior."patient_identifier" = ..CXIdentifier(seg, 1), prior."visit_number" = seg.GetValueAt("5.1"), prior."into" = lastPid
             If groups = 1 Set info."prior_patient_identifier" = prior."patient_identifier", info."prior_visit_number" = prior."visit_number"
             Do priors.%Push(prior)
         }
@@ -281,17 +284,17 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
     Quit info
 }
 
-/// MRG-1 of one MRG segment as "<id>^^^<authority>^<type>": the repetition typed MR (CX.5), else the first, as the
+/// A CX identifier field of a segment (PID-3, MRG-1) as "<id>^^^<authority>^<type>": the repetition typed MR (CX.5), else the first, as the
 /// patient identifier is read from PID-3; "" when the field is empty.
-Method PriorIdentifier(mrg As EnsLib.HL7.Segment) As %String [ Private ]
+Method CXIdentifier(seg As EnsLib.HL7.Segment, field As %Integer) As %String [ Private ]
 {
-    Set reps = +mrg.GetValueAt("1(*)"), pick = 1
-    For r = 1:1:reps { If $ZCONVERT(mrg.GetValueAt("1(" _ r _ ").5"), "U") = "MR" Set pick = r Quit }
-    Set id = mrg.GetValueAt("1(" _ pick _ ").1")
+    Set reps = +seg.GetValueAt(field _ "(*)"), pick = 1
+    For r = 1:1:reps { If $ZCONVERT(seg.GetValueAt(field _ "(" _ r _ ").5"), "U") = "MR" Set pick = r Quit }
+    Set id = seg.GetValueAt(field _ "(" _ pick _ ").1")
     If id = "" Quit ""
-    Set authority = mrg.GetValueAt("1(" _ pick _ ").4.1")
-    If authority = "" Set authority = mrg.GetValueAt("1(" _ pick _ ").4")
-    Quit id _ "^^^" _ authority _ "^" _ mrg.GetValueAt("1(" _ pick _ ").5")
+    Set authority = seg.GetValueAt(field _ "(" _ pick _ ").4.1")
+    If authority = "" Set authority = seg.GetValueAt(field _ "(" _ pick _ ").4")
+    Quit id _ "^^^" _ authority _ "^" _ seg.GetValueAt(field _ "(" _ pick _ ").5")
 }
 
 /// The standard category a schema category descends from: the category itself when it is standard, else its Base

@@ -7,4 +7,5 @@ web/dist-demo
 web/playwright-report
 web/test-results
 tests/**/__pycache__
+tests/unit/Shutter
 **/.DS_Store

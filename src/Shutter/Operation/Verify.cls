@@ -32,7 +32,7 @@ Method OnVerifyRequest(request As Shutter.Msg.VerifyRequest, Output response As 
     Set plan = ##class(Shutter.Store.Plan).%OpenId(request.PlanId)
     Set attempt = ##class(Shutter.Store.ExecutionAttempt).%OpenId(request.AttemptId)
     Set receiver = $SELECT(case.Receiver '= "": case.Receiver, 1: ..Receiver)
-    Set encounter = ..Get(##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", case.EncounterId), .estatus)
+    If case.EncounterId = "-" { Set estatus = 404, encounter = {"note": "Not applicable: the case names no encounter"} } Else { Set encounter = ..Get(##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", case.EncounterId), .estatus) }
     Set receiptPath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "receipt", "", case.OperationKey)
     Set receipt = $SELECT(receiptPath = "": {}, 1: ..Get(receiptPath, .rstatus))
     // -1: the receiver keeps no receipts; the committed history alone then shows the effect.
@@ -96,7 +96,7 @@ Method OnVerifyRequest(request As Shutter.Msg.VerifyRequest, Output response As 
                 Set text = "No later event in the receiver's history supports the supersession"
             }
         } Else {
-            Set text = "The receiver's encounter could not be read (HTTP " _ estatus _ ")"
+            Set text = $SELECT(case.EncounterId = "-": "A patient-level case names no encounter to verify against; a person decides", 1: "The receiver's encounter could not be read (HTTP " _ estatus _ ")")
         }
     } Else {
         Set outcome = "unresolved"

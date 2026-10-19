@@ -317,6 +317,12 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
     If '..Release && '..Reopened && $ISOBJECT(case.Incident) Quit ..Park(case)
     // Every investigation starts clean: a policy from an earlier round never carries over to a plan the board makes.
     Set ..Policy = "", ..CatalogueEntry = "", ..CatalogueOutcome = ""
+    // A withheld operation (T31) has one answer in every mode: nothing is sent and a person decides. The gate blocks
+    // every plan on it, so a board run would only cost: a burst of merges or cancels would buy one run per message.
+    If case.FailureKind = "withheld" {
+        If $ISOBJECT(cat) && (cat.%GetTypeOf("matches") = "array") && (cat.%Get("matches").%Size() = 1) Quit ..PersonByCatalogue(case, cat)
+        Quit ..WithheldToPerson(case)
+    }
     If ..Release {
         // The sequence rule (7.4): the item goes at the version the chain expects, or not at all.
         If ..ExpectedVersion '= "" {
@@ -918,7 +924,7 @@ Method OnClose(request As Shutter.Msg.CaseClose, Output response As %Library.Per
     }
     Set ..CaseId = case.CaseId, ..Mode = case.Mode
     Set who = $SELECT(request.Actor = "": "a person", 1: request.Actor)
-    Set sc = ##class(Shutter.Store.Case).CloseByHand(case, request.Reason, who)
+    Set sc = ##class(Shutter.Store.Case).CloseByHand(case, request.Reason, who, request.ExpectedVersion)
     Quit:$$$ISERR(sc) sc
     Set started.State = case.State
     $$$TRACE("Case " _ case.CaseId _ " handled by hand, closed by " _ who)
@@ -935,6 +941,7 @@ Method OnClose(request As Shutter.Msg.CaseClose, Output response As %Library.Per
             Set task.%UserName = request.Actor
         }
         Do task.%FormValues.SetAt("Cancelled: the case was handled by hand", "Comment")
+        If '$LISTFIND($LISTFROMSTRING(task.%Actions, ","), "Cancel") Set task.%Actions = task.%Actions _ $SELECT(task.%Actions = "": "", 1: ",") _ "Cancel"
         Do task.%Save()
         Set tsc = ##class(EnsLib.Workflow.Engine).CompleteTask(task, "Cancel")
         If $$$ISERR(tsc) {
@@ -945,6 +952,20 @@ Method OnClose(request As Shutter.Msg.CaseClose, Output response As %Library.Per
         }
     }
     Quit $$$OK
+}
+
+/// A withheld case with no single catalogue entry (E14 and E15 not installed, or several matched): an escalate plan
+/// naming the feed's reason, through the gate, which appends MERGE_WITHHELD or CANCEL_UNSUPPORTED; the board never runs.
+Method WithheldToPerson(case As Shutter.Store.Case) As %Status
+{
+    Set ..Policy = "person"
+    Do case.Note("note", "Withheld operation: no board; a person decides (" _ case.FailureText _ ")", "system")
+    Set plan = {}
+    Set plan.disposition = "escalate", plan.action = {"type": "none"}
+    Set plan.why = case.FailureText
+    Set plan.summary = "Withheld: " _ case.FailureText
+    Set plan.preconditions = [], plan."evidence_refs" = ["failure"], plan.disagreements = []
+    Quit ..AdoptPlan(case, plan, "withheld")
 }
 
 /// A released item authorised by the incident's approval (CONTRACTS 7.3): an approval record naming the approver,

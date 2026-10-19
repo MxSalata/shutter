@@ -109,10 +109,12 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     If isWrite {
         If wardStatus = 200 {
             Set state = ##class(Shutter.Util.Json).Str(ward, "state")
-            Set allowed = $CASE(case.Event, "admit": 0, "transfer": state = "admitted", "update": state = "admitted", "discharge": state = "admitted", : 0)
+            Set allowed = $CASE(case.Event, "admit": 0, "transfer": state = "admitted", "update": state = "admitted", "discharge": state = "admitted", "merge": state '= "", "cancel_admit": state = "admitted", "cancel_transfer": state = "admitted", "cancel_discharge": state = "discharged", : 0)
             Do ..Check(checks, "state_transition", $SELECT(allowed: "pass", 1: "block"), $SELECT(allowed: "TRANSITION_ALLOWED", 1: "INVALID_TRANSITION"), "Receiver state '" _ state _ "', event '" _ case.Event _ "'")
         } ElseIf (wardStatus = 404) && (case.Event = "admit") {
             Do ..Check(checks, "state_transition", "pass", "TRANSITION_ALLOWED", "An admission of an unknown encounter")
+        } ElseIf case.EncounterId = "-" {
+            Do ..Check(checks, "state_transition", "block", "PATIENT_LEVEL_WRITE", "The operation names no encounter whose state could be checked (a patient-level message); a person decides")
         } Else {
             Do ..Check(checks, "state_transition", "unknown", "RECEIVER_UNREADABLE", "The receiver's state could not be read")
         }
@@ -179,6 +181,8 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
             Do ..Check(checks, "concurrency", $SELECT(current = plan.ExpectedVersion: "pass", 1: "block"), $SELECT(current = plan.ExpectedVersion: "VERSION_MATCHES", 1: "RECEIVER_CHANGED"), "Expected version " _ plan.ExpectedVersion _ ", observed " _ current)
         } ElseIf (wardStatus = 404) && (case.Event = "admit") {
             Do ..Check(checks, "concurrency", $SELECT(plan.ExpectedVersion = 0: "pass", 1: "block"), $SELECT(plan.ExpectedVersion = 0: "VERSION_MATCHES", 1: "RECEIVER_CHANGED"), "An admission expects version 0")
+        } ElseIf case.EncounterId = "-" {
+            Do ..Check(checks, "concurrency", "block", "PATIENT_LEVEL_WRITE", "The operation names no encounter version to condition the write on (a patient-level message); a person decides")
         } Else {
             Do ..Check(checks, "concurrency", "unknown", "RECEIVER_UNREADABLE", "The receiver's version could not be read")
         }

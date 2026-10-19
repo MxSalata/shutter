@@ -293,7 +293,7 @@ Method Transition(toState As %String, text As %String = "", actor As %String = "
 /// handled_by_hand, and its state event names the reason and, when the case was escalated, the latest escalation
 /// it followed. The current approval, if any, is revoked as a reopening revokes it. An open Workflow task is the
 /// workflow's to cancel (Shutter.Process.CaseWorkflow.OnClose), since the engine answers the instance that raised it.
-ClassMethod CloseByHand(case As Shutter.Store.Case, reason As %String, actor As %String) As %Status
+ClassMethod CloseByHand(case As Shutter.Store.Case, reason As %String, actor As %String, expectedVersion As %Integer = "") As %Status
 {
     If '$ISOBJECT(case) Quit $$$ERROR($$$GeneralError, "No case to close")
     If '$LISTFIND($LISTBUILD("escalated", "blocked", "failed"), case.State) Quit $$$ERROR($$$GeneralError, "The case is " _ case.State _ "; only an escalated, blocked or failed case can be marked handled")
@@ -307,13 +307,15 @@ ClassMethod CloseByHand(case As Shutter.Store.Case, reason As %String, actor As 
         Set esc = ##class(Shutter.Store.Escalation).BySeq(case, +seq)
         Set followed = "; after escalation " _ (+seq)
         If $ISOBJECT(esc) Set followed = followed _ $SELECT(esc.TeamName '= "": " to " _ esc.TeamName, 1: "") _ " (" _ esc.State _ ")"
+        // An email not yet sent would tell the team to correct a case already handled: it is cancelled.
+        If $ISOBJECT(esc) && ((esc.State = "draft") || (esc.State = "queued")) { Set esc.State = "cancelled" Set esc.UpdatedAt = ##class(Shutter.Util.Time).NowUTC() Do esc.%Save() Set followed = followed _ ", cancelled" }
         Set ref = "escalation:" _ (+seq)
     }
     If $ISOBJECT(case.CurrentApproval) && 'case.CurrentApproval.Revoked Do case.CurrentApproval.Revoke(who _ ": the case was handled by hand")
     Set case.Disposition = "handled_by_hand"
     Set case.Headline = "Handled by the team. " _ $EXTRACT(reason, 1, 200)
     Set case.Outcome = "Handled by hand, recorded by " _ who _ ": " _ reason
-    Quit case.Transition("resolved", "Handled by hand: " _ reason _ followed, who, ref)
+    Quit case.Transition("resolved", "Handled by hand: " _ reason _ followed, who, ref, expectedVersion)
 }
 
 /// Record something that is not a state change: a note, an artefact, an error.
@@ -348,7 +350,7 @@ ClassMethod DescribeFailure(case As Shutter.Store.Case) As %String [ Private ]
 {
     Set what = $CASE(case.Event, "admit": "admission", "transfer": "transfer to " _ case.Ward, "discharge": "discharge", "update": "update", "merge": $SELECT(case.PriorPatientId '= "": "merge of " _ case.PriorPatientId _ " into " _ case.PatientId, 1: "merge into " _ case.PatientId), "cancel_admit": "cancellation of the admission", "cancel_transfer": "cancellation of the transfer" _ $SELECT(case.Ward '= "": " to " _ case.Ward, 1: ""), "cancel_discharge": "cancellation of the discharge", "register": "registration", "preadmit": "pre-admission", "person_add": "person record", "person_update": "person update", "": "message", : case.Event _ " message")
     Set when = $REPLACE($PIECE(case.EventTime, "Z", 1), "T", " ")
-    Set how = $CASE(case.FailureKind, "delivery_failed": "was not delivered", "uncertain_outcome": "has an uncertain outcome", "rejected": "was rejected", "unmappable": "could not be mapped to an operation for the downstream system", "withheld": "was withheld by the site's policy", : "failed")
+    Set how = $CASE(case.FailureKind, "delivery_failed": "was not delivered", "uncertain_outcome": "has an uncertain outcome", "rejected": "was rejected", "unmappable": "could not be mapped to an operation for the downstream system", "withheld": $SELECT(case.Event = "merge": "was withheld by the site's policy", 1: "was withheld: the receiver cannot reverse it"), : "failed")
     // A cancel or a merge happens at its time; the movements keep "of".
     Set joiner = $SELECT((case.Event = "merge") || ($EXTRACT(case.Event, 1, 7) = "cancel_"): " at ", 1: " of ")
     Set where = $SELECT(case.EncounterId = "-": "", 1: " for encounter " _ case.EncounterId)

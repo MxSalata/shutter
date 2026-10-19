@@ -47,8 +47,7 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
             Set text = "Withheld by the site's policy: merges go to the PAS team", code = "merge"
         } Else {
             Set allowed = ##class(Shutter.Util.Json).Bool(entry, "cancels")
-            Set cancelled = $PIECE(event, "_", 2)
-            Set text = "Withheld: the receiver cannot reverse " _ $SELECT(cancelled = "admit": "an ", 1: "a ") _ cancelled, code = "cancel_unsupported"
+            Set text = "Withheld: the receiver cannot reverse the " _ ##class(Shutter.Operation.Gate).Reversed(event), code = "cancel_unsupported"
         }
         If 'allowed {
             $$$TRACE(text _ " (" _ key _ ")")
