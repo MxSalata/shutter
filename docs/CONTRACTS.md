@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.13, 19 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.14, 19 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -28,6 +28,7 @@ The downstream system (`Downstream.*`), a demo bed-management system, stands in 
 ```
 
 - `event` is one of `admit`, `transfer`, `discharge`, `update`. `ward` is required for `admit` and `transfer` and must be null for `discharge` and `update`.
+- A receiver that declares `cancels: true` in its site profile entry (6.4) also takes `cancel_admit`, `cancel_transfer` and `cancel_discharge`, each the reversal of the named event on the encounter; one that declares `merges: true` takes `merge`, with `prior_patient_id`, `prior_patient_id_authority` and `prior_encounter_id` beside the fields above (v1.14). The demo receiver declares neither and refuses them with 422 `invalid_request`; Shutter never sends them to it (section 2).
 - `event_time` is the source event's time (see section 2), in ISO 8601 UTC with a `Z`. The downstream system stores it but **does not order by it**: operations are applied in arrival order. That is the receiver contract, and it is why a stale transfer applied late moves a patient backwards.
 - `expected_version` is optional. When present, the operation applies only if the encounter's current version equals it. Normal traffic omits it; recovery always sends it.
 - `payload_digest` is the sender's SHA-256 of the canonical payload (section 1.6). The downstream system computes its own and compares them when an operation key is reused.
@@ -165,14 +166,19 @@ From an HL7 v2.5.1 ADT message:
 | Field | HL7 |
 |---|---|
 | `source_system` | MSH-3 (sending application) |
-| `patient_id` and `patient_id_authority` | PID-3, first repetition: the ID and the assigning authority (`MRN1001^^^HOSP^MR` gives `MRN1001` and `HOSP`) |
-| `encounter_id` | PV1-19 (visit number) |
-| `event` | MSH-9.2: A01 → `admit`, A02 → `transfer`, A03 → `discharge`, A08 → `update` |
-| `ward` | PV1-3.1 (assigned patient location, point of care) for A01 and A02; null otherwise |
+| `patient_id` and `patient_id_authority` | PID-3, the repetition typed MR (PID-3.5), else the first: the ID and the assigning authority (`MRN1001^^^HOSP^MR` gives `MRN1001` and `HOSP`) |
+| `encounter_id` | PV1-19 (visit number); required for the delivered events; for the indexed events and a merge, the literal `-` when absent, never empty (v1.14) |
+| `event` | MSH-9.2, by the trigger table below (v1.14): A01 `admit`, A02 `transfer`, A03 `discharge`, A04 `register`, A05 `preadmit`, A06 and A07 `update`, A08 `update`, A11 `cancel_admit`, A12 `cancel_transfer`, A13 `cancel_discharge`, A28 `person_add`, A31 `person_update`, A40 `merge`; anything else does not map (an `unmappable` case) |
+| `ward` | PV1-3.1 (assigned patient location, point of care) for `admit` and `transfer`; null otherwise |
+| `prior_patient_id`, `prior_patient_id_authority`, `prior_encounter_id`, `merge_groups` | a merge only (v1.14): MRG-1 (the repetition typed MR, else the first), MRG-5, and the number of MRG segments; carried on the case, outside the payload digest (1.6) |
 | `event_time` | EVN-6 (event occurred) if present, else EVN-2 (recorded), as ISO 8601 UTC |
 | `source_message_id` | MSH-10 |
 
 Scenario S8's third message comes from a second source system, `BEDMGR` (MSH-3), for the same encounter (v1.5): its operation key starts `BEDMGR^HOSP^…`, so it is a different operation from the PAS messages even when it describes the same movement. Admit to Ward A applied; the 09:20 transfer to Ward B fails; the bed manager's own transfer to Ward C, also timed 09:20, applies. Neither event is later than the other, so supersession is unknown: nothing is resent.
+
+**The trigger table and what is delivered** (v1.14). `Shutter.Util.OperationKey.DeliveryOf(event)` classes every event word: `deliver` (`admit`, `transfer`, `discharge`, `update`) goes to the receiver as before; `index` (`register`, `preadmit`, `person_add`, `person_update`) is recorded by the HL7 index with its event word and never delivered, with no case (an A04 is `register` unless PV1-2 is `I` and PV1-3.1 is present, when it is an `admit`); `cancel` is delivered only to a receiver whose entry says `cancels: true`; `merge` only when the site profile says `merges: allowed` and the receiver's entry says `merges: true`. A cancel or a merge that is not delivered opens a case of kind `withheld` with `FailureReasonCode` `cancel_unsupported` or `merge`; the gate blocks every plan on it (`CANCEL_UNSUPPORTED`, `MERGE_WITHHELD`, 6.5) and the case goes to a person (E15, E14). The fields are read wherever the message structure puts the segment (a merge's PID and PV1 sit in the PATIENT group of ADT_A39): `OperationKey.Value(message, segment, path)`.
+
+**The schema category and the version note** (v1.14). Each HL7 service parses with its own `MessageSchemaCategory` (a category per message type is also an IRIS setting); IRIS resolves the structure from MSH-9.1 and 9.2 under that category and reads neither MSH-9.3 nor MSH-12 for it. The fields above sit at the same positions in 2.3.1, 2.4 and 2.5.1. The evidence's validation item records `message_version` (MSH-12.1), `route_category` (the message's `DocTypeCategory`), `route_standard` (the category's standard ancestor, by `Base` through `EnsLib.HL7.Schema:TypeCategories`) and `version_agrees`, with a `version_note` when they differ ("The message says HL7 2.4; the route parses it as 2.5.1"); it is a note, never a failure, and the conformance review cites it.
 
 The business process that builds the downstream operation and delivers it is `Shutter.Process.ADTToWard`; the mapping it uses is the class method `Shutter.Util.OperationKey.FromHL7(message)`, shared with the evidence collector, the index and the fixtures. The same mapping, as an ObjectScript class method, is `Shutter.Util.OperationKey.FromHL7(message)` so the evidence collector and the fixtures agree.
 
@@ -236,6 +242,8 @@ Scenario S7 (a later transfer arriving while the plan awaits approval) is writte
 
 The API as built is `src/Shutter/API/Dispatch.cls` (its UrlMap lists the routes; sign-in through `POST /session` and the CSP session cookie; every change carries `X-Requested-With: Shutter`, the idempotent ones an `Idempotency-Key`; errors are JSON with `error` and `detail`). The web application's notes on using it are in `web/README.md`. Workflow tasks come back in camelCase with ISO 8601 UTC times (v1.5).
 
+`POST /cases/{id}/close` with `{reason}` (v1.14; `Shutter_Operate`, `X-Requested-With`, an `Idempotency-Key`) answers 202 `{caseId, state: "closing", requestedBy, reason}` and sends `Shutter.Msg.CaseClose` to the Case Workflow item: the case resolves with disposition `handled_by_hand`, its state event names the reason and the latest escalation, the current approval is revoked and an open approval task is cancelled; 400 `bad_request` when the body is not a JSON object or `reason` is empty, 404 `not_found`, 409 `wrong_state` unless the case is escalated, blocked or failed. It is how a case the team corrected by hand (a withheld merge or cancel, an escalation the PAS team acted on) is closed; `reinvestigate` stays for a correction the receiver's state can prove.
+
 ## 6. The scenario catalogue and the matcher (v1.6)
 
 The catalogue is the knowledge base's core: every failure pattern Shutter knows, each with a preferred outcome and its
@@ -251,10 +259,11 @@ conditions that matter; an unlisted condition is a wildcard. A listed condition 
 
 | Condition | Values | Computed from |
 | --- | --- | --- |
-| `delivery` | `failed`, `rejected`, `uncertain`, `unmappable` | the case's failure kind (1.1: 503 and connection failures are `failed`; 409 and 422 are `rejected`; 504 is `uncertain`; a message Shutter could not map to an operation is `unmappable`, v1.9) |
+| `delivery` | `failed`, `rejected`, `uncertain`, `unmappable`, `withheld` | the case's failure kind (1.1: 503 and connection failures are `failed`; 409 and 422 are `rejected`; 504 is `uncertain`; a message Shutter could not map to an operation is `unmappable`, v1.9) |
 | `receiver_answer` | `unavailable`, `timeout`, `duplicate`, `version_conflict`, `refused`, `none` | the error item's reason code, else its HTTP status (504 `timeout`, 409 and 422 `refused`, 503 `unavailable`); an uncertain delivery with no code reads `timeout` |
+| `event` | `admit`, `transfer`, `discharge`, `update`, `merge`, `cancel`, `register`, `other` | the case's event word (v1.14): the three cancel words fold to `cancel`; an unmapped trigger is `other`. A withheld case reads `delivery: withheld` and `receiver_answer: none` (no receiver was asked); `later_applied` reads `cancelled` for an applied cancel at or after the failed event's time (top of the precedence) and `merge` for a later applied merge |
 | `receipt` | `present`, `absent`, `unreadable`, `none` | the receipt lookup: 200, 404, anything else (1.9); `none` when the receiver has no receipt endpoint (6.4), which is a fact about the receiver, not a failed lookup |
-| `later_applied` | `none`, `transfer`, `discharge`, `admit`, `update` | among the applied events for the encounter whose event time is later than the failed operation's (the downstream system's history and the timeline), by precedence: `discharge` if any, else `transfer` if any, else `admit` (a later admission, v1.11), else `update` (an A08), else `none` |
+| `later_applied` | `none`, `cancelled`, `merge`, `transfer`, `discharge`, `admit`, `update` | among the applied events for the encounter whose event time is later than the failed operation's (the downstream system's history and the timeline), by precedence: `discharge` if any, else `transfer` if any, else `admit` (a later admission, v1.11), else `update` (an A08), else `none` |
 | `event_time` | `plausible`, `before_admission`, `future`, `far_from_recorded`, `clock_change` | the failed event's time (v1.11, T28): before the admission the message (PV1-44) or the receiver's first history entry names, for anything but an admission; more than five minutes after the message was sent or the evidence was taken; more than a day from the recording time (EVN-2); without an offset, read in `Europe/London`, and within an hour of a British clock change (the order of two events is then not safe); plausible otherwise |
 | `encounter_state` | `admitted`, `discharged`, `not_found`, `unknown` | the downstream system's state; `not_found` when the receiver answers 404 (it does not know the encounter); `unknown` when the receiver can't be read |
 | `transition` | `allowed`, `invalid`, `unknown` | the failed event from the encounter's current state (1.4): a transfer after a discharge is `invalid` |
@@ -332,7 +341,7 @@ reads it through `Shutter.Store.SiteProfile`.
   "version": 1,
   "receivers": [
     {"name": "Downstream Out", "system": "the demo bed-management system", "tier": 2,
-     "applies": "arrival_order", "resend_timestamp": "original", "cancels": false,
+     "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "merges": false,
      "api": {"base": "/downstream/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}",
              "capabilities": "/capabilities", "operations": "/operations"},
      "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}}
@@ -340,6 +349,7 @@ reads it through `Shutter.Store.SiteProfile`.
   "history_policy": "current",
   "authoritative_source": "",
   "unconditional_resend": "forbidden",
+  "merges": "forbidden",
   "policy": {
     "1": {"single": "automatic", "ordered": "automatic", "interleaved": "board"},
     "2": {"single": "automatic", "ordered": "approval", "interleaved": "board"},
@@ -383,6 +393,7 @@ reads it through `Shutter.Store.SiteProfile`.
 - `per_chain`: one Workflow task per chain of the incident.
 - `board` for a chain kind means the board runs whatever the match says.
 - A tier 3 receiver never takes `automatic` unless the profile says so explicitly; the shipped default does not.
+- `merges` (v1.14): `forbidden` (the default when absent) or `allowed`, the only values the validator accepts. A receiver entry's `merges` and `cancels` (booleans, default false) say what it takes (1.1). A merge is delivered only under `allowed` to a receiver with `merges: true`; the gate's `MERGE_WITHHELD` blocks any write of a merge otherwise, so the exact repeat of a merge the receiver already holds (a receipt present) is E3's reconcile, and no other merge is ever resent by Shutter. `Shutter.Store.SiteProfile.MergesAllowed()` and `ReceiverFlag(name, flag)` read them.
 
 ### 6.5 The gate's catalogue checks
 
@@ -393,6 +404,8 @@ A new check, `catalogue`, with these reason codes (in `knowledge/block-reasons.j
 - `NEW_PATTERN`: no entry matches (block; the case escalates as a candidate entry);
 - `POLICY_REQUIRES_APPROVAL`: an automatic release where the profile requires an approval (block; an internal guard).
 The plan's `catalogue_entry` and `outcome` are bound by the approval's digest like every other field of the plan.
+
+Two `intent` checks for withheld cases (v1.14, policy version 2026-10-19.3), appended for every plan on a case of kind `withheld` as `UNMAPPABLE` is, and as guards on any write of a merge or a cancel: `MERGE_WITHHELD` (the case's event is `merge` and the site profile does not allow merges, or the receiver does not take them) and `CANCEL_UNSUPPORTED` (a `cancel_*` event to a receiver whose entry says `cancels: false`). The identity check answers `NO_ENCOUNTER` (pass) for a case whose encounter piece is `-`.
 
 ### 6.6 The board's tool
 
@@ -419,6 +432,7 @@ cites entries by id. The coordinator's instructions say the plan names the entry
 - A chain's kind: `single` (one failure, nothing later applied), `ordered` (several failures, no successful delivery for
   the encounter between them), `interleaved` (successful deliveries between the failures, or a later applied event).
 - Each case in a chain gets its own evidence snapshot as today. The matcher runs per case with `chain` set.
+- `withheld` and `unmappable` cases never count towards or join an incident (the detector counts `delivery_failed` and `rejected` only); a rejected merge at a site that allows merges does, and its release is gated like any write (v1.14).
 
 ### 7.2 Classification and the plan
 
@@ -525,6 +539,7 @@ separate, later tool.
   matcher's `later_applied` count only `applied` and `already_committed`, so it supersedes nothing by itself; the
   receiver's history decides. The board sees it and can say so.
 - A scenario for a later movement on a route Shutter does not own, found only by the index, is planned; it is not in `fixtures/scenarios.json` yet.
+- The index row's `Event` is the key's event word (v1.14: `register`, `preadmit`, `person_add`, `person_update`, the cancel words and `merge` included, 32 characters), so registrations, pre-admissions and person updates show between the movements; its `VisitNumber` is `-` for a message with no PV1-19, and the timeline and the index answer nothing for an encounter of `-` or empty.
 
 ### 8.3 The API
 
@@ -585,6 +600,8 @@ left IRIS. A recording made before this rule replays with real ids in its result
 it. `GetFailure` answers a fresh failure object and the error item, never the case headline. `SELECT Shutter_Util.ModelView_Preview('C-000012')`
 shows what the model would see of a case.
 
+- A merge's prior identifiers (v1.14: `prior_patient_id`, `prior_encounter_id`, `prior_patient_identifier`, `prior_visit_number`, and every MRG group's in `prior_identifiers`) are tokens like the case's own (PID or MRN or NHS by the identifier type, ENC, VISIT; the prior name's parts NAME); `merge_groups`, `patient_class` and the validation's version fields pass through.
+
 ## 10. Escalation by email (v1.11)
 
 A blocked, escalated or failed case can be handed to the people who correct systems by hand. The draft is built from
@@ -594,7 +611,7 @@ checks), what the receiver holds with its history, the encounter's timeline from
 sent, and references. No name, address or note text. A person reviews it, chooses the team and sends it; the send is
 bound to the digest of the text the person read.
 
-- The site profile's `teams` (array of `{id, name, mailbox, cc?: [...], receivers?: [...]}`; `id`, `name` and
+- The site profile's `teams` (array of `{id, name, mailbox, cc?: [...], receivers?: [...], sources?: [...]}` (v1.14: `sources` lists sending applications, MSH-3, such as `PAS`; a merge goes first to the team whose `sources` lists the case's source system, then to the receiver's team, then to the first team; the draft words a merge "Merge of <prior identifier> into <patient identifier>" and a cancel "Cancellation of the transfer to WARD-B at ..."); `id`, `name` and
   `mailbox` required, ids unique) and `mail` (`allowed_domains`: every mailbox and cc must end in one of them when set, checked when the profile is saved and again at `PATCH` and at the send; `from`: the sender of the emails when set, else the `Escalation Mail` operation's `From` setting, default `shutter@localhost`). The team for a case is the one whose `receivers` names the case's receiver, else the first, else the
   profile's `approvers.escalation` text with no mailbox (the person fills one in).
 - `GET /cases/{id}/escalations`; `POST /cases/{id}/escalations` with `{teamId?}` answers 201 with the draft (409
@@ -620,6 +637,7 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.14, 19 Oct 2026: other HL7 schemas and the trigger table (section 2: the events A04, A05, A06, A07, A11 to A13, A28, A31 and A40; what is delivered, indexed only or withheld; the `-` encounter piece; fields read wherever the structure puts the segment; the version note in the evidence); the A40 rule (`merges` in the site profile and the receiver entry, 6.4; the kind `withheld`; `MERGE_WITHHELD` and `CANCEL_UNSUPPORTED`, 6.5; the merge's prior fields, 2 and 9; the escalation's `sources` routing and wording, 10); the matcher's `event`, `delivery: withheld`, `receiver_answer: none` and `later_applied: cancelled | merge` (6.1); withheld and unmappable cases outside incidents (7.1); the index's event words and the `-` visit (8.2); `POST /cases/{id}/close` (5); the gate's policy version 2026-10-19.3 and its `NO_ENCOUNTER` identity answer. The catalogue entries E14 (a patient merge) and E15 (a cancel the receiver can't reverse) and the block reasons `MERGE_WITHHELD` and `CANCEL_UNSUPPORTED` are the knowledge side of the same change.
 - v1.13, 19 Oct 2026: the receiving system is named the downstream system (a demo bed-management system): the package
   `Downstream.*` with its globals `^Downstream.*` (was `Wards.*`), the web application `/downstream/api`, the resource
   and role `Downstream_API`, the role `Shutter_DownstreamClient`, the user `downstream-client`, the Ens credential
