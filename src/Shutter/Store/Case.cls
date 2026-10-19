@@ -92,7 +92,7 @@ Property SourceHeaderId As %String(%JSONFIELDNAME = "sourceHeaderId", MAXLEN = 2
 /// The production session of the case workflow, once it runs.
 Property WorkflowSessionId As %String(%JSONFIELDNAME = "workflowSessionId", MAXLEN = 20);
 
-/// The decided disposition: resend, reconcile, superseded, more_evidence, escalate.
+/// The decided disposition: resend, reconcile, superseded, more_evidence, escalate; handled_by_hand when the team closed the case (CloseByHand).
 Property Disposition As %String(%JSONFIELDNAME = "disposition", MAXLEN = 32);
 
 /// The catalogue had no entry for this case's pattern (CONTRACTS 6.3): a reviewer may write one.

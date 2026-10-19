@@ -34,6 +34,8 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     If wardStatus = 200 {
         Set same = (##class(Shutter.Util.Json).Str(ward, "patient_id") = case.PatientId) && (##class(Shutter.Util.Json).Str(ward, "patient_id_authority") = case.PatientIdAuthority)
         Do ..Check(checks, "identity", $SELECT(same: "pass", 1: "block"), $SELECT(same: "IDENTITY_MATCHES", 1: "PATIENT_MISMATCH"), $SELECT(same: "The receiver's encounter " _ case.EncounterId _ " belongs to " _ case.PatientId _ " (" _ case.PatientIdAuthority _ ")", 1: "The receiver's encounter belongs to another patient"))
+    } ElseIf case.EncounterId = "-" {
+        Do ..Check(checks, "identity", "pass", "NO_ENCOUNTER", "The message names no encounter (a patient-level message): there is no receiver record to compare")
     } ElseIf (wardStatus = 404) && (case.Event = "admit") {
         Do ..Check(checks, "identity", "pass", "NEW_ENCOUNTER", "The receiver has no encounter yet, as an admission expects")
     } ElseIf wardStatus = 404 {

@@ -111,7 +111,7 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     If request.%IsA("Shutter.Msg.CaseRelease") Quit ..OnRelease(request, .response)
     If request.%IsA("Shutter.Msg.Reinvestigate") Quit ..OnReinvestigate(request, .response)
     If request.%IsA("Shutter.Msg.CaseClose") Quit ..OnClose(request, .response)
-    If 'request.%IsA("Shutter.Msg.CaseIntake") Quit $$$ERROR($$$GeneralError, "Case Workflow expects a case intake or a case release, got " _ $CLASSNAME(request))
+    If 'request.%IsA("Shutter.Msg.CaseIntake") Quit $$$ERROR($$$GeneralError, "Case Workflow expects a case intake, a case release, a reinvestigation or a close, got " _ $CLASSNAME(request))
     Set op = ##class(Shutter.Util.Json).Parse(request.OperationJSON, .sc)
     If $$$ISERR(sc) Quit sc
     Set sc = ##class(Shutter.Store.Case).Open(op, request.FailureKind, request.FailureText, request.EnsSessionId, request.SourceHeaderId, request.Mode, .case, .opened)
@@ -748,6 +748,7 @@ Method Complete(summary As %DynamicObject, case As Shutter.Store.Case) As %Boole
     Set ws = $CLASSMETHOD(json, "Str", summary, "ward_state_http_status"), rs = $CLASSMETHOD(json, "Str", summary, "receipt_http_status")
     Set route = summary.%Get("route")
     Set cs = $SELECT($ISOBJECT(route): $CLASSMETHOD(json, "Str", route, "capabilities_http_status"), 1: 200)
+    If case.EncounterId = "-" Quit (cs = 200)
     If (ws '= 200) && '((ws = 404) && (case.Event = "admit")) Quit 0
     If (rs '= 200) && (rs '= 404) && (rs '= -1) Quit 0
     If cs '= 200 Quit 0

@@ -1,5 +1,5 @@
 /// The REST API for the web application (docs/CONTRACTS.md, section 5). Every route checks the
-/// caller's resources on the server; changes need the CSRF header; the two idempotent POSTs take
+/// caller's resources on the server; changes need the CSRF header; the POSTs that change a case take
 /// an Idempotency-Key. Everything the app shows comes through here.
 Class Shutter.API.Dispatch Extends %CSP.REST
 {

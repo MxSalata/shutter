@@ -90,7 +90,11 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
             }
         }
     } Else {
-        Set b = b _ "  Not known: the receiver's record of the encounter could not be read (HTTP " _ summary.%Get("ward_state_http_status") _ ")." _ nl
+        If case.EncounterId = "-" {
+            Set b = b _ "  Not applicable: the message names no encounter (a patient-level message)." _ nl
+        } Else {
+            Set b = b _ "  Not known: the receiver's record of the encounter could not be read (HTTP " _ summary.%Get("ward_state_http_status") _ ")." _ nl
+        }
     }
     Set b = b _ nl
 
