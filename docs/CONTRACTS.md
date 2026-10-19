@@ -629,7 +629,9 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   readiness keys and the `ward` field (the patient's location) keep their names. The installer removes the names from
   before (`/wards/api`, `Wards_API`, `Shutter_WardClient`, `wards-client`, `WardsAPI` and the `Wards` classes) when it
   finds them. Nothing under `^Wards.*` is migrated: a volume from before this version is removed once
-  (`docker compose down -v`) before the first `up` of a newer build.
+  (`docker compose down -v`) before the first `up` of a newer build. The production start also rebuilds the agents'
+  search collections (contracts, lifecycle, effects, playbooks) when their files changed, and drops the chunks of a
+  file that is gone, so a renamed or removed document no longer answers a search.
 - v1.12, 19 Oct 2026: `mail.from` is the sender of escalation emails when set; the addresses a person types are checked
   against `mail.allowed_domains` at `PATCH` and at the send (422 `address_not_allowed`). The recordings re-made with the
   zone: the shipped seed profile says `Europe/London` (6.4), and the scenario S13 (a transfer timed before its

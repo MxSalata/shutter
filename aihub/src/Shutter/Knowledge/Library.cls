@@ -57,7 +57,7 @@ ClassMethod BuildAll(dir As %String) As %String [ SqlProc ]
         If '##class(%File).DirectoryExists(sub) Do out.%Set(coll, "no folder") Continue
         Set kb = ..Open(coll, .err)
         If '$ISOBJECT(kb) Do out.%Set(coll, "unavailable: " _ err) Continue
-        Set chunks = 0, files = 0
+        Set chunks = 0, files = 0, kept = "", dropped = 0
         Try {
             Set rs = ##class(%File).FileSetFunc(sub, "*.md")
             While rs.%Next() {
@@ -66,10 +66,19 @@ ClassMethod BuildAll(dir As %String) As %String [ SqlProc ]
                 Continue:text=""
                 Set source = ##class(%File).GetFilename(path)
                 Set n = kb.ReindexDocument(source, text, {"collection": (coll), "source": (source)})
-                Set chunks = chunks + n, files = files + 1
+                Set chunks = chunks + n, files = files + 1, kept = kept _ $LISTBUILD(source)
+            }
+            // A file removed or renamed since the last build leaves its chunks behind, and a search would still find them
+            Set table = ..TableFor(coll)
+            Set found = ##class(%SQL.Statement).%ExecDirect(, "SELECT DISTINCT %EXACT(source) AS s FROM " _ table)
+            While found.%Next() {
+                Set s = found.%Get("s")
+                Continue:$LISTFIND(kept, s)
+                Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM " _ table _ " WHERE %EXACT(source) = ?", s)
+                Set dropped = dropped + 1
             }
             Set ^Shutter.Config("knowledge", coll) = $LISTBUILD(files, chunks, ##class(Shutter.Util.Time).NowUTC())
-            Do out.%Set(coll, {"files": (files), "chunks": (chunks)})
+            Do out.%Set(coll, {"files": (files), "chunks": (chunks), "dropped": (dropped)})
         } Catch ex {
             Do out.%Set(coll, "failed: " _ ex.DisplayString())
         }

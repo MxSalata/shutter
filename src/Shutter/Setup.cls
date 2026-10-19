@@ -795,6 +795,27 @@ ClassMethod RefreshKnowledge(root As %String = "") As %String [ SqlProc ]
             Do out.%Set(name, "error: " _ $SYSTEM.Status.GetErrorText(sc))
         }
     }
+    // The aihub module's search collections (the contract, lifecycle, effects and playbooks the agents search): rebuilt
+    // when their files change, as the rest is, so a new image's knowledge reaches the collections a volume kept
+    If ##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Knowledge.Library") {
+        Set kdir = root _ "knowledge/", stamp = "", list = $PARAMETER("Shutter.Knowledge.Library", "COLLECTIONS")
+        For i = 1:1:$LENGTH(list, ",") {
+            Set coll = $PIECE(list, ",", i)
+            If ##class(%File).DirectoryExists(kdir _ coll) Set stamp = stamp _ coll _ "=" _ ..DirectoryStamp(kdir _ coll) _ ";"
+        }
+        If (stamp '= "") && ($GET(^Shutter.Config("stamp", "searchKnowledge")) '= stamp) {
+            Try {
+                Set built = ##class(%DynamicObject).%FromJSON($CLASSMETHOD("Shutter.Knowledge.Library", "BuildAll", kdir))
+                // A collection that failed to build ("unavailable: ...", "failed: ...") is tried again at the next start
+                Set ok = 1, it = built.%GetIterator()
+                While it.%GetNext(, .v) { If '$ISOBJECT(v) && (v '= "no folder") Set ok = 0 }
+                If ok Set ^Shutter.Config("stamp", "searchKnowledge") = stamp
+                Do out.%Set("searchKnowledge", built)
+            } Catch ex {
+                Do out.%Set("searchKnowledge", "error: " _ ex.DisplayString())
+            }
+        }
+    }
     Quit out.%ToJSON()
 }
 

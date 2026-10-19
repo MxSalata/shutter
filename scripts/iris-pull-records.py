@@ -5,7 +5,9 @@ scenario-<S>-<encounter>-<event>-<member>-<cfg>[-roundN].json for the keys that 
 
     python3 scripts/iris-pull-records.py --url http://host:52773 --ns SHUTTER [--like 'scenario:S2:%'] [--dir fixtures/records]
 
-Only recordings whose key starts with "scenario:" are written (the demo scenarios); others are listed.
+Only recordings whose key starts with "scenario:" are written (the demo scenarios); others are listed. The repository
+has no em dashes, and models write them: in every text of a recording, a spaced em dash becomes a semicolon and any
+other one a hyphen, also where the transcript's JSON text escapes it. Nothing else in a recording is changed.
 """
 import argparse
 import base64
@@ -18,6 +20,19 @@ import urllib.request
 # scenario:<S>[:<encounter>:<event>]|<member>|<configVersion>[|round<n>], as in scripts/check-records.py
 KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+)(?::(?P<encounter>[^:|]+):(?P<event>[^:|]+))?"
                     r"\|(?P<member>[a-z]+)\|(?P<cfg>\d+)(?:\|round(?P<round>\d+))?$")
+
+
+def plain(x):
+    """x with its em dashes replaced, in every string it holds."""
+    if isinstance(x, str):
+        for dash in ("\u2014", "\\u2014"):
+            x = x.replace(" " + dash + " ", "; ").replace(dash, "-")
+        return x
+    if isinstance(x, list):
+        return [plain(v) for v in x]
+    if isinstance(x, dict):
+        return {k: plain(v) for k, v in x.items()}
+    return x
 
 
 def file_name(m):
@@ -69,6 +84,7 @@ def main():
         d.pop("id", None)
         ordered = {k: d[k] for k in ("key", "agentClass", "configVersion", "memberCode", "snapshotDigest", "correlationKey",
                                      "model", "response", "transcript", "toolCalls", "recordedAt", "label") if k in d}
+        ordered = plain(ordered)
         name = file_name(m)
         path = os.path.join(args.dir, name)
         with open(path, "w", encoding="utf-8") as f:

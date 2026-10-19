@@ -85,21 +85,22 @@ and the agent items, set to `auto`, then run live (`SHUTTER_AGENT_MODE` forces `
 on 19 October 2026 with `claude-opus-5-5`: one board pass (three specialists and the coordinator) uses about 84,000 input and
 4,500 output tokens, roughly 0.43 USD at list prices, and takes about a minute; the Settings page shows the figures per run.
 
-What you make stays: the cases, approvals, incidents, the site profile and Shutter's record of the provider configuration live in a data
-database inside the `shutter-mgr` volume (the image keeps only the code), so `docker compose down` and `up` keep them, a
-rebuilt image brings new code to the same data, and `docker compose down -v` starts afresh. A volume made by a build
-from before 18 October 2026 has no data database, and one from before 19 October 2026 keeps the downstream system's
-records under its earlier name, which newer builds don't read: remove such a volume once (`docker compose down -v`)
-before the first `up` of a newer build. The compose file gives the container two minutes to stop (`stop_grace_period`),
-so IRIS writes its journal and write image out cleanly; a container killed mid-write recovers from the journal at the
-next start, which is what the "abnormal shutdown" alert in the console log then says. When the production starts it
-re-reads the knowledge files that changed (block reasons, catalogue, site profile seed, recordings), so a rebuilt
-image's knowledge reaches the kept data; a site profile saved from the app is never overwritten by the seed. Installing
-again over an instance that already has Shutter (a rebuilt image on the kept volume, or `zpm "load"` again) brings the
-roles to their current definition and the demo users `operator`, `approver` and `downstream-client` back to the demo's
-role, password and enabled state, and rewrites the `DownstreamAPI` credential; a non-demo install only adds roles to
-users that exist. Every install also removes what the downstream system was called before 19 October 2026: its web
-application, resource, roles, user, credential and classes, when they are there.
+What you make stays: the cases, approvals, incidents, the site profile and Shutter's record of the provider
+configuration live in a data database inside the `shutter-mgr` volume (the image keeps only the code), so `docker
+compose down` and `up` keep them, a rebuilt image brings new code to the same data, and `docker compose down -v` starts
+afresh. A volume made by a build from before 18 October 2026 has no data database, and one from before 19 October 2026
+keeps the downstream system's records under its earlier name, which newer builds don't read: remove such a volume once
+(`docker compose down -v`) before the first `up` of a newer build. The compose file gives the container two minutes to
+stop (`stop_grace_period`), so IRIS writes its journal and write image out cleanly; a container killed mid-write
+recovers from the journal at the next start, which is what the "abnormal shutdown" alert in the console log then says.
+When the production starts it re-reads the knowledge files that changed (block reasons, catalogue, site profile seed,
+recordings, and the documents the agents search), so a rebuilt image's knowledge reaches the kept data; a site profile
+saved from the app is never overwritten by the seed. Installing again over an instance that already has Shutter (a
+rebuilt image on the kept volume, or `zpm "load"` again) brings the roles to their current definition and the demo users
+`operator`, `approver` and `downstream-client` back to the demo's role, password and enabled state, and rewrites the
+`DownstreamAPI` credential; a non-demo install only adds roles to users that exist. Every install also removes what the
+downstream system was called before 19 October 2026: its web application, resource, roles, user, credential and classes,
+when they are there.
 
 **What reaches the model.** Only what is needed leaves IRIS: before the evidence or a tool result goes to an agent, every
 patient and encounter identifier is replaced by a per-case token (`MRN-T1`, `ENC-T1` and the like, mapped back only inside
