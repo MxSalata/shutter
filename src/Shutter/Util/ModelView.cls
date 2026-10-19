@@ -17,11 +17,11 @@ Parameter DENYLIST = ",patient_name,name,given_name,family_name,date_of_birth,do
 
 Parameter SUMMARYKEEP = ",case_id,scenario,operation,failure,message,validation,ward_state,ward_state_http_status,receipt,receipt_http_status,timeline,later_events,route,epoch,observed_at,incident,catalogue,fresh_until,snapshot_id,snapshot_digest,taken_at,";
 
-Parameter OPERATIONKEEP = ",operation_key,encounter_id,patient_id,patient_id_authority,event,ward,event_time,source_system,source_message_id,payload_digest,";
+Parameter OPERATIONKEEP = ",operation_key,encounter_id,patient_id,patient_id_authority,event,ward,event_time,source_system,source_message_id,payload_digest,prior_patient_id,prior_patient_id_authority,prior_encounter_id,";
 
-Parameter MESSAGEKEEP = ",message_control_id,message_type,sending_application,sending_facility,receiving_application,message_time,hl7_version,event_recorded,event_occurred,patient_identifier,patient_class,assigned_location,visit_number,admit_time,notes,segment_count,doc_type,error,";
+Parameter MESSAGEKEEP = ",message_control_id,message_type,sending_application,sending_facility,receiving_application,message_time,hl7_version,message_version,event_recorded,event_occurred,patient_identifier,patient_class,assigned_location,visit_number,admit_time,prior_patient_identifier,prior_visit_number,merge_groups,prior_identifiers,notes,segment_count,doc_type,error,";
 
-Parameter VALIDATIONKEEP = ",parsed,doc_type,schema_category,spec,error,note,";
+Parameter VALIDATIONKEEP = ",parsed,doc_type,schema_category,spec,error,note,message_version,route_category,route_standard,version_agrees,version_note,";
 
 /// What a receiver's body keeps.
 Parameter WARDKEEP = ",encounter_id,patient_id,patient_id_authority,state,ward,location,version,epoch,history,error,status,http_status,";
@@ -40,7 +40,7 @@ Parameter TIMELINEKEEP = ",event,ward,event_time,operation_key,source_message_id
 Parameter ROUTEKEEP = ",feed,connector,receiver,tier,capabilities_source,declared,capabilities_http_status,capabilities,conditional_writes,receipts,dry_run,epoch,note,";
 
 /// Keys whose string values are identifiers of the case, and the token kind each gives.
-Parameter IDKEYS = ",patient_id:PID,encounter_id:ENC,encounter:ENC,visit_number:VISIT,visit:VISIT,nhs_number:NHS,mrn:MRN,";
+Parameter IDKEYS = ",patient_id:PID,encounter_id:ENC,encounter:ENC,visit_number:VISIT,visit:VISIT,nhs_number:NHS,mrn:MRN,prior_patient_id:PID,prior_encounter_id:ENC,prior_visit_number:VISIT,prior_patient_identifier:PID,";
 
 /// Strings that come from outside and are kept: capped, and flagged when they read like an instruction.
 Parameter OUTSIDEKEYS = ",text,error,message,detail,";
@@ -208,7 +208,9 @@ ClassMethod Learn(case As Shutter.Store.Case, obj As %DynamicAbstractObject)
 }
 
 /// The message's identifiers (every PID-3 repetition, typed by PID-3.5), the name parts (PID-5) and the date of birth
-/// (PID-7, as written and as ISO), as candidates; returns the kind of the case's own patient identifier.
+/// (PID-7, as written and as ISO), and for a merge the prior patient's identifiers (MRG-1, every repetition, typed by
+/// CX.5), visit number (MRG-5) and name parts (MRG-7) from every MRG segment, as candidates; returns the kind of the
+/// case's own patient identifier.
 ClassMethod LearnMessage(case As Shutter.Store.Case, ByRef cand) As %String [ Private ]
 {
     Set kind = "MRN"
@@ -237,6 +239,27 @@ ClassMethod LearnMessage(case As Shutter.Store.Case, ByRef cand) As %String [ Pr
                     Set cand("DOB", $EXTRACT(dob, 1, 4) _ "-" _ $EXTRACT(dob, 5, 6) _ "-" _ $EXTRACT(dob, 7, 8)) = ""
                     If $LENGTH(dob) > 8 Set cand("DOB", dob) = ""
                 }
+                // A merge (ADT^A40): every MRG segment, one per PATIENT group (a bare "MRG" path reads the first only),
+                // so every prior identifier, the prior visit number and the prior name parts become tokens too.
+                Set index = ""
+                For {
+                    Set mrg = msg.FindSegment("MRG", .index)
+                    Quit:'$ISOBJECT(mrg)
+                    Set reps = +mrg.GetValueAt("1(*)")
+                    For r = 1:1:reps {
+                        Set id = mrg.GetValueAt("1(" _ r _ ").1"), type = $ZCONVERT(mrg.GetValueAt("1(" _ r _ ").5"), "U")
+                        If (id '= "") && (id '= case.PatientId) Set cand($CASE(type, "MR": "MRN", "NH": "NHS", "NHS": "NHS", "NI": "NHS", : "PID"), id) = ""
+                    }
+                    Set visit = $ZSTRIP(mrg.GetValueAt("5.1"), "<>W")
+                    If (visit '= "") && (visit '= case.EncounterId) Set cand("VISIT", visit) = ""
+                    Set names = +mrg.GetValueAt("7(*)")
+                    For r = 1:1:names {
+                        For c = 1, 2, 3 {
+                            Set part = $ZSTRIP(mrg.GetValueAt("7(" _ r _ ")." _ c), "<>W")
+                            If $LENGTH(part) >= 3 Set cand("NAME", part) = ""
+                        }
+                    }
+                }
             }
         }
     } Catch {
@@ -244,8 +267,9 @@ ClassMethod LearnMessage(case As Shutter.Store.Case, ByRef cand) As %String [ Pr
     Quit kind
 }
 
-/// Candidates from an object: the values of identifier keys, the first piece of a composite patient identifier, and
-/// the patient and encounter pieces of every operation key (source^authority^patient^encounter^event^time).
+/// Candidates from an object: the values of identifier keys, the first piece of a composite patient identifier (the
+/// case's, or a merge's prior one), and the patient and encounter pieces of every operation key
+/// (source^authority^patient^encounter^event^time).
 ClassMethod Collect(node As %DynamicAbstractObject, ByRef cand, case As Shutter.Store.Case, depth As %Integer) [ Private ]
 {
     If '$ISOBJECT(node) || (depth > 12) Quit
@@ -263,7 +287,7 @@ ClassMethod Collect(node As %DynamicAbstractObject, ByRef cand, case As Shutter.
             If ($LENGTH(enc) >= 3) && (enc '= case.EncounterId) Set cand("ENC", enc) = ""
             Continue
         }
-        If lkey = "patient_identifier" {
+        If (lkey = "patient_identifier") || (lkey = "prior_patient_identifier") {
             Set pid = $PIECE(value, "^", 1)
             If ($LENGTH(pid) >= 3) && (pid '= case.PatientId) Set cand("PID", pid) = ""
             Continue

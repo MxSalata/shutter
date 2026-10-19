@@ -10,6 +10,7 @@ Class Shutter.Index.Timeline
 /// feed did not carry, merged by event time.
 ClassMethod ForCase(case As Shutter.Store.Case) As %DynamicArray
 {
+    If ..NoEncounter(case.EncounterId) { Set out = [] Quit out }
     Set resetAt = $GET(^Shutter.Config("resetAt"))
     Set since = $SELECT(resetAt = "": "2000-01-01 00:00:00", 1: $TRANSLATE($PIECE(resetAt, "Z", 1), "T", " "))
     Set out = ..Typed(case, since)
@@ -22,6 +23,7 @@ ClassMethod ForCase(case As Shutter.Store.Case) As %DynamicArray
 ClassMethod Typed(case As Shutter.Store.Case, since As %String) As %DynamicArray
 {
     Set out = []
+    If ..NoEncounter(case.EncounterId) Quit out
     Set sql = "SELECT w.ID AS WID, w.Event, w.Ward, w.EventTime, w.OperationKey, w.SourceMessageId, h.ID AS HeaderId, h.SessionId, h.TimeCreated "
         _ "FROM Shutter_Msg.WardOperation w JOIN Ens.MessageHeader h ON h.MessageBodyId = CAST(w.ID AS VARCHAR(20)) AND h.MessageBodyClassName = 'Shutter.Msg.WardOperation' "
         _ "WHERE w.EncounterId = ? AND w.Purpose = 'normal' AND h.TimeCreated >= ? ORDER BY w.EventTime, w.ID"
@@ -55,6 +57,7 @@ ClassMethod Typed(case As Shutter.Store.Case, since As %String) As %DynamicArray
 ClassMethod FromIndex(case As Shutter.Store.Case, since As %String, typed As %DynamicArray) As %DynamicArray
 {
     Set out = []
+    If ..NoEncounter(case.EncounterId) Quit out
     Try {
         Set iter = typed.%GetIterator()
         While iter.%GetNext(.i, .ev) {
@@ -91,6 +94,14 @@ ClassMethod FromIndex(case As Shutter.Store.Case, since As %String, typed As %Dy
         // The index is a finder; without it the feed's timeline stands.
     }
     Quit out
+}
+
+/// Whether an encounter id names nothing to look up: empty, or the "-" piece of a patient-level message (a merge or
+/// a person update without a visit number). An empty id would join every indexed message without a visit number, so
+/// every entry point answers an empty timeline for both without a query.
+ClassMethod NoEncounter(encounterId As %String) As %Boolean
+{
+    Quit (encounterId = "") || (encounterId = "-")
 }
 
 /// Two timelines merged by event time (the feed's first at equal times).

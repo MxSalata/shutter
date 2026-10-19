@@ -52,25 +52,39 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     // 4. The downstream system's state and history for the encounter.
     // The receiver's paths come from its description in the site profile (CONTRACTS 6.4), never from code.
     Set receiver = $SELECT(case.Receiver '= "": case.Receiver, 1: ..Receiver)
-    Set statePath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", case.EncounterId)
-    If statePath = "" { Set status = 0, wardState = {"error": "no state endpoint in the receiver's description"} } Else { Set wardState = ..WardGet(statePath, .status) }
+    // A case whose encounter piece is "-" (a patient-level message with no visit number: a merge, a person update)
+    // names no encounter to read: the state and the receipt are not applicable, recorded with the statuses the
+    // matcher reads as encounter_state unknown (no answer, 0) and receipt none (-1), and the timeline is empty.
+    Set noEncounter = (case.EncounterId = "-")
+    If noEncounter {
+        Set status = 0, wardState = {"note": "Not applicable: the case names no encounter (the message carries no visit number)"}
+    } Else {
+        Set statePath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", case.EncounterId)
+        If statePath = "" { Set status = 0, wardState = {"error": "no state endpoint in the receiver's description"} } Else { Set wardState = ..WardGet(statePath, .status) }
+    }
     Set wardItem = {}
     Set wardItem."http_status" = status
     Set wardItem.body = wardState
+    If noEncounter Do wardItem.%Set("not_applicable", 1, "boolean")
     Do snap.AddItem("ward_state", "ward_api", now, wardItem) Set count = count + 1
 
     // 5. The receipt for the operation key, if any.
-    Set receiptPath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "receipt", "", case.OperationKey)
-    Set receipt = $SELECT(receiptPath = "": {}, 1: ..WardGet(receiptPath, .rstatus))
-    // -1: the receiver keeps no receipts (no receipt path in its description), as against 0 for no answer.
-    If receiptPath = "" Set rstatus = -1
+    If noEncounter {
+        Set rstatus = -1, receipt = {"note": "Not applicable: the case names no encounter"}
+    } Else {
+        Set receiptPath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "receipt", "", case.OperationKey)
+        Set receipt = $SELECT(receiptPath = "": {}, 1: ..WardGet(receiptPath, .rstatus))
+        // -1: the receiver keeps no receipts (no receipt path in its description), as against 0 for no answer.
+        If receiptPath = "" Set rstatus = -1
+    }
     Set receiptItem = {}
     Set receiptItem."http_status" = rstatus
     Set receiptItem.body = receipt
+    If noEncounter Do receiptItem.%Set("not_applicable", 1, "boolean")
     Do snap.AddItem("receipt", "ward_api", now, receiptItem) Set count = count + 1
 
     // 6. Every operation the feed sent for this encounter in this run, with its delivery outcome.
-    Set timeline = ..Timeline(case)
+    If noEncounter { Set timeline = [] } Else { Set timeline = ..Timeline(case) }
     Set laterCount = 0
     Set iter = timeline.%GetIterator()
     While iter.%GetNext(.i, .ev) {
@@ -156,6 +170,10 @@ Method OperationOf(case As Shutter.Store.Case) As %DynamicObject [ Private ]
     If case.Ward '= "" { Set op."ward" = case.Ward } Else { Do op.%Set("ward", "", "null") }
     Set op."event_time" = case.EventTime, op."source_system" = case.SourceSystem, op."source_message_id" = case.SourceMessageId
     Set op."payload_digest" = ##class(Shutter.Util.Digest).WardPayloadDigest(op)
+    // A merge (ADT^A40): the prior patient and visit the merge discards, as the case carries them. The payload
+    // digest's eight keys (CONTRACTS 1.6) are unchanged by them.
+    If case.PriorPatientId '= "" Set op."prior_patient_id" = case.PriorPatientId, op."prior_patient_id_authority" = case.PriorPatientIdAuthority
+    If case.PriorEncounterId '= "" Set op."prior_encounter_id" = case.PriorEncounterId
     Quit op
 }
 
@@ -177,7 +195,9 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
         Set zone = ##class(Shutter.Store.SiteProfile).FeedTimeZone(), withOffset = 0, without = 0
         Set info."message_time" = ##class(Shutter.Util.Time).FromHL7(msg.GetValueAt("MSH:7.1"), zone, .had)
         If msg.GetValueAt("MSH:7.1") '= "" { If had { Set withOffset = withOffset + 1 } Else { Set without = without + 1 } }
-        Set info."hl7_version" = msg.GetValueAt("MSH:12.1")
+        // MSH-12.1 under both names: hl7_version, as before, and message_version, the version note's name for it.
+        Set version = msg.GetValueAt("MSH:12.1")
+        Set info."hl7_version" = version, info."message_version" = version
         Set info."event_recorded" = ##class(Shutter.Util.Time).FromHL7(msg.GetValueAt("EVN:2.1"), zone, .had)
         If msg.GetValueAt("EVN:2.1") '= "" { If had { Set withOffset = withOffset + 1 } Else { Set without = without + 1 } }
         Set recordedHad = had
@@ -193,6 +213,25 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
         Set info."visit_number" = msg.GetValueAt("PV1:19.1")
         Set info."admit_time" = ##class(Shutter.Util.Time).FromHL7(msg.GetValueAt("PV1:44.1"), zone, .had)
         If msg.GetValueAt("PV1:44.1") '= "" { If had { Set withOffset = withOffset + 1 } Else { Set without = without + 1 } }
+        // A merge (ADT^A40, or any message carrying MRG): what the merge discards, from every MRG segment. The first
+        // group's prior identifier and visit number stand at the top; prior_identifiers lists every group's, and
+        // merge_groups counts them. A bare "MRG" path would read the first group only, so the segments are walked.
+        Set trigger = msg.GetValueAt("MSH:9.2"), groups = 0, priors = [], index = ""
+        For {
+            Set mrg = msg.FindSegment("MRG", .index)
+            Quit:'$ISOBJECT(mrg)
+            Set groups = groups + 1
+            Set prior = {}
+            Do prior.%Set("group", groups, "number")
+            Set prior."patient_identifier" = ..PriorIdentifier(mrg), prior."visit_number" = mrg.GetValueAt("5.1")
+            If groups = 1 Set info."prior_patient_identifier" = prior."patient_identifier", info."prior_visit_number" = prior."visit_number"
+            Do priors.%Push(prior)
+        }
+        If (trigger = "A40") || (groups > 0) {
+            If groups = 0 Set info."prior_patient_identifier" = "", info."prior_visit_number" = ""
+            Do info.%Set("merge_groups", groups, "number")
+            Set info."prior_identifiers" = priors
+        }
         // How the times were read (T28): a timestamp without an offset is read in the feed's time zone.
         Set info."times_without_offset" = without, info."times_with_offset" = withOffset, info."feed_time_zone" = zone
         // Every OBX and NTE segment, wherever it sits (a group of an SIU message included), up to 50: the text stays in
@@ -226,11 +265,65 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
         Set validation.spec = "dm"
         If $$$ISERR(sc) Set validation.error = $SYSTEM.Status.GetErrorText(sc)
         Set validation.note = "Structural validation against the " _ msg.DocTypeCategory _ " schema (document type and segment structure); profile rules are the conformance review's job"
+        // The version note: the route's category is the site's choice, and IRIS never picks it from MSH-12, so a
+        // message whose own version is not the category's standard is noted, never failed.
+        Set category = msg.DocTypeCategory, standard = ..StandardCategory(category)
+        Set validation."message_version" = version
+        Set validation."route_category" = category
+        Set validation."route_standard" = standard
+        Set agrees = (version '= "") && (version = standard)
+        Do validation.%Set("version_agrees", agrees, "boolean")
+        If 'agrees Set validation."version_note" = $SELECT(version '= "": "The message says HL7 " _ version, 1: "The message names no HL7 version (MSH-12)") _ "; the route parses it as " _ $SELECT(standard '= "": standard, 1: category)
     } Catch ex {
         Set info.error = ex.DisplayString()
         Set validation.error = ex.DisplayString()
     }
     Quit info
+}
+
+/// MRG-1 of one MRG segment as "<id>^^^<authority>^<type>": the repetition typed MR (CX.5), else the first, as the
+/// patient identifier is read from PID-3; "" when the field is empty.
+Method PriorIdentifier(mrg As EnsLib.HL7.Segment) As %String [ Private ]
+{
+    Set reps = +mrg.GetValueAt("1(*)"), pick = 1
+    For r = 1:1:reps { If $ZCONVERT(mrg.GetValueAt("1(" _ r _ ").5"), "U") = "MR" Set pick = r Quit }
+    Set id = mrg.GetValueAt("1(" _ pick _ ").1")
+    If id = "" Quit ""
+    Set authority = mrg.GetValueAt("1(" _ pick _ ").4.1")
+    If authority = "" Set authority = mrg.GetValueAt("1(" _ pick _ ").4")
+    Quit id _ "^^^" _ authority _ "^" _ mrg.GetValueAt("1(" _ pick _ ").5")
+}
+
+/// The standard category a schema category descends from: the category itself when it is standard, else its Base
+/// walked up through the class query EnsLib.HL7.Schema:TypeCategories (Category, IsStandard, Base), read once per
+/// call; "" when the instance does not know the category.
+Method StandardCategory(category As %String) As %String [ Private ]
+{
+    If category = "" Quit ""
+    Set out = ""
+    Try {
+        Kill base, standard
+        Set rs = ##class(%ResultSet).%New("EnsLib.HL7.Schema:TypeCategories")
+        If $ISOBJECT(rs) {
+            Set sc = rs.Execute()
+            If $$$ISOK(sc) {
+                While rs.Next() {
+                    Set cat = rs.Get("Category")
+                    If cat '= "" Set base(cat) = rs.Get("Base"), standard(cat) = +rs.Get("IsStandard")
+                }
+            }
+        }
+        Set cat = category
+        For i = 1:1:20 {
+            Quit:'$DATA(standard(cat))
+            If standard(cat) Set out = cat Quit
+            Set cat = base(cat)
+            Quit:cat=""
+        }
+    } Catch ex {
+        Set out = ""
+    }
+    Quit out
 }
 
 /// GET a path on the downstream system; returns the parsed body (an object) and the HTTP status (0 when no answer).

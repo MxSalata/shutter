@@ -26,8 +26,9 @@ Property MessageType As %String(COLLATION = "EXACT", MAXLEN = 20);
 
 Index MessageType On MessageType [ Type = bitmap ];
 
-/// Shutter's word for the event (admit, transfer, discharge, update), or the trigger when none maps.
-Property Event As %String(COLLATION = "EXACT", MAXLEN = 20);
+/// Shutter's word for the event (admit, transfer, discharge, update, register, preadmit, person_add, person_update,
+/// cancel_admit, cancel_transfer, cancel_discharge, merge), or the trigger when none maps.
+Property Event As %String(COLLATION = "EXACT", MAXLEN = 32);
 
 /// MSH-10.
 Property ControlId As %String(COLLATION = "EXACT", MAXLEN = 200);
@@ -125,10 +126,12 @@ ClassMethod Count() As %Integer
     Quit +n
 }
 
-/// The rows for a visit number whose header is not older than a time, event time ascending, as objects.
+/// The rows for a visit number whose header is not older than a time, event time ascending, as objects. An empty
+/// visit number, or the "-" piece of a message without one, has no rows: it would match every such message.
 ClassMethod ForVisit(visitNumber As %String, since As %String = "") As %DynamicArray
 {
     Set out = []
+    If (visitNumber = "") || (visitNumber = "-") Quit out
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Index.Message WHERE VisitNumber = ? AND (TimeCreated >= ? OR TimeCreated IS NULL) ORDER BY EventTime, ID", visitNumber, since)
     While rs.%Next() {
         Set r = ..%OpenId(rs.%Get("ID"))
