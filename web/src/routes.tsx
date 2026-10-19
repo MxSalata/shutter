@@ -10,6 +10,7 @@ const CasesPage = lazy(() => import('./features/cases/CasesPage'));
 const CasePage = lazy(() => import('./features/cases/CasePage'));
 const IncidentsPage = lazy(() => import('./features/incidents/IncidentsPage'));
 const IncidentPage = lazy(() => import('./features/incidents/IncidentPage'));
+const SiteProfilePage = lazy(() => import('./features/site-profile/SiteProfilePage'));
 const LibraryPage = lazy(() => import('./features/library/LibraryPage'));
 const SettingsPage = lazy(() => import('./features/settings/SettingsPage'));
 const HealthPage = lazy(() => import('./features/health/HealthPage'));
@@ -32,6 +33,7 @@ export const router = createHashRouter([
           { path: 'cases/:caseId', element: <CasePage /> },
           { path: 'incidents', element: <IncidentsPage /> },
           { path: 'incidents/:incidentId', element: <IncidentPage /> },
+          { path: 'site-profile', element: <SiteProfilePage /> },
           { path: 'library', element: <LibraryPage /> },
           { path: 'settings', element: <SettingsPage /> },
           { path: 'health', element: <HealthPage /> },

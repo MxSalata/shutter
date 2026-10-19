@@ -1,0 +1,1 @@
+import{j as t,h as o,T as s}from"./mantine-DcYKCqem.js";import{g as f,f as a,e as l}from"./format-fZBVf_qC.js";function p({iso:e,age:m=!1,...r}){if(!e)return null;const n=`${f(e)} · ${a(e)}`;return t.jsx(o,{label:n,children:t.jsx(s,{component:"time",dateTime:e,size:"sm",tabIndex:0,...r,children:m?a(e):`${l(e)} UTC`})})}export{p as T};

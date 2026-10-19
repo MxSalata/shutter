@@ -29,6 +29,9 @@ import {
   type ScenarioList,
   type ScenarioRun,
   type Settings,
+  type SiteProfile,
+  type SiteProfileVersionEntry,
+  type SiteProfileView,
   type Snapshot,
 } from './types';
 
@@ -45,6 +48,8 @@ export const keys = {
   incidents: (filters: IncidentFilters) => ['incidents', filters] as const,
   incident: (id: string) => ['incident', id] as const,
   incidentEvents: (id: string) => ['incident', id, 'events'] as const,
+  siteProfile: ['site-profile'] as const,
+  siteProfileHistory: ['site-profile', 'history'] as const,
   library: ['library'] as const,
   settings: ['settings'] as const,
   costs: ['costs'] as const,
@@ -333,6 +338,34 @@ export function useDecideIncident(incidentId: string) {
     onSettled: async () => {
       await client.invalidateQueries({ queryKey: keys.incident(incidentId) });
       await client.invalidateQueries({ queryKey: ['incidents'] });
+    },
+  });
+}
+
+// ---- the site profile (CONTRACTS 6.4) ----
+
+export function useSiteProfile() {
+  return useQuery({ queryKey: keys.siteProfile, queryFn: () => api.get<SiteProfileView>('/site-profile') });
+}
+
+export function useSiteProfileHistory() {
+  return useQuery({
+    queryKey: keys.siteProfileHistory,
+    queryFn: () => api.get<SiteProfileVersionEntry[]>('/site-profile/history?limit=50'),
+  });
+}
+
+/** Stores the whole profile; expectedVersion is the version read, so a change saved meanwhile is refused (409). */
+export function useSaveSiteProfile() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SiteProfile & { expectedVersion: number }) =>
+      api.put<SiteProfileView>('/site-profile', body),
+    onSuccess: (data) => {
+      client.setQueryData(keys.siteProfile, data);
+    },
+    onSettled: async () => {
+      await client.invalidateQueries({ queryKey: keys.siteProfileHistory });
     },
   });
 }

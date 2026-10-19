@@ -196,6 +196,8 @@ const fixtures = {
   settings: await read('/settings'),
   costs: only ? costsOfKept() : await read('/costs'),
   health: await read('/health'),
+  siteProfile: await read('/site-profile'),
+  siteProfileHistory: await read('/site-profile/history'),
 };
 await call('DELETE', '/session');
 writeFileSync(out, `${JSON.stringify(fixtures, null, 1)}\n`);

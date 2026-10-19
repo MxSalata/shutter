@@ -16,6 +16,7 @@ import type { ReactNode } from 'react';
 import { useDisclosure } from '@mantine/hooks';
 import {
   IconBooks,
+  IconBuildingHospital,
   IconContrast,
   IconDeviceDesktop,
   IconFlask,
@@ -62,6 +63,13 @@ const NAV = [
     icon: IconStack2,
     color: 'orange',
     hint: 'Many failures to one receiver, released in order',
+  },
+  {
+    to: '/site-profile',
+    label: 'Site profile',
+    icon: IconBuildingHospital,
+    color: 'teal',
+    hint: 'Receivers, tiers, who approves what, incidents',
   },
   {
     to: '/library',

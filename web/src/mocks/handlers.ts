@@ -1,6 +1,17 @@
 import { delay, http, HttpResponse } from 'msw';
 import fixtures from './fixtures.json';
-import type { CaseState, IncidentDetail, IncidentEvent, IncidentSummary, Me, ScenarioRun } from '@/api/types';
+import type {
+  CaseState,
+  IncidentDetail,
+  IncidentEvent,
+  IncidentSummary,
+  Me,
+  ScenarioRun,
+  SiteProfile,
+  SiteProfileVersionEntry,
+  SiteProfileView,
+} from '@/api/types';
+import { validateProfile } from '@/features/site-profile/profile';
 
 /**
  * An in-browser stand-in for Shutter's REST API (CONTRACTS 5), for the demo build, development
@@ -29,11 +40,25 @@ let run: ScenarioRun | null = null;
 /** The mode each scenario was last played in here: a real run opens a case in that mode, which its card then shows. */
 let played: Record<string, string> = {};
 
+/** The recorded site profile and its versions; a save in the demo changes these until the page is reloaded. */
+const recorded = fixtures as unknown as {
+  siteProfile?: SiteProfileView | null;
+  siteProfileHistory?: SiteProfileVersionEntry[] | null;
+};
+let siteProfile: SiteProfileView | null = null;
+let siteProfileHistory: SiteProfileVersionEntry[] = [];
+function resetSiteProfile() {
+  siteProfile = recorded.siteProfile ? structuredClone(recorded.siteProfile) : null;
+  siteProfileHistory = structuredClone(recorded.siteProfileHistory ?? []);
+}
+resetSiteProfile();
+
 /** For tests: start signed in (or not), with no run playing. */
 export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
   session = signedInAs ? USERS[signedInAs] : null;
   run = null;
   played = {};
+  resetSiteProfile();
 }
 
 const error = (status: number, code: string, detail: string) =>
@@ -248,6 +273,58 @@ export const handlers = [
   http.post(`${BASE}/incidents/:id/chains/:seq/approvals`, ({ request, params }) =>
     decideIncident(request, String(params.id), Number(params.seq)),
   ),
+
+  http.get(`${BASE}/site-profile`, () =>
+    !session
+      ? signedOut()
+      : siteProfile
+        ? HttpResponse.json(siteProfile)
+        : error(404, 'not_found', 'No site profile was recorded'),
+  ),
+  http.get(`${BASE}/site-profile/history`, ({ request }) => {
+    if (!session) return signedOut();
+    const limit = Number(new URL(request.url).searchParams.get('limit') ?? 50);
+    return HttpResponse.json(siteProfileHistory.slice(0, limit));
+  }),
+  // As the server answers (CONTRACTS 6.4): the whole profile, expectedVersion taken out before the shape check
+  http.put(`${BASE}/site-profile`, async ({ request }) => {
+    const denied = csrf(request) ?? guard('approver');
+    if (denied) return denied;
+    if (!siteProfile) return error(404, 'not_found', 'No site profile was recorded');
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      body = null;
+    }
+    if (!body || typeof body !== 'object' || Array.isArray(body))
+      return error(400, 'bad_request', 'The body must be the profile as a JSON object');
+    const { expectedVersion, ...profile } = body as SiteProfile & { expectedVersion?: number };
+    if (expectedVersion !== undefined && Number(expectedVersion) !== siteProfile.version)
+      return HttpResponse.json(
+        {
+          error: 'stale_version',
+          detail: "expectedVersion is not the stored profile's version",
+          currentVersion: siteProfile.version,
+        },
+        { status: 409 },
+      );
+    const problem = validateProfile(profile);
+    if (problem) return error(400, 'bad_request', `The profile is not valid (CONTRACTS 6.4): ${problem}`);
+    const version = siteProfile.version + 1;
+    const updatedAt = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+    const updatedBy = session?.username ?? '';
+    siteProfile = {
+      ...siteProfile,
+      profile: { ...profile, version },
+      version,
+      source: 'api',
+      updatedAt,
+      updatedBy,
+    };
+    siteProfileHistory.unshift({ version, source: 'api', updatedAt, updatedBy, profile });
+    return HttpResponse.json(siteProfile);
+  }),
 
   http.get(`${BASE}/library`, () => (session ? HttpResponse.json(fixtures.library) : signedOut())),
   http.patch(`${BASE}/library/:code`, async ({ request, params }) => {

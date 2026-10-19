@@ -525,6 +525,55 @@ export interface CaseIncident {
   expected_version?: number;
 }
 
+// ---- the site profile (CONTRACTS 6.4) ----
+
+export type ChainPolicy = 'automatic' | 'approval' | 'per_chain' | 'board';
+export type ChainKind = 'single' | 'ordered' | 'interleaved';
+
+/** A receiver in the site profile: the induction answers, and the receiver description the core reads its paths from. */
+export interface SiteReceiver {
+  name: string;
+  system?: string;
+  tier: number;
+  applies?: string;
+  resend_timestamp?: string;
+  cancels?: boolean;
+  api?: Record<string, string>;
+  features?: Record<string, boolean>;
+  [key: string]: unknown;
+}
+
+/** The profile as stored (snake case, as knowledge/site/profile.json writes it). */
+export interface SiteProfile {
+  version?: number;
+  receivers: SiteReceiver[];
+  history_policy?: string;
+  authoritative_source?: string;
+  unconditional_resend?: string;
+  policy: Record<string, Partial<Record<ChainKind, string>>>;
+  approvers?: { role?: string; escalation?: string; [key: string]: unknown };
+  incident?: { threshold?: number; window_minutes?: number; quiet_seconds?: number };
+}
+
+/** GET /site-profile: the profile in force and its store version, which a PUT sends back as expectedVersion. */
+export interface SiteProfileView {
+  profile: SiteProfile;
+  version: number;
+  /** api for a profile saved through the API; defaults, or the seed file's path, for the shipped answers. */
+  source: string;
+  updatedAt: string;
+  updatedBy: string;
+  catalogueEntries: number;
+}
+
+export interface SiteProfileVersionEntry {
+  version: number;
+  source: string;
+  updatedAt: string;
+  updatedBy: string;
+  profile?: SiteProfile;
+}
+
 // ---- library, settings, costs, health (5.4) ----
 
 export interface LibraryMember {

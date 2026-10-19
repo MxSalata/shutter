@@ -17,7 +17,14 @@ import { notifications } from '@mantine/notifications';
 import { IconPlayerPlay, IconRefresh } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { isPlaying, useMe, useResetScenarios, useRunScenario, useScenarios } from '@/api/hooks';
+import {
+  isPlaying,
+  useMe,
+  useResetScenarios,
+  useRunScenario,
+  useScenarios,
+  useSiteProfile,
+} from '@/api/hooks';
 import type { Mode, Scenario, ScenarioRun } from '@/api/types';
 import { PageHeader } from '@/components/PageHeader';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -210,6 +217,20 @@ function ScenarioCard({
   );
 }
 
+/** The induction prompt (the owner's questionnaire): an approver sees it until the site's answers are saved. */
+function InductionPrompt() {
+  const profile = useSiteProfile().data;
+  if (!profile || profile.source === 'api') return null;
+  return (
+    <Alert color="blue" variant="light" mb="md" title="Shutter is running on the shipped site profile">
+      Answer the eight induction questions so it acts as your site does.{' '}
+      <Anchor component={Link} to="/site-profile" size="sm" underline="always">
+        Answer the questions
+      </Anchor>
+    </Alert>
+  );
+}
+
 export default function ScenariosPage() {
   const me = useMe().data;
   const scenarios = useScenarios();
@@ -237,6 +258,7 @@ export default function ScenariosPage() {
 
   return (
     <>
+      {me?.approver ? <InductionPrompt /> : null}
       <PageHeader
         title="Scenarios"
         subtitle="Each scenario plays a real failure into the production: HL7 files into the ADT folder and faults on the ward. Shutter opens a case, investigates, checks the plan at the gate, asks a person, and verifies the result at the receiver."

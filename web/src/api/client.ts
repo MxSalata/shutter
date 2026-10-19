@@ -3,7 +3,7 @@ import { ApiError } from '@/lib/errors';
 /** The REST API's base path (CONTRACTS 5). The app is served from the same origin, by IRIS or the Vite proxy. */
 export const API_BASE = '/api/shutter';
 
-type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export interface RequestOptions {
   body?: unknown;
@@ -61,6 +61,8 @@ export const api = {
   get: <T>(path: string, options?: RequestOptions) => request<T>('GET', path, options),
   post: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>('POST', path, { ...options, body: body ?? {} }),
+  put: <T>(path: string, body: unknown, options?: RequestOptions) =>
+    request<T>('PUT', path, { ...options, body }),
   patch: <T>(path: string, body: unknown, options?: RequestOptions) =>
     request<T>('PATCH', path, { ...options, body }),
   del: <T>(path: string, options?: RequestOptions) => request<T>('DELETE', path, options),

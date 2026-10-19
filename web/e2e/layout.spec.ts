@@ -14,6 +14,7 @@ const SCREENS: [path: string, heading: string][] = [
   ['/cases/C-000007', 'Case C-000007'],
   ['/incidents', 'Incidents'],
   ['/incidents/I-000001', 'Incident I-000001'],
+  ['/site-profile', 'Site profile'],
   ['/library', 'Agent library'],
   ['/settings', 'Settings and costs'],
   ['/health', 'Health'],
