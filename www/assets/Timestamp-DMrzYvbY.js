@@ -1,1 +1,0 @@
-import{j as a,h as o,T as s}from"./mantine-B8ComFNC.js";import{a3 as f,a4 as l,m as e,Y as c}from"./index-CVPDmpOI.js";function i({iso:t,age:r=!1,...m}){if(!t)return null;const n=`${f(t)} · yours: ${l(t)} · ${e(t)}`;return a.jsx(o,{label:n,children:a.jsx(s,{component:"time",dateTime:t,size:"sm",tabIndex:0,...m,children:r?e(t):c(t)})})}export{i as T};
