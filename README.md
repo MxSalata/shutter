@@ -87,7 +87,9 @@ on 19 October 2026 with `claude-opus-5-5`: one board pass (three specialists and
 
 What you make stays: the cases, approvals, incidents, the site profile and Shutter's record of the provider
 configuration live in a data database inside the `shutter-mgr` volume (the image keeps only the code), so `docker
-compose down` and `up` keep them, a rebuilt image brings new code to the same data, and `docker compose down -v` starts
+compose down` and `up` keep them, a rebuilt image brings new code to the same data (a build that changes the gate's policy version, as this one does with
+`2026-10-19.3`, voids approvals given before it and not yet dispatched: such a case blocks at dispatch with
+`APPROVAL_POLICY_CHANGED`; reinvestigate it), and `docker compose down -v` starts
 afresh. A volume made by a build from before 18 October 2026 has no data database, and one from before 19 October 2026
 keeps the downstream system's records under its earlier name, which newer builds don't read: remove such a volume once
 (`docker compose down -v`) before the first `up` of a newer build. The compose file gives the container two minutes to
@@ -141,8 +143,10 @@ to the team the site profile names for the sending application (`teams[].sources
 whose risk tolerance allows it sets `merges: allowed` in the profile and `merges: true` on a receiver that takes merges.
 Cancellations (A11, A12, A13) are delivered only to a receiver whose entry says `cancels: true`; the demo's downstream
 system cannot reverse an event, so a cancellation is withheld and escalated (`CANCEL_UNSUPPORTED`). Once a team has
-corrected the receiver by hand, the case page's "Mark as handled by the team" (`POST /cases/{id}/close`) closes the case
-with the reason on its record.
+corrected the receiver by hand, `POST /cases/{id}/close` with a reason (the case page's "Mark as handled by the team",
+once the page offers it) closes the case with the reason on its record. The case page's evidence shows the version note
+as `message_version`, `route_category`, `route_standard` and `version_agrees`, and the timeline names registrations,
+pre-admissions and person events by those words. A withheld case never convenes the board, whatever the mode.
 
 The same `Dockerfile` builds the replay edition on any IRIS for Health Community 2026.2 or later:
 `SHUTTER_IMAGE=containers.intersystems.com/intersystems/irishealth-community:2026.2 SHUTTER_WITH_AIHUB=0 docker compose up -d --build` (the image CI builds from). Other
