@@ -594,6 +594,8 @@ export interface SiteProfile {
   /** Who corrects the systems by hand when Shutter can't, and where their email goes (T29). */
   teams?: SiteTeam[];
   mail?: { from?: string; allowed_domains?: string[] };
+  /** The zone of times the feed sends without an offset: an IANA name or a fixed offset (CONTRACTS 6.4). */
+  feed?: { time_zone?: string };
 }
 
 /** GET /site-profile: the profile in force and its store version, which a PUT sends back as expectedVersion. */

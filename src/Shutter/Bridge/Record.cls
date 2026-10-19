@@ -1,5 +1,6 @@
 /// A recorded agent run: the response and the transcript, stored under a replay key. Recordings
-/// for the demo scenarios are keyed by scenario and member so that they replay on any instance;
+/// for the demo scenarios are keyed by scenario, encounter, event, member and config version
+/// (scenario:S2:ENC-1002:transfer|encounter|1) so that they replay on any instance;
 /// recordings of other cases are keyed by the snapshot digest and replay only where the same
 /// evidence recurs.
 Class Shutter.Bridge.Record Extends (%Persistent, %JSON.Adaptor)
@@ -34,19 +35,13 @@ Property RecordedAt As %String(%JSONFIELDNAME = "recordedAt", MAXLEN = 30);
 
 Property Label As %String(%JSONFIELDNAME = "label", MAXLEN = 200);
 
+/// The recording under exactly this key: a demo scenario's key names the scenario, the encounter, the event, the
+/// member and the config version, and nothing else stands in for it.
 ClassMethod Find(key As %String) As Shutter.Bridge.Record
 {
     Set id = ""
     &sql(SELECT ID INTO :id FROM Shutter_Bridge.Record WHERE "Key" = :key)
     If (SQLCODE = 0) && (id '= "") Quit ..%OpenId(id)
-    // A scenario key with the encounter and event (scenario:S2:ENC-1002:transfer|member|cfg) falls back to the
-    // older form without them (scenario:S2|member|cfg), which the first recordings use.
-    Set head = $PIECE(key, "|", 1)
-    If ($PIECE(head, ":", 1) = "scenario") && ($LENGTH(head, ":") >= 4) {
-        Set short = "scenario:" _ $PIECE(head, ":", 2) _ "|" _ $PIECE(key, "|", 2, *)
-        &sql(SELECT ID INTO :id FROM Shutter_Bridge.Record WHERE "Key" = :short)
-        If (SQLCODE = 0) && (id '= "") Quit ..%OpenId(id)
-    }
     Quit ""
 }
 

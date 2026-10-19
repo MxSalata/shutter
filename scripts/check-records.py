@@ -6,9 +6,10 @@ coordinator and the generalist). Mirrors the schema classes' Check methods.
     python3 scripts/check-records.py [fixtures/records] [--scenarios fixtures/scenarios.json]
 
 Exit code 1 when any file has a problem. With --scenarios it also lists, per scenario in that file, the
-members whose round-1 recording is missing: per case when the keys name the encounter and event
-(scenario:S11:ENC-1101:transfer|member|cfg), per scenario for the older keys without them (scenario:S2|member|cfg). A
-scenario that opens an incident needs recordings only for the encounters whose chain the board decides.
+members whose round-1 recording is missing, per case (scenario:S11:ENC-1101:transfer|member|cfg). A key in the older
+form without the encounter and event (scenario:S2|member|cfg) is a problem: Shutter.Bridge.Record looks up the long key
+only, so such a recording never replays. A scenario that opens an incident needs recordings only for the encounters
+whose chain the board decides.
 """
 import argparse
 import glob
@@ -25,8 +26,8 @@ MEMBERS = {
     "coordinator": ("Shutter.Agent.Coordinator", "plan"),
     "generalist": ("Shutter.Agent.Generalist", "plan"),
 }
-# scenario:<S>[:<encounter>:<event>]|<member>|<configVersion>[|round<n>]: the core writes the long form since the
-# incident work (CaseWorkflow), and Shutter.Bridge.Record falls back to the short one the first recordings use.
+# scenario:<S>:<encounter>:<event>|<member>|<configVersion>[|round<n>], as CaseWorkflow writes it. The pattern still parses
+# the older form without the encounter and event, so that check_file can say why such a recording is refused.
 KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+)(?::(?P<encounter>[^:|]+):(?P<event>[^:|]+))?"
                     r"\|(?P<member>[a-z]+)\|(?P<cfg>\d+)(?:\|round(?P<round>\d+))?$")
 
@@ -133,6 +134,9 @@ def check_file(path):
         member = d.get("memberCode")
     else:
         member, cfg = m["member"], m["cfg"]
+        if not m["encounter"]:
+            problems.append(f"key {key!r} has no encounter and event: Shutter looks up scenario:<S>:<encounter>:<event>|..."
+                            " only, so this recording never replays")
         if d.get("memberCode") != member:
             problems.append(f"memberCode {d.get('memberCode')!r} differs from the key's member {member!r}")
         if str(d.get("configVersion")) != cfg:

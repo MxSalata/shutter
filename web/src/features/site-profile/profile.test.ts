@@ -13,6 +13,7 @@ import {
 
 const recorded = (fixtures as unknown as { siteProfile: { profile: SiteProfile } }).siteProfile.profile;
 const copy = (): SiteProfile => structuredClone(recorded);
+const FEED_ZONE = 'feed.time_zone: must be UTC, Europe/London or a fixed offset such as +01:00 (up to 14:00)';
 
 describe('validateProfile, the port of SiteProfile.Validate', () => {
   it('accepts the recorded profile', () => {
@@ -47,6 +48,61 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
       'policy.1.single: must be automatic, approval, per_chain or board',
     ],
     [
+      (p: SiteProfile) => (p.receivers[0].api = { base: '/wards/api', state: '/encounters/{encounter}' }),
+      'receivers[0].api.operations: required when api is given',
+    ],
+    [(p: Record<string, unknown>) => (p.feed = { time_zone: 'GMT' }), FEED_ZONE],
+    [(p: Record<string, unknown>) => (p.feed = { time_zone: '+15:00' }), FEED_ZONE],
+    [(p: Record<string, unknown>) => (p.feed = { time_zone: 1 }), FEED_ZONE],
+    [(p: Record<string, unknown>) => (p.feed = { zone: 'UTC' }), 'feed.zone: unknown setting'],
+    [
+      (p: Record<string, unknown>) => (p.model_content = { free_text: 'yes' }),
+      'model_content.free_text: must be true or false',
+    ],
+    [
+      (p: Record<string, unknown>) => (p.model_content = { names: false }),
+      'model_content.names: unknown setting',
+    ],
+    [
+      (p: Record<string, unknown>) => (p.mail = { allowed_domains: 'nhs.net' }),
+      'mail.allowed_domains: must be an array of domains',
+    ],
+    [(p: Record<string, unknown>) => (p.mail = { reply_to: 'x@nhs.net' }), 'mail.reply_to: unknown setting'],
+    [(p: Record<string, unknown>) => (p.teams = { id: 'pas' }), 'teams: must be an array'],
+    [
+      (p: Record<string, unknown>) => (p.teams = [{ id: 'pas', name: 'PAS team' }]),
+      'teams[0].mailbox: required',
+    ],
+    [
+      (p: Record<string, unknown>) =>
+        (p.teams = [{ id: 'pas', name: 'PAS team', mailbox: 'pas.team', pager: '1' }]),
+      'teams[0].pager: unknown field',
+    ],
+    [
+      (p: Record<string, unknown>) => (p.teams = [{ id: 'pas', name: 'PAS team', mailbox: 'pas.team' }]),
+      'teams[0].mailbox: must be an address',
+    ],
+    [
+      (p: Record<string, unknown>) => {
+        p.mail = { allowed_domains: ['nhs.net'] };
+        p.teams = [{ id: 'pas', name: 'PAS team', mailbox: 'pas@trust.nhs.net', cc: ['it@example.com'] }];
+      },
+      'teams[0].cc[0]: not in the allowed domains',
+    ],
+    [
+      (p: Record<string, unknown>) =>
+        (p.teams = [
+          { id: 'pas', name: 'PAS team', mailbox: 'pas@trust.nhs.net' },
+          { id: 'pas', name: 'Integration', mailbox: 'int@trust.nhs.net' },
+        ]),
+      'teams[1].id: must be unique',
+    ],
+    [
+      (p: Record<string, unknown>) =>
+        (p.teams = [{ id: 'pas', name: 'PAS team', mailbox: 'pas@trust.nhs.net', receivers: [''] }]),
+      'teams[0].receivers[0]: must be a receiver name',
+    ],
+    [
       (p: SiteProfile) => (p.incident = { ...p.incident, threshold: 0 }),
       'incident.threshold: must be a whole number of 1 or more',
     ],
@@ -64,6 +120,22 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
     const p = copy();
     p.incident = { ...p.incident, quiet_seconds: 0 };
     (p.receivers[0] as Record<string, unknown>).tier = '2';
+    expect(validateProfile(p)).toBe('');
+  });
+
+  it('accepts a fixed offset, and a team whose mailboxes are in a subdomain of an allowed domain', () => {
+    const p = copy() as SiteProfile & Record<string, unknown>;
+    p.feed = { time_zone: '-03:30' };
+    p.mail = { from: 'shutter@trust.nhs.net', allowed_domains: ['NHS.net'] };
+    p.teams = [
+      {
+        id: 'pas',
+        name: 'PAS team',
+        mailbox: 'pas@trust.nhs.net',
+        cc: ['oncall@nhs.net'],
+        receivers: ['Ward Out'],
+      },
+    ];
     expect(validateProfile(p)).toBe('');
   });
 

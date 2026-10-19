@@ -1,6 +1,7 @@
 /**
- * Times are ISO 8601 UTC from the server and are shown in UTC, as the HL7 messages and the scenarios carry them (a
- * transfer "at 09:20" reads 09:20 on screen too); the browser's own time is in the tooltips. UK English.
+ * Times are ISO 8601 UTC from the server. They are shown in the feed's time zone, the site profile's feed.time_zone
+ * (Europe/London unless a site says otherwise), so a transfer the PAS sent "at 09:20" reads 09:20 BST on screen, as
+ * the hospital's staff know it; UTC and the browser's own time are in the tooltips. UK English.
  */
 const parts = {
   day: 'numeric',
@@ -9,14 +10,63 @@ const parts = {
   minute: '2-digit',
   second: '2-digit',
 } as const;
-const dateTime = new Intl.DateTimeFormat('en-GB', { ...parts, timeZone: 'UTC' });
-const timeOnly = new Intl.DateTimeFormat('en-GB', {
+
+const accepts = (name: string) => {
+  try {
+    new Intl.DateTimeFormat('en-GB', { timeZone: name });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * The Intl zone for a profile's answer: an IANA zone, or a fixed offset such as +01:00 or -03:30, which current engines
+ * take as it is. An engine that doesn't gets the Etc/GMT name for a whole hour (whose sign is the other way round, and
+ * which stops at GMT+12 on the west side); anything else reads as UTC.
+ */
+function intlZone(zone: string): string {
+  if (accepts(zone)) return zone;
+  const fixed = /^([+-])(\d{2}):00$/.exec(zone);
+  if (fixed) {
+    const hours = Number(fixed[2]);
+    const name = hours === 0 ? 'UTC' : `Etc/GMT${fixed[1] === '+' ? '-' : '+'}${hours}`;
+    if (accepts(name)) return name;
+  }
+  return 'UTC';
+}
+
+let zone = 'Europe/London';
+let shown = 'Europe/London';
+let dateTime = new Intl.DateTimeFormat('en-GB', { ...parts, timeZone: zone });
+let timeOnly = new Intl.DateTimeFormat('en-GB', {
   hour: '2-digit',
   minute: '2-digit',
   second: '2-digit',
-  timeZone: 'UTC',
+  timeZone: zone,
 });
+let zoneName = new Intl.DateTimeFormat('en-GB', { timeZone: zone, timeZoneName: 'short' });
+const utcDateTime = new Intl.DateTimeFormat('en-GB', { ...parts, timeZone: 'UTC' });
 const localDateTime = new Intl.DateTimeFormat('en-GB', { ...parts, timeZoneName: 'short' });
+
+/** The zone the app shows times in: the feed's, from the site profile. */
+export function setDisplayZone(z: string | undefined) {
+  const next = intlZone(z || 'Europe/London');
+  shown = next === 'UTC' ? 'UTC' : z || 'Europe/London';
+  if (next === zone) return;
+  zone = next;
+  dateTime = new Intl.DateTimeFormat('en-GB', { ...parts, timeZone: zone });
+  timeOnly = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZone: zone,
+  });
+  zoneName = new Intl.DateTimeFormat('en-GB', { timeZone: zone, timeZoneName: 'short' });
+}
+
+/** The zone as the site profile names it (Europe/London, UTC, +01:00). */
+export const displayZone = () => shown;
 
 export function parseTime(iso: string | undefined | null): Date | undefined {
   if (!iso) return undefined;
@@ -27,6 +77,25 @@ export function parseTime(iso: string | undefined | null): Date | undefined {
 export function formatDateTime(iso: string | undefined | null): string {
   const d = parseTime(iso);
   return d ? dateTime.format(d) : '';
+}
+
+/** The zone's short name at that moment: GMT or BST for Europe/London, UTC, or the offset. */
+export function zoneLabel(iso: string | undefined | null): string {
+  const d = parseTime(iso);
+  if (!d) return '';
+  return zoneName.formatToParts(d).find((p) => p.type === 'timeZoneName')?.value ?? zone;
+}
+
+/** "15 Oct, 09:20:00 BST": a time in the feed's zone, named. */
+export function formatZoned(iso: string | undefined | null): string {
+  const d = parseTime(iso);
+  return d ? `${dateTime.format(d)} ${zoneLabel(iso)}` : '';
+}
+
+/** The same moment in UTC, as the API carries it. */
+export function formatUtc(iso: string | undefined | null): string {
+  const d = parseTime(iso);
+  return d ? `${utcDateTime.format(d)} UTC` : '';
 }
 
 /** The same moment in the browser's own time zone, with the zone named. */

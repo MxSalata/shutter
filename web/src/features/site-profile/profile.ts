@@ -105,6 +105,20 @@ const isObject = (x: unknown): x is Record<string, unknown> => typeof x === 'obj
 const members = (x: object): [string, unknown][] =>
   Array.isArray(x) ? x.map((v, i): [string, unknown] => [String(i), v]) : Object.entries(x);
 
+const ZONES = ['UTC', 'Europe/London'];
+const FIXED_OFFSET = /^[+-](0[0-9]|1[0-4]):[0-5][0-9]$/;
+
+/** The port of MailboxProblem: "" when fine, else why the mailbox is refused. */
+function mailboxProblem(mailbox: string, domains: string[]): string {
+  const at = mailbox.indexOf('@');
+  const local = at < 0 ? '' : mailbox.slice(0, at);
+  const host = at < 0 ? '' : mailbox.slice(at + 1).split('@')[0];
+  if (at < 0 || local === '' || host === '') return 'must be an address';
+  if (domains.length === 0) return '';
+  const domain = host.toLowerCase();
+  return domains.some((d) => domain === d || domain.endsWith(`.${d}`)) ? '' : 'not in the allowed domains';
+}
+
 /** The port of SiteProfile.Validate: "" when the profile is valid, else the server's message for the first problem. */
 export function validateProfile(p: unknown): string {
   if (!isObject(p)) return 'the profile must be a JSON object';
@@ -117,6 +131,10 @@ export function validateProfile(p: unknown): string {
     'policy',
     'approvers',
     'incident',
+    'model_content',
+    'teams',
+    'mail',
+    'feed',
   ];
   for (const key of Object.keys(p)) if (!top.includes(key)) return `${key}: unknown field`;
   if ('version' in p && (!numeric(p.version) || asNumber(p.version) < 0))
@@ -137,6 +155,9 @@ export function validateProfile(p: unknown): string {
           return `${at}.api.${k}: unknown path`;
         if (typeof v !== 'string') return `${at}.api.${k}: must be a string`;
       }
+      // Without a state path nothing can be read, and without an operations path nothing can be sent.
+      if (!r.api.state) return `${at}.api.state: required when api is given`;
+      if (!r.api.operations) return `${at}.api.operations: required when api is given`;
     }
     if ('features' in r) {
       if (!isObject(r.features)) return `${at}.features: must be an object`;
@@ -164,6 +185,68 @@ export function validateProfile(p: unknown): string {
     }
   }
   if ('approvers' in p && !isObject(p.approvers)) return 'approvers: must be an object';
+  // The feed: the time zone of timestamps that carry no offset.
+  if ('feed' in p) {
+    if (!isObject(p.feed)) return 'feed: must be an object';
+    for (const [k, v] of members(p.feed)) {
+      if (k !== 'time_zone') return `feed.${k}: unknown setting`;
+      if (typeof v !== 'string' || !(ZONES.includes(v) || FIXED_OFFSET.test(v)))
+        return 'feed.time_zone: must be UTC, Europe/London or a fixed offset such as +01:00 (up to 14:00)';
+    }
+  }
+  // What may leave IRIS for a model: free text off unless the site says so.
+  if ('model_content' in p) {
+    if (!isObject(p.model_content)) return 'model_content: must be an object';
+    for (const [k, v] of members(p.model_content)) {
+      if (k !== 'free_text') return `model_content.${k}: unknown setting`;
+      if (typeof v !== 'boolean') return `model_content.${k}: must be true or false`;
+    }
+  }
+  // The teams an escalation can go to, and the mail rules.
+  const domains: string[] = [];
+  if ('mail' in p) {
+    if (!isObject(p.mail)) return 'mail: must be an object';
+    for (const [k, v] of members(p.mail)) {
+      if (!['from', 'allowed_domains'].includes(k)) return `mail.${k}: unknown setting`;
+      if (k === 'from' && typeof v !== 'string') return 'mail.from: must be a string';
+      if (k === 'allowed_domains') {
+        if (!Array.isArray(v)) return 'mail.allowed_domains: must be an array of domains';
+        for (const [j, d] of members(v)) {
+          if (typeof d !== 'string' || d === '') return `mail.allowed_domains[${j}]: must be a domain`;
+          domains.push(d.toLowerCase());
+        }
+      }
+    }
+  }
+  if ('teams' in p) {
+    if (!Array.isArray(p.teams)) return 'teams: must be an array';
+    const ids: unknown[] = [];
+    for (const [i, t] of members(p.teams)) {
+      const at = `teams[${i}]`;
+      if (!isObject(t)) return `${at}: must be an object`;
+      for (const k of Object.keys(t))
+        if (!['id', 'name', 'mailbox', 'cc', 'receivers'].includes(k)) return `${at}.${k}: unknown field`;
+      for (const f of ['id', 'name', 'mailbox'])
+        if (typeof t[f] !== 'string' || t[f] === '') return `${at}.${f}: required`;
+      if (ids.includes(t.id)) return `${at}.id: must be unique`;
+      ids.push(t.id);
+      const problem = mailboxProblem(t.mailbox as string, domains);
+      if (problem) return `${at}.mailbox: ${problem}`;
+      if ('cc' in t) {
+        if (!Array.isArray(t.cc)) return `${at}.cc: must be an array of mailboxes`;
+        for (const [j, m] of members(t.cc)) {
+          if (typeof m !== 'string') return `${at}.cc[${j}]: must be a mailbox`;
+          const ccProblem = mailboxProblem(m, domains);
+          if (ccProblem) return `${at}.cc[${j}]: ${ccProblem}`;
+        }
+      }
+      if ('receivers' in t) {
+        if (!Array.isArray(t.receivers)) return `${at}.receivers: must be an array of receiver names`;
+        for (const [j, m] of members(t.receivers))
+          if (typeof m !== 'string' || m === '') return `${at}.receivers[${j}]: must be a receiver name`;
+      }
+    }
+  }
   if ('incident' in p) {
     if (!isObject(p.incident)) return 'incident: must be an object';
     for (const [k, n] of members(p.incident)) {

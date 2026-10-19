@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.11, 19 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.12, 19 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The ward system's API
 
@@ -348,7 +348,7 @@ reads it through `Shutter.Store.SiteProfile`.
   "approvers": {"role": "Shutter Approvers", "escalation": "the integration team's on-call"},
   "incident": {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60},
   "model_content": {"free_text": false},
-  "feed": {"time_zone": "UTC"}
+  "feed": {"time_zone": "Europe/London"}
 }
 ```
 
@@ -367,8 +367,8 @@ reads it through `Shutter.Store.SiteProfile`.
   `GET /site-profile/history` lists them (v1.9). `feed.time_zone` (v1.11) names the zone of timestamps without an
   offset: `UTC`, `Europe/London` or a fixed offset; the built-in default (`SiteProfile.Default()`, in force only while no
   profile row is stored) is `Europe/London`, a stored profile that does not answer keeps `UTC` (the reading before v1.11),
-  and the shipped seed profile says `UTC` until the recordings are made with the zone (the fixtures' times then read as
-  British Summer Time). The questionnaire page asks no question yet for `feed`, `model_content`, `teams` or `mail`: they are
+  and the shipped seed profile says `Europe/London` (v1.12), so the fixtures' times read as British Summer Time (09:20 on
+  15 October is 08:20Z). The questionnaire page asks no question yet for `feed`, `model_content`, `teams` or `mail`: they are
   set through `PUT /site-profile`. The body may carry
   `expectedVersion` (the version the caller read, not
   part of the profile): when the stored version has moved, the answer is 409 `stale_version` with `currentVersion`, so
@@ -620,6 +620,8 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.12, 19 Oct 2026: the recordings re-made with the zone: the shipped seed profile says `Europe/London` (6.4), and the
+  scenario S13 (a transfer timed before its admission) exercises E13 and `EVENT_TIME_IMPLAUSIBLE`.
 - v1.11, 19 Oct 2026: what leaves IRIS for a model (9): per-case tokens for the identifiers, no demographics, no free
   text (a flag instead, and the site profile's `model_content.free_text` switch), the receiver's bodies and the failure
   reduced, the map-back inside IRIS; escalation by email (10): the profile's `teams` and `mail`, the four routes,

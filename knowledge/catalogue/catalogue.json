@@ -33,7 +33,7 @@
  },
  {
   "id": "E2",
-  "version": 2,
+  "version": 3,
   "title": "Not delivered, still current",
   "scenarios": [
    "S2",
@@ -41,6 +41,7 @@
    "S11"
   ],
   "pattern": {
+   "event_time": "plausible",
    "delivery": [
     "failed",
     "uncertain"
@@ -112,12 +113,13 @@
  },
  {
   "id": "E4",
-  "version": 1,
+  "version": 2,
   "title": "Several failures, in order",
   "scenarios": [
    "S11"
   ],
   "pattern": {
+   "event_time": "plausible",
    "delivery": "failed",
    "receiver_answer": [
     "unavailable",
@@ -303,12 +305,13 @@
  },
  {
   "id": "E10",
-  "version": 1,
+  "version": 2,
   "title": "An update after the failed movement",
   "scenarios": [
    "S5"
   ],
   "pattern": {
+   "event_time": "plausible",
    "delivery": [
     "failed",
     "uncertain"
@@ -385,5 +388,33 @@
   ],
   "prose": "# E12 A message that can't become a ward operation\n\n## Meaning\n\nThe feed received an ADT message it could not map to a ward operation: a field the operation needs (the visit\nnumber, the event time, the patient identifier) is missing or malformed, or the profile maps no operation for its\nevent. Shutter opens a case for it so the failure isn't lost, with the message's fields and a key of its own, but\nthere is no operation behind the case: nothing can be resent, and the gate's conformance check blocks any plan that\ntries (UNMAPPABLE). The case goes to a person with the reason named.\n\n## Telling it apart\n\nEvery other entry starts from an operation the receiver failed, refused or may have applied. Here the receiver was\nnever asked: the message stopped at the mapping. A message that maps but fails schema validation is not this entry,\nsince it has an operation; the board reads its validation evidence.\n\n## Cite\n\nThe message and the mapping's error (the failure text), the schema validation, and the absence of an operation key\nderived from the message's fields.",
   "source": "E12.md"
+ },
+ {
+  "id": "E13",
+  "version": 1,
+  "title": "An event time the receiver's record can't hold",
+  "scenarios": [
+   "S13"
+  ],
+  "pattern": {
+   "event_time": [
+    "before_admission",
+    "future",
+    "far_from_recorded",
+    "clock_change"
+   ]
+  },
+  "decides": "person",
+  "preferred": {
+   "outcome": "escalate",
+   "why": "The failed movement's event time contradicts the encounter it belongs to, so neither resending it nor letting a later event supersede it can be decided from the data; the PAS team checks the source (ELS-2.1)."
+  },
+  "alternatives": [],
+  "checks": [
+   "ordering",
+   "state_transition"
+  ],
+  "prose": "# E13 An event time the receiver's record can't hold\n\n## Meaning\n\nThe failed operation's event time doesn't fit the encounter: it is before the patient's admission, more than five\nminutes after the message was sent (MSH-7) or the evidence was taken, more than a day from the time the PAS recorded\nthe event (EVN-2), or within the hour around a clock change where a local time without an offset can't be ordered. Shutter orders and supersedes movements by event time,\nso a wrong time can resend a movement that predates the stay, or make genuine failures look overtaken. Bad data from\nthe PAS is not something Shutter corrects: the case goes to a person with the times named, for the PAS team to check\nthe source.\n\n## Telling it apart\n\nA movement overtaken by a later one with a sound time is E1; a failed movement still due is E2. Here the time itself\nis the question. When the time is plausible but another source moved the patient at the same minute, it is E7.\n\n## Cite\n\nThe failed operation's event time, the admission time (PV1-44 or the receiver's first history entry), EVN-2, MSH-7,\nand the feed's time zone setting.",
+  "source": "E13.md"
  }
 ]

@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { formatDateTime, formatUsd, humanize, shortDigest } from './format';
+import {
+  formatDateTime,
+  formatUsd,
+  formatUtc,
+  formatZoned,
+  humanize,
+  displayZone,
+  setDisplayZone,
+  shortDigest,
+} from './format';
 
 describe('shortDigest', () => {
   it('shortens a digest after its scheme', () => {
@@ -14,8 +23,27 @@ describe('shortDigest', () => {
 });
 
 describe('formatting', () => {
-  it('shows times in UTC, as the messages carry them', () => {
+  it("shows times in the feed's zone, named, as the hospital knows them", () => {
+    setDisplayZone('Europe/London');
+    expect(formatZoned('2026-10-15T08:20:00Z')).toBe('15 Oct, 09:20:00 BST');
+    expect(formatZoned('2026-11-15T09:20:00Z')).toBe('15 Nov, 09:20:00 GMT');
+    expect(formatUtc('2026-10-15T08:20:00Z')).toBe('15 Oct, 08:20:00 UTC');
+    setDisplayZone('UTC');
     expect(formatDateTime('2026-10-15T09:20:00Z')).toBe('15 Oct, 09:20:00');
+    setDisplayZone('+01:00');
+    expect(formatDateTime('2026-11-15T09:20:00Z')).toBe('15 Nov, 10:20:00');
+    expect(displayZone()).toBe('+01:00');
+    // Offsets the profile accepts beyond whole hours and past GMT+12 on the west side
+    setDisplayZone('-03:30');
+    expect(formatDateTime('2026-11-15T09:20:00Z')).toBe('15 Nov, 05:50:00');
+    setDisplayZone('-14:00');
+    expect(formatDateTime('2026-11-15T19:20:00Z')).toBe('15 Nov, 05:20:00');
+    // A zone that isn't one reads as UTC, and says so
+    setDisplayZone('Mars/Olympus');
+    expect(formatDateTime('2026-10-15T09:20:00Z')).toBe('15 Oct, 09:20:00');
+    expect(displayZone()).toBe('UTC');
+    setDisplayZone('Europe/London');
+    expect(displayZone()).toBe('Europe/London');
   });
   it('turns codes into words', () => {
     expect(humanize('awaiting_approval')).toBe('Awaiting approval');

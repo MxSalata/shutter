@@ -4,7 +4,7 @@ import { Link } from 'react-router';
 import type { CaseDetail } from '@/api/types';
 import { DispositionBadge, StateBadge } from '@/components/StateBadge';
 import { Timestamp } from '@/components/Timestamp';
-import { humanize } from '@/lib/format';
+import { displayZone, humanize } from '@/lib/format';
 
 /** A labelled fact in a page header. */
 export function Meta({ label, children }: { label: string; children: React.ReactNode }) {
@@ -83,7 +83,7 @@ export function CaseHeader({ c }: { c: CaseDetail }) {
           </Meta>
         ) : null}
         <Meta label="Case version">{String(c.version ?? '')}</Meta>
-        <Meta label="Times">UTC, as the messages carry them</Meta>
+        <Meta label="Times">{`In ${displayZone()}, as the PAS sends them; UTC in the tooltips`}</Meta>
         {c.links?.visualTrace || c.links?.workflowTrace ? (
           <Meta label="In the Management Portal">
             <Group gap="sm">

@@ -2,7 +2,7 @@ import { Anchor, Group, Stack, Text, Title } from '@mantine/core';
 import { IconExternalLink } from '@tabler/icons-react';
 import type { IncidentDetail } from '@/api/types';
 import { Timestamp } from '@/components/Timestamp';
-import { humanize } from '@/lib/format';
+import { displayZone, humanize } from '@/lib/format';
 import { Meta } from '../../cases/case/CaseHeader';
 import { IncidentStateBadge } from '../badges';
 
@@ -39,7 +39,7 @@ export function IncidentHeader({ inc }: { inc: IncidentDetail }) {
             <Timestamp iso={inc.closedAt} />
           </Meta>
         ) : null}
-        <Meta label="Times">UTC, as the messages carry them</Meta>
+        <Meta label="Times">{`In ${displayZone()}, as the PAS sends them; UTC in the tooltips`}</Meta>
         {inc.links?.workflowTrace && inc.workflowSessionId ? (
           <Meta label="In the Management Portal">
             <Anchor href={inc.links.workflowTrace} target="_blank" rel="noreferrer" size="sm">

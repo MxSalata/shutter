@@ -52,7 +52,7 @@ describe('EscalationPanel', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Escalate to system administrators' });
     const message = within(dialog).getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement;
     expect(message.value).toContain('Hospital number: MRN1008 (HOSP)');
-    expect(message.value).toContain('Transfer to WARD-B at 2026-10-15 09:20 UTC');
+    expect(message.value).toContain('Transfer to WARD-B at 2026-10-15 08:20 UTC');
     expect(message.value).not.toMatch(/SYNTH/);
     // No team in the recorded profile: the person addresses it
     expect(within(dialog).getByRole('button', { name: 'Send' })).toBeDisabled();

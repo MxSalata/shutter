@@ -1,6 +1,6 @@
 {
   "id": "block-reasons",
-  "version": "1.4",
+  "version": "1.5",
   "effective_from": "2026-10-19",
   "applies_to": [
     "ward-api-v1",
@@ -408,6 +408,15 @@
       "owner": "Operator",
       "reevaluate_when": "The receiver's history shows the operation, or the plan takes another outcome",
       "text": "This receiver publishes no receipts, so whether the operation was applied can only be read from its history. A reconcile is right when the history shows the operation; this history does not, so there is nothing to reconcile against."
+    },
+    {
+      "code": "EVENT_TIME_IMPLAUSIBLE",
+      "title": "The event's time doesn't fit the encounter",
+      "prerequisite": "An event time that fits the encounter: after its admission, not in the future, close to the time the PAS recorded it, and not inside a clock change when it carries no offset",
+      "next_action": "Confirm the event's real time with the source system, then reinvestigate the case or correct the history.",
+      "owner": "Integration team",
+      "reevaluate_when": "The source system confirms or corrects the time",
+      "text": "Shutter orders and supersedes movements by their event time. A time before the admission, in the future, far from when the PAS recorded the event, or in the hour of a clock change can't be ordered safely, so nothing is written and a person decides."
     }
   ]
 }

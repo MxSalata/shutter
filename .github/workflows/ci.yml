@@ -95,11 +95,15 @@ jobs:
           if echo "$out" | grep -q ': missing '; then echo "A scenario lacks recordings for its board"; exit 1; fi
       - name: The scenario catalogue keeps to the condition vocabulary, and catalogue.json is built from it
         run: python3 scripts/build-catalogue.py knowledge/catalogue --check
+      # The model gets tokens (MRN-T1, ENC-T1) for the patient's identifiers and never their name, date of birth,
+      # address, phone numbers or note text: nothing personal from the fixtures may appear in what a recorded run saw.
+      - name: Nothing personal from the fixtures reached the model in any recording
+        run: python3 tests/privacy_check.py --demo web/src/mocks/fixtures.json
 
   # The ObjectScript side on a real IRIS for Health Community 2026.2 (InterSystems' image; the AI Hub build is not on a
   # registry CI can pull from, and the core needs none of it): the namespace, a full load and compile, the installer,
   # the ward's contract tests in process and over HTTP, and every scenario end to end with its recorded runs: S1 to S10
-  # on the board, and the two outage scenarios, S11 and S12, in site-policy mode.
+  # and S13 on the board, and the two outage scenarios, S11 and S12, in site-policy mode.
   iris:
     name: IRIS (the ward's contract, scenarios in replay)
     runs-on: ubuntu-latest
@@ -160,8 +164,32 @@ jobs:
           sys.exit(0 if r["failed"] == 0 and r["passed"] > 0 else 1)'
       - name: The ward's API over HTTP
         run: python3 tests/e2e/ward_api_check.py --url "$IRIS_URL" --second-user wards-client --second-password shutter
-      - name: Scenarios S1 to S10 end to end on the board, in replay
-        run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --approve S1 S2 S3 S4 S5 S6 S7 S8 S9 S10
+      - name: Scenarios S1 to S10 and S13 end to end on the board, in replay
+        run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --approve S1 S2 S3 S4 S5 S6 S7 S8 S9 S10 S13
+      # What the model would see of a case: tokens for the hospital number and the visit number, never the values.
+      - name: The model's view of a case carries tokens, not identifiers
+        run: |
+          out=$(python3 scripts/iris-sql.py --url "$IRIS_URL" --ns SHUTTER --json "SELECT Shutter_Util.ModelView_Preview('C-000001') AS p")
+          echo "$out" | head -40
+          echo "$out" | grep -q 'MRN-T1'
+          echo "$out" | grep -q 'ENC-T1'
+          if echo "$out" | grep -Eq 'MRN1001|ENC-1001'; then echo "A real identifier reached the model's view"; exit 1; fi
+      # Times without an offset are read in the feed's zone: British Summer Time in July, GMT in January, and the hour
+      # before the October clock change flagged.
+      - name: Event times in the feed's time zone
+        run: |
+          out=$(python3 scripts/iris-sql.py --url "$IRIS_URL" --ns SHUTTER --json "SELECT Shutter_Util.Time_Probe('20260715094500', 'Europe/London') AS summer, Shutter_Util.Time_Probe('20260115094500', 'Europe/London') AS winter, Shutter_Util.Time_Probe('20261025013000', 'Europe/London') AS change, Shutter_Util.Time_Probe('20260715094500+0200', 'Europe/London') AS offset, Shutter_Util.Time_Probe('20260715094500', 'UTC') AS utc")
+          echo "$out"
+          echo "$out" | python3 -c '
+          import json, sys
+          r = json.load(sys.stdin)[0]
+          r = {k: json.loads(v) if isinstance(v, str) else v for k, v in r.items()}
+          assert r["summer"]["iso"] == "2026-07-15T08:45:00Z", r["summer"]
+          assert r["winter"]["iso"] == "2026-01-15T09:45:00Z", r["winter"]
+          assert r["change"]["near_clock_change"] is True, r["change"]
+          assert r["summer"]["near_clock_change"] is False, r["summer"]
+          assert r["offset"]["iso"] == "2026-07-15T07:45:00Z" and r["offset"]["had_offset"] is True, r["offset"]
+          assert r["utc"]["iso"] == "2026-07-15T09:45:00Z", r["utc"]'
       # An outage opens an incident: each patient's chain is checked for its kind, who decided it, its catalogue
       # entries, its writes and the ward's final state.
       - name: The outage scenarios S11 and S12 in site-policy mode

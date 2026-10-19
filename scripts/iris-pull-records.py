@@ -3,7 +3,7 @@
 shape (response as an object; transcript and toolCalls as JSON text), named scenario-<S>-<member>-<cfg>[-roundN].json, or
 scenario-<S>-<encounter>-<event>-<member>-<cfg>[-roundN].json for the keys that name the case's encounter and event.
 
-    python3 scripts/iris-pull-records.py --url http://host:52773 --ns SHUTTER [--like 'scenario:S2|%'] [--dir fixtures/records]
+    python3 scripts/iris-pull-records.py --url http://host:52773 --ns SHUTTER [--like 'scenario:S2:%'] [--dir fixtures/records]
 
 Only recordings whose key starts with "scenario:" are written (the demo scenarios); others are listed.
 """

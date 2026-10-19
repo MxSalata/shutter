@@ -33,7 +33,8 @@ import {
 } from '@tabler/icons-react';
 import { Suspense } from 'react';
 import { Link, NavLink as RouterNavLink, Outlet, ScrollRestoration, useNavigate } from 'react-router';
-import { useMe, useSignOut } from '@/api/hooks';
+import { useMe, useSignOut, useSiteProfile } from '@/api/hooks';
+import { displayZone, setDisplayZone } from '@/lib/format';
 import { APP_NAME } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
 import { PageSkeleton } from '@/components/PageSkeleton';
@@ -225,6 +226,11 @@ function UserMenu() {
 
 export function AppLayout() {
   const [opened, { toggle, close }] = useDisclosure();
+  // Times show in the feed's zone (the site profile's feed.time_zone); the page renders again if it changes
+  // As the server reads the feed (SiteProfile.FeedTimeZone): a stored profile that doesn't answer the question keeps
+  // UTC; until the profile has loaded, the questionnaire's default.
+  const profile = useSiteProfile().data?.profile;
+  setDisplayZone(profile ? profile.feed?.time_zone || 'UTC' : undefined);
   return (
     <AppShell
       header={{ height: 56 }}
@@ -293,7 +299,7 @@ export function AppLayout() {
         {/* A new page starts at its top; Back returns to where the previous one was left. */}
         <ScrollRestoration />
         <Suspense fallback={<PageSkeleton />}>
-          <Outlet />
+          <Outlet key={displayZone()} />
         </Suspense>
       </AppShell.Main>
     </AppShell>

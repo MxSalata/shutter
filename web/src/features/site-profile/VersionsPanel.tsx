@@ -3,7 +3,7 @@ import { useSiteProfileHistory } from '@/api/hooks';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { JsonBlock } from '@/components/JsonBlock';
 import { PageSkeleton } from '@/components/PageSkeleton';
-import { formatDateTime } from '@/lib/format';
+import { formatZoned } from '@/lib/format';
 import { NotYet, Section } from '../cases/case/Section';
 import { describeSource, diffProfiles } from './profile';
 
@@ -44,8 +44,7 @@ export function VersionsPanel({ current }: { current: number }) {
                       </Badge>
                     ) : null}
                     <Text size="xs" c="dimmed">
-                      {formatDateTime(e.updatedAt)} UTC · {e.updatedBy || 'Setup'} ·{' '}
-                      {describeSource(e.source)}
+                      {formatZoned(e.updatedAt)} · {e.updatedBy || 'Setup'} · {describeSource(e.source)}
                     </Text>
                   </Group>
                 </Accordion.Control>

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Writes the HL7 fixtures and scenarios.json for the scenarios S1 to S12 (docs/CONTRACTS.md, sections 3 and 7.6).
+"""Writes the HL7 fixtures and scenarios.json for the scenarios S1 to S13 (docs/CONTRACTS.md, sections 3 and 7.6).
 
     python3 fixtures/generate.py
 
@@ -7,9 +7,19 @@ Run it from anywhere; it writes next to itself. The files it writes are committe
 """
 import json
 import os
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DAY = "20261015"
+# The PAS writes local times with no offset; Shutter reads them in the site profile's feed.time_zone (CONTRACTS 6.4)
+FEED_ZONE = ZoneInfo("Europe/London")
+
+
+def utc(hhmm):
+    """The UTC form of a fixture's local time on the scenario day: 0920 in British Summer Time is 08:20Z."""
+    local = datetime(int(DAY[:4]), int(DAY[4:6]), int(DAY[6:]), int(hhmm[:2]), int(hhmm[2:]), tzinfo=FEED_ZONE)
+    return local.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:00Z")
 
 # One synthetic patient and encounter per scenario
 PATIENTS = {
@@ -21,7 +31,7 @@ PATIENTS = {
     "S6": ("MRN1006", "ENC-1006", "SYNTH^FINN", "19590214", "M"),
     "S7": ("MRN1007", "ENC-1007", "SYNTH^GRACE", "19870509", "F"),
     "S8": ("MRN1008", "ENC-1008", "SYNTH^HARRY", "19700123", "M"),
-    "S9": ("MRN1009", "ENC-1009", "SYNTH^IRIS", "19951111", "F"),
+    "S9": ("MRN1009", "ENC-1009", "SYNTH^ISLA", "19951111", "F"),
     "S10": ("MRN1010", "ENC-1010", "SYNTH^JUDE", "19820618", "M"),
     # S11, the outage burst: six patients in one scenario
     "S11-P1": ("MRN1101", "ENC-1101", "SYNTH^KAI", "19880404", "M"),
@@ -31,6 +41,8 @@ PATIENTS = {
     "S11-P5": ("MRN1105", "ENC-1105", "SYNTH^OSCAR", "19771006", "M"),
     "S11-P6": ("MRN1106", "ENC-1106", "SYNTH^PIA", "20000512", "F"),
     # S12, a lost admission at the head of a chain
+    # S13, a transfer timed before its admission
+    "S13": ("MRN1013", "ENC-1013", "SYNTH^TOM", "19840909", "M"),
     "S12-P1": ("MRN1201", "ENC-1201", "SYNTH^RUBY", "19900301", "F"),
     "S12-P2": ("MRN1202", "ENC-1202", "SYNTH^SAM", "19720615", "M"),
     "S12-P3": ("MRN1203", "ENC-1203", "SYNTH^TESS", "19850920", "F"),
@@ -80,7 +92,7 @@ def message(scenario, seq, trigger, time, ward=None, prior=None, admit_time="090
     name_ = f"{scenario}-{seq:02d}-{trigger}.hl7"
     key_ward = ward if trigger in ("A01", "A02") else None
     return name_, "\r".join(segments) + "\r", {
-        "operation_key": f"{source}^HOSP^{mrn}^{encounter}^{EVENT[trigger]}^2026-10-15T{time[:2]}:{time[2:]}:00Z",
+        "operation_key": f"{source}^HOSP^{mrn}^{encounter}^{EVENT[trigger]}^{utc(time)}",
         "ward": key_ward,
     }
 
@@ -396,6 +408,28 @@ def scenarios():
             "failed_operation_keys": [m[2]["operation_key"] for m in lost],
         },
     }, applied + lost))
+
+    # S13: bad data from the PAS: a transfer timed before the admission it belongs to. Shutter orders movements by
+    # their event time, so it must neither resend this one nor let it supersede anything: a person checks the source.
+    a = message("S13", 1, "A01", "1000", ward="WARD-A", admit_time="1000")
+    b = message("S13", 2, "A02", "0930", ward="WARD-B", prior="WARD-A", admit_time="1000")
+    out.append(({
+        "id": "S13",
+        "title": "A transfer timed before its admission",
+        "summary": "The patient is admitted to Ward A at 10:00; then a transfer to Ward B, timed 09:30, fails because "
+                   "the ward is down. A movement half an hour before the stay began is bad data from the PAS, not "
+                   "something to resend or order: nothing is written, and the case goes to a person to check the source.",
+        "steps": [
+            {"file": a[0]},
+            {"fault": "fail_before_accept"},
+            {"file": b[0], "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+        ],
+        "expected": {"disposition": "escalate", "acceptable": ["more_evidence"], "write": False,
+                     "final_state": "admitted", "final_ward": "WARD-A",
+                     "failed_operation_key": b[2]["operation_key"]},
+    }, [a, b]))
 
     return out
 

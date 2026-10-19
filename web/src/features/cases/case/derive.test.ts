@@ -199,7 +199,7 @@ describe('describeEntry', () => {
       describeEntry({
         event: 'transfer',
         ward: 'WARD-C',
-        event_time: '2026-10-15T09:45:00Z',
+        event_time: '2026-10-15T08:45:00Z',
         source: 'ward history',
       }),
     ).toBe('Transfer to WARD-C at 09:45:00, from the ward history');
