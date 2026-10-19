@@ -3,6 +3,7 @@ import type { SiteProfile } from '@/api/types';
 import fixtures from '@/mocks/fixtures.json';
 import {
   checkDraft,
+  describePath,
   describeSource,
   diffProfiles,
   fieldId,
@@ -170,6 +171,16 @@ describe('the server’s error path', () => {
     expect(fieldId('policy.3.single')).toBe('site-policy-3-single');
     expect(fieldId('incident.threshold')).toBe('site-incident-threshold');
     expect(fieldId('receivers[0].api.base')).toBe('');
+    // A problem with one entry of a list belongs to the list's control
+    expect(fieldId('teams[1].mailbox')).toBe('site-teams-1-mailbox');
+    expect(fieldId('teams[0].cc[2]')).toBe('site-teams-0-cc');
+    expect(fieldId('mail.allowed_domains[0]')).toBe('site-mail-allowed_domains');
+    expect(fieldId('feed.time_zone')).toBe('site-feed-time_zone');
+    expect(fieldId('model_content.free_text')).toBe('site-model_content-free_text');
+    expect(describePath('teams[0].cc[2]')).toBe('Team 1, copies 3');
+    expect(describePath('teams[1].id')).toBe('Team 2, id');
+    expect(describePath('mail.allowed_domains[0]')).toBe('Mail, allowed domains 1');
+    expect(describePath('feed.time_zone')).toBe('Feed, time zone');
   });
 });
 
@@ -193,6 +204,58 @@ describe('diffProfiles', () => {
     const policy = diffProfiles(recorded, p).find((c) => c.path === 'policy.3.single');
     expect(policy?.lessOversight).toBe(true);
     expect(policy?.tier3Automatic).toBe(true);
+  });
+
+  it('names the teams, mail, zone and note-text changes', () => {
+    const p = copy();
+    const team = { id: 'pas', name: 'PAS team', mailbox: 'pas@trust.nhs.net', receivers: ['Ward Out'] };
+    p.teams = [team];
+    p.mail = { allowed_domains: ['nhs.net'] };
+    p.feed = { time_zone: 'UTC' };
+    p.model_content = { free_text: true };
+    expect(diffProfiles(recorded, p).map((c) => c.text)).toEqual([
+      'Team added: PAS team <pas@trust.nhs.net>, for Ward Out, and any receiver no team names',
+      'Allowed mail domains: nhs.net',
+      'Feed time zone: from Europe/London to UTC. Every operation key read from now on uses it',
+      'Note text: sent to the model from now on',
+    ]);
+    const q = structuredClone(p);
+    q.teams = [
+      { ...team, mailbox: 'pas.team@trust.nhs.net' },
+      { id: 'int', name: 'Integration', mailbox: 'int@trust.nhs.net', receivers: [] },
+    ];
+    // As the server routes: the first team also takes what no team names; a later team naming none, only when picked
+    expect(diffProfiles(p, q).map((c) => c.text)).toEqual([
+      'Team pas changed: PAS team <pas.team@trust.nhs.net>, for Ward Out, and any receiver no team names',
+      'Team added: Integration <int@trust.nhs.net>, for no receiver: only when a person picks it on the case',
+    ]);
+    const r = structuredClone(q);
+    r.teams = [q.teams[1], q.teams[0]];
+    expect(diffProfiles(q, r).map((c) => c.text)).toEqual([
+      'Cases no team names: now to Integration, before to PAS team',
+    ]);
+  });
+
+  it('names a change of the first team even with other team changes, and a reorder further down', () => {
+    const a = (id: string, receivers: string[] = ['Ward Out']) => ({
+      id,
+      name: id.toUpperCase(),
+      mailbox: `${id}@trust.nhs.net`,
+      receivers,
+    });
+    const p = copy();
+    p.teams = [a('x'), a('y')];
+    const q = structuredClone(p);
+    q.teams = [a('y'), a('x'), a('z')];
+    expect(diffProfiles(p, q).map((c) => c.text)).toEqual([
+      'Team added: Z <z@trust.nhs.net>, for Ward Out',
+      'Cases no team names: now to Y, before to X',
+    ]);
+    const r = structuredClone(q);
+    r.teams = [a('y'), a('z'), a('x')];
+    expect(diffProfiles(q, r).map((c) => c.text)).toEqual([
+      'Teams reordered: where two teams name a receiver, the earlier one gets its cases',
+    ]);
   });
 
   it('reads a renamed receiver as one removed and one added', () => {

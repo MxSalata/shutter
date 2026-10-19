@@ -95,6 +95,108 @@ describe('SiteProfilePage', () => {
     expect(screen.queryByText('Shutter is running on the shipped answers')).not.toBeInTheDocument();
   });
 
+  it('adds the team that corrects a receiver by hand, and sends it with the profile', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add a team' }));
+    const team = screen.getByRole('group', { name: 'Team 1: new' });
+    await userEvent.type(within(team).getByRole('textbox', { name: 'Short id' }), 'pas');
+    await userEvent.type(within(team).getByRole('textbox', { name: 'Team' }), 'PAS team');
+    await userEvent.type(within(team).getByRole('textbox', { name: 'Mailbox' }), 'pas@trust.nhs.net');
+    const copies = within(team).getByRole('textbox', { name: 'Copies' });
+    await userEvent.type(copies, 'oncall@trust.nhs.net, ');
+    // A trailing comma survives while typing the next address
+    expect(copies).toHaveValue('oncall@trust.nhs.net, ');
+    await userEvent.click(within(team).getByRole('checkbox', { name: 'Ward Out' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByText(
+        'Team added: PAS team <pas@trust.nhs.net>, copies oncall@trust.nhs.net, for Ward Out, and any receiver no team names',
+      ),
+    ).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 7' }));
+    expect(await screen.findByText('Version 7 saved')).toBeInTheDocument();
+    expect(puts[0].body.teams).toEqual([
+      {
+        id: 'pas',
+        name: 'PAS team',
+        mailbox: 'pas@trust.nhs.net',
+        cc: ['oncall@trust.nhs.net'],
+        receivers: ['Ward Out'],
+      },
+    ]);
+  });
+
+  it('refuses a team mailbox outside the allowed domains before sending, and points at it', async () => {
+    renderPage();
+    await userEvent.type(
+      await screen.findByRole('textbox', { name: 'Mail domains allowed for the teams' }),
+      'nhs.net',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Add a team' }));
+    const team = screen.getByRole('group', { name: 'Team 1: new' });
+    await userEvent.type(within(team).getByRole('textbox', { name: 'Short id' }), 'pas');
+    await userEvent.type(within(team).getByRole('textbox', { name: 'Team' }), 'PAS team');
+    await userEvent.type(within(team).getByRole('textbox', { name: 'Mailbox' }), 'pas@example.com');
+    await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
+    expect(
+      await screen.findByRole('button', { name: 'Team 1, mailbox: not in the allowed domains' }),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(within(team).getByRole('textbox', { name: 'Mailbox' })).toHaveFocus());
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(puts).toHaveLength(0);
+  });
+
+  it("sets the feed's zone to a fixed offset, and the review says every key changes", async () => {
+    renderPage();
+    expect(await screen.findByRole('radio', { name: /UK time/ })).toBeChecked();
+    await userEvent.click(screen.getByRole('radio', { name: /A fixed offset from UTC/ }));
+    const offset = screen.getByRole('textbox', { name: 'Offset' });
+    await userEvent.clear(offset);
+    await userEvent.type(offset, '-03:30');
+    await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByText(/Feed time zone: from Europe\/London to -03:30\. Every operation key/),
+    ).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 7' }));
+    expect(await screen.findByText('Version 7 saved')).toBeInTheDocument();
+    expect(puts[0].body.feed).toEqual({ time_zone: '-03:30' });
+  });
+
+  it('shows the offset as the draft holds it after Discard, and points a cleared offset at its field', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('radio', { name: /A fixed offset from UTC/ }));
+    const offset = screen.getByRole('textbox', { name: 'Offset' });
+    expect(offset).toHaveValue('+01:00');
+    await userEvent.clear(offset);
+    expect(offset).toHaveAccessibleDescription(/Write it as \+01:00 or -03:30/);
+    await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
+    expect(
+      await screen.findByRole('button', {
+        name: /^Feed, time zone: must be UTC, Europe\/London or a fixed offset/,
+      }),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(offset).toHaveFocus());
+    await userEvent.type(offset, '+02:00');
+    await userEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
+    expect(screen.getByRole('radio', { name: /UK time/ })).toBeChecked();
+    expect(screen.queryByRole('textbox', { name: 'Offset' })).not.toBeInTheDocument();
+  });
+
+  it('sends note text to the model only when the site says so', async () => {
+    renderPage();
+    const sw = await screen.findByRole('switch', { name: /^Send note text to the model/ });
+    expect(sw).not.toBeChecked();
+    await userEvent.click(sw);
+    await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Note text: sent to the model from now on')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 7' }));
+    expect(await screen.findByText('Version 7 saved')).toBeInTheDocument();
+    expect(puts[0].body.model_content).toEqual({ free_text: true });
+  });
+
   it('confirms the shipped answers with no change, which records who answered', async () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Confirm these answers…' }));

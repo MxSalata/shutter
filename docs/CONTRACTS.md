@@ -368,8 +368,8 @@ reads it through `Shutter.Store.SiteProfile`.
   offset: `UTC`, `Europe/London` or a fixed offset; the built-in default (`SiteProfile.Default()`, in force only while no
   profile row is stored) is `Europe/London`, a stored profile that does not answer keeps `UTC` (the reading before v1.11),
   and the shipped seed profile says `Europe/London` (v1.12), so the fixtures' times read as British Summer Time (09:20 on
-  15 October is 08:20Z). The questionnaire page asks no question yet for `feed`, `model_content`, `teams` or `mail`: they are
-  set through `PUT /site-profile`. The body may carry
+  15 October is 08:20Z). The questionnaire page asks for `teams` and `mail` (question 9), `feed` (10) and `model_content` (11)
+  since v1.12. The body may carry
   `expectedVersion` (the version the caller read, not
   part of the profile): when the stored version has moved, the answer is 409 `stale_version` with `currentVersion`, so
   a page never overwrites another person's change unseen; the check and the write happen under one lock (v1.10). An
@@ -621,8 +621,10 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 ## Changes
 
 - v1.12, 19 Oct 2026: `mail.from` is the sender of escalation emails when set; the addresses a person types are checked
-  against `mail.allowed_domains` at `PATCH` and at the send (422 `address_not_allowed`). The recordings re-made with the zone: the shipped seed profile says `Europe/London` (6.4), and the
-  scenario S13 (a transfer timed before its admission) exercises E13 and `EVENT_TIME_IMPLAUSIBLE`.
+  against `mail.allowed_domains` at `PATCH` and at the send (422 `address_not_allowed`). The recordings re-made with the
+  zone: the shipped seed profile says `Europe/London` (6.4), and the scenario S13 (a transfer timed before its
+  admission) exercises E13 and `EVENT_TIME_IMPLAUSIBLE`. The questionnaire page asks questions 9 to 11 (teams and mail,
+  the feed's zone, note text for the model).
 - v1.11, 19 Oct 2026: what leaves IRIS for a model (9): per-case tokens for the identifiers, no demographics, no free
   text (a flag instead, and the site profile's `model_content.free_text` switch), the receiver's bodies and the failure
   reduced, the map-back inside IRIS; escalation by email (10): the profile's `teams` and `mail`, the four routes,

@@ -1,7 +1,6 @@
 import {
   Alert,
   Anchor,
-  Badge,
   Button,
   Card,
   Fieldset,
@@ -31,7 +30,9 @@ import { DEMO } from '@/demo';
 import { describeError, isApiError } from '@/lib/errors';
 import { humanize } from '@/lib/format';
 import { Section } from '../cases/case/Section';
+import { MoreQuestions } from './MoreQuestions';
 import { PolicySummary } from './PolicySummary';
+import { Effect, Question } from './Question';
 import {
   KINDS,
   KIND_LABELS,
@@ -52,26 +53,6 @@ import {
 } from './profile';
 import { ReviewModal, type SaveProblem } from './ReviewModal';
 import { VersionsPanel } from './VersionsPanel';
-
-/** Whether Shutter acts on an answer, or keeps it on record for the board and reviewers. */
-function Effect({ acts }: { acts: boolean }) {
-  return (
-    <Badge size="xs" variant="outline" color={acts ? 'teal' : 'gray'} style={{ textTransform: 'none' }}>
-      {acts ? 'Changes what Shutter does' : 'On record: nothing reads it yet'}
-    </Badge>
-  );
-}
-
-function Question({ n, text, acts }: { n: number; text: string; acts: boolean }) {
-  return (
-    <Group gap="xs" wrap="wrap">
-      <Text fw={600} size="sm">
-        {n}. {text}
-      </Text>
-      <Effect acts={acts} />
-    </Group>
-  );
-}
 
 /** A choice between known values; a stored value the page doesn't know is shown and kept, never replaced silently. */
 function Choice({
@@ -432,6 +413,7 @@ function ProfileForm({
           </SimpleGrid>
           <Text size="sm">{describeIncident(draft)}</Text>
         </Section>
+        <MoreQuestions draft={draft} setDraft={setDraft} problem={problem} />
       </Stack>
     </Fieldset>
   );
@@ -507,7 +489,9 @@ function Profile({ view }: { view: SiteProfileView }) {
   const focusField = (path: string) =>
     window.setTimeout(() => {
       const id = fieldId(path);
+      // A zone problem with the offset field open belongs to that field, not to the choice above it
       const el =
+        (path === 'feed.time_zone' ? document.getElementById('site-feed-offset') : null) ??
         document.getElementById(id) ??
         document.querySelector<HTMLElement>(`[aria-labelledby="${id}-label"]`) ??
         document.getElementById(`${id}-label`)?.parentElement;
@@ -628,7 +612,7 @@ function Profile({ view }: { view: SiteProfileView }) {
           />
           {shipped ? (
             <Alert color="blue" variant="light" title="Shutter is running on the shipped answers">
-              Check the eight questions below and save them, changed or not, so Shutter acts as this site
+              Check the eleven questions below and save them, changed or not, so Shutter acts as this site
               does.
               {editable ? '' : ' An approver answers them.'}
             </Alert>
@@ -703,7 +687,7 @@ export default function SiteProfilePage() {
     <>
       <PageHeader
         title="Site profile"
-        subtitle="The site's answers to the induction questions. Shutter reads them for each receiver's tier, the approval each chain needs and when many failures become an incident. Every saved version is kept."
+        subtitle="The site's answers to the induction questions. Shutter reads them for each receiver's tier, the approval each chain needs, when many failures become an incident, who an escalation goes to, the feed's time zone and what the model may see. Every saved version is kept."
       />
       {view.isPending || me.isPending ? <PageSkeleton label="Loading the site profile…" /> : null}
       {view.isError ? (

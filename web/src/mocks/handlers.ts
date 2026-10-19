@@ -12,7 +12,7 @@ import type {
   SiteProfileVersionEntry,
   SiteProfileView,
 } from '@/api/types';
-import { validateProfile } from '@/features/site-profile/profile';
+import { addressesProblem, validateProfile } from '@/features/site-profile/profile';
 import { digest, draftEscalation, teamFor } from './escalation';
 
 /**
@@ -70,6 +70,19 @@ let escalations: Record<string, Escalation[]> = {};
 const error = (status: number, code: string, detail: string) =>
   HttpResponse.json({ error: code, detail }, { status });
 const signedOut = () => error(401, 'unauthorized', 'Sign in first');
+/** As the server answers a To or Cc it won't send to (CONTRACTS 10): 422 naming the field. */
+const addressRefused = (e: Pick<Escalation, 'to' | 'cc'>) => {
+  const domains = siteProfile?.profile.mail?.allowed_domains ?? [];
+  for (const field of ['to', 'cc'] as const) {
+    const problem = addressesProblem(e[field] ?? '', domains);
+    if (problem)
+      return HttpResponse.json(
+        { error: 'address_not_allowed', field, detail: `The ${field} address is not allowed: ${problem}` },
+        { status: 422 },
+      );
+  }
+  return null;
+};
 const guard = (role: 'operator' | 'approver') =>
   !session ? signedOut() : !session[role] ? error(403, 'forbidden', `Needs the ${role} role`) : null;
 const csrf = (request: Request) =>
@@ -316,6 +329,8 @@ export const handlers = [
       return error(409, 'wrong_state', `The escalation is ${e.state}`);
     const change = (await request.json()) as Pick<Escalation, 'subject' | 'body' | 'to' | 'cc'>;
     if (!change.to?.trim()) return error(400, 'bad_request', 'to: at least one address');
+    const refused = addressRefused({ to: change.to, cc: change.cc });
+    if (refused) return refused;
     Object.assign(e, change, { state: 'draft', editedBy: session!.username });
     e.bodyDigest = digest(e.to ?? '', e.cc ?? '', e.subject, e.body);
     return HttpResponse.json(e);
@@ -329,6 +344,9 @@ export const handlers = [
     if (bodyDigest !== e.bodyDigest)
       return error(409, 'body_changed', "bodyDigest is not the digest of the escalation's current text");
     if (!e.to) return error(409, 'no_recipient', 'The escalation has no recipient');
+    // Again at the send: the allowed domains may have changed since the edit
+    const refused = addressRefused(e);
+    if (refused) return refused;
     Object.assign(e, {
       state: 'sent',
       sentBy: session!.username,

@@ -594,6 +594,8 @@ export interface SiteProfile {
   /** Who corrects the systems by hand when Shutter can't, and where their email goes (T29). */
   teams?: SiteTeam[];
   mail?: { from?: string; allowed_domains?: string[] };
+  /** What may leave IRIS for a model beyond tokens and flags (CONTRACTS 9). */
+  model_content?: { free_text?: boolean };
   /** The zone of times the feed sends without an offset: an IANA name or a fixed offset (CONTRACTS 6.4). */
   feed?: { time_zone?: string };
 }

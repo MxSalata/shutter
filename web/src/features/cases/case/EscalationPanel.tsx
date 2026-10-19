@@ -27,7 +27,8 @@ import {
 import type { CaseDetail, Escalation } from '@/api/types';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Timestamp } from '@/components/Timestamp';
-import { describeError } from '@/lib/errors';
+import { describeError, isApiError } from '@/lib/errors';
+import { addressesProblem } from '../../site-profile/profile';
 import { humanize } from '@/lib/format';
 import { Section } from './Section';
 
@@ -48,12 +49,29 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
   const [subject, setSubject] = useState(draft.subject);
   const [body, setBody] = useState(draft.body);
   const [key] = useState(newIdempotencyKey);
+  const [lastSent, setLastSent] = useState({ to: '', cc: '' });
   const changed =
     to !== (draft.to ?? '') || cc !== (draft.cc ?? '') || subject !== draft.subject || body !== draft.body;
   const busy = edit.isPending || send.isPending;
   const error = edit.error ?? send.error;
+  // The site's rule for addresses, checked as they are typed; the server checks them again at the edit and the send
+  const domains = useSiteProfile().data?.profile.mail?.allowed_domains ?? [];
+  const toProblem = addressesProblem(to, domains);
+  const ccProblem = addressesProblem(cc, domains);
+  // A refusal the server named a field for (the domains changed meanwhile) shows on that field, while it still applies
+  const refused =
+    isApiError(error) && error.code === 'address_not_allowed'
+      ? ((error.body as { field?: string } | null)?.field ?? '')
+      : '';
+  const fieldError = (field: 'to' | 'cc', value: string, problem: string) =>
+    problem
+      ? `Not allowed: ${problem}`
+      : refused === field && value === (field === 'to' ? lastSent.to : lastSent.cc)
+        ? error!.message
+        : undefined;
 
   const submit = async () => {
+    setLastSent({ to, cc });
     // An edited draft is stored first; the send then names the digest of the text as stored
     const stored = changed
       ? await edit.mutateAsync({ seq: draft.seq, change: { to, cc, subject, body } })
@@ -83,13 +101,19 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
         </Text>
         <TextInput
           label="To"
-          description="Addresses separated by commas"
+          description={`Addresses separated by commas${domains.length ? `, in ${domains.join(', ')}` : ''}`}
           value={to}
           onChange={(e) => setTo(e.currentTarget.value)}
-          error={!to.trim() ? 'Who is it for?' : undefined}
+          error={!to.trim() ? 'Who is it for?' : fieldError('to', to, toProblem)}
           data-autofocus={!to.trim() || undefined}
         />
-        <TextInput label="Cc" value={cc} onChange={(e) => setCc(e.currentTarget.value)} />
+        <TextInput
+          label="Cc"
+          description={domains.length ? `Addresses in ${domains.join(', ')}` : undefined}
+          value={cc}
+          onChange={(e) => setCc(e.currentTarget.value)}
+          error={fieldError('cc', cc, ccProblem)}
+        />
         <TextInput label="Subject" value={subject} onChange={(e) => setSubject(e.currentTarget.value)} />
         <Textarea
           label="Message"
@@ -113,7 +137,7 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
             leftSection={<IconMailForward size={16} />}
             onClick={() => void submit().catch(() => undefined)}
             loading={busy}
-            disabled={!to.trim() || !subject.trim() || !body.trim()}
+            disabled={!to.trim() || !!toProblem || !!ccProblem || !subject.trim() || !body.trim()}
           >
             Send
           </Button>

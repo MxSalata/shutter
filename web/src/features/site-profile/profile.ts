@@ -1,4 +1,4 @@
-import type { ChainKind, SiteProfile, SiteReceiver } from '@/api/types';
+import type { ChainKind, SiteProfile, SiteReceiver, SiteTeam } from '@/api/types';
 
 /**
  * The site profile's questionnaire, without React: labels, the diff the review and the history show, the port of
@@ -70,6 +70,24 @@ export function describeSource(source: string | undefined): string {
 /** The shipped answers are in force until someone saves the profile in Shutter. */
 export const isShipped = (source: string | undefined) => source !== 'api';
 
+/** A team as the form adds it: every required field empty, for the person to fill. */
+export function newTeam(): SiteTeam {
+  return { id: '', name: '', mailbox: '', cc: [], receivers: [] };
+}
+
+/** "a@x.nhs.uk, b@x.nhs.uk" as a list, without the empty entries a trailing comma leaves. */
+export const parseList = (text: string) =>
+  text
+    .split(/[,;\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+/** The feed's zone choices. A fixed offset is the third, with its own value. */
+export const ZONE_LABELS: Record<string, string> = {
+  'Europe/London': 'UK time (Europe/London)',
+  UTC: 'UTC',
+};
+
 export function newReceiver(): SiteReceiver {
   return {
     name: '',
@@ -107,6 +125,20 @@ const members = (x: object): [string, unknown][] =>
 
 const ZONES = ['UTC', 'Europe/London'];
 const FIXED_OFFSET = /^[+-](0[0-9]|1[0-4]):[0-5][0-9]$/;
+
+/**
+ * The port of AddressesProblem: the first address of a comma-separated list that is not an address, or not in the
+ * allowed domains when there are any, as "<address>: <why>"; "" when every address is fine.
+ */
+export function addressesProblem(list: string, domains: string[] = []): string {
+  const allowed = domains.filter(Boolean).map((d) => d.toLowerCase());
+  for (const a of list.split(',').map((x) => x.trim())) {
+    if (!a) continue;
+    const problem = mailboxProblem(a, allowed);
+    if (problem) return `${a}: ${problem}`;
+  }
+  return '';
+}
 
 /** The port of MailboxProblem: "" when fine, else why the mailbox is refused. */
 function mailboxProblem(mailbox: string, domains: string[]): string {
@@ -301,6 +333,12 @@ export function fieldId(path: string): string {
   m = /^approvers\.(role|escalation)$/.exec(path);
   if (m) return `site-approvers-${m[1]}`;
   if (path === 'history_policy') return 'site-history-policy';
+  m = /^teams\[(\d+)\]\.(id|name|mailbox|cc|receivers)(\[\d+\])?$/.exec(path);
+  if (m) return `site-teams-${m[1]}-${m[2]}`;
+  m = /^mail\.(from|allowed_domains)(\[\d+\])?$/.exec(path);
+  if (m) return `site-mail-${m[1]}`;
+  if (path === 'feed.time_zone') return 'site-feed-time_zone';
+  if (path === 'model_content.free_text') return 'site-model_content-free_text';
   return '';
 }
 
@@ -312,6 +350,13 @@ export function describePath(path: string): string {
   if (m) return `Tier ${m[1]}, ${m[2]} chains`;
   m = /^incident\.(\w+)$/.exec(path);
   if (m) return `Incidents, ${m[1].replace(/_/g, ' ')}`;
+  m = /^teams\[(\d+)\]\.?([a-z_]*)(?:\[(\d+)\])?$/.exec(path);
+  if (m)
+    return `Team ${Number(m[1]) + 1}${m[2] ? `, ${m[2] === 'cc' ? 'copies' : m[2]}` : ''}${m[3] ? ` ${Number(m[3]) + 1}` : ''}`;
+  m = /^mail\.(\w+)(?:\[(\d+)\])?$/.exec(path);
+  if (m) return `Mail, ${m[1].replace(/_/g, ' ')}${m[2] ? ` ${Number(m[2]) + 1}` : ''}`;
+  if (path === 'feed.time_zone') return 'Feed, time zone';
+  if (path === 'model_content.free_text') return 'Model, note text';
   return path.replace(/_/g, ' ');
 }
 
@@ -414,6 +459,28 @@ export function diffProfiles(a: SiteProfile | undefined, b: SiteProfile): Change
         path: `incident.${k}`,
         text: `Incidents, ${label}: from ${show({}, before.incident?.[k])} to ${show({}, b.incident?.[k])}`,
       });
+  out.push(...teamChanges(before, b));
+  const domains = (p: SiteProfile) => (p.mail?.allowed_domains ?? []).join(', ');
+  if (domains(before) !== domains(b))
+    out.push({ path: 'mail.allowed_domains', text: `Allowed mail domains: ${domains(b) || 'any'}` });
+  if (!same(before.mail?.from ?? '', b.mail?.from ?? ''))
+    out.push({
+      path: 'mail.from',
+      text: `Emails sent from: ${b.mail?.from || "the mail operation's own setting"}`,
+    });
+  if (!same(before.feed?.time_zone, b.feed?.time_zone))
+    out.push({
+      path: 'feed.time_zone',
+      text: `Feed time zone: from ${before.feed?.time_zone || 'not answered (read as UTC)'} to ${b.feed?.time_zone || 'not answered (read as UTC)'}. Every operation key read from now on uses it`,
+    });
+  if ((before.model_content?.free_text === true) !== (b.model_content?.free_text === true))
+    out.push({
+      path: 'model_content.free_text',
+      text:
+        b.model_content?.free_text === true
+          ? 'Note text: sent to the model from now on'
+          : 'Note text: no longer sent to the model; it sees a flag instead',
+    });
   if (!same(before.unconditional_resend, b.unconditional_resend))
     out.push({
       path: 'unconditional_resend',
@@ -423,6 +490,52 @@ export function diffProfiles(a: SiteProfile | undefined, b: SiteProfile): Change
     out.push({
       path: 'authoritative_source',
       text: `Authoritative source: from ${show({}, before.authoritative_source)} to ${show({}, b.authoritative_source)}`,
+    });
+  return out;
+}
+
+/**
+ * A team in words, by its place in the list as the server routes (EscalationDraft.Team): a case goes to the first team
+ * whose receivers name its receiver, else to the first team; a later team that names none gets a case only when a
+ * person picks it.
+ */
+function teamText(t: SiteTeam, first: boolean) {
+  const named = t.receivers?.length ? t.receivers.join(', ') : '';
+  const routes = first
+    ? named
+      ? `${named}, and any receiver no team names`
+      : 'any receiver no team names'
+    : named || 'no receiver: only when a person picks it on the case';
+  return `${t.name || 'unnamed'} <${t.mailbox || 'no mailbox'}>${t.cc?.length ? `, copies ${t.cc.join(', ')}` : ''}, for ${routes}`;
+}
+
+/** Teams added, removed or changed, matched by id (a team whose id changed reads as removed and added). */
+function teamChanges(a: SiteProfile, b: SiteProfile): Change[] {
+  const out: Change[] = [];
+  const before = new Map((a.teams ?? []).map((t) => [t.id, t]));
+  const ids = new Set((b.teams ?? []).map((t) => t.id));
+  for (const [i, t] of (b.teams ?? []).entries()) {
+    const old = before.get(t.id);
+    if (!old) out.push({ path: 'teams', text: `Team added: ${teamText(t, i === 0)}` });
+    else if (!same(old, t))
+      out.push({ path: 'teams', text: `Team ${t.id} changed: ${teamText(t, i === 0)}` });
+  }
+  for (const t of a.teams ?? [])
+    if (!ids.has(t.id)) out.push({ path: 'teams', text: `Team removed: ${t.name || t.id || 'unnamed'}` });
+  // The order routes: the first team takes the cases no team names, and the earlier of two naming a receiver wins
+  const kept = (x: SiteProfile, y: SiteProfile) =>
+    (x.teams ?? []).map((t) => t.id).filter((id) => (y.teams ?? []).some((u) => u.id === id));
+  const firstBefore = a.teams?.[0];
+  const firstAfter = b.teams?.[0];
+  if (firstBefore && firstAfter && firstBefore.id !== firstAfter.id)
+    out.push({
+      path: 'teams',
+      text: `Cases no team names: now to ${firstAfter.name || firstAfter.id}, before to ${firstBefore.name || firstBefore.id}`,
+    });
+  else if (!same(kept(a, b), kept(b, a)))
+    out.push({
+      path: 'teams',
+      text: 'Teams reordered: where two teams name a receiver, the earlier one gets its cases',
     });
   return out;
 }
