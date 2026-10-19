@@ -53,6 +53,9 @@ Storage Default
 <Value name="7">
 <Value>Mode</Value>
 </Value>
+<Value name="8">
+<Value>FailureReasonCode</Value>
+</Value>
 </Data>
 <DefaultData>CaseIntakeDefaultData</DefaultData>
 <Type>%Storage.Persistent</Type>

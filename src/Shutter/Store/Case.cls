@@ -478,6 +478,18 @@ Storage Default
 <Value name="35">
 <Value>FailureHttpStatus</Value>
 </Value>
+<Value name="36">
+<Value>PriorPatientId</Value>
+</Value>
+<Value name="37">
+<Value>PriorPatientIdAuthority</Value>
+</Value>
+<Value name="38">
+<Value>PriorEncounterId</Value>
+</Value>
+<Value name="39">
+<Value>MergeGroups</Value>
+</Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>
 <DefaultData>CaseDefaultData</DefaultData>

@@ -12,4 +12,21 @@ Property Reason As %String(MAXLEN = 2000);
 /// The signed-in user who marked the case handled.
 Property Actor As %String(MAXLEN = 100);
 
+Storage Default
+{
+<Data name="CaseCloseDefaultData">
+<Subscript>"CaseClose"</Subscript>
+<Value name="1">
+<Value>CaseId</Value>
+</Value>
+<Value name="2">
+<Value>Reason</Value>
+</Value>
+<Value name="3">
+<Value>Actor</Value>
+</Value>
+</Data>
+<DefaultData>CaseCloseDefaultData</DefaultData>
+<Type>%Storage.Persistent</Type>
+}
 }
