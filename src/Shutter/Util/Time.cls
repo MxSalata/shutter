@@ -30,23 +30,35 @@ ClassMethod FromNow(seconds As %Integer) As %String
     Quit $ZDATE(days, 3) _ "T" _ $ZTIME(secs, 1) _ "Z"
 }
 
-/// An HL7 timestamp (YYYYMMDD[HHMM[SS[.ssss]]][+/-ZZZZ]) as ISO 8601 UTC. Without an offset the
-/// value is taken as UTC, which is how the fixtures are written. Returns "" for an empty input.
-ClassMethod FromHL7(ts As %String) As %String
+/// An HL7 timestamp as ISO 8601 UTC. A timestamp with an offset is shifted by it; one without is read in the feed's
+/// time zone (the site profile's feed.time_zone; UTC when it does not say): "UTC", "Europe/London" (British Summer
+/// Time from the last Sunday of March at 01:00 UTC to the last Sunday of October at 01:00 UTC) or a fixed offset such
+/// as "+01:00". hadOffset says whether the timestamp carried one.
+ClassMethod FromHL7(ts As %String, zone As %String = "", Output hadOffset As %Boolean) As %String
 {
-    Set ts = $ZSTRIP(ts, "<>W")
+    Set hadOffset = 0
+    Set ts = $ZSTRIP(ts, "<>WC")
     If ts = "" Quit ""
+    // An HL7 DTM: YYYYMMDD[HH[MM[SS[.S...]]]][+/-ZZZZ]; the offset is always four digits at the end. Anything else is
+    // no time at all ("", never an error on the feed's path).
     Set offset = ""
-    If ts [ "+" { Set offset = "+" _ $PIECE(ts, "+", 2), ts = $PIECE(ts, "+", 1) }
-    ElseIf ($LENGTH(ts) > 8) && (ts [ "-") { Set offset = "-" _ $PIECE(ts, "-", 2), ts = $PIECE(ts, "-", 1) }
+    If $MATCH(ts, "^[0-9]+(\.[0-9]+)?[+-][0-9]{4}$") Set offset = $EXTRACT(ts, * - 4, *), ts = $EXTRACT(ts, 1, * - 5)
     Set ts = $PIECE(ts, ".", 1)
+    If '$MATCH(ts, "^[0-9]{8}([0-9]{2}){0,3}$") Quit ""
     Set y = $EXTRACT(ts, 1, 4), mo = $EXTRACT(ts, 5, 6), d = $EXTRACT(ts, 7, 8)
     Set hh = $EXTRACT(ts, 9, 10), mi = $EXTRACT(ts, 11, 12), ss = $EXTRACT(ts, 13, 14)
     If hh = "" Set hh = "00"
     If mi = "" Set mi = "00"
     If ss = "" Set ss = "00"
     Set iso = y _ "-" _ mo _ "-" _ d _ "T" _ hh _ ":" _ mi _ ":" _ ss
-    If offset = "" Quit iso _ "Z"
+    If offset = "" {
+        // SQL hands an empty string over as $CHAR(0): both mean the profile's zone.
+        If ($GET(zone) = "") || (zone = $CHAR(0)) Set zone = ##class(Shutter.Store.SiteProfile).FeedTimeZone()
+        Set offset = ..ZoneOffset(zone, iso)
+        If offset = "" Quit iso _ "Z"
+    } Else {
+        Set hadOffset = 1
+    }
     // Apply the offset so the result is UTC.
     Set sign = $EXTRACT(offset, 1), oh = +$EXTRACT(offset, 2, 3), om = +$EXTRACT(offset, 4, 5)
     Set shift = (oh * 3600) + (om * 60)
@@ -54,6 +66,71 @@ ClassMethod FromHL7(ts As %String) As %String
     Set total = ($PIECE(h, ",", 1) * 86400) + $PIECE(h, ",", 2)
     Set total = $SELECT(sign = "+": total - shift, 1: total + shift)
     Quit $ZDATE(total \ 86400, 3) _ "T" _ $ZTIME(total # 86400, 1) _ "Z"
+}
+
+/// The offset ("+HHMM" or "-HHMM") a zone gives a local time; "" for UTC. "Europe/London": +0100 in British Summer
+/// Time (an ambiguous or skipped local time at the change itself is read as summer time).
+ClassMethod ZoneOffset(zone As %String, localIso As %String) As %String
+{
+    Set zone = $ZSTRIP(zone, "<>W")
+    If (zone = "") || ($ZCONVERT(zone, "U") = "UTC") || ($ZCONVERT(zone, "U") = "Z") || (zone = "+00:00") Quit ""
+    If $MATCH(zone, "^[+-][0-9]{2}:?[0-9]{2}$") Quit $EXTRACT(zone, 1) _ $TRANSLATE($EXTRACT(zone, 2, *), ":", "")
+    If zone = "Europe/London" Quit $SELECT(..InBritishSummerTime(localIso, 1): "+0100", 1: "")
+    Quit ""
+}
+
+/// Whether a time is in British Summer Time. The time is UTC, or local London time when local is 1 (then the hour
+/// skipped in March reads as summer time and the repeated hour in October as summer time).
+ClassMethod InBritishSummerTime(iso As %String, local As %Boolean = 0) As %Boolean
+{
+    Set y = +$EXTRACT(iso, 1, 4)
+    If y = 0 Quit 0
+    Set start = ..LastSunday(y, 3) _ "T01:00:00", end = ..LastSunday(y, 10) _ "T01:00:00"
+    Set t = $PIECE(iso, "Z", 1)
+    If local {
+        // Summer time is local 01:00:00 on the March Sunday (the skipped hour reads as summer) up to, not including,
+        // local 02:00:00 on the October Sunday; the repeated hour 01:00 to 01:59 reads as summer, the second time round
+        // included.
+        Set octLocal = ..LastSunday(y, 10) _ "T02:00:00"
+        Quit ((t ]] start) || (t = start)) && '((t ]] octLocal) || (t = octLocal))
+    }
+    Quit ((t ]] start) || (t = start)) && '((t ]] end) || (t = end))
+}
+
+/// Whether a UTC time is within an hour of a British clock change (the order of two events across it is not safe).
+ClassMethod NearBritishClockChange(iso As %String) As %Boolean
+{
+    Set y = +$EXTRACT(iso, 1, 4)
+    If y = 0 Quit 0
+    For change = ..LastSunday(y, 3) _ "T01:00:00Z", ..LastSunday(y, 10) _ "T01:00:00Z" {
+        Set gap = ..SecondsBetween(change, iso)
+        If (gap >= -3600) && (gap <= 3600) Quit
+    }
+    Quit (gap >= -3600) && (gap <= 3600)
+}
+
+/// The last Sunday of a month, as YYYY-MM-DD.
+ClassMethod LastSunday(year As %Integer, month As %Integer) As %String
+{
+    Set last = $ZDATEH(year _ "-" _ $SELECT(month = 12: "12-31", 1: $TRANSLATE($JUSTIFY(month + 1, 2), " ", "0") _ "-01"), 3)
+    If month '= 12 Set last = last - 1
+    // $ZDATE(h, 10) is the day of the week, 0 for Sunday.
+    Set dow = +$ZDATE(last, 10)
+    Quit $ZDATE(last - dow, 3)
+}
+
+/// A probe for tests and the terminal: how a timestamp reads in a zone, and the clock-change facts, as JSON.
+ClassMethod Probe(ts As %String, zone As %String = "") As %String [ SqlProc ]
+{
+    Set iso = ..FromHL7(ts, zone, .had)
+    Set o = {}
+    Set o.iso = iso
+    Do o.%Set("had_offset", ''had, "boolean")
+    Do o.%Set("bst", ..InBritishSummerTime(iso), "boolean")
+    Do o.%Set("near_clock_change", ..NearBritishClockChange(iso), "boolean")
+    Set y = +$EXTRACT(iso, 1, 4)
+    If y > 0 Set o."last_sunday_march" = ..LastSunday(y, 3), o."last_sunday_october" = ..LastSunday(y, 10)
+    Quit o.%ToJSON()
 }
 
 /// Seconds between two ISO UTC timestamps (b minus a). Returns "" when either is empty.

@@ -42,6 +42,10 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
 
     // 3. The message's named fields and its validation, from the message store.
     Set msgInfo = ..MessageFields(case.SourceHeaderId, .validation)
+    // Said once, on the first collection; the facts stay in every snapshot's message section.
+    If (+##class(Shutter.Util.Json).Str(msgInfo, "times_without_offset") > 0) && '$ISOBJECT(case.CurrentSnapshot) {
+        Do case.Note("note", "The message's times carry no offset; they are read as " _ ##class(Shutter.Util.Json).Str(msgInfo, "feed_time_zone") _ " (the site profile's feed time zone)" _ $SELECT(+##class(Shutter.Util.Json).Str(msgInfo, "times_with_offset") > 0: ", while others in the same message carry one", 1: ""), "system")
+    }
     Do snap.AddItem("message", "message_store", now, msgInfo) Set count = count + 1
     Do snap.AddItem("validation", "validator", now, validation) Set count = count + 1
 
@@ -170,17 +174,27 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
         Set info."sending_application" = msg.GetValueAt("MSH:3.1")
         Set info."sending_facility" = msg.GetValueAt("MSH:4.1")
         Set info."receiving_application" = msg.GetValueAt("MSH:5.1")
-        Set info."message_time" = ##class(Shutter.Util.Time).FromHL7(msg.GetValueAt("MSH:7.1"))
+        Set zone = ##class(Shutter.Store.SiteProfile).FeedTimeZone(), withOffset = 0, without = 0
+        Set info."message_time" = ##class(Shutter.Util.Time).FromHL7(msg.GetValueAt("MSH:7.1"), zone, .had)
+        If msg.GetValueAt("MSH:7.1") '= "" { If had { Set withOffset = withOffset + 1 } Else { Set without = without + 1 } }
         Set info."hl7_version" = msg.GetValueAt("MSH:12.1")
-        Set info."event_recorded" = ##class(Shutter.Util.Time).FromHL7(msg.GetValueAt("EVN:2.1"))
-        Set info."event_occurred" = ##class(Shutter.Util.Time).FromHL7(msg.GetValueAt("EVN:6.1"))
+        Set info."event_recorded" = ##class(Shutter.Util.Time).FromHL7(msg.GetValueAt("EVN:2.1"), zone, .had)
+        If msg.GetValueAt("EVN:2.1") '= "" { If had { Set withOffset = withOffset + 1 } Else { Set without = without + 1 } }
+        Set recordedHad = had
+        Set info."event_occurred" = ##class(Shutter.Util.Time).FromHL7(msg.GetValueAt("EVN:6.1"), zone, .had)
+        If msg.GetValueAt("EVN:6.1") '= "" { If had { Set withOffset = withOffset + 1 } Else { Set without = without + 1 } }
+        // The field the operation key's time came from (EVN-6, else EVN-2): whether it carried an offset.
+        Do info.%Set("event_time_had_offset", $SELECT(msg.GetValueAt("EVN:6.1") '= "": had, 1: recordedHad), "boolean")
         Set pid = ##class(Shutter.Util.OperationKey).PatientIdentifier(msg, .pidAuthority, .pidType)
         Set info."patient_identifier" = pid _ "^^^" _ pidAuthority _ "^" _ pidType
         Set info."patient_name" = msg.GetValueAt("PID:5(1).1") _ ", " _ msg.GetValueAt("PID:5(1).2")
         Set info."patient_class" = msg.GetValueAt("PV1:2")
         Set info."assigned_location" = msg.GetValueAt("PV1:3.1") _ "^" _ msg.GetValueAt("PV1:3.2") _ "^" _ msg.GetValueAt("PV1:3.3") _ "^" _ msg.GetValueAt("PV1:3.4")
         Set info."visit_number" = msg.GetValueAt("PV1:19.1")
-        Set info."admit_time" = ##class(Shutter.Util.Time).FromHL7(msg.GetValueAt("PV1:44.1"))
+        Set info."admit_time" = ##class(Shutter.Util.Time).FromHL7(msg.GetValueAt("PV1:44.1"), zone, .had)
+        If msg.GetValueAt("PV1:44.1") '= "" { If had { Set withOffset = withOffset + 1 } Else { Set without = without + 1 } }
+        // How the times were read (T28): a timestamp without an offset is read in the feed's time zone.
+        Set info."times_without_offset" = without, info."times_with_offset" = withOffset, info."feed_time_zone" = zone
         // Every OBX and NTE segment, wherever it sits (a group of an SIU message included), up to 50: the text stays in
         // the snapshot; what a model sees of it is a flag (Shutter.Util.ModelView).
         Set notes = []

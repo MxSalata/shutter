@@ -54,5 +54,8 @@
   },
   "model_content": {
     "free_text": false
+  },
+  "feed": {
+    "time_zone": "UTC"
   }
 }

@@ -180,7 +180,7 @@ The DTL that builds the ward operation lives in `Shutter.DTL.ADTToWard`. The sam
 
 - HL7 v2.5.1, one message per file, segments separated by carriage returns (`\r`), files under `fixtures/<scenario>/`, named `<scenario>-<nn>-<event>.hl7` (for example `S1-02-A02.hl7`). UTF-8, ASCII content.
 - MSH-3 `PAS` (S8's third message: `BEDMGR`, a bed management system; v1.5), MSH-4 `HOSP`, MSH-5 `WARDS`, MSH-6 `HOSP`, MSH-9 `ADT^A02^ADT_A02`, MSH-10 unique across all fixtures (`MSG` plus five digits), MSH-11 `P`, MSH-12 `2.5.1`.
-- EVN-1 the trigger, EVN-2 the recorded time, EVN-6 the event time (both `YYYYMMDDHHMMSS`, interpreted as UTC).
+- EVN-1 the trigger, EVN-2 the recorded time, EVN-6 the event time (both `YYYYMMDDHHMMSS`; a value with an offset is shifted to UTC, one without is read in the site profile's `feed.time_zone`, v1.11).
 - PID-3 `MRN1001^^^HOSP^MR`; PID-5 synthetic names (no real people); PID-7 a date of birth; PID-8 a sex code.
 - PV1-2 `I`; PV1-3 `WARD-A^BAY1^01^HOSP` (point of care, room, bed, facility); PV1-19 `ENC-1001`; PV1-44 the admit time.
 - Free text that must reach the agents as data (the injected instruction in S4) goes in an OBX segment after PV1, `OBX|1|TX|NOTE^Transfer note^L||<text>||||||F`, which the ADT_A02 structure allows. No NTE segments in A02.
@@ -254,7 +254,8 @@ conditions that matter; an unlisted condition is a wildcard. A listed condition 
 | `delivery` | `failed`, `rejected`, `uncertain`, `unmappable` | the case's failure kind (1.1: 503 and connection failures are `failed`; 409 and 422 are `rejected`; 504 is `uncertain`; a message Shutter could not map to an operation is `unmappable`, v1.9) |
 | `receiver_answer` | `unavailable`, `timeout`, `duplicate`, `version_conflict`, `refused`, `none` | the error item's reason code |
 | `receipt` | `present`, `absent`, `unreadable`, `none` | the receipt lookup: 200, 404, anything else (1.9); `none` when the receiver has no receipt endpoint (6.4), which is a fact about the receiver, not a failed lookup |
-| `later_applied` | `none`, `transfer`, `discharge`, `update` | among the applied events for the encounter whose event time is later than the failed operation's (the ward history and the timeline), by precedence: `discharge` if any, else `transfer` if any, else `update` (an A08), else `none` |
+| `later_applied` | `none`, `transfer`, `discharge`, `admit`, `update` | among the applied events for the encounter whose event time is later than the failed operation's (the ward history and the timeline), by precedence: `discharge` if any, else `transfer` if any, else `admit` (a later admission, v1.11), else `update` (an A08), else `none` |
+| `event_time` | `plausible`, `before_admission`, `future`, `far_from_recorded`, `clock_change` | the failed event's time (v1.11, T28): before the admission the message (PV1-44) or the receiver's first history entry names, for anything but an admission; more than five minutes after the message was sent or the evidence was taken; more than a day from the recording time (EVN-2); without an offset and within an hour of a British clock change (the order of two events is then not safe); plausible otherwise |
 | `encounter_state` | `admitted`, `discharged`, `not_found`, `unknown` | the ward's state; `not_found` when the receiver answers 404 (it does not know the encounter); `unknown` when the receiver can't be read |
 | `transition` | `allowed`, `invalid`, `unknown` | the failed event from the encounter's current state (1.4): a transfer after a discharge is `invalid` |
 | `patient_match` | `yes`, `no`, `unknown` | the message's PID-3 against the ward's patient for the encounter |
@@ -360,7 +361,11 @@ reads it through `Shutter.Store.SiteProfile`.
   item records as `capabilities_source`. An entry without `api` takes the ward's paths.
 - `PUT /site-profile` refuses a profile that has not this shape, naming the field (unknown top-level fields and
   unknown `api` paths or `features` are refused too); every stored version is kept with who stored it and from where,
-  `GET /site-profile/history` lists them (v1.9). The body may carry `expectedVersion` (the version the caller read, not
+  `GET /site-profile/history` lists them (v1.9). `feed.time_zone` (v1.11) names the zone of timestamps without an
+  offset: `UTC`, `Europe/London` or a fixed offset; the questionnaire's default answer is `Europe/London`, a profile
+  that does not answer keeps `UTC` (the reading before v1.11), and the shipped demo profile says `UTC` until the
+  recordings are made with the zone (the fixtures' times then read as British Summer Time). The body may carry
+  `expectedVersion` (the version the caller read, not
   part of the profile): when the stored version has moved, the answer is 409 `stale_version` with `currentVersion`, so
   a page never overwrites another person's change unseen; the check and the write happen under one lock (v1.10). An
   `api` entry must name at least its `state` and `operations` paths. The shipped seed profile fills an empty store and
@@ -604,7 +609,13 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 - v1.11, 19 Oct 2026: what leaves IRIS for a model (9): per-case tokens for the identifiers, no demographics, no free
   text (a flag instead, and the site profile's `model_content.free_text` switch), the receiver's bodies and the failure
   reduced, the map-back inside IRIS; escalation by email (10, S13): the profile's `teams` and `mail`, the four routes,
-  the `Escalation Mail` operation and the `escalation` event kind.
+  the `Escalation Mail` operation and the `escalation` event kind. Event times (T28): the `event_time` condition
+  (6.1) and `later_applied: admit` (a later admission is not an update); the gate's ordering check blocks a write,
+  and a superseded closure, whose event time is not plausible (`EVENT_TIME_IMPLAUSIBLE`; policy version
+  `2026-10-19.2`); timestamps without an offset are read in the site profile's `feed.time_zone` (`UTC`,
+  `Europe/London` or a fixed offset; UTC when the profile does not say), the message section records
+  `times_without_offset`, `times_with_offset`, `feed_time_zone` and `event_time_had_offset` (whether the key's own
+  field carried one), and the case gets a note, once, when a message's times carried no offset.
 - v1.10, 19 Oct 2026: from the review of the day's code. New gate codes: `CLOSED_BY_CATALOGUE` (a pass of the ordering
   check: the plan says superseded and the history shows no later event, but the matched entry's outcome on this
   evidence is none, so the case closes with nothing to send; the verifier accepts the same closure when the receiver

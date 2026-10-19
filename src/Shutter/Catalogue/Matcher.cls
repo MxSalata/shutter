@@ -23,6 +23,8 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     Set c.receipt = $SELECT(rstatus = 200: "present", rstatus = 404: "absent", rstatus = -1: "none", 1: "unreadable")
     // later_applied: the latest later applied event, from the timeline and the receiver's history
     Set c."later_applied" = ..LaterApplied(summary, case)
+    // event_time (T28): the failed event's time against the admission, the message, the recording time and the clock
+    Set c."event_time" = ..EventTimePlausibility(summary, case)
     // encounter_state and the identity
     Set ward = summary.%Get("ward_state"), wstatus = $CLASSMETHOD(json, "Str", summary, "ward_state_http_status")
     Set state = $SELECT((wstatus = 200) && $ISOBJECT(ward): $CLASSMETHOD(json, "Str", ward, "state"), 1: "")
@@ -126,7 +128,8 @@ ClassMethod Holds(pattern As %DynamicObject, conditions As %DynamicObject) As %B
 /// transfer, else update, else none. (A later transfer followed by a later update is a transfer.)
 ClassMethod LaterApplied(summary As %DynamicObject, case As Shutter.Store.Case) As %String [ Private ]
 {
-    Set seen("discharge") = 0, seen("transfer") = 0, seen("update") = 0
+    // A later admission is its own answer (T28): an encounter admitted again after the failed event is not an update.
+    Set seen("discharge") = 0, seen("transfer") = 0, seen("update") = 0, seen("admit") = 0
     Set timeline = summary.%Get("timeline")
     If $ISOBJECT(timeline) {
         Set iter = timeline.%GetIterator()
@@ -149,7 +152,37 @@ ClassMethod LaterApplied(summary As %DynamicObject, case As Shutter.Store.Case) 
             Set seen($SELECT($DATA(seen(e)): e, 1: "update")) = 1
         }
     }
-    Quit $SELECT(seen("discharge"): "discharge", seen("transfer"): "transfer", seen("update"): "update", 1: "none")
+    Quit $SELECT(seen("discharge"): "discharge", seen("transfer"): "transfer", seen("admit"): "admit", seen("update"): "update", 1: "none")
+}
+
+/// Whether the failed event's time is plausible (T28): before_admission when it precedes the admission the message
+/// or the receiver's history names (for anything but an admission); future when it is more than five minutes after
+/// the message was sent or the evidence was taken; far_from_recorded when it is more than a day from the time the
+/// event was recorded (EVN-2); clock_change when it came without an offset and lies within an hour of a British clock
+/// change, where the order of two events is not safe; plausible otherwise.
+ClassMethod EventTimePlausibility(summary As %DynamicObject, case As Shutter.Store.Case) As %String
+{
+    Set json = "Shutter.Util.Json", t = case.EventTime
+    Set msg = summary.%Get("message")
+    If (t = "") || '$ISOBJECT(msg) Quit "plausible"
+    Set admit = $CLASSMETHOD(json, "Str", msg, "admit_time"), recorded = $CLASSMETHOD(json, "Str", msg, "event_recorded"), sent = $CLASSMETHOD(json, "Str", msg, "message_time")
+    Set firstAdmit = ""
+    Set ward = summary.%Get("ward_state")
+    Set history = $SELECT($ISOBJECT(ward): ward.%Get("history"), 1: "")
+    If $ISOBJECT(history) && (history.%Size() > 0) {
+        Set first = history.%Get(0)
+        If $ISOBJECT(first) && ($CLASSMETHOD(json, "Str", first, "event") = "admit") Set firstAdmit = $CLASSMETHOD(json, "Str", first, "event_time")
+    }
+    If case.Event '= "admit" {
+        If (admit '= "") && (admit ]] t) Quit "before_admission"
+        If (firstAdmit '= "") && (firstAdmit ]] t) Quit "before_admission"
+    }
+    Set observed = $CLASSMETHOD(json, "Str", summary, "observed_at")
+    If (sent '= "") && (t ]] sent) && ($ZABS(##class(Shutter.Util.Time).SecondsBetween(sent, t)) > 300) Quit "future"
+    If (observed '= "") && (t ]] observed) && ($ZABS(##class(Shutter.Util.Time).SecondsBetween(observed, t)) > 300) Quit "future"
+    If (recorded '= "") && ($ZABS(##class(Shutter.Util.Time).SecondsBetween(recorded, t)) > 86400) Quit "far_from_recorded"
+    If msg.%IsDefined("event_time_had_offset") && '$CLASSMETHOD(json, "Bool", msg, "event_time_had_offset") && ($CLASSMETHOD(json, "Str", msg, "feed_time_zone") = "Europe/London") && ##class(Shutter.Util.Time).NearBritishClockChange(t) Quit "clock_change"
+    Quit "plausible"
 }
 
 /// Facts beside the conditions, for the alternatives' "when": other_source (the other source system of a

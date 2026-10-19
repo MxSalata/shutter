@@ -32,6 +32,7 @@ ClassMethod Default() As %DynamicObject
     Set p.approvers = {"role": "Shutter Approvers", "escalation": "the integration team's on-call"}
     Set p.incident = {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60}
     Set p."model_content" = {"free_text": false}
+    Set p.feed = {"time_zone": "Europe/London"}
     Quit p
 }
 
@@ -85,7 +86,7 @@ ClassMethod Store(json As %String, source As %String = "", user As %String = "",
             Set v.Version = row.Version, v.Json = row.Json, v.Source = source, v.UpdatedAt = row.UpdatedAt, v.UpdatedBy = row.UpdatedBy
             Set sc = v.%Save()
         }
-        If $$$ISOK(sc) { TCOMMIT } Else { TROLLBACK }
+        If $$$ISOK(sc) { TCOMMIT  Kill ^Shutter.Config("feedZone") } Else { TROLLBACK }
         Set currentVersion = +row.Version
     } Catch ex {
         Set sc = ex.AsStatus()
@@ -111,7 +112,7 @@ ClassMethod Validate(p As %DynamicObject) As %String
     If '$ISOBJECT(p) Quit "the profile must be a JSON object"
     Set it = p.%GetIterator()
     While it.%GetNext(.key, .v) {
-        If '$LISTFIND($LISTBUILD("version", "receivers", "history_policy", "authoritative_source", "unconditional_resend", "policy", "approvers", "incident", "model_content", "teams", "mail"), key) Return key _ ": unknown field"
+        If '$LISTFIND($LISTBUILD("version", "receivers", "history_policy", "authoritative_source", "unconditional_resend", "policy", "approvers", "incident", "model_content", "teams", "mail", "feed"), key) Return key _ ": unknown field"
     }
     If p.%IsDefined("version") && ((p.%Get("version") '= +p.%Get("version")) || (p.%Get("version") < 0)) Quit "version: must be a whole number"
     Set rcv = p.%Get("receivers")
@@ -161,6 +162,16 @@ ClassMethod Validate(p As %DynamicObject) As %String
         }
     }
     If p.%IsDefined("approvers") && '$ISOBJECT(p.%Get("approvers")) Quit "approvers: must be an object"
+    // The feed: the time zone of timestamps that carry no offset (T28).
+    If p.%IsDefined("feed") {
+        Set feed = p.%Get("feed")
+        If '$ISOBJECT(feed) Quit "feed: must be an object"
+        Set fi = feed.%GetIterator()
+        While fi.%GetNext(.k, .v) {
+            If '$LISTFIND($LISTBUILD("time_zone"), k) Return "feed." _ k _ ": unknown setting"
+            If (feed.%GetTypeOf(k) '= "string") || '$LISTFIND($LISTBUILD("UTC", "Europe/London"), v) && '$MATCH(v, "^[+-](0[0-9]|1[0-4]):[0-5][0-9]$") Return "feed.time_zone: must be UTC, Europe/London or a fixed offset such as +01:00 (up to 14:00)"
+        }
+    }
     // What may leave IRIS for a model (T27): free text off unless the site says so.
     If p.%IsDefined("model_content") {
         Set mc = p.%Get("model_content")
@@ -265,6 +276,21 @@ ClassMethod MailboxProblem(mailbox As %String, domains As %List) As %String [ Pr
     }
     If (domain = d) || ($EXTRACT(domain, * - $LENGTH(d), *) = ("." _ d)) Quit ""
     Quit "not in the allowed domains"
+}
+
+/// The time zone of the feed's timestamps that carry no offset (T28): UTC, Europe/London or a fixed offset. A
+/// profile that does not answer the question (one saved before it existed) keeps the old reading, UTC, so nothing
+/// moves under an installed site until it answers; the questionnaire's default answer is Europe/London (Default()).
+ClassMethod FeedTimeZone() As %String
+{
+    // Read on the feed's hot path for every timestamp: cached in a global that every store of the profile clears.
+    Set cached = $GET(^Shutter.Config("feedZone"))
+    If cached '= "" Quit cached
+    Set feed = ..Current().%Get("feed")
+    Set zone = $SELECT($ISOBJECT(feed): ##class(Shutter.Util.Json).Str(feed, "time_zone"), 1: "")
+    If zone = "" Set zone = "UTC"
+    Set ^Shutter.Config("feedZone") = zone
+    Quit zone
 }
 
 /// Whether the site allows OBX and NTE free text to go to a model (T27): off unless the profile says so.

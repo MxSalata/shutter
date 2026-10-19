@@ -9,7 +9,7 @@ Class Shutter.Operation.Gate Extends Ens.BusinessOperation
 Parameter INVOCATION = "Queue";
 
 /// Bumped whenever a check changes; recorded on every decision and bound by approvals.
-Parameter POLICYVERSION = "2026-10-19.1";
+Parameter POLICYVERSION = "2026-10-19.2";
 
 Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shutter.Msg.GateResult) As %Status
 {
@@ -61,17 +61,26 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         Do ..Check(checks, "intent", "pass", "NO_WRITE", "The plan writes nothing to the receiver")
     }
 
-    // Ordering: for a write, no later transfer or discharge was applied for this encounter.
+    // Ordering: for a write, the event's time is plausible (T28) and no later transfer or discharge was applied for
+    // this encounter.
+    Set cat = summary.%Get("catalogue"), conds = $SELECT($ISOBJECT(cat): cat.%Get("conditions"), 1: "")
+    Set eventTime = $SELECT($ISOBJECT(conds): ##class(Shutter.Util.Json).Str(conds, "event_time"), 1: "")
+    Set timeDoubt = (eventTime '= "") && (eventTime '= "plausible")
     If isWrite {
         Set superseding = ..Superseding(summary, case)
-        If superseding = "" {
+        If timeDoubt {
+            Do ..Check(checks, "ordering", "block", "EVENT_TIME_IMPLAUSIBLE", "The event's time is not plausible (" _ eventTime _ "): " _ $CASE(eventTime, "before_admission": "it precedes the admission", "future": "it lies in the future", "far_from_recorded": "it is more than a day from when the event was recorded", "clock_change": "it lies within an hour of a clock change and came without an offset", : eventTime) _ "; a person decides")
+        } ElseIf superseding = "" {
             Do ..Check(checks, "ordering", "pass", "NO_LATER_EVENT", "No later transfer or discharge was applied for this encounter")
         } Else {
             Do ..Check(checks, "ordering", "block", "SUPERSEDED_BY_LATER_EVENT", "A later event was applied: " _ superseding)
         }
     } ElseIf plan.Disposition = "superseded" {
         Set superseding = ..Superseding(summary, case)
-        If superseding '= "" {
+        If timeDoubt {
+            // An ordering made with a doubtful time closes nothing on its own: a person decides.
+            Do ..Check(checks, "ordering", "block", "EVENT_TIME_IMPLAUSIBLE", "The event's time is not plausible (" _ eventTime _ "), so what came before or after it is not settled; a person decides")
+        } ElseIf superseding '= "" {
             Do ..Check(checks, "ordering", "pass", "SUPERSEDED_BY_LATER_EVENT", "The evidence shows the later event: " _ superseding)
         } ElseIf ..ClosedByCatalogue(plan, summary) {
             Do ..Check(checks, "ordering", "pass", "CLOSED_BY_CATALOGUE", "Catalogue entry " _ plan.CatalogueEntry _ " closes the case with nothing to send, and its pattern holds on this evidence")
