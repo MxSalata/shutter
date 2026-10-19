@@ -71,12 +71,12 @@ Docker's health check reflects the instance's real state; any other alert stays.
 Then open:
 
 - the web application: http://localhost:52773/shutter/index.html (the bare `/shutter/` answers 404);
-  sign in as `operator` or `approver`, password `shutter`;
+  sign in as `operator` or `approver`, password `shutter` (`operator` views cases, runs scenarios, reopens cases and drafts escalations; `approver` can also approve or reject plans and incident releases, read the message traces and the Workflow inbox, and save the site profile; neither starts, stops or purges the production);
 - the REST API's health report: http://localhost:52773/api/shutter/health;
 - the Management Portal: http://localhost:52773/csp/sys/UtilHome.csp, `_SYSTEM` / `SYS` (namespace `SHUTTER`,
   production `Shutter.Production`, and the Visual Trace of every case).
 
-To watch a case unfold, run a scenario from the web application's Scenarios page (S1 to S10): each one feeds synthetic
+To watch a case unfold, run a scenario from the web application's Scenarios page (S1 to S12; S11 and S12 are the outage scenarios that open an incident): each one feeds synthetic
 ADT messages into the production, makes one delivery fail in a particular way, and opens a case. Out of the box the
 agents replay recorded runs, so the demo needs no API key. For live agents, put an `ANTHROPIC_API_KEY` in a `.env` file
 (copy `.env.example`) before `docker compose up`: the production writes the provider configuration from it when it starts,
@@ -84,7 +84,7 @@ and the agent items, set to `auto`, then run live (`SHUTTER_AGENT_MODE` forces `
 on 16 October 2026 with `claude-opus-5-5`: one board pass (three specialists and the coordinator) uses about 90,000 input and
 4,000 output tokens, roughly 0.45 USD at list prices, and takes about a minute; the Settings page shows the figures per run.
 
-What you make stays: the cases, approvals, incidents, the site profile and the provider configuration live in a data
+What you make stays: the cases, approvals, incidents, the site profile and Shutter's record of the provider configuration live in a data
 database inside the `shutter-mgr` volume (the image keeps only the code), so `docker compose down` and `up` keep
 them, a rebuilt image brings new code to the same data, and `docker compose down -v` starts afresh. A volume made by a
 build from before 18 October 2026 has no data database: remove it once (`docker compose down -v`) before the first
@@ -92,8 +92,33 @@ build from before 18 October 2026 has no data database: remove it once (`docker 
 its journal and write image out cleanly; a container killed mid-write recovers from the journal at the next start,
 which is what the "abnormal shutdown" alert in the console log then says. When the production starts it re-reads the
 knowledge files that changed (block reasons, catalogue, site profile seed, recordings), so a rebuilt image's knowledge
-reaches the kept data; a site profile saved from the app is never overwritten by the seed.
+reaches the kept data; a site profile saved from the app is never overwritten by the seed. Installing again over an
+instance that already has Shutter (a rebuilt image on the kept volume, or `zpm "load"` again) brings the roles to their
+current definition and the demo users `operator`, `approver` and `wards-client` back to the demo's role, password and
+enabled state, and rewrites the `WardsAPI` credential; a non-demo install only adds roles to users that exist.
+
+**What reaches the model.** Only what is needed leaves IRIS: before the evidence or a tool result goes to an agent, every
+patient and encounter identifier is replaced by a per-case token (`MRN-T1`, `ENC-T1` and the like, mapped back only inside
+IRIS), the demographics (names, date of birth, sex, address) are dropped, and each OBX or NTE note becomes a flag saying
+that free text is present and whether it reads like an instruction; the text itself goes only when the site profile's
+`model_content.free_text` is true. `SELECT Shutter_Util.ModelView_Preview('C-000012')` shows what the model would see of a
+case, and `tests/privacy_check.py` fails when a recording carries a name, a date of birth or a raw identifier.
+
+**Escalation by email.** When Shutter cannot recover a case (blocked, escalated or failed), the case page drafts an email
+for the team that owns the receiving system, from the stored case and without a model: the hospital number, the NHS number
+and the date of birth, the event and its operation key, what failed, why Shutter stopped, what the receiver holds, the
+encounter's timeline and what Shutter sent; no name, address or note text. A person edits it, picks the team (the site
+profile's `teams`) and sends it; the send is bound to the digest of the text they read. The `Escalation Mail` operation
+sends through the site's mail server when its `SMTPServer`, port, TLS and credentials are set in the production (first-time
+configuration; the NHS relay at most trusts), and otherwise writes an `.eml` file under `<mgr>/shutter/out/mail`, so the
+demo and CI need no mail server.
+
+**The feed's time zone.** HL7 timestamps that carry no offset are read in the site profile's `feed.time_zone`: `UTC` (the
+shipped profile), `Europe/London` (with British Summer Time) or a fixed offset such as `+01:00`. The zone changes every
+operation key, so set it before the first case; the matcher's `event_time` condition and the gate then block a resend
+whose event time precedes its admission, lies in the future, is far from when it was recorded, or sits within an hour of a
+clock change.
 
 The same `Dockerfile` builds the replay edition on any IRIS for Health Community 2026.2 or later:
-`SHUTTER_IMAGE=intersystemsdc/irishealth-community:latest SHUTTER_WITH_AIHUB=0 docker compose up -d --build`. Other
+`SHUTTER_IMAGE=containers.intersystems.com/intersystems/irishealth-community:2026.2 SHUTTER_WITH_AIHUB=0 docker compose up -d --build` (the image CI builds from). Other
 settings in `.env.example`: the published ports, the agents' mode and model.

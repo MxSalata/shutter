@@ -21,7 +21,7 @@ services:
     environment:
       # Empty: the agents replay recorded runs. Set it for live agents (the aihub module).
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      # live, record or replay; empty lets the instance decide (live when a key is set, else replay).
+      # live, record or replay; empty keeps a mode set on the instance, else the instance decides (live when a key is set, else replay).
       - SHUTTER_AGENT_MODE=${SHUTTER_AGENT_MODE:-}
       # The model for live agents (default claude-opus-5-5).
       - SHUTTER_MODEL=${SHUTTER_MODEL:-}

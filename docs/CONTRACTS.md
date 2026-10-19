@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.9, 18 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.11, 19 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The ward system's API
 
@@ -174,7 +174,7 @@ From an HL7 v2.5.1 ADT message:
 
 Scenario S8's third message comes from a second source system, `BEDMGR` (MSH-3), for the same encounter (v1.5): its operation key starts `BEDMGR^HOSP^…`, so it is a different operation from the PAS messages even when it describes the same movement. Admit to Ward A applied; the 09:20 transfer to Ward B fails; the bed manager's own transfer to Ward C, also timed 09:20, applies. Neither event is later than the other, so supersession is unknown: nothing is resent.
 
-The DTL that builds the ward operation lives in `Shutter.DTL.ADTToWard`. The same mapping, as an ObjectScript class method, is `Shutter.Util.OperationKey.FromHL7(message)` so the evidence collector and the fixtures agree.
+The business process that builds the ward operation and delivers it is `Shutter.Process.ADTToWard`; the mapping it uses is the class method `Shutter.Util.OperationKey.FromHL7(message)`, shared with the evidence collector, the index and the fixtures. The same mapping, as an ObjectScript class method, is `Shutter.Util.OperationKey.FromHL7(message)` so the evidence collector and the fixtures agree.
 
 ## 3. HL7 fixtures
 
@@ -212,7 +212,7 @@ Step kinds: `file` (drop the file into the ADT In folder; `expect` is `delivered
 `Shutter.Scenarios.Runner`, class methods marked `SqlProc` so the app and the scripts can call them through SQL:
 
 - `List() As %String`: the scenarios as JSON (the `scenarios.json` content with the fixture files resolved).
-- `Run(scenario As %String, mode As %String = "board") As %String`: resets the ward (section 1.7), sets the run mode for the case workflow (`board`, `single`, `rules`, by writing `^Shutter.Config("mode")`) and the running scenario (`^Shutter.Config("scenario")` = the scenario id, which the case intake stamps on the case, so that recorded agent runs replay by scenario on any instance), then executes the steps: faults through the ward API, files copied into the production's inbound folder (`^Shutter.Config("adtIn")`, set by `Shutter.Setup`), waits. Returns JSON `{"scenario": "S1", "started_at": "…", "files": [...]}`. It does not wait for the case; the production and the app do the rest.
+- `Run(scenario As %String, mode As %String = "board") As %String`: resets the ward (section 1.7), sets the run mode for the case workflow (`board`, `single`, `rules` or `policy`, by writing `^Shutter.Config("mode")`) and the running scenario (`^Shutter.Config("scenario")` = the scenario id, which the case intake stamps on the case, so that recorded agent runs replay by scenario on any instance), then executes the steps: faults through the ward API, files copied into the production's inbound folder (`^Shutter.Config("adtIn")`, set by `Shutter.Setup`), waits. Returns JSON `{"scenario": "S1", "started_at": "…", "files": [...]}`. It does not wait for the case; the production and the app do the rest.
 - `Reset() As %String`: the ward reset, the inbound and archive folders emptied, `^Shutter.Config("mode")` back to `board`, `^Shutter.Config("scenario")` cleared, and `^Shutter.Config("resetAt")` set to the ISO UTC time of the reset. Encounter ids are fixed per scenario, so the evidence collector ignores message-store events older than `resetAt`; the ward's own history is per run already.
 - The runner may call `Wards.Service` in process for the reset and the faults; the production always goes through HTTP.
 - Settings the runner reads, all set by `Shutter.Setup`: `^Shutter.Config("fixtures")` (the fixtures directory), `("adtIn")`, `("adtArchive")`. The ADT In service takes `*.hl7` and archives what it has read.
@@ -230,7 +230,7 @@ Scenario S7 (a later transfer arriving while the plan awaits approval) is writte
 
 ## 4.2 Running a scenario from the API (v1.5)
 
-`POST /api/shutter/scenarios/{id}/run` with `{"mode": "board" | "single" | "rules"}` answers 202 and the run record; `GET /api/shutter/scenarios` carries the current record as `run`. With the production's **Scenario Player** item enabled, the route writes a record in state `queued` and sends an `Shutter.Msg.ScenarioRun` through the `Shutter API` service to the player, which plays the steps in its own job (the same checks and reset as `Runner.Start`) and moves the record through `running` to `done` or `failed`; a run therefore never needs a new process, and it shows in the trace with the cases it causes. A second POST while a record is `queued` or `running` answers 409 `wrong_state`. Without the player the route calls `Runner.Start`, which uses a background job, or plays inline when none can start.
+`POST /api/shutter/scenarios/{id}/run` with `{"mode": "board" | "single" | "rules" | "policy"}` (default `board`; 400 `bad_request` for any other value) answers 202 and the run record; `GET /api/shutter/scenarios` carries the current record as `run`. With the production's **Scenario Player** item enabled, the route writes a record in state `queued` and sends an `Shutter.Msg.ScenarioRun` through the `Shutter API` service to the player, which plays the steps in its own job (the same checks and reset as `Runner.Start`) and moves the record through `running` to `done` or `failed`; a run therefore never needs a new process, and it shows in the trace with the cases it causes. A second POST while a record is `queued` or `running` answers 409 `wrong_state`. Without the player the route calls `Runner.Start`, which uses a background job, or plays inline when none can start.
 
 ## 5. The REST API for the app
 
@@ -252,10 +252,10 @@ conditions that matter; an unlisted condition is a wildcard. A listed condition 
 | Condition | Values | Computed from |
 | --- | --- | --- |
 | `delivery` | `failed`, `rejected`, `uncertain`, `unmappable` | the case's failure kind (1.1: 503 and connection failures are `failed`; 409 and 422 are `rejected`; 504 is `uncertain`; a message Shutter could not map to an operation is `unmappable`, v1.9) |
-| `receiver_answer` | `unavailable`, `timeout`, `duplicate`, `version_conflict`, `refused`, `none` | the error item's reason code |
+| `receiver_answer` | `unavailable`, `timeout`, `duplicate`, `version_conflict`, `refused`, `none` | the error item's reason code, else its HTTP status (504 `timeout`, 409 and 422 `refused`, 503 `unavailable`); an uncertain delivery with no code reads `timeout` |
 | `receipt` | `present`, `absent`, `unreadable`, `none` | the receipt lookup: 200, 404, anything else (1.9); `none` when the receiver has no receipt endpoint (6.4), which is a fact about the receiver, not a failed lookup |
 | `later_applied` | `none`, `transfer`, `discharge`, `admit`, `update` | among the applied events for the encounter whose event time is later than the failed operation's (the ward history and the timeline), by precedence: `discharge` if any, else `transfer` if any, else `admit` (a later admission, v1.11), else `update` (an A08), else `none` |
-| `event_time` | `plausible`, `before_admission`, `future`, `far_from_recorded`, `clock_change` | the failed event's time (v1.11, T28): before the admission the message (PV1-44) or the receiver's first history entry names, for anything but an admission; more than five minutes after the message was sent or the evidence was taken; more than a day from the recording time (EVN-2); without an offset and within an hour of a British clock change (the order of two events is then not safe); plausible otherwise |
+| `event_time` | `plausible`, `before_admission`, `future`, `far_from_recorded`, `clock_change` | the failed event's time (v1.11, T28): before the admission the message (PV1-44) or the receiver's first history entry names, for anything but an admission; more than five minutes after the message was sent or the evidence was taken; more than a day from the recording time (EVN-2); without an offset, read in `Europe/London`, and within an hour of a British clock change (the order of two events is then not safe); plausible otherwise |
 | `encounter_state` | `admitted`, `discharged`, `not_found`, `unknown` | the ward's state; `not_found` when the receiver answers 404 (it does not know the encounter); `unknown` when the receiver can't be read |
 | `transition` | `allowed`, `invalid`, `unknown` | the failed event from the encounter's current state (1.4): a transfer after a discharge is `invalid` |
 | `patient_match` | `yes`, `no`, `unknown` | the message's PID-3 against the ward's patient for the encounter |
@@ -290,8 +290,7 @@ checks: [ordering, effect, state_transition, identity, capability]
   (the board chooses among the outcomes), `person` (always escalated, with the entry named).
 - `outcome` is one of `resend` (the case's own operation, conditional on the receiver's version), `resend_chain` (every
   item of an ordered chain, in event order), `resend_latest` (the chain's latest item only; the earlier ones are
-  superseded), `reconcile`, `none`, `escalate`, `resend_unconditional` (never automatic; needs the site flag
-  `unconditional_resend: with_approval`), `correct_history` (not implemented: always escalated with the steps named).
+  superseded), `reconcile`, `none`, `escalate`, `resend_unconditional` (never automatic; needs the site flag `unconditional_resend: allowed`, the only value besides `forbidden` the profile validator accepts), `correct_history` (not implemented: always escalated with the steps named).
 - An alternative has `outcome`, `why` and `when`: `always` for a choice left to the board, or a site profile condition
   `<flag>: <value>` such as `history_policy: correct` or `unconditional_resend: with_approval`. The value may be the
   symbol `other_source`, which stands for the other source system of the simultaneous event the matcher found
@@ -306,7 +305,7 @@ checks: [ordering, effect, state_transition, identity, capability]
 The matcher runs after the evidence is collected, before any agent, in every mode: its result (the conditions, the
 facts, the matches) is part of the snapshot summary, so the board reads it and the gate checks the plan against it.
 The investigation mode decides who settles the case:
-- `policy` (the site's default once a catalogue is installed): the rules below;
+- `policy`: the rules below (chosen per run; the installed default, and the mode after every scenario reset, is `board`);
 - `board`: the board always runs, the match in its evidence; the comparison's board column keeps its meaning;
 - `single`: the single investigator always runs;
 - `rules`: no agents and no catalogue path: a plain resend for the gate to judge.
@@ -347,9 +346,13 @@ reads it through `Shutter.Store.SiteProfile`.
     "3": {"single": "approval", "ordered": "per_chain", "interleaved": "board"}
   },
   "approvers": {"role": "Shutter Approvers", "escalation": "the integration team's on-call"},
-  "incident": {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60}
+  "incident": {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60},
+  "model_content": {"free_text": false},
+  "feed": {"time_zone": "UTC"}
 }
 ```
+
+(`teams` and `mail`, optional, are in section 10.)
 
 - A tier is the receiver's; a policy is read by tier and chain kind.
 - **The receiver description** (v1.8): each receiver entry carries `api` (its `base` path and the paths of its `state`,
@@ -362,9 +365,11 @@ reads it through `Shutter.Store.SiteProfile`.
 - `PUT /site-profile` refuses a profile that has not this shape, naming the field (unknown top-level fields and
   unknown `api` paths or `features` are refused too); every stored version is kept with who stored it and from where,
   `GET /site-profile/history` lists them (v1.9). `feed.time_zone` (v1.11) names the zone of timestamps without an
-  offset: `UTC`, `Europe/London` or a fixed offset; the questionnaire's default answer is `Europe/London`, a profile
-  that does not answer keeps `UTC` (the reading before v1.11), and the shipped demo profile says `UTC` until the
-  recordings are made with the zone (the fixtures' times then read as British Summer Time). The body may carry
+  offset: `UTC`, `Europe/London` or a fixed offset; the built-in default (`SiteProfile.Default()`, in force only while no
+  profile row is stored) is `Europe/London`, a stored profile that does not answer keeps `UTC` (the reading before v1.11),
+  and the shipped seed profile says `UTC` until the recordings are made with the zone (the fixtures' times then read as
+  British Summer Time). The questionnaire page asks no question yet for `feed`, `model_content`, `teams` or `mail`: they are
+  set through `PUT /site-profile`. The body may carry
   `expectedVersion` (the version the caller read, not
   part of the profile): when the stored version has moved, the answer is 409 `stale_version` with `currentVersion`, so
   a page never overwrites another person's change unseen; the check and the write happen under one lock (v1.10). An
@@ -460,8 +465,9 @@ cites entries by id. The coordinator's instructions say the plan names the entry
 
 ### 7.5 The API
 
-- `GET /incidents`: id, receiver, openedAt, state (`open`, `classified`, `awaiting_approval`, `releasing`, `closed`),
-  counts of chains by kind and outcome.
+- `GET /incidents` (`?state=`, `?limit=`, default 50, at most 500): `items` and `total`; each item is the incident (id,
+  receiver, mode, state (`open`, `classified`, `awaiting_approval`, `releasing`, `closed`), times, the plan's digest and
+  the versions it binds, the approval) with `progress`: `chains`, `cases`, `byKind` and `byState`.
 - `GET /incidents/{id}`: the chains with their items (case ids, position, kind, entry, outcome, the expected version
   rule), the plan's digest, the approvals, progress.
 - `POST /incidents/{id}/approvals` with `planDigest`, `decision` (`approve` or `reject`; `action` is accepted too),
@@ -473,8 +479,10 @@ cites entries by id. The coordinator's instructions say the plan names the entry
   `decides`, `chain_policy`, `item_state`, `expected_version`); its events say whether it was released automatically,
   under the incident's approval, or stopped.
 - `GET /site-profile` (`Shutter_Operate`, as every read) returns the current profile with its version; `PUT /site-profile`
-  (`Shutter_Approve`, `X-Requested-With`) replaces it with the body, which must have the shape of 6.4, and answers the
-  new version; the questionnaire page writes it. Every change is recorded as a case-independent event with the user.
+  (`Shutter_Approve`, `X-Requested-With`) replaces it with the body, which must have the shape of 6.4 (400 `bad_request`
+  naming the field otherwise), and answers the same object as the GET with the new version; the questionnaire page writes
+  it. Every version is kept as a `Shutter.Store.SiteProfileVersion` row with who stored it and from where
+  (`GET /site-profile/history`).
 
 ### 7.6 Scenario S11, an outage burst
 
@@ -500,11 +508,11 @@ separate, later tool.
   `Location` (PV1-3.1), `SourceSystem` (MSH-3), `OperationKey` (Shutter's key when the message maps), and the first
   header's id, source, target and time. Indexed: visit number, patient, operation key, control id, event time,
   message type and source (bitmaps). IRIS removes a row when its message is purged.
-- `Shutter.Index.Indexer` (production item "HL7 Index", a service with no adapter, `CallInterval` 5 s) walks
+- `Shutter.Index.Indexer` (production item "HL7 Index", a service on the plain `Ens.InboundAdapter`, whose `CallInterval` is 5 s) walks
   `Ens.MessageHeader` by id from a high-water mark (`^Shutter.Index("hwm")`), `BatchSize` headers a pass, only HL7
   bodies on the `Routes` (business service config names; empty means every route), and only headers older than
   `LagSeconds`, because an id is taken before its row is written. The first start begins at the oldest header within
-  `BackfillHours`. A body already indexed is skipped, so a site may also name the class as a host's Search Table
+  `BackfillHours`. Defaults: `Routes` "ADT In", `BatchSize` 200, `LagSeconds` 5, `BackfillHours` 168; one call runs up to 20 passes while the walk is behind. A header whose message could not be indexed is recorded in `^Shutter.Index("failed")` (`GET /index` counts them as `failed_headers`) and cleared when `Rebuild` indexes it. A body already indexed is skipped, so a site may also name the class as a host's Search Table
   Class. `Rebuild(fromId, toId, routes)` walks a range again (SQL procedure, `Shutter_Operate`).
 - The index is a finder, never a second source of truth: every decision still opens the message or asks the receiver.
 
@@ -516,11 +524,12 @@ separate, later tool.
   `message_type` and a `note`). An indexed message's `outcome` is `unknown`: the gate's supersession check and the
   matcher's `later_applied` count only `applied` and `already_committed`, so it supersedes nothing by itself; the
   receiver's history decides. The board sees it and can say so.
-- Scenario S13: a later movement on a route Shutter does not own, found only by the index.
+- A scenario for a later movement on a route Shutter does not own, found only by the index, is planned; it is not in `fixtures/scenarios.json` yet.
 
 ### 8.3 The API
 
-- `GET /index`: rows, high-water mark, newest header, the last pass and the last indexing time, the total indexed.
+- `GET /index`: `rows`, `high_water_mark`, `started_at`, `last_pass_at`, `last_indexed_at`, `indexed_total`, `newest_header`, `hl7_headers_behind`, `caught_up` and `failed_headers`.
+- `GET /index/messages?encounter=…|patient=…|key=…`: `items` (the indexed messages, at most 500, event time ascending) and `total`; 400 `bad_request` when none of the three is given.
 - `GET /index/messages?encounter=…|patient=…|key=…`: the indexed messages (at most 500), event time ascending.
 
 ### 8.4 Limits
@@ -547,11 +556,12 @@ IRIS (the gate, the matcher, the verifier and the app read it); what a model rec
   inside every string value of the reduced object at identifier boundaries (a number equal to an identifier becomes
   the token), so operation keys (`PAS^HOSP^MRN-T1^ENC-T1^transfer^...`), history entries, timeline rows and error
   echoes carry the tokens too. A value already mapped keeps its token whatever kind asks (an encounter id that is
-  also the visit number is one token); a value that itself looks like a token is left as it is.
+  also the visit number is one token); a value that itself looks like a token is left as it is, and a value or name part shorter than three characters is never tokenised.
 - **Demographics never go**: `patient_name`, `name`, `given_name`, `family_name`, `date_of_birth`, `dob`, `sex`,
   `gender`, `address`, `phone`, `email`, `next_of_kin` and the like are dropped wherever they occur.
-- **Free text never goes.** Each OBX or NTE note becomes `{observation_id, free_text_present, instruction_like}`; the
-  text stays in IRIS. `instruction_like` is a word-list flag (ignore, override, you must, resend, approve and the like),
+- **Free text never goes.** Each OBX or NTE note becomes `{segment, position, observation_id, value_type,
+  free_text_present, instruction_like, note}`, where `note` says the text stays in IRIS (or that a binary or reference
+  value is never sent); the text stays in IRIS. `instruction_like` is a word-list flag (ignore, override, you must, resend, approve and the like),
   not a verdict. The site profile's `model_content.free_text: true` sends the text; the default is off.
 - **Allowlists by shape.** The summary, the operation, the message (`message_control_id`, `message_type`, the
   sending and receiving applications, the times, `patient_identifier`, `patient_class`, `assigned_location`,
@@ -575,7 +585,7 @@ left IRIS. A recording made before this rule replays with real ids in its result
 it. `GetFailure` answers a fresh failure object and the error item, never the case headline. `SELECT Shutter_Util.ModelView_Preview('C-000012')`
 shows what the model would see of a case.
 
-## 10. Escalation by email (v1.11, S13)
+## 10. Escalation by email (v1.11)
 
 A blocked, escalated or failed case can be handed to the people who correct systems by hand. The draft is built from
 the stored case without a model (`Shutter.Util.EscalationDraft`): the hospital number and NHS number, the date of birth,
@@ -585,19 +595,23 @@ sent, and references. No name, address or note text. A person reviews it, choose
 bound to the digest of the text the person read.
 
 - The site profile's `teams` (array of `{id, name, mailbox, cc?: [...], receivers?: [...]}`; `id`, `name` and
-  `mailbox` required, ids unique) and `mail` (`from`, `allowed_domains`: every mailbox and cc must end in one of them
-  when set). The team for a case is the one whose `receivers` names the case's receiver, else the first, else the
+  `mailbox` required, ids unique) and `mail` (`allowed_domains`: every mailbox and cc must end in one of them when set; `from` is
+  accepted and stored but not read: the sender is the `Escalation Mail` operation's `From` setting, default
+  `shutter@localhost`). The team for a case is the one whose `receivers` names the case's receiver, else the first, else the
   profile's `approvers.escalation` text with no mailbox (the person fills one in).
 - `GET /cases/{id}/escalations`; `POST /cases/{id}/escalations` with `{teamId?}` answers 201 with the draft (409
-  `wrong_state` unless the case is blocked, escalated or failed); `PATCH /cases/{id}/escalations/{seq}` with
-  `{subject?, body?, to?, cc?}` edits a draft or a failed email (409 otherwise) and moves the body's digest;
+  `wrong_state` unless the case is blocked, escalated or failed; 500 `draft_failed` when `teamId` names no team of the
+  profile); `PATCH /cases/{id}/escalations/{seq}` (404 `not_found` for an unknown seq; 400 `bad_request` when the body is
+  not a JSON object) with `{subject?, body?, to?, cc?}` edits a draft or a failed email (409 otherwise) and moves
+  `bodyDigest`, the SHA-256 of `to`, `cc`, `subject` and `body` together, so a change of recipient alone moves it;
   `POST /cases/{id}/escalations/{seq}/send` with `{bodyDigest}` answers 202 with the queued escalation, 409
   `body_changed` when the digest is not the current text's, 409 `no_recipient` when `to` is empty. All need
   `Shutter_Operate`; the writes need `X-Requested-With` and take an `Idempotency-Key`.
 - The `Escalation Mail` operation (`Shutter.Operation.EscalationMail`, `EnsLib.EMail.OutboundAdapter`) sends through the
   site's mail server when the adapter's `SMTPServer` is set (first-time configuration; the NHS relay at most trusts),
   and otherwise writes an `.eml` file to its `OutputFolder` (default `<mgr>/shutter/out/mail`), so the demo and CI need
-  no mail server. States: `draft`, `queued`, `sent`, `failed`, `cancelled`; each step is a case event of kind
+  no mail server. States: `draft`, `queued`, `sent`, `failed` (`cancelled` is declared but nothing sets it: there is no cancel route);
+  each step is a case event of kind
   `escalation`. Then `POST /cases/{id}/reinvestigate` verifies the manual correction.
 
 ## Repository layout
@@ -608,7 +622,7 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 - v1.11, 19 Oct 2026: what leaves IRIS for a model (9): per-case tokens for the identifiers, no demographics, no free
   text (a flag instead, and the site profile's `model_content.free_text` switch), the receiver's bodies and the failure
-  reduced, the map-back inside IRIS; escalation by email (10, S13): the profile's `teams` and `mail`, the four routes,
+  reduced, the map-back inside IRIS; escalation by email (10): the profile's `teams` and `mail`, the four routes,
   the `Escalation Mail` operation and the `escalation` event kind. Event times (T28): the `event_time` condition
   (6.1) and `later_applied: admit` (a later admission is not an update); the gate's ordering check blocks a write,
   and a superseded closure, whose event time is not plausible (`EVENT_TIME_IMPLAUSIBLE`; policy version
@@ -625,8 +639,8 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   the `receipt: none` condition (6.1). The gate's policy version is `2026-10-19.1`, so approvals given under the
   earlier checks are void. An `Idempotency-Key` is scoped to the user, the method and the route, and may be
   at most 128 characters (400 beyond). The anonymous `GET /health` adds `production_state`, and its `ok` is true only
-  when the production runs. `GET /cases` clamps a negative `offset` to 0; the history and incident lists clamp
-  `limit` to 1 to 500. A board timeout belongs to the investigation round that armed it; a reopened or released case
+  when the production runs. `GET /cases` clamps a negative `offset` to 0 and caps it at 100000; on the case, history and incident lists a
+  `limit` below 1 takes the default 50 and one above 500 is clamped to 500. A board timeout belongs to the investigation round that armed it; a reopened or released case
   is driven by its newest workflow instance only, and an answer that reaches an older one is recorded for its cost and
   changes nothing. A preflight that finds no encounter for a non-admission blocks the case (`UNKNOWN_ENCOUNTER`): a
   definite answer, not a failed read. A refreshable unknown at the proposal gate collects the evidence again (bounded,
@@ -659,9 +673,9 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   and item states, the expected-version rule, the approvals route and the case's `incident` fields; the gate's
   `APPROVAL_PLAN_ORIGIN` check (an approval by policy needs a plan from the policy path for its entry; policy version
   2026-10-17.2) and the chain kind in its policy check (6.4); `encounter_state: not_found` when the receiver answers 404 (6.1); a chain item's `releaseEntry` and `releaseOutcome` (7.5).
-- v1.6, 17 Oct 2026: the scenario catalogue and the deterministic matcher, the condition vocabulary, the site profile and the policy path (automatic, approval, per chain), the gate's catalogue checks, the board's `search_catalogue` tool (6); incidents: detection, chains and their kinds, the plan and its approval binding the sequence rule, the ordered release through each case's own dispatch, the API, scenario S11 (7). From the owner's decisions of 17 Oct, all taken.
-- v1.5, 16 Oct 2026: rehearsal responses carry `encounter_before` and `epoch` (1.1); `POST /capabilities` takes `last_contract_check` (1.8); S8's second source system `BEDMGR` (2, 3); S9's second encounter `ENC-2009` (3); the `capabilities` step kind (3); the scenario player and the run states (4.2); section 5 points at the API as built. Points (a) to (e) are House's, accepted on 15 Oct.
-- v1.4, 15 Oct 2026: the capabilities read and the demo switch, the epoch, the receipt-lookup fault (1.8, 1.9); scenario steps that wait for a case state (4.1). From House's triage of the owner's feature documents (T9, T10, A1, A2, A5).
+- v1.6, 17 Oct 2026: the scenario catalogue and the deterministic matcher, the condition vocabulary, the site profile and the policy path (automatic, approval, per chain), the gate's catalogue checks, the board's `search_catalogue` tool (6); incidents: detection, chains and their kinds, the plan and its approval binding the sequence rule, the ordered release through each case's own dispatch, the API, scenario S11 (7). From the owner's decisions of 17 Oct and the T19 points (a) to (f), all taken.
+- v1.5, 16 Oct 2026: rehearsal responses carry `encounter_before` and `epoch` (1.1); `POST /capabilities` takes `last_contract_check` (1.8); S8's second source system `BEDMGR` (2, 3); S9's second encounter `ENC-2009` (3); the `capabilities` step kind (3); the scenario player and the run states (4.2); section 5 points at the API as built. Points (a) to (e) were accepted on 15 Oct.
+- v1.4, 15 Oct 2026: the capabilities read and the demo switch, the epoch, the receipt-lookup fault (1.8, 1.9); scenario steps that wait for a case state (4.1). From the triage of the owner's feature documents (T9, T10, A1, A2, A5).
 - v1.3, 15 Oct 2026: `misleading_duplicate_error` with an `operation_key` (1.5); `resetAt`, the runner's settings and the mode semantics (section 4), from the scenario work.
 - v1.2, 15 Oct 2026: the ward decisions of 15 Oct recorded (section 1.1), with `patient_mismatch` and `payload_digest_mismatch` as their own codes.
 - v1.1, 15 Oct 2026: the runner sets `^Shutter.Config("scenario")` (section 4); the repository layout.
