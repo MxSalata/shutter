@@ -355,6 +355,12 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
     Quit:$$$ISERR(sc) sc
     Set ..PendingJSON = pending.%ToJSON()
     Do case.Note("note", "Board convened: " _ $REPLACE($REPLACE(pending.%ToJSON(), "[", ""), "]", ""), "system")
+    // The audit trail says when free text left IRIS under the site's switch (T27).
+    If ##class(Shutter.Store.SiteProfile).ModelFreeText() {
+        Set sm = ##class(Shutter.Util.Json).Parse(result.SummaryJSON, .psc), notesN = 0
+        If $ISOBJECT(sm) && $ISOBJECT(sm.%Get("message")) && $ISOBJECT(sm.%Get("message").%Get("notes")) Set notesN = sm.%Get("message").%Get("notes").%Size()
+        If notesN > 0 Do case.Note("note", "The free text of " _ notesN _ " note(s) is sent to the board, as the site profile (version " _ ##class(Shutter.Util.Json).Str(##class(Shutter.Store.SiteProfile).Current(), "version", 0) _ ") allows", "system")
+    }
     Quit ..ArmTimeout("board:timeout")
 }
 
@@ -374,10 +380,15 @@ ClassMethod BuildAgentRequest(case As Shutter.Store.Case, m As Shutter.Store.Boa
     // The key names the case within its scenario (several cases can share one); the replay runner also looks up
     // the older form without the encounter and event.
     If case.Scenario '= "" Set req.RecordKey = "scenario:" _ case.Scenario _ ":" _ case.EncounterId _ ":" _ case.Event _ "|" _ m.Code _ "|" _ m.ConfigVersion _ $SELECT(replans > 0: "|round" _ (replans + 1), 1: "")
+    // Only what is needed leaves IRIS (T27): the evidence and the findings pass through the model view, which drops
+    // the demographics and the free text and replaces the case's identifiers by its tokens.
     Set context = {}
     Set context."case_id" = case.CaseId
-    Set context.evidence = ##class(%DynamicObject).%FromJSON(summaryJSON)
-    If findingsJSON '= "" Set context.findings = ##class(%DynamicArray).%FromJSON(findingsJSON)
+    Set evidence = ##class(%DynamicObject).%FromJSON(summaryJSON)
+    // The map of the case's identifiers is made here, once per case and in one job, in a canonical order.
+    Do ##class(Shutter.Util.ModelView).Learn(case, evidence)
+    Set context.evidence = ##class(Shutter.Util.ModelView).Reduce(case, evidence)
+    If findingsJSON '= "" Set context.findings = ##class(Shutter.Util.ModelView).Reduce(case, ##class(%DynamicArray).%FromJSON(findingsJSON))
     Set req.Context = context.%ToJSON()
     If m.Role = "coordinator" {
         Set req.Goal = "Read the specialists' findings and the evidence for case " _ case.CaseId _ ". Keep every disagreement. Propose exactly one plan with the recovery playbooks, and submit it with SubmitPlan."
@@ -415,7 +426,11 @@ Method OnMember(case As Shutter.Store.Case, code As %String, result As Shutter.B
     Set usable = (result.Status = "ok") && (result.ResultJSON '= "")
     Set findings = ""
     If usable {
-        Set findings = ##class(Shutter.Util.Json).Parse(result.ResultJSON, .psc)
+        // The model spoke in the case's tokens; what is stored and shown carries the identifiers again (T27).
+        Set restored = ##class(Shutter.Util.ModelView).Restore(case, result.ResultJSON)
+        Set left = ##class(Shutter.Util.ModelView).Unresolved(restored)
+        If left '= "" Do case.Note("error", $SELECT($ISOBJECT(m): m.Name, 1: code) _ " names tokens the case has no value for (" _ left _ "); they stay as written", "system", "run:" _ run.%Id())
+        Set findings = ##class(Shutter.Util.Json).Parse(restored, .psc)
         If '$ISOBJECT(findings) || $$$ISERR(psc) Set usable = 0
     }
     If usable {
@@ -526,7 +541,10 @@ Method OnCoordinator(case As Shutter.Store.Case, result As Shutter.Bridge.Msg.Ag
     If (result.Status '= "ok") || (result.ResultJSON = "") {
         Quit case.Transition("escalated", "The coordinator produced no plan: " _ result.Status _ $SELECT(result.Error '= "": ", " _ result.Error, 1: ""), "system", "run:" _ run.%Id())
     }
-    Set plan = ##class(Shutter.Util.Json).Parse(result.ResultJSON, .psc)
+    Set restored = ##class(Shutter.Util.ModelView).Restore(case, result.ResultJSON)
+    Set left = ##class(Shutter.Util.ModelView).Unresolved(restored)
+    If left '= "" Do case.Note("error", "The coordinator names tokens the case has no value for (" _ left _ "); they stay as written", "system", "run:" _ run.%Id())
+    Set plan = ##class(Shutter.Util.Json).Parse(restored, .psc)
     If '$ISOBJECT(plan) || $$$ISERR(psc) Quit case.Transition("escalated", "The coordinator's plan is not valid JSON", "system", "run:" _ run.%Id())
     Quit ..AdoptPlan(case, plan, "run:" _ run.%Id())
 }

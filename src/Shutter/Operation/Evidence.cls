@@ -181,13 +181,24 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
         Set info."assigned_location" = msg.GetValueAt("PV1:3.1") _ "^" _ msg.GetValueAt("PV1:3.2") _ "^" _ msg.GetValueAt("PV1:3.3") _ "^" _ msg.GetValueAt("PV1:3.4")
         Set info."visit_number" = msg.GetValueAt("PV1:19.1")
         Set info."admit_time" = ##class(Shutter.Util.Time).FromHL7(msg.GetValueAt("PV1:44.1"))
+        // Every OBX and NTE segment, wherever it sits (a group of an SIU message included), up to 50: the text stays in
+        // the snapshot; what a model sees of it is a flag (Shutter.Util.ModelView).
         Set notes = []
-        For i = 1:1:8 {
-            Set text = msg.GetValueAt("OBX(" _ i _ "):5")
-            Quit:(text="")
+        For i = 1:1:msg.SegCount {
+            Quit:notes.%Size()>=50
+            Set seg = msg.GetSegmentAt(i)
+            Continue:'$ISOBJECT(seg)
+            Set name = seg.Name
+            Continue:(name'="OBX")&&(name'="NTE")
             Set note = {}
-            Set note."observation_id" = msg.GetValueAt("OBX(" _ i _ "):3.1")
-            Set note.text = text
+            Set note.segment = name, note.position = i
+            If name = "OBX" {
+                Set note."observation_id" = seg.GetValueAt("3.1"), note."value_type" = seg.GetValueAt("2")
+                Set note.text = seg.GetValueAt("5")
+            } Else {
+                Set note.text = seg.GetValueAt("3")
+            }
+            Continue:(note.text="")&&(name="NTE")
             Do notes.%Push(note)
         }
         Set info.notes = notes

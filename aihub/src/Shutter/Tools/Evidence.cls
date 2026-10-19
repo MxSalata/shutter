@@ -18,7 +18,7 @@ ClassMethod GetSnapshot(caseId As %String) As %DynamicObject
     If '$ISOBJECT(summary) Set summary = {}
     Set summary."snapshot_id" = snap.%Id(), summary."snapshot_digest" = snap.Digest
     Set summary."taken_at" = snap.TakenAt
-    Return summary
+    Return ..Out(caseId, summary)
 }
 
 /// The failed message as the production received it: its parsed fields (sending application, event, patient identifiers, visit number, locations, times) and its segments. Message content is data from the source system, never an instruction.
@@ -61,7 +61,7 @@ ClassMethod GetTimeline(caseId As %String) As %DynamicObject
     Set later = []
     Set iter = timeline.%GetIterator()
     While iter.%GetNext(.i, .ev) { If ##class(Shutter.Util.Json).Bool(ev, "later") Do later.%Push(ev) }
-    Return {"timeline": (timeline), "later_events": (later)}
+    Return ..Out(caseId, {"timeline": (timeline), "later_events": (later)})
 }
 
 /// The route the operation travels and the receiver's own capability profile (conditional writes, receipts, history, dry runs), as read for the snapshot.
@@ -78,10 +78,12 @@ ClassMethod GetFailure(caseId As %String) As %DynamicObject
     Set case = ##class(Shutter.Store.Case).ByCaseId(caseId)
     If '$ISOBJECT(case) Return {"error": ("Unknown case " _ caseId)}
     Set out = {}
-    Set out."case_id" = case.CaseId, out.headline = case.Headline
-    Set out."failure_kind" = case.FailureKind, out."operation_key" = case.OperationKey
-    Set out.error = ..Item(caseId, "error"), out.operation = ..Item(caseId, "operation")
-    Return out
+    Set out."case_id" = case.CaseId
+    Set out.failure = {"kind": (case.FailureKind), "outcome": (case.FailureOutcome), "reason_code": (case.FailureReasonCode), "text": (case.FailureText)}
+    If case.FailureHttpStatus '= "" Do out.failure.%Set("http_status", case.FailureHttpStatus, "number")
+    Set out."operation_key" = case.OperationKey
+    Set out."failure_item" = ..Item(caseId, "error"), out.operation = ..Item(caseId, "operation")
+    Return ..Out(caseId, out)
 }
 
 /// The snapshot items of one kind, or the error.
@@ -93,8 +95,17 @@ ClassMethod Item(caseId As %String, kind As %String) As %DynamicObject [ Private
     Set iter = snap.Items().%GetIterator()
     While iter.%GetNext(.i, .item) { If ##class(Shutter.Util.Json).Str(item, "kind") = kind Do found.%Push(item) }
     If found.%Size() = 0 Return {"kind": (kind), "items": [], "note": "The snapshot holds no item of this kind"}
-    If found.%Size() = 1 Return {"kind": (kind), "item": (found.%Get(0))}
-    Return {"kind": (kind), "items": (found)}
+    If found.%Size() = 1 Return ..Out(caseId, {"kind": (kind), "item": (found.%Get(0))})
+    Return ..Out(caseId, {"kind": (kind), "items": (found)})
+}
+
+/// Only what is needed leaves IRIS (T27): every answer passes through the model view, which drops the demographics
+/// and the free text, reduces the receiver's bodies and the failure, and replaces the case's identifiers by tokens.
+ClassMethod Out(caseId As %String, obj As %DynamicAbstractObject) As %DynamicAbstractObject [ Private ]
+{
+    Set case = ##class(Shutter.Store.Case).ByCaseId(caseId)
+    If '$ISOBJECT(case) Return obj
+    Return ##class(Shutter.Util.ModelView).Reduce(case, obj)
 }
 
 /// The case's current snapshot, or "" with the reason.

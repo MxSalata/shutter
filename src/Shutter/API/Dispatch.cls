@@ -35,6 +35,10 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/cases/:caseId/preview-blind-resend" Method="POST" Call="CasePreview"/>
   <Route Url="/cases/:caseId/blocked-reason" Method="GET" Call="CaseBlockedReason"/>
   <Route Url="/cases/:caseId/reinvestigate" Method="POST" Call="CaseReinvestigate"/>
+  <Route Url="/cases/:caseId/escalations" Method="GET" Call="CaseEscalations"/>
+  <Route Url="/cases/:caseId/escalations" Method="POST" Call="CaseEscalationCreate"/>
+  <Route Url="/cases/:caseId/escalations/:seq" Method="PATCH" Call="CaseEscalationPatch"/>
+  <Route Url="/cases/:caseId/escalations/:seq/send" Method="POST" Call="CaseEscalationSend"/>
   <Route Url="/library" Method="GET" Call="Library"/>
   <Route Url="/library/:code" Method="PATCH" Call="LibraryPatch"/>
   <Route Url="/settings" Method="GET" Call="Settings"/>
@@ -688,6 +692,100 @@ ClassMethod CaseBlockedReason(caseId As %String) As %Status
 // ---- library, settings, costs ----
 
 /// Reopen a blocked, escalated or failed case: a fresh instance collects fresh evidence and plans again.
+// ---- escalations to the people who correct systems by hand (T29, S13) ----
+
+/// The case's escalation drafts and sent emails, oldest first.
+ClassMethod CaseEscalations(caseId As %String) As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Quit ..Json(##class(Shutter.Store.Escalation).ForCase(case))
+}
+
+/// A draft email for a team, built from the stored case without a model; a person edits and sends it.
+ClassMethod CaseEscalationCreate(caseId As %String) As %Status
+{
+    If '..Allow("Shutter_Operate", 1) Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
+    If '$ISOBJECT(body) Set body = {}
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    If 'case.IsClosed() || (case.State = "resolved") Quit ..Fail("409 Conflict", "wrong_state", "The case is " _ case.State _ "; only a blocked, escalated or failed case is escalated by email")
+    Set sc = ##class(Shutter.Store.Escalation).Draft(case, $EXTRACT(##class(Shutter.Util.Json).Str(body, "teamId"), 1, 64), ..User(), .esc)
+    If $$$ISERR(sc) Quit ..Fail("500 Internal Server Error", "draft_failed", $SYSTEM.Status.GetErrorText(sc))
+    Set text = esc.ToObject().%ToJSON()
+    Do ..Remember(bodyText, "201 Created", text)
+    Set %response.Status = "201 Created"
+    Set %response.ContentType = "application/json"
+    Write text
+    Quit $$$OK
+}
+
+/// Edit a draft (or a failed email): subject, body, to and cc; the body's digest moves with it.
+ClassMethod CaseEscalationPatch(caseId As %String, seq As %String) As %Status
+{
+    If '..Allow("Shutter_Operate", 1) Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set esc = ##class(Shutter.Store.Escalation).BySeq(case, +seq)
+    If '$ISOBJECT(esc) Quit ..Fail("404 Not Found", "not_found", "The case has no escalation " _ seq)
+    Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
+    If '$ISOBJECT(body) || $$$ISERR(psc) Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with subject, body, to and cc")
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    Set json = "Shutter.Util.Json"
+    Set sc = esc.Edit($SELECT(body.%IsDefined("subject"): $CLASSMETHOD(json, "Str", body, "subject"), 1: esc.Subject), $SELECT(body.%IsDefined("body"): $CLASSMETHOD(json, "Str", body, "body"), 1: esc.Body), $SELECT(body.%IsDefined("to"): $CLASSMETHOD(json, "Str", body, "to"), 1: esc.ToAddr), $SELECT(body.%IsDefined("cc"): $CLASSMETHOD(json, "Str", body, "cc"), 1: esc.CcAddr), ..User())
+    If $$$ISERR(sc) Quit ..Fail("409 Conflict", "wrong_state", $SYSTEM.Status.GetErrorText(sc))
+    Set text = esc.ToObject().%ToJSON()
+    Do ..Remember(bodyText, "200 OK", text)
+    Set %response.ContentType = "application/json"
+    Write text
+    Quit $$$OK
+}
+
+/// Send a draft: the body's digest must be the one the person read; the mail goes through the Escalation Mail
+/// operation (the site's mail server, or an .eml file when none is set), and the answer is the queued escalation.
+ClassMethod CaseEscalationSend(caseId As %String, seq As %String) As %Status
+{
+    If '..Allow("Shutter_Operate", 1) Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set esc = ##class(Shutter.Store.Escalation).BySeq(case, +seq)
+    If '$ISOBJECT(esc) Quit ..Fail("404 Not Found", "not_found", "The case has no escalation " _ seq)
+    Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
+    If '$ISOBJECT(body) Set body = {}
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    Set digest = ##class(Shutter.Util.Json).Str(body, "bodyDigest")
+    If digest = "" Quit ..Fail("400 Bad Request", "bad_request", "bodyDigest is required: the digest of the body as read")
+    If esc.ToAddr = "" Quit ..Fail("409 Conflict", "no_recipient", "The escalation has no recipient; edit it with a team mailbox first")
+    Set sc = esc.Queue(digest, ..User())
+    If $$$ISERR(sc) {
+        Set why = $SYSTEM.Status.GetErrorText(sc)
+        Set extra = {} Set extra.bodyDigest = esc.BodyDigest, extra.state = esc.State
+        Quit ..Fail("409 Conflict", $SELECT($ZCONVERT(why, "L") [ "digest": "body_changed", 1: "wrong_state"), why, extra)
+    }
+    Set msg = ##class(Shutter.Msg.EscalationSend).%New()
+    Set msg.EscalationId = esc.%Id()
+    Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
+    If $$$ISERR(sc) || '$ISOBJECT(service) Quit ..Fail("503 Service Unavailable", "no_service", "The API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
+    Set service.Target = "Escalation Mail", service.Async = 1
+    Set sc = service.ProcessInput(msg)
+    If $$$ISERR(sc) Quit ..Fail("503 Service Unavailable", "not_queued", "The email could not be queued: " _ $SYSTEM.Status.GetErrorText(sc))
+    Set text = esc.ToObject().%ToJSON()
+    Do ..Remember(bodyText, "202 Accepted", text)
+    Set %response.Status = "202 Accepted"
+    Set %response.ContentType = "application/json"
+    Write text
+    Quit $$$OK
+}
+
 ClassMethod CaseReinvestigate(caseId As %String) As %Status
 {
     If '..Allow("Shutter_Operate", 1) Quit $$$OK

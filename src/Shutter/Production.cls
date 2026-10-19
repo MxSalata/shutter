@@ -59,6 +59,9 @@ XData ProductionDefinition
     <Setting Target="Adapter" Name="ConnectTimeout">5</Setting>
     <Setting Target="Host" Name="FailureTimeout">0</Setting>
   </Item>
+  <Item Name="Escalation Mail" Category="Recovery" ClassName="Shutter.Operation.EscalationMail" PoolSize="1" Enabled="true" Foreground="false" Comment="Escalation emails a person reviewed: through the site's mail server, or as .eml files under the output folder when no server is set" LogTraceEvents="true" Schedule="">
+    <Setting Target="Host" Name="FailureTimeout">0</Setting>
+  </Item>
   <Item Name="Case Workflow" Category="Recovery" ClassName="Shutter.Process.CaseWorkflow" PoolSize="1" Enabled="true" Foreground="false" Comment="One instance per case: evidence, the board, the gate, approval, execution, verification" LogTraceEvents="true" Schedule="">
     <Setting Target="Host" Name="SettleSeconds">15</Setting>
   </Item>

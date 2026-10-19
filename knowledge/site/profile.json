@@ -51,5 +51,8 @@
     "threshold": 5,
     "window_minutes": 10,
     "quiet_seconds": 60
+  },
+  "model_content": {
+    "free_text": false
   }
 }

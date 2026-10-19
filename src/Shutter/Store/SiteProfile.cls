@@ -31,6 +31,7 @@ ClassMethod Default() As %DynamicObject
     Set p.policy = {"1": {"single": "automatic", "ordered": "automatic", "interleaved": "board"}, "2": {"single": "automatic", "ordered": "approval", "interleaved": "board"}, "3": {"single": "approval", "ordered": "per_chain", "interleaved": "board"}}
     Set p.approvers = {"role": "Shutter Approvers", "escalation": "the integration team's on-call"}
     Set p.incident = {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60}
+    Set p."model_content" = {"free_text": false}
     Quit p
 }
 
@@ -110,7 +111,7 @@ ClassMethod Validate(p As %DynamicObject) As %String
     If '$ISOBJECT(p) Quit "the profile must be a JSON object"
     Set it = p.%GetIterator()
     While it.%GetNext(.key, .v) {
-        If '$LISTFIND($LISTBUILD("version", "receivers", "history_policy", "authoritative_source", "unconditional_resend", "policy", "approvers", "incident"), key) Return key _ ": unknown field"
+        If '$LISTFIND($LISTBUILD("version", "receivers", "history_policy", "authoritative_source", "unconditional_resend", "policy", "approvers", "incident", "model_content", "teams", "mail"), key) Return key _ ": unknown field"
     }
     If p.%IsDefined("version") && ((p.%Get("version") '= +p.%Get("version")) || (p.%Get("version") < 0)) Quit "version: must be a whole number"
     Set rcv = p.%Get("receivers")
@@ -160,6 +161,69 @@ ClassMethod Validate(p As %DynamicObject) As %String
         }
     }
     If p.%IsDefined("approvers") && '$ISOBJECT(p.%Get("approvers")) Quit "approvers: must be an object"
+    // What may leave IRIS for a model (T27): free text off unless the site says so.
+    If p.%IsDefined("model_content") {
+        Set mc = p.%Get("model_content")
+        If '$ISOBJECT(mc) Quit "model_content: must be an object"
+        Set mi = mc.%GetIterator()
+        While mi.%GetNext(.k, .flag) {
+            If '$LISTFIND($LISTBUILD("free_text"), k) Return "model_content." _ k _ ": unknown setting"
+            If mc.%GetTypeOf(k) '= "boolean" Return "model_content." _ k _ ": must be true or false"
+        }
+    }
+    // The teams an escalation can go to, and the mail rules (T29).
+    Set domains = ""
+    If p.%IsDefined("mail") {
+        Set mail = p.%Get("mail")
+        If '$ISOBJECT(mail) Quit "mail: must be an object"
+        Set mi = mail.%GetIterator()
+        While mi.%GetNext(.k, .v) {
+            If '$LISTFIND($LISTBUILD("from", "allowed_domains"), k) Return "mail." _ k _ ": unknown setting"
+            If (k = "from") && (mail.%GetTypeOf(k) '= "string") Return "mail.from: must be a string"
+            If (k = "allowed_domains") {
+                If '$ISOBJECT(v) || v.%IsA("%DynamicObject") Return "mail.allowed_domains: must be an array of domains"
+                Set di = v.%GetIterator()
+                While di.%GetNext(.j, .d) {
+                    If (v.%GetTypeOf(j) '= "string") || (d = "") Return "mail.allowed_domains[" _ j _ "]: must be a domain"
+                    Set domains = domains _ $LISTBUILD($ZCONVERT(d, "L"))
+                }
+            }
+        }
+    }
+    If p.%IsDefined("teams") {
+        Set teams = p.%Get("teams")
+        If '$ISOBJECT(teams) || teams.%IsA("%DynamicObject") Quit "teams: must be an array"
+        Set ti = teams.%GetIterator(), ids = ""
+        While ti.%GetNext(.i, .t) {
+            Set at = "teams[" _ i _ "]"
+            If '$ISOBJECT(t) Return at _ ": must be an object"
+            Set ki = t.%GetIterator()
+            While ki.%GetNext(.k, .v) {
+                If '$LISTFIND($LISTBUILD("id", "name", "mailbox", "cc", "receivers"), k) Return at _ "." _ k _ ": unknown field"
+            }
+            For f = "id", "name", "mailbox" { If ($CLASSMETHOD(json, "Str", t, f) = "") || (t.%GetTypeOf(f) '= "string") Return at _ "." _ f _ ": required" }
+            If $LISTFIND(ids, t.%Get("id")) Return at _ ".id: must be unique"
+            Set ids = ids _ $LISTBUILD(t.%Get("id"))
+            Set problem = ..MailboxProblem(t.%Get("mailbox"), domains)
+            If problem '= "" Return at _ ".mailbox: " _ problem
+            If t.%IsDefined("cc") {
+                Set cc = t.%Get("cc")
+                If '$ISOBJECT(cc) || cc.%IsA("%DynamicObject") Return at _ ".cc: must be an array of mailboxes"
+                Set ci = cc.%GetIterator()
+                While ci.%GetNext(.j, .m) {
+                    If cc.%GetTypeOf(j) '= "string" Return at _ ".cc[" _ j _ "]: must be a mailbox"
+                    Set problem = ..MailboxProblem(m, domains)
+                    If problem '= "" Return at _ ".cc[" _ j _ "]: " _ problem
+                }
+            }
+            If t.%IsDefined("receivers") {
+                Set rl = t.%Get("receivers")
+                If '$ISOBJECT(rl) || rl.%IsA("%DynamicObject") Return at _ ".receivers: must be an array of receiver names"
+                Set ri = rl.%GetIterator()
+                While ri.%GetNext(.j, .m) { If (rl.%GetTypeOf(j) '= "string") || (m = "") Return at _ ".receivers[" _ j _ "]: must be a receiver name" }
+            }
+        }
+    }
     If p.%IsDefined("incident") {
         Set inc = p.%Get("incident")
         If '$ISOBJECT(inc) Quit "incident: must be an object"
@@ -189,6 +253,41 @@ ClassMethod SeedFromFile(path As %String) As %Status
 }
 
 /// The receiver's tier (the production item's name), default 2.
+/// A mailbox's problem: not an address, or outside the allowed domains when the profile names them. "" when fine.
+ClassMethod MailboxProblem(mailbox As %String, domains As %List) As %String [ Private ]
+{
+    If (mailbox '[ "@") || ($PIECE(mailbox, "@", 2) = "") || ($PIECE(mailbox, "@", 1) = "") Quit "must be an address"
+    If $LISTLENGTH(domains) = 0 Quit ""
+    Set domain = $ZCONVERT($PIECE(mailbox, "@", 2), "L")
+    For i = 1:1:$LISTLENGTH(domains) {
+        Set d = $LIST(domains, i)
+        If (domain = d) || ($EXTRACT(domain, * - $LENGTH(d), *) = ("." _ d)) Quit
+    }
+    If (domain = d) || ($EXTRACT(domain, * - $LENGTH(d), *) = ("." _ d)) Quit ""
+    Quit "not in the allowed domains"
+}
+
+/// Whether the site allows OBX and NTE free text to go to a model (T27): off unless the profile says so.
+ClassMethod ModelFreeText() As %Boolean
+{
+    Set mc = ..Current().%Get("model_content")
+    Quit $ISOBJECT(mc) && ##class(Shutter.Util.Json).Bool(mc, "free_text", 0)
+}
+
+/// The teams an escalation can go to (T29), as stored; an empty array when the profile names none.
+ClassMethod Teams() As %DynamicArray
+{
+    Set teams = ..Current().%Get("teams")
+    Quit $SELECT($ISOBJECT(teams) && teams.%IsA("%DynamicArray"): teams, 1: [])
+}
+
+/// The mail settings (T29): from and allowed_domains, or an empty object.
+ClassMethod Mail() As %DynamicObject
+{
+    Set mail = ..Current().%Get("mail")
+    Quit $SELECT($ISOBJECT(mail) && mail.%IsA("%DynamicObject"): mail, 1: {})
+}
+
 ClassMethod TierOf(receiver As %String) As %Integer
 {
     Set p = ..Current()

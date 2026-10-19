@@ -524,12 +524,87 @@ separate, later tool.
 - The Message Viewer may or may not offer the columns of a search table no host names in its setting (to check);
   Shutter's own pages carry the search.
 
+## 9. What leaves IRIS for a model (v1.11)
+
+The owner's rule (19 Oct 2026): only what is needed goes to the model. The stored snapshot is complete and stays inside
+IRIS (the gate, the matcher, the verifier and the app read it); what a model receives is a reduced copy made by
+`Shutter.Util.ModelView.Reduce` at the two places anything leaves: the agent request's context
+(`CaseWorkflow.BuildAgentRequest`: the evidence and the specialists' findings) and every answer of the evidence tools
+(`Shutter.Tools.Evidence`). The reduction:
+
+- **Identifiers become per-case tokens.** The MRN, the NHS number and any other PID-3 identifier, the encounter id,
+  the visit number, the name parts (PID-5) and the date of birth (PID-7, as written and as ISO) are replaced by
+  `MRN-T1`, `NHS-T1`, `PID-T1`, `ENC-T1`, `VISIT-T1`, `NAME-T1`, `DOB-T1`. The map (`Shutter.Store.CaseToken`, in the
+  data database, never leaving IRIS) is built once per case by the business process in a canonical order: the case's
+  own patient and encounter first (always T1), then the message's values, then every identifier found in the
+  evidence (id keys, the first piece of `patient_identifier`, the patient and encounter pieces of every operation
+  key), sorted by kind and value, so the same fixture gives the same tokens in every run. The replacement happens
+  inside every string value of the reduced object at identifier boundaries (a number equal to an identifier becomes
+  the token), so operation keys (`PAS^HOSP^MRN-T1^ENC-T1^transfer^...`), history entries, timeline rows and error
+  echoes carry the tokens too. A value already mapped keeps its token whatever kind asks (an encounter id that is
+  also the visit number is one token); a value that itself looks like a token is left as it is.
+- **Demographics never go**: `patient_name`, `name`, `given_name`, `family_name`, `date_of_birth`, `dob`, `sex`,
+  `gender`, `address`, `phone`, `email`, `next_of_kin` and the like are dropped wherever they occur.
+- **Free text never goes.** Each OBX or NTE note becomes `{observation_id, free_text_present, instruction_like}`; the
+  text stays in IRIS. `instruction_like` is a word-list flag (ignore, override, you must, resend, approve and the like),
+  not a verdict. The site profile's `model_content.free_text: true` sends the text; the default is off.
+- **Allowlists by shape.** The summary, the operation, the message (`message_control_id`, `message_type`, the
+  sending and receiving applications, the times, `patient_identifier`, `patient_class`, `assigned_location`,
+  `visit_number`, `admit_time`, `notes`, `segment_count`, `doc_type`, `error`), the validation, a receiver's body
+  (`encounter_id`, `patient_id`, `patient_id_authority`, `state`, `ward`, `location`, `version`, `epoch`, `history`,
+  `error`), a history entry (`event`, `ward`, `event_time`, `applied_at`, `version_after`, `operation_key`), a
+  receipt (all of its fields), the failure (`kind`, `outcome`, `reason_code`, `http_status`, `text`,
+  `ens_session_id`, `source_header_id`), a timeline row and the route each keep a named set of keys; anything else
+  keeps everything but the denied keys (`headline` among them). Strings that came from outside (`text`, `error`,
+  `message`, `detail`) are capped at 1000 characters and carry `instruction_like: true` when they read like an
+  instruction.
+- **OBX and NTE** are read wherever they sit in the message (grouped segments included, 50 at most), with `segment`,
+  `position`, `observation_id` and `value_type`; the stored snapshot keeps the text. With the switch on, the text goes
+  tokenised and capped at 500 characters, never an ED or RP value, and the case records that it went.
+
+**Coming back:** the model speaks in tokens. `ModelView.Restore` puts the identifiers back before a run, a finding or a
+plan is stored (`AgentRun.FromResponse` for the result, the text and the error; `CaseWorkflow.OnMember` and
+`OnCoordinator` before they parse the result), so people and the gate read real ids; a token the case has no value for
+stays as written and is noted on the case. The recordings and the tool-call rows keep the tokens, since that is what
+left IRIS. A recording made before this rule replays with real ids in its result; `Restore` finds no token and leaves
+it. `GetFailure` answers a fresh failure object and the error item, never the case headline. `SELECT Shutter_Util.ModelView_Preview('C-000012')`
+shows what the model would see of a case.
+
+## 10. Escalation by email (v1.11, S13)
+
+A blocked, escalated or failed case can be handed to the people who correct systems by hand. The draft is built from
+the stored case without a model (`Shutter.Util.EscalationDraft`): the hospital number and NHS number, the date of birth,
+the event (what, where, when, the operation key), what failed, why Shutter stopped (the block reason and the failing
+checks), what the receiver holds with its history, the encounter's timeline from the feed and the index, what Shutter
+sent, and references. No name, address or note text. A person reviews it, chooses the team and sends it; the send is
+bound to the digest of the text the person read.
+
+- The site profile's `teams` (array of `{id, name, mailbox, cc?: [...], receivers?: [...]}`; `id`, `name` and
+  `mailbox` required, ids unique) and `mail` (`from`, `allowed_domains`: every mailbox and cc must end in one of them
+  when set). The team for a case is the one whose `receivers` names the case's receiver, else the first, else the
+  profile's `approvers.escalation` text with no mailbox (the person fills one in).
+- `GET /cases/{id}/escalations`; `POST /cases/{id}/escalations` with `{teamId?}` answers 201 with the draft (409
+  `wrong_state` unless the case is blocked, escalated or failed); `PATCH /cases/{id}/escalations/{seq}` with
+  `{subject?, body?, to?, cc?}` edits a draft or a failed email (409 otherwise) and moves the body's digest;
+  `POST /cases/{id}/escalations/{seq}/send` with `{bodyDigest}` answers 202 with the queued escalation, 409
+  `body_changed` when the digest is not the current text's, 409 `no_recipient` when `to` is empty. All need
+  `Shutter_Operate`; the writes need `X-Requested-With` and take an `Idempotency-Key`.
+- The `Escalation Mail` operation (`Shutter.Operation.EscalationMail`, `EnsLib.EMail.OutboundAdapter`) sends through the
+  site's mail server when the adapter's `SMTPServer` is set (first-time configuration; the NHS relay at most trusts),
+  and otherwise writes an `.eml` file to its `OutputFolder` (default `<mgr>/shutter/out/mail`), so the demo and CI need
+  no mail server. States: `draft`, `queued`, `sent`, `failed`, `cancelled`; each step is a case event of kind
+  `escalation`. Then `POST /cases/{id}/reinvestigate` verifies the manual correction.
+
 ## Repository layout
 
 The core IPM module is the repository root (`module.xml`, sources under `src/`): it compiles on any 2026.2 Community image and replays recorded runs. The aihub module is `aihub/` (`aihub/module.xml`, sources under `aihub/src/`): the live runner, the agents, tools, schemas, policies and knowledge bases, which need the `%AI` package. Both modules contribute classes to the `Shutter` package; nothing under `src/` may reference `%AI`.
 
 ## Changes
 
+- v1.11, 19 Oct 2026: what leaves IRIS for a model (9): per-case tokens for the identifiers, no demographics, no free
+  text (a flag instead, and the site profile's `model_content.free_text` switch), the receiver's bodies and the failure
+  reduced, the map-back inside IRIS; escalation by email (10, S13): the profile's `teams` and `mail`, the four routes,
+  the `Escalation Mail` operation and the `escalation` event kind.
 - v1.10, 19 Oct 2026: from the review of the day's code. New gate codes: `CLOSED_BY_CATALOGUE` (a pass of the ordering
   check: the plan says superseded and the history shows no later event, but the matched entry's outcome on this
   evidence is none, so the case closes with nothing to send; the verifier accepts the same closure when the receiver
