@@ -9,7 +9,7 @@ Class Shutter.Operation.Gate Extends Ens.BusinessOperation
 Parameter INVOCATION = "Queue";
 
 /// Bumped whenever a check changes; recorded on every decision and bound by approvals.
-Parameter POLICYVERSION = "2026-10-17.2";
+Parameter POLICYVERSION = "2026-10-19.1";
 
 Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shutter.Msg.GateResult) As %Status
 {
@@ -73,6 +73,8 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         Set superseding = ..Superseding(summary, case)
         If superseding '= "" {
             Do ..Check(checks, "ordering", "pass", "SUPERSEDED_BY_LATER_EVENT", "The evidence shows the later event: " _ superseding)
+        } ElseIf ..ClosedByCatalogue(plan, summary) {
+            Do ..Check(checks, "ordering", "pass", "CLOSED_BY_CATALOGUE", "Catalogue entry " _ plan.CatalogueEntry _ " closes the case with nothing to send, and its pattern holds on this evidence")
         } Else {
             Do ..Check(checks, "ordering", "block", "SUPERSESSION_UNSUPPORTED", "The plan calls the operation superseded, but the evidence shows no later transfer or discharge for this encounter")
         }
@@ -109,6 +111,15 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
             Do ..Check(checks, "effect", "block", "NO_RECEIPT", "Nothing to reconcile: the receiver has no receipt for this operation")
         } Else {
             Do ..Check(checks, "effect", "pass", "NO_RECEIPT", "The receiver has no receipt for this operation")
+        }
+    } ElseIf receiptStatus = -1 {
+        // The receiver keeps no receipts (no receipt path in its description): its history alone shows what it applied,
+        // and the capability check governs writes.
+        If plan.Disposition = "reconcile" {
+            Set inHistory = (wardStatus = 200) && ##class(Shutter.Operation.Verify).InHistory(ward, case.OperationKey)
+            Do ..Check(checks, "effect", $SELECT(inHistory: "pass", 1: "block"), "RECEIPT_NOT_AVAILABLE", $SELECT(inHistory: "The receiver keeps no receipts, but its history shows the operation as applied; reconciling is right", 1: "The receiver keeps no receipts and its history does not show the operation: nothing to reconcile against"))
+        } Else {
+            Do ..Check(checks, "effect", "pass", "RECEIPT_NOT_AVAILABLE", "The receiver has no receipt endpoint; its capabilities decide whether a write may go")
         }
     } Else {
         Do ..Check(checks, "effect", "unknown", "RECEIPT_UNREADABLE", "The receipt lookup failed (HTTP " _ receiptStatus _ ")")
@@ -170,8 +181,10 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     // Catalogue (CONTRACTS 6.5): the plan's entry and outcome against the matcher's result in the evidence.
     Set cat = summary.%Get("catalogue")
     Set decision = $SELECT($ISOBJECT(cat): ##class(Shutter.Util.Json).Str(cat, "decision"), 1: "")
-    If (decision = "") || (decision = "not_configured") || (decision = "error") {
+    If (decision = "") || (decision = "not_configured") {
         Do ..Check(checks, "catalogue", "pass", "NOT_CONFIGURED", "No catalogue is installed, or the matcher gave no result")
+    } ElseIf decision = "error" {
+        Do ..Check(checks, "catalogue", "unknown", "MATCHER_ERROR", "The matcher failed on this evidence: " _ $EXTRACT(##class(Shutter.Util.Json).Str(cat, "error"), 1, 200))
     } ElseIf decision = "new_pattern" {
         Do ..Check(checks, "catalogue", "block", "NEW_PATTERN", "No catalogue entry matches this evidence: a candidate entry for a reviewer")
     } ElseIf plan.CatalogueEntry = "" {
@@ -213,6 +226,27 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     Do case.Note("artifact", "Gate (" _ request.Stage _ "): " _ text, "system", "gate:" _ response.DecisionId)
     $$$TRACE("Gate " _ request.Stage _ " for " _ case.CaseId _ " plan v" _ plan.Version _ ": " _ outcome)
     Quit $$$OK
+}
+
+/// Whether the plan follows a matched catalogue entry whose chosen outcome is "none": the entry closes the case with
+/// nothing to send, so a superseded plan needs no later event in the message store (a discharge before the failed
+/// transfer, a duplicate, another source named authoritative).
+ClassMethod ClosedByCatalogue(plan As Shutter.Store.Plan, summary As %DynamicObject) As %Boolean
+{
+    If plan.CatalogueEntry = "" Quit 0
+    Set cat = summary.%Get("catalogue")
+    If '$ISOBJECT(cat) || '$ISOBJECT(cat.%Get("matches")) Quit 0
+    Set matched = "", mi = cat.%Get("matches").%GetIterator()
+    While mi.%GetNext(.i, .m) { If ##class(Shutter.Util.Json).Str(m, "id") = plan.CatalogueEntry Set matched = m Quit }
+    If '$ISOBJECT(matched) Quit 0
+    If $EXTRACT(plan.Outcome, 1, 12) = "alternative:" {
+        Set n = +$PIECE(plan.Outcome, ":", 2), alts = matched.%Get("alternatives")
+        Set alt = $SELECT($ISOBJECT(alts) && (n >= 1) && (n <= alts.%Size()): alts.%Get(n - 1), 1: "")
+        If '$ISOBJECT(alt) Quit 0
+        If '##class(Shutter.Catalogue.Matcher).WhenHolds(##class(Shutter.Util.Json).Str(alt, "when", "always"), cat.%Get("facts")) Quit 0
+        Quit ##class(Shutter.Util.Json).Str(alt, "outcome") = "none"
+    }
+    Quit ##class(Shutter.Util.Json).Str(matched.%Get("preferred"), "outcome") = "none"
 }
 
 /// The disposition a catalogue outcome allows (CONTRACTS 6.3): a plan that follows an entry's outcome must act

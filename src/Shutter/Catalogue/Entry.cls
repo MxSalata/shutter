@@ -83,6 +83,7 @@ Method ToObject() As %DynamicObject
     Set o.preferred = ##class(Shutter.Util.Json).Parse($SELECT(..PreferredJSON = "": "{}", 1: ..PreferredJSON), .sc)
     Set o.alternatives = ##class(Shutter.Util.Json).Parse($SELECT(..AlternativesJSON = "": "[]", 1: ..AlternativesJSON), .sc)
     Set o.checks = ##class(Shutter.Util.Json).Parse($SELECT(..ChecksJSON = "": "[]", 1: ..ChecksJSON), .sc)
+    Set o.prose = ..Prose
     Quit o
 }
 

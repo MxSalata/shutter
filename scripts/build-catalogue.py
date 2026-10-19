@@ -19,7 +19,7 @@ import sys
 CONDITIONS = {
     "delivery": {"failed", "rejected", "uncertain", "unmappable"},
     "receiver_answer": {"unavailable", "timeout", "duplicate", "version_conflict", "refused", "none"},
-    "receipt": {"present", "absent", "unreadable"},
+    "receipt": {"present", "absent", "unreadable", "none"},
     "later_applied": {"none", "transfer", "discharge", "update"},
     "encounter_state": {"admitted", "discharged", "not_found", "unknown"},
     "transition": {"allowed", "invalid", "unknown"},

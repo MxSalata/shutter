@@ -161,25 +161,54 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
 
 /// Delete the closed cases whose closing is older than a time, with everything that hangs off them (events, snapshots
 /// and their items, plans, approvals, rehearsals, gate decisions, attempts, verifications, agent runs and their tool
-/// calls, chain items). Cases an incident still holds stay. Returns how many cases went. Housekeeping only
+/// calls, chain items), and the closed incidents older than it with their chains, items, events and the cases they
+/// held. Cases an open incident still holds stay. Returns how many cases went. Housekeeping only
 /// (Shutter.Util.RetentionTask, switched on by a site): the record is the product.
 ClassMethod PurgeClosedBefore(cutoff As %String) As %Integer
 {
     Set n = 0
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE ClosedAt IS NOT NULL AND ClosedAt < ? AND State IN ('resolved', 'blocked', 'escalated', 'failed') AND Incident IS NULL", cutoff)
     While rs.%Next() {
-        Set id = rs.%Get("ID"), sc = $$$OK
+        If $$$ISOK(..PurgeCase(rs.%Get("ID"))) Set n = n + 1
+    }
+    Set ri = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.Incident WHERE State = 'closed' AND ClosedAt IS NOT NULL AND ClosedAt < ?", cutoff)
+    While ri.%Next() {
+        Set iid = ri.%Get("ID"), ok = 1
+        // Only its cases whose own closing is older than the cutoff: a case reopened and closed again later stays.
+        Set rc = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE Incident = ? AND State IN ('resolved', 'blocked', 'escalated', 'failed') AND ClosedAt IS NOT NULL AND ClosedAt < ?", iid, cutoff)
+        While rc.%Next() { If $$$ISOK(..PurgeCase(rc.%Get("ID"))) { Set n = n + 1 } Else { Set ok = 0 } }
+        Continue:'ok
+        Set open = 0
+        &sql(SELECT COUNT(*) INTO :open FROM Shutter_Store."Case" WHERE Incident = :iid)
+        Continue:(+open > 0)
         TSTART
-        For table = "Shutter_Store.ChainItem", "Shutter_Store.Verification", "Shutter_Store.ExecutionAttempt", "Shutter_Store.Approval", "Shutter_Store.Rehearsal", "Shutter_Store.GateDecision", "Shutter_Store.Finding", "Shutter_Store.AgentRun", "Shutter_Store.Plan" {
-            If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM " _ table _ " WHERE ""Case"" = ?", id)
-        }
-        If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM Shutter_Store.SnapshotItem WHERE Snapshot IN (SELECT ID FROM Shutter_Store.Snapshot WHERE ""Case"" = ?)", id)
-        If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM Shutter_Store.Snapshot WHERE ""Case"" = ?", id)
-        If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM Shutter_Store.CaseEvent WHERE ""Case"" = ?", id)
-        If $$$ISOK(sc) Set sc = ..%DeleteId(id)
-        If $$$ISOK(sc) { TCOMMIT  Set n = n + 1 } Else { TROLLBACK }
+        Set sc = ..Exec("DELETE FROM Shutter_Store.ChainItem WHERE Chain IN (SELECT ID FROM Shutter_Store.Chain WHERE Incident = ?)", iid)
+        If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM Shutter_Store.Chain WHERE Incident = ?", iid)
+        If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM Shutter_Store.IncidentEvent WHERE Incident = ?", iid)
+        If $$$ISOK(sc) Set sc = ##class(Shutter.Store.Incident).%DeleteId(iid)
+        If $$$ISOK(sc) { TCOMMIT  Kill ^Shutter.Counter("incidentEvent", iid) } Else { TROLLBACK }
     }
     Quit n
+}
+
+/// One closed case and everything that hangs off it, in one transaction.
+ClassMethod PurgeCase(id As %String) As %Status [ Private ]
+{
+    // The tool calls of the case's runs, and their counters.
+    Set keys = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT EnsMessageId FROM Shutter_Store.AgentRun WHERE ""Case"" = ? AND EnsMessageId IS NOT NULL", id)
+    While keys.%Next() { Kill ^Shutter.Counter("toolcall", keys.%Get("EnsMessageId")) }
+    TSTART
+    Set sc = ..Exec("DELETE FROM Shutter_Bridge.ToolCall WHERE RunKey IN (SELECT EnsMessageId FROM Shutter_Store.AgentRun WHERE ""Case"" = ? AND EnsMessageId IS NOT NULL)", id)
+    For table = "Shutter_Store.ChainItem", "Shutter_Store.Verification", "Shutter_Store.ExecutionAttempt", "Shutter_Store.Approval", "Shutter_Store.Rehearsal", "Shutter_Store.GateDecision", "Shutter_Store.Finding", "Shutter_Store.AgentRun", "Shutter_Store.Plan" {
+        If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM " _ table _ " WHERE ""Case"" = ?", id)
+    }
+    If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM Shutter_Store.SnapshotItem WHERE Snapshot IN (SELECT ID FROM Shutter_Store.Snapshot WHERE ""Case"" = ?)", id)
+    If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM Shutter_Store.Snapshot WHERE ""Case"" = ?", id)
+    If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM Shutter_Store.CaseEvent WHERE ""Case"" = ?", id)
+    If $$$ISOK(sc) Set sc = ..%DeleteId(id)
+    If $$$ISOK(sc) { TCOMMIT } Else { TROLLBACK  Quit sc }
+    Kill ^Shutter.Counter("event", id), ^Shutter.Counter("plan", id), ^Shutter.Counter("snapshot", id)
+    Quit sc
 }
 
 /// One SQL statement with one argument, as a status.

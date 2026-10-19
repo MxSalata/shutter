@@ -6,8 +6,10 @@ Class Shutter.Production Extends Ens.Production
 {
 
 /// When the container's environment carries ANTHROPIC_API_KEY and the provider configuration is
-/// not there yet (a fresh `docker compose up` with a .env), write it, so live agents need no
-/// manual step. Replay mode needs nothing.
+/// not there yet, or was written from another key (the .env changed), write it, so live agents need
+/// no manual step. Replay mode needs nothing. The knowledge files (block reasons, catalogue, site
+/// profile seed, recordings) are re-read when they changed since the last start: a rebuilt image
+/// brings its knowledge to the data the volume kept.
 ClassMethod OnStart(pTimeStarted As %String) As %Status
 {
     // In a container, the production starts with the instance, after the two known startup alerts are
@@ -18,10 +20,14 @@ ClassMethod OnStart(pTimeStarted As %String) As %Status
     }
     Try {
         Set key = $SYSTEM.Util.GetEnviron("ANTHROPIC_API_KEY")
-        If (key '= "") && '##class(Shutter.Setup).ProviderConfigured() {
+        If (key '= "") && ('##class(Shutter.Setup).ProviderConfigured() || '##class(Shutter.Setup).ProviderKeyMatches(key)) {
             Do ##class(Shutter.Setup).ConfigureProvider(key, $SYSTEM.Util.GetEnviron("SHUTTER_MODEL"))
         }
         Do ##class(Shutter.Setup).RecordAgentMode($SYSTEM.Util.GetEnviron("SHUTTER_AGENT_MODE"))
+    } Catch {
+    }
+    Try {
+        Do ##class(Shutter.Setup).RefreshKnowledge()
     } Catch {
     }
     Quit $$$OK

@@ -100,7 +100,7 @@ Method StopRest(reason As %String, actor As %String = "system") As %Status
         Quit:$$$ISERR(sc)
         Set c = it.Case
         If $ISOBJECT(c) && 'c.IsClosed() {
-            Set c.Headline = "Not released: " _ reason
+            Set c.Headline = $EXTRACT("Not released: " _ reason, 1, 500)
             Set sc = c.Transition("escalated", "Not released: " _ reason _ ". This operation needs a person", actor, "incident:" _ ..Incident.IncidentId)
             Quit:$$$ISERR(sc)
         }

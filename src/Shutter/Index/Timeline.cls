@@ -71,6 +71,8 @@ ClassMethod FromIndex(case As Shutter.Store.Case, since As %String, typed As %Dy
             Set k = ##class(Shutter.Util.Json).Str(row, "operation_key")
             Continue:((k '= "") && $DATA(keys(k)))
             Continue:(k = case.OperationKey)
+            // The case's own message, mapped or not, is not a second event.
+            Continue:((case.SourceHeaderId '= "") && (##class(Shutter.Util.Json).Str(row, "ens_header_id") = case.SourceHeaderId))
             Set c = ##class(Shutter.Util.Json).Str(row, "control_id")
             Continue:((c '= "") && $DATA(controls(c)))
             Set ev = {}
@@ -100,7 +102,8 @@ ClassMethod Merge(a As %DynamicArray, b As %DynamicArray) As %DynamicArray
         Set iter = list.%GetIterator()
         While iter.%GetNext(.i, .ev) {
             Set n = n + 1
-            Set order(##class(Shutter.Util.Json).Str(ev, "event_time"), src, n) = ev
+            Set t = ##class(Shutter.Util.Json).Str(ev, "event_time")
+            Set order($SELECT(t = "": " ", 1: t), src, n) = ev
         }
     }
     Set out = [], t = ""

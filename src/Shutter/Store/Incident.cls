@@ -88,6 +88,8 @@ ClassMethod OpenFor(receiver As %String) As Shutter.Store.Incident
 /// take the next run's failures. Returns how many were closed.
 ClassMethod AbandonOpen(why As %String, actor As %String = "system") As %Integer [ SqlProc ]
 {
+    // The guard is for SQL callers (the terminal, the API's users); the production's own jobs (a scenario reset) run it freely.
+    If $ISOBJECT($GET(%sqlcontext)) && '$SYSTEM.Security.Check("Shutter_Operate", "USE") Quit -1
     Set n = 0
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.Incident WHERE State <> 'closed'")
     While rs.%Next() {
@@ -205,7 +207,8 @@ Method Approvals() As %DynamicArray
 }
 
 /// Close an incident whose workflow is gone (it died, or the production was reset): the chains still open are
-/// stopped and the cases it holds are failed with the reason, so nothing waits forever.
+/// stopped and the cases it still holds (adopted or parked, not yet released) are failed with the reason, so nothing
+/// waits forever. A released case is driven by its own workflow instance past the board and is left to finish.
 Method Abandon(why As %String, actor As %String = "operator") As %Status
 {
     Set sc = $$$OK
@@ -213,21 +216,21 @@ Method Abandon(why As %String, actor As %String = "operator") As %Status
     While rs.%Next() {
         Set ch = ##class(Shutter.Store.Chain).%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(ch)
-        Set ch.State = "stopped", ch.Outcome = "Abandoned: " _ why
+        Set ch.State = "stopped", ch.Outcome = $EXTRACT("Abandoned: " _ why, 1, 2000)
         Set sc = ch.%Save()
         Quit:$$$ISERR(sc)
     }
     Quit:$$$ISERR(sc) sc
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE Incident = ? AND State NOT IN ('resolved', 'blocked', 'escalated', 'failed')", ..%Id())
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE Incident = ? AND State IN ('detected', 'collecting', 'investigating', 'grouped')", ..%Id())
     While rs.%Next() {
         Set c = ##class(Shutter.Store.Case).%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(c)
-        Set c.Headline = "Abandoned with incident " _ ..IncidentId _ ": " _ why
+        Set c.Headline = $EXTRACT("Abandoned with incident " _ ..IncidentId _ ": " _ why, 1, 500)
         Set sc = c.Transition("failed", "Abandoned with incident " _ ..IncidentId _ ": " _ why, actor, "incident:" _ ..IncidentId)
         Quit:$$$ISERR(sc)
     }
     Quit:$$$ISERR(sc) sc
-    Set ..Summary = "Abandoned: " _ why
+    Set ..Summary = $EXTRACT("Abandoned: " _ why, 1, 4000)
     Quit ..Transition("closed", "Abandoned by " _ actor _ ": " _ why, actor)
 }
 

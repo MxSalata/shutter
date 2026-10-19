@@ -253,7 +253,7 @@ conditions that matter; an unlisted condition is a wildcard. A listed condition 
 | --- | --- | --- |
 | `delivery` | `failed`, `rejected`, `uncertain`, `unmappable` | the case's failure kind (1.1: 503 and connection failures are `failed`; 409 and 422 are `rejected`; 504 is `uncertain`; a message Shutter could not map to an operation is `unmappable`, v1.9) |
 | `receiver_answer` | `unavailable`, `timeout`, `duplicate`, `version_conflict`, `refused`, `none` | the error item's reason code |
-| `receipt` | `present`, `absent`, `unreadable` | the receipt lookup: 200, 404, anything else (1.9) |
+| `receipt` | `present`, `absent`, `unreadable`, `none` | the receipt lookup: 200, 404, anything else (1.9); `none` when the receiver has no receipt endpoint (6.4), which is a fact about the receiver, not a failed lookup |
 | `later_applied` | `none`, `transfer`, `discharge`, `update` | among the applied events for the encounter whose event time is later than the failed operation's (the ward history and the timeline), by precedence: `discharge` if any, else `transfer` if any, else `update` (an A08), else `none` |
 | `encounter_state` | `admitted`, `discharged`, `not_found`, `unknown` | the ward's state; `not_found` when the receiver answers 404 (it does not know the encounter); `unknown` when the receiver can't be read |
 | `transition` | `allowed`, `invalid`, `unknown` | the failed event from the encounter's current state (1.4): a transfer after a discharge is `invalid` |
@@ -362,7 +362,9 @@ reads it through `Shutter.Store.SiteProfile`.
   unknown `api` paths or `features` are refused too); every stored version is kept with who stored it and from where,
   `GET /site-profile/history` lists them (v1.9). The body may carry `expectedVersion` (the version the caller read, not
   part of the profile): when the stored version has moved, the answer is 409 `stale_version` with `currentVersion`, so
-  a page never overwrites another person's change unseen.
+  a page never overwrites another person's change unseen; the check and the write happen under one lock (v1.10). An
+  `api` entry must name at least its `state` and `operations` paths. The shipped seed profile fills an empty store and
+  follows its own file; once a person has saved a profile from the app, a reinstall or a restart never replaces it.
 - `automatic`: the case (or the chain) is released with no Workflow task. It is still gated at the proposal and at the
   dispatch, rehearsed and verified, exactly as an approved case. The case records an approval whose approver is
   `policy`, with the profile's version, the tier, the chain kind and the entry, so the authorization check and the
@@ -465,7 +467,7 @@ cites entries by id. The coordinator's instructions say the plan names the entry
 - A case carries `incidentId` and `incident` (`incident_id`, `incident_state`, `chain_seq`, `position`, `chain_kind`,
   `decides`, `chain_policy`, `item_state`, `expected_version`); its events say whether it was released automatically,
   under the incident's approval, or stopped.
-- `GET /site-profile` (any signed-in user) returns the current profile with its version; `PUT /site-profile`
+- `GET /site-profile` (`Shutter_Operate`, as every read) returns the current profile with its version; `PUT /site-profile`
   (`Shutter_Approve`, `X-Requested-With`) replaces it with the body, which must have the shape of 6.4, and answers the
   new version; the questionnaire page writes it. Every change is recorded as a case-independent event with the user.
 
@@ -528,6 +530,26 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.10, 19 Oct 2026: from the review of the day's code. New gate codes: `CLOSED_BY_CATALOGUE` (a pass of the ordering
+  check: the plan says superseded and the history shows no later event, but the matched entry's outcome on this
+  evidence is none, so the case closes with nothing to send; the verifier accepts the same closure when the receiver
+  holds neither a receipt nor the operation), `RECEIPT_NOT_AVAILABLE` (the receiver has no receipt endpoint: a
+  reconcile passes only when the receiver's history shows the operation, otherwise it blocks; other dispositions pass
+  and the capability check governs the write), `MATCHER_ERROR` (a block: the matcher failed, which is not "no entry");
+  the `receipt: none` condition (6.1). The gate's policy version is `2026-10-19.1`, so approvals given under the
+  earlier checks are void. An `Idempotency-Key` is scoped to the user, the method and the route, and may be
+  at most 128 characters (400 beyond). The anonymous `GET /health` adds `production_state`, and its `ok` is true only
+  when the production runs. `GET /cases` clamps a negative `offset` to 0; the history and incident lists clamp
+  `limit` to 1 to 500. A board timeout belongs to the investigation round that armed it; a reopened or released case
+  is driven by its newest workflow instance only, and an answer that reaches an older one is recorded for its cost and
+  changes nothing. A preflight that finds no encounter for a non-admission blocks the case (`UNKNOWN_ENCOUNTER`): a
+  definite answer, not a failed read. A refreshable unknown at the proposal gate collects the evidence again (bounded,
+  with a growing wait) instead of blocking. An incident whose workflow fails is abandoned (chains stopped, the cases it
+  still holds failed, released cases left to finish), not merely closed; an
+  incident whose released chains are done and that waits for approval tasks says `awaiting_approval`. Retention also
+  purges closed incidents older than the cutoff (chains, items, events and the cases they held) and the tool calls of
+  purged runs. The production start reconfigures the provider when the environment's key changed (compared by digest)
+  and re-reads the knowledge files that changed.
 - v1.9, 18 Oct 2026: the exact index (8): the custom search table, the indexer, the merged timeline, two routes; a plan
   records the catalogue version it was matched against and an approval the site profile's version, and the dispatch gate
   voids the approval when either changed (`APPROVAL_CATALOGUE_CHANGED`, `APPROVAL_SITE_PROFILE_CHANGED`); the

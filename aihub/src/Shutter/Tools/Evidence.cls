@@ -8,7 +8,7 @@ Property Name As %String [ InitialExpression = "Shutter evidence" ];
 
 Property Description As %String(MAXLEN = "") [ InitialExpression = "Read-only access to a case's evidence snapshot: the failed operation, the message, its validation, the ward's state and history, the receipt lookup, the timeline and the route's capabilities" ];
 
-/// The whole evidence summary for a case: the failed operation and the failure, the message's fields and validation, the ward's state and history for the encounter, the receipt lookup, the timeline of every operation sent for the encounter (later events marked), the route's capability profile and the epoch. Start here.
+/// The whole evidence summary for a case: the failed operation and the failure, the message's fields and validation, the ward's state and history for the encounter, the receipt lookup, the timeline of every operation sent for the encounter (later events marked), the route's capability profile and the epoch. The case's evidence in one read.
 /// caseId: the case identifier, for example C-000012
 ClassMethod GetSnapshot(caseId As %String) As %DynamicObject
 {

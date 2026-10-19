@@ -11,6 +11,19 @@ ClassMethod FromParts(sourceSystem As %String, authority As %String, patientId A
     Quit sourceSystem _ "^" _ authority _ "^" _ patientId _ "^" _ encounterId _ "^" _ event _ "^" _ eventTime
 }
 
+/// The patient identifier and its assigning authority: the PID-3 repetition typed MR (PID-3.5) whichever it is,
+/// else the first repetition (D2). Every reader of PID-3 uses this, so one patient gets one identifier. typeCode is
+/// the chosen repetition's PID-3.5.
+ClassMethod PatientIdentifier(message As EnsLib.HL7.Message, Output authority As %String, Output typeCode As %String) As %String
+{
+    Set reps = +message.GetValueAt("PID:3(*)"), pick = 1
+    For r = 1:1:reps { If $ZCONVERT(message.GetValueAt("PID:3(" _ r _ ").5"), "U") = "MR" Set pick = r Quit }
+    Set authority = message.GetValueAt("PID:3(" _ pick _ ").4.1")
+    If authority = "" Set authority = message.GetValueAt("PID:3(" _ pick _ ").4")
+    Set typeCode = message.GetValueAt("PID:3(" _ pick _ ").5")
+    Quit message.GetValueAt("PID:3(" _ pick _ ").1")
+}
+
 /// The ward operation (as a dynamic object with the contract's field names) for an HL7 ADT message,
 /// with its operation key and payload digest filled in. Returns "" with an error status when a
 /// required field is missing.
@@ -21,12 +34,7 @@ ClassMethod FromHL7(message As EnsLib.HL7.Message, Output sc As %Status) As %Dyn
         Set sourceSystem = message.GetValueAt("MSH:3.1")
         Set trigger = message.GetValueAt("MSH:9.2")
         Set controlId = message.GetValueAt("MSH:10")
-        // The medical record number (PID-3.5 = MR) whichever repetition carries it, else the first repetition (D2).
-        Set reps = +message.GetValueAt("PID:3(*)"), pick = 1
-        For r = 1:1:reps { If $ZCONVERT(message.GetValueAt("PID:3(" _ r _ ").5"), "U") = "MR" Set pick = r Quit }
-        Set patientId = message.GetValueAt("PID:3(" _ pick _ ").1")
-        Set authority = message.GetValueAt("PID:3(" _ pick _ ").4.1")
-        If authority = "" Set authority = message.GetValueAt("PID:3(" _ pick _ ").4")
+        Set patientId = ..PatientIdentifier(message, .authority)
         Set encounterId = message.GetValueAt("PV1:19.1")
         Set ward = message.GetValueAt("PV1:3.1")
         Set eventTime = message.GetValueAt("EVN:6.1")

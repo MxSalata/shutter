@@ -1,7 +1,7 @@
 {
   "id": "block-reasons",
-  "version": "1.3",
-  "effective_from": "2026-10-18",
+  "version": "1.4",
+  "effective_from": "2026-10-19",
   "applies_to": [
     "ward-api-v1",
     "hl7-v2.5.1-adt"
@@ -381,6 +381,33 @@
       "owner": "Approver",
       "reevaluate_when": "The plan is approved",
       "text": "An automatic release was attempted where the site profile requires a person's approval for this tier and kind of chain."
+    },
+    {
+      "code": "APPROVAL_PLAN_ORIGIN",
+      "title": "The policy's approval needs a plan from the policy path",
+      "prerequisite": "A plan from the policy path for the entry the automatic release names",
+      "next_action": "Investigate again so the plan comes from the policy path for its entry, or have a person approve it.",
+      "owner": "Operator",
+      "reevaluate_when": "The case is investigated again or a person approves the plan",
+      "text": "An approval by site policy stands only for a plan the policy path produced for its catalogue entry. This plan came from elsewhere, so the automatic release does not cover it."
+    },
+    {
+      "code": "MATCHER_ERROR",
+      "title": "The catalogue matcher failed",
+      "prerequisite": "A matcher result for the case's conditions",
+      "next_action": "Investigate again. If the error repeats, the integration team checks the catalogue and the matcher.",
+      "owner": "Integration team",
+      "reevaluate_when": "The case is investigated again or the catalogue is corrected",
+      "text": "The matcher raised an error instead of a result. That is not the same as no matching entry: the pattern may well be known, so the gate blocks rather than treating the case as new."
+    },
+    {
+      "code": "RECEIPT_NOT_AVAILABLE",
+      "title": "The receiver keeps no receipts",
+      "prerequisite": "For a reconcile: the operation in the receiver's history, since the receiver's description has no receipt endpoint (6.4)",
+      "next_action": "Check the receiver's own records for the operation. If it was applied, a person confirms and the case closes; if it was not, the plan should resend under the capability check, not reconcile.",
+      "owner": "Operator",
+      "reevaluate_when": "The receiver's history shows the operation, or the plan takes another outcome",
+      "text": "This receiver publishes no receipts, so whether the operation was applied can only be read from its history. A reconcile is right when the history shows the operation; this history does not, so there is nothing to reconcile against."
     }
   ]
 }

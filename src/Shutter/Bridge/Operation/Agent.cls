@@ -5,7 +5,9 @@
 ///
 /// Settings: AgentClass (the declarative agent to run unless the request names one), Runner (the
 /// class that runs live and record modes), Mode (live, record or replay), ProviderConfig and Model
-/// (overrides of the agent class's parameters), MaxIterations, TokenBudget, RequestTimeoutSeconds.
+/// (overrides of the agent class's parameters), MaxIterations, TokenBudget, RequestTimeoutSeconds (the whole run's
+/// deadline, as seconds per turn times the turn limit, checked by the monitor between model calls: AI Hub's
+/// agent loop offers no timeout on a single request, so one slow request can run past it).
 /// Configure one item per board member for separate lanes in the trace, or one shared item with a
 /// larger pool.
 Class Shutter.Bridge.Operation.Agent Extends Ens.BusinessOperation
@@ -36,7 +38,8 @@ Property MaxIterations As %Integer [ InitialExpression = 8 ];
 /// Tokens (prompt plus completion, cumulative over the run) after which the run is stopped.
 Property TokenBudget As %Integer [ InitialExpression = 120000 ];
 
-/// The provider's HTTP request timeout, per model call.
+/// Seconds per turn for the run's deadline: the monitor stops the run after this many seconds times the turn limit,
+/// checked between model calls. AI Hub's agent loop has no timeout on a single request.
 Property RequestTimeoutSeconds As %Integer [ InitialExpression = 120 ];
 
 Parameter SETTINGS = "AgentClass:Agent,Runner:Agent,Mode:Agent,ProviderConfig:Agent,Model:Agent,MaxIterations:Agent,TokenBudget:Agent,RequestTimeoutSeconds:Agent";

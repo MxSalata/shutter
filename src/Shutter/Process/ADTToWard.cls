@@ -56,9 +56,7 @@ Method UnmappedOperation(request As EnsLib.HL7.Message) As %DynamicObject
     Set headerId = ..%PrimaryRequestHeader.%Id()
     Set op."operation_key" = "UNMAPPED^" _ headerId
     Set op."encounter_id" = request.GetValueAt("PV1:19.1")
-    Set op."patient_id" = request.GetValueAt("PID:3(1).1")
-    Set authority = request.GetValueAt("PID:3(1).4.1")
-    If authority = "" Set authority = request.GetValueAt("PID:3(1).4")
+    Set op."patient_id" = ##class(Shutter.Util.OperationKey).PatientIdentifier(request, .authority)
     Set op."patient_id_authority" = authority
     Set trigger = request.GetValueAt("MSH:9.2")
     Set op."event" = $SELECT(trigger = "": "", 1: trigger)

@@ -65,6 +65,9 @@ ClassMethod Join(case As Shutter.Store.Case, incident As Shutter.Store.Incident)
 /// A case leaves an incident (it was not ready when the chains formed): it continues alone.
 ClassMethod Leave(case As Shutter.Store.Case, incident As Shutter.Store.Incident, why As %String) As %Status
 {
+    // A case that parked meanwhile is ready after all, and stays (read again from disk, not the in-memory copy).
+    Do case.%Reload()
+    If case.State = "grouped" Quit $$$OK
     Set case.Incident = ""
     Set sc = case.%Save()
     Quit:$$$ISERR(sc) sc
@@ -205,7 +208,9 @@ ClassMethod Rematch(case As Shutter.Store.Case, chainKind As %String, projectedS
     If projectedState '= "" {
         Set summary = ##class(%DynamicObject).%FromJSON(summary.%ToJSON())
         Do summary.%Set("ward_state_http_status", 200, "number")
-        Set ws = {}
+        // The receiver's history, version and epoch stay as read; only the state and the ward are the projected ones.
+        Set old = summary.%Get("ward_state")
+        Set ws = $SELECT($ISOBJECT(old): ##class(%DynamicObject).%FromJSON(old.%ToJSON()), 1: {})
         Set ws.state = projectedState, ws.ward = projectedWard, ws."patient_id" = case.PatientId, ws."patient_id_authority" = case.PatientIdAuthority
         Do ws.%Set("projected", 1, "boolean")
         Set summary."ward_state" = ws

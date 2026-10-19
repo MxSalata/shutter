@@ -20,7 +20,7 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     If (c."receiver_answer" = "none") && (c.delivery = "uncertain") Set c."receiver_answer" = "timeout"
     // receipt
     Set rstatus = $CLASSMETHOD(json, "Str", summary, "receipt_http_status")
-    Set c.receipt = $SELECT(rstatus = 200: "present", rstatus = 404: "absent", 1: "unreadable")
+    Set c.receipt = $SELECT(rstatus = 200: "present", rstatus = 404: "absent", rstatus = -1: "none", 1: "unreadable")
     // later_applied: the latest later applied event, from the timeline and the receiver's history
     Set c."later_applied" = ..LaterApplied(summary, case)
     // encounter_state and the identity

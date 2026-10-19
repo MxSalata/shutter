@@ -75,11 +75,25 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
     If $$$ISERR(sc) {
         Set incident = ##class(Shutter.Store.Incident).ByIncidentId(..IncidentId)
         If $ISOBJECT(incident) && (incident.State '= "closed") {
+            // Abandoned, not merely closed: its open chains stop and the cases it still holds are failed with the reason,
+            // so nothing waits for an incident that no longer runs; a released case runs on by itself.
             Do incident.Note("error", "Workflow error at " _ completionkey _ ": " _ $SYSTEM.Status.GetErrorText(sc), "system")
-            Do ..Close(incident, "closed after a workflow error at " _ completionkey)
+            Do incident.Abandon("a workflow error at " _ completionkey _ ": " _ $EXTRACT($SYSTEM.Status.GetErrorText(sc), 1, 300), "system")
         }
     }
     Quit sc
+}
+
+/// A called item answered with an error status: the incident is abandoned with the reason (its chains stopped and the
+/// cases it still holds failed), and the instance ends cleanly.
+Method OnError(request As %Library.Persistent, ByRef response As %Library.Persistent, callrequest As %Library.Persistent, pErrorStatus As %Status, pCompletionKey As %String) As %Status
+{
+    Try {
+        Set incident = ##class(Shutter.Store.Incident).ByIncidentId(..IncidentId)
+        If $ISOBJECT(incident) && (incident.State '= "closed") Do incident.Abandon("an error from the call " _ pCompletionKey _ ": " _ $EXTRACT($SYSTEM.Status.GetErrorText(pErrorStatus), 1, 300), "system")
+    } Catch {
+    }
+    Quit $$$OK
 }
 
 // ---- intake and grouping ----
@@ -313,7 +327,11 @@ Method Advance(incident As Shutter.Store.Incident) As %Status
         &sql(SELECT TOP 1 ID INTO :rid FROM Shutter_Store.Chain WHERE Incident = :iid AND State = 'approved' ORDER BY Seq)
         If (SQLCODE '= 0) || (rid = "") {
             Set ..CurrentChainId = ""
-            If ..PendingTasks > 0 Quit $$$OK
+            If ..PendingTasks > 0 {
+                // The released chains are done and only a person's answer is awaited: the state says so.
+                If incident.State = "releasing" Quit incident.Transition("awaiting_approval", "The released chains are done; waiting for " _ ..PendingTasks _ " approval task(s)", "system")
+                Quit $$$OK
+            }
             Set n = 0
             &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.Chain WHERE Incident = :iid AND State IN ('awaiting_approval', 'releasing'))
             If +n > 0 Quit $$$OK

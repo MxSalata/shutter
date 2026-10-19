@@ -27,10 +27,17 @@ Parameter SETTINGS = "Routes:Index,BatchSize:Index,LagSeconds:Index,BackfillHour
 
 Method OnProcessInput(pInput As %RegisteredObject, Output pOutput As %RegisteredObject) As %Status
 {
-    Set pOutput = ""
-    Set caughtUp = ..Pass(..Routes, ..BatchSize, ..LagSeconds, ..BackfillHours, .indexed, .error)
-    If error '= "" $$$LOGWARNING("Index pass: " _ error)
-    If indexed > 0 $$$TRACE("Indexed " _ indexed _ " HL7 message(s); high-water mark " _ $GET(^Shutter.Index("hwm")))
+    Set pOutput = "", total = 0, passes = 0
+    // Several passes per call while the walk is behind (a back-fill or a burst), bounded so the service stays responsive.
+    For {
+        Set caughtUp = ..Pass(..Routes, ..BatchSize, ..LagSeconds, ..BackfillHours, .indexed, .error)
+        Set total = total + indexed, passes = passes + 1
+        If error '= "" $$$LOGWARNING("Index pass: " _ error)
+        Quit:caughtUp
+        Quit:(passes >= 20)
+        Quit:(error '= "")
+    }
+    If total > 0 $$$TRACE("Indexed " _ total _ " HL7 message(s) in " _ passes _ " pass(es); high-water mark " _ $GET(^Shutter.Index("hwm")))
     Quit $$$OK
 }
 
@@ -54,9 +61,16 @@ ClassMethod Pass(routes As %String = "", batch As %Integer = 200, lag As %Intege
             }
             Set ^Shutter.Index("hwm") = hwm, ^Shutter.Index("started_at") = ##class(Shutter.Util.Time).NowUTC()
         }
+        Set ^Shutter.Index("routes") = routes, ^Shutter.Index("lag") = lag
         Set cutoff = ..Odbc(##class(Shutter.Util.Time).FromNow(-lag))
-        Set sql = "SELECT TOP " _ (+batch) _ " ID, MessageBodyId FROM Ens.MessageHeader WHERE ID > ? AND MessageBodyClassName = 'EnsLib.HL7.Message' AND TimeCreated <= ?"
-        Set args = 2, args(1) = hwm, args(2) = cutoff
+        // The walk is bounded by id, not by time: it stops short of the first header younger than the lag, so a header
+        // with a lower id that is still being written is never leapt over.
+        Set boundary = ""
+        &sql(SELECT MIN(ID) INTO :boundary FROM Ens.MessageHeader WHERE ID > :hwm AND TimeCreated > :cutoff)
+        If (SQLCODE '= 0) Set boundary = ""
+        Set sql = "SELECT TOP " _ (+batch) _ " ID, MessageBodyId FROM Ens.MessageHeader WHERE ID > ? AND MessageBodyClassName = 'EnsLib.HL7.Message'"
+        Set args = 1, args(1) = hwm
+        If boundary '= "" Set sql = sql _ " AND ID < ?", args = 2, args(2) = boundary
         Set in = ""
         For i = 1:1:$LENGTH(routes, ",") {
             Set r = $ZSTRIP($PIECE(routes, ",", i), "<>W")
@@ -74,7 +88,14 @@ ClassMethod Pass(routes As %String = "", batch As %Integer = 200, lag As %Intege
                 Set body = ##class(EnsLib.HL7.Message).%OpenId(bodyId)
                 If $ISOBJECT(body) {
                     Set sc = ##class(Shutter.Index.Message).IndexDoc(body)
-                    If $$$ISERR(sc) { Set error = "header " _ id _ ": " _ $SYSTEM.Status.GetErrorText(sc) } Else { Set indexed = indexed + 1 }
+                    If $$$ISERR(sc) {
+                        // Recorded for Rebuild; the walk goes on, and the pass reports how many failed.
+                        Set ^Shutter.Index("failed", id) = $EXTRACT($SYSTEM.Status.GetErrorText(sc), 1, 500)
+                        Set failed = $GET(failed) + 1, error = failed _ " header(s) could not be indexed, the last " _ id _ ": " _ $EXTRACT($SYSTEM.Status.GetErrorText(sc), 1, 200)
+                    } Else {
+                        Set indexed = indexed + 1
+                        Kill ^Shutter.Index("failed", id)
+                    }
                 }
             }
             Set hwm = id
@@ -108,7 +129,7 @@ ClassMethod Rebuild(fromId As %Integer, toId As %Integer, routes As %String = ""
         Continue:((bodyId = "") || ##class(Shutter.Index.Message).Indexed(bodyId))
         Set body = ##class(EnsLib.HL7.Message).%OpenId(bodyId)
         Continue:'$ISOBJECT(body)
-        If $$$ISOK(##class(Shutter.Index.Message).IndexDoc(body)) Set added = added + 1
+        If $$$ISOK(##class(Shutter.Index.Message).IndexDoc(body)) Set added = added + 1, ^Shutter.Index("total") = $GET(^Shutter.Index("total")) Kill ^Shutter.Index("failed", rs.%Get("ID"))
     }
     If added > 0 Set ^Shutter.Index("total") = $GET(^Shutter.Index("total")) + added
     Quit added
@@ -125,6 +146,25 @@ ClassMethod Status() As %DynamicObject
     Set newest = ""
     &sql(SELECT MAX(ID) INTO :newest FROM Ens.MessageHeader)
     Set o."newest_header" = newest
+    // Behind: the HL7 headers above the mark on the watched routes that are older than the lag, as the walk sees them.
+    Set behind = 0
+    If (newest '= "") && ($GET(^Shutter.Index("hwm")) '= "") {
+        Set hwm = ^Shutter.Index("hwm"), routes = $GET(^Shutter.Index("routes")), lag = +$GET(^Shutter.Index("lag"))
+        Set sql = "SELECT COUNT(*) FROM Ens.MessageHeader WHERE ID > ? AND MessageBodyClassName = 'EnsLib.HL7.Message' AND TimeCreated <= ?"
+        Set args = 2, args(1) = hwm, args(2) = ..Odbc(##class(Shutter.Util.Time).FromNow(-lag)), in = ""
+        For i = 1:1:$LENGTH(routes, ",") {
+            Set r = $ZSTRIP($PIECE(routes, ",", i), "<>W")
+            Continue:r=""
+            Set in = in _ $SELECT(in = "": "", 1: ", ") _ "?", args = args + 1, args(args) = r
+        }
+        If in '= "" Set sql = sql _ " AND SourceConfigName IN (" _ in _ ")"
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, args...)
+        If rs.%Next() Set behind = rs.%GetData(1)
+    }
+    Set o."hl7_headers_behind" = +behind
+    Do o.%Set("caught_up", +behind = 0, "boolean")
+    Set o."failed_headers" = 0
+    Set k = "" For { Set k = $ORDER(^Shutter.Index("failed", k)) Quit:k=""  Set o."failed_headers" = o."failed_headers" + 1 }
     Quit o
 }
 

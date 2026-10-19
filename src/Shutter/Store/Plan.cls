@@ -78,8 +78,9 @@ ClassMethod Create(case As Shutter.Store.Case, snapshot As Shutter.Store.Snapsho
     Set p.EvidenceRefsJSON = ##class(Shutter.Util.Json).Text(plan.%Get("evidence_refs"))
     Set p.DisagreementsJSON = ##class(Shutter.Util.Json).Text(plan.%Get("disagreements"))
     Set p.Summary = $EXTRACT(##class(Shutter.Util.Json).Str(plan, "summary"), 1, 4000)
-    Set p.CatalogueEntry = ##class(Shutter.Util.Json).Str(plan, "catalogue_entry")
-    Set p.Outcome = ##class(Shutter.Util.Json).Str(plan, "outcome")
+    // Clipped to their columns: a stray value from a model must not fail the save (the gate judges the content).
+    Set p.CatalogueEntry = $EXTRACT(##class(Shutter.Util.Json).Str(plan, "catalogue_entry"), 1, 16)
+    Set p.Outcome = $EXTRACT(##class(Shutter.Util.Json).Str(plan, "outcome"), 1, 32)
     Set p.Why = $EXTRACT(##class(Shutter.Util.Json).Str(plan, "why"), 1, 1000)
     Set p.CreatedAt = ##class(Shutter.Util.Time).NowUTC()
     Set p.CreatedBy = createdBy

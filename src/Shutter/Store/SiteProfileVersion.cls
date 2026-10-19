@@ -14,12 +14,14 @@ Property Source As %String(%JSONFIELDNAME = "source", MAXLEN = 500);
 
 Property UpdatedAt As %String(%JSONFIELDNAME = "updatedAt", MAXLEN = 30);
 
-Property UpdatedBy As %String(%JSONFIELDNAME = "updatedBy", MAXLEN = 100);
+Property UpdatedBy As %String(%JSONFIELDNAME = "updatedBy", MAXLEN = 160);
 
 /// The versions, newest first, as objects (the profile itself included).
 ClassMethod History(limit As %Integer = 50) As %DynamicArray
 {
     Set out = []
+    If +limit < 1 Set limit = 50
+    If +limit > 500 Set limit = 500
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP " _ (+limit) _ " ID FROM Shutter_Store.SiteProfileVersion ORDER BY Version DESC")
     While rs.%Next() {
         Set v = ..%OpenId(rs.%Get("ID"))

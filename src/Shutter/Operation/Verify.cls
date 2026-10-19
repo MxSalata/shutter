@@ -15,6 +15,15 @@ Property Receiver As %String(MAXLEN = 128) [ InitialExpression = "Ward Out" ];
 
 Parameter SETTINGS = "Receiver:Verify";
 
+/// Whether the plan's catalogue entry closes the case with nothing to send on the case's evidence, as the gate judged.
+ClassMethod ClosedByCatalogue(case As Shutter.Store.Case, plan As Shutter.Store.Plan) As %Boolean
+{
+    If '$ISOBJECT(plan) || '$ISOBJECT(case.CurrentSnapshot) Quit 0
+    Set summary = case.CurrentSnapshot.SummaryObject()
+    If '$ISOBJECT(summary) Quit 0
+    Quit ##class(Shutter.Operation.Gate).ClosedByCatalogue(plan, summary)
+}
+
 Method OnVerifyRequest(request As Shutter.Msg.VerifyRequest, Output response As Shutter.Msg.VerifyResult) As %Status
 {
     Set response = ##class(Shutter.Msg.VerifyResult).%New()
@@ -26,7 +35,8 @@ Method OnVerifyRequest(request As Shutter.Msg.VerifyRequest, Output response As 
     Set encounter = ..Get(##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", case.EncounterId), .estatus)
     Set receiptPath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "receipt", "", case.OperationKey)
     Set receipt = $SELECT(receiptPath = "": {}, 1: ..Get(receiptPath, .rstatus))
-    If receiptPath = "" Set rstatus = 0
+    // -1: the receiver keeps no receipts; the committed history alone then shows the effect.
+    If receiptPath = "" Set rstatus = -1
     Set detail = {}
     Set detail."encounter_http_status" = estatus, detail.encounter = encounter
     Set detail."receipt_http_status" = rstatus, detail.receipt = receipt
@@ -56,6 +66,13 @@ Method OnVerifyRequest(request As Shutter.Msg.VerifyRequest, Output response As 
         } ElseIf rstatus = 404 {
             Set text = "The receiver holds no receipt for the operation: it was not committed"
             Set outcome = "failed"
+        } ElseIf rstatus = -1 {
+            If (estatus = 200) && ..InHistory(encounter, case.OperationKey) {
+                Set outcome = "verified"
+                Set text = "Committed: the operation is in the receiver's history (the receiver keeps no receipts). Current state " _ ##class(Shutter.Util.Json).Str(encounter, "state") _ ", version " _ ##class(Shutter.Util.Json).Str(encounter, "version")
+            } Else {
+                Set text = "The receiver keeps no receipts and its history does not show the operation"
+            }
         } Else {
             Set text = "The receipt lookup answered HTTP " _ rstatus
         }
@@ -64,12 +81,17 @@ Method OnVerifyRequest(request As Shutter.Msg.VerifyRequest, Output response As 
             Set later = ..LaterThan(encounter, case.EventTime)
             Set current = ##class(Shutter.Util.Json).Str(encounter, "ward")
             Set state = ##class(Shutter.Util.Json).Str(encounter, "state")
-            If (later '= "") && (rstatus = 404) {
+            If (later '= "") && ((rstatus = 404) || (rstatus = -1)) {
                 Set outcome = "verified"
                 Set text = "Nothing was resent; the receiver's history shows the later event (" _ later _ ") and no receipt for the stale operation. Current state " _ state _ $SELECT(current '= "": " in " _ current, 1: "")
             } ElseIf rstatus = 200 {
                 Set text = "The stale operation has a receipt after all: it was committed"
                 Set outcome = "failed"
+            } ElseIf ..ClosedByCatalogue(case, plan) && '..InHistory(encounter, case.OperationKey) {
+                // The gate passed the closure on the catalogue entry's say-so (CLOSED_BY_CATALOGUE): the receiver holds
+                // neither a receipt nor the operation, which is what closing with nothing to send requires.
+                Set outcome = "verified"
+                Set text = "Nothing was resent; catalogue entry " _ plan.CatalogueEntry _ " closes the case with nothing to send, and the receiver holds neither a receipt nor the operation in its history. Current state " _ state _ $SELECT(current '= "": " in " _ current, 1: "")
             } Else {
                 Set text = "No later event in the receiver's history supports the supersession"
             }
@@ -112,7 +134,7 @@ Method Get(path As %String, Output status As %Integer) As %DynamicObject [ Priva
 }
 
 /// True when the encounter's history has an entry for the operation key.
-Method InHistory(encounter As %DynamicObject, key As %String) As %Boolean [ Private ]
+ClassMethod InHistory(encounter As %DynamicObject, key As %String) As %Boolean
 {
     Set history = encounter.%Get("history")
     If '$ISOBJECT(history) Quit 0

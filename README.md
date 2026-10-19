@@ -88,7 +88,11 @@ What you make stays: the cases, approvals, incidents, the site profile and the p
 database inside the `shutter-mgr` volume (the image keeps only the code), so `docker compose down` and `up` keep
 them, a rebuilt image brings new code to the same data, and `docker compose down -v` starts afresh. A volume made by a
 build from before 18 October 2026 has no data database: remove it once (`docker compose down -v`) before the first
-`up` of a newer build.
+`up` of a newer build. The compose file gives the container two minutes to stop (`stop_grace_period`), so IRIS writes
+its journal and write image out cleanly; a container killed mid-write recovers from the journal at the next start,
+which is what the "abnormal shutdown" alert in the console log then says. When the production starts it re-reads the
+knowledge files that changed (block reasons, catalogue, site profile seed, recordings), so a rebuilt image's knowledge
+reaches the kept data; a site profile saved from the app is never overwritten by the seed.
 
 The same `Dockerfile` builds the replay edition on any IRIS for Health Community 2026.2 or later:
 `SHUTTER_IMAGE=intersystemsdc/irishealth-community:latest SHUTTER_WITH_AIHUB=0 docker compose up -d --build`. Other

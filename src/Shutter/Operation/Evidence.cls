@@ -48,7 +48,8 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     // 4. The ward's state and history for the encounter.
     // The receiver's paths come from its description in the site profile (CONTRACTS 6.4), never from code.
     Set receiver = $SELECT(case.Receiver '= "": case.Receiver, 1: ..Receiver)
-    Set wardState = ..WardGet(##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", case.EncounterId), .status)
+    Set statePath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", case.EncounterId)
+    If statePath = "" { Set status = 0, wardState = {"error": "no state endpoint in the receiver's description"} } Else { Set wardState = ..WardGet(statePath, .status) }
     Set wardItem = {}
     Set wardItem."http_status" = status
     Set wardItem.body = wardState
@@ -57,7 +58,8 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     // 5. The receipt for the operation key, if any.
     Set receiptPath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "receipt", "", case.OperationKey)
     Set receipt = $SELECT(receiptPath = "": {}, 1: ..WardGet(receiptPath, .rstatus))
-    If receiptPath = "" Set rstatus = 0
+    // -1: the receiver keeps no receipts (no receipt path in its description), as against 0 for no answer.
+    If receiptPath = "" Set rstatus = -1
     Set receiptItem = {}
     Set receiptItem."http_status" = rstatus
     Set receiptItem.body = receipt
@@ -172,7 +174,8 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
         Set info."hl7_version" = msg.GetValueAt("MSH:12.1")
         Set info."event_recorded" = ##class(Shutter.Util.Time).FromHL7(msg.GetValueAt("EVN:2.1"))
         Set info."event_occurred" = ##class(Shutter.Util.Time).FromHL7(msg.GetValueAt("EVN:6.1"))
-        Set info."patient_identifier" = msg.GetValueAt("PID:3(1).1") _ "^^^" _ msg.GetValueAt("PID:3(1).4.1") _ "^" _ msg.GetValueAt("PID:3(1).5")
+        Set pid = ##class(Shutter.Util.OperationKey).PatientIdentifier(msg, .pidAuthority, .pidType)
+        Set info."patient_identifier" = pid _ "^^^" _ pidAuthority _ "^" _ pidType
         Set info."patient_name" = msg.GetValueAt("PID:5(1).1") _ ", " _ msg.GetValueAt("PID:5(1).2")
         Set info."patient_class" = msg.GetValueAt("PV1:2")
         Set info."assigned_location" = msg.GetValueAt("PV1:3.1") _ "^" _ msg.GetValueAt("PV1:3.2") _ "^" _ msg.GetValueAt("PV1:3.3") _ "^" _ msg.GetValueAt("PV1:3.4")

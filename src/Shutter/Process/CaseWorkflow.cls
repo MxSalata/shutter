@@ -92,6 +92,9 @@ Property CoordinatorPending As %Boolean [ InitialExpression = 0 ];
 /// Evidence refreshes and preflight retries taken at the dispatch stage (A1): bounded, then the case blocks.
 Property Refreshes As %Integer [ InitialExpression = 0 ];
 
+/// The investigation round (one per evidence collection); a timeout armed in an earlier round is ignored when it fires.
+Property Round As %Integer [ InitialExpression = 0 ];
+
 /// The next evidence collection is a refresh under an approval, not a new investigation.
 Property Refreshing As %Boolean [ InitialExpression = 0 ];
 
@@ -150,6 +153,7 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
 
 Method StartEvidence(case As Shutter.Store.Case) As %Status
 {
+    Set ..Round = ..Round + 1
     Set sc = case.Transition("collecting", "Collecting evidence", "system")
     Quit:$$$ISERR(sc) sc
     Set req = ##class(Shutter.Msg.EvidenceRequest).%New()
@@ -187,11 +191,28 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
             $$$TRACE("Case " _ ..CaseId _ " is closed; ignoring " _ completionkey)
             Quit
         }
-        If completionkey = "board:timeout" { Set sc = ..OnBoardTimeout(case) Quit }
+        // A reopened or released case belongs to its newest instance; an answer that reaches an earlier one is recorded
+        // for its cost and changes nothing.
+        If (case.WorkflowSessionId '= "") && (case.WorkflowSessionId '= ..%SessionId) {
+            If $ISOBJECT(callresponse) && (($EXTRACT(completionkey, 1, 7) = "member:") || (completionkey = "coordinator")) {
+                Set code = $SELECT(completionkey = "coordinator": "coordinator", 1: $EXTRACT(completionkey, 8, *))
+                Set m = ##class(Shutter.Store.BoardMember).ByCode(code)
+                Do ##class(Shutter.Store.AgentRun).FromResponse(case, case.CurrentSnapshot, $SELECT(completionkey = "coordinator": "coordinator", $ISOBJECT(m): m.Role, 1: ""), code, callresponse, ..HeaderIdOf(..%LastCallRequest), .run)
+            }
+            $$$TRACE("Case " _ ..CaseId _ " is driven by another instance (session " _ case.WorkflowSessionId _ "); ignoring " _ completionkey)
+            Quit
+        }
+        If $PIECE(completionkey, ":", 1, 2) = "board:timeout" {
+            If +$PIECE(completionkey, ":", 3) '= +..Round { $$$TRACE("A board timeout from round " _ $PIECE(completionkey, ":", 3) _ " arrived in round " _ ..Round _ "; ignored") Quit }
+            Set sc = ..OnBoardTimeout(case) Quit
+        }
         If completionkey = "preflight:retry" { Set sc = ..SendPreflight(case) Quit }
         If completionkey = "refresh:retry" { Set sc = ..StartEvidence(case) Quit }
         If completionkey = "verify:retry" { Set sc = ..SendVerify(case) Quit }
-        If completionkey = "coordinator:timeout" { Set sc = ..OnCoordinatorTimeout(case) Quit }
+        If $PIECE(completionkey, ":", 1, 2) = "coordinator:timeout" {
+            If +$PIECE(completionkey, ":", 3) '= +..Round { $$$TRACE("A coordinator timeout from round " _ $PIECE(completionkey, ":", 3) _ " arrived in round " _ ..Round _ "; ignored") Quit }
+            Set sc = ..OnCoordinatorTimeout(case) Quit
+        }
         If completionkey = "settle" { Set sc = ..StartEvidence(case) Quit }
         If completionkey = "evidence" { Set sc = ..OnEvidence(case, callresponse) Quit }
         If $EXTRACT(completionkey, 1, 7) = "member:" { Set sc = ..OnMember(case, $EXTRACT(completionkey, 8, *), callresponse) Quit }
@@ -212,6 +233,41 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
         If $ISOBJECT(case) && 'case.IsClosed() Do case.Transition("failed", "Workflow error at " _ completionkey _ ": " _ $SYSTEM.Status.GetErrorText(sc), "system")
     }
     Quit sc
+}
+
+/// A called item answered with an error status instead of a response: the case fails with the reason, and the
+/// instance ends cleanly instead of stranding the case in a working state.
+Method OnError(request As %Library.Persistent, ByRef response As %Library.Persistent, callrequest As %Library.Persistent, pErrorStatus As %Status, pCompletionKey As %String) As %Status
+{
+    Try {
+        Set case = ##class(Shutter.Store.Case).ByCaseId(..CaseId)
+        If $ISOBJECT(case) && 'case.IsClosed() && ((case.WorkflowSessionId = "") || (case.WorkflowSessionId = ..%SessionId)) {
+            Set text = $EXTRACT($SYSTEM.Status.GetErrorText(pErrorStatus), 1, 400)
+            // A board member or the coordinator the case no longer waits for (an earlier round, or a late call).
+            Set awaited = 1
+            If $EXTRACT(pCompletionKey, 1, 7) = "member:" {
+                Set awaited = 0, code = $EXTRACT(pCompletionKey, 8, *)
+                Set pending = ##class(%DynamicArray).%FromJSON(..PendingJSON), iter = pending.%GetIterator()
+                While iter.%GetNext(.i, .c) { If c = code Set awaited = 1 }
+            } ElseIf pCompletionKey = "coordinator" {
+                Set awaited = ..CoordinatorPending
+            }
+            If 'awaited {
+                Do case.Note("error", "The call " _ pCompletionKey _ " failed after the case had moved on: " _ text, "system")
+                Quit
+            }
+            If pCompletionKey = "execute" {
+                // The write may or may not have been applied: that is for a person to establish, not a failure.
+                Set case.Headline = "Escalated: the write's call failed and its outcome is unknown"
+                Do case.Transition("escalated", "Error from the write call: " _ text _ ". Whether the receiver applied the operation is unknown; a person must check", "system")
+                Quit
+            }
+            Set case.Headline = "Failed: " _ text
+            Do case.Transition("failed", "Error from the call " _ pCompletionKey _ ": " _ text, "system")
+        }
+    } Catch {
+    }
+    Quit $$$OK
 }
 
 // ---- evidence and the board ----
@@ -250,7 +306,7 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
             Quit ..SendPreflight(case)
         }
         If $ISOBJECT(approval) Do approval.Revoke("system: the evidence changed materially on refresh")
-        Set ..PlanId = "", ..ApprovalId = "", ..ReceiverVersion = "", ..ReceiverEpoch = ""
+        Set ..PlanId = "", ..ApprovalId = "", ..ReceiverVersion = "", ..ReceiverEpoch = "", ..AttemptId = ""
         Do case.Note("note", "Evidence refreshed (" _ ..Refreshes _ " of " _ ..MaxRefreshes _ "): the evidence changed materially, so the approval is void and the case is planned again", "system", "snapshot:" _ $SELECT($ISOBJECT(snap): snap.%Id(), 1: ""))
     }
     // A case an incident holds parks here, its evidence and match in the store: the incident decides when it is
@@ -343,6 +399,19 @@ Method OnMember(case As Shutter.Store.Case, code As %String, result As Shutter.B
     Set m = ##class(Shutter.Store.BoardMember).ByCode(code)
     Set sc = ##class(Shutter.Store.AgentRun).FromResponse(case, case.CurrentSnapshot, $SELECT($ISOBJECT(m): m.Role, 1: ""), code, result, ..HeaderIdOf(..%LastCallRequest), .run)
     Quit:$$$ISERR(sc) sc
+    // An answer after the board's time was up is recorded for its cost and changes nothing: no finding, no plan.
+    Set pending = ##class(%DynamicArray).%FromJSON(..PendingJSON), was = 0
+    Set iter = pending.%GetIterator()
+    While iter.%GetNext(.i, .c) { If c = code Set was = 1 }
+    If 'was {
+        Do case.Note("note", $SELECT($ISOBJECT(m): m.Name, 1: code) _ " answered after the board's time was up; the answer is recorded and not used", "system", "run:" _ run.%Id())
+        Quit $$$OK
+    }
+    // An answer about an earlier snapshot (the member timed out in the round before and was asked again) is late too.
+    If ..StaleAnswer(case) {
+        Do case.Note("note", $SELECT($ISOBJECT(m): m.Name, 1: code) _ " answered about an earlier snapshot; the answer is recorded and not used", "system", "run:" _ run.%Id())
+        Quit $$$OK
+    }
     Set usable = (result.Status = "ok") && (result.ResultJSON '= "")
     Set findings = ""
     If usable {
@@ -364,15 +433,10 @@ Method OnMember(case As Shutter.Store.Case, code As %String, result As Shutter.B
         Set ..FailedJSON = failed.%ToJSON()
         Do case.Note("error", $SELECT($ISOBJECT(m): m.Name, 1: code) _ " gave no usable findings: " _ result.Status _ $SELECT(result.Error '= "": ", " _ result.Error, 1: ""), "agent:" _ code, "run:" _ run.%Id())
     }
-    // Remove from the pending list; an answer after the board's time was up is recorded and changes nothing.
-    Set pending = ##class(%DynamicArray).%FromJSON(..PendingJSON)
-    Set rest = [], was = 0
+    // Remove from the pending list.
+    Set rest = []
     Set iter = pending.%GetIterator()
-    While iter.%GetNext(.i, .c) { If c '= code { Do rest.%Push(c) } Else { Set was = 1 } }
-    If 'was {
-        Do case.Note("note", $SELECT($ISOBJECT(m): m.Name, 1: code) _ " answered after the board's time was up; the answer is recorded and not used", "system", "run:" _ run.%Id())
-        Quit $$$OK
-    }
+    While iter.%GetNext(.i, .c) { If c '= code Do rest.%Push(c) }
     Set ..PendingJSON = rest.%ToJSON()
     If rest.%Size() > 0 Quit $$$OK
     Quit ..AfterBoard(case)
@@ -411,13 +475,23 @@ Method AllNoRecord(case As Shutter.Store.Case) As %Boolean
     Quit (+n > 0) && (+other = 0)
 }
 
+/// Whether the call being answered was made about a snapshot other than the case's current one.
+Method StaleAnswer(case As Shutter.Store.Case) As %Boolean
+{
+    Set req = ..%LastCallRequest
+    If '$ISOBJECT(req) || 'req.%IsA("Shutter.Bridge.Msg.AgentRequest") Quit 0
+    Set digest = $PROPERTY(req, "SnapshotDigest")
+    If (digest = "") || '$ISOBJECT(case.CurrentSnapshot) Quit 0
+    Quit digest '= case.CurrentSnapshot.Digest
+}
+
 /// A timer on a board round or on the coordinator: a member that never answers must not hang the case.
 Method ArmTimeout(key As %String) As %Status
 {
     If ..BoardTimeoutSeconds <= 0 Quit $$$OK
     Set alarm = ##class(Ens.AlarmRequest).%New()
     Set alarm.Timeout = ..BoardTimeoutSeconds
-    Quit ..SendRequestAsync("Ens.Alarm", alarm, 1, key)
+    Quit ..SendRequestAsync("Ens.Alarm", alarm, 1, key _ ":" _ ..Round)
 }
 
 Method OnBoardTimeout(case As Shutter.Store.Case) As %Status
@@ -441,9 +515,14 @@ Method OnCoordinatorTimeout(case As Shutter.Store.Case) As %Status
 
 Method OnCoordinator(case As Shutter.Store.Case, result As Shutter.Bridge.Msg.AgentResponse) As %Status
 {
-    Set ..CoordinatorPending = 0
     Set sc = ##class(Shutter.Store.AgentRun).FromResponse(case, case.CurrentSnapshot, "coordinator", "coordinator", result, ..HeaderIdOf(..%LastCallRequest), .run)
     Quit:$$$ISERR(sc) sc
+    // A plan about an earlier snapshot (the coordinator of the round before) is recorded and changes nothing.
+    If ..StaleAnswer(case) {
+        Do case.Note("note", "The coordinator answered about an earlier snapshot; the answer is recorded and not used", "system", "run:" _ run.%Id())
+        Quit $$$OK
+    }
+    Set ..CoordinatorPending = 0
     If (result.Status '= "ok") || (result.ResultJSON = "") {
         Quit case.Transition("escalated", "The coordinator produced no plan: " _ result.Status _ $SELECT(result.Error '= "": ", " _ result.Error, 1: ""), "system", "run:" _ run.%Id())
     }
@@ -614,6 +693,17 @@ Method OnGateProposal(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
             Set case.Headline = "New pattern, a person decides: " _ $EXTRACT(plan.Summary, 1, 200)
             Quit case.Transition("escalated", "The catalogue has no entry for this pattern and the plan writes; a person decides (candidate entry)", "gate", "gate:" _ result.DecisionId)
         }
+        // A lookup that failed at the proposal is not a verdict either: the evidence is collected again and the case is
+        // planned afresh, up to the limit.
+        If ..OnlyRefreshable(result) && (..Refreshes < ..MaxRefreshes) {
+            Set ..Refreshes = ..Refreshes + 1, ..Refreshing = 0
+            Set ..PlanId = "", ..PendingJSON = "[]"
+            Set wait = 10 * (2 ** (..Refreshes - 1))
+            Do case.Note("note", "The proposal gate could not decide (" _ result.Summary _ "); collecting the evidence again in " _ wait _ " s and planning afresh (" _ ..Refreshes _ " of " _ ..MaxRefreshes _ ")", "gate", "gate:" _ result.DecisionId)
+            Set alarm = ##class(Ens.AlarmRequest).%New()
+            Set alarm.Timeout = wait
+            Quit ..SendRequestAsync("Ens.Alarm", alarm, 1, "refresh:retry")
+        }
         Set case.Headline = "Blocked by the gate: " _ result.Summary
         Quit case.Transition("blocked", "The gate did not pass the plan; a person must decide", "gate", "gate:" _ result.DecisionId)
     }
@@ -628,8 +718,8 @@ Method OnGateProposal(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
     Quit ..SendVerify(case)
 }
 
-/// Whether the evidence's lookups all answered: the receiver's state (200, or 404 for an admission), the receipt (200 or
-/// 404) and the capabilities (200, or declared by the profile).
+/// Whether the evidence's lookups all answered: the receiver's state (200, or 404 for an admission), the receipt (200,
+/// 404, or -1 for a receiver that keeps none) and the capabilities (200, or declared by the profile).
 Method Complete(summary As %DynamicObject, case As Shutter.Store.Case) As %Boolean
 {
     If '$ISOBJECT(summary) Quit 0
@@ -638,7 +728,7 @@ Method Complete(summary As %DynamicObject, case As Shutter.Store.Case) As %Boole
     Set route = summary.%Get("route")
     Set cs = $SELECT($ISOBJECT(route): $CLASSMETHOD(json, "Str", route, "capabilities_http_status"), 1: 200)
     If (ws '= 200) && '((ws = 404) && (case.Event = "admit")) Quit 0
-    If (rs '= 200) && (rs '= 404) && (rs '= 0) Quit 0
+    If (rs '= 200) && (rs '= 404) && (rs '= -1) Quit 0
     If cs '= 200 Quit 0
     Quit 1
 }
@@ -846,11 +936,17 @@ Method SendPreflight(case As Shutter.Store.Case) As %Status
 
 Method OnPreflight(case As Shutter.Store.Case, result As Shutter.Msg.WardResult) As %Status
 {
-    If (result.Outcome = "unknown_encounter") && (case.Event = "admit") {
-        Set ..ReceiverVersion = 0
+    If result.Outcome = "unknown_encounter" {
         If result.Epoch '= "" Set ..ReceiverEpoch = result.Epoch
-        Do case.Note("note", "Preflight: the receiver has no encounter yet, as the admission expects (version 0)", "system")
-        Quit ..SendGate(case, "dispatch", "gate:dispatch")
+        If case.Event = "admit" {
+            Set ..ReceiverVersion = 0
+            Do case.Note("note", "Preflight: the receiver has no encounter yet, as the admission expects (version 0)", "system")
+            Quit ..SendGate(case, "dispatch", "gate:dispatch")
+        }
+        // A definite answer, not a failed read: the receiver has no such encounter, so nothing may be written to it. The
+        // gate judges the stored snapshot, not this read, so the case blocks here, for a person.
+        Set case.Headline = "Blocked at dispatch: the receiver does not know encounter " _ case.EncounterId
+        Quit case.Transition("blocked", "The preflight read found no encounter " _ case.EncounterId _ " at the receiver (UNKNOWN_ENCOUNTER); nothing was dispatched, and a person must decide", "system")
     }
     If result.Outcome '= "read" {
         // A receiver that cannot be read right now is asked again, with a growing wait (A1); then the case blocks.
@@ -881,7 +977,7 @@ Method OnGateDispatch(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
             Set ..Replans = ..Replans + 1
             Set approval = ##class(Shutter.Store.Approval).%OpenId(..ApprovalId)
             If $ISOBJECT(approval) Do approval.Revoke("system: the receiver changed before dispatch")
-            Set ..PlanId = "", ..ApprovalId = "", ..ReceiverVersion = "", ..ReceiverEpoch = ""
+            Set ..PlanId = "", ..ApprovalId = "", ..ReceiverVersion = "", ..ReceiverEpoch = "", ..AttemptId = ""
             Set ..Policy = "", ..CatalogueEntry = "", ..CatalogueOutcome = ""
             Do case.Note("note", "The receiver changed after the approval (" _ result.Summary _ "). The approval is void and the case is planned again on fresh evidence", "gate", "gate:" _ result.DecisionId)
             Quit ..StartEvidence(case)
@@ -897,6 +993,8 @@ Method OnGateDispatch(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
         Quit case.Transition("blocked", "The gate did not pass the dispatch: " _ result.Summary, "gate", "gate:" _ result.DecisionId)
     }
     Set plan = ##class(Shutter.Store.Plan).%OpenId(..PlanId)
+    // The dispatch is cleared: the retry budget starts afresh for what follows.
+    Set ..Refreshes = 0
     Set sc = case.Transition("executing", "Dispatching the conditional write (expected version " _ plan.ExpectedVersion _ ")", "system", "gate:" _ result.DecisionId)
     Quit:$$$ISERR(sc) sc
     Quit ..SendRequestAsync(..WardTarget, ..WardOperationFor(case, plan, 0), 1, "execute")
@@ -922,7 +1020,7 @@ Method OnExecute(case As Shutter.Store.Case, result As Shutter.Msg.WardResult) A
     If (outcome = "version_conflict") && (..Replans < 1) {
         Set ..Replans = ..Replans + 1
         If $ISOBJECT(approval) Do approval.Revoke("system: the receiver's version moved before the write")
-        Set ..PlanId = "", ..ApprovalId = "", ..ReceiverVersion = "", ..ReceiverEpoch = ""
+        Set ..PlanId = "", ..ApprovalId = "", ..ReceiverVersion = "", ..ReceiverEpoch = "", ..AttemptId = ""
         Set ..Policy = "", ..CatalogueEntry = "", ..CatalogueOutcome = ""
         Do case.Note("note", "The write was refused: the receiver's version moved between the preflight read and the write (" _ $SELECT(result.ReasonCode '= "": result.ReasonCode, 1: outcome) _ "). The approval is void and the case is planned again on fresh evidence", "system", "attempt:" _ attempt.%Id())
         Quit ..StartEvidence(case)
@@ -948,7 +1046,7 @@ Method OnVerify(case As Shutter.Store.Case, result As Shutter.Msg.VerifyResult) 
     Set detail = ##class(Shutter.Util.Json).Parse(result.DetailJSON, .dsc)
     If $ISOBJECT(detail) {
         Set es = ##class(Shutter.Util.Json).Str(detail, "encounter_http_status"), rs = ##class(Shutter.Util.Json).Str(detail, "receipt_http_status")
-        Set unreadable = ((es '= 200) && (es '= 404)) || ((rs '= 200) && (rs '= 404))
+        Set unreadable = ((es '= 200) && (es '= 404)) || ((rs '= 200) && (rs '= 404) && (rs '= -1))
         If unreadable && (..Refreshes < ..MaxRefreshes) {
             Set ..Refreshes = ..Refreshes + 1
             Set wait = 10 * (2 ** (..Refreshes - 1))
@@ -1079,6 +1177,9 @@ Storage Default
 </Value>
 <Value name="38">
 <Value>MaxRefreshes</Value>
+</Value>
+<Value name="39">
+<Value>Round</Value>
 </Value>
 </Data>
 <DefaultData>CaseWorkflowDefaultData</DefaultData>

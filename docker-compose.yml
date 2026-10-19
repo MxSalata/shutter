@@ -11,6 +11,9 @@ services:
     image: shutter:dev
     container_name: shutter
     restart: unless-stopped
+    # IRIS writes its journal and write image daemon files out before it stops; a longer grace period than Docker's
+    # default 10 s lets a busy instance shut down cleanly instead of being killed mid-write.
+    stop_grace_period: 2m
     # Published on the loopback interface only: the demo instance has well-known passwords.
     ports:
       - "127.0.0.1:${SHUTTER_WEB_PORT:-52773}:52773"

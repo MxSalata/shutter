@@ -14,7 +14,7 @@ Property VisitNumber As %String(COLLATION = "EXACT", MAXLEN = 100);
 
 Index VisitNumber On VisitNumber;
 
-/// PID-3.1, the first repetition, and its assigning authority (PID-3.4).
+/// The patient identifier (the PID-3 repetition typed MR, else the first) and its assigning authority.
 Property PatientId As %String(COLLATION = "EXACT", MAXLEN = 100);
 
 Index PatientId On PatientId;
@@ -82,10 +82,9 @@ ClassMethod OnIndexDoc(pDocObj As EnsLib.HL7.Message, pSearchTable As Shutter.In
             Set pSearchTable.SourceSystem = ##class(Shutter.Util.Json).Str(op, "source_system")
         }
         If pSearchTable.VisitNumber = "" Set pSearchTable.VisitNumber = pDocObj.GetValueAt("PV1:19.1")
-        If pSearchTable.PatientId = "" Set pSearchTable.PatientId = pDocObj.GetValueAt("PID:3(1).1")
-        If pSearchTable.PatientIdAuthority = "" {
-            Set pSearchTable.PatientIdAuthority = pDocObj.GetValueAt("PID:3(1).4.1")
-            If pSearchTable.PatientIdAuthority = "" Set pSearchTable.PatientIdAuthority = pDocObj.GetValueAt("PID:3(1).4")
+        If pSearchTable.PatientId = "" {
+            Set pSearchTable.PatientId = ##class(Shutter.Util.OperationKey).PatientIdentifier(pDocObj, .authority)
+            If pSearchTable.PatientIdAuthority = "" Set pSearchTable.PatientIdAuthority = authority
         }
         If pSearchTable.Location = "" Set pSearchTable.Location = pDocObj.GetValueAt("PV1:3.1")
         If pSearchTable.SourceSystem = "" Set pSearchTable.SourceSystem = pDocObj.GetValueAt("MSH:3.1")
@@ -102,6 +101,8 @@ ClassMethod OnIndexDoc(pDocObj As EnsLib.HL7.Message, pSearchTable As Shutter.In
         Set bodyId = pDocObj.%Id(), hid = "", src = "", tgt = "", tc = ""
         &sql(SELECT TOP 1 ID, SourceConfigName, TargetConfigName, TimeCreated INTO :hid, :src, :tgt, :tc FROM Ens.MessageHeader WHERE MessageBodyClassName = 'EnsLib.HL7.Message' AND MessageBodyId = :bodyId ORDER BY ID)
         If SQLCODE = 0 Set pSearchTable.HeaderId = hid, pSearchTable.SourceConfigName = src, pSearchTable.TargetConfigName = tgt, pSearchTable.TimeCreated = tc
+        // A message with no time of its own takes the header's, so every row sorts and merges.
+        If (pSearchTable.EventTime = "") && (tc '= "") Set pSearchTable.EventTime = $TRANSLATE($PIECE(tc, ".", 1), " ", "T") _ "Z"
         Set pSearchTable.IndexedAt = ##class(Shutter.Util.Time).NowUTC()
     } Catch ex {
         Set sc = ex.AsStatus()

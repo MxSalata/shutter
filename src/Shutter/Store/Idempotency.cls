@@ -3,7 +3,7 @@
 Class Shutter.Store.Idempotency Extends %Persistent
 {
 
-Property Key As %String(MAXLEN = 200) [ Required ];
+Property Key As %String(MAXLEN = 600) [ Required ];
 
 Index KeyIdx On Key [ Unique ];
 

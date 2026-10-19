@@ -631,6 +631,8 @@ ClassMethod ConfigureProvider(key As %String, model As %String = "") As %String 
         If $$$ISERR(sc) Return "config store: " _ $SYSTEM.Status.GetErrorText(sc)
         Set ^Shutter.Config("aihub", "provider") = "AI.LLM.Shutter"
         Set ^Shutter.Config("aihub", "model") = model
+        // A digest of the key, never the key: a later start compares the environment's key against it.
+        Set ^Shutter.Config("aihub", "keyDigest") = ##class(Shutter.Util.Digest).SHA256Hex(key)
         Set ^Shutter.Config("aihub", "providerConfiguredAt") = ##class(Shutter.Util.Time).NowUTC()
         Return "ok: AI.LLM.Shutter, model " _ model
     } Catch ex {
@@ -681,6 +683,87 @@ ClassMethod RecordAgentMode(mode As %String) As %String [ SqlProc ]
     Quit "auto"
 }
 
+/// Whether the configured provider was written from this key (by its digest).
+ClassMethod ProviderKeyMatches(key As %String) As %Boolean
+{
+    // No digest yet (a configuration from before it was recorded): answer no, so the start writes the key again and
+    // stamps it once.
+    Set stored = $GET(^Shutter.Config("aihub", "keyDigest"))
+    If stored = "" Quit 0
+    Quit stored = ##class(Shutter.Util.Digest).SHA256Hex($ZSTRIP(key, "<>W"))
+}
+
+/// Re-reads the knowledge files that changed since they were last read (by their modification stamps): the block
+/// reasons, the catalogue, the site profile seed and the recordings. Run at production start, so a rebuilt image's
+/// knowledge reaches the data a volume kept. Returns a JSON object naming what was re-read.
+ClassMethod RefreshKnowledge(root As %String = "") As %String [ SqlProc ]
+{
+    Set out = {}
+    // From SQL, another root than the installed one needs the approver's right: it replaces the knowledge wholesale.
+    If (root '= "") && $ISOBJECT($GET(%sqlcontext)) && '$SYSTEM.Security.Check("Shutter_Approve", "USE") {
+        Set out.error = "Shutter_Approve is required to refresh the knowledge from another root"
+        Quit out.%ToJSON()
+    }
+    If root = "" Set root = $GET(^Shutter.Config("root"))
+    If root = "" Quit out.%ToJSON()
+    Set root = ##class(%File).NormalizeDirectory(root)
+    Set files("blockReasons") = root _ "knowledge/block-reasons.json"
+    Set files("catalogue") = root _ "knowledge/catalogue/catalogue.json"
+    Set files("siteProfile") = root _ "knowledge/site/profile.json"
+    Set files("records") = root _ "fixtures/records"
+    Set name = ""
+    For {
+        Set name = $ORDER(files(name)) Quit:name=""
+        Set path = files(name), isDir = (name = "records")
+        If isDir { Continue:'##class(%File).DirectoryExists(path) } Else { Continue:'##class(%File).Exists(path) }
+        Set stamp = $SELECT(isDir: ..DirectoryStamp(path), 1: ##class(%File).GetFileDateModified(path, 1) _ ":" _ ##class(%File).GetFileSize(path))
+        Continue:($GET(^Shutter.Config("stamp", name)) = stamp)
+        Set sc = ..ReseedOne(name, path, .n)
+        If $$$ISOK(sc) {
+            Set ^Shutter.Config("stamp", name) = stamp
+            Do out.%Set(name, $SELECT($GET(n) = "": "reread", 1: n))
+        } Else {
+            Do out.%Set(name, "error: " _ $SYSTEM.Status.GetErrorText(sc))
+        }
+    }
+    Quit out.%ToJSON()
+}
+
+/// One knowledge file re-read; n is what it counted, when it counts.
+ClassMethod ReseedOne(name As %String, path As %String, Output n As %String) As %Status [ Private ]
+{
+    Set n = "", sc = $$$OK
+    Try {
+        If name = "blockReasons" {
+            Set sc = ##class(Shutter.Store.BlockReason).SeedFromFile(path, .n)
+            If $$$ISOK(sc) Set ^Shutter.Config("blockReasons") = n
+        } ElseIf name = "catalogue" {
+            Set sc = ##class(Shutter.Catalogue.Entry).SeedFromFile(path, .n)
+            If $$$ISOK(sc) Set ^Shutter.Config("catalogue", "entries") = $GET(n, 0)
+        } ElseIf name = "siteProfile" {
+            Set sc = ##class(Shutter.Store.SiteProfile).SeedFromFile(path)
+        } Else {
+            Set sc = ##class(Shutter.Bridge.Record).ImportDir(path, .n)
+            If $$$ISOK(sc) Set ^Shutter.Config("recordsImported") = n
+        }
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    Quit sc
+}
+
+/// A stamp of a folder's files: each name with its modification time and size.
+ClassMethod DirectoryStamp(dir As %String) As %String [ Private ]
+{
+    Set stamp = ""
+    Set rs = ##class(%ResultSet).%New("%File:FileSet")
+    Do rs.Execute(dir, "*", "Name")
+    While rs.Next() {
+        Set stamp = stamp _ "|" _ rs.Get("ItemName") _ ":" _ rs.Get("DateModified") _ ":" _ rs.Get("Size")
+    }
+    Quit ##class(Shutter.Util.Digest).SHA256Hex(stamp)
+}
+
 /// Whether ConfigureProvider has written AI.LLM.Shutter. Read from the module's own record, so that
 /// callers without the right to read the Config Store (the API's users, the production's jobs) get the
 /// same answer as those with it.
@@ -701,7 +784,7 @@ ClassMethod ClearProvider() As %String [ SqlProc ]
         Do $CLASSMETHOD("%Wallet.KeyValue", "Delete", "Shutter.Anthropic")
     } Catch {
     }
-    Kill ^Shutter.Config("aihub", "provider"), ^Shutter.Config("aihub", "model"), ^Shutter.Config("aihub", "providerConfiguredAt")
+    Kill ^Shutter.Config("aihub", "provider"), ^Shutter.Config("aihub", "model"), ^Shutter.Config("aihub", "providerConfiguredAt"), ^Shutter.Config("aihub", "keyDigest")
     Quit "ok: no provider configured; the agents replay recordings"
 }
 

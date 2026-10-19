@@ -54,23 +54,44 @@ ClassMethod Row() As Shutter.Store.SiteProfile
 }
 
 /// Store a profile (JSON text) as the current one, with the next version.
-ClassMethod Store(json As %String, source As %String = "", user As %String = "") As %Status
+ClassMethod Store(json As %String, source As %String = "", user As %String = "", expectedVersion As %String = "", Output currentVersion As %Integer) As %Status
 {
+    Set currentVersion = 0
     Set p = ##class(Shutter.Util.Json).Parse(json, .sc)
     If '$ISOBJECT(p) || $$$ISERR(sc) Quit $$$ERROR($$$GeneralError, "The profile is not a JSON object")
-    Set row = ..Row()
-    If '$ISOBJECT(row) Set row = ..%New(), row.Version = 0
     Set problem = ..Validate(p)
     If problem '= "" Quit $$$ERROR($$$GeneralError, "The profile is not valid: " _ problem)
-    Set row.Version = row.Version + 1
-    Set row.Json = p.%ToJSON(), row.Source = source, row.UpdatedBy = user
-    Set row.UpdatedAt = ##class(Shutter.Util.Time).NowUTC()
-    Set sc = row.%Save()
-    Quit:$$$ISERR(sc) sc
-    // Every change is kept, with who made it and from where (CONTRACTS 6.4).
-    Set v = ##class(Shutter.Store.SiteProfileVersion).%New()
-    Set v.Version = row.Version, v.Json = row.Json, v.Source = source, v.UpdatedAt = row.UpdatedAt, v.UpdatedBy = user
-    Quit v.%Save()
+    // One writer at a time: the version check (expectedVersion, when given), the increment and the two saves happen
+    // under the lock, so two concurrent PUTs cannot both pass the check and both write.
+    LOCK +^Shutter.SiteProfile:5
+    If '$TEST Quit $$$ERROR($$$GeneralError, "The site profile is being written by someone else; try again")
+    Try {
+        Set row = ..Row()
+        If '$ISOBJECT(row) Set row = ..%New(), row.Version = 0
+        If (expectedVersion '= "") && (+expectedVersion '= +row.Version) {
+            Set currentVersion = +row.Version
+            Set sc = $$$ERROR($$$GeneralError, "stale_version")
+            Quit
+        }
+        TSTART
+        Set row.Version = row.Version + 1
+        Set row.Json = p.%ToJSON(), row.Source = source, row.UpdatedBy = $EXTRACT(user, 1, 160)
+        Set row.UpdatedAt = ##class(Shutter.Util.Time).NowUTC()
+        Set sc = row.%Save()
+        If $$$ISOK(sc) {
+            // Every change is kept, with who made it and from where (CONTRACTS 6.4).
+            Set v = ##class(Shutter.Store.SiteProfileVersion).%New()
+            Set v.Version = row.Version, v.Json = row.Json, v.Source = source, v.UpdatedAt = row.UpdatedAt, v.UpdatedBy = row.UpdatedBy
+            Set sc = v.%Save()
+        }
+        If $$$ISOK(sc) { TCOMMIT } Else { TROLLBACK }
+        Set currentVersion = +row.Version
+    } Catch ex {
+        Set sc = ex.AsStatus()
+        If $TLEVEL > 0 TROLLBACK
+    }
+    LOCK -^Shutter.SiteProfile
+    Quit sc
 }
 
 /// The validator for SQL and tests: "ok", or the problem.
@@ -110,6 +131,9 @@ ClassMethod Validate(p As %DynamicObject) As %String
                 If '$LISTFIND($LISTBUILD("base", "state", "receipt", "capabilities", "operations"), k) Return at _ ".api." _ k _ ": unknown path"
                 If api.%GetTypeOf(k) '= "string" Return at _ ".api." _ k _ ": must be a string"
             }
+            // Without a state path nothing can be read, and without an operations path nothing can be sent.
+            If $CLASSMETHOD(json, "Str", api, "state") = "" Return at _ ".api.state: required when api is given"
+            If $CLASSMETHOD(json, "Str", api, "operations") = "" Return at _ ".api.operations: required when api is given"
         }
         If r.%IsDefined("features") {
             Set f = r.%Get("features")
@@ -154,9 +178,14 @@ ClassMethod SeedFromFile(path As %String) As %Status
     If '##class(%File).Exists(path) Quit $$$OK
     Set text = ##class(Shutter.Knowledge.Text).ReadFile(path)
     If text = "" Quit $$$OK
+    Set p = ##class(Shutter.Util.Json).Parse(text, .sc)
+    If '$ISOBJECT(p) || $$$ISERR(sc) Quit $$$ERROR($$$GeneralError, "The seed profile " _ path _ " is not a JSON object")
     Set row = ..Row()
-    If $ISOBJECT(row) && (row.Source = path) && (row.Json = ##class(Shutter.Util.Json).Parse(text, .sc).%ToJSON()) Quit $$$OK
-    Quit ..Store(text, path)
+    // The seed fills an empty store and follows its own file; a profile a person saved (another source) is theirs and
+    // is never overwritten by a reinstall or a restart.
+    If $ISOBJECT(row) && (row.Source '= path) Quit $$$OK
+    If $ISOBJECT(row) && (row.Json = p.%ToJSON()) Quit $$$OK
+    Quit ..Store(p.%ToJSON(), path)
 }
 
 /// The receiver's tier (the production item's name), default 2.

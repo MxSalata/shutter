@@ -165,8 +165,9 @@ ClassMethod Idempotent(bodyText As %String, Output replayed As %Boolean) As %Int
     Set replayed = 0
     Set key = %request.GetCgiEnv("HTTP_IDEMPOTENCY_KEY")
     If key = "" Quit 0
+    If $LENGTH(key) > 128 Do ..Fail("400 Bad Request", "bad_request", "Idempotency-Key is longer than 128 characters") Set replayed = 1 Quit -1
     Set digest = ##class(Shutter.Util.Digest).SHA256Hex(bodyText)
-    Set found = ##class(Shutter.Store.Idempotency).Lookup(..User() _ "|" _ key, digest, .status, .response)
+    Set found = ##class(Shutter.Store.Idempotency).Lookup(..IdempotencyKey(key), digest, .status, .response)
     If found = -1 Do ..Fail("409 Conflict", "idempotency_key_reused", "This key was used with another body") Set replayed = 1 Quit -1
     If found = 1 {
         Set %response.Status = status
@@ -182,7 +183,14 @@ ClassMethod Remember(bodyText As %String, status As %String, response As %String
 {
     Set key = %request.GetCgiEnv("HTTP_IDEMPOTENCY_KEY")
     Quit:(key="")
-    Do ##class(Shutter.Store.Idempotency).Store(..User() _ "|" _ key, ##class(Shutter.Util.Digest).SHA256Hex(bodyText), status, response)
+    Do ##class(Shutter.Store.Idempotency).Store(..IdempotencyKey(key), ##class(Shutter.Util.Digest).SHA256Hex(bodyText), status, response)
+}
+
+/// The stored key is scoped to the user, the method and the route, so the same client key on another route (or
+/// another user's) is another request, never a replay of this one.
+ClassMethod IdempotencyKey(key As %String) As %String
+{
+    Quit ..User() _ "|" _ %request.Method _ "|" _ %request.URL _ "|" _ key
 }
 
 /// Rows of a SQL query as projected objects of a class.
@@ -245,7 +253,8 @@ ClassMethod Health() As %Status
     If $SYSTEM.Security.Check("Shutter_Operate", "USE") Quit ..Json(full)
     // Anyone may ask whether the instance is up and whether it is the demo; the rest is for signed-in users.
     Set o = {}
-    For key = "status", "ok", "demo", "version", "production", "mode" { If full.%IsDefined(key) Do o.%Set(key, full.%Get(key), $SELECT(full.%GetTypeOf(key) = "boolean": "boolean", 1: "")) }
+    For key = "status", "ok", "demo", "version", "production", "production_state", "mode" { If full.%IsDefined(key) Do o.%Set(key, full.%Get(key), $SELECT(full.%GetTypeOf(key) = "boolean": "boolean", 1: "")) }
+    Do o.%Set("ok", ##class(Shutter.Util.Json).Str(full, "production_state") = "running", "boolean")
     Quit ..Json(o)
 }
 
@@ -362,6 +371,8 @@ ClassMethod Cases() As %Status
     Set limit = +$GET(%request.Data("limit", 1), 50), offset = +$GET(%request.Data("offset", 1), 0)
     If limit < 1 Set limit = 50
     If limit > 500 Set limit = 500
+    If offset < 0 Set offset = 0
+    If offset > 100000 Set offset = 100000
     Set where = "", args = 0
     If state '= "" Set where = where _ " AND State = ?", args = args + 1, args(args) = state
     If scenario '= "" Set where = where _ " AND Scenario = ?", args = args + 1, args(args) = scenario
@@ -754,16 +765,14 @@ ClassMethod SiteProfilePut() As %Status
     // would otherwise win): the stored version must still be the one the caller read.
     Set expected = ##class(Shutter.Util.Json).Str(body, "expectedVersion")
     If body.%IsDefined("expectedVersion") Do body.%Remove("expectedVersion")
-    If expected '= "" {
-        Set current = ##class(Shutter.Util.Json).Str(##class(Shutter.Store.SiteProfile).Current(), "version", 0)
-        If +expected '= +current {
-            Set extra = {} Set extra.currentVersion = +current
-            Quit ..Fail("409 Conflict", "stale_version", "expectedVersion is not the stored profile's version", extra)
-        }
-    }
     Set problem = ##class(Shutter.Store.SiteProfile).Validate(body)
     If problem '= "" Quit ..Fail("400 Bad Request", "bad_request", "The profile is not valid (CONTRACTS 6.4): " _ problem)
-    Set sc = ##class(Shutter.Store.SiteProfile).Store(body.%ToJSON(), "api", $USERNAME)
+    // The store checks the version under its own lock, so the check and the write are one step.
+    Set sc = ##class(Shutter.Store.SiteProfile).Store(body.%ToJSON(), "api", $USERNAME, expected, .current)
+    If $$$ISERR(sc) && ($SYSTEM.Status.GetErrorText(sc) [ "stale_version") {
+        Set extra = {} Set extra.currentVersion = +current
+        Quit ..Fail("409 Conflict", "stale_version", "expectedVersion is not the stored profile's version", extra)
+    }
     If $$$ISERR(sc) Quit ..Fail("500 Internal Server Error", "store_failed", $SYSTEM.Status.GetErrorText(sc))
     Quit ..SiteProfileGet()
 }
@@ -772,7 +781,10 @@ ClassMethod SiteProfilePut() As %Status
 ClassMethod SiteProfileHistory() As %Status
 {
     If '..Allow() Quit $$$OK
-    Quit ..Json(##class(Shutter.Store.SiteProfileVersion).History(+$GET(%request.Data("limit", 1), 50)))
+    Set limit = +$GET(%request.Data("limit", 1), 50)
+    If limit < 1 Set limit = 50
+    If limit > 500 Set limit = 500
+    Quit ..Json(##class(Shutter.Store.SiteProfileVersion).History(limit))
 }
 
 // ---- the exact index (CONTRACTS 8) ----
@@ -829,7 +841,8 @@ ClassMethod Incidents() As %Status
     If '..Allow() Quit $$$OK
     Set state = $GET(%request.Data("state", 1))
     Set limit = +$GET(%request.Data("limit", 1), 50)
-    If (limit < 1) || (limit > 500) Set limit = 50
+    If limit < 1 Set limit = 50
+    If limit > 500 Set limit = 500
     Set where = "", args = 0
     If state '= "" Set where = " AND State = ?", args = 1, args(1) = state
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.Incident WHERE 1=1" _ where _ " ORDER BY ID DESC", args...)
