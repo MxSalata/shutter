@@ -1,11 +1,12 @@
 /// The operation key identifies a business operation, not a message (docs/CONTRACTS.md, section 2):
 /// <source_system>^<patient_id_authority>^<patient_id>^<encounter_id>^<event>^<event_time>.
-/// The same transfer resent under a new message control id has the same key.
+/// The same transfer resent under a new message control id has the same key. The trigger table (EventForTrigger)
+/// gives the event word of each ADT trigger, and DeliveryOf says what the feed does with the word: deliver it, index
+/// it only, treat it as a cancel or as a merge.
 Class Shutter.Util.OperationKey Extends %RegisteredObject
 {
 
-/// Build a key from its parts. The event is one of admit, transfer, discharge, update; the time
-/// is ISO 8601 UTC.
+/// Build a key from its parts. The event is one of the words of EventForTrigger; the time is ISO 8601 UTC.
 ClassMethod FromParts(sourceSystem As %String, authority As %String, patientId As %String, encounterId As %String, event As %String, eventTime As %String) As %String
 {
     Quit sourceSystem _ "^" _ authority _ "^" _ patientId _ "^" _ encounterId _ "^" _ event _ "^" _ eventTime
@@ -25,8 +26,17 @@ ClassMethod PatientIdentifier(message As EnsLib.HL7.Message, Output authority As
 }
 
 /// The downstream operation (as a dynamic object with the contract's field names) for an HL7 ADT message,
-/// with its operation key and payload digest filled in. Returns "" with an error status when a
-/// required field is missing.
+/// with its operation key and payload digest filled in. Returns "" with an error status when the trigger is not in
+/// the table or a required field is missing.
+/// PV1-19 is required for the events that are delivered or cancelled. For the indexed-only events (register,
+/// preadmit, person_add, person_update) and a merge, the key's encounter piece is PV1-19 when present, else the
+/// literal "-", never empty: the timeline returns nothing for "-" and the evidence skips the encounter reads.
+/// An A04 whose PV1-2 is I and whose PV1-3.1 names a bed is an admit, not a register. The ward is carried for admit
+/// and transfer only, as before.
+/// A merge (A40) also carries prior_patient_id and prior_patient_id_authority (MRG-1, the repetition typed MR, else
+/// the first), prior_encounter_id (MRG-5) and merge_groups, the number of MRG segments (one per PATIENT group; the
+/// prior fields are the first group's). They sit outside the canonical payload (CONTRACTS 1.6), so the digest is the
+/// same eight-key form as before.
 ClassMethod FromHL7(message As EnsLib.HL7.Message, Output sc As %Status) As %DynamicObject
 {
     Set sc = $$$OK
@@ -41,13 +51,18 @@ ClassMethod FromHL7(message As EnsLib.HL7.Message, Output sc As %Status) As %Dyn
         If eventTime = "" Set eventTime = message.GetValueAt("EVN:2.1")
         Set event = ..EventForTrigger(trigger)
         If event = "" Set sc = $$$ERROR($$$GeneralError, "Unsupported ADT trigger: " _ trigger) Quit
+        // An A04 for an inpatient with a bed is an admission the receiver can take; any other registration is indexed only.
+        If (event = "register") && ($ZCONVERT(message.GetValueAt("PV1:2"), "U") = "I") && (ward '= "") Set event = "admit"
+        Set how = ..DeliveryOf(event)
         Set missing = ""
         If sourceSystem = "" Set missing = "MSH-3 sending application"
         If patientId = "" Set missing = "PID-3 patient identifier"
         If authority = "" Set missing = "PID-3 assigning authority"
-        If encounterId = "" Set missing = "PV1-19 visit number"
+        If (encounterId = "") && ((how = "deliver") || (how = "cancel")) Set missing = "PV1-19 visit number"
         If eventTime = "" Set missing = "EVN-6 or EVN-2 event time"
         If missing '= "" Set sc = $$$ERROR($$$GeneralError, "Missing field for the operation key: " _ missing) Quit
+        // A registration, a person update or a merge may carry no visit number: the piece is "-", never empty.
+        If encounterId = "" Set encounterId = "-"
         Set isoTime = ##class(Shutter.Util.Time).FromHL7(eventTime)
         Set op = {}
         Set op."operation_key" = ..FromParts(sourceSystem, authority, patientId, encounterId, event, isoTime)
@@ -64,6 +79,7 @@ ClassMethod FromHL7(message As EnsLib.HL7.Message, Output sc As %Status) As %Dyn
         Set op."source_system" = sourceSystem
         Set op."source_message_id" = controlId
         Set op."payload_digest" = ##class(Shutter.Util.Digest).WardPayloadDigest(op)
+        If event = "merge" Do ..MergeFields(message, op)
     } Catch ex {
         Set sc = ex.AsStatus()
     }
@@ -71,11 +87,46 @@ ClassMethod FromHL7(message As EnsLib.HL7.Message, Output sc As %Status) As %Dyn
     Quit op
 }
 
-/// admit, transfer, discharge or update for an ADT trigger event; "" for anything else.
+/// The prior record of a merge (A40) from the message's MRG segments, added to the operation: prior_patient_id and
+/// prior_patient_id_authority (MRG-1, the repetition typed MR by CX.5, else the first), prior_encounter_id (MRG-5),
+/// both from the first MRG, and merge_groups, how many MRG segments the message has (one per PATIENT group).
+ClassMethod MergeFields(message As EnsLib.HL7.Message, op As %DynamicObject)
+{
+    Set index = "", groups = 0
+    For {
+        Set seg = message.FindSegment("MRG", .index)
+        Quit:((index = "") || '$ISOBJECT(seg))
+        Set groups = groups + 1
+        If groups = 1 {
+            Set reps = +seg.GetValueAt("1(*)"), pick = 1
+            For r = 1:1:reps { If $ZCONVERT(seg.GetValueAt("1(" _ r _ ").5"), "U") = "MR" Set pick = r Quit }
+            Set priorAuthority = seg.GetValueAt("1(" _ pick _ ").4.1")
+            If priorAuthority = "" Set priorAuthority = seg.GetValueAt("1(" _ pick _ ").4")
+            Set op."prior_patient_id" = seg.GetValueAt("1(" _ pick _ ").1")
+            Set op."prior_patient_id_authority" = priorAuthority
+            Set op."prior_encounter_id" = seg.GetValueAt("5.1")
+        }
+    }
+    Set op."merge_groups" = groups
+}
+
+/// The trigger table (CONTRACTS 2): the event word for an ADT trigger, "" for anything else.
+/// A01 admit, A02 transfer, A03 discharge, A04 register, A05 preadmit, A06 and A07 update (a change of patient
+/// class), A08 update, A11 cancel_admit, A12 cancel_transfer, A13 cancel_discharge, A28 person_add, A31
+/// person_update, A40 merge. FromHL7 turns a register with PV1-2 I and a bed into an admit.
 ClassMethod EventForTrigger(trigger As %String) As %String
 {
     Set trigger = $ZCONVERT(trigger, "U")
-    Quit $CASE(trigger, "A01": "admit", "A02": "transfer", "A03": "discharge", "A08": "update", : "")
+    Quit $CASE(trigger, "A01": "admit", "A02": "transfer", "A03": "discharge", "A04": "register", "A05": "preadmit", "A06": "update", "A07": "update", "A08": "update", "A11": "cancel_admit", "A12": "cancel_transfer", "A13": "cancel_discharge", "A28": "person_add", "A31": "person_update", "A40": "merge", : "")
+}
+
+/// What the feed does with an event word: "deliver" (admit, transfer, discharge, update go to the receiver),
+/// "index" (register, preadmit, person_add, person_update are recorded by the index and not delivered), "cancel"
+/// (the three cancel words: delivered only to a receiver whose profile entry says cancels), "merge" (delivered only
+/// when the site allows merges and the receiver takes them), "" for a word not in the table.
+ClassMethod DeliveryOf(event As %String) As %String
+{
+    Quit $CASE(event, "admit": "deliver", "transfer": "deliver", "discharge": "deliver", "update": "deliver", "register": "index", "preadmit": "index", "person_add": "index", "person_update": "index", "cancel_admit": "cancel", "cancel_transfer": "cancel", "cancel_discharge": "cancel", "merge": "merge", : "")
 }
 
 }

@@ -26,7 +26,10 @@ Property Version As %Integer(%JSONFIELDNAME = "version") [ InitialExpression = 1
 /// How the case is investigated: the board, a single investigator, or rules only.
 Property Mode As %String(%JSONFIELDNAME = "mode", MAXLEN = 16, VALUELIST = ",board,single,rules,policy") [ InitialExpression = "board" ];
 
-Property FailureKind As %String(%JSONFIELDNAME = "failureKind", MAXLEN = 32, VALUELIST = ",delivery_failed,uncertain_outcome,rejected,unmappable");
+/// delivery_failed, uncertain_outcome and rejected are the connector's answers; unmappable, a message that maps to no
+/// operation; withheld, an operation the feed never sent (a merge the site's policy keeps for the PAS team, a cancel
+/// the receiver cannot reverse), with the reason in FailureReasonCode (merge, cancel_unsupported).
+Property FailureKind As %String(%JSONFIELDNAME = "failureKind", MAXLEN = 32, VALUELIST = ",delivery_failed,uncertain_outcome,rejected,unmappable,withheld");
 
 Property FailureText As %String(%JSONFIELDNAME = "failureText", MAXLEN = 2000);
 
@@ -49,9 +52,22 @@ Property SourceSystem As %String(%JSONFIELDNAME = "sourceSystem", MAXLEN = 100);
 
 Property SourceMessageId As %String(%JSONFIELDNAME = "sourceMessageId", MAXLEN = 200);
 
-Property Event As %String(%JSONFIELDNAME = "event", MAXLEN = 16);
+/// The event word of the operation key (Shutter.Util.OperationKey.EventForTrigger): admit, transfer, discharge,
+/// update, the cancel words, merge, the indexed-only words; the raw trigger for an unmappable case.
+Property Event As %String(%JSONFIELDNAME = "event", MAXLEN = 32);
 
 Property Ward As %String(%JSONFIELDNAME = "ward", MAXLEN = 100);
+
+/// A merge's prior record (A40, CONTRACTS 2): the patient identifier the merge discards (MRG-1) with its assigning
+/// authority, the prior visit (MRG-5), and how many MRG segments the message carried (one per PATIENT group); the
+/// identifiers are the first group's.
+Property PriorPatientId As %String(%JSONFIELDNAME = "priorPatientId", MAXLEN = 100);
+
+Property PriorPatientIdAuthority As %String(%JSONFIELDNAME = "priorPatientIdAuthority", MAXLEN = 100);
+
+Property PriorEncounterId As %String(%JSONFIELDNAME = "priorEncounterId", MAXLEN = 100);
+
+Property MergeGroups As %Integer(%JSONFIELDNAME = "mergeGroups");
 
 /// The production item the failed delivery went to (the receiver), for incidents (CONTRACTS 7).
 Property Receiver As %String(%JSONFIELDNAME = "receiver", MAXLEN = 128);
@@ -139,6 +155,11 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
     Set case.SourceMessageId = ##class(Shutter.Util.Json).Str(op, "source_message_id")
     Set case.Event = op."event"
     Set case.Ward = ##class(Shutter.Util.Json).Str(op, "ward")
+    Set case.PriorPatientId = ##class(Shutter.Util.Json).Str(op, "prior_patient_id")
+    Set case.PriorPatientIdAuthority = ##class(Shutter.Util.Json).Str(op, "prior_patient_id_authority")
+    Set case.PriorEncounterId = ##class(Shutter.Util.Json).Str(op, "prior_encounter_id")
+    Set groups = ##class(Shutter.Util.Json).Str(op, "merge_groups")
+    If groups '= "" Set case.MergeGroups = +groups
     Set case.EventTime = op."event_time"
     Set case.EnsSessionId = ensSessionId
     Set case.SourceHeaderId = sourceHeaderId
@@ -292,13 +313,19 @@ ClassMethod NextId() As %String [ Private ]
     Quit "C-" _ $TRANSLATE($JUSTIFY(n, 6), " ", "0")
 }
 
-/// A one-line description of the failure for the headline.
+/// A one-line description of the failure for the headline. The four movements keep their wording ("The transfer to
+/// WARD-B of 2026-10-15 09:20:00 for encounter ENC-1001 was not delivered"); a cancel reads "The cancellation of the
+/// transfer to WARD-B at ...", a merge "The merge of <prior patient id> into <patient id> at ...", and the encounter
+/// clause is left out when the key's encounter piece is the literal "-" (no visit number).
 ClassMethod DescribeFailure(case As Shutter.Store.Case) As %String [ Private ]
 {
-    Set what = $CASE(case.Event, "admit": "admission", "transfer": "transfer to " _ case.Ward, "discharge": "discharge", "update": "update", "": "message", : case.Event _ " message")
+    Set what = $CASE(case.Event, "admit": "admission", "transfer": "transfer to " _ case.Ward, "discharge": "discharge", "update": "update", "merge": $SELECT(case.PriorPatientId '= "": "merge of " _ case.PriorPatientId _ " into " _ case.PatientId, 1: "merge into " _ case.PatientId), "cancel_admit": "cancellation of the admission", "cancel_transfer": "cancellation of the transfer" _ $SELECT(case.Ward '= "": " to " _ case.Ward, 1: ""), "cancel_discharge": "cancellation of the discharge", "register": "registration", "preadmit": "pre-admission", "person_add": "person record", "person_update": "person update", "": "message", : case.Event _ " message")
     Set when = $REPLACE($PIECE(case.EventTime, "Z", 1), "T", " ")
-    Set how = $CASE(case.FailureKind, "delivery_failed": "was not delivered", "uncertain_outcome": "has an uncertain outcome", "rejected": "was rejected", "unmappable": "could not be mapped to an operation for the downstream system", : "failed")
-    Quit "The " _ what _ " of " _ when _ " for encounter " _ case.EncounterId _ " " _ how
+    Set how = $CASE(case.FailureKind, "delivery_failed": "was not delivered", "uncertain_outcome": "has an uncertain outcome", "rejected": "was rejected", "unmappable": "could not be mapped to an operation for the downstream system", "withheld": "was withheld by the site's policy", : "failed")
+    // A cancel or a merge happens at its time; the movements keep "of".
+    Set joiner = $SELECT((case.Event = "merge") || ($EXTRACT(case.Event, 1, 7) = "cancel_"): " at ", 1: " of ")
+    Set where = $SELECT(case.EncounterId = "-": "", 1: " for encounter " _ case.EncounterId)
+    Quit "The " _ what _ joiner _ when _ where _ " " _ how
 }
 
 /// The case's events, oldest first, as a dynamic array.

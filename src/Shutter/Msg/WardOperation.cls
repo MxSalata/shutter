@@ -15,8 +15,9 @@ Property PatientId As %String(MAXLEN = 100);
 
 Property PatientIdAuthority As %String(MAXLEN = 100);
 
-/// admit, transfer, discharge, update.
-Property Event As %String(MAXLEN = 16);
+/// admit, transfer, discharge, update; cancel_admit, cancel_transfer, cancel_discharge and merge for a receiver whose
+/// profile entry says it takes them (CONTRACTS 1.1).
+Property Event As %String(MAXLEN = 32);
 
 Property Ward As %String(MAXLEN = 100);
 

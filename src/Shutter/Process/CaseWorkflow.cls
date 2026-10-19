@@ -131,6 +131,8 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
         Set status = ##class(Shutter.Util.Json).Str(wr, "http_status")
         If +status > 0 Set case.FailureHttpStatus = +status
     }
+    // A withheld operation was never sent: its reason code (merge, cancel_unsupported) is the feed's, not the connector's.
+    If (request.FailureReasonCode '= "") && ($ZSTRIP(request.WardResultJSON, "<>W") = "") Set case.FailureReasonCode = request.FailureReasonCode
     Do case.%Save()
     $$$TRACE("Case " _ case.CaseId _ " opened (" _ case.Mode _ "): " _ case.Headline)
     // Detection (CONTRACTS 7.1): this failure counts towards an incident for the receiver; at the threshold one

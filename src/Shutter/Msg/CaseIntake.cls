@@ -1,14 +1,20 @@
-/// Opens a case: sent by the feed process when a delivery failed or its outcome is uncertain.
+/// Opens a case: sent by the feed process when a delivery failed, its outcome is uncertain, the message could not
+/// be mapped, or the operation was withheld (a merge the site's policy keeps for the PAS team, a cancel the receiver
+/// cannot reverse).
 Class Shutter.Msg.CaseIntake Extends Ens.Request
 {
 
 /// The downstream operation as a JSON object (the contract's fields).
 Property OperationJSON As %String(MAXLEN = "");
 
-/// delivery_failed, uncertain_outcome, rejected.
+/// delivery_failed, uncertain_outcome, rejected, unmappable, withheld.
 Property FailureKind As %String(MAXLEN = 32);
 
 Property FailureText As %String(MAXLEN = 2000);
+
+/// The feed's own reason code for a case with no connector answer: merge (a merge withheld by the site's policy) or
+/// cancel_unsupported (a cancel the receiver cannot reverse). The connector's reason code travels in WardResultJSON.
+Property FailureReasonCode As %String(MAXLEN = 100);
 
 /// The Ens.MessageHeader id of the HL7 message whose delivery failed.
 Property SourceHeaderId As %String(MAXLEN = 20);
