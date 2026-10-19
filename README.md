@@ -124,6 +124,26 @@ offset such as `+01:00`. The zone changes every operation key, so set it before 
 `event_time` condition and the gate then block a resend whose event time precedes its admission, lies in the future, is
 far from when it was recorded, or sits within an hour of a clock change.
 
+**The HL7 schema and the triggers.** Each HL7 service parses with its own schema category, as IRIS does (the demo's
+`ADT In` uses 2.5.1; a site's route sets 2.3.1, 2.4 or its own custom category, or one category per message type), and
+Shutter reads the fields it needs by position, which are the same in 2.3.1, 2.4 and 2.5.1: MSH, EVN, PID-3, PV1-2, -3,
+-19 and -44, MRG for a merge. The evidence notes when the message's own version (MSH-12) differs from the route's
+category; it is a note for the conformance review, never a failure. The feed maps every common ADT trigger: A01, A02,
+A03 and A08 are delivered to the downstream system as the admission, transfer, discharge and update they are, A06 and
+A07 (a change of patient class) as updates, and an A04 registration as an admission only when it names an inpatient
+with a bed; registrations without a bed, pre-admissions (A05) and person events (A28, A31) are recorded in the exact
+index, where the case page's timeline shows them between the movements, and are not delivered. Anything else opens a
+case that says the message could not be mapped.
+
+**Merges and cancellations.** By default Shutter never touches an ADT^A40 merge: the message is withheld, a case opens
+with the surviving and prior identifiers, the gate refuses any resend (`MERGE_WITHHELD`), and the escalation draft goes
+to the team the site profile names for the sending application (`teams[].sources`), the PAS team as a rule. A site
+whose risk tolerance allows it sets `merges: allowed` in the profile and `merges: true` on a receiver that takes merges.
+Cancellations (A11, A12, A13) are delivered only to a receiver whose entry says `cancels: true`; the demo's downstream
+system cannot reverse an event, so a cancellation is withheld and escalated (`CANCEL_UNSUPPORTED`). Once a team has
+corrected the receiver by hand, the case page's "Mark as handled by the team" (`POST /cases/{id}/close`) closes the case
+with the reason on its record.
+
 The same `Dockerfile` builds the replay edition on any IRIS for Health Community 2026.2 or later:
 `SHUTTER_IMAGE=containers.intersystems.com/intersystems/irishealth-community:2026.2 SHUTTER_WITH_AIHUB=0 docker compose up -d --build` (the image CI builds from). Other
 settings in `.env.example`: the published ports, the agents' mode and model.
