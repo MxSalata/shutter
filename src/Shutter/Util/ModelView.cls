@@ -219,21 +219,21 @@ ClassMethod LearnMessage(case As Shutter.Store.Case, ByRef cand) As %String [ Pr
         If $ISOBJECT(header) {
             Set msg = ##class(EnsLib.HL7.Message).%OpenId(header.MessageBodyId)
             If $ISOBJECT(msg) {
-                Set reps = +msg.GetValueAt("PID:3(*)")
+                Set reps = +##class(Shutter.Util.OperationKey).Value(msg, "PID", "3(*)")
                 For r = 1:1:reps {
-                    Set id = msg.GetValueAt("PID:3(" _ r _ ").1"), type = $ZCONVERT(msg.GetValueAt("PID:3(" _ r _ ").5"), "U")
+                    Set id = ##class(Shutter.Util.OperationKey).Value(msg, "PID", "3(" _ r _ ").1"), type = $ZCONVERT(##class(Shutter.Util.OperationKey).Value(msg, "PID", "3(" _ r _ ").5"), "U")
                     Continue:id=""
                     Set k = $CASE(type, "MR": "MRN", "NH": "NHS", "NHS": "NHS", "NI": "NHS", : "PID")
                     If id = case.PatientId { Set kind = k } Else { Set cand(k, id) = "" }
                 }
-                Set names = +msg.GetValueAt("PID:5(*)")
+                Set names = +##class(Shutter.Util.OperationKey).Value(msg, "PID", "5(*)")
                 For r = 1:1:names {
                     For c = 1, 2, 3 {
-                        Set part = $ZSTRIP(msg.GetValueAt("PID:5(" _ r _ ")." _ c), "<>W")
+                        Set part = $ZSTRIP(##class(Shutter.Util.OperationKey).Value(msg, "PID", "5(" _ r _ ")." _ c), "<>W")
                         If $LENGTH(part) >= 3 Set cand("NAME", part) = ""
                     }
                 }
-                Set dob = $ZSTRIP(msg.GetValueAt("PID:7.1"), "<>W")
+                Set dob = $ZSTRIP(##class(Shutter.Util.OperationKey).Value(msg, "PID", "7.1"), "<>W")
                 If $LENGTH(dob) >= 8 {
                     Set cand("DOB", $EXTRACT(dob, 1, 8)) = ""
                     Set cand("DOB", $EXTRACT(dob, 1, 4) _ "-" _ $EXTRACT(dob, 5, 6) _ "-" _ $EXTRACT(dob, 7, 8)) = ""

@@ -207,12 +207,12 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
         Do info.%Set("event_time_had_offset", $SELECT(msg.GetValueAt("EVN:6.1") '= "": had, 1: recordedHad), "boolean")
         Set pid = ##class(Shutter.Util.OperationKey).PatientIdentifier(msg, .pidAuthority, .pidType)
         Set info."patient_identifier" = pid _ "^^^" _ pidAuthority _ "^" _ pidType
-        Set info."patient_name" = msg.GetValueAt("PID:5(1).1") _ ", " _ msg.GetValueAt("PID:5(1).2")
-        Set info."patient_class" = msg.GetValueAt("PV1:2")
-        Set info."assigned_location" = msg.GetValueAt("PV1:3.1") _ "^" _ msg.GetValueAt("PV1:3.2") _ "^" _ msg.GetValueAt("PV1:3.3") _ "^" _ msg.GetValueAt("PV1:3.4")
-        Set info."visit_number" = msg.GetValueAt("PV1:19.1")
-        Set info."admit_time" = ##class(Shutter.Util.Time).FromHL7(msg.GetValueAt("PV1:44.1"), zone, .had)
-        If msg.GetValueAt("PV1:44.1") '= "" { If had { Set withOffset = withOffset + 1 } Else { Set without = without + 1 } }
+        Set info."patient_name" = ##class(Shutter.Util.OperationKey).Value(msg, "PID", "5(1).1") _ ", " _ ##class(Shutter.Util.OperationKey).Value(msg, "PID", "5(1).2")
+        Set info."patient_class" = ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "2")
+        Set info."assigned_location" = ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.1") _ "^" _ ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.2") _ "^" _ ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.3") _ "^" _ ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.4")
+        Set info."visit_number" = ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "19.1")
+        Set info."admit_time" = ##class(Shutter.Util.Time).FromHL7(##class(Shutter.Util.OperationKey).Value(msg, "PV1", "44.1"), zone, .had)
+        If ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "44.1") '= "" { If had { Set withOffset = withOffset + 1 } Else { Set without = without + 1 } }
         // A merge (ADT^A40, or any message carrying MRG): what the merge discards, from every MRG segment. The first
         // group's prior identifier and visit number stand at the top; prior_identifiers lists every group's, and
         // merge_groups counts them. A bare "MRG" path would read the first group only, so the segments are walked.

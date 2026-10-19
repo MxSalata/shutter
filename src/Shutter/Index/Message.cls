@@ -82,12 +82,12 @@ ClassMethod OnIndexDoc(pDocObj As EnsLib.HL7.Message, pSearchTable As Shutter.In
             Set pSearchTable.Location = ##class(Shutter.Util.Json).Str(op, "ward")
             Set pSearchTable.SourceSystem = ##class(Shutter.Util.Json).Str(op, "source_system")
         }
-        If pSearchTable.VisitNumber = "" Set pSearchTable.VisitNumber = pDocObj.GetValueAt("PV1:19.1")
+        If pSearchTable.VisitNumber = "" Set pSearchTable.VisitNumber = ##class(Shutter.Util.OperationKey).Value(pDocObj, "PV1", "19.1")
         If pSearchTable.PatientId = "" {
             Set pSearchTable.PatientId = ##class(Shutter.Util.OperationKey).PatientIdentifier(pDocObj, .authority)
             If pSearchTable.PatientIdAuthority = "" Set pSearchTable.PatientIdAuthority = authority
         }
-        If pSearchTable.Location = "" Set pSearchTable.Location = pDocObj.GetValueAt("PV1:3.1")
+        If pSearchTable.Location = "" Set pSearchTable.Location = ##class(Shutter.Util.OperationKey).Value(pDocObj, "PV1", "3.1")
         If pSearchTable.SourceSystem = "" Set pSearchTable.SourceSystem = pDocObj.GetValueAt("MSH:3.1")
         Set type = pDocObj.GetValueAt("MSH:9.1"), trigger = pDocObj.GetValueAt("MSH:9.2")
         Set pSearchTable.MessageType = $SELECT(trigger = "": type, 1: type _ "_" _ trigger)

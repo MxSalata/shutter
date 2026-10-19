@@ -84,12 +84,12 @@ Method UnmappedOperation(request As EnsLib.HL7.Message) As %DynamicObject
     Set op = {}
     Set headerId = ..%PrimaryRequestHeader.%Id()
     Set op."operation_key" = "UNMAPPED^" _ headerId
-    Set op."encounter_id" = request.GetValueAt("PV1:19.1")
+    Set op."encounter_id" = ##class(Shutter.Util.OperationKey).Value(request, "PV1", "19.1")
     Set op."patient_id" = ##class(Shutter.Util.OperationKey).PatientIdentifier(request, .authority)
     Set op."patient_id_authority" = authority
     Set trigger = request.GetValueAt("MSH:9.2")
     Set op."event" = $SELECT(trigger = "": "", 1: trigger)
-    Set ward = request.GetValueAt("PV1:3.1")
+    Set ward = ##class(Shutter.Util.OperationKey).Value(request, "PV1", "3.1")
     If ward '= "" { Set op."ward" = ward } Else { Do op.%Set("ward", "", "null") }
     Set raw = request.GetValueAt("EVN:6.1")
     If raw = "" Set raw = request.GetValueAt("EVN:2.1")
