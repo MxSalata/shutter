@@ -15,6 +15,7 @@ import { PlanPanel, RehearsalPanel } from './case/PlanPanel';
 import { ApprovalPanel } from './case/ApprovalPanel';
 import { ExecutionPanel } from './case/ExecutionPanel';
 import { OutcomePanel } from './case/OutcomePanel';
+import { EscalationPanel } from './case/EscalationPanel';
 import { CaseTimeline } from './case/CaseTimeline';
 
 /** The portal's base path (/csp/<namespace>/) for links to messages, read from the case's trace link. */
@@ -68,6 +69,7 @@ export default function CasePage() {
         <Grid.Col span={{ base: 12, xl: 8 }}>
           <Stack gap="md">
             <OutcomePanel c={detail} />
+            <EscalationPanel c={detail} />
             <FailurePanel c={detail} />
             <EvidencePanel caseId={caseId} open={open} />
             <BoardPanel
