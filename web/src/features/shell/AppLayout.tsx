@@ -148,6 +148,8 @@ function AppearanceMenu() {
             key={t.value}
             leftSection={t.icon}
             onClick={() => choose(t.value)}
+            // The menu focuses its first item on opening, and focus looks like the selection: start on the current one
+            data-autofocus={current === t.value || undefined}
             aria-label={`${t.label}${current === t.value ? ' (current theme)' : ''}`}
             rightSection={current === t.value ? '●' : undefined}
           >
