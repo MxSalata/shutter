@@ -289,6 +289,33 @@ Method Transition(toState As %String, text As %String = "", actor As %String = "
     Quit sc
 }
 
+/// Close a case the team handled by hand (T31, 2.6): an escalated, blocked or failed case resolves with disposition
+/// handled_by_hand, and its state event names the reason and, when the case was escalated, the latest escalation
+/// it followed. The current approval, if any, is revoked as a reopening revokes it. An open Workflow task is the
+/// workflow's to cancel (Shutter.Process.CaseWorkflow.OnClose), since the engine answers the instance that raised it.
+ClassMethod CloseByHand(case As Shutter.Store.Case, reason As %String, actor As %String) As %Status
+{
+    If '$ISOBJECT(case) Quit $$$ERROR($$$GeneralError, "No case to close")
+    If '$LISTFIND($LISTBUILD("escalated", "blocked", "failed"), case.State) Quit $$$ERROR($$$GeneralError, "The case is " _ case.State _ "; only an escalated, blocked or failed case can be marked handled")
+    Set who = $SELECT(actor = "": "a person", 1: actor)
+    Set reason = $EXTRACT(reason, 1, 2000)
+    // The escalation the team worked from: the latest one, whatever its state.
+    Set cid = case.%Id(), seq = "", followed = "", ref = ""
+    &sql(SELECT MAX(Seq) INTO :seq FROM Shutter_Store.Escalation WHERE "Case" = :cid)
+    If (SQLCODE '= 0) Set seq = ""
+    If +seq > 0 {
+        Set esc = ##class(Shutter.Store.Escalation).BySeq(case, +seq)
+        Set followed = "; after escalation " _ (+seq)
+        If $ISOBJECT(esc) Set followed = followed _ $SELECT(esc.TeamName '= "": " to " _ esc.TeamName, 1: "") _ " (" _ esc.State _ ")"
+        Set ref = "escalation:" _ (+seq)
+    }
+    If $ISOBJECT(case.CurrentApproval) && 'case.CurrentApproval.Revoked Do case.CurrentApproval.Revoke(who _ ": the case was handled by hand")
+    Set case.Disposition = "handled_by_hand"
+    Set case.Headline = "Handled by the team. " _ $EXTRACT(reason, 1, 200)
+    Set case.Outcome = "Handled by hand, recorded by " _ who _ ": " _ reason
+    Quit case.Transition("resolved", "Handled by hand: " _ reason _ followed, who, ref)
+}
+
 /// Record something that is not a state change: a note, an artefact, an error.
 Method Note(kind As %String, text As %String, actor As %String = "system", ref As %String = "") As %Status
 {

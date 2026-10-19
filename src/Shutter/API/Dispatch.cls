@@ -35,6 +35,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/cases/:caseId/preview-blind-resend" Method="POST" Call="CasePreview"/>
   <Route Url="/cases/:caseId/blocked-reason" Method="GET" Call="CaseBlockedReason"/>
   <Route Url="/cases/:caseId/reinvestigate" Method="POST" Call="CaseReinvestigate"/>
+  <Route Url="/cases/:caseId/close" Method="POST" Call="CaseClose"/>
   <Route Url="/cases/:caseId/escalations" Method="GET" Call="CaseEscalations"/>
   <Route Url="/cases/:caseId/escalations" Method="POST" Call="CaseEscalationCreate"/>
   <Route Url="/cases/:caseId/escalations/:seq" Method="PATCH" Call="CaseEscalationPatch"/>
@@ -829,6 +830,40 @@ ClassMethod CaseReinvestigate(caseId As %String) As %Status
     If $$$ISERR(sc) Quit ..Fail("503 Service Unavailable", "not_queued", "The case could not be reopened: " _ $SYSTEM.Status.GetErrorText(sc))
     Set reply = {}
     Set reply.caseId = caseId, reply.state = "reopening", reply.requestedBy = ..User()
+    Set text = reply.%ToJSON()
+    Do ..Remember(bodyText, "202 Accepted", text)
+    Set %response.Status = "202 Accepted"
+    Write text
+    Quit $$$OK
+}
+
+/// Close a case the team handled by hand (T31, 2.6): an escalated, blocked or failed case resolves with disposition
+/// handled_by_hand through the Case Workflow item, as a reopening runs through it, and its open approval task is
+/// cancelled. Reinvestigate stays for a correction the receiver's state can prove.
+ClassMethod CaseClose(caseId As %String) As %Status
+{
+    If '..Allow("Shutter_Operate", 1) Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
+    If '$ISOBJECT(body) || $$$ISERR(psc) Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with reason")
+    If $CLASSNAME(body) '= "%Library.DynamicObject" Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with reason")
+    Set reason = ""
+    If $LISTFIND($LISTBUILD("string", "number"), body.%GetTypeOf("reason")) Set reason = $ZSTRIP($EXTRACT(##class(Shutter.Util.Json).Str(body, "reason"), 1, 2000), "<>W")
+    If reason = "" Quit ..Fail("400 Bad Request", "bad_request", "reason is required: what the team did")
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    If '$LISTFIND($LISTBUILD("escalated", "blocked", "failed"), case.State) Quit ..Fail("409 Conflict", "wrong_state", "The case is " _ case.State _ "; only an escalated, blocked or failed case can be marked handled")
+    Set msg = ##class(Shutter.Msg.CaseClose).%New()
+    Set msg.CaseId = caseId, msg.Reason = reason, msg.Actor = ..User()
+    Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
+    If $$$ISERR(sc) || '$ISOBJECT(service) Quit ..Fail("503 Service Unavailable", "no_service", "The API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
+    Set service.Target = "Case Workflow", service.Async = 1
+    Set sc = service.ProcessInput(msg)
+    If $$$ISERR(sc) Quit ..Fail("503 Service Unavailable", "not_queued", "The case could not be closed: " _ $SYSTEM.Status.GetErrorText(sc))
+    Set reply = {}
+    Set reply.caseId = caseId, reply.state = "closing", reply.requestedBy = ..User(), reply.reason = reason
     Set text = reply.%ToJSON()
     Do ..Remember(bodyText, "202 Accepted", text)
     Set %response.Status = "202 Accepted"
