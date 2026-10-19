@@ -130,6 +130,13 @@ ClassMethod CreateFolders() As %Status
 }
 
 /// Resources, roles and the demo users. Runs in %SYS.
+/// A demo user that already exists gets the demo password, is enabled and need not change it (run in %SYS).
+ClassMethod ResetDemoUser(user As %String, password As %String) As %Status [ Private ]
+{
+    Set props("Password") = password, props("Enabled") = 1, props("ChangePassword") = 0, props("PasswordNeverExpires") = 1
+    Quit ##class(Security.Users).Modify(user, .props)
+}
+
 ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
 {
     Set sc = $$$OK
@@ -165,9 +172,15 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
         Set password = $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_PASSWORD")
         If password = "" Set password = "shutter"
         For user = "operator", "approver" {
-            Continue:##class(Security.Users).Exists(user)
             Set roles = $SELECT(user = "approver": "Shutter_Approver", 1: "Shutter_Operator")
-            Set sc = ##class(Security.Users).Create(user, roles, password, "Shutter demo " _ user, ns, "", "", 0, 1, "Shutter demo user")
+            If ##class(Security.Users).Exists(user) {
+                // An upgraded demo instance: the user is brought to the demo's definition (its role, the demo
+                // password, enabled), as the documentation promises for operator and approver.
+                Do ##class(Security.Users).AddRoles(user, roles)
+                Set sc = ..ResetDemoUser(user, password)
+            } Else {
+                Set sc = ##class(Security.Users).Create(user, roles, password, "Shutter demo " _ user, ns, "", "", 0, 1, "Shutter demo user")
+            }
             Quit:$$$ISERR(sc)
         }
     }
@@ -231,9 +244,14 @@ ClassMethod CreateCredentials(demo As %Boolean) As %Status
         Quit:$$$ISERR(sc) sc
     } Else {
         Do ##class(Security.Users).AddRoles(user, roles)
+        // On a demo instance the client's password is the demo's, whatever an earlier install left, so the stored
+        // credential below always matches the user.
+        If demo Set sc = ..ResetDemoUser(user, password) Quit:$$$ISERR(sc) sc
     }
     Set $NAMESPACE = ns
     If '##class(Ens.Config.Credentials).%ExistsId("WardsAPI") {
+        Set sc = ##class(Ens.Config.Credentials).SetCredential("WardsAPI", user, password, 1)
+    } ElseIf demo {
         Set sc = ##class(Ens.Config.Credentials).SetCredential("WardsAPI", user, password, 1)
     }
     Quit sc

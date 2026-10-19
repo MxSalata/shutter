@@ -23,7 +23,9 @@ ClassMethod OnStart(pTimeStarted As %String) As %Status
         If (key '= "") && ('##class(Shutter.Setup).ProviderConfigured() || '##class(Shutter.Setup).ProviderKeyMatches(key)) {
             Do ##class(Shutter.Setup).ConfigureProvider(key, $SYSTEM.Util.GetEnviron("SHUTTER_MODEL"))
         }
-        Do ##class(Shutter.Setup).RecordAgentMode($SYSTEM.Util.GetEnviron("SHUTTER_AGENT_MODE"))
+        // A mode set by hand (record, for the recordings) survives a restart: only an environment that names one
+        // changes it.
+        If $SYSTEM.Util.GetEnviron("SHUTTER_AGENT_MODE") '= "" Do ##class(Shutter.Setup).RecordAgentMode($SYSTEM.Util.GetEnviron("SHUTTER_AGENT_MODE"))
     } Catch {
     }
     Try {
