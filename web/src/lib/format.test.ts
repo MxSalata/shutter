@@ -6,6 +6,7 @@ import {
   formatZoned,
   humanize,
   displayZone,
+  keyLabel,
   setDisplayZone,
   shortDigest,
 } from './format';
@@ -47,6 +48,12 @@ describe('formatting', () => {
   });
   it('turns codes into words', () => {
     expect(humanize('awaiting_approval')).toBe('Awaiting approval');
+  });
+  it('names the readiness keys whose words alone would say too little', () => {
+    expect(keyLabel('purge_task')).toBe('Message purge task');
+    expect(keyLabel('message_days')).toBe('Messages kept (days)');
+    expect(keyLabel('shutter_production')).toBe("Shutter's production");
+    expect(keyLabel('production_state')).toBe('Production state');
   });
   it('prices below a cent with four decimals', () => {
     expect(formatUsd(0.00042)).toBe('$0.0004');

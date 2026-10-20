@@ -1,9 +1,11 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { keys } from '@/api/hooks';
 import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
 import { theme } from '@/theme';
@@ -15,7 +17,7 @@ afterAll(() => server.close());
 
 function renderScenarios() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  render(
     <MantineProvider theme={theme}>
       <QueryClientProvider client={client}>
         <MemoryRouter>
@@ -24,6 +26,7 @@ function renderScenarios() {
       </QueryClientProvider>
     </MantineProvider>,
   );
+  return client;
 }
 
 /** A scenario's card, found by its Run button. */
@@ -52,5 +55,26 @@ describe('ScenariosPage', () => {
       ),
     ).toBeInTheDocument();
     expect(within(await card('S2')).getByRole('button', { name: 'Run S2' })).toBeEnabled();
+  });
+
+  it('offers runs on a demo instance', async () => {
+    const client = renderScenarios();
+    await waitFor(() => expect(client.getQueryState(keys.health)?.status).toBe('success'));
+    expect(await screen.findByRole('button', { name: 'Run S2' })).toBeEnabled();
+    expect(screen.queryByText('The Scenario Player is switched off')).not.toBeInTheDocument();
+  });
+
+  it('says the Scenario Player is switched off on a site install, and offers no runs', async () => {
+    server.use(http.get('/api/shutter/health', () => HttpResponse.json({ ok: true, demo: false })));
+    renderScenarios();
+    expect(await screen.findByText('The Scenario Player is switched off')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Run S2' })).toBeDisabled();
+    const runs = screen.getAllByRole('button', { name: /^Run S\d+$/ });
+    expect(runs.length).toBeGreaterThan(1);
+    for (const run of runs) expect(run).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
+    expect(screen.queryByRole('radio', { name: 'Board' })).not.toBeInTheDocument();
+    // No card is greyed out for a mode when there is no mode to play in
+    expect(screen.queryByText(/^Not defined for/)).not.toBeInTheDocument();
   });
 });

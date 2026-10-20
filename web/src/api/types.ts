@@ -717,4 +717,8 @@ export interface Costs {
   byCase: { caseId: string; runs: number; replayedRuns?: number; costUsd: number }[];
 }
 
-export type Health = Record<string, unknown>;
+/** The readiness report (Shutter.Setup.Doctor); a user without the operator role gets only a few of its keys. */
+export type Health = Record<string, unknown> & {
+  /** False on a site install: no demo, and the Scenario Player is switched off (CONTRACTS 12). */
+  demo?: boolean;
+};
