@@ -150,7 +150,9 @@ jobs:
       # publish.
       - name: Both module.xml files are plain ASCII
         run: python3 scripts/check-ascii.py module.xml aihub/module.xml
-      # The evaluation of the board is made from the recordings and the scenarios, so a change to either regenerates it
+      # The evaluation of the board is made from the recordings, the scenarios and docs/readme/comparison.md, so a change
+      # to any of them regenerates it (scripts/evaluate.py). A push of docs alone runs no CI, so regenerate it with the
+      # docs change rather than leave it to the next code push.
       - name: The evaluation matches the recordings and the scenarios
         run: python3 scripts/evaluate.py --check
 
@@ -237,8 +239,9 @@ jobs:
           r = json.load(sys.stdin)[0]["r"]
           r = json.loads(r) if isinstance(r, str) else r
           sys.exit(0 if r["failed"] == 0 and r["passed"] > 0 else 1)'
-      # The trigger table, merges and cancels: how each HL7 event maps, what is delivered, indexed or withheld
-      - name: Shutter's trigger tests, in process
+      # The trigger table, merges and cancels, the gate's checks, the matcher's conditions, supersession, the model view
+      # and the case's writes
+      - name: Shutter's unit tests, in process
         run: |
           out=$(python3 scripts/iris-sql.py --url "$IRIS_URL" --ns SHUTTER --json "SELECT Shutter_Test.Run_Triggers() AS r")
           echo "$out"

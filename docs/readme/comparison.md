@@ -59,4 +59,4 @@ case's outcome and the receiving system's final state with the scenario's expect
 The replay column is what CI checks on every push to `main` that changes code (a push of only the README or `docs/`
 runs nothing): a full install on IRIS for Health Community, then
 `scenario_check.py --approve` over S1 to S10, S13, S15 and S16 with these recordings, all expected to match; the image job builds
-the contest image's Dockerfile and plays S2 on it.
+the contest image's Dockerfile and plays S2 and S19 on it.

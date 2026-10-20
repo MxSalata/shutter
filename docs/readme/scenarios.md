@@ -1,6 +1,6 @@
 # Scenarios, step by step, and what to look for
 
-The README's "Five minutes with Shutter" takes six of these. This page has every scenario and a checklist of where each part of the task shows. Sign in as `approver` (password `shutter`) on your own instance, or with "Try the demo" in the online demo. The online demo shows each scenario's recorded outcome but has no case or incident waiting for a person, so the approvals in steps 3, 6 and 8 work on your own instance only.
+The README's "Five minutes with Shutter" takes six of these. This page has every scenario and a checklist of where each part of the task shows. Sign in as `approver` (password `shutter`) on your own instance, or with "Try the demo" in the online demo. The online demo shows each scenario's recorded outcome and holds S2's case at its approval, so the approval in step 3 works there too (it replays the recorded outcome); the approvals in steps 6 and 8 work on your own instance only.
 
 ## Every scenario
 

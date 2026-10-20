@@ -24,8 +24,10 @@ the productions a hospital already runs; the README's `docker compose up` is the
 ## 2. What an install creates
 
 The module `iris-shutter` (the repository root) carries the core, the demo receiver's classes included. Its manifest
-runs `Shutter.Setup.Install(root, demo)`; the IPM parameter `demo` defaults to 1, and
-`zpm "load /path/to/module -Ddemo=0"` installs without the demo. A failed install stops the load. A packaged install (an
+runs `Shutter.Setup.InstallStatus(root, demo, production)`; the IPM parameter `demo` defaults to 1, and
+`zpm "load /path/to/module -Ddemo=0"` installs without the demo; the parameter `production` (empty by default) names a
+production of the site's own to install Shutter's items into instead (section 4), as in
+`zpm "load /path/to/module -Ddemo=0 -Dproduction=Your.Production"`. A failed install stops the load. A packaged install (an
 archive made by `zpm "package"`, the form the registry serves) carries the `knowledge/`, `fixtures/` and `www/` folders
 the install reads; IPM keeps the extracted module in its module root (its ModuleRoot setting, by default
 `<data directory>/ipm/iris-shutter/<version>/`), and `/shutter` serves `www/` from there. A packaged install needs IPM

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Writes the HL7 fixtures and scenarios.json for the scenarios S1 to S18 (docs/CONTRACTS.md, sections 3 and 7.6).
+"""Writes the HL7 fixtures and scenarios.json for the scenarios S1 to S19 (docs/CONTRACTS.md, sections 3 and 7.6).
 
     python3 fixtures/generate.py
 
