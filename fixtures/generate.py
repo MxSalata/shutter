@@ -577,10 +577,11 @@ def scenarios():
         ],
         # Rules only until the board's runs are recorded: rules propose the resend, the gate and the rehearsal pass it,
         # and after the nurse's move the dispatch finds the receiver changed (APPROVAL_RECEIVER_CHANGED); planned
-        # again, the resend is stopped as superseded by the receiver's own history (SUPERSEDED_BY_LATER_EVENT).
-        "expected": {"disposition": "resend", "write": False, "final_state": "admitted", "final_ward": "WARD-C",
-                     "failed_operation_key": b[2]["operation_key"], "blocked_by": "APPROVAL_RECEIVER_CHANGED",
-                     "final_reason": "SUPERSEDED_BY_LATER_EVENT",
+        # again, the resend is stopped as superseded by the receiver's own history (SUPERSEDED_BY_LATER_EVENT). The
+        # answer is superseded; the resend rules propose is acceptable here because the gate stops it.
+        "expected": {"disposition": "superseded", "acceptable": ["resend"], "write": False, "final_state": "admitted",
+                     "final_ward": "WARD-C", "failed_operation_key": b[2]["operation_key"],
+                     "blocked_by": "APPROVAL_RECEIVER_CHANGED", "final_reason": "SUPERSEDED_BY_LATER_EVENT",
                      "last_operation_key": f"WARD^HOSP^{mrn}^{encounter}^transfer^{by_hand['event_time']}",
                      "modes": ["rules"]},
     }, [a, b]))

@@ -858,7 +858,10 @@
       }
     ],
     "expected": {
-      "disposition": "resend",
+      "disposition": "superseded",
+      "acceptable": [
+        "resend"
+      ],
       "write": false,
       "final_state": "admitted",
       "final_ward": "WARD-C",
