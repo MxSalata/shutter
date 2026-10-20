@@ -46,6 +46,23 @@ Method TestNoteKeepsAMembershipMadeElsewhere()
     Do $$$AssertEquals(..Stored("Version"), 1, "a note never moves the version (the approve route compares it)")
 }
 
+Method TestNoteLeavesTheCopyUnchanged()
+{
+    Set c = ##class(Shutter.Store.Case).%OpenId(..CaseRowId)
+    Do $$$AssertStatusOK(c.Note("note", "A note from the evidence collector"), "the note")
+    Do $$$AssertNotTrue(c.%IsModified(), "the copy is not marked changed by the note")
+    // Another job moves the case on, then a snapshot made from the older copy is saved: it never writes the copy.
+    Do ..Exec("UPDATE Shutter_Store.""Case"" SET State = 'blocked', Version = 2 WHERE ID = ?")
+    Set snap = ##class(Shutter.Store.Snapshot).Begin(c, 300)
+    Do $$$AssertStatusOK(snap.Seal({}), "the snapshot is sealed")
+    Do $$$AssertEquals(..Stored("State"), "blocked", "the other job's state stands")
+    Do $$$AssertEquals(..Stored("Version"), 2, "and its version")
+    Set id = ..CaseRowId, sid = snap.%Id()
+    &sql(DELETE FROM Shutter_Store.SnapshotItem WHERE Snapshot = :sid)
+    Do ##class(Shutter.Store.Snapshot).%DeleteId(sid)
+    Kill ^Shutter.Counter("snapshot", id)
+}
+
 Method TestTransitionKeepsAMembershipMadeElsewhere()
 {
     Set c = ##class(Shutter.Store.Case).%OpenId(..CaseRowId)

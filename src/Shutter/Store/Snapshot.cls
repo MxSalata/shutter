@@ -33,7 +33,9 @@ Property Summary As %String(%JSONFIELDNAME = "summary", MAXLEN = "");
 ClassMethod Begin(case As Shutter.Store.Case, freshSeconds As %Integer = 300) As Shutter.Store.Snapshot
 {
     Set s = ..%New()
-    Set s.Case = case
+    // By id, not the caller's copy: the evidence collector holds that copy across its HTTP calls, and a save of the
+    // snapshot would otherwise also write the copy whole if it had changed.
+    Do s.CaseSetObjectId(case.%Id())
     Set s.Seq = $INCREMENT(^Shutter.Counter("snapshot", case.%Id()))
     Set s.TakenAt = ##class(Shutter.Util.Time).NowUTC()
     Set s.FreshUntil = ##class(Shutter.Util.Time).FromNow(freshSeconds)

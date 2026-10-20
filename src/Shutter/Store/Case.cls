@@ -462,6 +462,9 @@ Method Note(kind As %String, text As %String, actor As %String = "system", ref A
     }
     Set sc = ..Lock()
     Quit:$$$ISERR(sc) sc
+    // A copy that had no unsaved change before the note has none after it: marked changed, it would be written whole
+    // by the next save of a record that refers to it (a snapshot, a plan), over whatever moved the case meanwhile.
+    Set clean = '..%IsModified()
     Set level = $TLEVEL
     Try {
         TSTART
@@ -477,6 +480,7 @@ Method Note(kind As %String, text As %String, actor As %String = "system", ref A
         If $TLEVEL > level TROLLBACK 1
         Set sc = ex.AsStatus()
     }
+    If clean Do ..%SetModified(0)
     Do ..Unlock()
     Quit sc
 }
