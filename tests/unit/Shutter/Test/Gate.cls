@@ -231,8 +231,8 @@ Method Run(row As %DynamicObject) As %DynamicObject
     Set snap = ##class(Shutter.Store.Snapshot).Begin(case, fresh)
     Set sc = snap.Seal(summary)
     Do $$$AssertStatusOK(sc, row.name _ ": the snapshot is sealed")
-    Set case.CurrentSnapshot = snap
-    Do case.%Save()
+    // The current snapshot is written only through SetSnapshot: a whole save keeps the stored one.
+    Do $$$AssertStatusOK(case.SetSnapshot(snap), row.name _ ": the snapshot is the case's current one")
     // The plan.
     Set planObj = ..Fill({"disposition": "resend", "action": {"type": "resend", "operation_key": "{key}", "expected_version": 3, "payload_digest": "sha256:ut"}, "summary": "Resend the transfer"}, key)
     If row.%IsDefined("plan") Do ..Merge(planObj, ..Fill(row.plan, key))

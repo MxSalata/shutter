@@ -18,7 +18,7 @@ ClassMethod Vocabulary() As %DynamicObject
         "receiver_answer": ["unavailable", "timeout", "duplicate", "version_conflict", "refused", "none"],
         "receipt": ["present", "absent", "unreadable", "none"],
         "later_applied": ["none", "transfer", "discharge", "update", "admit", "cancelled", "merge"],
-        "event_time": ["plausible", "before_admission", "future", "far_from_recorded", "clock_change"],
+        "event_time": ["plausible", "before_admission", "future", "far_from_recorded", "clock_change", "later_event_future"],
         "encounter_state": ["admitted", "discharged", "not_found", "unknown"],
         "transition": ["allowed", "invalid", "unknown"],
         "patient_match": ["yes", "no", "unknown"],
@@ -208,7 +208,9 @@ ClassMethod Case(spec As %DynamicObject) As Shutter.Store.Case
 }
 
 /// The summary for a row: a transfer the receiver could not take because it was unavailable, with the encounter
-/// admitted the day before, nothing later, the message sent and recorded at the event's time with an offset.
+/// admitted the day before, nothing later, the message sent and recorded at the event's time with an offset, and the
+/// evidence taken at 13:00, after every later event the rows add (a later event timed after the evidence settles no
+/// order).
 ClassMethod Summary(row As %DynamicObject, case As Shutter.Store.Case) As %DynamicObject
 {
     Set s = {
@@ -218,7 +220,7 @@ ClassMethod Summary(row As %DynamicObject, case As Shutter.Store.Case) As %Dynam
         "receipt_http_status": 404,
         "route": {"capabilities_http_status": 200, "capabilities": {"conditional_writes": true, "receipts": true}},
         "message": {"admit_time": "2026-10-18T08:00:00Z", "event_recorded": (..#EVENTTIME), "message_time": "2026-10-19T09:00:05Z", "event_time_had_offset": true, "feed_time_zone": "Europe/London", "notes": []},
-        "observed_at": "2026-10-19T09:05:00Z",
+        "observed_at": "2026-10-19T13:00:00Z",
         "timeline": []
     }
     If row.%IsDefined("summary") Do ##class(Shutter.Test.Gate).Merge(s, ##class(Shutter.Test.Gate).Fill(row.summary, case.OperationKey))
@@ -369,7 +371,11 @@ XData Rows [ MimeType = application/json ]
    "case": {"event_time": "2026-10-25T03:00:00Z"},
    "summary": {"observed_at": "2026-10-25T03:05:00Z", "message": {"admit_time": "2026-10-24T08:00:00Z", "event_recorded": "2026-10-25T03:00:00Z", "message_time": "2026-10-25T03:00:05Z", "event_time_had_offset": false}, "ward_state": {"history": [{"event": "admit", "event_time": "2026-10-24T08:00:00Z"}]}},
    "expect": {"event_time": "plausible"}},
-  {"group": "event_time", "name": "no message item", "summary": {"message": null, "observed_at": "2026-10-19T08:00:00Z"}, "expect": {"event_time": "plausible", "free_text": "no"}},
+  {"group": "event_time", "name": "no message item", "summary": {"message": null}, "expect": {"event_time": "plausible", "free_text": "no"}},
+  {"group": "event_time", "name": "no message item, with the evidence taken an hour before the event", "summary": {"message": null, "observed_at": "2026-10-19T08:00:00Z"}, "expect": {"event_time": "future"}},
+  {"group": "event_time", "name": "a later transfer timed after the evidence was taken", "summary": {"timeline": [{"later": true, "outcome": "applied", "event": "transfer", "event_time": "2026-10-19T14:00:00Z"}]}, "expect": {"event_time": "later_event_future", "later_applied": "none"}},
+  {"group": "event_time", "name": "a later update timed after the evidence was taken is no doubt", "summary": {"timeline": [{"later": true, "outcome": "applied", "event": "update", "event_time": "2026-10-19T14:00:00Z"}]}, "expect": {"event_time": "plausible", "later_applied": "none"}},
+  {"group": "event_time", "name": "a doubtful later transfer behind a plausible later discharge is no doubt", "summary": {"timeline": [{"later": true, "outcome": "applied", "event": "discharge", "event_time": "2026-10-19T11:00:00Z"}, {"later": true, "outcome": "applied", "event": "transfer", "event_time": "2026-10-19T14:00:00Z"}]}, "expect": {"event_time": "plausible", "later_applied": "discharge"}},
   {"group": "event_time", "name": "a case with no event time", "case": {"event_time": ""}, "summary": {"message": {"admit_time": "2026-10-19T10:00:00Z"}}, "expect": {"event_time": "plausible"}},
 
   {"group": "encounter", "name": "a discharged encounter", "summary": {"ward_state": {"state": "discharged"}}, "expect": {"encounter_state": "discharged", "transition": "invalid"}},
