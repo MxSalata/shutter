@@ -1,18 +1,23 @@
 import { Text, Tooltip, type TextProps } from '@mantine/core';
+import { DEMO } from '@/demo';
 import { formatAge, formatLocal, formatUtc, formatZoned } from '@/lib/format';
 
-/** A time from the API, in the feed's time zone and named; the tooltip gives it in UTC, in the browser's own zone and its age. */
+/**
+ * A time from the API, in the feed's time zone and named; the tooltip gives it in UTC, in the browser's own zone and
+ * its age. With `age` the age is shown instead, except in the demo: its times are a recording's, so "3 days ago"
+ * would count from the day it was recorded, and the demo shows that date and time, with no age anywhere.
+ */
 export function Timestamp({
   iso,
   age = false,
   ...props
 }: { iso: string | undefined | null; age?: boolean } & TextProps) {
   if (!iso) return null;
-  const label = `${formatUtc(iso)} · yours: ${formatLocal(iso)} · ${formatAge(iso)}`;
+  const label = [formatUtc(iso), `yours: ${formatLocal(iso)}`, ...(DEMO ? [] : [formatAge(iso)])].join(' · ');
   return (
     <Tooltip label={label}>
       <Text component="time" dateTime={iso} size="sm" tabIndex={0} {...props}>
-        {age ? formatAge(iso) : formatZoned(iso)}
+        {age && !DEMO ? formatAge(iso) : formatZoned(iso)}
       </Text>
     </Tooltip>
   );

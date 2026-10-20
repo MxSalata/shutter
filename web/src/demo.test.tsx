@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
 import { theme } from '@/theme';
+import { Timestamp } from '@/components/Timestamp';
 import LoginPage from '@/features/auth/LoginPage';
 import CasePage from '@/features/cases/CasePage';
 import ScenariosPage from '@/features/scenarios/ScenariosPage';
@@ -79,6 +80,16 @@ describe('the demo', () => {
       ['Settings and costs', '/settings'],
     ]);
     expect(within(card).getByText(/S8 in Rules only mode/)).toBeInTheDocument();
+  });
+
+  it('shows a recorded time as its date and time, never as an age', () => {
+    render(
+      <MantineProvider theme={theme}>
+        <Timestamp iso="2026-10-15T08:20:00Z" age />
+      </MantineProvider>,
+    );
+    expect(screen.getByText('15 Oct, 09:20:00 BST')).toBeInTheDocument();
+    expect(screen.queryByText(/ago/)).not.toBeInTheDocument();
   });
 
   it('says the held case is a replay, and links nothing into a portal it does not have', async () => {
