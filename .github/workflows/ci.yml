@@ -62,20 +62,10 @@ jobs:
             git status --porcelain -- ../www
             exit 1
           fi
-      # The browser is kept between runs, keyed on the lockfile (so on Playwright's version); the system libraries it
-      # needs are installed each time, which the cache can't hold.
-      - name: Cache Playwright's browsers
-        id: playwright-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+      # House's runner keeps ~/.cache between jobs, so the browser downloads once and later installs only check it; the
+      # system libraries come with it (a GitHub cache restore once reported a hit without the headless shell)
       - name: Install Playwright's Chromium
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
-      - name: Install Chromium's system libraries
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
       - name: Accessibility of every screen in every appearance (axe-core, WCAG 2.1 A/AA)
         run: npm run test:e2e
         env:
