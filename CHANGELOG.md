@@ -32,8 +32,10 @@ Interoperability production, with a board of IRIS AI Hub agents.
 - **The web application:** scenarios, cases, incidents, the board's findings, the gate, approvals, verification, the
   site profile, the library, and costs and tokens per agent run; served by IRIS, and as an online demo of recorded
   runs.
-- **Scenarios** S1 to S19 (S14 aside) that play each kind of failure end to end on the demo downstream system, and a
-  demo hospital production in its own namespace that Shutter watches (S19).
+- **Scenarios** S1 to S20 (S14 aside) that play each kind of failure end to end on the demo downstream system, a
+  demo hospital production in its own namespace that Shutter watches (S19), and a nurse's move entered by hand in the
+  downstream system while a resend waits for approval: the approval is bound to the receiver's version, so the resend
+  never writes over her entry (S20).
 - **Install:** the `iris-shutter` and `iris-shutter-aihub` IPM modules, a Dockerfile and `docker compose up`, and a
   site install into an existing production.
 

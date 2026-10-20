@@ -217,6 +217,7 @@ Per member, over all passes:
 - S17 S2 in HL7 2.4: played in policy mode only.
 - S18 S2 in HL7 2.3.1: played in policy mode only.
 - S19 Shape A: a failed transfer in the hospital's own production: played in policy mode only.
+- S20 A nurse moves the patient by hand while the plan awaits approval: played in rules mode only.
 
 ## Not yet measured
 

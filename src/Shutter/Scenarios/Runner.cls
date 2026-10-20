@@ -1,6 +1,7 @@
 /// Plays the demo scenarios (docs/CONTRACTS.md, section 4). <method>Run</method> resets the downstream system, sets
 /// the case workflow's mode, then plays a scenario's steps: faults on the downstream system, HL7 files into the
-/// production's inbound folder, waits, and for S7 a wait for the case's state. The production and the app do the rest.
+/// production's inbound folder, waits, for S7 and S20 a wait for the case's state, and for S20 a change a person makes
+/// in the downstream system by hand. The production and the app do the rest.
 /// <method>Start</method> does the same in a background job and returns at once, for the app. The methods are SQL
 /// procedures, so scripts and the app can call them: <code>SELECT Shutter_Scenarios.Runner_Run('S2', 'board')</code>.
 Class Shutter.Scenarios.Runner
@@ -8,6 +9,10 @@ Class Shutter.Scenarios.Runner
 
 /// Seconds a <code>wait_for_state</code> step waits when it gives no <code>timeout</code>.
 Parameter WAITTIMEOUT = 120;
+
+/// The source system of an operation a <code>manual</code> step enters: a person on the ward, in the downstream
+/// system's own screens rather than through the feed.
+Parameter MANUALSOURCE = "WARD";
 
 /// The folder that holds scenarios.json and one folder per scenario.
 ClassMethod FixturesDir() As %String
@@ -241,6 +246,10 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
             Set answer = ##class(Downstream.Service).SetCapabilities(step.capabilities, .status)
             Set:status'=200 error = "the downstream system refused the capabilities step: " _ answer.%ToJSON()
             Quit:error'=""
+        } ElseIf step.%IsDefined("manual") {
+            Set answer = ..Manual(step.manual, .status)
+            Set:status'=201 error = "the downstream system refused the manual step: " _ $SELECT($ISOBJECT(answer): answer.%ToJSON(), 1: "HTTP " _ status)
+            Quit:error'=""
         }
     }
     If error '= "" {
@@ -257,7 +266,40 @@ ClassMethod Describe(step As %DynamicObject) As %String
     Quit:step.%IsDefined("wait") "waiting " _ step.wait _ " s"
     Quit:step.%IsDefined("wait_for_state") "waiting for the case to reach " _ step."wait_for_state"
     Quit:step.%IsDefined("capabilities") "changing the downstream system's capabilities"
+    If step.%IsDefined("manual") {
+        Set entry = step.manual
+        Quit:'$ISOBJECT(entry) "a manual step with nothing to enter"
+        Quit "entering a " _ entry.event _ " of " _ entry."encounter_id" _ $SELECT(entry.ward '= "": " to " _ entry.ward, 1: "") _ " in the downstream system by hand"
+    }
     Quit "a step the runner doesn't know"
+}
+
+/// A <code>manual</code> step (CONTRACTS 4.3): an operation a person on the ward enters in the downstream system
+/// itself while the feed's own delivery is still a case, as S20's nurse moves the patient. It goes to
+/// <class>Downstream.Service</class> in process with its own source (<parameter>MANUALSOURCE</parameter> unless the
+/// step names one) and its own operation key, and no expected version, as a person's entry has none; the downstream
+/// system applies it like any operation, so its version moves and its history records the key. The patient is the
+/// encounter's own unless the step names one, and the event time is the step's or now. Returns the downstream
+/// system's answer, with its HTTP status in <var>status</var>: 201 when it applied.
+ClassMethod Manual(entry As %DynamicObject, Output status As %Integer) As %DynamicObject
+{
+    If '$ISOBJECT(entry) {
+        Set status = 422
+        Quit {"error": "invalid_request", "detail": "a manual step is an object with encounter_id, event and, for an admission or a transfer, ward"}
+    }
+    Set encounterId = entry."encounter_id", event = entry.event
+    Set patient = entry."patient_id", authority = entry."patient_id_authority"
+    Set held = ##class(Downstream.Encounter).EncounterIdIdxOpen(encounterId)
+    If $ISOBJECT(held) {
+        Set:patient="" patient = held.PatientId
+        Set:authority="" authority = held.PatientIdAuthority
+    }
+    Set source = $SELECT(entry."source_system" '= "": entry."source_system", 1: ..#MANUALSOURCE)
+    Set time = $SELECT(entry."event_time" '= "": entry."event_time", 1: ##class(Downstream.Service).Now())
+    Set request = {"encounter_id": (encounterId), "patient_id": (patient), "patient_id_authority": (authority), "event": (event), "event_time": (time), "source_system": (source)}
+    Set request."operation_key" = ##class(Shutter.Util.OperationKey).FromParts(source, authority, patient, encounterId, event, time)
+    Do:entry.ward'="" request.%Set("ward", entry.ward)
+    Quit ##class(Downstream.Service).Apply(request, .status)
 }
 
 /// Waits until the newest case of <var>scenario</var> reaches <var>state</var> (CONTRACTS 4.1). Returns 1 when it

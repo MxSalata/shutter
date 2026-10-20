@@ -10,7 +10,7 @@ table.
 
 Signs in as the demo users `operator` and `approver` (password from SHUTTER_PASSWORD, default "shutter"). With
 --approve, a plan waiting for approval is approved as the approver once the scenario's own steps have finished (S7
-changes the downstream system while its plan waits). The downstream system's final state is read through its API
+and S20 change the downstream system while its plan waits). The downstream system's final state is read through its API
 (--downstream-user and --downstream-password, default _SYSTEM / SYS). The expected outcomes are in
 fixtures/scenarios.json. Prints one line per scenario and exits 1 when any differs. Standard library only.
 
@@ -18,8 +18,14 @@ A scenario whose expected outcome says "incident" (S11) has several cases: the c
 opens, approves its plan and its cases' plans with --approve, and compares each encounter's chain (kind, who decided,
 the catalogue entries), its writes and the downstream system's final state with expected.encounters.
 
-A scenario that names the modes it is defined for (expected.modes: S7, S11, S12, S17, S18, S19) is skipped in the others.
-S7 is not defined for site policy, which resends without asking anyone, so no plan waits for its later transfer.
+A scenario that names the modes it is defined for (expected.modes: S7, S11, S12, S17, S18, S19, S20) is skipped in the
+others. S7 is not defined for site policy, which resends without asking anyone, so no plan waits for its later
+transfer; S20 is defined for rules only until the board's runs for it are recorded.
+
+Besides the outcome, expected.blocked_by is a reason code the case met on the way (in any round, so a dispatch block
+that led to a re-plan counts), expected.final_reason the code the closed case names for stopping (GET
+/cases/{id}/blocked-reason), and expected.last_operation_key the operation the downstream system's history for the
+encounter ends with (S20: the nurse's own entry still stands).
 
 It plays scenarios: each run resets the downstream system. Don't run it on an instance someone else is using.
 """
@@ -280,10 +286,12 @@ def judge(args, operator, scenario, mode, final):
     _, view = operator.call("GET", f"/cases/{caseid}/plan")
     codes = {chk.get("reason_code") for d in ((view or {}).get("gateDecisions") or [])
              for chk in (d.get("checks") or []) if chk.get("result") != "pass"}
+    final_reason = None
     if final["state"] in ("blocked", "escalated"):
         status, reason = operator.call("GET", f"/cases/{caseid}/blocked-reason")
         if status == 200 and reason:
-            codes.add(reason.get("code"))
+            final_reason = reason.get("code")
+            codes.add(final_reason)
     # A code from an earlier round (a dispatch block that led to a re-plan) is in the case's events only
     _, events = operator.call("GET", f"/cases/{caseid}/events")
     for event in events or []:
@@ -301,6 +309,14 @@ def judge(args, operator, scenario, mode, final):
                            f"expected {expected['final_state']} {expected['final_ward']}")
     if expected.get("blocked_by") and expected["blocked_by"] not in codes:
         differences.append(f"no {expected['blocked_by']} among {sorted(c for c in codes if c) or 'no reason codes'}")
+    if expected.get("final_reason") and final_reason != expected["final_reason"]:
+        differences.append(f"the case names {final_reason or 'no reason'}, expected {expected['final_reason']}")
+    if expected.get("last_operation_key"):
+        history = held.get("history") or []
+        last = history[-1].get("operation_key") if history else None
+        if last != expected["last_operation_key"]:
+            differences.append(f"the downstream system's history ends with {last or 'nothing'}, "
+                               f"expected {expected['last_operation_key']}")
     if expected.get("source"):
         # A case forwarded from another production names where it came from (CONTRACTS 11)
         _, case = operator.call("GET", f"/cases/{caseid}")
