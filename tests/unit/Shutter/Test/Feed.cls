@@ -25,13 +25,14 @@ ClassMethod Describe(text As %String, docType As %String = "") As %String [ SqlP
     Quit {"doc_type": (msg.DocType), "name": (msg.Name), "segments": (msg.SegCount)}.%ToJSON()
 }
 
-/// Writes the text as <name> into the inbound folder (^Shutter.Config("adtIn")), through a .part file that is
+/// Writes the text as <name> into the inbound folder (^Shutter.Config("adtIn"), or the hospital's with folder "hospital"), through a .part file that is
 /// renamed, as the scenario runner does. Returns the path written, or an error text.
-ClassMethod Drop(name As %String, text As %String) As %String [ SqlProc ]
+ClassMethod Drop(name As %String, text As %String, folder As %String = "") As %String [ SqlProc ]
 {
     If '$SYSTEM.Security.Check("%Development", "USE") Quit "error: a development helper; %Development is required"
     If '$MATCH(name, "^[A-Za-z0-9_.-]+\.hl7$") Quit "error: the name must be a plain .hl7 file name"
-    Set dir = $GET(^Shutter.Config("adtIn"))
+    // folder "hospital": the demo hospital's inbound folder (Hospital.Setup records it here); anything else: Shutter's own.
+    Set dir = $SELECT(folder = "hospital": $GET(^Shutter.Config("hospitalIn")), 1: $GET(^Shutter.Config("adtIn")))
     If dir = "" Quit "error: the adtIn setting is not set"
     Set target = ##class(%File).NormalizeDirectory(dir) _ name, partial = target _ ".part"
     Set f = ##class(%Stream.FileCharacter).%New()
