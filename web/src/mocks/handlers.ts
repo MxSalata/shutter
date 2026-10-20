@@ -1,7 +1,11 @@
 import { delay, http, HttpResponse } from 'msw';
 import fixtures from './fixtures.json';
+import definitions from '../../../fixtures/scenarios.json';
 import type {
+  AgentRun,
+  ApprovalDecision,
   CaseState,
+  Costs,
   Escalation,
   IncidentDetail,
   IncidentEvent,
@@ -14,15 +18,15 @@ import type {
 } from '@/api/types';
 import { addressesProblem, validateProfile } from '@/features/site-profile/profile';
 import { digest, draftEscalation, teamFor } from './escalation';
+import { freshHolds, heldView, type CaseFixture, type Hold } from './hold';
 
 /**
  * An in-browser stand-in for Shutter's REST API (CONTRACTS 5), for the demo build, development
  * (`VITE_MOCK=1 npm run dev`) and the tests. It serves answers recorded from the real API (scripts/record-demo.mjs;
- * fixtures.json says when); playing a scenario only pretends, and a decision is accepted without changing the
- * recorded case.
+ * fixtures.json says when); playing a scenario only pretends. One recorded case is held at its approval (hold.ts), so
+ * that a decision can be tried: approving it replays the recorded outcome.
  */
 const BASE = '/api/shutter';
-type CaseFixture = (typeof fixtures.cases)[keyof typeof fixtures.cases];
 const cases = fixtures.cases as unknown as Record<string, CaseFixture>;
 interface IncidentFixture {
   summary: IncidentSummary;
@@ -41,6 +45,14 @@ let session: Me | null = null;
 let run: ScenarioRun | null = null;
 /** The mode each scenario was last played in here: a real run opens a case in that mode, which its card then shows. */
 let played: Record<string, string> = {};
+/** The cases held at their approval, and what was decided on them here. */
+let holds: Record<string, Hold> = freshHolds(cases);
+
+/** A case as the demo shows it now: the recording, or the held case's view of it. */
+const caseOf = (id: string): CaseFixture | undefined =>
+  cases[id] ? heldView(cases[id], holds[id]) : undefined;
+const allCases = () => Object.keys(cases).map((id) => caseOf(id)!);
+const stamp = () => new Date().toISOString().replace(/\.\d+Z$/, 'Z');
 
 /** The recorded site profile and its versions; a save in the demo changes these until the page is reloaded. */
 const recorded = fixtures as unknown as {
@@ -60,6 +72,7 @@ export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
   session = signedInAs ? USERS[signedInAs] : null;
   run = null;
   played = {};
+  holds = freshHolds(cases);
   resetSiteProfile();
   escalations = {};
   closed = {};
@@ -94,10 +107,84 @@ const csrf = (request: Request) =>
     ? null
     : error(400, 'csrf', 'Missing X-Requested-With');
 
+/**
+ * The modes a scenario is defined for (expected.modes), from the scenario definitions themselves, so that a recording
+ * made before a scenario named its modes still shows which ones it isn't defined for.
+ */
+const definedModes: Record<string, string[]> = Object.fromEntries(
+  (definitions as { id: string; expected: { modes?: string[] } }[]).flatMap((d) =>
+    d.expected.modes ? [[d.id, d.expected.modes]] : [],
+  ),
+);
+
+/**
+ * The costs, as the server sums them from the agent runs (CONTRACTS 5): the recorded answer, or, when the recording
+ * has none, the same sums over the recorded cases' runs. A replay costs nothing; its tokens are the recorded run's.
+ */
+function costs(): Costs {
+  const answer = fixtures.costs as unknown as Partial<Costs>;
+  if (answer.byModel?.length) return answer as Costs;
+  const runs = Object.values(cases).flatMap((c) =>
+    ((c.runs ?? []) as unknown as AgentRun[]).map((r) => ({ ...r, caseId: c.summary.caseId })),
+  );
+  const cost = (r: AgentRun) => (r.mode === 'replay' ? 0 : Number(r.costUsd) || 0);
+  const byModel = new Map<string, Costs['byModel'][number]>();
+  const byDay = new Map<string, Costs['byDay'][number]>();
+  const byCase = new Map<string, Costs['byCase'][number]>();
+  for (const r of runs) {
+    const replayed = r.mode === 'replay' ? 1 : 0;
+    const m = byModel.get(`${r.model}|${r.mode}`) ?? {
+      model: r.model,
+      mode: r.mode,
+      runs: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      cacheReadTokens: 0,
+      costUsd: 0,
+    };
+    m.runs += 1;
+    m.promptTokens += Number(r.promptTokens) || 0;
+    m.completionTokens += Number(r.completionTokens) || 0;
+    m.cacheReadTokens += Number(r.cacheReadTokens) || 0;
+    m.costUsd += cost(r);
+    byModel.set(`${r.model}|${r.mode}`, m);
+    const day = r.startedAt.slice(0, 10);
+    const d = byDay.get(day) ?? { day, runs: 0, replayedRuns: 0, costUsd: 0 };
+    d.runs += 1;
+    d.replayedRuns = (d.replayedRuns ?? 0) + replayed;
+    d.costUsd += cost(r);
+    byDay.set(day, d);
+    const k = byCase.get(r.caseId) ?? { caseId: r.caseId, runs: 0, replayedRuns: 0, costUsd: 0 };
+    k.runs += 1;
+    k.replayedRuns = (k.replayedRuns ?? 0) + replayed;
+    k.costUsd += cost(r);
+    byCase.set(r.caseId, k);
+  }
+  const replayedRuns = runs.filter((r) => r.mode === 'replay').length;
+  return {
+    totals: {
+      spentUsd: runs.reduce((sum, r) => sum + cost(r), 0),
+      liveRuns: runs.length - replayedRuns,
+      replayedRuns,
+    },
+    byModel: [...byModel.values()].sort((a, b) =>
+      `${a.model}|${a.mode}`.localeCompare(`${b.model}|${b.mode}`),
+    ),
+    byDay: [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day)),
+    byCase: [...byCase.values()].sort((a, b) => b.caseId.localeCompare(a.caseId)),
+  };
+}
+
+/** The HL7 files a scenario delivers, in order, as its steps name them. */
+function filesOf(scenario: string): string[] {
+  const steps = fixtures.scenarios.find((s) => s.id === scenario)?.steps ?? [];
+  return steps.flatMap((step) => ('file' in step && step.file ? [String(step.file)] : []));
+}
+
 /** The scenario's latest recorded case in the mode it was last played in (the board's until then), else any. */
 function latestCase(scenario: string) {
   const mode = played[scenario] ?? 'board';
-  const all = Object.values(cases)
+  const all = allCases()
     .filter((x) => x.summary.scenario === scenario)
     .sort((a, b) => b.summary.openedAt.localeCompare(a.summary.openedAt));
   const c = all.find((x) => x.summary.mode === mode) ?? all[0];
@@ -112,7 +199,7 @@ function latestCase(scenario: string) {
 }
 
 function part(caseId: string, pick: (c: CaseFixture) => unknown, missing: string) {
-  const c = cases[caseId];
+  const c = caseOf(caseId);
   if (!session) return signedOut();
   if (!c) return error(404, 'not_found', `No case ${caseId}`);
   const value = pick(c);
@@ -176,10 +263,14 @@ export const handlers = [
         state: 'done',
         finishedAt: new Date().toISOString(),
         step: undefined,
-        files: [`${run.scenario}-01-A01.hl7`, `${run.scenario}-02-A02.hl7`],
+        files: filesOf(run.scenario),
       };
     return HttpResponse.json({
-      scenarios: fixtures.scenarios.map((s) => ({ ...s, latestCase: latestCase(s.id) })),
+      scenarios: fixtures.scenarios.map((s) => ({
+        ...s,
+        expected: { ...s.expected, ...(definedModes[s.id] ? { modes: definedModes[s.id] } : {}) },
+        latestCase: latestCase(s.id),
+      })),
       run,
     });
   }),
@@ -190,6 +281,9 @@ export const handlers = [
       return error(409, 'wrong_state', `A run of ${run.scenario} is still playing`);
     const { mode } = (await request.json()) as { mode: ScenarioRun['mode'] };
     played[String(params.id)] = mode;
+    // Playing it again opens the case again: a held case of the scenario in this mode waits for its approval anew
+    for (const [id, hold] of Object.entries(freshHolds(cases)))
+      if (cases[id].summary.scenario === params.id && cases[id].summary.mode === mode) holds[id] = hold;
     run = {
       scenario: String(params.id),
       mode,
@@ -218,7 +312,7 @@ export const handlers = [
     const url = new URL(request.url);
     const state = url.searchParams.get('state');
     const scenario = url.searchParams.get('scenario');
-    const items = Object.values(cases)
+    const items = allCases()
       .map((c) => c.summary)
       .filter((c) => (!state || c.state === state) && (!scenario || c.scenario === scenario))
       .sort((a, b) => b.openedAt.localeCompare(a.openedAt));
@@ -252,19 +346,53 @@ export const handlers = [
   http.get(`${BASE}/cases/:id/blocked-reason`, ({ params }) =>
     part(String(params.id), (c) => c.blockedReason, 'no_blocked_reason'),
   ),
-  http.post(`${BASE}/cases/:id/approvals`, ({ request, params }) => {
+  // As the server decides (CONTRACTS 5.3): the plan's digest and the case's version must still match
+  http.post(`${BASE}/cases/:id/approvals`, async ({ request, params }) => {
     const denied = csrf(request) ?? guard('approver');
     if (denied) return denied;
-    const c = cases[String(params.id)];
+    const id = String(params.id);
+    const c = caseOf(id);
     if (!c) return error(404, 'not_found', 'No such case');
+    const body = (await request.json().catch(() => null)) as Partial<ApprovalDecision> | null;
+    if (body?.decision !== 'approve' && body?.decision !== 'reject')
+      return error(400, 'bad_request', 'decision must be approve or reject');
     if (c.summary.state !== 'awaiting_approval')
-      return error(409, 'wrong_state', `The case is ${c.summary.state}`);
-    return HttpResponse.json({ taskId: '1', decision: 'approve' }, { status: 202 });
+      return error(409, 'wrong_state', `The case is ${c.summary.state}, not awaiting approval`);
+    const digest = (c.plan as { plan?: { digest?: string } } | null)?.plan?.digest;
+    if (body.planDigest !== digest)
+      return HttpResponse.json(
+        {
+          error: 'stale_version',
+          detail: "planDigest is not the current plan's digest",
+          currentDigest: digest,
+        },
+        { status: 409 },
+      );
+    if (Number(body.expectedVersion) !== c.detail.version)
+      return HttpResponse.json(
+        {
+          error: 'stale_version',
+          detail: "expectedVersion is not the case's version",
+          currentVersion: c.detail.version,
+        },
+        { status: 409 },
+      );
+    holds[id] = {
+      state: body.decision === 'approve' ? 'approved' : 'rejected',
+      by: session!.username,
+      at: stamp(),
+      comment: body.comment ?? '',
+    };
+    const task = (c.approvals as { tasks?: { taskId?: string }[] }).tasks?.[0];
+    return HttpResponse.json(
+      { taskId: task?.taskId ?? '1', decision: body.decision, caseId: id },
+      { status: 202 },
+    );
   }),
   http.post(`${BASE}/cases/:id/reinvestigate`, ({ request, params }) => {
     const denied = csrf(request) ?? guard('operator');
     if (denied) return denied;
-    const c = cases[String(params.id)];
+    const c = caseOf(String(params.id));
     if (!c) return error(404, 'not_found', 'No such case');
     if (!['blocked', 'escalated', 'failed'].includes(c.summary.state))
       return error(409, 'wrong_state', `The case is ${c.summary.state}`);
@@ -275,7 +403,7 @@ export const handlers = [
     const denied = csrf(request) ?? guard('operator');
     if (denied) return denied;
     const id = String(params.id);
-    const c = cases[id];
+    const c = caseOf(id);
     if (!c) return error(404, 'not_found', 'No such case');
     const body = (await request.json().catch(() => null)) as {
       reason?: string;
@@ -302,15 +430,21 @@ export const handlers = [
   http.post(`${BASE}/cases/:id/preview-blind-resend`, ({ request, params }) => {
     const denied = csrf(request) ?? guard('operator');
     if (denied) return denied;
-    const c = cases[String(params.id)];
+    const id = String(params.id);
+    const c = caseOf(id);
     if (!c) return error(404, 'not_found', 'No such case');
     if (['resolved', 'blocked', 'escalated', 'failed'].includes(c.summary.state))
       return error(409, 'wrong_state', 'The case is closed');
+    // A held case: what the recorded resend left at the receiver is what sending it again would leave
+    const sent = (cases[id].attempts as { attempt?: { response?: { encounter?: unknown } } }[])[0];
+    const after = sent?.attempt?.response?.encounter ?? null;
     return HttpResponse.json({
       wouldApply: true,
       reason: '',
-      encounterAfter: null,
-      note: 'Recorded data: no downstream system to ask.',
+      encounterAfter: after,
+      note: after
+        ? 'Recorded data: the encounter as the recorded resend left it. The demo has no downstream system to ask.'
+        : 'Recorded data: no downstream system to ask.',
     });
   }),
 
@@ -342,7 +476,7 @@ export const handlers = [
     const denied = csrf(request) ?? guard('operator');
     if (denied) return denied;
     const id = String(params.id);
-    const c = cases[id];
+    const c = caseOf(id);
     if (!c) return error(404, 'not_found', `No case ${id}`);
     if (!['blocked', 'escalated', 'failed'].includes(c.summary.state))
       return error(
@@ -461,7 +595,7 @@ export const handlers = [
     return HttpResponse.json(m);
   }),
   http.get(`${BASE}/settings`, () => (session ? HttpResponse.json(fixtures.settings) : signedOut())),
-  http.get(`${BASE}/costs`, () => (session ? HttpResponse.json(fixtures.costs) : signedOut())),
+  http.get(`${BASE}/costs`, () => (session ? HttpResponse.json(costs()) : signedOut())),
   http.get(`${BASE}/health`, () =>
     session ? HttpResponse.json({ recorded: fixtures.source, ...fixtures.health }) : signedOut(),
   ),
