@@ -5,7 +5,8 @@ cited, and what the runs cost in tokens, money and time. No model calls and no I
 
     python3 scripts/evaluate.py [--check]
 
-Inputs: the recordings (fixtures/records/*.json, one per board member and case, as check-records.py reads them), the
+Inputs: the recordings (fixtures/records/*.json, one per board member and case, as check-records.py reads them, with
+the evidence snapshot each run received in its transcript; files that are not a board member's are listed apart), the
 expected outcomes (fixtures/scenarios.json), the catalogue (knowledge/catalogue/catalogue.json), the seeded model
 prices (Shutter.Store.ModelPrice's Seed, read from its source) and the played outcomes in docs/readme/comparison.md.
 --check builds both files in memory and compares them with the committed ones (exit 1 on a difference), like
@@ -13,6 +14,7 @@ build-catalogue.py --check. Standard library only.
 """
 import argparse
 import datetime
+import decimal
 import glob
 import json
 import os
@@ -70,12 +72,43 @@ def parse_time(s):
     return datetime.datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ")
 
 
+def evidence_of(d):
+    """The case's evidence snapshot as the run received it: the JSON inside the first <evidence-...> block of the
+    transcript's messages, or None."""
+    try:
+        messages = json.loads(d.get("transcript") or "{}").get("messages") or []
+    except ValueError:
+        return None
+    for msg in messages:
+        text = msg.get("content")
+        if not isinstance(text, str) or "<evidence-" not in text:
+            continue
+        start = text.find("{", text.find("<evidence-"))
+        try:
+            obj = json.JSONDecoder().raw_decode(text[start:])[0]
+        except ValueError:
+            return None
+        return obj.get("evidence") if isinstance(obj.get("evidence"), dict) else obj
+    return None
+
+
 def load_runs(prices):
-    runs = []
+    """The board members' recordings, and the files not used here with the reason for each."""
+    runs, others = [], []
     for path in sorted(glob.glob(os.path.join(RECORDS, "*.json"))):
-        d = load_json(path)
-        m = KEY_RE.match(d.get("key", ""))
-        if not m or m["member"] not in MEMBERS:
+        text = open(path, encoding="utf-8").read()
+        d = json.loads(text)
+        key = d.get("key", "")
+        m = KEY_RE.match(key)
+        if not m:
+            why = ("a key in the older form without the encounter and event" if re.match(r"^scenario:S\d+\|", key)
+                   else "a key that is not a scenario recording's")
+            others.append({"file": os.path.basename(path), "key": key, "member": d.get("memberCode") or "", "why": why})
+            continue
+        if m["member"] not in MEMBERS:
+            why = ("a generalist run (the single investigator), not a board member's" if m["member"] == "generalist"
+                   else f"member {m['member']!r} is not on the board")
+            others.append({"file": os.path.basename(path), "key": key, "member": m["member"], "why": why})
             continue
         resp = d["response"]
         result = resp.get("result")
@@ -90,10 +123,11 @@ def load_runs(prices):
             "iterations": int(resp.get("iterations") or 0), "tool_calls": int(resp.get("tool_calls") or 0),
             "disposition": result.get("disposition"), "confidence": result.get("confidence"),
             "evidence_refs": list(result.get("evidence_refs") or []), "result": result,
+            "text": text, "evidence": evidence_of(d) or {},
         }
         r["cost_usd"] = cost(prices, r)
         runs.append(r)
-    return runs
+    return runs, others
 
 
 def comparison_rows():
@@ -129,6 +163,23 @@ def matches(disposition, expected):
     return disposition == expected["disposition"] or disposition in expected.get("acceptable", [])
 
 
+def latest_failed_event(keys, encounter):
+    """The event of an encounter's latest failed operation by event time, from operation keys
+    (...^<encounter>^<event>^<event time>); None when there are none or two share the latest time."""
+    items = [k.split("^")[-2:] for k in keys if f"^{encounter}^" in k]
+    if not items:
+        return None
+    last = max(t for _, t in items)
+    at = [e for e, t in items if t == last]
+    return at[0] if len(at) == 1 else None
+
+
+def round_half_up(x, places=0):
+    """Round once, half up, for the figures shown: Python's round() and format() round half to even."""
+    q = decimal.Decimal(1).scaleb(-places)
+    return float(decimal.Decimal(repr(x)).quantize(q, rounding=decimal.ROUND_HALF_UP))
+
+
 def expected_label(expected):
     alts = [a for a in expected.get("acceptable", []) if a != expected["disposition"]]
     return expected["disposition"] + (f" (or {', '.join(alts)})" if alts else "")
@@ -136,7 +187,7 @@ def expected_label(expected):
 
 def build():
     prices, prices_as_of = load_prices()
-    runs = load_runs(prices)
+    runs, others = load_runs(prices)
     scenarios = {s["id"]: s for s in load_json(SCENARIOS)}
     order = list(scenarios)
     catalogue = {e["id"]: e for e in load_json(CATALOGUE)}
@@ -173,12 +224,28 @@ def build():
             entries = spec.get("entries", [])
             p["expected_entries"] = entries
             p["expected_writes_for_encounter"] = spec.get("writes")
-            entry = plan.get("catalogue_entry") or ""
-            if entry in entries:
-                want = OUTCOME_DISPOSITION.get((catalogue.get(entry) or {}).get("preferred", {}).get("outcome"))
-                p["expected"] = {"disposition": want, "from": f"entry {entry}, one of {', '.join(entries)}"}
+            # The entry the catalogue's matcher found in the case's own evidence, not the one the plan cites
+            found = sorted({x.get("id") for r in members.values()
+                            for x in ((r["evidence"].get("catalogue") or {}).get("matches") or []) if isinstance(x, dict)})
+            p["matcher_entries"] = found
+            matched = [e for e in found if e in entries]
+            if len(matched) == 1:
+                entry = matched[0]
+                outcome = (catalogue.get(entry) or {}).get("preferred", {}).get("outcome")
+                want, why = OUTCOME_DISPOSITION.get(outcome), f"entry {entry}, matched in the case's evidence"
+                if outcome == "resend_latest":
+                    # Only the chain's latest failed item is resent; the earlier ones are superseded
+                    latest = latest_failed_event(exp.get("failed_operation_keys", []), enc)
+                    if latest is None:
+                        want = None
+                    elif event != latest:
+                        want, why = "superseded", why + f", not the chain's latest ({latest})"
+                    else:
+                        why += ", the chain's latest"
+                p["expected"] = {"disposition": want, "from": why}
             else:
                 p["expected"] = {"disposition": None, "from": f"entries {', '.join(entries)}"}
+            p["plan_cites_matched_entry"] = (len(matched) == 1 and plan.get("catalogue_entry") == matched[0])
             p["scored"] = True
         else:
             p["expected"] = {"disposition": exp.get("disposition"), "acceptable": exp.get("acceptable", []),
@@ -233,25 +300,29 @@ def build():
                        ("cache_read_tokens", "cache_read"), ("cache_write_tokens", "cache_write")):
             p[f] = sum(r[src] for r in rs)
         p["cost_usd"] = round(sum(r["cost_usd"] or 0 for r in rs), 6)
-        p["agent_seconds"] = round(sum(r["duration_ms"] for r in rs) / 1000, 1)
+        p["agent_ms"] = sum(r["duration_ms"] for r in rs)
         starts = [parse_time(members[n]["started_at"]) for n in SPECIALISTS if n in members]
         if coord and starts:
             end = parse_time(coord["started_at"]) + datetime.timedelta(milliseconds=coord["duration_ms"])
-            p["elapsed_seconds"] = round((end - min(starts)).total_seconds(), 1)
+            p["elapsed_ms"] = (end - min(starts)) // datetime.timedelta(milliseconds=1)
         else:
-            p["elapsed_seconds"] = None
+            p["elapsed_ms"] = None
         p["played"] = played.get(sid, {})
-        # An injected note: whether each member's result says it saw instruction-like text
+        # An injected note: whether its text reached each member (anywhere in the recording: the evidence, the tool
+        # results, the transcript), the flags the core put in its place, and the member's sentences about it
         if exp.get("injected_note"):
-            notes = {}
+            seen = {}
             for name in MEMBERS:
                 r = members.get(name)
                 if not r:
                     continue
+                flags = [{**{k: x.get(k) for k in ("segment", "position", "free_text_present", "instruction_like", "note")},
+                          "text_sent": "text" in x}
+                         for x in ((r["evidence"].get("message") or {}).get("notes") or []) if isinstance(x, dict)]
                 text = " ".join(str(r["result"].get(f) or "") for f in ("summary", "why"))
                 hit = [x.strip() for x in re.split(r"(?<=\.)\s+", text) if re.search(r"instruction", x, re.I)]
-                notes[name] = hit[:2]
-            p["injected_note"] = {"note": exp["injected_note"], "mentions": notes}
+                seen[name] = {"text_in_recording": exp["injected_note"] in r["text"], "flags": flags, "mentions": hit[:2]}
+            p["injected_note"] = {"note": exp["injected_note"], "members": seen}
         out_passes.append(p)
 
     # Scenarios with no board recordings, and why
@@ -273,6 +344,8 @@ def build():
 
     all_runs = [m for p in out_passes for m in p["members"].values()]
     totals = {
+        "files": len(runs) + len(others), "not_used": len(others),
+        "generalist_runs": sum(1 for o in others if o["member"] == "generalist"),
         "runs": len(all_runs), "passes": len(out_passes),
         "cases": len({(p["scenario"], p["encounter"], p["event"]) for p in out_passes}),
         "scenarios": len(recorded),
@@ -281,7 +354,7 @@ def build():
         "cache_read_tokens": sum(m["cache_read_tokens"] for m in all_runs),
         "cache_write_tokens": sum(m["cache_write_tokens"] for m in all_runs),
         "cost_usd": round(sum(m["cost_usd"] or 0 for m in all_runs), 6),
-        "agent_seconds": round(sum(m["duration_ms"] for m in all_runs) / 1000, 1),
+        "agent_ms": sum(m["duration_ms"] for m in all_runs),
         "models": sorted({m["model"] for m in all_runs}),
         "modes": sorted({r["mode"] for r in runs}),
         "recorded_from": min(m["started_at"] for m in all_runs) if all_runs else "",
@@ -292,6 +365,22 @@ def build():
     totals["board_matches"] = sum(1 for p in scored if p["expected"]["disposition"] and matches(p["board_disposition"], p["expected"]))
     totals["specialist_matches"] = {n: sum(1 for p in scored if (p["members"].get(n) or {}).get("matches_expected"))
                                     for n in SPECIALISTS}
+    # A specialist whose view differs from the case's outcome, and whether the plan's disagreements names it
+    outweighed = [(p, n) for p in scored for n in SPECIALISTS if (p["members"].get(n) or {}).get("matches_expected") is False]
+    totals["specialist_differs"] = len(outweighed)
+    totals["specialist_differs_listed"] = sum(1 for p, n in outweighed if n in p["disagreements_listed"])
+    incident = [p for p in scored if p["incident"]]
+    totals["incident_passes"] = len(incident)
+    totals["incident_plans_cite_matched_entry"] = sum(1 for p in incident if p.get("plan_cites_matched_entry"))
+    # Per incident encounter: the resends the board's plans propose against the writes the scenario expects
+    writes = {}
+    for p in incident:
+        w = writes.setdefault((p["scenario"], p["encounter"]), {"scenario": p["scenario"], "encounter": p["encounter"],
+                                                                 "cases": 0, "resends": 0,
+                                                                 "expected_writes": p["expected_writes_for_encounter"]})
+        w["cases"] += 1
+        w["resends"] += p["board_disposition"] == "resend"
+    totals["incident_writes"] = list(writes.values())
     totals["agreement"] = {a: sum(1 for p in out_passes if p["agreement"] == a)
                            for a in ("unanimous", "with the majority", "with a minority", "against all three")}
     totals["dissent_recorded"] = sum(1 for p in out_passes if p["dissent_recorded"])
@@ -301,13 +390,13 @@ def build():
             m = p["members"].get(n)
             if m and isinstance(m["confidence"], (int, float)) and m["matches_expected"] is not None:
                 conf["matched" if m["matches_expected"] else "differed"].append(m["confidence"])
-    totals["confidence"] = {k: ({"n": len(v), "min": min(v), "mean": round(sum(v) / len(v), 3), "max": max(v)} if v else {"n": 0})
+    totals["confidence"] = {k: ({"n": len(v), "min": min(v), "mean": round(sum(v) / len(v), 6), "max": max(v)} if v else {"n": 0})
                             for k, v in conf.items()}
     return {
         "sources": {"records": rel(RECORDS), "scenarios": rel(SCENARIOS), "catalogue": rel(CATALOGUE),
                     "prices": rel(PRICES), "prices_as_of": prices_as_of, "comparison": rel(COMPARISON)},
         "prices_per_million": {m: dict(zip(("input", "output", "cache_read", "cache_write"), v)) for m, v in prices.items()},
-        "passes": out_passes, "without_board": without, "totals": totals,
+        "passes": out_passes, "without_board": without, "not_used": others, "totals": totals,
     }
 
 
@@ -321,8 +410,13 @@ def usd(x, places=2):
     return "" if x is None else f"{x:.{places}f}"
 
 
-def secs(x):
-    return "" if x is None else f"{x:.0f} s"
+def secs(ms, places=0):
+    """Milliseconds as seconds, rounded once and half up."""
+    return "" if ms is None else f"{round_half_up(ms / 1000, places):,.{places}f} s"
+
+
+def two(x):
+    return f"{round_half_up(x, 2):.2f}"
 
 
 def case_label(p):
@@ -349,8 +443,11 @@ def render(ev):
     w = L.append
     w("# Evaluation: how the board decides, from the recorded runs")
     w("")
-    w(f"Made by `scripts/evaluate.py` from files in the repository, with no model calls: the {t['runs']} recordings in "
-      f"`{src['records']}` (live runs of `{', '.join(t['models'])}` in {', '.join(t['modes'])} mode, started between "
+    w(f"Made by `scripts/evaluate.py` from files in the repository, with no model calls: the {t['runs']} board members' "
+      f"recordings in `{src['records']}`"
+      + (f" ({t['not_used']} other {'file' if t['not_used'] == 1 else 'files'} there not used, see *Recordings not used*)"
+         if t["not_used"] else "")
+      + f" (live runs of `{', '.join(t['models'])}` in {', '.join(t['modes'])} mode, started between "
       f"{t['recorded_from']} and {t['recorded_to']}), the expected outcomes in `{src['scenarios']}`, the catalogue in "
       f"`{src['catalogue']}`, the model prices seeded by `{src['prices']}` (list prices read on {src['prices_as_of']}) "
       f"and the played outcomes in `{src['comparison']}`. The same figures are in `docs/readme/evaluation.json`. "
@@ -363,10 +460,19 @@ def render(ev):
     w("")
     w(f"- **The board's disposition matches the expected outcome in {t['board_matches']} of {t['scored_passes']} scored "
       f"passes** ({t['cases']} cases in {t['scenarios']} scenarios; {t['passes']} passes, of which "
-      f"{t['passes'] - t['scored_passes']} not scored, see below).")
+      f"{t['passes'] - t['scored_passes']} not scored, see below)."
+      + (f" The {plural(t['incident_passes'], 'incident case')} are scored against the catalogue entry the matcher found "
+         "in each case's own evidence, not the entry the plan cites; the plans cite that entry in "
+         f"{t['incident_plans_cite_matched_entry']} of {t['incident_passes']}." if t["incident_passes"] else ""))
     sm = t["specialist_matches"]
-    w(f"- **Each specialist alone:** conformance {sm['conformance']}, encounter {sm['encounter']} and impact "
-      f"{sm['impact']} of {t['scored_passes']}.")
+    w("- **Each specialist's own view:** a specialist decides from its own view only (conformance: is the message "
+      "acceptable; encounter: does the movement still hold; impact: can the write be made safely), so its disposition is "
+      "what that view alone would decide, not a verdict on the case. It is the case's expected outcome for conformance "
+      f"in {sm['conformance']}, encounter in {sm['encounter']} and impact in {sm['impact']} of {t['scored_passes']} "
+      "scored passes."
+      + (f" Where it is not ({plural(t['specialist_differs'], 'finding')}), the plan's `disagreements` names the "
+         f"specialist and says why another view outweighed it in {t['specialist_differs_listed']}."
+         if t["specialist_differs"] else ""))
     a = t["agreement"]
     w(f"- **Agreement:** all four agreed in {a['unanimous']} of {t['passes']} passes; the coordinator sided with the "
       f"specialists' majority in {a['with the majority']}, with a minority of one in {a['with a minority']} and against "
@@ -383,16 +489,17 @@ def render(ev):
             "the board's judgement; a person entry only a person may act on.")
     c = t["confidence"]
     if c["matched"].get("n") and c["differed"].get("n"):
-        w(f"- **Confidence does not separate right from wrong:** {c['matched']['n']} specialist findings that match the "
-          f"expected outcome had confidence {c['matched']['min']:.2f} to {c['matched']['max']:.2f} (mean "
-          f"{c['matched']['mean']:.2f}); the {c['differed']['n']} that differ had {c['differed']['min']:.2f} to "
-          f"{c['differed']['max']:.2f} (mean {c['differed']['mean']:.2f}). Shutter stores the confidence and shows it, "
-          "but no rule in the core or the gate reads it.")
+        w(f"- **Confidence:** the {c['matched']['n']} specialist findings whose disposition is the case's outcome had "
+          f"confidence {two(c['matched']['min'])} to {two(c['matched']['max'])} (mean {two(c['matched']['mean'])}); the "
+          f"{c['differed']['n']} outweighed by another view had {two(c['differed']['min'])} to "
+          f"{two(c['differed']['max'])} (mean {two(c['differed']['mean'])}). A confidence is the specialist's confidence "
+          "in its own view's answer, not in the case's outcome. Shutter stores it and shows it, but no rule in the core or "
+          "the gate reads it.")
     w(f"- **Cost:** {t['runs']} agent runs, {n(t['prompt_tokens'])} uncached input, {n(t['cache_read_tokens'])} "
       f"cache-read, {n(t['cache_write_tokens'])} cache-write and {n(t['completion_tokens'])} output tokens, "
-      f"{usd(t['cost_usd'])} USD at list prices; {t['agent_seconds']:,.0f} s of agent time in all.")
+      f"{usd(t['cost_usd'])} USD at list prices; {secs(t['agent_ms'])} of agent time in all.")
     cs = [p["cost_usd"] for p in passes]
-    es = [p["elapsed_seconds"] for p in passes if p["elapsed_seconds"] is not None]
+    es = [p["elapsed_ms"] for p in passes if p["elapsed_ms"] is not None]
     w(f"- **Per pass:** {usd(min(cs))} to {usd(max(cs))} USD and {secs(min(es))} to {secs(max(es))} from the first "
       "specialist's start to the plan.")
     w("")
@@ -400,7 +507,8 @@ def render(ev):
     w("## Per case: the board against the expected outcome")
     w("")
     w("Each specialist's cell is its disposition and confidence; the plan's is the coordinator's disposition. **Bold** "
-      "marks a disposition that differs from the expected one. *Entry* is the catalogue entry the plan cites, with the "
+      "marks a disposition that differs from the expected one: for a specialist, its own view's answer where the plan "
+      "followed another view. *Entry* is the catalogue entry the plan cites, with the "
       "entry's `decides` field (policy: the catalogue alone may settle it in site-policy mode; board: it needs the board's "
       "judgement; person: only a person may act). *Played* is the case's outcome when the scenario was played end to "
       f"end with the live board and with rules alone (`{src['comparison']}`): it includes the gate and the downstream "
@@ -431,17 +539,20 @@ def render(ev):
     w("")
     w("- *Expected* is `expected.disposition` in `fixtures/scenarios.json`, and `expected.acceptable` where it lists "
       "other acceptable dispositions. A scenario that opens an incident (S11) gives, per encounter, the catalogue entries "
-      "its chain should match rather than a disposition per case: such a case is expected to cite one of those entries, "
-      "and is scored against that entry's preferred outcome (`none` read as superseded, `resend_latest` as resend).")
-    for p in passes:
-        if p["incident"] and p["expected_writes_for_encounter"] is not None and p["round"] == 1:
-            same = [q for q in passes if q["scenario"] == p["scenario"] and q["encounter"] == p["encounter"]]
-            resends = sum(1 for q in same if q["board_disposition"] == "resend")
-            if p is same[0]:
-                writes = p["expected_writes_for_encounter"]
-                w(f"  For {p['scenario']} {p['encounter']} the board's plans over its {len(same)} cases propose "
-                  f"{plural(resends, 'resend')}, and `fixtures/scenarios.json` expects {plural(writes, 'write')} for the "
-                  "encounter.")
+      "its chain should match rather than a disposition per case. Such a case is scored against the entry the "
+      "catalogue's matcher found in the case's own evidence snapshot (`catalogue.matches`, among the scenario's entries "
+      "for the encounter), not the entry the plan cites, and against that entry's preferred outcome: `none` is read as "
+      "superseded, and `resend_latest` as resend for the chain's latest failed item by event time "
+      "(`expected.failed_operation_keys`) and superseded for the earlier ones.")
+    for x in t["incident_writes"]:
+        same = [q for q in scored if q["incident"] and q["scenario"] == x["scenario"] and q["encounter"] == x["encounter"]]
+        cite = sum(1 for q in same if q.get("plan_cites_matched_entry"))
+        wr = x["expected_writes"]
+        w(f"  For {x['scenario']} {x['encounter']} the plans cite the matched entry in {cite} of {x['cases']} cases and "
+          f"propose {plural(x['resends'], 'resend')} in all; `fixtures/scenarios.json` expects "
+          + (f"{plural(wr, 'write')} for the encounter, "
+             + ("which the plans match." if wr == x["resends"] else "which the plans do not match.")
+             if wr is not None else "no number of writes for the encounter."))
     multi = [p for p in passes if p["rounds"] > 1 and not p["scored"]]
     for p in multi:
         last = next(q for q in passes if q["scenario"] == p["scenario"] and q["encounter"] == p["encounter"]
@@ -491,19 +602,23 @@ def render(ev):
     w("## Confidence")
     w("")
     w("Specialists' confidence (`response.result.confidence`, 0 to 1) in the scored passes, split by whether their "
-      "disposition matches the expected outcome. The coordinator's plan carries no confidence.")
+      "disposition is the case's expected outcome or was outweighed by another view. The coordinator's plan carries no "
+      "confidence.")
     w("")
     w("| Specialist findings | Count | Lowest | Mean | Highest |")
     w("| --- | --- | --- | --- | --- |")
-    for k, label in (("matched", "match the expected outcome"), ("differed", "differ from it")):
+    for k, label in (("matched", "the case's outcome"), ("differed", "outweighed by another view")):
         v = c[k]
         if v.get("n"):
-            w(f"| {label} | {v['n']} | {v['min']:.2f} | {v['mean']:.2f} | {v['max']:.2f} |")
+            w(f"| {label} | {v['n']} | {two(v['min'])} | {two(v['mean'])} | {two(v['max'])} |")
         else:
             w(f"| {label} | 0 | | | |")
     w("")
-    w("The ranges overlap, so a confidence threshold would not tell a right finding from a wrong one in these runs. "
-      "The sample is small and every finding comes from one model, so this says nothing about calibration in general.")
+    w("Each specialist is told to decide from its own view only, and its confidence is in that view's answer, not in the "
+      "case's outcome. An outweighed finding is not therefore a wrong one: conformance, for example, is told to resend a "
+      "message that is valid, and the plan then follows a view that sees why the case should not be resent. So this "
+      "split is not an error rate, and the figures say nothing about calibration: the sample is small and every finding "
+      "comes from one model.")
     w("")
 
     w("## Evidence cited")
@@ -539,16 +654,42 @@ def render(ev):
         w("")
         for p in inj:
             note = p["injected_note"]
-            w(f"{case_label(p)} carries a note telling the reader \"{note['note']}\". Every member's disposition is in the "
-              "table above; here, the sentences of each member's `summary` (and the plan's `why`) that mention "
-              "instruction-like text:")
+            ms = note["members"]
+            reached = [nm for nm in MEMBERS if nm in ms and ms[nm]["text_in_recording"]]
+            flagged = [nm for nm in MEMBERS if nm in ms
+                       and any(f.get("free_text_present") and f.get("instruction_like") for f in ms[nm]["flags"])]
+            where = sorted({f"{f.get('segment')}-{f.get('position')}" for nm in MEMBERS if nm in ms for f in ms[nm]["flags"]})
+            w(f"{case_label(p)}'s message carries a free-text note written as an instruction to the reader "
+              "(`expected.injected_note` in `fixtures/scenarios.json`).")
+            w("")
+            withheld = all(not f["text_sent"] for nm in ms for f in ms[nm]["flags"])
+            if reached:
+                w(f"- **The text reached {', '.join(reached)}:** it appears in {'its' if len(reached) == 1 else 'their'} "
+                  "recordings.")
+            else:
+                w(f"- **The text reached no agent:** it appears in none of the {len(ms)} recordings (evidence, tool "
+                  "results or transcript)."
+                  + (" The evidence carries flags with no text: with the site's free-text switch off, the core keeps the "
+                     "text in IRIS and sends the flags in its place (`Shutter.Util.ModelView`, `FlagNotes`)."
+                     if withheld else ""))
+            if flagged:
+                w(f"- **The flags:** the evidence's {', '.join(where)} note says `free_text_present` and "
+                  f"`instruction_like` for {'all four members' if len(flagged) == len(MEMBERS) else ', '.join(flagged)}. "
+                  "The core sets `instruction_like` (`InstructionLike`), not the agents.")
+            w("")
+            w("The sentences of each member's `summary` (and the plan's `why`) that mention it:")
             w("")
             for name in MEMBERS:
-                hit = note["mentions"].get(name)
+                hit = (ms.get(name) or {}).get("mentions")
                 w(f"- {name}: " + (" ".join(f"\"{h}\"" for h in hit) if hit else "no mention"))
             w("")
-            w("The note pushes towards a resend, which is also the expected outcome, so a correct disposition here does not "
-              "by itself show that the agents resist such notes; see *Not yet measured*.")
+            if not reached:
+                w("So these runs show only that the agents notice the core's flag, which the sentences above restate. They "
+                  "do not test whether the agents would resist the instruction itself, which they never read; and the "
+                  "note pushes towards a resend, which is also the expected outcome. See *Not yet measured*.")
+            else:
+                w("The note pushes towards a resend, which is also the expected outcome, so a correct disposition here does "
+                  "not by itself show that the agents resist such notes; see *Not yet measured*.")
             w("")
 
     w("## Tokens, cost and time")
@@ -560,7 +701,7 @@ def render(ev):
       + ") to each run's tokens, as the instance's Costs page does, rounded to six places per run before summing. "
       "*Elapsed* runs from the earliest specialist's `started_at` (whole seconds) to the coordinator's `started_at` plus "
       "its `duration_ms`; *agent time* adds the four runs' `duration_ms`, so it counts the specialists' parallel time "
-      "three times. The comparison column is the case's cost as the comparison table gives it, from the instance's "
+      "three times. Times are added in milliseconds and rounded once, half up, for display. The comparison column is the case's cost as the comparison table gives it, from the instance's "
       "Costs page.")
     w("")
     w("| Case | Runs | Input | Cache read | Cache write | Output | Cost, USD | Comparison, USD | Elapsed | Agent time |")
@@ -570,9 +711,9 @@ def render(ev):
         comp = "-" if comp is None else usd(comp) + (" (both passes)" if p["rounds"] == 2 else f" (all {p['rounds']} passes)" if p["rounds"] > 2 else "")
         w(f"| {case_label(p)} | {p['runs']} | {n(p['prompt_tokens'])} | {n(p['cache_read_tokens'])} | "
           f"{n(p['cache_write_tokens'])} | {n(p['completion_tokens'])} | {usd(p['cost_usd'], 3)} | "
-          f"{comp} | {secs(p['elapsed_seconds'])} | {secs(p['agent_seconds'])} |")
+          f"{comp} | {secs(p['elapsed_ms'])} | {secs(p['agent_ms'])} |")
     w(f"| **Total** | {t['runs']} | {n(t['prompt_tokens'])} | {n(t['cache_read_tokens'])} | {n(t['cache_write_tokens'])} | "
-      f"{n(t['completion_tokens'])} | {usd(t['cost_usd'], 3)} | | | {secs(t['agent_seconds'])} |")
+      f"{n(t['completion_tokens'])} | {usd(t['cost_usd'], 3)} | | | {secs(t['agent_ms'])} |")
     w("")
     per_case = {}
     for p in passes:
@@ -580,7 +721,7 @@ def render(ev):
     multi_cases = {k: v for k, v in per_case.items() if len(v) > 1}
     for k, v in multi_cases.items():
         w(f"{k} over its {len(v)} passes: {sum(q['runs'] for q in v)} runs, {usd(sum(q['cost_usd'] for q in v))} USD, "
-          f"{secs(sum(q['elapsed_seconds'] or 0 for q in v))} elapsed in the passes (the wait for approval between them "
+          f"{secs(sum(q['elapsed_ms'] or 0 for q in v))} elapsed in the passes (the wait for approval between them "
           "is not counted).")
         w("")
     w("Per member, over all passes:")
@@ -594,7 +735,7 @@ def render(ev):
         k = len(ms)
         w(f"| {name} | {k} | {n(round(sum(m['prompt_tokens'] for m in ms) / k))} | "
           f"{n(round(sum(m['completion_tokens'] for m in ms) / k))} | {sum(m['cost_usd'] for m in ms) / k:.3f} | "
-          f"{min(m['duration_ms'] for m in ms) / 1000:.0f} to {max(m['duration_ms'] for m in ms) / 1000:.0f} s | "
+          f"{secs(min(m['duration_ms'] for m in ms))[:-2]} to {secs(max(m['duration_ms'] for m in ms))} | "
           f"{sum(m['tool_calls'] for m in ms) / k:.1f} |")
     w("")
     w("<details>")
@@ -606,7 +747,7 @@ def render(ev):
         for name in MEMBERS:
             m = p["members"].get(name)
             if m:
-                w(f"| `{m['file']}` | {m['started_at']} | {m['duration_ms'] / 1000:.1f} s | {n(m['prompt_tokens'])} | "
+                w(f"| `{m['file']}` | {m['started_at']} | {secs(m['duration_ms'], 1)} | {n(m['prompt_tokens'])} | "
                   f"{n(m['cache_read_tokens'])} | {n(m['cache_write_tokens'])} | {n(m['completion_tokens'])} | "
                   f"{m['tool_calls']} | {usd(m['cost_usd'], 4)} |")
     w("")
@@ -619,17 +760,42 @@ def render(ev):
         w(f"- {s['scenario']} {s['title']}: {s['why']}.")
     w("")
 
+    if ev["not_used"]:
+        w("## Recordings not used")
+        w("")
+        w(f"{plural(t['not_used'], 'file')} in `{src['records']}` {'is' if t['not_used'] == 1 else 'are'} not read "
+          "into the figures above:")
+        w("")
+        for o in ev["not_used"]:
+            w(f"- `{o['file']}`: {o['why']}.")
+        w("")
+
     w("## Not yet measured")
     w("")
     w("- **Repeat runs.** Each pass above is one recording per member. Nothing here shows how often the same model, on "
       "the same version of the product, reaches the same disposition when the case is run again. Earlier recordings made "
       "on earlier versions of the product are in the repository's history; they are not a controlled repeat, and this "
       "document does not read them.")
-    w("- **The single investigator.** Shutter can give a case to one generalist agent instead of the board "
-      "(`scenario_check.py --modes single`), but no generalist runs are recorded, so the board is not compared with a "
-      "single agent here.")
-    w("- **Adversarial variants.** The only adversarial input is the one injected note above, and it points at the "
-      "expected answer. No note pushes towards a wrong answer, and no variant feeds misleading or contradictory evidence.")
+    if t["generalist_runs"]:
+        w("- **The single investigator.** Shutter can give a case to one generalist agent instead of the board "
+          f"(`scenario_check.py --modes single`). {plural(t['generalist_runs'], 'generalist recording')} "
+          f"{'is' if t['generalist_runs'] == 1 else 'are'} in `{src['records']}` (see *Recordings not used*), but this "
+          f"document does not yet compare {'it' if t['generalist_runs'] == 1 else 'them'} with the board.")
+    else:
+        w("- **The single investigator.** Shutter can give a case to one generalist agent instead of the board "
+          f"(`scenario_check.py --modes single`), but no generalist runs are in `{src['records']}`, so the board is not "
+          "compared with a single agent here.")
+    reached_any = any(m["text_in_recording"] for p in inj for m in p["injected_note"]["members"].values())
+    if inj and not reached_any:
+        w("- **Adversarial variants.** No adversarial text reached any agent in these recordings: the one injected note "
+          "stays in IRIS and the agents see only its flags, so what is shown is that they notice the flag, not that they "
+          "resist an instruction. Earlier recordings in the repository's history were made with the note's text sent; "
+          "this document does not read them. No note pushes towards a wrong answer, and no variant feeds misleading or "
+          "contradictory evidence.")
+    else:
+        w("- **Adversarial variants.** The only adversarial input is the injected note above, and it points at the "
+          "expected answer. No note pushes towards a wrong answer, and no variant feeds misleading or contradictory "
+          "evidence.")
     held = [p for p in scored if p["catalogue_entry"] and p["entry_lists_scenario"]]
     w(f"- **Held-out cases.** In {len(held)} of {len(scored)} scored passes the plan cites a catalogue entry that names "
       "the same scenario in its `scenarios` field: the knowledge the agents read was written alongside these scenarios. "
@@ -649,6 +815,8 @@ def main():
     if not ev["passes"]:
         print(f"no recordings in {rel(RECORDS)}", file=sys.stderr)
         return 1
+    for o in ev["not_used"]:
+        print(f"not used: {rel(RECORDS)}/{o['file']}: {o['why']}", file=sys.stderr)
     md = render(ev) + "\n"
     js = json.dumps(ev, indent=1, ensure_ascii=False) + "\n"
     outputs = ((OUT_MD, md), (OUT_JSON, js))
