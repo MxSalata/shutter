@@ -26,7 +26,9 @@
       <Resource Name="Shutter.Bridge.Policy.PKG"/>
       <Resource Name="Shutter.Bridge.Monitor.CLS"/>
       <Resource Name="Shutter.Bridge.Runner.AIHub.CLS"/>
-      <Invoke Class="Shutter.Setup" Method="InstallAIHub">
+      <!-- The provider configuration and the knowledge bases. InstallAIHubStatus returns a %Status and the Invoke
+           checks it, so an install that stops at an error stops the load. -->
+      <Invoke Class="Shutter.Setup" Method="InstallAIHubStatus" CheckStatus="true">
         <Arg>${root}</Arg>
       </Invoke>
     </Module>

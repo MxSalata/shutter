@@ -1,7 +1,8 @@
 // Runs once, during the image build (Dockerfile): the namespaces, the package manager, the module and the demo hospital.
-// A failed step stops the build: each step sets sc to a failure before it runs and checks it on a line of its own after,
-// so a step whose line stops at an error (the session then goes on to the next line) is caught too, and fail ends the
-// session with exit code 1, which fails the Dockerfile's RUN. An image that built is an image that installed.
+// A failed step stops the build: each step starts from a failure (sc set to one, or for IPM an empty digest that cannot
+// match) and checks sc on a line of its own after, so a step whose line stops at an error (the session then goes on to
+// the next line) is caught too, and fail ends the session with exit code 1, which fails the Dockerfile's RUN. An image
+// that built is an image that installed.
 // One statement per line: `iris session` reads its input a line at a time, so a block cannot span lines.
 Set fail = "Write !, ""BUILD FAILED: "", $SYSTEM.Status.GetErrorText(sc), ! Do $SYSTEM.Process.Terminate($JOB, 1)"
 zn "USER"
@@ -12,7 +13,9 @@ Set sc = $SYSTEM.Status.Error(5001, "the namespaces were not created"), vars("NA
 Set sc = ##class(Shutter.Installer).setup(.vars)
 If 'sc Xecute fail
 zn "%SYS"
-Do ##class(Security.Users).UnExpireUserPasswords("*")
+Set sc = $SYSTEM.Status.Error(5001, "the passwords were not unexpired")
+Set sc = ##class(Security.Users).UnExpireUserPasswords("*")
+If 'sc Xecute fail
 zn "SHUTTER"
 Set sc = $SELECT($NAMESPACE = "SHUTTER": 1, 1: $SYSTEM.Status.Error(5001, "the SHUTTER namespace is not there"))
 If 'sc Xecute fail
@@ -20,7 +23,7 @@ If 'sc Xecute fail
 // vendored in vendor/ipm (release 0.10.10 of github.com/intersystems/ipm) and checked against its SHA-256 before it
 // loads. Only when that file is missing is the same release asset downloaded from GitHub, under the same check.
 Set ipmFile = "/home/irisowner/dev/vendor/ipm/zpm-0.10.10.xml", ipmSHA = "daa2adabd66b488f57187d29712e54b0c25bbe000794fbf2a35a882c458b788a"
-Set hasIPM = ##class(%Dictionary.CompiledClass).%ExistsId("%IPM.Main"), vendored = ##class(%File).Exists(ipmFile), sc = 1, ipm = ""
+Set hasIPM = ##class(%Dictionary.CompiledClass).%ExistsId("%IPM.Main"), vendored = ##class(%File).Exists(ipmFile), sc = 1, ipm = "", digest = ""
 If 'hasIPM,vendored Write "IPM 0.10.10 from ", ipmFile, ! Set ipm = ##class(%Stream.FileBinary).%New(), sc = ipm.LinkToFile(ipmFile)
 If 'hasIPM,'vendored Write "IPM installer not in the repository: downloading 0.10.10 from github.com", ! Set req = ##class(%Net.HttpRequest).%New(), req.Server = "github.com", req.Https = 1, req.ReadRawMode = 1, req.SSLConfiguration = "ISC.FeatureTracker.SSL.Config", req.Timeout = 60, sc = req.Get("/intersystems/ipm/releases/download/v0.10.10/zpm-0.10.10.xml")
 If 'hasIPM,'vendored,sc,req.HttpResponse.StatusCode '= 200 Set sc = $SYSTEM.Status.Error(5001, "the IPM download answered HTTP " _ req.HttpResponse.StatusCode)

@@ -66,6 +66,20 @@ ClassMethod Install(root As %String = "", demo As %Boolean = 1, production As %S
     Quit $SELECT($$$ISOK(sc): "ok", 1: $SYSTEM.Status.GetErrorText(sc))
 }
 
+/// Refuses a module root that will not outlive the install. IPM 0.10.0 to 0.10.3 extract a packaged module (the
+/// registry's or an archive's) into a folder under the instance's temporary directory and delete it when the install
+/// ends, but /shutter serves www/ from the root and the scenarios read fixtures/ there afterwards: the install then
+/// fails with the reason instead of leaving a web application that answers 404. IPM 0.10.4 and later keep the module
+/// in their module root, and a module loaded from a folder (zpm "load <dir>") stays where it is.
+ClassMethod RootStatus(root As %String = "") As %Status [ Private ]
+{
+    If ($GET(root) = "") || (root = $CHAR(0)) Quit $$$OK
+    Set dir = $ZCONVERT(##class(%File).NormalizeDirectory(root), "L")
+    Set temp = $ZCONVERT(##class(%File).NormalizeDirectory(##class(%SYS.System).TempDirectory()), "L")
+    If $EXTRACT(dir, 1, $LENGTH(temp)) '= temp Quit $$$OK
+    Quit $$$ERROR($$$GeneralError, "The module's files are in " _ root _ ", which IPM 0.10.0 to 0.10.3 delete when the install ends: install IPM 0.10.4 or later, or load the module from a folder (zpm ""load <dir>"")")
+}
+
 /// Install as a %Status: what the module's manifest invokes (the Invoke checks the status, so a failed install stops
 /// the load) and what Install wraps. The housekeeping tasks read SHUTTER_MESSAGE_DAYS and SHUTTER_MESSAGE_PURGE from
 /// the environment of the process that runs the install (EnsureRetentionTasks).
@@ -78,6 +92,7 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
     // a load or install that worked ends with an error. The level the install was called at is restored before it
     // returns; what was written up to the production's start is committed either way.
     Set tlevel = $TLEVEL
+    Set sc = ..RootStatus(root) Quit:$$$ISERR(sc) sc
     Set production = $ZSTRIP($GET(production), "<>WC")
     If production '= "" {
         Set sc = ..InstallIntoStatus(production, root)
@@ -978,6 +993,23 @@ ClassMethod InstallAIHub(root As %String = "") As %String [ SqlProc ]
         Set out.error = ex.DisplayString()
     }
     Quit out.%ToJSON()
+}
+
+/// InstallAIHub as a %Status: what the aihub module's manifest invokes (the Invoke checks the status, so an install
+/// that stopped at an error stops the load, and the image build with it). Writes InstallAIHub's JSON, which holds no
+/// secret. A knowledge base that did not build is reported there and does not fail the install.
+ClassMethod InstallAIHubStatus(root As %String = "") As %Status
+{
+    Set sc = $$$OK
+    Try {
+        Set json = ..InstallAIHub(root)
+        Write !, "aihub install: ", json, !
+        Set out = ##class(%DynamicObject).%FromJSON(json)
+        If out.error '= "" Set sc = $$$ERROR($$$GeneralError, "The aihub install: " _ out.error)
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    Quit sc
 }
 
 /// Puts the provider key in the IRIS wallet (collection Shutter, secret Anthropic) and writes the

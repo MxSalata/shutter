@@ -54,7 +54,8 @@
            scenarios' HL7 messages, read again at run time) and the web application's built files, which /shutter
            serves from ${root}www/ where they are: nothing is copied into the csp directory, which a container may
            not let IRIS write. A package installed from the registry or an archive stays in IPM's module root
-           (IPM 0.10.10: the data directory's ipm/iris-shutter/<version>/), so ${root} outlives the install. -->
+           (IPM 0.10.4 and later; by default the data directory's ipm/iris-shutter/<version>/), so ${root} outlives
+           the install. IPM 0.10.0 to 0.10.3 delete it when the install ends, and Setup refuses them. -->
       <Resource Name="/knowledge/"/>
       <Resource Name="/fixtures/"/>
       <Resource Name="/www/"/>
