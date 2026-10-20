@@ -129,6 +129,38 @@ describe('EscalationPanel', () => {
     expect(cc).not.toHaveAccessibleDescription(/not allowed/);
   });
 
+  it('closes the case as handled once the email is sent, with the reason and the case version', async () => {
+    const closes: Record<string, unknown>[] = [];
+    server.events.on('request:start', async ({ request }) => {
+      if (request.url.endsWith('/close'))
+        closes.push((await request.clone().json()) as Record<string, unknown>);
+    });
+    renderCase('C-000008');
+    const panel = await screen.findByRole('region', { name: 'Escalations' });
+    expect(within(panel).queryByRole('button', { name: /Mark as handled/ })).not.toBeInTheDocument();
+    await userEvent.click(within(panel).getByRole('button', { name: /Escalate to system administrators/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Escalate to system administrators' });
+    const to = within(dialog).getByRole('textbox', { name: /To/ });
+    if (!(to as HTMLInputElement).value) await userEvent.type(to, 'bed.management@example.nhs.uk');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Send' }));
+    await userEvent.click(await within(panel).findByRole('button', { name: /Mark as handled by the team/ }));
+    const close = await screen.findByRole('dialog', { name: 'Mark C-000008 as handled' });
+    expect(within(close).getByRole('button', { name: 'Close the case' })).toBeDisabled();
+    await userEvent.type(
+      within(close).getByRole('textbox', { name: /What the team did/ }),
+      'The bed manager placed the patient in WARD-C by hand',
+    );
+    await userEvent.click(within(close).getByRole('button', { name: 'Close the case' }));
+    expect(await screen.findByText('C-000008 marked as handled')).toBeInTheDocument();
+    expect(closes).toEqual([
+      { reason: 'The bed manager placed the patient in WARD-C by hand', expectedVersion: expect.any(Number) },
+    ]);
+    // The case reads as resolved, handled by hand, so the escalation panel leaves the page
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Escalations' })).not.toBeInTheDocument(),
+    );
+  });
+
   it('is not offered on a case Shutter resolved', async () => {
     renderCase('C-000009');
     expect(await screen.findByText('Closed: verified')).toBeInTheDocument();

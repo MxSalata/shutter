@@ -130,6 +130,11 @@ export interface CaseDetail extends CaseSummary {
   failureText: string;
   patientId: string;
   patientIdAuthority: string;
+  /** A merge only (ADT^A40): the patient (MRG-1) and visit (MRG-5) merged into this one, and how many MRG groups. */
+  priorPatientId?: string;
+  priorPatientIdAuthority?: string;
+  priorEncounterId?: string;
+  mergeGroups?: number;
   sourceSystem: string;
   sourceMessageId: string;
   outcome: string;

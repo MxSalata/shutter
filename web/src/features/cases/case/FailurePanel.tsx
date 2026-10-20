@@ -10,6 +10,9 @@ const KINDS: Record<string, string> = {
   delivery_failed: 'Not delivered: the downstream system did not accept it',
   uncertain_outcome: 'Outcome unknown: the downstream system may or may not have applied it',
   rejected: 'Refused by the downstream system',
+  unmappable: 'Could not be mapped to a downstream operation',
+  withheld:
+    'Withheld: never sent (a merge the site keeps for the PAS team, or a cancellation the receiver cannot reverse)',
 };
 
 export function FailurePanel({ c }: { c: CaseDetail }) {

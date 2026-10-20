@@ -55,7 +55,16 @@ export function CaseHeader({ c }: { c: CaseDetail }) {
         </Text>
       ) : null}
       <Group gap="xl" wrap="wrap" align="flex-start">
-        <Meta label="What">{`${what}, encounter ${c.encounterId}`}</Meta>
+        <Meta label="What">
+          {c.encounterId && c.encounterId !== '-'
+            ? `${what}, encounter ${c.encounterId}`
+            : `${what}, no encounter`}
+        </Meta>
+        {c.event === 'merge' ? (
+          <Meta label="Merge">
+            {`${c.priorPatientId || 'a prior record'}${c.priorPatientIdAuthority ? ` (${c.priorPatientIdAuthority})` : ''}${c.priorEncounterId ? `, visit ${c.priorEncounterId}` : ''} into ${c.patientId}${(c.mergeGroups ?? 1) > 1 ? `, and ${(c.mergeGroups ?? 1) - 1} more` : ''}`}
+          </Meta>
+        ) : null}
         <Meta label="Event time">
           <Timestamp iso={c.eventTime} />
         </Meta>

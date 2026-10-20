@@ -13,10 +13,11 @@ import {
   TextInput,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconMailForward } from '@tabler/icons-react';
+import { IconCircleCheck, IconMailForward } from '@tabler/icons-react';
 import { useState } from 'react';
 import { newIdempotencyKey } from '@/api/client';
 import {
+  useCloseCase,
   useDraftEscalation,
   useEditEscalation,
   useEscalations,
@@ -80,7 +81,7 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
     notifications.show({
       color: 'teal',
       title: `Escalation ${draft.seq} sent`,
-      message: `To ${to}. Reinvestigate the case once they have corrected the systems.`,
+      message: `To ${to}. Once they have corrected the systems, mark the case as handled${c.failureKind === 'withheld' ? '' : ', or reinvestigate it'}.`,
     });
     onClose();
   };
@@ -148,6 +149,76 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
 }
 
 /**
+ * Closes a case the team corrected by hand: offered once an escalation is sent, or at once for a withheld case (a merge
+ * or a cancel Shutter never sends), where reinvestigating could find nothing new. The reason is recorded on the case,
+ * and the case's version guards against closing one that changed meanwhile.
+ */
+function MarkHandled({ c }: { c: CaseDetail }) {
+  const close = useCloseCase(c.caseId);
+  const [opened, setOpened] = useState(false);
+  const [reason, setReason] = useState('');
+  const [key, setKey] = useState('');
+  const open = () => {
+    setReason('');
+    setKey(newIdempotencyKey());
+    close.reset();
+    setOpened(true);
+  };
+  const submit = () =>
+    close.mutate(
+      { reason: reason.trim(), expectedVersion: c.version, idempotencyKey: key },
+      {
+        onSuccess: () => {
+          setOpened(false);
+          notifications.show({
+            color: 'teal',
+            title: `${c.caseId} marked as handled`,
+            message: 'Closed as handled by hand; a draft email of the case is cancelled.',
+          });
+        },
+      },
+    );
+  return (
+    <>
+      <Group gap="sm" wrap="wrap">
+        <Button variant="light" color="teal" leftSection={<IconCircleCheck size={16} />} onClick={open}>
+          Mark as handled by the team…
+        </Button>
+        <Text size="xs" c="dimmed">
+          When the team has corrected the systems by hand. Nothing is sent.
+        </Text>
+      </Group>
+      <Modal opened={opened} onClose={() => setOpened(false)} title={`Mark ${c.caseId} as handled`}>
+        <Stack gap="sm">
+          <Textarea
+            label="What the team did"
+            description="Recorded on the case with your name"
+            value={reason}
+            onChange={(e) => setReason(e.currentTarget.value)}
+            autosize
+            minRows={2}
+            data-autofocus
+          />
+          {close.error ? (
+            <Text size="sm" c="red">
+              {describeError(close.error)}
+            </Text>
+          ) : null}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setOpened(false)}>
+              Cancel
+            </Button>
+            <Button color="teal" onClick={submit} loading={close.isPending} disabled={!reason.trim()}>
+              Close the case
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </>
+  );
+}
+
+/**
  * Escalations: when Shutter can't safely recover a message, a person sends the case to the team that owns the
  * downstream system, who compare the systems and correct them by hand, outside HL7 (T29).
  */
@@ -163,6 +234,11 @@ export function EscalationPanel({ c }: { c: CaseDetail }) {
   if (!stopped) return null;
   const escalations = list.data ?? [];
   const pending = escalations.find((e) => e.state === 'draft' || e.state === 'failed');
+  const latest = escalations.reduce<Escalation | undefined>(
+    (a, e) => (!a || e.seq > a.seq ? e : a),
+    undefined,
+  );
+  const canClose = !!me?.operator && (c.failureKind === 'withheld' || latest?.state === 'sent');
   const start = () =>
     draft.mutate(
       { teamId: teamId || undefined, idempotencyKey: newIdempotencyKey() },
@@ -271,6 +347,7 @@ export function EscalationPanel({ c }: { c: CaseDetail }) {
           Escalating needs the operator role.
         </Text>
       )}
+      {canClose ? <MarkHandled c={c} /> : null}
       {!teams.length ? (
         <Text size="xs" c="dimmed">
           No teams are set in the site profile yet, so the draft has no recipient: add one there, or type the

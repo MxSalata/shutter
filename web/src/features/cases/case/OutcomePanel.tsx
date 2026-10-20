@@ -130,7 +130,8 @@ export function OutcomePanel({ c }: { c: CaseDetail }) {
           </Stack>
         </Alert>
       ) : null}
-      {c.state !== 'resolved' ? <Reinvestigate c={c} /> : null}
+      {/* A withheld case (a merge or a cancel Shutter never sends) has nothing new to find: the team closes it */}
+      {c.state !== 'resolved' && c.failureKind !== 'withheld' ? <Reinvestigate c={c} /> : null}
       {cl ? (
         <Stack gap="xs">
           <KeyValueList

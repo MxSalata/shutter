@@ -62,7 +62,11 @@ export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
   played = {};
   resetSiteProfile();
   escalations = {};
+  closed = {};
 }
+
+/** Cases a person closed as handled by hand in the demo, laid over the recorded case when it is read. */
+let closed: Record<string, { reason: string; by: string }> = {};
 
 /** Escalations drafted and sent in the demo, by case: nothing leaves the browser. */
 let escalations: Record<string, Escalation[]> = {};
@@ -220,7 +224,16 @@ export const handlers = [
       .sort((a, b) => b.openedAt.localeCompare(a.openedAt));
     return HttpResponse.json({ items, total: items.length });
   }),
-  http.get(`${BASE}/cases/:id`, ({ params }) => part(String(params.id), (c) => c.detail, 'not_found')),
+  http.get(`${BASE}/cases/:id`, ({ params }) =>
+    part(
+      String(params.id),
+      (c) =>
+        closed[String(params.id)]
+          ? { ...c.detail, state: 'resolved', disposition: 'handled_by_hand' }
+          : c.detail,
+      'not_found',
+    ),
+  ),
   http.get(`${BASE}/cases/:id/events`, ({ params }) => part(String(params.id), (c) => c.events, 'not_found')),
   http.get(`${BASE}/cases/:id/snapshot`, ({ params }) =>
     part(String(params.id), (c) => c.snapshot, 'no_snapshot'),
@@ -256,6 +269,35 @@ export const handlers = [
     if (!['blocked', 'escalated', 'failed'].includes(c.summary.state))
       return error(409, 'wrong_state', `The case is ${c.summary.state}`);
     return HttpResponse.json({ caseId: String(params.id), state: 'reopening' }, { status: 202 });
+  }),
+  // A case the team corrected by hand, closed with the reason (CONTRACTS 5.3, v1.14)
+  http.post(`${BASE}/cases/:id/close`, async ({ request, params }) => {
+    const denied = csrf(request) ?? guard('operator');
+    if (denied) return denied;
+    const id = String(params.id);
+    const c = cases[id];
+    if (!c) return error(404, 'not_found', 'No such case');
+    const body = (await request.json().catch(() => null)) as {
+      reason?: string;
+      expectedVersion?: number;
+    } | null;
+    if (!body || typeof body !== 'object' || !body.reason?.trim())
+      return error(400, 'bad_request', 'reason: say what the team did');
+    if (closed[id] || !['blocked', 'escalated', 'failed'].includes(c.summary.state))
+      return error(409, 'wrong_state', `The case is ${closed[id] ? 'resolved' : c.summary.state}`);
+    const version = (c.detail as { version?: number }).version;
+    if (body.expectedVersion !== undefined && body.expectedVersion !== version)
+      return HttpResponse.json(
+        { error: 'stale_version', detail: 'The case changed since it was read', currentVersion: version },
+        { status: 409 },
+      );
+    closed[id] = { reason: body.reason, by: session!.username };
+    // A draft or queued email is cancelled: the team is not asked to correct a case already handled
+    for (const e of escalations[id] ?? []) if (['draft', 'queued'].includes(e.state)) e.state = 'cancelled';
+    return HttpResponse.json(
+      { caseId: id, state: 'closing', requestedBy: session!.username, reason: body.reason },
+      { status: 202 },
+    );
   }),
   http.post(`${BASE}/cases/:id/preview-blind-resend`, ({ request, params }) => {
     const denied = csrf(request) ?? guard('operator');

@@ -277,6 +277,34 @@ export function useReinvestigate(caseId: string) {
   });
 }
 
+/**
+ * Close a case the team corrected by hand (a withheld merge or cancel, an escalation acted on): it resolves as
+ * handled_by_hand and a draft or queued email is cancelled (CONTRACTS 5.3, v1.14).
+ */
+export function useCloseCase(caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      reason,
+      expectedVersion,
+      idempotencyKey,
+    }: {
+      reason: string;
+      expectedVersion?: number;
+      idempotencyKey: string;
+    }) =>
+      api.post<{ caseId: string; state: string; requestedBy: string; reason: string }>(
+        `/cases/${seg(caseId)}/close`,
+        { reason, ...(expectedVersion !== undefined ? { expectedVersion } : {}) },
+        { idempotencyKey },
+      ),
+    onSettled: async () => {
+      await client.invalidateQueries({ queryKey: keys.case(caseId) });
+      await client.invalidateQueries({ queryKey: keys.escalations(caseId) });
+    },
+  });
+}
+
 export function usePreviewBlindResend(caseId: string) {
   return useMutation({
     mutationFn: () => api.post<BlindResendPreview>(`/cases/${seg(caseId)}/preview-blind-resend`),

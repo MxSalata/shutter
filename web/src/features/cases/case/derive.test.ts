@@ -160,6 +160,43 @@ describe('describeItem', () => {
     );
   });
 
+  it('says a merge with no encounter has no downstream state or receipt to read', () => {
+    expect(describeItem(item('ward_state', { not_applicable: true, http_status: '' }))).toBe(
+      'Not applicable: the message names no encounter',
+    );
+    expect(describeItem(item('receipt', { not_applicable: true }))).toBe(
+      'Not applicable: the message names no encounter',
+    );
+  });
+
+  it('notes the HL7 version the message says and the category it was parsed with', () => {
+    expect(
+      describeItem(
+        item('validation', {
+          parsed: true,
+          doc_type: '2.5.1:ADT_A02',
+          message_version: '2.4',
+          route_category: '2.5.1',
+          version_agrees: false,
+          version_note: 'The message says HL7 2.4; the route parses it as 2.5.1',
+        }),
+      ),
+    ).toBe(
+      'Parses as 2.5.1:ADT_A02; HL7 2.4 parsed as 2.5.1: The message says HL7 2.4; the route parses it as 2.5.1',
+    );
+    expect(
+      describeItem(
+        item('validation', {
+          parsed: true,
+          doc_type: '2.5.1:ADT_A02',
+          message_version: '2.5.1',
+          route_category: '2.5.1',
+          version_agrees: true,
+        }),
+      ),
+    ).toBe('Parses as 2.5.1:ADT_A02; HL7 2.5.1 parsed as 2.5.1');
+  });
+
   it('counts the free-text notes in a message', () => {
     expect(
       describeItem(

@@ -18,11 +18,17 @@ export function describeItem(item: SnapshotItem): string {
       const notes = asArray(d.notes);
       return `${str(d.message_type)} ${str(d.message_control_id)} from ${str(d.sending_application)}, location ${str(d.assigned_location).split('^')[0]}${notes.length ? `, ${notes.length} free-text note${notes.length > 1 ? 's' : ''}` : ''}`;
     }
-    case 'validation':
+    case 'validation': {
+      // The version the message says and the category its route parses it with, when they differ (a note, never a failure)
+      const version = d.message_version
+        ? `; HL7 ${str(d.message_version)} parsed as ${str(d.route_category)}${d.version_agrees === false && d.version_note ? `: ${str(d.version_note)}` : ''}`
+        : '';
       return d.parsed
-        ? `Parses as ${str(d.doc_type)}`
-        : `Does not parse${d.error ? `: ${str(d.error)}` : ''}`;
+        ? `Parses as ${str(d.doc_type)}${version}`
+        : `Does not parse${d.error ? `: ${str(d.error)}` : ''}${version}`;
+    }
     case 'ward_state': {
+      if (d.not_applicable) return 'Not applicable: the message names no encounter';
       const status = Number(d.http_status);
       const b = asObject(d.body) ?? {};
       if (status === 200)
@@ -31,6 +37,7 @@ export function describeItem(item: SnapshotItem): string {
       return `Could not be read (HTTP ${status || 'none'}): unknown`;
     }
     case 'receipt': {
+      if (d.not_applicable) return 'Not applicable: the message names no encounter';
       const status = Number(d.http_status);
       const b = asObject(d.body) ?? {};
       if (status === 200)

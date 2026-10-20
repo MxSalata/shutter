@@ -59,6 +59,7 @@ const DISPOSITION_COLOURS: Record<string, string> = {
   superseded: 'gray',
   more_evidence: 'yellow',
   escalate: 'orange',
+  handled_by_hand: 'grape',
 };
 
 export const DISPOSITION_HINTS: Record<string, string> = {
@@ -67,6 +68,7 @@ export const DISPOSITION_HINTS: Record<string, string> = {
   superseded: 'A later event moved the encounter on: sending it now would undo that',
   more_evidence: 'The evidence does not decide it yet',
   escalate: 'A person must decide',
+  handled_by_hand: 'The team corrected the systems by hand, and a person closed the case',
 };
 
 export function DispositionBadge({ disposition }: { disposition: string }) {
