@@ -81,7 +81,9 @@ ClassMethod ExportDir(dir As %String) As %Status
         Do r.%JSONExportToString(.json)
         Set name = $TRANSLATE(r.Key, ":|/\ ", "-----") _ ".json"
         Set f = ##class(%Stream.FileCharacter).%New()
-        Set f.Filename = dir _ name
+        Set f.TranslateTable = "UTF8"
+        Set sc = f.LinkToFile(dir _ name)
+        Quit:$$$ISERR(sc)
         Do f.Write(json)
         Set sc = f.%Save()
         Quit:$$$ISERR(sc)
@@ -134,9 +136,8 @@ ClassMethod ImportDir(dir As %String, Output count As %Integer) As %Status
     Do rs.Execute(dir, "*.json")
     While rs.Next() {
         Set path = rs.Get("Name")
-        Set f = ##class(%Stream.FileCharacter).%New()
-        Set f.Filename = path
-        Set json = ..Normalise(f.Read($$$MaxStringLength))
+        // The recordings are UTF-8 (an arrow in a model's text): read without the table, each byte would be a character.
+        Set json = ..Normalise(##class(Shutter.Knowledge.Text).ReadFile(path))
         Set r = ..%New()
         Set sc = r.%JSONImport(json)
         Quit:$$$ISERR(sc)

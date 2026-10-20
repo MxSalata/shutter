@@ -54,7 +54,7 @@ ClassMethod FromHL7(ts As %String, zone As %String = "", Output hadOffset As %Bo
     If offset = "" {
         // SQL hands an empty string over as $CHAR(0): both mean the profile's zone.
         If ($GET(zone) = "") || (zone = $CHAR(0)) Set zone = $GET(^Shutter.Config("feedZone"))
-    If zone = "" Set zone = ##class(Shutter.Store.SiteProfile).FeedTimeZone()
+        If zone = "" Set zone = ##class(Shutter.Store.SiteProfile).FeedTimeZone()
         Set offset = ..ZoneOffset(zone, iso)
         If offset = "" Quit iso _ "Z"
     } Else {
@@ -70,14 +70,30 @@ ClassMethod FromHL7(ts As %String, zone As %String = "", Output hadOffset As %Bo
 }
 
 /// The offset ("+HHMM" or "-HHMM") a zone gives a local time; "" for UTC. "Europe/London": +0100 in British Summer
-/// Time (an ambiguous or skipped local time at the change itself is read as summer time).
+/// Time (an ambiguous or skipped local time at the change itself is read as summer time). A zone Shutter does not
+/// know is read as UTC, and a warning says so in the event log, once per process and zone.
 ClassMethod ZoneOffset(zone As %String, localIso As %String) As %String
 {
     Set zone = $ZSTRIP(zone, "<>W")
     If (zone = "") || ($ZCONVERT(zone, "U") = "UTC") || ($ZCONVERT(zone, "U") = "Z") || (zone = "+00:00") Quit ""
     If $MATCH(zone, "^[+-][0-9]{2}:?[0-9]{2}$") Quit $EXTRACT(zone, 1) _ $TRANSLATE($EXTRACT(zone, 2, *), ":", "")
     If zone = "Europe/London" Quit $SELECT(..InBritishSummerTime(localIso, 1): "+0100", 1: "")
+    If '$DATA(^||Shutter.UnknownZone(zone)) {
+        Set ^||Shutter.UnknownZone(zone) = ""
+        Try {
+            Do ##class(Ens.Util.Log).LogWarning($CLASSNAME(), "ZoneOffset", "The feed time zone '" _ zone _ "' is not one Shutter knows (UTC, Europe/London or a fixed offset such as +01:00): times without an offset are read as UTC")
+        } Catch {
+        }
+    }
     Quit ""
+}
+
+/// Whether ZoneOffset knows a zone: empty (UTC), UTC, Z, Europe/London or a fixed offset.
+ClassMethod KnownZone(zone As %String) As %Boolean
+{
+    Set zone = $ZSTRIP(zone, "<>W")
+    If (zone = "") || $LISTFIND($LISTBUILD("UTC", "Z"), $ZCONVERT(zone, "U")) || (zone = "Europe/London") Quit 1
+    Quit $MATCH(zone, "^[+-][0-9]{2}:?[0-9]{2}$")
 }
 
 /// Whether a time is in British Summer Time. The time is UTC, or local London time when local is 1 (then the hour
@@ -120,13 +136,19 @@ ClassMethod LastSunday(year As %Integer, month As %Integer) As %String
     Quit $ZDATE(last - dow, 3)
 }
 
-/// A probe for tests and the terminal: how a timestamp reads in a zone, and the clock-change facts, as JSON.
+/// A probe for tests and the terminal: how a timestamp reads in a zone, the zone a time without an offset is read in and
+/// whether Shutter knows it, and the clock-change facts, as JSON.
 ClassMethod Probe(ts As %String, zone As %String = "") As %String [ SqlProc ]
 {
     Set iso = ..FromHL7(ts, zone, .had)
+    // The zone FromHL7 applied to a time without an offset: an empty one is the namespace's cached zone, then the profile's.
+    If (zone = "") || (zone = $CHAR(0)) Set zone = $GET(^Shutter.Config("feedZone"))
+    If zone = "" Set zone = ##class(Shutter.Store.SiteProfile).FeedTimeZone()
     Set o = {}
     Set o.iso = iso
     Do o.%Set("had_offset", ''had, "boolean")
+    Set o.zone = zone
+    Do o.%Set("zone_known", ..KnownZone(zone), "boolean")
     Do o.%Set("bst", ..InBritishSummerTime(iso), "boolean")
     Do o.%Set("near_clock_change", ..NearBritishClockChange(iso), "boolean")
     Set y = +$EXTRACT(iso, 1, 4)

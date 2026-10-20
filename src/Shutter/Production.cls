@@ -1,3 +1,5 @@
+Include Ensemble
+
 /// The Shutter production: the ADT feed to the downstream system, and the recovery side that opens
 /// and works cases. Paths and the downstream system's address come from system default settings written by
 /// Shutter.Setup, so this definition carries none. The agent items default to replay so that the
@@ -16,25 +18,36 @@ Parameter RECEIVER = "Downstream Out";
 /// brings its knowledge to the data the volume kept.
 ClassMethod OnStart(pTimeStarted As %String) As %Status
 {
+    // Nothing here stops the start: a failure is written to the event log, and the production runs without what
+    // failed (no provider configured from the environment, or the knowledge as last read).
     // In a container, the production starts with the instance, after the two known startup alerts are
     // logged: clear them here, so Docker's health check shows the instance's real state.
     Try {
-        Do ##class(Shutter.Setup).ClearStartupAlerts()
-    } Catch {
+        // It catches its own errors and answers "error: ..." rather than throw.
+        Set r = ##class(Shutter.Setup).ClearStartupAlerts()
+        If $EXTRACT(r, 1, 6) = "error:" $$$LOGWARNING("Clearing the startup alerts failed: " _ r)
+    } Catch ex {
+        $$$LOGWARNING("Clearing the startup alerts failed: " _ ex.DisplayString())
     }
     Try {
         Set key = $SYSTEM.Util.GetEnviron("ANTHROPIC_API_KEY")
         If (key '= "") && ('##class(Shutter.Setup).ProviderConfigured() || '##class(Shutter.Setup).ProviderKeyMatches(key)) {
-            Do ##class(Shutter.Setup).ConfigureProvider(key, $SYSTEM.Util.GetEnviron("SHUTTER_MODEL"))
+            Set r = ##class(Shutter.Setup).ConfigureProvider(key, $SYSTEM.Util.GetEnviron("SHUTTER_MODEL"))
+            If $EXTRACT(r, 1, 3) '= "ok:" $$$LOGWARNING("The model provider was not configured from ANTHROPIC_API_KEY: " _ r)
         }
         // A mode set by hand (record, for the recordings) survives a restart: only an environment that names one
         // changes it.
         If $SYSTEM.Util.GetEnviron("SHUTTER_AGENT_MODE") '= "" Do ##class(Shutter.Setup).RecordAgentMode($SYSTEM.Util.GetEnviron("SHUTTER_AGENT_MODE"))
-    } Catch {
+    } Catch ex {
+        $$$LOGWARNING("The model provider setup failed: " _ ex.DisplayString())
     }
     Try {
-        Do ##class(Shutter.Setup).RefreshKnowledge()
-    } Catch {
+        Set r = ##class(Shutter.Setup).RefreshKnowledge()
+        // A file that failed reads "error: ...", and a search collection that failed to build "unavailable: ..." or
+        // "failed: ..." (Shutter.Knowledge.Library's BuildAll).
+        If (r [ """error") || (r [ """unavailable: ") || (r [ """failed: ") $$$LOGERROR("Re-reading the knowledge files failed in part: " _ r)
+    } Catch ex {
+        $$$LOGERROR("Re-reading the knowledge files failed: " _ ex.DisplayString())
     }
     Quit $$$OK
 }

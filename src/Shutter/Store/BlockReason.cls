@@ -34,9 +34,7 @@ ClassMethod SeedFromFile(path As %String, Output count As %Integer) As %Status
 {
     Set count = 0
     If '##class(%File).Exists(path) Quit $$$OK
-    Set f = ##class(%Stream.FileCharacter).%New()
-    Set f.Filename = path
-    Set json = f.Read($$$MaxStringLength)
+    Set json = ##class(Shutter.Knowledge.Text).ReadFile(path)
     Set arr = ##class(Shutter.Util.Json).Parse(json, .sc)
     Quit:$$$ISERR(sc) sc
     If '$ISOBJECT(arr) Quit $$$OK

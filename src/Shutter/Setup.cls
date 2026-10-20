@@ -1090,6 +1090,9 @@ ClassMethod RefreshKnowledge(root As %String = "") As %String [ SqlProc ]
         Set path = files(name), isDir = (name = "records")
         If isDir { Continue:'##class(%File).DirectoryExists(path) } Else { Continue:'##class(%File).Exists(path) }
         Set stamp = $SELECT(isDir: ..DirectoryStamp(path), 1: ##class(%File).GetFileDateModified(path, 1) _ ":" _ ##class(%File).GetFileSize(path))
+        // The recordings were once imported without UTF-8 (an arrow read as mojibake): the reader's version in the stamp
+        // makes an instance that kept its data import them again, once, though their files have not changed.
+        If name = "records" Set stamp = "utf8:" _ stamp
         Continue:($GET(^Shutter.Config("stamp", name)) = stamp)
         Set sc = ..ReseedOne(name, path, .n)
         If $$$ISOK(sc) {

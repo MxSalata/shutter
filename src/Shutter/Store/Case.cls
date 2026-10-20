@@ -324,7 +324,7 @@ ClassMethod CloseByHand(case As Shutter.Store.Case, reason As %String, actor As 
     }
     If $ISOBJECT(case.CurrentApproval) && 'case.CurrentApproval.Revoked Do case.CurrentApproval.Revoke(who _ ": the case was handled by hand")
     Set case.Disposition = "handled_by_hand"
-    Set case.Headline = "Handled by the team. " _ $EXTRACT(reason, 1, 200)
+    Set case.Headline = "Handled by the team. " _ ##class(Shutter.Util.Json).Clip(reason, 200)
     Set case.Outcome = "Handled by hand, recorded by " _ who _ ": " _ reason
     Quit case.Transition("resolved", "Handled by hand: " _ reason _ followed, who, ref, expectedVersion)
 }

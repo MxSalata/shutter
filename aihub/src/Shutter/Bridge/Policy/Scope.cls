@@ -1,15 +1,17 @@
 Include %AI
 
-/// Holds an agent run to its own case and to the tools its role may use. Attached by the runner as
-/// the global authorization policy, so the model cannot read another case's evidence or submit
-/// a result for it, whatever the prompt says.
+/// Holds an agent run to its own case. Attached by the runner as the global authorization policy, so
+/// the model cannot read another case's evidence or submit a result for it, whatever the prompt says.
+/// What a role may call is set by the tools registered on its agent (its class's tools, its submit
+/// tool and its knowledge search), not by a list here.
 Class Shutter.Bridge.Policy.Scope Extends %AI.Policy.Authorization
 {
 
 /// The case the run is for.
 Property CaseId As %String(MAXLEN = 32);
 
-/// Comma-separated tool names the run may call; empty allows every registered tool.
+/// Comma-separated tool names the run may call; empty allows every registered tool. The runner leaves
+/// it empty: no role list is set.
 Property Allowed As %String(MAXLEN = 1000);
 
 /// Calls denied, for the response.

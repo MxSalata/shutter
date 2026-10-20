@@ -61,6 +61,17 @@ ClassMethod Preview(text As %String, max As %Integer = 200) As %String
     Quit $EXTRACT(t, 1, max - 1) _ "…"
 }
 
+/// <var>text</var> cut to at most <var>max</var> characters at a word boundary, with an ellipsis when it was cut. A
+/// single word longer than half the room is cut where it falls.
+ClassMethod Clip(text As %String, max As %Integer = 200) As %String
+{
+    If $LENGTH(text) <= max Quit text
+    Set t = $EXTRACT(text, 1, max - 1)
+    // The last space within the room, if the words before it fill at least half of it.
+    For i = max:-1:max \ 2 { If $EXTRACT(text, i) = " " Set t = $EXTRACT(text, 1, i - 1) Quit }
+    Quit $ZSTRIP(t, ">", " ,;:-") _ "…"
+}
+
 /// <var>json</var> with <code>null</code> inserted wherever a value is missing (<code>:,</code>, <code>:}</code>
 /// or <code>:]</code> outside string literals), as %JSON.Adaptor writes a numeric property with no value.
 /// Text inside strings is left alone.
