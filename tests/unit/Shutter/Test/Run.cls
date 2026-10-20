@@ -11,7 +11,12 @@ ClassMethod Triggers(repo As %String = "/home/irisowner/dev/") As %String [ SqlP
     Set root = $GET(^UnitTestRoot)
     Set ^UnitTestRoot = repo _ "tests/unit/"
     Set before = $ORDER(^UnitTest.Result(""), -1)
-    Set sc = ##class(%UnitTest.Manager).RunTest("Shutter", "/nodelete")
+    If ##class(%File).DirectoryExists(repo _ "tests/unit/Shutter") {
+        Set sc = ##class(%UnitTest.Manager).RunTest("Shutter", "/nodelete")
+    } Else {
+        // The tests are not on the mounted path (a worktree loaded them by hand): run the loaded class as it is.
+        Set sc = ##class(%UnitTest.Manager).DebugRunTestCase("", "Shutter.Test.Triggers", "/noload/nodelete")
+    }
     If root = "" {
         Kill ^UnitTestRoot
     } Else {

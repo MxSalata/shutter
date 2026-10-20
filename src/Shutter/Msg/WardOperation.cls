@@ -148,6 +148,15 @@ Storage Default
 <Value name="15">
 <Value>SourceHeaderId</Value>
 </Value>
+<Value name="16">
+<Value>PriorPatientId</Value>
+</Value>
+<Value name="17">
+<Value>PriorPatientIdAuthority</Value>
+</Value>
+<Value name="18">
+<Value>PriorEncounterId</Value>
+</Value>
 </Data>
 <DefaultData>WardOperationDefaultData</DefaultData>
 <Type>%Storage.Persistent</Type>

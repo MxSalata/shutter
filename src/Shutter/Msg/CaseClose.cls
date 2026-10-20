@@ -28,6 +28,9 @@ Storage Default
 <Value name="3">
 <Value>Actor</Value>
 </Value>
+<Value name="4">
+<Value>ExpectedVersion</Value>
+</Value>
 </Data>
 <DefaultData>CaseCloseDefaultData</DefaultData>
 <Type>%Storage.Persistent</Type>
