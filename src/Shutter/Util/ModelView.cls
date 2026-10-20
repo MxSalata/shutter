@@ -7,8 +7,10 @@
 /// numbers, the name parts and the date of birth) by the case's token for it (Shutter.Store.CaseToken) inside every
 /// string value, wherever the value stands: a field, an operation key, a history entry, a timeline row, an error echo.
 /// The map is built once per case by Learn, in the business process, in a canonical order; Reduce only reads it. The
-/// stored snapshot is untouched: the gate, the matcher, the verifier and the app read it inside IRIS. The regular
-/// expressions are ICU's ($LOCATE, $MATCH).
+/// view fails closed: when Learn cannot read the message or store a token it returns an error and the workflow sends
+/// nothing, and Reduce refuses a case whose own identifiers have no tokens. Values are matched whatever their case
+/// ("SMITH", "Smith"). The stored snapshot is untouched: the gate, the matcher, the verifier and the app read it inside
+/// IRIS. The regular expressions are ICU's ($LOCATE, $MATCH).
 Class Shutter.Util.ModelView Extends %RegisteredObject
 {
 
@@ -64,6 +66,10 @@ ClassMethod Reduce(case As Shutter.Store.Case, obj As %DynamicAbstractObject) As
     Set list = ##class(Shutter.Store.CaseToken).Map(case)
     For i = 1:1:$LISTLENGTH(list) { Set e = $LIST(list, i), map(i) = e, byValue($LIST(e, 2)) = $LIST(e, 1) }
     Set map = $LISTLENGTH(list)
+    // Fail closed: a case whose own patient and encounter have no tokens was never learnt, or not completely.
+    For value = case.PatientId, case.EncounterId {
+        If ##class(Shutter.Store.CaseToken).Accepts("", value) && '$DATA(byValue(value)) Return {"error": ("The identifiers of case " _ case.CaseId _ " have no tokens yet, so nothing of it is shown to a model")}
+    }
     Quit ..Walk(copy, "", freeText, .map, .byValue)
 }
 
@@ -193,13 +199,16 @@ ClassMethod InstructionLike(text As %String) As %Boolean
 /// (always T1 of their kinds), then everything else found in the message (every PID-3 repetition, the name parts, the
 /// date of birth) and in the object (patient_id, encounter_id, visit_number, nhs_number values, the pieces of every
 /// operation key) sorted by kind and value, so the same evidence gives the same tokens in every run. Run once per case
-/// by the business process (and by Preview); Reduce never learns.
-ClassMethod Learn(case As Shutter.Store.Case, obj As %DynamicAbstractObject)
+/// by the business process (and by Preview); Reduce never learns. An error when the message could not be read or a
+/// value that takes a token could not be given one: the caller then sends nothing to a model.
+ClassMethod Learn(case As Shutter.Store.Case, obj As %DynamicAbstractObject) As %Status
 {
     Kill cand
-    Set patientKind = ..LearnMessage(case, .cand)
-    If case.PatientId '= "" Do ##class(Shutter.Store.CaseToken).Assign(case, patientKind, case.PatientId)
-    If case.EncounterId '= "" Do ##class(Shutter.Store.CaseToken).Assign(case, "ENC", case.EncounterId)
+    Set patientKind = ..LearnMessage(case, .cand, .sc)
+    Quit:$$$ISERR(sc) sc
+    If case.PatientId '= "" Set sc = ..Assign(case, patientKind, case.PatientId)
+    If $$$ISOK(sc) && (case.EncounterId '= "") Set sc = ..Assign(case, "ENC", case.EncounterId)
+    Quit:$$$ISERR(sc) sc
     Do ..Collect(obj, .cand, case, 0)
     Set kind = ""
     For {
@@ -207,22 +216,37 @@ ClassMethod Learn(case As Shutter.Store.Case, obj As %DynamicAbstractObject)
         Set value = ""
         For {
             Set value = $ORDER(cand(kind, value)) Quit:value=""
-            Do ##class(Shutter.Store.CaseToken).Assign(case, kind, value)
+            Set sc = ..Assign(case, kind, value)
+            Quit:$$$ISERR(sc)
         }
+        Quit:$$$ISERR(sc)
     }
+    Quit sc
+}
+
+/// A value's token, made on first sight; an error when the value takes a token and none could be stored.
+ClassMethod Assign(case As Shutter.Store.Case, kind As %String, value As %String) As %Status [ Private ]
+{
+    If ##class(Shutter.Store.CaseToken).Assign(case, kind, value) '= "" Quit $$$OK
+    If '##class(Shutter.Store.CaseToken).Accepts(kind, value) Quit $$$OK
+    Quit $$$ERROR($$$GeneralError, "No token could be stored for a " _ kind _ " value of case " _ case.CaseId)
 }
 
 /// The message's identifiers (every PID-3 repetition, typed by PID-3.5), the name parts (PID-5) and the date of birth
 /// (PID-7, as written and as ISO), and for a merge the prior patient's identifiers (MRG-1, every repetition, typed by
 /// CX.5), visit number (MRG-5) and name parts (MRG-7) from every MRG segment, as candidates; returns the kind of the
-/// case's own patient identifier.
-ClassMethod LearnMessage(case As Shutter.Store.Case, ByRef cand) As %String [ Private ]
+/// case's own patient identifier. A name part counts from two letters (a single initial is left: as a token it would
+/// replace every standalone letter of a text). sc is an error when the case names a message that cannot be read, or
+/// reading it failed: its names would then reach a model unreplaced.
+ClassMethod LearnMessage(case As Shutter.Store.Case, ByRef cand, Output sc As %Status) As %String [ Private ]
 {
-    Set kind = "MRN"
+    Set kind = "MRN", sc = $$$OK
     Try {
-        Set header = ##class(Ens.MessageHeader).%OpenId(case.SourceHeaderId)
+        Set header = $SELECT(case.SourceHeaderId '= "": ##class(Ens.MessageHeader).%OpenId(case.SourceHeaderId), 1: "")
+        If (case.SourceHeaderId '= "") && '$ISOBJECT(header) Set sc = $$$ERROR($$$GeneralError, "The message header " _ case.SourceHeaderId _ " of case " _ case.CaseId _ " cannot be read")
         If $ISOBJECT(header) {
             Set msg = ##class(EnsLib.HL7.Message).%OpenId(header.MessageBodyId)
+            If '$ISOBJECT(msg) Set sc = $$$ERROR($$$GeneralError, "The HL7 message of case " _ case.CaseId _ " cannot be read")
             If $ISOBJECT(msg) {
                 Set reps = +##class(Shutter.Util.OperationKey).Value(msg, "PID", "3(*)")
                 For r = 1:1:reps {
@@ -235,7 +259,7 @@ ClassMethod LearnMessage(case As Shutter.Store.Case, ByRef cand) As %String [ Pr
                 For r = 1:1:names {
                     For c = 1, 2, 3 {
                         Set part = $ZSTRIP(##class(Shutter.Util.OperationKey).Value(msg, "PID", "5(" _ r _ ")." _ c), "<>W")
-                        If $LENGTH(part) >= 3 Set cand("NAME", part) = ""
+                        If $LENGTH(part) >= 2 Set cand("NAME", part) = ""
                     }
                 }
                 Set dob = $ZSTRIP(##class(Shutter.Util.OperationKey).Value(msg, "PID", "7.1"), "<>W")
@@ -261,13 +285,14 @@ ClassMethod LearnMessage(case As Shutter.Store.Case, ByRef cand) As %String [ Pr
                     For r = 1:1:names {
                         For c = 1, 2, 3 {
                             Set part = $ZSTRIP(mrg.GetValueAt("7(" _ r _ ")." _ c), "<>W")
-                            If $LENGTH(part) >= 3 Set cand("NAME", part) = ""
+                            If $LENGTH(part) >= 2 Set cand("NAME", part) = ""
                         }
                     }
                 }
             }
         }
-    } Catch {
+    } Catch ex {
+        Set sc = $$$ERROR($$$GeneralError, "The message of case " _ case.CaseId _ " could not be read for its identifiers: " _ ex.DisplayString())
     }
     Quit kind
 }
@@ -320,7 +345,7 @@ ClassMethod Tokenise(case As Shutter.Store.Case, text As %String) As %String
 ClassMethod TokeniseWith(text As %String, ByRef map) As %String [ Private ]
 {
     If text = "" Quit text
-    For i = 1:1:+$GET(map) { Set text = ..ReplaceBounded(text, $LIST(map(i), 2), $LIST(map(i), 1)) }
+    For i = 1:1:+$GET(map) { Set text = ..ReplaceBounded(text, $LIST(map(i), 2), $LIST(map(i), 1), 1) }
     Quit text
 }
 
@@ -351,13 +376,16 @@ ClassMethod Unresolved(text As %String) As %String
 }
 
 /// Replace a value by another wherever it stands as a whole identifier (not inside a longer run of letters, digits,
-/// hyphens or underscores). The value is quoted for the regular expression piece by piece, so a \E inside it is safe.
-ClassMethod ReplaceBounded(text As %String, value As %String, by As %String) As %String
+/// hyphens or underscores), whatever its case when caseless is set (the way out: a name written "SMITH" in the message
+/// and "Smith" in an error echo). The value is quoted for the regular expression piece by piece, so a \E inside it is
+/// safe.
+ClassMethod ReplaceBounded(text As %String, value As %String, by As %String, caseless As %Boolean = 0) As %String
 {
-    If (value = "") || '(text [ value) Quit text
+    If value = "" Quit text
+    If caseless { Quit:'($ZCONVERT(text, "U") [ $ZCONVERT(value, "U")) text } Else { Quit:'(text [ value) text }
     Set quoted = ""
     For p = 1:1:$LENGTH(value, "\E") { Set quoted = quoted _ $SELECT(p > 1: "\\E", 1: "") _ "\Q" _ $PIECE(value, "\E", p) _ "\E" }
-    Set pattern = "(?<![A-Za-z0-9_-])" _ quoted _ "(?![A-Za-z0-9_-])"
+    Set pattern = $SELECT(caseless: "(?i)", 1: "") _ "(?<![A-Za-z0-9_-])" _ quoted _ "(?![A-Za-z0-9_-])"
     Set out = "", pos = 1
     For {
         Set at = $LOCATE(text, pattern, pos, after)
