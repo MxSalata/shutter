@@ -117,6 +117,9 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The whole history: the writing rules' step reads the messages of every commit a push brings.
+          fetch-depth: 0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
@@ -150,6 +153,16 @@ jobs:
       # publish.
       - name: Both module.xml files are plain ASCII
         run: python3 scripts/check-ascii.py module.xml aihub/module.xml
+      # The writing rules: no em or en dashes, no tool's name and no Co-Authored-By trailer, in every tracked file but
+      # the built www/ and the vendored installer, and in the messages of the commits a push brings.
+      - name: The files and the pushed commit messages keep the writing rules
+        run: |
+          before="${{ github.event.before }}"
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "$before" ] && [ "$before" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$before^{commit}" 2>/dev/null; then
+            python3 scripts/check-text.py --messages "$before..${{ github.sha }}"
+          else
+            python3 scripts/check-text.py --messages "-1"
+          fi
       # The evaluation of the board is made from the recordings, the scenarios and docs/readme/comparison.md, so a change
       # to any of them regenerates it (scripts/evaluate.py). A push of docs alone runs no CI, so regenerate it with the
       # docs change rather than leave it to the next code push.
