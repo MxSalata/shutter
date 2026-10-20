@@ -396,6 +396,8 @@ ClassMethod Cases() As %Status
         Continue:'$ISOBJECT(c)
         Set o = ..Project(c)
         If $ISOBJECT(c.Incident) Set o.incidentId = c.Incident.IncidentId
+        // Who made the current plan (the board's or the investigator's run, the site's policy, rules alone)
+        If $ISOBJECT(c.CurrentPlan) Set o.planCreatedBy = c.CurrentPlan.CreatedBy
         Do items.%Push(o)
     }
     Set out = {}
@@ -409,6 +411,7 @@ ClassMethod CaseGet(caseId As %String) As %Status
     Set case = ..CaseOr404(caseId)
     If '$ISOBJECT(case) Quit $$$OK
     Set o = ..Project(case)
+    If $ISOBJECT(case.CurrentPlan) Set o.planCreatedBy = case.CurrentPlan.CreatedBy
     // The case's place in its incident (CONTRACTS 7.5), when one holds it.
     If $ISOBJECT(case.Incident) Set o.incidentId = case.Incident.IncidentId, o.incident = ##class(Shutter.Store.ChainItem).IncidentContext(case)
     Set id = case.%Id()
