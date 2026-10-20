@@ -1,5 +1,5 @@
 /// <reference types="vitest/config" />
-import { defineConfig, loadEnv, type Plugin } from 'vite';
+import { defineConfig, loadEnv, searchForWorkspaceRoot, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
 import { readFileSync, rmSync } from 'node:fs';
@@ -79,6 +79,8 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       strictPort: true,
+      // The mock reads the scenario definitions (fixtures/scenarios.json) beside the recorded answers.
+      fs: { allow: [searchForWorkspaceRoot(process.cwd()), '../fixtures'] },
       proxy: {
         // The browser talks to Vite, Vite to IRIS: same origin, so the session cookie works as it will when IRIS
         // serves the app. A Basic challenge on a 401 would open the browser's own login dialog.

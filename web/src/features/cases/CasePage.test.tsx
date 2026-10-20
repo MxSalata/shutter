@@ -108,6 +108,42 @@ describe('CasePage', () => {
     expect(screen.queryByRole('button', { name: 'Reinvestigate' })).not.toBeInTheDocument();
   });
 
+  it('lets an approver approve the held case, which then replays its recorded outcome', async () => {
+    renderCase('C-000002');
+    const approval = await screen.findByRole('region', { name: 'Approval' });
+    expect(await within(approval).findByText('Waiting for an approver')).toBeInTheDocument();
+    await userEvent.click(within(approval).getByRole('button', { name: 'Approve…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve this plan' }));
+    expect(await screen.findByText('Closed: verified', {}, { timeout: 5_000 })).toBeInTheDocument();
+    const dispatch = await screen.findByRole('region', { name: 'Dispatch and verification' });
+    expect(await within(dispatch).findByText('Verified at the receiver')).toBeInTheDocument();
+  });
+
+  it('closes the held case as blocked when the approver rejects it', async () => {
+    renderCase('C-000002');
+    const approval = await screen.findByRole('region', { name: 'Approval' });
+    await userEvent.click(await within(approval).findByRole('button', { name: 'Reject…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Reject plan v1' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Reject this plan' }));
+    expect(await screen.findByText('Closed: blocked', {}, { timeout: 5_000 })).toBeInTheDocument();
+    expect(await within(approval).findByText('Rejected by approver')).toBeInTheDocument();
+  });
+
+  it('ends a headline the server cut mid-word with an ellipsis', async () => {
+    renderCase('C-000008');
+    expect(await screen.findByText(/That state was set by…$/)).toBeInTheDocument();
+    expect(screen.queryByText(/set by BE$/)).not.toBeInTheDocument();
+  });
+
+  it("shows a replayed run's model and what the recorded run cost, not $0.00", async () => {
+    renderCase('C-000009');
+    const board = await screen.findByRole('region', { name: 'The board' });
+    expect((await within(board).findAllByText('Recorded run · claude-opus-5-5, replayed')).length).toBe(4);
+    expect((await within(board).findAllByText(/\$\d+\.\d+ when recorded, nothing now/)).length).toBe(4);
+    expect(within(board).queryByText(/\$0\.00/)).not.toBeInTheDocument();
+  });
+
   it.each(Object.keys(fixtures.cases))('shows recorded case %s', async (caseId) => {
     renderCase(caseId);
     expect(await screen.findByRole('heading', { name: `Case ${caseId}` })).toBeInTheDocument();

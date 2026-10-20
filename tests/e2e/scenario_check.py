@@ -16,8 +16,10 @@ fixtures/scenarios.json. Prints one line per scenario and exits 1 when any diffe
 
 A scenario whose expected outcome says "incident" (S11) has several cases: the check follows the incident the run
 opens, approves its plan and its cases' plans with --approve, and compares each encounter's chain (kind, who decided,
-the catalogue entries), its writes and the downstream system's final state with expected.encounters. Such a scenario
-names the modes it is defined for (expected.modes); other modes are skipped.
+the catalogue entries), its writes and the downstream system's final state with expected.encounters.
+
+A scenario that names the modes it is defined for (expected.modes: S7, S11, S12, S17, S18) is skipped in the others.
+S7 is not defined for site policy, which resends without asking anyone, so no plan waits for its later transfer.
 
 It plays scenarios: each run resets the downstream system. Don't run it on an instance someone else is using.
 """
@@ -111,8 +113,11 @@ def wait_until_idle(operator, timeout):
 
 def play(args, operator, approver, scenario, mode):
     """Plays one scenario in one mode and returns (as_expected, line, outcome)."""
-    if scenario["expected"].get("incident"):
+    expected = scenario["expected"]
+    if expected.get("incident"):
         return play_incident(args, operator, approver, scenario, mode)
+    if mode not in expected.get("modes", [mode]):
+        return True, f"skipped {scenario['id']} {mode}: defined for {', '.join(expected['modes'])}", "not defined"
     wait_until_idle(operator, args.timeout)
     before = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     status, started = operator.call("POST", f"/scenarios/{scenario['id']}/run", {"mode": mode}, idempotent=True)

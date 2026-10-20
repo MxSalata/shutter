@@ -5,13 +5,66 @@ import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { Timestamp } from '@/components/Timestamp';
 import { formatInt, formatUsd, humanize } from '@/lib/format';
-import type { AgentItem } from '@/api/types';
+import type { AgentItem, Settings } from '@/api/types';
 
-function Flag({ on, yes, no }: { on: boolean; yes: string; no: string }) {
+function Flag({ children }: { children: React.ReactNode }) {
   return (
-    <Badge color={on ? 'teal' : 'gray'} variant="light" style={{ textTransform: 'none' }}>
-      {on ? yes : no}
+    <Badge color="teal" variant="light" style={{ textTransform: 'none' }}>
+      {children}
     </Badge>
+  );
+}
+
+/** How the agents answer, by the mode they run in now; a replaying instance counts the replays it has run. */
+function answering(mode: string, replayed: number | undefined): string {
+  if (mode === 'replay')
+    return `replaying recorded live runs${replayed ? ` (${formatInt(replayed)} ${replayed === 1 ? 'replay' : 'replays'} so far)` : ''}`;
+  if (mode === 'live') return 'running live on the configured model provider';
+  if (mode === 'record') return 'running live and recording each run';
+  return humanize(mode).toLowerCase();
+}
+
+/**
+ * What the instance has, first: its agents and how they answer, then what is present. What it lacks follows in one
+ * line, since a replaying instance needs none of it.
+ */
+function Configured({ s, replayed }: { s: Settings; replayed: number | undefined }) {
+  const agents = s.agentItems.filter((a) => a.agentClass && a.enabled !== false);
+  const modes = [...new Set(agents.map((a) => a.effectiveMode || a.mode || ''))];
+  const how = modes.length === 1 ? answering(modes[0], replayed) : 'in different modes, as the table shows';
+  const missing = [
+    !s.aiHubPresent && 'AI Hub',
+    !s.liveRunnerPresent && 'the live runner',
+    s.providerConfigured === false && 'a model provider',
+  ].filter(Boolean) as string[];
+  return (
+    <Stack gap="xs">
+      <Text fw={600}>
+        {`${agents.length} ${s.aiHubPresent ? 'AI Hub ' : ''}${agents.length === 1 ? 'agent' : 'agents'}, ${how}`}
+      </Text>
+      <Group gap="sm" wrap="wrap">
+        <Flag>Mode: {humanize(s.mode)}</Flag>
+        {s.demo ? <Flag>Demo instance</Flag> : null}
+        {s.aiHubPresent ? <Flag>AI Hub present</Flag> : null}
+        {s.liveRunnerPresent ? <Flag>Live runner installed</Flag> : null}
+        {s.providerConfigured ? <Flag>Model provider configured</Flag> : null}
+        {s.scenario ? <Text size="sm">Last scenario: {s.scenario}</Text> : null}
+        {s.resetAt ? (
+          <Group gap={4}>
+            <Text size="sm">Last reset</Text>
+            <Timestamp iso={s.resetAt} />
+          </Group>
+        ) : null}
+      </Group>
+      {missing.length ? (
+        <Text size="sm">
+          Not on this instance: {missing.join(', ').replace(/, ([^,]*)$/, ' and $1')}.
+          {modes.length === 1 && modes[0] === 'replay'
+            ? ' A replay needs none of them: the recorded runs answer.'
+            : ''}
+        </Text>
+      ) : null}
+    </Stack>
   );
 }
 
@@ -102,26 +155,7 @@ export default function SettingsPage() {
         {s ? (
           <>
             <Card padding="md">
-              <Group gap="sm" wrap="wrap">
-                <Flag on={s.aiHubPresent} yes="AI Hub present" no="No AI Hub: recorded runs only" />
-                <Flag on={s.liveRunnerPresent} yes="Live runner installed" no="No live runner" />
-                {s.providerConfigured !== undefined ? (
-                  <Flag
-                    on={s.providerConfigured}
-                    yes="Model provider configured"
-                    no="No model provider configured"
-                  />
-                ) : null}
-                <Flag on={s.demo} yes="Demo instance" no="Not a demo instance" />
-                <Text size="sm">Mode: {humanize(s.mode)}</Text>
-                {s.scenario ? <Text size="sm">Scenario: {s.scenario}</Text> : null}
-                {s.resetAt ? (
-                  <Group gap={4}>
-                    <Text size="sm">Last reset</Text>
-                    <Timestamp iso={s.resetAt} />
-                  </Group>
-                ) : null}
-              </Group>
+              <Configured s={s} replayed={costs.data?.totals?.replayedRuns} />
             </Card>
             <Card padding="md">
               <Title order={2} fz="lg" mb={4}>
@@ -187,7 +221,7 @@ export default function SettingsPage() {
             Costs
           </Title>
           {costs.isError ? <ErrorAlert error={costs.error} title="The costs could not be read" /> : null}
-          {costs.data?.totals ? (
+          {costs.data?.totals?.spentUsd !== undefined ? (
             <Text size="sm" mb="sm">
               <Text span fw={700}>
                 {formatUsd(costs.data.totals.spentUsd)}

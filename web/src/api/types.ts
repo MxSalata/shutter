@@ -57,6 +57,8 @@ export interface ScenarioExpected {
   blocked_by?: string;
   injected_note?: string;
   other_encounter?: string;
+  /** The modes the scenario is defined for, when not all of them: in another mode its card doesn't apply. */
+  modes?: Mode[];
 }
 
 export interface ScenarioRun {

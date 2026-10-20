@@ -264,8 +264,10 @@ def scenarios():
             {"wait_for_state": "awaiting_approval", "timeout": 180},
             {"file": c[0]},
         ],
+        # Site policy resends an E2 case without asking anyone, so no plan waits for the later transfer to overtake.
         "expected": {"disposition": "superseded", "write": False, "final_state": "admitted", "final_ward": "WARD-C",
-                     "failed_operation_key": b[2]["operation_key"], "blocked_by": "APPROVAL_RECEIVER_CHANGED"},
+                     "failed_operation_key": b[2]["operation_key"], "blocked_by": "APPROVAL_RECEIVER_CHANGED",
+                     "modes": ["board", "single", "rules"]},
     }, [a, b, c]))
 
     # S8: event times that can't be compared

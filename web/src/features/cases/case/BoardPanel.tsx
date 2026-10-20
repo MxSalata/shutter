@@ -1,9 +1,11 @@
-import { Accordion, Anchor, Badge, Card, Group, List, SimpleGrid, Stack, Text, Tooltip } from '@mantine/core';
-import { useRuns } from '@/api/hooks';
+import { Accordion, Badge, Card, Group, List, SimpleGrid, Stack, Text, Tooltip } from '@mantine/core';
+import { useRuns, useSettings } from '@/api/hooks';
 import type { AgentRun, Mode } from '@/api/types';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { PortalLink } from '@/components/PortalLink';
 import { DispositionBadge } from '@/components/StateBadge';
 import { JsonBlock } from '@/components/JsonBlock';
+import { costAtPrice } from '@/lib/cost';
 import { asArray, asObject } from '@/lib/json';
 import { formatDuration, formatInt, formatUsd, humanize, keyLabel } from '@/lib/format';
 import { describeEntry } from './derive';
@@ -21,11 +23,25 @@ const LISTS: [string, string][] = [
 
 function RunStats({ run, portalBase }: { run: AgentRun; portalBase: string }) {
   const replay = run.mode === 'replay';
+  const prices = useSettings().data?.prices;
+  // A replay costs nothing now; its tokens are the recorded run's, so they give what that run cost.
+  const recorded = replay ? costAtPrice(run, prices) : undefined;
+  const cost = replay
+    ? recorded !== undefined
+      ? `${formatUsd(recorded)} when recorded, nothing now`
+      : 'nothing now'
+    : formatUsd(run.costUsd) || '$0.00';
   return (
     <Stack gap={4}>
       <Group gap={6} wrap="wrap">
         <Tooltip
-          label={replay ? 'Replayed from a recorded run: no model was called' : `A live run on ${run.model}`}
+          label={
+            replay
+              ? `Replayed from a recorded live run${run.model ? ` on ${run.model}` : ''}: no model was called now`
+              : `A live run on ${run.model}`
+          }
+          multiline
+          maw={300}
         >
           <Badge
             size="xs"
@@ -34,7 +50,7 @@ function RunStats({ run, portalBase }: { run: AgentRun; portalBase: string }) {
             style={{ textTransform: 'none' }}
             tabIndex={0}
           >
-            {replay ? 'Replayed recording' : `Live · ${run.model}`}
+            {replay ? `Recorded run${run.model ? ` · ${run.model}` : ''}, replayed` : `Live · ${run.model}`}
           </Badge>
         </Tooltip>
         {run.status !== 'ok' ? (
@@ -55,22 +71,21 @@ function RunStats({ run, portalBase }: { run: AgentRun; portalBase: string }) {
             ? ` · cache ${formatInt(run.cacheReadTokens)} read, ${formatInt(run.cacheCreationTokens)} written`
             : ''}
           {' · '}
-          {formatUsd(run.costUsd) || '$0.00'} · {formatDuration(run.durationMs) || '0 ms'}
+          {cost} · {formatDuration(run.durationMs) || '0 ms'}
           {run.toolCallCount ? ` · ${run.toolCallCount} tool calls` : ''}
         </Text>
       )}
       {run.ensMessageId ? (
-        <Anchor
+        <PortalLink
           href={
             run.messageLink ||
             `${portalBase}EnsPortal.MessageContents.zen?HeaderId=${encodeURIComponent(run.ensMessageId)}`
           }
-          target="_blank"
-          rel="noreferrer"
+          what={`message ${run.ensMessageId}, the agent's request and answer`}
           size="xs"
         >
           The run's message in the production
-        </Anchor>
+        </PortalLink>
       ) : null}
       {run.error ? (
         <Text size="xs" c="red">
