@@ -12,7 +12,7 @@ case's outcome and the receiving system's final state with the scenario's expect
   no note text (`tests/privacy_check.py`). Each cell gives the case's cost.
 - **Board, replay:** the same board replaying those live runs' recordings, as Shutter does without an API key (the
   recordings in `fixtures/records` are these runs, one per board member and case). Played on IRIS for Health Community
-  2026.2 in replay mode, with no model calls, as CI does on every push to `main`.
+  2026.2 in replay mode, with no model calls, as CI does on every push to `main` that changes code.
 - **Rules only:** no agents. It proposes resending the operation unchanged at the observed version, and the gate alone
   decides.
 
@@ -34,8 +34,9 @@ case's outcome and the receiving system's final state with the scenario's expect
 
 ## What it shows
 
-- **The board gets all thirteen right, with live agents as in replay.** Rules alone get the four plain resends right
-  (S2, S4, S5, S9) and the two withheld cases (S15, S16), which never reach a plan of either kind.
+- **The board gets 11 of the 11 single cases it is convened for (S1 to S10 and S13), with live agents as in replay.**
+  Rules alone get 4 of those 11, the plain resends (S2, S4, S5, S9). S15 and S16 are withheld by rule before either
+  the board or rules alone: no plan of either kind is made, and both end escalated as expected.
 - **Where rules alone are wrong, the gate usually stops them.** In S1, S3, S6, S7, S10 and S13 the resend is blocked by
   a check (a later event, an existing receipt, a discharge, a changed receiver, a receiver that can't take a conditional
   write, an event time before the admission), so nothing wrong reaches the receiver, but the case stops for a person.
@@ -55,6 +56,7 @@ case's outcome and the receiving system's final state with the scenario's expect
   passes, 0.74 USD: a later transfer arrived while the first plan awaited approval, so the case was planned again and
   closed as superseded.
 
-The replay column is what CI checks on every push to `main`: a full install on IRIS for Health Community, then
+The replay column is what CI checks on every push to `main` that changes code (a push of only the README or `docs/`
+runs nothing): a full install on IRIS for Health Community, then
 `scenario_check.py --approve` over S1 to S10, S13, S15 and S16 with these recordings, all expected to match; the image job builds
 the contest image's Dockerfile and plays S2 on it.
