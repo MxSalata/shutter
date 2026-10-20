@@ -56,17 +56,28 @@ ClassMethod CreateNamespaceStatus(ns As %String) As %Status
 /// library, prices, recordings, the downstream system's installer when present, the web applications and the
 /// production. The names from before the downstream system's rename are removed when they exist. root is the
 /// module's directory (IPM passes ${root}); demo marks the instance as a demo (reset allowed, demo users created).
+/// The module's manifest passes ${demo} (default 1; zpm "load <dir> -Ddemo=0" for a site). With demo = 0 nothing of
+/// the demo is made: no demo users, nothing of the demo receiver's (its resource, role, web application, client user
+/// and credential), no recorded runs, the message purge task only when SHUTTER_MESSAGE_PURGE is 1, and the
+/// production's feed, downstream and scenario items switched off (DisableDemoItems). Returns "ok" or the error.
 ClassMethod Install(root As %String = "", demo As %Boolean = 1) As %String [ SqlProc ]
 {
     Set sc = ..InstallStatus(root, demo)
     Quit $SELECT($$$ISOK(sc): "ok", 1: $SYSTEM.Status.GetErrorText(sc))
 }
 
+/// Install as a %Status: what the module's manifest invokes (the Invoke checks the status, so a failed install stops
+/// the load) and what Install wraps. The housekeeping tasks read SHUTTER_MESSAGE_DAYS and SHUTTER_MESSAGE_PURGE from
+/// the environment of the process that runs the install (EnsureRetentionTasks).
 ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1) As %Status
 {
     Set sc = $$$OK
     Try {
         Set ns = $NAMESPACE
+        // SQL hands an empty argument to a procedure as $CHAR(0); an empty demo keeps the default.
+        If root = $CHAR(0) Set root = ""
+        If (demo = "") || (demo = $CHAR(0)) Set demo = 1
+        Set demo = ''demo
         If root '= "" Set root = ##class(%File).NormalizeDirectory(root)
         Set ^Shutter.Config("root") = root
         Set ^Shutter.Config("demo") = demo
@@ -76,12 +87,13 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1) As %Status
         Set sc = ..CreateFolders() Quit:$$$ISERR(sc)
         Set sc = ..CreateSecurity(ns, demo) Quit:$$$ISERR(sc)
         Set sc = ..RemoveOldReceiverNames() Quit:$$$ISERR(sc)
-        // The downstream system's resource and role first: the production's client user gets the role at creation.
-        If ##class(%Dictionary.CompiledClass).%ExistsId("Downstream.Installer") {
-            Set sc = $CLASSMETHOD("Downstream.Installer", "Install")
+        // The demo receiver's resource and role first: the production's client user gets the role at creation. A site
+        // install makes nothing of the demo receiver's: no resource, role, client user or credential.
+        If demo && ##class(%Dictionary.CompiledClass).%ExistsId("Downstream.Installer") {
+            Set sc = $CLASSMETHOD("Downstream.Installer", "Install", demo)
             Quit:$$$ISERR(sc)
         }
-        Set sc = ..CreateCredentials(demo) Quit:$$$ISERR(sc)
+        If demo Set sc = ..CreateCredentials(demo) Quit:$$$ISERR(sc)
         Set sc = ..CreateWorkflowRole(demo) Quit:$$$ISERR(sc)
         Set sc = ##class(Shutter.Store.BoardMember).Seed() Quit:$$$ISERR(sc)
         Set sc = ##class(Shutter.Store.ModelPrice).Seed() Quit:$$$ISERR(sc)
@@ -95,17 +107,20 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1) As %Status
             Set sc = ##class(Shutter.Catalogue.Entry).SeedFromFile(root _ "knowledge/catalogue/catalogue.json", .entries) Quit:$$$ISERR(sc)
             Set ^Shutter.Config("catalogue", "entries") = $GET(entries, 0)
         }
-        If (root '= "") && ##class(%File).DirectoryExists(root _ "fixtures/records") {
+        // The recorded agent runs are the demo's: a site's cases have none to replay (RefreshKnowledge skips them too).
+        If demo && (root '= "") && ##class(%File).DirectoryExists(root _ "fixtures/records") {
             Set sc = ##class(Shutter.Bridge.Record).ImportDir(root _ "fixtures/records", .count)
             Quit:$$$ISERR(sc)
             Set ^Shutter.Config("recordsImported") = count
         }
-        Set sc = ..CreateWebApps(ns, root) Quit:$$$ISERR(sc)
+        Set sc = ..CreateWebApps(ns, root, demo) Quit:$$$ISERR(sc)
         Set r = ..EnsureRetentionTasks(ns)
         If $EXTRACT(r, 1, 6) = "ERROR:" Set sc = $$$ERROR($$$GeneralError, "Retention tasks: " _ r) Quit
         // Replayed runs spend nothing; rows written before this rule held a recording's price.
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "UPDATE Shutter_Store.AgentRun SET CostUSD = 0 WHERE Mode = 'replay' AND CostUSD <> 0")
         Set sc = ..StartProduction() Quit:$$$ISERR(sc)
+        // A site runs the production with no feed of its own: the demo's items are switched off.
+        If 'demo Set sc = ..DisableDemoItems() Quit:$$$ISERR(sc)
     } Catch ex {
         Set sc = ex.AsStatus()
     }
@@ -227,8 +242,9 @@ ClassMethod DatabaseResource(ns As %String, code As %Boolean = 0) As %String
     Quit resource
 }
 
-/// The production's credentials for the downstream API: a user with the Downstream_API role when the downstream
-/// system's installer created it, otherwise the demo operator.
+/// The production's credentials for the demo receiver's API: a user with the Downstream_API role when the downstream
+/// system's installer created it, otherwise the demo operator. Called on a demo install only: a site has no demo
+/// receiver to call, so it gets no downstream-client user and no DownstreamAPI credential.
 ClassMethod CreateCredentials(demo As %Boolean) As %Status
 {
     Set sc = $$$OK
@@ -335,12 +351,12 @@ ClassMethod CreateWorkflowRole(demo As %Boolean) As %Status
     Quit sc
 }
 
-/// /api/shutter (REST, password), /downstream/api (the downstream system's REST API, when its classes
-/// are installed) and /shutter (the web app's files, when root/www exists).
-ClassMethod CreateWebApps(ns As %String, root As %String) As %Status
+/// /api/shutter (REST, password) and /shutter (the web app's files, when root/www exists) on every install;
+/// /downstream/api (the demo receiver's REST API) only on a demo install whose Downstream classes are installed.
+ClassMethod CreateWebApps(ns As %String, root As %String, demo As %Boolean = 1) As %Status
 {
     Set sc = $$$OK
-    Set hasDownstream = ##class(%Dictionary.CompiledClass).%ExistsId("Downstream.API")
+    Set hasDownstream = demo && ##class(%Dictionary.CompiledClass).%ExistsId("Downstream.API")
     New $NAMESPACE
     Set $NAMESPACE = "%SYS"
     If hasDownstream {
@@ -469,22 +485,105 @@ ClassMethod StartProduction() As %Status
     Quit sc
 }
 
-/// Empty Shutter's own tables (cases and everything attached to them, recordings excepted) on a
-/// demo instance. Refused elsewhere. Returns the number of tables emptied or the error.
-/// The two daily housekeeping tasks (A14), created once: "Shutter message purge" (the standard Ens.Util.Tasks.Purge,
-/// 30 days, bodies too, keeping sessions whole) and "Shutter retention" (Shutter.Util.RetentionTask). Returns "ok",
-/// "exists" or the error.
-ClassMethod EnsureRetentionTasks(ns As %String = "") As %String [ SqlProc ]
+/// On a site install (demo = 0): the demo's items of Shutter.Production are switched off, so the production runs
+/// with no feed of its own: "ADT In", "ADT to Downstream", "Downstream Out" and "Scenario Player". A site adds its
+/// own feed items or uses the intake route. The definition is saved, and a running production takes the change at
+/// once. A demo install leaves the items as the class defines them; a reinstall compiles the class afresh (the items
+/// enabled again) and switches them off again.
+ClassMethod DisableDemoItems() As %Status
+{
+    Set sc = $$$OK
+    If '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Production") Quit sc
+    Try {
+        Set prod = ##class(Ens.Config.Production).%OpenId("Shutter.Production", , .sc)
+        If '$ISOBJECT(prod) Quit
+        Set demoItems = $LISTBUILD("ADT In", "ADT to Downstream", "Downstream Out", "Scenario Player"), changed = 0
+        For i = 1:1:prod.Items.Count() {
+            Set item = prod.Items.GetAt(i)
+            If $LISTFIND(demoItems, item.Name) && item.Enabled {
+                Set item.Enabled = 0, changed = changed + 1
+            }
+        }
+        If 'changed Quit
+        Set sc = prod.%Save()
+        Quit:$$$ISERR(sc)
+        Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)
+        Quit:$$$ISERR(sc)
+        If (state = 1) && (name = "Shutter.Production") Set sc = ##class(Ens.Director).UpdateProduction()
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    Quit sc
+}
+
+/// The two daily housekeeping tasks (A14): "Shutter message purge" (the standard Ens.Util.Tasks.Purge: every message
+/// type in the namespace, bodies too, sessions kept whole) and "Shutter retention" (Shutter.Util.RetentionTask:
+/// idempotency keys older than a day, closed cases past the retention only when switched on). The retention task is
+/// always made; the purge task only when purge is 1, keeping days days of messages, because a namespace-wide purge
+/// belongs only in a namespace that holds nothing but Shutter. The defaults come from the environment of the process
+/// that runs the install (the shell that runs zpm, not the running container): days from SHUTTER_MESSAGE_DAYS (90 when
+/// unset or not a positive whole number), purge from SHUTTER_MESSAGE_PURGE (1 or 0; when unset, 1 on a demo instance
+/// and 0 otherwise, read from ^Shutter.Config("demo")). Each task is made once: on an instance that already has it,
+/// change the days or remove the purge in the Task Manager (System Operation > Task Manager); this method leaves an
+/// existing task as it is, whatever the arguments say. Returns "message purge created (N days)|exists|off; retention
+/// created|exists", or "ERROR: ..." . From SQL with no arguments (SELECT Shutter.Setup_EnsureRetentionTasks()) the
+/// defaults above apply.
+ClassMethod EnsureRetentionTasks(ns As %String = "", days As %String = "", purge As %String = "") As %String [ SqlProc ]
 {
     If '$SYSTEM.Security.Check("%Admin_Task", "USE") && '$SYSTEM.Security.Check("Shutter_Operate", "USE") Quit "Shutter_Operate is required"
+    // SQL hands an empty argument to a procedure as $CHAR(0).
+    If ns = $CHAR(0) Set ns = ""
+    If days = $CHAR(0) Set days = ""
+    If purge = $CHAR(0) Set purge = ""
     If ns = "" Set ns = $NAMESPACE
-    Set out = ""
-    Set sc = ..EnsureTask("Shutter message purge", ns, "Ens.Util.Tasks.Purge", "Shutter: purge messages, logs and traces older than 30 days, sessions kept whole", $LISTBUILD("NumberOfDaysToKeep", 30, "BodiesToo", 1, "KeepIntegrity", 1, "TypesToPurge", "all"), 9600, .made)
-    If $$$ISERR(sc) Quit "ERROR: " _ $SYSTEM.Status.GetErrorText(sc)
-    Set out = out _ "message purge " _ $SELECT(made: "created", 1: "exists")
+    Set days = ..MessageDays(days), purge = ..MessagePurge(purge)
+    Set exists = (..TaskId("Shutter message purge") '= ""), made = 0
+    If purge && 'exists {
+        Set sc = ..EnsureTask("Shutter message purge", ns, "Ens.Util.Tasks.Purge", "Shutter: purge messages, logs and traces older than " _ days _ " days, sessions kept whole", $LISTBUILD("NumberOfDaysToKeep", days, "BodiesToo", 1, "KeepIntegrity", 1, "TypesToPurge", "all"), 9600, .made)
+        If $$$ISERR(sc) Quit "ERROR: " _ $SYSTEM.Status.GetErrorText(sc)
+        If made Set exists = 1, ^|ns|Shutter.Config("messageDays") = days
+    }
+    // The install's record, for a Doctor report by a caller without access to the Task Manager.
+    Set ^|ns|Shutter.Config("purgeTask") = exists
+    Set out = "message purge " _ $SELECT(made: "created (" _ days _ " days)", exists: "exists", 1: "off")
     Set sc = ..EnsureTask("Shutter retention", ns, "Shutter.Util.RetentionTask", "Shutter: idempotency keys older than a day, and closed cases past the retention when switched on", $LISTBUILD("RetentionDays", 30, "PurgeClosedCases", 0), 9900, .made)
     If $$$ISERR(sc) Quit "ERROR: " _ $SYSTEM.Status.GetErrorText(sc)
     Quit out _ "; retention " _ $SELECT(made: "created", 1: "exists")
+}
+
+/// The days of messages the purge task keeps: the argument, else SHUTTER_MESSAGE_DAYS, else 90; a value that is not a
+/// positive whole number counts as unset.
+ClassMethod MessageDays(days As %String = "") As %Integer [ Private ]
+{
+    Set days = $ZSTRIP(days, "<>W")
+    If days = "" Set days = $ZSTRIP($SYSTEM.Util.GetEnviron("SHUTTER_MESSAGE_DAYS"), "<>W")
+    If (days '?1.N) || (+days < 1) Quit 90
+    Quit +days
+}
+
+/// Whether the message purge task is wanted: the argument, else SHUTTER_MESSAGE_PURGE, each 1 or 0; anything else
+/// means 1 on a demo instance and 0 otherwise.
+ClassMethod MessagePurge(purge As %String = "") As %Boolean [ Private ]
+{
+    Set purge = $ZSTRIP(purge, "<>W")
+    If purge = "" Set purge = $ZSTRIP($SYSTEM.Util.GetEnviron("SHUTTER_MESSAGE_PURGE"), "<>W")
+    If (purge = "1") || (purge = "0") Quit +purge
+    Quit ''$GET(^Shutter.Config("demo"))
+}
+
+/// The id of the Task Manager task of this name, or "" when there is none (or the caller cannot read %SYS).
+ClassMethod TaskId(name As %String) As %String [ Private ]
+{
+    Set id = ""
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = "%SYS"
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM %SYS.Task WHERE Name = ?", name)
+        If rs.%Next() Set id = rs.%Get("ID")
+    } Catch ex {
+        Set id = ""
+    }
+    Quit id
 }
 
 /// A daily task by name, created when none of that name exists (startSeconds after midnight, local time).
@@ -510,6 +609,8 @@ ClassMethod EnsureTask(name As %String, ns As %String, class As %String, descrip
     Quit sc
 }
 
+/// Empty Shutter's own tables (cases and everything attached to them, recordings excepted) on a
+/// demo instance. Refused elsewhere. Returns the number of tables emptied or the error.
 ClassMethod PurgeStore() As %String [ SqlProc ]
 {
     If '$SYSTEM.Security.Check("Shutter_Operate", "USE") Quit "Shutter_Operate is required"
@@ -631,12 +732,26 @@ ClassMethod Doctor() As %String [ SqlProc ]
         Do r.%Set("api_webapp", ''##class(Security.Applications).Exists("/api/shutter"), "boolean")
         Do r.%Set("ui_webapp", ''##class(Security.Applications).Exists("/shutter"), "boolean")
         Do r.%Set("wards_webapp", ''##class(Security.Applications).Exists("/downstream/api"), "boolean")
+        // The message purge task (a demo instance has one; a site only when SHUTTER_MESSAGE_PURGE said so) and the days
+        // it keeps, read from the Task Manager so a change made there shows.
+        Set taskId = ..TaskId("Shutter message purge")
+        Do r.%Set("purge_task", taskId '= "", "boolean")
+        If taskId '= "" {
+            Set task = ##class(%SYS.Task).%OpenId(taskId)
+            If $ISOBJECT(task) && $LISTVALID(task.Settings) {
+                For i = 1:2:$LISTLENGTH(task.Settings) {
+                    If $LISTGET(task.Settings, i) = "NumberOfDaysToKeep" Set r."message_days" = +$LISTGET(task.Settings, i + 1)
+                }
+            }
+        }
         Set r."webapps_checked" = "live"
     } Catch ex {
         // A caller without %SYS access gets what the install recorded.
         Do r.%Set("api_webapp", ''$GET(^Shutter.Config("webapp", "/api/shutter")), "boolean")
         Do r.%Set("ui_webapp", ''$GET(^Shutter.Config("webapp", "/shutter")), "boolean")
         Do r.%Set("wards_webapp", ''$GET(^Shutter.Config("webapp", "/downstream/api")), "boolean")
+        Do r.%Set("purge_task", ''$GET(^Shutter.Config("purgeTask")), "boolean")
+        If $GET(^Shutter.Config("purgeTask")) && ($GET(^Shutter.Config("messageDays")) '= "") Set r."message_days" = +^Shutter.Config("messageDays")
         Set r."webapps_checked" = "install record"
     }
     Quit r.%ToJSON()
@@ -789,7 +904,8 @@ ClassMethod RefreshKnowledge(root As %String = "") As %String [ SqlProc ]
     Set files("blockReasons") = root _ "knowledge/block-reasons.json"
     Set files("catalogue") = root _ "knowledge/catalogue/catalogue.json"
     Set files("siteProfile") = root _ "knowledge/site/profile.json"
-    Set files("records") = root _ "fixtures/records"
+    // The recorded runs are the demo's (InstallStatus imports them only with demo = 1): a site instance skips them.
+    If $GET(^Shutter.Config("demo")) Set files("records") = root _ "fixtures/records"
     Set name = ""
     For {
         Set name = $ORDER(files(name)) Quit:name=""

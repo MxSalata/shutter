@@ -14,6 +14,10 @@
       <Packaging>module</Packaging>
       <SourcesRoot>src</SourcesRoot>
       <SystemRequirements Version=">=2026.2" Interoperability="enabled"/>
+      <!-- demo = 1 installs the demo: the demo users, the demo receiver's web application and client, the recorded
+           runs, the feed and scenario items enabled, the message purge task. A site install passes 0:
+           zpm "load <dir> -Ddemo=0" (the IPM parameter overrides this default). -->
+      <Default Name="demo" Value="1"/>
       <!-- The core's classes, listed so that the aihub module can add its own under the same package
            (Shutter.Agent, Shutter.Tools, Shutter.Schema, Shutter.Knowledge, Shutter.Bridge.Policy,
            Shutter.Bridge.Monitor, Shutter.Bridge.Runner.AIHub) without the two modules claiming one resource. -->
@@ -39,9 +43,11 @@
       <Resource Name="Shutter.Util.PKG"/>
       <!-- The downstream system (the demo bed-management system) the production delivers to. -->
       <Resource Name="Downstream.PKG"/>
-      <!-- Folders, security, the library, prices, recorded runs, the web applications and the production. -->
-      <Invoke Class="Shutter.Setup" Method="Install">
+      <!-- Folders, security, the library, prices, recorded runs, the web applications and the production.
+           InstallStatus returns a %Status and the Invoke checks it, so a failed install stops the load. -->
+      <Invoke Class="Shutter.Setup" Method="InstallStatus" CheckStatus="true">
         <Arg>${root}</Arg>
+        <Arg>${demo}</Arg>
       </Invoke>
       <!-- The web application's built files, once they exist. -->
       <FileCopy Name="www/" Target="${cspdir}shutter/" Overlay="1"/>
