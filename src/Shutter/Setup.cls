@@ -402,16 +402,33 @@ ClassMethod CreateWebApps(ns As %String, root As %String) As %Status
     Quit sc
 }
 
+/// The production Shutter's items live in: Shutter.Production, unless InstallInto recorded the site's own production
+/// (shape B) in ^Shutter.Config("production").
+ClassMethod ProductionName() As %String
+{
+    Set name = $GET(^Shutter.Config("production"))
+    Quit $SELECT(name = "": "Shutter.Production", 1: name)
+}
+
 /// System default settings for the production: the folders and the downstream API's address, so the
-/// production definition carries no paths of its own.
-ClassMethod ApplyDefaultSettings() As %Status
+/// production definition carries no paths of its own. Keyed to the named production: Shutter's own by default, or
+/// the site's production InstallInto put Shutter's items in. In a site's production the feed's folders have no item,
+/// and the receiver's address goes to Shutter's own items by name, never to every item: a "*" row would reach the
+/// site's.
+ClassMethod ApplyDefaultSettings(production As %String = "Shutter.Production") As %Status
 {
     Set sc = $$$OK
-    Set values("ADT In", "FilePath") = $GET(^Shutter.Config("dir", "in"))
-    Set values("ADT In", "ArchivePath") = $GET(^Shutter.Config("dir", "archive"))
-    Set values("ADT In", "WorkPath") = $GET(^Shutter.Config("dir", "work"))
-    Set values("*", "HTTPServer") = $GET(^Shutter.Config("downstreamHost"), $GET(^Shutter.Config("wardHost"), "127.0.0.1"))
-    Set values("*", "HTTPPort") = $GET(^Shutter.Config("downstreamPort"), $GET(^Shutter.Config("wardPort"), 52773))
+    If production = "" Set production = "Shutter.Production"
+    Set host = $GET(^Shutter.Config("downstreamHost"), $GET(^Shutter.Config("wardHost"), "127.0.0.1"))
+    Set port = $GET(^Shutter.Config("downstreamPort"), $GET(^Shutter.Config("wardPort"), 52773))
+    If production = "Shutter.Production" {
+        Set values("ADT In", "FilePath") = $GET(^Shutter.Config("dir", "in"))
+        Set values("ADT In", "ArchivePath") = $GET(^Shutter.Config("dir", "archive"))
+        Set values("ADT In", "WorkPath") = $GET(^Shutter.Config("dir", "work"))
+        Set values("*", "HTTPServer") = host, values("*", "HTTPPort") = port
+    } Else {
+        For item = "Evidence Collector", "Verifier" Set values(item, "HTTPServer") = host, values(item, "HTTPPort") = port
+    }
     Set item = ""
     For {
         Set item = $ORDER(values(item))
@@ -421,11 +438,11 @@ ClassMethod ApplyDefaultSettings() As %Status
             Set name = $ORDER(values(item, name), 1, value)
             Quit:(name="")
             Continue:(value="")
-            Set id = "Shutter.Production||" _ item _ "||*||" _ name
+            Set id = production _ "||" _ item _ "||*||" _ name
             Set d = ##class(Ens.Config.DefaultSettings).%OpenId(id)
             If '$ISOBJECT(d) {
                 Set d = ##class(Ens.Config.DefaultSettings).%New()
-                Set d.ProductionName = "Shutter.Production", d.ItemName = item, d.HostClassName = "*", d.SettingName = name
+                Set d.ProductionName = production, d.ItemName = item, d.HostClassName = "*", d.SettingName = name
             }
             Set d.SettingValue = value
             Set d.Description = "Set by Shutter.Setup"
@@ -437,12 +454,15 @@ ClassMethod ApplyDefaultSettings() As %Status
     Quit sc
 }
 
-/// Make Shutter.Production the namespace's production and start it, when the class is compiled.
+/// Make Shutter.Production the namespace's production and start it, when the class is compiled. When InstallInto
+/// put Shutter's items in the site's own production, there is nothing of Shutter's to start, and that production is
+/// never stopped here.
 ClassMethod StartProduction() As %Status
 {
     Set sc = $$$OK
     Set prod = "Shutter.Production"
     If '##class(%Dictionary.CompiledClass).%ExistsId(prod) Quit sc
+    If ..ProductionName() '= prod Quit sc
     Set sc = ..ApplyDefaultSettings()
     Quit:$$$ISERR(sc) sc
     Try {
@@ -467,6 +487,144 @@ ClassMethod StartProduction() As %Status
         Set sc = ex.AsStatus()
     }
     Quit sc
+}
+
+// ---- shape B: Shutter's items inside a site's own production ----
+
+/// Shutter's items inside a production the site already runs, in the current namespace. Does what Install does at
+/// namespace level with no demo (the folders, the resources and roles, the Workflow role, the seeds, the web
+/// applications, the retention task without the message purge; no demo users, no demo receiver, no credential),
+/// records the production's name in ^Shutter.Config("production"), adds Shutter's recovery items to that production
+/// (AddItemsTo), writes the default settings keyed to it and, when it is running, updates it in place. It never stops
+/// a production and never sets the auto-start production: a production that is not running is left for the site to
+/// start. root is the module's directory (IPM's ${root}), for the seeds and the web application's files. Run again
+/// after an upgrade, it adds the items that are new. Returns "ok" or the error text.
+ClassMethod InstallInto(production As %String, root As %String = "") As %String [ SqlProc ]
+{
+    Set sc = ..InstallIntoStatus(production, root)
+    Quit $SELECT($$$ISOK(sc): "ok", 1: $SYSTEM.Status.GetErrorText(sc))
+}
+
+ClassMethod InstallIntoStatus(production As %String, root As %String = "") As %Status
+{
+    Set sc = $$$OK
+    Try {
+        // SQL hands an empty argument over as $CHAR(0): a control character, stripped with the blanks.
+        Set production = $ZSTRIP($GET(production), "<>WC")
+        If production = "" Set sc = $$$ERROR($$$GeneralError, "InstallInto needs the name of the production Shutter's items go into") Quit
+        If '##class(Ens.Config.Production).%ExistsId(production) Set sc = $$$ERROR($$$GeneralError, "No production " _ production _ " in " _ $NAMESPACE) Quit
+        Set ns = $NAMESPACE
+        If root '= "" Set root = ##class(%File).NormalizeDirectory(root)
+        Set ^Shutter.Config("root") = root
+        Set ^Shutter.Config("demo") = 0
+        Set ^Shutter.Config("production") = production
+        Set ^Shutter.Config("installedAt") = ##class(Shutter.Util.Time).NowUTC()
+        Set ^Shutter.Config("version") = ..#VERSION
+        If $GET(^Shutter.Config("mode")) = "" Set ^Shutter.Config("mode") = "board"
+        Set sc = ..CreateFolders() Quit:$$$ISERR(sc)
+        Set sc = ..CreateSecurity(ns, 0) Quit:$$$ISERR(sc)
+        Set sc = ..CreateWorkflowRole(0) Quit:$$$ISERR(sc)
+        Set sc = ..SeedAll(root) Quit:$$$ISERR(sc)
+        Set sc = ..CreateWebApps(ns, root) Quit:$$$ISERR(sc)
+        // The retention task only: the site's own purge rules govern the messages of its production.
+        Set r = ..EnsureRetentionTasks(ns, 0)
+        If $EXTRACT(r, 1, 6) = "ERROR:" Set sc = $$$ERROR($$$GeneralError, "Retention tasks: " _ r) Quit
+        Set sc = ..AddItemsTo(production, .added) Quit:$$$ISERR(sc)
+        Set ^Shutter.Config("production", "itemsAdded") = added
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    Quit sc
+}
+
+/// The seeds: the board members, the model prices and, from the module's root, the block reasons, the site profile,
+/// the catalogue and the recorded runs. The same list as Install's.
+ClassMethod SeedAll(root As %String) As %Status [ Private ]
+{
+    Set sc = ##class(Shutter.Store.BoardMember).Seed() Quit:$$$ISERR(sc) sc
+    Set sc = ##class(Shutter.Store.ModelPrice).Seed() Quit:$$$ISERR(sc) sc
+    If (root '= "") && ##class(%File).Exists(root _ "knowledge/block-reasons.json") {
+        Set sc = ##class(Shutter.Store.BlockReason).SeedFromFile(root _ "knowledge/block-reasons.json", .reasons)
+        Quit:$$$ISERR(sc) sc
+        Set ^Shutter.Config("blockReasons") = reasons
+    }
+    If root '= "" {
+        Set sc = ##class(Shutter.Store.SiteProfile).SeedFromFile(root _ "knowledge/site/profile.json") Quit:$$$ISERR(sc) sc
+        Set sc = ##class(Shutter.Catalogue.Entry).SeedFromFile(root _ "knowledge/catalogue/catalogue.json", .entries) Quit:$$$ISERR(sc) sc
+        Set ^Shutter.Config("catalogue", "entries") = $GET(entries, 0)
+    }
+    If (root '= "") && ##class(%File).DirectoryExists(root _ "fixtures/records") {
+        Set sc = ##class(Shutter.Bridge.Record).ImportDir(root _ "fixtures/records", .count)
+        Quit:$$$ISERR(sc) sc
+        Set ^Shutter.Config("recordsImported") = count
+    }
+    Quit $$$OK
+}
+
+/// The items InstallInto adds to a site's production, in Shutter.Production's order: the recovery side, the index and
+/// the board, never the feed or the demo (ADT In, ADT to Downstream, Downstream Out, Scenario Player). Case Intake and
+/// Case Intake Store are added once Shutter.Production defines them. A new recovery item is listed here too.
+Parameter INSTALLITEMS = "HL7 Index,Escalation Mail,Case Workflow,Incident Workflow,Evidence Collector,Agent Conformance,Agent Encounter,Agent Impact,Agent Coordinator,Agent Board,Gate,Shutter Approvers,Shutter API,Verifier,Case Intake,Case Intake Store";
+
+/// Adds Shutter's items (INSTALLITEMS) to the named production, each as Shutter.Production's compiled definition has
+/// it (class, pool size, enabled, foreground, comment, category, trace flag, schedule and settings), when the
+/// production has no item of that name; an item whose class is not compiled here is skipped. Then saves the
+/// definition, writes the default settings keyed to the production (ApplyDefaultSettings) and, when that production
+/// is running, updates it in place; a stopped one is left for the site to start. added is the number of items created.
+ClassMethod AddItemsTo(production As %String, Output added As %Integer) As %Status
+{
+    Set sc = $$$OK, added = 0
+    Try {
+        If production = "" Set sc = $$$ERROR($$$GeneralError, "No production named") Quit
+        Set source = ##class(Ens.Config.Production).%OpenId("Shutter.Production")
+        If '$ISOBJECT(source) Set sc = $$$ERROR($$$GeneralError, "Shutter.Production is not compiled in " _ $NAMESPACE _ ": nothing to copy the items from") Quit
+        Set target = ##class(Ens.Config.Production).%OpenId(production)
+        If '$ISOBJECT(target) Set sc = $$$ERROR($$$GeneralError, "No production " _ production _ " in " _ $NAMESPACE) Quit
+        // Shutter's own production has them all already (the same id opens the same object).
+        If target '= source {
+            For i = 1:1:target.Items.Count() Set have(target.Items.GetAt(i).Name) = i
+            For i = 1:1:source.Items.Count() Set from(source.Items.GetAt(i).Name) = i
+            Set names = ..#INSTALLITEMS
+            For n = 1:1:$LENGTH(names, ",") {
+                Set name = $PIECE(names, ",", n)
+                If '$DATA(have(name)) && $DATA(from(name)) {
+                    Set item = source.Items.GetAt(from(name))
+                    If ##class(%Dictionary.CompiledClass).%ExistsId(item.ClassName) {
+                        Set sc = ..CopyItem(item, target) Quit:$$$ISERR(sc)
+                        Set added = added + 1
+                    }
+                }
+            }
+            Quit:$$$ISERR(sc)
+            If added > 0 {
+                // The class definition (what a start reads) and the configuration rows (what the portal and SQL read).
+                Set sc = target.SaveToClass() Quit:$$$ISERR(sc)
+                Set sc = target.%Save() Quit:$$$ISERR(sc)
+            }
+        }
+        Set sc = ..ApplyDefaultSettings(production) Quit:$$$ISERR(sc)
+        Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state) Quit:$$$ISERR(sc)
+        If (state = 1) && (name = production) Set sc = ##class(Ens.Director).UpdateProduction()
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    Quit sc
+}
+
+/// One item of Shutter.Production copied into another production's definition.
+ClassMethod CopyItem(item As Ens.Config.Item, target As Ens.Config.Production) As %Status [ Private ]
+{
+    Set copy = ##class(Ens.Config.Item).%New(item.ClassName)
+    Set copy.Name = item.Name, copy.ClassName = item.ClassName, copy.PoolSize = item.PoolSize, copy.Enabled = item.Enabled
+    Set copy.Foreground = item.Foreground, copy.Comment = item.Comment, copy.Category = item.Category
+    Set copy.LogTraceEvents = item.LogTraceEvents, copy.Schedule = item.Schedule
+    For j = 1:1:item.Settings.Count() {
+        Set s = item.Settings.GetAt(j)
+        Set t = ##class(Ens.Config.Setting).%New()
+        Set t.Target = s.Target, t.Name = s.Name, t.Value = s.Value
+        Do copy.Settings.Insert(t)
+    }
+    Quit target.Items.Insert(copy)
 }
 
 /// Empty Shutter's own tables (cases and everything attached to them, recordings excepted) on a
@@ -546,7 +704,13 @@ ClassMethod RestartProduction() As %String [ SqlProc ]
         Set sc = ##class(Ens.Director).StopProduction(60, 0)
         If $$$ISERR(sc) Quit $SYSTEM.Status.GetErrorText(sc)
     }
-    Set sc = ..StartProduction()
+    // The site's own production (InstallInto) is started again as it was; Shutter's own through StartProduction.
+    Set prod = ..ProductionName()
+    If prod '= "Shutter.Production" {
+        Set sc = ##class(Ens.Director).StartProduction(prod)
+    } Else {
+        Set sc = ..StartProduction()
+    }
     Quit $SELECT($$$ISOK(sc): "ok", 1: $SYSTEM.Status.GetErrorText(sc))
 }
 
@@ -612,9 +776,15 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Set r.mode = $GET(^Shutter.Config("mode"))
     Set r."adt_in" = $GET(^Shutter.Config("adtIn"))
     Do r.%Set("interoperability", ''##class(%EnsembleMgr).IsEnsembleNamespace($NAMESPACE), "boolean")
-    Do r.%Set("production_class", ''##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Production"), "boolean")
+    // The production Shutter's items live in: its own, or the site's that InstallInto put them in.
+    Set prod = ..ProductionName()
+    Set r."shutter_production" = prod
+    Do r.%Set("production_class", ''##class(%Dictionary.CompiledClass).%ExistsId(prod), "boolean")
     Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)
-    Set r.production = name, r."production_state" = $CASE(state, 1: "running", 2: "stopped", 3: "suspended", 4: "troubled", 5: "network stopped", : state)
+    Set text = $CASE(state, 1: "running", 2: "stopped", 3: "suspended", 4: "troubled", 5: "network stopped", : state)
+    // Another production running in the namespace leaves Shutter's items without jobs: not "running" for Shutter.
+    If (state = 1) && (name '= prod) Set text = "another production running"
+    Set r.production = name, r."production_state" = text
     Do r.%Set("ward_classes", ''##class(%Dictionary.CompiledClass).%ExistsId("Downstream.API"), "boolean")
     Do r.%Set("aihub_runner", ''##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Bridge.Runner.AIHub"), "boolean")
     Do r.%Set("ai_hub_present", ''##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent"), "boolean")
