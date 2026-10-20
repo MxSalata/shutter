@@ -321,8 +321,10 @@ Method Transition(toState As %String, text As %String = "", actor As %String = "
     Quit sc
 }
 
-/// The case's lock (^Shutter.CaseLock), taken by every change that reads and writes the stored case; ten seconds at
-/// most to get it. A case not yet saved needs none.
+/// The case's lock (^Shutter.CaseLock), taken around the read and write of the stored case by Transition, Note,
+/// SetIncident and SetSnapshot, and by the case workflow's Park; ten seconds at most to get it. A case not yet saved
+/// needs none. A plain whole save (the case's opening, a release from an incident, a reopening) does not take it, and
+/// %OnBeforeSave keeps the incident and the current snapshot as stored, which only SetIncident and SetSnapshot write.
 Method Lock() As %Status
 {
     Set id = ..%Id()
