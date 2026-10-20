@@ -5,9 +5,9 @@ Include Ensemble
 /// Config Store, model, evidence tools), adds the terminal tool as an instance it keeps, attaches
 /// the knowledge collection, the scope and the trace policies, runs the agent with a monitor that
 /// enforces the token budget, and reads the result the terminal tool accepted. Failures are
-/// reported in the response's Status, never retried here. While the API mimic is on (Shutter.Setup
-/// MockConfig), the provider is the mimic's, set before %Init so the class's own configuration is
-/// never read; the run is labelled model mock and is never recorded.
+/// reported in the response's Status, never retried here. When the run was resolved under the API mimic
+/// (the spec's MockConfig), the provider is the mimic's, set before %Init so the class's own
+/// configuration is never read; the run is labelled model mock and is never recorded.
 Class Shutter.Bridge.Runner.AIHub Extends Shutter.Bridge.Runner
 {
 
@@ -19,7 +19,8 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
     Set agent = "", session = "", monitor = "", submit = "", trace = "", scope = ""
     Set turns = $SELECT(+spec.MaxIterations > 0: +spec.MaxIterations, 1: 8)
     Set terminal = $SELECT($ZCONVERT(spec.TerminalTool, "L") [ "plan": "SubmitPlan", 1: "SubmitFindings")
-    Set mock = ##class(Shutter.Setup).MockConfig()
+    // The mimic as the run was resolved, not as the switch is now, so such a run never reaches another provider.
+    Set mock = spec.MockConfig
     Try {
         If (spec.AgentClass = "") || '##class(%Dictionary.CompiledClass).%ExistsId(spec.AgentClass) {
             Set response.Status = "error", response.Error = "Agent class not available: " _ spec.AgentClass
@@ -275,7 +276,7 @@ ClassMethod TestRun(caseId As %String, memberCode As %String = "conformance", mo
         Set spec.CorrelationKey = request.CorrelationKey, spec.SnapshotDigest = request.SnapshotDigest
         Set spec.ResultClass = request.ResultClass, spec.TerminalTool = request.TerminalTool
         Set spec.ConfigVersion = request.ConfigVersion
-        Set spec.Mode = mode, spec.RunnerClass = $CLASSNAME()
+        Set spec.Mode = mode, spec.RunnerClass = $CLASSNAME(), spec.MockConfig = ##class(Shutter.Setup).MockConfig()
         Set spec.MaxIterations = 8, spec.TokenBudget = tokenBudget, spec.RequestTimeoutSeconds = 120
         Set spec.RecordKey = "", spec.EnsMessageId = "test:" _ caseId _ ":" _ memberCode, spec.EnsSessionId = ""
         Set response = ##class(Shutter.Bridge.Msg.AgentResponse).%New()

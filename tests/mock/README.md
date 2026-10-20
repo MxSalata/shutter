@@ -31,7 +31,8 @@ is: while the switch is set, every agent item set to `auto` runs live through th
 
 `SelfTest()` is the proof to run before any agent does, and it calls nothing but the mimic. It checks that:
 
-- every board item resolves to live through the live runner;
+- every board item resolves to live through the live runner, and the spec the operation builds for it carries the
+  mimic's configuration;
 - the provider the runner makes is the mimic's, and an agent keeps it through `%Init`, so `AI.LLM.Shutter` is never
   read;
 - that provider lists the models, passes the Config Store's test of the configuration, and gets "pong" back for a ping
@@ -39,8 +40,9 @@ is: while the switch is set, every agent item set to `auto` runs live through th
 - a response labelled `mock` is refused as a recording.
 
 Switch it off with `SELECT Shutter_Mock.Setup_Disable() AS s` (`Disable(1)` clears the call log too). The switch goes
-first, then the options, the configuration, the web application and the role. Switch it off only while no agent runs:
-a request already resolved to live before the switch went would run with the instance's own provider.
+first, then the options, the configuration, the web application and the role. The switch is read once per run, when its
+mode is resolved, and the runner follows that reading: a run resolved while the mimic was on still goes to the mimic,
+and fails if the mimic is gone by then, but never reaches the instance's own provider.
 
 ## What it answers
 

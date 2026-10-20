@@ -102,12 +102,12 @@ ClassMethod Status() As %String [ SqlProc ]
     Quit o.%ToJSON()
 }
 
-/// The no-cost proof, before any agent runs: every board item resolves to live through the live runner; the
-/// provider the runner makes is the mimic's (openai at the mimic's base_url, the run's token as its key) and an
-/// agent keeps it through %Init, so the class's own configuration (AI.LLM.Shutter) is never read; that provider
-/// lists models, passes AI Hub's TestConfiguration and answers a ping, all at the mimic, as the call log shows; and a
-/// response labelled mock is refused as a recording. Calls nothing but the mimic. Returns {ok, ...} as JSON, with the
-/// ping's request body.
+/// The no-cost proof, before any agent runs: every board item resolves to live through the live runner, with the
+/// mimic's configuration in the spec the operation builds; the provider the runner makes is the mimic's (openai at
+/// the mimic's base_url, the run's token as its key) and an agent keeps it through %Init, so the class's own
+/// configuration (AI.LLM.Shutter) is never read; that provider lists models, passes AI Hub's TestConfiguration and
+/// answers a ping, all at the mimic, as the call log shows; and a response labelled mock is refused as a recording.
+/// Calls nothing but the mimic. Returns {ok, ...} as JSON, with the ping's request body.
 ClassMethod SelfTest() As %String [ SqlProc ]
 {
     Set o = {}, problems = []
@@ -119,7 +119,7 @@ ClassMethod SelfTest() As %String [ SqlProc ]
         Set o.items = ..Items(problems)
         // 2. The provider the runner makes for a run, and an agent made the way the runner makes it.
         Set spec = ##class(Shutter.Bridge.RunSpec).%New()
-        Set spec.AgentClass = "Shutter.Agent.Conformance", spec.MemberCode = "selftest", spec.EnsMessageId = "selftest"
+        Set spec.AgentClass = "Shutter.Agent.Conformance", spec.MemberCode = "selftest", spec.EnsMessageId = "selftest", spec.MockConfig = mock
         Set provider = ##class(Shutter.Bridge.Runner.AIHub).MockProvider(mock, spec, "SubmitFindings", .model)
         Set o.provider = provider.Name, o.model = model
         If provider.Name '= "openai" Do problems.%Push("the runner's provider is " _ provider.Name _ ", not the mimic's openai")
@@ -183,8 +183,9 @@ ClassMethod SelfTest() As %String [ SqlProc ]
     Quit o.%ToJSON()
 }
 
-/// The production's board items with their Mode setting and the mode it resolves to now; an item that would not run
-/// live through the live runner is a problem.
+/// The production's board items with their Mode setting, and the mode and mimic configuration of the spec the operation
+/// builds for a request now (RunSpec FromRequest, with the item's settings); an item that would not run live through
+/// the live runner, or whose spec does not carry the mimic, is a problem.
 ClassMethod Items(problems As %DynamicArray) As %DynamicArray
 {
     Set out = []
@@ -199,9 +200,12 @@ ClassMethod Items(problems As %DynamicArray) As %DynamicArray
             If s.Name = "Mode" Set mode = s.Value
             If s.Name = "Runner" Set runner = s.Value
         }
-        Set resolved = ##class(Shutter.Bridge.Operation.Agent).ResolveMode(mode)
-        Do out.%Push({"item": (item.Name), "enabled": (item.Enabled), "mode": (mode), "resolves_to": (resolved), "runner": (runner)})
+        // The operation's settings that FromRequest reads; a business host cannot be made outside the production.
+        Set spec = ##class(Shutter.Bridge.RunSpec).FromRequest(##class(Shutter.Bridge.Msg.AgentRequest).%New(), {"Mode": (mode), "Runner": (runner)})
+        Set resolved = spec.Mode
+        Do out.%Push({"item": (item.Name), "enabled": (item.Enabled), "mode": (mode), "resolves_to": (resolved), "runner": (runner), "mock_config": (spec.MockConfig)})
         If item.Enabled && ((resolved '= "live") || (runner '= "Shutter.Bridge.Runner.AIHub")) Do problems.%Push(item.Name _ " would run " _ resolved _ " through " _ runner)
+        If item.Enabled && (spec.MockConfig '= ##class(Shutter.Setup).MockConfig()) Do problems.%Push(item.Name _ "'s spec does not carry the mimic's configuration")
     }
     Quit out
 }
