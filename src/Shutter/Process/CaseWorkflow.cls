@@ -324,7 +324,10 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
     }
     // A case an incident holds parks here, its evidence and match in the store: the incident decides when it is
     // released (CONTRACTS 7.1).
-    If '..Release && '..Reopened && $ISOBJECT(case.Incident) Quit ..Park(case)
+    If '..Release && '..Reopened && $ISOBJECT(case.Incident) {
+        Set sc = ..Park(case, .parked)
+        If parked || $$$ISERR(sc) Quit sc
+    }
     // Every investigation starts clean: a policy from an earlier round never carries over to a plan the board makes.
     Set ..Policy = "", ..CatalogueEntry = "", ..CatalogueOutcome = ""
     // A withheld operation (T31) has one answer in every mode: nothing is sent and a person decides. The gate blocks
@@ -367,10 +370,13 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
     While iter.%GetNext(.i, .code) {
         Set m = ##class(Shutter.Store.BoardMember).ByCode(code)
         Continue:'$ISOBJECT(m)
-        Set sc = ..SendRequestAsync(m.ConfigItem, ..AgentRequestFor(case, m, result.SummaryJSON, ""), 1, "member:" _ code)
+        Set req = ..AgentRequestFor(case, m, result.SummaryJSON, "", .sc)
+        If '$ISOBJECT(req) Set refused = sc Quit
+        Set sc = ..SendRequestAsync(m.ConfigItem, req, 1, "member:" _ code)
         Quit:$$$ISERR(sc)
         Do pending.%Push(code)
     }
+    If $DATA(refused) Quit ..ModelViewFailed(case, refused)
     Quit:$$$ISERR(sc) sc
     Set ..PendingJSON = pending.%ToJSON()
     Do case.Note("note", "Board convened: " _ $REPLACE($REPLACE(pending.%ToJSON(), "[", ""), "]", ""), "system")
@@ -385,9 +391,11 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
 
 /// The request the case workflow sends a board member, built from the case, its current snapshot's summary,
 /// the specialists' findings (for the coordinator) and the re-plan round. A class method, so a test can
-/// build the same request outside the production.
-ClassMethod BuildAgentRequest(case As Shutter.Store.Case, m As Shutter.Store.BoardMember, summaryJSON As %String, findingsJSON As %String, replans As %Integer = 0) As Shutter.Bridge.Msg.AgentRequest
+/// build the same request outside the production. "" when the model view cannot be built (sc says why): then nothing
+/// of the case leaves IRIS.
+ClassMethod BuildAgentRequest(case As Shutter.Store.Case, m As Shutter.Store.BoardMember, summaryJSON As %String, findingsJSON As %String, replans As %Integer = 0, Output sc As %Status) As Shutter.Bridge.Msg.AgentRequest
 {
+    Set sc = $$$OK
     Set req = ##class(Shutter.Bridge.Msg.AgentRequest).%New()
     Set req.Role = m.Role, req.MemberCode = m.Code, req.AgentClass = m.AgentClass
     Set req.CorrelationKey = case.CaseId
@@ -405,7 +413,8 @@ ClassMethod BuildAgentRequest(case As Shutter.Store.Case, m As Shutter.Store.Boa
     Set context."case_id" = case.CaseId
     Set evidence = ##class(%DynamicObject).%FromJSON(summaryJSON)
     // The map of the case's identifiers is made here, once per case and in one job, in a canonical order.
-    Do ##class(Shutter.Util.ModelView).Learn(case, evidence)
+    Set sc = ##class(Shutter.Util.ModelView).Learn(case, evidence)
+    If $$$ISERR(sc) Quit ""
     Set context.evidence = ##class(Shutter.Util.ModelView).Reduce(case, evidence)
     If findingsJSON '= "" Set context.findings = ##class(Shutter.Util.ModelView).Reduce(case, ##class(%DynamicArray).%FromJSON(findingsJSON))
     Set req.Context = context.%ToJSON()
@@ -419,9 +428,16 @@ ClassMethod BuildAgentRequest(case As Shutter.Store.Case, m As Shutter.Store.Boa
     Quit req
 }
 
-Method AgentRequestFor(case As Shutter.Store.Case, m As Shutter.Store.BoardMember, summaryJSON As %String, findingsJSON As %String) As Shutter.Bridge.Msg.AgentRequest
+Method AgentRequestFor(case As Shutter.Store.Case, m As Shutter.Store.BoardMember, summaryJSON As %String, findingsJSON As %String, Output sc As %Status) As Shutter.Bridge.Msg.AgentRequest
 {
-    Quit ..BuildAgentRequest(case, m, summaryJSON, findingsJSON, ..Replans)
+    Quit ..BuildAgentRequest(case, m, summaryJSON, findingsJSON, ..Replans, .sc)
+}
+
+/// The model view of the case could not be built (Shutter.Util.ModelView.Learn): nothing was sent to a model, and a
+/// person looks.
+Method ModelViewFailed(case As Shutter.Store.Case, sc As %Status) As %Status
+{
+    Quit case.Transition("escalated", "The model's view of the case could not be built (" _ $EXTRACT($SYSTEM.Status.GetErrorText(sc), 1, 400) _ "), so nothing was sent to a model; a person must look", "system")
 }
 
 Method OnMember(case As Shutter.Store.Case, code As %String, result As Shutter.Bridge.Msg.AgentResponse) As %Status
@@ -493,7 +509,8 @@ Method AfterBoard(case As Shutter.Store.Case) As %Status
     Set coordinator = ##class(Shutter.Store.BoardMember).Coordinator()
     If '$ISOBJECT(coordinator) Quit case.Transition("escalated", "No coordinator is enabled; the findings are on the case for a person", "system")
     Set snap = case.CurrentSnapshot
-    Set req = ..AgentRequestFor(case, coordinator, snap.Summary, all.%ToJSON())
+    Set req = ..AgentRequestFor(case, coordinator, snap.Summary, all.%ToJSON(), .sc)
+    If '$ISOBJECT(req) Quit ..ModelViewFailed(case, sc)
     Set sc = ..SendRequestAsync(coordinator.ConfigItem, req, 1, "coordinator")
     Quit:$$$ISERR(sc) sc
     Set ..CoordinatorPending = 1
@@ -595,10 +612,13 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
         While iter.%GetNext(.i, .code) {
             Set mem = ##class(Shutter.Store.BoardMember).ByCode(code)
             Continue:'$ISOBJECT(mem)
-            Set sc = ..SendRequestAsync(mem.ConfigItem, ..AgentRequestFor(case, mem, summary.%ToJSON(), ""), 1, "member:" _ code)
+            Set req = ..AgentRequestFor(case, mem, summary.%ToJSON(), "", .sc)
+            If '$ISOBJECT(req) Set refused = sc Quit
+            Set sc = ..SendRequestAsync(mem.ConfigItem, req, 1, "member:" _ code)
             Quit:$$$ISERR(sc)
             Do pending.%Push(code)
         }
+        If $DATA(refused) Quit ..ModelViewFailed(case, refused)
         Set ..PendingJSON = pending.%ToJSON()
         Do case.Note("note", "Board convened by site policy: " _ $REPLACE($REPLACE(pending.%ToJSON(), "[", ""), "]", ""), "system")
         Quit ..ArmTimeout("board:timeout")
@@ -679,7 +699,10 @@ Method AdoptPlan(case As Shutter.Store.Case, plan As %DynamicObject, createdBy A
     Set sc = case.Transition("proposed", "Plan v" _ p.Version _ " (" _ p.Disposition _ "): " _ p.Summary, createdBy, "plan:" _ p.%Id())
     Quit:$$$ISERR(sc) sc
     // A case its incident adopted while the board sat parks here: the plan is on the case, the release re-plans.
-    If '..Release && '..Reopened && $ISOBJECT(case.Incident) Quit ..Park(case)
+    If '..Release && '..Reopened && $ISOBJECT(case.Incident) {
+        Set sc = ..Park(case, .parked)
+        If parked || $$$ISERR(sc) Quit sc
+    }
     Quit ..SendGate(case, "proposal", "gate:proposal")
 }
 
@@ -863,12 +886,23 @@ Method ReleaseByPolicy(case As Shutter.Store.Case, plan As Shutter.Store.Plan, r
 }
 
 /// The case stops here, its evidence and match in the store, until its incident releases it (CONTRACTS 7.1);
-/// this instance ends.
-Method Park(case As Shutter.Store.Case) As %Status
+/// this instance ends. The membership is read again under the case's lock, which the incident takes too when it lets a
+/// case go (Shutter.Store.IncidentDetector.Leave): a case let go meanwhile does not park (parked is 0) and goes on alone.
+Method Park(case As Shutter.Store.Case, Output parked As %Boolean) As %Status
 {
-    Set inc = case.Incident
-    Set ..PendingJSON = "[]"
-    Quit case.Transition("grouped", "Held by incident " _ inc.IncidentId _ ": the incident groups the receiver's failures into chains per encounter and decides the order of release", "system", "incident:" _ inc.IncidentId)
+    Set parked = 0
+    Set sc = case.Lock()
+    Quit:$$$ISERR(sc) sc
+    Set inc = case.StoredIncident()
+    If '$ISOBJECT(inc) {
+        Do case.IncidentSetObjectId("")
+        Do case.Unlock()
+        Quit $$$OK
+    }
+    Set parked = 1, ..PendingJSON = "[]"
+    Set sc = case.Transition("grouped", "Held by incident " _ inc.IncidentId _ ": the incident groups the receiver's failures into chains per encounter and decides the order of release", "system", "incident:" _ inc.IncidentId)
+    Do case.Unlock()
+    Quit sc
 }
 
 /// A case its incident releases (CONTRACTS 7.4): a fresh instance, fresh evidence with no settle period, then the

@@ -23,13 +23,12 @@ Index CaseValue On (Case, Value) [ Unique ];
 Index CaseToken On (Case, Token) [ Unique ];
 
 /// The token for a value of the case, made on first sight. A value already mapped keeps its token whatever kind is
-/// asked now (an encounter id that is also the visit number is one token).
+/// asked now (an encounter id that is also the visit number is one token). "" for a value Accepts refuses, or when
+/// the token could not be stored.
 ClassMethod Assign(case As Shutter.Store.Case, kind As %String, value As %String) As %String
 {
     Set value = $ZSTRIP(value, "<>W")
-    If ($LENGTH(value) < 3) || '$ISOBJECT(case) Quit ""
-    // A value that itself looks like a token is left as it is: it could not be told from a token on the way back.
-    If $MATCH(value, "^(MRN|NHS|PID|ENC|VISIT|NAME|DOB)-T[0-9]+$") Quit ""
+    If '..Accepts(kind, value) || '$ISOBJECT(case) Quit ""
     Set cid = case.%Id(), token = ""
     &sql(SELECT Token INTO :token FROM Shutter_Store.CaseToken WHERE "Case" = :cid AND Value = :value)
     If (SQLCODE = 0) && (token '= "") Quit token
@@ -46,6 +45,16 @@ ClassMethod Assign(case As Shutter.Store.Case, kind As %String, value As %String
     LOCK -^Shutter.CaseToken(cid)
     If $$$ISERR(sc) Quit ""
     Quit t.Token
+}
+
+/// Whether a value takes a token: three characters or more, two for a name part (a surname such as Li or Ng), and not
+/// a value that itself looks like a token, which could not be told from one on the way back.
+ClassMethod Accepts(kind As %String, value As %String) As %Boolean
+{
+    Set value = $ZSTRIP(value, "<>W")
+    If $LENGTH(value) < $SELECT(kind = "NAME": 2, 1: 3) Quit 0
+    If $MATCH(value, "^(MRN|NHS|PID|ENC|VISIT|NAME|DOB)-T[0-9]+$") Quit 0
+    Quit 1
 }
 
 /// Every token of the case, as a list of $LISTBUILD(token, value, kind), longest value first (so a value that is a

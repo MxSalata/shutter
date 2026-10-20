@@ -1,6 +1,6 @@
 {
   "id": "block-reasons",
-  "version": "1.7",
+  "version": "1.8",
   "effective_from": "2026-10-20",
   "applies_to": [
     "downstream-api-v1",
@@ -89,16 +89,16 @@
     {
       "code": "SUPERSEDED_BY_LATER_EVENT",
       "title": "A later event made this movement obsolete",
-      "prerequisite": "No later applied location event (ELS-2.1, ELS-2.3)",
+      "prerequisite": "No later location event that supersedes this one: a transfer or discharge the downstream system applied, or a later transfer the PAS sent whose delivery failed too (ELS-2.1, ELS-2.3)",
       "next_action": "Close the case as superseded, recording the superseding event. Nothing is sent.",
       "owner": "Operator",
       "reevaluate_when": "Only if the later event is itself reversed",
-      "text": "The encounter has an applied transfer or discharge with a later event time, so resending would move the patient's record backwards."
+      "text": "The encounter has a later transfer or discharge with a plausible event time: one the downstream system applied, or a later transfer the PAS sent whose delivery failed too, which its own case recovers. Resending would move the patient's record backwards."
     },
     {
       "code": "SUPERSESSION_UNSUPPORTED",
       "title": "The claimed later event is not in the evidence",
-      "prerequisite": "A later applied transfer or discharge in the snapshot (ELS-2.1)",
+      "prerequisite": "A later transfer or discharge in the snapshot: applied, or a later transfer whose delivery failed too (ELS-2.1)",
       "next_action": "Check the receiver's history for the encounter. If a later event exists, collect evidence again; otherwise the operation may still be due, so re-plan.",
       "owner": "Operator",
       "reevaluate_when": "After new evidence is collected",
@@ -412,12 +412,12 @@
     },
     {
       "code": "EVENT_TIME_IMPLAUSIBLE",
-      "title": "The event's time doesn't fit the encounter",
-      "prerequisite": "An event time that fits the encounter: after its admission, not in the future, close to the time the PAS recorded it, and not inside a clock change when it carries no offset",
-      "next_action": "Confirm the event's real time with the source system, then reinvestigate the case or correct the history.",
+      "title": "The event's time, or a later event's, doesn't fit the encounter",
+      "prerequisite": "An event time that fits the encounter: after its admission, not in the future, close to the time the PAS recorded it, and not inside a clock change when it carries no offset; and later events it is ordered against timed no more than five minutes after they were sent, applied or seen",
+      "next_action": "Confirm the event's real time, or the later event's, with the source system, then reinvestigate the case or correct the history.",
       "owner": "Integration team",
       "reevaluate_when": "The source system confirms or corrects the time",
-      "text": "Shutter orders and supersedes movements by their event time. A time before the admission, in the future, far from when the PAS recorded the event, or in the hour of a clock change can't be ordered safely, so nothing is written and a person decides."
+      "text": "Shutter orders and supersedes movements by their event time. A time before the admission, in the future, far from when the PAS recorded the event, or in the hour of a clock change can't be ordered safely, nor can a later event timed well after it was sent, applied or seen when that event would decide whether this one was overtaken. So nothing is written and a person decides."
     },
     {
       "code": "MERGE_WITHHELD",

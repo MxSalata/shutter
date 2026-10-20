@@ -1,7 +1,8 @@
 /// The operations for an encounter (CONTRACTS 8.2): what the feed sent through Shutter's own typed messages, each
 /// with its delivery outcome, and what the exact index knows besides, from HL7 messages on routes whose delivery
 /// Shutter does not watch, with outcome unknown. The evidence collector puts the result in the snapshot; the gate
-/// and the matcher count only applied outcomes, so an indexed message never supersedes a case by itself: the
+/// and the matcher count applied outcomes and, outside a chain, a later transfer of the feed's own whose failure the
+/// connector recorded (Shutter.Catalogue.Matcher.Later), so an indexed message never supersedes a case by itself: the
 /// receiver's own history decides that.
 Class Shutter.Index.Timeline
 {

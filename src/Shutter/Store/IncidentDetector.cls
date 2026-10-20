@@ -50,12 +50,12 @@ ClassMethod Since(windowMinutes As %Integer) As %String
     Quit since
 }
 
-/// A case joins an incident: recorded on the case, noted on both.
+/// A case joins an incident: recorded on the case (the membership alone, so the case's own workflow and evidence keep
+/// what they wrote meanwhile), noted on both.
 ClassMethod Join(case As Shutter.Store.Case, incident As Shutter.Store.Incident) As %Status
 {
     If $ISOBJECT(case.Incident) && (case.Incident.%Id() = incident.%Id()) Quit $$$OK
-    Set case.Incident = incident
-    Set sc = case.%Save()
+    Set sc = case.SetIncident(incident)
     Quit:$$$ISERR(sc) sc
     Set sc = case.Note("note", "Joined incident " _ incident.IncidentId _ " (" _ incident.Receiver _ "): the incident decides when this case is released", "system", "incident:" _ incident.IncidentId)
     Quit:$$$ISERR(sc) sc
@@ -65,12 +65,11 @@ ClassMethod Join(case As Shutter.Store.Case, incident As Shutter.Store.Incident)
 /// A case leaves an incident (it was not ready when the chains formed): it continues alone.
 ClassMethod Leave(case As Shutter.Store.Case, incident As Shutter.Store.Incident, why As %String) As %Status
 {
-    // A case that parked meanwhile is ready after all, and stays (read again from disk, not the in-memory copy).
-    Do case.%Reload()
-    If case.State = "grouped" Quit $$$OK
-    Set case.Incident = ""
-    Set sc = case.%Save()
+    // A case that parked meanwhile is ready after all, and stays: its stored state is read under the case's lock, which
+    // the workflow's parking takes too (Shutter.Process.CaseWorkflow.Park).
+    Set sc = case.SetIncident("", "grouped", .left)
     Quit:$$$ISERR(sc) sc
+    If 'left Quit $$$OK
     Set sc = case.Note("note", "Left incident " _ incident.IncidentId _ ": " _ why _ ". The case continues on its own", "system", "incident:" _ incident.IncidentId)
     Quit:$$$ISERR(sc) sc
     Quit incident.Note("note", "Case " _ case.CaseId _ " left: " _ why, "system")

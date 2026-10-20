@@ -205,7 +205,8 @@ ClassMethod TestRun(caseId As %String, memberCode As %String = "conformance", mo
         If '$ISOBJECT(snap) Return {"error": "The case has no evidence snapshot"}.%ToJSON()
         Set findings = ""
         If member.Role '= "specialist" Set findings = ##class(Shutter.Store.Finding).ForSnapshot(snap).%ToJSON()
-        Set request = ##class(Shutter.Process.CaseWorkflow).BuildAgentRequest(case, member, snap.Summary, findings, 0)
+        Set request = ##class(Shutter.Process.CaseWorkflow).BuildAgentRequest(case, member, snap.Summary, findings, 0, .bsc)
+        If '$ISOBJECT(request) Return {"error": ("The model's view of the case could not be built: " _ $SYSTEM.Status.GetErrorText(bsc))}.%ToJSON()
         // The operation's defaults, by hand: a business host cannot be instantiated outside the production.
         Set spec = ##class(Shutter.Bridge.RunSpec).%New()
         Set spec.AgentClass = $SELECT(request.AgentClass '= "": request.AgentClass, 1: member.AgentClass)

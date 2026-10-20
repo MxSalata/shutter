@@ -29,10 +29,13 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     // receipt
     Set rstatus = $CLASSMETHOD(json, "Str", summary, "receipt_http_status")
     Set c.receipt = $SELECT(rstatus = 200: "present", rstatus = 404: "absent", rstatus = -1: "none", 1: "unreadable")
-    // later_applied: the latest later applied event, from the timeline and the receiver's history
-    Set c."later_applied" = ..LaterApplied(summary, case)
-    // event_time (T28): the failed event's time against the admission, the message, the recording time and the clock
-    Set c."event_time" = ..EventTimePlausibility(summary, case)
+    // later_applied: the latest later event (applied, or outside a chain a later transfer that failed too), from the
+    // timeline and the receiver's history (Later, which the gate's ordering check reads too)
+    Set later = ..Later(summary, case, chainKind)
+    Set c."later_applied" = ..LaterApplied(summary, case, later)
+    // event_time (T28): the failed event's time against the admission, the message, the recording time and the clock,
+    // and the times of the later events it is ordered against
+    Set c."event_time" = ..EventTimePlausibility(summary, case, later)
     // encounter_state and the identity
     Set ward = summary.%Get("ward_state"), wstatus = $CLASSMETHOD(json, "Str", summary, "ward_state_http_status")
     Set state = $SELECT((wstatus = 200) && $ISOBJECT(ward): $CLASSMETHOD(json, "Str", ward, "state"), 1: "")
@@ -132,29 +135,74 @@ ClassMethod Holds(pattern As %DynamicObject, conditions As %DynamicObject) As %B
     Quit 1
 }
 
-/// The applied events for the encounter later than the failed operation, by precedence (CONTRACTS 6.1): cancelled
-/// (an applied cancel at or after the failed event's time, T31), else merge (an applied merge, T31), else discharge,
-/// else transfer, else admit (a later admission, T28), else update, else none. (A later transfer followed by a later
-/// update is a transfer.) A cancel counts from the failed event's own time, not strictly after it, because a cancel
-/// carries the time of the event it reverses; the case's own operation never counts.
-ClassMethod LaterApplied(summary As %DynamicObject, case As Shutter.Store.Case) As %String [ Private ]
+/// The later events for the encounter (Later: applied ones, and outside a chain a later transfer whose delivery failed
+/// or is uncertain as well), by precedence (CONTRACTS 6.1): cancelled (an applied cancel at or after the failed event's
+/// time, T31), else merge (an applied merge, T31), else discharge, else transfer, else admit (a later admission, T28),
+/// else update, else none. (A later transfer followed by a later update is a transfer.) A cancel counts from the failed
+/// event's own time, not strictly after it, because a cancel carries the time of the event it reverses; the case's own
+/// operation never counts. Only the events whose time is plausible count.
+ClassMethod LaterApplied(summary As %DynamicObject, case As Shutter.Store.Case, later As %DynamicArray = "") As %String [ Private ]
 {
+    If '$ISOBJECT(later) Set later = ..Later(summary, case)
     // A later admission is its own answer (T28): an encounter admitted again after the failed event is not an update.
     // So are a cancel and a merge (T31); any other word the receiver or the index reports still reads as an update.
     Set seen("cancelled") = 0, seen("merge") = 0, seen("discharge") = 0, seen("transfer") = 0, seen("update") = 0, seen("admit") = 0
+    Set iter = later.%GetIterator()
+    While iter.%GetNext(.i, .ev) {
+        Continue:'ev.plausible
+        Set seen(ev.word) = 1
+    }
+    Quit $SELECT(seen("cancelled"): "cancelled", seen("merge"): "merge", seen("discharge"): "discharge", seen("transfer"): "transfer", seen("admit"): "admit", seen("update"): "update", 1: "none")
+}
+
+/// The events for the encounter that bear on the failed operation's order, from the snapshot's timeline and the
+/// receiver's history, each as {word, event, ward, event_time, from (timeline or history), delivered, plausible}.
+/// later_applied and the gate's ordering check (Shutter.Operation.Gate) both read them, so the two agree.
+/// - An applied (or already committed) event whose time is later than the failed event's; a cancel from the failed
+///   event's own time on (T31), never the case's own operation. word is the precedence word (cancelled, merge,
+///   discharge, transfer, admit, update).
+/// - Outside a chain, also a later transfer the feed sent whose delivery failed or is uncertain as well (delivered 0):
+///   it is the PAS's later word on where the patient is, and its own case delivers it, so resending the earlier
+///   movement would only take the patient back. An admission is never overtaken, and in an ordered or interleaved chain
+///   the incident sends the chain's failures in event order (CONTRACTS 7), so neither counts such an event. A later
+///   discharge that failed does not count either: resending the earlier movement does no harm, since the discharge's
+///   own case follows it, and no catalogue entry covers a discharge the receiver has not applied (the encounter is
+///   still admitted there). A message the index found on another route has no known outcome and counts only once the
+///   receiver's history shows it.
+/// - plausible is 0 when the event's time lies more than five minutes after the feed sent it, the receiver applied it
+///   or the evidence was taken (the rule event_time applies to the failed event's own time): such a time settles no
+///   order.
+ClassMethod Later(summary As %DynamicObject, case As Shutter.Store.Case, chainKind As %String = "single") As %DynamicArray
+{
+    Set out = [], json = "Shutter.Util.Json"
+    Set observed = $CLASSMETHOD(json, "Str", summary, "observed_at")
+    Set failedCount = ((chainKind = "") || (chainKind = "single")) && (case.Event '= "admit")
+    Set words = $LISTBUILD("merge", "discharge", "transfer", "admit", "update")
     Set timeline = summary.%Get("timeline")
     If $ISOBJECT(timeline) {
         Set iter = timeline.%GetIterator()
         While iter.%GetNext(.i, .ev) {
-            Set outcome = ##class(Shutter.Util.Json).Str(ev, "outcome")
-            Continue:((outcome '= "applied") && (outcome '= "already_committed"))
-            Set e = ##class(Shutter.Util.Json).Str(ev, "event")
+            Continue:'$ISOBJECT(ev)
+            Set outcome = $CLASSMETHOD(json, "Str", ev, "outcome"), e = $CLASSMETHOD(json, "Str", ev, "event")
+            Set t = $CLASSMETHOD(json, "Str", ev, "event_time"), key = $CLASSMETHOD(json, "Str", ev, "operation_key")
+            Set delivered = (outcome = "applied") || (outcome = "already_committed")
             If $EXTRACT(e, 1, 7) = "cancel_" {
-                If ..AtOrAfter(##class(Shutter.Util.Json).Str(ev, "event_time"), ##class(Shutter.Util.Json).Str(ev, "operation_key"), case) Set seen("cancelled") = 1
-                Continue
+                Continue:'delivered
+                Continue:'..AtOrAfter(t, key, case)
+                Set word = "cancelled"
+            } Else {
+                Continue:'$CLASSMETHOD(json, "Bool", ev, "later")
+                If 'delivered {
+                    // A failure the connector recorded for a message the feed sent, not one still in flight.
+                    Continue:'failedCount
+                    Continue:(($CLASSMETHOD(json, "Str", ev, "source") '= "feed") || (outcome = "") || (outcome = "unknown"))
+                    Continue:(e '= "transfer")
+                    Continue:((key = case.OperationKey) || $CLASSMETHOD(json, "Bool", ev, "this_case"))
+                }
+                Set word = $SELECT($LISTFIND(words, e): e, 1: "update")
             }
-            Continue:'##class(Shutter.Util.Json).Bool(ev, "later")
-            Set seen($SELECT($DATA(seen(e)): e, 1: "update")) = 1
+            Set ok = ..PlausibleLater(t, ..AsUTC($CLASSMETHOD(json, "Str", ev, "sent_at")), observed)
+            Do out.%Push(..LaterEvent(word, e, $CLASSMETHOD(json, "Str", ev, "ward"), t, "timeline", delivered, ok))
         }
     }
     Set ward = summary.%Get("ward_state")
@@ -162,17 +210,50 @@ ClassMethod LaterApplied(summary As %DynamicObject, case As Shutter.Store.Case) 
     If $ISOBJECT(history) {
         Set iter = history.%GetIterator()
         While iter.%GetNext(.i, .h) {
-            Set t = ##class(Shutter.Util.Json).Str(h, "event_time")
-            Set e = ##class(Shutter.Util.Json).Str(h, "event")
+            Continue:'$ISOBJECT(h)
+            Set t = $CLASSMETHOD(json, "Str", h, "event_time"), e = $CLASSMETHOD(json, "Str", h, "event")
             If $EXTRACT(e, 1, 7) = "cancel_" {
-                If ..AtOrAfter(t, ##class(Shutter.Util.Json).Str(h, "operation_key"), case) Set seen("cancelled") = 1
-                Continue
+                Continue:'..AtOrAfter(t, $CLASSMETHOD(json, "Str", h, "operation_key"), case)
+                Set word = "cancelled"
+            } Else {
+                Continue:'(t ]] case.EventTime)
+                Set word = $SELECT($LISTFIND(words, e): e, 1: "update")
             }
-            Continue:'(t ]] case.EventTime)
-            Set seen($SELECT($DATA(seen(e)): e, 1: "update")) = 1
+            Set ok = ..PlausibleLater(t, ..AsUTC($CLASSMETHOD(json, "Str", h, "applied_at")), observed)
+            Do out.%Push(..LaterEvent(word, e, $CLASSMETHOD(json, "Str", h, "ward"), t, "history", 1, ok))
         }
     }
-    Quit $SELECT(seen("cancelled"): "cancelled", seen("merge"): "merge", seen("discharge"): "discharge", seen("transfer"): "transfer", seen("admit"): "admit", seen("update"): "update", 1: "none")
+    Quit out
+}
+
+ClassMethod LaterEvent(word As %String, event As %String, ward As %String, time As %String, from As %String, delivered As %Boolean, plausible As %Boolean) As %DynamicObject [ Private ]
+{
+    Set o = {}
+    Set o.word = word, o.event = event, o.ward = ward, o."event_time" = time, o.from = from
+    Do o.%Set("delivered", ''delivered, "boolean"), o.%Set("plausible", ''plausible, "boolean")
+    Quit o
+}
+
+/// Whether a later event's time is plausible: no more than five minutes after the time it was sent or applied (when
+/// known) and after the evidence was taken. A time that cannot be read is not.
+ClassMethod PlausibleLater(time As %String, sentOrApplied As %String, observed As %String) As %Boolean [ Private ]
+{
+    Set ok = 1
+    Try {
+        If (sentOrApplied '= "") && (##class(Shutter.Util.Time).SecondsBetween(sentOrApplied, time) > 300) Set ok = 0
+        If (observed '= "") && (##class(Shutter.Util.Time).SecondsBetween(observed, time) > 300) Set ok = 0
+    } Catch ex {
+        Set ok = 0
+    }
+    Quit ok
+}
+
+/// A UTC timestamp as the message store or the receiver writes it (2026-10-15 09:20:00.123, 2026-10-15T09:20:00Z) in
+/// the ISO form with a Z, to the second; "" when it is not one.
+ClassMethod AsUTC(ts As %String) As %String [ Private ]
+{
+    If '$MATCH($EXTRACT(ts, 1, 19), "[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9]{2}:[0-9]{2}:[0-9]{2}") Quit ""
+    Quit $EXTRACT(ts, 1, 10) _ "T" _ $EXTRACT(ts, 12, 19) _ "Z"
 }
 
 /// Whether an applied event (its time and its operation key) lies at or after the failed event's time and is not the
@@ -187,12 +268,15 @@ ClassMethod AtOrAfter(time As %String, key As %String, case As Shutter.Store.Cas
 /// or the receiver's history names (for anything but an admission); future when it is more than five minutes after
 /// the message was sent or the evidence was taken; far_from_recorded when it is more than a day from the time the
 /// event was recorded (EVN-2); clock_change when it came without an offset and lies within an hour of a British clock
-/// change, where the order of two events is not safe; plausible otherwise.
-ClassMethod EventTimePlausibility(summary As %DynamicObject, case As Shutter.Store.Case) As %String
+/// change, where the order of two events is not safe; later_event_future when the failed event's own time is sound but
+/// a later event it would be ordered against (Later) lies in the future by the same five-minute rule and believing it
+/// would change the reading, so a wrong time could make a genuine failure look overtaken; plausible otherwise.
+ClassMethod EventTimePlausibility(summary As %DynamicObject, case As Shutter.Store.Case, later As %DynamicArray = "") As %String
 {
     Set json = "Shutter.Util.Json", t = case.EventTime
     Set msg = summary.%Get("message")
-    If (t = "") || '$ISOBJECT(msg) Quit "plausible"
+    If t = "" Quit "plausible"
+    If '$ISOBJECT(msg) Set msg = {}
     Set admit = $CLASSMETHOD(json, "Str", msg, "admit_time"), recorded = $CLASSMETHOD(json, "Str", msg, "event_recorded"), sent = $CLASSMETHOD(json, "Str", msg, "message_time")
     Set firstAdmit = ""
     Set ward = summary.%Get("ward_state")
@@ -210,6 +294,24 @@ ClassMethod EventTimePlausibility(summary As %DynamicObject, case As Shutter.Sto
     If (observed '= "") && (t ]] observed) && ($ZABS(##class(Shutter.Util.Time).SecondsBetween(observed, t)) > 300) Quit "future"
     If (recorded '= "") && ($ZABS(##class(Shutter.Util.Time).SecondsBetween(recorded, t)) > 86400) Quit "far_from_recorded"
     If msg.%IsDefined("event_time_had_offset") && '$CLASSMETHOD(json, "Bool", msg, "event_time_had_offset") && ($CLASSMETHOD(json, "Str", msg, "feed_time_zone") = "Europe/London") && ##class(Shutter.Util.Time).NearBritishClockChange(t) Quit "clock_change"
+    If '$ISOBJECT(later) Set later = ..Later(summary, case)
+    Quit ..LaterTimeDoubt(summary, case, later)
+}
+
+/// later_event_future or plausible, for the later events' times. A later event whose time is not plausible is a doubt
+/// only when believing it would change the reading: when no plausible later transfer, discharge or cancel settles the
+/// order already, and the event outranks what the plausible ones give (by later_applied's precedence). An update never
+/// is one, since it supersedes nothing.
+ClassMethod LaterTimeDoubt(summary As %DynamicObject, case As Shutter.Store.Case, later As %DynamicArray) As %String [ Private ]
+{
+    Set settled = ..LaterApplied(summary, case, later)
+    If $LISTFIND($LISTBUILD("cancelled", "discharge", "transfer"), settled) Quit "plausible"
+    Set rank = $LISTBUILD("update", "admit", "transfer", "discharge", "merge", "cancelled")
+    Set iter = later.%GetIterator()
+    While iter.%GetNext(.i, .ev) {
+        Continue:(ev.plausible || (ev.word = "update"))
+        If $LISTFIND(rank, ev.word) > $LISTFIND(rank, settled) Return "later_event_future"
+    }
     Quit "plausible"
 }
 

@@ -1,6 +1,10 @@
 /// A recovery case: one failed or uncertain delivery, identified by its operation key, with a
 /// lifecycle whose every transition is a CaseEvent. Changes carry an expected version so that two
 /// actors cannot both advance the same case.
+/// Several jobs hold copies of a case at once (its workflow, the evidence collector, the gate, the incident detector of
+/// another case), so no job writes its whole copy back over a newer one: a transition takes the case's lock and refuses
+/// a copy older than the stored version; a note writes only its time; the incident and the current snapshot are written
+/// field by field (SetIncident, SetSnapshot), and every whole save takes both from the stored case (%OnBeforeSave).
 Class Shutter.Store.Case Extends (%Persistent, %JSON.Adaptor)
 {
 
@@ -74,7 +78,8 @@ Property Receiver As %String(%JSONFIELDNAME = "receiver", MAXLEN = 128);
 
 Property EventTime As %String(%JSONFIELDNAME = "eventTime", MAXLEN = 30);
 
-/// The incident the case belongs to, when many failures to the receiver were grouped (CONTRACTS 7).
+/// The incident the case belongs to, when many failures to the receiver were grouped (CONTRACTS 7). Written only by
+/// SetIncident.
 Property Incident As Shutter.Store.Incident(%JSONINCLUDE = "none");
 
 /// The demo scenario that produced the case (S1 to S6), when the scenario runner was running one;
@@ -123,6 +128,7 @@ Index UpdatedIdx On UpdatedAt;
 
 Property ClosedAt As %String(%JSONFIELDNAME = "closedAt", MAXLEN = 30);
 
+/// Written only by SetSnapshot.
 Property CurrentSnapshot As Shutter.Store.Snapshot(%JSONFIELDNAME = "currentSnapshotId", %JSONREFERENCE = "ID");
 
 Property CurrentPlan As Shutter.Store.Plan(%JSONFIELDNAME = "currentPlanId", %JSONREFERENCE = "ID");
@@ -282,22 +288,133 @@ ClassMethod ByCaseId(caseId As %String) As Shutter.Store.Case
 }
 
 /// Move the case to a new state. The expected version, when given, must match; the version then
-/// increments. Appends the CaseEvent in the same transaction.
+/// increments. Appends the CaseEvent in the same transaction. Under the case's lock, a copy whose version is no
+/// longer the stored one (another job moved the case after this copy was read) changes nothing.
 Method Transition(toState As %String, text As %String = "", actor As %String = "system", ref As %String = "", expectedVersion As %Integer = "") As %Status
 {
     If (expectedVersion '= "") && (expectedVersion '= ..Version) {
         Quit $$$ERROR($$$GeneralError, "Stale case version: expected " _ expectedVersion _ ", current " _ ..Version)
     }
-    Set from = ..State
-    Set ..State = toState
-    Set ..Version = ..Version + 1
-    Set ..UpdatedAt = ##class(Shutter.Util.Time).NowUTC()
-    If $LISTFIND($LISTBUILD("resolved", "blocked", "escalated", "failed"), toState) Set ..ClosedAt = ..UpdatedAt
-    TSTART
-    Set sc = ..%Save()
-    If $$$ISOK(sc) Set sc = ##class(Shutter.Store.CaseEvent).Append($THIS, "state", from, toState, text, actor, ref)
-    If $$$ISOK(sc) { TCOMMIT } Else { TROLLBACK }
+    Set sc = ..Lock()
+    Quit:$$$ISERR(sc) sc
+    Set level = $TLEVEL
+    Try {
+        Set stored = ..StoredVersion()
+        If (stored '= "") && (stored '= ..Version) {
+            Set sc = $$$ERROR($$$GeneralError, "Stale case version: this copy of " _ ..CaseId _ " is at version " _ ..Version _ ", the stored case at " _ stored)
+        } Else {
+            Set from = ..State
+            Set ..State = toState
+            Set ..Version = ..Version + 1
+            Set ..UpdatedAt = ##class(Shutter.Util.Time).NowUTC()
+            If $LISTFIND($LISTBUILD("resolved", "blocked", "escalated", "failed"), toState) Set ..ClosedAt = ..UpdatedAt
+            TSTART
+            Set sc = ..%Save()
+            If $$$ISOK(sc) Set sc = ##class(Shutter.Store.CaseEvent).Append($THIS, "state", from, toState, text, actor, ref)
+            If $$$ISOK(sc) { TCOMMIT } Else { TROLLBACK }
+        }
+    } Catch ex {
+        If $TLEVEL > level TROLLBACK 1
+        Set sc = ex.AsStatus()
+    }
+    Do ..Unlock()
     Quit sc
+}
+
+/// The case's lock (^Shutter.CaseLock), taken around the read and write of the stored case by Transition, Note,
+/// SetIncident and SetSnapshot, and by the case workflow's Park; ten seconds at most to get it. A case not yet saved
+/// needs none. A plain whole save (the case's opening, a release from an incident, a reopening) does not take it, and
+/// %OnBeforeSave keeps the incident and the current snapshot as stored, which only SetIncident and SetSnapshot write.
+Method Lock() As %Status
+{
+    Set id = ..%Id()
+    If id = "" Quit $$$OK
+    LOCK +^Shutter.CaseLock(id):10
+    If '$TEST Quit $$$ERROR($$$GeneralError, "Case " _ ..CaseId _ " is locked by another job")
+    Quit $$$OK
+}
+
+Method Unlock()
+{
+    Set id = ..%Id()
+    If id '= "" LOCK -^Shutter.CaseLock(id)
+}
+
+/// The version as stored, or "" for a case not saved yet.
+Method StoredVersion() As %String [ Private ]
+{
+    Set id = ..%Id(), v = ""
+    If id = "" Quit ""
+    &sql(SELECT Version INTO :v FROM Shutter_Store."Case" WHERE ID = :id)
+    If SQLCODE '= 0 Quit ""
+    Quit v
+}
+
+/// The incident that holds the case as stored (this copy may be older), or "".
+Method StoredIncident() As Shutter.Store.Incident
+{
+    Set id = ..%Id(), iid = ""
+    If id = "" Quit ""
+    &sql(SELECT Incident INTO :iid FROM Shutter_Store."Case" WHERE ID = :id)
+    If (SQLCODE '= 0) || (iid = "") Quit ""
+    Quit ##class(Shutter.Store.Incident).%OpenId(iid)
+}
+
+/// Make the case a member of an incident, or of none (""), writing that field alone under the case's lock, in the
+/// stored case and in this copy. With unlessState, a case whose stored state is that one keeps its membership (a case
+/// that parked meanwhile stays); changed says whether the membership was written.
+Method SetIncident(incident As Shutter.Store.Incident, unlessState As %String = "", Output changed As %Boolean) As %Status
+{
+    Set changed = 0, id = ..%Id(), iid = $SELECT($ISOBJECT(incident): incident.%Id(), 1: "")
+    If id = "" Quit $$$ERROR($$$GeneralError, "The case is not saved yet")
+    Set sc = ..Lock()
+    Quit:$$$ISERR(sc) sc
+    Set state = ""
+    If unlessState '= "" {
+        &sql(SELECT State INTO :state FROM Shutter_Store."Case" WHERE ID = :id)
+    }
+    If (unlessState = "") || (state '= unlessState) {
+        &sql(UPDATE Shutter_Store."Case" SET Incident = :iid WHERE ID = :id)
+        If SQLCODE < 0 {
+            Set sc = $$$ERROR($$$SQLError, SQLCODE, $GET(%msg))
+        } Else {
+            Do ..IncidentSetObjectId(iid)
+            Set changed = 1
+        }
+    }
+    Do ..Unlock()
+    Quit sc
+}
+
+/// Make a snapshot the case's current one, writing that field alone under the case's lock, in the stored case and in
+/// this copy.
+Method SetSnapshot(snapshot As Shutter.Store.Snapshot) As %Status
+{
+    Set id = ..%Id(), sid = $SELECT($ISOBJECT(snapshot): snapshot.%Id(), 1: "")
+    If id = "" Quit $$$ERROR($$$GeneralError, "The case is not saved yet")
+    Set sc = ..Lock()
+    Quit:$$$ISERR(sc) sc
+    &sql(UPDATE Shutter_Store."Case" SET CurrentSnapshot = :sid WHERE ID = :id)
+    If SQLCODE < 0 {
+        Set sc = $$$ERROR($$$SQLError, SQLCODE, $GET(%msg))
+    } Else {
+        Do ..CurrentSnapshotSetObjectId(sid)
+    }
+    Do ..Unlock()
+    Quit sc
+}
+
+/// A whole save keeps the incident and the current snapshot as stored: only SetIncident and SetSnapshot write them, so
+/// a copy read before either changed never writes back the older value.
+Method %OnBeforeSave(insert As %Boolean) As %Status [ Private, ServerOnly = 1 ]
+{
+    If insert Quit $$$OK
+    Set id = ..%Id(), inc = "", snap = ""
+    &sql(SELECT Incident, CurrentSnapshot INTO :inc, :snap FROM Shutter_Store."Case" WHERE ID = :id)
+    If SQLCODE '= 0 Quit $$$OK
+    If inc '= ..IncidentGetObjectId() Do ..IncidentSetObjectId(inc)
+    If snap '= ..CurrentSnapshotGetObjectId() Do ..CurrentSnapshotSetObjectId(snap)
+    Quit $$$OK
 }
 
 /// Close a case the team handled by hand (T31, 2.6): an escalated, blocked or failed case resolves with disposition
@@ -329,14 +446,38 @@ ClassMethod CloseByHand(case As Shutter.Store.Case, reason As %String, actor As 
     Quit case.Transition("resolved", "Handled by hand: " _ reason _ followed, who, ref, expectedVersion)
 }
 
-/// Record something that is not a state change: a note, an artefact, an error.
+/// Record something that is not a state change: a note, an artefact, an error. Only the time of the change is written
+/// to the stored case, never this copy, so a job holding an older copy (the evidence collector, the gate) writes nothing
+/// back over newer changes; the version does not move. A case not saved yet is saved whole.
 Method Note(kind As %String, text As %String, actor As %String = "system", ref As %String = "") As %Status
 {
-    Set ..UpdatedAt = ##class(Shutter.Util.Time).NowUTC()
-    TSTART
-    Set sc = ..%Save()
-    If $$$ISOK(sc) Set sc = ##class(Shutter.Store.CaseEvent).Append($THIS, kind, "", "", text, actor, ref)
-    If $$$ISOK(sc) { TCOMMIT } Else { TROLLBACK }
+    Set now = ##class(Shutter.Util.Time).NowUTC(), id = ..%Id()
+    If id = "" {
+        Set ..UpdatedAt = now
+        TSTART
+        Set sc = ..%Save()
+        If $$$ISOK(sc) Set sc = ##class(Shutter.Store.CaseEvent).Append($THIS, kind, "", "", text, actor, ref)
+        If $$$ISOK(sc) { TCOMMIT } Else { TROLLBACK }
+        Quit sc
+    }
+    Set sc = ..Lock()
+    Quit:$$$ISERR(sc) sc
+    Set level = $TLEVEL
+    Try {
+        TSTART
+        &sql(UPDATE Shutter_Store."Case" SET UpdatedAt = :now WHERE ID = :id)
+        If SQLCODE < 0 {
+            Set sc = $$$ERROR($$$SQLError, SQLCODE, $GET(%msg))
+        } Else {
+            Set i%UpdatedAt = now
+            Set sc = ##class(Shutter.Store.CaseEvent).Append($THIS, kind, "", "", text, actor, ref)
+        }
+        If $$$ISOK(sc) { TCOMMIT } Else { TROLLBACK }
+    } Catch ex {
+        If $TLEVEL > level TROLLBACK 1
+        Set sc = ex.AsStatus()
+    }
+    Do ..Unlock()
     Quit sc
 }
 

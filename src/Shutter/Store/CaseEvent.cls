@@ -24,11 +24,12 @@ Property Ref As %String(%JSONFIELDNAME = "ref", MAXLEN = 200);
 
 Property Actor As %String(%JSONFIELDNAME = "actor", MAXLEN = 100);
 
-/// Append an entry for a case. Called inside the case's own transaction.
+/// Append an entry for a case. Called inside the case's own transaction. The case is referred to by its id, so saving
+/// the entry never saves the caller's copy of the case with it.
 ClassMethod Append(case As Shutter.Store.Case, kind As %String, fromState As %String, toState As %String, text As %String, actor As %String = "system", ref As %String = "") As %Status
 {
     Set ev = ..%New()
-    Set ev.Case = case
+    Do ev.CaseSetObjectId(case.%Id())
     Set ev.Seq = $INCREMENT(^Shutter.Counter("event", case.%Id()))
     Set ev.At = ##class(Shutter.Util.Time).NowUTCms()
     Set ev.Kind = kind
