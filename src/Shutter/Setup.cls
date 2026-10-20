@@ -521,6 +521,14 @@ ClassMethod PurgeStore() As %String [ SqlProc ]
         Set n = n + 1
     }
     If $$$ISERR(sc) Quit "ERROR: " _ $SYSTEM.Status.GetErrorText(sc)
+    // The Workflow tasks of the purged cases and incidents (T31b): the engine keeps them, and with the counters reset a
+    // new I-000001 would list every earlier I-000001's tasks. Each task's worklist rows go first, then the task.
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM EnsLib_Workflow.TaskResponse WHERE ""%Subject"" LIKE 'Shutter %'")
+    While rs.%Next() {
+        Set id = rs.%Get("ID")
+        Do ##class(%SQL.Statement).%ExecDirectNoPriv(, "DELETE FROM EnsLib_Workflow.Worklist WHERE Task = ?", id)
+        Do ##class(EnsLib.Workflow.TaskResponse).%DeleteId(id)
+    }
     Kill ^Shutter.Counter, ^Shutter.Scenarios
     Quit n
 }
