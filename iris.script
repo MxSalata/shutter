@@ -1,19 +1,49 @@
-// Runs once, during the image build (Dockerfile): the namespace, the package manager and the module.
+// Runs once, during the image build (Dockerfile): the namespaces, the package manager, the module and the demo hospital.
+// A failed step stops the build: each step sets sc to a failure before it runs and checks it on a line of its own after,
+// so a step whose line stops at an error (the session then goes on to the next line) is caught too, and fail ends the
+// session with exit code 1, which fails the Dockerfile's RUN. An image that built is an image that installed.
+// One statement per line: `iris session` reads its input a line at a time, so a block cannot span lines.
+Set fail = "Write !, ""BUILD FAILED: "", $SYSTEM.Status.GetErrorText(sc), ! Do $SYSTEM.Process.Terminate($JOB, 1)"
 zn "USER"
-do $SYSTEM.OBJ.Load("/home/irisowner/dev/Installer.cls", "ck")
-set vars("NAMESPACE") = "SHUTTER"
-do ##class(Shutter.Installer).setup(.vars)
+Set sc = $SYSTEM.Status.Error(5001, "Installer.cls did not load")
+Set sc = $SYSTEM.OBJ.Load("/home/irisowner/dev/Installer.cls", "ck")
+If 'sc Xecute fail
+Set sc = $SYSTEM.Status.Error(5001, "the namespaces were not created"), vars("NAMESPACE") = "SHUTTER"
+Set sc = ##class(Shutter.Installer).setup(.vars)
+If 'sc Xecute fail
 zn "%SYS"
-do ##class(Security.Users).UnExpireUserPasswords("*")
+Do ##class(Security.Users).UnExpireUserPasswords("*")
 zn "SHUTTER"
-// InterSystems Package Manager, when the base image doesn't ship it
-set r = ##class(%Net.HttpRequest).%New(), r.Server = "pm.community.intersystems.com", r.SSLConfiguration = "ISC.FeatureTracker.SSL.Config" do r.Get("/packages/zpm/latest/installer"), $SYSTEM.OBJ.LoadStream(r.HttpResponse.Data, "c")
-// The core module: the production, the store, the gate, the downstream system, the web app and the recorded runs
-zpm "load /home/irisowner/dev -v":1:1
+Set sc = $SELECT($NAMESPACE = "SHUTTER": 1, 1: $SYSTEM.Status.Error(5001, "the SHUTTER namespace is not there"))
+If 'sc Xecute fail
+// InterSystems Package Manager, when the base image doesn't ship it (InterSystems' own images don't). The installer is
+// vendored in vendor/ipm (release 0.10.10 of github.com/intersystems/ipm) and checked against its SHA-256 before it
+// loads. Only when that file is missing is the same release asset downloaded from GitHub, under the same check.
+Set ipmFile = "/home/irisowner/dev/vendor/ipm/zpm-0.10.10.xml", ipmSHA = "daa2adabd66b488f57187d29712e54b0c25bbe000794fbf2a35a882c458b788a"
+Set hasIPM = ##class(%Dictionary.CompiledClass).%ExistsId("%IPM.Main"), vendored = ##class(%File).Exists(ipmFile), sc = 1, ipm = ""
+If 'hasIPM,vendored Write "IPM 0.10.10 from ", ipmFile, ! Set ipm = ##class(%Stream.FileBinary).%New(), sc = ipm.LinkToFile(ipmFile)
+If 'hasIPM,'vendored Write "IPM installer not in the repository: downloading 0.10.10 from github.com", ! Set req = ##class(%Net.HttpRequest).%New(), req.Server = "github.com", req.Https = 1, req.ReadRawMode = 1, req.SSLConfiguration = "ISC.FeatureTracker.SSL.Config", req.Timeout = 60, sc = req.Get("/intersystems/ipm/releases/download/v0.10.10/zpm-0.10.10.xml")
+If 'hasIPM,'vendored,sc,req.HttpResponse.StatusCode '= 200 Set sc = $SYSTEM.Status.Error(5001, "the IPM download answered HTTP " _ req.HttpResponse.StatusCode)
+If 'hasIPM,'vendored,sc Set ipm = req.HttpResponse.Data
+If 'hasIPM,sc Set digest = $ZCONVERT(##class(%xsd.hexBinary).LogicalToXSD($SYSTEM.Encryption.SHAHashStream(256, ipm, .sc)), "L") Do ipm.Rewind()
+If 'hasIPM,sc,digest '= ipmSHA Set sc = $SYSTEM.Status.Error(5001, "the IPM installer's SHA-256 is " _ digest _ ", not the pinned 0.10.10's")
+If 'hasIPM,sc Set sc = $SYSTEM.OBJ.LoadStream(ipm, "ck")
+If 'sc Xecute fail
+Set sc = $SELECT(##class(%Dictionary.CompiledClass).%ExistsId("%IPM.Main"): 1, 1: $SYSTEM.Status.Error(5001, "IPM is not installed (no %IPM.Main)"))
+If 'sc Xecute fail
+// The core module: the production, the store, the gate, the downstream system, the web app and the recorded runs. A
+// failed install fails the load (the module's Invoke checks InstallStatus's %Status), and so does a load that leaves
+// no /shutter web application: that image would answer 404.
+Set sc = $SYSTEM.Status.Error(5001, "the module did not load")
+Set sc = ##class(%IPM.Main).Shell("load /home/irisowner/dev -v")
+If sc,'$DATA(^Shutter.Config("webapp", "/shutter")) Set sc = $SYSTEM.Status.Error(5001, "the web application /shutter was not created")
+If 'sc Xecute fail
 // The demo hospital: a production of its own in the HOSPITAL namespace, created above with Shutter's packages mapped
 // in, so nothing is loaded here. Its install makes the folders, the credentials and the default settings and sets
 // Hospital.Production to start with the instance (SHUTTER_BUILD keeps it from starting during the build, as Shutter's).
 zn "HOSPITAL"
-write !, "Hospital install: ", ##class(Hospital.Setup).Install("SHUTTER"), !
+Set sc = $SYSTEM.Status.Error(5001, "the hospital's install did not run")
+Set r = ##class(Hospital.Setup).Install("SHUTTER") Write !, "Hospital install: ", r, ! Set sc = $SELECT(r = "ok": 1, 1: $SYSTEM.Status.Error(5001, "the hospital's install: " _ r))
+If 'sc Xecute fail
 zn "SHUTTER"
-halt
+Halt

@@ -1,5 +1,8 @@
 // Runs during the image build after iris.script, on an image with the AI Hub package (WITH_AIHUB=1):
-// the live agents, their tools, policies, knowledge bases and the provider configuration.
+// the live agents, their tools, policies, knowledge bases and the provider configuration. A failed load ends the
+// session with exit code 1, which fails the build (as in iris.script).
 zn "SHUTTER"
-zpm "load /home/irisowner/dev/aihub -v":1:1
-halt
+Set sc = $SYSTEM.Status.Error(5001, "the aihub module did not load")
+Set sc = ##class(%IPM.Main).Shell("load /home/irisowner/dev/aihub -v")
+If 'sc Write !, "BUILD FAILED: ", $SYSTEM.Status.GetErrorText(sc), ! Do $SYSTEM.Process.Terminate($JOB, 1)
+Halt
