@@ -381,8 +381,8 @@ reads it through `Shutter.Store.SiteProfile`.
   offset: `UTC`, `Europe/London` or a fixed offset; the built-in default (`SiteProfile.Default()`, in force only while no
   profile row is stored) is `Europe/London`, a stored profile that does not answer keeps `UTC` (the reading before v1.11),
   and the shipped seed profile says `Europe/London` (v1.12), so the fixtures' times read as British Summer Time (09:20 on
-  15 October is 08:20Z). A zone outside these that reaches the reader anyway (a profile stored before the check) is read
-  as `UTC` with a warning in the event log, once per job and zone, and the evidence's note says so (v1.16). The questionnaire page asks for `teams` and `mail` (question 9), `feed` (10) and `model_content` (11)
+  15 October is 08:20Z). A zone outside these that reaches the reader anyway (the profile's check refuses one, so only a zone
+  set by hand in the namespace's cached `feedZone`, or one passed to the time probe) is read as `UTC` with a warning in the event log, once per job and zone, and the evidence's note says so (v1.16). The questionnaire page asks for `teams` and `mail` (question 9), `feed` (10) and `model_content` (11)
   since v1.12, and since v1.14 for `merges` (12), each receiver's `merges` beside its `cancels` (5) and each team's
   `sources` (9). The body may carry
   `expectedVersion` (the version the caller read, not

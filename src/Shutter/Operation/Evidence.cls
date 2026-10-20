@@ -56,7 +56,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     If (+##class(Shutter.Util.Json).Str(msgInfo, "times_without_offset") > 0) && '$ISOBJECT(case.CurrentSnapshot) {
         Set zone = ##class(Shutter.Util.Json).Str(msgInfo, "feed_time_zone")
         // A zone Shutter does not know is read as UTC: the note says so rather than name a zone that was not applied.
-        Set read = $SELECT(##class(Shutter.Util.Time).KnownZone(zone): zone _ " (the site profile's feed time zone)", 1: "UTC (the site profile's feed time zone, " _ zone _ ", is not one Shutter knows)")
+        Set read = $SELECT(##class(Shutter.Util.Time).KnownZone(zone): zone _ " (the site profile's feed time zone)", 1: "UTC (the feed time zone, " _ zone _ ", is not one Shutter knows)")
         Do case.Note("note", "The message's times carry no offset; they are read as " _ read _ $SELECT(+##class(Shutter.Util.Json).Str(msgInfo, "times_with_offset") > 0: ", while others in the same message carry one", 1: ""), "system")
     }
     Do snap.AddItem("message", "message_store", now, msgInfo) Set count = count + 1

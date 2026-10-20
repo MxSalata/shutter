@@ -23,7 +23,9 @@ ClassMethod OnStart(pTimeStarted As %String) As %Status
     // In a container, the production starts with the instance, after the two known startup alerts are
     // logged: clear them here, so Docker's health check shows the instance's real state.
     Try {
-        Do ##class(Shutter.Setup).ClearStartupAlerts()
+        // It catches its own errors and answers "error: ..." rather than throw.
+        Set r = ##class(Shutter.Setup).ClearStartupAlerts()
+        If $EXTRACT(r, 1, 6) = "error:" $$$LOGWARNING("Clearing the startup alerts failed: " _ r)
     } Catch ex {
         $$$LOGWARNING("Clearing the startup alerts failed: " _ ex.DisplayString())
     }
@@ -41,7 +43,9 @@ ClassMethod OnStart(pTimeStarted As %String) As %Status
     }
     Try {
         Set r = ##class(Shutter.Setup).RefreshKnowledge()
-        If r [ """error" $$$LOGERROR("Re-reading the knowledge files failed in part: " _ r)
+        // A file that failed reads "error: ...", and a search collection that failed to build "unavailable: ..." or
+        // "failed: ..." (Shutter.Knowledge.Library's BuildAll).
+        If (r [ """error") || (r [ """unavailable: ") || (r [ """failed: ") $$$LOGERROR("Re-reading the knowledge files failed in part: " _ r)
     } Catch ex {
         $$$LOGERROR("Re-reading the knowledge files failed: " _ ex.DisplayString())
     }

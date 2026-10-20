@@ -136,14 +136,19 @@ ClassMethod LastSunday(year As %Integer, month As %Integer) As %String
     Quit $ZDATE(last - dow, 3)
 }
 
-/// A probe for tests and the terminal: how a timestamp reads in a zone, and the clock-change facts, as JSON.
+/// A probe for tests and the terminal: how a timestamp reads in a zone, the zone a time without an offset is read in and
+/// whether Shutter knows it, and the clock-change facts, as JSON.
 ClassMethod Probe(ts As %String, zone As %String = "") As %String [ SqlProc ]
 {
     Set iso = ..FromHL7(ts, zone, .had)
+    // The zone FromHL7 applied to a time without an offset: an empty one is the namespace's cached zone, then the profile's.
+    If (zone = "") || (zone = $CHAR(0)) Set zone = $GET(^Shutter.Config("feedZone"))
+    If zone = "" Set zone = ##class(Shutter.Store.SiteProfile).FeedTimeZone()
     Set o = {}
     Set o.iso = iso
     Do o.%Set("had_offset", ''had, "boolean")
-    Do o.%Set("zone_known", ..KnownZone($SELECT(zone = $CHAR(0): "", 1: zone)), "boolean")
+    Set o.zone = zone
+    Do o.%Set("zone_known", ..KnownZone(zone), "boolean")
     Do o.%Set("bst", ..InBritishSummerTime(iso), "boolean")
     Do o.%Set("near_clock_change", ..NearBritishClockChange(iso), "boolean")
     Set y = +$EXTRACT(iso, 1, 4)
