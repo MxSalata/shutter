@@ -10,4 +10,10 @@ zn "SHUTTER"
 set r = ##class(%Net.HttpRequest).%New(), r.Server = "pm.community.intersystems.com", r.SSLConfiguration = "ISC.FeatureTracker.SSL.Config" do r.Get("/packages/zpm/latest/installer"), $SYSTEM.OBJ.LoadStream(r.HttpResponse.Data, "c")
 // The core module: the production, the store, the gate, the downstream system, the web app and the recorded runs
 zpm "load /home/irisowner/dev -v":1:1
+// The demo hospital: a production of its own in the HOSPITAL namespace, created above with Shutter's packages mapped
+// in, so nothing is loaded here. Its install makes the folders, the credentials and the default settings and sets
+// Hospital.Production to start with the instance (SHUTTER_BUILD keeps it from starting during the build, as Shutter's).
+zn "HOSPITAL"
+write !, "Hospital install: ", ##class(Hospital.Setup).Install("SHUTTER"), !
+zn "SHUTTER"
 halt
