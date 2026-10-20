@@ -180,8 +180,9 @@ jobs:
           r = json.load(sys.stdin)[0]["r"]
           r = json.loads(r) if isinstance(r, str) else r
           sys.exit(0 if r["failed"] == 0 and r["passed"] > 0 else 1)'
-      # The trigger table, merges and cancels: how each HL7 event maps, what is delivered, indexed or withheld
-      - name: Shutter's trigger tests, in process
+      # The trigger table, merges and cancels: how each HL7 event maps, what is delivered, indexed or withheld; the
+      # gate's checks with every reason code; the matcher's conditions with every value of the vocabulary
+      - name: Shutter's unit tests (triggers, the gate, the matcher), in process
         run: |
           out=$(python3 scripts/iris-sql.py --url "$IRIS_URL" --ns SHUTTER --json "SELECT Shutter_Test.Run_Triggers() AS r")
           echo "$out"
