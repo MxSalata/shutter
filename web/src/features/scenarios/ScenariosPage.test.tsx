@@ -43,6 +43,12 @@ describe('ScenariosPage', () => {
     expect(await screen.findByRole('radio', { name: 'Single investigator' })).toBeInTheDocument();
   });
 
+  it('shows no guided path outside the demo: an instance has its own cases', async () => {
+    renderScenarios();
+    expect(await screen.findByRole('button', { name: 'Run S2' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Start here' })).not.toBeInTheDocument();
+  });
+
   it("greys out a scenario in a mode it isn't defined for, and says which modes it is", async () => {
     renderScenarios();
     expect(await screen.findByRole('button', { name: 'Run S7' })).toBeEnabled();

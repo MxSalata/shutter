@@ -34,6 +34,7 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { DispositionBadge, StateBadge } from '@/components/StateBadge';
 import { describeError } from '@/lib/errors';
 import { formatAge, humanize } from '@/lib/format';
+import { StartHere } from './StartHere';
 
 const ALL_MODES: { value: Mode; label: string; hint: string }[] = [
   {
@@ -333,6 +334,8 @@ export default function ScenariosPage() {
         }
       />
       <Stack gap="md">
+        {/* The demo's guided path through the recorded cases: the first thing a judge sees */}
+        {DEMO ? <StartHere /> : null}
         {playerOff ? (
           <Alert color="gray" variant="light" title="The Scenario Player is switched off">
             <Text size="sm">

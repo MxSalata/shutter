@@ -50,6 +50,21 @@ describe('the demo', () => {
     ).toBeInTheDocument();
   });
 
+  it('starts a judge on the recorded cases, found by scenario and mode', async () => {
+    renderAt('/scenarios');
+    const card = await screen.findByRole('region', { name: 'Start here' });
+    const links = await within(card).findAllByRole('link');
+    expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+      ['Case C-000002', '/cases/C-000002'],
+      ['Case C-000021', '/cases/C-000021'],
+      ['Case C-000008', '/cases/C-000008'],
+      ['Case C-000012', '/cases/C-000012'],
+      ['Incident I-000001', '/incidents/I-000001'],
+      ['Settings and costs', '/settings'],
+    ]);
+    expect(within(card).getByText(/S8 in Rules only mode/)).toBeInTheDocument();
+  });
+
   it('says the held case is a replay, and links nothing into a portal it does not have', async () => {
     const { container } = renderAt('/cases/C-000002');
     const approval = await screen.findByRole('region', { name: 'Approval' });
