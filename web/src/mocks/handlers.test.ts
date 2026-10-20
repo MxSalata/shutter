@@ -5,6 +5,7 @@ import type {
   CaseDetail,
   CaseEvent,
   CaseList,
+  Closure,
   Costs,
   PlanView,
   ScenarioList,
@@ -64,6 +65,10 @@ describe('the held case', () => {
     expect(approvals.tasks.map((t) => t.complete)).toEqual([false]);
     expect(await api.get<unknown[]>(`/cases/${HELD}/attempts`)).toEqual([]);
     expect((await refusal(api.get(`/cases/${HELD}/closure`))).status).toBe(404);
+    // The gate's check at dispatch came after the approval
+    const plan = await api.get<PlanView>(`/cases/${HELD}/plan`);
+    expect(recorded.plan.gateDecisions.map((g) => g.stage)).toContain('dispatch');
+    expect(plan.gateDecisions.map((g) => g.stage)).toEqual(['proposal']);
     const list = await api.get<CaseList>('/cases?state=awaiting_approval');
     expect(list.items.map((x) => x.caseId)).toEqual([HELD]);
   });
@@ -98,6 +103,19 @@ describe('the held case', () => {
       ['rejected', 'tried in the demo'],
     ]);
     expect(await api.get<unknown[]>(`/cases/${HELD}/attempts`)).toEqual([]);
+    const plan = await api.get<PlanView>(`/cases/${HELD}/plan`);
+    expect(plan.gateDecisions.map((g) => g.stage)).toEqual(['proposal']);
+    // As the server answers: the approver's rejection from the catalogue, and a closure with no verification
+    const reason = await api.get<{ code: string; catalogue: { title: string }; failingChecks: unknown[] }>(
+      `/cases/${HELD}/blocked-reason`,
+    );
+    expect(reason.code).toBe('REJECTED_BY_APPROVER');
+    expect(reason.catalogue.title).toBe('The approver rejected the plan');
+    expect(reason.failingChecks).toEqual([]);
+    const closure = await api.get<Closure & { state: string }>(`/cases/${HELD}/closure`);
+    expect([closure.state, closure.disposition, closure.verification]).toEqual(['blocked', 'resend', null]);
+    expect(closure.actors).toContain('approver');
+    expect(closure.unverified).toHaveLength(1);
   });
 
   it('binds the decision to the plan digest and the case version', async () => {
@@ -121,6 +139,17 @@ describe('the held case', () => {
     await decide('approve');
     await api.post('/scenarios/S2/run', { mode: 'board' });
     expect((await api.get<CaseDetail>(`/cases/${HELD}`)).state).toBe('awaiting_approval');
+  });
+
+  it('forgets a hand closure and its emails when it waits again', async () => {
+    await decide('reject');
+    await api.post(`/cases/${HELD}/close`, { reason: 'corrected at the ward' });
+    expect((await api.get<CaseDetail>(`/cases/${HELD}`)).disposition).toBe('handled_by_hand');
+    await api.post('/scenarios/S2/run', { mode: 'board' });
+    const c = await api.get<CaseDetail>(`/cases/${HELD}`);
+    expect([c.state, c.disposition]).toEqual(['awaiting_approval', recorded.summary.disposition]);
+    expect(await api.get<unknown[]>(`/cases/${HELD}/escalations`)).toEqual([]);
+    expect((await decide('approve')).decision).toBe('approve');
   });
 
   it('leaves the other recorded cases as they were recorded', async () => {

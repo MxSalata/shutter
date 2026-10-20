@@ -69,7 +69,9 @@ describe('Settings', () => {
 
   it('leads with what is configured, not with what is missing', async () => {
     renderAt('/settings');
-    expect(await screen.findByText('4 AI Hub agents, replaying 64 recorded live runs')).toBeInTheDocument();
+    expect(
+      await screen.findByText('4 agents, replaying recorded live runs (64 replays so far)'),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(
         'Not on this instance: AI Hub, the live runner and a model provider. A replay needs none of them: the recorded runs answer.',

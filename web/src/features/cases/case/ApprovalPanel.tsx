@@ -129,7 +129,7 @@ export function ApprovalPanel({
               decision !== 'approve'
                 ? 'Nothing will be sent.'
                 : DEMO
-                  ? 'The demo now replays what the recorded live run did after its approval: the dispatch and its verification.'
+                  ? 'The demo now replays what the recorded case did after its approval: the dispatch and its verification.'
                   : 'The receiver is read again and the gate checks the dispatch.',
           });
         },
@@ -167,7 +167,7 @@ export function ApprovalPanel({
           {DEMO && awaiting ? (
             <Alert color="blue" variant="light" title="Demo replay">
               This recorded case is held at its approval so that you can decide it here. Approving it replays
-              what the live run did next, the dispatch and its verification at the receiver; rejecting it
+              what the recorded case did next, the dispatch and its verification at the receiver; rejecting it
               closes it as blocked. The plan digest you approve is the recorded plan's.
             </Alert>
           ) : null}

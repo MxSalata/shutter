@@ -16,9 +16,10 @@ fixtures/scenarios.json. Prints one line per scenario and exits 1 when any diffe
 
 A scenario whose expected outcome says "incident" (S11) has several cases: the check follows the incident the run
 opens, approves its plan and its cases' plans with --approve, and compares each encounter's chain (kind, who decided,
-the catalogue entries), its writes and the downstream system's final state with expected.encounters. Such a scenario
-names the modes it is defined for (expected.modes), as S7 does (site policy resends without asking anyone, so no plan
-waits for its later transfer); other modes are skipped.
+the catalogue entries), its writes and the downstream system's final state with expected.encounters.
+
+A scenario that names the modes it is defined for (expected.modes: S7, S11, S12, S17, S18) is skipped in the others.
+S7 is not defined for site policy, which resends without asking anyone, so no plan waits for its later transfer.
 
 It plays scenarios: each run resets the downstream system. Don't run it on an instance someone else is using.
 """

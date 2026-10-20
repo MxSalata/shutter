@@ -38,6 +38,14 @@ describe('clampHeadline', () => {
     expect(clampHeadline(recorded('C-000007')).endsWith('epoch 30…')).toBe(true);
   });
 
+  it("ends the team's reason for a case handled by hand, which the server also cuts at 200", () => {
+    const reason = `${'fixed '.repeat(32)}by the h`;
+    expect(reason).toHaveLength(200);
+    expect(clampHeadline(`Handled by the team. ${reason}`)).toBe(
+      `Handled by the team. ${'fixed '.repeat(32)}by the…`,
+    );
+  });
+
   it('reads through a rejection', () => {
     const cut = recorded('C-000008');
     expect(clampHeadline(`Rejected by approver: ${cut}`)).toBe(`Rejected by approver: ${clampHeadline(cut)}`);

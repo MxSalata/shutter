@@ -1,11 +1,11 @@
 /**
- * A case's headline is a fixed opening sentence and the plan's summary, which the server cuts at 200 characters
- * (CaseWorkflow.HeadlineFor), so a long one can stop in the middle of a word. Such a headline is shown up to its last
+ * A case's headline is a fixed opening sentence and a text the server cuts at 200 characters (the plan's summary in
+ * CaseWorkflow, the team's reason in Case.CloseByHand), so a long one can stop in the middle of a word. Such a headline is shown up to its last
  * whole word, with an ellipsis; any other headline is shown as it is.
  */
 const SUMMARY_LIMIT = 200;
 
-/** The openings HeadlineFor puts before the summary; a rejection puts "Rejected by <user>: " before those. */
+/** The openings CaseWorkflow and Case put before a 200-character text; a rejection puts "Rejected by <user>: " first. */
 const OPENINGS = [
   /^Valid message\. Do not resend: a later event moved the encounter on\. /,
   /^Resend the .+? unchanged, after rehearsal and approval\. /,
@@ -13,6 +13,7 @@ const OPENINGS = [
   /^Escalated to a person\. /,
   /^More evidence needed\. /,
   /^New pattern, a person decides: /,
+  /^Handled by the team\. /,
 ];
 
 export function clampHeadline(headline: string | undefined | null): string {

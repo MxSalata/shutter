@@ -15,10 +15,10 @@ function Flag({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** How the agents answer, by the mode they run in now. */
+/** How the agents answer, by the mode they run in now; a replaying instance counts the replays it has run. */
 function answering(mode: string, replayed: number | undefined): string {
   if (mode === 'replay')
-    return `replaying ${replayed ? `${formatInt(replayed)} ` : ''}recorded live ${replayed === 1 ? 'run' : 'runs'}`;
+    return `replaying recorded live runs${replayed ? ` (${formatInt(replayed)} ${replayed === 1 ? 'replay' : 'replays'} so far)` : ''}`;
   if (mode === 'live') return 'running live on the configured model provider';
   if (mode === 'record') return 'running live and recording each run';
   return humanize(mode).toLowerCase();
@@ -40,7 +40,7 @@ function Configured({ s, replayed }: { s: Settings; replayed: number | undefined
   return (
     <Stack gap="xs">
       <Text fw={600}>
-        {agents.length} AI Hub {agents.length === 1 ? 'agent' : 'agents'}, {how}
+        {`${agents.length} ${s.aiHubPresent ? 'AI Hub ' : ''}${agents.length === 1 ? 'agent' : 'agents'}, ${how}`}
       </Text>
       <Group gap="sm" wrap="wrap">
         <Flag>Mode: {humanize(s.mode)}</Flag>

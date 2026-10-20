@@ -1,12 +1,14 @@
 import fixtures from './fixtures.json';
+import blockReasons from '../../../knowledge/block-reasons.json';
 
 /**
  * The demo's case held at its approval. The recordings hold no case waiting for a person, since the scenario check
  * approves each plan as it plays, so the mock holds one recorded case where it waited: its events up to the request
- * for approval, its evidence, findings, plan and rehearsal, and an open approval task, with no decision, dispatch or
- * closure yet. Approving it replays what the live run did next (the recorded case as it resolved, with a note on its
- * timeline saying so); rejecting it closes it as blocked, as the server does. Everything here is derived from the
- * recorded case: the fixtures themselves are not changed.
+ * for approval, its evidence, findings, plan and rehearsal (without the gate's check at dispatch, which came after the
+ * approval), and an open approval task, with no decision, dispatch or closure yet. Approving it replays what the
+ * recorded case did next (the case as it resolved, with a note on its timeline saying so); rejecting it closes it as
+ * blocked, with the blocked reason and closure the server gives. Everything here is derived from the recorded case:
+ * the fixtures themselves are not changed.
  */
 export type CaseFixture = (typeof fixtures.cases)[keyof typeof fixtures.cases];
 
@@ -41,7 +43,17 @@ const versionOf = (events: Event[]) => events.filter((e) => e.kind === 'state').
 
 /** Whether the recorded case can be held: it passed through awaiting_approval and was approved. */
 export function canHold(c: CaseFixture | undefined): c is CaseFixture {
-  return !!c && (c.events as Event[]).some((e) => e.kind === 'state' && e.toState === 'awaiting_approval');
+  if (!c) return false;
+  const events = c.events as Event[];
+  return (
+    events.some((e) => e.kind === 'state' && e.toState === 'awaiting_approval') &&
+    events.some((e) => e.kind === 'state' && e.fromState === 'awaiting_approval' && e.toState === 'approved')
+  );
+}
+
+interface GateDecision {
+  stage: string;
+  policyVersion?: string;
 }
 
 /** The case as it waited for an approver. */
@@ -54,7 +66,7 @@ export function awaiting(c: CaseFixture): CaseFixture {
     seq: (last?.seq ?? 0) + 1,
     at: last?.at ?? at,
     kind: 'note',
-    text: 'Demo replay: this recorded case is held here, before its approval, so that it can be approved in the browser. Approving it replays what the live run did next; rejecting it closes it as blocked.',
+    text: 'Demo replay: this recorded case is held here, before its approval, so that it can be approved in the browser. Approving it replays what the recorded case did next; rejecting it closes it as blocked.',
     actor: 'system',
   };
   const open = {
@@ -66,8 +78,14 @@ export function awaiting(c: CaseFixture): CaseFixture {
     currentApprovalId: '',
   };
   const approvals = c.approvals as { approvals: unknown[]; tasks: Record<string, unknown>[] };
+  const plan = c.plan as { gateDecisions?: GateDecision[] } | null;
   return {
     ...c,
+    // The gate checks the plan again at dispatch, after the approval: that decision is not made yet
+    plan: plan && {
+      ...plan,
+      gateDecisions: (plan.gateDecisions ?? []).filter((g) => g.stage !== 'dispatch'),
+    },
     summary: { ...c.summary, ...open },
     detail: {
       ...c.detail,
@@ -99,7 +117,7 @@ export function decided(c: CaseFixture, hold: Exclude<Hold, { state: 'awaiting' 
       seq: (events.at(-1)?.seq ?? 0) + 1,
       at: hold.at,
       kind: 'note',
-      text: `Demo replay: approved in the browser by ${hold.by}. The approval, dispatch and verification shown are the recorded live run's, including its approver and comment.`,
+      text: `Demo replay: approved in the browser by ${hold.by}. The approval, dispatch and verification shown are the recorded case's, including its approver and comment.`,
       actor: 'system',
     };
     return {
@@ -120,22 +138,46 @@ export function decided(c: CaseFixture, hold: Exclude<Hold, { state: 'awaiting' 
   };
   const recorded = (c.approvals as { approvals: Record<string, unknown>[] }).approvals[0] ?? {};
   const tasks = (held.approvals as { tasks: Record<string, unknown>[] }).tasks;
+  const all: Event[] = [
+    ...events,
+    {
+      seq: (events.at(-1)?.seq ?? 0) + 1,
+      at: hold.at,
+      kind: 'state',
+      fromState: 'awaiting_approval',
+      toState: 'blocked',
+      text: `Rejected by ${hold.by}${hold.comment ? `: ${hold.comment}` : ''}`,
+      actor: hold.by,
+    },
+  ];
+  const gates = (held.plan as { gateDecisions?: GateDecision[] } | null)?.gateDecisions ?? [];
   return {
     ...held,
     summary: { ...held.summary, ...closed },
     detail: { ...held.detail, ...closed },
-    events: [
-      ...events,
-      {
-        seq: (events.at(-1)?.seq ?? 0) + 1,
-        at: hold.at,
-        kind: 'state',
-        fromState: 'awaiting_approval',
-        toState: 'blocked',
-        text: `Rejected by ${hold.by}${hold.comment ? `: ${hold.comment}` : ''}`,
-        actor: hold.by,
-      },
-    ],
+    events: all,
+    // As the server answers when no gate check failed and the rejection is the case's last state change
+    blockedReason: {
+      code: REJECTED,
+      catalogue: catalogueEntry(REJECTED),
+      failingChecks: [],
+      state: 'blocked',
+      headline,
+    },
+    closure: {
+      caseId: c.summary.caseId,
+      state: 'blocked',
+      disposition: c.summary.disposition,
+      outcome: '',
+      closedAt: hold.at,
+      verification: null,
+      verifiedEffects: [],
+      unverified: [
+        "Consumers beyond the downstream system are outside the production's view and are not verified",
+      ],
+      actors: [...new Set(all.map((e) => e.actor).filter((a): a is string => !!a))].sort(),
+      policyVersion: gates.at(-1)?.policyVersion ?? '',
+    },
     approvals: {
       approvals: [
         {
@@ -157,6 +199,24 @@ export function decided(c: CaseFixture, hold: Exclude<Hold, { state: 'awaiting' 
       })),
     },
   } as unknown as CaseFixture;
+}
+
+const REJECTED = 'REJECTED_BY_APPROVER';
+
+/** A block reason's catalogue entry (knowledge/block-reasons.json), in the API's names. */
+function catalogueEntry(code: string) {
+  const r = blockReasons.reasons.find((x) => x.code === code);
+  return r
+    ? {
+        code: r.code,
+        title: r.title,
+        prerequisite: r.prerequisite,
+        nextAction: r.next_action,
+        owner: r.owner,
+        reevaluateWhen: r.reevaluate_when,
+        text: r.text,
+      }
+    : null;
 }
 
 /** The case as the demo shows it now. */

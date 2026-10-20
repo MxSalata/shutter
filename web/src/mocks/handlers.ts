@@ -283,7 +283,11 @@ export const handlers = [
     played[String(params.id)] = mode;
     // Playing it again opens the case again: a held case of the scenario in this mode waits for its approval anew
     for (const [id, hold] of Object.entries(freshHolds(cases)))
-      if (cases[id].summary.scenario === params.id && cases[id].summary.mode === mode) holds[id] = hold;
+      if (cases[id].summary.scenario === params.id && cases[id].summary.mode === mode) {
+        holds[id] = hold;
+        delete closed[id];
+        delete escalations[id];
+      }
     run = {
       scenario: String(params.id),
       mode,
