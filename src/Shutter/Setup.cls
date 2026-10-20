@@ -529,6 +529,8 @@ ClassMethod PurgeStore() As %String [ SqlProc ]
         Do ##class(%SQL.Statement).%ExecDirectNoPriv(, "DELETE FROM EnsLib_Workflow.Worklist WHERE Task = ?", id)
         Do ##class(EnsLib.Workflow.TaskResponse).%DeleteId(id)
     }
+    // Worklist rows whose task is gone (a task deleted by hand) would show as broken entries in the inbox.
+    Do ##class(%SQL.Statement).%ExecDirectNoPriv(, "DELETE FROM EnsLib_Workflow.Worklist WHERE Task NOT IN (SELECT ID FROM EnsLib_Workflow.TaskResponse)")
     Kill ^Shutter.Counter, ^Shutter.Scenarios
     Quit n
 }
