@@ -26,7 +26,9 @@ the productions a hospital already runs; the README's `docker compose up` is the
 The module `iris-shutter` (the repository root) carries the core, the demo receiver's classes included. Its manifest
 runs `Shutter.Setup.Install(root, demo)`; the
 IPM parameter `demo` defaults to 1, and `zpm "load /path/to/module -Ddemo=0"` installs without the demo. A failed
-install stops the load. The companion module `iris-shutter-aihub` adds the live agents on an AI Hub build; without it
+install stops the load. A packaged install (an archive made by `zpm "package"`, the form the registry serves) carries
+the `knowledge/`, `fixtures/` and `www/` folders the install reads; IPM keeps the extracted module in its module root
+(IPM 0.10.10: `<install directory>/ipm/iris-shutter/<version>/`), and `/shutter` serves `www/` from there. The companion module `iris-shutter-aihub` adds the live agents on an AI Hub build; without it
 the gate, the catalogue and the policy path work, and the board replays recordings.
 
 `Install` creates, in the current namespace, the folders under `<mgr>/shutter/`, the resources `Shutter_Operate`,

@@ -73,8 +73,17 @@ ClassMethod Install(root As %String = "", demo As %Boolean = 1, production As %S
 /// production (InstallIntoStatus) and Shutter.Production is neither started nor made the auto-start production.
 ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production As %String = "") As %Status
 {
+    // IPM runs the install inside a transaction of its own and commits it after the Activate phase, but starting a
+    // production (Ens.Director) commits every open transaction: IPM's commit then fails (<COMMAND> *NoTransaction) and
+    // a load or install that worked ends with an error. The level the install was called at is restored before it
+    // returns; what was written up to the production's start is committed either way.
+    Set tlevel = $TLEVEL
     Set production = $ZSTRIP($GET(production), "<>WC")
-    If production '= "" Quit ..InstallIntoStatus(production, root)
+    If production '= "" {
+        Set sc = ..InstallIntoStatus(production, root)
+        While $TLEVEL < tlevel { TSTART }
+        Quit sc
+    }
     Set sc = $$$OK
     Try {
         Set ns = $NAMESPACE
@@ -128,6 +137,7 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
     } Catch ex {
         Set sc = ex.AsStatus()
     }
+    While $TLEVEL < tlevel { TSTART }
     Quit sc
 }
 
@@ -1025,8 +1035,9 @@ ClassMethod RebuildDescriptorRegistry() As %Boolean
     }
 }
 
-/// The resource guarding the wallet collection, with public Use so the production's jobs can
-/// resolve the secret through the Config Store. Tighten for a shared instance.
+/// The resource guarding the wallet collection, created with no public permission. The production's jobs run as
+/// _Ensemble, whose role %All holds every resource, so they resolve the secret through the Config Store; any other
+/// account needs a role that grants Shutter_Secrets.
 ClassMethod EnsureSecretResource() As %Status [ Private ]
 {
     Set sc = $$$OK
