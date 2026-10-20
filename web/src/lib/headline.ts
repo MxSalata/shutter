@@ -18,6 +18,9 @@ const OPENINGS = [
 
 export function clampHeadline(headline: string | undefined | null): string {
   if (!headline) return '';
+  // The server cuts at a whole word itself since 20 October 2026; a cut it made before then could leave a full stop
+  // or a bracket before its ellipsis.
+  headline = headline.replace(/[\s.,;:(-]+…$/, '…');
   const rejected = /^Rejected by [^:]+: /.exec(headline)?.[0] ?? '';
   const rest = headline.slice(rejected.length);
   for (const opening of OPENINGS) {
