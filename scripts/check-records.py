@@ -9,7 +9,7 @@ Exit code 1 when any file has a problem. With --scenarios it also lists, per sce
 members whose round-1 recording is missing, per case (scenario:S11:ENC-1101:transfer|member|cfg). A key in the older
 form without the encounter and event (scenario:S2|member|cfg) is a problem: Shutter.Bridge.Record looks up the long key
 only, so such a recording never replays. A scenario that opens an incident needs recordings only for the encounters
-whose chain the board decides.
+whose chain the board decides; a withheld merge or cancel, and a scenario played only in site-policy mode, need none.
 """
 import argparse
 import glob
@@ -43,6 +43,9 @@ def case_of(m):
     """What a full board set is counted over: the case (scenario, encounter, event), or the scenario alone."""
     return (m["scenario"], m["encounter"], m["event"])
 
+
+# The gate's codes for an operation Shutter never sends (CONTRACTS 2, v1.14)
+WITHHELD = {"MERGE_WITHHELD", "CANCEL_UNSUPPORTED"}
 
 FINDINGS_FIELDS = {"disposition", "confidence", "summary", "violations", "unknowns", "evidence_refs"}
 PLAN_FIELDS = {"disposition", "summary", "action", "preconditions", "evidence_refs", "disagreements",
@@ -198,6 +201,14 @@ def main():
         board = {"conformance", "encounter", "impact", "coordinator"}
         for s in scenarios:
             expected = s.get("expected") or {}
+            # A withheld merge or cancel never convenes the board, and a scenario played only in site-policy mode is
+            # decided by the catalogue: neither needs recordings
+            if expected.get("blocked_by") in WITHHELD:
+                print(f"{s['id']}: withheld ({expected['blocked_by']}), no board")
+                continue
+            if expected.get("modes") and "board" not in expected["modes"] and not expected.get("incident"):
+                print(f"{s['id']}: played in {', '.join(expected['modes'])} only, no board")
+                continue
             if expected.get("incident"):
                 # an incident's cases need recordings only where the board decides their chain (expected path "board")
                 encounters = [e["encounter"] for e in expected.get("encounters", []) if e.get("path") == "board"]

@@ -661,5 +661,121 @@
       "final_ward": "WARD-A",
       "failed_operation_key": "PAS^HOSP^MRN1013^ENC-1013^transfer^2026-10-15T08:30:00Z"
     }
+  },
+  {
+    "id": "S15",
+    "title": "A patient merge Shutter withholds for the PAS team",
+    "summary": "The patient is admitted to Ward A and moved to Ward B; then the PAS merges an older record into theirs (ADT^A40). A merge changes which record a patient's history belongs to, so by default Shutter never sends one: nothing is written, and the case goes to the PAS team, whose email Shutter drafts.",
+    "steps": [
+      {
+        "file": "S15-01-A01.hl7"
+      },
+      {
+        "file": "S15-02-A02.hl7"
+      },
+      {
+        "file": "S15-03-A40.hl7",
+        "expect": "withheld"
+      }
+    ],
+    "expected": {
+      "disposition": "escalate",
+      "write": false,
+      "blocked_by": "MERGE_WITHHELD",
+      "final_state": "admitted",
+      "final_ward": "WARD-B",
+      "failed_operation_key": "PAS^HOSP^MRN1015^ENC-1015^merge^2026-10-15T08:50:00Z"
+    }
+  },
+  {
+    "id": "S16",
+    "title": "A cancellation the downstream system cannot reverse",
+    "summary": "The patient is admitted to Ward A and moved to Ward B; then the PAS cancels the transfer (ADT^A12). The downstream system takes no cancels, so Shutter sends nothing: the case goes to a person, who moves the patient back by hand and marks the case handled.",
+    "steps": [
+      {
+        "file": "S16-01-A01.hl7"
+      },
+      {
+        "file": "S16-02-A02.hl7"
+      },
+      {
+        "file": "S16-03-A12.hl7",
+        "expect": "withheld"
+      }
+    ],
+    "expected": {
+      "disposition": "escalate",
+      "write": false,
+      "blocked_by": "CANCEL_UNSUPPORTED",
+      "final_state": "admitted",
+      "final_ward": "WARD-B",
+      "failed_operation_key": "PAS^HOSP^MRN1016^ENC-1016^cancel_transfer^2026-10-15T08:35:00Z"
+    }
+  },
+  {
+    "id": "S17",
+    "title": "S2 in HL7 2.4",
+    "summary": "S2's never-accepted transfer, sent as HL7 2.4 messages to a route that parses 2.5.1. The fields Shutter reads are where they always are, so the transfer is resent as in S2; the case notes the version the message says.",
+    "steps": [
+      {
+        "file": "S17-01-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S17-02-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      }
+    ],
+    "expected": {
+      "disposition": "resend",
+      "write": true,
+      "final_state": "admitted",
+      "final_ward": "WARD-B",
+      "modes": [
+        "policy"
+      ],
+      "failed_operation_key": "PAS^HOSP^MRN1017^ENC-1017^transfer^2026-10-15T08:20:00Z"
+    }
+  },
+  {
+    "id": "S18",
+    "title": "S2 in HL7 2.3.1",
+    "summary": "S2's never-accepted transfer, sent as HL7 2.3.1 messages to a route that parses 2.5.1. The fields Shutter reads are where they always are, so the transfer is resent as in S2; the case notes the version the message says.",
+    "steps": [
+      {
+        "file": "S18-01-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S18-02-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      }
+    ],
+    "expected": {
+      "disposition": "resend",
+      "write": true,
+      "final_state": "admitted",
+      "final_ward": "WARD-B",
+      "modes": [
+        "policy"
+      ],
+      "failed_operation_key": "PAS^HOSP^MRN1018^ENC-1018^transfer^2026-10-15T08:20:00Z"
+    }
   }
 ]

@@ -6,7 +6,8 @@ tool calls and responses (and, with --demo, the names, dates of birth and notes 
 
 The fixtures are synthetic, but the rule is the real one: the model gets tokens for the identifiers and the event's
 facts, never the patient's identifiers (PID-3, the visit number PV1-19), name or any part of it (PID-5), date of birth
-(PID-7), address (PID-11), phone numbers (PID-13, PID-14) or the free text of notes (OBX-5 of a TX, ST or FT
+(PID-7), address (PID-11), phone numbers (PID-13, PID-14), a merge's prior patient, visit and name (MRG-1, MRG-5,
+MRG-7) or the free text of notes (OBX-5 of a TX, ST or FT
 observation, NTE-3). Every such value found in a fixture is looked for in what the model saw, in the forms a summary
 would write it ("SYNTH, ADA", "Ada Synth", "1968-10-02", "02/10/1968", "2 October 1968"), in any case; values match as
 whole words, so a token like MRN-T1 doesn't count. A recording's key, correlation key and label are Shutter's own
@@ -76,6 +77,16 @@ def personal_values(fixture_dir):
                         add("phone", phone, [phone])
             elif kind == "PV1":
                 add("identifier", field(seg, 19).split("^")[0], [field(seg, 19).split("^")[0]])
+            elif kind == "MRG":
+                # A merge's prior patient (every MRG-1 repetition), prior visit (MRG-5) and prior name (MRG-7)
+                for rep in field(seg, 1).split("~"):
+                    add("identifier", rep.split("^")[0], [rep.split("^")[0]])
+                add("identifier", field(seg, 5).split("^")[0], [field(seg, 5).split("^")[0]])
+                name = field(seg, 7).split("~")[0].split("^")
+                family, given = (name + ["", ""])[:2]
+                if family and given:
+                    add("name", f"{family}^{given}", [f"{family}^{given}", f"{family}, {given}", f"{given} {family}"])
+                    add("name part", given, [given])
             elif kind == "OBX" and field(seg, 2) in ("TX", "ST", "FT"):
                 add("note text", field(seg, 5), [field(seg, 5)])
             elif kind == "NTE":
