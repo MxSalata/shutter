@@ -13,4 +13,24 @@ Property Opened As %Boolean [ InitialExpression = 0 ];
 
 Property Error As %String(MAXLEN = 4000);
 
+Storage Default
+{
+<Data name="ForwardedDefaultData">
+<Subscript>"Forwarded"</Subscript>
+<Value name="1">
+<Value>CaseId</Value>
+</Value>
+<Value name="2">
+<Value>State</Value>
+</Value>
+<Value name="3">
+<Value>Opened</Value>
+</Value>
+<Value name="4">
+<Value>Error</Value>
+</Value>
+</Data>
+<DefaultData>ForwardedDefaultData</DefaultData>
+<Type>%Storage.Persistent</Type>
+}
 }

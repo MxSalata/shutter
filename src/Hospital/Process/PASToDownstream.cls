@@ -94,4 +94,24 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
     Quit $$$OK
 }
 
+Storage Default
+{
+<Data name="PASToDownstreamDefaultData">
+<Subscript>"PASToDownstream"</Subscript>
+<Value name="1">
+<Value>WardTarget</Value>
+</Value>
+<Value name="2">
+<Value>ForwarderTarget</Value>
+</Value>
+<Value name="3">
+<Value>RouteName</Value>
+</Value>
+<Value name="4">
+<Value>DeliveryTimeout</Value>
+</Value>
+</Data>
+<DefaultData>PASToDownstreamDefaultData</DefaultData>
+<Type>%Storage.Persistent</Type>
+}
 }

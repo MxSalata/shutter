@@ -538,6 +538,11 @@ ClassMethod DisableDemoItems() As %Status
         Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)
         Quit:$$$ISERR(sc)
         If (state = 1) && (name = "Shutter.Production") Set sc = ##class(Ens.Director).UpdateProduction()
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    Quit sc
+}
 
 // ---- shape B: Shutter's items inside a site's own production ----
 
@@ -677,8 +682,6 @@ ClassMethod CopyItem(item As Ens.Config.Item, target As Ens.Config.Production) A
     Quit target.Items.Insert(copy)
 }
 
-/// Empty Shutter's own tables (cases and everything attached to them, recordings excepted) on a
-/// demo instance. Refused elsewhere. Returns the number of tables emptied or the error.
 /// The two daily housekeeping tasks (A14): "Shutter message purge" (the standard Ens.Util.Tasks.Purge: every message
 /// type in the namespace, bodies too, sessions kept whole) and "Shutter retention" (Shutter.Util.RetentionTask:
 /// idempotency keys older than a day, closed cases past the retention only when switched on). The retention task is

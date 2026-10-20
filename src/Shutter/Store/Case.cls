@@ -503,6 +503,18 @@ Storage Default
 <Value name="39">
 <Value>MergeGroups</Value>
 </Value>
+<Value name="40">
+<Value>SourceNamespace</Value>
+</Value>
+<Value name="41">
+<Value>SourceProduction</Value>
+</Value>
+<Value name="42">
+<Value>SourceRoute</Value>
+</Value>
+<Value name="43">
+<Value>OriginHeaderId</Value>
+</Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>
 <DefaultData>CaseDefaultData</DefaultData>

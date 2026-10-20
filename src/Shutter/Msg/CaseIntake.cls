@@ -71,6 +71,21 @@ Storage Default
 <Value name="8">
 <Value>FailureReasonCode</Value>
 </Value>
+<Value name="9">
+<Value>Receiver</Value>
+</Value>
+<Value name="10">
+<Value>SourceNamespace</Value>
+</Value>
+<Value name="11">
+<Value>SourceProduction</Value>
+</Value>
+<Value name="12">
+<Value>SourceRoute</Value>
+</Value>
+<Value name="13">
+<Value>OriginHeaderId</Value>
+</Value>
 </Data>
 <DefaultData>CaseIntakeDefaultData</DefaultData>
 <Type>%Storage.Persistent</Type>

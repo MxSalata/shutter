@@ -28,4 +28,36 @@ Property FailureReasonCode As %String(MAXLEN = 100);
 /// The service that received the message. Empty: the forwarder reads the header's SourceConfigName.
 Property Route As %String(MAXLEN = 128);
 
+Storage Default
+{
+<Data name="ForwardDefaultData">
+<Subscript>"Forward"</Subscript>
+<Value name="1">
+<Value>HeaderId</Value>
+</Value>
+<Value name="2">
+<Value>Receiver</Value>
+</Value>
+<Value name="3">
+<Value>FailureKind</Value>
+</Value>
+<Value name="4">
+<Value>FailureText</Value>
+</Value>
+<Value name="5">
+<Value>FailureOutcome</Value>
+</Value>
+<Value name="6">
+<Value>FailureHttpStatus</Value>
+</Value>
+<Value name="7">
+<Value>FailureReasonCode</Value>
+</Value>
+<Value name="8">
+<Value>Route</Value>
+</Value>
+</Data>
+<DefaultData>ForwardDefaultData</DefaultData>
+<Type>%Storage.Persistent</Type>
+}
 }

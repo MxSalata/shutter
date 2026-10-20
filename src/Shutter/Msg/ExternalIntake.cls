@@ -41,4 +41,51 @@ Property SchemaCategory As %String(MAXLEN = 32);
 /// The investigation mode requested (board, single, rules, policy); empty takes the configured default.
 Property Mode As %String(MAXLEN = 16);
 
+Storage Default
+{
+<Data name="ExternalIntakeDefaultData">
+<Subscript>"ExternalIntake"</Subscript>
+<Value name="1">
+<Value>SourceNamespace</Value>
+</Value>
+<Value name="2">
+<Value>SourceProduction</Value>
+</Value>
+<Value name="3">
+<Value>SourceRoute</Value>
+</Value>
+<Value name="4">
+<Value>OriginHeaderId</Value>
+</Value>
+<Value name="5">
+<Value>Receiver</Value>
+</Value>
+<Value name="6">
+<Value>FailureKind</Value>
+</Value>
+<Value name="7">
+<Value>FailureText</Value>
+</Value>
+<Value name="8">
+<Value>FailureOutcome</Value>
+</Value>
+<Value name="9">
+<Value>FailureHttpStatus</Value>
+</Value>
+<Value name="10">
+<Value>FailureReasonCode</Value>
+</Value>
+<Value name="11">
+<Value>MessageText</Value>
+</Value>
+<Value name="12">
+<Value>SchemaCategory</Value>
+</Value>
+<Value name="13">
+<Value>Mode</Value>
+</Value>
+</Data>
+<DefaultData>ExternalIntakeDefaultData</DefaultData>
+<Type>%Storage.Persistent</Type>
+}
 }

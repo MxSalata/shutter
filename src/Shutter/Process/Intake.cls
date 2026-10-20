@@ -109,4 +109,21 @@ Method StoredHeaderId(msg As EnsLib.HL7.Message) As %String
     Quit id
 }
 
+Storage Default
+{
+<Data name="IntakeDefaultData">
+<Subscript>"Intake"</Subscript>
+<Value name="1">
+<Value>StoreTarget</Value>
+</Value>
+<Value name="2">
+<Value>CaseTarget</Value>
+</Value>
+<Value name="3">
+<Value>WaitSeconds</Value>
+</Value>
+</Data>
+<DefaultData>IntakeDefaultData</DefaultData>
+<Type>%Storage.Persistent</Type>
+}
 }
