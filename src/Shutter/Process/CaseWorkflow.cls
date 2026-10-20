@@ -124,7 +124,12 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
         Quit $$$OK
     }
     Set ..CaseId = case.CaseId, ..Mode = case.Mode
-    Set case.WorkflowSessionId = ..%SessionId, case.Receiver = ..WardTarget
+    Set case.WorkflowSessionId = ..%SessionId
+    // The receiver is the one the intake names (a case from another production, CONTRACTS 11), else this process's
+    // connector; where the original message lives travels with it, so the evidence can say where it is.
+    Set case.Receiver = $SELECT(request.Receiver '= "": request.Receiver, 1: ..WardTarget)
+    Set case.SourceNamespace = request.SourceNamespace, case.SourceProduction = request.SourceProduction
+    Set case.SourceRoute = request.SourceRoute, case.OriginHeaderId = request.OriginHeaderId
     // The connector's answer, structured, so the matcher never parses it out of the failure text.
     Set wr = ##class(Shutter.Util.Json).Parse(request.WardResultJSON, .wsc)
     If $ISOBJECT(wr) {
@@ -136,9 +141,14 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     If (request.FailureReasonCode '= "") && ($ZSTRIP(request.WardResultJSON, "<>W") = "") Set case.FailureReasonCode = request.FailureReasonCode
     Do case.%Save()
     $$$TRACE("Case " _ case.CaseId _ " opened (" _ case.Mode _ "): " _ case.Headline)
+    // The answer goes back now, not when the whole workflow completes: the case intake process (and through it the
+    // REST route) waits for the case id, and the feed's instance need not stay open for the investigation. The
+    // response set above still stands for a caller that reads it at completion.
+    Set rsc = ..Reply(started)
+    If $$$ISERR(rsc) $$$TRACE("The early reply was not sent: " _ $SYSTEM.Status.GetErrorText(rsc))
     // Detection (CONTRACTS 7.1): this failure counts towards an incident for the receiver; at the threshold one
     // opens, adopts the burst's cases, and its workflow starts. A detection error never stops the case.
-    Set dsc = ##class(Shutter.Store.IncidentDetector).Register(case, ..WardTarget, .incident, .openedNow)
+    Set dsc = ##class(Shutter.Store.IncidentDetector).Register(case, case.Receiver, .incident, .openedNow)
     If $$$ISERR(dsc) {
         $$$LOGWARNING("Incident detection failed for " _ case.CaseId _ ": " _ $SYSTEM.Status.GetErrorText(dsc))
     } ElseIf $ISOBJECT(incident) && openedNow {

@@ -15,7 +15,11 @@ Class Shutter.Util.ModelView Extends %RegisteredObject
 /// Keys that never leave IRIS, wherever they occur.
 Parameter DENYLIST = ",patient_name,name,given_name,family_name,date_of_birth,dob,birth_date,birth_time,sex,gender,address,phone,telephone,email,next_of_kin,mother_maiden_name,maiden_name,religion,ethnicity,ethnic_group,marital_status,nationality,ssn,national_id,language,headline,";
 
-Parameter SUMMARYKEEP = ",case_id,scenario,operation,failure,message,validation,ward_state,ward_state_http_status,receipt,receipt_http_status,timeline,later_events,route,epoch,observed_at,incident,catalogue,fresh_until,snapshot_id,snapshot_digest,taken_at,";
+Parameter SUMMARYKEEP = ",case_id,scenario,operation,failure,message,validation,ward_state,ward_state_http_status,receipt,receipt_http_status,timeline,later_events,route,source,epoch,observed_at,incident,catalogue,fresh_until,snapshot_id,snapshot_digest,taken_at,";
+
+/// What the source of a case from another production keeps (CONTRACTS 11): the namespace, the production, the route
+/// and the header id there, operational names with no patient data.
+Parameter SOURCEKEEP = ",namespace,production,route,header_id,";
 
 Parameter OPERATIONKEEP = ",operation_key,encounter_id,patient_id,patient_id_authority,event,ward,event_time,source_system,source_message_id,payload_digest,prior_patient_id,prior_patient_id_authority,prior_encounter_id,";
 
@@ -141,6 +145,7 @@ ClassMethod KeepFor(node As %DynamicObject, parentKey As %String) As %String [ P
     If node.%IsDefined("state") || node.%IsDefined("history") Quit ..#WARDKEEP
     If node.%IsDefined("kind") && (node.%IsDefined("text") || node.%IsDefined("outcome")) && 'node.%IsDefined("data") && 'node.%IsDefined("item") && 'node.%IsDefined("items") Quit ..#FAILUREKEEP
     If node.%IsDefined("connector") && node.%IsDefined("capabilities_source") Quit ..#ROUTEKEEP
+    If node.%IsDefined("namespace") && node.%IsDefined("header_id") Quit ..#SOURCEKEEP
     Quit ""
 }
 

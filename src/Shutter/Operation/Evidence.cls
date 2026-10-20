@@ -40,6 +40,16 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     Set failure."ens_session_id" = case.EnsSessionId, failure."source_header_id" = case.SourceHeaderId
     Do snap.AddItem("error", "production", now, failure) Set count = count + 1
 
+    // 2b. Where the original message lives when the case came from another production (CONTRACTS 11): the namespace,
+    // the production, the route that received it and its header id there. Operational names, no patient data.
+    Set source = ""
+    If case.SourceNamespace '= "" {
+        Set source = {}
+        Set source.namespace = case.SourceNamespace, source.production = case.SourceProduction
+        Set source.route = case.SourceRoute, source."header_id" = case.OriginHeaderId
+        Do snap.AddItem("source", "production", now, source) Set count = count + 1
+    }
+
     // 3. The message's named fields and its validation, from the message store.
     Set msgInfo = ..MessageFields(case.SourceHeaderId, .validation)
     // Said once, on the first collection; the facts stay in every snapshot's message section.
@@ -139,6 +149,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     Set summary.timeline = timeline
     Set summary."later_events" = laterCount
     Set summary.route = route
+    If $ISOBJECT(source) Set summary.source = source
     Set summary.epoch = ##class(Shutter.Util.Json).Str(wardState, "epoch", ##class(Shutter.Util.Json).Str(route, "epoch"))
     Set summary."observed_at" = now
     // The incident this case belongs to, when one holds it (CONTRACTS 7): the board and the matcher see the chain.

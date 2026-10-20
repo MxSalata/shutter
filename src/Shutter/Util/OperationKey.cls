@@ -123,6 +123,31 @@ ClassMethod MergeFields(message As EnsLib.HL7.Message, op As %DynamicObject)
     Set op."merge_groups" = groups
 }
 
+/// The operation record of a message that does not map: what the message says, with a key of its own
+/// (UNMAPPED^<header id>), so the case can hold it. headerId is the message's Ens.MessageHeader id in this namespace:
+/// the feed's own (Shutter.Process.ADTToWard) or the intake's stored copy (Shutter.Process.Intake).
+ClassMethod Unmapped(request As EnsLib.HL7.Message, headerId As %String) As %DynamicObject
+{
+    Set op = {}
+    Set op."operation_key" = "UNMAPPED^" _ headerId
+    Set op."encounter_id" = ..Value(request, "PV1", "19.1")
+    Set op."patient_id" = ..PatientIdentifier(request, .authority)
+    Set op."patient_id_authority" = authority
+    Set trigger = request.GetValueAt("MSH:9.2")
+    Set op."event" = $SELECT(trigger = "": "", 1: trigger)
+    Set ward = ..Value(request, "PV1", "3.1")
+    If ward '= "" { Set op."ward" = ward } Else { Do op.%Set("ward", "", "null") }
+    Set raw = request.GetValueAt("EVN:6.1")
+    If raw = "" Set raw = request.GetValueAt("EVN:2.1")
+    If raw = "" Set raw = request.GetValueAt("MSH:7.1")
+    Set when = ##class(Shutter.Util.Time).FromHL7(raw)
+    Set op."event_time" = $SELECT(when = "": ##class(Shutter.Util.Time).NowUTC(), 1: when)
+    Set op."source_system" = request.GetValueAt("MSH:3.1")
+    Set op."source_message_id" = request.GetValueAt("MSH:10")
+    Set op."payload_digest" = ""
+    Quit op
+}
+
 /// The trigger table (CONTRACTS 2): the event word for an ADT trigger, "" for anything else.
 /// A01 admit, A02 transfer, A03 discharge, A04 register, A05 preadmit, A06 and A07 update (a change of patient
 /// class), A08 update, A11 cancel_admit, A12 cancel_transfer, A13 cancel_discharge, A28 person_add, A31
