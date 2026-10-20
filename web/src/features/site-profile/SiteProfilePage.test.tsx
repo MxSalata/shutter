@@ -79,8 +79,8 @@ describe('SiteProfilePage', () => {
     expect(
       within(dialog).getByText('Closing a case by hand: only an approver, from now on'),
     ).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 9' }));
-    expect(await screen.findByText('Version 9 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
+    expect(await screen.findByText('Version 10 saved')).toBeInTheDocument();
     expect(puts[0].body.approvers).toEqual({ ...recorded.profile.approvers, close_needs_approver: true });
   });
 
@@ -103,9 +103,9 @@ describe('SiteProfilePage', () => {
     expect(
       within(dialog).getByText('Downstream Out, tier: from 2, operations to 3, clinical safety'),
     ).toBeInTheDocument();
-    expect(within(dialog).getByText(/made under version 8 are refused at release/)).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 9' }));
-    expect(await screen.findByText('Version 9 saved')).toBeInTheDocument();
+    expect(within(dialog).getByText(/made under version 9 are refused at release/)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
+    expect(await screen.findByText('Version 10 saved')).toBeInTheDocument();
     expect(puts).toHaveLength(1);
     expect(puts[0].headers.get('X-Requested-With')).toBe('Shutter');
     const { version: _v, ...expected } = structuredClone(recorded.profile);
@@ -135,8 +135,8 @@ describe('SiteProfilePage', () => {
         'Team added: Bed management <beds@trust.nhs.net>, copies oncall@trust.nhs.net, for Downstream Out',
       ),
     ).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 9' }));
-    expect(await screen.findByText('Version 9 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
+    expect(await screen.findByText('Version 10 saved')).toBeInTheDocument();
     // The seed's two teams first, as stored, then the new one
     const teams = puts[0].body.teams as { id: string }[];
     expect(teams.map((t) => t.id)).toEqual(['integration', 'pas', 'beds']);
@@ -184,8 +184,8 @@ describe('SiteProfilePage', () => {
     expect(
       within(dialog).getByText(/Feed time zone: from Europe\/London to -03:30\. Every operation key/),
     ).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 9' }));
-    expect(await screen.findByText('Version 9 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
+    expect(await screen.findByText('Version 10 saved')).toBeInTheDocument();
     expect(puts[0].body.feed).toEqual({ time_zone: '-03:30' });
   });
 
@@ -217,8 +217,8 @@ describe('SiteProfilePage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('Note text: sent to the model from now on')).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 9' }));
-    expect(await screen.findByText('Version 9 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
+    expect(await screen.findByText('Version 10 saved')).toBeInTheDocument();
     expect(puts[0].body.model_content).toEqual({ free_text: true });
   });
 
@@ -226,7 +226,7 @@ describe('SiteProfilePage', () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Confirm these answers…' }));
     const dialog = await screen.findByRole('dialog');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm as version 9' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm as version 10' }));
     expect(await screen.findByText('Saved in Shutter')).toBeInTheDocument();
     const { version: _v, ...expected } = structuredClone(recorded.profile);
     expect(puts[0].body).toEqual({ ...expected, expectedVersion: recorded.version });
@@ -240,7 +240,7 @@ describe('SiteProfilePage', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
     const dialog = await screen.findByRole('dialog');
-    const save = within(dialog).getByRole('button', { name: 'Save version 9' });
+    const save = within(dialog).getByRole('button', { name: 'Save version 10' });
     expect(save).toBeDisabled();
     expect(within(dialog).getByText('Fewer releases wait for a person')).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('checkbox', { name: /I mean it/ }));
@@ -261,27 +261,27 @@ describe('SiteProfilePage', () => {
   it('keeps the edits when someone else saved meanwhile, and saves them against the newer version', async () => {
     renderPage();
     await userEvent.click(await screen.findByRole('radio', { name: /3, clinical safety/ }));
-    // Someone else saves version 9 while this page holds version 8
+    // Someone else saves version 10 while this page holds version 9
     const theirs = structuredClone(recorded.profile);
     delete theirs.version;
     theirs.incident = { ...theirs.incident, threshold: 8 };
     const res = await fetch(`${BASE}/site-profile`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'Shutter' },
-      body: JSON.stringify({ ...theirs, expectedVersion: 8 }),
+      body: JSON.stringify({ ...theirs, expectedVersion: 9 }),
     });
     expect(res.status).toBe(200);
     await userEvent.click(screen.getByRole('button', { name: 'Review and save\u2026' }));
     let dialog = await screen.findByRole('dialog');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 9' }));
-    expect(await within(dialog).findByText(/Version 9 was saved by someone else/)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
+    expect(await within(dialog).findByText(/Version 10 was saved by someone else/)).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }));
     await userEvent.click(screen.getByRole('button', { name: 'Review and save\u2026' }));
     dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('Incidents, failures: from 8 to 5')).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
-    expect(await screen.findByText('Version 10 saved')).toBeInTheDocument();
-    expect(puts.at(-1)?.body.expectedVersion).toBe(9);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
+    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
+    expect(puts.at(-1)?.body.expectedVersion).toBe(10);
   });
 
   it('counts a save whose answer was lost as saved when the stored profile is ours', async () => {
@@ -299,8 +299,8 @@ describe('SiteProfilePage', () => {
     await userEvent.click(await screen.findByRole('radio', { name: /3, clinical safety/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Review and save\u2026' }));
     const dialog = await screen.findByRole('dialog');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 9' }));
-    expect(await screen.findByText('Version 9 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
+    expect(await screen.findByText('Version 10 saved')).toBeInTheDocument();
   });
 
   it('marks the field a server refusal names, and focuses its chosen radio', async () => {
@@ -319,7 +319,7 @@ describe('SiteProfilePage', () => {
     await userEvent.click(await screen.findByRole('radio', { name: /3, clinical safety/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Review and save\u2026' }));
     const dialog = await screen.findByRole('dialog');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 9' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
     expect(await screen.findByText('Receiver 1, tier: must be 1, 2 or 3')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('radio', { name: /3, clinical safety/ })).toHaveFocus());
   });
