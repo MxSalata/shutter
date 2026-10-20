@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Writes the HL7 fixtures and scenarios.json for the scenarios S1 to S19 (docs/CONTRACTS.md, sections 3 and 7.6).
+"""Writes the HL7 fixtures and scenarios.json for the scenarios S1 to S20 (docs/CONTRACTS.md, sections 3, 4 and 7.6).
 
     python3 fixtures/generate.py
 
@@ -54,6 +54,8 @@ PATIENTS = {
     "S18": ("MRN1018", "ENC-1018", "SYNTH^YUSUF", "19670330", "M"),
     # S19, S2 in the demo hospital's own production (T33)
     "S19": ("MRN1019", "ENC-1019", "SYNTH^ARLO", "19890227", "M"),
+    # S20, S2's transfer overtaken by a nurse's move entered by hand in the downstream system
+    "S20": ("MRN1020", "ENC-1020", "SYNTH^BRAM", "19860412", "M"),
 }
 
 # The prior record an S15 merge folds into its patient (MRG-1, MRG-5, MRG-7)
@@ -546,6 +548,41 @@ def scenarios():
         "expected": {"disposition": "resend", "write": True, "final_state": "admitted", "final_ward": "WARD-B",
                      "modes": ["policy"], "failed_operation_key": b[2]["operation_key"],
                      "source": {"namespace": "HOSPITAL", "production": "Hospital.Production", "route": "PAS In"}},
+    }, [a, b]))
+
+    # S20: S2's transfer, and while its resend waits for approval a nurse moves the patient by hand in the downstream
+    # system itself (the runner's manual step, its own source and key, CONTRACTS 4). The approval is bound to the
+    # receiver's version, so the dispatch finds the receiver changed and the write never goes: the nurse's Ward C
+    # stands. Rules only for now: the board needs live recordings of the case.
+    a = message("S20", 1, "A01", "0900", ward="WARD-A")
+    b = message("S20", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
+    mrn, encounter = PATIENTS["S20"][:2]
+    by_hand = {"encounter_id": encounter, "event": "transfer", "ward": "WARD-C", "event_time": utc("0940")}
+    out.append(({
+        "id": "S20",
+        "title": "A nurse moves the patient by hand while the plan awaits approval",
+        "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails, and its resend waits for approval. "
+                   "Meanwhile a nurse moves the patient to Ward C at 09:40 in the downstream system itself, not "
+                   "through the feed. The approval is bound to the receiver's version, so at dispatch Shutter finds "
+                   "the receiver changed and plans again: the nurse's later move supersedes the transfer, nothing is "
+                   "written, and Ward C stands. Rules alone propose the resend again and the gate stops it.",
+        "steps": [
+            {"file": a[0]},
+            {"fault": "fail_before_accept"},
+            {"file": b[0], "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+            {"wait_for_state": "awaiting_approval", "timeout": 180},
+            {"manual": by_hand},
+        ],
+        # Rules only until the board's runs are recorded: rules propose the resend, the gate and the rehearsal pass it,
+        # and after the nurse's move the dispatch finds the receiver changed (APPROVAL_RECEIVER_CHANGED); planned
+        # again, the resend is stopped as superseded by the receiver's own history (SUPERSEDED_BY_LATER_EVENT).
+        "expected": {"disposition": "resend", "write": False, "final_state": "admitted", "final_ward": "WARD-C",
+                     "failed_operation_key": b[2]["operation_key"], "blocked_by": "APPROVAL_RECEIVER_CHANGED",
+                     "final_reason": "SUPERSEDED_BY_LATER_EVENT",
+                     "last_operation_key": f"WARD^HOSP^{mrn}^{encounter}^transfer^{by_hand['event_time']}",
+                     "modes": ["rules"]},
     }, [a, b]))
 
     return out

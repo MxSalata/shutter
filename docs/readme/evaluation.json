@@ -2332,6 +2332,11 @@
    "scenario": "S19",
    "title": "Shape A: a failed transfer in the hospital's own production",
    "why": "played in policy mode only"
+  },
+  {
+   "scenario": "S20",
+   "title": "A nurse moves the patient by hand while the plan awaits approval",
+   "why": "played in rules mode only"
   }
  ],
  "not_used": [],
