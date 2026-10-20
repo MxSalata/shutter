@@ -3,6 +3,7 @@ import type { SiteProfile } from '@/api/types';
 import fixtures from '@/mocks/fixtures.json';
 import {
   checkDraft,
+  closeNeedsApprover,
   describePath,
   describeSource,
   diffProfiles,
@@ -112,6 +113,11 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
       (p: SiteProfile) => (p.incident = { ...p.incident, quiet_seconds: -1 }),
       'incident.quiet_seconds: must be a whole number',
     ],
+    [
+      (p: SiteProfile) =>
+        (p.approvers = { ...p.approvers, close_needs_approver: 'yes' as unknown as boolean }),
+      'approvers.close_needs_approver: must be true or false',
+    ],
   ])('refuses a bad profile with the server’s message (%#)', (spoil, message) => {
     const p = copy();
     (spoil as (p: unknown) => void)(p);
@@ -182,6 +188,39 @@ describe('the server’s error path', () => {
     expect(describePath('teams[1].id')).toBe('Team 2, id');
     expect(describePath('mail.allowed_domains[0]')).toBe('Mail, allowed domains 1');
     expect(describePath('feed.time_zone')).toBe('Feed, time zone');
+    expect(fieldId('approvers.close_needs_approver')).toBe('site-approvers-close_needs_approver');
+    expect(describePath('approvers.close_needs_approver')).toBe('Approvers, closing a case by hand');
+  });
+});
+
+describe('the two-person rule for closing a case by hand', () => {
+  it('is off unless the profile says true, as the server reads it', () => {
+    expect(closeNeedsApprover(recorded)).toBe(false);
+    expect(closeNeedsApprover(undefined)).toBe(false);
+    const p = copy();
+    p.approvers = { ...p.approvers, close_needs_approver: false };
+    expect(validateProfile(p)).toBe('');
+    expect(closeNeedsApprover(p)).toBe(false);
+    p.approvers.close_needs_approver = true;
+    expect(validateProfile(p)).toBe('');
+    expect(closeNeedsApprover(p)).toBe(true);
+  });
+
+  it('reads as a change only when it moves, an explicit off being the same as no answer', () => {
+    const off = copy();
+    off.approvers = { ...off.approvers, close_needs_approver: false };
+    expect(diffProfiles(recorded, off)).toEqual([]);
+    const on = copy();
+    on.approvers = { ...on.approvers, close_needs_approver: true };
+    expect(diffProfiles(recorded, on)).toEqual([
+      {
+        path: 'approvers.close_needs_approver',
+        text: 'Closing a case by hand: only an approver, from now on',
+      },
+    ]);
+    expect(diffProfiles(on, off).map((c) => c.text)).toEqual([
+      'Closing a case by hand: an operator too, from now on',
+    ]);
   });
 });
 

@@ -7,8 +7,11 @@ import type {
   CaseList,
   Closure,
   Costs,
+  Escalation,
+  LibraryMember,
   PlanView,
   ScenarioList,
+  SiteProfileView,
 } from '@/api/types';
 import { isApiError } from '@/lib/errors';
 import fixtures from './fixtures.json';
@@ -195,5 +198,78 @@ describe('the costs', () => {
     expect(costs.byModel.reduce((n, m) => n + m.runs, 0)).toBe(runs.length);
     expect(costs.byModel.every((m) => m.costUsd === 0)).toBe(true);
     expect(costs.byCase.find((c) => c.caseId === HELD)?.runs).toBe(recorded.runs.length);
+  });
+});
+
+describe('the roles', () => {
+  beforeEach(() => resetMock('approver'));
+  const WITHHELD = 'C-000012';
+
+  const signIn = (username: string) => api.post('/session', { username, password: 'shutter' });
+
+  async function twoPersonRule() {
+    const view = await api.get<SiteProfileView>('/site-profile');
+    const { version: _inner, ...profile } = view.profile;
+    await api.put('/site-profile', {
+      ...profile,
+      approvers: { ...profile.approvers, close_needs_approver: true },
+      expectedVersion: view.version,
+    });
+  }
+
+  it('keep changes to the agent library to an approver', async () => {
+    const member = fixtures.library[0];
+    resetMock('operator');
+    const refused = await refusal(api.patch(`/library/${member.code}`, { sort: member.sort }));
+    expect([refused.status, (refused.body as { error: string }).error]).toEqual([403, 'forbidden']);
+    resetMock('approver');
+    const changed = await api.patch<LibraryMember>(`/library/${member.code}`, { sort: member.sort });
+    expect(changed.code).toBe(member.code);
+  });
+
+  it('let an operator close a case by hand by default, on the record with the reason', async () => {
+    resetMock('operator');
+    const r = await api.post<{ state: string; requestedBy: string }>(`/cases/${WITHHELD}/close`, {
+      reason: 'The PAS team merged the records by hand',
+    });
+    expect([r.state, r.requestedBy]).toEqual(['closing', 'operator']);
+    const c = await api.get<CaseDetail>(`/cases/${WITHHELD}`);
+    expect([c.state, c.disposition]).toEqual(['resolved', 'handled_by_hand']);
+    expect(c.outcome).toBe('Handled by hand, recorded by operator: The PAS team merged the records by hand');
+    const last = (await api.get<CaseEvent[]>(`/cases/${WITHHELD}/events`)).at(-1);
+    expect([last?.kind, last?.toState, last?.actor, last?.text]).toEqual([
+      'state',
+      'resolved',
+      'operator',
+      'Handled by hand: The PAS team merged the records by hand',
+    ]);
+    const closure = await api.get<Closure>(`/cases/${WITHHELD}/closure`);
+    expect([closure.disposition, closure.actors.includes('operator')]).toEqual(['handled_by_hand', true]);
+    expect((await api.get<CaseList>('/cases?state=resolved')).items.map((x) => x.caseId)).toContain(WITHHELD);
+  });
+
+  it("need an approver to close a case by hand where the site's two-person rule says so", async () => {
+    await twoPersonRule();
+    // Signing in again keeps the saved profile, as the demo keeps it until the page is reloaded
+    await signIn('operator');
+    const refused = await refusal(api.post(`/cases/${WITHHELD}/close`, { reason: 'merged by hand' }));
+    expect([refused.status, (refused.body as { error: string }).error]).toEqual([403, 'forbidden']);
+    expect((refused.body as { detail: string }).detail).toMatch(/needs an approver/);
+    expect((await api.get<CaseDetail>(`/cases/${WITHHELD}`)).state).toBe('escalated');
+    await signIn('approver');
+    const r = await api.post<{ requestedBy: string }>(`/cases/${WITHHELD}/close`, {
+      reason: 'merged by hand',
+    });
+    expect(r.requestedBy).toBe('approver');
+  });
+
+  it('record who sent an escalation and the digest of the text sent', async () => {
+    const draft = await api.post<Escalation>(`/cases/${WITHHELD}/escalations`, {});
+    await api.post(`/cases/${WITHHELD}/escalations/${draft.seq}/send`, { bodyDigest: draft.bodyDigest });
+    const lines = (await api.get<CaseEvent[]>(`/cases/${WITHHELD}/events`)).slice(-2).map((e) => e.text);
+    expect(lines).toEqual([
+      `Escalation 1 drafted for ${draft.teamName} (${draft.to})`,
+      `Escalation 1 sent by approver to ${draft.to}; digest of the text sent ${draft.bodyDigest}`,
+    ]);
   });
 });

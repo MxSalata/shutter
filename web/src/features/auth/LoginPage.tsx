@@ -86,8 +86,9 @@ export default function LoginPage() {
             {/* The demo users and their password only on a demo instance (the server's flag) or the recorded demo. */}
             {DEMO || health.data?.demo === true ? (
               <Text size="xs" c="dimmed">
-                The demo installs two users: <b>operator</b> runs scenarios and reads cases; <b>approver</b>{' '}
-                can also approve or reject plans. Their password is the installer's (<code>shutter</code>{' '}
+                The demo installs two users: <b>operator</b> runs scenarios, reads cases, escalates them and
+                marks them handled; <b>approver</b> can also approve or reject plans and change the site
+                profile and the agent library. Their password is the installer&apos;s (<code>shutter</code>{' '}
                 unless it was changed).
               </Text>
             ) : null}

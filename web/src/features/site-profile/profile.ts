@@ -222,6 +222,14 @@ export function validateProfile(p: unknown): string {
     }
   }
   if ('approvers' in p && !isObject(p.approvers)) return 'approvers: must be an object';
+  // The two-person rule for closing a case by hand: off unless the site says so.
+  if (
+    isObject(p.approvers) &&
+    !Array.isArray(p.approvers) &&
+    'close_needs_approver' in p.approvers &&
+    typeof p.approvers.close_needs_approver !== 'boolean'
+  )
+    return 'approvers.close_needs_approver: must be true or false';
   // The feed: the time zone of timestamps that carry no offset.
   if ('feed' in p) {
     if (!isObject(p.feed)) return 'feed: must be an object';
@@ -343,7 +351,7 @@ export function fieldId(path: string): string {
   if (m) return `site-policy-${m[1]}-${m[2]}`;
   m = /^incident\.(threshold|window_minutes|quiet_seconds)$/.exec(path);
   if (m) return `site-incident-${m[1]}`;
-  m = /^approvers\.(role|escalation)$/.exec(path);
+  m = /^approvers\.(role|escalation|close_needs_approver)$/.exec(path);
   if (m) return `site-approvers-${m[1]}`;
   if (path === 'history_policy') return 'site-history-policy';
   m = /^teams\[(\d+)\]\.(id|name|mailbox|cc|receivers|sources)(\[\d+\])?$/.exec(path);
@@ -371,6 +379,7 @@ export function describePath(path: string): string {
   if (m) return `Mail, ${m[1].replace(/_/g, ' ')}${m[2] ? ` ${Number(m[2]) + 1}` : ''}`;
   if (path === 'feed.time_zone') return 'Feed, time zone';
   if (path === 'model_content.free_text') return 'Model, note text';
+  if (path === 'approvers.close_needs_approver') return 'Approvers, closing a case by hand';
   return path.replace(/_/g, ' ');
 }
 
@@ -467,6 +476,13 @@ export function diffProfiles(a: SiteProfile | undefined, b: SiteProfile): Change
     out.push({
       path: 'approvers.escalation',
       text: `When nobody is available: ${b.approvers?.escalation || 'not set'}`,
+    });
+  if (closeNeedsApprover(before) !== closeNeedsApprover(b))
+    out.push({
+      path: 'approvers.close_needs_approver',
+      text: closeNeedsApprover(b)
+        ? 'Closing a case by hand: only an approver, from now on'
+        : 'Closing a case by hand: an operator too, from now on',
     });
   const inc: [keyof NonNullable<SiteProfile['incident']>, string][] = [
     ['threshold', 'failures'],
@@ -567,6 +583,14 @@ function teamChanges(a: SiteProfile, b: SiteProfile): Change[] {
       text: 'Teams reordered: where two teams name a receiver, the earlier one gets its cases',
     });
   return out;
+}
+
+/**
+ * Whether closing a case by hand ("Mark as handled by the team") needs an approver on this site: the two-person rule
+ * some trusts keep. Off unless the profile says true, as the server reads it (SiteProfile.CloseNeedsApprover).
+ */
+export function closeNeedsApprover(p: SiteProfile | undefined): boolean {
+  return p?.approvers?.close_needs_approver === true;
 }
 
 /** The receivers at a tier, for the summary. */

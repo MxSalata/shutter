@@ -16,7 +16,7 @@ import type {
   SiteProfileVersionEntry,
   SiteProfileView,
 } from '@/api/types';
-import { addressesProblem, validateProfile } from '@/features/site-profile/profile';
+import { addressesProblem, closeNeedsApprover, validateProfile } from '@/features/site-profile/profile';
 import { digest, draftEscalation, teamFor } from './escalation';
 import { freshHolds, heldView, type CaseFixture, type Hold } from './hold';
 
@@ -48,9 +48,9 @@ let played: Record<string, string> = {};
 /** The cases held at their approval, and what was decided on them here. */
 let holds: Record<string, Hold> = freshHolds(cases);
 
-/** A case as the demo shows it now: the recording, or the held case's view of it. */
+/** A case as the demo shows it now: the recording, or the held case's view of it, with what was done to it here. */
 const caseOf = (id: string): CaseFixture | undefined =>
-  cases[id] ? heldView(cases[id], holds[id]) : undefined;
+  cases[id] ? doneHere(id, heldView(cases[id], holds[id])) : undefined;
 const allCases = () => Object.keys(cases).map((id) => caseOf(id)!);
 const stamp = () => new Date().toISOString().replace(/\.\d+Z$/, 'Z');
 
@@ -76,10 +76,66 @@ export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
   resetSiteProfile();
   escalations = {};
   closed = {};
+  trail = {};
 }
 
 /** Cases a person closed as handled by hand in the demo, laid over the recorded case when it is read. */
-let closed: Record<string, { reason: string; by: string }> = {};
+let closed: Record<string, { reason: string; by: string; at: string; version: number }> = {};
+
+interface TrailEvent {
+  at: string;
+  kind: string;
+  fromState: string;
+  toState: string;
+  text: string;
+  actor: string;
+  ref: string;
+}
+/** The lines the demo adds to a case's timeline, as the server writes them: escalations drafted and sent, a hand closure. */
+let trail: Record<string, TrailEvent[]> = {};
+const record = (id: string, line: Partial<TrailEvent> & Pick<TrailEvent, 'kind' | 'text' | 'actor'>) =>
+  (trail[id] ??= []).push({ at: stamp(), fromState: '', toState: '', ref: '', ...line });
+
+/**
+ * The case with what was done to it in the demo: the trail's lines after the recorded events and, once it was closed
+ * by hand, the case, its summary and its closure as the server leaves them (Case.CloseByHand).
+ */
+function doneHere(id: string, c: CaseFixture): CaseFixture {
+  const lines = trail[id] ?? [];
+  const close = closed[id];
+  if (!lines.length && !close) return c;
+  const events = c.events as { seq: number }[];
+  const last = events.at(-1)?.seq ?? 0;
+  const out = { ...c, events: [...events, ...lines.map((e, i) => ({ ...e, seq: last + i + 1 }))] };
+  if (!close) return out as unknown as CaseFixture;
+  const outcome = `Handled by hand, recorded by ${close.by}: ${close.reason}`;
+  const handled = {
+    state: 'resolved',
+    disposition: 'handled_by_hand',
+    outcome,
+    // Cut at 200 characters as the server cuts it; the page shows a cut headline up to its last whole word
+    headline: `Handled by the team. ${close.reason.slice(0, 200)}`,
+    closedAt: close.at,
+    updatedAt: close.at,
+    version: close.version,
+  };
+  const closure = (c.closure ?? {}) as { actors?: unknown[] };
+  return {
+    ...out,
+    summary: { ...c.summary, ...handled },
+    detail: { ...c.detail, ...handled },
+    closure: {
+      ...closure,
+      caseId: id,
+      state: 'resolved',
+      disposition: 'handled_by_hand',
+      outcome,
+      closedAt: close.at,
+      verifiedEffects: [],
+      actors: [...new Set([...(closure.actors ?? []).map(String), close.by])].sort(),
+    },
+  } as unknown as CaseFixture;
+}
 
 /** Escalations drafted and sent in the demo, by case: nothing leaves the browser. */
 let escalations: Record<string, Escalation[]> = {};
@@ -287,6 +343,7 @@ export const handlers = [
         holds[id] = hold;
         delete closed[id];
         delete escalations[id];
+        delete trail[id];
       }
     run = {
       scenario: String(params.id),
@@ -322,16 +379,7 @@ export const handlers = [
       .sort((a, b) => b.openedAt.localeCompare(a.openedAt));
     return HttpResponse.json({ items, total: items.length });
   }),
-  http.get(`${BASE}/cases/:id`, ({ params }) =>
-    part(
-      String(params.id),
-      (c) =>
-        closed[String(params.id)]
-          ? { ...c.detail, state: 'resolved', disposition: 'handled_by_hand' }
-          : c.detail,
-      'not_found',
-    ),
-  ),
+  http.get(`${BASE}/cases/:id`, ({ params }) => part(String(params.id), (c) => c.detail, 'not_found')),
   http.get(`${BASE}/cases/:id/events`, ({ params }) => part(String(params.id), (c) => c.events, 'not_found')),
   http.get(`${BASE}/cases/:id/snapshot`, ({ params }) =>
     part(String(params.id), (c) => c.snapshot, 'no_snapshot'),
@@ -402,10 +450,17 @@ export const handlers = [
       return error(409, 'wrong_state', `The case is ${c.summary.state}`);
     return HttpResponse.json({ caseId: String(params.id), state: 'reopening' }, { status: 202 });
   }),
-  // A case the team corrected by hand, closed with the reason (CONTRACTS 5.3, v1.14)
+  // A case the team corrected by hand, closed with the reason (CONTRACTS 5.3, v1.14); an approver's step where the
+  // site keeps the two-person rule (v1.17)
   http.post(`${BASE}/cases/:id/close`, async ({ request, params }) => {
     const denied = csrf(request) ?? guard('operator');
     if (denied) return denied;
+    if (closeNeedsApprover(siteProfile?.profile) && !session!.approver)
+      return error(
+        403,
+        'forbidden',
+        "On this site closing a case by hand needs an approver (the site profile's approvers.close_needs_approver): ask an approver to mark it handled",
+      );
     const id = String(params.id);
     const c = caseOf(id);
     if (!c) return error(404, 'not_found', 'No such case');
@@ -423,9 +478,27 @@ export const handlers = [
         { error: 'stale_version', detail: 'The case changed since it was read', currentVersion: version },
         { status: 409 },
       );
-    closed[id] = { reason: body.reason, by: session!.username };
-    // A draft or queued email is cancelled: the team is not asked to correct a case already handled
-    for (const e of escalations[id] ?? []) if (['draft', 'queued'].includes(e.state)) e.state = 'cancelled';
+    // The latest email the team worked from is named, and cancelled when it had not gone: the team is not asked to
+    // correct a case already handled
+    const latest = (escalations[id] ?? []).at(-1);
+    let followed = '';
+    if (latest) {
+      followed = `; after escalation ${latest.seq}${latest.teamName ? ` to ${latest.teamName}` : ''} (${latest.state})`;
+      if (['draft', 'queued'].includes(latest.state)) {
+        latest.state = 'cancelled';
+        followed += ', cancelled';
+      }
+    }
+    const reason = body.reason.trim();
+    closed[id] = { reason, by: session!.username, at: stamp(), version: (version ?? 0) + 1 };
+    record(id, {
+      kind: 'state',
+      fromState: c.summary.state,
+      toState: 'resolved',
+      text: `Handled by hand: ${reason}${followed}`,
+      actor: session!.username,
+      ref: latest ? `escalation:${latest.seq}` : '',
+    });
     return HttpResponse.json(
       { caseId: id, state: 'closing', requestedBy: session!.username, reason: body.reason },
       { status: 202 },
@@ -498,6 +571,12 @@ export const handlers = [
     const list = (escalations[id] ??= []);
     const e = draftEscalation(c as never, team, list.length + 1, session!.username);
     list.push(e);
+    record(id, {
+      kind: 'escalation',
+      text: `Escalation ${e.seq} drafted for ${e.teamName || 'a person'} (${e.to ?? ''})`,
+      actor: session!.username,
+      ref: `escalation:${e.seq}`,
+    });
     return HttpResponse.json(e, { status: 201 });
   }),
   http.patch(`${BASE}/cases/:id/escalations/:seq`, async ({ request, params }) => {
@@ -533,6 +612,12 @@ export const handlers = [
       sentAt: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
       transport: 'file',
       result: `Written as ${String(params.id)}-escalation-${e.seq}.eml (the demo sends no email)`,
+    });
+    record(String(params.id), {
+      kind: 'escalation',
+      text: `Escalation ${e.seq} sent by ${session!.username} to ${e.to}; digest of the text sent ${e.bodyDigest}`,
+      actor: session!.username,
+      ref: `escalation:${e.seq}`,
     });
     return HttpResponse.json(e, { status: 202 });
   }),
@@ -590,8 +675,9 @@ export const handlers = [
   }),
 
   http.get(`${BASE}/library`, () => (session ? HttpResponse.json(fixtures.library) : signedOut())),
+  // Which agents sit on the board is an approver's change (CONTRACTS 5, v1.17)
   http.patch(`${BASE}/library/:code`, async ({ request, params }) => {
-    const denied = csrf(request) ?? guard('operator');
+    const denied = csrf(request) ?? guard('approver');
     if (denied) return denied;
     const m = fixtures.library.find((x) => x.code === params.code);
     if (!m) return error(404, 'not_found', 'No such member');

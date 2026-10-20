@@ -103,8 +103,13 @@ export function OutcomePanel({ c }: { c: CaseDetail }) {
   if (!closed) return null;
   const cl = closure.data;
   const r = reason.data;
+  // A case the team closed by hand is resolved, but nothing was verified at the receiver
+  const title =
+    c.disposition === 'handled_by_hand'
+      ? 'Closed: handled by the team'
+      : (TITLES[c.state] ?? humanize(c.state));
   return (
-    <Section id="outcome" title={TITLES[c.state] ?? humanize(c.state)} note={c.outcome || undefined}>
+    <Section id="outcome" title={title} note={c.outcome || undefined}>
       {r ? (
         <Alert color={c.state === 'blocked' ? 'red' : 'orange'} variant="light" title={r.title || r.code}>
           <Stack gap="xs">

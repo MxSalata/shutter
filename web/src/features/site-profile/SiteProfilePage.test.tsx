@@ -65,11 +65,31 @@ describe('SiteProfilePage', () => {
     expect(within(summary).getAllByText('automatic').length).toBeGreaterThan(0);
   });
 
+  it('asks whether closing a case by hand needs an approver, and sends the answer with the profile', async () => {
+    renderPage();
+    const rule = await screen.findByRole('switch', { name: /^Closing a case by hand needs an approver/ });
+    expect(rule).not.toBeChecked();
+    expect(screen.getByText(/is marked handled by an operator or an approver/)).toBeInTheDocument();
+    await userEvent.click(rule);
+    expect(
+      screen.getByText(/is marked handled by an approver only \(the two-person rule\)/),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByText('Closing a case by hand: only an approver, from now on'),
+    ).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 9' }));
+    expect(await screen.findByText('Version 9 saved')).toBeInTheDocument();
+    expect(puts[0].body.approvers).toEqual({ ...recorded.profile.approvers, close_needs_approver: true });
+  });
+
   it('lets an operator read the answers but not change them', async () => {
     resetMock('operator');
     renderPage();
     expect(await screen.findByText(/Changing the answers needs the approver role/)).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /2, operations/ })).toBeDisabled();
+    expect(screen.getByRole('switch', { name: /^Closing a case by hand needs an approver/ })).toBeDisabled();
     expect(
       screen.queryByRole('button', { name: /Review and save|Confirm these answers/ }),
     ).not.toBeInTheDocument();

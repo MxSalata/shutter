@@ -29,7 +29,7 @@ import type { CaseDetail, Escalation } from '@/api/types';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Timestamp } from '@/components/Timestamp';
 import { describeError, isApiError } from '@/lib/errors';
-import { addressesProblem } from '../../site-profile/profile';
+import { addressesProblem, closeNeedsApprover } from '../../site-profile/profile';
 import { humanize } from '@/lib/format';
 import { Section } from './Section';
 
@@ -220,25 +220,32 @@ function MarkHandled({ c }: { c: CaseDetail }) {
 
 /**
  * Escalations: when Shutter can't safely recover a message, a person sends the case to the team that owns the
- * downstream system, who compare the systems and correct them by hand, outside HL7 (T29).
+ * downstream system, who compare the systems and correct them by hand, outside HL7 (T29). Once the team has closed the
+ * case, the emails stay on the page as its record: who sent each, when, and the digest of the text sent.
  */
 export function EscalationPanel({ c }: { c: CaseDetail }) {
   const stopped = ['blocked', 'escalated', 'failed'].includes(c.state);
+  const handled = c.state === 'resolved' && c.disposition === 'handled_by_hand';
   const me = useMe().data;
-  const list = useEscalations(c.caseId, stopped);
-  const profile = useSiteProfile().data?.profile;
+  const list = useEscalations(c.caseId, stopped || handled);
+  const site = useSiteProfile();
+  const profile = site.data?.profile;
   const draft = useDraftEscalation(c.caseId);
   const teams = profile?.teams ?? [];
   const [teamId, setTeamId] = useState('');
   const [open, setOpen] = useState<Escalation | null>(null);
-  if (!stopped) return null;
   const escalations = list.data ?? [];
+  if (!stopped && !(handled && escalations.length)) return null;
   const pending = escalations.find((e) => e.state === 'draft' || e.state === 'failed');
   const latest = escalations.reduce<Escalation | undefined>(
     (a, e) => (!a || e.seq > a.seq ? e : a),
     undefined,
   );
-  const canClose = !!me?.operator && (c.failureKind === 'withheld' || latest?.state === 'sent');
+  const closable = stopped && (c.failureKind === 'withheld' || latest?.state === 'sent');
+  // The site's two-person rule: an operator closes only where the profile allows it, and the server decides when the
+  // profile could not be read
+  const needsApprover = closeNeedsApprover(profile);
+  const mayClose = !!me?.approver || (!!me?.operator && (site.isError || (!!profile && !needsApprover)));
   const start = () =>
     draft.mutate(
       { teamId: teamId || undefined, idempotencyKey: newIdempotencyKey() },
@@ -248,7 +255,11 @@ export function EscalationPanel({ c }: { c: CaseDetail }) {
     <Section
       id="escalations"
       title="Escalations"
-      note="When Shutter can't safely recover a message, don't guess: send the case to the team that owns the downstream system, so they compare the systems and correct them by hand. Shutter drafts the email from its record; a person checks it and sends it."
+      note={
+        stopped
+          ? "When Shutter can't safely recover a message, don't guess: send the case to the team that owns the downstream system, so they compare the systems and correct them by hand. Shutter drafts the email from its record; a person checks it and sends it."
+          : 'The emails sent before the team corrected the systems by hand and the case was closed.'
+      }
     >
       {list.isError ? <ErrorAlert error={list.error} title="The escalations could not be read" /> : null}
       {escalations.map((e) => (
@@ -298,6 +309,11 @@ export function EscalationPanel({ c }: { c: CaseDetail }) {
                     </Text>
                   ) : null}
                 </Group>
+                {(e.state === 'queued' || e.state === 'sent') && e.bodyDigest ? (
+                  <Text size="xs" c="dimmed" className="mono-wrap">
+                    Digest of the text sent: {e.bodyDigest}
+                  </Text>
+                ) : null}
                 {e.state === 'failed' && e.result ? (
                   <Text size="sm" c="red">
                     {e.result}
@@ -307,7 +323,7 @@ export function EscalationPanel({ c }: { c: CaseDetail }) {
                   {e.subject}
                 </Text>
                 <Code block>{e.body}</Code>
-                {(e.state === 'draft' || e.state === 'failed') && me?.operator ? (
+                {stopped && (e.state === 'draft' || e.state === 'failed') && me?.operator ? (
                   <Group>
                     <Button size="xs" variant="light" onClick={() => setOpen(e)}>
                       {e.state === 'failed' ? 'Check and send again…' : 'Check and send…'}
@@ -319,7 +335,7 @@ export function EscalationPanel({ c }: { c: CaseDetail }) {
           </Accordion.Item>
         </Accordion>
       ))}
-      {me?.operator ? (
+      {!stopped ? null : me?.operator ? (
         <Group gap="sm" align="flex-end" wrap="wrap">
           {teams.length ? (
             <NativeSelect
@@ -347,8 +363,14 @@ export function EscalationPanel({ c }: { c: CaseDetail }) {
           Escalating needs the operator role.
         </Text>
       )}
-      {canClose ? <MarkHandled c={c} /> : null}
-      {!teams.length ? (
+      {closable && mayClose ? <MarkHandled c={c} /> : null}
+      {closable && !mayClose && me?.operator && needsApprover ? (
+        <Text size="sm" c="dimmed">
+          On this site closing a case by hand needs an approver (the site profile&apos;s two-person rule):
+          once the team has corrected the systems, ask an approver to mark it handled.
+        </Text>
+      ) : null}
+      {stopped && !teams.length ? (
         <Text size="xs" c="dimmed">
           No teams are set in the site profile yet, so the draft has no recipient: add one there, or type the
           address.

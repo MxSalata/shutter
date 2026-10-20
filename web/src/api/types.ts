@@ -613,7 +613,8 @@ export interface SiteProfile {
   /** forbidden (the default: every merge goes to the PAS team) or allowed. */
   merges?: string;
   policy: Record<string, Partial<Record<ChainKind, string>>>;
-  approvers?: { role?: string; escalation?: string; [key: string]: unknown };
+  /** close_needs_approver: closing a case by hand needs an approver (the two-person rule); off when absent. */
+  approvers?: { role?: string; escalation?: string; close_needs_approver?: boolean; [key: string]: unknown };
   incident?: { threshold?: number; window_minutes?: number; quiet_seconds?: number };
   /** Who corrects the systems by hand when Shutter can't, and where their email goes (T29). */
   teams?: SiteTeam[];

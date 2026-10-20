@@ -41,6 +41,7 @@ import {
   TIER_HINTS,
   TIER_LABELS,
   checkDraft,
+  closeNeedsApprover,
   describeIncident,
   describePath,
   describeSource,
@@ -377,6 +378,25 @@ function ProfileForm({
               }}
             />
           </SimpleGrid>
+          <Group gap="xs" wrap="wrap">
+            <Text fw={600} size="sm">
+              Who closes a case the team corrected by hand
+            </Text>
+            <Effect acts />
+          </Group>
+          <Switch
+            id="site-approvers-close_needs_approver"
+            label="Closing a case by hand needs an approver"
+            description="The two-person rule: the operator on call escalates the case, and an approver marks it handled by the team once it is corrected. Off: the operator who escalated it can close it too."
+            checked={closeNeedsApprover(draft)}
+            onChange={(e) => {
+              const v = e.currentTarget.checked;
+              setDraft((d) => {
+                d.approvers = { ...(d.approvers ?? {}), close_needs_approver: v };
+              });
+            }}
+            error={err('approvers.close_needs_approver')}
+          />
         </Section>
         <Section id="site-incident" title="Incidents" note="Question 8.">
           <Question n={8} text="When do many failures to one receiver become one incident?" acts />
@@ -700,7 +720,7 @@ export default function SiteProfilePage() {
     <>
       <PageHeader
         title="Site profile"
-        subtitle="The site's answers to the induction questions. Shutter reads them for each receiver's tier, the approval each chain needs, when many failures become an incident, who an escalation goes to, the feed's time zone, what the model may see and whether a merge is ever sent. Every saved version is kept."
+        subtitle="The site's answers to the induction questions. Shutter reads them for each receiver's tier, the approval each chain needs, who may close a case by hand, when many failures become an incident, who an escalation goes to, the feed's time zone, what the model may see and whether a merge is ever sent. Every saved version is kept."
       />
       {view.isPending || me.isPending ? <PageSkeleton label="Loading the site profile…" /> : null}
       {view.isError ? (
