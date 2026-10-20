@@ -57,12 +57,11 @@ describe('EscalationPanel', () => {
     expect(message.value).toContain('Hospital number: MRN1008 (HOSP)');
     expect(message.value).toContain('Transfer to WARD-B at 2026-10-15 08:20 UTC');
     expect(message.value).not.toMatch(/SYNTH/);
-    // No team in the recorded profile: the person addresses it
-    expect(within(dialog).getByRole('button', { name: 'Send' })).toBeDisabled();
-    await userEvent.type(
-      within(dialog).getByRole('textbox', { name: /To/ }),
-      'bed.management@example.nhs.uk',
-    );
+    // Addressed to the team the site profile names for the case's receiver; the person may change it
+    const to = within(dialog).getByRole('textbox', { name: /To/ });
+    expect(to).toHaveValue('integration@example.nhs.uk');
+    await userEvent.clear(to);
+    await userEvent.type(to, 'bed.management@example.nhs.uk');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Send' }));
     expect(await screen.findByText('Escalation 1 sent')).toBeInTheDocument();
     // The edited draft is stored first, then sent bound to the stored text's digest
@@ -84,6 +83,7 @@ describe('EscalationPanel', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Escalate to system administrators' });
     const to = within(dialog).getByRole('textbox', { name: /To/ });
     await waitFor(() => expect(to).toHaveAccessibleDescription(/in nhs\.uk/));
+    await userEvent.clear(to);
     await userEvent.type(to, 'bed.management@example.com');
     expect(to).toHaveAccessibleDescription(
       /Not allowed: bed\.management@example\.com: not in the allowed domains/,

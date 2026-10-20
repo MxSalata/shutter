@@ -208,13 +208,16 @@ describe('diffProfiles', () => {
   });
 
   it('names the teams, mail, zone and note-text changes', () => {
-    const p = copy();
+    // From a profile with no teams, whatever the recorded one has
+    const base = copy();
+    delete base.teams;
+    const p = structuredClone(base);
     const team = { id: 'pas', name: 'PAS team', mailbox: 'pas@trust.nhs.net', receivers: ['Downstream Out'] };
     p.teams = [team];
     p.mail = { allowed_domains: ['nhs.net'] };
     p.feed = { time_zone: 'UTC' };
     p.model_content = { free_text: true };
-    expect(diffProfiles(recorded, p).map((c) => c.text)).toEqual([
+    expect(diffProfiles(base, p).map((c) => c.text)).toEqual([
       'Team added: PAS team <pas@trust.nhs.net>, for Downstream Out, and any receiver no team names',
       'Allowed mail domains: nhs.net',
       'Feed time zone: from Europe/London to UTC. Every operation key read from now on uses it',
