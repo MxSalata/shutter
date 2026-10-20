@@ -265,11 +265,20 @@ describe('the roles', () => {
 
   it('record who sent an escalation and the digest of the text sent', async () => {
     const draft = await api.post<Escalation>(`/cases/${WITHHELD}/escalations`, {});
-    await api.post(`/cases/${WITHHELD}/escalations/${draft.seq}/send`, { bodyDigest: draft.bodyDigest });
-    const lines = (await api.get<CaseEvent[]>(`/cases/${WITHHELD}/events`)).slice(-2).map((e) => e.text);
+    const sent = await api.post<Escalation>(`/cases/${WITHHELD}/escalations/${draft.seq}/send`, {
+      bodyDigest: draft.bodyDigest,
+    });
+    const lines = (await api.get<CaseEvent[]>(`/cases/${WITHHELD}/events`))
+      .slice(-3)
+      .map((e) => [e.actor, e.ref, e.text]);
     expect(lines).toEqual([
-      `Escalation 1 drafted for ${draft.teamName} (${draft.to})`,
-      `Escalation 1 sent by approver to ${draft.to}; digest of the text sent ${draft.bodyDigest}`,
+      ['approver', 'escalation:1', `Escalation 1 drafted for ${draft.teamName} (${draft.to})`],
+      [
+        'approver',
+        'escalation:1',
+        `Escalation 1 sent by approver to ${draft.to}; digest of the text sent ${draft.bodyDigest}`,
+      ],
+      ['system', 'escalation:1', `Escalation 1 delivered (file): ${sent.result}`],
     ]);
   });
 });

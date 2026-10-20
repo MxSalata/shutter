@@ -215,6 +215,20 @@ describe('EscalationPanel', () => {
     expect(within(panel).queryByText(/needs an approver/)).not.toBeInTheDocument();
   });
 
+  it('keeps the closing from a user with the approver role but not the operator role, as the server does', async () => {
+    server.use(
+      http.get('/api/shutter/me', () =>
+        HttpResponse.json({ username: 'reviewer', operator: false, approver: true }),
+      ),
+    );
+    renderCase('C-000012');
+    const panel = await screen.findByRole('region', { name: 'Escalations' });
+    expect(
+      await within(panel).findByText('Escalating and marking a case handled need the operator role.'),
+    ).toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: /Mark as handled/ })).not.toBeInTheDocument();
+  });
+
   it('is not offered on a case Shutter resolved', async () => {
     renderCase('C-000009');
     expect(await screen.findByText('Closed: verified')).toBeInTheDocument();

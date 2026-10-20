@@ -387,7 +387,7 @@ function ProfileForm({
           <Switch
             id="site-approvers-close_needs_approver"
             label="Closing a case by hand needs an approver"
-            description="The two-person rule: the operator on call escalates the case, and an approver marks it handled by the team once it is corrected. Off: the operator who escalated it can close it too."
+            description="On: only an approver marks a case handled by the team once it is corrected, so an operator on call escalates it and asks an approver to close it. Shutter checks the role of whoever closes the case, not that it is a second person: an approver may escalate and close the same case. Off: an operator can close it too, the one who escalated it included."
             checked={closeNeedsApprover(draft)}
             onChange={(e) => {
               const v = e.currentTarget.checked;

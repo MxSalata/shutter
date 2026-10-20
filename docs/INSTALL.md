@@ -132,8 +132,10 @@ Shape A:
 3. Map the trust's users to `Shutter_Operator` and `Shutter_Approver`; add the approvers to the Workflow role; create
    the forwarder's user with `Shutter_Forwarder`. An operator escalates a case (the escalation is the sign-off) and
    marks it handled once the team has corrected the systems; an approver also approves plans and incident releases,
-   saves the site profile and changes the agent library. A trust that wants two people on every hand closure answers
-   yes to "Closing a case by hand needs an approver" in the site profile (`approvers.close_needs_approver`).
+   saves the site profile and changes the agent library. A trust that wants only an approver to close a case handled
+   by hand answers yes to "Closing a case by hand needs an approver" in the site profile
+   (`approvers.close_needs_approver`). Shutter checks the role of whoever closes the case, not that a second person
+   does: an approver may escalate and close the same case.
 4. Fill in the site profile (the web application's questionnaire): receivers, tiers, what each takes, API paths or
    none, the policy per tier, teams and mailboxes, the feed's time zone, `merges: forbidden`.
 5. Set the `Escalation Mail` operation's SMTP server.

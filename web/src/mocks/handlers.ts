@@ -619,6 +619,13 @@ export const handlers = [
       actor: session!.username,
       ref: `escalation:${e.seq}`,
     });
+    // The server's mail operation then records the delivery, as the system
+    record(String(params.id), {
+      kind: 'escalation',
+      text: `Escalation ${e.seq} delivered (file): ${e.result}`,
+      actor: 'system',
+      ref: `escalation:${e.seq}`,
+    });
     return HttpResponse.json(e, { status: 202 });
   }),
 

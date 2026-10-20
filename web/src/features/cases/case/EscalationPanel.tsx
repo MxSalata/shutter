@@ -242,10 +242,11 @@ export function EscalationPanel({ c }: { c: CaseDetail }) {
     undefined,
   );
   const closable = stopped && (c.failureKind === 'withheld' || latest?.state === 'sent');
-  // The site's two-person rule: an operator closes only where the profile allows it, and the server decides when the
-  // profile could not be read
+  // Closing needs the operator resource first, as the server checks it; then the site's two-person rule: an operator
+  // without the approver role closes only where the profile allows it, and the server decides when the profile could
+  // not be read
   const needsApprover = closeNeedsApprover(profile);
-  const mayClose = !!me?.approver || (!!me?.operator && (site.isError || (!!profile && !needsApprover)));
+  const mayClose = !!me?.operator && (!!me.approver || site.isError || (!!profile && !needsApprover));
   const start = () =>
     draft.mutate(
       { teamId: teamId || undefined, idempotencyKey: newIdempotencyKey() },
@@ -360,7 +361,7 @@ export function EscalationPanel({ c }: { c: CaseDetail }) {
         </Group>
       ) : (
         <Text size="sm" c="dimmed">
-          Escalating needs the operator role.
+          Escalating and marking a case handled need the operator role.
         </Text>
       )}
       {closable && mayClose ? <MarkHandled c={c} /> : null}

@@ -423,10 +423,13 @@ reads it through `Shutter.Store.SiteProfile`.
 - A tier 3 receiver never takes `automatic` unless the profile says so explicitly; the shipped default does not.
 - `approvers.close_needs_approver` (v1.17): the two-person rule some trusts keep for closing a case by hand. `false`
   (the default, and what an absent answer means) lets an operator mark a case handled by the team; `true` leaves it to
-  an approver (section 5). The validator accepts only `true` or `false`. It belongs to question 7, who approves what,
-  so the questionnaire still has twelve questions; the shipped seed profile answers `false` (its file's `version` is 3).
-  `Shutter.Store.SiteProfile.CloseNeedsApprover()` reads it. `approvers.role` and `approvers.escalation` stay on record
-  only: the permissions themselves are the resources of section 5.
+  an approver (section 5). It checks the closer's resource only: the server does not compare the closer with whoever
+  sent the case's escalation, and `Shutter_Approver` holds `Shutter_Operate` too, so one approver may escalate and close
+  a case, or close one that was never escalated, as the case page offers for a withheld case. The validator accepts only
+  `true` or `false`. It belongs to question 7, who approves what, so the questionnaire still has twelve questions; the
+  shipped seed profile answers `false` (its file's `version` is 3). `Shutter.Store.SiteProfile.CloseNeedsApprover()`
+  reads it. `approvers.role` and `approvers.escalation` stay on record only: the permissions themselves are the
+  resources of section 5.
 - `merges` (v1.14): `forbidden` (the default when absent) or `allowed`, the only values the validator accepts. A receiver entry's `merges` and `cancels` (booleans, default false) say what it takes (1.1). A merge is delivered only under `allowed` to a receiver with `merges: true`; the gate's `MERGE_WITHHELD` blocks any write of a merge otherwise, so the exact repeat of a merge the receiver already holds (a receipt present) is E3's reconcile, and no other merge is ever resent by Shutter. `Shutter.Store.SiteProfile.MergesAllowed()` and `ReceiverFlag(name, flag)` read them.
 
 ### 6.5 The gate's catalogue checks
