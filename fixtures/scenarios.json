@@ -228,7 +228,12 @@
       "final_state": "admitted",
       "final_ward": "WARD-C",
       "failed_operation_key": "PAS^HOSP^MRN1007^ENC-1007^transfer^2026-10-15T08:20:00Z",
-      "blocked_by": "APPROVAL_RECEIVER_CHANGED"
+      "blocked_by": "APPROVAL_RECEIVER_CHANGED",
+      "modes": [
+        "board",
+        "single",
+        "rules"
+      ]
     }
   },
   {
