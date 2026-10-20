@@ -30,6 +30,17 @@ test.describe('the guided path', () => {
     await expect(page.getByRole('region', { name: 'Approval' })).toContainText('Waiting for an approver');
   });
 
+  test('the cases list says who investigated each case', async ({ page }) => {
+    await signIn(page);
+    await go(page, '/cases');
+    await expect(page.getByRole('columnheader', { name: 'Investigated by' })).toBeVisible();
+    const row = (id: string) => page.getByRole('row').filter({ has: page.getByRole('link', { name: id }) });
+    await expect(row('C-000002')).toContainText('Board');
+    await expect(row('C-000021')).toContainText('Rules only');
+    await expect(row('C-000028')).toContainText('Site policy');
+    await expect(row('C-000028')).toContainText('entry E2');
+  });
+
   test('leads to the outage incident', async ({ page }) => {
     await signIn(page);
     await page

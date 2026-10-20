@@ -14,6 +14,30 @@ import { forwardedFrom } from './case/derive';
 
 const PAGE = 25;
 
+/**
+ * Who investigated the case and made its plan: the board, the single investigator, rules alone or the site's policy
+ * (the catalogue entry it matched). The plan's origin says it exactly (an agent run, a policy entry or rules); a
+ * server that does not send it leaves the mode, which in site-policy mode cannot tell a case the policy settled from
+ * one it left to the board. A withheld merge or cancel is the policy's in every mode: no agent runs for it.
+ */
+export function investigatedBy(c: CaseSummary): { who: string; entry?: string } {
+  const by = c.planCreatedBy ?? '';
+  if (by.startsWith('run:')) return { who: c.mode === 'single' ? 'Single investigator' : 'Board' };
+  if (by.startsWith('policy:')) return { who: 'Site policy', entry: by.slice('policy:'.length) };
+  if (by === 'rules') return { who: 'Rules only' };
+  if (c.failureKind === 'withheld') return { who: 'Site policy' };
+  return {
+    who:
+      c.mode === 'single'
+        ? 'Single investigator'
+        : c.mode === 'rules'
+          ? 'Rules only'
+          : c.mode === 'policy'
+            ? 'Site policy'
+            : 'Board',
+  };
+}
+
 /** A case another production forwarded (CONTRACTS 11); the tooltip says where its message came from. */
 export function ForwardedBadge({ c }: { c: CaseSummary }) {
   const from = forwardedFrom({
@@ -29,6 +53,21 @@ export function ForwardedBadge({ c }: { c: CaseSummary }) {
         Forwarded
       </Badge>
     </Tooltip>
+  );
+}
+
+/** The list's cell: who investigated, and the catalogue entry when the site's policy settled the case. */
+export function InvestigatedBy({ c }: { c: CaseSummary }) {
+  const { who, entry } = investigatedBy(c);
+  return (
+    <>
+      <Text size="sm">{who}</Text>
+      {entry ? (
+        <Text size="xs" c="dimmed">
+          entry {entry}
+        </Text>
+      ) : null}
+    </>
   );
 }
 
@@ -99,6 +138,7 @@ export default function CasesPage() {
                   <Table.Th>Disposition</Table.Th>
                   <Table.Th>What failed</Table.Th>
                   <Table.Th>Scenario</Table.Th>
+                  <Table.Th>Investigated by</Table.Th>
                   <Table.Th>Opened</Table.Th>
                 </Table.Tr>
               </Table.Thead>
@@ -148,6 +188,9 @@ export default function CasesPage() {
                       <Text size="xs" c="dimmed">
                         {humanize(c.mode)}
                       </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <InvestigatedBy c={c} />
                     </Table.Td>
                     <Table.Td>
                       <Timestamp iso={c.openedAt} age />

@@ -115,8 +115,16 @@ export interface CaseSummary {
   closedAt: string;
   ensSessionId: string;
   workflowSessionId: string;
+  /** How the delivery failed (delivery_failed, uncertain, unmappable, withheld for a merge or a cancel never sent). */
+  failureKind: string;
   /** The incident that holds the case, when one does (CONTRACTS 7.5). */
   incidentId?: string;
+  /**
+   * Who made the current plan, as the plan's `createdBy` names it: `run:<id>` for an agent run (the coordinator's,
+   * or the single investigator's), `policy:<entry>` for the catalogue and the site's policy, `rules` for rules alone.
+   * A server that does not send it leaves the list to read the mode.
+   */
+  planCreatedBy?: string;
   /** The Ens.MessageHeader id of the message whose delivery failed: Shutter's own copy for a forwarded case. */
   sourceHeaderId?: string;
   /**
@@ -139,7 +147,6 @@ export interface CaseDetail extends CaseSummary {
   operationKey: string;
   /** No catalogue entry fitted the case: it is flagged as a candidate for a new entry (CONTRACTS 6.3). */
   candidateEntry?: boolean;
-  failureKind: string;
   failureText: string;
   patientId: string;
   patientIdAuthority: string;

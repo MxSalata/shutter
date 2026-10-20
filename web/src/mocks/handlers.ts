@@ -231,6 +231,12 @@ function costs(): Costs {
   };
 }
 
+/** Who made the case's current plan (its `createdBy`: run:<id>, policy:<entry> or rules), for the list's summary. */
+function planOrigin(c: CaseFixture): { planCreatedBy?: string } {
+  const by = (c.plan as { plan?: { createdBy?: string } } | null)?.plan?.createdBy;
+  return by ? { planCreatedBy: by } : {};
+}
+
 /** The HL7 files a scenario delivers, in order, as its steps name them. */
 function filesOf(scenario: string): string[] {
   const steps = fixtures.scenarios.find((s) => s.id === scenario)?.steps ?? [];
@@ -373,8 +379,9 @@ export const handlers = [
     const url = new URL(request.url);
     const state = url.searchParams.get('state');
     const scenario = url.searchParams.get('scenario');
+    // The list names who made each case's current plan, from the recorded plan, as the API's summary does
     const items = allCases()
-      .map((c) => c.summary)
+      .map((c) => ({ ...c.summary, ...planOrigin(c) }))
       .filter((c) => (!state || c.state === state) && (!scenario || c.scenario === scenario))
       .sort((a, b) => b.openedAt.localeCompare(a.openedAt));
     return HttpResponse.json({ items, total: items.length });

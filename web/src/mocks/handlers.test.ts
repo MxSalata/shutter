@@ -282,3 +282,19 @@ describe('the roles', () => {
     ]);
   });
 });
+
+describe('the cases list', () => {
+  beforeEach(() => resetMock('approver'));
+
+  it("names who made each case's plan, from the recorded plan", async () => {
+    const list = await api.get<CaseList>('/cases');
+    const by = Object.fromEntries(list.items.map((c) => [c.caseId, c.planCreatedBy]));
+    expect(by['C-000002']).toMatch(/^run:/);
+    expect(by['C-000021']).toBe('rules');
+    expect(by['C-000028']).toBe('policy:E2');
+    // In site-policy mode the catalogue left S8 to the board
+    expect(by['C-000033']).toMatch(/^run:/);
+    // A withheld merge is the policy's in board mode too
+    expect(by['C-000012']).toBe('policy:E14');
+  });
+});
