@@ -1,7 +1,7 @@
 /// The matcher's reading of the later events (docs/CONTRACTS.md, section 6.1), which the gate's ordering check reads
-/// too: a later movement whose delivery also failed supersedes outside a chain, never an admission and never inside an
-/// ordered chain; a later event whose time lies in the future supersedes nothing and makes the order a person's
-/// question. Each test builds a case in memory (never saved) and a snapshot summary by hand.
+/// too: a later transfer whose delivery also failed supersedes outside a chain, never an admission and never inside an
+/// ordered chain, and a later discharge that failed supersedes nothing; a later event whose time lies in the future
+/// supersedes nothing and makes the order a person's question when believing it would change the reading. Each test builds a case in memory (never saved) and a snapshot summary by hand.
 Class Shutter.Test.Supersession Extends %UnitTest.TestCase
 {
 
@@ -38,6 +38,14 @@ Method Row(event As %String, ward As %String, time As %String, outcome As %Strin
     Quit {"event": (event), "ward": (ward), "event_time": (time), "operation_key": (key), "sent_at": ($TRANSLATE($EXTRACT(time, 1, 19), "T", " ") _ ".500"), "source": (source), "later": true, "this_case": false, "outcome": (outcome)}
 }
 
+/// The rest of what a resend needs (E2): the receiver was unavailable, no receipt, conditional writes.
+Method Resendable(summary As %DynamicObject) As %DynamicObject
+{
+    Set summary.failure = {"reason_code": "ward_unavailable", "http_status": 503}, summary."receipt_http_status" = 404
+    Set summary.route = {"capabilities": {"conditional_writes": true}}
+    Quit summary
+}
+
 Method Conditions(case As Shutter.Store.Case, summary As %DynamicObject, chain As %String = "single") As %DynamicObject
 {
     Quit ##class(Shutter.Catalogue.Matcher).Conditions(case, summary, chain)
@@ -64,12 +72,23 @@ Method TestLaterFailedTransferSupersedesOutsideAChain()
     Do $$$AssertEquals(..Conditions(c, s, "interleaved")."later_applied", "none", "nor in an interleaved chain")
 }
 
-Method TestLaterFailedDischargeCounts()
+Method TestLaterUncertainTransferCounts()
 {
     Set c = ..Case()
-    Set s = ..Summary(c, [(..Row("discharge", "", "2026-10-15T10:00:00Z", "uncertain"))], [])
+    Set s = ..Summary(c, [(..Row("transfer", "WARD-C", "2026-10-15T09:00:00Z", "uncertain"))], [])
+    Do $$$AssertEquals(..Conditions(c, s)."later_applied", "transfer", "a later transfer whose outcome is uncertain: applied or not, it is the later word")
+}
+
+Method TestLaterFailedDischargeLeavesTheResend()
+{
+    Set c = ..Case()
+    Set s = ..Resendable(..Summary(c, [(..Row("discharge", "", "2026-10-15T10:00:00Z", "unavailable"))], []))
     Set s."observed_at" = "2026-10-15T10:30:00Z"
-    Do $$$AssertEquals(..Conditions(c, s)."later_applied", "discharge", "a later discharge whose outcome is uncertain")
+    Set k = ..Conditions(c, s)
+    Do $$$AssertEquals(k."later_applied", "none", "a later discharge the receiver has not applied supersedes nothing")
+    Do $$$AssertEquals(k."event_time", "plausible", "and raises no doubt")
+    Set m = ##class(Shutter.Catalogue.Matcher).Match(k)
+    Do $$$AssertEquals(m.decision _ " " _ m.entry, "policy E2", "the transfer is resent by policy, and the discharge's own case follows it")
 }
 
 Method TestAdmissionIsNeverOvertakenByAFailure()
@@ -98,6 +117,36 @@ Method TestFutureLaterEventSupersedesNothing()
     Do $$$AssertEquals(k."event_time", "later_event_future", "the order is a person's question")
     Set later = ##class(Shutter.Catalogue.Matcher).Later(s, c, "single")
     Do $$$AssertNotTrue(later.%Get(0).plausible, "flagged for the gate")
+}
+
+Method TestFutureUpdateRaisesNoDoubt()
+{
+    Set c = ..Case()
+    // An A08 applied at 09:10 but timed the next day: an update supersedes nothing, so its time decides nothing.
+    Set u = ..Row("update", "", "2026-10-16T09:10:00Z", "applied")
+    Set u."sent_at" = "2026-10-15 09:10:00.000"
+    Set s = ..Resendable(..Summary(c, [(u)], []))
+    Set k = ..Conditions(c, s)
+    Do $$$AssertEquals(k."later_applied", "none", "the future-timed update does not count")
+    Do $$$AssertEquals(k."event_time", "plausible", "nor does it make the order a person's question")
+    Set m = ##class(Shutter.Catalogue.Matcher).Match(k)
+    Do $$$AssertEquals(m.decision _ " " _ m.entry, "policy E2", "so the resend stands")
+    // A sound later transfer settles the order, whatever the update's time.
+    Do s.timeline.%Push(..Row("transfer", "WARD-C", "2026-10-15T09:00:00Z", "applied"))
+    Set k = ..Conditions(c, s)
+    Do $$$AssertEquals(k."later_applied", "transfer", "the plausible transfer supersedes")
+    Do $$$AssertEquals(k."event_time", "plausible", "and the future update does not block the closure")
+}
+
+Method TestSoundTransferSettlesTheOrder()
+{
+    Set c = ..Case()
+    // A plausible applied transfer at 09:00, and a discharge applied at 09:20 but timed the next day.
+    Set h = {"version_after": 3, "event": "discharge", "ward": "", "event_time": "2026-10-16T09:20:00Z", "applied_at": "2026-10-15T09:20:02Z", "operation_key": "PAS^HOSP^MRN9001^ENC-9001^discharge^2026-10-16T09:20:00Z"}
+    Set s = ..Summary(c, [(..Row("transfer", "WARD-C", "2026-10-15T09:00:00Z", "applied"))], [(h)])
+    Set k = ..Conditions(c, s)
+    Do $$$AssertEquals(k."later_applied", "transfer", "the sound transfer supersedes")
+    Do $$$AssertEquals(k."event_time", "plausible", "so the discharge's doubtful time changes nothing")
 }
 
 Method TestFeedRowTimedAfterItWasSent()

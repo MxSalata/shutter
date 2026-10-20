@@ -297,21 +297,23 @@ Method OutcomeConsistency(checks As %DynamicArray, plan As Shutter.Store.Plan, o
     Do ..Check(checks, "catalogue", "block", "OUTCOME_MISMATCH", "The outcome " _ outcome _ " calls for " _ allowed _ ", but the plan's disposition is " _ plan.Disposition)
 }
 
-/// A later transfer or discharge that supersedes the case's operation, described, or "": the last one in the feed's
-/// timeline, else the last in the receiver's own history, which is authoritative when the message store is silent.
-/// The events are the matcher's (Shutter.Catalogue.Matcher.Later), so a later movement whose delivery also failed
-/// supersedes outside a chain (delivered is then 0), and one whose time is not plausible supersedes nothing.
+/// A later transfer or discharge that supersedes the case's operation, described, or "": the last applied one in the
+/// feed's timeline, else the last in the receiver's own history, which is authoritative when the message store is
+/// silent, else the last later transfer the feed sent whose delivery failed or is uncertain as well (delivered is then
+/// 0), which supersedes outside a chain. The events are the matcher's (Shutter.Catalogue.Matcher.Later), so the gate
+/// and later_applied agree, and one whose time is not plausible supersedes nothing.
 Method Superseding(summary As %DynamicObject, case As Shutter.Store.Case, chainKind As %String, Output delivered As %Boolean) As %String [ Private ]
 {
     Set found = "", delivered = 1
     Set later = ##class(Shutter.Catalogue.Matcher).Later(summary, case, chainKind)
-    For from = "timeline", "history" {
+    For pass = $LISTBUILD("timeline", 1), $LISTBUILD("history", 1), $LISTBUILD("timeline", 0) {
+        Set from = $LIST(pass, 1), want = $LIST(pass, 2)
         Set iter = later.%GetIterator()
         While iter.%GetNext(.i, .ev) {
-            Continue:((ev.from '= from) || 'ev.plausible)
+            Continue:((ev.from '= from) || (ev.delivered '= want) || 'ev.plausible)
             Continue:((ev.word '= "transfer") && (ev.word '= "discharge"))
-            Set found = ev.word _ $SELECT(ev.ward '= "": " to " _ ev.ward, 1: "") _ " at " _ ev."event_time" _ $SELECT(from = "history": " (receiver history)", 'ev.delivered: " (its delivery failed too; its own case recovers it)", 1: "")
-            Set delivered = ev.delivered
+            Set found = ev.word _ $SELECT(ev.ward '= "": " to " _ ev.ward, 1: "") _ " at " _ ev."event_time" _ $SELECT(from = "history": " (receiver history)", 'want: " (its delivery failed or is uncertain; its own case recovers it)", 1: "")
+            Set delivered = want
         }
         Quit:found'=""
     }

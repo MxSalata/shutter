@@ -29,8 +29,8 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     // receipt
     Set rstatus = $CLASSMETHOD(json, "Str", summary, "receipt_http_status")
     Set c.receipt = $SELECT(rstatus = 200: "present", rstatus = 404: "absent", rstatus = -1: "none", 1: "unreadable")
-    // later_applied: the latest later applied event, from the timeline and the receiver's history (Later, which the
-    // gate's ordering check reads too)
+    // later_applied: the latest later event (applied, or outside a chain a later transfer that failed too), from the
+    // timeline and the receiver's history (Later, which the gate's ordering check reads too)
     Set later = ..Later(summary, case, chainKind)
     Set c."later_applied" = ..LaterApplied(summary, case, later)
     // event_time (T28): the failed event's time against the admission, the message, the recording time and the clock,
@@ -135,12 +135,12 @@ ClassMethod Holds(pattern As %DynamicObject, conditions As %DynamicObject) As %B
     Quit 1
 }
 
-/// The applied events for the encounter later than the failed operation, by precedence (CONTRACTS 6.1): cancelled
-/// (an applied cancel at or after the failed event's time, T31), else merge (an applied merge, T31), else discharge,
-/// else transfer, else admit (a later admission, T28), else update, else none. (A later transfer followed by a later
-/// update is a transfer.) A cancel counts from the failed event's own time, not strictly after it, because a cancel
-/// carries the time of the event it reverses; the case's own operation never counts. The events are Later's, and only
-/// those whose time is plausible count.
+/// The later events for the encounter (Later: applied ones, and outside a chain a later transfer whose delivery failed
+/// or is uncertain as well), by precedence (CONTRACTS 6.1): cancelled (an applied cancel at or after the failed event's
+/// time, T31), else merge (an applied merge, T31), else discharge, else transfer, else admit (a later admission, T28),
+/// else update, else none. (A later transfer followed by a later update is a transfer.) A cancel counts from the failed
+/// event's own time, not strictly after it, because a cancel carries the time of the event it reverses; the case's own
+/// operation never counts. Only the events whose time is plausible count.
 ClassMethod LaterApplied(summary As %DynamicObject, case As Shutter.Store.Case, later As %DynamicArray = "") As %String [ Private ]
 {
     If '$ISOBJECT(later) Set later = ..Later(summary, case)
@@ -161,11 +161,14 @@ ClassMethod LaterApplied(summary As %DynamicObject, case As Shutter.Store.Case, 
 /// - An applied (or already committed) event whose time is later than the failed event's; a cancel from the failed
 ///   event's own time on (T31), never the case's own operation. word is the precedence word (cancelled, merge,
 ///   discharge, transfer, admit, update).
-/// - Outside a chain, also a later transfer or discharge the feed sent whose delivery failed as well (delivered 0): it is
-///   the PAS's later word on where the patient is, and its own case delivers it, so resending the earlier movement
-///   would only take the patient back. An admission is never overtaken, and in an ordered or interleaved chain the
-///   incident sends the chain's failures in event order (CONTRACTS 7), so neither counts such an event. A message the
-///   index found on another route has no known outcome and counts only once the receiver's history shows it.
+/// - Outside a chain, also a later transfer the feed sent whose delivery failed or is uncertain as well (delivered 0):
+///   it is the PAS's later word on where the patient is, and its own case delivers it, so resending the earlier
+///   movement would only take the patient back. An admission is never overtaken, and in an ordered or interleaved chain
+///   the incident sends the chain's failures in event order (CONTRACTS 7), so neither counts such an event. A later
+///   discharge that failed does not count either: resending the earlier movement does no harm, since the discharge's
+///   own case follows it, and no catalogue entry covers a discharge the receiver has not applied (the encounter is
+///   still admitted there). A message the index found on another route has no known outcome and counts only once the
+///   receiver's history shows it.
 /// - plausible is 0 when the event's time lies more than five minutes after the feed sent it, the receiver applied it
 ///   or the evidence was taken (the rule event_time applies to the failed event's own time): such a time settles no
 ///   order.
@@ -193,7 +196,7 @@ ClassMethod Later(summary As %DynamicObject, case As Shutter.Store.Case, chainKi
                     // A failure the connector recorded for a message the feed sent, not one still in flight.
                     Continue:'failedCount
                     Continue:(($CLASSMETHOD(json, "Str", ev, "source") '= "feed") || (outcome = "") || (outcome = "unknown"))
-                    Continue:((e '= "transfer") && (e '= "discharge"))
+                    Continue:(e '= "transfer")
                     Continue:((key = case.OperationKey) || $CLASSMETHOD(json, "Bool", ev, "this_case"))
                 }
                 Set word = $SELECT($LISTFIND(words, e): e, 1: "update")
@@ -266,8 +269,8 @@ ClassMethod AtOrAfter(time As %String, key As %String, case As Shutter.Store.Cas
 /// the message was sent or the evidence was taken; far_from_recorded when it is more than a day from the time the
 /// event was recorded (EVN-2); clock_change when it came without an offset and lies within an hour of a British clock
 /// change, where the order of two events is not safe; later_event_future when the failed event's own time is sound but
-/// a later event it would be ordered against (Later) lies in the future by the same five-minute rule, so a wrong time
-/// could make a genuine failure look overtaken; plausible otherwise.
+/// a later event it would be ordered against (Later) lies in the future by the same five-minute rule and believing it
+/// would change the reading, so a wrong time could make a genuine failure look overtaken; plausible otherwise.
 ClassMethod EventTimePlausibility(summary As %DynamicObject, case As Shutter.Store.Case, later As %DynamicArray = "") As %String
 {
     Set json = "Shutter.Util.Json", t = case.EventTime
@@ -292,8 +295,23 @@ ClassMethod EventTimePlausibility(summary As %DynamicObject, case As Shutter.Sto
     If (recorded '= "") && ($ZABS(##class(Shutter.Util.Time).SecondsBetween(recorded, t)) > 86400) Quit "far_from_recorded"
     If msg.%IsDefined("event_time_had_offset") && '$CLASSMETHOD(json, "Bool", msg, "event_time_had_offset") && ($CLASSMETHOD(json, "Str", msg, "feed_time_zone") = "Europe/London") && ##class(Shutter.Util.Time).NearBritishClockChange(t) Quit "clock_change"
     If '$ISOBJECT(later) Set later = ..Later(summary, case)
+    Quit ..LaterTimeDoubt(summary, case, later)
+}
+
+/// later_event_future or plausible, for the later events' times. A later event whose time is not plausible is a doubt
+/// only when believing it would change the reading: when no plausible later transfer, discharge or cancel settles the
+/// order already, and the event outranks what the plausible ones give (by later_applied's precedence). An update never
+/// is one, since it supersedes nothing.
+ClassMethod LaterTimeDoubt(summary As %DynamicObject, case As Shutter.Store.Case, later As %DynamicArray) As %String [ Private ]
+{
+    Set settled = ..LaterApplied(summary, case, later)
+    If $LISTFIND($LISTBUILD("cancelled", "discharge", "transfer"), settled) Quit "plausible"
+    Set rank = $LISTBUILD("update", "admit", "transfer", "discharge", "merge", "cancelled")
     Set iter = later.%GetIterator()
-    While iter.%GetNext(.i, .ev) { If 'ev.plausible Return "later_event_future" }
+    While iter.%GetNext(.i, .ev) {
+        Continue:(ev.plausible || (ev.word = "update"))
+        If $LISTFIND(rank, ev.word) > $LISTFIND(rank, settled) Return "later_event_future"
+    }
     Quit "plausible"
 }
 
