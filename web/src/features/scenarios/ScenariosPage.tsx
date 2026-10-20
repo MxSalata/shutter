@@ -19,6 +19,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import {
   isPlaying,
+  useHealth,
   useMe,
   useResetScenarios,
   useRunScenario,
@@ -64,6 +65,9 @@ const modeLabel = (mode: Mode) => ALL_MODES.find((m) => m.value === mode)?.label
 
 /** Whether the scenario is defined for the mode: one that names its modes isn't for the others. */
 const definedFor = (s: Scenario, mode: Mode) => !s.expected?.modes || s.expected.modes.includes(mode);
+
+/** Why nothing can be played on a site install: the server switches the Scenario Player off (CONTRACTS 12). */
+const PLAYER_OFF = 'The Scenario Player is switched off on a site install, which has no demo';
 
 function RunBanner({ run }: { run: ScenarioRun }) {
   if (run.state === 'queued')
@@ -159,6 +163,7 @@ function ScenarioCard({
   s,
   mode,
   canRun,
+  playerOff,
   busy,
   onRun,
   starting,
@@ -166,17 +171,21 @@ function ScenarioCard({
   s: Scenario;
   mode: Mode;
   canRun: boolean;
+  playerOff: boolean;
   busy: string;
   onRun: () => void;
   starting: boolean;
 }) {
-  const defined = definedFor(s, mode);
+  // With the player switched off there is no mode to play in, so no card is greyed out for one.
+  const defined = playerOff || definedFor(s, mode);
   const modes = (s.expected?.modes ?? []).filter((m) => MODES.some((x) => x.value === m)).map(modeLabel);
-  const why = !defined
-    ? `${s.id} is not defined for ${modeLabel(mode)} mode: it would not end as its card says. Its modes: ${modes.join(', ')}.`
-    : !canRun
-      ? 'Running a scenario needs the operator role'
-      : busy;
+  const why = playerOff
+    ? PLAYER_OFF
+    : !defined
+      ? `${s.id} is not defined for ${modeLabel(mode)} mode: it would not end as its card says. Its modes: ${modes.join(', ')}.`
+      : !canRun
+        ? 'Running a scenario needs the operator role'
+        : busy;
   return (
     <Card
       padding="md"
@@ -262,6 +271,8 @@ export default function ScenariosPage() {
   const reset = useResetScenarios();
   const [mode, setMode] = useState<Mode>('board');
   const canRun = !!me?.operator;
+  // Only a report that says so switches the runs off: an older server, or one not answering yet, keeps them.
+  const playerOff = useHealth().data?.demo === false;
   const current = scenarios.data?.run ?? null;
   const busy = isPlaying(current) ? `A run of ${current?.scenario} is still playing` : '';
 
@@ -289,16 +300,18 @@ export default function ScenariosPage() {
         actions={
           <Tooltip
             label={
-              !canRun
-                ? 'Resetting needs the operator role'
-                : busy || 'Clear the downstream system, the folders and the running scenario'
+              playerOff
+                ? PLAYER_OFF
+                : !canRun
+                  ? 'Resetting needs the operator role'
+                  : busy || 'Clear the downstream system, the folders and the running scenario'
             }
           >
             <span>
               <Button
                 variant="default"
                 leftSection={<IconRefresh size={16} />}
-                disabled={!canRun || !!busy}
+                disabled={playerOff || !canRun || !!busy}
                 loading={reset.isPending}
                 onClick={() =>
                   reset.mutate(undefined, {
@@ -320,24 +333,34 @@ export default function ScenariosPage() {
         }
       />
       <Stack gap="md">
-        <Card padding="md">
-          <Stack gap={6}>
-            <Text fw={600} size="sm" id="mode-label">
-              Investigation mode
+        {playerOff ? (
+          <Alert color="gray" variant="light" title="The Scenario Player is switched off">
+            <Text size="sm">
+              This is a site install, without the demo: there is no demo feed or downstream system to play the
+              scenarios into, so they are listed here for reference only. Cases come from the feed items the
+              site adds and from the productions that forward their failed deliveries to Shutter.
             </Text>
-            <SegmentedControl
-              aria-labelledby="mode-label"
-              value={mode}
-              onChange={(v) => setMode(v as Mode)}
-              data={MODES.map((m) => ({ value: m.value, label: m.label }))}
-              w="fit-content"
-            />
-            <Text size="sm" c="dimmed">
-              {MODES.find((m) => m.value === mode)?.hint}. The gate, the rehearsal and the approval are the
-              same in every mode.
-            </Text>
-          </Stack>
-        </Card>
+          </Alert>
+        ) : (
+          <Card padding="md">
+            <Stack gap={6}>
+              <Text fw={600} size="sm" id="mode-label">
+                Investigation mode
+              </Text>
+              <SegmentedControl
+                aria-labelledby="mode-label"
+                value={mode}
+                onChange={(v) => setMode(v as Mode)}
+                data={MODES.map((m) => ({ value: m.value, label: m.label }))}
+                w="fit-content"
+              />
+              <Text size="sm" c="dimmed">
+                {MODES.find((m) => m.value === mode)?.hint}. The gate, the rehearsal and the approval are the
+                same in every mode.
+              </Text>
+            </Stack>
+          </Card>
+        )}
         {current ? <RunBanner run={current} /> : null}
         {scenarios.isPending ? <PageSkeleton label="Loading the scenarios…" /> : null}
         {scenarios.isError ? (
@@ -355,6 +378,7 @@ export default function ScenariosPage() {
                 s={s}
                 mode={mode}
                 canRun={canRun}
+                playerOff={playerOff}
                 busy={busy || (run.isPending ? 'Starting…' : '')}
                 starting={run.isPending && run.variables?.id === s.id}
                 onRun={() => start(s)}

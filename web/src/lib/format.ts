@@ -164,7 +164,7 @@ export function humanize(code: string | undefined | null): string {
 
 /**
  * Identifiers the server keeps from before the downstream system had its name (snapshot item kinds, evidence
- * sources, readiness keys), as the screens name them.
+ * sources, readiness keys), and readiness keys whose words alone would say too little, as the screens name them.
  */
 const KEY_LABELS: Record<string, string> = {
   ward_state: 'Downstream state',
@@ -172,6 +172,9 @@ const KEY_LABELS: Record<string, string> = {
   ward_api: 'Downstream API',
   ward_classes: 'Downstream classes',
   wards_webapp: 'Downstream webapp',
+  purge_task: 'Message purge task',
+  message_days: 'Messages kept (days)',
+  shutter_production: "Shutter's production",
 };
 
 /** An identifier in words: its label when it has one, otherwise humanized. */

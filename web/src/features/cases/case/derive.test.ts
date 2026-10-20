@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CaseEvent, SnapshotItem } from '@/api/types';
-import { checksOf, describeEntry, describeItem, phaseStatuses, rounds } from './derive';
+import { checksOf, describeEntry, describeItem, forwardedFrom, phaseStatuses, rounds } from './derive';
 
 const transition = (seq: number, fromState: string, toState: string): CaseEvent => ({
   seq,
@@ -215,6 +215,33 @@ describe('describeItem', () => {
     expect(
       describeItem(item('validation', JSON.stringify({ parsed: true, doc_type: '2.5.1:ADT_A02' }))),
     ).toBe('Parses as 2.5.1:ADT_A02');
+  });
+
+  it('says which production forwarded the message, and its header there', () => {
+    expect(
+      describeItem(
+        item('source', {
+          namespace: 'HOSPITAL',
+          production: 'Hospital.Production',
+          route: 'PAS In',
+          header_id: '4243',
+        }),
+      ),
+    ).toBe('Forwarded from HOSPITAL / Hospital.Production, route PAS In, message header 4243');
+  });
+});
+
+describe('forwardedFrom', () => {
+  it('leaves out the parts the source does not name', () => {
+    expect(forwardedFrom({ namespace: 'HOSPITAL', production: 'Hospital.Production' })).toBe(
+      'HOSPITAL / Hospital.Production',
+    );
+    expect(forwardedFrom({ namespace: 'HOSPITAL', route: 'PAS In' })).toBe('HOSPITAL, route PAS In');
+  });
+
+  it("is empty for a case the feed in Shutter's own production opened", () => {
+    expect(forwardedFrom({})).toBe('');
+    expect(forwardedFrom({ namespace: '', production: 'Shutter.Production', headerId: '11961' })).toBe('');
   });
 });
 

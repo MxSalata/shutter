@@ -45,4 +45,27 @@ describe('CaseHeader', () => {
     renderHeader({ ...base, candidateEntry: false });
     expect(screen.queryByText('New pattern')).not.toBeInTheDocument();
   });
+
+  it("names where a forwarded case's message lives, and Shutter's own copy of it", () => {
+    renderHeader({
+      ...base,
+      sourceHeaderId: '13111',
+      sourceNamespace: 'HOSPITAL',
+      sourceProduction: 'Hospital.Production',
+      sourceRoute: 'PAS In',
+      originHeaderId: '4243',
+    });
+    expect(screen.getByText('Source')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Forwarded from HOSPITAL / Hospital.Production, route PAS In, message header 4243; Shutter's copy is message 13111",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("names no source for a case the feed in Shutter's own production opened", () => {
+    renderHeader({ ...base, sourceHeaderId: '11961', sourceNamespace: '', sourceProduction: '' });
+    expect(screen.queryByText('Source')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Forwarded from/)).not.toBeInTheDocument();
+  });
 });

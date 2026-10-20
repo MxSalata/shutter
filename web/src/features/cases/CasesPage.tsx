@@ -1,7 +1,8 @@
-import { Anchor, Card, Group, Pagination, Select, Table, Text } from '@mantine/core';
+import { Anchor, Badge, Card, Group, Pagination, Select, Table, Text, Tooltip } from '@mantine/core';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useCases, useScenarios, type CaseFilters } from '@/api/hooks';
+import type { CaseSummary } from '@/api/types';
 import { PageHeader } from '@/components/PageHeader';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
@@ -9,8 +10,27 @@ import { DispositionBadge, STATE_HINTS, StateBadge } from '@/components/StateBad
 import { Timestamp } from '@/components/Timestamp';
 import { humanize } from '@/lib/format';
 import { clampHeadline } from '@/lib/headline';
+import { forwardedFrom } from './case/derive';
 
 const PAGE = 25;
+
+/** A case another production forwarded (CONTRACTS 11); the tooltip says where its message came from. */
+export function ForwardedBadge({ c }: { c: CaseSummary }) {
+  const from = forwardedFrom({
+    namespace: c.sourceNamespace,
+    production: c.sourceProduction,
+    route: c.sourceRoute,
+    headerId: c.originHeaderId,
+  });
+  if (!from) return null;
+  return (
+    <Tooltip label={`Forwarded from ${from}`} multiline maw={320}>
+      <Badge size="xs" variant="outline" color="gray" tabIndex={0} style={{ textTransform: 'none' }}>
+        Forwarded
+      </Badge>
+    </Tooltip>
+  );
+}
 
 export default function CasesPage() {
   const [state, setState] = useState<string | null>(null);
@@ -86,14 +106,17 @@ export default function CasesPage() {
                 {cases.data.items.map((c) => (
                   <Table.Tr key={c.caseId}>
                     <Table.Td>
-                      <Anchor
-                        component={Link}
-                        to={`/cases/${encodeURIComponent(c.caseId)}`}
-                        fw={600}
-                        size="sm"
-                      >
-                        {c.caseId}
-                      </Anchor>
+                      <Group gap={6} wrap="nowrap">
+                        <Anchor
+                          component={Link}
+                          to={`/cases/${encodeURIComponent(c.caseId)}`}
+                          fw={600}
+                          size="sm"
+                        >
+                          {c.caseId}
+                        </Anchor>
+                        <ForwardedBadge c={c} />
+                      </Group>
                     </Table.Td>
                     <Table.Td>
                       <StateBadge state={c.state} />
