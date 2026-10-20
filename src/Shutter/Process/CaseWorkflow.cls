@@ -683,16 +683,19 @@ Method AdoptPlan(case As Shutter.Store.Case, plan As %DynamicObject, createdBy A
     Quit ..SendGate(case, "proposal", "gate:proposal")
 }
 
+/// The case's headline: what the plan does, then the start of its summary, cut at a word (the whole summary is on the
+/// plan).
 Method HeadlineFor(case As Shutter.Store.Case, p As Shutter.Store.Plan) As %String
 {
     Set what = $CASE(case.Event, "transfer": "transfer to " _ case.Ward, "admit": "admission", "discharge": "discharge", : case.Event)
+    Set summary = ##class(Shutter.Util.Json).Clip(p.Summary, 200)
     Quit $CASE(p.Disposition,
-        "superseded": "Valid message. Do not resend: a later event moved the encounter on. " _ $EXTRACT(p.Summary, 1, 200),
-        "resend": "Resend the " _ what _ " unchanged, after rehearsal and approval. " _ $EXTRACT(p.Summary, 1, 200),
-        "reconcile": "Already applied at the receiver: reconcile, do not resend. " _ $EXTRACT(p.Summary, 1, 200),
-        "escalate": "Escalated to a person. " _ $EXTRACT(p.Summary, 1, 200),
-        "more_evidence": "More evidence needed. " _ $EXTRACT(p.Summary, 1, 200),
-        : p.Disposition _ ": " _ $EXTRACT(p.Summary, 1, 200))
+        "superseded": "Valid message. Do not resend: a later event moved the encounter on. " _ summary,
+        "resend": "Resend the " _ what _ " unchanged, after rehearsal and approval. " _ summary,
+        "reconcile": "Already applied at the receiver: reconcile, do not resend. " _ summary,
+        "escalate": "Escalated to a person. " _ summary,
+        "more_evidence": "More evidence needed. " _ summary,
+        : p.Disposition _ ": " _ summary)
 }
 
 Method SendGate(case As Shutter.Store.Case, stage As %String, key As %String) As %Status
