@@ -19,9 +19,13 @@ on:
 permissions:
   contents: read
 
+# One queue per ref, and a newer push cancels the run it replaces, except on main: a run there may be in the middle of a
+# dependency release (a commit, a tag, a GitHub release), so every run on main finishes. A run still waiting there is
+# replaced by a newer one, which releases the same updates, since the release reads the history since the last version
+# tag.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   # InterSystems' own IRIS for Health Community 2026.2, by its tag. InterSystems republishes the tag: on 16 October 2026
@@ -44,6 +48,9 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The whole history with its tags: the www/ check looks for dependency updates since the last release.
+          fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
@@ -57,11 +64,24 @@ jobs:
       - name: www/ is current (IRIS serves the committed build)
         run: |
           npm run build:www
-          if [ -n "$(git status --porcelain -- ../www)" ]; then
-            echo "www/ is stale: run 'npm run build:www' in web/ and commit the result"
-            git status --porcelain -- ../www
-            exit 1
+          if [ -z "$(git status --porcelain -- ../www)" ]; then exit 0; fi
+          # A dependency update changes the bundle. On Dependabot's pull request the build is checked and the comparison
+          # skipped; on main, while npm updates merged since the last version tag are unreleased, the release jobs below
+          # commit the rebuilt www/. Everyone else commits www/ with the change. Before the first version tag nothing is
+          # skipped on main.
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.user.login }}" = "dependabot[bot]" ]; then
+            echo "www/ changes with this dependency update; it is rebuilt and committed when the pull request is merged"
+            exit 0
           fi
+          last=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2> /dev/null || true)
+          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ -n "$last" ] &&
+            [ -n "$(git log --format=%h --author='dependabot\[bot\]' "$last..HEAD" -- package.json package-lock.json)" ]; then
+            echo "www/ changes with the dependency updates merged since $last; the release jobs commit it to main"
+            exit 0
+          fi
+          echo "www/ is stale: run 'npm run build:www' in web/ and commit the result"
+          git status --porcelain -- ../www
+          exit 1
       # House's runner keeps ~/.cache between jobs, so the browser downloads once and later installs only check it; the
       # system libraries come with it (a GitHub cache restore once reported a hit without the headless shell)
       - name: Install Playwright's Chromium
@@ -115,6 +135,20 @@ jobs:
       # address, phone numbers or note text: nothing personal from the fixtures may appear in what a recorded run saw.
       - name: Nothing personal from the fixtures reached the model in any recording
         run: python3 tests/privacy_check.py --demo web/src/mocks/fixtures.json
+      # The IPM version equals the release tag, so every place that writes the version holds the same one: both
+      # module.xml files (and the aihub module's dependency on the core), Setup.cls, the web package and its lockfile,
+      # and the recorded demo's health.version. On a version tag (a run started by hand on the tag) they must also equal
+      # the tag.
+      - name: The version is the same everywhere it is written
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            python3 scripts/check-versions.py --tag "${{ github.ref_name }}"
+          else
+            python3 scripts/check-versions.py
+          fi
+      # Open Exchange's reader of module.xml keeps only the low byte of a character: an en dash broke a publish.
+      - name: Both module.xml files are plain ASCII
+        run: python3 scripts/check-ascii.py module.xml aihub/module.xml
 
   # The ObjectScript side on a real IRIS for Health Community 2026.2 (InterSystems' image; the AI Hub build is not on a
   # registry CI can pull from, and the core needs none of it): the namespace, a full load and compile, the installer,
@@ -240,16 +274,193 @@ jobs:
         if: always()
         run: docker rm -f iris > /dev/null 2>&1 || true
 
+  # Merged Dependabot pull requests change the bundle but not the committed www/, which IRIS serves and the IPM package
+  # and the image ship. These two jobs make them a patch release. They run on every push to main and read the history,
+  # not the push: the Dependabot commits since the last version tag are the unreleased updates, however many pull
+  # requests were merged together and whichever runs a newer push replaced. Until the first version tag (v1.0.0, made
+  # when the owner releases on Open Exchange) they do nothing. When any of the updates changed
+  # web/package.json or web/package-lock.json, the last figure of the version moves in every place
+  # scripts/check-versions.py knows (both module.xml files, the aihub module's dependency on the core, Setup.cls, the
+  # web package and its lockfile, the recorded demo's health.version), the CHANGELOG gets a section naming every update
+  # (scripts/dependency-release.mjs), www/ is rebuilt, and the commit is pushed to main with its annotated tag and a
+  # GitHub release; the image job then builds from that commit. Open Exchange's "Release app" with the same version
+  # publishes it to the package manager: that stays the owner's step, so the IPM version follows the tag. Updates to
+  # workflows alone bump nothing (the next release names them). Pull requests never reach these jobs, so no run that
+  # Dependabot starts holds a write token. A push made with GITHUB_TOKEN starts no workflow, so the commit is checked
+  # by the next push.
+  #
+  # The first job runs the updated packages (npm ci, the build) with a read-only token that it does not keep, and hands
+  # its commit over as a git bundle; the second holds the write token and runs no package code: it checks the commit
+  # touches only the release's files, and the versioned files only in their version, then pushes, tags and releases
+  # it. Both work on this push's commit, never a newer one, and when main has moved on the release is left to the run
+  # for the newer push, so nothing is published that its own checks have not passed.
+  dependency-release-build:
+    needs: [web, fixtures, iris]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, house]
+    timeout-minutes: 15
+    outputs:
+      commit: ${{ steps.build.outputs.commit }}
+      version: ${{ steps.build.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The whole history with its tags, back to the last release.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Make the dependency updates since the last release a patch release, with www/ rebuilt
+        id: build
+        run: |
+          last=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2> /dev/null || true)
+          if [ -z "$last" ]; then
+            echo "No version tag yet: nothing to release"
+            exit 0
+          fi
+          dependabot_since() { git log --format=%h --author='dependabot\[bot\]' "$last..HEAD" "$@"; }
+          if [ -z "$(dependabot_since)" ]; then
+            echo "No Dependabot commit since $last: nothing to release"
+            exit 0
+          fi
+          (cd web && npm ci)
+          version=""
+          if [ -n "$(dependabot_since -- web/package.json web/package-lock.json)" ]; then
+            current=$(python3 scripts/check-versions.py --print)
+            version="${current%.*}.$((${current##*.} + 1))"
+            python3 scripts/check-versions.py --set "$version"
+            node scripts/dependency-release.mjs "$version" "$last" > release-notes.md
+          fi
+          (cd web && npm run build:www)
+          if [ -z "$version" ] && [ -z "$(git status --porcelain -- www)" ]; then
+            echo "No npm update since $last and www/ current: nothing to commit"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A www
+          if [ -n "$version" ]; then
+            git add module.xml aihub/module.xml src/Shutter/Setup.cls web/package.json web/package-lock.json \
+              web/src/mocks/fixtures.json CHANGELOG.md
+            # The subject, a blank line, then the notes: git takes -m or -F, not both.
+            { printf '%s\n\n' "$version: dependency updates"; cat release-notes.md; } | git commit -F -
+          else
+            git commit -m "www/ rebuilt for the dependency update"
+          fi
+          mkdir -p "$RUNNER_TEMP/release"
+          git bundle create "$RUNNER_TEMP/release/release.bundle" "$GITHUB_SHA..HEAD"
+          [ -z "$version" ] || cp release-notes.md "$RUNNER_TEMP/release/"
+          echo "commit=true" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: steps.build.outputs.commit == 'true'
+        with:
+          name: dependency-release
+          path: ${{ runner.temp }}/release
+          retention-days: 1
+
+  www-after-dependabot-merge:
+    needs: dependency-release-build
+    if: needs.dependency-release-build.outputs.commit == 'true'
+    runs-on: [self-hosted, house]
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.push.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dependency-release
+          path: ${{ runner.temp }}/release
+      - name: Push the release commit with its tag and GitHub release
+        id: push
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.dependency-release-build.outputs.version }}
+        run: |
+          release="$RUNNER_TEMP/release"
+          # This push's own scripts/check-versions.py, which the bundle cannot change: it runs here on the commit's files.
+          check="$PWD/scripts/check-versions.py"
+          git fetch -q "$release/release.bundle" HEAD
+          commit=$(git rev-parse FETCH_HEAD)
+          # One commit on this push's, touching only what a dependency release changes.
+          if [ "$(git rev-list --count "$GITHUB_SHA..$commit")" != 1 ] || [ "$(git rev-parse "$commit^")" != "$GITHUB_SHA" ]; then
+            echo "The bundle is not one commit on $GITHUB_SHA"; exit 1
+          fi
+          versioned='module.xml aihub/module.xml src/Shutter/Setup.cls web/package.json web/package-lock.json web/src/mocks/fixtures.json'
+          other=$(git diff --name-only "$GITHUB_SHA" "$commit" \
+            | grep -vxE 'www/.*|module\.xml|aihub/module\.xml|src/Shutter/Setup\.cls|web/package(-lock)?\.json|web/src/mocks/fixtures\.json|CHANGELOG\.md' || true)
+          if [ -n "$other" ]; then echo "The release commit changes other files:"; echo "$other"; exit 1; fi
+          # The build ran package code, so the versioned files may differ only in their version ($versioned is split on
+          # purpose: one path per word).
+          if [ -z "$VERSION" ] && ! git diff --quiet "$GITHUB_SHA" "$commit" -- $versioned CHANGELOG.md; then
+            echo "A www/ rebuild changes files outside www/"; exit 1
+          fi
+          same() { cmp -s <(git show "$GITHUB_SHA:$1" | python3 "$check" --blank "$1") <(git show "$commit:$1" | python3 "$check" --blank "$1"); }
+          for f in $versioned; do
+            if ! same "$f"; then echo "The release commit changes $f beyond the version"; exit 1; fi
+          done
+          if [ -n "$VERSION" ]; then
+            if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "'$VERSION' is not a version"; exit 1; fi
+            tree=$(mktemp -d)
+            git worktree add -q --detach "$tree" "$commit"
+            carried=yes
+            python3 "$check" --root "$tree" --tag "v$VERSION" || carried=no
+            # The runner keeps its workspace between jobs, so the worktree goes either way.
+            git worktree remove --force "$tree"
+            if [ "$carried" = no ]; then echo "The release commit does not carry version '$VERSION' everywhere"; exit 1; fi
+          fi
+          if [ "$(git ls-remote origin refs/heads/main | cut -f1)" != "$GITHUB_SHA" ]; then
+            echo "main has moved on since this push: the run for the newer push releases these updates"
+            exit 0
+          fi
+          if [ -n "$VERSION" ]; then
+            command -v gh > /dev/null || { sudo apt-get update -q && sudo apt-get install -y -q gh; }
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git tag -a "v$VERSION" -m "Shutter $VERSION: dependency updates" "$commit"
+            # Atomic: if main moved in the meantime, neither main nor the tag changes.
+            git push --atomic origin "$commit:refs/heads/main" "v$VERSION"
+            gh release create "v$VERSION" --title "Shutter $VERSION" --notes-file "$release/release-notes.md"
+            echo "Released $VERSION from the dependency updates"
+          else
+            git push origin "$commit:refs/heads/main"
+            echo "Committed the rebuilt www/ to main"
+          fi
+          echo "sha=$commit" >> "$GITHUB_OUTPUT"
+
   # The judges' path: the Dockerfile, its build script and the IPM module, built from the public IRIS for Health
   # Community 2026.2 image (the contest's AI Hub build is not on a registry CI can pull from), then started as
   # `docker compose up` would start it, with scenario S2 played end to end on it.
+  # After a dependency release it builds the release commit; when the release jobs are skipped (a pull request, a branch,
+  # no update to release) it builds this run's commit.
   image:
     name: Image (Dockerfile, iris.script, the IPM module)
+    needs: [dependency-release-build, www-after-dependabot-merge]
     runs-on: [self-hosted, house]
-    if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
+    if: >-
+      ${{ !cancelled()
+      && (github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]')
+      && (needs.dependency-release-build.result == 'success' || needs.dependency-release-build.result == 'skipped')
+      && (needs.www-after-dependabot-merge.result == 'success' || needs.www-after-dependabot-merge.result == 'skipped') }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.www-after-dependabot-merge.outputs.sha || github.sha }}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
@@ -291,9 +502,14 @@ jobs:
         run: docker rm -f shutter > /dev/null 2>&1 || true
 
   # Publishes the demo to GitHub Pages. Skipped (not failed) until the repository is public, Pages is enabled
-  # (Settings, Pages, Source: GitHub Actions) and the repository variable DEPLOY_DEMO is 'true'.
+  # (Settings, Pages, Source: GitHub Actions) and the repository variable DEPLOY_DEMO is 'true'. The four checks are
+  # named in the condition: the release jobs before the image are skipped on most runs, and a skipped job further up
+  # would otherwise skip this one too.
   deploy-demo:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_DEMO == 'true'
+    if: >-
+      ${{ !cancelled() && needs.web.result == 'success' && needs.fixtures.result == 'success'
+      && needs.iris.result == 'success' && needs.image.result == 'success'
+      && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_DEMO == 'true' }}
     needs: [web, fixtures, iris, image]
     runs-on: ubuntu-latest
     permissions:
