@@ -1,6 +1,7 @@
 name: CI
 
-# CI runs on main after a merge, and on a branch only by hand (workflow_dispatch): branch work is tested on House's IRIS
+# The jobs run on House's own runner (house-runner, a VM with only the internet, the owner's choice of 20 Oct), so CI
+# costs no GitHub minutes; it runs one job at a time and keeps Docker images between runs. CI runs on main after a merge, and on a branch only by hand (workflow_dispatch): branch work is tested on House's IRIS
 # instances before it is pushed, and the free Actions minutes are kept for main. A push that changes only the docs
 # (docs/ and the top-level Markdown) runs nothing; the knowledge's Markdown is checked, so it still runs.
 on:
@@ -10,6 +11,9 @@ on:
       - 'docs/**'
       - '*.md'
   workflow_dispatch:
+  # Dependabot's update pull requests are tested on House's runner before they are merged (the owner, 20 Oct); no
+  # other pull request runs, since the runner is the owner's own machine
+  pull_request:
 
 # Least privilege by default; the Pages deployment raises what it needs.
 permissions:
@@ -32,7 +36,8 @@ jobs:
   # screen in every appearance against the demo build. The demo build is kept as an artifact.
   web:
     name: Web application
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, house]
+    if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
     timeout-minutes: 20
     defaults:
       run:
@@ -97,10 +102,14 @@ jobs:
   # live agents submit, and a full board set for every scenario.
   fixtures:
     name: Recordings and scenarios
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, house]
+    if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
       - name: Every recording keeps to the schemas, and every scenario has a full board set
         run: |
           set +e
@@ -124,14 +133,20 @@ jobs:
   # S12, and S2 in HL7 2.4 and 2.3.1 (S17, S18) in site-policy mode.
   iris:
     name: IRIS (the downstream system's contract, scenarios in replay)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, house]
+    if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
     timeout-minutes: 45
     env:
       IRIS_URL: http://localhost:52773
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      # The runner keeps Docker between jobs: a container a cancelled run left behind would hold the name and the port
       - name: Start IRIS with the repository mounted
         run: >-
+          docker rm -f iris shutter > /dev/null 2>&1 || true;
           docker run -d --name iris -p 52773:52773 -v "$GITHUB_WORKSPACE:/home/irisowner/dev:ro" "$IRIS_IMAGE"
           --check-caps false --ISCAgent false
       # The official image ships its accounts' passwords expired; the demonstration password SYS stays.
@@ -230,16 +245,24 @@ jobs:
         run: |
           python3 scripts/iris-sql.py --url "$IRIS_URL" --ns SHUTTER "SELECT Shutter.Setup_Doctor() AS r" || true
           docker logs iris 2>&1 | tail -80 || true
+      # The next job on the runner needs the port and the name
+      - name: Remove the IRIS container
+        if: always()
+        run: docker rm -f iris > /dev/null 2>&1 || true
 
   # The judges' path: the Dockerfile, its build script and the IPM module, built from the public IRIS for Health
   # Community 2026.2 image (the contest's AI Hub build is not on a registry CI can pull from), then started as
   # `docker compose up` would start it, with scenario S2 played end to end on it.
   image:
     name: Image (Dockerfile, iris.script, the IPM module)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, house]
+    if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
       # A plain build: the Dockerfile copies the whole repository before installing, so every commit changes every layer
       # after the base, and a layer cache (buildx with the GitHub Actions cache, tried on 20 Oct) saved nothing and ran
       # the runner out of disk keeping a second copy of the image. The public base has no AI Hub package, so the image
@@ -251,8 +274,10 @@ jobs:
           --build-arg WITH_AIHUB=0
           -t shutter:ci .
       - name: Start it
-        # The startup alerts are cleared by the production's own start; no after-start script is needed.
+        # The startup alerts are cleared by the production's own start; no after-start script is needed. A container a
+        # cancelled run left behind is removed first: the runner keeps Docker between jobs.
         run: >-
+          docker rm -f iris shutter > /dev/null 2>&1 || true;
           docker run -d --name shutter -p 52773:52773 shutter:ci
           --check-caps false --ISCAgent false
       - name: Wait for the web application
@@ -271,6 +296,9 @@ jobs:
       - name: IRIS log
         if: always()
         run: docker logs shutter 2>&1 | tail -100 || true
+      - name: Remove the container
+        if: always()
+        run: docker rm -f shutter > /dev/null 2>&1 || true
 
   # Publishes the demo to GitHub Pages. Skipped (not failed) until the repository is public, Pages is enabled
   # (Settings, Pages, Source: GitHub Actions) and the repository variable DEPLOY_DEMO is 'true'.
