@@ -251,12 +251,20 @@ function ScenarioCard({
   );
 }
 
-/** The induction prompt (the owner's questionnaire): an approver sees it until the site's answers are saved. */
-function InductionPrompt() {
+/**
+ * The induction prompt (the owner's questionnaire): an approver sees it until the site's answers are saved. It leads
+ * the page on an instance; `below` places it under the scenarios, where the demo keeps it.
+ */
+function InductionPrompt({ below = false }: { below?: boolean }) {
   const profile = useSiteProfile().data;
   if (!profile || profile.source === 'api') return null;
   return (
-    <Alert color="blue" variant="light" mb="md" title="Shutter is running on the shipped site profile">
+    <Alert
+      color="blue"
+      variant="light"
+      mb={below ? 0 : 'md'}
+      title="Shutter is running on the shipped site profile"
+    >
       Answer the twelve induction questions so it acts as your site does.{' '}
       <Anchor component={Link} to="/site-profile" size="sm" underline="always">
         Answer the questions
@@ -292,9 +300,12 @@ export default function ScenariosPage() {
       },
     );
 
+  // The induction prompt leads the page on an instance, as the owner's questionnaire is designed; the demo, whose
+  // profile is a recording nobody answers, keeps it below the fold, under the scenarios, so the guided path comes first.
+  const induction = me?.approver ? <InductionPrompt below={DEMO} /> : null;
   return (
     <>
-      {me?.approver ? <InductionPrompt /> : null}
+      {DEMO ? null : induction}
       <PageHeader
         title="Scenarios"
         subtitle="Each scenario plays a real failure into the production: HL7 files into the ADT folder and faults on the downstream system. Shutter opens a case, investigates, checks the plan at the gate, asks a person, and verifies the result at the receiver."
@@ -389,6 +400,7 @@ export default function ScenariosPage() {
             ))}
           </SimpleGrid>
         ) : null}
+        {DEMO ? induction : null}
       </Stack>
     </>
   );

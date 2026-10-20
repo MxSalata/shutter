@@ -49,6 +49,13 @@ describe('ScenariosPage', () => {
     expect(screen.queryByRole('region', { name: 'Start here' })).not.toBeInTheDocument();
   });
 
+  it('leads with the induction prompt on an instance running the shipped profile', async () => {
+    renderScenarios();
+    const prompt = await screen.findByText('Shutter is running on the shipped site profile');
+    const heading = screen.getByRole('heading', { name: 'Scenarios' });
+    expect(prompt.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("greys out a scenario in a mode it isn't defined for, and says which modes it is", async () => {
     renderScenarios();
     expect(await screen.findByRole('button', { name: 'Run S7' })).toBeEnabled();

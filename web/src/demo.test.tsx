@@ -82,6 +82,15 @@ describe('the demo', () => {
     expect(within(card).getByText(/S8 in Rules only mode/)).toBeInTheDocument();
   });
 
+  it('keeps the induction prompt below the scenarios, under the guided path', async () => {
+    renderAt('/scenarios');
+    const prompt = await screen.findByText('Shutter is running on the shipped site profile');
+    const card = screen.getByRole('region', { name: 'Start here' });
+    const last = screen.getByRole('button', { name: 'Run S19' });
+    expect(card.compareDocumentPosition(prompt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(last.compareDocumentPosition(prompt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('shows a recorded time as its date and time, never as an age', () => {
     render(
       <MantineProvider theme={theme}>
