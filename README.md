@@ -52,6 +52,7 @@ Workflows" (Open Exchange contest 49). Private while the entry is built.
 - Without an API key the agents replay recorded runs: the live board's own runs with `claude-opus-5-5` on 19 October 2026, one per board member and case (`fixtures/records`). The online demo is recorded from those runs too.
 - A replay answers only for the scenarios' cases. A case with no recording, such as one from an HL7 file of your own, takes the rules path: no board findings, the gate alone decides, and a resend still waits for a person's approval. The board on your own messages needs live agents (an API key, "Run it").
 - The receiving system is the downstream system, a demo bed-management system (`Downstream.*`) built for the scenarios; its interface contract is in `knowledge/contracts/`.
+- Shutter resends only to a receiver with an API it can read and write through: the encounter's state and version, receipts by operation key, and conditional writes (the site profile's `api` and `features`). A receiver that takes HL7 over TCP and keeps no receipts can be investigated and escalated, never resent to: Shutter can't prove what it holds, so the case goes to the team that owns it.
 
 ## Run it
 
