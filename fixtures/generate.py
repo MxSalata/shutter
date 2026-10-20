@@ -52,6 +52,8 @@ PATIENTS = {
     "S16": ("MRN1016", "ENC-1016", "SYNTH^WILF", "19760221", "M"),
     "S17": ("MRN1017", "ENC-1017", "SYNTH^XENA", "19910812", "F"),
     "S18": ("MRN1018", "ENC-1018", "SYNTH^YUSUF", "19670330", "M"),
+    # S19, S2 in the demo hospital's own production (T33)
+    "S19": ("MRN1019", "ENC-1019", "SYNTH^ARLO", "19890227", "M"),
 }
 
 # The prior record an S15 merge folds into its patient (MRG-1, MRG-5, MRG-7)
@@ -522,6 +524,29 @@ def scenarios():
             "expected": {"disposition": "resend", "write": True, "final_state": "admitted", "final_ward": "WARD-B",
                          "modes": ["policy"], "failed_operation_key": b[2]["operation_key"]},
         }, [a, b]))
+
+    # S19: S2's transfer, failing in the demo hospital's own production (namespace HOSPITAL). The hospital's PAS In
+    # takes the messages, PAS to Downstream sends them to Downstream Out, and its Shutter Forwarder posts the failure
+    # to Shutter's intake; the case names its source and is recovered through Shutter's own connector.
+    a = message("S19", 1, "A01", "0900", ward="WARD-A")
+    b = message("S19", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
+    out.append(({
+        "id": "S19",
+        "title": "Shape A: a failed transfer in the hospital's own production",
+        "summary": "S2's never-accepted transfer, but the messages go through the demo hospital's own production in the "
+                   "namespace HOSPITAL, which Shutter does not own. Its forwarder hands the failure to Shutter, and "
+                   "the case names where it came from; the transfer is resent through Shutter's connector.",
+        "steps": [
+            {"file": a[0], "route": "hospital"},
+            {"fault": "fail_before_accept"},
+            {"file": b[0], "route": "hospital", "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+        ],
+        "expected": {"disposition": "resend", "write": True, "final_state": "admitted", "final_ward": "WARD-B",
+                     "modes": ["policy"], "failed_operation_key": b[2]["operation_key"],
+                     "source": {"namespace": "HOSPITAL", "production": "Hospital.Production", "route": "PAS In"}},
+    }, [a, b]))
 
     return out
 

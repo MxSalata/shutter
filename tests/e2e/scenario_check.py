@@ -301,6 +301,16 @@ def judge(args, operator, scenario, mode, final):
                            f"expected {expected['final_state']} {expected['final_ward']}")
     if expected.get("blocked_by") and expected["blocked_by"] not in codes:
         differences.append(f"no {expected['blocked_by']} among {sorted(c for c in codes if c) or 'no reason codes'}")
+    if expected.get("source"):
+        # A case forwarded from another production names where it came from (CONTRACTS 11)
+        _, case = operator.call("GET", f"/cases/{caseid}")
+        case = case or {}
+        for field, key in (("namespace", "sourceNamespace"), ("production", "sourceProduction"), ("route", "sourceRoute")):
+            want = expected["source"].get(field)
+            if want and case.get(key) != want:
+                differences.append(f"{key} {case.get(key) or 'empty'}, expected {want}")
+        if not case.get("originHeaderId"):
+            differences.append("no originHeaderId: the case does not name the source's message")
     outcome = (f"{final['state']}, {final.get('disposition') or 'no plan'}, {'one write' if wrote else 'no write'}, "
                f"downstream {held.get('state')} {held.get('ward')}")
     summary = f"{scenario['id']} {mode}: {final['caseId']} {outcome}"

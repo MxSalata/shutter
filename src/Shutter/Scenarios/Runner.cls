@@ -213,7 +213,18 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
             Set:status'=200 error = "the downstream system refused the fault step: " _ answer.%ToJSON()
             Quit:error'=""
         } ElseIf step.%IsDefined("file") {
-            Set error = ..Drop(step.path, inbound)
+            // A step with the route "hospital" drops the file into the demo hospital's own inbound folder (T33), so
+            // the failure happens in the hospital's production and reaches Shutter through its forwarder.
+            Set target = inbound
+            If step.%IsDefined("route") && (step.route = "hospital") {
+                Set target = $GET(^Shutter.Config("hospitalIn"))
+                If target = "" {
+                    Set error = "the step's route is the demo hospital, which is not installed (^Shutter.Config(""hospitalIn"") is not set)"
+                    Quit
+                }
+                Set target = ##class(%File).NormalizeDirectory(target)
+            }
+            Set error = ..Drop(step.path, target)
             Quit:error'=""
             Do files.%Push(step.file)
             // At least two seconds between files, so the production applies them in order
@@ -241,7 +252,7 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
 /// A step in words, for <method>Status</method>.
 ClassMethod Describe(step As %DynamicObject) As %String
 {
-    Quit:step.%IsDefined("file") "delivering " _ step.file
+    Quit:step.%IsDefined("file") "delivering " _ step.file _ $SELECT(step.%IsDefined("route") && (step.route = "hospital"): " to the demo hospital", 1: "")
     Quit:step.%IsDefined("fault") "setting the downstream system's fault to " _ step.fault
     Quit:step.%IsDefined("wait") "waiting " _ step.wait _ " s"
     Quit:step.%IsDefined("wait_for_state") "waiting for the case to reach " _ step."wait_for_state"
@@ -302,7 +313,8 @@ ClassMethod Drop(source As %String, inbound As %String) As %String
     Quit ""
 }
 
-/// The downstream system reset, the inbound and archive folders emptied of fixtures, the mode back to board, the
+/// The downstream system reset, the inbound and archive folders (Shutter's and the demo hospital's) emptied of
+/// fixtures, the mode back to board, the
 /// running scenario and any run record that isn't playing cleared, and <code>^Shutter.Config("resetAt")</code> set to
 /// the time of the reset: the evidence collector ignores message-store events older than it, since encounter ids are
 /// fixed per scenario. An incident still open is abandoned, since the downstream system it would release into has just
@@ -312,7 +324,7 @@ ClassMethod Reset() As %String [ SqlProc ]
     Set resetAt = ##class(Downstream.Service).Now()
     Set ward = ##class(Downstream.Service).Reset(.status)
     Set emptied = []
-    For setting = "adtIn", "adtArchive" {
+    For setting = "adtIn", "adtArchive", "hospitalIn", "hospitalArchive" {
         Set dir = $GET(^Shutter.Config(setting))
         Continue:dir=""
         Set dir = ##class(%File).NormalizeDirectory(dir)

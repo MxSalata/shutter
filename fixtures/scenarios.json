@@ -782,5 +782,45 @@
       ],
       "failed_operation_key": "PAS^HOSP^MRN1018^ENC-1018^transfer^2026-10-15T08:20:00Z"
     }
+  },
+  {
+    "id": "S19",
+    "title": "Shape A: a failed transfer in the hospital's own production",
+    "summary": "S2's never-accepted transfer, but the messages go through the demo hospital's own production in the namespace HOSPITAL, which Shutter does not own. Its forwarder hands the failure to Shutter, and the case names where it came from; the transfer is resent through Shutter's connector.",
+    "steps": [
+      {
+        "file": "S19-01-A01.hl7",
+        "route": "hospital"
+      },
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S19-02-A02.hl7",
+        "route": "hospital",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      }
+    ],
+    "expected": {
+      "disposition": "resend",
+      "write": true,
+      "final_state": "admitted",
+      "final_ward": "WARD-B",
+      "modes": [
+        "policy"
+      ],
+      "failed_operation_key": "PAS^HOSP^MRN1019^ENC-1019^transfer^2026-10-15T08:20:00Z",
+      "source": {
+        "namespace": "HOSPITAL",
+        "production": "Hospital.Production",
+        "route": "PAS In"
+      }
+    }
   }
 ]

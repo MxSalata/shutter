@@ -216,6 +216,7 @@ Per member, over all passes:
 - S16 A cancellation the downstream system cannot reverse: withheld before any agent runs (CANCEL_UNSUPPORTED).
 - S17 S2 in HL7 2.4: played in policy mode only.
 - S18 S2 in HL7 2.3.1: played in policy mode only.
+- S19 Shape A: a failed transfer in the hospital's own production: played in policy mode only.
 
 ## Not yet measured
 
