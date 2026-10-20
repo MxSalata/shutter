@@ -8,6 +8,10 @@ services:
         IRIS_IMAGE: ${SHUTTER_IMAGE:-irishealth-community:2026.3.0AI.154.0}
         # 1 on the contest image (live agents); 0 on a plain IRIS for Health Community base (replay edition).
         WITH_AIHUB: ${SHUTTER_WITH_AIHUB:-1}
+        # Read by the installer at build time (see .env.example); empty keeps the defaults.
+        SHUTTER_DEMO_PASSWORD: ${SHUTTER_DEMO_PASSWORD:-}
+        SHUTTER_MESSAGE_DAYS: ${SHUTTER_MESSAGE_DAYS:-}
+        SHUTTER_MESSAGE_PURGE: ${SHUTTER_MESSAGE_PURGE:-}
     image: shutter:dev
     container_name: shutter
     restart: unless-stopped

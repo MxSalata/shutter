@@ -15,14 +15,14 @@ XData ProductionDefinition
     <Setting Target="Adapter" Name="FileSpec">*.hl7</Setting>
     <Setting Target="Adapter" Name="CallInterval">1</Setting>
     <Setting Target="Adapter" Name="DeleteFromServer">1</Setting>
-    <Setting Target="Host" Name="TargetConfigNames">PAS to Ward</Setting>
+    <Setting Target="Host" Name="TargetConfigNames">PAS to Downstream</Setting>
     <Setting Target="Host" Name="MessageSchemaCategory">2.5.1</Setting>
     <Setting Target="Host" Name="AckMode">Never</Setting>
     <Setting Target="Host" Name="UseAckCommitCodes">0</Setting>
   </Item>
-  <Item Name="PAS to Ward" Category="Feed" ClassName="Hospital.Process.PASToWard" PoolSize="1" Enabled="true" Foreground="false" Comment="Builds the ward operation, delivers it, hands a failure to Shutter" LogTraceEvents="true" Schedule="">
+  <Item Name="PAS to Downstream" Category="Feed" ClassName="Hospital.Process.PASToDownstream" PoolSize="1" Enabled="true" Foreground="false" Comment="Builds the ward operation, delivers it, hands a failure to Shutter" LogTraceEvents="true" Schedule="">
   </Item>
-  <Item Name="Ward Out" Category="Feed" ClassName="Hospital.Operation.WardOut" PoolSize="1" Enabled="true" Foreground="false" Comment="The hospital's own connector to the ward system (the demo bed-management system)" LogTraceEvents="true" Schedule="">
+  <Item Name="Downstream Out" Category="Feed" ClassName="Hospital.Operation.DownstreamOut" PoolSize="1" Enabled="true" Foreground="false" Comment="The hospital's own connector to the ward system (the demo bed-management system)" LogTraceEvents="true" Schedule="">
     <Setting Target="Adapter" Name="Credentials">DownstreamAPI</Setting>
     <Setting Target="Adapter" Name="ResponseTimeout">15</Setting>
     <Setting Target="Adapter" Name="ConnectTimeout">5</Setting>

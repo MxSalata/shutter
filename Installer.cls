@@ -43,6 +43,43 @@ XData Manifest [ XMLNamespace = INSTALLER ]
 </Manifest>
 }
 
+/// The demo hospital's namespace alone, for an instance that already has Shutter (a development instance, CI):
+/// SELECT Shutter.Installer_RunHospital('SHUTTER') makes HOSPITAL with its databases and the package mappings from
+/// that Shutter namespace. Hospital.Setup.Install, run in HOSPITAL afterwards, installs the production.
+XData HospitalManifest [ XMLNamespace = INSTALLER ]
+{
+<Manifest>
+  <Default Name="NAMESPACE" Value="SHUTTER"/>
+  <Default Name="HOSPITAL" Value="HOSPITAL"/>
+  <Default Name="HOSPITALDBDIR" Value="${MGRDIR}${HOSPITAL}"/>
+  <Default Name="HOSPITALDATADIR" Value="${MGRDIR}shutter/db/${HOSPITAL}DATA"/>
+  <Namespace Name="${HOSPITAL}" Create="yes" Code="${HOSPITAL}" Data="${HOSPITAL}DATA" Ensemble="1">
+    <Configuration>
+      <Database Name="${HOSPITAL}" Dir="${HOSPITALDBDIR}" Create="yes" Resource="%DB_${HOSPITAL}"/>
+      <Database Name="${HOSPITAL}DATA" Dir="${HOSPITALDATADIR}" Create="yes" Resource="%DB_${HOSPITAL}DATA"/>
+      <ClassMapping Package="Shutter.Intake" From="${NAMESPACE}"/>
+      <ClassMapping Package="Shutter.Util" From="${NAMESPACE}"/>
+      <ClassMapping Package="Shutter.Msg" From="${NAMESPACE}"/>
+      <ClassMapping Package="Shutter.Store" From="${NAMESPACE}"/>
+      <ClassMapping Package="Hospital" From="${NAMESPACE}"/>
+    </Configuration>
+  </Namespace>
+</Manifest>
+}
+
+ClassMethod RunHospital(shutterNs As %String = "SHUTTER") As %String [ SqlProc ]
+{
+    If (shutterNs = "") || (shutterNs = $CHAR(0)) Set shutterNs = "SHUTTER"
+    Set vars("NAMESPACE") = $ZCONVERT(shutterNs, "U")
+    Set sc = ..setupHospital(.vars)
+    Quit $SELECT($$$ISOK(sc): "ok", 1: $SYSTEM.Status.GetErrorText(sc))
+}
+
+ClassMethod setupHospital(ByRef pVars, pLogLevel As %Integer = 3, pInstaller As %Installer.Installer, pLogger As %Installer.AbstractLogger) As %Status [ CodeMode = objectgenerator, Internal ]
+{
+    Quit ##class(%Installer.Manifest).%Generate(%compiledclass, %code, "HospitalManifest")
+}
+
 /// Runs the manifest for <var>ns</var> (and the HOSPITAL namespace mapped from it) and returns "ok" or the error
 /// text; callable over SQL (SELECT Shutter.Installer_Run('SHUTTER')) for an instance reached only through its REST API.
 ClassMethod Run(ns As %String = "SHUTTER") As %String [ SqlProc ]

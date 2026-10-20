@@ -53,7 +53,8 @@ ClassMethod FromHL7(ts As %String, zone As %String = "", Output hadOffset As %Bo
     Set iso = y _ "-" _ mo _ "-" _ d _ "T" _ hh _ ":" _ mi _ ":" _ ss
     If offset = "" {
         // SQL hands an empty string over as $CHAR(0): both mean the profile's zone.
-        If ($GET(zone) = "") || (zone = $CHAR(0)) Set zone = ##class(Shutter.Store.SiteProfile).FeedTimeZone()
+        If ($GET(zone) = "") || (zone = $CHAR(0)) Set zone = $GET(^Shutter.Config("feedZone"))
+    If zone = "" Set zone = ##class(Shutter.Store.SiteProfile).FeedTimeZone()
         Set offset = ..ZoneOffset(zone, iso)
         If offset = "" Quit iso _ "Z"
     } Else {

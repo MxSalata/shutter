@@ -4,11 +4,11 @@
 /// The hospital has no policy of its own: a registration or a person update is answered OK and never sent (the ward
 /// system takes no such word), and a merge or a cancel goes out as it is; what the ward system refuses becomes a case
 /// in Shutter like any other refusal.
-Class Hospital.Process.PASToWard Extends Ens.BusinessProcess
+Class Hospital.Process.PASToDownstream Extends Ens.BusinessProcess
 {
 
 /// The ward system's connector item; its name is the receiver Shutter is told about.
-Property WardTarget As %String(MAXLEN = 128) [ InitialExpression = "Ward Out" ];
+Property WardTarget As %String(MAXLEN = 128) [ InitialExpression = "Downstream Out" ];
 
 /// The item that hands a failed delivery to Shutter.
 Property ForwarderTarget As %String(MAXLEN = 128) [ InitialExpression = "Shutter Forwarder" ];
@@ -24,7 +24,7 @@ Parameter SETTINGS = "WardTarget:Basic:selector?context={Ens.ContextSearch/Produ
 Method OnRequest(request As %Library.Persistent, Output response As %Library.Persistent) As %Status
 {
     Set response = ""
-    If 'request.%IsA("EnsLib.HL7.Message") Quit $$$ERROR($$$GeneralError, "PAS to Ward expects an HL7 message, got " _ $CLASSNAME(request))
+    If 'request.%IsA("EnsLib.HL7.Message") Quit $$$ERROR($$$GeneralError, "PAS to Downstream expects an HL7 message, got " _ $CLASSNAME(request))
     Set op = ##class(Shutter.Util.OperationKey).FromHL7(request, .sc)
     If $$$ISERR(sc) {
         Set text = "The message could not be mapped to a ward operation: " _ $SYSTEM.Status.GetErrorText(sc)

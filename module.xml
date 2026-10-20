@@ -18,6 +18,8 @@
            runs, the feed and scenario items enabled, the message purge task. A site install passes 0:
            zpm "load <dir> -Ddemo=0" (the IPM parameter overrides this default). -->
       <Default Name="demo" Value="1"/>
+      <!-- Empty: Shutter.Production in this namespace (shape A). A production's name: Shutter's items go into that production (shape B). -->
+      <Default Name="production" Value=""/>
       <!-- The core's classes, listed so that the aihub module can add its own under the same package
            (Shutter.Agent, Shutter.Tools, Shutter.Schema, Shutter.Knowledge, Shutter.Bridge.Policy,
            Shutter.Bridge.Monitor, Shutter.Bridge.Runner.AIHub) without the two modules claiming one resource. -->
@@ -52,6 +54,7 @@
       <Invoke Class="Shutter.Setup" Method="InstallStatus" CheckStatus="true">
         <Arg>${root}</Arg>
         <Arg>${demo}</Arg>
+        <Arg>${production}</Arg>
       </Invoke>
       <!-- The web application's built files, once they exist. -->
       <FileCopy Name="www/" Target="${cspdir}shutter/" Overlay="1"/>

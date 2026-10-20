@@ -6,7 +6,7 @@
 /// Shutter.Intake.Forward to this item, asynchronously so that the feed never waits for Shutter, with the failed
 /// message's header id (..%PrimaryRequestHeader.%Id() in a business process), the item that delivered, the failure
 /// kind (delivery_failed, rejected, uncertain_outcome or unmappable), its text, and the connector's outcome, HTTP
-/// status and reason code. Hospital.Process.PASToWard is the worked example. The item's adapter settings name
+/// status and reason code. Hospital.Process.PASToDownstream is the worked example. The item's adapter settings name
 /// Shutter's instance: HTTPServer, HTTPPort, SSLConfig and Credentials (a user holding the Shutter_Forwarder role);
 /// Shutter.Util is the one other package the namespace needs.
 /// It never retries and never fails the message: a refusal is in the response's Error and in the event log as a

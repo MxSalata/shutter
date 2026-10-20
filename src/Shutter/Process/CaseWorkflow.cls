@@ -578,7 +578,7 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
 {
     Set json = "Shutter.Util.Json"
     Set entry = $CLASSMETHOD(json, "Str", cat, "entry"), outcome = $CLASSMETHOD(json, "Str", cat, "outcome")
-    Set tier = ##class(Shutter.Store.SiteProfile).TierOf(..WardTarget)
+    Set tier = ##class(Shutter.Store.SiteProfile).TierOf($SELECT(case.Receiver '= "": case.Receiver, 1: ..WardTarget))
     Set kind = $SELECT(..Release: ..ChainKind, 1: $CLASSMETHOD(json, "Str", cat.%Get("conditions"), "chain", "single"))
     Set ..Policy = ##class(Shutter.Store.SiteProfile).Policy(tier, kind)
     // A released item is authorised by its incident (7.3): by site policy, or under the incident's approval.
@@ -698,7 +698,7 @@ Method HeadlineFor(case As Shutter.Store.Case, p As Shutter.Store.Plan) As %Stri
 Method SendGate(case As Shutter.Store.Case, stage As %String, key As %String) As %Status
 {
     Set req = ##class(Shutter.Msg.GateRequest).%New()
-    Set req.CaseId = case.CaseId, req.PlanId = ..PlanId, req.Stage = stage, req.Receiver = ..WardTarget
+    Set req.CaseId = case.CaseId, req.PlanId = ..PlanId, req.Stage = stage, req.Receiver = $SELECT(case.Receiver '= "": case.Receiver, 1: ..WardTarget)
     Set req.ApprovalId = ..ApprovalId, req.ChainKind = ..ChainKind
     If ..ReceiverVersion '= "" Set req.ReceiverVersion = ..ReceiverVersion
     If ..ReceiverEpoch '= "" Set req.ReceiverEpoch = ..ReceiverEpoch
@@ -848,7 +848,7 @@ Method OnRehearsal(case As Shutter.Store.Case, result As Shutter.Msg.WardResult)
 Method ReleaseByPolicy(case As Shutter.Store.Case, plan As Shutter.Store.Plan, rehearsal As Shutter.Store.Rehearsal) As %Status
 {
     Set profile = ##class(Shutter.Store.SiteProfile).Current()
-    Set tier = ##class(Shutter.Store.SiteProfile).TierOf(..WardTarget)
+    Set tier = ##class(Shutter.Store.SiteProfile).TierOf($SELECT(case.Receiver '= "": case.Receiver, 1: ..WardTarget))
     Set comment = "Automatic by site policy v" _ ##class(Shutter.Util.Json).Str(profile, "version", 0) _ ": tier " _ tier _ ", " _ ..ChainKind _ " chain; catalogue " _ ..CatalogueEntry _ " " _ ..CatalogueOutcome
     Set sc = ##class(Shutter.Store.Approval).Create(case, plan, case.CurrentSnapshot, ##class(Shutter.Operation.Gate).#POLICYVERSION, rehearsal, plan.ExpectedVersion, "policy", "approved", comment, "", ..ApprovalValidSeconds, .a, ..ReceiverEpoch)
     Quit:$$$ISERR(sc) sc

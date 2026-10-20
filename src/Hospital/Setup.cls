@@ -133,7 +133,7 @@ ClassMethod ApplyDefaultSettings() As %Status
     Set values("PAS In", "FilePath") = $GET(^Hospital.Config("dir", "in"))
     Set values("PAS In", "ArchivePath") = $GET(^Hospital.Config("dir", "archive"))
     Set values("PAS In", "WorkPath") = $GET(^Hospital.Config("dir", "work"))
-    For item = "Ward Out", "Shutter Forwarder" {
+    For item = "Downstream Out", "Shutter Forwarder" {
         Set values(item, "HTTPServer") = $GET(^Hospital.Config("httpServer"), "127.0.0.1")
         Set values(item, "HTTPPort") = $GET(^Hospital.Config("httpPort"), 52773)
     }

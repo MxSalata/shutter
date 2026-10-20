@@ -60,7 +60,7 @@ authentication as a user holding `Shutter_Forwarder` (the resource `Shutter_Inta
 
 ```json
 {"source": {"namespace": "HOSPITAL", "production": "Hospital.Production", "route": "PAS In", "header_id": "123"},
- "receiver": "Ward Out",
+ "receiver": "Downstream Out",
  "failure": {"kind": "delivery_failed", "text": "...", "outcome": "unavailable", "http_status": 503,
              "reason_code": "ward_unavailable"},
  "message": "<the HL7 text, segments separated by carriage returns>",
@@ -92,7 +92,7 @@ roles. Escalation mail goes through the `Escalation Mail` operation's `SMTPServe
 files under `<mgr>/shutter/out/mail`.
 
 **The worked example: Hospital PAS.** The demo image carries a second, tiny production in its own namespace, the
-hospital's side of shape A: an HL7 service (`PAS In`), a delivery (`Ward Out`) that fails, and the forwarder. Its
+hospital's side of shape A: an HL7 service (`PAS In`), a delivery (`Downstream Out`) that fails, and the forwarder. Its
 failures appear as cases in Shutter's own production in SHUTTER, each recording where the original lives; nothing in
 that production is stopped, purged or rerouted.
 

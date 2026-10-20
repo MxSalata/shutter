@@ -60,17 +60,21 @@ ClassMethod CreateNamespaceStatus(ns As %String) As %Status
 /// the demo is made: no demo users, nothing of the demo receiver's (its resource, role, web application, client user
 /// and credential), no recorded runs, the message purge task only when SHUTTER_MESSAGE_PURGE is 1, and the
 /// production's feed, downstream and scenario items switched off (DisableDemoItems). Returns "ok" or the error.
-ClassMethod Install(root As %String = "", demo As %Boolean = 1) As %String [ SqlProc ]
+ClassMethod Install(root As %String = "", demo As %Boolean = 1, production As %String = "") As %String [ SqlProc ]
 {
-    Set sc = ..InstallStatus(root, demo)
+    Set sc = ..InstallStatus(root, demo, production)
     Quit $SELECT($$$ISOK(sc): "ok", 1: $SYSTEM.Status.GetErrorText(sc))
 }
 
 /// Install as a %Status: what the module's manifest invokes (the Invoke checks the status, so a failed install stops
 /// the load) and what Install wraps. The housekeeping tasks read SHUTTER_MESSAGE_DAYS and SHUTTER_MESSAGE_PURGE from
 /// the environment of the process that runs the install (EnsureRetentionTasks).
-ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1) As %Status
+/// With a production named (IPM: -Dproduction=Your.Production), the install is shape B: Shutter's items go into that
+/// production (InstallIntoStatus) and Shutter.Production is neither started nor made the auto-start production.
+ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production As %String = "") As %Status
 {
+    Set production = $ZSTRIP($GET(production), "<>WC")
+    If production '= "" Quit ..InstallIntoStatus(production, root)
     Set sc = $$$OK
     Try {
         Set ns = $NAMESPACE
@@ -571,9 +575,9 @@ ClassMethod InstallIntoStatus(production As %String, root As %String = "") As %S
         Set sc = ..CreateSecurity(ns, 0) Quit:$$$ISERR(sc)
         Set sc = ..CreateWorkflowRole(0) Quit:$$$ISERR(sc)
         Set sc = ..SeedAll(root) Quit:$$$ISERR(sc)
-        Set sc = ..CreateWebApps(ns, root) Quit:$$$ISERR(sc)
+        Set sc = ..CreateWebApps(ns, root, 0) Quit:$$$ISERR(sc)
         // The retention task only: the site's own purge rules govern the messages of its production.
-        Set r = ..EnsureRetentionTasks(ns, 0)
+        Set r = ..EnsureRetentionTasks(ns, "", 0)
         If $EXTRACT(r, 1, 6) = "ERROR:" Set sc = $$$ERROR($$$GeneralError, "Retention tasks: " _ r) Quit
         Set sc = ..AddItemsTo(production, .added) Quit:$$$ISERR(sc)
         Set ^Shutter.Config("production", "itemsAdded") = added
@@ -582,20 +586,6 @@ ClassMethod InstallIntoStatus(production As %String, root As %String = "") As %S
     }
     Quit sc
 }
-
-/// The two daily housekeeping tasks (A14): "Shutter message purge" (the standard Ens.Util.Tasks.Purge: every message
-/// type in the namespace, bodies too, sessions kept whole) and "Shutter retention" (Shutter.Util.RetentionTask:
-/// idempotency keys older than a day, closed cases past the retention only when switched on). The retention task is
-/// always made; the purge task only when purge is 1, keeping days days of messages, because a namespace-wide purge
-/// belongs only in a namespace that holds nothing but Shutter. The defaults come from the environment of the process
-/// that runs the install (the shell that runs zpm, not the running container): days from SHUTTER_MESSAGE_DAYS (90 when
-/// unset or not a positive whole number), purge from SHUTTER_MESSAGE_PURGE (1 or 0; when unset, 1 on a demo instance
-/// and 0 otherwise, read from ^Shutter.Config("demo")). Each task is made once: on an instance that already has it,
-/// change the days or remove the purge in the Task Manager (System Operation > Task Manager); this method leaves an
-/// existing task as it is, whatever the arguments say. Returns "message purge created (N days)|exists|off; retention
-/// created|exists", or "ERROR: ..." . From SQL with no arguments (SELECT Shutter.Setup_EnsureRetentionTasks()) the
-/// defaults above apply.
-ClassMethod EnsureRetentionTasks(ns As %String = "", days As %String = "", purge As %String = "") As %String [ SqlProc ]
 
 /// The seeds: the board members, the model prices and, from the module's root, the block reasons, the site profile,
 /// the catalogue and the recorded runs. The same list as Install's.
@@ -689,10 +679,19 @@ ClassMethod CopyItem(item As Ens.Config.Item, target As Ens.Config.Production) A
 
 /// Empty Shutter's own tables (cases and everything attached to them, recordings excepted) on a
 /// demo instance. Refused elsewhere. Returns the number of tables emptied or the error.
-/// The two daily housekeeping tasks (A14), created once: "Shutter message purge" (the standard Ens.Util.Tasks.Purge,
-/// 30 days, bodies too, keeping sessions whole) and "Shutter retention" (Shutter.Util.RetentionTask). Returns "ok",
-/// "exists" or the error.
-ClassMethod EnsureRetentionTasks(ns As %String = "") As %String [ SqlProc ]
+/// The two daily housekeeping tasks (A14): "Shutter message purge" (the standard Ens.Util.Tasks.Purge: every message
+/// type in the namespace, bodies too, sessions kept whole) and "Shutter retention" (Shutter.Util.RetentionTask:
+/// idempotency keys older than a day, closed cases past the retention only when switched on). The retention task is
+/// always made; the purge task only when purge is 1, keeping days days of messages, because a namespace-wide purge
+/// belongs only in a namespace that holds nothing but Shutter. The defaults come from the environment of the process
+/// that runs the install (the shell that runs zpm, not the running container): days from SHUTTER_MESSAGE_DAYS (90 when
+/// unset or not a positive whole number), purge from SHUTTER_MESSAGE_PURGE (1 or 0; when unset, 1 on a demo instance
+/// and 0 otherwise, read from ^Shutter.Config("demo")). Each task is made once: on an instance that already has it,
+/// change the days or remove the purge in the Task Manager (System Operation > Task Manager); this method leaves an
+/// existing task as it is, whatever the arguments say. Returns "message purge created (N days)|exists|off; retention
+/// created|exists", or "ERROR: ..." . From SQL with no arguments (SELECT Shutter.Setup_EnsureRetentionTasks()) the
+/// defaults above apply.
+ClassMethod EnsureRetentionTasks(ns As %String = "", days As %String = "", purge As %String = "") As %String [ SqlProc ]
 {
     If '$SYSTEM.Security.Check("%Admin_Task", "USE") && '$SYSTEM.Security.Check("Shutter_Operate", "USE") Quit "Shutter_Operate is required"
     // SQL hands an empty argument to a procedure as $CHAR(0).

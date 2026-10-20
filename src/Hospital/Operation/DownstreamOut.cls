@@ -2,7 +2,7 @@
 /// operation to the operations endpoint and the classification of the answer, as Shutter.Operation.Ward does for
 /// normal traffic, without the preflight read and without a site profile: the path is this item's setting. It never
 /// retries on its own and never turns an outcome into a failed message; the feed process reads the outcome.
-Class Hospital.Operation.WardOut Extends Ens.BusinessOperation
+Class Hospital.Operation.DownstreamOut Extends Ens.BusinessOperation
 {
 
 Parameter ADAPTER = "EnsLib.HTTP.OutboundAdapter";
