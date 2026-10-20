@@ -963,7 +963,7 @@ Method WithheldToPerson(case As Shutter.Store.Case) As %Status
     Set plan = {}
     Set plan.disposition = "escalate", plan.action = {"type": "none"}
     Set plan.why = case.FailureText
-    Set plan.summary = "Withheld: " _ case.FailureText
+    Set plan.summary = case.FailureText
     Set plan.preconditions = [], plan."evidence_refs" = ["failure"], plan.disagreements = []
     Quit ..AdoptPlan(case, plan, "withheld")
 }
