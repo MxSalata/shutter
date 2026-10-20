@@ -29,11 +29,13 @@ case's outcome and the receiving system's final state with the scenario's expect
 | S9 One patient, two encounters | resend, one write, downstream admitted WARD-B | as expected: resolved, resend, one write, downstream admitted WARD-B (0.34 USD) | as expected: resolved, resend, one write, downstream admitted WARD-B | as expected: resolved, resend, one write, downstream admitted WARD-B |
 | S10 The downstream system can't take a conditional write | escalate, no write, downstream admitted WARD-A | as expected: escalated, escalate, no write, downstream admitted WARD-A (0.36 USD) | as expected: escalated, escalate, no write, downstream admitted WARD-A | **differs**: blocked, resend, no write, downstream admitted WARD-A (disposition resend, expected escalate or more_evidence) |
 | S13 A transfer timed before its admission | escalate, no write, downstream admitted WARD-A | as expected: escalated, escalate, no write, downstream admitted WARD-A (0.39 USD) | as expected: escalated, escalate, no write, downstream admitted WARD-A | **differs**: blocked, resend, no write, downstream admitted WARD-A (disposition resend, expected escalate or more_evidence) |
+| S15 A patient merge Shutter withholds for the PAS team | escalate, no write, downstream admitted WARD-B, blocked by MERGE_WITHHELD | no agents: withheld before the board (0 USD) | as expected: escalated, escalate, no write, downstream admitted WARD-B | as expected: escalated, escalate, no write, downstream admitted WARD-B |
+| S16 A cancellation the downstream system cannot reverse | escalate, no write, downstream admitted WARD-B, blocked by CANCEL_UNSUPPORTED | no agents: withheld before the board (0 USD) | as expected: escalated, escalate, no write, downstream admitted WARD-B | as expected: escalated, escalate, no write, downstream admitted WARD-B |
 
 ## What it shows
 
-- **The board gets all eleven right, with live agents as in replay.** Rules alone get the four plain resends right
-  (S2, S4, S5, S9).
+- **The board gets all thirteen right, with live agents as in replay.** Rules alone get the four plain resends right
+  (S2, S4, S5, S9) and the two withheld cases (S15, S16), which never reach a plan of either kind.
 - **Where rules alone are wrong, the gate usually stops them.** In S1, S3, S6, S7, S10 and S13 the resend is blocked by
   a check (a later event, an existing receipt, a discharge, a changed receiver, a receiver that can't take a conditional
   write, an event time before the admission), so nothing wrong reaches the receiver, but the case stops for a person.
@@ -41,6 +43,11 @@ case's outcome and the receiving system's final state with the scenario's expect
   later than the other, so every mechanical check passes; rules alone resend, the approval goes through, and the
   write moves the patient to Ward B over the bed manager's placement in Ward C. The board sees that the evidence
   can't decide which movement is current and escalates to a person.
+- **S15 and S16 are what Shutter must never send by itself.** A merge (ADT^A40) changes which record a patient's
+  history belongs to, and a cancel the downstream system can't take would be refused or misapplied: Shutter withholds
+  both before any agent runs, the gate blocks every plan (`MERGE_WITHHELD`, `CANCEL_UNSUPPORTED`), and the case goes to
+  the team that corrects it by hand, the PAS team for a merge. Played on 20 October 2026, in replay and rules only; they
+  need no recordings.
 - **S13 is bad data from the PAS.** A transfer timed half an hour before the patient's admission can't be resent or
   ordered: the gate refuses the write (`EVENT_TIME_IMPLAUSIBLE`), and the board, matching catalogue entry E13, escalates
   so the PAS team can check the source.
@@ -49,5 +56,5 @@ case's outcome and the receiving system's final state with the scenario's expect
   closed as superseded.
 
 The replay column is what CI checks on every push to `main`: a full install on IRIS for Health Community, then
-`scenario_check.py --approve` over S1 to S10 and S13 with these recordings, all expected to match; the image job builds
+`scenario_check.py --approve` over S1 to S10, S13, S15 and S16 with these recordings, all expected to match; the image job builds
 the contest image's Dockerfile and plays S2 on it.
