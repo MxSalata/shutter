@@ -294,19 +294,20 @@ ClassMethod Scenarios() As %Status
     Quit ..Json(out)
 }
 
-/// True when the running production has the Scenario Player item enabled.
+/// True when the running production (Shutter's own, or the site's that InstallInto put Shutter's items in) has the
+/// Scenario Player item enabled.
 ClassMethod PlayerEnabled() As %Boolean
 {
-    Set n = 0
+    Set n = 0, prod = ##class(Shutter.Setup).ProductionName()
     Try {
-        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT COUNT(*) AS N FROM Ens_Config.Item WHERE Production = ? AND Name = ? AND Enabled = 1", "Shutter.Production", "Scenario Player")
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT COUNT(*) AS N FROM Ens_Config.Item WHERE Production = ? AND Name = ? AND Enabled = 1", prod, "Scenario Player")
         If rs.%Next() Set n = +rs.%Get("N")
     } Catch {
         Set n = 0
     }
     If n = 0 Quit 0
     Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)
-    Quit (state = 1) && (name = "Shutter.Production")
+    Quit (state = 1) && (name = prod)
 }
 
 ClassMethod ScenarioRun(id As %String) As %Status
@@ -1185,7 +1186,7 @@ ClassMethod Settings() As %Status
     Set o.mode = $GET(^Shutter.Config("mode")), o.scenario = $GET(^Shutter.Config("scenario")), o.resetAt = $GET(^Shutter.Config("resetAt"))
     Do o.%Set("demo", ''$GET(^Shutter.Config("demo")), "boolean")
     Set items = []
-    Set prod = ##class(Ens.Config.Production).%OpenId("Shutter.Production")
+    Set prod = ##class(Ens.Config.Production).%OpenId(##class(Shutter.Setup).ProductionName())
     If $ISOBJECT(prod) {
         For i = 1:1:prod.Items.Count() {
             Set item = prod.Items.GetAt(i)
