@@ -231,6 +231,9 @@ export default function SettingsPage() {
               {costs.data.totals.replayedRuns
                 ? `; ${formatInt(costs.data.totals.replayedRuns)} replayed ${costs.data.totals.replayedRuns === 1 ? 'run' : 'runs'} cost nothing, since a replay reuses a recorded run`
                 : ''}
+              {costs.data.totals.mockRuns
+                ? `; ${formatInt(costs.data.totals.mockRuns)} ${costs.data.totals.mockRuns === 1 ? 'run' : 'runs'} against the API mimic cost nothing, since no model answered them`
+                : ''}
               .
             </Text>
           ) : null}

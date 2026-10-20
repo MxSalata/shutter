@@ -23,10 +23,11 @@ Property Runner As %String(MAXLEN = 200) [ InitialExpression = "Shutter.Bridge.R
 
 /// replay answers from recordings and needs no model; record runs live and stores the recording; auto
 /// (the default) is what the instance says: SHUTTER_AGENT_MODE when set, else live when a provider is
-/// configured and the live runner is installed, else replay.
+/// configured and the live runner is installed, else replay; live while the API mimic (tests/mock) is on.
 Property Mode As %String(MAXLEN = 16, VALUELIST = ",auto,live,record,replay") [ InitialExpression = "auto" ];
 
-/// A Config Store configuration name (AI.LLM.<name>) that overrides the agent class's provider.
+/// A Config Store configuration name (AI.LLM.<name>) that overrides the agent class's provider, and its model
+/// unless Model is set.
 Property ProviderConfig As %String(MAXLEN = 100);
 
 /// A model id that overrides the agent class's model.
@@ -46,10 +47,13 @@ Parameter SETTINGS = "AgentClass:Agent,Runner:Agent,Mode:Agent,ProviderConfig:Ag
 
 /// The mode a setting means: itself, or for auto what the instance says (^Shutter.Config("aihub","mode")
 /// from SHUTTER_AGENT_MODE), else live when a provider is configured and the live runner exists, else replay.
+/// While the API mimic is on (Shutter.Setup MockConfig), auto means live: the live runner sends the run to the
+/// mimic, and switching the mimic off brings back what the instance says.
 ClassMethod ResolveMode(mode As %String) As %String
 {
     Set mode = $ZCONVERT(mode, "L")
     If (mode '= "") && (mode '= "auto") Quit mode
+    If (##class(Shutter.Setup).MockConfig() '= "") && ##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Bridge.Runner.AIHub") Quit "live"
     Set m = $ZCONVERT($GET(^Shutter.Config("aihub", "mode")), "L")
     If $LISTFIND($LISTBUILD("live", "record", "replay"), m) Quit m
     If '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Bridge.Runner.AIHub") Quit "replay"

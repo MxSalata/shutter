@@ -1086,10 +1086,12 @@ ClassMethod EnsureSecretResource() As %Status [ Private ]
 }
 
 /// Records the agents' mode for items set to auto (live, record or replay); anything else leaves auto
-/// to decide (live when a provider is configured, else replay). Returns what applies.
+/// to decide (live when a provider is configured, else replay). Returns what applies. Record is refused while the
+/// API mimic is on (MockConfig), and the mode is left as it was, so nothing the mimic answers becomes a recording.
 ClassMethod RecordAgentMode(mode As %String) As %String [ SqlProc ]
 {
     Set mode = $ZCONVERT($ZSTRIP(mode, "<>W"), "L")
+    If (mode = "record") && (..MockConfig() '= "") Quit "refused: the API mimic is on"
     If $LISTFIND($LISTBUILD("live", "record", "replay"), mode) {
         Set ^Shutter.Config("aihub", "mode") = mode
         Quit mode
@@ -1210,6 +1212,14 @@ ClassMethod DirectoryStamp(dir As %String) As %String [ Private ]
 ClassMethod ProviderConfigured() As %Boolean
 {
     Quit $GET(^Shutter.Config("aihub", "provider")) '= ""
+}
+
+/// The Config Store configuration of the API mimic while it is switched on, else "". The mimic is a test fixture
+/// (tests/mock, in neither module nor the image) that answers the live runner's model calls without a model: while
+/// it is on, every live run goes to it and is labelled model mock at cost 0, and record mode is refused.
+ClassMethod MockConfig() As %String
+{
+    Quit $GET(^Shutter.Config("aihub", "mock"))
 }
 
 /// Forgets the provider configuration: removes AI.LLM.Shutter and the wallet secret, and the record.

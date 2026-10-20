@@ -701,8 +701,11 @@ export interface Settings {
 }
 
 export interface Costs {
-  /** What was spent: live and record runs. A replay reuses a recording's tokens and costs nothing. */
-  totals?: { spentUsd: number; liveRuns: number; replayedRuns: number };
+  /**
+   * What was spent: live and record runs. A replay reuses a recording's tokens and costs nothing, and so does a run the
+   * API mimic answered (model mock, a test fixture), counted in mockRuns and not in liveRuns.
+   */
+  totals?: { spentUsd: number; liveRuns: number; replayedRuns: number; mockRuns?: number };
   byModel: {
     model: string;
     /** live, record or replay: replays have their own rows, at no cost. */

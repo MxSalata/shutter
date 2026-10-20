@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Check recording files (fixtures/records/*.json) offline: the key, the member, the agent class, and the
 result's shape as the core stores it (Shutter.Schema.Findings for specialists, Shutter.Schema.Plan for the
-coordinator and the generalist). Mirrors the schema classes' Check methods.
+coordinator and the generalist). Mirrors the schema classes' Check methods. A run the API mimic answered
+(model mock, tests/mock) is a problem: no model made it.
 
     python3 scripts/check-records.py [fixtures/records] [--scenarios fixtures/scenarios.json]
 
@@ -123,6 +124,14 @@ def check_plan(r):
     return p
 
 
+def mock_problems(d):
+    """A run the API mimic answered (tests/mock): no model made it, so it is never a recording."""
+    resp = d.get("response") if isinstance(d.get("response"), dict) else {}
+    if "mock" in (d.get("model"), resp.get("model")) or "ShutterMock" in str(resp.get("provider_config") or ""):
+        return ["made against the API mimic (model mock): no model answered it, so it is never a recording"]
+    return []
+
+
 def check_file(path):
     problems = []
     try:
@@ -130,6 +139,9 @@ def check_file(path):
             d = json.load(f)
     except (OSError, ValueError) as e:
         return [f"not readable as JSON: {e}"], None
+    if not isinstance(d, dict):
+        return ["a recording must be a JSON object"], None
+    problems += mock_problems(d)
     key = d.get("key", "")
     m = KEY_RE.match(key)
     if not m:

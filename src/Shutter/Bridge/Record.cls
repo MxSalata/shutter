@@ -45,9 +45,11 @@ ClassMethod Find(key As %String) As Shutter.Bridge.Record
     Quit ""
 }
 
-/// Store or replace the recording of a run.
+/// Store or replace the recording of a run. A run the API mimic answered (model mock) is refused: no model made it.
 ClassMethod Store(spec As Shutter.Bridge.RunSpec, response As Shutter.Bridge.Msg.AgentResponse, transcript As %String = "", toolCalls As %String = "", Output record As Shutter.Bridge.Record) As %Status
 {
+    Set record = ""
+    If response.Model = "mock" Quit $$$ERROR($$$GeneralError, "A run the API mimic answered is never stored as a recording")
     Set key = spec.ReplayKey()
     Set record = ..Find(key)
     If '$ISOBJECT(record) Set record = ..%New(), record.Key = key

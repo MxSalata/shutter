@@ -5,7 +5,9 @@ Include Ensemble
 /// Config Store, model, evidence tools), adds the terminal tool as an instance it keeps, attaches
 /// the knowledge collection, the scope and the trace policies, runs the agent with a monitor that
 /// enforces the token budget, and reads the result the terminal tool accepted. Failures are
-/// reported in the response's Status, never retried here.
+/// reported in the response's Status, never retried here. While the API mimic is on (Shutter.Setup
+/// MockConfig), the provider is the mimic's, set before %Init so the class's own configuration is
+/// never read; the run is labelled model mock and is never recorded.
 Class Shutter.Bridge.Runner.AIHub Extends Shutter.Bridge.Runner
 {
 
@@ -17,18 +19,37 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
     Set agent = "", session = "", monitor = "", submit = "", trace = "", scope = ""
     Set turns = $SELECT(+spec.MaxIterations > 0: +spec.MaxIterations, 1: 8)
     Set terminal = $SELECT($ZCONVERT(spec.TerminalTool, "L") [ "plan": "SubmitPlan", 1: "SubmitFindings")
+    Set mock = ##class(Shutter.Setup).MockConfig()
     Try {
         If (spec.AgentClass = "") || '##class(%Dictionary.CompiledClass).%ExistsId(spec.AgentClass) {
             Set response.Status = "error", response.Error = "Agent class not available: " _ spec.AgentClass
+        } ElseIf (mock '= "") && (response.Mode = "record") {
+            // Nothing the mimic answers may become a recording.
+            Set response.Status = "refused", response.Error = "Record mode is refused while the API mimic is on"
         } Else {
+            // The provider goes in before %Init, which then leaves the class's PROVIDERCONFIG unread: the mimic's
+            // while it is on, else the item's ProviderConfig when set. One that cannot be made fails the run.
+            Set provider = "", model = ""
+            If mock '= "" {
+                Set provider = ..MockProvider(mock, spec, terminal, .model)
+            } ElseIf spec.ProviderConfig '= "" {
+                Set provider = ..ProviderFrom(spec.ProviderConfig, .model)
+            }
             Set agent = $CLASSMETHOD(spec.AgentClass, "%New")
             If agent.%IsA("Shutter.Agent.Base") Set agent.CaseId = spec.CorrelationKey
+            If $ISOBJECT(provider) Set agent.Provider = provider
             Set sc = agent.%Init({"caseId": (spec.CorrelationKey), "role": (spec.Role), "member": (spec.MemberCode)})
             If $$$ISERR(sc) {
                 Set response.Status = "model_error", response.Error = "The agent could not start: " _ $SYSTEM.Status.GetErrorText(sc)
             } Else {
-                If spec.ProviderConfig '= "" Set agent.Provider = ##class(%AI.Provider).CreateFromConfig(spec.ProviderConfig)
-                If spec.Model '= "" Set agent.Model = spec.Model
+                // The model: the mimic's; else the item's Model, then its configuration's, then the class's.
+                If mock '= "" {
+                    Set agent.Model = model
+                } ElseIf spec.Model '= "" {
+                    Set agent.Model = spec.Model
+                } ElseIf model '= "" {
+                    Set agent.Model = model
+                }
                 Set agent.MaxIterations = turns
                 // The terminal tool: an instance this runner keeps, so the accepted result is read from it.
                 Set submit = $CLASSMETHOD("Shutter.Tools." _ terminal, "%New")
@@ -77,9 +98,48 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
         If $ISOBJECT(submit) && (submit.Result '= "") Set response.ResultJSON = submit.Result
     }
     Do ..FillStats(response, agent, session, monitor, trace)
+    // No model answered a run of the mimic's: it is labelled so, costs nothing and is never recorded.
+    If mock '= "" Set response.Model = "mock", response.ProviderConfig = $PIECE(mock, ".", *)
     Set response.DurationMs = (($ZHOROLOG - start) * 1000) \ 1
-    If (response.Mode = "record") && (response.Status = "ok") Do ..Record(spec, response, session)
+    If (mock = "") && (response.Mode = "record") && (response.Status = "ok") Do ..Record(spec, response, session)
     Quit $$$OK
+}
+
+/// A provider made from a Config Store configuration, resolved as the agent class's @{config:...} is: a name of
+/// fewer than three parts is under AI.LLM (Shutter is AI.LLM.Shutter), and secrets are resolved. Returns the
+/// configuration's model too. Build 154's %AI.Provider has Create(name, settings) and no CreateFromConfig. Throws
+/// when the configuration cannot be read or the provider made.
+ClassMethod ProviderFrom(name As %String, Output model As %String) As %AI.Provider
+{
+    Set model = ""
+    Set fqn = $SELECT($LENGTH(name, ".") < 3: "AI.LLM." _ name, 1: name)
+    $$$ThrowOnError(##class(%ConfigStore.Configuration).GetDetails(fqn, .details, 0, 1))
+    Set model = details.%Get("model")
+    Quit ##class(%AI.Provider).Create(details.%Get("model_provider"), details)
+}
+
+/// The API mimic's provider for one run: its configuration's openai provider, base_url and model, with the run's
+/// context as the API key (MockToken), so the mimic knows the recording, case, member and terminal tool the run is
+/// for. No secret is read: the configuration's own key is a placeholder, and it is replaced.
+ClassMethod MockProvider(config As %String, spec As Shutter.Bridge.RunSpec, terminal As %String, Output model As %String) As %AI.Provider
+{
+    Set model = ""
+    Set fqn = $SELECT($LENGTH(config, ".") < 3: "AI.LLM." _ config, 1: config)
+    $$$ThrowOnError(##class(%ConfigStore.Configuration).GetDetails(fqn, .details, 0, 0))
+    If (details.%Get("model_provider") '= "openai") || (details.%Get("base_url") = "") {
+        $$$ThrowStatus($$$ERROR($$$GeneralError, "The API mimic's configuration " _ fqn _ " must name the openai provider and a base_url"))
+    }
+    Set model = details.%Get("model")
+    Set details."api_key" = ..MockToken(spec, terminal)
+    Quit ##class(%AI.Provider).Create("openai", details)
+}
+
+/// The run's context for the API mimic, carried as its API key: smk1. and the JSON in unpadded base64url, with the
+/// replay key, the case, the member, the terminal tool and the production message.
+ClassMethod MockToken(spec As Shutter.Bridge.RunSpec, terminal As %String) As %String
+{
+    Set ctx = {"k": (spec.ReplayKey()), "c": (spec.CorrelationKey), "m": (spec.MemberCode), "t": (terminal), "r": (spec.EnsMessageId)}
+    Quit "smk1." _ $TRANSLATE($SYSTEM.Encryption.Base64Encode($ZCONVERT(ctx.%ToJSON(), "O", "UTF8"), 1), "+/=", "-_")
 }
 
 /// Tokens, turns, tool calls, the model and the saved session.
