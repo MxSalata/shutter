@@ -753,7 +753,7 @@ Method OnGateProposal(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
                 Quit:$$$ISERR(sc) sc
                 Quit ..SendVerify(case)
             }
-            Set case.Headline = "New pattern, a person decides: " _ $EXTRACT(plan.Summary, 1, 200)
+            Set case.Headline = "New pattern, a person decides: " _ ##class(Shutter.Util.Json).Clip(plan.Summary, 200)
             Quit case.Transition("escalated", "The catalogue has no entry for this pattern and the plan writes; a person decides (candidate entry)", "gate", "gate:" _ result.DecisionId)
         }
         // A lookup that failed at the proposal is not a verdict either: the evidence is collected again and the case is

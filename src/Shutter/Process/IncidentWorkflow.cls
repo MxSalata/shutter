@@ -414,7 +414,7 @@ Method OnPoll(incident As Shutter.Store.Incident) As %Status
     Set chain.Outcome = $SELECT(case.State = "escalated": "Escalated", 1: "Stopped") _ " at item " _ item.Position _ " (case " _ case.CaseId _ " " _ case.State _ "): " _ $EXTRACT(case.Headline, 1, 500)
     Set sc = chain.%Save()
     Quit:$$$ISERR(sc) sc
-    Set sc = chain.StopRest("chain " _ chain.Seq _ " of incident " _ incident.IncidentId _ " " _ chain.State _ " at item " _ item.Position _ " (" _ case.CaseId _ ": " _ $EXTRACT(case.Headline, 1, 200) _ ")")
+    Set sc = chain.StopRest("chain " _ chain.Seq _ " of incident " _ incident.IncidentId _ " " _ chain.State _ " at item " _ item.Position _ " (" _ case.CaseId _ ": " _ ##class(Shutter.Util.Json).Clip(case.Headline, 200) _ ")")
     Quit:$$$ISERR(sc) sc
     Do incident.Note("release", "Chain " _ chain.Seq _ " " _ chain.State _ ": " _ chain.Outcome, "system")
     Set ..CurrentCaseId = "", ..CurrentItemId = "", ..CurrentChainId = ""
