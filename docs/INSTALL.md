@@ -24,10 +24,14 @@ the productions a hospital already runs; the README's `docker compose up` is the
 ## 2. What an install creates
 
 The module `iris-shutter` (the repository root) carries the core, the demo receiver's classes included. Its manifest
-runs `Shutter.Setup.Install(root, demo)`; the
-IPM parameter `demo` defaults to 1, and `zpm "load /path/to/module -Ddemo=0"` installs without the demo. A failed
-install stops the load. The companion module `iris-shutter-aihub` adds the live agents on an AI Hub build; without it
-the gate, the catalogue and the policy path work, and the board replays recordings.
+runs `Shutter.Setup.Install(root, demo)`; the IPM parameter `demo` defaults to 1, and
+`zpm "load /path/to/module -Ddemo=0"` installs without the demo. A failed install stops the load. A packaged install (an
+archive made by `zpm "package"`, the form the registry serves) carries the `knowledge/`, `fixtures/` and `www/` folders
+the install reads; IPM keeps the extracted module in its module root (its ModuleRoot setting, by default
+`<data directory>/ipm/iris-shutter/<version>/`), and `/shutter` serves `www/` from there. A packaged install needs IPM
+0.10.4 or later: 0.10.0 to 0.10.3 delete the extracted module when the install ends, so the install refuses them and
+says so; a load from a folder works on any IPM. The companion module `iris-shutter-aihub` adds the live agents on an AI
+Hub build; without it the gate, the catalogue and the policy path work, and the board replays recordings.
 
 `Install` creates, in the current namespace, the folders under `<mgr>/shutter/`, the resources `Shutter_Operate`,
 `Shutter_Approve` and `Shutter_Intake`, the roles `Shutter_Operator`, `Shutter_Approver`, `Shutter_WebApp` and

@@ -49,6 +49,16 @@
       <!-- The demo hospital's production (shape A): runs in the HOSPITAL namespace through a package mapping, so a judge
            sees Shutter watching a production it does not own. Compiled here; installed there by Hospital.Setup. -->
       <Resource Name="Hospital.PKG"/>
+      <!-- The files Setup reads from the module's root (${root}), declared so that a package carries them: the
+           knowledge (block reasons, the site profile, the catalogue), the fixtures (the recorded runs, and the
+           scenarios' HL7 messages, read again at run time) and the web application's built files, which /shutter
+           serves from ${root}www/ where they are: nothing is copied into the csp directory, which a container may
+           not let IRIS write. A package installed from the registry or an archive stays in IPM's module root
+           (IPM 0.10.4 and later; by default the data directory's ipm/iris-shutter/<version>/), so ${root} outlives
+           the install. IPM 0.10.0 to 0.10.3 delete it when the install ends, and Setup refuses them. -->
+      <Resource Name="/knowledge/"/>
+      <Resource Name="/fixtures/"/>
+      <Resource Name="/www/"/>
       <!-- Folders, security, the library, prices, recorded runs, the web applications and the production.
            InstallStatus returns a %Status and the Invoke checks it, so a failed install stops the load. -->
       <Invoke Class="Shutter.Setup" Method="InstallStatus" CheckStatus="true">
@@ -56,8 +66,6 @@
         <Arg>${demo}</Arg>
         <Arg>${production}</Arg>
       </Invoke>
-      <!-- The web application's built files, once they exist. -->
-      <FileCopy Name="www/" Target="${cspdir}shutter/" Overlay="1"/>
       <!-- No UnitTest element: the unit tests under tests/unit run in CI and by hand, not in IPM's test phase. The feed's
            tests call a development helper that stays out of the image (.dockerignore), and the downstream system's
            contract tests set its fault setting. -->

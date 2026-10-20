@@ -20,9 +20,11 @@ ARG SHUTTER_DEMO_PASSWORD=
 ARG SHUTTER_MESSAGE_DAYS=
 ARG SHUTTER_MESSAGE_PURGE=
 
-# Create the namespace, install the package manager and load the modules while the image is built,
-# so that `docker compose up` starts an instance that is ready. The production is set to start with
-# the instance; SHUTTER_BUILD tells the install not to start it here.
+# Create the namespace, install the package manager (the pinned installer in vendor/ipm) and load the
+# modules while the image is built, so that `docker compose up` starts an instance that is ready. A
+# step that fails ends its session with exit code 1 and fails the build, so no image is made that
+# would answer 404. The production is set to start with the instance; SHUTTER_BUILD tells the install
+# not to start it here.
 RUN iris start IRIS \
  && SHUTTER_BUILD=1 SHUTTER_DEMO_PASSWORD="${SHUTTER_DEMO_PASSWORD}" SHUTTER_MESSAGE_DAYS="${SHUTTER_MESSAGE_DAYS}" SHUTTER_MESSAGE_PURGE="${SHUTTER_MESSAGE_PURGE}" iris session IRIS < /home/irisowner/dev/iris.script \
  && if [ "${WITH_AIHUB}" = "1" ]; then SHUTTER_BUILD=1 iris session IRIS < /home/irisowner/dev/aihub.script; fi \

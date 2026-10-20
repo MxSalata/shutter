@@ -66,12 +66,13 @@ docker tag <the loaded image> irishealth-community:2026.3.0AI.154.0
 docker compose up -d
 ```
 
-The first `up` builds the image: it creates the `SHUTTER` namespace, installs the InterSystems Package Manager and
-loads the `iris-shutter` module (the production, the case store, the gate, the downstream system, the web
-application and the recorded agent runs) and, on the contest image, the `iris-shutter-aihub` module (the live agents
-and their knowledge bases). Allow a few minutes. The production starts with the container, and as it starts it
-clears two known startup alerts (the build host's "failover" message and the preview build's own startup error), so
-Docker's health check reflects the instance's real state; any other alert stays.
+The first `up` builds the image: it creates the `SHUTTER` namespace, installs the InterSystems Package Manager (from the
+pinned installer kept in `vendor/ipm`, so the build does not depend on the package registry) and loads the
+`iris-shutter` module (the production, the case store, the gate, the downstream system, the web application and the
+recorded agent runs) and, on the contest image, the `iris-shutter-aihub` module (the live agents and their knowledge
+bases). Allow a few minutes. A step that fails stops the build with `BUILD FAILED` and the reason. The production starts
+with the container, and as it starts it clears two known startup alerts (the build host's "failover" message and the
+preview build's own startup error), so Docker's health check reflects the instance's real state; any other alert stays.
 
 Then open:
 
