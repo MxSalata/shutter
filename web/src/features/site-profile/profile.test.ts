@@ -135,7 +135,7 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
         name: 'PAS team',
         mailbox: 'pas@trust.nhs.net',
         cc: ['oncall@nhs.net'],
-        receivers: ['Ward Out'],
+        receivers: ['Downstream Out'],
       },
     ];
     expect(validateProfile(p)).toBe('');
@@ -198,7 +198,7 @@ describe('diffProfiles', () => {
     p.policy['3'].single = 'automatic';
     p.incident = { ...p.incident, threshold: 8 };
     const texts = diffProfiles(recorded, p).map((c) => c.text);
-    expect(texts).toContain('Ward Out, tier: from 2, operations to 3, clinical safety');
+    expect(texts).toContain('Downstream Out, tier: from 2, operations to 3, clinical safety');
     expect(texts).toContain('Tier 3 single failures: from one approval to automatic');
     expect(texts).toContain('Incidents, failures: from 5 to 8');
     expect(texts.join(' ')).not.toContain('->');
@@ -209,13 +209,13 @@ describe('diffProfiles', () => {
 
   it('names the teams, mail, zone and note-text changes', () => {
     const p = copy();
-    const team = { id: 'pas', name: 'PAS team', mailbox: 'pas@trust.nhs.net', receivers: ['Ward Out'] };
+    const team = { id: 'pas', name: 'PAS team', mailbox: 'pas@trust.nhs.net', receivers: ['Downstream Out'] };
     p.teams = [team];
     p.mail = { allowed_domains: ['nhs.net'] };
     p.feed = { time_zone: 'UTC' };
     p.model_content = { free_text: true };
     expect(diffProfiles(recorded, p).map((c) => c.text)).toEqual([
-      'Team added: PAS team <pas@trust.nhs.net>, for Ward Out, and any receiver no team names',
+      'Team added: PAS team <pas@trust.nhs.net>, for Downstream Out, and any receiver no team names',
       'Allowed mail domains: nhs.net',
       'Feed time zone: from Europe/London to UTC. Every operation key read from now on uses it',
       'Note text: sent to the model from now on',
@@ -227,7 +227,7 @@ describe('diffProfiles', () => {
     ];
     // As the server routes: the first team also takes what no team names; a later team naming none, only when picked
     expect(diffProfiles(p, q).map((c) => c.text)).toEqual([
-      'Team pas changed: PAS team <pas.team@trust.nhs.net>, for Ward Out, and any receiver no team names',
+      'Team pas changed: PAS team <pas.team@trust.nhs.net>, for Downstream Out, and any receiver no team names',
       'Team added: Integration <int@trust.nhs.net>, for no receiver: only when a person picks it on the case',
     ]);
     const r = structuredClone(q);
@@ -238,7 +238,7 @@ describe('diffProfiles', () => {
   });
 
   it('names a change of the first team even with other team changes, and a reorder further down', () => {
-    const a = (id: string, receivers: string[] = ['Ward Out']) => ({
+    const a = (id: string, receivers: string[] = ['Downstream Out']) => ({
       id,
       name: id.toUpperCase(),
       mailbox: `${id}@trust.nhs.net`,
@@ -249,7 +249,7 @@ describe('diffProfiles', () => {
     const q = structuredClone(p);
     q.teams = [a('y'), a('x'), a('z')];
     expect(diffProfiles(p, q).map((c) => c.text)).toEqual([
-      'Team added: Z <z@trust.nhs.net>, for Ward Out',
+      'Team added: Z <z@trust.nhs.net>, for Downstream Out',
       'Cases no team names: now to Y, before to X',
     ]);
     const r = structuredClone(q);
@@ -264,7 +264,7 @@ describe('diffProfiles', () => {
     p.receivers[0].name = 'Bed Board';
     expect(diffProfiles(recorded, p).map((c) => c.text)).toEqual([
       'Receiver added: Bed Board',
-      'Receiver removed: Ward Out',
+      'Receiver removed: Downstream Out',
     ]);
   });
 });
