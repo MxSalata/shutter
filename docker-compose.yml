@@ -26,9 +26,10 @@ services:
       # The model for live agents (default claude-opus-5-5).
       - SHUTTER_MODEL=${SHUTTER_MODEL:-}
     volumes:
-      # The HL7 folders (drop files into in/ to feed the production by hand; the scenarios do it for you) and, under
-      # db/, the data database: cases, approvals, incidents, the site profile and the provider configuration survive
-      # `docker compose down` and `up`, and a rebuilt image brings new code to the same data. `down -v` wipes them.
+      # The HL7 folders (drop files into in/ to feed Shutter's production by hand, or into hospital/in/ to feed the
+      # demo hospital's; the scenarios do it for you) and, under db/, the data databases of both namespaces: cases,
+      # approvals, incidents, the site profile and the provider configuration survive `docker compose down` and `up`,
+      # and a rebuilt image brings new code to the same data. `down -v` wipes them.
       - shutter-mgr:/usr/irissys/mgr/shutter
 volumes:
   shutter-mgr:

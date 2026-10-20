@@ -27,6 +27,7 @@
       <Resource Name="Shutter.Bridge.ToolCall.CLS"/>
       <Resource Name="Shutter.Catalogue.PKG"/>
       <Resource Name="Shutter.Index.PKG"/>
+      <Resource Name="Shutter.Intake.PKG"/>
       <Resource Name="Shutter.Knowledge.Text.CLS"/>
       <Resource Name="Shutter.Msg.PKG"/>
       <Resource Name="Shutter.Operation.PKG"/>
@@ -39,6 +40,9 @@
       <Resource Name="Shutter.Util.PKG"/>
       <!-- The downstream system (the demo bed-management system) the production delivers to. -->
       <Resource Name="Downstream.PKG"/>
+      <!-- The demo hospital's production (shape A): runs in the HOSPITAL namespace through a package mapping, so a judge
+           sees Shutter watching a production it does not own. Compiled here; installed there by Hospital.Setup. -->
+      <Resource Name="Hospital.PKG"/>
       <!-- Folders, security, the library, prices, recorded runs, the web applications and the production. -->
       <Invoke Class="Shutter.Setup" Method="Install">
         <Arg>${root}</Arg>
