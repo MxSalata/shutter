@@ -36,6 +36,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/cases/:caseId/blocked-reason" Method="GET" Call="CaseBlockedReason"/>
   <Route Url="/cases/:caseId/reinvestigate" Method="POST" Call="CaseReinvestigate"/>
   <Route Url="/cases/:caseId/close" Method="POST" Call="CaseClose"/>
+  <Route Url="/intake" Method="POST" Call="Intake"/>
   <Route Url="/cases/:caseId/escalations" Method="GET" Call="CaseEscalations"/>
   <Route Url="/cases/:caseId/escalations" Method="POST" Call="CaseEscalationCreate"/>
   <Route Url="/cases/:caseId/escalations/:seq" Method="PATCH" Call="CaseEscalationPatch"/>
@@ -870,6 +871,63 @@ ClassMethod CaseClose(caseId As %String) As %Status
     If $$$ISERR(sc) Quit ..Fail("503 Service Unavailable", "not_queued", "The case could not be closed: " _ $SYSTEM.Status.GetErrorText(sc))
     Set reply = {}
     Set reply.caseId = caseId, reply.state = "closing", reply.requestedBy = ..User(), reply.reason = reason
+    Set text = reply.%ToJSON()
+    Do ..Remember(bodyText, "202 Accepted", text)
+    Set %response.Status = "202 Accepted"
+    Write text
+    Quit $$$OK
+}
+
+/// Open a case for a delivery that failed in another production (CONTRACTS 11): the forwarder in the watched
+/// production posts the HL7 message's text with where it came from, the receiver and how the delivery failed. The
+/// intake goes through the API service to the Case Intake item synchronously, so the answer carries the case id.
+/// Shutter_Intake, the X-Requested-With header and an optional Idempotency-Key; 202 {caseId, state, opened}; 400
+/// bad_request naming the field when the body is not a JSON object, message is missing or is not an HL7 message, or
+/// failure.kind is not one of the four kinds.
+ClassMethod Intake() As %Status
+{
+    If '..Allow("Shutter_Intake", 1) Quit $$$OK
+    Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
+    If '$ISOBJECT(body) || $$$ISERR(psc) Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with message, failure, source and receiver")
+    If $CLASSNAME(body) '= "%Library.DynamicObject" Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with message, failure, source and receiver")
+    Set message = ""
+    If body.%GetTypeOf("message") = "string" Set message = body.%Get("message")
+    If $ZSTRIP(message, "<>WC") = "" Quit ..Fail("400 Bad Request", "bad_request", "message is required: the HL7 message's text, segments separated by carriage returns")
+    If $EXTRACT($ZSTRIP(message, "<WC"), 1, 3) '= "MSH" Quit ..Fail("400 Bad Request", "bad_request", "message must be an HL7 message: it does not start with MSH")
+    If body.%GetTypeOf("failure") '= "object" Quit ..Fail("400 Bad Request", "bad_request", "failure is required: an object with kind")
+    Set failure = body.failure
+    Set kind = ##class(Shutter.Util.Json).Str(failure, "kind")
+    If '$LISTFIND($LISTBUILD("delivery_failed", "rejected", "uncertain_outcome", "unmappable"), kind) Quit ..Fail("400 Bad Request", "bad_request", "failure.kind must be delivery_failed, rejected, uncertain_outcome or unmappable")
+    Set mode = ##class(Shutter.Util.Json).Str(body, "mode")
+    If (mode '= "") && '$LISTFIND($LISTBUILD("board", "single", "rules", "policy"), mode) Quit ..Fail("400 Bad Request", "bad_request", "mode must be board, single, rules or policy")
+    Set source = $SELECT(body.%GetTypeOf("source") = "object": body.source, 1: {})
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    Set msg = ##class(Shutter.Msg.ExternalIntake).%New()
+    Set msg.SourceNamespace = $EXTRACT(##class(Shutter.Util.Json).Str(source, "namespace"), 1, 64)
+    Set msg.SourceProduction = $EXTRACT(##class(Shutter.Util.Json).Str(source, "production"), 1, 128)
+    Set msg.SourceRoute = $EXTRACT(##class(Shutter.Util.Json).Str(source, "route"), 1, 128)
+    Set msg.OriginHeaderId = $EXTRACT(##class(Shutter.Util.Json).Str(source, "header_id"), 1, 40)
+    Set msg.Receiver = $EXTRACT(##class(Shutter.Util.Json).Str(body, "receiver"), 1, 128)
+    Set msg.FailureKind = kind
+    Set msg.FailureText = $EXTRACT(##class(Shutter.Util.Json).Str(failure, "text"), 1, 2000)
+    Set msg.FailureOutcome = $EXTRACT(##class(Shutter.Util.Json).Str(failure, "outcome"), 1, 32)
+    Set msg.FailureReasonCode = $EXTRACT(##class(Shutter.Util.Json).Str(failure, "reason_code"), 1, 100)
+    Set status = ##class(Shutter.Util.Json).Str(failure, "http_status")
+    If +status > 0 Set msg.FailureHttpStatus = +status
+    Set msg.MessageText = message
+    Set msg.SchemaCategory = $EXTRACT(##class(Shutter.Util.Json).Str(body, "schema_category", "2.5.1"), 1, 32)
+    Set msg.Mode = mode
+    Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
+    If $$$ISERR(sc) || '$ISOBJECT($GET(service)) Quit ..Fail("503 Service Unavailable", "no_service", "The API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
+    Set service.Target = "Case Intake", service.Async = 0
+    Set sc = service.ProcessInput(msg, .started)
+    If $$$ISERR(sc) Quit ..Fail("503 Service Unavailable", "not_queued", "The case could not be opened: " _ $SYSTEM.Status.GetErrorText(sc))
+    If '$ISOBJECT($GET(started)) || 'started.%IsA("Shutter.Msg.CaseStarted") Quit ..Fail("503 Service Unavailable", "not_queued", "The case intake did not answer")
+    Set reply = {}
+    Set reply.caseId = started.CaseId, reply.state = started.State
+    Do reply.%Set("opened", ''started.Opened, "boolean")
     Set text = reply.%ToJSON()
     Do ..Remember(bodyText, "202 Accepted", text)
     Set %response.Status = "202 Accepted"

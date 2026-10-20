@@ -89,6 +89,17 @@ Property EnsSessionId As %String(%JSONFIELDNAME = "ensSessionId", MAXLEN = 20);
 /// The Ens.MessageHeader id of the message whose delivery failed.
 Property SourceHeaderId As %String(%JSONFIELDNAME = "sourceHeaderId", MAXLEN = 20);
 
+/// Where the original message lives when the case came from another production (CONTRACTS 11): its namespace, the
+/// production and the route (the item) that received it there, and its Ens.MessageHeader id in that namespace.
+/// SourceHeaderId is then Shutter's own stored copy. Empty for a case the feed in this production opened.
+Property SourceNamespace As %String(%JSONFIELDNAME = "sourceNamespace", MAXLEN = 64);
+
+Property SourceProduction As %String(%JSONFIELDNAME = "sourceProduction", MAXLEN = 128);
+
+Property SourceRoute As %String(%JSONFIELDNAME = "sourceRoute", MAXLEN = 128);
+
+Property OriginHeaderId As %String(%JSONFIELDNAME = "originHeaderId", MAXLEN = 40);
+
 /// The production session of the case workflow, once it runs.
 Property WorkflowSessionId As %String(%JSONFIELDNAME = "workflowSessionId", MAXLEN = 20);
 

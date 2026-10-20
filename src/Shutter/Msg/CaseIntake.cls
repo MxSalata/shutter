@@ -1,6 +1,7 @@
 /// Opens a case: sent by the feed process when a delivery failed, its outcome is uncertain, the message could not
 /// be mapped, or the operation was withheld (a merge the site's policy keeps for the PAS team, a cancel the receiver
-/// cannot reverse).
+/// cannot reverse); and by the case intake process for a failure another production reported (CONTRACTS 11), which
+/// names its receiver and where the original message lives.
 Class Shutter.Msg.CaseIntake Extends Ens.Request
 {
 
@@ -27,6 +28,20 @@ Property WardResultJSON As %String(MAXLEN = "");
 
 /// The investigation mode requested (board, single, rules); empty takes the configured default.
 Property Mode As %String(MAXLEN = 16);
+
+/// The production item the delivery went to (the receiver); empty means the case workflow's own connector.
+Property Receiver As %String(MAXLEN = 128);
+
+/// Where the original message lives when the failure came from another production (CONTRACTS 11): its namespace, the
+/// production and the route (the item) that received it there, and its Ens.MessageHeader id in that namespace.
+/// SourceHeaderId is then Shutter's own stored copy. Empty for the feed's own cases.
+Property SourceNamespace As %String(MAXLEN = 64);
+
+Property SourceProduction As %String(MAXLEN = 128);
+
+Property SourceRoute As %String(MAXLEN = 128);
+
+Property OriginHeaderId As %String(MAXLEN = 40);
 
 Storage Default
 {

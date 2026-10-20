@@ -55,7 +55,7 @@ XData ProductionDefinition
   </Item>
   <Item Name="HL7 Index" Category="Feed" ClassName="Shutter.Index.Indexer" PoolSize="1" Enabled="true" Foreground="false" Comment="The exact index of the watched HL7 traffic: one row per message with the visit number, patient, event, time, location, operation key and route, filled a few seconds behind the feed" LogTraceEvents="false" Schedule="">
     <Setting Target="Adapter" Name="CallInterval">5</Setting>
-    <Setting Target="Host" Name="Routes">ADT In</Setting>
+    <Setting Target="Host" Name="Routes">ADT In,Case Intake</Setting>
   </Item>
   <Item Name="ADT to Downstream" Category="Feed" ClassName="Shutter.Process.ADTToWard" PoolSize="1" Enabled="true" Foreground="false" Comment="Builds the downstream operation, delivers it, opens a case on failure" LogTraceEvents="true" Schedule="">
   </Item>
@@ -70,6 +70,10 @@ XData ProductionDefinition
   </Item>
   <Item Name="Case Workflow" Category="Recovery" ClassName="Shutter.Process.CaseWorkflow" PoolSize="1" Enabled="true" Foreground="false" Comment="One instance per case: evidence, the board, the gate, approval, execution, verification" LogTraceEvents="true" Schedule="">
     <Setting Target="Host" Name="SettleSeconds">15</Setting>
+  </Item>
+  <Item Name="Case Intake" Category="Recovery" ClassName="Shutter.Process.Intake" PoolSize="1" Enabled="true" Foreground="false" Comment="A failed delivery another production reported through POST /api/shutter/intake: stores Shutter's own copy of the message, maps it and opens the case through the case workflow" LogTraceEvents="true" Schedule="">
+  </Item>
+  <Item Name="Case Intake Store" Category="Recovery" ClassName="Shutter.Operation.IntakeStore" PoolSize="1" Enabled="true" Foreground="false" Comment="Receives the intake's copy of the HL7 message, so it has a message header in this namespace for the evidence, the model view and the index" LogTraceEvents="true" Schedule="">
   </Item>
   <Item Name="Incident Workflow" Category="Recovery" ClassName="Shutter.Process.IncidentWorkflow" PoolSize="1" Enabled="true" Foreground="false" Comment="One instance per incident: the quiet period, chains per encounter, the plan and its approval, the ordered release through each case's own dispatch" LogTraceEvents="true" Schedule="">
   </Item>

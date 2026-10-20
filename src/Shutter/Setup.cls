@@ -143,9 +143,9 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     Set sc = $$$OK
     New $NAMESPACE
     Set $NAMESPACE = "%SYS"
-    For res = "Shutter_Operate", "Shutter_Approve" {
+    For res = "Shutter_Operate", "Shutter_Approve", "Shutter_Intake" {
         If '##class(Security.Resources).Exists(res) {
-            Set sc = ##class(Security.Resources).Create(res, "Shutter: " _ $SELECT(res [ "Approve": "approve or reject recovery plans", 1: "view cases, run scenarios, start investigations"), "")
+            Set sc = ##class(Security.Resources).Create(res, "Shutter: " _ $CASE(res, "Shutter_Approve": "approve or reject recovery plans", "Shutter_Intake": "open a case from another production", : "view cases, run scenarios, start investigations"), "")
             Quit:$$$ISERR(sc)
         }
     }
@@ -169,14 +169,18 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     // that the sign-in route can run for an anonymous session; data routes still check resources.
     Set sc = ..EnsureRole("Shutter_WebApp", "Shutter web application: read the namespace's databases (granted to every caller by the web application)", db _ ":R" _ codeRead, "")
     Quit:$$$ISERR(sc) sc
+    // The forwarder in a watched production opens cases through POST /api/shutter/intake and nothing else (CONTRACTS
+    // 11): the intake resource and the databases, so only the watched productions' credential can open cases.
+    Set sc = ..EnsureRole("Shutter_Forwarder", "Shutter forwarder: open a case from another production through the intake route", "Shutter_Intake:U," _ db _ ":RW" _ codeRead, "")
+    Quit:$$$ISERR(sc) sc
     If demo {
         Set password = $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_PASSWORD")
         If password = "" Set password = "shutter"
-        For user = "operator", "approver" {
-            Set roles = $SELECT(user = "approver": "Shutter_Approver", 1: "Shutter_Operator")
+        For user = "operator", "approver", "forwarder" {
+            Set roles = $CASE(user, "approver": "Shutter_Approver", "forwarder": "Shutter_Forwarder", : "Shutter_Operator")
             If ##class(Security.Users).Exists(user) {
                 // An upgraded demo instance: the user is brought to the demo's definition (its role, the demo
-                // password, enabled), as the documentation promises for operator and approver.
+                // password, enabled), as the documentation promises for operator, approver and forwarder.
                 Do ##class(Security.Users).AddRoles(user, roles)
                 Set sc = ..ResetDemoUser(user, password)
             } Else {

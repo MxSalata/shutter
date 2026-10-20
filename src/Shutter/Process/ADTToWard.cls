@@ -28,7 +28,7 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
         // A message Shutter cannot map (an unsupported trigger, a missing identifier or time) is a case too: the
         // failure stands, and a person sees it with the message's fields rather than finding it only in the event log.
         Set text = "The message could not be mapped to an operation for the downstream system: " _ $SYSTEM.Status.GetErrorText(sc)
-        Do ..OpenCase(..UnmappedOperation(request), "unmappable", text, "", "")
+        Do ..OpenCase(##class(Shutter.Util.OperationKey).Unmapped(request, ..%PrimaryRequestHeader.%Id()), "unmappable", text, "", "")
         Quit sc
     }
     Set event = ##class(Shutter.Util.Json).Str(op, "event"), key = ##class(Shutter.Util.Json).Str(op, "operation_key")
@@ -74,31 +74,6 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     Set text = "Delivery " _ result.Outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "") _ $SELECT(result.HttpStatus '= "": ", HTTP " _ result.HttpStatus, 1: "") _ $SELECT(result.Error '= "": ": " _ result.Error, 1: "")
     Set sent = ..OpenCase(op, kind, text, result, "")
     Quit $$$ERROR($$$GeneralError, text _ $SELECT(sent '= "": ". A case was opened", 1: ". No case could be opened"))
-}
-
-/// The operation record of a message that does not map: what the message says, with a key of its own
-/// (UNMAPPED^<header id>), so the case can hold it.
-Method UnmappedOperation(request As EnsLib.HL7.Message) As %DynamicObject
-{
-    Set op = {}
-    Set headerId = ..%PrimaryRequestHeader.%Id()
-    Set op."operation_key" = "UNMAPPED^" _ headerId
-    Set op."encounter_id" = ##class(Shutter.Util.OperationKey).Value(request, "PV1", "19.1")
-    Set op."patient_id" = ##class(Shutter.Util.OperationKey).PatientIdentifier(request, .authority)
-    Set op."patient_id_authority" = authority
-    Set trigger = request.GetValueAt("MSH:9.2")
-    Set op."event" = $SELECT(trigger = "": "", 1: trigger)
-    Set ward = ##class(Shutter.Util.OperationKey).Value(request, "PV1", "3.1")
-    If ward '= "" { Set op."ward" = ward } Else { Do op.%Set("ward", "", "null") }
-    Set raw = request.GetValueAt("EVN:6.1")
-    If raw = "" Set raw = request.GetValueAt("EVN:2.1")
-    If raw = "" Set raw = request.GetValueAt("MSH:7.1")
-    Set when = ##class(Shutter.Util.Time).FromHL7(raw)
-    Set op."event_time" = $SELECT(when = "": ##class(Shutter.Util.Time).NowUTC(), 1: when)
-    Set op."source_system" = request.GetValueAt("MSH:3.1")
-    Set op."source_message_id" = request.GetValueAt("MSH:10")
-    Set op."payload_digest" = ""
-    Quit op
 }
 
 /// Send the intake to the case workflow asynchronously; returns the case id when the workflow
