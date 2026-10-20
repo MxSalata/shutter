@@ -2,6 +2,7 @@ import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { server } from '@/mocks/node';
@@ -142,6 +143,52 @@ describe('CasePage', () => {
     expect((await within(board).findAllByText('Recorded run · claude-opus-5-5, replayed')).length).toBe(4);
     expect((await within(board).findAllByText(/\$\d+\.\d+ when recorded, nothing now/)).length).toBe(4);
     expect(within(board).queryByText(/\$0\.00/)).not.toBeInTheDocument();
+  });
+
+  it('names where a forwarded case came from, in the header and in the evidence', async () => {
+    const recorded = fixtures.cases['C-000009'];
+    const source = {
+      seq: 99,
+      kind: 'source',
+      source: 'production',
+      observed_at: recorded.snapshot.takenAt,
+      data: { namespace: 'HOSPITAL', production: 'Hospital.Production', route: 'PAS In', header_id: '4243' },
+    };
+    server.use(
+      http.get('/api/shutter/cases/C-000009', () =>
+        HttpResponse.json({
+          ...recorded.detail,
+          sourceHeaderId: '13111',
+          sourceNamespace: 'HOSPITAL',
+          sourceProduction: 'Hospital.Production',
+          sourceRoute: 'PAS In',
+          originHeaderId: '4243',
+        }),
+      ),
+      http.get('/api/shutter/cases/C-000009/snapshot', () =>
+        HttpResponse.json({ ...recorded.snapshot, items: [...recorded.snapshot.items, source] }),
+      ),
+    );
+    renderCase('C-000009');
+    expect(
+      await screen.findByText(
+        "Forwarded from HOSPITAL / Hospital.Production, route PAS In, message header 4243; Shutter's copy is message 13111",
+      ),
+    ).toBeInTheDocument();
+    const evidence = await screen.findByRole('region', { name: 'Evidence' });
+    const item = await within(evidence).findByRole('button', { name: /Where the original message lives/ });
+    expect(item).toHaveTextContent(
+      'Forwarded from HOSPITAL / Hospital.Production, route PAS In, message header 4243',
+    );
+  });
+
+  it("names no source for a case the feed in Shutter's own production opened", async () => {
+    renderCase('C-000009');
+    expect(await screen.findByRole('heading', { name: 'Case C-000009' })).toBeInTheDocument();
+    const evidence = await screen.findByRole('region', { name: 'Evidence' });
+    expect(await within(evidence).findByText('The failed operation')).toBeInTheDocument();
+    expect(screen.queryByText(/^Forwarded from/)).not.toBeInTheDocument();
+    expect(within(evidence).queryByText('Where the original message lives')).not.toBeInTheDocument();
   });
 
   it.each(Object.keys(fixtures.cases))('shows recorded case %s', async (caseId) => {

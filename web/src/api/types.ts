@@ -117,6 +117,17 @@ export interface CaseSummary {
   workflowSessionId: string;
   /** The incident that holds the case, when one does (CONTRACTS 7.5). */
   incidentId?: string;
+  /** The Ens.MessageHeader id of the message whose delivery failed: Shutter's own copy for a forwarded case. */
+  sourceHeaderId?: string;
+  /**
+   * Where the original message lives when another production forwarded the case (CONTRACTS 11): its namespace, the
+   * production and the route (the item) that received it there, and its header id in that namespace. Empty or absent
+   * for a case the feed in Shutter's own production opened.
+   */
+  sourceNamespace?: string;
+  sourceProduction?: string;
+  sourceRoute?: string;
+  originHeaderId?: string;
 }
 
 export interface CaseList {

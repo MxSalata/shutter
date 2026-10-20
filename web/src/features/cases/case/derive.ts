@@ -6,6 +6,20 @@ import { formatTime, humanize } from '@/lib/format';
 
 const str = (v: unknown) => (v === undefined || v === null ? '' : String(v));
 
+/**
+ * Where a forwarded case's message came from, as the case and its `source` evidence name it: "HOSPITAL /
+ * Hospital.Production, route PAS In, message header 4243". Empty for a case the feed in Shutter's own production opened.
+ */
+export function forwardedFrom(source: {
+  namespace?: unknown;
+  production?: unknown;
+  route?: unknown;
+  headerId?: unknown;
+}): string {
+  if (!str(source.namespace)) return '';
+  return `${str(source.namespace)}${source.production ? ` / ${str(source.production)}` : ''}${source.route ? `, route ${str(source.route)}` : ''}${source.headerId ? `, message header ${str(source.headerId)}` : ''}`;
+}
+
 /** One line that says what an observation found, so the list reads without opening each item. */
 export function describeItem(item: SnapshotItem): string {
   const d = asObject(item.data) ?? {};
@@ -49,6 +63,15 @@ export function describeItem(item: SnapshotItem): string {
       return `${humanize(str(d.event))}${d.ward ? ` to ${str(d.ward)}` : ''} at ${formatTime(str(d.event_time))} (${humanize(str(d.outcome))})`;
     case 'route':
       return `${str(d.feed)}`;
+    case 'source': {
+      const from = forwardedFrom({
+        namespace: d.namespace,
+        production: d.production,
+        route: d.route,
+        headerId: d.header_id,
+      });
+      return `Forwarded from ${from || 'another production'}`;
+    }
     default:
       return str(d.text) || item.source;
   }

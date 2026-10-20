@@ -22,6 +22,7 @@ const KIND_LABELS: Record<string, string> = {
   receipt: "The downstream system's receipt for this operation",
   later_event: 'A later event for the encounter',
   route: 'The route and what the connector guarantees',
+  source: 'Where the original message lives',
   note: 'Note',
 };
 

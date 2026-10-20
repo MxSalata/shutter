@@ -6,6 +6,7 @@ import { DispositionBadge, StateBadge } from '@/components/StateBadge';
 import { Timestamp } from '@/components/Timestamp';
 import { displayZone, humanize } from '@/lib/format';
 import { clampHeadline } from '@/lib/headline';
+import { forwardedFrom } from './derive';
 
 /** A labelled fact in a page header. */
 export function Meta({ label, children }: { label: string; children: React.ReactNode }) {
@@ -29,9 +30,22 @@ function incidentPlace(c: CaseDetail): string {
   return parts.join(' · ');
 }
 
+/** Where a case another production forwarded came from, and Shutter's own copy of the message; empty otherwise. */
+function sourceText(c: CaseDetail): string {
+  const from = forwardedFrom({
+    namespace: c.sourceNamespace,
+    production: c.sourceProduction,
+    route: c.sourceRoute,
+    headerId: c.originHeaderId,
+  });
+  if (!from) return '';
+  return `Forwarded from ${from}${c.sourceHeaderId ? `; Shutter's copy is message ${c.sourceHeaderId}` : ''}`;
+}
+
 export function CaseHeader({ c }: { c: CaseDetail }) {
   const what = `${humanize(c.event)}${c.ward ? ` to ${c.ward}` : ''}`;
   const place = incidentPlace(c);
+  const source = sourceText(c);
   return (
     <Stack gap="sm" mb="md">
       <Group gap="sm" wrap="wrap">
@@ -61,6 +75,7 @@ export function CaseHeader({ c }: { c: CaseDetail }) {
             ? `${what}, encounter ${c.encounterId}`
             : `${what}, no encounter`}
         </Meta>
+        {source ? <Meta label="Source">{source}</Meta> : null}
         {c.event === 'merge' ? (
           <Meta label="Merge">
             {`${c.priorPatientId || 'a prior record'}${c.priorPatientIdAuthority ? ` (${c.priorPatientIdAuthority})` : ''}${c.priorEncounterId ? `, visit ${c.priorEncounterId}` : ''} into ${c.patientId}${(c.mergeGroups ?? 1) > 1 ? `, and ${(c.mergeGroups ?? 1) - 1} more` : ''}`}
