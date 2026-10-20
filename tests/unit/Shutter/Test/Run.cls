@@ -14,10 +14,14 @@ ClassMethod Triggers(repo As %String = "/home/irisowner/dev/") As %String [ SqlP
     If ##class(%File).DirectoryExists(repo _ "tests/unit/Shutter") {
         Set sc = ##class(%UnitTest.Manager).RunTest("Shutter", "/nodelete")
     } Else {
-        // The tests are not on the mounted path (a worktree loaded them by hand): run the loaded classes as they are.
-        // The manager still looks for the root directory, so it is pointed at one that exists.
+        // The tests are not on the mounted path (a worktree loaded them by hand): run every loaded test class of the
+        // package as it is. The manager still looks for the root directory, so it is pointed at one that exists.
         Set ^UnitTestRoot = $SYSTEM.Util.ManagerDirectory()
-        For class = "Shutter.Test.Triggers", "Shutter.Test.Gate", "Shutter.Test.Matcher" {
+        Set sc = $$$ERROR($$$GeneralError, "no test class of the package Shutter.Test is loaded")
+        Set classes = ##class(%SQL.Statement).%ExecDirect(, "SELECT Name FROM %Dictionary.CompiledClass WHERE Name %STARTSWITH 'Shutter.Test.' ORDER BY Name")
+        While classes.%Next() {
+            Set class = classes.%Get("Name")
+            Continue:'$CLASSMETHOD(class, "%Extends", "%UnitTest.TestCase")
             Set sc = ##class(%UnitTest.Manager).DebugRunTestCase("", class, "/noload/nodelete")
         }
     }

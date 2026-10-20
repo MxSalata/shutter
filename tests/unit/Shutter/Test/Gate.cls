@@ -1,9 +1,10 @@
 /// The deterministic gate (Shutter.Operation.Gate), check by check: every row of the table in XData Rows builds a case,
-/// an evidence snapshot, a plan and, at approval or dispatch, an approval, runs the gate's OnGateRequest in process with
-/// no production running it, and asserts the checks the row names (check, result, reason code). The rows start from a
-/// resend that passes every check and change only what the row is about: "case", "summary" and "plan" are merged into
-/// the defaults ("{key}" stands for the case's operation key, null removes a field), "approval" makes an approval for
-/// the plan, "request" sets the gate request's fields, "profile" changes the site profile for the row only. The cases
+/// an evidence snapshot, a plan and, when the row has "approval", an approval, runs the gate's OnGateRequest in process
+/// with no production running it, and asserts the checks the row names (check, result, reason code). The rows start
+/// from a resend that passes every check and change only what the row is about: "case", "summary" and "plan" are merged
+/// into the defaults ("{key}" stands for the case's operation key, null removes a field), "approval" makes an approval
+/// for the plan (the request is then at dispatch, otherwise at proposal), "request" sets the gate request's fields (its
+/// "stage" names another stage), "profile" changes the site profile for the row only. The cases
 /// are named UT-GATE-..., never take a public case number, and are deleted with everything the gate recorded for them
 /// after each test; the site profile is put back as it was.
 Class Shutter.Test.Gate Extends %UnitTest.TestCase
@@ -511,6 +512,15 @@ XData Rows [ MimeType = application/json ]
    "expect": [["ordering", "pass", "NO_LATER_EVENT"]]},
   {"group": "ordering", "name": "a later update supersedes nothing",
    "summary": {"timeline": [{"later": true, "outcome": "applied", "event": "update", "event_time": "2026-10-19T10:00:00Z"}]},
+   "expect": [["ordering", "pass", "NO_LATER_EVENT"]]},
+  {"group": "ordering", "name": "an earlier transfer in the message store supersedes nothing",
+   "summary": {"timeline": [{"later": false, "outcome": "applied", "event": "transfer", "ward": "WARD-A", "event_time": "2026-10-19T08:00:00Z"}]},
+   "expect": [["ordering", "pass", "NO_LATER_EVENT"]]},
+  {"group": "ordering", "name": "an earlier transfer in the receiver's own history supersedes nothing",
+   "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z"}, {"event": "transfer", "event_time": "2026-10-19T08:00:00Z", "ward": "WARD-A"}]}},
+   "expect": [["ordering", "pass", "NO_LATER_EVENT"]]},
+  {"group": "ordering", "name": "a transfer in the receiver's own history at the event's own time is not later",
+   "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z"}, {"event": "transfer", "event_time": "2026-10-19T09:00:00Z", "ward": "WARD-A"}]}},
    "expect": [["ordering", "pass", "NO_LATER_EVENT"]]},
   {"group": "ordering", "name": "a later discharge in the receiver's own history",
    "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z"}, {"event": "discharge", "event_time": "2026-10-19T11:00:00Z"}]}},

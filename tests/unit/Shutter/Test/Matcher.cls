@@ -290,6 +290,9 @@ XData Rows [ MimeType = application/json ]
   {"group": "receiver_answer", "name": "a refusal read from the failure text", "summary": {"failure": {"reason_code": null, "http_status": null, "text": "Delivery refused (duplicate_message), HTTP 409"}}, "expect": {"receiver_answer": "duplicate"}},
   {"group": "receiver_answer", "name": "an outage read from the failure text", "summary": {"failure": {"reason_code": null, "http_status": null, "text": "Delivery unavailable (ward_unavailable), HTTP 503: the ward system is down"}}, "expect": {"receiver_answer": "unavailable"}},
   {"group": "receiver_answer", "name": "an uncertain delivery read from the failure text", "summary": {"failure": {"reason_code": null, "http_status": null, "text": "Delivery uncertain, HTTP 504: no answer"}}, "expect": {"receiver_answer": "timeout"}},
+  {"group": "receiver_answer", "name": "an uncertain outcome recorded on a failed delivery", "summary": {"failure": {"reason_code": null, "http_status": 502, "outcome": "uncertain"}}, "expect": {"delivery": "failed", "receiver_answer": "timeout"}},
+  {"group": "receiver_answer", "name": "an uncertain outcome read from the failure text of a failed delivery", "summary": {"failure": {"reason_code": null, "http_status": null, "text": "Delivery uncertain, HTTP 502"}}, "expect": {"delivery": "failed", "receiver_answer": "timeout"}},
+  {"group": "receiver_answer", "name": "a status read from failure text with no reason", "summary": {"failure": {"reason_code": null, "http_status": null, "text": "Delivery refused, HTTP 422"}}, "expect": {"receiver_answer": "refused"}},
   {"group": "receiver_answer", "name": "a withheld operation had no answer, whatever the failure says", "case": {"failure_kind": "withheld", "event": "cancel_transfer"}, "expect": {"delivery": "withheld", "receiver_answer": "none", "event": "cancel"}},
 
   {"group": "event", "name": "an admission", "case": {"event": "admit"}, "expect": {"event": "admit"}},
@@ -337,6 +340,8 @@ XData Rows [ MimeType = application/json ]
   {"group": "event_time", "name": "ten minutes after the message was sent", "summary": {"message": {"message_time": "2026-10-19T08:50:00Z"}}, "expect": {"event_time": "future"}},
   {"group": "event_time", "name": "four minutes after the message was sent", "summary": {"message": {"message_time": "2026-10-19T08:56:00Z"}}, "expect": {"event_time": "plausible"}},
   {"group": "event_time", "name": "ten minutes after the evidence was taken", "summary": {"observed_at": "2026-10-19T08:50:00Z", "message": {"message_time": null}}, "expect": {"event_time": "future"}},
+  {"group": "event_time", "name": "evidence taken a day after the event", "summary": {"observed_at": "2026-10-20T09:00:00Z"}, "expect": {"event_time": "plausible"}},
+  {"group": "event_time", "name": "a message sent an hour after the event", "summary": {"message": {"message_time": "2026-10-19T10:00:00Z"}}, "expect": {"event_time": "plausible"}},
   {"group": "event_time", "name": "before the admission outranks in the future", "summary": {"message": {"admit_time": "2026-10-19T10:00:00Z", "message_time": "2026-10-19T08:50:00Z"}}, "expect": {"event_time": "before_admission"}},
   {"group": "event_time", "name": "two days from when the event was recorded", "summary": {"message": {"event_recorded": "2026-10-17T09:00:00Z"}}, "expect": {"event_time": "far_from_recorded"}},
   {"group": "event_time", "name": "twenty-three hours from when the event was recorded", "summary": {"message": {"event_recorded": "2026-10-18T10:00:00Z"}}, "expect": {"event_time": "plausible"}},
