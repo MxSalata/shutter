@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "receivers": [
     {
       "name": "Downstream Out",
@@ -47,7 +47,8 @@
   },
   "approvers": {
     "role": "Shutter Approvers",
-    "escalation": "the integration team's on-call"
+    "escalation": "the integration team's on-call",
+    "close_needs_approver": false
   },
   "incident": {
     "threshold": 5,
