@@ -800,14 +800,14 @@ ClassMethod EnsureTask(name As %String, ns As %String, class As %String, descrip
     Quit sc
 }
 
-/// Empty Shutter's own tables (cases and everything attached to them, recordings excepted) on a
-/// demo instance. Refused elsewhere. Returns the number of tables emptied or the error.
+/// Empty Shutter's own tables (cases and everything attached to them, their escalation emails included, recordings
+/// excepted) on a demo instance. Refused elsewhere. Returns the number of tables emptied or the error.
 ClassMethod PurgeStore() As %String [ SqlProc ]
 {
     If '$SYSTEM.Security.Check("Shutter_Operate", "USE") Quit "Shutter_Operate is required"
     If '$GET(^Shutter.Config("demo")) Quit "ERROR: not a demo instance"
     Set n = 0
-    For cls = "Shutter.Store.CaseToken", "Shutter.Store.ChainItem", "Shutter.Store.Chain", "Shutter.Store.IncidentEvent", "Shutter.Store.Incident", "Shutter.Store.Verification", "Shutter.Store.ExecutionAttempt", "Shutter.Store.Approval", "Shutter.Store.Rehearsal", "Shutter.Store.GateDecision", "Shutter.Store.Plan", "Shutter.Store.Finding", "Shutter.Store.AgentRun", "Shutter.Store.SnapshotItem", "Shutter.Store.Snapshot", "Shutter.Store.CaseEvent", "Shutter.Store.Case", "Shutter.Store.Idempotency", "Shutter.Bridge.ToolCall" {
+    For cls = "Shutter.Store.CaseToken", "Shutter.Store.ChainItem", "Shutter.Store.Chain", "Shutter.Store.IncidentEvent", "Shutter.Store.Incident", "Shutter.Store.Verification", "Shutter.Store.ExecutionAttempt", "Shutter.Store.Approval", "Shutter.Store.Rehearsal", "Shutter.Store.GateDecision", "Shutter.Store.Plan", "Shutter.Store.Finding", "Shutter.Store.AgentRun", "Shutter.Store.SnapshotItem", "Shutter.Store.Snapshot", "Shutter.Store.CaseEvent", "Shutter.Store.Escalation", "Shutter.Store.Case", "Shutter.Store.Idempotency", "Shutter.Bridge.ToolCall" {
         Set sc = $CLASSMETHOD(cls, "%KillExtent")
         If $$$ISERR(sc) Quit
         Set n = n + 1
