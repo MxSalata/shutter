@@ -17,10 +17,11 @@ import re
 import sys
 
 CONDITIONS = {
-    "delivery": {"failed", "rejected", "uncertain", "unmappable"},
+    "event": {"admit", "transfer", "discharge", "update", "merge", "cancel", "other"},
+    "delivery": {"failed", "rejected", "uncertain", "unmappable", "withheld"},
     "receiver_answer": {"unavailable", "timeout", "duplicate", "version_conflict", "refused", "none"},
     "receipt": {"present", "absent", "unreadable", "none"},
-    "later_applied": {"none", "transfer", "discharge", "update", "admit"},
+    "later_applied": {"none", "transfer", "discharge", "update", "admit", "cancelled", "merge"},
     "event_time": {"plausible", "before_admission", "future", "far_from_recorded", "clock_change"},
     "encounter_state": {"admitted", "discharged", "not_found", "unknown"},
     "transition": {"allowed", "invalid", "unknown"},

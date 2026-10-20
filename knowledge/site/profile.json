@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "receivers": [
     {
       "name": "Downstream Out",
@@ -8,6 +8,7 @@
       "applies": "arrival_order",
       "resend_timestamp": "original",
       "cancels": false,
+      "merges": false,
       "api": {
         "base": "/downstream/api",
         "state": "/encounters/{encounter}",
@@ -26,6 +27,7 @@
   "history_policy": "current",
   "authoritative_source": "",
   "unconditional_resend": "forbidden",
+  "merges": "forbidden",
   "policy": {
     "1": {
       "single": "automatic",
@@ -57,5 +59,23 @@
   },
   "feed": {
     "time_zone": "Europe/London"
-  }
+  },
+  "teams": [
+    {
+      "id": "integration",
+      "name": "Integration team",
+      "mailbox": "integration@example.nhs.uk",
+      "receivers": [
+        "Downstream Out"
+      ]
+    },
+    {
+      "id": "pas",
+      "name": "PAS team",
+      "mailbox": "pas@example.nhs.uk",
+      "sources": [
+        "PAS"
+      ]
+    }
+  ]
 }

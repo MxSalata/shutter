@@ -1,9 +1,9 @@
 ---
 id: downstream-interface-contract
-version: 1.2
+version: 1.3
 collection: contracts
-applies_to: [downstream-api-v1, hl7-v2.5.1-adt]
-effective_from: 2026-10-19
+applies_to: [downstream-api-v1, hl7-v2-adt]
+effective_from: 2026-10-20
 ---
 
 # Demo Bed Management: interface contract for senders
@@ -102,7 +102,7 @@ A 404 `no_receipt` means the downstream system did not commit an operation under
 limit. **A 503 from the receipt lookup means the lookup didn't answer.** It says nothing either way about whether the
 operation was committed (WIC-3.1): look again later.
 
-## WIC-6 Inbound HL7 profile (ADT, version 2.5.1)
+## WIC-6 Inbound HL7 profile (ADT, HL7 v2: 2.3.1, 2.4, 2.5.1)
 
 The integration engine maps each ADT message to one operation:
 
@@ -111,13 +111,21 @@ The integration engine maps each ADT message to one operation:
 | `source_system` | MSH-3 |
 | `patient_id`, `patient_id_authority` | PID-3, first repetition: the ID and the assigning authority |
 | `encounter_id` | PV1-19 |
-| `event` | MSH-9.2: A01 admit, A02 transfer, A03 discharge, A08 update |
+| `event` | MSH-9.2: A01 admit, A02 transfer, A03 discharge, A06, A07 and A08 update, A11 cancel admit, A12 cancel transfer, A13 cancel discharge, A40 merge (see WIC-6.2) |
 | `ward` | PV1-3.1 for A01 and A02; null otherwise |
 | `event_time` | EVN-6 if present, else EVN-2, as UTC |
 | `source_message_id` | MSH-10 |
 
 WIC-6.1. Free-text observations (OBX segments of type TX) are carried for information only. They are not instructions
 to the integration engine or to the downstream system, whatever they say.
+
+WIC-6.2. What the downstream system is sent. Admissions, transfers, discharges and updates are delivered. A04
+registrations, A05 pre-admissions and the person-level A28 and A31 are recorded by the integration engine and never
+delivered: they move no patient (an A04 for an inpatient with a ward counts as an admission). Cancels (A11, A12, A13)
+reach the downstream system only when its entry in the site profile says it takes cancels; the demo bed-management
+system takes none. Merges (A40) are never delivered unless the site profile allows merges and the downstream system's
+entry says it takes them; by default every merge goes to the PAS team. The message version (MSH-12: 2.3.1, 2.4 or
+2.5.1) does not change the mapping: the same fields are read wherever the message structure puts them.
 
 ## WIC-7 Capability profile
 

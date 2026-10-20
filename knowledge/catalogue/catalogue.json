@@ -1,7 +1,7 @@
 [
  {
   "id": "E1",
-  "version": 2,
+  "version": 3,
   "title": "Superseded by a later transfer",
   "scenarios": [
    "S1",
@@ -9,7 +9,10 @@
    "S11"
   ],
   "pattern": {
-   "later_applied": "transfer",
+   "later_applied": [
+    "transfer",
+    "cancelled"
+   ],
    "encounter_state": "admitted"
   },
   "decides": "policy",
@@ -183,14 +186,19 @@
  },
  {
   "id": "E6",
-  "version": 2,
+  "version": 3,
   "title": "The encounter is discharged",
   "scenarios": [
    "S6",
    "S11"
   ],
   "pattern": {
-   "encounter_state": "discharged"
+   "encounter_state": "discharged",
+   "delivery": [
+    "failed",
+    "rejected",
+    "uncertain"
+   ]
   },
   "decides": "policy",
   "preferred": {
@@ -348,10 +356,15 @@
  },
  {
   "id": "E11",
-  "version": 1,
+  "version": 2,
   "title": "A movement for an encounter the receiver doesn't know",
   "scenarios": [],
   "pattern": {
+   "delivery": [
+    "failed",
+    "rejected",
+    "uncertain"
+   ],
    "receipt": "absent",
    "encounter_state": "not_found",
    "transition": "unknown"
@@ -391,12 +404,17 @@
  },
  {
   "id": "E13",
-  "version": 1,
+  "version": 2,
   "title": "An event time the receiver's record can't hold",
   "scenarios": [
    "S13"
   ],
   "pattern": {
+   "delivery": [
+    "failed",
+    "rejected",
+    "uncertain"
+   ],
    "event_time": [
     "before_admission",
     "future",
@@ -416,5 +434,56 @@
   ],
   "prose": "# E13 An event time the receiver's record can't hold\n\n## Meaning\n\nThe failed operation's event time doesn't fit the encounter: it is before the patient's admission, more than five\nminutes after the message was sent (MSH-7) or the evidence was taken, more than a day from the time the PAS recorded\nthe event (EVN-2), or within the hour around a clock change where a local time without an offset can't be ordered. Shutter orders and supersedes movements by event time,\nso a wrong time can resend a movement that predates the stay, or make genuine failures look overtaken. Bad data from\nthe PAS is not something Shutter corrects: the case goes to a person with the times named, for the PAS team to check\nthe source.\n\n## Telling it apart\n\nA movement overtaken by a later one with a sound time is E1; a failed movement still due is E2. Here the time itself\nis the question. When the time is plausible but another source moved the patient at the same minute, it is E7.\n\n## Cite\n\nThe failed operation's event time, the admission time (PV1-44 or the receiver's first history entry), EVN-2, MSH-7,\nand the feed's time zone setting.",
   "source": "E13.md"
+ },
+ {
+  "id": "E14",
+  "version": 1,
+  "title": "A patient merge",
+  "scenarios": [
+   "S15"
+  ],
+  "pattern": {
+   "event": "merge",
+   "receipt": [
+    "absent",
+    "none",
+    "unreadable"
+   ]
+  },
+  "decides": "person",
+  "preferred": {
+   "outcome": "escalate",
+   "why": "A merge changes which record a patient's history belongs to, and only the PAS team may decide it."
+  },
+  "alternatives": [],
+  "checks": [
+   "intent",
+   "identity"
+  ],
+  "prose": "# E14 A patient merge\n\n## Meaning\n\nThe failed operation is an ADT^A40 merge: the patient named in PID takes over the history of each prior patient named\nin an MRG segment. Under the site profile's `merges: forbidden`, the default, Shutter withholds every merge and sends\nnothing, whatever the receiver answered, and the case goes to the PAS team named for the sending application. The\nsame holds when the site allows merges but the receiver's entry says it takes none.\n\n## Telling it apart\n\nAn exact repeat of a merge the receiver already holds carries a receipt: that is E3's reconcile, not this entry. A\nfailed transfer or discharge for one of the merged patients is not a merge either; it follows the entries for its own\nevent.\n\n## Cite\n\nEvery PATIENT group of the message (`prior_identifiers`, each with the patient it goes `into`), the receipt lookup, the\nsite profile's `merges` setting and the receiver's entry.",
+  "source": "E14.md"
+ },
+ {
+  "id": "E15",
+  "version": 1,
+  "title": "A cancellation the receiver cannot reverse",
+  "scenarios": [
+   "S16"
+  ],
+  "pattern": {
+   "event": "cancel",
+   "delivery": "withheld"
+  },
+  "decides": "person",
+  "preferred": {
+   "outcome": "escalate",
+   "why": "The receiver cannot reverse the event, so a person corrects it by hand."
+  },
+  "alternatives": [],
+  "checks": [
+   "intent"
+  ],
+  "prose": "# E15 A cancellation the receiver cannot reverse\n\n## Meaning\n\nThe failed operation cancels an earlier movement (ADT^A11, A12 or A13), and the receiver's entry in the site profile\nsays it takes no cancels. Shutter withholds the cancel and sends nothing: the receiver would refuse it, or apply it in\na way nobody can check. A person corrects the receiver by hand, then marks the case handled on the case page.\n\n## Telling it apart\n\nA receiver whose entry declares `cancels: true` takes the cancel, and this entry does not apply. A movement that a\nlater cancel already undid is E1: there is nothing left to resend.\n\n## Cite\n\nThe cancel and the movement it names, the receiver's `cancels` setting, and the receiver's current state of the\nencounter.",
+  "source": "E15.md"
  }
 ]

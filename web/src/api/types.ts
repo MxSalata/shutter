@@ -560,6 +560,8 @@ export interface SiteTeam {
   cc?: string[];
   /** The receivers (production items) whose cases this team corrects. */
   receivers?: string[];
+  /** The sending applications (MSH-3) whose merges this team decides, such as PAS; checked before receivers. */
+  sources?: string[];
   [key: string]: unknown;
 }
 
@@ -576,6 +578,8 @@ export interface SiteReceiver {
   applies?: string;
   resend_timestamp?: string;
   cancels?: boolean;
+  /** Whether the receiver takes merges (ADT^A40); a merge still needs the site's merges: allowed. */
+  merges?: boolean;
   api?: Record<string, string>;
   features?: Record<string, boolean>;
   [key: string]: unknown;
@@ -588,6 +592,8 @@ export interface SiteProfile {
   history_policy?: string;
   authoritative_source?: string;
   unconditional_resend?: string;
+  /** forbidden (the default: every merge goes to the PAS team) or allowed. */
+  merges?: string;
   policy: Record<string, Partial<Record<ChainKind, string>>>;
   approvers?: { role?: string; escalation?: string; [key: string]: unknown };
   incident?: { threshold?: number; window_minutes?: number; quiet_seconds?: number };

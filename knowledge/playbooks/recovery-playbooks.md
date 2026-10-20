@@ -1,9 +1,9 @@
 ---
 id: recovery-playbooks
-version: 1.1
+version: 1.2
 collection: playbooks
-applies_to: [downstream-api-v1, hl7-v2.5.1-adt]
-effective_from: 2026-10-17
+applies_to: [downstream-api-v1, hl7-v2-adt]
+effective_from: 2026-10-20
 ---
 
 # Recovery playbooks for failed ward movements
@@ -49,6 +49,14 @@ times can't be compared (ELS-2.5). Read again; if that doesn't settle it, escala
 RP-2.5. **Escalate** on an identity conflict (ELS-3.1), on a key that the downstream system reports with a different
 payload (WIC-3, `key_reused_with_different_payload`), on content that changed between messages of the same operation, or
 when a dry run says the resend would not apply.
+
+RP-2.6. **A merge goes to the PAS team.** An ADT^A40 changes which record a patient's history belongs to. Shutter never
+sends one by default, and never resends one that may have half applied: the case goes to the PAS team named for the
+sending application, who confirm what the downstream system should hold. An exact repeat of a merge the downstream
+system already holds carries a receipt and is reconciled (RP-2.2).
+
+RP-2.7. **A withheld case is closed by hand.** A merge or a cancel Shutter did not send leaves the downstream system as
+it was. The team corrects it by hand, then marks the case handled; nothing is resent.
 
 ## RP-3 Rules that always hold
 

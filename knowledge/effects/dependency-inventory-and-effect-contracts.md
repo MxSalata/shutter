@@ -1,9 +1,9 @@
 ---
 id: dependency-inventory-and-effect-contracts
-version: 1.0
+version: 1.1
 collection: effects
-applies_to: [downstream-api-v1]
-effective_from: 2026-10-01
+applies_to: [downstream-api-v1, hl7-v2-adt]
+effective_from: 2026-10-20
 ---
 
 # Ward location: dependency inventory and effect contracts

@@ -223,7 +223,7 @@ function InductionPrompt() {
   if (!profile || profile.source === 'api') return null;
   return (
     <Alert color="blue" variant="light" mb="md" title="Shutter is running on the shipped site profile">
-      Answer the eleven induction questions so it acts as your site does.{' '}
+      Answer the twelve induction questions so it acts as your site does.{' '}
       <Anchor component={Link} to="/site-profile" size="sm" underline="always">
         Answer the questions
       </Anchor>

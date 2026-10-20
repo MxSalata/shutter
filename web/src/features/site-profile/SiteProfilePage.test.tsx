@@ -123,6 +123,7 @@ describe('SiteProfilePage', () => {
         mailbox: 'pas@trust.nhs.net',
         cc: ['oncall@trust.nhs.net'],
         receivers: ['Downstream Out'],
+        sources: [],
       },
     ]);
   });

@@ -72,7 +72,7 @@ export const isShipped = (source: string | undefined) => source !== 'api';
 
 /** A team as the form adds it: every required field empty, for the person to fill. */
 export function newTeam(): SiteTeam {
-  return { id: '', name: '', mailbox: '', cc: [], receivers: [] };
+  return { id: '', name: '', mailbox: '', cc: [], receivers: [], sources: [] };
 }
 
 /** "a@x.nhs.uk, b@x.nhs.uk" as a list, without the empty entries a trailing comma leaves. */
@@ -96,6 +96,7 @@ export function newReceiver(): SiteReceiver {
     applies: 'arrival_order',
     resend_timestamp: 'original',
     cancels: false,
+    merges: false,
   };
 }
 
@@ -160,6 +161,7 @@ export function validateProfile(p: unknown): string {
     'history_policy',
     'authoritative_source',
     'unconditional_resend',
+    'merges',
     'policy',
     'approvers',
     'incident',
@@ -180,6 +182,7 @@ export function validateProfile(p: unknown): string {
     if (!numeric(r.tier) || asNumber(r.tier) < 1 || asNumber(r.tier) > 3)
       return `${at}.tier: must be 1, 2 or 3`;
     if ('cancels' in r && typeof r.cancels !== 'boolean') return `${at}.cancels: must be true or false`;
+    if ('merges' in r && typeof r.merges !== 'boolean') return `${at}.merges: must be true or false`;
     if ('api' in r) {
       if (!isObject(r.api)) return `${at}.api: must be an object`;
       for (const [k, v] of members(r.api)) {
@@ -202,6 +205,8 @@ export function validateProfile(p: unknown): string {
   }
   if ('unconditional_resend' in p && !['forbidden', 'allowed'].includes(p.unconditional_resend as string))
     return 'unconditional_resend: must be forbidden or allowed';
+  if ('merges' in p && !['forbidden', 'allowed'].includes(p.merges as string))
+    return 'merges: must be forbidden or allowed';
   if ('history_policy' in p && typeof p.history_policy !== 'string')
     return 'history_policy: must be a string';
   const pol = p.policy;
@@ -257,7 +262,8 @@ export function validateProfile(p: unknown): string {
       const at = `teams[${i}]`;
       if (!isObject(t)) return `${at}: must be an object`;
       for (const k of Object.keys(t))
-        if (!['id', 'name', 'mailbox', 'cc', 'receivers'].includes(k)) return `${at}.${k}: unknown field`;
+        if (!['id', 'name', 'mailbox', 'cc', 'receivers', 'sources'].includes(k))
+          return `${at}.${k}: unknown field`;
       for (const f of ['id', 'name', 'mailbox'])
         if (typeof t[f] !== 'string' || t[f] === '') return `${at}.${f}: required`;
       if (ids.includes(t.id)) return `${at}.id: must be unique`;
@@ -276,6 +282,13 @@ export function validateProfile(p: unknown): string {
         if (!Array.isArray(t.receivers)) return `${at}.receivers: must be an array of receiver names`;
         for (const [j, m] of members(t.receivers))
           if (typeof m !== 'string' || m === '') return `${at}.receivers[${j}]: must be a receiver name`;
+      }
+      // The sending applications (MSH-3) whose merges the team decides, such as PAS
+      if ('sources' in t) {
+        if (!Array.isArray(t.sources)) return `${at}.sources: must be an array of sending applications`;
+        for (const [j, m] of members(t.sources))
+          if (typeof m !== 'string' || m === '')
+            return `${at}.sources[${j}]: must be a sending application (MSH-3)`;
       }
     }
   }
@@ -324,7 +337,7 @@ export function problemField(text: string): { path: string; message: string } | 
 
 /** The DOM id of the control for a path, or "" when the page has no control for it (api, features). */
 export function fieldId(path: string): string {
-  let m = /^receivers\[(\d+)\]\.(name|system|tier|applies|resend_timestamp|cancels)$/.exec(path);
+  let m = /^receivers\[(\d+)\]\.(name|system|tier|applies|resend_timestamp|cancels|merges)$/.exec(path);
   if (m) return `site-receivers-${m[1]}-${m[2]}`;
   m = /^policy\.([123])\.(single|ordered|interleaved)$/.exec(path);
   if (m) return `site-policy-${m[1]}-${m[2]}`;
@@ -333,10 +346,11 @@ export function fieldId(path: string): string {
   m = /^approvers\.(role|escalation)$/.exec(path);
   if (m) return `site-approvers-${m[1]}`;
   if (path === 'history_policy') return 'site-history-policy';
-  m = /^teams\[(\d+)\]\.(id|name|mailbox|cc|receivers)(\[\d+\])?$/.exec(path);
+  m = /^teams\[(\d+)\]\.(id|name|mailbox|cc|receivers|sources)(\[\d+\])?$/.exec(path);
   if (m) return `site-teams-${m[1]}-${m[2]}`;
   m = /^mail\.(from|allowed_domains)(\[\d+\])?$/.exec(path);
   if (m) return `site-mail-${m[1]}`;
+  if (path === 'merges') return 'site-merges';
   if (path === 'feed.time_zone') return 'site-feed-time_zone';
   if (path === 'model_content.free_text') return 'site-model_content-free_text';
   return '';
@@ -402,6 +416,12 @@ function receiverChanges(a: SiteReceiver, b: SiteReceiver, p: SiteProfile): Chan
   }
   if (!same(a.cancels, b.cancels))
     out.push({ path: 'cancels', text: `${name}, accepts cancels: ${b.cancels ? 'yes' : 'no'}` });
+  if (!same(a.merges ?? false, b.merges ?? false))
+    out.push({
+      path: 'merges',
+      text: `${name}, takes merges: ${b.merges ? 'yes' : 'no'}`,
+      lessOversight: b.merges === true,
+    });
   if (!same(a.api, b.api)) out.push({ path: 'api', text: `${name}, its endpoints changed` });
   if (!same(a.features, b.features))
     out.push({ path: 'features', text: `${name}, its declared features changed` });
@@ -481,6 +501,15 @@ export function diffProfiles(a: SiteProfile | undefined, b: SiteProfile): Change
           ? 'Note text: sent to the model from now on'
           : 'Note text: no longer sent to the model; it sees a flag instead',
     });
+  if ((before.merges ?? 'forbidden') !== (b.merges ?? 'forbidden'))
+    out.push({
+      path: 'merges',
+      text:
+        b.merges === 'allowed'
+          ? 'Merges may be sent to receivers that take them'
+          : 'Merges are never sent: each goes to the PAS team',
+      lessOversight: b.merges === 'allowed',
+    });
   if (!same(before.unconditional_resend, b.unconditional_resend))
     out.push({
       path: 'unconditional_resend',
@@ -495,17 +524,17 @@ export function diffProfiles(a: SiteProfile | undefined, b: SiteProfile): Change
 }
 
 /**
- * A team in words, by its place in the list as the server routes (EscalationDraft.Team): a case goes to the first team
- * whose receivers name its receiver, else to the first team; a later team that names none gets a case only when a
- * person picks it.
+ * A team in words, by its place in the list as the server routes (EscalationDraft.Team): a merge goes to the first team
+ * whose sources name its sending application; any case to the first team whose receivers name its receiver, else to
+ * the first team; a later team that names neither gets a case only when a person picks it.
  */
 function teamText(t: SiteTeam, first: boolean) {
-  const named = t.receivers?.length ? t.receivers.join(', ') : '';
-  const routes = first
-    ? named
-      ? `${named}, and any receiver no team names`
-      : 'any receiver no team names'
-    : named || 'no receiver: only when a person picks it on the case';
+  const parts = [
+    ...(t.receivers?.length ? [t.receivers.join(', ')] : []),
+    ...(first ? ['any receiver no team names'] : []),
+    ...(t.sources?.length ? [`merges from ${t.sources.join(', ')}`] : []),
+  ];
+  const routes = parts.join(', and ') || 'no receiver: only when a person picks it on the case';
   return `${t.name || 'unnamed'} <${t.mailbox || 'no mailbox'}>${t.cc?.length ? `, copies ${t.cc.join(', ')}` : ''}, for ${routes}`;
 }
 

@@ -193,11 +193,11 @@ function ReceiverFields({
           }
           error={err('resend_timestamp')}
         />
-        <Question n={5} text="Does it accept cancels (A11, A12, A13)?" acts={false} />
+        <Question n={5} text="Does it accept cancels (A11, A12, A13) and merges (A40)?" acts />
         <Switch
           id={id('cancels')}
           label={`${r.name || 'This receiver'} accepts cancels`}
-          description="On record for reviewers and the board: Shutter does not send cancels yet"
+          description="Off: Shutter never sends it a cancel; the case goes to a person, who corrects the receiver by hand"
           checked={r.cancels === true}
           onChange={(e) => {
             const v = e.currentTarget.checked;
@@ -206,6 +206,19 @@ function ReceiverFields({
             });
           }}
           error={err('cancels')}
+        />
+        <Switch
+          id={id('merges')}
+          label={`${r.name || 'This receiver'} takes merges`}
+          description="A merge also needs the site to allow merges (question 12); otherwise it goes to the PAS team"
+          checked={r.merges === true}
+          onChange={(e) => {
+            const v = e.currentTarget.checked;
+            update((x) => {
+              x.merges = v;
+            });
+          }}
+          error={err('merges')}
         />
         <Text size="xs" c="dimmed">
           {endpoints}. Kept as they are when you save.
@@ -612,7 +625,7 @@ function Profile({ view }: { view: SiteProfileView }) {
           />
           {shipped ? (
             <Alert color="blue" variant="light" title="Shutter is running on the shipped answers">
-              Check the eleven questions below and save them, changed or not, so Shutter acts as this site
+              Check the twelve questions below and save them, changed or not, so Shutter acts as this site
               does.
               {editable ? '' : ' An approver answers them.'}
             </Alert>
@@ -687,7 +700,7 @@ export default function SiteProfilePage() {
     <>
       <PageHeader
         title="Site profile"
-        subtitle="The site's answers to the induction questions. Shutter reads them for each receiver's tier, the approval each chain needs, when many failures become an incident, who an escalation goes to, the feed's time zone and what the model may see. Every saved version is kept."
+        subtitle="The site's answers to the induction questions. Shutter reads them for each receiver's tier, the approval each chain needs, when many failures become an incident, who an escalation goes to, the feed's time zone, what the model may see and whether a merge is ever sent. Every saved version is kept."
       />
       {view.isPending || me.isPending ? <PageSkeleton label="Loading the site profile…" /> : null}
       {view.isError ? (

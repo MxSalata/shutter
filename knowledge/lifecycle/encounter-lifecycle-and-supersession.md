@@ -1,9 +1,9 @@
 ---
 id: encounter-lifecycle-and-supersession
-version: 1.0
+version: 1.1
 collection: lifecycle
-applies_to: [downstream-api-v1, hl7-v2.5.1-adt]
-effective_from: 2026-10-01
+applies_to: [downstream-api-v1, hl7-v2-adt]
+effective_from: 2026-10-20
 ---
 
 # Inpatient encounter lifecycle and supersession policy
@@ -40,7 +40,11 @@ ELS-2.4. An admission is never superseded; if it failed, nothing else can apply 
 ELS-2.5. **When event times can't be compared** (missing, equal, or not in UTC), supersession is unknown. Don't apply
 the event; ask the integration team.
 
-ELS-2.6. Supersession is decided from the encounter's history as the downstream system holds it (WIC-5.1) together with
+ELS-2.6. **A cancellation supersedes the movement it cancels** (A11 an admission, A12 a transfer, A13 a discharge):
+once a cancel with a later event time has been applied, the cancelled movement is not resent. A cancel the downstream
+system cannot take is never sent; a person corrects the record by hand.
+
+ELS-2.7. Supersession is decided from the encounter's history as the downstream system holds it (WIC-5.1) together with
 the movements the integration engine has received. The current location alone isn't enough: the history shows what was
 applied and when its event happened.
 

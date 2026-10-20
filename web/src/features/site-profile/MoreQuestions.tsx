@@ -137,6 +137,18 @@ function TeamFields({
           }
           error={err('cc')}
         />
+        <ListInput
+          id={id('sources')}
+          label="Sending applications whose merges it decides"
+          description="MSH-3, such as PAS, separated by commas: a merge from them comes to this team first"
+          value={t.sources ?? []}
+          onList={(list) =>
+            update((x) => {
+              x.sources = list;
+            })
+          }
+          error={err('sources')}
+        />
         <Checkbox.Group
           id={id('receivers')}
           label="The receivers whose data this team corrects"
@@ -355,7 +367,32 @@ function Model({ draft, setDraft }: { draft: SiteProfile; setDraft: SetDraft }) 
   );
 }
 
-/** Questions 9 to 11: escalation teams and mail, the feed's time zone, and note text for the model. */
+function Merges({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: SetDraft; problem: Problem }) {
+  return (
+    <Section
+      id="site-merges-section"
+      title="Merges"
+      note="Question 12. An ADT^A40 merge changes which record a patient's history belongs to. By default Shutter never sends one: the case goes to the team whose sending applications name the merge's source."
+    >
+      <Question n={12} text="May Shutter ever send a merge (A40)?" acts />
+      <Switch
+        id="site-merges"
+        label="Merges may be sent to receivers that take them"
+        description="Off (the default): every merge is withheld and goes to a person. On: a merge goes, gated and verified, only to a receiver whose entry takes merges"
+        checked={draft.merges === 'allowed'}
+        onChange={(e) => {
+          const v = e.currentTarget.checked;
+          setDraft((d) => {
+            d.merges = v ? 'allowed' : 'forbidden';
+          });
+        }}
+        error={problem?.path === 'merges' ? problem.message : undefined}
+      />
+    </Section>
+  );
+}
+
+/** Questions 9 to 12: escalation teams and mail, the feed's time zone, note text for the model, and merges. */
 export function MoreQuestions({
   draft,
   setDraft,
@@ -370,6 +407,7 @@ export function MoreQuestions({
       <Teams draft={draft} setDraft={setDraft} problem={problem} />
       <Feed draft={draft} setDraft={setDraft} problem={problem} />
       <Model draft={draft} setDraft={setDraft} />
+      <Merges draft={draft} setDraft={setDraft} problem={problem} />
     </>
   );
 }

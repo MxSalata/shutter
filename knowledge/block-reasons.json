@@ -1,16 +1,17 @@
 {
   "id": "block-reasons",
-  "version": "1.6",
-  "effective_from": "2026-10-19",
+  "version": "1.7",
+  "effective_from": "2026-10-20",
   "applies_to": [
     "downstream-api-v1",
-    "hl7-v2.5.1-adt"
+    "hl7-v2-adt"
   ],
   "roles": {
     "Operator": "The integration operator working the case",
     "Approver": "The person who approves an exact resend",
     "Integration team": "Owns the interfaces, mappings and policies",
-    "Downstream system team": "Owns the demo bed-management system (the downstream system)"
+    "Downstream system team": "Owns the demo bed-management system (the downstream system)",
+    "PAS team": "Owns the patient administration system and its patient records: merges, and the source of the events"
   },
   "reasons": [
     {
@@ -417,6 +418,33 @@
       "owner": "Integration team",
       "reevaluate_when": "The source system confirms or corrects the time",
       "text": "Shutter orders and supersedes movements by their event time. A time before the admission, in the future, far from when the PAS recorded the event, or in the hour of a clock change can't be ordered safely, so nothing is written and a person decides."
+    },
+    {
+      "code": "MERGE_WITHHELD",
+      "title": "A merge is never sent by Shutter",
+      "prerequisite": "The site profile says merges: allowed and the receiver's entry says merges: true (CONTRACTS 6.4)",
+      "next_action": "Hand the merge to the PAS team named for the sending application; mark the case handled when it confirms what it did.",
+      "owner": "PAS team",
+      "reevaluate_when": "The PAS team confirms the merge or declines it",
+      "text": "An ADT^A40 merge changes which record a patient's history belongs to. Shutter withholds it under the site's policy, or because the receiver takes no merges, and sends nothing."
+    },
+    {
+      "code": "CANCEL_UNSUPPORTED",
+      "title": "The receiver cannot reverse the event",
+      "prerequisite": "A receiver whose entry says cancels: true",
+      "next_action": "Correct the receiver by hand, then mark the case handled on the case page.",
+      "owner": "Integration team",
+      "reevaluate_when": "The receiver gains a reversal, or the team confirms the correction",
+      "text": "The message cancels an earlier movement, and the receiver's entry says it takes no cancels. Shutter withholds the cancel and sends nothing; a person corrects the receiver."
+    },
+    {
+      "code": "PATIENT_LEVEL_WRITE",
+      "title": "The operation names no encounter",
+      "prerequisite": "An encounter whose state and version the receiver can show",
+      "next_action": "A person decides: the message is patient-level (a merge with no visit number).",
+      "owner": "Integration team",
+      "reevaluate_when": "A message that names the encounter arrives, or a person decides",
+      "text": "Shutter writes only to an encounter whose state and version it can read and compare. A patient-level message names none, so there is nothing to check a write against."
     }
   ]
 }
