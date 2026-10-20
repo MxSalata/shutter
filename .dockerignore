@@ -8,4 +8,5 @@ web/playwright-report
 web/test-results
 tests/**/__pycache__
 tests/unit/Shutter
+tests/mock
 **/.DS_Store

@@ -1228,9 +1228,10 @@ ClassMethod Costs() As %Status
     Set byModel = []
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT %EXACT(Model) AS Model, %EXACT(Mode) AS Mode, COUNT(*) AS Runs, SUM(PromptTokens) AS P, SUM(CompletionTokens) AS C, SUM(CacheReadTokens) AS R, SUM(CostUSD) AS Cost FROM Shutter_Store.AgentRun WHERE 1=1" _ where _ " GROUP BY %EXACT(Model), %EXACT(Mode) ORDER BY %EXACT(Model), %EXACT(Mode)", args...)
     While rs.%Next() { Set r = {} Set r.model = rs.%Get("Model"), r.mode = rs.%Get("Mode"), r.runs = +rs.%Get("Runs"), r.promptTokens = +rs.%Get("P"), r.completionTokens = +rs.%Get("C"), r.cacheReadTokens = +rs.%Get("R"), r.costUsd = $SELECT(rs.%Get("Mode") = "replay": 0, 1: +rs.%Get("Cost")) Do byModel.%Push(r) }
+    // A run the API mimic answered (model mock, tests/mock) is counted apart: no model was called, and it cost 0.
     Set totals = {}
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT SUM(CASE WHEN Mode = 'replay' THEN 0 ELSE CostUSD END) AS Spent, SUM(CASE WHEN Mode = 'replay' THEN 1 ELSE 0 END) AS Replays, SUM(CASE WHEN Mode = 'replay' THEN 0 ELSE 1 END) AS Live FROM Shutter_Store.AgentRun WHERE 1=1" _ where, args...)
-    If rs.%Next() Set totals.spentUsd = +rs.%Get("Spent"), totals.liveRuns = +rs.%Get("Live"), totals.replayedRuns = +rs.%Get("Replays")
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT SUM(CASE WHEN Mode = 'replay' THEN 0 ELSE CostUSD END) AS Spent, SUM(CASE WHEN Mode = 'replay' THEN 1 ELSE 0 END) AS Replays, SUM(CASE WHEN Mode <> 'replay' AND Model = 'mock' THEN 1 ELSE 0 END) AS Mock, SUM(CASE WHEN Mode = 'replay' OR Model = 'mock' THEN 0 ELSE 1 END) AS Live FROM Shutter_Store.AgentRun WHERE 1=1" _ where, args...)
+    If rs.%Next() Set totals.spentUsd = +rs.%Get("Spent"), totals.liveRuns = +rs.%Get("Live"), totals.replayedRuns = +rs.%Get("Replays"), totals.mockRuns = +rs.%Get("Mock")
     Set o.totals = totals
     Set byDay = []
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT SUBSTRING(StartedAt,1,10) AS Day, COUNT(*) AS Runs, SUM(CASE WHEN Mode = 'replay' THEN 1 ELSE 0 END) AS Replays, SUM(CASE WHEN Mode = 'replay' THEN 0 ELSE CostUSD END) AS Cost FROM Shutter_Store.AgentRun WHERE 1=1" _ where _ " GROUP BY SUBSTRING(StartedAt,1,10) ORDER BY Day", args...)

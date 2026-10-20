@@ -26,7 +26,7 @@ Property Model As %String(%JSONFIELDNAME = "model", MAXLEN = 100);
 
 Property ProviderConfig As %String(%JSONFIELDNAME = "providerConfig", MAXLEN = 100);
 
-/// ok, schema_failed, budget_exceeded, timeout, model_error, denied, loop_detected, no_record, error.
+/// ok, schema_failed, budget_exceeded, timeout, model_error, denied, loop_detected, no_record, refused, error.
 Property Status As %String(%JSONFIELDNAME = "status", MAXLEN = 32);
 
 Property StartedAt As %String(%JSONFIELDNAME = "startedAt", MAXLEN = 30);
@@ -78,8 +78,9 @@ ClassMethod FromResponse(case As Shutter.Store.Case, snapshot As Shutter.Store.S
     Set run.ResultJSON = ##class(Shutter.Util.ModelView).Restore(case, response.ResultJSON)
     Set run.Content = ##class(Shutter.Util.ModelView).Restore(case, response.Content)
     Set run.Error = ##class(Shutter.Util.ModelView).Restore(case, response.Error)
-    // A replayed run spends nothing: its tokens are the recording's, kept for the record, and cost 0.
-    Set run.CostUSD = $SELECT(response.Mode = "replay": 0, 1: ##class(Shutter.Store.ModelPrice).Cost(response.Model, response.PromptTokens, response.CompletionTokens, response.CacheReadTokens, response.CacheCreationTokens))
+    // A replayed run spends nothing: its tokens are the recording's, kept for the record, and cost 0. Nor does a run
+    // the API mimic answered (model mock): its tokens are estimates and no model was called.
+    Set run.CostUSD = $SELECT(response.Mode = "replay": 0, response.Model = "mock": 0, 1: ##class(Shutter.Store.ModelPrice).Cost(response.Model, response.PromptTokens, response.CompletionTokens, response.CacheReadTokens, response.CacheCreationTokens))
     Quit run.%Save()
 }
 

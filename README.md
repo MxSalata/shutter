@@ -79,6 +79,7 @@ In the Management Portal, the Visual Trace of a case shows each step as a messag
 - CI runs on every push to `main` that changes code (a push of only the README or `docs/` runs nothing). On a real IRIS for Health Community 2026.2 it runs the full install, the receiving system's 23 contract tests and Shutter's 61 unit tests (the trigger table, the gate, the matcher's conditions, supersession, the model view and the case's writes), and 19 scenarios end to end through the REST API, one of them through the demo hospital's own production.
 - CI also checks the recordings and the demo's data for privacy, and runs axe-core on 12 screens in 5 appearances of the web app's demo build. Third-party actions are pinned by commit SHA.
 - The live edition (the aihub module) needs the AI Hub build, which CI can't download, so it is checked by hand on that build, and its recorded runs are what CI replays.
+- The live path itself (AI Hub's agent loop, the tools, the policies, the Visual Trace) also runs on that build with no model, against an API mimic: a test fixture in [tests/mock](https://github.com/MxSalata/shutter/tree/main/tests/mock), in neither module nor the image, whose runs are labelled model `mock`, cost nothing and are never recorded.
 
 ### Limits, plainly
 

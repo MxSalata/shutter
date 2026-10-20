@@ -33,6 +33,11 @@ Property ProviderConfig As %String(MAXLEN = 100);
 
 Property Model As %String(MAXLEN = 100);
 
+/// The API mimic's configuration when its switch was set as the mode was resolved (Shutter.Setup MockConfig), else
+/// "". The live runner sends the run to it, so a run resolved under the mimic never reaches another provider, even if
+/// the switch goes before it starts.
+Property MockConfig As %String(MAXLEN = 200);
+
 Property MaxIterations As %Integer;
 
 Property TokenBudget As %Integer;
@@ -63,7 +68,9 @@ ClassMethod FromRequest(request As Shutter.Bridge.Msg.AgentRequest, op As Shutte
     Set s.CorrelationKey = request.CorrelationKey, s.SnapshotDigest = request.SnapshotDigest
     Set s.ResultClass = request.ResultClass, s.TerminalTool = request.TerminalTool
     Set s.ConfigVersion = request.ConfigVersion
-    Set s.Mode = $SELECT(request.ModeOverride '= "": request.ModeOverride, 1: ##class(Shutter.Bridge.Operation.Agent).ResolveMode(op.Mode))
+    // The mimic's switch is read once: the mode and the runner's provider both follow this reading.
+    Set s.MockConfig = ##class(Shutter.Setup).MockConfig()
+    Set s.Mode = $SELECT(request.ModeOverride '= "": request.ModeOverride, 1: ##class(Shutter.Bridge.Operation.Agent).ResolveMode(op.Mode, s.MockConfig))
     Set s.RunnerClass = op.Runner
     Set s.ProviderConfig = op.ProviderConfig, s.Model = op.Model
     Set s.MaxIterations = op.MaxIterations
