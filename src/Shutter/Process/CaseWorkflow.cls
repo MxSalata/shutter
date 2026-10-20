@@ -324,7 +324,10 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
     }
     // A case an incident holds parks here, its evidence and match in the store: the incident decides when it is
     // released (CONTRACTS 7.1).
-    If '..Release && '..Reopened && $ISOBJECT(case.Incident) Quit ..Park(case)
+    If '..Release && '..Reopened && $ISOBJECT(case.Incident) {
+        Set sc = ..Park(case, .parked)
+        If parked || $$$ISERR(sc) Quit sc
+    }
     // Every investigation starts clean: a policy from an earlier round never carries over to a plan the board makes.
     Set ..Policy = "", ..CatalogueEntry = "", ..CatalogueOutcome = ""
     // A withheld operation (T31) has one answer in every mode: nothing is sent and a person decides. The gate blocks
@@ -679,7 +682,10 @@ Method AdoptPlan(case As Shutter.Store.Case, plan As %DynamicObject, createdBy A
     Set sc = case.Transition("proposed", "Plan v" _ p.Version _ " (" _ p.Disposition _ "): " _ p.Summary, createdBy, "plan:" _ p.%Id())
     Quit:$$$ISERR(sc) sc
     // A case its incident adopted while the board sat parks here: the plan is on the case, the release re-plans.
-    If '..Release && '..Reopened && $ISOBJECT(case.Incident) Quit ..Park(case)
+    If '..Release && '..Reopened && $ISOBJECT(case.Incident) {
+        Set sc = ..Park(case, .parked)
+        If parked || $$$ISERR(sc) Quit sc
+    }
     Quit ..SendGate(case, "proposal", "gate:proposal")
 }
 
@@ -860,12 +866,23 @@ Method ReleaseByPolicy(case As Shutter.Store.Case, plan As Shutter.Store.Plan, r
 }
 
 /// The case stops here, its evidence and match in the store, until its incident releases it (CONTRACTS 7.1);
-/// this instance ends.
-Method Park(case As Shutter.Store.Case) As %Status
+/// this instance ends. The membership is read again under the case's lock, which the incident takes too when it lets a
+/// case go (Shutter.Store.IncidentDetector.Leave): a case let go meanwhile does not park (parked is 0) and goes on alone.
+Method Park(case As Shutter.Store.Case, Output parked As %Boolean) As %Status
 {
-    Set inc = case.Incident
-    Set ..PendingJSON = "[]"
-    Quit case.Transition("grouped", "Held by incident " _ inc.IncidentId _ ": the incident groups the receiver's failures into chains per encounter and decides the order of release", "system", "incident:" _ inc.IncidentId)
+    Set parked = 0
+    Set sc = case.Lock()
+    Quit:$$$ISERR(sc) sc
+    Set inc = case.StoredIncident()
+    If '$ISOBJECT(inc) {
+        Do case.IncidentSetObjectId("")
+        Do case.Unlock()
+        Quit $$$OK
+    }
+    Set parked = 1, ..PendingJSON = "[]"
+    Set sc = case.Transition("grouped", "Held by incident " _ inc.IncidentId _ ": the incident groups the receiver's failures into chains per encounter and decides the order of release", "system", "incident:" _ inc.IncidentId)
+    Do case.Unlock()
+    Quit sc
 }
 
 /// A case its incident releases (CONTRACTS 7.4): a fresh instance, fresh evidence with no settle period, then the

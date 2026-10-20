@@ -164,7 +164,10 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     Set summary."fresh_until" = snap.FreshUntil
     Set sc = snap.Seal(summary)
     If $$$ISERR(sc) Set response.Error = $SYSTEM.Status.GetErrorText(sc) Quit $$$OK
-    Set case.CurrentSnapshot = snap
+    // The snapshot field alone: this copy of the case was read before the lookups, and the case may have joined an
+    // incident meanwhile.
+    Set sc = case.SetSnapshot(snap)
+    If $$$ISERR(sc) Set response.Error = $SYSTEM.Status.GetErrorText(sc) Quit $$$OK
     Do case.Note("artifact", "Snapshot " _ snap.Seq _ " taken: " _ count _ " observations, " _ laterCount _ " later events, digest " _ $EXTRACT(snap.Digest, 1, 19), "system", "snapshot:" _ snap.%Id())
     Set response.SnapshotId = snap.%Id(), response.Digest = snap.Digest, response.SummaryJSON = snap.Summary, response.ItemCount = count
     $$$TRACE("Snapshot " _ snap.%Id() _ " for " _ case.CaseId _ ": downstream HTTP " _ status _ ", receipt HTTP " _ rstatus _ ", " _ laterCount _ " later events")
