@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.15, 20 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.16, 20 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -381,7 +381,8 @@ reads it through `Shutter.Store.SiteProfile`.
   offset: `UTC`, `Europe/London` or a fixed offset; the built-in default (`SiteProfile.Default()`, in force only while no
   profile row is stored) is `Europe/London`, a stored profile that does not answer keeps `UTC` (the reading before v1.11),
   and the shipped seed profile says `Europe/London` (v1.12), so the fixtures' times read as British Summer Time (09:20 on
-  15 October is 08:20Z). The questionnaire page asks for `teams` and `mail` (question 9), `feed` (10) and `model_content` (11)
+  15 October is 08:20Z). A zone outside these that reaches the reader anyway (a profile stored before the check) is read
+  as `UTC` with a warning in the event log, once per job and zone, and the evidence's note says so (v1.16). The questionnaire page asks for `teams` and `mail` (question 9), `feed` (10) and `model_content` (11)
   since v1.12, and since v1.14 for `merges` (12), each receiver's `merges` beside its `cancels` (5) and each team's
   `sources` (9). The body may carry
   `expectedVersion` (the version the caller read, not
@@ -411,10 +412,13 @@ The plan's `catalogue_entry` and `outcome` are bound by the approval's digest li
 
 Two `intent` checks for withheld cases (v1.14, policy version 2026-10-19.3), appended for every plan on a case of kind `withheld` as `UNMAPPABLE` is, and as guards on any write of a merge or a cancel: `MERGE_WITHHELD` (the case's event is `merge` and the site profile does not allow merges, or the receiver does not take them) and `CANCEL_UNSUPPORTED` (a `cancel_*` event to a receiver whose entry says `cancels: false`). The identity check answers `NO_ENCOUNTER` (pass) for a case whose encounter piece is `-`, and the state-transition and concurrency checks answer `PATIENT_LEVEL_WRITE` (block) for a write on such a case: there is no encounter state or version to check, so a person decides, and nothing is retried.
 
-### 6.6 The board's tool
+### 6.6 The board and the catalogue
 
-`search_catalogue` is a knowledge-base tool over `knowledge/catalogue/`, attached to every member, so that the board
-cites entries by id. The coordinator's instructions say the plan names the entry and the outcome.
+The board has no catalogue tool (v1.6 named a `search_catalogue` tool; it was never built, and the coordinator stopped
+naming it in v1.7). The matches reach it in the evidence, in the snapshot summary's `catalogue` section, each with its
+entry's prose, so that the board cites entries by id. The coordinator's instructions say the plan names the entry and
+the outcome, or leaves `catalogue_entry` empty when no entry fits (a new pattern). The members' knowledge tools are the
+four collections under `knowledge/` (`search_contracts`, `search_lifecycle`, `search_effects`, `search_playbooks`).
 
 ## 7. Incidents: many failures to one receiver (v1.6, as built in v1.7)
 
@@ -631,7 +635,7 @@ bound to the digest of the text the person read.
 - The `Escalation Mail` operation (`Shutter.Operation.EscalationMail`, `EnsLib.EMail.OutboundAdapter`) sends through the
   site's mail server when the adapter's `SMTPServer` is set (first-time configuration; the NHS relay at most trusts),
   and otherwise writes an `.eml` file to its `OutputFolder` (default `<mgr>/shutter/out/mail`), so the demo and CI need
-  no mail server. States: `draft`, `queued`, `sent`, `failed` (`cancelled` is declared but nothing sets it: there is no cancel route);
+  no mail server. States: `draft`, `queued`, `sent`, `failed` and `cancelled` (closing the case by hand, `POST /cases/{id}/close` in 5, cancels a draft or queued email);
   each step is a case event of kind
   `escalation`. Then `POST /cases/{id}/reinvestigate` verifies the manual correction.
 
@@ -734,6 +738,7 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.16, 20 Oct 2026: corrections. The board has no catalogue tool: the matches and their prose reach it in the evidence (6.6). Closing a case by hand cancels its draft or queued email, so the state `cancelled` is set (10). An unknown `feed.time_zone` is read as `UTC` with a warning (6.4).
 - v1.15, 20 Oct 2026: the production-install story (T33). The case intake from another production (section 11: `POST /api/shutter/intake`, the resource `Shutter_Intake` and the role `Shutter_Forwarder`, the items Case Intake and Case Intake Store, the source fields on the case and the `source` item of the evidence, the forwarder `Shutter.Intake.Forwarder` for a watched production, the demo hospital in the namespace `HOSPITAL`); the install (section 12: the IPM parameters `demo` and `production`, a status-checked Invoke, what a non-demo install creates and omits, the demo items switched off, the message purge by `SHUTTER_MESSAGE_PURGE` and `SHUTTER_MESSAGE_DAYS` with a default of 90 days, `InstallInto` for a site's own production and `Setup.INSTALLITEMS`); the gate's receiver and the policy's tier follow the case's receiver; `Shutter.Util.Time` reads the namespace's cached feed zone before the store. The install guide for a hospital is `docs/INSTALL.md`.
 - v1.14, 19 Oct 2026: other HL7 schemas and the trigger table (section 2: the events A04, A05, A06, A07, A11 to A13, A28, A31 and A40; what is delivered, indexed only or withheld; the `-` encounter piece; fields read wherever the structure puts the segment; the version note in the evidence); the A40 rule (`merges` in the site profile and the receiver entry, 6.4; the kind `withheld`; `MERGE_WITHHELD` and `CANCEL_UNSUPPORTED`, 6.5; the merge's prior fields, 2 and 9; the escalation's `sources` routing and wording, 10); the matcher's `event`, `delivery: withheld`, `receiver_answer: none` and `later_applied: cancelled | merge` (6.1); withheld and unmappable cases outside incidents (7.1); the index's event words and the `-` visit (8.2); `POST /cases/{id}/close` (5); the gate's policy version 2026-10-19.3 (an approval given under 2026-10-19.2 and not yet dispatched is void at dispatch, `APPROVAL_POLICY_CHANGED`: the case blocks and a person reinvestigates), its `NO_ENCOUNTER` identity answer and `PATIENT_LEVEL_WRITE`; a withheld case never convenes the board (6.3); the close route's `expectedVersion` and the cancelled emails (5). The catalogue entries E14 (a patient merge) and E15 (a cancel the receiver can't reverse) and the block reasons `MERGE_WITHHELD` and `CANCEL_UNSUPPORTED` are the knowledge side of the same change.
 - v1.13, 19 Oct 2026: the receiving system is named the downstream system (a demo bed-management system): the package
