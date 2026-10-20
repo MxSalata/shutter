@@ -33,7 +33,7 @@ ClassMethod OnPreDispatch(pUrl As %String, pMethod As %String, ByRef pContinue A
     If (addr = "127.0.0.1") || (addr = "::1") || ($EXTRACT(addr, 1, 4) = "127.") || (addr = "::ffff:127.0.0.1") Quit $$$OK
     Set pContinue = 0
     Do ..Log(pUrl, pMethod, 403, {"note": ("not a loopback caller: " _ addr)})
-    Quit ..Fail(403, "The API mimic answers loopback callers only", "forbidden")
+    Quit ..Fail(403, "The API mimic answers callers on this instance only", "forbidden")
 }
 
 /// GET /v1/models: the one model the mimic answers as (what AI Hub's TestConfiguration looks for).

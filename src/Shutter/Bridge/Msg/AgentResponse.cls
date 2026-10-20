@@ -5,7 +5,7 @@
 Class Shutter.Bridge.Msg.AgentResponse Extends Ens.Response
 {
 
-/// ok, schema_failed, budget_exceeded, timeout, model_error, denied, loop_detected, no_record, error.
+/// ok, schema_failed, budget_exceeded, timeout, model_error, denied, loop_detected, no_record, refused, error.
 Property Status As %String(MAXLEN = 32);
 
 Property AgentClass As %String(MAXLEN = 200);
