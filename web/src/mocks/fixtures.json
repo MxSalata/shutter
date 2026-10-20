@@ -1,6 +1,6 @@
 {
- "source": "Recorded from Shutter's REST API at 2026-10-20T17:41:11Z: 53 cases (14 by rules alone, 26 in site-policy mode, 13 by the board of specialists) and 2 incidents; the board's 64 agent runs are replays of recorded runs. The demo serves these answers in the browser; nothing in it reaches an IRIS instance.",
- "recordedAt": "2026-10-20T17:41:11Z",
+ "source": "Recorded from Shutter's REST API at 2026-10-20T17:55:04Z: 53 cases (14 by rules alone, 26 in site-policy mode, 13 by the board of specialists) and 2 incidents; the board's 64 agent runs are replays of recorded runs. The demo serves these answers in the browser; nothing in it reaches an IRIS instance.",
+ "recordedAt": "2026-10-20T17:55:04Z",
  "scenarios": [
   {
    "id": "S1",
@@ -1046,7 +1046,8 @@
     "currentSnapshotId": "69",
     "currentPlanId": "56",
     "currentApprovalId": "29",
-    "id": "53"
+    "id": "53",
+    "planCreatedBy": "rules"
    },
    "detail": {
     "caseId": "C-000053",
@@ -1082,6 +1083,7 @@
     "currentPlanId": "56",
     "currentApprovalId": "29",
     "id": "53",
+    "planCreatedBy": "rules",
     "counts": {
      "events": 25,
      "runs": 0,
@@ -1967,7 +1969,8 @@
     "currentSnapshotId": "67",
     "currentPlanId": "54",
     "currentApprovalId": "28",
-    "id": "52"
+    "id": "52",
+    "planCreatedBy": "policy:E2"
    },
    "detail": {
     "caseId": "C-000052",
@@ -2008,6 +2011,7 @@
     "currentPlanId": "54",
     "currentApprovalId": "28",
     "id": "52",
+    "planCreatedBy": "policy:E2",
     "counts": {
      "events": 20,
      "runs": 0,
@@ -3109,7 +3113,8 @@
     "currentSnapshotId": "66",
     "currentPlanId": "53",
     "currentApprovalId": "27",
-    "id": "51"
+    "id": "51",
+    "planCreatedBy": "policy:E2"
    },
    "detail": {
     "caseId": "C-000051",
@@ -3146,6 +3151,7 @@
     "currentPlanId": "53",
     "currentApprovalId": "27",
     "id": "51",
+    "planCreatedBy": "policy:E2",
     "counts": {
      "events": 20,
      "runs": 0,
@@ -4265,7 +4271,8 @@
     "currentSnapshotId": "65",
     "currentPlanId": "52",
     "currentApprovalId": "26",
-    "id": "50"
+    "id": "50",
+    "planCreatedBy": "policy:E2"
    },
    "detail": {
     "caseId": "C-000050",
@@ -4302,6 +4309,7 @@
     "currentPlanId": "52",
     "currentApprovalId": "26",
     "id": "50",
+    "planCreatedBy": "policy:E2",
     "counts": {
      "events": 20,
      "runs": 0,
@@ -5422,7 +5430,8 @@
     "currentPlanId": "51",
     "currentApprovalId": "25",
     "id": "49",
-    "incidentId": "I-000002"
+    "incidentId": "I-000002",
+    "planCreatedBy": "policy:E2"
    },
    "detail": {
     "caseId": "C-000049",
@@ -5459,6 +5468,7 @@
     "currentPlanId": "51",
     "currentApprovalId": "25",
     "id": "49",
+    "planCreatedBy": "policy:E2",
     "incidentId": "I-000002",
     "incident": {
      "incident_id": "I-000002",
@@ -6656,7 +6666,8 @@
     "currentPlanId": "50",
     "currentApprovalId": "24",
     "id": "48",
-    "incidentId": "I-000002"
+    "incidentId": "I-000002",
+    "planCreatedBy": "policy:E2"
    },
    "detail": {
     "caseId": "C-000048",
@@ -6693,6 +6704,7 @@
     "currentPlanId": "50",
     "currentApprovalId": "24",
     "id": "48",
+    "planCreatedBy": "policy:E2",
     "incidentId": "I-000002",
     "incident": {
      "incident_id": "I-000002",
@@ -7890,7 +7902,8 @@
     "currentPlanId": "47",
     "currentApprovalId": "21",
     "id": "47",
-    "incidentId": "I-000002"
+    "incidentId": "I-000002",
+    "planCreatedBy": "policy:E2"
    },
    "detail": {
     "caseId": "C-000047",
@@ -7927,6 +7940,7 @@
     "currentPlanId": "47",
     "currentApprovalId": "21",
     "id": "47",
+    "planCreatedBy": "policy:E2",
     "incidentId": "I-000002",
     "incident": {
      "incident_id": "I-000002",
@@ -9124,7 +9138,8 @@
     "currentPlanId": "49",
     "currentApprovalId": "23",
     "id": "46",
-    "incidentId": "I-000002"
+    "incidentId": "I-000002",
+    "planCreatedBy": "policy:E4"
    },
    "detail": {
     "caseId": "C-000046",
@@ -9161,6 +9176,7 @@
     "currentPlanId": "49",
     "currentApprovalId": "23",
     "id": "46",
+    "planCreatedBy": "policy:E4",
     "incidentId": "I-000002",
     "incident": {
      "incident_id": "I-000002",
@@ -10368,7 +10384,8 @@
     "currentPlanId": "48",
     "currentApprovalId": "22",
     "id": "45",
-    "incidentId": "I-000002"
+    "incidentId": "I-000002",
+    "planCreatedBy": "policy:E4"
    },
    "detail": {
     "caseId": "C-000045",
@@ -10405,6 +10422,7 @@
     "currentPlanId": "48",
     "currentApprovalId": "22",
     "id": "45",
+    "planCreatedBy": "policy:E4",
     "incidentId": "I-000002",
     "incident": {
      "incident_id": "I-000002",
@@ -11538,7 +11556,8 @@
     "currentPlanId": "43",
     "currentApprovalId": "19",
     "id": "44",
-    "incidentId": "I-000001"
+    "incidentId": "I-000001",
+    "planCreatedBy": "run:64"
    },
    "detail": {
     "caseId": "C-000044",
@@ -11574,6 +11593,7 @@
     "currentPlanId": "43",
     "currentApprovalId": "19",
     "id": "44",
+    "planCreatedBy": "run:64",
     "incidentId": "I-000001",
     "incident": {
      "incident_id": "I-000001",
@@ -13283,7 +13303,8 @@
     "currentPlanId": "41",
     "currentApprovalId": "18",
     "id": "43",
-    "incidentId": "I-000001"
+    "incidentId": "I-000001",
+    "planCreatedBy": "policy:E4"
    },
    "detail": {
     "caseId": "C-000043",
@@ -13319,6 +13340,7 @@
     "currentPlanId": "41",
     "currentApprovalId": "18",
     "id": "43",
+    "planCreatedBy": "policy:E4",
     "incidentId": "I-000001",
     "incident": {
      "incident_id": "I-000001",
@@ -14598,7 +14620,8 @@
     "currentSnapshotId": "53",
     "currentPlanId": "45",
     "id": "42",
-    "incidentId": "I-000001"
+    "incidentId": "I-000001",
+    "planCreatedBy": "policy:E6"
    },
    "detail": {
     "caseId": "C-000042",
@@ -14634,6 +14657,7 @@
     "currentSnapshotId": "53",
     "currentPlanId": "45",
     "id": "42",
+    "planCreatedBy": "policy:E6",
     "incidentId": "I-000001",
     "incident": {
      "incident_id": "I-000001",
@@ -15560,7 +15584,8 @@
     "currentPlanId": "46",
     "currentApprovalId": "20",
     "id": "41",
-    "incidentId": "I-000001"
+    "incidentId": "I-000001",
+    "planCreatedBy": "policy:E2"
    },
    "detail": {
     "caseId": "C-000041",
@@ -15597,6 +15622,7 @@
     "currentPlanId": "46",
     "currentApprovalId": "20",
     "id": "41",
+    "planCreatedBy": "policy:E2",
     "incidentId": "I-000001",
     "incident": {
      "incident_id": "I-000001",
@@ -16691,7 +16717,8 @@
     "currentSnapshotId": "52",
     "currentPlanId": "44",
     "id": "40",
-    "incidentId": "I-000001"
+    "incidentId": "I-000001",
+    "planCreatedBy": "policy:E1"
    },
    "detail": {
     "caseId": "C-000040",
@@ -16727,6 +16754,7 @@
     "currentSnapshotId": "52",
     "currentPlanId": "44",
     "id": "40",
+    "planCreatedBy": "policy:E1",
     "incidentId": "I-000001",
     "incident": {
      "incident_id": "I-000001",
@@ -17652,7 +17680,8 @@
     "currentSnapshotId": "50",
     "currentPlanId": "42",
     "id": "39",
-    "incidentId": "I-000001"
+    "incidentId": "I-000001",
+    "planCreatedBy": "run:60"
    },
    "detail": {
     "caseId": "C-000039",
@@ -17688,6 +17717,7 @@
     "currentSnapshotId": "50",
     "currentPlanId": "42",
     "id": "39",
+    "planCreatedBy": "run:60",
     "incidentId": "I-000001",
     "incident": {
      "incident_id": "I-000001",
@@ -19046,7 +19076,8 @@
     "currentPlanId": "40",
     "currentApprovalId": "17",
     "id": "38",
-    "incidentId": "I-000001"
+    "incidentId": "I-000001",
+    "planCreatedBy": "policy:E4"
    },
    "detail": {
     "caseId": "C-000038",
@@ -19083,6 +19114,7 @@
     "currentPlanId": "40",
     "currentApprovalId": "17",
     "id": "38",
+    "planCreatedBy": "policy:E4",
     "incidentId": "I-000001",
     "incident": {
      "incident_id": "I-000001",
@@ -20329,7 +20361,8 @@
     "currentPlanId": "39",
     "currentApprovalId": "16",
     "id": "37",
-    "incidentId": "I-000001"
+    "incidentId": "I-000001",
+    "planCreatedBy": "policy:E2"
    },
    "detail": {
     "caseId": "C-000037",
@@ -20366,6 +20399,7 @@
     "currentPlanId": "39",
     "currentApprovalId": "16",
     "id": "37",
+    "planCreatedBy": "policy:E2",
     "incidentId": "I-000001",
     "incident": {
      "incident_id": "I-000001",
@@ -21560,7 +21594,8 @@
     "closedAt": "2026-10-20T17:36:03Z",
     "currentSnapshotId": "38",
     "currentPlanId": "38",
-    "id": "36"
+    "id": "36",
+    "planCreatedBy": "policy:E13"
    },
    "detail": {
     "caseId": "C-000036",
@@ -21595,6 +21630,7 @@
     "currentSnapshotId": "38",
     "currentPlanId": "38",
     "id": "36",
+    "planCreatedBy": "policy:E13",
     "counts": {
      "events": 11,
      "runs": 0,
@@ -22297,7 +22333,8 @@
     "closedAt": "2026-10-20T17:35:45Z",
     "currentSnapshotId": "37",
     "currentPlanId": "37",
-    "id": "35"
+    "id": "35",
+    "planCreatedBy": "policy:E8"
    },
    "detail": {
     "caseId": "C-000035",
@@ -22332,6 +22369,7 @@
     "currentSnapshotId": "37",
     "currentPlanId": "37",
     "id": "35",
+    "planCreatedBy": "policy:E8",
     "counts": {
      "events": 11,
      "runs": 0,
@@ -23019,7 +23057,8 @@
     "currentSnapshotId": "36",
     "currentPlanId": "36",
     "currentApprovalId": "15",
-    "id": "34"
+    "id": "34",
+    "planCreatedBy": "policy:E2"
    },
    "detail": {
     "caseId": "C-000034",
@@ -23056,6 +23095,7 @@
     "currentPlanId": "36",
     "currentApprovalId": "15",
     "id": "34",
+    "planCreatedBy": "policy:E2",
     "counts": {
      "events": 20,
      "runs": 0,
@@ -24171,7 +24211,8 @@
     "closedAt": "2026-10-20T17:35:09Z",
     "currentSnapshotId": "35",
     "currentPlanId": "35",
-    "id": "33"
+    "id": "33",
+    "planCreatedBy": "run:56"
    },
    "detail": {
     "caseId": "C-000033",
@@ -24206,6 +24247,7 @@
     "currentSnapshotId": "35",
     "currentPlanId": "35",
     "id": "33",
+    "planCreatedBy": "run:56",
     "counts": {
      "events": 15,
      "runs": 4,
@@ -25261,7 +25303,8 @@
     "closedAt": "2026-10-20T17:34:51Z",
     "currentSnapshotId": "34",
     "currentPlanId": "34",
-    "id": "32"
+    "id": "32",
+    "planCreatedBy": "policy:E6"
    },
    "detail": {
     "caseId": "C-000032",
@@ -25297,6 +25340,7 @@
     "currentSnapshotId": "34",
     "currentPlanId": "34",
     "id": "32",
+    "planCreatedBy": "policy:E6",
     "counts": {
      "events": 13,
      "runs": 0,
@@ -26143,7 +26187,8 @@
     "currentSnapshotId": "33",
     "currentPlanId": "33",
     "currentApprovalId": "14",
-    "id": "31"
+    "id": "31",
+    "planCreatedBy": "policy:E10"
    },
    "detail": {
     "caseId": "C-000031",
@@ -26180,6 +26225,7 @@
     "currentPlanId": "33",
     "currentApprovalId": "14",
     "id": "31",
+    "planCreatedBy": "policy:E10",
     "counts": {
      "events": 20,
      "runs": 0,
@@ -27393,7 +27439,8 @@
     "currentSnapshotId": "32",
     "currentPlanId": "32",
     "currentApprovalId": "13",
-    "id": "30"
+    "id": "30",
+    "planCreatedBy": "run:52"
    },
    "detail": {
     "caseId": "C-000030",
@@ -27430,6 +27477,7 @@
     "currentPlanId": "32",
     "currentApprovalId": "13",
     "id": "30",
+    "planCreatedBy": "run:52",
     "counts": {
      "events": 25,
      "runs": 4,
@@ -28974,7 +29022,8 @@
     "closedAt": "2026-10-20T17:33:53Z",
     "currentSnapshotId": "31",
     "currentPlanId": "31",
-    "id": "29"
+    "id": "29",
+    "planCreatedBy": "policy:E3"
    },
    "detail": {
     "caseId": "C-000029",
@@ -29009,6 +29058,7 @@
     "currentSnapshotId": "31",
     "currentPlanId": "31",
     "id": "29",
+    "planCreatedBy": "policy:E3",
     "counts": {
      "events": 13,
      "runs": 0,
@@ -29856,7 +29906,8 @@
     "currentSnapshotId": "30",
     "currentPlanId": "30",
     "currentApprovalId": "12",
-    "id": "28"
+    "id": "28",
+    "planCreatedBy": "policy:E2"
    },
    "detail": {
     "caseId": "C-000028",
@@ -29893,6 +29944,7 @@
     "currentPlanId": "30",
     "currentApprovalId": "12",
     "id": "28",
+    "planCreatedBy": "policy:E2",
     "counts": {
      "events": 20,
      "runs": 0,
@@ -31009,7 +31061,8 @@
     "closedAt": "2026-10-20T17:33:15Z",
     "currentSnapshotId": "29",
     "currentPlanId": "29",
-    "id": "27"
+    "id": "27",
+    "planCreatedBy": "policy:E1"
    },
    "detail": {
     "caseId": "C-000027",
@@ -31045,6 +31098,7 @@
     "currentSnapshotId": "29",
     "currentPlanId": "29",
     "id": "27",
+    "planCreatedBy": "policy:E1",
     "counts": {
      "events": 13,
      "runs": 0,
@@ -31886,7 +31940,8 @@
     "closedAt": "2026-10-20T17:32:55Z",
     "currentSnapshotId": "28",
     "currentPlanId": "28",
-    "id": "26"
+    "id": "26",
+    "planCreatedBy": "policy:E15"
    },
    "detail": {
     "caseId": "C-000026",
@@ -31918,6 +31973,7 @@
     "currentSnapshotId": "28",
     "currentPlanId": "28",
     "id": "26",
+    "planCreatedBy": "policy:E15",
     "counts": {
      "events": 11,
      "runs": 0,
@@ -32624,7 +32680,8 @@
     "closedAt": "2026-10-20T17:32:34Z",
     "currentSnapshotId": "27",
     "currentPlanId": "27",
-    "id": "25"
+    "id": "25",
+    "planCreatedBy": "policy:E14"
    },
    "detail": {
     "caseId": "C-000025",
@@ -32660,6 +32717,7 @@
     "currentSnapshotId": "27",
     "currentPlanId": "27",
     "id": "25",
+    "planCreatedBy": "policy:E14",
     "counts": {
      "events": 11,
      "runs": 0,
@@ -33393,7 +33451,8 @@
     "closedAt": "2026-10-20T17:32:14Z",
     "currentSnapshotId": "26",
     "currentPlanId": "26",
-    "id": "24"
+    "id": "24",
+    "planCreatedBy": "rules"
    },
    "detail": {
     "caseId": "C-000024",
@@ -33428,6 +33487,7 @@
     "currentSnapshotId": "26",
     "currentPlanId": "26",
     "id": "24",
+    "planCreatedBy": "rules",
     "counts": {
      "events": 11,
      "runs": 0,
@@ -34133,7 +34193,8 @@
     "closedAt": "2026-10-20T17:31:56Z",
     "currentSnapshotId": "25",
     "currentPlanId": "25",
-    "id": "23"
+    "id": "23",
+    "planCreatedBy": "rules"
    },
    "detail": {
     "caseId": "C-000023",
@@ -34168,6 +34229,7 @@
     "currentSnapshotId": "25",
     "currentPlanId": "25",
     "id": "23",
+    "planCreatedBy": "rules",
     "counts": {
      "events": 11,
      "runs": 0,
@@ -34858,7 +34920,8 @@
     "currentSnapshotId": "24",
     "currentPlanId": "24",
     "currentApprovalId": "11",
-    "id": "22"
+    "id": "22",
+    "planCreatedBy": "rules"
    },
    "detail": {
     "caseId": "C-000022",
@@ -34895,6 +34958,7 @@
     "currentPlanId": "24",
     "currentApprovalId": "11",
     "id": "22",
+    "planCreatedBy": "rules",
     "counts": {
      "events": 21,
      "runs": 0,
@@ -36015,7 +36079,8 @@
     "currentSnapshotId": "23",
     "currentPlanId": "23",
     "currentApprovalId": "10",
-    "id": "21"
+    "id": "21",
+    "planCreatedBy": "rules"
    },
    "detail": {
     "caseId": "C-000021",
@@ -36052,6 +36117,7 @@
     "currentPlanId": "23",
     "currentApprovalId": "10",
     "id": "21",
+    "planCreatedBy": "rules",
     "counts": {
      "events": 21,
      "runs": 0,
@@ -37250,7 +37316,8 @@
     "currentSnapshotId": "22",
     "currentPlanId": "22",
     "currentApprovalId": "9",
-    "id": "20"
+    "id": "20",
+    "planCreatedBy": "rules"
    },
    "detail": {
     "caseId": "C-000020",
@@ -37286,6 +37353,7 @@
     "currentPlanId": "22",
     "currentApprovalId": "9",
     "id": "20",
+    "planCreatedBy": "rules",
     "counts": {
      "events": 25,
      "runs": 0,
@@ -38205,7 +38273,8 @@
     "closedAt": "2026-10-20T17:30:35Z",
     "currentSnapshotId": "20",
     "currentPlanId": "20",
-    "id": "19"
+    "id": "19",
+    "planCreatedBy": "rules"
    },
    "detail": {
     "caseId": "C-000019",
@@ -38240,6 +38309,7 @@
     "currentSnapshotId": "20",
     "currentPlanId": "20",
     "id": "19",
+    "planCreatedBy": "rules",
     "counts": {
      "events": 11,
      "runs": 0,
@@ -38992,7 +39062,8 @@
     "currentSnapshotId": "19",
     "currentPlanId": "19",
     "currentApprovalId": "8",
-    "id": "18"
+    "id": "18",
+    "planCreatedBy": "rules"
    },
    "detail": {
     "caseId": "C-000018",
@@ -39029,6 +39100,7 @@
     "currentPlanId": "19",
     "currentApprovalId": "8",
     "id": "18",
+    "planCreatedBy": "rules",
     "counts": {
      "events": 21,
      "runs": 0,
@@ -40245,7 +40317,8 @@
     "currentSnapshotId": "18",
     "currentPlanId": "18",
     "currentApprovalId": "7",
-    "id": "17"
+    "id": "17",
+    "planCreatedBy": "rules"
    },
    "detail": {
     "caseId": "C-000017",
@@ -40282,6 +40355,7 @@
     "currentPlanId": "18",
     "currentApprovalId": "7",
     "id": "17",
+    "planCreatedBy": "rules",
     "counts": {
      "events": 21,
      "runs": 0,
@@ -41494,7 +41568,8 @@
     "closedAt": "2026-10-20T17:29:35Z",
     "currentSnapshotId": "17",
     "currentPlanId": "17",
-    "id": "16"
+    "id": "16",
+    "planCreatedBy": "rules"
    },
    "detail": {
     "caseId": "C-000016",
@@ -41528,6 +41603,7 @@
     "currentSnapshotId": "17",
     "currentPlanId": "17",
     "id": "16",
+    "planCreatedBy": "rules",
     "counts": {
      "events": 11,
      "runs": 0,
@@ -42252,7 +42328,8 @@
     "currentSnapshotId": "16",
     "currentPlanId": "16",
     "currentApprovalId": "6",
-    "id": "15"
+    "id": "15",
+    "planCreatedBy": "rules"
    },
    "detail": {
     "caseId": "C-000015",
@@ -42289,6 +42366,7 @@
     "currentPlanId": "16",
     "currentApprovalId": "6",
     "id": "15",
+    "planCreatedBy": "rules",
     "counts": {
      "events": 21,
      "runs": 0,
@@ -43407,7 +43485,8 @@
     "closedAt": "2026-10-20T17:28:57Z",
     "currentSnapshotId": "15",
     "currentPlanId": "15",
-    "id": "14"
+    "id": "14",
+    "planCreatedBy": "rules"
    },
    "detail": {
     "caseId": "C-000014",
@@ -43442,6 +43521,7 @@
     "currentSnapshotId": "15",
     "currentPlanId": "15",
     "id": "14",
+    "planCreatedBy": "rules",
     "counts": {
      "events": 11,
      "runs": 0,
@@ -44183,7 +44263,8 @@
     "closedAt": "2026-10-20T17:28:39Z",
     "currentSnapshotId": "14",
     "currentPlanId": "14",
-    "id": "13"
+    "id": "13",
+    "planCreatedBy": "policy:E15"
    },
    "detail": {
     "caseId": "C-000013",
@@ -44215,6 +44296,7 @@
     "currentSnapshotId": "14",
     "currentPlanId": "14",
     "id": "13",
+    "planCreatedBy": "policy:E15",
     "counts": {
      "events": 11,
      "runs": 0,
@@ -44921,7 +45003,8 @@
     "closedAt": "2026-10-20T17:28:19Z",
     "currentSnapshotId": "13",
     "currentPlanId": "13",
-    "id": "12"
+    "id": "12",
+    "planCreatedBy": "policy:E14"
    },
    "detail": {
     "caseId": "C-000012",
@@ -44957,6 +45040,7 @@
     "currentSnapshotId": "13",
     "currentPlanId": "13",
     "id": "12",
+    "planCreatedBy": "policy:E14",
     "counts": {
      "events": 11,
      "runs": 0,
@@ -45690,7 +45774,8 @@
     "closedAt": "2026-10-20T17:27:59Z",
     "currentSnapshotId": "12",
     "currentPlanId": "12",
-    "id": "11"
+    "id": "11",
+    "planCreatedBy": "run:48"
    },
    "detail": {
     "caseId": "C-000011",
@@ -45725,6 +45810,7 @@
     "currentSnapshotId": "12",
     "currentPlanId": "12",
     "id": "11",
+    "planCreatedBy": "run:48",
     "counts": {
      "events": 14,
      "runs": 4,
@@ -46743,7 +46829,8 @@
     "closedAt": "2026-10-20T17:27:41Z",
     "currentSnapshotId": "11",
     "currentPlanId": "11",
-    "id": "10"
+    "id": "10",
+    "planCreatedBy": "run:44"
    },
    "detail": {
     "caseId": "C-000010",
@@ -46778,6 +46865,7 @@
     "currentSnapshotId": "11",
     "currentPlanId": "11",
     "id": "10",
+    "planCreatedBy": "run:44",
     "counts": {
      "events": 14,
      "runs": 4,
@@ -47805,7 +47893,8 @@
     "currentSnapshotId": "10",
     "currentPlanId": "10",
     "currentApprovalId": "5",
-    "id": "9"
+    "id": "9",
+    "planCreatedBy": "run:40"
    },
    "detail": {
     "caseId": "C-000009",
@@ -47842,6 +47931,7 @@
     "currentPlanId": "10",
     "currentApprovalId": "5",
     "id": "9",
+    "planCreatedBy": "run:40",
     "counts": {
      "events": 24,
      "runs": 4,
@@ -49278,7 +49368,8 @@
     "closedAt": "2026-10-20T17:27:03Z",
     "currentSnapshotId": "9",
     "currentPlanId": "9",
-    "id": "8"
+    "id": "8",
+    "planCreatedBy": "run:36"
    },
    "detail": {
     "caseId": "C-000008",
@@ -49313,6 +49404,7 @@
     "currentSnapshotId": "9",
     "currentPlanId": "9",
     "id": "8",
+    "planCreatedBy": "run:36",
     "counts": {
      "events": 14,
      "runs": 4,
@@ -50361,7 +50453,8 @@
     "currentSnapshotId": "8",
     "currentPlanId": "8",
     "currentApprovalId": "4",
-    "id": "7"
+    "id": "7",
+    "planCreatedBy": "run:32"
    },
    "detail": {
     "caseId": "C-000007",
@@ -50398,6 +50491,7 @@
     "currentPlanId": "8",
     "currentApprovalId": "4",
     "id": "7",
+    "planCreatedBy": "run:32",
     "counts": {
      "events": 33,
      "runs": 8,
@@ -52011,7 +52105,8 @@
     "closedAt": "2026-10-20T17:26:23Z",
     "currentSnapshotId": "6",
     "currentPlanId": "6",
-    "id": "6"
+    "id": "6",
+    "planCreatedBy": "run:24"
    },
    "detail": {
     "caseId": "C-000006",
@@ -52047,6 +52142,7 @@
     "currentSnapshotId": "6",
     "currentPlanId": "6",
     "id": "6",
+    "planCreatedBy": "run:24",
     "counts": {
      "events": 16,
      "runs": 4,
@@ -53215,7 +53311,8 @@
     "currentSnapshotId": "5",
     "currentPlanId": "5",
     "currentApprovalId": "3",
-    "id": "5"
+    "id": "5",
+    "planCreatedBy": "run:20"
    },
    "detail": {
     "caseId": "C-000005",
@@ -53252,6 +53349,7 @@
     "currentPlanId": "5",
     "currentApprovalId": "3",
     "id": "5",
+    "planCreatedBy": "run:20",
     "counts": {
      "events": 24,
      "runs": 4,
@@ -54793,7 +54891,8 @@
     "currentSnapshotId": "4",
     "currentPlanId": "4",
     "currentApprovalId": "2",
-    "id": "4"
+    "id": "4",
+    "planCreatedBy": "run:16"
    },
    "detail": {
     "caseId": "C-000004",
@@ -54830,6 +54929,7 @@
     "currentPlanId": "4",
     "currentApprovalId": "2",
     "id": "4",
+    "planCreatedBy": "run:16",
     "counts": {
      "events": 24,
      "runs": 4,
@@ -56366,7 +56466,8 @@
     "closedAt": "2026-10-20T17:25:17Z",
     "currentSnapshotId": "3",
     "currentPlanId": "3",
-    "id": "3"
+    "id": "3",
+    "planCreatedBy": "run:12"
    },
    "detail": {
     "caseId": "C-000003",
@@ -56401,6 +56502,7 @@
     "currentSnapshotId": "3",
     "currentPlanId": "3",
     "id": "3",
+    "planCreatedBy": "run:12",
     "counts": {
      "events": 16,
      "runs": 4,
@@ -57556,7 +57658,8 @@
     "currentSnapshotId": "2",
     "currentPlanId": "2",
     "currentApprovalId": "1",
-    "id": "2"
+    "id": "2",
+    "planCreatedBy": "run:8"
    },
    "detail": {
     "caseId": "C-000002",
@@ -57593,6 +57696,7 @@
     "currentPlanId": "2",
     "currentApprovalId": "1",
     "id": "2",
+    "planCreatedBy": "run:8",
     "counts": {
      "events": 24,
      "runs": 4,
@@ -59027,7 +59131,8 @@
     "closedAt": "2026-10-20T17:24:38Z",
     "currentSnapshotId": "1",
     "currentPlanId": "1",
-    "id": "1"
+    "id": "1",
+    "planCreatedBy": "run:4"
    },
    "detail": {
     "caseId": "C-000001",
@@ -59063,6 +59168,7 @@
     "currentSnapshotId": "1",
     "currentPlanId": "1",
     "id": "1",
+    "planCreatedBy": "run:4",
     "counts": {
      "events": 16,
      "runs": 4,
@@ -61764,8 +61870,8 @@
   "cases": 53,
   "license": {
    "license_type": "Concurrent User",
-   "units_consumed": 2,
-   "units_available": 6,
+   "units_consumed": 1,
+   "units_available": 7,
    "max_connections": 25
   },
   "api_webapp": true,
