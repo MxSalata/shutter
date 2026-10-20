@@ -1,17 +1,21 @@
 import { MantineProvider } from '@mantine/core';
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import evaluation from '../../../../docs/readme/evaluation.json';
 import { theme } from '@/theme';
+import type { Evaluation } from './evaluation';
 import EvaluationPage from './EvaluationPage';
 
 /** The page needs no API: the evaluation is read from the repository's documents at build time. */
-function renderPage() {
+function renderPage(data?: Evaluation) {
   return render(
     <MantineProvider theme={theme}>
-      <EvaluationPage />
+      <EvaluationPage data={data} />
     </MantineProvider>,
   );
 }
+
+const recorded = evaluation as unknown as Evaluation;
 
 describe('EvaluationPage', () => {
   it('says plainly where the figures come from', () => {
@@ -49,6 +53,60 @@ describe('EvaluationPage', () => {
     const unscored = within(table).getByText('S7 pass 1').closest('tr')!;
     expect(unscored).toHaveTextContent('Not scored: planned again after the change');
     expect(within(table).getByText('S11 ENC-1103 transfer')).toBeInTheDocument();
+  });
+
+  it('marks nothing in a pass that is not scored, as the document does', () => {
+    renderPage();
+    const table = screen.getByRole('region', { name: 'Per scenario' });
+    // Every member said resend, which the scenario's later expectation does not match
+    const unscored = within(table).getByText('S7 pass 1').closest('tr')!;
+    expect(within(unscored).getAllByText('Resend')).toHaveLength(4);
+    expect(unscored).not.toHaveTextContent('outweighed');
+    expect(unscored).not.toHaveTextContent('differs');
+    // The pass after the change is scored: conformance's resend was set aside, and the plan is the expected one
+    const scored = within(table).getByText('S7 pass 2').closest('tr')!;
+    const cells = within(scored).getAllByRole('cell');
+    expect(cells[2]).toHaveTextContent('outweighed');
+    expect(cells[3]).not.toHaveTextContent('outweighed');
+    expect(cells[5]).not.toHaveTextContent('differs');
+  });
+
+  it('reads an empty confidence group and an evaluation with no recordings, as the script can write them', () => {
+    const allAgreed: Evaluation = {
+      ...recorded,
+      totals: { ...recorded.totals, confidence: { ...recorded.totals.confidence, differed: { n: 0 } } },
+    };
+    const { unmount } = renderPage(allAgreed);
+    expect(
+      screen.getByText(/the findings with the expected outcome: 31, from 0\.72 to 0\.95/),
+    ).toHaveTextContent(/and those another view outweighed: none$/);
+    unmount();
+
+    const none: Evaluation = {
+      ...recorded,
+      passes: [],
+      totals: {
+        ...recorded.totals,
+        runs: 0,
+        passes: 0,
+        cases: 0,
+        scenarios: 0,
+        scored_passes: 0,
+        board_matches: 0,
+        models: [],
+        recorded_from: '',
+        recorded_to: '',
+        confidence: { matched: { n: 0 }, differed: { n: 0 } },
+      },
+    };
+    renderPage(none);
+    expect(
+      screen.getByText(
+        /^There are no recorded live runs to evaluate yet: scripts\/evaluate\.py found none\./,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/^the findings with the expected outcome: none/)).toBeInTheDocument();
+    expect(screen.getByText('No scored passes')).toBeInTheDocument();
   });
 
   it("lists the document's Not yet measured items and the scenarios with no recordings", () => {

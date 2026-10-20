@@ -7,7 +7,8 @@ export interface EvaluationMember {
   disposition: string;
   /** The specialist's own confidence, 0 to 1; the coordinator's plan carries none. */
   confidence: number | null;
-  matches_expected: boolean;
+  /** Null when the scenario names no expected disposition. */
+  matches_expected: boolean | null;
   model: string;
   duration_ms: number;
   prompt_tokens: number;
@@ -34,6 +35,7 @@ export interface EvaluationPass {
   members: Record<string, EvaluationMember>;
   catalogue_entry: string;
   entry_decides: string;
+  /** The plan's disposition: the coordinator's. */
   board_disposition: string;
   /** unanimous, with the majority, with a minority, against all three. */
   agreement: string;
@@ -48,6 +50,14 @@ export interface EvaluationPass {
   agent_ms: number;
   /** The case's outcome when the scenario was played end to end (comparison.md), by mode. */
   played: Record<string, { status: string; cost_usd: number | null }>;
+}
+
+/** One group of the specialists' confidence; an empty group has its count alone. */
+export interface EvaluationConfidence {
+  n: number;
+  min?: number;
+  mean?: number;
+  max?: number;
 }
 
 export interface Evaluation {
@@ -70,13 +80,14 @@ export interface Evaluation {
     cost_usd: number;
     agent_ms: number;
     models: string[];
+    /** The first and last runs' start, or "" when there are no recordings. */
     recorded_from: string;
     recorded_to: string;
     scored_passes: number;
     board_matches: number;
     specialist_matches: Record<string, number>;
     agreement: Record<string, number>;
-    confidence: Record<string, { n: number; min: number; mean: number; max: number }>;
+    confidence: Record<string, EvaluationConfidence>;
   };
 }
 

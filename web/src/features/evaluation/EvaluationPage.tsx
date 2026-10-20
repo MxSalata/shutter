@@ -10,6 +10,7 @@ import {
   passName,
   SPECIALISTS,
   type Evaluation,
+  type EvaluationConfidence,
   type EvaluationMember,
   type EvaluationPass,
 } from './evaluation';
@@ -18,7 +19,7 @@ import {
  * How the board decides, from docs/readme/evaluation.json: the document scripts/evaluate.py writes from the recorded
  * live runs, read here at build time (never copied by hand), with the "Not yet measured" list from evaluation.md.
  */
-const data = evaluation as unknown as Evaluation;
+const EVALUATION = evaluation as unknown as Evaluation;
 const NOT_YET = notYetMeasured(evaluationText);
 const day = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
@@ -26,23 +27,28 @@ const day = new Intl.DateTimeFormat('en-GB', {
   year: 'numeric',
   timeZone: 'UTC',
 });
-const recordedDay = day.format(new Date(data.totals.recorded_from));
-const scored = data.passes.filter((p) => p.scored);
-const elapsed = scored.map((p) => p.elapsed_ms);
-const costs = scored.map((p) => p.cost_usd);
-const agreement = Object.entries(data.totals.agreement);
 
 /** The list's "a, b and c" from a few parts. */
 const andList = (parts: string[]) => parts.join(', ').replace(/, ([^,]*)$/, ' and $1');
 
-/** A member's disposition and, for a specialist, its confidence; a view the plan set aside says so. */
-function MemberCell({ m, plan }: { m: EvaluationMember | undefined; plan: boolean }) {
+/**
+ * What evaluation.md marks in a member's cell: nothing in a pass that is not scored; in a scored one, a specialist
+ * whose disposition is not the plan's was outweighed, and a plan that is not the expected outcome differs.
+ */
+function memberNote(m: EvaluationMember, p: EvaluationPass, plan: boolean): string {
+  if (!p.scored) return '';
+  if (plan) return m.matches_expected === false ? 'differs' : '';
+  return m.disposition !== p.board_disposition ? 'outweighed' : '';
+}
+
+/** A member's disposition and, for a specialist, its confidence, with its note. */
+function MemberCell({ m, p, plan }: { m: EvaluationMember | undefined; p: EvaluationPass; plan: boolean }) {
   if (!m) return <Text size="sm">-</Text>;
   const confidence =
     m.confidence !== null && m.confidence !== undefined
       ? `confidence ${Math.round(m.confidence * 100)}%`
       : '';
-  const note = m.matches_expected ? '' : plan ? 'differs' : 'outweighed';
+  const note = memberNote(m, p, plan);
   return (
     <Stack gap={2}>
       <DispositionBadge disposition={m.disposition} />
@@ -53,6 +59,12 @@ function MemberCell({ m, plan }: { m: EvaluationMember | undefined; plan: boolea
       ) : null}
     </Stack>
   );
+}
+
+/** One group of the specialists' confidence; scripts/evaluate.py writes an empty group as its count alone. */
+function confidenceGroup(c: EvaluationConfidence): string {
+  if (!c.n || c.min === undefined || c.max === undefined || c.mean === undefined) return 'none';
+  return `${c.n}, from ${c.min.toFixed(2)} to ${c.max.toFixed(2)} (mean ${c.mean.toFixed(2)})`;
 }
 
 /** What the scenario expects, or why the pass is not scored against it. */
@@ -74,8 +86,17 @@ function tokens(p: EvaluationPass): string {
   return parts.join(' · ');
 }
 
-export default function EvaluationPage() {
+/** The page; a test may pass another document of the same shape. */
+export default function EvaluationPage({ data = EVALUATION }: { data?: Evaluation }) {
   const t = data.totals;
+  const scored = data.passes.filter((p) => p.scored);
+  const elapsed = scored.map((p) => p.elapsed_ms);
+  const costs = scored.map((p) => p.cost_usd);
+  const agreement = Object.entries(t.agreement);
+  // An evaluation made with no recordings has no first run to date it by
+  const source = t.recorded_from
+    ? `Every figure here comes from the recorded live runs of ${day.format(new Date(t.recorded_from))}: ${formatInt(t.runs)} runs of ${andList(t.models)}, started between ${formatUtc(t.recorded_from)} and ${formatUtc(t.recorded_to)}, computed from the recordings by scripts/evaluate.py with no model calls.`
+    : 'There are no recorded live runs to evaluate yet: scripts/evaluate.py found none.';
   return (
     <>
       <PageHeader
@@ -86,7 +107,7 @@ export default function EvaluationPage() {
         <Card padding="md">
           <Stack gap="sm">
             <Text size="sm" fw={600}>
-              {`Every figure here comes from the recorded live runs of ${recordedDay}: ${formatInt(t.runs)} runs of ${andList(t.models)}, started between ${formatUtc(t.recorded_from)} and ${formatUtc(t.recorded_to)}, computed from the recordings by scripts/evaluate.py with no model calls. Nothing on this page was measured on this instance.`}
+              {`${source} Nothing on this page was measured on this instance.`}
             </Text>
             <Text size="sm" c="dimmed">
               A pass is one board decision on one case: the three specialists in parallel (conformance,
@@ -114,7 +135,7 @@ export default function EvaluationPage() {
                   andList(
                     Object.entries(t.confidence).map(
                       ([which, c]) =>
-                        `${which === 'matched' ? 'the findings with the expected outcome' : 'those another view outweighed'}: ${c.n}, from ${c.min.toFixed(2)} to ${c.max.toFixed(2)} (mean ${c.mean.toFixed(2)})`,
+                        `${which === 'matched' ? 'the findings with the expected outcome' : 'those another view outweighed'}: ${confidenceGroup(c)}`,
                     ),
                   ),
                 ],
@@ -124,7 +145,9 @@ export default function EvaluationPage() {
                 ],
                 [
                   'Per pass',
-                  `${formatUsd(Math.min(...costs))} to ${formatUsd(Math.max(...costs))}, and ${formatDuration(Math.min(...elapsed))} to ${formatDuration(Math.max(...elapsed))} from the first specialist's start to the plan; ${formatDuration(t.agent_ms)} of agent time in all`,
+                  scored.length
+                    ? `${formatUsd(Math.min(...costs))} to ${formatUsd(Math.max(...costs))}, and ${formatDuration(Math.min(...elapsed))} to ${formatDuration(Math.max(...elapsed))} from the first specialist's start to the plan; ${formatDuration(t.agent_ms)} of agent time in all`
+                    : 'No scored passes',
                 ],
               ]}
             />
@@ -139,7 +162,8 @@ export default function EvaluationPage() {
             Each member's disposition and confidence, the plan's disposition, the catalogue entry the plan
             cites with who it says decides (policy: the catalogue alone may settle it in site-policy mode;
             board: it needs the board's judgement; person: only a person may act), the agreement, and the
-            tokens, cost and time of the pass. "Outweighed" marks a view the plan set aside for another.
+            tokens, cost and time of the pass. In a scored pass, "outweighed" marks a view the plan set aside
+            for another, and "differs" a plan that is not the expected outcome.
           </Text>
           <Table.ScrollContainer minWidth={1100}>
             <Table verticalSpacing="xs">
@@ -174,11 +198,11 @@ export default function EvaluationPage() {
                     </Table.Td>
                     {SPECIALISTS.map((s) => (
                       <Table.Td key={s}>
-                        <MemberCell m={p.members[s]} plan={false} />
+                        <MemberCell m={p.members[s]} p={p} plan={false} />
                       </Table.Td>
                     ))}
                     <Table.Td>
-                      <MemberCell m={p.members.coordinator} plan />
+                      <MemberCell m={p.members.coordinator} p={p} plan />
                     </Table.Td>
                     <Table.Td>
                       <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
