@@ -4,7 +4,7 @@ import { useCases } from '@/api/hooks';
 import type { CaseSummary, Mode } from '@/api/types';
 
 /**
- * The demo's guided path: the recorded cases in the order the README's "Five minutes with Shutter" takes them. Each
+ * The demo's guided path: a short path through the recorded cases, and then the Settings and Evaluation pages. Each
  * step's case is found among the recorded cases by scenario and mode, never by a written-in id, so a recording made
  * again still links to the right case; a step whose recording is missing is left out. The demo build alone shows it.
  */
@@ -103,9 +103,8 @@ export function StartHere() {
             Start here
           </Title>
           <Text size="sm" c="dimmed">
-            The recorded cases in the order the README takes them. The demo replays recorded runs in the
-            browser, so Approve in step 1, and the escalation and the close in step 4, work here too; nothing
-            leaves the browser.
+            A short path through the recorded cases. The demo replays recorded runs in the browser, so Approve
+            in step 1, and the escalation and the close in step 4, work here too; nothing leaves the browser.
           </Text>
         </Stack>
         <List type="ordered" spacing="sm">

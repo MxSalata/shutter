@@ -17,6 +17,7 @@ import { useDisclosure } from '@mantine/hooks';
 import {
   IconBooks,
   IconBuildingHospital,
+  IconChartBar,
   IconContrast,
   IconDeviceDesktop,
   IconFlask,
@@ -85,6 +86,13 @@ const NAV = [
     icon: IconSettings,
     color: 'gray',
     hint: 'Agent items, models, prices, costs',
+  },
+  {
+    to: '/evaluation',
+    label: 'Evaluation',
+    icon: IconChartBar,
+    color: 'indigo',
+    hint: 'How the board decides, from its recorded runs',
   },
   {
     to: '/health',

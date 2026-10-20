@@ -81,6 +81,17 @@ describe('the demo', () => {
       ['Evaluation', '/evaluation'],
     ]);
     expect(within(card).getByText(/S8 in Rules only mode/)).toBeInTheDocument();
+    expect(within(card).getByText(/^A short path through the recorded cases\./)).toBeInTheDocument();
+  });
+
+  it("puts the scenario cards' headings under their own heading, not under Start here", async () => {
+    renderAt('/scenarios');
+    const start = await screen.findByRole('heading', { name: 'Start here', level: 2 });
+    const run = await screen.findByRole('button', { name: 'Run S2' });
+    const every = screen.getByRole('heading', { name: 'Every scenario', level: 2 });
+    const card = within(run.closest<HTMLElement>('.mantine-Card-root')!).getByRole('heading', { level: 3 });
+    expect(start.compareDocumentPosition(every) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(every.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('keeps the induction prompt below the scenarios, under the guided path', async () => {

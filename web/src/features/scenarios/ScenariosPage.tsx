@@ -12,6 +12,7 @@ import {
   Text,
   Title,
   Tooltip,
+  VisuallyHidden,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconPlayerPlay, IconRefresh } from '@tabler/icons-react';
@@ -385,20 +386,26 @@ export default function ScenariosPage() {
           />
         ) : null}
         {scenarios.data ? (
-          <SimpleGrid cols={{ base: 1, md: 2, xl: 3 }} spacing="md">
-            {scenarios.data.scenarios.map((s) => (
-              <ScenarioCard
-                key={s.id}
-                s={s}
-                mode={mode}
-                canRun={canRun}
-                playerOff={playerOff}
-                busy={busy || (run.isPending ? 'Starting…' : '')}
-                starting={run.isPending && run.variables?.id === s.id}
-                onRun={() => start(s)}
-              />
-            ))}
-          </SimpleGrid>
+          <>
+            {/* The cards' headings sit under this one, not under Start here; the layout does not show it */}
+            <Title order={2} className={VisuallyHidden.classes.root}>
+              Every scenario
+            </Title>
+            <SimpleGrid cols={{ base: 1, md: 2, xl: 3 }} spacing="md">
+              {scenarios.data.scenarios.map((s) => (
+                <ScenarioCard
+                  key={s.id}
+                  s={s}
+                  mode={mode}
+                  canRun={canRun}
+                  playerOff={playerOff}
+                  busy={busy || (run.isPending ? 'Starting…' : '')}
+                  starting={run.isPending && run.variables?.id === s.id}
+                  onRun={() => start(s)}
+                />
+              ))}
+            </SimpleGrid>
+          </>
         ) : null}
         {DEMO ? induction : null}
       </Stack>

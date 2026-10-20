@@ -43,6 +43,14 @@ describe('ScenariosPage', () => {
     expect(await screen.findByRole('radio', { name: 'Single investigator' })).toBeInTheDocument();
   });
 
+  it("puts the scenario cards' headings under a heading of their own", async () => {
+    renderScenarios();
+    const run = await screen.findByRole('button', { name: 'Run S2' });
+    const heading = screen.getByRole('heading', { name: 'Every scenario', level: 2 });
+    const card = within(run.closest<HTMLElement>('.mantine-Card-root')!).getByRole('heading', { level: 3 });
+    expect(heading.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('shows no guided path outside the demo: an instance has its own cases', async () => {
     renderScenarios();
     expect(await screen.findByRole('button', { name: 'Run S2' })).toBeInTheDocument();
