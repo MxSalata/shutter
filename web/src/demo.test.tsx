@@ -78,6 +78,7 @@ describe('the demo', () => {
       ['Case C-000012', '/cases/C-000012'],
       ['Incident I-000001', '/incidents/I-000001'],
       ['Settings and costs', '/settings'],
+      ['Evaluation', '/evaluation'],
     ]);
     expect(within(card).getByText(/S8 in Rules only mode/)).toBeInTheDocument();
   });

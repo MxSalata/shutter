@@ -1,0 +1,307 @@
+import { Card, List, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
+import evaluation from '../../../../docs/readme/evaluation.json';
+import evaluationText from '../../../../docs/readme/evaluation.md?raw';
+import { PageHeader } from '@/components/PageHeader';
+import { KeyValueList } from '@/components/KeyValueList';
+import { DispositionBadge } from '@/components/StateBadge';
+import { formatDuration, formatInt, formatUsd, formatUtc, humanize } from '@/lib/format';
+import {
+  notYetMeasured,
+  passName,
+  SPECIALISTS,
+  type Evaluation,
+  type EvaluationMember,
+  type EvaluationPass,
+} from './evaluation';
+
+/**
+ * How the board decides, from docs/readme/evaluation.json: the document scripts/evaluate.py writes from the recorded
+ * live runs, read here at build time (never copied by hand), with the "Not yet measured" list from evaluation.md.
+ */
+const data = evaluation as unknown as Evaluation;
+const NOT_YET = notYetMeasured(evaluationText);
+const day = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
+const recordedDay = day.format(new Date(data.totals.recorded_from));
+const scored = data.passes.filter((p) => p.scored);
+const elapsed = scored.map((p) => p.elapsed_ms);
+const costs = scored.map((p) => p.cost_usd);
+const agreement = Object.entries(data.totals.agreement);
+
+/** The list's "a, b and c" from a few parts. */
+const andList = (parts: string[]) => parts.join(', ').replace(/, ([^,]*)$/, ' and $1');
+
+/** A member's disposition and, for a specialist, its confidence; a view the plan set aside says so. */
+function MemberCell({ m, plan }: { m: EvaluationMember | undefined; plan: boolean }) {
+  if (!m) return <Text size="sm">-</Text>;
+  const confidence =
+    m.confidence !== null && m.confidence !== undefined
+      ? `confidence ${Math.round(m.confidence * 100)}%`
+      : '';
+  const note = m.matches_expected ? '' : plan ? 'differs' : 'outweighed';
+  return (
+    <Stack gap={2}>
+      <DispositionBadge disposition={m.disposition} />
+      {confidence || note ? (
+        <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+          {[confidence, note].filter(Boolean).join(' · ')}
+        </Text>
+      ) : null}
+    </Stack>
+  );
+}
+
+/** What the scenario expects, or why the pass is not scored against it. */
+function expected(p: EvaluationPass): string {
+  if (!p.scored) return 'Not scored: planned again after the change';
+  const others = (p.expected.acceptable ?? [])
+    .filter((a) => a !== p.expected.disposition)
+    .map((a) => humanize(a).toLowerCase());
+  // An incident's case is scored against the entry the matcher found in its evidence, which `from` names
+  const from = p.incident && p.expected.from ? ` (${p.expected.from})` : '';
+  return `${humanize(p.expected.disposition)}${others.length ? ` (or ${others.join(', ')})` : ''}${from}`;
+}
+
+/** The pass's tokens as the provider bills them: uncached input, cache reads and writes, output. */
+function tokens(p: EvaluationPass): string {
+  const parts = [`${formatInt(p.prompt_tokens)} in`, `${formatInt(p.cache_read_tokens)} cached`];
+  if (p.cache_write_tokens) parts.push(`${formatInt(p.cache_write_tokens)} cache written`);
+  parts.push(`${formatInt(p.completion_tokens)} out`);
+  return parts.join(' · ');
+}
+
+export default function EvaluationPage() {
+  const t = data.totals;
+  return (
+    <>
+      <PageHeader
+        title="Evaluation"
+        subtitle="How the board decides: its disposition against each scenario's expected outcome, every member's own view and confidence, how far they agreed, and what each pass cost in tokens, money and time."
+      />
+      <Stack gap="md">
+        <Card padding="md">
+          <Stack gap="sm">
+            <Text size="sm" fw={600}>
+              {`Every figure here comes from the recorded live runs of ${recordedDay}: ${formatInt(t.runs)} runs of ${andList(t.models)}, started between ${formatUtc(t.recorded_from)} and ${formatUtc(t.recorded_to)}, computed from the recordings by scripts/evaluate.py with no model calls. Nothing on this page was measured on this instance.`}
+            </Text>
+            <Text size="sm" c="dimmed">
+              A pass is one board decision on one case: the three specialists in parallel (conformance,
+              encounter, impact), then the coordinator, who writes the plan. A case planned again after a
+              change has a pass per plan. A specialist decides from its own view only, so its disposition is
+              what that view alone would decide, not a verdict on the case; its confidence is in that answer.
+              Shutter stores and shows the confidence, and no rule in the core or the gate reads it.
+            </Text>
+            <KeyValueList
+              rows={[
+                [
+                  'The board against the expected outcome',
+                  `${t.board_matches} of ${t.scored_passes} scored passes (${t.cases} cases in ${t.scenarios} scenarios; ${t.passes} passes, ${t.passes - t.scored_passes} not scored)`,
+                ],
+                [
+                  'Agreement',
+                  andList(agreement.map(([how, n]) => `${how} in ${n}`)) + ` of ${t.passes} passes`,
+                ],
+                [
+                  'Each specialist alone',
+                  `${andList(SPECIALISTS.map((s) => `${s} in ${t.specialist_matches[s] ?? 0}`))} of ${t.scored_passes} scored passes gave the expected outcome from its own view`,
+                ],
+                [
+                  'Confidence',
+                  andList(
+                    Object.entries(t.confidence).map(
+                      ([which, c]) =>
+                        `${which === 'matched' ? 'the findings with the expected outcome' : 'those another view outweighed'}: ${c.n}, from ${c.min.toFixed(2)} to ${c.max.toFixed(2)} (mean ${c.mean.toFixed(2)})`,
+                    ),
+                  ),
+                ],
+                [
+                  'Tokens and cost',
+                  `${formatInt(t.prompt_tokens)} uncached input, ${formatInt(t.cache_read_tokens)} cache read, ${formatInt(t.cache_write_tokens)} cache written and ${formatInt(t.completion_tokens)} output tokens over ${formatInt(t.runs)} runs: ${formatUsd(t.cost_usd)} at list prices`,
+                ],
+                [
+                  'Per pass',
+                  `${formatUsd(Math.min(...costs))} to ${formatUsd(Math.max(...costs))}, and ${formatDuration(Math.min(...elapsed))} to ${formatDuration(Math.max(...elapsed))} from the first specialist's start to the plan; ${formatDuration(t.agent_ms)} of agent time in all`,
+                ],
+              ]}
+            />
+          </Stack>
+        </Card>
+
+        <Card padding="md" component="section" aria-labelledby="passes-title">
+          <Title order={2} fz="lg" id="passes-title" mb={4}>
+            Per scenario
+          </Title>
+          <Text size="sm" c="dimmed" mb="sm">
+            Each member's disposition and confidence, the plan's disposition, the catalogue entry the plan
+            cites with who it says decides (policy: the catalogue alone may settle it in site-policy mode;
+            board: it needs the board's judgement; person: only a person may act), the agreement, and the
+            tokens, cost and time of the pass. "Outweighed" marks a view the plan set aside for another.
+          </Text>
+          <Table.ScrollContainer minWidth={1100}>
+            <Table verticalSpacing="xs">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Pass</Table.Th>
+                  <Table.Th>Expected</Table.Th>
+                  <Table.Th>Conformance</Table.Th>
+                  <Table.Th>Encounter</Table.Th>
+                  <Table.Th>Impact</Table.Th>
+                  <Table.Th>Plan</Table.Th>
+                  <Table.Th>Entry</Table.Th>
+                  <Table.Th>Agreement</Table.Th>
+                  <Table.Th>Tokens</Table.Th>
+                  <Table.Th>Cost</Table.Th>
+                  <Table.Th>Elapsed</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {data.passes.map((p) => (
+                  <Table.Tr key={passName(p)}>
+                    <Table.Td>
+                      <Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>
+                        {passName(p)}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        {p.title}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm">{expected(p)}</Text>
+                    </Table.Td>
+                    {SPECIALISTS.map((s) => (
+                      <Table.Td key={s}>
+                        <MemberCell m={p.members[s]} plan={false} />
+                      </Table.Td>
+                    ))}
+                    <Table.Td>
+                      <MemberCell m={p.members.coordinator} plan />
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
+                        {p.catalogue_entry || '-'}
+                        {p.entry_decides ? ` (${p.entry_decides})` : ''}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm">{p.agreement}</Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="xs">{tokens(p)}</Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm">{formatUsd(p.cost_usd)}</Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
+                        {formatDuration(p.elapsed_ms)}
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+                <Table.Tr>
+                  <Table.Th>Total</Table.Th>
+                  <Table.Td colSpan={7}>
+                    <Text size="sm">{`${t.passes} passes, ${t.runs} runs`}</Text>
+                  </Table.Td>
+                  <Table.Td>
+                    <Text size="xs">{`${formatInt(t.prompt_tokens)} in · ${formatInt(t.cache_read_tokens)} cached · ${formatInt(t.cache_write_tokens)} cache written · ${formatInt(t.completion_tokens)} out`}</Text>
+                  </Table.Td>
+                  <Table.Td>
+                    <Text size="sm">{formatUsd(t.cost_usd)}</Text>
+                  </Table.Td>
+                  <Table.Td>
+                    <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
+                      {`${formatDuration(t.agent_ms)} of agent time`}
+                    </Text>
+                  </Table.Td>
+                </Table.Tr>
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
+        </Card>
+
+        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+          <Card padding="md" component="section" aria-labelledby="not-measured-title">
+            <Title order={2} fz="lg" id="not-measured-title" mb="sm">
+              Not yet measured
+            </Title>
+            <List size="sm" spacing="sm">
+              {NOT_YET.map((item) => (
+                <List.Item key={item.title || item.text}>
+                  {item.title ? (
+                    <Text span size="sm" fw={600}>
+                      {item.title}{' '}
+                    </Text>
+                  ) : null}
+                  <Text span size="sm">
+                    {item.text}
+                  </Text>
+                </List.Item>
+              ))}
+            </List>
+          </Card>
+          <Card padding="md" component="section" aria-labelledby="without-board-title">
+            <Title order={2} fz="lg" id="without-board-title" mb="sm">
+              Scenarios with no board recordings
+            </Title>
+            <List size="sm" spacing="sm">
+              {data.without_board.map((s) => (
+                <List.Item key={s.scenario}>
+                  <Text span size="sm" fw={600}>
+                    {s.scenario} {s.title}:{' '}
+                  </Text>
+                  <Text span size="sm">
+                    {s.why}.
+                  </Text>
+                </List.Item>
+              ))}
+            </List>
+          </Card>
+        </SimpleGrid>
+
+        <Card padding="md" component="section" aria-labelledby="sources-title">
+          <Title order={2} fz="lg" id="sources-title" mb={4}>
+            Where the figures come from
+          </Title>
+          <Text size="sm" c="dimmed" mb="sm">
+            The files of the repository the evaluation reads, and the list prices per million tokens it
+            applies to each run's tokens, as the Settings page does.
+          </Text>
+          <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+            <KeyValueList rows={Object.entries(data.sources).map(([key, value]) => [humanize(key), value])} />
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Model</Table.Th>
+                  <Table.Th>Input</Table.Th>
+                  <Table.Th>Output</Table.Th>
+                  <Table.Th>Cache read</Table.Th>
+                  <Table.Th>Cache write</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {Object.entries(data.prices_per_million).map(([model, price]) => (
+                  <Table.Tr key={model}>
+                    <Table.Td>
+                      <Text size="sm" className="mono-wrap">
+                        {model}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>{formatUsd(price.input)}</Table.Td>
+                    <Table.Td>{formatUsd(price.output)}</Table.Td>
+                    <Table.Td>{formatUsd(price.cache_read)}</Table.Td>
+                    <Table.Td>{formatUsd(price.cache_write)}</Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </SimpleGrid>
+        </Card>
+      </Stack>
+    </>
+  );
+}

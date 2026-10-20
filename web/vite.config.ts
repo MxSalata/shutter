@@ -79,8 +79,9 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       strictPort: true,
-      // The mock reads the scenario definitions (fixtures/scenarios.json) beside the recorded answers.
-      fs: { allow: [searchForWorkspaceRoot(process.cwd()), '../fixtures'] },
+      // The mock reads the scenario definitions (fixtures/scenarios.json) beside the recorded answers, and the
+      // Evaluation page the board's evaluation (docs/readme/evaluation.json and .md).
+      fs: { allow: [searchForWorkspaceRoot(process.cwd()), '../fixtures', '../docs'] },
       proxy: {
         // The browser talks to Vite, Vite to IRIS: same origin, so the session cookie works as it will when IRIS
         // serves the app. A Basic challenge on a 401 would open the browser's own login dialog.

@@ -17,6 +17,7 @@ const SCREENS: [path: string, heading: string][] = [
   ['/site-profile', 'Site profile'],
   ['/library', 'Agent library'],
   ['/settings', 'Settings and costs'],
+  ['/evaluation', 'Evaluation'],
   ['/health', 'Health'],
 ];
 

@@ -1,4 +1,5 @@
-import { Badge, Card, Group, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
+import { Anchor, Badge, Card, Group, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
+import { Link } from 'react-router';
 import { useCosts, useSettings } from '@/api/hooks';
 import { PageHeader } from '@/components/PageHeader';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -155,7 +156,17 @@ export default function SettingsPage() {
         {s ? (
           <>
             <Card padding="md">
-              <Configured s={s} replayed={costs.data?.totals?.replayedRuns} />
+              <Stack gap="sm">
+                <Configured s={s} replayed={costs.data?.totals?.replayedRuns} />
+                <Text size="sm">
+                  How well the board decides, from its recorded live runs: every member's disposition and
+                  confidence per scenario, the agreement, the tokens, the cost and the time, and what is not
+                  yet measured.{' '}
+                  <Anchor component={Link} to="/evaluation" size="sm" underline="always">
+                    Evaluation
+                  </Anchor>
+                </Text>
+              </Stack>
             </Card>
             <Card padding="md">
               <Title order={2} fz="lg" mb={4}>

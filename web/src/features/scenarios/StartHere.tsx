@@ -1,4 +1,4 @@
-import { Anchor, Card, List, Stack, Text, Title } from '@mantine/core';
+import { Anchor, Card, Group, List, Stack, Text, Title } from '@mantine/core';
 import { Link } from 'react-router';
 import { useCases } from '@/api/hooks';
 import type { CaseSummary, Mode } from '@/api/types';
@@ -16,9 +16,13 @@ interface Step {
   mode?: Mode;
   /** The step opens the scenario's incident rather than its case. */
   incident?: boolean;
-  /** A page of the app, for a step that opens no case. */
-  to?: string;
-  label?: string;
+  /** Pages of the app, for a step that opens no case. */
+  pages?: PageLink[];
+}
+
+interface PageLink {
+  to: string;
+  label: string;
 }
 
 const STEPS: Step[] = [
@@ -52,10 +56,12 @@ const STEPS: Step[] = [
     text: 'The receiver went down twice and eight deliveries failed: one incident, a chain per encounter in event order, released one operation at a time at the version the one before verified.',
   },
   {
-    to: '/settings',
-    label: 'Settings and costs',
-    title: 'Settings and costs',
-    text: 'Every agent run with its model, tokens, cache and cost; a replayed run costs nothing.',
+    pages: [
+      { to: '/settings', label: 'Settings and costs' },
+      { to: '/evaluation', label: 'Evaluation' },
+    ],
+    title: 'Settings and costs, and the evaluation of the board',
+    text: "Every agent run with its model, tokens, cache and cost; a replayed run costs nothing. The evaluation gives each board member's disposition and confidence per scenario, from the recorded live runs.",
   },
 ];
 
@@ -68,25 +74,27 @@ function caseFor(cases: CaseSummary[], scenario: string, mode?: Mode): CaseSumma
   return ofScenario.find((c) => c.mode === 'board') ?? ofScenario[0];
 }
 
-/** Where a step leads: a case, an incident or a page; nothing when its recording is missing. */
-function linkFor(step: Step, cases: CaseSummary[]): { to: string; label: string } | null {
-  if (step.to) return { to: step.to, label: step.label ?? step.to };
-  if (!step.scenario) return null;
+/** Where a step leads: its pages, a case or an incident; nothing when its recording is missing. */
+function linksFor(step: Step, cases: CaseSummary[]): PageLink[] {
+  if (step.pages) return step.pages;
+  if (!step.scenario) return [];
   if (step.incident) {
     const id = cases
       .filter((c) => c.scenario === step.scenario && c.incidentId)
       .sort(newestFirst)[0]?.incidentId;
-    return id ? { to: `/incidents/${encodeURIComponent(id)}`, label: `Incident ${id}` } : null;
+    return id ? [{ to: `/incidents/${encodeURIComponent(id)}`, label: `Incident ${id}` }] : [];
   }
   const c = caseFor(cases, step.scenario, step.mode);
-  return c ? { to: `/cases/${encodeURIComponent(c.caseId)}`, label: `Case ${c.caseId}` } : null;
+  return c ? [{ to: `/cases/${encodeURIComponent(c.caseId)}`, label: `Case ${c.caseId}` }] : [];
 }
 
 export function StartHere() {
   // The recorded cases, all of them: the demo's mock answers them from its recording whatever the limit.
   const cases = useCases({ limit: 100 });
   if (!cases.isSuccess) return null;
-  const steps = STEPS.map((s) => ({ ...s, link: linkFor(s, cases.data.items) })).filter((s) => s.link);
+  const steps = STEPS.map((s) => ({ ...s, links: linksFor(s, cases.data.items) })).filter(
+    (s) => s.links.length,
+  );
   return (
     <Card padding="md" component="section" aria-labelledby="start-here-title">
       <Stack gap="sm">
@@ -108,9 +116,13 @@ export function StartHere() {
                   {s.title}
                 </Text>
                 <Text size="sm">{s.text}</Text>
-                <Anchor component={Link} to={s.link!.to} size="sm" fw={600} w="fit-content">
-                  {s.link!.label}
-                </Anchor>
+                <Group gap="md">
+                  {s.links.map((l) => (
+                    <Anchor key={l.to} component={Link} to={l.to} size="sm" fw={600}>
+                      {l.label}
+                    </Anchor>
+                  ))}
+                </Group>
               </Stack>
             </List.Item>
           ))}
