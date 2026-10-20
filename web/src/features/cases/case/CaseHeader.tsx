@@ -1,10 +1,11 @@
 import { Anchor, Badge, Group, Stack, Text, Title, Tooltip } from '@mantine/core';
-import { IconExternalLink } from '@tabler/icons-react';
 import { Link } from 'react-router';
 import type { CaseDetail } from '@/api/types';
+import { PortalLink } from '@/components/PortalLink';
 import { DispositionBadge, StateBadge } from '@/components/StateBadge';
 import { Timestamp } from '@/components/Timestamp';
 import { displayZone, humanize } from '@/lib/format';
+import { clampHeadline } from '@/lib/headline';
 
 /** A labelled fact in a page header. */
 export function Meta({ label, children }: { label: string; children: React.ReactNode }) {
@@ -51,7 +52,7 @@ export function CaseHeader({ c }: { c: CaseDetail }) {
       </Group>
       {c.headline ? (
         <Text size="md" fw={500}>
-          {c.headline}
+          {clampHeadline(c.headline)}
         </Text>
       ) : null}
       <Group gap="xl" wrap="wrap" align="flex-start">
@@ -97,14 +98,17 @@ export function CaseHeader({ c }: { c: CaseDetail }) {
           <Meta label="In the Management Portal">
             <Group gap="sm">
               {c.links.visualTrace ? (
-                <Anchor href={c.links.visualTrace} target="_blank" rel="noreferrer" size="sm">
-                  Message trace <IconExternalLink size={12} />
-                </Anchor>
+                <PortalLink href={c.links.visualTrace} what={`the Visual Trace of session ${c.ensSessionId}`}>
+                  Message trace
+                </PortalLink>
               ) : null}
               {c.links.workflowTrace ? (
-                <Anchor href={c.links.workflowTrace} target="_blank" rel="noreferrer" size="sm">
-                  Workflow trace <IconExternalLink size={12} />
-                </Anchor>
+                <PortalLink
+                  href={c.links.workflowTrace}
+                  what={`the trace of the case's workflow session ${c.workflowSessionId}`}
+                >
+                  Workflow trace
+                </PortalLink>
               ) : null}
             </Group>
           </Meta>

@@ -26,6 +26,7 @@ import {
   useSiteProfile,
 } from '@/api/hooks';
 import type { Mode, Scenario, ScenarioRun } from '@/api/types';
+import { DEMO } from '@/demo';
 import { PageHeader } from '@/components/PageHeader';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
@@ -33,7 +34,7 @@ import { DispositionBadge, StateBadge } from '@/components/StateBadge';
 import { describeError } from '@/lib/errors';
 import { formatAge, humanize } from '@/lib/format';
 
-const MODES: { value: Mode; label: string; hint: string }[] = [
+const ALL_MODES: { value: Mode; label: string; hint: string }[] = [
   {
     value: 'board',
     label: 'Board',
@@ -55,6 +56,14 @@ const MODES: { value: Mode; label: string; hint: string }[] = [
     hint: 'No agents: resend unchanged unless the gate objects. The baseline to compare with',
   },
 ];
+
+/** The demo leaves out the single investigator: its runs were never recorded, so it has nothing to replay. */
+const MODES = DEMO ? ALL_MODES.filter((m) => m.value !== 'single') : ALL_MODES;
+
+const modeLabel = (mode: Mode) => ALL_MODES.find((m) => m.value === mode)?.label ?? humanize(mode);
+
+/** Whether the scenario is defined for the mode: one that names its modes isn't for the others. */
+const definedFor = (s: Scenario, mode: Mode) => !s.expected?.modes || s.expected.modes.includes(mode);
 
 function RunBanner({ run }: { run: ScenarioRun }) {
   if (run.state === 'queued')
@@ -161,9 +170,19 @@ function ScenarioCard({
   onRun: () => void;
   starting: boolean;
 }) {
-  const why = !canRun ? 'Running a scenario needs the operator role' : busy;
+  const defined = definedFor(s, mode);
+  const modes = (s.expected?.modes ?? []).filter((m) => MODES.some((x) => x.value === m)).map(modeLabel);
+  const why = !defined
+    ? `${s.id} is not defined for ${modeLabel(mode)} mode: it would not end as its card says. Its modes: ${modes.join(', ')}.`
+    : !canRun
+      ? 'Running a scenario needs the operator role'
+      : busy;
   return (
-    <Card padding="md">
+    <Card
+      padding="md"
+      bg={defined ? undefined : 'var(--mantine-color-default-hover)'}
+      data-defined={defined ? undefined : 'false'}
+    >
       <Stack gap="sm" h="100%">
         <Group justify="space-between" wrap="nowrap" align="flex-start">
           <Stack gap={2} style={{ minWidth: 0 }}>
@@ -190,6 +209,11 @@ function ScenarioCard({
           </Tooltip>
         </Group>
         <Text size="sm">{s.summary}</Text>
+        {!defined ? (
+          <Text size="xs" fw={600}>
+            Not defined for {modeLabel(mode)} mode. Its modes: {modes.join(', ')}.
+          </Text>
+        ) : null}
         <ExpectedOutcome s={s} />
         <div style={{ flex: 1 }} />
         {s.latestCase ? (

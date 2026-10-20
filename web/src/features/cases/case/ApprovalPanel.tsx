@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { usePreviewBlindResend, useDecideApproval } from '@/api/hooks';
 import { newIdempotencyKey } from '@/api/client';
 import type { ApprovalsView, CaseDetail, Me, PlanView } from '@/api/types';
+import { DEMO } from '@/demo';
 import { Digest } from '@/components/Digest';
 import { KeyValueList } from '@/components/KeyValueList';
 import { Timestamp } from '@/components/Timestamp';
@@ -125,9 +126,11 @@ export function ApprovalPanel({
             color: decision === 'approve' ? 'teal' : 'gray',
             title: decision === 'approve' ? 'Approved' : 'Rejected',
             message:
-              decision === 'approve'
-                ? 'The receiver is read again and the gate checks the dispatch.'
-                : 'Nothing will be sent.',
+              decision !== 'approve'
+                ? 'Nothing will be sent.'
+                : DEMO
+                  ? 'The demo now replays what the recorded live run did after its approval: the dispatch and its verification.'
+                  : 'The receiver is read again and the gate checks the dispatch.',
           });
         },
       },
@@ -161,6 +164,13 @@ export function ApprovalPanel({
       {!write && plan ? <NotYet>No approval needed: the plan writes nothing.</NotYet> : null}
       {write || awaiting ? (
         <Stack gap="sm">
+          {DEMO && awaiting ? (
+            <Alert color="blue" variant="light" title="Demo replay">
+              This recorded case is held at its approval so that you can decide it here. Approving it replays
+              what the live run did next, the dispatch and its verification at the receiver; rejecting it
+              closes it as blocked. The plan digest you approve is the recorded plan's.
+            </Alert>
+          ) : null}
           <KeyValueList
             rows={[
               [

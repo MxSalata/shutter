@@ -1,6 +1,6 @@
-import { Anchor, Group, Stack, Text, Title } from '@mantine/core';
-import { IconExternalLink } from '@tabler/icons-react';
+import { Group, Stack, Text, Title } from '@mantine/core';
 import type { IncidentDetail } from '@/api/types';
+import { PortalLink } from '@/components/PortalLink';
 import { Timestamp } from '@/components/Timestamp';
 import { displayZone, humanize } from '@/lib/format';
 import { Meta } from '../../cases/case/CaseHeader';
@@ -42,9 +42,12 @@ export function IncidentHeader({ inc }: { inc: IncidentDetail }) {
         <Meta label="Times">{`In ${displayZone()}, as the PAS sends them; UTC in the tooltips`}</Meta>
         {inc.links?.workflowTrace && inc.workflowSessionId ? (
           <Meta label="In the Management Portal">
-            <Anchor href={inc.links.workflowTrace} target="_blank" rel="noreferrer" size="sm">
-              Workflow trace <IconExternalLink size={12} />
-            </Anchor>
+            <PortalLink
+              href={inc.links.workflowTrace}
+              what={`the trace of the incident's workflow session ${inc.workflowSessionId}`}
+            >
+              Workflow trace
+            </PortalLink>
           </Meta>
         ) : null}
       </Group>

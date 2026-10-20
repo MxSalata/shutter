@@ -8,6 +8,7 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { DispositionBadge, STATE_HINTS, StateBadge } from '@/components/StateBadge';
 import { Timestamp } from '@/components/Timestamp';
 import { humanize } from '@/lib/format';
+import { clampHeadline } from '@/lib/headline';
 
 const PAGE = 25;
 
@@ -102,7 +103,7 @@ export default function CasesPage() {
                     </Table.Td>
                     <Table.Td maw={420}>
                       <Text size="sm" lineClamp={2}>
-                        {c.headline ||
+                        {clampHeadline(c.headline) ||
                           `${humanize(c.event)}${c.ward ? ` to ${c.ward}` : ''} for ${c.encounterId}`}
                       </Text>
                       {c.incidentId ? (
