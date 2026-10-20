@@ -21,7 +21,8 @@ Parameter PID = "PID|1||MRN9001^^^HOSP^MR||SYNTH^UT||19800101|F";
 
 Method PV1(class As %String, ward As %String, visit As %String) As %String
 {
-    Quit "PV1|1|" _ class _ "|" _ $SELECT(ward = "": "", 1: ward _ "^BAY1^01^HOSP") _ "|||||||||||||||||" _ visit _ "|||||||||||||||||||||||||20261019100000"
+    // PV1-2 the class, PV1-3 the location, PV1-19 the visit number (sixteen separators after the location), PV1-44 the admit time.
+    Quit "PV1|1|" _ class _ "|" _ $SELECT(ward = "": "", 1: ward _ "^BAY1^01^HOSP") _ "||||||||||||||||" _ visit _ "|||||||||||||||||||||||||20261019100000"
 }
 
 Method TestTriggerTable()
