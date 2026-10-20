@@ -8,8 +8,9 @@
 /// string value, wherever the value stands: a field, an operation key, a history entry, a timeline row, an error echo.
 /// The map is built once per case by Learn, in the business process, in a canonical order; Reduce only reads it. The
 /// view fails closed: when Learn cannot read the message or store a token it returns an error and the workflow sends
-/// nothing, and Reduce refuses a case whose own identifiers have no tokens. Values are matched whatever their case
-/// ("SMITH", "Smith"). The stored snapshot is untouched: the gate, the matcher, the verifier and the app read it inside
+/// nothing, and Reduce refuses a case whose own identifiers have no tokens. Values of three characters or more are
+/// matched whatever their case ("SMITH", "Smith"); a two-letter name part only as written, so a short word of the
+/// summary's own text ("no", "to") is never taken for a name. The stored snapshot is untouched: the gate, the matcher, the verifier and the app read it inside
 /// IRIS. The regular expressions are ICU's ($LOCATE, $MATCH).
 Class Shutter.Util.ModelView Extends %RegisteredObject
 {
@@ -66,7 +67,7 @@ ClassMethod Reduce(case As Shutter.Store.Case, obj As %DynamicAbstractObject) As
     Set list = ##class(Shutter.Store.CaseToken).Map(case)
     For i = 1:1:$LISTLENGTH(list) { Set e = $LIST(list, i), map(i) = e, byValue($LIST(e, 2)) = $LIST(e, 1) }
     Set map = $LISTLENGTH(list)
-    // Fail closed: a case whose own patient and encounter have no tokens was never learnt, or not completely.
+    // Fail closed: a case whose own patient or encounter has no token was never learnt, or not completely.
     For value = case.PatientId, case.EncounterId {
         If ##class(Shutter.Store.CaseToken).Accepts("", value) && '$DATA(byValue(value)) Return {"error": ("The identifiers of case " _ case.CaseId _ " have no tokens yet, so nothing of it is shown to a model")}
     }
@@ -82,7 +83,8 @@ ClassMethod ReduceJSON(case As Shutter.Store.Case, json As %String) As %String
 }
 
 /// What the model would see of a case's current evidence, as JSON: for the app, a test and the terminal. Learns the
-/// case's identifiers as the business process does, in the same canonical order.
+/// case's identifiers as the business process does, in the same canonical order, and like it shows nothing when
+/// learning fails.
 ClassMethod Preview(caseId As %String) As %String [ SqlProc ]
 {
     Set case = ##class(Shutter.Store.Case).ByCaseId(caseId)
@@ -90,7 +92,8 @@ ClassMethod Preview(caseId As %String) As %String [ SqlProc ]
     If '$ISOBJECT(case.CurrentSnapshot) Quit {"error": "The case has no evidence snapshot yet"}.%ToJSON()
     Set summary = case.CurrentSnapshot.SummaryObject()
     If '$ISOBJECT(summary) Quit {"error": "The snapshot has no summary"}.%ToJSON()
-    Do ..Learn(case, summary)
+    Set sc = ..Learn(case, summary)
+    If $$$ISERR(sc) Quit {"error": ("The model's view of the case could not be built: " _ $SYSTEM.Status.GetErrorText(sc))}.%ToJSON()
     Quit ..Reduce(case, summary).%ToJSON()
 }
 
@@ -345,7 +348,8 @@ ClassMethod Tokenise(case As Shutter.Store.Case, text As %String) As %String
 ClassMethod TokeniseWith(text As %String, ByRef map) As %String [ Private ]
 {
     If text = "" Quit text
-    For i = 1:1:+$GET(map) { Set text = ..ReplaceBounded(text, $LIST(map(i), 2), $LIST(map(i), 1), 1) }
+    // Whatever the case from three characters; a two-letter name part only as written.
+    For i = 1:1:+$GET(map) { Set text = ..ReplaceBounded(text, $LIST(map(i), 2), $LIST(map(i), 1), $LENGTH($LIST(map(i), 2)) > 2) }
     Quit text
 }
 
