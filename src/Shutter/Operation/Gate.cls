@@ -9,7 +9,7 @@ Class Shutter.Operation.Gate Extends Ens.BusinessOperation
 Parameter INVOCATION = "Queue";
 
 /// Bumped whenever a check changes; recorded on every decision and bound by approvals.
-Parameter POLICYVERSION = "2026-10-19.3";
+Parameter POLICYVERSION = "2026-10-20.1";
 
 Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shutter.Msg.GateResult) As %Status
 {
@@ -75,25 +75,31 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         Do ..Check(checks, "intent", "pass", "NO_WRITE", "The plan writes nothing to the receiver")
     }
 
-    // Ordering: for a write, the event's time is plausible (T28) and no later transfer or discharge was applied for
-    // this encounter.
+    // Ordering: for a write, the event's time and the times of the later events are plausible (T28) and no later
+    // transfer or discharge supersedes it, by the matcher's own reading of the later events and with the chain kind
+    // the snapshot's match used, so the gate and later_applied agree.
     Set cat = summary.%Get("catalogue"), conds = $SELECT($ISOBJECT(cat): cat.%Get("conditions"), 1: "")
     Set eventTime = $SELECT($ISOBJECT(conds): ##class(Shutter.Util.Json).Str(conds, "event_time"), 1: "")
     Set timeDoubt = (eventTime '= "") && (eventTime '= "plausible")
+    Set whose = $SELECT(eventTime = "later_event_future": "A later event's time", 1: "The event's time")
+    Set chainKind = $SELECT($ISOBJECT(conds): ##class(Shutter.Util.Json).Str(conds, "chain"), 1: "")
+    If chainKind = "" Set chainKind = request.ChainKind
     If isWrite {
-        Set superseding = ..Superseding(summary, case)
+        Set superseding = ..Superseding(summary, case, chainKind, .delivered)
         If timeDoubt {
-            Do ..Check(checks, "ordering", "block", "EVENT_TIME_IMPLAUSIBLE", "The event's time is not plausible (" _ eventTime _ "): " _ $CASE(eventTime, "before_admission": "it precedes the admission", "future": "it lies in the future", "far_from_recorded": "it is more than a day from when the event was recorded", "clock_change": "it lies within an hour of a clock change and came without an offset", : eventTime) _ "; a person decides")
+            Do ..Check(checks, "ordering", "block", "EVENT_TIME_IMPLAUSIBLE", whose _ " is not plausible (" _ eventTime _ "): " _ $CASE(eventTime, "before_admission": "it precedes the admission", "future": "it lies in the future", "far_from_recorded": "it is more than a day from when the event was recorded", "clock_change": "it lies within an hour of a clock change and came without an offset", "later_event_future": "it lies in the future, so it cannot settle the order", : eventTime) _ "; a person decides")
         } ElseIf superseding = "" {
             Do ..Check(checks, "ordering", "pass", "NO_LATER_EVENT", "No later transfer or discharge was applied for this encounter")
-        } Else {
+        } ElseIf delivered {
             Do ..Check(checks, "ordering", "block", "SUPERSEDED_BY_LATER_EVENT", "A later event was applied: " _ superseding)
+        } Else {
+            Do ..Check(checks, "ordering", "block", "SUPERSEDED_BY_LATER_EVENT", "A later movement was sent after it: " _ superseding)
         }
     } ElseIf plan.Disposition = "superseded" {
-        Set superseding = ..Superseding(summary, case)
+        Set superseding = ..Superseding(summary, case, chainKind, .delivered)
         If timeDoubt {
             // An ordering made with a doubtful time closes nothing on its own: a person decides.
-            Do ..Check(checks, "ordering", "block", "EVENT_TIME_IMPLAUSIBLE", "The event's time is not plausible (" _ eventTime _ "), so what came before or after it is not settled; a person decides")
+            Do ..Check(checks, "ordering", "block", "EVENT_TIME_IMPLAUSIBLE", whose _ " is not plausible (" _ eventTime _ "), so what came before or after it is not settled; a person decides")
         } ElseIf superseding '= "" {
             Do ..Check(checks, "ordering", "pass", "SUPERSEDED_BY_LATER_EVENT", "The evidence shows the later event: " _ superseding)
         } ElseIf ..ClosedByCatalogue(plan, summary) {
@@ -291,36 +297,23 @@ Method OutcomeConsistency(checks As %DynamicArray, plan As Shutter.Store.Plan, o
     Do ..Check(checks, "catalogue", "block", "OUTCOME_MISMATCH", "The outcome " _ outcome _ " calls for " _ allowed _ ", but the plan's disposition is " _ plan.Disposition)
 }
 
-/// A later applied transfer or discharge for the encounter, described, or "".
-Method Superseding(summary As %DynamicObject, case As Shutter.Store.Case) As %String [ Private ]
+/// A later transfer or discharge that supersedes the case's operation, described, or "": the last one in the feed's
+/// timeline, else the last in the receiver's own history, which is authoritative when the message store is silent.
+/// The events are the matcher's (Shutter.Catalogue.Matcher.Later), so a later movement whose delivery also failed
+/// supersedes outside a chain (delivered is then 0), and one whose time is not plausible supersedes nothing.
+Method Superseding(summary As %DynamicObject, case As Shutter.Store.Case, chainKind As %String, Output delivered As %Boolean) As %String [ Private ]
 {
-    Set found = ""
-    Set timeline = summary.%Get("timeline")
-    If $ISOBJECT(timeline) {
-        Set iter = timeline.%GetIterator()
+    Set found = "", delivered = 1
+    Set later = ##class(Shutter.Catalogue.Matcher).Later(summary, case, chainKind)
+    For from = "timeline", "history" {
+        Set iter = later.%GetIterator()
         While iter.%GetNext(.i, .ev) {
-            If '##class(Shutter.Util.Json).Bool(ev, "later") Continue
-            Set outcome = ##class(Shutter.Util.Json).Str(ev, "outcome")
-            If (outcome '= "applied") && (outcome '= "already_committed") Continue
-            Set event = ##class(Shutter.Util.Json).Str(ev, "event")
-            If (event = "transfer") || (event = "discharge") {
-                Set found = event _ $SELECT(##class(Shutter.Util.Json).Str(ev, "ward") '= "": " to " _ ev.ward, 1: "") _ " at " _ ##class(Shutter.Util.Json).Str(ev, "event_time")
-            }
+            Continue:((ev.from '= from) || 'ev.plausible)
+            Continue:((ev.word '= "transfer") && (ev.word '= "discharge"))
+            Set found = ev.word _ $SELECT(ev.ward '= "": " to " _ ev.ward, 1: "") _ " at " _ ev."event_time" _ $SELECT(from = "history": " (receiver history)", 'ev.delivered: " (its delivery failed too; its own case recovers it)", 1: "")
+            Set delivered = ev.delivered
         }
-    }
-    // The receiver's own history is authoritative when the message store is silent.
-    If found = "" {
-        Set ward = summary.%Get("ward_state")
-        Set history = $SELECT($ISOBJECT(ward): ward.%Get("history"), 1: "")
-        If $ISOBJECT(history) {
-            Set iter = history.%GetIterator()
-            While iter.%GetNext(.i, .h) {
-                Set t = ##class(Shutter.Util.Json).Str(h, "event_time")
-                If '(t ]] case.EventTime) Continue
-                Set event = ##class(Shutter.Util.Json).Str(h, "event")
-                If (event = "transfer") || (event = "discharge") Set found = event _ $SELECT(##class(Shutter.Util.Json).Str(h, "ward") '= "": " to " _ h.ward, 1: "") _ " at " _ t _ " (receiver history)"
-            }
-        }
+        Quit:found'=""
     }
     Quit found
 }

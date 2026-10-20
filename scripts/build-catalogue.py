@@ -22,7 +22,7 @@ CONDITIONS = {
     "receiver_answer": {"unavailable", "timeout", "duplicate", "version_conflict", "refused", "none"},
     "receipt": {"present", "absent", "unreadable", "none"},
     "later_applied": {"none", "transfer", "discharge", "update", "admit", "cancelled", "merge"},
-    "event_time": {"plausible", "before_admission", "future", "far_from_recorded", "clock_change"},
+    "event_time": {"plausible", "before_admission", "future", "far_from_recorded", "clock_change", "later_event_future"},
     "encounter_state": {"admitted", "discharged", "not_found", "unknown"},
     "transition": {"allowed", "invalid", "unknown"},
     "patient_match": {"yes", "no", "unknown"},

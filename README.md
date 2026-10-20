@@ -92,7 +92,7 @@ on 19 October 2026 with `claude-opus-5-5`: one board pass (three specialists and
 What you make stays: the cases, approvals, incidents, the site profile and Shutter's record of the provider
 configuration live in a data database inside the `shutter-mgr` volume (the image keeps only the code), so `docker
 compose down` and `up` keep them, a rebuilt image brings new code to the same data (a build that changes the gate's policy version, as this one does with
-`2026-10-19.3`, voids approvals given before it and not yet dispatched: such a case blocks at dispatch with
+`2026-10-20.1`, voids approvals given before it and not yet dispatched: such a case blocks at dispatch with
 `APPROVAL_POLICY_CHANGED`; reinvestigate it), and `docker compose down -v` starts
 afresh. A volume made by a build from before 18 October 2026 has no data database, and one from before 19 October 2026
 keeps the downstream system's records under its earlier name, which newer builds don't read: remove such a volume once
