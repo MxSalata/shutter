@@ -231,7 +231,7 @@ function costs(): Costs {
   };
 }
 
-/** Who made the case's current plan (its `createdBy`: run:<id>, policy:<entry> or rules), for the list's summary. */
+/** Who made the case's current plan (its `createdBy`: run:<id>, policy:<entry>, rules or withheld), for the list's summary. */
 function planOrigin(c: CaseFixture): { planCreatedBy?: string } {
   const by = (c.plan as { plan?: { createdBy?: string } } | null)?.plan?.createdBy;
   return by ? { planCreatedBy: by } : {};

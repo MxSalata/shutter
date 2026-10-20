@@ -239,19 +239,22 @@ export function BoardPanel({
   const specialists = list.filter((r) => r.role === 'specialist');
   const coordinator = list.filter((r) => r.role === 'coordinator').at(-1);
   const generalist = list.filter((r) => r.role === 'generalist').at(-1);
+  // A withheld merge or cancel convenes no board in any mode, and the section says only that.
+  const notConvened = withheld && list.length === 0;
   // In policy mode the board runs only for the cases the catalogue and the site's profile leave to it.
-  const settledByPolicy = mode === 'policy' && runs.isSuccess && list.length === 0;
-  const notConvened = withheld && runs.isSuccess && list.length === 0;
-  const title =
-    mode === 'rules'
+  const settledByPolicy = !notConvened && mode === 'policy' && runs.isSuccess && list.length === 0;
+  const title = notConvened
+    ? 'Investigation: withheld for the team'
+    : mode === 'rules'
       ? 'Investigation: rules only'
       : mode === 'single'
         ? 'Investigation: one agent'
         : settledByPolicy
           ? 'Investigation: site policy'
           : 'The board';
-  const note =
-    mode === 'rules'
+  const note = notConvened
+    ? 'Not convened: a withheld merge or cancel goes to the team that corrects it by hand, whatever the mode.'
+    : mode === 'rules'
       ? 'No agents: the rules propose resending the operation unchanged at the observed version, and the gate alone decides.'
       : mode === 'single'
         ? 'One generalist agent reads the whole snapshot and proposes the plan itself.'
@@ -261,13 +264,8 @@ export function BoardPanel({
   return (
     <Section id="board" title={title} note={note}>
       {runs.isError ? <ErrorAlert error={runs.error} title="The agent runs could not be read" /> : null}
-      {mode === 'rules' ? <NotYet>No agent runs in this mode.</NotYet> : null}
-      {notConvened ? (
-        <NotYet>
-          Not convened: a withheld merge or cancel goes to the team that corrects it by hand, whatever the
-          mode.
-        </NotYet>
-      ) : settledByPolicy ? (
+      {mode === 'rules' && !notConvened ? <NotYet>No agent runs in this mode.</NotYet> : null}
+      {notConvened ? null : settledByPolicy ? (
         <NotYet>
           No agents ran: the catalogue and the site's policy settle this case, or the board hasn't been asked
           yet.

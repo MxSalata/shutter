@@ -121,8 +121,9 @@ export interface CaseSummary {
   incidentId?: string;
   /**
    * Who made the current plan, as the plan's `createdBy` names it: `run:<id>` for an agent run (the coordinator's,
-   * or the single investigator's), `policy:<entry>` for the catalogue and the site's policy, `rules` for rules alone.
-   * A server that does not send it leaves the list to read the mode.
+   * or the single investigator's), `policy:<entry>` for the catalogue and the site's policy, `rules` for rules alone,
+   * `withheld` for a withheld operation no single catalogue entry matched (no agent runs; a person decides). Sent only
+   * when the case has a plan; a server that does not send it leaves the list to read the case's state and mode.
    */
   planCreatedBy?: string;
   /** The Ens.MessageHeader id of the message whose delivery failed: Shutter's own copy for a forwarded case. */

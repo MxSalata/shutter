@@ -62,12 +62,36 @@ describe('investigatedBy', () => {
     expect(at('rules', { planCreatedBy: 'rules' })).toEqual({ who: 'Rules only' });
   });
 
-  it('falls back to the mode when the server sends no plan origin', () => {
-    expect(at('board')).toEqual({ who: 'Board' });
-    expect(at('single')).toEqual({ who: 'Single investigator' });
-    expect(at('rules')).toEqual({ who: 'Rules only' });
-    expect(at('policy')).toEqual({ who: 'Site policy' });
-    expect(at('board', { failureKind: 'withheld' })).toEqual({ who: 'Site policy' });
+  it('says a person decides a withheld operation no single catalogue entry matched', () => {
+    expect(at('rules', { planCreatedBy: 'withheld', failureKind: 'withheld' })).toEqual({
+      who: 'Withheld: a person decides',
+    });
+    expect(at('policy', { planCreatedBy: 'withheld', failureKind: 'withheld' })).toEqual({
+      who: 'Withheld: a person decides',
+    });
+  });
+
+  it('says not yet while the case is on its way to a plan', () => {
+    for (const state of ['detected', 'collecting', 'investigating', 'grouped'] as const) {
+      expect(at('board', { state })).toEqual({ who: 'Not yet' });
+      expect(at('policy', { state })).toEqual({ who: 'Not yet' });
+    }
+  });
+
+  it('reads the mode for a case with no plan origin, without claiming the policy settled it', () => {
+    const escalated = { state: 'escalated' } as const;
+    expect(at('board', escalated)).toEqual({ who: 'Board' });
+    expect(at('single', escalated)).toEqual({ who: 'Single investigator' });
+    expect(at('rules', escalated)).toEqual({ who: 'Rules only' });
+    // In site-policy mode the catalogue may have settled it or left it to the board
+    expect(at('policy', escalated)).toEqual({ who: 'Site policy or board' });
+    expect(at('board', { ...escalated, failureKind: 'withheld' })).toEqual({
+      who: 'Withheld: a person decides',
+    });
+  });
+
+  it('names no one for a plan origin it does not know', () => {
+    expect(at('board', { planCreatedBy: 'user:approver' })).toEqual({ who: '-' });
   });
 
   it('shows the entry under the name in the list', () => {

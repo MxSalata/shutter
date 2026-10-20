@@ -286,7 +286,8 @@ escalation), the case's `outcome` ("Handled by hand, recorded by <who>: <reason>
 
 **Who made the plan** (v1.18). `GET /cases` and `GET /cases/{id}` carry `planCreatedBy` when the case has a plan: the
 current plan's `createdBy`, `run:<id>` for the coordinator's or the single investigator's run, `policy:<entry>` for the
-catalogue and the site's policy, `rules` for rules alone. The cases list shows it as who investigated the case.
+catalogue and the site's policy, `rules` for rules alone, `withheld` for a withheld merge or cancel that no single
+catalogue entry matched (no agent runs; a person decides). The cases list shows it as who investigated the case.
 
 ## 6. The scenario catalogue and the matcher (v1.6)
 

@@ -14,28 +14,32 @@ import { forwardedFrom } from './case/derive';
 
 const PAGE = 25;
 
+/** The states a case is in before anyone has made its plan. */
+const BEFORE_PLAN = new Set(['detected', 'collecting', 'investigating', 'grouped']);
+
 /**
- * Who investigated the case and made its plan: the board, the single investigator, rules alone or the site's policy
- * (the catalogue entry it matched). The plan's origin says it exactly (an agent run, a policy entry or rules); a
- * server that does not send it leaves the mode, which in site-policy mode cannot tell a case the policy settled from
- * one it left to the board. A withheld merge or cancel is the policy's in every mode: no agent runs for it.
+ * Who investigated the case and made its plan: the board, the single investigator, rules alone, the site's policy
+ * (the catalogue entry it matched), or nobody for a withheld operation, which a person decides. The plan's origin says
+ * it exactly, and the server sends it only when the case has a plan. With none, a case on its way to a plan says so, a
+ * withheld one says a person decides, and any other reads the mode, which in site-policy mode cannot tell the policy
+ * from the board.
  */
 export function investigatedBy(c: CaseSummary): { who: string; entry?: string } {
   const by = c.planCreatedBy ?? '';
   if (by.startsWith('run:')) return { who: c.mode === 'single' ? 'Single investigator' : 'Board' };
   if (by.startsWith('policy:')) return { who: 'Site policy', entry: by.slice('policy:'.length) };
   if (by === 'rules') return { who: 'Rules only' };
-  if (c.failureKind === 'withheld') return { who: 'Site policy' };
-  return {
-    who:
-      c.mode === 'single'
-        ? 'Single investigator'
-        : c.mode === 'rules'
-          ? 'Rules only'
-          : c.mode === 'policy'
-            ? 'Site policy'
-            : 'Board',
+  if (by === 'withheld') return { who: 'Withheld: a person decides' };
+  if (by) return { who: '-' };
+  if (BEFORE_PLAN.has(c.state)) return { who: 'Not yet' };
+  if (c.failureKind === 'withheld') return { who: 'Withheld: a person decides' };
+  const byMode: Record<string, string> = {
+    board: 'Board',
+    single: 'Single investigator',
+    rules: 'Rules only',
+    policy: 'Site policy or board',
   };
+  return { who: byMode[c.mode] ?? '-' };
 }
 
 /** A case another production forwarded (CONTRACTS 11); the tooltip says where its message came from. */

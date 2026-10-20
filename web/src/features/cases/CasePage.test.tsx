@@ -70,8 +70,18 @@ describe('CasePage', () => {
 
   it('says the board was not convened for a withheld merge', async () => {
     renderCase('C-000012');
-    const board = await screen.findByRole('region', { name: 'The board' });
+    const board = await screen.findByRole('region', { name: 'Investigation: withheld for the team' });
     expect(await within(board).findByText(/^Not convened/)).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'The board' })).not.toBeInTheDocument();
+  });
+
+  it('says only that the board was not convened for a withheld merge in rules mode', async () => {
+    renderCase('C-000025');
+    const board = await screen.findByRole('region', { name: 'Investigation: withheld for the team' });
+    await waitFor(() => expect(within(board).getAllByText(/^Not convened/)).toHaveLength(1));
+    expect(within(board).queryByText(/the rules propose/)).not.toBeInTheDocument();
+    expect(within(board).queryByText('No agent runs in this mode.')).not.toBeInTheDocument();
+    expect(within(board).queryByText(/^No agents/)).not.toBeInTheDocument();
   });
 
   it('says why an escalated case stopped and what comes next', async () => {
