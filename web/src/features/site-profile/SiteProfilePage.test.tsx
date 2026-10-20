@@ -95,6 +95,7 @@ describe('SiteProfilePage', () => {
     expect(screen.queryByText('Shutter is running on the shipped answers')).not.toBeInTheDocument();
   });
 
+  // It fills a whole team form, about 3 s alone, so it gets more than the 5 s default when the suite runs in parallel.
   it('adds a team that corrects a receiver by hand, and sends it with the profile', async () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Add a team' }));
@@ -129,7 +130,7 @@ describe('SiteProfilePage', () => {
         sources: [],
       },
     ]);
-  });
+  }, 15_000);
 
   it('refuses a team mailbox outside the allowed domains before sending, and points at it', async () => {
     renderPage();
