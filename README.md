@@ -8,7 +8,7 @@
 
 - **S8, the case a gate can't catch:** two systems move one patient in the same minute. Rules alone pass every check and write WARD-B over the bed manager's WARD-C; the board sees that the evidence can't decide which movement is current, and escalates to a person.
 - **The board gets 11 of the 11 single cases it is convened for, live and in replay; rules alone get 4 of those 11.** S15 and S16 (a patient merge and a cancel the receiver can't take) are withheld by rule before either. The table: [comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md); how well the agents decide: [Evaluation](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md).
-- **About 0.38 USD and 27 to 38 seconds of agent time a board pass** with `claude-opus-5-5`. Without an API key the board replays its own recorded live runs, so the demo costs nothing.
+- **About 0.38 USD a board pass, and 27 to 38 seconds from the board's start to the coordinator's plan** with `claude-opus-5-5` (the three specialists run in parallel). Without an API key the board replays its own recorded live runs, so the demo costs nothing.
 
 **Links:**
 
@@ -53,11 +53,11 @@ Not used, on purpose: nested agents (the case workflow gives the board its paral
 
 ### Five minutes with Shutter
 
-Sign in to the online demo with **Try the demo**, or to your own instance as `approver` / `shutter`, and open **Scenarios**.
+Sign in to your own instance as `approver` / `shutter`, or to the online demo with **Try the demo**, and open **Scenarios**. The online demo shows the recorded outcomes; **Approve** (steps 1, 3 and 5) needs your own instance.
 
 1. **S2, board mode.** A transfer never arrived. Three specialists review the evidence, the coordinator proposes a resend, the gate passes it and the receiver's dry run says it would apply. **Approve**: one conditional write, then "Verified" from the receiver's history.
 2. **S1, board mode, then Rules only.** A later transfer has overtaken the failed one. The board closes the case as superseded and writes nothing; rules alone propose a resend, and the gate blocks it.
-3. **S8, Rules only, then board mode.** Rules alone resend and overwrite the bed manager's placement; the board escalates. This is the case the gate alone can't catch.
+3. **S8, Rules only, then board mode.** Rules alone pass every check; **Approve** the plan and the resend overwrites the bed manager's WARD-C with WARD-B. In board mode the board escalates. This is the case the gate alone can't catch.
 4. **S15, any mode.** A patient merge: the gate blocks every plan (`MERGE_WITHHELD`), the board is not convened, **Escalate** drafts the email to the PAS team, and **Mark as handled by the team** closes the case with what they did.
 5. **S11, Site policy mode.** The receiver goes down twice and eight deliveries fail: one incident, a chain per encounter, the single chains settled by the site's policy, the ordered chain waiting for one approval.
 
@@ -75,7 +75,8 @@ In the Management Portal, the Visual Trace of a case shows each step as a messag
 
 ### How it is tested
 
-- CI on a real IRIS for Health Community 2026.2 on every push to `main` that changes code (a push of only the README or `docs/` runs nothing): the full install, the receiving system's 23 contract tests and Shutter's 9 trigger tests, 17 scenarios end to end through the REST API, the privacy check, and axe-core on 12 screens in 5 appearances. Third-party actions are pinned by commit SHA.
+- CI runs on every push to `main` that changes code (a push of only the README or `docs/` runs nothing). On a real IRIS for Health Community 2026.2 it runs the full install, the receiving system's 23 contract tests and Shutter's 9 trigger tests, and 17 scenarios end to end through the REST API.
+- CI also checks the recordings and the demo's data for privacy, and runs axe-core on 12 screens in 5 appearances of the web app's demo build. Third-party actions are pinned by commit SHA.
 - The live edition (the aihub module) needs the AI Hub build, which CI can't download, so it is checked by hand on that build, and its recorded runs are what CI replays.
 
 ### Limits, plainly
@@ -93,7 +94,7 @@ Shutter runs on InterSystems IRIS for Health Community with AI Hub, build `2026.
 
 ### With the AI Hub image (the main route, live agents)
 
-1. From the Early Access portal, download the IRIS for Health Community image: `irishealth-community-2026.3.0AI.154.0-docker.tar.gz` for x64. ARM64 machines (Apple silicon) need `irishealth_arm64-community-2026.3.0AI.154.0-docker.tar.gz`; Shutter has not been tried on ARM64.
+1. From the Early Access portal, download the IRIS for Health Community image: `irishealth-community-2026.3.0AI.154.0-docker.tar.gz` for x64. ARM64 machines (Apple silicon) need the `irishealth_arm64-community` file of the same build; Shutter has not been tried on ARM64.
 2. Load it, check the name it loaded as, tag it with the short name the build expects, and start Shutter:
 
 ```sh
@@ -124,6 +125,9 @@ The health report says `"ok":true` once the production is running.
 Without the Early Access file, build the replay edition on InterSystems' public IRIS for Health Community 2026.2 image. It has the same production, gate, catalogue, scenarios and recorded board, but no live agents and no knowledge search. It is built on your machine and is never pushed to a registry:
 
 ```sh
+git clone https://github.com/MxSalata/shutter.git
+cd shutter
+cp .env.example .env
 SHUTTER_IMAGE=containers.intersystems.com/intersystems/irishealth-community:2026.2 SHUTTER_WITH_AIHUB=0 docker compose up -d --build
 ```
 
@@ -150,7 +154,7 @@ To feed a message of your own, copy an HL7 file (one message, `.hl7`) into the p
 
 The first `up` creates the `SHUTTER` namespace, installs the InterSystems Package Manager and loads the `iris-shutter` module (the production, the case store, the gate, the downstream system, the web application and the recorded agent runs) and, on the AI Hub image, the `iris-shutter-aihub` module (the live agents and their knowledge bases). The production starts with the container, and as it starts it clears two known startup alerts (the build host's "failover" message and the preview build's own startup error), so Docker's health check reflects the instance's real state; any other alert stays.
 
-To watch a case unfold, run a scenario from the web application's Scenarios page (S1 to S13 and S15 to S18; S11 and S12 are the outage scenarios that open an incident): each one feeds synthetic ADT messages into the production, makes one delivery fail in a particular way, and opens a case. With an `ANTHROPIC_API_KEY` in `.env`, the production writes the provider configuration from it when it starts, and the agent items, set to `auto`, then run live (`SHUTTER_AGENT_MODE` forces `live`, `record` or `replay`). Measured on 19 October 2026 with `claude-opus-5-5`: one board pass (three specialists and the coordinator) uses about 72,000 input and 4,200 output tokens, roughly 0.38 USD at list prices, and its agent runs take 27 to 38 seconds; the Settings page shows the figures per run.
+To watch a case unfold, run a scenario from the web application's Scenarios page (S1 to S13 and S15 to S18; S11 and S12 are the outage scenarios that open an incident): each one feeds synthetic ADT messages into the production, makes one delivery fail in a particular way, and opens a case. With an `ANTHROPIC_API_KEY` in `.env`, the production writes the provider configuration from it when it starts, and the agent items, set to `auto`, then run live (`SHUTTER_AGENT_MODE` forces `live`, `record` or `replay`). Measured on 19 October 2026 with `claude-opus-5-5`: one board pass (three specialists and the coordinator) uses about 72,000 input and 4,200 output tokens, roughly 0.38 USD at list prices, and takes 27 to 38 seconds from the board's start to the coordinator's plan, because the three specialists run in parallel; the Settings page shows the figures per run, whose durations add up to more.
 
 What you make stays: the cases, approvals, incidents, the site profile and Shutter's record of the provider configuration live in a data database inside the `shutter-mgr` volume (the image keeps only the code), so `docker compose down` and `up` keep them, a rebuilt image brings new code to the same data (a build that changes the gate's policy version, as this one does with `2026-10-19.3`, voids approvals given before it and not yet dispatched: such a case blocks at dispatch with `APPROVAL_POLICY_CHANGED`; reinvestigate it), and `docker compose down -v` starts afresh. A volume made by a build from before 18 October 2026 has no data database, and one from before 19 October 2026 keeps the downstream system's records under its earlier name, which newer builds don't read: remove such a volume once (`docker compose down -v`) before the first `up` of a newer build. The compose file gives the container two minutes to stop (`stop_grace_period`), so IRIS writes its journal and write image out cleanly; a container killed mid-write recovers from the journal at the next start, which is what the "abnormal shutdown" alert in the console log then says. When the production starts it re-reads the knowledge files that changed (block reasons, catalogue, site profile seed, recordings, and the documents the agents search), so a rebuilt image's knowledge reaches the kept data; a site profile saved from the app is never overwritten by the seed. Installing again over an instance that already has Shutter (a rebuilt image on the kept volume, or `zpm "load"` again) brings the roles to their current definition and the demo users `operator`, `approver` and `downstream-client` back to the demo's role, password and enabled state, and rewrites the `DownstreamAPI` credential; a non-demo install only adds roles to users that exist. Every install also removes what the downstream system was called before 19 October 2026: its web application, resource, roles, user, credential and classes, when they are there.
 
