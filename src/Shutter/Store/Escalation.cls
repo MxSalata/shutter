@@ -136,7 +136,8 @@ Method Queue(bodyDigest As %String, user As %String) As %Status
     Set ..State = "queued", ..SentBy = user
     Set sc = ..%Save()
     Quit:$$$ISERR(sc) sc
-    Quit ..Note("Escalation " _ ..Seq _ " sent by " _ user _ " to " _ ..ToAddr, user)
+    // The record names the digest of the text sent, so the timeline alone shows what the person approved for sending.
+    Quit ..Note("Escalation " _ ..Seq _ " sent by " _ user _ " to " _ ..ToAddr _ "; digest of the text sent " _ ..BodyDigest, user)
 }
 
 Method MarkSent(transport As %String, result As %String) As %Status

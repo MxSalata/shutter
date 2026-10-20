@@ -160,8 +160,8 @@ jobs:
   # registry CI can pull from, and the core needs none of it): the namespace, a full load and compile, the installer,
   # the downstream system's contract tests in process and over HTTP, and every scenario end to end with its recorded
   # runs: S1 to S10, S13, and the withheld merge and cancel (S15, S16) on the board; the two outage scenarios, S11 and
-  # S12, and S2 in HL7 2.4 and 2.3.1 (S17, S18) in site-policy mode; and S20, a move entered by hand, in rules-only
-  # mode.
+  # S12, and S2 in HL7 2.4 and 2.3.1 (S17, S18) in site-policy mode; S20, a move entered by hand, in rules-only mode;
+  # then the operator's and the approver's routes.
   iris:
     name: IRIS (the downstream system's contract, scenarios in replay)
     runs-on: [self-hosted, house]
@@ -294,6 +294,11 @@ jobs:
       # bound to the receiver's version, so the dispatch stops, the case is planned again, and her entry stands
       - name: A move entered by hand while the resend awaits approval (S20) in rules-only mode
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes rules --approve S20
+      # The roles over HTTP: the library is the approver's to change, an operator escalates a case and closes it by hand,
+      # and under the site profile's two-person rule only an approver closes it. It closes two of the cases the
+      # scenarios left escalated or blocked, so it runs after them.
+      - name: The operator's and the approver's routes
+        run: python3 tests/e2e/roles_check.py --url "$IRIS_URL"
       - name: Readiness report and the IRIS log
         if: always()
         run: |

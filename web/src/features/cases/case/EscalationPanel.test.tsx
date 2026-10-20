@@ -155,10 +155,78 @@ describe('EscalationPanel', () => {
     expect(closes).toEqual([
       { reason: 'The bed manager placed the patient in WARD-C by hand', expectedVersion: expect.any(Number) },
     ]);
-    // The case reads as resolved, handled by hand, so the escalation panel leaves the page
+    // The case reads as handled by the team, and the email it followed stays on the page as its record, with no actions
+    expect(await screen.findByRole('region', { name: 'Closed: handled by the team' })).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.queryByRole('region', { name: 'Escalations' })).not.toBeInTheDocument(),
+      expect(within(panel).queryByRole('button', { name: /Escalate to system administrators/ })).toBeNull(),
     );
+    expect(within(panel).queryByRole('button', { name: /Mark as handled/ })).not.toBeInTheDocument();
+    expect(within(panel).getByText('Sent')).toBeInTheDocument();
+    expect(within(panel).getByText(/^Digest of the text sent: demo:/)).toBeInTheDocument();
+    // The timeline names who closed it, the reason and the email it followed
+    const timeline = screen.getByRole('region', { name: 'Timeline events' });
+    expect(
+      await within(timeline).findByText(
+        'Handled by hand: The bed manager placed the patient in WARD-C by hand; after escalation 1 to Integration team (sent)',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(timeline).getByText(/^Escalation 1 sent by approver to .*; digest of the text sent demo:/),
+    ).toBeInTheDocument();
+  });
+
+  it('offers an operator the closing by default', async () => {
+    resetMock('operator');
+    renderCase('C-000012');
+    const panel = await screen.findByRole('region', { name: 'Escalations' });
+    expect(
+      await within(panel).findByRole('button', { name: /Mark as handled by the team/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the closing from an operator where the site's two-person rule needs an approver", async () => {
+    const view = structuredClone(
+      (fixtures as unknown as { siteProfile: { profile: SiteProfile } }).siteProfile,
+    );
+    view.profile.approvers = { ...view.profile.approvers, close_needs_approver: true };
+    server.use(http.get('/api/shutter/site-profile', () => HttpResponse.json(view)));
+    resetMock('operator');
+    renderCase('C-000012');
+    const panel = await screen.findByRole('region', { name: 'Escalations' });
+    expect(
+      await within(panel).findByText(/On this site closing a case by hand needs an approver/),
+    ).toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: /Mark as handled/ })).not.toBeInTheDocument();
+    // Escalating stays the operator's
+    expect(within(panel).getByRole('button', { name: /Escalate to system administrators/ })).toBeEnabled();
+  });
+
+  it('offers an approver the closing under the two-person rule', async () => {
+    const view = structuredClone(
+      (fixtures as unknown as { siteProfile: { profile: SiteProfile } }).siteProfile,
+    );
+    view.profile.approvers = { ...view.profile.approvers, close_needs_approver: true };
+    server.use(http.get('/api/shutter/site-profile', () => HttpResponse.json(view)));
+    renderCase('C-000012');
+    const panel = await screen.findByRole('region', { name: 'Escalations' });
+    expect(
+      await within(panel).findByRole('button', { name: /Mark as handled by the team/ }),
+    ).toBeInTheDocument();
+    expect(within(panel).queryByText(/needs an approver/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the closing from a user with the approver role but not the operator role, as the server does', async () => {
+    server.use(
+      http.get('/api/shutter/me', () =>
+        HttpResponse.json({ username: 'reviewer', operator: false, approver: true }),
+      ),
+    );
+    renderCase('C-000012');
+    const panel = await screen.findByRole('region', { name: 'Escalations' });
+    expect(
+      await within(panel).findByText('Escalating and marking a case handled need the operator role.'),
+    ).toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: /Mark as handled/ })).not.toBeInTheDocument();
   });
 
   it('is not offered on a case Shutter resolved', async () => {

@@ -20,7 +20,7 @@ Property UpdatedBy As %String(%JSONFIELDNAME = "updatedBy", MAXLEN = 160);
 
 /// The shipped defaults: one receiver (the downstream system, tier 2, taking neither cancels nor merges), keep what is
 /// current, no authoritative source, unconditional resends forbidden, merges forbidden (they go to the PAS team, T31),
-/// automatic single chains for tiers 1 and 2, approvals elsewhere.
+/// automatic single chains for tiers 1 and 2, approvals elsewhere, and an operator may close a case by hand.
 ClassMethod Default() As %DynamicObject
 {
     Set p = {}
@@ -31,7 +31,7 @@ ClassMethod Default() As %DynamicObject
     Set p."unconditional_resend" = "forbidden"
     Set p.merges = "forbidden"
     Set p.policy = {"1": {"single": "automatic", "ordered": "automatic", "interleaved": "board"}, "2": {"single": "automatic", "ordered": "approval", "interleaved": "board"}, "3": {"single": "approval", "ordered": "per_chain", "interleaved": "board"}}
-    Set p.approvers = {"role": "Shutter Approvers", "escalation": "the integration team's on-call"}
+    Set p.approvers = {"role": "Shutter Approvers", "escalation": "the integration team's on-call", "close_needs_approver": false}
     Set p.incident = {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60}
     Set p."model_content" = {"free_text": false}
     Set p.feed = {"time_zone": "Europe/London"}
@@ -168,6 +168,9 @@ ClassMethod Validate(p As %DynamicObject) As %String
         }
     }
     If p.%IsDefined("approvers") && '$ISOBJECT(p.%Get("approvers")) Quit "approvers: must be an object"
+    // The two-person rule for closing a case by hand: off unless the site says so.
+    Set approvers = p.%Get("approvers")
+    If $ISOBJECT(approvers) && approvers.%IsA("%DynamicObject") && approvers.%IsDefined("close_needs_approver") && (approvers.%GetTypeOf("close_needs_approver") '= "boolean") Quit "approvers.close_needs_approver: must be true or false"
     // The feed: the time zone of timestamps that carry no offset (T28).
     If p.%IsDefined("feed") {
         Set feed = p.%Get("feed")
@@ -330,6 +333,14 @@ ClassMethod ModelFreeText() As %Boolean
 {
     Set mc = ..Current().%Get("model_content")
     Quit $ISOBJECT(mc) && ##class(Shutter.Util.Json).Bool(mc, "free_text", 0)
+}
+
+/// Whether closing a case by hand (POST /cases/{id}/close) needs an approver, the two-person rule some trusts keep:
+/// off unless the profile's approvers.close_needs_approver is true, so an operator who escalated a case closes it too.
+ClassMethod CloseNeedsApprover() As %Boolean
+{
+    Set approvers = ..Current().%Get("approvers")
+    Quit $ISOBJECT(approvers) && approvers.%IsA("%DynamicObject") && (approvers.%GetTypeOf("close_needs_approver") = "boolean") && approvers.%Get("close_needs_approver")
 }
 
 /// The teams an escalation can go to (T29), as stored; an empty array when the profile names none.

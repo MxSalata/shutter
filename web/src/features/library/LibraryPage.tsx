@@ -18,7 +18,8 @@ export default function LibraryPage() {
   const me = useMe().data;
   const library = useLibrary();
   const patch = usePatchMember();
-  const canEdit = !!me?.operator;
+  // Which agents sit on the board is an approver's change, as the site profile is (CONTRACTS 5)
+  const canEdit = !!me?.approver;
   const change = (m: LibraryMember, field: 'enabled' | 'inDefaultBoard', value: boolean) =>
     patch.mutate(
       { code: m.code, change: { [field]: value } },
@@ -41,6 +42,11 @@ export default function LibraryPage() {
             title="The library could not be read"
             onRetry={() => void library.refetch()}
           />
+        ) : null}
+        {library.data && me && !canEdit ? (
+          <Text size="sm" c="dimmed" mb="sm">
+            Changing which agents sit on the board needs the approver role: sign in as approver.
+          </Text>
         ) : null}
         {library.data ? (
           <Table.ScrollContainer minWidth={820}>
@@ -85,7 +91,7 @@ export default function LibraryPage() {
                       </Text>
                     </Table.Td>
                     <Table.Td>
-                      <Tooltip label="Needs the operator role" disabled={canEdit}>
+                      <Tooltip label="Needs the approver role" disabled={canEdit}>
                         <Group>
                           <Switch
                             checked={m.enabled}
@@ -98,7 +104,7 @@ export default function LibraryPage() {
                     </Table.Td>
                     <Table.Td>
                       {m.role === 'specialist' ? (
-                        <Tooltip label="Needs the operator role" disabled={canEdit}>
+                        <Tooltip label="Needs the approver role" disabled={canEdit}>
                           <Group>
                             <Switch
                               checked={m.inDefaultBoard}

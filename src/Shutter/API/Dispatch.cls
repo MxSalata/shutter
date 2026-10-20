@@ -841,10 +841,12 @@ ClassMethod CaseReinvestigate(caseId As %String) As %Status
 
 /// Close a case the team handled by hand (T31, 2.6): an escalated, blocked or failed case resolves with disposition
 /// handled_by_hand through the Case Workflow item, as a reopening runs through it, and its open approval task is
-/// cancelled. Reinvestigate stays for a correction the receiver's state can prove.
+/// cancelled. Reinvestigate stays for a correction the receiver's state can prove. An operator closes it, unless the
+/// site profile keeps the two-person rule (approvers.close_needs_approver), when only an approver does.
 ClassMethod CaseClose(caseId As %String) As %Status
 {
     If '..Allow("Shutter_Operate", 1) Quit $$$OK
+    If ##class(Shutter.Store.SiteProfile).CloseNeedsApprover() && '$SYSTEM.Security.Check("Shutter_Approve", "USE") Quit ..Fail("403 Forbidden", "forbidden", "On this site closing a case by hand needs an approver (the site profile's approvers.close_needs_approver): ask an approver to mark it handled")
     Set case = ..CaseOr404(caseId)
     If '$ISOBJECT(case) Quit $$$OK
     Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
@@ -942,9 +944,10 @@ ClassMethod Library() As %Status
     Quit ..Json(..Rows("Shutter.Store.BoardMember", "SELECT ID FROM Shutter_Store.BoardMember ORDER BY Sort, Code"))
 }
 
+/// Change which agents sit on the board: by an approver, as the site profile is saved.
 ClassMethod LibraryPatch(code As %String) As %Status
 {
-    If '..Allow("Shutter_Operate", 1) Quit $$$OK
+    If '..Allow("Shutter_Approve", 1) Quit $$$OK
     Set m = ##class(Shutter.Store.BoardMember).ByCode(code)
     If '$ISOBJECT(m) Quit ..Fail("404 Not Found", "not_found", "No library member " _ code)
     Set body = ..Body()

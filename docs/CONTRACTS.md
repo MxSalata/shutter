@@ -248,7 +248,29 @@ Scenario S20 is written with it: S2's start, a `wait_for_state` for `awaiting_ap
 
 The API as built is `src/Shutter/API/Dispatch.cls` (its UrlMap lists the routes; sign-in through `POST /session` and the CSP session cookie; every change carries `X-Requested-With: Shutter`, the idempotent ones an `Idempotency-Key`; errors are JSON with `error` and `detail`). The web application's notes on using it are in `web/README.md`. Workflow tasks come back in camelCase with ISO 8601 UTC times (v1.5).
 
-`POST /cases/{id}/close` with `{reason}` (v1.14; `Shutter_Operate`, `X-Requested-With`, an `Idempotency-Key`) answers 202 `{caseId, state: "closing", requestedBy, reason}` and sends `Shutter.Msg.CaseClose` to the Case Workflow item: the case resolves with disposition `handled_by_hand`, its state event names the reason and the latest escalation, the current approval is revoked and an open approval task is cancelled; 400 `bad_request` when the body is not a JSON object or `reason` is empty, 404 `not_found`, 409 `wrong_state` unless the case is escalated, blocked or failed, and 409 `stale_version` (with `currentVersion`) when the body's optional `expectedVersion` is not the case's version. A draft or queued escalation email of the case is cancelled, so the team is not asked to correct a case already handled. It is how a case the team corrected by hand (a withheld merge or cancel, an escalation the PAS team acted on) is closed; `reinvestigate` stays for a correction the receiver's state can prove.
+**Who may call what** (v1.17). Every route checks the caller's resources on the server: 401 `unauthenticated` when no
+one is signed in, 403 `forbidden` (detail "This needs <resource>") without the resource, and 403 `csrf` for a change
+without `X-Requested-With`. The installer's roles hold them: `Shutter_Operator` has `Shutter_Operate`,
+`Shutter_Approver` has `Shutter_Operate` and `Shutter_Approve`, `Shutter_Forwarder` has `Shutter_Intake`.
+
+| Resource | Routes |
+| --- | --- |
+| none | `POST` and `DELETE /session`; `GET /health` (its summary; the full report needs `Shutter_Operate`) |
+| signed in | `GET /me`, which answers `{username, operator, approver}` from the two resources |
+| `Shutter_Operate` | every other `GET`; `POST /scenarios/{id}/run` and `/scenarios/reset`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send` |
+| `Shutter_Approve` | `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `PUT /site-profile`; `PATCH /library/{code}` (since v1.17; it was `Shutter_Operate`); `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true |
+| `Shutter_Intake` | `POST /intake` (section 11) |
+
+So the person on call (an operator) escalates a case and, once the team that corrects the systems has done so, marks
+it handled; the escalation is the sign-off. Which agents sit on the board is an approver's change, as the site profile
+is. A site that keeps the two-person rule for closing a case by hand says so in the site profile (6.4): then only an
+approver closes it, and an operator's `POST /cases/{id}/close` answers 403 `forbidden` with a detail that says the site
+needs an approver, before the body or the case's state is read.
+
+`POST /cases/{id}/close` with `{reason}` (v1.14; `Shutter_Operate`, `X-Requested-With`, an `Idempotency-Key`) answers 202 `{caseId, state: "closing", requestedBy, reason}` and sends `Shutter.Msg.CaseClose` to the Case Workflow item: the case resolves with disposition `handled_by_hand`, its state event names the reason and the latest escalation, the current approval is revoked and an open approval task is cancelled; 400 `bad_request` when the body is not a JSON object or `reason` is empty, 404 `not_found`, 409 `wrong_state` unless the case is escalated, blocked or failed, and 409 `stale_version` (with `currentVersion`) when the body's optional `expectedVersion` is not the case's version. A draft or queued escalation email of the case is cancelled, so the team is not asked to correct a case already handled. It is how a case the team corrected by hand (a withheld merge or cancel, an escalation the PAS team acted on) is closed; `reinvestigate` stays for a correction the receiver's state can prove. The record of a hand closure is the
+state event (its actor is who closed it, its time when, its text the reason and the escalation followed, its `ref` that
+escalation), the case's `outcome` ("Handled by hand, recorded by <who>: <reason>") and the closure's `closedAt` and
+`actors`.
 
 ## 6. The scenario catalogue and the matcher (v1.6)
 
@@ -364,7 +386,8 @@ reads it through `Shutter.Store.SiteProfile`.
     "2": {"single": "automatic", "ordered": "approval", "interleaved": "board"},
     "3": {"single": "approval", "ordered": "per_chain", "interleaved": "board"}
   },
-  "approvers": {"role": "Shutter Approvers", "escalation": "the integration team's on-call"},
+  "approvers": {"role": "Shutter Approvers", "escalation": "the integration team's on-call",
+                "close_needs_approver": false},
   "incident": {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60},
   "model_content": {"free_text": false},
   "feed": {"time_zone": "Europe/London"}
@@ -404,6 +427,15 @@ reads it through `Shutter.Store.SiteProfile`.
 - `per_chain`: one Workflow task per chain of the incident.
 - `board` for a chain kind means the board runs whatever the match says.
 - A tier 3 receiver never takes `automatic` unless the profile says so explicitly; the shipped default does not.
+- `approvers.close_needs_approver` (v1.17): the two-person rule some trusts keep for closing a case by hand. `false`
+  (the default, and what an absent answer means) lets an operator mark a case handled by the team; `true` leaves it to
+  an approver (section 5). It checks the closer's resource only: the server does not compare the closer with whoever
+  sent the case's escalation, and `Shutter_Approver` holds `Shutter_Operate` too, so one approver may escalate and close
+  a case, or close one that was never escalated, as the case page offers for a withheld case. The validator accepts only
+  `true` or `false`. It belongs to question 7, who approves what, so the questionnaire still has twelve questions; the
+  shipped seed profile answers `false` (its file's `version` is 3). `Shutter.Store.SiteProfile.CloseNeedsApprover()`
+  reads it. `approvers.role` and `approvers.escalation` stay on record only: the permissions themselves are the
+  resources of section 5.
 - `merges` (v1.14): `forbidden` (the default when absent) or `allowed`, the only values the validator accepts. A receiver entry's `merges` and `cancels` (booleans, default false) say what it takes (1.1). A merge is delivered only under `allowed` to a receiver with `merges: true`; the gate's `MERGE_WITHHELD` blocks any write of a merge otherwise, so the exact repeat of a merge the receiver already holds (a receipt present) is E3's reconcile, and no other merge is ever resent by Shutter. `Shutter.Store.SiteProfile.MergesAllowed()` and `ReceiverFlag(name, flag)` read them.
 
 ### 6.5 The gate's catalogue checks
@@ -638,7 +670,10 @@ bound to the digest of the text the person read.
   `body_changed` when the digest is not the current text's, 409 `no_recipient` when `to` is empty, and 422
   `address_not_allowed` (with `field`: `to` or `cc`) when an address is not an address or lies outside the allowed
   domains; `PATCH` answers the same 422 for a `to` or `cc` it is given. All need
-  `Shutter_Operate`; the writes need `X-Requested-With` and take an `Idempotency-Key`.
+  `Shutter_Operate`; the writes need `X-Requested-With` and take an `Idempotency-Key`. The escalation keeps who drafted,
+  edited and sent it (`draftedBy` and `draftedAt`, `editedBy` and `editedAt`, `sentBy`, and `sentAt` when the operation
+  delivered it), and the case event of the send names who sent it, to whom and, since v1.17, the digest of the text sent
+  ("Escalation 1 sent by operator to ...; digest of the text sent <bodyDigest>").
 - The `Escalation Mail` operation (`Shutter.Operation.EscalationMail`, `EnsLib.EMail.OutboundAdapter`) sends through the
   site's mail server when the adapter's `SMTPServer` is set (first-time configuration; the NHS relay at most trusts),
   and otherwise writes an `.eml` file to its `OutputFolder` (default `<mgr>/shutter/out/mail`), so the demo and CI need
@@ -745,7 +780,7 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
-- v1.17, 20 Oct 2026: the scenario runner's `manual` step, a change a person enters in the downstream system by hand, with its own source (`WARD`) and operation key, applied in process through `Downstream.Service` (4.3); scenario S20, a nurse's move while a resend awaits approval, which the version-bound approval stops at dispatch; `expected.final_reason` and `expected.last_operation_key` (3, 4.3).
+- v1.17, 20 Oct 2026: the roles (5). Who may call each route, in one table; changing the agent library (`PATCH /library/{code}`) needs `Shutter_Approve`, as saving the site profile does; the site profile's `approvers.close_needs_approver` (6.4; `false` by default and in the shipped seed, whose file's `version` is 3), with which closing a case by hand needs an approver and an operator's `POST /cases/{id}/close` answers 403 `forbidden`; the record of a hand closure (5) and the send's case event naming the digest of the text sent (10). The scenario runner (4.3): the scenario runner's `manual` step, a change a person enters in the downstream system by hand, with its own source (`WARD`) and operation key, applied in process through `Downstream.Service` (4.3); scenario S20, a nurse's move while a resend awaits approval, which the version-bound approval stops at dispatch; `expected.final_reason` and `expected.last_operation_key` (3, 4.3).
 - v1.16, 20 Oct 2026: supersession, the model view and corrections. `later_applied` counts, outside a chain and for anything but an admission, a later transfer whose delivery failed or is uncertain as well, and no later event whose time is not plausible; `event_time` gains `later_event_future` for a later event whose doubtful time would change the reading (6.1; the gate's ordering check reads the matcher's own list of later events, so the two agree, and says "a later movement was sent after it" when the superseding movement was not delivered; policy version 2026-10-20.1, so an approval given under 2026-10-19.3 and not yet dispatched is void at dispatch). The model view tokenises name parts from two characters, matches values of three characters or more whatever their case, and fails closed (9). A case is never written whole from a copy older than the stored one: a transition takes the case's lock and refuses a copy whose version is no longer the stored one, a note writes only its time (the version still moves only on transitions, so the routes' `expectedVersion` checks are unchanged), and the incident membership and the current snapshot are written field by field. The scenario runner's `route: "hospital"` file step, the hospital's folders in its reset and the `expected.source` of a forwarded case (4; S19). Corrections: the board has no catalogue tool: the matches and their prose reach it in the evidence (6.6). Closing a case by hand cancels its draft or queued email, so the state `cancelled` is set (10). An unknown `feed.time_zone` is read as `UTC` with a warning (6.4).
 - v1.15, 20 Oct 2026: the production-install story (T33). The case intake from another production (section 11: `POST /api/shutter/intake`, the resource `Shutter_Intake` and the role `Shutter_Forwarder`, the items Case Intake and Case Intake Store, the source fields on the case and the `source` item of the evidence, the forwarder `Shutter.Intake.Forwarder` for a watched production, the demo hospital in the namespace `HOSPITAL`); the install (section 12: the IPM parameters `demo` and `production`, a status-checked Invoke, what a non-demo install creates and omits, the demo items switched off, the message purge by `SHUTTER_MESSAGE_PURGE` and `SHUTTER_MESSAGE_DAYS` with a default of 90 days, `InstallInto` for a site's own production and `Setup.INSTALLITEMS`); the gate's receiver and the policy's tier follow the case's receiver; `Shutter.Util.Time` reads the namespace's cached feed zone before the store. The install guide for a hospital is `docs/INSTALL.md`.
 - v1.14, 19 Oct 2026: other HL7 schemas and the trigger table (section 2: the events A04, A05, A06, A07, A11 to A13, A28, A31 and A40; what is delivered, indexed only or withheld; the `-` encounter piece; fields read wherever the structure puts the segment; the version note in the evidence); the A40 rule (`merges` in the site profile and the receiver entry, 6.4; the kind `withheld`; `MERGE_WITHHELD` and `CANCEL_UNSUPPORTED`, 6.5; the merge's prior fields, 2 and 9; the escalation's `sources` routing and wording, 10); the matcher's `event`, `delivery: withheld`, `receiver_answer: none` and `later_applied: cancelled | merge` (6.1); withheld and unmappable cases outside incidents (7.1); the index's event words and the `-` visit (8.2); `POST /cases/{id}/close` (5); the gate's policy version 2026-10-19.3 (an approval given under 2026-10-19.2 and not yet dispatched is void at dispatch, `APPROVAL_POLICY_CHANGED`: the case blocks and a person reinvestigates), its `NO_ENCOUNTER` identity answer and `PATIENT_LEVEL_WRITE`; a withheld case never convenes the board (6.3); the close route's `expectedVersion` and the cancelled emails (5). The catalogue entries E14 (a patient merge) and E15 (a cancel the receiver can't reverse) and the block reasons `MERGE_WITHHELD` and `CANCEL_UNSUPPORTED` are the knowledge side of the same change.
