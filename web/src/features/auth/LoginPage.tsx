@@ -1,4 +1,15 @@
-import { Alert, Button, Center, Paper, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core';
+import {
+  Alert,
+  Button,
+  Center,
+  Divider,
+  Paper,
+  PasswordInput,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core';
 import { useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router';
 import { useHealth, useMe, useSignIn } from '@/api/hooks';
@@ -53,6 +64,22 @@ export default function LoginPage() {
                 {message}
               </Alert>
             ) : null}
+            {/* The demo leads with its own sign-in: a judge opening it needs no password, and the form is second. */}
+            {DEMO ? (
+              <>
+                <Button
+                  variant="filled"
+                  fullWidth
+                  loading={signIn.isPending}
+                  onClick={() =>
+                    signIn.mutate(DEMO_USER, { onSuccess: () => navigate(from, { replace: true }) })
+                  }
+                >
+                  Try the demo (recorded runs)
+                </Button>
+                <Divider label="or sign in as a demo user" labelPosition="center" />
+              </>
+            ) : null}
             <TextInput
               label="User name"
               autoComplete="username"
@@ -68,21 +95,9 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.currentTarget.value)}
               required
             />
-            <Button type="submit" loading={signIn.isPending} fullWidth>
+            <Button type="submit" variant={DEMO ? 'default' : 'filled'} loading={signIn.isPending} fullWidth>
               Sign in
             </Button>
-            {DEMO ? (
-              <Button
-                variant="light"
-                fullWidth
-                loading={signIn.isPending}
-                onClick={() =>
-                  signIn.mutate(DEMO_USER, { onSuccess: () => navigate(from, { replace: true }) })
-                }
-              >
-                Try the demo (recorded runs)
-              </Button>
-            ) : null}
             {/* The demo users and their password only on a demo instance (the server's flag) or the recorded demo. */}
             {DEMO || health.data?.demo === true ? (
               <Text size="xs" c="dimmed">

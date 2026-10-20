@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
 import { theme } from '@/theme';
+import LoginPage from '@/features/auth/LoginPage';
 import CasePage from '@/features/cases/CasePage';
 import ScenariosPage from '@/features/scenarios/ScenariosPage';
 import SettingsPage from '@/features/settings/SettingsPage';
@@ -22,6 +23,7 @@ function renderAt(path: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter(
     [
+      { path: '/login', element: <LoginPage /> },
       { path: '/scenarios', element: <ScenariosPage /> },
       { path: '/cases/:caseId', element: <CasePage /> },
       { path: '/settings', element: <SettingsPage /> },
@@ -39,6 +41,20 @@ function renderAt(path: string) {
 
 describe('the demo', () => {
   beforeEach(() => resetMock('approver'));
+
+  it('leads its sign-in page with Try the demo, filled, and signs in with it', async () => {
+    resetMock(null);
+    renderAt('/login');
+    const demo = await screen.findByRole('button', { name: 'Try the demo (recorded runs)' });
+    const signIn = screen.getByRole('button', { name: 'Sign in' });
+    expect(demo).toHaveAttribute('data-variant', 'filled');
+    expect(signIn).toHaveAttribute('data-variant', 'default');
+    // The demo's button comes first; the form with the demo users' password is second
+    expect(demo.compareDocumentPosition(signIn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText('or sign in as a demo user')).toBeInTheDocument();
+    await userEvent.click(demo);
+    expect(await screen.findByRole('heading', { name: 'Scenarios' })).toBeInTheDocument();
+  });
 
   it('leaves out the single investigator, which has no recordings', async () => {
     renderAt('/scenarios');
