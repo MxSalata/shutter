@@ -175,12 +175,33 @@ function ToolCalls({ run }: { run: AgentRun }) {
   );
 }
 
+/** A member's verdict, first on its card: its disposition and, for a specialist, its own confidence in it. */
+function Verdict({ disposition, confidence }: { disposition: string; confidence?: number }) {
+  return (
+    <Group gap={6} wrap="wrap">
+      <DispositionBadge disposition={disposition} />
+      {confidence !== undefined && Number.isFinite(confidence) && confidence > 0 ? (
+        <Tooltip label="The agent's own confidence in its finding: not a measured probability">
+          <Badge size="sm" variant="light" color="gray" tabIndex={0} style={{ textTransform: 'none' }}>
+            confidence {Math.round(confidence * 100)}%
+          </Badge>
+        </Tooltip>
+      ) : null}
+    </Group>
+  );
+}
+
 function FindingCard({ run, portalBase }: { run: AgentRun; portalBase: string }) {
   const result = asObject(run.finding?.findings) ?? asObject(run.result) ?? {};
   const confidence = Number(result.confidence ?? run.finding?.confidence);
   return (
     <Card padding="sm" withBorder>
       <Stack gap="xs">
+        {/* The verdict first, then who gave it and from which view, then the reasoning behind it */}
+        <Verdict
+          disposition={String(result.disposition ?? run.finding?.disposition ?? '')}
+          confidence={confidence}
+        />
         <Stack gap={0}>
           <Text fw={600}>{run.member?.name ?? humanize(run.memberCode)}</Text>
           {run.member?.perspective ? (
@@ -189,16 +210,6 @@ function FindingCard({ run, portalBase }: { run: AgentRun; portalBase: string })
             </Text>
           ) : null}
         </Stack>
-        <Group gap={6}>
-          <DispositionBadge disposition={String(result.disposition ?? run.finding?.disposition ?? '')} />
-          {Number.isFinite(confidence) && confidence > 0 ? (
-            <Tooltip label="The agent's own confidence in its finding: not a measured probability">
-              <Badge size="sm" variant="light" color="gray" tabIndex={0} style={{ textTransform: 'none' }}>
-                confidence {Math.round(confidence * 100)}%
-              </Badge>
-            </Tooltip>
-          ) : null}
-        </Group>
         <Text size="sm">{String(result.summary ?? run.finding?.summary ?? run.content ?? '')}</Text>
         <ResultLists result={result} />
         <EvidenceRefs refs={result.evidence_refs} />
@@ -213,11 +224,14 @@ export function BoardPanel({
   caseId,
   open,
   mode,
+  withheld = false,
   portalBase,
 }: {
   caseId: string;
   open: boolean;
   mode: Mode;
+  /** A merge or a cancel Shutter never sends: the board is not convened, whatever the mode. */
+  withheld?: boolean;
   portalBase: string;
 }) {
   const runs = useRuns(caseId, open);
@@ -227,6 +241,7 @@ export function BoardPanel({
   const generalist = list.filter((r) => r.role === 'generalist').at(-1);
   // In policy mode the board runs only for the cases the catalogue and the site's profile leave to it.
   const settledByPolicy = mode === 'policy' && runs.isSuccess && list.length === 0;
+  const notConvened = withheld && runs.isSuccess && list.length === 0;
   const title =
     mode === 'rules'
       ? 'Investigation: rules only'
@@ -247,7 +262,12 @@ export function BoardPanel({
     <Section id="board" title={title} note={note}>
       {runs.isError ? <ErrorAlert error={runs.error} title="The agent runs could not be read" /> : null}
       {mode === 'rules' ? <NotYet>No agent runs in this mode.</NotYet> : null}
-      {settledByPolicy ? (
+      {notConvened ? (
+        <NotYet>
+          Not convened: a withheld merge or cancel goes to the team that corrects it by hand, whatever the
+          mode.
+        </NotYet>
+      ) : settledByPolicy ? (
         <NotYet>
           No agents ran: the catalogue and the site's policy settle this case, or the board hasn't been asked
           yet.
@@ -269,6 +289,7 @@ export function BoardPanel({
       {coordinator ? (
         <Card padding="sm" withBorder bg="var(--mantine-color-default-hover)">
           <Stack gap="xs">
+            <Verdict disposition={String(asObject(coordinator.result)?.disposition ?? '')} />
             <Text fw={600}>Coordinator</Text>
             <Text size="sm">
               {String(asObject(coordinator.result)?.summary ?? coordinator.content ?? '')}

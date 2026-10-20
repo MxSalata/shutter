@@ -69,15 +69,17 @@ export default function CasePage() {
         <Grid.Col span={{ base: 12, xl: 8 }}>
           <Stack gap="md">
             <OutcomePanel c={detail} />
-            <EscalationPanel c={detail} />
-            <FailurePanel c={detail} />
-            <EvidencePanel caseId={caseId} open={open} />
+            {/* The board's findings right under the outcome: what the case was decided on, before how it got there */}
             <BoardPanel
               caseId={caseId}
               open={open}
               mode={detail.mode}
+              withheld={detail.failureKind === 'withheld'}
               portalBase={portalBase(detail.links?.visualTrace)}
             />
+            <EscalationPanel c={detail} />
+            <FailurePanel c={detail} />
+            <EvidencePanel caseId={caseId} open={open} />
             <PlanPanel view={plan.data} loading={plan.isPending} />
             <RehearsalPanel view={plan.data} write={write} />
             {me ? <ApprovalPanel c={detail} me={me} view={plan.data} approvals={approvals.data} /> : null}

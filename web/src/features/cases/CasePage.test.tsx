@@ -45,6 +45,35 @@ describe('CasePage', () => {
     expect(await within(dispatch).findByText('Verified at the receiver')).toBeInTheDocument();
   });
 
+  it('shows the board right under the outcome, each member leading with its verdict', async () => {
+    renderCase('C-000008');
+    const outcome = await screen.findByRole('region', { name: 'Closed: handed to a person' });
+    const board = await screen.findByRole('region', { name: 'The board' });
+    const evidence = await screen.findByRole('region', { name: 'Evidence' });
+    expect(outcome.nextElementSibling).toBe(board);
+    expect(board.compareDocumentPosition(evidence) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // A specialist's card: the verdict and the confidence come before the name and the summary
+    const name = await within(board).findByText('Conformance');
+    const card = name.closest<HTMLElement>('.mantine-Card-root')!;
+    const verdict = within(card).getByText('Resend');
+    const confidence = within(card).getByText('confidence 80%');
+    expect(verdict.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(confidence.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The coordinator's card leads with its disposition too
+    const coordinator = within(board).getByText('Coordinator').closest<HTMLElement>('.mantine-Card-root')!;
+    const plan = within(coordinator).getByText('Escalate');
+    expect(
+      plan.compareDocumentPosition(within(coordinator).getByText('Coordinator')) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('says the board was not convened for a withheld merge', async () => {
+    renderCase('C-000012');
+    const board = await screen.findByRole('region', { name: 'The board' });
+    expect(await within(board).findByText(/^Not convened/)).toBeInTheDocument();
+  });
+
   it('says why an escalated case stopped and what comes next', async () => {
     renderCase('C-000008');
     expect(await screen.findByText('Closed: handed to a person')).toBeInTheDocument();
