@@ -171,6 +171,13 @@ ClassMethod StartProduction() As %Status
     Set prod = "Hospital.Production"
     If '##class(%Dictionary.CompiledClass).%ExistsId(prod) Quit $$$ERROR($$$GeneralError, prod _ " is not visible in " _ $NAMESPACE _ ": is the Hospital package mapped from Shutter's namespace?")
     Try {
+        // The class is compiled in Shutter's namespace and mapped here, so this namespace holds no production
+        // definition for it yet: compiling it here runs the projection that registers the definition in this namespace.
+        If '##class(Ens.Config.Production).%ExistsId(prod) {
+            Set sc = $SYSTEM.OBJ.Compile(prod, "ck-d")
+            Quit:$$$ISERR(sc)
+            If '##class(Ens.Config.Production).%ExistsId(prod) Set sc = $$$ERROR($$$GeneralError, prod _ " has no production definition in " _ $NAMESPACE _ " after compiling") Quit
+        }
         Do ##class(Ens.Director).SetAutoStart(prod)
         If $SYSTEM.Util.GetEnviron("SHUTTER_BUILD") = "1" Quit
         Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)

@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.14, 19 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.15, 20 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -635,12 +635,106 @@ bound to the digest of the text the person read.
   each step is a case event of kind
   `escalation`. Then `POST /cases/{id}/reinvestigate` verifies the manual correction.
 
+## 11. The case intake from another production (v1.15)
+
+Shutter can open a case for a delivery that failed in a production it does not own (the install document's shape A,
+`docs/INSTALL.md`). Nothing is mapped across namespaces for it: the intake is self-contained, and Shutter keeps its own
+copy of the message.
+
+- `POST /api/shutter/intake`, resource `Shutter_Intake` (the role `Shutter_Forwarder` carries it, and only it: the
+  forwarder's user can call no other route; the demo user is `forwarder`, password `shutter`, the `SHUTTER_DEMO_PASSWORD`
+  rule as for the others). The caller signs in with HTTP Basic authentication and sends `X-Requested-With: Shutter`; an
+  `Idempotency-Key` is honoured as on the other POSTs. The body: `{"source": {"namespace", "production", "route",
+  "header_id"}, "receiver": "<the item that delivered; the receiver's name in the site profile>", "failure": {"kind":
+  "delivery_failed" | "rejected" | "uncertain_outcome" | "unmappable", "text", "outcome": "unavailable" | "error" |
+  "uncertain" | "rejected" | "", "http_status", "reason_code"}, "message": "<the HL7 text, segments separated by
+  carriage returns>", "schema_category": "2.5.1", "mode": "board"}` (the last two optional). Answers 202 `{"caseId",
+  "state", "opened"}` (`opened` false when a case for the same operation key is already open, as the feed's own
+  intake); 400 `bad_request` naming the field (no JSON object, no message, an unknown kind); 401; 403; 503 `no_service`
+  or `not_queued`.
+- Inside the production: the API service sends `Shutter.Msg.ExternalIntake` (the body's fields as properties:
+  `SourceNamespace`, `SourceProduction`, `SourceRoute`, `OriginHeaderId`, `Receiver`, `FailureKind`, `FailureText`,
+  `FailureOutcome`, `FailureHttpStatus`, `FailureReasonCode`, `MessageText`, `SchemaCategory`, `Mode`) synchronously to
+  the item **Case Intake** (`Shutter.Process.Intake`), which parses the text (`EnsLib.HL7.Message.ImportFromString`, the
+  DocType resolved from the category, 2.5.1 when none), sends the message to **Case Intake Store**
+  (`Shutter.Operation.IntakeStore`, an adapterless operation that only answers) so that the copy has an
+  `Ens.MessageHeader` in Shutter's namespace, builds the operation with `OperationKey.FromHL7` (or `Unmapped`, with the
+  kind `unmappable`, when it does not map), and sends `Shutter.Msg.CaseIntake` to **Case Workflow** with the failure, the
+  stored copy's header as `SourceHeaderId`, and the receiver and source fields. The case workflow answers as soon as the
+  case row is saved (`Reply`), so the route carries the case id within seconds. The HL7 Index's `Routes` names
+  `Case Intake` beside `ADT In`, so the stored copies are indexed.
+- The case carries `receiver` (the intake's, else the connector item), `sourceNamespace`, `sourceProduction`,
+  `sourceRoute` and `originHeaderId`; the evidence snapshot has an item of kind `source` and the summary a `source`
+  object `{namespace, production, route, header_id}` (kept for the model view, since it carries no patient data). The
+  gate's receiver and the policy's tier follow the case's receiver. Everything else (the evidence against the receiver's
+  API from the site profile's entry, the matcher, the board, the gate, approvals, the escalation) is as for the feed's
+  own cases; a resend goes through Shutter's connector item, so a forwarded case's receiver is normally the name of
+  that item (`Downstream Out` in the demo).
+- **The forwarder.** `Shutter.Intake.Forwarder` is the item a watched production adds: a business operation on
+  `EnsLib.HTTP.OutboundAdapter` (queue). Request `Shutter.Intake.Forward`: `HeaderId` (the failed HL7 message's header
+  in the sending namespace), `Receiver`, `FailureKind`, `FailureText`, `FailureOutcome`, `FailureHttpStatus`,
+  `FailureReasonCode`, `Route` (empty takes the header's `SourceConfigName`). Response `Shutter.Intake.Forwarded`:
+  `CaseId`, `State`, `Opened`, `Error` (empty on 202; otherwise the HTTP status and body, or the connection error; no
+  retry). Settings: `IntakePath` (default `/api/shutter/intake`), `SourceProduction` (default the running production's
+  name), `SourceNamespace` (default the namespace), `SchemaCategory` (default the message's own category, else 2.5.1);
+  the adapter's server, port, credentials (HTTP Basic as the forwarder's user) and SSL configuration are the site's.
+  The sending production's process calls it on a failed delivery with the failure as its connector reported it; the
+  package `Shutter.Intake` (with `Shutter.Util` and `Shutter.Msg`) is mapped into that namespace.
+- **The demo hospital** (shape A as a judge sees it): the image also creates the namespace `HOSPITAL` (`Installer.cls`;
+  `SELECT Shutter.Installer_RunHospital('SHUTTER')` on an instance that has Shutter) with the packages `Shutter.Intake`,
+  `Shutter.Util`, `Shutter.Msg`, `Shutter.Store` and `Hospital` mapped from Shutter's code database, and
+  `Hospital.Setup.Install('SHUTTER')`, run there, makes its folders (`<mgr>/shutter/hospital/in`, `archive`, `work`),
+  its credentials (`DownstreamAPI` as `downstream-client`, `ShutterIntake` as `forwarder`), copies Shutter's feed time
+  zone into `^Shutter.Config("feedZone")` so both namespaces key a message alike, and starts `Hospital.Production`:
+  `PAS In` (an HL7 file service on the hospital's folder), `PAS to Downstream` (`Hospital.Process.PASToDownstream`:
+  the operation from `OperationKey.FromHL7`, delivered through `Downstream Out`, and on a failure a `Forward` to
+  `Shutter Forwarder`), `Downstream Out` (`Hospital.Operation.DownstreamOut`, the connector's POST and classification
+  without Shutter's store), `Shutter Forwarder`. The hospital's production registers its definition in its namespace by
+  compiling the mapped class there once. A scenario drops files into the hospital's folder (`^Shutter.Config("hospitalIn")`
+  in Shutter's namespace names it); the case in Shutter then names the source.
+
+## 12. The install (v1.15)
+
+- **The demo flag.** The module manifest declares the IPM parameters `demo` (default 1) and `production` (default empty)
+  and invokes `Shutter.Setup.InstallStatus(${root}, ${demo}, ${production})`, whose `%Status` IPM checks: a failed install
+  stops the load and the Docker build. `zpm "load <dir> -Ddemo=0"` installs for a site. Every install creates
+  `^Shutter.Config` (root, demo, version, mode), the folders under `<mgr>/shutter/`, the resources `Shutter_Operate`,
+  `Shutter_Approve` and `Shutter_Intake`, the roles `Shutter_Operator`, `Shutter_Approver`, `Shutter_DownstreamClient`,
+  `Shutter_WebApp` and `Shutter_Forwarder`, the Workflow role "Shutter Approvers", the seeds (board members, model
+  prices, block reasons, the site profile, the catalogue), the web applications `/api/shutter` and `/shutter`, the daily
+  task "Shutter retention", the production's default settings, and starts `Shutter.Production` as the namespace's
+  auto-start production (a different running production in that namespace is stopped first). With `demo = 1` it also
+  creates the users `operator`, `approver` and `forwarder`, the demo receiver (its resource and role, `/downstream/api`,
+  `downstream-client` and the `DownstreamAPI` credential), imports the recorded runs, and creates the message purge
+  task. With `demo = 0` it makes none of those, and after the start switches off the demo and feed items of
+  `Shutter.Production` (`ADT In`, `ADT to Downstream`, `Downstream Out`, `Scenario Player`): a site adds its own feed
+  items or uses the intake route. `PurgeStore` and `RecordAgentMode` refuse a non-demo instance as before.
+- **The message purge.** "Shutter message purge" (`Ens.Util.Tasks.Purge`, every message type in the namespace, bodies
+  too, sessions kept whole) is created only when `SHUTTER_MESSAGE_PURGE` is 1, or, when unset, on a demo instance; it
+  keeps `SHUTTER_MESSAGE_DAYS` days of messages (90 when unset). The installer reads both from the environment of the
+  process that runs it (the Dockerfile passes them as build arguments from `.env`; a `zpm load` by hand reads the
+  shell's). The task is made once: an existing instance changes it in the Task Manager. The Doctor reports
+  `purge_task` and `message_days`.
+- **Shape B: Shutter's items inside a site's own production.** `Shutter.Setup.InstallInto(production, root)`
+  (`SELECT Shutter.Setup_InstallInto('Your.Production', '/path/to/module/')`, or `zpm "load <dir> -Ddemo=0
+  -Dproduction=Your.Production"`), in that production's namespace with the core classes loaded: refuses an empty name or a
+  production that does not exist, records it in `^Shutter.Config("production")`, runs the namespace-level parts of a
+  non-demo install (no message purge), and adds to the production, when it has none of that name, each of Shutter's
+  items as `Shutter.Production` defines it (`Setup.INSTALLITEMS`: HL7 Index, Escalation Mail, Case Workflow, Incident
+  Workflow, Evidence Collector, the agent items when their class is compiled, Gate, Shutter Approvers, Shutter API,
+  Verifier, Case Intake, Case Intake Store; never the feed or the demo items), writes the default settings keyed to it
+  (the receiver's address on Evidence Collector and Verifier, no wildcard row) and, when it is running, updates it in
+  place; it never stops a production and never sets the auto-start production. The health route and the Doctor then
+  name that production (`shutter_production`), and `StartProduction` leaves a shape-B namespace alone. Run again after
+  an upgrade, it adds the items that are new.
+
 ## Repository layout
 
 The core IPM module is the repository root (`module.xml`, sources under `src/`): it compiles on any 2026.2 Community image and replays recorded runs. The aihub module is `aihub/` (`aihub/module.xml`, sources under `aihub/src/`): the live runner, the agents, tools, schemas, policies and knowledge bases, which need the `%AI` package. Both modules contribute classes to the `Shutter` package; nothing under `src/` may reference `%AI`.
 
 ## Changes
 
+- v1.15, 20 Oct 2026: the production-install story (T33). The case intake from another production (section 11: `POST /api/shutter/intake`, the resource `Shutter_Intake` and the role `Shutter_Forwarder`, the items Case Intake and Case Intake Store, the source fields on the case and the `source` item of the evidence, the forwarder `Shutter.Intake.Forwarder` for a watched production, the demo hospital in the namespace `HOSPITAL`); the install (section 12: the IPM parameters `demo` and `production`, a status-checked Invoke, what a non-demo install creates and omits, the demo items switched off, the message purge by `SHUTTER_MESSAGE_PURGE` and `SHUTTER_MESSAGE_DAYS` with a default of 90 days, `InstallInto` for a site's own production and `Setup.INSTALLITEMS`); the gate's receiver and the policy's tier follow the case's receiver; `Shutter.Util.Time` reads the namespace's cached feed zone before the store. The install guide for a hospital is `docs/INSTALL.md`.
 - v1.14, 19 Oct 2026: other HL7 schemas and the trigger table (section 2: the events A04, A05, A06, A07, A11 to A13, A28, A31 and A40; what is delivered, indexed only or withheld; the `-` encounter piece; fields read wherever the structure puts the segment; the version note in the evidence); the A40 rule (`merges` in the site profile and the receiver entry, 6.4; the kind `withheld`; `MERGE_WITHHELD` and `CANCEL_UNSUPPORTED`, 6.5; the merge's prior fields, 2 and 9; the escalation's `sources` routing and wording, 10); the matcher's `event`, `delivery: withheld`, `receiver_answer: none` and `later_applied: cancelled | merge` (6.1); withheld and unmappable cases outside incidents (7.1); the index's event words and the `-` visit (8.2); `POST /cases/{id}/close` (5); the gate's policy version 2026-10-19.3 (an approval given under 2026-10-19.2 and not yet dispatched is void at dispatch, `APPROVAL_POLICY_CHANGED`: the case blocks and a person reinvestigates), its `NO_ENCOUNTER` identity answer and `PATIENT_LEVEL_WRITE`; a withheld case never convenes the board (6.3); the close route's `expectedVersion` and the cancelled emails (5). The catalogue entries E14 (a patient merge) and E15 (a cancel the receiver can't reverse) and the block reasons `MERGE_WITHHELD` and `CANCEL_UNSUPPORTED` are the knowledge side of the same change.
 - v1.13, 19 Oct 2026: the receiving system is named the downstream system (a demo bed-management system): the package
   `Downstream.*` with its globals `^Downstream.*` (was `Wards.*`), the web application `/downstream/api`, the resource

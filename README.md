@@ -130,6 +130,34 @@ offset such as `+01:00`. The zone changes every operation key, so set it before 
 `event_time` condition and the gate then block a resend whose event time precedes its admission, lies in the future, is
 far from when it was recorded, or sits within an hour of a clock change.
 
+**A site install (no demo).** The image is the demo. On a hospital's own IRIS for Health, create the `SHUTTER`
+namespace (`Installer.cls`, or `SELECT Shutter.Setup_CreateNamespace('SHUTTER')`) and load the module with the demo
+switched off: `zpm "load /path/to/shutter -Ddemo=0"`. That install creates the resources and roles, the web applications
+`/api/shutter` and `/shutter`, the Workflow role "Shutter Approvers" and the retention task, and starts
+`Shutter.Production` with its demo items (`ADT In`, `ADT to Downstream`, `Downstream Out`, `Scenario Player`) switched
+off; it makes no demo users and nothing of the demo receiver, imports no recorded runs, and creates no message purge
+task unless `SHUTTER_MESSAGE_PURGE=1` (the purge keeps `SHUTTER_MESSAGE_DAYS` days, 90 by default; the installer reads
+both when it runs, the image build from `.env` through the compose file's build arguments). The hospital's own
+productions then hand Shutter their failed deliveries: each adds `Shutter.Intake.Forwarder`, which posts a failed
+message with its context to `POST /api/shutter/intake` as a user holding `Shutter_Forwarder`, and Shutter opens the case
+with the source recorded. The full guide for an integration team, both shapes, is `docs/INSTALL.md`.
+
+**Shutter watching a production it does not own.** The image also creates the `HOSPITAL` namespace, the demo hospital
+whose production is not Shutter's: `PAS In` on `<mgr>/shutter/hospital/in`, `PAS to Downstream`, `Downstream Out` to the
+demo bed-management system, and `Shutter Forwarder`. It starts with the container; a delivery that fails there appears
+in Shutter as a case that names its source (namespace, production, route and the message's header), with Shutter's own
+copy of the message in its evidence, and a resend goes through Shutter's connector. Its messages and settings live in a
+data database of their own in the same volume.
+
+**Inside a production you already run.** Shutter's items can live in an existing production instead of
+`Shutter.Production`: load the core classes into that namespace and run
+`SELECT Shutter.Setup_InstallInto('Your.Production', '/path/to/shutter/')` (or `zpm "load /path/to/shutter -Ddemo=0
+-Dproduction=Your.Production"`). It adds the case workflow, the incident workflow, the evidence collector, the gate, the
+verifier, the escalation mail, the Workflow operation, the API service, the index, the intake and the agent operations
+to that production as `Shutter.Production` defines them, writes their default settings for it and updates it in place
+when it is running; it never stops it, creates no demo users or receiver and no message purge. The health report then
+names that production.
+
 **The HL7 schema and the triggers.** Each HL7 service parses with its own schema category, as IRIS does (the demo's
 `ADT In` uses 2.5.1; a site's route sets 2.3.1, 2.4 or its own custom category, or one category per message type), and
 Shutter reads the fields it needs by position, which are the same in 2.3.1, 2.4 and 2.5.1: MSH, EVN, PID-3, PV1-2, -3,
