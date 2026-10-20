@@ -150,6 +150,9 @@ jobs:
       # publish.
       - name: Both module.xml files are plain ASCII
         run: python3 scripts/check-ascii.py module.xml aihub/module.xml
+      # The evaluation of the board is made from the recordings and the scenarios, so a change to either regenerates it
+      - name: The evaluation matches the recordings and the scenarios
+        run: python3 scripts/evaluate.py --check
 
   # The ObjectScript side on a real IRIS for Health Community 2026.2 (InterSystems' image; the AI Hub build is not on a
   # registry CI can pull from, and the core needs none of it): the namespace, a full load and compile, the installer,
@@ -211,6 +214,20 @@ jobs:
             | docker exec -i iris iris session IRIS -U SHUTTER)
           echo "$out" | tail -30
           echo "$out" | grep -q '^RESULT: ok'
+      # The demo hospital (shape A): its own namespace, with Shutter's packages mapped from SHUTTER, and its production,
+      # which forwards its failed deliveries to Shutter's intake. Both write their progress to the current device, as
+      # above, so they run in terminal sessions too.
+      - name: The demo hospital's namespace and production
+        run: |
+          python3 scripts/iris-load.py --url "$IRIS_URL" --ns SHUTTER Installer.cls
+          out=$(printf '%s\n' 'Set r = ##class(Shutter.Installer).RunHospital("SHUTTER") Write !,"RESULT: ",r,!' 'Halt' \
+            | docker exec -i iris iris session IRIS -U SHUTTER)
+          echo "$out" | tail -20
+          echo "$out" | grep -q '^RESULT: ok'
+          out=$(printf '%s\n' 'Set r = ##class(Hospital.Setup).Install("SHUTTER") Write !,"RESULT: ",r,!' 'Halt' \
+            | docker exec -i iris iris session IRIS -U HOSPITAL)
+          echo "$out" | tail -20
+          echo "$out" | grep -q '^RESULT: ok'
       - name: The downstream system's contract tests, in process
         run: |
           out=$(python3 scripts/iris-sql.py --url "$IRIS_URL" --ns SHUTTER --json "SELECT Downstream_Test.Run_Contract() AS r")
@@ -265,6 +282,10 @@ jobs:
       # The fields Shutter reads sit at the same positions in HL7 2.3.1, 2.4 and 2.5.1
       - name: S2 in HL7 2.4 and 2.3.1 (S17, S18) in site-policy mode
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes policy --approve S17 S18
+      # Shape A: the transfer fails in the demo hospital's own production, its forwarder hands the case to Shutter, and
+      # the case names its source
+      - name: S2 in the demo hospital's production (S19) in site-policy mode
+        run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes policy --approve S19
       - name: Readiness report and the IRIS log
         if: always()
         run: |
@@ -498,6 +519,9 @@ jobs:
           exit 1
       - name: Scenario S2 end to end on the built image
         run: python3 tests/e2e/scenario_check.py --url http://localhost:52773 --approve S2
+      # The image installs the demo hospital at build time (iris.script) and starts its production with the instance
+      - name: Scenario S19 through the built image's demo hospital
+        run: python3 tests/e2e/scenario_check.py --url http://localhost:52773 --modes policy --approve S19
       - name: IRIS log
         if: always()
         run: docker logs shutter 2>&1 | tail -100 || true

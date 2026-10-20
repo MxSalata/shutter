@@ -2327,6 +2327,11 @@
    "scenario": "S18",
    "title": "S2 in HL7 2.3.1",
    "why": "played in policy mode only"
+  },
+  {
+   "scenario": "S19",
+   "title": "Shape A: a failed transfer in the hospital's own production",
+   "why": "played in policy mode only"
   }
  ],
  "not_used": [],
