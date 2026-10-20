@@ -58,10 +58,9 @@
       </Invoke>
       <!-- The web application's built files, once they exist. -->
       <FileCopy Name="www/" Target="${cspdir}shutter/" Overlay="1"/>
-      <!-- The unit tests IPM's test phase runs (zpm "iris-shutter test"): the feed's mapping of HL7 messages, which
-           needs no production and changes no data. The downstream system's contract tests (tests/unit/Downstream) set
-           its fault setting, so they run in CI and by hand, not here. -->
-      <UnitTest Name="/tests/unit/" Package="Shutter.Test" Phase="test"/>
+      <!-- No UnitTest element: the unit tests under tests/unit run in CI and by hand, not in IPM's test phase. The feed's
+           tests call a development helper that stays out of the image (.dockerignore), and the downstream system's
+           contract tests set its fault setting. -->
     </Module>
   </Document>
 </Export>

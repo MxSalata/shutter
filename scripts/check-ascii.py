@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check that files are plain ASCII: printable characters, tabs and line ends only. Open Exchange's reader of module.xml
-keeps the low byte of a character only, so an en dash (U+2013) in a description became 0x13, which XML does not allow,
-and publishing to the package manager failed ("XSLT XML Transformer Error: invalid character 0x13").
+keeps only the low byte of each character, so a character outside ASCII breaks the publish to the package manager (an
+en dash, U+2013, becomes 0x13, which XML does not allow: "invalid character 0x13").
 
     python3 scripts/check-ascii.py module.xml aihub/module.xml
 

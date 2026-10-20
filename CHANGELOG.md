@@ -27,8 +27,8 @@ Interoperability production, with a board of IRIS AI Hub agents.
   an escalation goes to, the feed's time zone and whether note text may reach the model, with every version kept.
 - **Only what is needed reaches the model:** identifiers become per-case tokens, names, dates of birth and addresses
   are dropped, and CI fails when anything personal from the fixtures reaches a recording.
-- **Merges and cancels** the receiver cannot take are withheld and escalated, with an email drafted for the team the
-  site profile names.
+- **Merges** are withheld by default (the site profile can allow them for a receiver that takes them), and **cancels**
+  the receiver cannot take are withheld; both are escalated, with an email drafted for the team the site profile names.
 - **The web application:** scenarios, cases, incidents, the board's findings, the gate, approvals, verification, the
   site profile, the library, and costs and tokens per agent run; served by IRIS, and as an online demo of recorded
   runs.
