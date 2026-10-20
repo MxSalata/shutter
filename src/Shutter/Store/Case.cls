@@ -308,7 +308,7 @@ ClassMethod CloseByHand(case As Shutter.Store.Case, reason As %String, actor As 
         Set followed = "; after escalation " _ (+seq)
         If $ISOBJECT(esc) Set followed = followed _ $SELECT(esc.TeamName '= "": " to " _ esc.TeamName, 1: "") _ " (" _ esc.State _ ")"
         // An email not yet sent would tell the team to correct a case already handled: it is cancelled.
-        If $ISOBJECT(esc) && ((esc.State = "draft") || (esc.State = "queued")) { Set esc.State = "cancelled" Set esc.UpdatedAt = ##class(Shutter.Util.Time).NowUTC() Do esc.%Save() Set followed = followed _ ", cancelled" }
+        If $ISOBJECT(esc) && ((esc.State = "draft") || (esc.State = "queued")) { Set esc.State = "cancelled" Do esc.%Save() Set followed = followed _ ", cancelled" }
         Set ref = "escalation:" _ (+seq)
     }
     If $ISOBJECT(case.CurrentApproval) && 'case.CurrentApproval.Revoked Do case.CurrentApproval.Revoke(who _ ": the case was handled by hand")
