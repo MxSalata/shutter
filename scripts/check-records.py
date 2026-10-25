@@ -5,6 +5,7 @@ coordinator and the generalist, Shutter.Schema.Review for the production review'
 classes' Check methods. A run the API mimic answered (model mock, tests/mock) is a problem: no model made it.
 
     python3 scripts/check-records.py [fixtures/records] [--scenarios fixtures/scenarios.json]
+    python3 scripts/check-records.py --self-test
 
 Exit code 1 when any file has a problem. With --scenarios it also lists, per scenario in that file, the
 members whose round-1 recording is missing, per case (scenario:S11:ENC-1101:transfer|member|cfg). A key in the older
@@ -219,13 +220,16 @@ def check_review(r):
 
 
 def review_tool_problems(d):
-    """The review's run calls its knowledge search and SubmitReview only, and calls SubmitReview."""
-    try:
-        calls = json.loads(d.get("toolCalls") or "[]")
-    except (TypeError, ValueError):
-        return []
-    if not isinstance(calls, list) or not calls:
-        return []
+    """The review's run calls its knowledge search and SubmitReview only, and calls SubmitReview. Tool calls that are
+    empty, missing or not a list mean the run never reached SubmitReview either."""
+    calls = d.get("toolCalls")
+    if isinstance(calls, str):
+        try:
+            calls = json.loads(calls) if calls.strip() else []
+        except ValueError:
+            calls = None
+    if not isinstance(calls, list):
+        calls = []
     names = [c.get("name") for c in calls if isinstance(c, dict)]
     p = []
     other = sorted({str(x) for x in names} - REVIEW_TOOLS)
@@ -317,11 +321,41 @@ def check_file(path):
     return problems, m
 
 
+def self_test():
+    """Synthetic review recordings that prove review_tool_problems: a run with no SubmitReview call is a problem, whether
+    its tool calls are empty, missing, not a list or hold other calls only."""
+    never = "the run never called its terminal tool SubmitReview"
+    submit = json.dumps([{"name": "search_review", "arguments": {}}, {"name": "SubmitReview", "arguments": {}}])
+    cases = [
+        ({"toolCalls": submit}, []),
+        ({"toolCalls": json.loads(submit)}, []),
+        ({"toolCalls": ""}, [never]),
+        ({"toolCalls": "[]"}, [never]),
+        ({}, [never]),
+        ({"toolCalls": None}, [never]),
+        ({"toolCalls": "{}"}, [never]),
+        ({"toolCalls": {"name": "SubmitReview"}}, [never]),
+        ({"toolCalls": "not json"}, [never]),
+        ({"toolCalls": json.dumps([{"name": "search_review"}])}, [never]),
+    ]
+    failed = 0
+    for d, want in cases:
+        got = review_tool_problems(d)
+        if got != want:
+            failed += 1
+            print(f"self-test: {d!r} gave {got!r}, expected {want!r}")
+    print(f"self-test: {len(cases)} cases, {failed} failed")
+    return 1 if failed else 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("directory", nargs="?", default="fixtures/records")
     ap.add_argument("--scenarios", help="fixtures/scenarios.json, to list the scenarios without a full round-1 set")
+    ap.add_argument("--self-test", action="store_true", help="check the review's tool rule on synthetic recordings")
     args = ap.parse_args()
+    if args.self_test:
+        return self_test()
     files = sorted(glob.glob(os.path.join(args.directory, "*.json")))
     if not files:
         print(f"no recordings in {args.directory}", file=sys.stderr)
