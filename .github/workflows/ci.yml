@@ -180,7 +180,7 @@ jobs:
   # runs: S1 to S10, S13, and the withheld merge and cancel (S15, S16) on the board; the two outage scenarios, S11 and
   # S12, and S2 in HL7 2.4 and 2.3.1 (S17, S18) in site-policy mode; S20, a move entered by hand, in rules-only mode;
   # S21, a transfer in the hour the clocks go back, in rules-only and site-policy modes; then the operator's and the
-  # approver's routes, and the attempts to break the approval boundary.
+  # approver's routes, the attempts to break the approval boundary, and the production review.
   iris:
     name: IRIS (the downstream system's contract, scenarios in replay)
     runs-on: [self-hosted, house]
@@ -329,6 +329,11 @@ jobs:
       # scenarios in rules-only mode, so it runs after the roles check, which needs the cases the scenarios above left.
       - name: What the approval boundary refuses
         run: python3 tests/e2e/boundary_check.py --url "$IRIS_URL"
+      # The production review of both productions, read-only: the demo's findings, the fingerprint stable across two
+      # runs, an approver's annotation seen by a fresh review and revoked, and the agent's part with no recording. It runs
+      # after the scenarios, whose failed deliveries are the window's errors.
+      - name: The production review of Shutter's production and the hospital's
+        run: python3 tests/e2e/review_check.py --url "$IRIS_URL"
       - name: Readiness report and the IRIS log
         if: always()
         run: |
