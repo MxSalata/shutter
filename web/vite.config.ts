@@ -112,6 +112,8 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       globals: true,
       setupFiles: ['./src/test/setup.ts'],
+      // The self-hosted runner shares a busy host: a page test that walks a dialog can pass 5 s there.
+      testTimeout: 15_000,
       include: ['src/**/*.test.{ts,tsx}'],
       css: false,
     },
