@@ -90,15 +90,38 @@ function tokens(p: EvaluationPass): string {
   return parts.join(' · ');
 }
 
+/** How often a way of playing gave the expected outcome end to end, over the scored passes the comparison covers. */
+function played(data: Evaluation, how: string): { matches: number; of: number } {
+  const statuses = data.passes
+    .filter((p) => p.scored)
+    .map((p) => p.played?.[how]?.status)
+    .filter((st) => st === 'as expected' || st === 'differs');
+  return { matches: statuses.filter((st) => st === 'as expected').length, of: statuses.length };
+}
+
+/** The pass's played outcomes in words, for the plan's cell: the board's live run and rules alone. */
+function playedLine(p: EvaluationPass): string {
+  // A pass that is not scored was planned again: the case's outcome belongs to its last pass
+  if (!p.scored) return '';
+  const words = (st: string | undefined) =>
+    st === 'as expected' ? 'as expected' : st === 'differs' ? 'not as expected' : '';
+  const board = words(p.played?.board_live?.status);
+  const rules = words(p.played?.rules?.status);
+  return [board ? `Played by the board: ${board}` : '', rules ? `by rules alone: ${rules}` : '']
+    .filter(Boolean)
+    .join('; ');
+}
+
 /**
  * The headline result with its scope and its limits beside it, never further down the page: what the figure counts,
  * which set it was measured on, and what is planned but not yet reported.
  */
 function Headline({ data }: { data: Evaluation }) {
   const t = data.totals;
+  const rules = played(data, 'rules');
   return (
     <Card padding="md" component="section" aria-labelledby="headline-title" data-tour="evaluation-headline">
-      <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
+      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
         <Stack gap={2}>
           <Title order={2} fz="sm" c="dimmed" fw={600} id="headline-title">
             The board against the expected outcome
@@ -106,7 +129,20 @@ function Headline({ data }: { data: Evaluation }) {
           <Text fz={28} fw={650} className="tabular">
             {t.scored_passes ? `${t.board_matches} of ${t.scored_passes}` : 'None scored'}
           </Text>
-          <Text size="sm">scored passes gave the scenario's expected outcome</Text>
+          <Text size="sm">scored passes proposed the scenario's expected action</Text>
+        </Stack>
+        <Stack gap={2}>
+          <Text size="sm" c="dimmed" fw={600}>
+            Rules alone, the baseline
+          </Text>
+          <Text fz={28} fw={650} className="tabular">
+            {rules.of ? `${rules.matches} of ${rules.of}` : 'Not played'}
+          </Text>
+          <Text size="sm">
+            {rules.of
+              ? 'of the same scenarios, played end to end with no agents, ended as expected'
+              : 'no scenario of these passes was played with rules alone'}
+          </Text>
         </Stack>
         <Stack gap={2}>
           <Text size="sm" fw={600}>
@@ -165,7 +201,7 @@ export default function EvaluationPage({
     <>
       <PageHeader
         title="Evaluation"
-        subtitle="How the board decides: its disposition against each scenario's expected outcome, every member's own view and confidence, how far they agreed, and what each pass cost in tokens, money and time."
+        subtitle="How the board decides: the action it proposed against each scenario's expected outcome and against rules alone, every member's own view and confidence, how far they agreed, and what each pass cost in tokens, money and time."
       />
       <Stack gap="md">
         <Headline data={data} />
@@ -177,9 +213,10 @@ export default function EvaluationPage({
             <Text size="sm" c="dimmed">
               A pass is one board decision on one case: the three specialists in parallel (conformance,
               encounter, impact), then the coordinator, who writes the plan. A case planned again after a
-              change has a pass per plan. A specialist decides from its own view only, so its disposition is
-              what that view alone would decide, not a verdict on the case; its confidence is in that answer.
-              Shutter stores and shows the confidence, and no rule in the core or the gate reads it.
+              change has a pass per plan. A specialist decides from its own view only, so the action it
+              proposes is what that view alone would choose, not a verdict on the case; its confidence is in
+              that answer. Shutter stores and shows the confidence, and no rule in the core or the gate reads
+              it.
             </Text>
             <KeyValueList
               rows={[
@@ -224,14 +261,16 @@ export default function EvaluationPage({
             Per scenario
           </Title>
           <Text size="sm" c="dimmed" mb="sm">
-            Each member's disposition and confidence, the plan's disposition, the catalogue entry the plan
-            cites with who it says decides (policy: the catalogue alone may settle it in site-policy mode;
-            board: it needs the board's judgement; person: only a person may act), the agreement, and the
-            tokens, cost and time of the pass. In a scored pass, "outweighed" marks a view the plan set aside
-            for another, and "differs" a plan that is not the expected outcome.
+            Each member's proposed action and confidence; the plan's action, with how the scenario ended when
+            played end to end by the board and by rules alone; the catalogue entry the plan cites with who it
+            says decides (policy: the catalogue alone may settle it in site-policy mode; board: it needs the
+            board's judgement; person: only a person may act), the agreement, and the tokens, cost and time of
+            the pass. In a scored pass, "outweighed" marks a view the plan set aside for another, and
+            "differs" a plan that is not the expected outcome.
           </Text>
-          <Table.ScrollContainer minWidth={1100}>
-            <Table verticalSpacing="xs">
+          {/* On a phone each pass is a card, every column under its name */}
+          <Table.ScrollContainer minWidth={960} className="stack-scroll">
+            <Table verticalSpacing="xs" className="stack-table">
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Pass</Table.Th>
@@ -242,8 +281,7 @@ export default function EvaluationPage({
                   <Table.Th>Plan</Table.Th>
                   <Table.Th>Entry</Table.Th>
                   <Table.Th>Agreement</Table.Th>
-                  <Table.Th>Tokens</Table.Th>
-                  <Table.Th>Cost</Table.Th>
+                  <Table.Th>Cost and tokens</Table.Th>
                   <Table.Th>Elapsed</Table.Th>
                 </Table.Tr>
               </Table.Thead>
@@ -258,33 +296,38 @@ export default function EvaluationPage({
                         {p.title}
                       </Text>
                     </Table.Td>
-                    <Table.Td>
+                    <Table.Td data-label="Expected">
                       <Text size="sm">{expected(p)}</Text>
                     </Table.Td>
                     {SPECIALISTS.map((s) => (
-                      <Table.Td key={s}>
+                      <Table.Td key={s} data-label={humanize(s)}>
                         <MemberCell m={p.members[s]} p={p} plan={false} />
                       </Table.Td>
                     ))}
-                    <Table.Td>
+                    <Table.Td data-label="Plan">
                       <MemberCell m={p.members.coordinator} p={p} plan />
+                      {playedLine(p) ? (
+                        <Text size="xs" c="dimmed">
+                          {playedLine(p)}
+                        </Text>
+                      ) : null}
                     </Table.Td>
-                    <Table.Td>
+                    <Table.Td data-label="Entry">
                       <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
                         {p.catalogue_entry || '-'}
                         {p.entry_decides ? ` (${p.entry_decides})` : ''}
                       </Text>
                     </Table.Td>
-                    <Table.Td>
+                    <Table.Td data-label="Agreement">
                       <Text size="sm">{p.agreement}</Text>
                     </Table.Td>
-                    <Table.Td>
-                      <Text size="xs">{tokens(p)}</Text>
-                    </Table.Td>
-                    <Table.Td>
+                    <Table.Td data-label="Cost and tokens">
                       <Text size="sm">{formatUsd(p.cost_usd)}</Text>
+                      <Text size="xs" c="dimmed">
+                        {tokens(p)}
+                      </Text>
                     </Table.Td>
-                    <Table.Td>
+                    <Table.Td data-label="Elapsed">
                       <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
                         {formatDuration(p.elapsed_ms)}
                       </Text>
@@ -296,13 +339,14 @@ export default function EvaluationPage({
                   <Table.Td colSpan={7}>
                     <Text size="sm">{`${t.passes} passes, ${t.runs} runs`}</Text>
                   </Table.Td>
-                  <Table.Td>
-                    <Text size="xs">{`${formatInt(t.prompt_tokens)} in · ${formatInt(t.cache_read_tokens)} cached · ${formatInt(t.cache_write_tokens)} cache written · ${formatInt(t.completion_tokens)} out`}</Text>
-                  </Table.Td>
-                  <Table.Td>
+                  <Table.Td data-label="Cost and tokens">
                     <Text size="sm">{formatUsd(t.cost_usd)}</Text>
+                    <Text
+                      size="xs"
+                      c="dimmed"
+                    >{`${formatInt(t.prompt_tokens)} in · ${formatInt(t.cache_read_tokens)} cached · ${formatInt(t.cache_write_tokens)} cache written · ${formatInt(t.completion_tokens)} out`}</Text>
                   </Table.Td>
-                  <Table.Td>
+                  <Table.Td data-label="Time">
                     <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
                       {`${formatDuration(t.agent_ms)} of agent time`}
                     </Text>
@@ -364,8 +408,8 @@ export default function EvaluationPage({
           <Text size="sm" c="dimmed" mb="sm">
             {`What ${refusals.script} tries over HTTP against the approval boundary, and the answer each attempt must get. It runs in ${refusals.runs}, and on any instance of your own (it plays the scenarios it names, so not on one someone else is using).`}
           </Text>
-          <Table.ScrollContainer minWidth={800}>
-            <Table verticalSpacing="xs">
+          <Table.ScrollContainer minWidth={800} className="stack-scroll">
+            <Table verticalSpacing="xs" className="stack-table">
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Attempt</Table.Th>
@@ -382,17 +426,17 @@ export default function EvaluationPage({
                         {c.title}
                       </Text>
                     </Table.Td>
-                    <Table.Td>
+                    <Table.Td data-label="Scenario">
                       <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
                         {c.scenario}
                       </Text>
                     </Table.Td>
-                    <Table.Td>
+                    <Table.Td data-label="Answer">
                       <Text size="sm" className="mono-wrap">
                         {c.answer}
                       </Text>
                     </Table.Td>
-                    <Table.Td>
+                    <Table.Td data-label="What it proves">
                       <Text size="sm">{c.proves}</Text>
                     </Table.Td>
                   </Table.Tr>

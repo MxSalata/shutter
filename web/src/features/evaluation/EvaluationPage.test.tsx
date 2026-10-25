@@ -49,8 +49,8 @@ describe('EvaluationPage', () => {
     expect(cells[5]).toHaveTextContent('Escalate');
     expect(cells[6]).toHaveTextContent('E7 (board)');
     expect(cells[7]).toHaveTextContent('with the majority');
-    expect(cells[9]).toHaveTextContent('$0.37');
-    expect(cells[10]).toHaveTextContent('30.9 s');
+    expect(cells[8]).toHaveTextContent('$0.37');
+    expect(cells[9]).toHaveTextContent('30.9 s');
     const unscored = within(table).getByText('S7 pass 1').closest('tr')!;
     expect(unscored).toHaveTextContent('Not scored: planned again after the change');
     expect(within(table).getByText('S11 ENC-1103 transfer')).toBeInTheDocument();
