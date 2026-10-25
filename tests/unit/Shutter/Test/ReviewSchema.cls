@@ -26,9 +26,9 @@ Method GoodReview() As %DynamicObject
 {
     Quit {
         "ranking": [
-            {"finding_id": "F2", "rank": 1, "explanation": "FailureTimeout -1 on Downstream Out is consistent with the 3 unique cases of the window, all with failure kind unavailable.", "confidence_note": "No mechanism was traced."},
-            {"finding_id": "F1", "rank": 2, "explanation": "No alert consumer exists, so the alerts the items would raise reach the event log only."},
-            {"finding_id": "F3", "rank": 3, "explanation": "The purge task keeps 30 days, within the site's retention; no cases bear on it.", "confidence_note": "Latent."}
+            {"finding_id": "F2", "rank": 1, "code": "RETRY_FOREVER", "item": "Downstream Out", "setting": "FailureTimeout", "explanation": "FailureTimeout -1 on Downstream Out is consistent with the 3 unique cases of the window, all with failure kind unavailable.", "confidence_note": "No mechanism was traced."},
+            {"finding_id": "F1", "rank": 2, "code": "NO_ALERT_CONSUMER", "item": "", "setting": "", "explanation": "No alert consumer exists, so the alerts the items would raise reach the event log only."},
+            {"finding_id": "F3", "rank": 3, "code": "PURGE_LONG", "item": "", "setting": "NumberOfDaysToKeep", "explanation": "The purge task keeps 30 days, within the site's retention; no cases bear on it.", "confidence_note": "Latent."}
         ],
         "summary": "Two findings are consistent with the window's cases; the purge finding is latent.",
         "unknowns": ["Whether an external monitor reads the event log."]
@@ -52,8 +52,11 @@ Method TestGoodRankingIsAccepted()
     If '..Present("Shutter.Schema.Review") Quit
     Set problems = ..Problems(..GoodReview())
     Do $$$AssertEquals(problems.%Size(), 0, "a ranking of every finding once, ranks 1 to 3, an explanation each, is accepted: " _ problems.%ToJSON())
-    Set minimal = {"ranking": [{"finding_id": "F1", "rank": 1, "explanation": "One finding, ranked first."}]}
+    Set minimal = {"ranking": [{"finding_id": "F1", "rank": 1, "code": "PURGE_MISSING", "item": "", "setting": "", "explanation": "One finding, ranked first."}]}
     Do $$$AssertEquals(..Problems(minimal).%Size(), 0, "one finding with no summary and no unknowns is accepted too")
+    // Since v1.22 an entry names the finding's code (item and setting may be empty): a ranking is matched by them on replay.
+    Set nocode = {"ranking": [{"finding_id": "F1", "rank": 1, "explanation": "No code."}]}
+    Do $$$AssertTrue(..Problems(nocode).%ToJSON() [ "code", "an entry without the finding's code is refused: " _ ..Problems(nocode).%ToJSON())
 }
 
 Method TestRepeatedIdAndRanksOutOfRangeAreRefused()
