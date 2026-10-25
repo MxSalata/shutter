@@ -76,8 +76,9 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     }
 
     // Ordering: for a write, the event's time and the times of the later events are plausible (T28) and no later
-    // transfer or discharge supersedes it, by the matcher's own reading of the later events and with the chain kind
-    // the snapshot's match used, so the gate and later_applied agree.
+    // transfer, discharge, cancel, merge or admission supersedes it, by the matcher's own reading of the later events and
+    // with the chain kind the snapshot's match used, so the gate and later_applied agree. A superseded closure rests on a
+    // later transfer or discharge (a cancel there passes through the catalogue).
     Set cat = summary.%Get("catalogue"), conds = $SELECT($ISOBJECT(cat): cat.%Get("conditions"), 1: "")
     Set eventTime = $SELECT($ISOBJECT(conds): ##class(Shutter.Util.Json).Str(conds, "event_time"), 1: "")
     Set timeDoubt = (eventTime '= "") && (eventTime '= "plausible")
@@ -85,11 +86,11 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     Set chainKind = $SELECT($ISOBJECT(conds): ##class(Shutter.Util.Json).Str(conds, "chain"), 1: "")
     If chainKind = "" Set chainKind = request.ChainKind
     If isWrite {
-        Set superseding = ..Superseding(summary, case, chainKind, .delivered)
+        Set superseding = ..Superseding(summary, case, chainKind, .delivered, 1)
         If timeDoubt {
             Do ..Check(checks, "ordering", "block", "EVENT_TIME_IMPLAUSIBLE", whose _ " is not plausible (" _ eventTime _ "): " _ $CASE(eventTime, "before_admission": "it precedes the admission", "future": "it lies in the future", "far_from_recorded": "it is more than a day from when the event was recorded", "clock_change": "it lies within an hour of a clock change and came without an offset", "later_event_future": "it lies in the future, so it cannot settle the order", : eventTime) _ "; a person decides")
         } ElseIf superseding = "" {
-            Do ..Check(checks, "ordering", "pass", "NO_LATER_EVENT", "No later transfer or discharge was applied for this encounter")
+            Do ..Check(checks, "ordering", "pass", "NO_LATER_EVENT", "No later transfer or discharge was applied for this encounter, nor a later cancel, merge or admission")
         } ElseIf delivered {
             Do ..Check(checks, "ordering", "block", "SUPERSEDED_BY_LATER_EVENT", "A later event was applied: " _ superseding)
         } Else {
@@ -297,22 +298,25 @@ Method OutcomeConsistency(checks As %DynamicArray, plan As Shutter.Store.Plan, o
     Do ..Check(checks, "catalogue", "block", "OUTCOME_MISMATCH", "The outcome " _ outcome _ " calls for " _ allowed _ ", but the plan's disposition is " _ plan.Disposition)
 }
 
-/// A later transfer or discharge that supersedes the case's operation, described, or "": the last applied one in the
-/// feed's timeline, else the last in the receiver's own history, which is authoritative when the message store is
-/// silent, else the last later transfer the feed sent whose delivery failed or is uncertain as well (delivered is then
-/// 0), which supersedes outside a chain. The events are the matcher's (Shutter.Catalogue.Matcher.Later), so the gate
+/// A later event that supersedes the case's operation, described (Shutter.Catalogue.Matcher.Describe), or "": the last
+/// applied one in the feed's timeline, else the last in the receiver's own history, which is authoritative when the
+/// message store is silent, else the last later transfer the feed sent whose delivery failed or is uncertain as well
+/// (delivered is then 0; the description names the key it was sent as and its case), which supersedes outside a chain.
+/// For a write (isWrite) a later applied transfer, discharge, cancel, merge or admission supersedes; a superseded closure
+/// rests on a later transfer or discharge. The events are the matcher's (Shutter.Catalogue.Matcher.Later), so the gate
 /// and later_applied agree, and one whose time is not plausible supersedes nothing.
-Method Superseding(summary As %DynamicObject, case As Shutter.Store.Case, chainKind As %String, Output delivered As %Boolean) As %String [ Private ]
+Method Superseding(summary As %DynamicObject, case As Shutter.Store.Case, chainKind As %String, Output delivered As %Boolean, isWrite As %Boolean = 0) As %String [ Private ]
 {
     Set found = "", delivered = 1
     Set later = ##class(Shutter.Catalogue.Matcher).Later(summary, case, chainKind)
+    Set words = $SELECT(isWrite: $LISTBUILD("transfer", "discharge", "cancelled", "merge", "admit"), 1: $LISTBUILD("transfer", "discharge"))
     For pass = $LISTBUILD("timeline", 1), $LISTBUILD("history", 1), $LISTBUILD("timeline", 0) {
         Set from = $LIST(pass, 1), want = $LIST(pass, 2)
         Set iter = later.%GetIterator()
         While iter.%GetNext(.i, .ev) {
             Continue:((ev.from '= from) || (ev.delivered '= want) || 'ev.plausible)
-            Continue:((ev.word '= "transfer") && (ev.word '= "discharge"))
-            Set found = ev.word _ $SELECT(ev.ward '= "": " to " _ ev.ward, 1: "") _ " at " _ ev."event_time" _ $SELECT(from = "history": " (receiver history)", 'want: " (its delivery failed or is uncertain; its own case recovers it)", 1: "")
+            Continue:'$LISTFIND(words, ev.word)
+            Set found = ##class(Shutter.Catalogue.Matcher).Describe(ev)
             Set delivered = want
         }
         Quit:found'=""
