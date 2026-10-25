@@ -19,7 +19,7 @@ Property AgentTarget As %String(MAXLEN = 128) [ InitialExpression = "Agent Board
 Property AgentTimeoutSeconds As %Integer [ InitialExpression = 600 ];
 
 /// The agent's model turns and token budget: a review costs less than a board member's run.
-Property MaxIterations As %Integer [ InitialExpression = 3 ];
+Property MaxIterations As %Integer [ InitialExpression = 4 ];
 
 Property TokenBudget As %Integer [ InitialExpression = 60000 ];
 
