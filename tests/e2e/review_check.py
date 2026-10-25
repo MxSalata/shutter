@@ -266,10 +266,16 @@ def main():
         status, listing = operator.call("GET", "/production-reviews?production=Shutter.Production&limit=5")
     items = (listing or {}).get("items") or []
     latest = newest.get(("SHUTTER", "Shutter.Production"))
+
+    def unfiltered():
+        """What the list holds with no filter: whether the rows are there, and what they say they review."""
+        code, body = operator.call("GET", "/production-reviews?limit=10")
+        return f"{code} " + str([(i.get("reviewId"), i.get("namespace"), i.get("production"))
+                                 for i in (body or {}).get("items") or []] if code == 200 else body)
     check(f"operator: GET /production-reviews?production= lists the newest review first ({latest})",
           bool(items) and items[0].get("reviewId") == latest and all(i.get("production") == "Shutter.Production" for i in items)
           and (listing or {}).get("total", 0) >= len(items),
-          f"{status} {[i.get('reviewId') for i in items] if items else listing}")
+          f"{status} {[i.get('reviewId') for i in items] if items else listing}; unfiltered: {unfiltered()}")
 
     # ---- an annotation: the approver's, bound to the finding's value, seen by a fresh review, then revoked ----
     base = reviews.get(("SHUTTER", "Shutter.Production"))
