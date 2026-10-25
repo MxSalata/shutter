@@ -1,15 +1,16 @@
 ---
 id: recovery-playbooks
-version: 1.2
+version: 1.3
 collection: playbooks
 applies_to: [downstream-api-v1, hl7-v2-adt]
-effective_from: 2026-10-20
+effective_from: 2026-10-25
 ---
 
 # Recovery playbooks for failed ward movements
 
 Integration team runbook for movements that didn't reach the downstream system, or whose outcome is
-unclear. Version 1.2, in force from 20 October 2026. Changes from 1.1: merges go to the PAS team (RP-2.6) and withheld
+unclear. Version 1.3, in force from 25 October 2026. Changes from 1.2: a movement superseded by a later transfer that
+has not arrived either (RP-2.3). Changes from 1.1: merges go to the PAS team (RP-2.6) and withheld
 cases are closed by hand (RP-2.7). Changes from 1.0: a release by the site's policy (RP-2.1), the approval of a chain
 (RP-3.4), chains resent in event order (RP-3.5) and the scenario catalogue (RP-3.6).
 
@@ -42,8 +43,9 @@ RP-2.1. **Resend** only when all of these hold:
 RP-2.2. **Reconcile** when a receipt exists for the operation key with the same payload digest. Check that the
 encounter's history contains the operation (DEP-3.1). Never resend a committed movement.
 
-RP-2.3. **Superseded** when a later location event with a later event time has been applied (ELS-2.1, ELS-2.3). Record
-which event superseded it. Nothing is sent.
+RP-2.3. **Superseded** when a later location event with a later event time has been applied, or the PAS sent a later
+transfer that has not arrived either and whose own case recovers it (ELS-2.1, ELS-2.3). Record which event superseded
+it, and for an undelivered one its case. Nothing is sent.
 
 RP-2.4. **More evidence** when the downstream system can't be read, when receipts and history disagree, or when event
 times can't be compared (ELS-2.5). Read again; if that doesn't settle it, escalate.

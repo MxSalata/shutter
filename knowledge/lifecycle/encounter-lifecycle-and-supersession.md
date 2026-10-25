@@ -1,15 +1,16 @@
 ---
 id: encounter-lifecycle-and-supersession
-version: 1.1
+version: 1.2
 collection: lifecycle
 applies_to: [downstream-api-v1, hl7-v2-adt]
-effective_from: 2026-10-20
+effective_from: 2026-10-25
 ---
 
 # Inpatient encounter lifecycle and supersession policy
 
 Integration team policy for patient movements sent to the downstream system (the demo bed-management system). Version
-1.1, in force from 20 October 2026. Changes from 1.0: a cancellation supersedes the movement it cancels (ELS-2.6), and
+1.2, in force from 25 October 2026. Changes from 1.1: a later transfer the PAS sent that has not arrived either also
+supersedes (ELS-2.1). Changes from 1.0: a cancellation supersedes the movement it cancels (ELS-2.6), and
 the policy applies to HL7 v2 ADT feeds of every version taken (WIC-6).
 
 ## ELS-1 The lifecycle
@@ -27,8 +28,10 @@ decides whether an event may still be applied **before** it is sent, by comparin
 ## ELS-2 Supersession
 
 ELS-2.1. **A transfer is superseded** when the encounter has an applied location event whose event time is later than
-the transfer's event time: a later transfer, or a discharge. A superseded transfer must not be applied, because it
-would move the patient's recorded location back to where they no longer are.
+the transfer's event time: a later transfer, or a discharge. So does a later transfer the PAS sent after it whose own
+delivery failed or is uncertain: it is the PAS's later word on the patient's place, and its own case delivers it. A
+superseded transfer must not be applied, because it would move the patient's recorded location back to where they no
+longer are. A later event whose time lies in the future of when it was sent or applied settles nothing.
 
 ELS-2.2. **An update never supersedes a transfer.** A demographic update changes no location. A transfer that failed
 before a later update is still the patient's latest movement, and is still due, provided nothing in ELS-2.1 applies.
