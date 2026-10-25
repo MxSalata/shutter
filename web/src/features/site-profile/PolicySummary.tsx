@@ -34,6 +34,13 @@ export function PolicySummary({ profile }: { profile: SiteProfile }) {
       <Text size="sm" c="dimmed">
         Every write passes the gate first; then a person, or the site's written policy, releases it.
       </Text>
+      {/* What a chain is, before the cards use the word */}
+      <Text size="xs" c="dimmed">
+        When many deliveries fail together, an incident groups them, and each encounter&apos;s failures form a
+        chain, sent in event order. A single failure is one failure with nothing applied after it; an ordered
+        chain is several failures with no successful delivery between them; an interleaved chain has
+        successful deliveries between its failures, or a later event already applied.
+      </Text>
       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm" role="list" aria-labelledby="site-summary-title">
         {TIERS.map((tier) => {
           const receivers = receiversAt(profile, tier);
