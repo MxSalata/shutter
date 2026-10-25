@@ -44,6 +44,15 @@ ClassMethod Drop(name As %String, text As %String, folder As %String = "") As %S
     Quit target
 }
 
+/// Makes the running production pick up classes compiled since it started (Ens.Director.UpdateProduction), as the
+/// portal's Update button does, so a branch loaded by hand runs in every job. Returns "ok" or the error text.
+ClassMethod Update() As %String [ SqlProc ]
+{
+    If '$SYSTEM.Security.Check("%Development", "USE") Quit "error: a development helper; %Development is required"
+    Set sc = ##class(Ens.Director).UpdateProduction()
+    Quit $SELECT($$$ISOK(sc): "ok", 1: "error: " _ $SYSTEM.Status.GetErrorText(sc))
+}
+
 /// Sets the investigation mode for the cases the feed opens next (board, single, rules or policy), as a scenario run
 /// does, and returns it.
 ClassMethod Mode(mode As %String) As %String [ SqlProc ]

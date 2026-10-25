@@ -116,14 +116,14 @@ Method TestEditAndQueueCheckTheText()
     Do $$$AssertTrue($SYSTEM.Status.GetErrorText(sc) [ "subject: must not contain line breaks", "naming the field: " _ $SYSTEM.Status.GetErrorText(sc))
     Set sc = e.Edit("ok", "body", "a@example.nhs.uk@evil.com", "", "operator")
     Do $$$AssertStatusNotOK(sc, "an edit with two @ in to is refused")
-    Do $$$AssertTrue($SYSTEM.Status.GetErrorText(sc) [ "to: must be one address with one @", "naming the field and why: " _ $SYSTEM.Status.GetErrorText(sc))
+    Do $$$AssertTrue(($SYSTEM.Status.GetErrorText(sc) [ "to: a@example.nhs.uk@evil.com: ") && ($SYSTEM.Status.GetErrorText(sc) [ "must be one address with one @"), "naming the field, the address and why: " _ $SYSTEM.Status.GetErrorText(sc))
     Do $$$AssertEquals(..Column(1, "Subject"), "Shutter " _ ..#CASEID _ ": manual check needed", "the stored text is unchanged")
     // A row changed outside the API is refused at the queue.
     Set e.ToAddr = "Team <pas@example.nhs.uk>"
     Do $$$AssertStatusOK(e.%Save(), "the row is changed directly")
     Set sc = e.Queue("d1", "operator")
     Do $$$AssertStatusNotOK(sc, "a queue with a display name in to is refused")
-    Do $$$AssertTrue($SYSTEM.Status.GetErrorText(sc) [ "to: must be a bare address", "naming the field: " _ $SYSTEM.Status.GetErrorText(sc))
+    Do $$$AssertTrue(($SYSTEM.Status.GetErrorText(sc) [ "to: Team <pas@example.nhs.uk>: ") && ($SYSTEM.Status.GetErrorText(sc) [ "must be a bare address"), "naming the field, the address and why: " _ $SYSTEM.Status.GetErrorText(sc))
     Do $$$AssertEquals(..Column(1, "State"), "draft", "and the row stays a draft")
 }
 
