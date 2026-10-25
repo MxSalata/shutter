@@ -76,6 +76,25 @@ Interoperability production, with a board of IRIS AI Hub agents.
   which nothing writes (S21). Their messages carry what a real PAS feed sends: an NHS number beside the hospital
   number in PID-3, the prior location of a transfer and the location on an update or a discharge.
 - **A case the workflow left behind can be abandoned.** The production's start notes every case still in a working state (an error-kind event saying when it started and the way out), and an approver abandons a case whose workflow has had nothing in flight for 15 minutes (`POST /cases/{id}/abandon`; 409 `busy` while it has, with what is in flight): the case fails with disposition `abandoned`, its approval is revoked, its pending escalation emails and open approval task are cancelled, and it can be reinvestigated. The Doctor and `GET /health` report `working_cases` and `abandon_after_minutes`.
+- **A production review, on request.** `POST /api/shutter/production-reviews` runs one read-only pass over a production
+  Shutter knows (its own, or a watched one such as the demo hospital's) through the new Case Review item:
+  `Shutter.Util.ProductionReader` reads the production in its own namespace as plain data, and `Shutter.Review.Sweep`
+  runs 23 checks (`Shutter.Review.Checks`) over the items' effective settings, resolved through the item, the default
+  settings and the class default, the event log's errors grouped by signature, the suspended, aborted and errored
+  messages, the queues, the rule log and the message purge task, over a window of 1 to 90 days, each finding tied to the
+  cases Shutter opened for that item. The review is stored (`PR-000001`, the last 50 per production) with the findings in
+  a deterministic order (severity tier, unique cases, recency) and a fingerprint of the configuration findings. One AI
+  Hub agent, `Shutter.Agent.Review`, asked through the Agent Board item with a smaller budget than a board member's (3
+  turns, 60,000 tokens), ranks the findings within their severity tiers and explains each in one or two sentences
+  against the case history, seeing item names, setting values, counts and case ids only, never message content or a
+  patient identifier; it has no evidence tools and one knowledge collection, the production review rules
+  (`knowledge/review/production-review-rules.md`: what each check means, why it matters, the safer value and when it is
+  intended), and it calls one typed tool, `SubmitReview`, whose schema refuses a ranking that repeats a finding or
+  leaves a gap in the ranks. The agent never changes a severity, a count or a value, and a ranking that misses one of
+  the review's findings or puts a lower tier above a higher one is refused: the deterministic order stands, as it does
+  when the agent fails, has no recording to replay or is skipped. An approver marks a finding intended, an accepted risk or a false positive; the annotation binds the
+  finding's exact effective value and reopens when the value changes, it expires or it is revoked. Nothing writes to
+  the production. `GET /costs` lists the reviews' agent runs apart.
 - **The case record is written only by its own transitions:** the plan, the gate decision, the agent run, the case
   token, the finding and the approval refer to their case by id, so saving one never writes the case whole, and the
   cases list reads each case's plan origin with the case ids in one query.
