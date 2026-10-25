@@ -253,7 +253,14 @@ function MarkHandled({ c }: { c: CaseDetail }) {
  * downstream system, who compare the systems and correct them by hand, outside HL7 (T29). Once the team has closed the
  * case, the emails stay on the page as its record: who sent each, when, and the digest of the text sent.
  */
-export function EscalationPanel({ c }: { c: CaseDetail }) {
+export function EscalationPanel({
+  c,
+  primary = true,
+}: {
+  c: CaseDetail;
+  /** Whether escalating is the case's next action: its button is then the main one, otherwise a secondary one. */
+  primary?: boolean;
+}) {
   const stopped = ['blocked', 'escalated', 'failed'].includes(c.state);
   const handled = c.state === 'resolved' && c.disposition === 'handled_by_hand';
   const me = useMe().data;
@@ -388,7 +395,7 @@ export function EscalationPanel({ c }: { c: CaseDetail }) {
           ) : null}
           <Button
             leftSection={<IconMailForward size={16} />}
-            variant={pending ? 'default' : 'filled'}
+            variant={pending || !primary ? 'default' : 'filled'}
             loading={draft.isPending}
             onClick={start}
           >

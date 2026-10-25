@@ -116,8 +116,6 @@ function CaseBody({ c }: { c: CaseDetail }) {
           onReview={() => openStep('decision', 'approval')}
         />
         <AbandonPanel c={c} events={events.data} />
-        {/* A stopped case's hand-off to the team is its next action; once closed by hand, it is history */}
-        {stopped ? <EscalationPanel c={c} /> : null}
         <Tabs value={tab} onChange={setTab} keepMounted={false}>
           <Tabs.List aria-label="The case in detail">
             <Tabs.Tab value="summary" leftSection={<IconListDetails size={16} aria-hidden />}>
@@ -149,6 +147,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
           <Tabs.Panel value="audit" pt="md">
             <Stack gap="md">
               <CaseTimeline events={events.data ?? []} />
+              {/* A stopped case's hand-off is part of its next action; once closed by hand, it is history here */}
               {!stopped ? <EscalationPanel c={c} /> : null}
               <PortalLinks c={c} runs={facts.runs} portalBase={base} />
             </Stack>

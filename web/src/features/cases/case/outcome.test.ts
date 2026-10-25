@@ -88,7 +88,10 @@ describe('the outcome sentence', () => {
     );
     const next = nextAction(f);
     expect(next).toMatchObject({ kind: 'person', role: 'Operator' });
-    expect(next.handoff).toBe('Outstanding: no escalation sent yet');
+    expect(next.handoff).toBe('Escalation: not sent');
+    expect(next.escalate).toBe(true);
+    // S20's next step is to close the case as superseded, not to escalate it
+    expect(nextAction(factsOf('C-000053')).escalate).toBe(false);
   });
 
   it('says whether the hand-off went out', () => {

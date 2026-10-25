@@ -184,6 +184,8 @@ export interface NextAction {
   lookAgain: string;
   /** For a stopped case: whether the hand-off to the team went out. */
   handoff: string;
+  /** Whether escalating to the team is the next step itself, not only a way out of it. */
+  escalate: boolean;
 }
 
 function handoff(f: CaseFacts): string {
@@ -191,15 +193,14 @@ function handoff(f: CaseFacts): string {
   const list = f.escalations ?? [];
   const sent = list.filter((e) => e.state === 'sent' || e.state === 'queued').at(-1);
   if (sent)
-    return `Escalation ${sent.seq} ${sent.state === 'sent' ? 'sent' : 'queued'} to ${sent.teamName || sent.to || 'the team'}`;
-  if (list.some((e) => e.state === 'draft' || e.state === 'failed'))
-    return 'Outstanding: an escalation is drafted but not sent';
-  return 'Outstanding: no escalation sent yet';
+    return `Escalation ${sent.seq} ${sent.state === 'sent' ? 'sent' : 'queued'} to ${sent.teamName || sent.to || "the downstream system's team"}`;
+  if (list.some((e) => e.state === 'draft' || e.state === 'failed')) return 'Escalation: drafted, not sent';
+  return 'Escalation: not sent';
 }
 
 export function nextAction(f: CaseFacts): NextAction {
   const { c } = f;
-  const none = { blocking: '', lookAgain: '', handoff: '' };
+  const none = { blocking: '', lookAgain: '', handoff: '', escalate: false };
   if (c.state === 'resolved') return { kind: 'none', action: 'No pending action', role: '', ...none };
   if (c.state === 'failed')
     return {
@@ -209,6 +210,7 @@ export function nextAction(f: CaseFacts): NextAction {
       blocking: c.disposition === 'abandoned' ? 'The case was abandoned' : 'The workflow failed',
       lookAgain: '',
       handoff: '',
+      escalate: false,
     };
   if (c.state === 'blocked' || c.state === 'escalated') {
     const b = f.blocked;
@@ -220,6 +222,8 @@ export function nextAction(f: CaseFacts): NextAction {
       blocking: b?.prerequisite || b?.text || unknown,
       lookAgain: b?.reevaluateWhen ?? '',
       handoff: handoff(f),
+      // An escalated case goes to the team; a blocked one only when its reason says to escalate
+      escalate: c.state === 'escalated' || /escalat/i.test(b?.nextAction ?? ''),
     };
   }
   if (c.state === 'awaiting_approval')
@@ -230,6 +234,7 @@ export function nextAction(f: CaseFacts): NextAction {
       blocking: 'The write waits for a person to release it; the gate checks it again at dispatch',
       lookAgain: '',
       handoff: '',
+      escalate: false,
     };
   return {
     kind: 'shutter',

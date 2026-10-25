@@ -309,10 +309,37 @@ describe('CasePage', () => {
         "Next action: Read the findings and the gate's notes, then decide how to recover the message by hand.",
       ),
     ).toBeInTheDocument();
-    expect(await within(top).findByText('Handed to a person')).toBeInTheDocument();
     expect(within(top).getByText('Operator')).toBeInTheDocument();
+    expect(await within(top).findByText('Escalation: not sent')).toBeInTheDocument();
+    // The reason, its code and when to look again wait behind Why?
+    expect(within(top).queryByText('ESCALATED')).not.toBeInTheDocument();
+    await userEvent.click(within(top).getByRole('button', { name: 'Why?' }));
+    expect(within(top).getByText('Handed to a person')).toBeInTheDocument();
+    expect(within(top).getByText('ESCALATED')).toBeInTheDocument();
     expect(within(top).getByText('A decision only a person can make')).toBeInTheDocument();
-    expect(await within(top).findByText('Outstanding: no escalation sent yet')).toBeInTheDocument();
+    expect(within(top).getByText('New evidence arrives')).toBeInTheDocument();
+    // Escalating is the action here, so its button is the main one, inside the next action
+    const escalations = within(top).getByRole('region', { name: 'Escalations' });
+    expect(within(escalations).getByRole('button', { name: /^Escalate to / })).toHaveAttribute(
+      'data-variant',
+      'filled',
+    );
+  });
+
+  it('makes escalating a secondary choice when the next action is to close the case, and hides its status', async () => {
+    renderCase('C-000053');
+    const top = await outcome();
+    expect(
+      await within(top).findByText(
+        'Next action: Close the case as superseded, recording the superseding event. Nothing is sent.',
+      ),
+    ).toBeInTheDocument();
+    expect(within(top).queryByText(/^Escalation: /)).not.toBeInTheDocument();
+    const escalations = await within(top).findByRole('region', { name: 'Escalations' });
+    expect(await within(escalations).findByRole('button', { name: /^Escalate to / })).toHaveAttribute(
+      'data-variant',
+      'default',
+    );
   });
 
   it('marks the steps a superseded case did not need', async () => {
