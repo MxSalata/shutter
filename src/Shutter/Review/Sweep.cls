@@ -421,6 +421,8 @@ ClassMethod Evaluate(data As %DynamicObject, cases As %DynamicObject, window As 
         Set configName = ##class(Shutter.Util.Json).Str(g, "configName"), signature = ##class(Shutter.Util.Json).Str(g, "signature")
         Set class = ..ClassOf(items, configName)
         Set f = ##class(Shutter.Review.Checks).Finding("ERRORS_GROUPED", configName, class, "", signature, "observed", g.count)
+        // Errors logged outside any item (the production's own start and stop) are worth a look, not a medium.
+        If configName = "" Set f.severity = "low"
         If configName = "" {
             Set f.why = f.why _ " The errors carry no item name: they are the production's own (a start, a stop, the director)."
         } ElseIf (class = "") && '..HasItem(items, configName) {
@@ -577,7 +579,7 @@ ClassMethod Signature(text As %String) As %String
 ClassMethod TransformIn(text As %String) As %String
 {
     If text = "" Quit ""
-    Set pos = $LOCATE(text, "zTransform\+[0-9]+\^[A-Za-z%][A-Za-z0-9.]*\.1", 1, .end, .match)
+    Set pos = $LOCATE(text, "zTransform\+[0-9]+\^[A-Za-z%][A-Za-z0-9.]*\.1", 1, end, match)
     If pos = 0 Quit ""
     Set class = $PIECE(match, "^", 2)
     Quit $EXTRACT(class, 1, $LENGTH(class) - 2)
@@ -654,7 +656,7 @@ ClassMethod QueueDepth(data As %DynamicObject, name As %String) As %String [ Pri
     If '$ISOBJECT(queues) Quit ""
     Set iter = queues.%GetIterator()
     While iter.%GetNext(.i, .q) {
-        If q.name = name Quit +q.count
+        If q.name = name Return +q.count
     }
     Quit ""
 }
@@ -665,7 +667,7 @@ ClassMethod QueueCreated(data As %DynamicObject, name As %String) As %String [ P
     If '$ISOBJECT(queues) Quit ""
     Set iter = queues.%GetIterator()
     While iter.%GetNext(.i, .q) {
-        If q.name = name Quit ##class(Shutter.Util.Json).Str(q, "created")
+        If q.name = name Return ##class(Shutter.Util.Json).Str(q, "created")
     }
     Quit ""
 }
@@ -677,8 +679,10 @@ ClassMethod AttachCases(findings As %DynamicArray, cases As %DynamicObject) [ Pr
     If '$ISOBJECT(cases) Quit
     Set iter = findings.%GetIterator()
     While iter.%GetNext(.i, .f) {
-        Set key = $SELECT(f.item = "": "_total", 1: f.item)
-        Set agg = cases.%Get(key)
+        // A finding about the production as a whole is not motivated by particular cases: the whole production's cases
+        // stay in the aggregates for the agent, and the finding's own count stays 0, so it is ranked by its severity.
+        Continue:f.item=""
+        Set agg = cases.%Get(f.item)
         Continue:'$ISOBJECT(agg)
         Set f.cases.count = +agg.count
         Set f.cases.unique = +agg.unique
@@ -782,11 +786,16 @@ ClassMethod Fingerprint(findings As %DynamicArray) As %String
         Set lines($EXTRACT(line, 1, 300), ..Hex(line)) = line, n = n + 1
     }
     If n = 0 Quit ""
-    Set text = ""
-    Set ref = $QUERY(lines(""))
-    While ref '= "" {
-        Set text = text _ $SELECT(text = "": "", 1: $CHAR(10)) _ @ref
-        Set ref = $QUERY(@ref)
+    Set text = "", k1 = ""
+    For {
+        Set k1 = $ORDER(lines(k1))
+        Quit:k1=""
+        Set k2 = ""
+        For {
+            Set k2 = $ORDER(lines(k1, k2))
+            Quit:k2=""
+            Set text = text _ $SELECT(text = "": "", 1: $CHAR(10)) _ lines(k1, k2)
+        }
     }
     Quit ..Hex(text)
 }
@@ -821,15 +830,19 @@ ClassMethod BaselineRank(findings As %DynamicArray)
         If $ISOBJECT(f.%Get("cases")) Set unique = +##class(Shutter.Util.Json).Str(f.cases, "unique", 0)
         If $ISOBJECT(f.%Get("evidence")) Set latest = ##class(Shutter.Util.Json).Str(f.evidence, "latestAt")
         Set seconds = ..Seconds(latest)
-        Set sorted(tier, -unique, -seconds, "|" _ ##class(Shutter.Util.Json).Str(f, "code"), "|" _ ##class(Shutter.Util.Json).Str(f, "item"), i) = ""
+        // One composite key whose text order is the rank order: tier, then unique cases and recency descending, then code,
+        // item and position (a procedure block's locals cannot be walked with $QUERY, so the key is flat).
+        Set key = tier _ "|" _ $TRANSLATE($JUSTIFY(9999999 - unique, 7), " ", "0") _ "|" _ $TRANSLATE($JUSTIFY(99999999999 - +seconds, 11), " ", "0") _ "|" _ ##class(Shutter.Util.Json).Str(f, "code") _ "|" _ ##class(Shutter.Util.Json).Str(f, "item") _ "|" _ $TRANSLATE($JUSTIFY(i, 6), " ", "0")
+        Set sorted(key) = i
     }
     Set ordered = []
-    Set ref = $QUERY(sorted(""))
-    While ref '= "" {
-        Set f = findings.%Get($QSUBSCRIPT(ref, 6))
+    Set key = ""
+    For {
+        Set key = $ORDER(sorted(key))
+        Quit:key=""
+        Set f = findings.%Get(sorted(key))
         Set f.id = "F" _ (ordered.%Size() + 1)
         Do ordered.%Push(f)
-        Set ref = $QUERY(@ref)
     }
     While findings.%Size() > 0 {
         Do findings.%Remove(0)

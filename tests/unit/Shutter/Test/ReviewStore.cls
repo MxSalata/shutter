@@ -301,7 +301,7 @@ Method TestStoreAgent()
     Set lresp.Status = "ok", lresp.Mode = "live", lresp.Model = "claude-opus-5-5", lresp.PromptTokens = 1000000, lresp.CompletionTokens = 0
     Set lresp.ResultJSON = ranking.%ToJSON()
     Do $$$AssertStatusOK(live.StoreAgent(lresp, ..GoodRanking()), "the live answer is stored")
-    Do $$$AssertEquals(live.CostUSD, ##class(Shutter.Store.ModelPrice).Cost("claude-opus-5-5", 1000000, 0, 0, 0), "priced from the model's price row")
+    Do $$$AssertEquals(+live.CostUSD, +##class(Shutter.Store.ModelPrice).Cost("claude-opus-5-5", 1000000, 0, 0, 0), "priced from the model's price row")
     // A refused ranking: schema_failed, the baseline stands.
     Do $$$AssertStatusOK(..NewReview(.r2), "a review for a refused ranking")
     Do $$$AssertStatusOK(r2.StoreSweep(..Result(), 1, "key"), "its sweep")
@@ -448,7 +448,9 @@ Method TestAnnotations()
 Method TestRunningAndTrim()
 {
     For i = 1:1:5 {
-        Do $$$AssertStatusOK(..NewReview(.r(i)), "review " _ i _ " opens")
+        Set sc = ..NewReview(.one)
+        Set r(i) = one
+        Do $$$AssertStatusOK(sc, "review " _ i _ " opens")
     }
     Set running = ##class(Shutter.Store.Review).Running(..#NS, ..#PROD)
     Do $$$AssertTrue($ISOBJECT(running) && (running.ReviewId = r(5).ReviewId), "the newest sweeping review is the running one")
