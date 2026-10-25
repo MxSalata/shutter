@@ -200,6 +200,12 @@ def check_review(r):
         else:
             taken.add(int(rank))
         named = label if label != "" else f"ranking[{i}]"
+        # The finding's code, item and setting (v1.22): the code a non-empty string, item and setting strings or absent
+        if not isinstance(e.get("code"), str) or e.get("code") == "":
+            p.append(f"ranking[{i}] needs the finding's code, copied from the finding")
+        for field in ("item", "setting"):
+            if field in e and e[field] is not None and not isinstance(e[field], str):
+                p.append(f"ranking[{i}] {field} must be a string, the finding's own")
         explanation = os_text(e.get("explanation")) or ""
         # $ZSTRIP(x, "<>W"): tab, space and the no-break space
         if explanation.strip("\t \u00a0") == "":
@@ -344,6 +350,26 @@ def self_test():
         if got != want:
             failed += 1
             print(f"self-test: {d!r} gave {got!r}, expected {want!r}")
+    # The ranking's entries carry the finding's code (a non-empty string), and item and setting as strings when present
+    entry = {"finding_id": "F1", "rank": 1, "explanation": "Consistent with the cases of this item.",
+             "code": "ALERTING_OFF", "item": "", "setting": "AlertOnError"}
+    code_missing = "ranking[0] needs the finding's code, copied from the finding"
+    rankings = [
+        (entry, []),
+        ({k: v for k, v in entry.items() if k not in ("item", "setting")}, []),
+        ({**entry, "item": None}, []),
+        ({k: v for k, v in entry.items() if k != "code"}, [code_missing]),
+        ({**entry, "code": ""}, [code_missing]),
+        ({**entry, "code": 7}, [code_missing]),
+        ({**entry, "setting": 3}, ["ranking[0] setting must be a string, the finding's own"]),
+    ]
+    for e, want in rankings:
+        got = [x for x in check_review({"ranking": [e], "summary": "", "unknowns": []})
+               if "code" in x or "must be a string" in x]
+        cases.append(e)
+        if got != want:
+            failed += 1
+            print(f"self-test: ranking entry {e!r} gave {got!r}, expected {want!r}")
     print(f"self-test: {len(cases)} cases, {failed} failed")
     return 1 if failed else 0
 
