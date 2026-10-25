@@ -2,6 +2,7 @@ import { MantineProvider } from '@mantine/core';
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import evaluation from '../../../../docs/readme/evaluation.json';
+import boundary from '../../../../docs/readme/boundary.json';
 import { theme } from '@/theme';
 import type { Evaluation } from './evaluation';
 import EvaluationPage from './EvaluationPage';
@@ -118,5 +119,25 @@ describe('EvaluationPage', () => {
     expect(
       within(without).getByText(/withheld before any agent runs \(MERGE_WITHHELD\)/),
     ).toBeInTheDocument();
+  });
+
+  it('lists what the boundary refuses, each attempt with its scenario, its answer and what it proves', () => {
+    renderPage();
+    const section = screen.getByRole('region', { name: 'What the boundary refuses' });
+    expect(
+      within(section).getByText(/^What tests\/e2e\/boundary_check\.py tries over HTTP/),
+    ).toBeInTheDocument();
+    const rows = within(section).getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(boundary.checks.length);
+    const digest = within(section)
+      .getByText('An approval of a plan that is not the one shown')
+      .closest('tr')!;
+    expect(digest).toHaveTextContent('S2, rules only');
+    expect(digest).toHaveTextContent('409 stale_version');
+    const receiver = within(section)
+      .getByText('The receiving system changed after the approval')
+      .closest('tr')!;
+    expect(receiver).toHaveTextContent('S20, rules only');
+    expect(receiver).toHaveTextContent('APPROVAL_RECEIVER_CHANGED, no write');
   });
 });
