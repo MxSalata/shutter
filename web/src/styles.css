@@ -601,3 +601,75 @@ body {
   text-align: left;
   line-height: 1.3;
 }
+
+/*
+ * The case's decision receipt: a band set apart from the cards around it by a tinted surface and a thick edge in the
+ * primary colour, so the receipt reads as the record it is. The tint is the hovered surface the badges are already
+ * tuned against, so nothing on it needs a contrast rule of its own. On a phone each fact becomes a card of its own,
+ * its label over its value.
+ */
+.receipt-band {
+  background: var(--mantine-color-default-hover);
+  border: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
+  border-left: 4px solid var(--mantine-primary-color-filled);
+}
+/* A receipt's badge keeps its whole label: in a narrow column it wraps rather than ending in an ellipsis. */
+.receipt-band .mantine-Badge-root {
+  height: auto;
+  min-height: var(--badge-height);
+  max-width: 100%;
+  padding-block: 2px;
+}
+.receipt-band .mantine-Badge-label {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.3;
+}
+@media (max-width: 35.99em) {
+  .receipt-facts .receipt-fact {
+    background: var(--mantine-color-body);
+    border: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
+    border-radius: var(--mantine-radius-sm);
+    padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  }
+}
+
+/*
+ * A stacked table whose rows read as cards on a phone (`stack-cards`, with `stack-table`): each row is a bordered
+ * card, its first cell (the row's name) beside its second (the result's badge) on one line, and the other cells
+ * under them with their column's name. The header row stays for screen readers, so the result keeps its column.
+ */
+@media (max-width: 35.99em) {
+  .stack-cards tbody {
+    display: flex !important;
+    flex-direction: column;
+    gap: var(--mantine-spacing-xs);
+  }
+  .stack-cards tr {
+    display: flex !important;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px var(--mantine-spacing-xs);
+    padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+    border: calc(0.0625rem * var(--mantine-scale)) solid var(--table-border-color);
+    border-radius: var(--mantine-radius-md);
+  }
+  .stack-cards tr:last-of-type {
+    border-bottom: calc(0.0625rem * var(--mantine-scale)) solid var(--table-border-color);
+  }
+  .stack-cards td:first-child {
+    flex: 1 1 0;
+    width: auto !important;
+  }
+  .stack-cards td:first-child > :first-child {
+    font-weight: 600;
+  }
+  .stack-cards td:nth-child(2) {
+    flex: 0 0 auto;
+    width: auto !important;
+  }
+  .stack-cards td:nth-child(2)[data-label]::before {
+    display: none;
+  }
+}

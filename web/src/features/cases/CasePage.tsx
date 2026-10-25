@@ -15,6 +15,7 @@ import { EscalationPanel } from './case/EscalationPanel';
 import { AbandonPanel } from './case/AbandonPanel';
 import { CaseTimeline } from './case/CaseTimeline';
 import { CaseStory, type StoryStep } from './case/CaseStory';
+import { BoardPanel } from './case/BoardPanel';
 import { DecisionCard } from './case/DecisionCard';
 import { PortalLinks } from './case/PortalLinks';
 import { CounterpartStrip } from './case/S8Compare';
@@ -70,9 +71,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
   const compare = search.get('show') === 'compare';
   // The story steps start closed, except where the reader is sent: the approval of a case waiting for one, and the
   // S8 comparison when the demo's guide links to it. After that they stay as the reader leaves them.
-  // On a board case, what was proposed opens too: the specialists, their verdicts and any dissent are the point of it.
   const [steps, setSteps] = useState<string[]>(() => [
-    ...(c.mode === 'board' && c.failureKind !== 'withheld' ? ['proposed'] : []),
     ...(c.state === 'awaiting_approval' ? ['decision'] : []),
     ...(compare && c.scenario === 'S8' ? ['compare'] : []),
   ]);
@@ -106,6 +105,12 @@ function CaseBody({ c }: { c: CaseDetail }) {
     return () => window.removeEventListener(SHOW_EVIDENCE, show);
   }, [setTab]);
 
+  // A board case shows its board under the outcome: the specialists, their proposals and any dissent are the point
+  // of it. So does a site policy case the policy left to the board, once its runs show the board sat. A withheld
+  // merge or cancel convenes no board, and the other modes keep their investigation in step 3.
+  const boardOnTop =
+    c.failureKind !== 'withheld' &&
+    (c.mode === 'board' || (c.mode === 'policy' && !!facts.runs?.some((r) => r.role === 'coordinator')));
   const stopped = ['blocked', 'escalated', 'failed'].includes(c.state);
   const base = portalBase(c.links?.visualTrace);
   return (
@@ -119,6 +124,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
           round={rounds(events.data ?? [])}
           onReview={() => openStep('decision', 'approval')}
         />
+        {boardOnTop ? <BoardPanel caseId={c.caseId} open={open} mode={c.mode} portalBase={base} /> : null}
         <AbandonPanel c={c} events={events.data} />
         <Tabs value={tab} onChange={setTab} keepMounted={false}>
           <Tabs.List aria-label="The case in detail">
@@ -143,6 +149,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
               onShowEvidence={() => setTab('evidence')}
               portalBase={base}
               compareFocus={compare}
+              boardOnTop={boardOnTop}
             />
           </Tabs.Panel>
           <Tabs.Panel value="evidence" pt="md">

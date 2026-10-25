@@ -76,6 +76,7 @@ export function CaseStory({
   onShowEvidence,
   portalBase,
   compareFocus,
+  boardOnTop = false,
 }: {
   c: CaseDetail;
   me: Me | null | undefined;
@@ -87,6 +88,8 @@ export function CaseStory({
   onShowEvidence: () => void;
   portalBase: string;
   compareFocus: boolean;
+  /** The board's cards are at the top of the page, under the outcome: this step then holds the plan alone. */
+  boardOnTop?: boolean;
 }) {
   const plan = facts.plan;
   const write = plan?.plan?.disposition === 'resend';
@@ -139,13 +142,19 @@ export function CaseStory({
         </Stack>
       </Step>
       <Step value="proposed" n={3} title="What was proposed" summary={proposedSummary(facts)}>
-        <BoardPanel
-          caseId={c.caseId}
-          open={open}
-          mode={c.mode}
-          withheld={c.failureKind === 'withheld'}
-          portalBase={portalBase}
-        />
+        {boardOnTop ? (
+          <Text size="sm" c="dimmed">
+            The specialists&apos; findings and the coordinator&apos;s are on the board, under the outcome.
+          </Text>
+        ) : (
+          <BoardPanel
+            caseId={c.caseId}
+            open={open}
+            mode={c.mode}
+            withheld={c.failureKind === 'withheld'}
+            portalBase={portalBase}
+          />
+        )}
         <PlanPanel {...planRead} />
       </Step>
       <Step value="decision" n={4} title="Gate and decision" summary={decisionSummary(facts)}>

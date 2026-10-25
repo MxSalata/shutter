@@ -267,6 +267,12 @@ export function failedSummary(
   return sentence([`${what} ${how}${detail ? `: ${detail}` : ''}`]);
 }
 
+/** What failed in a few words, the event and how it failed: "Transfer was not delivered". */
+export function failedTitle(c: CaseDetail): string {
+  const how = FAILURES[c.failureKind] ?? (humanize(c.failureKind).toLowerCase() || 'failed');
+  return `${humanize(c.event) || 'The operation'} ${how}`;
+}
+
 /** The sending systems a header names, glossed at first use. */
 const SYSTEMS: Record<string, string> = {
   PAS: 'patient administration system',

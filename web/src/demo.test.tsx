@@ -149,14 +149,12 @@ describe('the demo', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Details' }));
     expect(await screen.findByText('Message trace (on an instance)')).toBeInTheDocument();
     expect(screen.getByText('Workflow trace (on an instance)')).toBeInTheDocument();
-    // A board case opens what was proposed by itself
-    expect(await screen.findByRole('button', { name: /^3\. What was proposed/ })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
+    // A board case shows its board under the outcome; each card's finding or reasoning opens on demand
     const board = await screen.findByRole('region', { name: 'The board' });
-    for (const row of within(board).getAllByRole('button', { name: /^(Resend|Escalate) / }))
-      if (row.getAttribute('aria-expanded') !== 'true') await userEvent.click(row);
+    for (const more of await within(board).findAllByRole('button', {
+      name: /^Show the (finding|reasoning)$/,
+    }))
+      await userEvent.click(more);
     expect(
       (await within(board).findAllByText("The run's message in the production (on an instance)")).length,
     ).toBe(4);

@@ -137,10 +137,9 @@ export const CHAPTERS: GuideChapter[] = [
       {
         id: 'dissent',
         title: 'The dissent the coordinator kept',
-        text: "Conformance proposed a resend: the message itself is valid. The coordinator kept that dissent in the plan, open here, while choosing escalation. A specialist's confidence is its own report; the gate does not use it.",
+        text: "Conformance proposed a resend: the message itself is valid. The coordinator kept that dissent in the plan, on its card beside the three specialists, while choosing escalation. A specialist's confidence is its own report; the gate does not use it.",
         place: { scenario: 'S8', mode: 'board' },
         target: 'case-board',
-        open: 'proposed',
       },
       {
         id: 'compare',
