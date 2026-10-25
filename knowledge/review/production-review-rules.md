@@ -125,8 +125,9 @@ when it last raised anything.
 ### ALERTING_OFF (medium, confirmed; one finding for the production)
 
 PRR-3.3. Items on the feed path (the HL7 service, the delivering process, the connector operation) have `AlertOnError`
-off or no `AlertGroups` while an alert consumer exists: the consumer is there and these items never speak to it. The
-finding lists the items.
+off or no `AlertGroups`: their errors raise no alert. The finding lists the items, with or without an alert consumer
+in the production; when `NO_ALERT_CONSUMER` is on the same production, turning these items' alerts on alone sends the
+alerts nowhere, so the two are fixed together.
 
 PRR-3.4. The safer value is `AlertOnError` on and an alert group that the consumer routes, on each feed-path item.
 Intended for an item whose errors another item already reports (a process that opens a case for every failure of its
@@ -272,8 +273,8 @@ that production. The action is a person's check of the namespace and of what Shu
 PRR-7.1. A finding is intended when a person has decided the value on purpose, with a compensating control, and has
 recorded that decision as an annotation with a reason, an owner and an expiry (PRR-1.5). Legitimate cases include:
 an endless retry with a staffed watch on queue depth and age; a feed that is quiet by schedule with the sender's team
-watching it; a known batch window at review time; a single job kept deliberately for order; parallel streams that are
-independent by design; raw I/O kept off for privacy; alerting done by an external monitor instead of an alert
+watching it; a known batch window at review time; parallel streams that are independent by design; raw I/O kept for a
+bounded diagnostic period under the site's retention rules; alerting done by an external monitor instead of an alert
 consumer.
 
 PRR-7.2. A reviewer does not take a finding as intended because it has been there a long time, because the value is
