@@ -953,6 +953,9 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Set r.recordings = +records
     &sql(SELECT COUNT(*) INTO :cases FROM Shutter_Store."Case")
     Set r.cases = +cases
+    // The cases still in a working state, and the quiet minutes after which an approver may abandon one (CONTRACTS 5, 12).
+    &sql(SELECT COUNT(*) INTO :working FROM Shutter_Store."Case" WHERE State NOT IN ('resolved', 'blocked', 'escalated', 'failed'))
+    Set r."working_cases" = +working, r."abandon_after_minutes" = ##class(Shutter.Store.Case).AbandonAfterMinutes()
     Set r.license = ##class(%DynamicObject).%FromJSON(..LicenseInfo())
     Try {
         New $NAMESPACE
