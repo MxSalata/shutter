@@ -80,9 +80,9 @@ CHECKS = [
     },
     {
         "id": "rehearsed",
-        "title": "A write without a dry run",
+        "title": "The write follows a dry run of the same plan",
         "scenario": "S2, rules only",
-        "answer": "REHEARSED before the write",
+        "answer": "APPROVAL_VALID and REHEARSED passed",
         "proves": "The approval binds the receiver's dry run of this exact plan, which would apply at the version the "
                   "write is conditional on, and the dispatch gate passed APPROVAL_VALID and REHEARSED under the same "
                   "policy version the approval bound. Without that dry run the gate blocks the write (DRY_RUN_MISSING, "
@@ -94,8 +94,8 @@ CHECKS = [
         "scenario": "S20, rules only",
         "answer": "APPROVAL_RECEIVER_CHANGED, no write",
         "proves": "A nurse moves the patient by hand while the resend waits. The approval is bound to the receiver's "
-                  "version, so the dispatch gate voids it, the case is planned again on fresh evidence and blocked, no "
-                  "write is attempted, and the nurse's entry is the last in the receiving system's history.",
+                  "version, so the dispatch gate voids it, the case is planned again on fresh evidence and blocked "
+                  "(SUPERSEDED_BY_LATER_EVENT), no write is attempted, and the nurse's entry is the last in the receiving system's history.",
     },
     {
         "id": "already_committed",
@@ -114,7 +114,7 @@ def check_list():
     """The document --write-list writes."""
     return {
         "script": "tests/e2e/boundary_check.py",
-        "runs": "CI's iris job on every push to main, after the roles check, on a real IRIS for Health",
+        "runs": "CI's iris job on main, on every push that changes code, after the roles check, on a real IRIS for Health",
         "checks": CHECKS,
     }
 
@@ -242,7 +242,8 @@ def main():
         status, started = operator.call("POST", f"/scenarios/{scenario}/run", {"mode": "rules"}, key=str(uuid.uuid4()))
         if not check(f"{scenario} in rules-only mode: the run starts", status in (200, 202), f"{status} {started}"):
             return None
-        since = max(started.get("startedAt") or "", started.get("queuedAt") or "", before)
+        # The server's own times, so a client clock ahead of the instance's cannot hide the new case.
+        since = max(started.get("startedAt") or "", started.get("queuedAt") or "") or before
 
         def newest():
             items = (get(f"/cases?scenario={scenario}&limit=5") or {}).get("items") or []
@@ -385,6 +386,9 @@ def main():
             events = " ".join(e.get("text") or "" for e in get(f"/cases/{q(caseid)}/events") or [])
             check("the dispatch gate refused it: APPROVAL_RECEIVER_CHANGED", "APPROVAL_RECEIVER_CHANGED" in events,
                   "not in the case's events")
+            reason = expected.get("final_reason") or "SUPERSEDED_BY_LATER_EVENT"
+            check(f"and the plan made on fresh evidence blocks with {reason}",
+                  reason in events or reason in (final.get("headline") or ""), final.get("headline"))
             stored = approvals(caseid)
             check("and voided the approval", len(stored) == 1 and stored[0].get("revoked") is True,
                   [(a.get("approver"), a.get("revoked")) for a in stored])

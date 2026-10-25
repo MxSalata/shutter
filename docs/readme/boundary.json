@@ -1,6 +1,6 @@
 {
   "script": "tests/e2e/boundary_check.py",
-  "runs": "CI's iris job on every push to main, after the roles check, on a real IRIS for Health",
+  "runs": "CI's iris job on main, on every push that changes code, after the roles check, on a real IRIS for Health",
   "checks": [
     {
       "id": "plan_digest",
@@ -39,9 +39,9 @@
     },
     {
       "id": "rehearsed",
-      "title": "A write without a dry run",
+      "title": "The write follows a dry run of the same plan",
       "scenario": "S2, rules only",
-      "answer": "REHEARSED before the write",
+      "answer": "APPROVAL_VALID and REHEARSED passed",
       "proves": "The approval binds the receiver's dry run of this exact plan, which would apply at the version the write is conditional on, and the dispatch gate passed APPROVAL_VALID and REHEARSED under the same policy version the approval bound. Without that dry run the gate blocks the write (DRY_RUN_MISSING, DRY_RUN_FAILED, DRY_RUN_STALE: Shutter's unit tests)."
     },
     {
@@ -49,7 +49,7 @@
       "title": "The receiving system changed after the approval",
       "scenario": "S20, rules only",
       "answer": "APPROVAL_RECEIVER_CHANGED, no write",
-      "proves": "A nurse moves the patient by hand while the resend waits. The approval is bound to the receiver's version, so the dispatch gate voids it, the case is planned again on fresh evidence and blocked, no write is attempted, and the nurse's entry is the last in the receiving system's history."
+      "proves": "A nurse moves the patient by hand while the resend waits. The approval is bound to the receiver's version, so the dispatch gate voids it, the case is planned again on fresh evidence and blocked (SUPERSEDED_BY_LATER_EVENT), no write is attempted, and the nurse's entry is the last in the receiving system's history."
     },
     {
       "id": "already_committed",
