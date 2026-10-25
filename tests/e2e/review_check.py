@@ -258,12 +258,17 @@ def main():
               f"{second.get('state')} {second.get('fingerprint')}")
         reviews[(ns, prod)] = second
 
-    _, listing = operator.call("GET", "/production-reviews?production=Shutter.Production&limit=5")
+    status, listing = operator.call("GET", "/production-reviews?production=Shutter.Production&limit=5")
+    if status >= 500 or status == 429:
+        # A busy instance can refuse a request (a licence unit, a restart): once more, then judge it
+        time.sleep(3)
+        status, listing = operator.call("GET", "/production-reviews?production=Shutter.Production&limit=5")
     items = (listing or {}).get("items") or []
     latest = newest.get(("SHUTTER", "Shutter.Production"))
     check(f"operator: GET /production-reviews?production= lists the newest review first ({latest})",
           bool(items) and items[0].get("reviewId") == latest and all(i.get("production") == "Shutter.Production" for i in items)
-          and (listing or {}).get("total", 0) >= len(items), [i.get("reviewId") for i in items])
+          and (listing or {}).get("total", 0) >= len(items),
+          f"{status} {[i.get('reviewId') for i in items] if items else listing}")
 
     # ---- an annotation: the approver's, bound to the finding's value, seen by a fresh review, then revoked ----
     base = reviews.get(("SHUTTER", "Shutter.Production"))
