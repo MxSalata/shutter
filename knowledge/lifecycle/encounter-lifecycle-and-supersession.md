@@ -9,7 +9,8 @@ effective_from: 2026-10-20
 # Inpatient encounter lifecycle and supersession policy
 
 Integration team policy for patient movements sent to the downstream system (the demo bed-management system). Version
-1.0, in force from 1 October 2026.
+1.1, in force from 20 October 2026. Changes from 1.0: a cancellation supersedes the movement it cancels (ELS-2.6), and
+the policy applies to HL7 v2 ADT feeds of every version taken (WIC-6).
 
 ## ELS-1 The lifecycle
 

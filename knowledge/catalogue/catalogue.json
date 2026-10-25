@@ -404,7 +404,7 @@
  },
  {
   "id": "E13",
-  "version": 2,
+  "version": 3,
   "title": "An event time the receiver's record can't hold",
   "scenarios": [
    "S13"
@@ -425,14 +425,14 @@
   "decides": "person",
   "preferred": {
    "outcome": "escalate",
-   "why": "The failed movement's event time contradicts the encounter it belongs to, so neither resending it nor letting a later event supersede it can be decided from the data; the PAS team checks the source (ELS-2.1)."
+   "why": "The failed movement's event time doesn't fit the encounter, and that is not simply bad data. A time more than a day before the PAS recorded it is usually a retrospective entry (paper notes typed in later), one in the future or before the admission usually a clock fault or a mistyped time, and a local time without an offset within an hour of a clock change may be one that night holds twice (or never), so only the source can say when it was. The messages can't tell these apart, so neither resending the movement nor letting a later event supersede it can be decided from the data, and a person decides, with the PAS team checking the source (ELS-2.1)."
   },
   "alternatives": [],
   "checks": [
    "ordering",
    "state_transition"
   ],
-  "prose": "# E13 An event time the receiver's record can't hold\n\n## Meaning\n\nThe failed operation's event time doesn't fit the encounter: it is before the patient's admission, more than five\nminutes after the message was sent (MSH-7) or the evidence was taken, more than a day from the time the PAS recorded\nthe event (EVN-2), or within the hour around a clock change where a local time without an offset can't be ordered. Shutter orders and supersedes movements by event time,\nso a wrong time can resend a movement that predates the stay, or make genuine failures look overtaken. Bad data from\nthe PAS is not something Shutter corrects: the case goes to a person with the times named, for the PAS team to check\nthe source.\n\n## Telling it apart\n\nA movement overtaken by a later one with a sound time is E1; a failed movement still due is E2. Here the time itself\nis the question. When the time is plausible but another source moved the patient at the same minute, it is E7.\n\n## Cite\n\nThe failed operation's event time, the admission time (PV1-44 or the receiver's first history entry), EVN-2, MSH-7,\nand the feed's time zone setting.",
+  "prose": "# E13 An event time the receiver's record can't hold\n\n## Meaning\n\nThe failed operation's event time doesn't fit the encounter: it is before the patient's admission, more than five\nminutes after the message was sent (MSH-7) or the evidence was taken, more than a day from the time the PAS recorded\nthe event (EVN-2), or within the hour around a clock change where a local time without an offset can't be ordered.\nShutter orders and supersedes movements by event time, so a wrong time can resend a movement that predates the stay,\nor make genuine failures look overtaken.\n\nSuch a time is not simply bad data, and the likely cause depends on the condition. A time more than a day before the\ntime the PAS recorded the event (EVN-2) is usually a retrospective entry: clinicians digitise paper records later, and\nnotes typed in more than a day after the event carry the genuine event time (EVN-6). A time in the future or before\nthe admission is usually a clock fault, in the PAS, the integration engine or the device that stamped the event, or a\nmistyped time, in this event or in the admission. A local time without an offset within an hour of a clock change may\nbe one that night holds twice, when the clocks go back, or not at all, when they go forward, so only the source can\nsay when it was. Which of these it is, and whether the movement should still be sent, can't be told from the messages,\nand Shutter doesn't correct the time: the case goes to a person with the times named, who decides with the PAS team\nchecking the source.\n\n## Telling it apart\n\nA movement overtaken by a later one with a sound time is E1; a failed movement still due is E2. Here the time itself\nis the question. When the time is plausible but another source moved the patient at the same minute, it is E7.\n\n## Cite\n\nThe failed operation's event time, the admission time (PV1-44 or the receiver's first history entry), EVN-2, MSH-7,\nand the feed's time zone setting.",
   "source": "E13.md"
  },
  {

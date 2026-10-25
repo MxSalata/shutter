@@ -1,7 +1,7 @@
 {
   "id": "block-reasons",
-  "version": "1.8",
-  "effective_from": "2026-10-20",
+  "version": "1.9",
+  "effective_from": "2026-10-25",
   "applies_to": [
     "downstream-api-v1",
     "hl7-v2-adt"
@@ -414,10 +414,10 @@
       "code": "EVENT_TIME_IMPLAUSIBLE",
       "title": "The event's time, or a later event's, doesn't fit the encounter",
       "prerequisite": "An event time that fits the encounter: after its admission, not in the future, close to the time the PAS recorded it, and not inside a clock change when it carries no offset; and later events it is ordered against timed no more than five minutes after they were sent, applied or seen",
-      "next_action": "Confirm the event's real time, or the later event's, with the source system, then reinvestigate the case or correct the history.",
+      "next_action": "Confirm the event's real time, or the later event's, with the source system: for a time far before it was recorded, whether it was entered retrospectively; for one in the future or before the admission, whether a clock or the typed time is wrong; for one within an hour of a clock change, which side of the change it was. Then reinvestigate the case or correct the history.",
       "owner": "Integration team",
       "reevaluate_when": "The source system confirms or corrects the time",
-      "text": "Shutter orders and supersedes movements by their event time. A time before the admission, in the future, far from when the PAS recorded the event, or in the hour of a clock change can't be ordered safely, nor can a later event timed well after it was sent, applied or seen when that event would decide whether this one was overtaken. So nothing is written and a person decides."
+      "text": "Shutter orders and supersedes movements by their event time. A time before the admission, in the future, far from when the PAS recorded the event, or in the hour of a clock change can't be ordered safely, nor can a later event timed well after it was sent, applied or seen when that event would decide whether this one was overtaken. Such a time is not simply bad data: one more than a day before the PAS recorded it is usually a retrospective entry (paper notes typed in later), one in the future or before the admission usually a clock fault or a mistyped time, and a local time without an offset within an hour of a clock change may be one that night holds twice (or never), so only the source can say when it was. The messages can't tell these apart, so nothing is written and a person decides."
     },
     {
       "code": "MERGE_WITHHELD",
