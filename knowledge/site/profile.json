@@ -1,9 +1,10 @@
 {
-  "version": 4,
+  "version": 5,
   "receivers": [
     {
       "name": "Downstream Out",
       "system": "the demo bed-management system",
+      "category": "current_state",
       "tier": 2,
       "applies": "arrival_order",
       "resend_timestamp": "original",
@@ -24,7 +25,6 @@
       }
     }
   ],
-  "history_policy": "current",
   "authoritative_source": "",
   "unconditional_resend": "forbidden",
   "merges": "forbidden",

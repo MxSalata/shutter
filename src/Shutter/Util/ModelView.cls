@@ -44,7 +44,7 @@ Parameter FAILUREKEEP = ",kind,outcome,reason_code,http_status,status,text,error
 
 Parameter TIMELINEKEEP = ",event,ward,event_time,operation_key,source_message_id,ens_header_id,ens_session_id,sent_at,source,later,this_case,outcome,reason_code,http_status,version_after,route,message_type,";
 
-Parameter ROUTEKEEP = ",feed,connector,receiver,tier,capabilities_source,declared,capabilities_http_status,capabilities,conditional_writes,receipts,dry_run,epoch,note,";
+Parameter ROUTEKEEP = ",feed,connector,receiver,tier,category,history_policy,capabilities_source,declared,capabilities_http_status,capabilities,conditional_writes,receipts,dry_run,epoch,note,";
 
 /// Keys whose string values are identifiers of the case, and the token kind each gives.
 Parameter IDKEYS = ",patient_id:PID,encounter_id:ENC,encounter:ENC,visit_number:VISIT,visit:VISIT,nhs_number:NHS,mrn:MRN,prior_patient_id:PID,prior_encounter_id:ENC,prior_visit_number:VISIT,prior_patient_identifier:PID,";

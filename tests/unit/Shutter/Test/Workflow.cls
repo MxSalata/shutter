@@ -97,7 +97,7 @@ Method TestIncidentTaskCarriesNoDigestValue()
     Set receiver = $PARAMETER("Shutter.Production", "RECEIVER")
     Set inc = ##class(Shutter.Store.Incident).%New()
     Set inc.IncidentId = "UT-WF-I1", inc.Receiver = receiver, inc.OpenedAt = "2026-10-19T09:00:00Z", inc.PlanDigest = "sha256:def"
-    Set inc.CatalogueVersion = "E1@1,E2@1", inc.ProfileVersion = "3", inc.PolicyVersion = "2026-10-25.1"
+    Set inc.CatalogueVersion = "E1@1,E2@1", inc.ProfileVersion = "3", inc.PolicyVersion = "2026-10-26.1"
     Set lines = $CHAR(10) _ "Chain 1 (ordered, E4,E4): encounter ENC-UT1, patient MRN-UT1, first at receiver version 1"
     Set task = ##class(Shutter.Process.IncidentWorkflow).ApprovalTask(inc, "", 1, 2, lines)
     Do $$$AssertEquals(task.%Subject, "Shutter UT-WF-I1: approve the release of 1 chain(s) to " _ receiver, "the shared task's subject")

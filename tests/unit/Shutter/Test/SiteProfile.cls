@@ -55,6 +55,31 @@ Method TestSeedProfileValidates()
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "", "the shipped seed profile passes the validator")
 }
 
+/// The receiver's category and history policy (v1.23): the validator's values, the derivation, and the deprecated
+/// site-wide flag as the fallback for an entry with neither.
+Method TestReceiverCategory()
+{
+    Set name = $PARAMETER("Shutter.Production", "RECEIVER")
+    Set p = ##class(Shutter.Store.SiteProfile).Default()
+    Do $$$AssertEquals(p.receivers.%Get(0).category, "current_state", "the default receiver is a current_state system")
+    Set p.receivers.%Get(0).category = "warehouse"
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "receivers[0].category: must be current_state, history_of_record or orders_results", "an unknown category")
+    Set p.receivers.%Get(0).category = "history_of_record", p.receivers.%Get(0)."history_policy" = "sometimes"
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "receivers[0].history_policy: must be current or correct", "an unknown policy")
+    Do p.receivers.%Get(0).%Remove("history_policy")
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "", "history_of_record passes")
+    // Stored: the category derives the policy; an own policy overrides it; neither falls back to the site-wide flag.
+    Do ..ChangeProfile({"receivers": [{"name": (name), "tier": 2, "category": "history_of_record"}], "history_policy": null})
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).ReceiverCategory(name), "history_of_record", "the stored category")
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).ReceiverHistoryPolicy(name), "correct", "history_of_record keeps the history straight")
+    Do ..ChangeProfile({"receivers": [{"name": (name), "tier": 2, "category": "history_of_record", "history_policy": "current"}]})
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).ReceiverHistoryPolicy(name), "current", "the entry's own policy wins")
+    Do ..ChangeProfile({"receivers": [{"name": (name), "tier": 2}], "history_policy": "correct"})
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).ReceiverCategory(name), "current_state", "no category reads as current_state")
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).ReceiverHistoryPolicy(name), "correct", "and the site-wide flag still answers for it")
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).ReceiverCategory("Not A Receiver"), "current_state", "an unnamed receiver is current_state")
+}
+
 /// The two-person rule's reader: on only for a stored true.
 Method TestCloseNeedsApprover()
 {

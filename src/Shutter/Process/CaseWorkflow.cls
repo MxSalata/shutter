@@ -343,6 +343,9 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
         If $ISOBJECT(cat) && (cat.%GetTypeOf("matches") = "array") && (cat.%Get("matches").%Size() = 1) Quit ..PersonByCatalogue(case, cat)
         Quit ..WithheldToPerson(case)
     }
+    // A receiver of category orders_results (v1.23) keeps orders and results, which the ADT catalogue does not model:
+    // the case goes to a person at once, in every mode, and no model runs for it.
+    If ##class(Shutter.Store.SiteProfile).ReceiverCategory($SELECT(case.Receiver '= "": case.Receiver, 1: ..WardTarget)) = "orders_results" Quit ..NotModelledToPerson(case)
     If ..Release {
         // The sequence rule (7.4): the item goes at the version the chain expects, or not at all.
         If ..ExpectedVersion '= "" {
@@ -671,6 +674,15 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
         Set plan.disposition = "superseded"
         Set action.type = "none"
         Set plan.preconditions = [], plan.summary = "Catalogue " _ entry _ ", " _ title _ ": nothing is sent"
+    } ElseIf outcome = "correct_history" {
+        // The receiver keeps the history of record (v1.23): the overtaken movement is not left out, and Shutter does not
+        // write it (a resend would move the patient back), so the case escalates with the correcting steps on its plan.
+        Set plan.disposition = "escalate"
+        Set action.type = "none"
+        Set steps = ##class(Shutter.Util.HistoryCorrection).Steps(case, summary)
+        Set plan."correction_steps" = steps
+        Set plan.preconditions = [], plan.summary = "Catalogue " _ entry _ ", " _ title _ ": the receiver keeps the history of record, so the missing movement is corrected by its team; the steps are on the plan"
+        Do case.Note("artifact", "Correcting the history: " _ ##class(Shutter.Util.HistoryCorrection).Headline(steps), "system")
     } Else {
         Set plan.disposition = "escalate"
         Set action.type = "none"
@@ -678,6 +690,20 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
     }
     Set plan.action = action
     Quit ..AdoptPlan(case, plan, "policy:" _ entry)
+}
+
+/// The receiver's category is orders_results (v1.23): an escalate plan naming the reason, through the gate (which blocks
+/// any write to such a receiver with RECEIVER_NOT_MODELLED), to escalated; no board and no investigator.
+Method NotModelledToPerson(case As Shutter.Store.Case) As %Status
+{
+    Set ..Policy = "person", ..CatalogueEntry = "", ..CatalogueOutcome = ""
+    Do case.Note("note", "The receiver's category is orders_results: order communications and results are not modelled yet, so a person handles the failure", "system")
+    Set plan = {}
+    Set plan.disposition = "escalate", plan.action = {"type": "none"}
+    Set plan.why = "Not modelled yet: the receiver keeps orders and results, which Shutter's ADT catalogue does not cover"
+    Set plan.summary = "Receiver category orders_results: not modelled yet, a person handles the failure"
+    Set plan.preconditions = [], plan."evidence_refs" = ["route"], plan.disagreements = []
+    Quit ..AdoptPlan(case, plan, "policy:not_modelled")
 }
 
 /// One entry matched and it decides by a person: an escalate plan naming it, through the gate, to escalated.

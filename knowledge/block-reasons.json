@@ -438,6 +438,15 @@
       "text": "The message cancels an earlier movement, and the receiver's entry says it takes no cancels. Shutter withholds the cancel and sends nothing; a person corrects the receiver."
     },
     {
+      "code": "RECEIVER_NOT_MODELLED",
+      "title": "The receiver's category is not modelled yet",
+      "prerequisite": "A receiver whose site profile category is current_state or history_of_record (the ADT catalogue covers movements, not orders and results)",
+      "next_action": "Handle the failure in the receiving system by hand, then mark the case handled on the case page. Nothing is sent.",
+      "owner": "Integration team",
+      "reevaluate_when": "Shutter gains a catalogue for order communications and results, or the receiver's category changes",
+      "text": "The receiver keeps orders and results (category orders_results), which Shutter's catalogue does not model yet. Shutter sends it nothing and does not judge the failure; a person handles it in the receiving system."
+    },
+    {
       "code": "PATIENT_LEVEL_WRITE",
       "title": "The operation names no encounter",
       "prerequisite": "An encounter whose state and version the receiver can show",

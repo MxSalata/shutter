@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.22, 25 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.23, 25 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -359,6 +359,13 @@ conditions that matter; an unlisted condition is a wildcard. A listed condition 
 | `conditional_writes` | `yes`, `no`, `unknown` | the route's capability profile (1.8) |
 | `free_text` | `yes`, `no` | the message carries free text (an OBX note or an NTE) |
 | `chain` | `single`, `ordered`, `interleaved` | section 7; a case outside an incident is `single` |
+| `receiver_category` | `current_state`, `history_of_record`, `orders_results` | the case's receiver's category in the site profile (6.4, v1.23); `current_state` when its entry names none |
+
+**Flags read per receiver** (v1.23). An entry's `when` names a flag (`history_policy: correct`, `authoritative_source:
+other_source`). The matcher's facts carry `history_policy` and `receiver_category` for the case's receiver, from its site
+profile entry at evidence time, and `WhenHolds` reads a fact of the flag's name before the profile's site-wide flag, so
+the catalogue, the gate and the model view judge the receiver the case went to, as the snapshot recorded it, and a
+profile edit later does not flip a decided case.
 
 **Times the matcher reads** (v1.21). The plausibility rule compares an event's time with the time the feed sent it (`sent_at`), the receiver applied it (`applied_at`) and the evidence was taken (`observed_at`). A time in the ISO 8601 UTC form with a `Z` (a fraction allowed) or in the message store's ODBC form (`2026-10-15 09:20:00.123`, written in UTC) is read; a time with an offset (`2026-10-15T10:20:00+01:00`) or in any other form is never read as UTC: a `sent_at` or `applied_at` of that shape skips its own check, as an empty one does, so one receiver's odd clock form never makes every later event implausible, while an event time the matcher cannot read is implausible and supersedes nothing (and raises `later_event_future` when believing it would change the reading). `Shutter_Catalogue.Matcher_ForCase(caseId, chainKind)` evaluates the stored snapshot again for checks over SQL; since v1.21 it takes the case's stored chain kind (`Shutter.Store.ChainItem.KindFor`, `single` outside a chain) when the caller gives none, so it agrees with the stored match for a chain item.
 
@@ -420,6 +427,10 @@ In `policy` mode the matcher's decision is:
 - **A withheld case (v1.14), in every mode:** no board and no investigator. One match takes the person path above; otherwise
   the workflow adopts an escalate plan naming the feed's reason, and the gate appends `MERGE_WITHHELD` or
   `CANCEL_UNSUPPORTED`. A withheld message costs no model run, however many arrive.
+- **A receiver of category `orders_results` (v1.23), in every mode:** no board and no investigator: the workflow adopts an
+  escalate plan ("not modelled yet"), and the gate appends `RECEIVER_NOT_MODELLED`.
+- **`correct_history` at a `history_of_record` receiver (v1.23):** the policy path's plan escalates with
+  `correction_steps` (section 10) and the case carries a note "Correcting the history: ...".
 - The matches, with every condition's observed value, are stored on the case (`catalogue` in the snapshot summary) and
   shown in the app.
 - Recording keys for replays name the case within its scenario: `scenario:<S>:<encounter>:<event>|<member>|<cfg>[|round<n>]`; The production review's recordings use the form `review:<namespace>:<production>|review|<CONFIGVERSION>|<fingerprint>` (13.6).
@@ -434,13 +445,12 @@ reads it through `Shutter.Store.SiteProfile`.
 {
   "version": 1,
   "receivers": [
-    {"name": "Downstream Out", "system": "the demo bed-management system", "tier": 2,
+    {"name": "Downstream Out", "system": "the demo bed-management system", "category": "current_state", "tier": 2,
      "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "merges": false,
      "api": {"base": "/downstream/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}",
              "capabilities": "/capabilities", "operations": "/operations"},
      "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}}
   ],
-  "history_policy": "current",
   "authoritative_source": "",
   "unconditional_resend": "forbidden",
   "merges": "forbidden",
@@ -461,6 +471,22 @@ reads it through `Shutter.Store.SiteProfile`.
 `mail.allowed_domains` set to their mailboxes' domain, `example.nhs.uk`.)
 
 - A tier is the receiver's; a policy is read by tier and chain kind.
+- **The receiver's category** (v1.23), asked at onboarding: `current_state` (a bed manager, whiteboard or portering
+  system: only the present placement matters, so an overtaken failed movement closes with no write), `history_of_record`
+  (a PAS, EPR or clinical data warehouse: the movement history must be complete, so an overtaken failed movement is not
+  "no action": the case escalates with the correcting steps on its plan, section 10) or `orders_results` (order
+  communications or a LIMS: each order or result is its own record; declared and validated, its cases escalate before any
+  model runs, "not modelled yet", and the gate blocks every write to it with `RECEIVER_NOT_MODELLED`). An entry without a
+  category is `current_state`, which is what every profile written before v1.23 meant. `receivers[].history_policy`
+  (`current` | `correct`) is derived from the category (`history_of_record` -> `correct`, the others -> `current`) and may
+  be set on the entry to override it. The site-wide `history_policy` is deprecated: still accepted, read only for an entry
+  with neither a category nor its own policy, and no longer in the seed (profile version 5).
+- **A gated history correction is planned, not in this version.** It would be a receiver feature `history_correction`
+  and an operation (1.1 with `"correction": true`) that inserts the movement into the history at its own time without
+  changing the current placement, bumps the version, stores a receipt and honours `dry_run` and `expected_version`; a plan
+  disposition `correct` that always needs an approval and a rehearsal showing the placement unchanged; the gate and the
+  verifier reading the history for the inserted movement. Practice (IHE PAM) corrects a past movement only through a
+  historic-movement update where the receiver supports it, never by resending the original message.
 - **The receiver description** (v1.8): each receiver entry carries `api` (its `base` path and the paths of its `state`,
   `receipt`, `capabilities` and `operations` endpoints, with the placeholders `{encounter}` and `{key}`) and
   `features` (what the site declares it can do: `conditional_writes`, `receipts`, `history`, `dry_run`). The evidence
@@ -751,6 +777,16 @@ shows what the model would see of a case.
 
 ## 10. Escalation by email (v1.11)
 
+**Correcting the history** (v1.23). When a `history_of_record` receiver's case escalates with the outcome
+`correct_history`, the plan carries `correction_steps`: `{receiver, system, category, encounter, missing: {event, ward,
+event_time, source_message_id, operation_key, after}, later: [{event, ward, event_time}], current: {state, ward, version},
+receipt, steps: [text]}`, built by `Shutter.Util.HistoryCorrection` from the case and the snapshot alone. The eight steps,
+in order: hold the case and never resend the original message; confirm the current placement, reading only; confirm the
+gap and where the movement belongs; have the correction approved and recorded; insert the movement as a historic
+movement through the receiver's own correction route, one write by one person; keep the current placement; read the
+history back and have a second person check it; record it on the case and close the case by hand. The escalation draft
+prints them as a section "CORRECTING THE HISTORY"; the case page shows them from the plan.
+
 A blocked, escalated or failed case can be handed to the people who correct systems by hand. The draft is built from
 the stored case without a model (`Shutter.Util.EscalationDraft`): the hospital number and NHS number, the date of birth,
 the event (what, where, when, the operation key), what failed, why Shutter stopped (the block reason and the failing
@@ -1003,6 +1039,14 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.23, 25 Oct 2026: system categories per receiver (6.1, 6.3, 6.4, 6.5, 10): `receivers[].category` (`current_state`,
+  `history_of_record`, `orders_results`; `current_state` when absent) with `receivers[].history_policy` derived from it
+  and overridable; the site-wide `history_policy` deprecated and out of the seed (profile version 5); the condition
+  `receiver_category` and the facts `history_policy` and `receiver_category` read from the case's receiver, which the
+  catalogue's `when`, the gate and the model view (route `category`, `history_policy`) use; `correct_history` escalates
+  with `correction_steps` on the plan; an `orders_results` case escalates before any model runs and the gate appends
+  `RECEIVER_NOT_MODELLED` to any write to such a receiver; gate policy version 2026-10-26.1. The gated history correction
+  is written down as the planned next step, not built.
 - v1.22, 25 Oct 2026: the production review (13): one read-only pass over a production Shutter knows (its own, or a watched one) through the new Case Review item (`Shutter.Process.Review`), on request only, never at the production's start, in the Doctor or on a timer. `Shutter.Util.ProductionReader` reads one production in its own namespace as plain data (the items and their settings, the system default settings, the class defaults, the event log's errors and the headers' failures over a window, the queues, the rule log and the message purge task); `Shutter.Review.Checks` holds the 23 checks' severities, confidences and words, and `Shutter.Review.Sweep` lists the targets, resolves every effective value in three explicit steps, runs the checks, ties the findings to the window's cases per item, computes the configuration fingerprint and the baseline rank and applies the annotations (`Shutter_Review.Sweep_RunJSON` and `Sweep_TargetsJSON` from SQL). The review is stored as `Shutter.Store.Review` (the last 50 per production; a review left sweeping or ranking for 20 minutes is failed by the next one) with the findings in baseline order, the fingerprint and the agent's ranking, cost and record key; approver annotations (`Shutter.Store.ReviewAnnotation`: intended, accepted risk, false positive) bind the finding's code, item, setting and effective value, are applied at read time and reopen on a changed value, an expiry or a revoke. The review's agent, `Shutter.Agent.Review` (no toolset, `KNOWLEDGE` `review`, `CONFIGVERSION` `1`, its own preamble and instructions), is asked through the Agent Board item with `MaxIterations` 3 and a 60000-token budget (`MaxIterations` is new on `AgentRequest`), answers through `Shutter.Tools.SubmitReview` and `Shutter.Schema.Review` with `Check`, and its ranking is refused (`schema_failed`) when it moves a finding above a higher severity tier; the runner maps a terminal name containing `review` to it and `AttachKnowledge` reads the agent class's `KNOWLEDGE` parameter when no board member row names a collection; the knowledge collection `review` (`knowledge/review/production-review-rules.md`, `search_review`; 6.6). The routes under `/production-reviews` (5, 13.5) and the reviews' runs in `GET /costs` (`totals.reviewRuns`, `byReview`, and `totals.spentUsd` with the reviews' live cost); the mimic does not answer review runs (4); what the review's agent sees (9); the item in `INSTALLITEMS` and the two stores in `PurgeStore` (12).
 - v1.21, 25 Oct 2026: the build of 25 October. Gate policy version 2026-10-25.1, so an approval given under 2026-10-20.1 and not yet dispatched is void at dispatch (`APPROVAL_POLICY_CHANGED`). Verification after a write whose answer was lost (1.3, 5.1): the verifier's verdict is a pure function of what was read (`Judge`); a missing receipt straight after an uncertain write is unknown and read again on the retry schedule, not committed only after the settle window (`UncertainSettleSeconds`, 30 s) with the version unchanged or once the version moved past the one the write was conditional on; an acknowledged write without a receipt is a contradiction (never "not committed"), and a reconcile whose receipt is gone claims nothing about what was committed; the case escalates on not committed with the approval revoked and on unknown after the last read, never resends from a verification, and the block reasons `WRITE_NOT_COMMITTED` and `WRITE_OUTCOME_UNKNOWN` name the next action. Supersession (6.1): the matcher's later events carry `operation_key` and `case_id`; `later_delivery` (`applied`, `sent`, `none`); a time with an offset or in another form is never read as UTC and an unreadable reference time skips its own check; a doubtful cancel behind a settled transfer or discharge is a doubt; `Matcher_ForCase` takes the stored chain kind; the gate blocks a write after a later applied cancel, merge or admission and, with the verifier, names an undelivered later transfer by its key and case, whose case is told; the verifier's superseded branch reads the matcher's list, so the three agree. A write stands on its own dry run (1.1, 1.8, 6.5): the gate's rehearsal check (`REHEARSED`, `DRY_RUN_MISSING`, `DRY_RUN_FAILED`, `DRY_RUN_STALE`) releases a write only after a dry run of the same plan at the same version, epoch and payload, and the capability check's `DRY_RUN_UNSUPPORTED` refuses a resend to a receiver without dry runs; the rehearsal records what was sent (`expectedVersion`, `payloadDigest`) and the execution attempt names its rehearsal (`rehearsalId`); the approval binds the latest rehearsal of its plan; a receiver that applies a dry run is recorded as an execution, alerted and verified, never reported as rolled back; the connector refuses a dry run to a receiver whose entry declares none (6.4); the blind-resend preview refuses a receiver without dry runs (409 `dry_run_unsupported`) and reports `checkedAgainst`, `expectedVersion: null` and `applied` (5). Who decided (5): the approver of record is the signed-in user; `Shutter.Util.Workflow.Decide` takes the digest instead of a user name, refuses an approver outside the Workflow role (403 `forbidden` over the API), an empty digest and a task another approver holds (409 `wrong_state`); the approval tasks' `PlanDigest` form value is no longer pre-filled, so an inbox approver pastes it (6.4, 7.3); the 202 reply of the approval routes carries `approver`. The incident's approval binds each item (7.2 to 7.5): the incident plan's digest is the SHA-256 of the plan as recorded in canonical JSON, so each item's case, catalogue entry, outcome, who decides and expected version are bound; a released item whose fresh match names another entry or outcome than the approval bound blocks before planning and, at dispatch, `APPROVAL_ITEM_CHANGED` and `APPROVAL_INCIDENT_PLAN_CHANGED`; the case approval's `incidentPlanDigest`, `boundEntry` and `boundOutcome`. Escalation addresses (10): one bare address per recipient with one `@` and no control characters, a domain in `mail.allowed_domains` or under one; an empty or absent list allows no address, and a profile naming a team mailbox without one is refused; `mail.from` and each domain entry are checked; `subject_not_allowed`; `PATCH` requires strings and answers 400 for a value longer than its column; the operation's last check before writing or sending, and the `.eml`'s header hygiene. Escalation retention (10, 12): `purgedAt`, the text and the `.eml` removed `EscalationDays` days after the case closed (`SHUTTER_ESCALATION_DAYS`, default the message days, 90, on by default on an upgraded instance), 409 `wrong_state` for editing or sending a purged one, the case purge takes escalations and their files, the Doctor's `escalation_days`. The hand close cancels every draft or queued email and says how many, and `PATCH` and `send` refuse a case no longer blocked, escalated or failed (5, 10). Unknown keys under `approvers` and the other sections are refused by name (6.4). The API mimic (4): its switch counts on a demo instance only, a site ignoring a stray one, and `Enable` refuses there and leaves nothing behind when it fails; `GET /settings` names it (`mock`, `mockConfig`, `mockModel`, each item's `answeredBy`), `Setup.Doctor` reports `mock_config`, and the production's start logs a set switch and a `SHUTTER_AGENT_MODE` it did not apply; `Record.ImportJSON` and `ImportDir` refuse a mock recording as `Store` does (`Record.IsMock`); the live runner ends a run whose agent replaced its provider before any model call, and its `TestRun` keys each run's tool calls apart (`test:<case>:<member>:<n>`, `run_key`, `mock`) and takes `live` or `record` only; the aihub install fails when a key in the environment could not configure the provider (12). The re-plan after a receiver change happens once per investigation, and a second change blocks the case for a person (4.3); the cases list reads `planCreatedBy` from the plan row in its own query (the values it sends are unchanged); the plan, gate decision, agent run, case token, finding and approval records refer to their case by id, so a save of any of them never writes the case; a board member's request is not built, and the case is escalated, when the model view fails closed on the evidence or the findings (9). Abandoning a case the workflow left behind (5): `POST /cases/{id}/abandon` for approvers, `Shutter.Msg.CaseAbandon`, the error code `busy` with `{state, inFlight, newestAt, deferred}`, the in-flight rule and `^Shutter.Config("abandonAfterMinutes")` (15); the disposition `abandoned`; the production-start sweep and the Doctor's `working_cases` and `abandon_after_minutes` (12).
 - v1.20, 25 Oct 2026: the shipped seed profile sets `mail.allowed_domains` to `example.nhs.uk`, the domain of its
