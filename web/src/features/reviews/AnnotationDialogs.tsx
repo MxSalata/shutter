@@ -60,7 +60,7 @@ export function useAnnotationDialogs(review: ReviewDetail) {
         onSuccess: () => {
           setMarking(null);
           notifications.show({
-            color: 'grape',
+            color: 'blue',
             title: `Marked as ${STATUS_LABELS[status].toLowerCase()}`,
             message: 'Bound to this exact value: the finding reopens when the value changes.',
           });
@@ -142,12 +142,7 @@ export function useAnnotationDialogs(review: ReviewDetail) {
               <Button variant="default" onClick={() => setMarking(null)}>
                 Cancel
               </Button>
-              <Button
-                color="grape"
-                onClick={submit}
-                loading={annotate.isPending}
-                disabled={!reason.trim() || !!problem}
-              >
+              <Button onClick={submit} loading={annotate.isPending} disabled={!reason.trim() || !!problem}>
                 Mark as {STATUS_LABELS[status].toLowerCase()}
               </Button>
             </Group>

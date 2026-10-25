@@ -6,7 +6,7 @@ import type { CaseSummary } from '@/api/types';
 import { PageHeader } from '@/components/PageHeader';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
-import { DispositionBadge, STATE_HINTS, StateBadge } from '@/components/StateBadge';
+import { CASE_STATE_NAMES, DispositionBadge, StateBadge } from '@/components/StateBadge';
 import { Timestamp } from '@/components/Timestamp';
 import { humanize } from '@/lib/format';
 import { clampHeadline } from '@/lib/headline';
@@ -92,7 +92,7 @@ export default function CasesPage() {
   return (
     <>
       <PageHeader title="Cases" subtitle="Every failed delivery Shutter opened a case for, newest first." />
-      <Card padding="md">
+      <Card padding="md" data-tour="cases-list">
         <Group gap="sm" mb="sm" wrap="wrap">
           <Select
             label="State"
@@ -103,7 +103,7 @@ export default function CasesPage() {
               setState(v);
               setPage(1);
             }}
-            data={Object.keys(STATE_HINTS).map((s) => ({ value: s, label: humanize(s) }))}
+            data={CASE_STATE_NAMES.map((s) => ({ value: s, label: humanize(s) }))}
             w={200}
           />
           <Select

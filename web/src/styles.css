@@ -363,14 +363,25 @@
   outline-offset: 2px;
 }
 
-/* The navigation icons, each in its entry's colour (nav.ts): the -text token of that colour,
-   which every scheme tunes to 4.5:1 on its surfaces, so the icon holds 3:1 on the navbar, on a
-   hovered entry and on the active entry's tint. High contrast keeps them in the text colour. */
+/* The navigation icons take the text colour of their entry: the entries carry no colour of their own, so
+   colour stays for statuses. */
 .nav-icon {
-  color: var(--nav-icon, currentColor);
-}
-:root[data-shutter-contrast='high'] .nav-icon {
   color: currentColor;
+}
+
+/* The guide. Its controls are at least 44 px high, for touch. A shown section clears the sticky header when it is
+   scrolled to, and carries a dashed outline that only marks it: the step's text says everything. */
+.guide-control {
+  --button-height: 2.75rem;
+  min-height: 2.75rem;
+}
+[data-tour] {
+  scroll-margin-top: 72px;
+}
+[data-tour-active='true'] {
+  outline: 2px dashed var(--mantine-primary-color-filled);
+  outline-offset: 4px;
+  border-radius: var(--mantine-radius-md);
 }
 
 /* Motion is a preference, not a requirement. Recharts animations are switched off in code. */
@@ -448,6 +459,13 @@ body {
 /* Digests, keys and other machine values wrap anywhere rather than overflow their card. */
 .mono-wrap {
   font-family: var(--mantine-font-family-monospace);
+  overflow-wrap: anywhere;
+}
+
+/* A list item that quotes a digest or an operation key wraps it rather than widening the page. */
+.mantine-List-itemWrapper,
+.mantine-List-itemLabel {
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 

@@ -23,6 +23,7 @@ function AgentBlock({ r }: { r: ReviewDetail }) {
   return (
     <Section
       id="agent"
+      tour="review-agent"
       title="The agent's ranking"
       note="One AI Hub agent ranks the findings within their severity tiers and explains each against the case history. It sees names, values, counts and case ids, never an error's text, and it never changes a severity or a count."
       aside={<AgentStateBadge state={a.state} />}
@@ -171,6 +172,7 @@ function Review({ r }: { r: ReviewDetail }) {
         <AgentBlock r={r} />
         <Section
           id="findings"
+          tour="review-findings"
           title="Findings"
           note={
             rankedByAgent(r)

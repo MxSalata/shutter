@@ -4,7 +4,7 @@ import type { ReviewFinding } from '@/api/types';
 import { PortalLink } from '@/components/PortalLink';
 import { Timestamp } from '@/components/Timestamp';
 import { formatInt } from '@/lib/format';
-import { ConfidenceText, SeverityBadge, StatusBadge } from './badges';
+import { ConfidenceText, FindingStatusBadge, SeverityBadge } from './badges';
 import { foundList, headerLink, SOURCE_LABELS, subjectOf } from './review';
 
 const present = (v: number | string | undefined) => v !== undefined && v !== null && v !== '';
@@ -161,7 +161,7 @@ function FindingRow({
       </Table.Td>
       <Table.Td style={{ verticalAlign: 'top' }}>
         <Stack gap={4} align="flex-start">
-          <StatusBadge status={f.status} />
+          <FindingStatusBadge status={f.status} />
           {f.annotationId ? (
             <Text size="xs" c="dimmed">
               Annotation {f.annotationId}
@@ -182,7 +182,6 @@ function FindingRow({
               <Button
                 size="compact-xs"
                 variant="light"
-                color="grape"
                 onClick={() => onMark(f)}
                 aria-label={`Annotate ${f.id}, ${f.code}`}
               >

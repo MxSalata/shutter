@@ -1,6 +1,7 @@
 import { Accordion, Card, Group, Stack, Table, Text, ThemeIcon } from '@mantine/core';
 import { IconCheck, IconMinus, IconX } from '@tabler/icons-react';
-import { useHealth } from '@/api/hooks';
+import { Fragment } from 'react';
+import { useHealth, useLibrary } from '@/api/hooks';
 import { PageHeader } from '@/components/PageHeader';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
@@ -11,7 +12,7 @@ import { keyLabel } from '@/lib/format';
 function Value({ value }: { value: unknown }) {
   if (value === true) {
     return (
-      <ThemeIcon size="sm" radius="xl" color="teal" variant="light" role="img" aria-label="yes">
+      <ThemeIcon size="sm" radius="xl" color="green" variant="light" role="img" aria-label="yes">
         <IconCheck size={14} />
       </ThemeIcon>
     );
@@ -26,7 +27,7 @@ function Value({ value }: { value: unknown }) {
   if (value === null || value === undefined || value === '') {
     return (
       <Group gap={6}>
-        <ThemeIcon size="sm" radius="xl" color="orange" variant="light" role="img" aria-label="not reported">
+        <ThemeIcon size="sm" radius="xl" color="yellow" variant="light" role="img" aria-label="not reported">
           <IconMinus size={14} />
         </ThemeIcon>
         <Text size="xs" c="dimmed">
@@ -42,6 +43,40 @@ function Value({ value }: { value: unknown }) {
   );
 }
 
+/**
+ * The board a case convenes by default, apart from the enabled agents the report counts: the library's members on
+ * the default board, by role, and the enabled coordinator ("3 specialists and the coordinator").
+ */
+function DefaultBoard() {
+  const library = useLibrary();
+  if (!library.data) return null;
+  const board = library.data.filter((m) => m.enabled && m.inDefaultBoard);
+  const specialists = board.filter((m) => m.role === 'specialist').length;
+  // The server convenes any enabled coordinator, whether or not it is marked for the default board
+  const coordinator = library.data.some((m) => m.enabled && m.role === 'coordinator');
+  const others = board.filter((m) => m.role !== 'specialist' && m.role !== 'coordinator').length;
+  const parts = [
+    specialists ? `${specialists} specialist${specialists === 1 ? '' : 's'}` : '',
+    coordinator ? 'the coordinator' : '',
+    others ? `${others} other${others === 1 ? '' : 's'}` : '',
+  ].filter(Boolean);
+  return (
+    <Table.Tr>
+      <Table.Th w={220} style={{ fontWeight: 500 }}>
+        <Text size="sm" c="dimmed">
+          Default board
+        </Text>
+      </Table.Th>
+      <Table.Td>
+        <Text size="sm">{parts.length ? parts.join(' and ') : 'nobody'}</Text>
+        <Text size="xs" c="dimmed">
+          From the agent library; the generalist answers only in single investigator mode
+        </Text>
+      </Table.Td>
+    </Table.Tr>
+  );
+}
+
 export default function HealthPage() {
   const health = useHealth();
   const report =
@@ -49,6 +84,7 @@ export default function HealthPage() {
   return (
     <>
       <PageHeader
+        tour="health"
         title="Health"
         subtitle="The installation's own readiness report: namespace, production, web applications, downstream system, knowledge and agents."
       />
@@ -66,16 +102,24 @@ export default function HealthPage() {
             <Table withRowBorders={false} verticalSpacing={4}>
               <Table.Tbody>
                 {Object.entries(report).map(([k, v]) => (
-                  <Table.Tr key={k}>
-                    <Table.Th w={220} style={{ fontWeight: 500 }}>
-                      <Text size="sm" c="dimmed">
-                        {keyLabel(k)}
-                      </Text>
-                    </Table.Th>
-                    <Table.Td>
-                      <Value value={v} />
-                    </Table.Td>
-                  </Table.Tr>
+                  <Fragment key={k}>
+                    <Table.Tr>
+                      <Table.Th w={220} style={{ fontWeight: 500 }}>
+                        <Text size="sm" c="dimmed">
+                          {keyLabel(k)}
+                        </Text>
+                      </Table.Th>
+                      <Table.Td>
+                        <Value value={v} />
+                        {k === 'mode' ? (
+                          <Text size="xs" c="dimmed">
+                            Set by the last scenario run or a reset; live failures are investigated in it too
+                          </Text>
+                        ) : null}
+                      </Table.Td>
+                    </Table.Tr>
+                    {k === 'board_members' ? <DefaultBoard /> : null}
+                  </Fragment>
                 ))}
               </Table.Tbody>
             </Table>

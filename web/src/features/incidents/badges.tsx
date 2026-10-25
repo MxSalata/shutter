@@ -1,4 +1,4 @@
-import { Badge, Tooltip } from '@mantine/core';
+import { StatusBadge } from '@/components/StatusBadge';
 import { humanize } from '@/lib/format';
 import { CHAIN_STATES, INCIDENT_STATES, ITEM_STATES, KIND_HINTS, type Meaning } from './describe';
 
@@ -11,14 +11,8 @@ function MeaningBadge({
   value: string;
   size?: 'xs' | 'sm' | 'md' | 'lg';
 }) {
-  const [colour, hint] = meaning[value] ?? ['gray', value];
-  return (
-    <Tooltip label={hint} multiline maw={320}>
-      <Badge color={colour} size={size} tabIndex={0} style={{ textTransform: 'none' }}>
-        {humanize(value)}
-      </Badge>
-    </Tooltip>
-  );
+  const status = meaning[value] ?? { tone: 'neutral' as const, label: humanize(value), hint: value };
+  return <StatusBadge {...status} size={size} />;
 }
 
 export const IncidentStateBadge = (p: { state: string; size?: 'xs' | 'sm' | 'md' | 'lg' }) => (
@@ -31,13 +25,16 @@ export const ItemStateBadge = (p: { state: string; size?: 'xs' | 'sm' | 'md' | '
   <MeaningBadge meaning={ITEM_STATES} value={p.state} size={p.size} />
 );
 
+/** How the chain's failures relate: a fact about it, not a status, so neutral and without an icon. */
 export function KindBadge({ kind }: { kind: string }) {
   if (!kind) return null;
   return (
-    <Tooltip label={KIND_HINTS[kind] ?? kind} multiline maw={320}>
-      <Badge variant="outline" color="gray" tabIndex={0} style={{ textTransform: 'none' }}>
-        {humanize(kind)}
-      </Badge>
-    </Tooltip>
+    <StatusBadge
+      tone="neutral"
+      label={humanize(kind)}
+      hint={KIND_HINTS[kind] ?? kind}
+      icon={null}
+      variant="outline"
+    />
   );
 }

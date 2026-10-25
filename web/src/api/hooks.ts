@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, newIdempotencyKey, seg } from './client';
 import { isApiError } from '@/lib/errors';
+import { useGuide } from '@/features/guide/store';
 import {
   CLOSED_STATES,
   type ApprovalDecision,
@@ -101,8 +102,10 @@ export function useSignOut() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: () => api.del<unknown>('/session'),
-    // Whatever the server answered, this browser forgets everything it showed.
+    // Whatever the server answered, this browser forgets everything it showed. The guide closes and drops its copy in
+    // memory; the place stored on the device stays, like the appearance settings.
     onSettled: () => {
+      useGuide.getState().reset();
       client.clear();
       client.setQueryData(keys.me, null);
     },

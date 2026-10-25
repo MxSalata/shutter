@@ -8,12 +8,6 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { describeError } from '@/lib/errors';
 import { humanize } from '@/lib/format';
 
-const ROLE_COLOURS: Record<string, string> = {
-  specialist: 'indigo',
-  coordinator: 'grape',
-  generalist: 'cyan',
-};
-
 export default function LibraryPage() {
   const me = useMe().data;
   const library = useLibrary();
@@ -31,6 +25,7 @@ export default function LibraryPage() {
   return (
     <>
       <PageHeader
+        tour="library"
         title="Agent library"
         subtitle="The agents a board is made from. Each specialist reviews the evidence from one perspective with its own knowledge collection; the coordinator turns their findings into one plan. What an agent is (its class, its production item, its tools) is code; which agents sit on the board is a setting."
       />
@@ -75,7 +70,8 @@ export default function LibraryPage() {
                       </Stack>
                     </Table.Td>
                     <Table.Td>
-                      <Badge color={ROLE_COLOURS[m.role] ?? 'gray'} style={{ textTransform: 'none' }}>
+                      {/* A role is who an agent is, not a status: a neutral label for each */}
+                      <Badge color="gray" variant="outline" style={{ textTransform: 'none' }}>
                         {humanize(m.role)}
                       </Badge>
                     </Table.Td>

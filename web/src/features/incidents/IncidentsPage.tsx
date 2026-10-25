@@ -20,7 +20,7 @@ export default function IncidentsPage() {
         title="Incidents"
         subtitle="Many failures to one receiver, grouped: chains per encounter, released in order and verified one operation at a time."
       />
-      <Card padding="md">
+      <Card padding="md" data-tour="incidents-list">
         <Group gap="sm" mb="sm" wrap="wrap">
           <NativeSelect
             label="State"

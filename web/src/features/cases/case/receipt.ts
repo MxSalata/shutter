@@ -27,8 +27,10 @@ export interface SafetyReceipt {
   expectedVersion: string;
   receiverEpoch: string;
   gate: { stage: string; outcome: string; policyVersion: string } | null;
-  /** Who let the write through: the approver, the site's policy, or why nobody needed to. */
+  /** Who let the current plan's write through: the approver, the site's policy, or why nobody needed to. */
   decidedBy: string;
+  /** An earlier plan's approval, as history; empty when there is none. */
+  earlierApproval: string;
   decidedAt: string;
   /** Writes that reached the receiver and may have landed: applied, already committed or uncertain. */
   writes: number;
@@ -37,6 +39,11 @@ export interface SafetyReceipt {
   /** Attempts that wrote nothing: refused by the receiver, a version conflict, or an error before sending. */
   notWritten: number;
   verification: string;
+  /**
+   * The verification as a state of lib/status's VERIFICATIONS: the verifier's outcome, pending after a write, by_hand
+   * for a hand correction, not_applicable when there is no write of Shutter's; empty when none of these is known yet.
+   */
+  verificationState: string;
   /** One line that says where the case stands. */
   status: string;
 }
@@ -46,36 +53,77 @@ const str = (v: unknown) => (v === undefined || v === null ? '' : String(v));
 /** Attempt outcomes where the write reached the receiver and may have landed (CONTRACTS, the attempt). */
 export const WRITE_OUTCOMES = ['applied', 'already_committed', 'uncertain'];
 
+/** Case states that stop a case: with no write sent by then, there is no write of Shutter's to verify. */
+export const STOPPED_STATES = ['blocked', 'failed', 'escalated'];
+
 /**
- * The approval the receipt names: the latest one in force, else the latest revoked one (the server revokes an approval
- * once its write is spent or not committed, and on a reopen, so a written case's approval is often revoked).
+ * A case's approvals split by plan: those of the current plan, which can be its release, and those of earlier plans,
+ * which are history (a re-plan revokes the earlier plan's approval). With no plan read, every approval counts as the
+ * current plan's.
  */
-function approvalOf(view: ApprovalsView | null | undefined): Approval | undefined {
-  const latest = [...(view?.approvals ?? [])].sort((a, b) =>
-    str(b.decidedAt).localeCompare(str(a.decidedAt)),
-  );
+export function approvalsByPlan(
+  view: ApprovalsView | null | undefined,
+  plan: PlanView | null | undefined,
+): { current: Approval[]; earlier: Approval[] } {
+  const all = view?.approvals ?? [];
+  const digest = plan?.plan?.digest;
+  if (!digest) return { current: all, earlier: [] };
+  return {
+    current: all.filter((a) => !a.planDigest || a.planDigest === digest),
+    earlier: all.filter((a) => a.planDigest && a.planDigest !== digest),
+  };
+}
+
+/**
+ * The approval the receipt names, from the current plan's: the latest one in force, else the latest revoked one (the
+ * server revokes an approval once its write is spent or not committed, and on a reopen, so a written case's approval
+ * is often revoked).
+ */
+function approvalOf(current: Approval[]): Approval | undefined {
+  const latest = [...current].sort((a, b) => str(b.decidedAt).localeCompare(str(a.decidedAt)));
   return latest.find((a) => !a.revoked) ?? latest[0];
+}
+
+/** An earlier plan's approval as history: "Earlier approval of plan v1 revoked by system: the receiver changed". */
+export function earlierApprovalText(earlier: Approval[], plan: PlanView | null | undefined): string {
+  const a = [...earlier].sort((x, y) => str(y.decidedAt).localeCompare(str(x.decidedAt)))[0];
+  if (!a) return '';
+  // Only a second plan has a single earlier one whose version is known
+  const which = Number(plan?.plan?.version) === 2 ? 'plan v1' : 'an earlier plan';
+  const verb = a.decision === 'rejected' ? 'Earlier rejection' : 'Earlier approval';
+  return a.revoked
+    ? `${verb} of ${which} revoked${a.revokedBy ? ` by ${a.revokedBy}` : ''}`
+    : `${verb} of ${which}, not of the current plan`;
 }
 
 function decider(
   c: CaseDetail,
   plan: PlanView | null | undefined,
+  approvals: ApprovalsView | null | undefined,
   approval: Approval | undefined,
   writes: boolean,
 ): string {
   if (approval) {
     const who =
       approval.approver === 'policy'
-        ? `site policy${approval.comment ? ` (${approval.comment})` : ''}`
+        ? `the site's written policy${approval.comment ? ` (${approval.comment})` : ''}`
         : approval.approver;
     const revoked = approval.revoked
       ? ` (since revoked${approval.revokedBy ? ` by ${approval.revokedBy}` : ''})`
       : '';
-    return `${approval.decision === 'rejected' ? 'Rejected' : 'Approved'} by ${who}${revoked}`;
+    const verb =
+      approval.decision === 'rejected'
+        ? 'Rejected'
+        : approval.approver === 'policy'
+          ? 'Released'
+          : 'Approved';
+    return `${verb} by ${who}${revoked}`;
   }
   const by = c.planCreatedBy ?? plan?.plan?.createdBy ?? '';
-  if (by.startsWith('policy:')) return `Site policy, entry ${by.slice('policy:'.length)}`;
+  if (by.startsWith('policy:')) return `The site's written policy, entry ${by.slice('policy:'.length)}`;
   if (!writes) return 'No approval needed: the plan writes nothing';
+  // Approvals not read (still loading, or the read failed): who released the write is not known
+  if (approvals === undefined) return 'Unknown';
   if (c.disposition === 'handled_by_hand') return 'The team, by hand';
   switch (c.state) {
     case 'blocked':
@@ -128,17 +176,39 @@ export function safetyReceipt({
   snapshot: Snapshot | null | undefined;
 }): SafetyReceipt {
   const p = plan?.plan;
-  const approval = approvalOf(approvals);
+  const byPlan = approvalsByPlan(approvals, plan);
+  const approval = approvalOf(byPlan.current);
   const tried = (attempts ?? []).filter((x) => x.attempt);
   const sent = tried.filter((x) => WRITE_OUTCOMES.includes(str(x.attempt?.outcome)));
   const acknowledged = sent.filter((x) => ['applied', 'already_committed'].includes(str(x.attempt?.outcome)));
   const last =
     [...(attempts ?? [])].reverse().find((x) => x.verification)?.verification ?? closure?.verification;
-  const verification = last ? `${humanize(last.outcome)}${last.summary ? `: ${last.summary}` : ''}` : '';
   const decisions = plan?.gateDecisions ?? [];
   const gate = decisions.length ? decisions[decisions.length - 1] : undefined;
   const disposition = p?.disposition || c.disposition || '';
   const writes = disposition === 'resend';
+  // With no verification yet: one still to come after a write, or none to make (no Shutter write, a hand
+  // correction, a case that stopped before its write went out)
+  const verification = last
+    ? `${humanize(last.outcome)}${last.summary ? `: ${last.summary}` : ''}`
+    : sent.length
+      ? 'Verification pending'
+      : c.disposition === 'handled_by_hand'
+        ? 'Not verified by Shutter: the team corrected it by hand'
+        : p && !writes
+          ? 'Not applicable: no Shutter write'
+          : STOPPED_STATES.includes(c.state)
+            ? `Not applicable: ${humanize(c.state).toLowerCase()} with nothing written`
+            : '';
+  const verificationState = last
+    ? last.outcome
+    : sent.length
+      ? 'pending'
+      : c.disposition === 'handled_by_hand'
+        ? 'by_hand'
+        : (p && !writes) || STOPPED_STATES.includes(c.state)
+          ? 'not_applicable'
+          : '';
   const target = `${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`;
   const action = !p
     ? 'No plan yet'
@@ -153,17 +223,19 @@ export function safetyReceipt({
     disposition,
     catalogueEntry: str(p?.catalogueEntry),
     planVersion: p ? Number(p.version) : null,
-    planDigest: str(approval?.planDigest || p?.digest),
+    planDigest: str(p?.digest || approval?.planDigest),
     snapshotDigest: str(approval?.snapshotDigest || snapshot?.digest),
     expectedVersion: writes ? str(approval?.expectedVersion ?? p?.expectedVersion) : '',
     receiverEpoch: str(approval?.receiverEpoch),
     gate: gate ? { stage: gate.stage, outcome: gate.outcome, policyVersion: gate.policyVersion } : null,
-    decidedBy: decider(c, plan, approval, writes),
+    decidedBy: decider(c, plan, approvals, approval, writes),
+    earlierApproval: earlierApprovalText(byPlan.earlier, plan),
     decidedAt: str(approval?.decidedAt),
     writes: sent.length,
     acknowledged: acknowledged.length,
     notWritten: tried.length - sent.length,
     verification,
+    verificationState,
     status: statusOf(c, sent.length, closure, last?.outcome === 'verified' ? 'verified at the receiver' : ''),
   };
 }

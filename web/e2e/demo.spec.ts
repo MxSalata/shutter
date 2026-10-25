@@ -1,10 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
+import { skipWelcome } from './guide';
 
 /**
  * What the demo build shows a judge first: the sign-in page's "Try the demo", then the Scenarios page's guided path
  * through the recorded cases, whose links open the cases they name.
  */
 const go = (page: Page, path: string) => page.goto(`./#${path}`);
+
+// The guide's welcome would cover the screens these tests are about; guide.spec.ts tests it
+test.beforeEach(({ page }) => skipWelcome(page));
 
 async function signIn(page: Page) {
   await go(page, '/login');
@@ -27,7 +31,43 @@ test.describe('the guided path', () => {
       await expect(card.getByRole('link', { name, exact: true })).toBeVisible();
     await card.getByRole('link', { name: 'Case C-000002', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Case C-000002', exact: true })).toBeVisible();
+    const outcome = page.getByRole('region', { name: 'Outcome' });
+    await expect(outcome).toContainText('Awaiting approval · 0 writes');
+    await expect(outcome).toContainText('Next action: Approve or reject plan v1');
     await expect(page.getByRole('region', { name: 'Approval' })).toContainText('Waiting for an approver');
+  });
+
+  test('opens the S8 comparison from the guide, behind why the board matters', async ({ page }) => {
+    await signIn(page);
+    await page
+      .getByRole('region', { name: 'Start here' })
+      .getByRole('link', { name: 'Rules and board side by side' })
+      .first()
+      .click();
+    await expect(page.getByRole('heading', { name: 'Case C-000008', exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Outcome' })).toContainText('Escalated · 0 writes');
+    await expect(page.getByRole('button', { name: /^Why the board matters/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    await expect(
+      page.getByRole('region', { name: 'S8 side by side: rules alone and the board' }),
+    ).toBeVisible();
+  });
+
+  test("keeps the case page's tab in the address", async ({ page }) => {
+    await signIn(page);
+    await go(page, '/cases/C-000008');
+    await page.getByRole('tab', { name: 'Evidence' }).click();
+    await expect(page).toHaveURL(/#\/cases\/C-000008\?tab=evidence$/);
+    await expect(page.getByRole('region', { name: 'Evidence' })).toContainText('Encounter timeline');
+    // A link that names the tab opens it
+    await go(page, '/cases/C-000009');
+    await go(page, '/cases/C-000008?tab=evidence');
+    await expect(page.getByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
+    await page.getByRole('tab', { name: 'Audit trail' }).click();
+    await expect(page.getByRole('region', { name: 'Timeline' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'In the Management Portal' })).toBeVisible();
   });
 
   test('the cases list says who investigated each case', async ({ page }) => {

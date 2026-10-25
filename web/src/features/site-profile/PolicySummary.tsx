@@ -1,4 +1,7 @@
-import { Badge, Card, SimpleGrid, Stack, Text, Title } from '@mantine/core';
+import { Card, SimpleGrid, Stack, Text, Title } from '@mantine/core';
+import { IconFileDescription, IconUserCheck, IconUsers, type Icon } from '@tabler/icons-react';
+import { StatusBadge } from '@/components/StatusBadge';
+import type { Tone } from '@/lib/tone';
 import type { SiteProfile } from '@/api/types';
 import {
   KINDS,
@@ -10,23 +13,27 @@ import {
   receiversAt,
 } from './profile';
 
-const COLOURS: Record<string, string> = {
-  automatic: 'teal',
-  approval: 'blue',
-  per_chain: 'orange',
-  board: 'grape',
+/** How a kind is released: by the site's written policy (information, so it stands out), else by people. */
+const RELEASES: Record<string, { tone: Tone; icon: Icon }> = {
+  automatic: { tone: 'info', icon: IconFileDescription },
+  approval: { tone: 'neutral', icon: IconUserCheck },
+  per_chain: { tone: 'neutral', icon: IconUserCheck },
+  board: { tone: 'neutral', icon: IconUsers },
 };
 
 /**
- * Who approves what, at a glance: one card per tier, each chain kind with how it is released. The value is always
+ * Who releases what, at a glance: one card per tier, each chain kind with how it is released. The value is always
  * written out, so the colour is never the only signal.
  */
 export function PolicySummary({ profile }: { profile: SiteProfile }) {
   return (
-    <Stack gap="xs">
+    <Stack gap="xs" data-tour="site-summary">
       <Title order={2} fz="lg" id="site-summary-title">
-        Who approves what
+        Who releases each write
       </Title>
+      <Text size="sm" c="dimmed">
+        Every write passes the gate first; then a person, or the site's written policy, releases it.
+      </Text>
       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm" role="list" aria-labelledby="site-summary-title">
         {TIERS.map((tier) => {
           const receivers = receiversAt(profile, tier);
@@ -42,13 +49,16 @@ export function PolicySummary({ profile }: { profile: SiteProfile }) {
                   return (
                     <Stack key={kind} gap={2}>
                       <Text size="sm">{KIND_LABELS[kind][0].toUpperCase() + KIND_LABELS[kind].slice(1)}</Text>
-                      <Badge
-                        color={COLOURS[value] ?? 'gray'}
-                        variant="light"
-                        style={{ textTransform: 'none', alignSelf: 'flex-start' }}
-                      >
-                        {POLICY_SHORT[value] ?? value}
-                      </Badge>
+                      <span style={{ alignSelf: 'flex-start' }}>
+                        <StatusBadge
+                          {...(RELEASES[value] ?? { tone: 'neutral' })}
+                          label={
+                            value === 'automatic'
+                              ? "automatic: the site's written policy"
+                              : (POLICY_SHORT[value] ?? value)
+                          }
+                        />
+                      </span>
                     </Stack>
                   );
                 })}
@@ -65,8 +75,8 @@ export function PolicySummary({ profile }: { profile: SiteProfile }) {
         .
       </Text>
       <Text size="xs" c="dimmed">
-        Automatic still means gated, rehearsed and verified: only the person's approval is left out. A tier
-        not set for a kind needs one approval.
+        Automatic means the site's written policy releases the write: it is still gated, rehearsed and
+        verified, only the person's approval is left out. A tier not set for a kind needs one approval.
       </Text>
     </Stack>
   );

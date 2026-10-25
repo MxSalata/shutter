@@ -1,4 +1,4 @@
-import { Card, List, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
+import { Anchor, Card, List, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
 import evaluation from '../../../../docs/readme/evaluation.json';
 import evaluationText from '../../../../docs/readme/evaluation.md?raw';
 import boundary from '../../../../docs/readme/boundary.json';
@@ -90,6 +90,60 @@ function tokens(p: EvaluationPass): string {
   return parts.join(' · ');
 }
 
+/**
+ * The headline result with its scope and its limits beside it, never further down the page: what the figure counts,
+ * which set it was measured on, and what is planned but not yet reported.
+ */
+function Headline({ data }: { data: Evaluation }) {
+  const t = data.totals;
+  return (
+    <Card padding="md" component="section" aria-labelledby="headline-title" data-tour="evaluation-headline">
+      <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
+        <Stack gap={2}>
+          <Title order={2} fz="sm" c="dimmed" fw={600} id="headline-title">
+            The board against the expected outcome
+          </Title>
+          <Text fz={28} fw={650} className="tabular">
+            {t.scored_passes ? `${t.board_matches} of ${t.scored_passes}` : 'None scored'}
+          </Text>
+          <Text size="sm">scored passes gave the scenario's expected outcome</Text>
+        </Stack>
+        <Stack gap={2}>
+          <Text size="sm" fw={600}>
+            Scope
+          </Text>
+          <Text size="sm">
+            {`${t.scenarios} scenarios, ${t.cases} cases and ${t.passes} passes (${t.passes - t.scored_passes} not scored), from the recorded set: one recording per member, on the scenarios the catalogue was written alongside.`}
+          </Text>
+        </Stack>
+        <Stack gap={2}>
+          <Text size="sm" fw={600}>
+            Limits
+          </Text>
+          <Text size="sm">
+            Planned, not yet reported: repeat runs of each scenario, held-out variants, and a comparison with
+            a single investigator. A match shows agreement with each scenario's expected outcome, on scenarios
+            the catalogue was written alongside; it is not evidence of general reliability.{' '}
+            {/* The hash is the router's, so the link scrolls rather than changing it */}
+            <Anchor
+              component="button"
+              type="button"
+              size="sm"
+              onClick={() => {
+                const target = document.getElementById('not-measured-title');
+                target?.scrollIntoView?.({ block: 'start' });
+                target?.focus({ preventScroll: true });
+              }}
+            >
+              What is not yet measured
+            </Anchor>
+          </Text>
+        </Stack>
+      </SimpleGrid>
+    </Card>
+  );
+}
+
 /** The page; a test may pass other documents of the same shapes. */
 export default function EvaluationPage({
   data = EVALUATION,
@@ -114,6 +168,7 @@ export default function EvaluationPage({
         subtitle="How the board decides: its disposition against each scenario's expected outcome, every member's own view and confidence, how far they agreed, and what each pass cost in tokens, money and time."
       />
       <Stack gap="md">
+        <Headline data={data} />
         <Card padding="md">
           <Stack gap="sm">
             <Text size="sm" fw={600}>
@@ -259,8 +314,13 @@ export default function EvaluationPage({
         </Card>
 
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-          <Card padding="md" component="section" aria-labelledby="not-measured-title">
-            <Title order={2} fz="lg" id="not-measured-title" mb="sm">
+          <Card
+            padding="md"
+            component="section"
+            aria-labelledby="not-measured-title"
+            data-tour="evaluation-limits"
+          >
+            <Title order={2} fz="lg" id="not-measured-title" mb="sm" tabIndex={-1}>
               Not yet measured
             </Title>
             <List size="sm" spacing="sm">

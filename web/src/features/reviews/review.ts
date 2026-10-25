@@ -18,13 +18,6 @@ export const READ_ONLY =
 
 export const SEVERITIES: Severity[] = ['high', 'medium', 'low', 'info'];
 
-export const SEVERITY_COLOURS: Record<Severity, string> = {
-  high: 'red',
-  medium: 'orange',
-  low: 'yellow',
-  info: 'gray',
-};
-
 export const CONFIDENCE_HINTS: Record<string, string> = {
   confirmed: 'Read from the configuration',
   consistent: 'The configuration is consistent with the pattern',
@@ -112,7 +105,7 @@ export function describeAgent(agent: ReviewAgent, reviewState: string): AgentVie
     case 'ok':
       return {
         title: agent.mode === 'replay' ? 'Ranked and explained (recorded)' : 'Ranked and explained',
-        colour: 'teal',
+        colour: 'blue',
         text:
           agent.mode === 'replay'
             ? 'The explanations were recorded on a run with a model for this exact configuration and are replayed here. The agent ranked the findings within their severity tiers only.'
@@ -133,7 +126,7 @@ export function describeAgent(agent: ReviewAgent, reviewState: string): AgentVie
     case 'schema_failed':
       return {
         title: 'Explanation not accepted',
-        colour: 'orange',
+        colour: 'yellow',
         text: `The agent's ranking was refused${agent.error ? `: ${agent.error}` : ''}. The findings stay in the deterministic order.`,
       };
     case 'error':

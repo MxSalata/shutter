@@ -1,7 +1,7 @@
 import { createTheme, rem, type MantineColorsTuple, type MantineThemeOverride } from '@mantine/core';
 
 export const APP_NAME = 'Shutter';
-export const APP_TAGLINE = 'Failed messages, investigated, gated, approved and verified';
+export const APP_TAGLINE = 'Failed messages, investigated, gated, released and verified';
 
 /**
  * The primary: an ocean blue-teal rather than Mantine's stock indigo. Shades 7 to 9 carry

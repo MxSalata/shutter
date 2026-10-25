@@ -21,13 +21,13 @@ import {
   IconClipboardSearch,
   IconContrast,
   IconDeviceDesktop,
-  IconFlask,
   IconFlask2,
   IconHeartbeat,
   IconListDetails,
   IconLogout,
   IconMoon,
   IconPalette,
+  IconPlayerPlay,
   IconSettings,
   IconStack2,
   IconSun,
@@ -44,70 +44,37 @@ import { useAppearance, type ContrastSetting, type PaletteSetting } from '@/stor
 import { useResolvedContrast } from './useApplyAppearance';
 import { MAIN_ID, SkipLink } from './SkipLink';
 import { DEMO } from '@/demo';
+import { Guide } from '@/features/guide/Guide';
+import { HelpMenu } from '@/features/guide/HelpMenu';
 
+/**
+ * The navigation in three groups, by what a visit is for: running and following the recovery, configuring it, and
+ * the evidence about the installation and the board. Short labels only; each page's introduction says what it is.
+ */
 const NAV = [
   {
-    to: '/scenarios',
-    label: 'Scenarios',
-    icon: IconFlask2,
-    color: 'violet',
-    hint: 'Play a failure and watch Shutter handle it',
+    group: 'Operate',
+    items: [
+      { to: '/scenarios', label: 'Scenarios', icon: IconFlask2 },
+      { to: '/cases', label: 'Cases', icon: IconListDetails },
+      { to: '/incidents', label: 'Incidents', icon: IconStack2 },
+      { to: '/reviews', label: 'Production review', icon: IconClipboardSearch },
+    ],
   },
   {
-    to: '/cases',
-    label: 'Cases',
-    icon: IconListDetails,
-    color: 'shutter',
-    hint: 'Every failed message Shutter has opened',
+    group: 'Configure',
+    items: [
+      { to: '/site-profile', label: 'Site profile', icon: IconBuildingHospital },
+      { to: '/library', label: 'Agent library', icon: IconBooks },
+      { to: '/settings', label: 'Settings and costs', icon: IconSettings },
+    ],
   },
   {
-    to: '/incidents',
-    label: 'Incidents',
-    icon: IconStack2,
-    color: 'orange',
-    hint: 'Many failures to one receiver, released in order',
-  },
-  {
-    to: '/reviews',
-    label: 'Production review',
-    icon: IconClipboardSearch,
-    color: 'cyan',
-    hint: "A read-only pass over a production's settings and failures",
-  },
-  {
-    to: '/site-profile',
-    label: 'Site profile',
-    icon: IconBuildingHospital,
-    color: 'teal',
-    hint: 'Receivers, tiers, who approves what, incidents',
-  },
-  {
-    to: '/library',
-    label: 'Agent library',
-    icon: IconBooks,
-    color: 'grape',
-    hint: 'The board members and the coordinator',
-  },
-  {
-    to: '/settings',
-    label: 'Settings and costs',
-    icon: IconSettings,
-    color: 'gray',
-    hint: 'Agent items, models, prices, costs',
-  },
-  {
-    to: '/evaluation',
-    label: 'Evaluation',
-    icon: IconChartBar,
-    color: 'indigo',
-    hint: 'How the board decides, from its recorded runs',
-  },
-  {
-    to: '/health',
-    label: 'Health',
-    icon: IconHeartbeat,
-    color: 'red',
-    hint: "The installation's readiness checks",
+    group: 'Evidence',
+    items: [
+      { to: '/evaluation', label: 'Evaluation', icon: IconChartBar },
+      { to: '/health', label: 'Health', icon: IconHeartbeat },
+    ],
   },
 ];
 
@@ -216,7 +183,7 @@ function UserMenu() {
         <Group gap={4} px="sm" pb="xs">
           {roles.length ? (
             roles.map((r) => (
-              <Badge key={r} size="sm" color={r === 'approver' ? 'grape' : 'indigo'}>
+              <Badge key={r} size="sm" color="gray" variant="outline">
                 {r}
               </Badge>
             ))
@@ -282,32 +249,37 @@ export function AppLayout() {
                 <Badge
                   size="sm"
                   variant="filled"
-                  color="grape"
-                  leftSection={<IconFlask size={12} />}
+                  color="gray"
+                  leftSection={<IconPlayerPlay size={12} aria-hidden />}
                   tabIndex={0}
                 >
                   DEMO
                 </Badge>
               </Tooltip>
             ) : null}
+            <HelpMenu />
             <AppearanceMenu />
             <UserMenu />
           </Group>
         </Group>
       </AppShell.Header>
       <AppShell.Navbar p="xs" aria-label="Main">
-        {NAV.map((item) => (
-          <NavLink
-            key={item.to}
-            component={RouterNavLink}
-            to={item.to}
-            label={item.label}
-            description={item.hint}
-            leftSection={<item.icon size={18} stroke={1.6} className="nav-icon" />}
-            onClick={close}
-            styles={{ description: { lineHeight: 1.3 } }}
-            style={{ ['--nav-icon' as string]: `var(--mantine-color-${item.color}-text)` }}
-          />
+        {NAV.map(({ group, items }) => (
+          <div key={group} role="group" aria-labelledby={`nav-${group}`} className="nav-group">
+            <Text id={`nav-${group}`} size="xs" fw={600} c="dimmed" tt="uppercase" px="sm" pt="sm" pb={4}>
+              {group}
+            </Text>
+            {items.map((item) => (
+              <NavLink
+                key={item.to}
+                component={RouterNavLink}
+                to={item.to}
+                label={item.label}
+                leftSection={<item.icon size={18} stroke={1.6} className="nav-icon" />}
+                onClick={close}
+              />
+            ))}
+          </div>
         ))}
       </AppShell.Navbar>
       {/* The skip link's target: focusable by script only, so it is no tab stop of its own. */}
@@ -318,6 +290,7 @@ export function AppLayout() {
           <Outlet key={displayZone()} />
         </Suspense>
       </AppShell.Main>
+      <Guide />
     </AppShell>
   );
 }

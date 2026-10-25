@@ -313,6 +313,7 @@ function ProfileForm({
         </Section>
         <Section
           id="site-approvals"
+          tour="site-approvals"
           title="Approvals"
           note="Question 7. Automatic is still gated, rehearsed and verified; only the person's approval is left out."
         >
@@ -566,7 +567,7 @@ function Profile({ view }: { view: SiteProfileView }) {
     reseed(v);
     setReviewing(0);
     notifications.show({
-      color: 'teal',
+      color: 'blue',
       title: `Version ${v.version} saved`,
       message: 'Shutter decides by it from now on, open cases that have not reached their approval included.',
     });
@@ -674,7 +675,7 @@ function Profile({ view }: { view: SiteProfileView }) {
       ) : null}
       {editable ? (
         <Group gap="sm">
-          <Button color="teal" onClick={review} disabled={!canReview}>
+          <Button onClick={review} disabled={!canReview}>
             {dirty ? 'Review and save…' : 'Confirm these answers…'}
           </Button>
           <Button variant="default" disabled={!dirty} onClick={() => reseed(base)}>

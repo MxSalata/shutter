@@ -1,13 +1,16 @@
-import { Accordion, Badge, Card, Group, List, SimpleGrid, Stack, Text, Tooltip } from '@mantine/core';
+import { Accordion, Badge, Card, Group, List, Stack, Text } from '@mantine/core';
+import { IconMessageExclamation, IconUsers } from '@tabler/icons-react';
 import { useRuns, useSettings } from '@/api/hooks';
 import type { AgentRun, Mode } from '@/api/types';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PortalLink } from '@/components/PortalLink';
 import { DispositionBadge } from '@/components/StateBadge';
+import { StatusBadge } from '@/components/StatusBadge';
 import { JsonBlock } from '@/components/JsonBlock';
 import { costAtPrice } from '@/lib/cost';
 import { asArray, asObject } from '@/lib/json';
 import { formatDuration, formatInt, formatUsd, humanize, keyLabel } from '@/lib/format';
+import { PROVENANCE } from '@/lib/status';
 import { describeEntry } from './derive';
 import { showEvidence } from './evidenceLinks';
 import { NotYet, Section } from './Section';
@@ -34,30 +37,21 @@ function RunStats({ run, portalBase }: { run: AgentRun; portalBase: string }) {
   return (
     <Stack gap={4}>
       <Group gap={6} wrap="wrap">
-        <Tooltip
+        <StatusBadge
+          {...PROVENANCE[replay ? 'replay' : 'live']}
+          size="xs"
           label={
+            replay
+              ? `${PROVENANCE.replay.label}${run.model ? ` · ${run.model}` : ''}`
+              : `${PROVENANCE.live.label} · ${run.model}`
+          }
+          hint={
             replay
               ? `Replayed from a recorded live run${run.model ? ` on ${run.model}` : ''}: no model was called now`
               : `A live run on ${run.model}`
           }
-          multiline
-          maw={300}
-        >
-          <Badge
-            size="xs"
-            color={replay ? 'gray' : 'indigo'}
-            variant="light"
-            style={{ textTransform: 'none' }}
-            tabIndex={0}
-          >
-            {replay ? `Recorded run${run.model ? ` · ${run.model}` : ''}, replayed` : `Live · ${run.model}`}
-          </Badge>
-        </Tooltip>
-        {run.status !== 'ok' ? (
-          <Badge size="xs" color="red" style={{ textTransform: 'none' }}>
-            {humanize(run.status)}
-          </Badge>
-        ) : null}
+        />
+        {run.status !== 'ok' ? <StatusBadge tone="blocking" size="xs" label={humanize(run.status)} /> : null}
       </Group>
       {replay && !Number(run.promptTokens) && !Number(run.completionTokens) ? (
         <Text size="xs" c="dimmed">
@@ -175,46 +169,91 @@ function ToolCalls({ run }: { run: AgentRun }) {
   );
 }
 
-/** A member's verdict, first on its card: its disposition and, for a specialist, its own confidence in it. */
-function Verdict({ disposition, confidence }: { disposition: string; confidence?: number }) {
+/** A specialist's own confidence in its finding: shown second, and never read by the gate. */
+function confidenceText(confidence: number): string {
+  return Number.isFinite(confidence) && confidence > 0
+    ? `Confidence ${Math.round(confidence * 100)}%, self-reported; not used by the gate`
+    : '';
+}
+
+/** The details of a member's finding: its reasoning, what it cites, its run and its tool calls. */
+function FindingDetail({ run, portalBase }: { run: AgentRun; portalBase: string }) {
+  const result = asObject(run.finding?.findings) ?? asObject(run.result) ?? {};
+  const confidence = confidenceText(Number(result.confidence ?? run.finding?.confidence));
   return (
-    <Group gap={6} wrap="wrap">
-      <DispositionBadge disposition={disposition} />
-      {confidence !== undefined && Number.isFinite(confidence) && confidence > 0 ? (
-        <Tooltip label="The agent's own confidence in its finding: not a measured probability">
-          <Badge size="sm" variant="light" color="gray" tabIndex={0} style={{ textTransform: 'none' }}>
-            confidence {Math.round(confidence * 100)}%
-          </Badge>
-        </Tooltip>
+    <Stack gap="xs">
+      {run.member?.perspective ? (
+        <Text size="xs" c="dimmed">
+          {run.member.perspective}
+        </Text>
       ) : null}
-    </Group>
+      <Text size="sm">{String(result.summary ?? run.finding?.summary ?? run.content ?? '')}</Text>
+      {confidence ? (
+        <Text size="xs" c="dimmed">
+          {confidence}
+        </Text>
+      ) : null}
+      <ResultLists result={result} />
+      <EvidenceRefs refs={result.evidence_refs} />
+      <RunStats run={run} portalBase={portalBase} />
+      <ToolCalls run={run} />
+    </Stack>
   );
 }
 
-function FindingCard({ run, portalBase }: { run: AgentRun; portalBase: string }) {
+/** A finding's disposition, from its structured result or the stored finding. */
+function dispositionOf(run: AgentRun): string {
   const result = asObject(run.finding?.findings) ?? asObject(run.result) ?? {};
-  const confidence = Number(result.confidence ?? run.finding?.confidence);
+  return String(result.disposition ?? run.finding?.disposition ?? '');
+}
+
+/**
+ * A specialist as one compact row: its proposed disposition, its role and its reason in a sentence, with the rest
+ * on demand. A specialist that disagreed with the plan is open from the start, so dissent is read, not hidden.
+ */
+function SpecialistRow({
+  run,
+  portalBase,
+  dissent,
+}: {
+  run: AgentRun;
+  portalBase: string;
+  dissent: boolean;
+}) {
+  const result = asObject(run.finding?.findings) ?? asObject(run.result) ?? {};
+  return (
+    <Accordion.Item value={String(run.id ?? run.memberCode)}>
+      <Accordion.Control>
+        <Stack gap={2}>
+          <Group gap={6} wrap="wrap">
+            <DispositionBadge disposition={dispositionOf(run)} />
+            <Text fw={600} size="sm">
+              {run.member?.name ?? humanize(run.memberCode)}
+            </Text>
+            {dissent ? (
+              <StatusBadge tone="attention" size="xs" label="Dissent" icon={IconMessageExclamation} />
+            ) : null}
+          </Group>
+          <Text size="sm" c="dimmed" lineClamp={2}>
+            {String(result.summary ?? run.finding?.summary ?? run.content ?? '')}
+          </Text>
+        </Stack>
+      </Accordion.Control>
+      <Accordion.Panel>
+        <FindingDetail run={run} portalBase={portalBase} />
+      </Accordion.Panel>
+    </Accordion.Item>
+  );
+}
+
+/** The single investigator's finding, as a card: there is no board to set it beside. */
+function FindingCard({ run, portalBase }: { run: AgentRun; portalBase: string }) {
   return (
     <Card padding="sm" withBorder>
       <Stack gap="xs">
-        {/* The verdict first, then who gave it and from which view, then the reasoning behind it */}
-        <Verdict
-          disposition={String(result.disposition ?? run.finding?.disposition ?? '')}
-          confidence={confidence}
-        />
-        <Stack gap={0}>
-          <Text fw={600}>{run.member?.name ?? humanize(run.memberCode)}</Text>
-          {run.member?.perspective ? (
-            <Text size="xs" c="dimmed" lineClamp={3}>
-              {run.member.perspective}
-            </Text>
-          ) : null}
-        </Stack>
-        <Text size="sm">{String(result.summary ?? run.finding?.summary ?? run.content ?? '')}</Text>
-        <ResultLists result={result} />
-        <EvidenceRefs refs={result.evidence_refs} />
-        <RunStats run={run} portalBase={portalBase} />
-        <ToolCalls run={run} />
+        <DispositionBadge disposition={dispositionOf(run)} />
+        <Text fw={600}>{run.member?.name ?? humanize(run.memberCode)}</Text>
+        <FindingDetail run={run} portalBase={portalBase} />
       </Stack>
     </Card>
   );
@@ -261,8 +300,41 @@ export function BoardPanel({
         : settledByPolicy
           ? "The scenario catalogue matched the case and the site's profile says who decides it. A case it leaves to the board shows the board's findings here."
           : 'Three specialists read the same evidence in parallel, each from one perspective, and cite what they used. The coordinator keeps their disagreements and proposes one plan.';
+  const coordinatorResult = asObject(coordinator?.result) ?? {};
+  const disagreements = asArray(coordinatorResult.disagreements);
+  const dissent = disagreements.length;
+  // A specialist dissents when the coordinator kept its disagreement, or when it proposed another disposition
+  const dissenters = new Set(disagreements.map((d) => String(asObject(d)?.member ?? '')));
+  const dissents = (r: AgentRun) =>
+    !!coordinator &&
+    (dissenters.has(r.memberCode) ||
+      (!!dispositionOf(r) && dispositionOf(r) !== String(coordinatorResult.disposition ?? '')));
   return (
-    <Section id="board" title={title} note={note}>
+    <Section
+      id="board"
+      tour="case-board"
+      title={title}
+      note={note}
+      aside={
+        coordinator ? (
+          dissent ? (
+            <StatusBadge
+              tone="attention"
+              label={`${dissent} dissent${dissent === 1 ? '' : 's'} kept`}
+              hint="A specialist disagreed with the plan; the coordinator kept the disagreement in it. Dissent is not an error."
+              icon={IconMessageExclamation}
+            />
+          ) : (
+            <StatusBadge
+              tone="neutral"
+              label="Unanimous"
+              hint="The specialists agreed; agreement is not a safety check, the gate is"
+              icon={IconUsers}
+            />
+          )
+        ) : null
+      }
+    >
       {runs.isError ? <ErrorAlert error={runs.error} title="The agent runs could not be read" /> : null}
       {mode === 'rules' && !notConvened ? <NotYet>No agent runs in this mode.</NotYet> : null}
       {notConvened ? null : settledByPolicy ? (
@@ -273,27 +345,15 @@ export function BoardPanel({
       ) : mode !== 'rules' && runs.isSuccess && list.length === 0 ? (
         <NotYet>No agent has answered yet.</NotYet>
       ) : null}
-      {specialists.length ? (
-        <SimpleGrid
-          cols={{ base: 1, sm: Math.min(2, specialists.length), lg: Math.min(3, specialists.length) }}
-          spacing="sm"
-        >
-          {specialists.map((r, i) => (
-            <FindingCard key={String(r.id ?? i)} run={r} portalBase={portalBase} />
-          ))}
-        </SimpleGrid>
-      ) : null}
-      {generalist ? <FindingCard run={generalist} portalBase={portalBase} /> : null}
+      {/* The coordinator's plan and rationale first, then each specialist as a row */}
       {coordinator ? (
         <Card padding="sm" withBorder bg="var(--mantine-color-default-hover)">
           <Stack gap="xs">
-            <Verdict disposition={String(asObject(coordinator.result)?.disposition ?? '')} />
+            <DispositionBadge disposition={String(coordinatorResult.disposition ?? '')} />
             <Text fw={600}>Coordinator</Text>
-            <Text size="sm">
-              {String(asObject(coordinator.result)?.summary ?? coordinator.content ?? '')}
-            </Text>
-            <ResultLists result={asObject(coordinator.result) ?? {}} />
-            {!asArray(asObject(coordinator.result)?.disagreements).length ? (
+            <Text size="sm">{String(coordinatorResult.summary ?? coordinator.content ?? '')}</Text>
+            <ResultLists result={coordinatorResult} />
+            {!dissent ? (
               <Text size="xs" c="dimmed">
                 No disagreements to keep: the specialists agreed.
               </Text>
@@ -302,6 +362,30 @@ export function BoardPanel({
           </Stack>
         </Card>
       ) : null}
+      {specialists.length ? (
+        <Stack gap={4}>
+          <Text size="xs" c="dimmed">
+            The specialists, each from one perspective. A confidence is the agent&apos;s own and is not used
+            by the gate; agreement is not a safety check either.
+          </Text>
+          <Accordion
+            variant="separated"
+            multiple
+            chevronPosition="left"
+            defaultValue={specialists.filter(dissents).map((r) => String(r.id ?? r.memberCode))}
+          >
+            {specialists.map((r) => (
+              <SpecialistRow
+                key={String(r.id ?? r.memberCode)}
+                run={r}
+                portalBase={portalBase}
+                dissent={dissents(r)}
+              />
+            ))}
+          </Accordion>
+        </Stack>
+      ) : null}
+      {generalist ? <FindingCard run={generalist} portalBase={portalBase} /> : null}
     </Section>
   );
 }

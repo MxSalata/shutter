@@ -1,7 +1,6 @@
 import {
   Accordion,
   Alert,
-  Badge,
   Button,
   Code,
   Group,
@@ -13,7 +12,16 @@ import {
   TextInput,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconCircleCheck, IconMailForward } from '@tabler/icons-react';
+import {
+  IconAlertCircle,
+  IconCircleCheck,
+  IconClock,
+  IconMailForward,
+  IconMinus,
+  IconPencil,
+  IconSend,
+  type Icon,
+} from '@tabler/icons-react';
 import { useState } from 'react';
 import { newIdempotencyKey } from '@/api/client';
 import {
@@ -27,18 +35,28 @@ import {
 } from '@/api/hooks';
 import type { CaseDetail, Escalation } from '@/api/types';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
+import type { Tone } from '@/lib/tone';
 import { describeError, isApiError } from '@/lib/errors';
 import { addressesProblem, closeNeedsApprover, controlProblem } from '../../site-profile/profile';
 import { formatZoned, humanize } from '@/lib/format';
 import { Section } from './Section';
 
-const STATE_COLOURS: Record<string, string> = {
-  draft: 'gray',
-  queued: 'blue',
-  sent: 'teal',
-  failed: 'red',
-  cancelled: 'gray',
+/** An escalation email's states: sending it is an action taken, not a result verified, so sent is information. */
+const EMAIL_TONES: Record<string, Tone> = {
+  draft: 'neutral',
+  queued: 'info',
+  sent: 'info',
+  failed: 'blocking',
+  cancelled: 'neutral',
+};
+const EMAIL_ICONS: Record<string, Icon> = {
+  draft: IconPencil,
+  queued: IconClock,
+  sent: IconSend,
+  failed: IconAlertCircle,
+  cancelled: IconMinus,
 };
 
 /** The dialog: a draft Shutter built from the case, which the person checks, edits and sends. */
@@ -81,7 +99,7 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
       : draft;
     await send.mutateAsync({ seq: draft.seq, bodyDigest: stored.bodyDigest, idempotencyKey: key });
     notifications.show({
-      color: 'teal',
+      color: 'blue',
       title: `Escalation ${draft.seq} sent`,
       message: `To ${to}. Once they have corrected the systems, mark the case as handled${c.failureKind === 'withheld' ? '' : ', or reinvestigate it'}.`,
     });
@@ -180,7 +198,7 @@ function MarkHandled({ c }: { c: CaseDetail }) {
         onSuccess: () => {
           setOpened(false);
           notifications.show({
-            color: 'teal',
+            color: 'blue',
             title: `${c.caseId} marked as handled`,
             message: 'Closed as handled by hand; any email of the case not yet sent is cancelled.',
           });
@@ -190,7 +208,7 @@ function MarkHandled({ c }: { c: CaseDetail }) {
   return (
     <>
       <Group gap="sm" wrap="wrap">
-        <Button variant="light" color="teal" leftSection={<IconCircleCheck size={16} />} onClick={open}>
+        <Button variant="light" leftSection={<IconCircleCheck size={16} />} onClick={open}>
           Mark as handled by the team…
         </Button>
         <Text size="xs" c="dimmed">
@@ -217,7 +235,7 @@ function MarkHandled({ c }: { c: CaseDetail }) {
             <Button variant="default" onClick={() => setOpened(false)}>
               Cancel
             </Button>
-            <Button color="teal" onClick={submit} loading={close.isPending} disabled={!reason.trim()}>
+            <Button onClick={submit} loading={close.isPending} disabled={!reason.trim()}>
               Close the case
             </Button>
           </Group>
@@ -280,13 +298,11 @@ export function EscalationPanel({ c }: { c: CaseDetail }) {
                 <Text size="sm" fw={600}>
                   Escalation {e.seq}
                 </Text>
-                <Badge
-                  color={STATE_COLOURS[e.state] ?? 'gray'}
-                  variant="light"
-                  style={{ textTransform: 'none' }}
-                >
-                  {humanize(e.state)}
-                </Badge>
+                <StatusBadge
+                  tone={EMAIL_TONES[e.state] ?? 'neutral'}
+                  label={humanize(e.state)}
+                  icon={EMAIL_ICONS[e.state]}
+                />
                 <Text size="xs" c="dimmed">
                   {e.teamName ? `${e.teamName}, ` : ''}
                   {e.to || 'no recipient yet'}
@@ -352,7 +368,8 @@ export function EscalationPanel({ c }: { c: CaseDetail }) {
           </Accordion.Item>
         </Accordion>
       ))}
-      {!stopped ? null : me?.operator ? (
+      {/* Until the user is read, neither the actions nor the note that they need the operator role */}
+      {!stopped || me === undefined ? null : me?.operator ? (
         <Group gap="sm" align="flex-end" wrap="wrap">
           {teams.length ? (
             <NativeSelect

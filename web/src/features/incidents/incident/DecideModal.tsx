@@ -44,7 +44,7 @@ export function useDecideDialog(inc: IncidentDetail) {
         onSuccess: () => {
           setDecision(null);
           notifications.show({
-            color: decision === 'approve' ? 'teal' : 'gray',
+            color: decision === 'approve' ? 'blue' : 'gray',
             title: decision === 'approve' ? 'Approved' : 'Rejected',
             message:
               decision === 'approve'
@@ -98,7 +98,7 @@ export function useDecideDialog(inc: IncidentDetail) {
             Cancel
           </Button>
           <Button
-            color={decision === 'approve' ? 'teal' : 'red'}
+            color={decision === 'approve' ? undefined : 'red'}
             loading={decide.isPending}
             onClick={submit}
             disabled={!!changed || !inc.planDigest}

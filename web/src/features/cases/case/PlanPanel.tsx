@@ -1,9 +1,12 @@
-import { Accordion, Badge, Group, List, Stack, Table, Text, ThemeIcon, Tooltip } from '@mantine/core';
-import { IconCheck, IconQuestionMark, IconX } from '@tabler/icons-react';
+import { Accordion, Group, List, Stack, Table, Text } from '@mantine/core';
+import { IconCircleCheck, IconCircleX } from '@tabler/icons-react';
 import type { GateDecision, PlanView } from '@/api/types';
 import { Digest } from '@/components/Digest';
+import { ErrorAlert } from '@/components/ErrorAlert';
 import { DispositionBadge } from '@/components/StateBadge';
+import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
+import { checkCounts, CHECK_STATES, checkState, gateOutcome } from '@/lib/status';
 import { asArray, asObject } from '@/lib/json';
 import { checksOf } from './derive';
 import { humanize } from '@/lib/format';
@@ -16,19 +19,13 @@ const STAGES: Record<string, string> = {
   dispatch: 'At dispatch, after the approval and a fresh read of the receiver',
 };
 
-const RESULT = {
-  pass: { colour: 'teal', icon: IconCheck, label: 'Pass' },
-  block: { colour: 'red', icon: IconX, label: 'Block' },
-  unknown: { colour: 'orange', icon: IconQuestionMark, label: 'Unknown: blocks a write' },
-} as const;
-
 function GateTable({ d }: { d: GateDecision }) {
   const checks = checksOf(d);
   return (
     <Stack gap={6}>
       <Group gap="sm" wrap="wrap">
         <Text size="xs" c="dimmed">
-          Policy {d.policyVersion}, checked
+          {`${checkCounts(checks)}. Policy ${d.policyVersion}, checked`}
         </Text>
         <Timestamp iso={d.at} size="xs" c="dimmed" />
       </Group>
@@ -37,32 +34,21 @@ function GateTable({ d }: { d: GateDecision }) {
           <Table.Thead>
             <Table.Tr>
               <Table.Th w={150}>Check</Table.Th>
-              <Table.Th w={70}>Result</Table.Th>
+              <Table.Th w={150}>Result</Table.Th>
               <Table.Th w={210}>Reason code</Table.Th>
               <Table.Th>Detail</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {checks.map((c) => {
-              const r = RESULT[c.result] ?? RESULT.unknown;
+              const r = CHECK_STATES[checkState(c)];
               return (
                 <Table.Tr key={c.check}>
                   <Table.Td>
                     <Text size="sm">{humanize(c.check)}</Text>
                   </Table.Td>
                   <Table.Td>
-                    <Tooltip label={r.label}>
-                      <ThemeIcon
-                        size="sm"
-                        radius="xl"
-                        color={r.colour}
-                        variant="light"
-                        role="img"
-                        aria-label={r.label}
-                      >
-                        <r.icon size={14} />
-                      </ThemeIcon>
-                    </Tooltip>
+                    <StatusBadge {...r} hint={undefined} size="sm" />
                   </Table.Td>
                   <Table.Td>
                     <Text size="xs" className="mono-wrap">
@@ -82,7 +68,18 @@ function GateTable({ d }: { d: GateDecision }) {
   );
 }
 
-export function PlanPanel({ view, loading }: { view: PlanView | null | undefined; loading: boolean }) {
+export function PlanPanel({
+  view,
+  loading,
+  error,
+  onRetry,
+}: {
+  view: PlanView | null | undefined;
+  loading: boolean;
+  /** The plan's read error: shown in place of the panel's body. */
+  error?: unknown;
+  onRetry?: () => void;
+}) {
   const p = view?.plan;
   const body = asObject(p?.plan) ?? {};
   const action = asObject(body.action) ?? {};
@@ -92,11 +89,12 @@ export function PlanPanel({ view, loading }: { view: PlanView | null | undefined
   return (
     <Section
       id="plan"
-      title="The plan and the gate"
-      note="One plan, bound by its digest. The gate checks it mechanically against the evidence, before the rehearsal and again before dispatch. An unknown blocks a write as surely as a failed check; the agents can explain the gate's result but cannot override it."
+      title="The plan"
+      note="One plan, bound by its digest: what the gate checks, and what a release names."
       aside={p ? <DispositionBadge disposition={p.disposition} /> : null}
     >
-      {!p ? (
+      {!p && error ? <ErrorAlert error={error} title="The plan could not be read" onRetry={onRetry} /> : null}
+      {!p && !error ? (
         <NotYet>{loading ? 'Loading…' : 'No plan yet: the investigation is still running.'}</NotYet>
       ) : null}
       {p ? (
@@ -162,44 +160,69 @@ export function PlanPanel({ view, loading }: { view: PlanView | null | undefined
               ? `${disagreements.length} disagreement(s) kept in the plan.`
               : 'No disagreements were recorded.'}
           </Text>
-          {(view?.gateDecisions ?? []).length ? (
-            <Accordion
-              variant="separated"
-              multiple
-              defaultValue={[String((view?.gateDecisions ?? []).length - 1)]}
-              chevronPosition="left"
-            >
-              {(view?.gateDecisions ?? []).map((d, i) => (
-                <Accordion.Item key={`${d.stage}-${i}`} value={String(i)}>
-                  <Accordion.Control>
-                    <Group gap="sm" wrap="wrap">
-                      <Text size="sm" fw={600}>
-                        {STAGES[d.stage] ?? humanize(d.stage)}
-                      </Text>
-                      <Badge
-                        color={(RESULT[d.outcome] ?? RESULT.unknown).colour}
-                        style={{ textTransform: 'none' }}
-                      >
-                        {d.outcome === 'pass'
-                          ? 'Every check passed'
-                          : d.outcome === 'block'
-                            ? 'Blocked'
-                            : 'Unknown: blocked'}
-                      </Badge>
-                    </Group>
-                  </Accordion.Control>
-                  <Accordion.Panel>
-                    <GateTable d={d} />
-                  </Accordion.Panel>
-                </Accordion.Item>
-              ))}
-            </Accordion>
-          ) : null}
-          {!(view?.gateDecisions ?? []).length ? (
-            <NotYet>The gate has not checked this plan yet.</NotYet>
-          ) : null}
         </Stack>
       ) : null}
+    </Section>
+  );
+}
+
+/**
+ * The gate's decisions on the plan, the latest open. The gate checks the plan mechanically against the evidence, before
+ * the rehearsal and again before dispatch.
+ */
+export function GatePanel({
+  view,
+  loading,
+  error,
+  onRetry,
+}: {
+  view: PlanView | null | undefined;
+  loading: boolean;
+  /** The plan's read error: shown in place of the panel's body. */
+  error?: unknown;
+  onRetry?: () => void;
+}) {
+  const decisions = view?.gateDecisions ?? [];
+  return (
+    <Section
+      id="gate"
+      title="The gate"
+      note="Mechanical checks of the plan against the evidence, before the rehearsal and again before dispatch. An unknown blocks a write as surely as a failed check; the agents can explain the gate's result but cannot override it."
+    >
+      {decisions.length ? (
+        <Accordion
+          variant="separated"
+          multiple
+          defaultValue={[String(decisions.length - 1)]}
+          chevronPosition="left"
+        >
+          {decisions.map((d, i) => (
+            <Accordion.Item key={`${d.stage}-${i}`} value={String(i)}>
+              <Accordion.Control>
+                <Group gap="sm" wrap="wrap">
+                  <Text size="sm" fw={600}>
+                    {STAGES[d.stage] ?? humanize(d.stage)}
+                  </Text>
+                  <StatusBadge {...gateOutcome(d.outcome, checksOf(d))} />
+                </Group>
+              </Accordion.Control>
+              <Accordion.Panel>
+                <GateTable d={d} />
+              </Accordion.Panel>
+            </Accordion.Item>
+          ))}
+        </Accordion>
+      ) : error && !view ? (
+        <ErrorAlert error={error} title="The gate's decisions could not be read" onRetry={onRetry} />
+      ) : (
+        <NotYet>
+          {loading
+            ? 'Loading…'
+            : view?.plan
+              ? 'The gate has not checked this plan yet.'
+              : 'No plan for the gate yet.'}
+        </NotYet>
+      )}
     </Section>
   );
 }
@@ -221,9 +244,12 @@ export function RehearsalPanel({ view, write }: { view: PlanView | null | undefi
       note="A dry run of the exact action on the downstream system itself, inside a transaction it rolls back. It shows the action would validate and apply against the state it read; it reserves nothing. The dispatch is a separate conditional write, checked again first."
       aside={
         r ? (
-          <Badge color={r.wouldApply ? 'teal' : 'red'} style={{ textTransform: 'none' }}>
-            {r.wouldApply ? 'Would apply' : `Would not apply${r.reason ? `: ${r.reason}` : ''}`}
-          </Badge>
+          <StatusBadge
+            tone={r.wouldApply ? 'positive' : 'blocking'}
+            label={r.wouldApply ? 'Would apply' : `Would not apply${r.reason ? `: ${r.reason}` : ''}`}
+            hint="The dry run checks the action against the receiver; it was rolled back"
+            icon={r.wouldApply ? IconCircleCheck : IconCircleX}
+          />
         ) : null
       }
     >

@@ -59,8 +59,8 @@ describe('SiteProfilePage', () => {
     expect(screen.getByRole('switch', { name: /accepts cancels/ })).not.toBeChecked();
     expect(screen.getByRole('combobox', { name: 'Tier 2, ordered chains' })).toHaveValue('approval');
     expect(screen.getByRole('textbox', { name: 'Failures' })).toHaveValue('5');
-    const summary = screen.getByRole('list', { name: 'Who approves what' });
-    expect(within(summary).getAllByText('automatic').length).toBeGreaterThan(0);
+    const summary = screen.getByRole('list', { name: 'Who releases each write' });
+    expect(within(summary).getAllByText("automatic: the site's written policy").length).toBeGreaterThan(0);
   });
 
   it('asks whether closing a case by hand needs an approver, and sends the answer with the profile', async () => {

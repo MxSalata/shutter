@@ -1,78 +1,83 @@
 import { Badge, Group, Text, Tooltip } from '@mantine/core';
+import {
+  IconAlertCircle,
+  IconCircleCheck,
+  IconClock,
+  IconListDetails,
+  IconProgress,
+} from '@tabler/icons-react';
 import type { FindingStatus, ReviewSummary, Severity } from '@/api/types';
+import { StatusBadge } from '@/components/StatusBadge';
 import { humanize } from '@/lib/format';
-import { CONFIDENCE_HINTS, SEVERITIES, SEVERITY_COLOURS, STATUS_LABELS } from './review';
+import { SEVERITY_STATUS } from '@/lib/status';
+import type { Status } from '@/lib/tone';
+import { CONFIDENCE_HINTS, SEVERITIES, STATUS_LABELS } from './review';
 
-const REVIEW_STATE: Record<string, { colour: string; hint: string }> = {
-  sweeping: { colour: 'blue', hint: "Reading the production's settings, errors and failed messages" },
-  ranking: {
-    colour: 'violet',
-    hint: 'The findings are stored; the agent is ranking them within their tiers',
+const REVIEW_STATE: Record<string, Status> = {
+  sweeping: {
+    tone: 'info',
+    label: 'Sweeping',
+    hint: "Reading the production's settings, errors and failed messages",
+    icon: IconProgress,
   },
-  done: { colour: 'green', hint: 'The review is finished' },
-  failed: { colour: 'red', hint: 'The sweep failed; the reason is on the review' },
+  ranking: {
+    tone: 'info',
+    label: 'Ranking',
+    hint: 'The findings are stored; the agent is ranking them within their tiers',
+    icon: IconProgress,
+  },
+  done: { tone: 'neutral', label: 'Done', hint: 'The review is finished', icon: IconCircleCheck },
+  failed: {
+    tone: 'blocking',
+    label: 'Failed',
+    hint: 'The sweep failed; the reason is on the review',
+    icon: IconAlertCircle,
+  },
 };
 
-const AGENT_STATE: Record<string, { label: string; colour: string; hint: string }> = {
-  pending: { label: 'Agent pending', colour: 'blue', hint: 'The agent has not answered yet' },
-  ok: { label: 'Ranked', colour: 'teal', hint: 'The agent ranked and explained the findings' },
+const AGENT_STATE: Record<string, Status> = {
+  pending: { tone: 'info', label: 'Agent pending', hint: 'The agent has not answered yet', icon: IconClock },
+  ok: {
+    tone: 'info',
+    label: 'Ranked',
+    hint: 'The agent ranked and explained the findings',
+    icon: IconListDetails,
+  },
   no_record: {
+    tone: 'neutral',
     label: 'No recording',
-    colour: 'gray',
     hint: 'No recorded explanation for this configuration: the deterministic order stands',
   },
-  skipped: { label: 'Agent not asked', colour: 'gray', hint: 'The deterministic order stands' },
+  skipped: { tone: 'neutral', label: 'Agent not asked', hint: 'The deterministic order stands' },
   schema_failed: {
+    tone: 'attention',
     label: 'Ranking refused',
-    colour: 'orange',
     hint: "The agent's ranking was not accepted: the deterministic order stands",
   },
   error: {
+    tone: 'blocking',
     label: 'Agent error',
-    colour: 'red',
     hint: 'The agent did not answer: the deterministic order stands',
   },
 };
 
 export function ReviewStateBadge({ state }: { state: string }) {
-  const s = REVIEW_STATE[state];
   return (
-    <Tooltip label={s?.hint ?? state}>
-      <Badge color={s?.colour ?? 'gray'} size="sm" tabIndex={0} style={{ textTransform: 'none' }}>
-        {humanize(state)}
-      </Badge>
-    </Tooltip>
+    <StatusBadge {...(REVIEW_STATE[state] ?? { tone: 'neutral', label: humanize(state), hint: state })} />
   );
 }
 
 export function AgentStateBadge({ state }: { state: string }) {
-  const s = AGENT_STATE[state];
   return (
-    <Tooltip label={s?.hint ?? state}>
-      <Badge
-        variant="outline"
-        color={s?.colour ?? 'gray'}
-        size="sm"
-        tabIndex={0}
-        style={{ textTransform: 'none' }}
-      >
-        {s?.label ?? humanize(state)}
-      </Badge>
-    </Tooltip>
+    <StatusBadge
+      {...(AGENT_STATE[state] ?? { tone: 'neutral', label: humanize(state), hint: state })}
+      variant="outline"
+    />
   );
 }
 
 export function SeverityBadge({ severity }: { severity: Severity }) {
-  return (
-    <Badge
-      color={SEVERITY_COLOURS[severity] ?? 'gray'}
-      size="sm"
-      variant="light"
-      style={{ textTransform: 'none' }}
-    >
-      {humanize(severity)}
-    </Badge>
-  );
+  return <StatusBadge {...(SEVERITY_STATUS[severity] ?? { tone: 'neutral', label: humanize(severity) })} />;
 }
 
 export function ConfidenceText({ confidence }: { confidence: string }) {
@@ -85,11 +90,11 @@ export function ConfidenceText({ confidence }: { confidence: string }) {
   );
 }
 
-export function StatusBadge({ status }: { status: FindingStatus }) {
+export function FindingStatusBadge({ status }: { status: FindingStatus }) {
   return (
     <Badge
-      color={status === 'new' ? 'blue' : 'grape'}
-      variant={status === 'new' ? 'light' : 'filled'}
+      color="gray"
+      variant={status === 'new' ? 'outline' : 'filled'}
       size="sm"
       style={{ textTransform: 'none' }}
     >
@@ -111,15 +116,7 @@ export function SeverityCounts({ summary }: { summary: ReviewSummary }) {
   return (
     <Group gap={4} wrap="wrap">
       {tiers.map((s) => (
-        <Badge
-          key={s}
-          color={SEVERITY_COLOURS[s]}
-          variant="light"
-          size="sm"
-          style={{ textTransform: 'none' }}
-        >
-          {summary.bySeverity![s]} {s}
-        </Badge>
+        <StatusBadge key={s} {...SEVERITY_STATUS[s]} label={`${summary.bySeverity![s]} ${s}`} />
       ))}
     </Group>
   );

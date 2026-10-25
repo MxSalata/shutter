@@ -124,7 +124,6 @@ export function ReviewModal({
             Cancel
           </Button>
           <Button
-            color="teal"
             loading={saving}
             disabled={(tier3.length > 0 && !acknowledged) || problem?.kind === 'stale'}
             onClick={onSave}

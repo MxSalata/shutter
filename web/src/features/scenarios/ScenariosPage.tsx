@@ -15,7 +15,7 @@ import {
   VisuallyHidden,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconPlayerPlay, IconRefresh } from '@tabler/icons-react';
+import { IconPlayerPlay, IconRefresh, IconShieldX } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import {
@@ -33,6 +33,8 @@ import { PageHeader } from '@/components/PageHeader';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { DispositionBadge, StateBadge } from '@/components/StateBadge';
+import { StatusBadge } from '@/components/StatusBadge';
+import { proposedWrites, writes } from '@/lib/status';
 import { describeError } from '@/lib/errors';
 import { formatAge, humanize } from '@/lib/format';
 import { StartHere } from './StartHere';
@@ -100,7 +102,7 @@ function RunBanner({ run }: { run: ScenarioRun }) {
   if (run.state === 'done')
     return (
       <Alert
-        color="teal"
+        color="blue"
         variant="light"
         title={`${run.scenario} played (${humanize(run.mode)}), ${formatAge(run.finishedAt)}`}
       >
@@ -142,15 +144,18 @@ function ExpectedOutcome({ s, mode }: { s: Scenario; mode: Mode }) {
               </Badge>
             </Tooltip>
           ))}
-        <Badge variant="light" color={e.write ? 'indigo' : 'gray'} style={{ textTransform: 'none' }}>
-          {e.write ? 'One conditional write' : 'Nothing written'}
-        </Badge>
+        {e.write ? (
+          <StatusBadge {...proposedWrites(1)} label="One conditional write" hint={undefined} />
+        ) : (
+          <StatusBadge {...writes(0)} label="Nothing written" hint={undefined} />
+        )}
         {e.blocked_by ? (
-          <Tooltip label="The reason code the gate or the dispatch should stop on">
-            <Badge variant="light" color="red" style={{ textTransform: 'none' }} tabIndex={0}>
-              {e.blocked_by}
-            </Badge>
-          </Tooltip>
+          <StatusBadge
+            tone="blocking"
+            label={e.blocked_by}
+            hint="The reason code the gate or the dispatch should stop on"
+            icon={IconShieldX}
+          />
         ) : null}
       </Group>
       <Text size="xs" c="dimmed">
@@ -293,7 +298,7 @@ export default function ScenariosPage() {
       {
         onSuccess: () =>
           notifications.show({
-            color: 'teal',
+            color: 'blue',
             title: `${s.id} started`,
             message: `${humanize(mode)} mode. The case appears in a few seconds.`,
           }),
@@ -309,8 +314,9 @@ export default function ScenariosPage() {
     <>
       {DEMO ? null : induction}
       <PageHeader
+        tour="scenarios"
         title="Scenarios"
-        subtitle="Each scenario plays a real failure into the production: HL7 files into the ADT folder and faults on the downstream system. Shutter opens a case, investigates, checks the plan at the gate, asks a person, and verifies the result at the receiver."
+        subtitle="Each scenario plays a real failure into the production: HL7 files into the ADT folder and faults on the downstream system. Shutter opens a case, investigates, checks the plan at the gate, has a person or the site's written policy release it, and verifies the result at the receiver."
         actions={
           <Tooltip
             label={
@@ -331,7 +337,7 @@ export default function ScenariosPage() {
                   reset.mutate(undefined, {
                     onSuccess: () =>
                       notifications.show({
-                        color: 'teal',
+                        color: 'blue',
                         title: 'Reset',
                         message: 'The downstream system and the folders are clear.',
                       }),
@@ -358,7 +364,7 @@ export default function ScenariosPage() {
             </Text>
           </Alert>
         ) : (
-          <Card padding="md">
+          <Card padding="md" data-tour="scenarios-mode">
             <Stack gap={6}>
               <Text fw={600} size="sm" id="mode-label">
                 Investigation mode
@@ -387,7 +393,7 @@ export default function ScenariosPage() {
           />
         ) : null}
         {scenarios.data ? (
-          <>
+          <div data-tour="scenarios-list">
             {/* The cards' headings sit under this one, not under Start here; the layout does not show it */}
             <Title order={2} className={VisuallyHidden.classes.root}>
               Every scenario
@@ -406,7 +412,7 @@ export default function ScenariosPage() {
                 />
               ))}
             </SimpleGrid>
-          </>
+          </div>
         ) : null}
         {DEMO ? induction : null}
       </Stack>

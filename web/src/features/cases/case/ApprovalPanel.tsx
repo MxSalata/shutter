@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Group, Modal, Stack, Table, Text, Textarea, Tooltip } from '@mantine/core';
+import { Alert, Button, Group, Modal, Stack, Table, Text, Textarea, Tooltip } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconCheck, IconEye, IconX } from '@tabler/icons-react';
 import { useState } from 'react';
@@ -8,10 +8,13 @@ import type { ApprovalsView, CaseDetail, Me, PlanView } from '@/api/types';
 import { DEMO } from '@/demo';
 import { Digest } from '@/components/Digest';
 import { KeyValueList } from '@/components/KeyValueList';
+import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
+import { APPROVALS } from '@/lib/status';
 import { describeError, isApiError } from '@/lib/errors';
 import { asObject } from '@/lib/json';
 import { humanize } from '@/lib/format';
+import { approvalsByPlan, earlierApprovalText } from './receipt';
 import { NotYet, Section } from './Section';
 
 function BlindResendPreview({ c, me }: { c: CaseDetail; me: Me }) {
@@ -37,7 +40,7 @@ function BlindResendPreview({ c, me }: { c: CaseDetail; me: Me }) {
           <span>
             <Button
               variant="light"
-              color="orange"
+              color="yellow"
               size="xs"
               leftSection={<IconEye size={14} />}
               disabled={!!why}
@@ -56,7 +59,7 @@ function BlindResendPreview({ c, me }: { c: CaseDetail; me: Me }) {
       ) : null}
       {r ? (
         <Alert
-          color={r.applied ? 'red' : r.wouldApply ? 'orange' : 'gray'}
+          color={r.applied ? 'red' : r.wouldApply ? 'yellow' : 'gray'}
           variant="light"
           title={
             r.applied
@@ -120,10 +123,13 @@ export function ApprovalPanel({
         ? 'There is no plan to decide on'
         : '';
   const policy = view?.gateDecisions?.at(-1)?.policyVersion ?? '';
-  // A re-plan revokes the earlier approval: only one that still stands is shown as the decision.
-  const latest = approvals?.approvals?.filter((a) => !a.revoked).at(-1);
+  // Only the current plan's approval that still stands is shown as the decision; a re-plan revokes the earlier
+  // plan's, which is history.
+  const { current, earlier } = approvalsByPlan(approvals, view);
+  const latest = current.filter((a) => !a.revoked).at(-1);
   const underIncident = Boolean(latest?.incidentPlanDigest);
-  const revoked = !latest && Boolean(approvals?.approvals?.some((a) => a.revoked));
+  const revoked = !latest && current.some((a) => a.revoked);
+  const history = earlierApprovalText(earlier, view);
 
   const openDialog = (d: 'approve' | 'reject') => {
     setDecision(d);
@@ -143,7 +149,7 @@ export function ApprovalPanel({
           setDecision(null);
           const by = reply?.approver ? ` by ${reply.approver}` : '';
           notifications.show({
-            color: decision === 'approve' ? 'teal' : 'gray',
+            color: decision === 'approve' ? 'blue' : 'gray',
             title: decision === 'approve' ? `Approved${by}` : `Rejected${by}`,
             message:
               decision !== 'approve'
@@ -164,26 +170,35 @@ export function ApprovalPanel({
     <Section
       id="approval"
       title="Approval"
-      note="A person approves exactly this plan. The approval binds the plan digest, the evidence snapshot, the gate's policy and the receiver version; if any of them changes before dispatch, it no longer authorises the write."
+      note="Every write passes the gate first; then a person, or the site's written policy, releases exactly this plan. The release binds the plan digest, the evidence snapshot, the gate's policy and the receiver version; if any of them changes before dispatch, it no longer authorises the write, and the gate checks again at dispatch."
       aside={
         latest ? (
-          <Badge color={latest.decision === 'approved' ? 'teal' : 'red'} style={{ textTransform: 'none' }}>
-            {latest.decision === 'approved'
-              ? `Approved by ${latest.approver}${underIncident ? " under the incident's approval" : ''}`
-              : `Rejected by ${latest.approver}`}
-          </Badge>
+          latest.decision !== 'approved' ? (
+            <StatusBadge {...APPROVALS.rejected} label={`Rejected by ${latest.approver}`} />
+          ) : latest.approver === 'policy' ? (
+            <StatusBadge {...APPROVALS.policy} />
+          ) : (
+            <StatusBadge
+              {...APPROVALS.approved}
+              label={`Approved by ${latest.approver}${underIncident ? " under the incident's approval" : ''}`}
+            />
+          )
         ) : awaiting ? (
-          <Badge color="yellow" style={{ textTransform: 'none' }}>
-            Waiting for an approver
-          </Badge>
+          <StatusBadge {...APPROVALS.awaiting} label="Waiting for an approver" />
         ) : revoked ? (
-          <Badge color="gray" style={{ textTransform: 'none' }}>
-            Earlier approval revoked
-          </Badge>
+          <StatusBadge {...APPROVALS.revoked} label="Approval no longer valid" />
+        ) : !write && plan ? (
+          <StatusBadge {...APPROVALS.not_required} />
         ) : null
       }
     >
       {!write && plan ? <NotYet>No approval needed: the plan writes nothing.</NotYet> : null}
+      {history ? (
+        <Group gap="xs" wrap="wrap">
+          <StatusBadge {...APPROVALS.revoked} tone="neutral" label="Earlier plan" />
+          <Text size="sm">{`${history}. It does not release the current plan.`}</Text>
+        </Group>
+      ) : null}
       {write || awaiting ? (
         <Stack gap="sm">
           {DEMO && awaiting ? (
@@ -232,7 +247,6 @@ export function ApprovalPanel({
               <Tooltip label={why || 'Approve exactly this plan'} disabled={!why}>
                 <span>
                   <Button
-                    color="teal"
                     leftSection={<IconCheck size={16} />}
                     disabled={!!why}
                     onClick={() => openDialog('approve')}
@@ -325,7 +339,7 @@ export function ApprovalPanel({
             {decide.error ? (
               <Alert color="red" variant="light" role="alert">
                 {stale
-                  ? 'The plan or the case changed since this page loaded: close this and review it again.'
+                  ? 'Approval no longer valid: the plan or the case changed since this page loaded, so this decision was not recorded. Close this and review the new plan.'
                   : describeError(decide.error)}
               </Alert>
             ) : null}
@@ -334,7 +348,7 @@ export function ApprovalPanel({
                 Cancel
               </Button>
               <Button
-                color={decision === 'approve' ? 'teal' : 'red'}
+                color={decision === 'approve' ? undefined : 'red'}
                 loading={decide.isPending}
                 onClick={submit}
                 disabled={!!stale}

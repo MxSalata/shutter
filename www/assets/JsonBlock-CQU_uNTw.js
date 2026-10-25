@@ -1,0 +1,1 @@
+import{j as e,_ as s}from"./mantine-DVYVZARc.js";import{p as n}from"./json-nMiTcUPM.js";function c({value:o,label:r}){const t=n(o);return t?e.jsx(s,{block:!0,className:"json-block","aria-label":r,tabIndex:0,children:t}):null}export{c as J};
