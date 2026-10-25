@@ -3,6 +3,7 @@
 tool calls and responses (and, with --demo, the names, dates of birth and notes in the web demo's recorded answers).
 
     python3 tests/privacy_check.py [--fixtures fixtures] [--records fixtures/records] [--demo web/src/mocks/fixtures.json]
+    python3 tests/privacy_check.py --self-test
 
 The fixtures are synthetic, but the rule is the real one: the model gets tokens for the identifiers and the event's
 facts, never the patient's identifiers (PID-3, the visit number PV1-19), name or any part of it (PID-5), date of birth
@@ -18,8 +19,10 @@ too, except the NHS number. NHS numbers (PID-3 typed NH) are looked for everywhe
 and so is anything shaped like one: ten digits, plain or spaced 3 3 4, whose modulus 11 check digit is valid, so a real
 NHS number fails the check even when no fixture holds it. A production review's recording (key review:...) is checked
 the same way, and more strictly: its agent sees item names, setting values, counts, header ids and case ids, never a
-case's evidence, so not even a case's token for an identifier (MRN-T1, ENC-T1) may appear in it. Prints each hit and
-exits 1 when there is any. Standard library only.
+case's evidence, so not even a case's token for an identifier (MRN-T1, ENC-T1) may appear in it; that rule reads the
+recording's strings decoded (JSON text within them too), as every rule here does, so a value or token after a newline
+or a tab is found. Prints each hit and exits 1 when there is any. --self-test runs the case-token rule over synthetic
+recordings instead. Standard library only.
 """
 import argparse
 import glob
@@ -48,6 +51,61 @@ def nhs_valid(digits):
 def nhs_shaped(text):
     """Every NHS number in a text, by its shape and check digit, as (as written, digits)."""
     return [(m.group(0), "".join(m.groups())) for m in NHS_SHAPE.finditer(text) if nhs_valid("".join(m.groups()))]
+
+
+def decoded_text(value):
+    """Every string in a value as the model read it, one per line: a string that is JSON text (a transcript or the
+    tool calls as recorded) is decoded and walked too, so a newline or tab before a value stays a newline or tab rather
+    than the escape json.dumps would write in its place."""
+    leaves = []
+
+    def walk(v):
+        if isinstance(v, dict):
+            for x in v.values():
+                walk(x)
+        elif isinstance(v, list):
+            for x in v:
+                walk(x)
+        elif isinstance(v, str):
+            t = v.strip()
+            if t[:1] in ("[", "{", '"'):
+                try:
+                    decoded = json.loads(t)
+                except ValueError:
+                    decoded = None
+                if decoded is not None and decoded != v:
+                    walk(decoded)
+                    return
+            leaves.append(v)
+        elif v is not None:
+            leaves.append(str(v))
+
+    walk(value)
+    return "\n".join(leaves)
+
+
+def review_tokens(data):
+    """The case tokens in a production review's recording, read from the decoded transcript, tool calls and response."""
+    return sorted(set(CASE_TOKEN.findall(decoded_text({k: data.get(k) for k in ("transcript", "toolCalls", "response")}))))
+
+
+def self_test():
+    """Synthetic recordings that prove the case-token rule, a token after a newline or a tab included."""
+    cases = [
+        ({"transcript": json.dumps([{"role": "tool", "content": "header 7\nMRN-T1 on it"}])}, ["MRN-T1"]),
+        ({"toolCalls": json.dumps([{"name": "search_review", "arguments": {"q": "x\tENC-T2"}}])}, ["ENC-T2"]),
+        ({"response": {"result": json.dumps({"summary": "line one\nNHS-T3"})}}, ["NHS-T3"]),
+        ({"transcript": json.dumps([{"role": "tool", "content": "3 cases, header 7, setting RetryInterval"}])}, []),
+        ({"transcript": "XMRN-T1 and MRN-T1x"}, []),
+    ]
+    failed = 0
+    for data, want in cases:
+        got = review_tokens(data)
+        if got != want:
+            failed += 1
+            print(f"self-test: {data!r} gave {got!r}, expected {want!r}")
+    print(f"self-test: {len(cases)} cases, {failed} failed")
+    return 1 if failed else 0
 
 
 def segments(path):
@@ -125,7 +183,10 @@ def main():
     parser.add_argument("--fixtures", default="fixtures")
     parser.add_argument("--records", default="fixtures/records")
     parser.add_argument("--demo", help="also check the web demo's recorded answers (web/src/mocks/fixtures.json)")
+    parser.add_argument("--self-test", action="store_true", help="check the case-token rule on synthetic recordings")
     args = parser.parse_args()
+    if args.self_test:
+        return self_test()
     values = personal_values(args.fixtures)
     files = sorted(glob.glob(os.path.join(args.records, "*.json")))
     if args.demo:
@@ -144,7 +205,8 @@ def main():
             }
         else:
             seen_by_model = {k: data.get(k) for k in ("transcript", "toolCalls", "response")}
-        text = json.dumps(seen_by_model, ensure_ascii=False)
+        # Read decoded, so that a value after a newline or a tab in a transcript is still a whole word
+        text = decoded_text(seen_by_model)
         reported = set()
         for (kind, value), forms in sorted(values.items()):
             if demo and kind == "identifier":
