@@ -60,6 +60,10 @@ function ranked(): ReviewDetail {
     error: '',
     summary: 'The downstream errors outnumber the rest.',
     unknowns: ['Whether the ward was down for maintenance'],
+    explained: 12,
+    unexplained: 1,
+    dropped: 2,
+    recordedEntries: 14,
   };
   r.agentState = 'ok';
   // Within the medium tier the agent puts MESSAGE_ERRORS on ADT to Downstream (F5) first
@@ -280,6 +284,11 @@ describe('ReviewPage', () => {
     expect(agent.getByText('Ranked and explained (recorded)')).toBeInTheDocument();
     expect(agent.getByText('The downstream errors outnumber the rest.')).toBeInTheDocument();
     expect(agent.getByText('Whether the ward was down for maintenance')).toBeInTheDocument();
+    expect(
+      agent.getByText(
+        '12 of 13 findings explained; the others keep the baseline order within their tier, with no explanation; 2 recorded explanations matched no finding here and were left out.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('lets an approver mark a finding intended with a reason and an expiry, and reads the review again', async () => {

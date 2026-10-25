@@ -223,6 +223,87 @@ ClassMethod TierOf(severity As %String) As %Integer
     Quit $CASE($ZCONVERT(severity, "L"), "high": 1, "medium": 2, "low": 3, "info": 4, : 5)
 }
 
+/// Matches a ranking to this review's findings and gives back the ranking as stored (v1.22). A ranking entry carries the
+/// finding's code, item and setting beside its finding_id (Shutter.Schema.ReviewRank), so a recording made on another
+/// instance is matched by (code, item, setting), in rank order, each current finding at most once; an entry without them
+/// is matched by finding_id. Entries with no current finding are dropped, current findings with no entry stay unexplained,
+/// and the matched entries keep their recorded order, re-ranked 1 to m. problem names what refuses the whole ranking: a
+/// shape that is not a ranking, a finding ranked twice, a tier order that goes up again, or no entry matching at all.
+/// Returns 1 when the matched ranking can be stored.
+ClassMethod MatchRanking(findings As %DynamicArray, ranking As %DynamicObject, Output matched As %DynamicObject, Output problem As %String) As %Boolean
+{
+    Set matched = "", problem = ""
+    If '$ISOBJECT(ranking) || 'ranking.%IsA("%Library.DynamicObject") Set problem = "The ranking is not a JSON object" Quit 0
+    Set list = ranking.%Get("ranking")
+    If '$ISOBJECT(list) || 'list.%IsA("%Library.DynamicArray") Set problem = "ranking must be an array of {finding_id, rank, explanation}" Quit 0
+    Set json = "Shutter.Util.Json"
+    // The current findings: by id, and by (code, item, setting) in baseline order.
+    Set n = 0
+    If $ISOBJECT(findings) {
+        Set iter = findings.%GetIterator()
+        While iter.%GetNext(.i, .f) {
+            Set id = $CLASSMETHOD(json, "Str", f, "id")
+            Continue:id=""
+            Set n = n + 1
+            Set tier(id) = ..TierOf($CLASSMETHOD(json, "Str", f, "severity")), sev(id) = $CLASSMETHOD(json, "Str", f, "severity")
+            Set key = $CLASSMETHOD(json, "Str", f, "code") _ "|" _ $CLASSMETHOD(json, "Str", f, "item") _ "|" _ $CLASSMETHOD(json, "Str", f, "setting")
+            Set byKey(key, n) = id
+        }
+    }
+    // The entries in rank order.
+    Set liter = list.%GetIterator()
+    While liter.%GetNext(.i, .e) {
+        If '$ISOBJECT(e) || 'e.%IsA("%Library.DynamicObject") Set problem = "Entry " _ (i + 1) _ " of the ranking is not an object" Quit
+        Set eid = $CLASSMETHOD(json, "Str", e, "finding_id")
+        If eid = "" Set problem = "Entry " _ (i + 1) _ " of the ranking names no finding_id" Quit
+        If $DATA(seenEntry(eid)) Set problem = "The ranking names " _ eid _ " twice" Quit
+        Set seenEntry(eid) = 1
+        Set rank = $CLASSMETHOD(json, "Str", e, "rank")
+        If (rank = "") || (rank '= +rank) || (+rank '= (+rank \ 1)) || (+rank < 1) Set problem = "The rank of " _ eid _ " must be a whole number from 1, not '" _ rank _ "'" Quit
+        Set order(+rank, i) = i
+    }
+    If problem '= "" Quit 0
+    Set out = [], dropped = 0, lastTier = "", lastId = ""
+    Set rank = ""
+    For {
+        Set rank = $ORDER(order(rank))
+        Quit:rank=""
+        Set pos = ""
+        For {
+            Set pos = $ORDER(order(rank, pos))
+            Quit:pos=""
+            Set e = list.%Get(pos)
+            Set code = $CLASSMETHOD(json, "Str", e, "code"), id = ""
+            If code '= "" {
+                Set key = code _ "|" _ $CLASSMETHOD(json, "Str", e, "item") _ "|" _ $CLASSMETHOD(json, "Str", e, "setting")
+                Set k = $ORDER(byKey(key, ""))
+                If k '= "" Set id = byKey(key, k) Kill byKey(key, k)
+            } Else {
+                Set eid = $CLASSMETHOD(json, "Str", e, "finding_id")
+                If $DATA(tier(eid)) && '$DATA(used(eid)) Set id = eid
+            }
+            If (id = "") || $DATA(used(id)) Set dropped = dropped + 1 Continue
+            Set used(id) = 1
+            If (lastTier '= "") && (tier(id) < lastTier) Set problem = id _ " (" _ sev(id) _ ") is ranked below " _ lastId _ " (" _ sev(lastId) _ "): a finding never ranks above one of a higher severity tier" Quit
+            Set lastTier = tier(id), lastId = id
+            Set m = {}
+            Set m."finding_id" = id, m.rank = out.%Size() + 1
+            Set m.explanation = $CLASSMETHOD(json, "Str", e, "explanation"), m."confidence_note" = $CLASSMETHOD(json, "Str", e, "confidence_note")
+            Set m.code = $CLASSMETHOD(json, "Str", e, "code"), m.item = $CLASSMETHOD(json, "Str", e, "item"), m.setting = $CLASSMETHOD(json, "Str", e, "setting")
+            Do out.%Push(m)
+        }
+        Quit:problem'=""
+    }
+    If problem '= "" Quit 0
+    If out.%Size() = 0 Set problem = "No entry of the ranking matches a finding of this review (by code, item and setting)" Quit 0
+    Set matched = {}
+    Set matched.ranking = out
+    Set matched.dropped = dropped, matched.unexplained = n - out.%Size(), matched."recorded_entries" = list.%Size()
+    Set matched.summary = $CLASSMETHOD(json, "Str", ranking, "summary")
+    Set matched.unknowns = $SELECT($ISOBJECT(ranking.%Get("unknowns")): ranking.%Get("unknowns"), 1: [])
+    Quit 1
+}
+
 /// What is wrong with an agent's ranking of these findings, or "" when it stands: the result must be an object whose
 /// ranking lists every finding id exactly once with ranks 1 to n and no gaps, and no finding of a lower severity tier
 /// may be ranked above one of a higher tier (the agent reorders within tiers only). Pure, so a test can call it.
@@ -303,7 +384,9 @@ Method ToObject(full As %Boolean = 1) As %DynamicObject
         } Catch ex {
         }
     }
-    // The agent's rank and explanation, merged in by finding id; the order stays the baseline's.
+    // The agent's rank and explanation (v1.22): the stored ranking's entries name current findings (MatchRanking). Every
+    // finding gets a rank: within each severity tier the explained findings first, in the agent's order, then the
+    // unexplained ones in baseline order; the ranks run 1 to n over the tiers in order.
     Set ranking = ""
     If (..AgentState = "ok") && (..RankingJSON '= "") Set ranking = ##class(Shutter.Util.Json).Parse(..RankingJSON, .rsc)
     If $ISOBJECT(ranking) && ranking.%IsA("%Library.DynamicObject") {
@@ -318,18 +401,36 @@ Method ToObject(full As %Boolean = 1) As %DynamicObject
             }
         }
     }
-    Set intended = 0
+    Set intended = 0, explained = $DATA(rankOf) > 0
     Set iter = findings.%GetIterator()
     While iter.%GetNext(.i, .f) {
         Continue:'$ISOBJECT(f)
         Set id = ##class(Shutter.Util.Json).Str(f, "id")
+        Set t = ..TierOf(##class(Shutter.Util.Json).Str(f, "severity"))
         If $DATA(rankOf(id)) && (rankOf(id) > 0) {
-            Set f.rank = rankOf(id), f.explanation = explanationOf(id)
+            Set f.explanation = explanationOf(id), slot(t, 0, rankOf(id)) = id
         } Else {
-            Do f.%Set("rank", "", "null")
-            Set f.explanation = ""
+            Set f.explanation = "", slot(t, 1, i) = id
         }
+        Do f.%Set("rank", "", "null")
+        Set byId(id) = f
         If ##class(Shutter.Util.Json).Str(f, "status", "new") '= "new" Set intended = intended + 1
+    }
+    If explained {
+        Set next = 0, t = ""
+        For {
+            Set t = $ORDER(slot(t))
+            Quit:t=""
+            For group = 0, 1 {
+                Set k = ""
+                For {
+                    Set k = $ORDER(slot(t, group, k), 1, id)
+                    Quit:k=""
+                    Set next = next + 1
+                    Set byId(id).rank = next
+                }
+            }
+        }
     }
     Set summary.intended = intended
     Set o.summary = summary
@@ -350,6 +451,14 @@ Method ToObject(full As %Boolean = 1) As %DynamicObject
     If ..RecordKey '= "" { Set a.recordKey = ..RecordKey } Else { Do a.%Set("recordKey", "", "null") }
     If ..EnsMessageId '= "" { Set a.ensMessageId = ..EnsMessageId } Else { Do a.%Set("ensMessageId", "", "null") }
     Set a.error = ..AgentError
+    // How much of the agent's ranking reached these findings (v1.22): null until it answered.
+    For key = "explained", "unexplained", "dropped", "recordedEntries" Do a.%Set(key, "", "null")
+    If $ISOBJECT(ranking) && ranking.%IsA("%Library.DynamicObject") {
+        Set list = ranking.%Get("ranking")
+        Set a.explained = $SELECT($ISOBJECT(list): list.%Size(), 1: 0)
+        Set a.unexplained = +##class(Shutter.Util.Json).Str(ranking, "unexplained", 0), a.dropped = +##class(Shutter.Util.Json).Str(ranking, "dropped", 0)
+        Set a.recordedEntries = +##class(Shutter.Util.Json).Str(ranking, "recorded_entries", $SELECT($ISOBJECT(list): list.%Size(), 1: 0))
+    }
     Set a.summary = $SELECT($ISOBJECT(ranking): ##class(Shutter.Util.Json).Str(ranking, "summary"), 1: "")
     Set unknowns = $SELECT($ISOBJECT(ranking): ranking.%Get("unknowns"), 1: "")
     If '$ISOBJECT(unknowns) || 'unknowns.%IsA("%Library.DynamicArray") Set unknowns = []
