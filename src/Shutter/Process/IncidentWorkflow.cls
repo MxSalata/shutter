@@ -194,50 +194,11 @@ Method Classify(incident As Shutter.Store.Incident) As %Status
     Quit ..Advance(incident)
 }
 
-/// The plan (7.2) and its digest: the chains' operation keys and payload digests in order, each chain's first
-/// expected version, the receiver's epoch, and the catalogue, site profile and gate policy versions.
+/// The plan (7.2) and its digest, written by the store (Shutter.Store.Incident.BuildPlan) under the gate's policy version:
+/// the SHA-256 of the recorded plan in canonical JSON, so each item's case, entry and outcome are bound.
 Method BuildPlan(incident As Shutter.Store.Incident) As %Status
 {
-    Set json = "Shutter.Util.Json"
-    Set profile = ##class(Shutter.Store.SiteProfile).Current()
-    Set incident.CatalogueVersion = ##class(Shutter.Catalogue.Entry).CatalogueVersion()
-    Set incident.ProfileVersion = $CLASSMETHOD(json, "Str", profile, "version", 0)
-    Set incident.PolicyVersion = ##class(Shutter.Operation.Gate).#POLICYVERSION
-    Set plan = {}
-    Set plan."incident_id" = incident.IncidentId, plan.receiver = incident.Receiver, plan.mode = incident.Mode
-    Set plan.chains = [], material = "", epoch = ""
-    Set chains = incident.ChainList()
-    For i = 1:1:chains.Count() {
-        Set ch = chains.GetAt(i)
-        Set co = {}
-        Set co.seq = ch.Seq, co."encounter_id" = ch.EncounterId, co."patient_id" = ch.PatientId, co.kind = ch.Kind
-        Set co.decides = ch.Decides, co.policy = ch.Policy, co.entries = ch.Entries
-        Do co.%Set("first_expected_version", ch.FirstExpectedVersion, $SELECT(ch.FirstExpectedVersion = "": "null", 1: "number"))
-        Set co.items = []
-        Set material = material _ "chain " _ ch.Seq _ "@" _ ch.FirstExpectedVersion _ ":"
-        Set items = ch.Items()
-        Set it = items.%GetIterator()
-        While it.%GetNext(.k, .item) {
-            Set c = ##class(Shutter.Store.Case).ByCaseId(item.%Get("caseId"))
-            Set summary = $SELECT($ISOBJECT(c) && $ISOBJECT(c.CurrentSnapshot): c.CurrentSnapshot.SummaryObject(), 1: {})
-            Set payload = $CLASSMETHOD(json, "Str", summary.%Get("operation"), "payload_digest")
-            If epoch = "" Set epoch = $CLASSMETHOD(json, "Str", summary, "epoch")
-            Set io = {}
-            Set io.position = item.%Get("position"), io."case_id" = item.%Get("caseId"), io."event" = item.%Get("event"), io."event_time" = item.%Get("eventTime")
-            Set io."operation_key" = item.%Get("operationKey"), io."payload_digest" = payload, io.entry = item.%Get("entry"), io.outcome = item.%Get("outcome")
-            Do co.items.%Push(io)
-            Set material = material _ item.%Get("operationKey") _ "#" _ payload _ ";"
-        }
-        Do plan.chains.%Push(co)
-        Set material = material _ "|"
-    }
-    Set material = material _ "epoch=" _ epoch _ "|catalogue=" _ incident.CatalogueVersion _ "|profile=" _ incident.ProfileVersion _ "|policy=" _ incident.PolicyVersion
-    Do plan.%Set("receiver_epoch", epoch, $SELECT(epoch = "": "null", 1: "number"))
-    Set plan."catalogue_version" = incident.CatalogueVersion, plan."site_profile_version" = incident.ProfileVersion, plan."gate_policy_version" = incident.PolicyVersion
-    Set plan.digest = ##class(Shutter.Util.Digest).SHA256Hex(material)
-    Set incident.PlanJSON = plan.%ToJSON(), incident.PlanDigest = plan.digest
-    If epoch '= "" Set incident.ReceiverEpoch = epoch
-    Quit incident.%Save()
+    Quit incident.BuildPlan(##class(Shutter.Operation.Gate).#POLICYVERSION)
 }
 
 /// One Workflow task for the incident's policy chains under a shared approval (seq ""), or for one chain (7.3).
@@ -256,20 +217,30 @@ Method AskApproval(incident As Shutter.Store.Incident, chains As %ListOfObjects,
             Set lines = lines _ $CHAR(10) _ "  " _ item.%Get("position") _ ". " _ item.%Get("event") _ " at " _ item.%Get("eventTime") _ " (" _ item.%Get("caseId") _ ", " _ item.%Get("entry") _ " " _ item.%Get("outcome") _ ")"
         }
     }
-    Set task = ##class(EnsLib.Workflow.TaskRequest).%New()
-    Set task.%Actions = "Approve,Reject"
-    Set task.%Subject = "Shutter " _ incident.IncidentId _ $SELECT(seq '= "": "/" _ seq, 1: "") _ ": approve the release of " _ count _ " chain(s) to " _ incident.Receiver
-    Set msg = "Incident " _ incident.IncidentId _ ": " _ incident.CaseCount() _ " failures to " _ incident.Receiver _ " since " _ incident.OpenedAt _ "." _ lines _ $CHAR(10) _ $CHAR(10)
-    Set msg = msg _ "Approving binds: resend these, in this order. Each one is rehearsed, gated and verified just before it goes; items after the first go at exactly the version the previous item's verified receipt reports; the chain stops at the first surprise, and the rest comes back to you." _ $CHAR(10)
-    Set msg = msg _ "Plan digest: " _ incident.PlanDigest _ $CHAR(10) _ "Catalogue " _ incident.CatalogueVersion _ ", site profile v" _ incident.ProfileVersion _ ", gate policy " _ incident.PolicyVersion
-    Set task.%Message = msg
-    Set task.%Priority = 1
-    Set task.%FormFields = "PlanDigest,Comment"
-    Do task.%FormValues.SetAt(incident.PlanDigest, "PlanDigest")
+    Set task = ..ApprovalTask(incident, seq, count, incident.CaseCount(), lines)
     Set sc = ..SendRequestAsync(..ApprovalTarget, task, 1, $SELECT(seq = "": "approval", 1: "approval:" _ seq))
     Quit:$$$ISERR(sc) sc
     Set ..PendingTasks = ..PendingTasks + 1
     Quit incident.Note("note", "Approval task raised: " _ task.%Subject, "system")
+}
+
+/// The approval task for the incident's policy chains (seq ""), or for one chain (7.3), over the text AskApproval
+/// made of the chains. Its PlanDigest form value starts empty: the decider supplies the digest (the API from the body
+/// it checked, an approver in the Workflow inbox by pasting it from this message), and an answer with none, or another
+/// one, rejects the chains it covers (OnApproval).
+ClassMethod ApprovalTask(incident As Shutter.Store.Incident, seq As %String, count As %Integer, failures As %Integer, lines As %String) As EnsLib.Workflow.TaskRequest
+{
+    Set task = ##class(EnsLib.Workflow.TaskRequest).%New()
+    Set task.%Actions = "Approve,Reject"
+    Set task.%Subject = "Shutter " _ incident.IncidentId _ $SELECT(seq '= "": "/" _ seq, 1: "") _ ": approve the release of " _ count _ " chain(s) to " _ incident.Receiver
+    Set msg = "Incident " _ incident.IncidentId _ ": " _ failures _ " failures to " _ incident.Receiver _ " since " _ incident.OpenedAt _ "." _ lines _ $CHAR(10) _ $CHAR(10)
+    Set msg = msg _ "Approving binds: resend these, in this order. Each one is rehearsed, gated and verified just before it goes; items after the first go at exactly the version the previous item's verified receipt reports; each operation goes only under the catalogue entry and outcome listed for it, and one whose fresh evidence reads differently stops its chain; the chain stops at the first surprise, and the rest comes back to you." _ $CHAR(10)
+    Set msg = msg _ "Plan digest: " _ incident.PlanDigest _ $CHAR(10) _ "Catalogue " _ incident.CatalogueVersion _ ", site profile v" _ incident.ProfileVersion _ ", gate policy " _ incident.PolicyVersion _ $CHAR(10)
+    Set msg = msg _ "To approve from the Workflow inbox, paste the plan digest above into the PlanDigest field: an approval with no digest, or another one, binds nothing and rejects these chains."
+    Set task.%Message = msg
+    Set task.%Priority = 1
+    Set task.%FormFields = "PlanDigest,Comment"
+    Quit task
 }
 
 /// A Workflow task answered: the chains it covered are approved, or rejected with their cases escalated.
@@ -373,6 +344,8 @@ Method Advance(incident As Shutter.Store.Incident) As %Status
     Set rel = ##class(Shutter.Msg.CaseRelease).%New()
     Set rel.CaseId = item.Case.CaseId, rel.IncidentId = incident.IncidentId, rel.ChainSeq = chain.Seq, rel.Position = item.Position
     Set rel.ChainKind = chain.Kind, rel.Decides = chain.Decides, rel.ExpectedVersion = expected, rel.PlanDigest = incident.PlanDigest
+    // What the approval covered for this item: the entry and outcome the chain bound (7.3).
+    Set rel.Entry = item.Entry, rel.Outcome = item.CatalogueOutcome
     Set rel.ReleasePolicy = $CASE(chain.Policy, "automatic": "automatic", "approval": "incident", "per_chain": "incident", : "path")
     If chain.Policy = "approval" Set rel.Approver = incident.ApprovedBy, rel.ApprovalRef = incident.ApprovalTaskId
     If chain.Policy = "per_chain" Set rel.Approver = chain.ApprovedBy, rel.ApprovalRef = chain.ApprovalTaskId

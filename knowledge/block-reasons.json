@@ -445,6 +445,24 @@
       "owner": "Integration team",
       "reevaluate_when": "A message that names the encounter arrives, or a person decides",
       "text": "Shutter writes only to an encounter whose state and version it can read and compare. A patient-level message names none, so there is nothing to check a write against."
+    },
+    {
+      "code": "APPROVAL_ITEM_CHANGED",
+      "title": "The incident's approval covered another entry or outcome for this item",
+      "prerequisite": "The released item's plan and fresh evidence follow the catalogue entry and outcome the incident's approval bound for it",
+      "next_action": "A person reviews the item on its fresh evidence: approve its own plan, or reinvestigate.",
+      "owner": "Approver",
+      "reevaluate_when": "A person approves the item's own plan",
+      "text": "The incident's approval named this operation as one catalogue entry and outcome, and its plan or its fresh evidence now reads another. The release does not cover it, so nothing is sent and the chain stops here."
+    },
+    {
+      "code": "APPROVAL_INCIDENT_PLAN_CHANGED",
+      "title": "The incident's plan changed after its approval",
+      "prerequisite": "An incident plan whose digest is the one the approval bound",
+      "next_action": "Review the incident's plan as it is now, and approve it again if it still holds.",
+      "owner": "Approver",
+      "reevaluate_when": "The incident's current plan is approved",
+      "text": "The approval the released item stands on named an incident plan digest that is no longer the incident's, or the case no longer belongs to the incident. An approval covers one exact plan (RP-3.4)."
     }
   ]
 }
