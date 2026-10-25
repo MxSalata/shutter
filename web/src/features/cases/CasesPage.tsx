@@ -8,6 +8,7 @@ import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { CASE_STATE_NAMES, DispositionBadge, StateBadge } from '@/components/StateBadge';
 import { Timestamp } from '@/components/Timestamp';
+import { caseState } from '@/lib/status';
 import { humanize } from '@/lib/format';
 import { clampHeadline } from '@/lib/headline';
 import { forwardedFrom } from './case/derive';
@@ -103,7 +104,7 @@ export default function CasesPage() {
               setState(v);
               setPage(1);
             }}
-            data={CASE_STATE_NAMES.map((s) => ({ value: s, label: humanize(s) }))}
+            data={CASE_STATE_NAMES.map((s) => ({ value: s, label: caseState(s).label }))}
             w={200}
           />
           <Select
@@ -119,6 +120,13 @@ export default function CasesPage() {
             w={160}
           />
         </Group>
+        {/* What the columns mean, once: a proposal beside a Blocked state is what was proposed and stopped */}
+        <Text size="sm" c="dimmed" mb="sm" maw="100ch">
+          State is where the case is now. Proposed action is what its plan proposed, which the gate can still
+          stop: Blocked beside Resend is a resend that was proposed and blocked. Investigated by is who made
+          the plan: the rules alone, one agent, the board (three specialists and a coordinator) or the
+          site&apos;s written policy.
+        </Text>
         {cases.isPending ? <PageSkeleton label="Loading the cases…" /> : null}
         {cases.isError ? (
           <ErrorAlert
@@ -139,7 +147,7 @@ export default function CasesPage() {
                 <Table.Tr>
                   <Table.Th>Case</Table.Th>
                   <Table.Th>State</Table.Th>
-                  <Table.Th>Disposition</Table.Th>
+                  <Table.Th>Proposed action</Table.Th>
                   <Table.Th>What failed</Table.Th>
                   <Table.Th>Scenario</Table.Th>
                   <Table.Th>Investigated by</Table.Th>

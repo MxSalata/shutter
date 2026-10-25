@@ -70,10 +70,14 @@ test.describe('the guided path', () => {
     await expect(page.getByRole('region', { name: 'In the Management Portal' })).toBeVisible();
   });
 
-  test('the cases list says who investigated each case', async ({ page }) => {
+  test('the cases list says who investigated each case and what its plan proposed', async ({ page }) => {
     await signIn(page);
     await go(page, '/cases');
     await expect(page.getByRole('columnheader', { name: 'Investigated by' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Proposed action' })).toBeVisible();
+    await expect(
+      page.getByText(/^State is where the case is now\. Proposed action is what its plan proposed/),
+    ).toBeVisible();
     const row = (id: string) => page.getByRole('row').filter({ has: page.getByRole('link', { name: id }) });
     await expect(row('C-000002')).toContainText('Board');
     await expect(row('C-000021')).toContainText('Rules only');
