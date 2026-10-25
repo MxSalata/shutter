@@ -13,9 +13,10 @@ Parameter RECEIVER = "Downstream Out";
 
 /// When the container's environment carries ANTHROPIC_API_KEY and the provider configuration is
 /// not there yet, or was written from another key (the .env changed), write it, so live agents need
-/// no manual step. Replay mode needs nothing. The knowledge files (block reasons, catalogue, site
-/// profile seed, recordings) are re-read when they changed since the last start: a rebuilt image
-/// brings its knowledge to the data the volume kept.
+/// no manual step. Replay mode needs nothing. The mode SHUTTER_AGENT_MODE names is recorded, and a
+/// refusal logged; the API mimic's switch, when set, is logged too. The knowledge files (block reasons,
+/// catalogue, site profile seed, recordings) are re-read when they changed since the last start: a
+/// rebuilt image brings its knowledge to the data the volume kept.
 ClassMethod OnStart(pTimeStarted As %String) As %Status
 {
     // Nothing here stops the start: a failure is written to the event log, and the production runs without what
@@ -36,8 +37,23 @@ ClassMethod OnStart(pTimeStarted As %String) As %Status
             If $EXTRACT(r, 1, 3) '= "ok:" $$$LOGWARNING("The model provider was not configured from ANTHROPIC_API_KEY: " _ r)
         }
         // A mode set by hand (record, for the recordings) survives a restart: only an environment that names one
-        // changes it.
-        If $SYSTEM.Util.GetEnviron("SHUTTER_AGENT_MODE") '= "" Do ##class(Shutter.Setup).RecordAgentMode($SYSTEM.Util.GetEnviron("SHUTTER_AGENT_MODE"))
+        // changes it. An answer other than the mode asked for (a refusal: record while the API mimic is on; or a word
+        // that is no mode, which leaves auto to decide) is logged, since the environment's word was not applied.
+        Set wanted = $SYSTEM.Util.GetEnviron("SHUTTER_AGENT_MODE")
+        If wanted '= "" {
+            Set r = ##class(Shutter.Setup).RecordAgentMode(wanted)
+            If r '= $ZCONVERT($ZSTRIP(wanted, "<>W"), "L") $$$LOGWARNING("SHUTTER_AGENT_MODE=" _ wanted _ " was not applied: " _ $SELECT(r = "auto": "not a mode, so auto decides", 1: r))
+        }
+        // The API mimic's switch (tests/mock, a test fixture that answers every live run without a model) at the start:
+        // it counts on a demo instance only, a site ignores it, and either way an operator should know it is set.
+        Set switch = $GET(^Shutter.Config("aihub", "mock"))
+        If switch '= "" {
+            If $GET(^Shutter.Config("demo")) {
+                $$$LOGWARNING("The API mimic's switch is set (" _ switch _ "): every agent item set to auto runs live through the mimic, with no model and at no cost, until Shutter.Mock.Setup_Disable() removes it")
+            } Else {
+                $$$LOGWARNING("The API mimic's switch is set (" _ switch _ ") on an instance that is not a demo, so it is ignored and the agents run as the instance says; Shutter.Mock.Setup_Disable() removes it")
+            }
+        }
     } Catch ex {
         $$$LOGWARNING("The model provider setup failed: " _ ex.DisplayString())
     }

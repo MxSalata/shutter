@@ -1191,6 +1191,9 @@ ClassMethod Settings() As %Status
     Set o = {}
     Set o.mode = $GET(^Shutter.Config("mode")), o.scenario = $GET(^Shutter.Config("scenario")), o.resetAt = $GET(^Shutter.Config("resetAt"))
     Do o.%Set("demo", ''$GET(^Shutter.Config("demo")), "boolean")
+    // The API mimic's switch (CONTRACTS 4), read once for every item: while it is set, an item that resolves to live is
+    // answered by the mimic, with no model, and the reply says so.
+    Set mock = ##class(Shutter.Setup).MockConfig()
     Set items = []
     Set prod = ##class(Ens.Config.Production).%OpenId(##class(Shutter.Setup).ProductionName())
     If $ISOBJECT(prod) {
@@ -1205,12 +1208,26 @@ ClassMethod Settings() As %Status
                 Set name = st.Name
                 Do a.%Set($ZCONVERT($EXTRACT(name, 1), "L") _ $EXTRACT(name, 2, *), st.Value)
             }
-            Set a.effectiveMode = ##class(Shutter.Bridge.Operation.Agent).ResolveMode(##class(Shutter.Util.Json).Str(a, "mode", "auto"))
+            Set a.effectiveMode = ##class(Shutter.Bridge.Operation.Agent).ResolveMode(##class(Shutter.Util.Json).Str(a, "mode", "auto"), mock)
+            // Who answers a run that goes to a model: the mimic while its switch is set, else the item's provider
+            // configuration (a name of fewer than three parts is under AI.LLM, as the runner reads it), else the
+            // instance's. A replaying item has none.
+            If (mock '= "") && (a.effectiveMode = "live") {
+                Set a.answeredBy = "the API mimic"
+            } ElseIf (a.effectiveMode = "live") || (a.effectiveMode = "record") {
+                Set by = ##class(Shutter.Util.Json).Str(a, "providerConfig")
+                If (by '= "") && ($LENGTH(by, ".") < 3) Set by = "AI.LLM." _ by
+                If by = "" Set by = $GET(^Shutter.Config("aihub", "provider"))
+                If by '= "" Set a.answeredBy = by
+            }
             Do items.%Push(a)
         }
     }
     Set o.agentItems = items
     Set o.agentMode = $GET(^Shutter.Config("aihub", "mode"), "auto")
+    Do o.%Set("mock", mock '= "", "boolean")
+    Set o.mockConfig = mock
+    Set o.mockModel = $SELECT(mock '= "": $GET(^Shutter.Config("aihub", "mockModel")), 1: "")
     Do o.%Set("providerConfigured", ''##class(Shutter.Setup).ProviderConfigured(), "boolean")
     Set o.prices = ..Rows("Shutter.Store.ModelPrice", "SELECT ID FROM Shutter_Store.ModelPrice ORDER BY Model")
     Do o.%Set("aiHubPresent", ''##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent"), "boolean")
