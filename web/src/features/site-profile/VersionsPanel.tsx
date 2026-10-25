@@ -39,7 +39,7 @@ export function VersionsPanel({ current }: { current: number }) {
                       Version {e.version}
                     </Text>
                     {e.version === current ? (
-                      <Badge size="xs" color="teal" variant="light" style={{ textTransform: 'none' }}>
+                      <Badge size="xs" color="blue" variant="light" style={{ textTransform: 'none' }}>
                         current
                       </Badge>
                     ) : null}

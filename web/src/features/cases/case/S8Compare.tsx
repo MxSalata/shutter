@@ -1,12 +1,14 @@
-import { Anchor, Badge, Card, Group, SimpleGrid, Stack, Table, Text, VisuallyHidden } from '@mantine/core';
-import { IconCheck } from '@tabler/icons-react';
+import { Anchor, Card, Group, SimpleGrid, Stack, Table, Text, VisuallyHidden } from '@mantine/core';
+import { IconEqual } from '@tabler/icons-react';
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router';
 import { useAttempts, useCase, useCases, useClosure, usePlan, useSnapshot } from '@/api/hooks';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PortalLink } from '@/components/PortalLink';
 import { DispositionBadge, StateBadge } from '@/components/StateBadge';
+import { StatusBadge } from '@/components/StatusBadge';
 import { humanize } from '@/lib/format';
+import { writes } from '@/lib/status';
 import { traceScreenshot } from '@/lib/screenshots';
 import type { CaseDetail } from '@/api/types';
 import { compareSide, evidenceRows, s8Pair, type CompareSide } from './compare';
@@ -55,11 +57,7 @@ function SideCard({ side, title, current }: { side: CompareSide; title: string; 
         <Group gap={6}>
           <StateBadge state={side.state} />
           <DispositionBadge disposition={side.disposition} />
-          <Badge
-            color={side.writes ? 'red' : 'teal'}
-            variant="light"
-            style={{ textTransform: 'none' }}
-          >{`${side.writes} write${side.writes === 1 ? '' : 's'}`}</Badge>
+          <StatusBadge {...writes(side.writes)} />
         </Group>
         <Text size="sm" fw={500}>
           {side.result}
@@ -117,7 +115,7 @@ function Pair({ rulesId, boardId, caseId }: { rulesId: string; boardId: string; 
                   <Table.Td>
                     {r.same ? (
                       <>
-                        <IconCheck size={16} color="var(--mantine-color-teal-6)" aria-hidden />
+                        <IconEqual size={16} color="var(--shutter-muted)" aria-hidden />
                         <VisuallyHidden>the same</VisuallyHidden>
                       </>
                     ) : (

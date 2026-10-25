@@ -1,15 +1,19 @@
 import { Badge, Group, Stack, Table, Text, Title, Tooltip } from '@mantine/core';
+import { IconAlertTriangle, IconClock } from '@tabler/icons-react';
+import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
+import type { Tone } from '@/lib/tone';
 import { displayZone, humanize } from '@/lib/format';
 import { encounterTimeline } from './timeline';
 
-const OUTCOMES: Record<string, string> = {
-  applied: 'teal',
-  already_committed: 'teal',
-  unavailable: 'red',
-  refused: 'red',
-  error: 'red',
-  uncertain: 'orange',
+/** What the receiver did with each operation: committed is a fact of its history, not a check, so information. */
+const OUTCOMES: Record<string, Tone> = {
+  applied: 'info',
+  already_committed: 'info',
+  unavailable: 'blocking',
+  refused: 'blocking',
+  error: 'blocking',
+  uncertain: 'attention',
 };
 
 /**
@@ -75,14 +79,10 @@ export function EncounterTimeline({ summary }: { summary: unknown }) {
                 </Table.Td>
                 <Table.Td>{`${r.system}${r.source === 'receiver' ? " (receiver's history)" : ''}`}</Table.Td>
                 <Table.Td>
-                  <Badge
-                    size="sm"
-                    variant="light"
-                    color={OUTCOMES[r.outcome] ?? 'gray'}
-                    style={{ textTransform: 'none' }}
-                  >
-                    {`${humanize(r.outcome) || 'Unknown'}${r.httpStatus ? ` (${r.httpStatus})` : ''}`}
-                  </Badge>
+                  <StatusBadge
+                    tone={OUTCOMES[r.outcome] ?? 'neutral'}
+                    label={`${humanize(r.outcome) || 'Unknown'}${r.httpStatus ? ` (${r.httpStatus})` : ''}`}
+                  />
                 </Table.Td>
                 <Table.Td>{r.versionAfter ? `v${r.versionAfter}` : 'none'}</Table.Td>
                 <Table.Td>
@@ -95,9 +95,10 @@ export function EncounterTimeline({ summary }: { summary: unknown }) {
                       >
                         <Badge
                           size="sm"
-                          color="orange"
+                          color="yellow"
                           variant="light"
                           tabIndex={0}
+                          leftSection={<IconAlertTriangle size={12} aria-hidden />}
                           style={{ textTransform: 'none' }}
                         >
                           Same event time
@@ -112,20 +113,17 @@ export function EncounterTimeline({ summary }: { summary: unknown }) {
                       >
                         <Badge
                           size="sm"
-                          color="grape"
+                          color="yellow"
                           variant="light"
                           tabIndex={0}
+                          leftSection={<IconClock size={12} aria-hidden />}
                           style={{ textTransform: 'none' }}
                         >
                           Clock-change hour
                         </Badge>
                       </Tooltip>
                     ) : null}
-                    {r.later ? (
-                      <Badge size="sm" color="blue" variant="light" style={{ textTransform: 'none' }}>
-                        Later event
-                      </Badge>
-                    ) : null}
+                    {r.later ? <StatusBadge tone="info" label="Later event" /> : null}
                   </Group>
                 </Table.Td>
               </Table.Tr>

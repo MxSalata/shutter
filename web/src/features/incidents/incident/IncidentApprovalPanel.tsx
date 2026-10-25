@@ -1,9 +1,11 @@
-import { Badge, Button, Group, List, Stack, Table, Text, Tooltip } from '@mantine/core';
+import { Button, Group, List, Stack, Table, Text, Tooltip } from '@mantine/core';
 import { IconCheck, IconX } from '@tabler/icons-react';
 import type { IncidentDetail, Me } from '@/api/types';
 import { Digest } from '@/components/Digest';
 import { KeyValueList } from '@/components/KeyValueList';
+import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
+import { APPROVALS } from '@/lib/status';
 import { NotYet, Section } from '../../cases/case/Section';
 import { describePolicy } from '../describe';
 import type { Decision } from './DecideModal';
@@ -32,13 +34,13 @@ export function IncidentApprovalPanel({
       note="One approval releases the chains the site's policy leaves to a person: resend these, in this order; each one is rehearsed, gated and verified just before it goes; a chain stops at the first surprise, and the rest comes back to a person. It binds the plan's digest, and each operation after the first goes at exactly the version the one before it verified. Each operation goes only under the catalogue entry and outcome listed for it; one whose fresh evidence reads differently stops its chain and comes back to a person."
       aside={
         decision ? (
-          <Badge color={decision.decision === 'approved' ? 'teal' : 'red'} style={{ textTransform: 'none' }}>
-            {decision.decision === 'approved' ? `Approved by ${decision.by}` : `Rejected by ${decision.by}`}
-          </Badge>
+          decision.decision === 'approved' ? (
+            <StatusBadge {...APPROVALS.approved} label={`Approved by ${decision.by}`} />
+          ) : (
+            <StatusBadge {...APPROVALS.rejected} label={`Rejected by ${decision.by}`} />
+          )
         ) : waiting ? (
-          <Badge color="yellow" style={{ textTransform: 'none' }}>
-            Waiting for an approver
-          </Badge>
+          <StatusBadge {...APPROVALS.awaiting} label="Waiting for an approver" />
         ) : null
       }
     >
@@ -68,7 +70,6 @@ export function IncidentApprovalPanel({
               <Tooltip label={why || "Approve the release of the incident's policy chains"} disabled={!why}>
                 <span>
                   <Button
-                    color="teal"
                     leftSection={<IconCheck size={16} />}
                     disabled={!!why}
                     onClick={() => onDecide('approve')}

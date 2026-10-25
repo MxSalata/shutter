@@ -10,7 +10,7 @@ import type { AgentItem, Settings } from '@/api/types';
 
 function Flag({ children }: { children: React.ReactNode }) {
   return (
-    <Badge color="teal" variant="light" style={{ textTransform: 'none' }}>
+    <Badge color="gray" variant="outline" style={{ textTransform: 'none' }}>
       {children}
     </Badge>
   );
@@ -50,7 +50,7 @@ function Configured({ s, replayed }: { s: Settings; replayed: number | undefined
         {`${agents.length} ${s.aiHubPresent ? 'AI Hub ' : ''}${agents.length === 1 ? 'agent' : 'agents'}, ${how}`}
       </Text>
       <Group gap="sm" wrap="wrap">
-        <Flag>Mode: {humanize(s.mode)}</Flag>
+        <Flag>Last scenario investigation: {humanize(s.mode)}</Flag>
         {s.demo ? <Flag>Demo instance</Flag> : null}
         {s.mock ? <Flag>API mimic on{s.mockConfig ? ` (${s.mockConfig})` : ''}</Flag> : null}
         {s.aiHubPresent ? <Flag>AI Hub present</Flag> : null}

@@ -42,7 +42,17 @@ describe('CasePage', () => {
     expect(await within(board).findByText('Impact Analysis')).toBeInTheDocument();
     const dispatch = await screen.findByRole('region', { name: 'Dispatch and verification' });
     expect(await within(dispatch).findByText(/Acknowledged/)).toBeInTheDocument();
-    expect(await within(dispatch).findByText('Verified at the receiver')).toBeInTheDocument();
+    expect(await within(dispatch).findByText('Effect verified at the receiver')).toBeInTheDocument();
+  });
+
+  it('calls the verification of a plan that writes nothing not applicable, not pending', async () => {
+    renderCase('C-000008');
+    const verification = await screen.findByRole('region', { name: 'Verification' });
+    expect(await within(verification).findByText('Not applicable: no Shutter write')).toBeInTheDocument();
+    expect(within(verification).queryByText(/Not verified yet/)).not.toBeInTheDocument();
+    const gate = await screen.findByRole('region', { name: 'The plan and the gate' });
+    expect(await within(gate).findByText(/^Passed \d+ of \d+ applicable checks$/)).toBeInTheDocument();
+    expect((await within(gate).findAllByText('Not applicable')).length).toBeGreaterThan(0);
   });
 
   it('shows the board right under the outcome, each member leading with its verdict', async () => {
@@ -209,7 +219,7 @@ describe('CasePage', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve this plan' }));
     expect(await screen.findByText('Closed: verified', {}, { timeout: 5_000 })).toBeInTheDocument();
     const dispatch = await screen.findByRole('region', { name: 'Dispatch and verification' });
-    expect(await within(dispatch).findByText('Verified at the receiver')).toBeInTheDocument();
+    expect(await within(dispatch).findByText('Effect verified at the receiver')).toBeInTheDocument();
   });
 
   it('closes the held case as blocked when the approver rejects it', async () => {
@@ -231,7 +241,7 @@ describe('CasePage', () => {
   it("shows a replayed run's model and what the recorded run cost, not $0.00", async () => {
     renderCase('C-000009');
     const board = await screen.findByRole('region', { name: 'The board' });
-    expect((await within(board).findAllByText('Recorded run · claude-opus-5-5, replayed')).length).toBe(4);
+    expect((await within(board).findAllByText('Recorded replay · claude-opus-5-5')).length).toBe(4);
     expect((await within(board).findAllByText(/\$\d+\.\d+ when recorded, nothing now/)).length).toBe(4);
     expect(within(board).queryByText(/\$0\.00/)).not.toBeInTheDocument();
   });

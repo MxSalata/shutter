@@ -363,13 +363,9 @@
   outline-offset: 2px;
 }
 
-/* The navigation icons, each in its entry's colour (nav.ts): the -text token of that colour,
-   which every scheme tunes to 4.5:1 on its surfaces, so the icon holds 3:1 on the navbar, on a
-   hovered entry and on the active entry's tint. High contrast keeps them in the text colour. */
+/* The navigation icons take the text colour of their entry: the entries carry no colour of their own, so
+   colour stays for statuses. */
 .nav-icon {
-  color: var(--nav-icon, currentColor);
-}
-:root[data-shutter-contrast='high'] .nav-icon {
   color: currentColor;
 }
 

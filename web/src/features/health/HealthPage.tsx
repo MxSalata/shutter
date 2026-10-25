@@ -1,6 +1,7 @@
 import { Accordion, Card, Group, Stack, Table, Text, ThemeIcon } from '@mantine/core';
 import { IconCheck, IconMinus, IconX } from '@tabler/icons-react';
-import { useHealth } from '@/api/hooks';
+import { Fragment } from 'react';
+import { useHealth, useLibrary } from '@/api/hooks';
 import { PageHeader } from '@/components/PageHeader';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
@@ -11,7 +12,7 @@ import { keyLabel } from '@/lib/format';
 function Value({ value }: { value: unknown }) {
   if (value === true) {
     return (
-      <ThemeIcon size="sm" radius="xl" color="teal" variant="light" role="img" aria-label="yes">
+      <ThemeIcon size="sm" radius="xl" color="green" variant="light" role="img" aria-label="yes">
         <IconCheck size={14} />
       </ThemeIcon>
     );
@@ -26,7 +27,7 @@ function Value({ value }: { value: unknown }) {
   if (value === null || value === undefined || value === '') {
     return (
       <Group gap={6}>
-        <ThemeIcon size="sm" radius="xl" color="orange" variant="light" role="img" aria-label="not reported">
+        <ThemeIcon size="sm" radius="xl" color="yellow" variant="light" role="img" aria-label="not reported">
           <IconMinus size={14} />
         </ThemeIcon>
         <Text size="xs" c="dimmed">
@@ -39,6 +40,39 @@ function Value({ value }: { value: unknown }) {
     <Text size="sm" className="mono-wrap">
       {typeof value === 'object' ? JSON.stringify(value) : String(value)}
     </Text>
+  );
+}
+
+/**
+ * The board a case convenes by default, apart from the registered agents the report counts: the library's members
+ * on the default board, by role ("3 specialists and the coordinator").
+ */
+function DefaultBoard() {
+  const library = useLibrary();
+  if (!library.data) return null;
+  const board = library.data.filter((m) => m.enabled && m.inDefaultBoard);
+  const specialists = board.filter((m) => m.role === 'specialist').length;
+  const coordinator = board.some((m) => m.role === 'coordinator');
+  const others = board.length - specialists - (coordinator ? 1 : 0);
+  const parts = [
+    specialists ? `${specialists} specialist${specialists === 1 ? '' : 's'}` : '',
+    coordinator ? 'the coordinator' : '',
+    others ? `${others} other${others === 1 ? '' : 's'}` : '',
+  ].filter(Boolean);
+  return (
+    <Table.Tr>
+      <Table.Th w={220} style={{ fontWeight: 500 }}>
+        <Text size="sm" c="dimmed">
+          Default board
+        </Text>
+      </Table.Th>
+      <Table.Td>
+        <Text size="sm">{parts.length ? parts.join(' and ') : 'nobody'}</Text>
+        <Text size="xs" c="dimmed">
+          From the agent library; the generalist answers only in single investigator mode
+        </Text>
+      </Table.Td>
+    </Table.Tr>
   );
 }
 
@@ -66,16 +100,19 @@ export default function HealthPage() {
             <Table withRowBorders={false} verticalSpacing={4}>
               <Table.Tbody>
                 {Object.entries(report).map(([k, v]) => (
-                  <Table.Tr key={k}>
-                    <Table.Th w={220} style={{ fontWeight: 500 }}>
-                      <Text size="sm" c="dimmed">
-                        {keyLabel(k)}
-                      </Text>
-                    </Table.Th>
-                    <Table.Td>
-                      <Value value={v} />
-                    </Table.Td>
-                  </Table.Tr>
+                  <Fragment key={k}>
+                    <Table.Tr>
+                      <Table.Th w={220} style={{ fontWeight: 500 }}>
+                        <Text size="sm" c="dimmed">
+                          {keyLabel(k)}
+                        </Text>
+                      </Table.Th>
+                      <Table.Td>
+                        <Value value={v} />
+                      </Table.Td>
+                    </Table.Tr>
+                    {k === 'board_members' ? <DefaultBoard /> : null}
+                  </Fragment>
                 ))}
               </Table.Tbody>
             </Table>

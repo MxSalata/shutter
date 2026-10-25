@@ -30,7 +30,7 @@ export function Digest({
           <ActionIcon
             size="sm"
             variant="subtle"
-            color={copied ? 'teal' : 'gray'}
+            color={copied ? undefined : 'gray'}
             onClick={copy}
             aria-label={copied ? 'Copied' : `Copy ${label ?? 'value'}`}
           >

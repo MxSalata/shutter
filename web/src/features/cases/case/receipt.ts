@@ -66,15 +66,21 @@ function decider(
   if (approval) {
     const who =
       approval.approver === 'policy'
-        ? `site policy${approval.comment ? ` (${approval.comment})` : ''}`
+        ? `the site's written policy${approval.comment ? ` (${approval.comment})` : ''}`
         : approval.approver;
     const revoked = approval.revoked
       ? ` (since revoked${approval.revokedBy ? ` by ${approval.revokedBy}` : ''})`
       : '';
-    return `${approval.decision === 'rejected' ? 'Rejected' : 'Approved'} by ${who}${revoked}`;
+    const verb =
+      approval.decision === 'rejected'
+        ? 'Rejected'
+        : approval.approver === 'policy'
+          ? 'Released'
+          : 'Approved';
+    return `${verb} by ${who}${revoked}`;
   }
   const by = c.planCreatedBy ?? plan?.plan?.createdBy ?? '';
-  if (by.startsWith('policy:')) return `Site policy, entry ${by.slice('policy:'.length)}`;
+  if (by.startsWith('policy:')) return `The site's written policy, entry ${by.slice('policy:'.length)}`;
   if (!writes) return 'No approval needed: the plan writes nothing';
   if (c.disposition === 'handled_by_hand') return 'The team, by hand';
   switch (c.state) {
@@ -134,11 +140,20 @@ export function safetyReceipt({
   const acknowledged = sent.filter((x) => ['applied', 'already_committed'].includes(str(x.attempt?.outcome)));
   const last =
     [...(attempts ?? [])].reverse().find((x) => x.verification)?.verification ?? closure?.verification;
-  const verification = last ? `${humanize(last.outcome)}${last.summary ? `: ${last.summary}` : ''}` : '';
   const decisions = plan?.gateDecisions ?? [];
   const gate = decisions.length ? decisions[decisions.length - 1] : undefined;
   const disposition = p?.disposition || c.disposition || '';
   const writes = disposition === 'resend';
+  // With no verification yet: one still to come after a write, or none to make (no Shutter write, a hand correction)
+  const verification = last
+    ? `${humanize(last.outcome)}${last.summary ? `: ${last.summary}` : ''}`
+    : sent.length
+      ? 'Verification pending'
+      : c.disposition === 'handled_by_hand'
+        ? 'Not verified by Shutter: the team corrected it by hand'
+        : p && !writes
+          ? 'Not applicable: no Shutter write'
+          : '';
   const target = `${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`;
   const action = !p
     ? 'No plan yet'

@@ -1,5 +1,6 @@
-import { Alert, Button, Group, List, Modal, Stack, Text, Textarea } from '@mantine/core';
+import { Button, Group, List, Modal, Stack, Text, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import { IconHandStop, IconUserQuestion } from '@tabler/icons-react';
 import { useState } from 'react';
 import { newIdempotencyKey } from '@/api/client';
 import { useBlockedReason, useClosure, useMe, useReinvestigate } from '@/api/hooks';
@@ -7,6 +8,7 @@ import type { CaseDetail } from '@/api/types';
 import { DEMO } from '@/demo';
 import { describeError } from '@/lib/errors';
 import { KeyValueList } from '@/components/KeyValueList';
+import { StatusNotice } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
 import { asArray } from '@/lib/json';
 import { humanize } from '@/lib/format';
@@ -113,7 +115,11 @@ export function OutcomePanel({ c }: { c: CaseDetail }) {
   return (
     <Section id="outcome" title={title} note={c.outcome || undefined}>
       {r ? (
-        <Alert color={c.state === 'blocked' ? 'red' : 'orange'} variant="light" title={r.title || r.code}>
+        <StatusNotice
+          tone={c.state === 'blocked' ? 'blocking' : 'attention'}
+          icon={c.state === 'blocked' ? IconHandStop : IconUserQuestion}
+          title={r.title || r.code}
+        >
           <Stack gap="xs">
             {r.text ? <Text size="sm">{r.text}</Text> : null}
             <KeyValueList
@@ -135,7 +141,7 @@ export function OutcomePanel({ c }: { c: CaseDetail }) {
               </List>
             ) : null}
           </Stack>
-        </Alert>
+        </StatusNotice>
       ) : null}
       {/* A withheld case (a merge or a cancel Shutter never sends) has nothing new to find: the team closes it */}
       {c.state !== 'resolved' && c.failureKind !== 'withheld' ? <Reinvestigate c={c} /> : null}

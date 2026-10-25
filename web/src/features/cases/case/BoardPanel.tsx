@@ -1,13 +1,16 @@
 import { Accordion, Badge, Card, Group, List, SimpleGrid, Stack, Text, Tooltip } from '@mantine/core';
+import { IconMessageExclamation, IconUsers } from '@tabler/icons-react';
 import { useRuns, useSettings } from '@/api/hooks';
 import type { AgentRun, Mode } from '@/api/types';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PortalLink } from '@/components/PortalLink';
 import { DispositionBadge } from '@/components/StateBadge';
+import { StatusBadge } from '@/components/StatusBadge';
 import { JsonBlock } from '@/components/JsonBlock';
 import { costAtPrice } from '@/lib/cost';
 import { asArray, asObject } from '@/lib/json';
 import { formatDuration, formatInt, formatUsd, humanize, keyLabel } from '@/lib/format';
+import { PROVENANCE } from '@/lib/status';
 import { describeEntry } from './derive';
 import { showEvidence } from './evidenceLinks';
 import { NotYet, Section } from './Section';
@@ -34,30 +37,21 @@ function RunStats({ run, portalBase }: { run: AgentRun; portalBase: string }) {
   return (
     <Stack gap={4}>
       <Group gap={6} wrap="wrap">
-        <Tooltip
+        <StatusBadge
+          {...PROVENANCE[replay ? 'replay' : 'live']}
+          size="xs"
           label={
+            replay
+              ? `${PROVENANCE.replay.label}${run.model ? ` · ${run.model}` : ''}`
+              : `${PROVENANCE.live.label} · ${run.model}`
+          }
+          hint={
             replay
               ? `Replayed from a recorded live run${run.model ? ` on ${run.model}` : ''}: no model was called now`
               : `A live run on ${run.model}`
           }
-          multiline
-          maw={300}
-        >
-          <Badge
-            size="xs"
-            color={replay ? 'gray' : 'indigo'}
-            variant="light"
-            style={{ textTransform: 'none' }}
-            tabIndex={0}
-          >
-            {replay ? `Recorded run${run.model ? ` · ${run.model}` : ''}, replayed` : `Live · ${run.model}`}
-          </Badge>
-        </Tooltip>
-        {run.status !== 'ok' ? (
-          <Badge size="xs" color="red" style={{ textTransform: 'none' }}>
-            {humanize(run.status)}
-          </Badge>
-        ) : null}
+        />
+        {run.status !== 'ok' ? <StatusBadge tone="blocking" size="xs" label={humanize(run.status)} /> : null}
       </Group>
       {replay && !Number(run.promptTokens) && !Number(run.completionTokens) ? (
         <Text size="xs" c="dimmed">
@@ -261,8 +255,32 @@ export function BoardPanel({
         : settledByPolicy
           ? "The scenario catalogue matched the case and the site's profile says who decides it. A case it leaves to the board shows the board's findings here."
           : 'Three specialists read the same evidence in parallel, each from one perspective, and cite what they used. The coordinator keeps their disagreements and proposes one plan.';
+  const dissent = asArray(asObject(coordinator?.result)?.disagreements).length;
   return (
-    <Section id="board" title={title} note={note}>
+    <Section
+      id="board"
+      title={title}
+      note={note}
+      aside={
+        coordinator ? (
+          dissent ? (
+            <StatusBadge
+              tone="attention"
+              label={`${dissent} dissent${dissent === 1 ? '' : 's'} kept`}
+              hint="A specialist disagreed with the plan; the coordinator kept the disagreement in it. Dissent is not an error."
+              icon={IconMessageExclamation}
+            />
+          ) : (
+            <StatusBadge
+              tone="neutral"
+              label="Unanimous"
+              hint="The specialists agreed; agreement is not a safety check, the gate is"
+              icon={IconUsers}
+            />
+          )
+        ) : null
+      }
+    >
       {runs.isError ? <ErrorAlert error={runs.error} title="The agent runs could not be read" /> : null}
       {mode === 'rules' && !notConvened ? <NotYet>No agent runs in this mode.</NotYet> : null}
       {notConvened ? null : settledByPolicy ? (

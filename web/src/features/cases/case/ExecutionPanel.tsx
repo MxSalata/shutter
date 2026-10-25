@@ -1,57 +1,26 @@
-import { Accordion, Badge, Card, Stack, Text, Tooltip } from '@mantine/core';
+import { Accordion, Card, Stack, Text } from '@mantine/core';
 import { useAttempts } from '@/api/hooks';
 import type { Attempt, Verification } from '@/api/types';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { JsonBlock } from '@/components/JsonBlock';
 import { KeyValueList } from '@/components/KeyValueList';
 import { Digest } from '@/components/Digest';
+import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
+import { attempt, verification } from '@/lib/status';
 import { asObject } from '@/lib/json';
 import { NotYet, Section } from './Section';
 
-/** What the downstream system answered. An acknowledgement is never called verified: only the verifier's read says that. */
-const ATTEMPT: Record<string, { colour: string; label: string; hint: string }> = {
-  applied: {
-    colour: 'blue',
-    label: 'Acknowledged',
-    hint: 'The downstream system answered 201; verification reads what it committed',
-  },
-  already_committed: {
-    colour: 'blue',
-    label: 'Already committed',
-    hint: 'The downstream system had committed this operation before',
-  },
-  uncertain: {
-    colour: 'orange',
-    label: 'No answer: outcome unknown',
-    hint: 'The write may or may not have been committed; reconciled by its key',
-  },
-  version_conflict: {
-    colour: 'red',
-    label: 'Refused: the receiver changed',
-    hint: 'The expected version no longer matched; nothing was written',
-  },
-  refused: { colour: 'red', label: 'Refused', hint: 'The downstream system refused the write' },
-  error: { colour: 'red', label: 'Error', hint: 'The write could not be sent' },
-};
-
-const VERIFIED: Record<string, { colour: string; label: string }> = {
-  verified: { colour: 'green', label: 'Verified at the receiver' },
-  unresolved: { colour: 'orange', label: 'Not established' },
-  not_committed: { colour: 'red', label: 'Not committed at the receiver' },
-  failed: { colour: 'red', label: 'Contradiction: a person must check' },
-};
-
 function AttemptCard({ a }: { a: Attempt }) {
-  const s = ATTEMPT[a.outcome] ?? { colour: 'gray', label: a.outcome, hint: '' };
+  const s = attempt(a.outcome);
   const receipt = asObject(a.receipt);
   return (
     <Stack gap={6}>
-      <Tooltip label={s.hint} disabled={!s.hint} multiline maw={320}>
-        <Badge color={s.colour} style={{ textTransform: 'none' }} tabIndex={0} w="fit-content">
-          {s.label} {a.httpStatus ? `(HTTP ${a.httpStatus})` : ''}
-        </Badge>
-      </Tooltip>
+      <StatusBadge
+        {...s}
+        label={`${s.label}${a.httpStatus ? ` (HTTP ${a.httpStatus})` : ''}`}
+        w="fit-content"
+      />
       <KeyValueList
         rows={[
           ['Sent', <Timestamp key="t" iso={a.at} />],
@@ -78,13 +47,10 @@ function AttemptCard({ a }: { a: Attempt }) {
 }
 
 function VerificationCard({ v }: { v: Verification }) {
-  const s = VERIFIED[v.outcome] ?? { colour: 'gray', label: v.outcome };
   const verdict = asObject(v.detail)?.verdict;
   return (
     <Stack gap={6}>
-      <Badge color={s.colour} style={{ textTransform: 'none' }} w="fit-content">
-        {s.label}
-      </Badge>
+      <StatusBadge {...verification(v.outcome)} w="fit-content" />
       {typeof verdict === 'string' && verdict ? (
         <Text size="xs" c="dimmed">
           Verdict: {verdict}
@@ -106,7 +72,39 @@ function VerificationCard({ v }: { v: Verification }) {
   );
 }
 
-export function ExecutionPanel({ caseId, open, write }: { caseId: string; open: boolean; write: boolean }) {
+/**
+ * What the section says before any attempt: a write still to come, no write of Shutter's to verify (a plan that
+ * writes nothing, or a correction the team made by hand), or no plan yet.
+ */
+function Empty({ write, planned, byHand }: { write: boolean; planned: boolean; byHand: boolean }) {
+  if (write) return <NotYet>Nothing dispatched yet.</NotYet>;
+  if (byHand || planned)
+    return (
+      <Stack gap={4}>
+        <StatusBadge {...verification(byHand ? 'by_hand' : 'not_applicable')} w="fit-content" />
+        <Text size="sm" c="dimmed">
+          {byHand
+            ? 'The team corrected the systems by hand and a person closed the case; Shutter wrote nothing and did not check the correction.'
+            : "The plan writes nothing to the receiver, so there is no write of Shutter's to verify."}
+        </Text>
+      </Stack>
+    );
+  return <NotYet>Nothing to verify yet: there is no plan.</NotYet>;
+}
+
+export function ExecutionPanel({
+  caseId,
+  open,
+  write,
+  planned,
+  byHand,
+}: {
+  caseId: string;
+  open: boolean;
+  write: boolean;
+  planned: boolean;
+  byHand: boolean;
+}) {
   const attempts = useAttempts(caseId, open);
   const list = attempts.data ?? [];
   return (
@@ -117,7 +115,7 @@ export function ExecutionPanel({ caseId, open, write }: { caseId: string; open: 
     >
       {attempts.isError ? <ErrorAlert error={attempts.error} title="The attempts could not be read" /> : null}
       {attempts.isSuccess && list.length === 0 ? (
-        <NotYet>{write ? 'Nothing dispatched yet.' : 'Not verified yet.'}</NotYet>
+        <Empty write={write} planned={planned} byHand={byHand} />
       ) : null}
       {list.map((x, i) => (
         <Card key={i} padding="sm" withBorder>

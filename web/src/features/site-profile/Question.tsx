@@ -3,7 +3,7 @@ import { Badge, Group, Text } from '@mantine/core';
 /** Whether Shutter acts on an answer, or keeps it on record for the board and reviewers. */
 export function Effect({ acts }: { acts: boolean }) {
   return (
-    <Badge size="xs" variant="outline" color={acts ? 'teal' : 'gray'} style={{ textTransform: 'none' }}>
+    <Badge size="xs" variant="outline" color={acts ? 'blue' : 'gray'} style={{ textTransform: 'none' }}>
       {acts ? 'Changes what Shutter does' : 'On record: nothing reads it yet'}
     </Badge>
   );

@@ -41,6 +41,7 @@ describe('safetyReceipt', () => {
     expect(r.writes).toBe(0);
     expect(r.expectedVersion).toBe('');
     expect(r.status).toBe('0 writes; waiting for a person');
+    expect(r.verification).toBe('Not applicable: no Shutter write');
   });
 
   it('names the site policy when it released the write', () => {
@@ -63,7 +64,7 @@ describe('safetyReceipt', () => {
       snapshot: base.snapshot as unknown as Snapshot,
     });
     expect(r.decidedBy).toMatch(/^Approved by /);
-    expect(p.decidedBy).toBe('Approved by site policy (Automatic by site policy v9)');
+    expect(p.decidedBy).toBe("Released by the site's written policy (Automatic by site policy v9)");
   });
 
   it('reads a policy plan with no approval row from who made the plan, and counts an open case so far', () => {
@@ -74,7 +75,7 @@ describe('safetyReceipt', () => {
     } as unknown as CaseDetail;
     const r = safetyReceipt({ c, plan: null, approvals: null, attempts: [], closure: null, snapshot: null });
     expect(r.action).toBe('No plan yet');
-    expect(r.decidedBy).toBe('Site policy, entry E2');
+    expect(r.decidedBy).toBe("The site's written policy, entry E2");
     expect(r.status).toBe('0 writes so far; executing');
   });
   it('names a revoked approval, and counts only attempts that reached the receiver as writes', () => {

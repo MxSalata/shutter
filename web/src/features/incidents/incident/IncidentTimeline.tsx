@@ -5,8 +5,8 @@ import { formatTime, humanize } from '@/lib/format';
 const KIND_COLOURS: Record<string, string> = {
   state: 'blue',
   note: 'gray',
-  release: 'violet',
-  approval: 'grape',
+  release: 'blue',
+  approval: 'blue',
 };
 
 export function IncidentTimeline({ events }: { events: IncidentEvent[] }) {

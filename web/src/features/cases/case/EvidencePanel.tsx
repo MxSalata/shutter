@@ -1,10 +1,11 @@
-import { Accordion, Badge, Group, Stack, Text, Tooltip } from '@mantine/core';
-import { IconCheck, IconQuestionMark, IconX } from '@tabler/icons-react';
+import { Accordion, Group, Stack, Text } from '@mantine/core';
+import { IconCheck, IconClock, IconQuestionMark, IconX } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import { useSnapshot } from '@/api/hooks';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Digest } from '@/components/Digest';
 import { JsonBlock } from '@/components/JsonBlock';
+import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
 import { asArray, asObject } from '@/lib/json';
 import { formatTime, keyLabel, parseTime } from '@/lib/format';
@@ -48,33 +49,20 @@ function CapabilityPassport({ data }: { data: Record<string, unknown> }) {
       <Group gap={6}>
         {caps.map(([key, label, hint]) => {
           const has = data[key] === true;
-          const colour = unreadable ? 'orange' : has ? 'teal' : 'red';
           const state = unreadable ? 'unknown' : has ? 'guaranteed' : 'not guaranteed';
           return (
-            <Tooltip key={key} label={`${hint}: ${state}`} multiline maw={300}>
-              <Badge
-                color={colour}
-                variant="light"
-                leftSection={
-                  unreadable ? (
-                    <IconQuestionMark size={12} />
-                  ) : has ? (
-                    <IconCheck size={12} />
-                  ) : (
-                    <IconX size={12} />
-                  )
-                }
-                style={{ textTransform: 'none' }}
-                tabIndex={0}
-              >
-                {label}
-              </Badge>
-            </Tooltip>
+            <StatusBadge
+              key={key}
+              tone={unreadable ? 'blocking' : has ? 'positive' : 'blocking'}
+              label={unreadable ? `${label}: unknown` : has ? label : `${label}: not guaranteed`}
+              hint={`${hint}: ${state}`}
+              icon={unreadable ? IconQuestionMark : has ? IconCheck : IconX}
+            />
           );
         })}
       </Group>
       {unreadable ? (
-        <Text size="xs" c="orange">
+        <Text size="xs" c="yellow">
           The receiver's capability profile could not be read (HTTP {String(status || 'none')}): nothing is
           assumed about it.
         </Text>
@@ -122,16 +110,18 @@ export function EvidencePanel({ caseId, open }: { caseId: string; open: boolean 
       note="What Shutter observed before anyone decided: one snapshot, each observation with its source, time and digest. The agents read only this; the gate checks the plan against it."
       aside={
         s ? (
-          <Tooltip label={`Observations count as fresh until ${s.freshUntil}; a write needs fresh evidence`}>
-            <Badge
-              color={expired ? 'gray' : 'teal'}
-              variant="light"
-              tabIndex={0}
-              style={{ textTransform: 'none' }}
-            >
-              {expired ? `Expired ${formatTime(s.freshUntil)}` : `Fresh until ${formatTime(s.freshUntil)}`}
-            </Badge>
-          </Tooltip>
+          <StatusBadge
+            tone={expired ? 'neutral' : 'info'}
+            label={
+              expired ? `Expired ${formatTime(s.freshUntil)}` : `Fresh until ${formatTime(s.freshUntil)}`
+            }
+            hint={
+              expired
+                ? `Observations counted as fresh until ${s.freshUntil}. Freshness is checked when a write is decided: the gate's table shows how it stood then`
+                : `Observations count as fresh until ${s.freshUntil}; a write needs fresh evidence`
+            }
+            icon={IconClock}
+          />
         ) : null
       }
     >
@@ -181,7 +171,7 @@ export function EvidencePanel({ caseId, open }: { caseId: string; open: boolean 
                       {item.kind === 'route' ? <CapabilityPassport data={data} /> : null}
                       {notes.length ? (
                         <Stack gap={2}>
-                          <Text size="xs" fw={600} c="orange">
+                          <Text size="xs" fw={600} c="yellow">
                             Free text in the message: data, never instructions
                           </Text>
                           {notes.map((n, i) => (

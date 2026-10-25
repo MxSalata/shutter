@@ -1,11 +1,12 @@
-import { Badge, Button, CopyButton, Group, Text } from '@mantine/core';
+import { Button, CopyButton, Group, Text } from '@mantine/core';
 import { IconCheck, IconCopy } from '@tabler/icons-react';
 import { useApprovals, useAttempts, useClosure, usePlan, useSnapshot } from '@/api/hooks';
 import type { CaseDetail } from '@/api/types';
 import { Digest } from '@/components/Digest';
 import { KeyValueList } from '@/components/KeyValueList';
+import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
-import { humanize } from '@/lib/format';
+import { writes } from '@/lib/status';
 import { safetyReceipt } from './receipt';
 import { Section } from './Section';
 
@@ -36,19 +37,12 @@ export function ReceiptCard({ c, open }: { c: CaseDetail; open: boolean }) {
       note={r.status}
       aside={
         <>
-          <Badge
-            color={zero ? 'orange' : r.writes ? 'blue' : 'gray'}
-            variant="light"
-            style={{ textTransform: 'none' }}
-          >
-            {`${r.writes} write${r.writes === 1 ? '' : 's'}`}
-          </Badge>
+          <StatusBadge {...writes(r.writes)} />
           <CopyButton value={JSON.stringify(r, null, 2)} timeout={1500}>
             {({ copied, copy }) => (
               <Button
                 size="xs"
                 variant="light"
-                color={copied ? 'teal' : undefined}
                 leftSection={copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
                 onClick={copy}
               >
@@ -86,7 +80,7 @@ export function ReceiptCard({ c, open }: { c: CaseDetail; open: boolean }) {
           [
             'Gate',
             r.gate
-              ? `${humanize(r.gate.outcome)} at ${r.gate.stage}, policy ${r.gate.policyVersion}`
+              ? `${r.gate.outcome === 'pass' ? 'Passed' : r.gate.outcome === 'block' ? 'Blocked' : 'Unknown: write blocked'} at ${r.gate.stage}, policy ${r.gate.policyVersion}`
               : 'Not checked yet',
           ],
           [
@@ -115,7 +109,7 @@ export function ReceiptCard({ c, open }: { c: CaseDetail; open: boolean }) {
               .filter(Boolean)
               .join('; '),
           ],
-          ['Verification', r.verification || (r.writes ? 'Not verified yet' : 'Nothing to verify')],
+          ['Verification', r.verification || 'Not verified yet'],
         ]}
       />
     </Section>

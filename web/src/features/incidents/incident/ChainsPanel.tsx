@@ -1,7 +1,8 @@
-import { Anchor, Badge, Button, Card, Group, Stack, Table, Text, Tooltip } from '@mantine/core';
-import { IconCheck, IconX } from '@tabler/icons-react';
+import { Anchor, Button, Card, Group, Stack, Table, Text, Tooltip } from '@mantine/core';
+import { IconCheck, IconHandStop, IconX } from '@tabler/icons-react';
 import { Link } from 'react-router';
 import type { Chain, ChainItem, IncidentDetail, Me } from '@/api/types';
+import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
 import { humanize } from '@/lib/format';
 import { NotYet, Section } from '../../cases/case/Section';
@@ -79,7 +80,6 @@ function ChainCard({
               <span>
                 <Button
                   size="xs"
-                  color="teal"
                   leftSection={<IconCheck size={14} />}
                   disabled={!!why}
                   onClick={() => onDecide('approve', chain)}
@@ -158,9 +158,12 @@ function ChainCard({
                     <Group gap={4}>
                       <ItemStateBadge state={item.state} />
                       {chain.stoppedAt === item.position ? (
-                        <Badge size="sm" color="red" variant="outline" style={{ textTransform: 'none' }}>
-                          Stopped the chain
-                        </Badge>
+                        <StatusBadge
+                          tone="blocking"
+                          label="Stopped the chain"
+                          icon={IconHandStop}
+                          variant="outline"
+                        />
                       ) : null}
                     </Group>
                     {item.caseHeadline ? (
@@ -195,16 +198,11 @@ export function ChainsPanel({
       title="Chains"
       note="One chain per encounter, its failed operations oldest event first. A chain the catalogue settles goes by the site's policy; any other chain's cases each go to the board. Chains are released one at a time, and within a chain one operation at a time, each through its own case's dispatch."
       aside={byState.map(([state, n]) => (
-        <Tooltip key={state} label={CHAIN_STATES[state]?.[1] ?? state} multiline maw={300}>
-          <Badge
-            color={CHAIN_STATES[state]?.[0] ?? 'gray'}
-            variant="light"
-            tabIndex={0}
-            style={{ textTransform: 'none' }}
-          >
-            {n} {humanize(state).toLowerCase()}
-          </Badge>
-        </Tooltip>
+        <StatusBadge
+          key={state}
+          {...(CHAIN_STATES[state] ?? { tone: 'neutral', hint: state })}
+          label={`${n} ${humanize(state).toLowerCase()}`}
+        />
       ))}
     >
       <Text size="sm">{describeProgress(inc)}</Text>

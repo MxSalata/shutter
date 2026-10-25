@@ -1,40 +1,65 @@
+import {
+  IconAlertCircle,
+  IconCircleCheck,
+  IconCircleX,
+  IconClock,
+  IconHandStop,
+  IconMinus,
+  IconProgress,
+  IconUserCheck,
+  IconUserQuestion,
+  type Icon,
+} from '@tabler/icons-react';
 import type { Chain, IncidentSummary } from '@/api/types';
 import { humanize } from '@/lib/format';
+import type { Status, Tone } from '@/lib/tone';
 
-export type Meaning = Record<string, [colour: string, hint: string]>;
+export type Meaning = Record<string, Status>;
 
-/** The incident's states (CONTRACTS 7.5): blue while it takes cases, yellow when a person is needed. */
-export const INCIDENT_STATES: Meaning = {
-  open: ['blue', 'Taking cases: failures to the receiver join it until the quiet period passes'],
-  classified: ['cyan', 'The chains are formed and classified, and the plan is made'],
-  awaiting_approval: ['yellow', 'A person must approve the release of the policy chains'],
-  releasing: ['indigo', 'Releasing the chains in order, one operation at a time'],
-  closed: ['gray', 'Every chain has an outcome'],
-};
+const m = (tone: Tone, hint: string, icon?: Icon) => ({ tone, hint, icon });
+const RUNNING = IconProgress;
 
-export const CHAIN_STATES: Meaning = {
-  pending: ['gray', 'Waiting for its turn'],
-  awaiting_approval: ['yellow', 'Waiting for a person to approve its release'],
-  approved: ['indigo', 'Approved: released in sequence order'],
-  rejected: ['red', 'A person rejected it: its cases went to a person'],
-  releasing: ['violet', 'Its operations are released one at a time'],
-  resolved: ['green', 'Every operation verified at the receiver'],
-  stopped: ['red', 'Stopped at the first surprise: the rest went to a person'],
-  escalated: ['orange', 'Handed to a person: a board chain or no catalogue match'],
-};
+/** Labels from the codes: "awaiting_approval" reads "Awaiting approval". */
+const label = (meaning: Record<string, Omit<Status, 'label'>>): Meaning =>
+  Object.fromEntries(Object.entries(meaning).map(([k, v]) => [k, { ...v, label: humanize(k) }]));
 
-export const ITEM_STATES: Meaning = {
-  pending: ['gray', 'Not released yet'],
-  released: [
-    'violet',
+/** The incident's states (CONTRACTS 7.5): information while it takes and releases cases, attention when a person is needed. */
+export const INCIDENT_STATES: Meaning = label({
+  open: m('info', 'Taking cases: failures to the receiver join it until the quiet period passes', RUNNING),
+  classified: m('info', 'The chains are formed and classified, and the plan is made', RUNNING),
+  awaiting_approval: m(
+    'attention',
+    'A person must approve the release of the chains the site policy does not release by itself',
+    IconUserQuestion,
+  ),
+  releasing: m('info', 'Releasing the chains in order, one operation at a time', RUNNING),
+  closed: m('neutral', 'Every chain has an outcome', IconCircleCheck),
+});
+
+export const CHAIN_STATES: Meaning = label({
+  pending: m('neutral', 'Waiting for its turn', IconClock),
+  awaiting_approval: m('attention', 'Waiting for a person to approve its release', IconUserQuestion),
+  approved: m('info', 'Approved: released in sequence order', IconUserCheck),
+  rejected: m('blocking', 'A person rejected it: its cases went to a person', IconCircleX),
+  releasing: m('info', 'Its operations are released one at a time', RUNNING),
+  resolved: m('positive', 'Every operation verified at the receiver', IconCircleCheck),
+  stopped: m('blocking', 'Stopped at the first surprise: the rest went to a person', IconHandStop),
+  escalated: m('attention', 'Handed to a person: a board chain or no catalogue match', IconUserQuestion),
+});
+
+export const ITEM_STATES: Meaning = label({
+  pending: m('neutral', 'Not released yet', IconClock),
+  released: m(
+    'info',
     'Released: the case runs its own dispatch (the preflight read, the gate, the rehearsal, the write, the verification)',
-  ],
-  resolved: ['green', 'Verified at the receiver'],
-  blocked: ['red', 'A check stopped it: nothing was sent'],
-  escalated: ['orange', 'Handed to a person'],
-  failed: ['gray', 'The workflow itself failed'],
-  stopped: ['gray', 'Never released: the chain stopped before it'],
-};
+    RUNNING,
+  ),
+  resolved: m('positive', 'Verified at the receiver', IconCircleCheck),
+  blocked: m('blocking', 'A check stopped it: nothing was sent', IconHandStop),
+  escalated: m('attention', 'Handed to a person', IconUserQuestion),
+  failed: m('blocking', 'The workflow itself failed', IconAlertCircle),
+  stopped: m('neutral', 'Never released: the chain stopped before it', IconMinus),
+});
 
 export const KIND_HINTS: Record<string, string> = {
   single: 'One failure for the encounter, nothing later applied',

@@ -176,6 +176,8 @@ const KEY_LABELS: Record<string, string> = {
   message_days: 'Messages kept (days)',
   escalation_days: 'Escalation texts kept (days)',
   shutter_production: "Shutter's production",
+  board_members: 'Registered agents',
+  mode: 'Last scenario investigation',
 };
 
 /** An identifier in words: its label when it has one, otherwise humanized. */

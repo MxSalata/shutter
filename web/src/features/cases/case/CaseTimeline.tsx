@@ -1,14 +1,15 @@
 import { Card, ScrollArea, Text, Timeline, Title } from '@mantine/core';
 import type { CaseEvent } from '@/api/types';
-import { STATE_COLOURS } from '@/components/StateBadge';
+import { stateColour } from '@/components/StateBadge';
 import { formatTime, humanize } from '@/lib/format';
 
+/** Events other than a state change: neutral records and notes, information for a release or a write, red for an error. */
 const KIND_COLOURS: Record<string, string> = {
-  artifact: 'indigo',
+  artifact: 'gray',
   note: 'gray',
   error: 'red',
-  approval: 'grape',
-  execution: 'teal',
+  approval: 'blue',
+  execution: 'blue',
 };
 
 export function CaseTimeline({ events }: { events: CaseEvent[] }) {
@@ -33,9 +34,7 @@ export function CaseTimeline({ events }: { events: CaseEvent[] }) {
             {events.map((e) => (
               <Timeline.Item
                 key={e.seq}
-                color={
-                  e.kind === 'state' ? (STATE_COLOURS[e.toState] ?? 'gray') : (KIND_COLOURS[e.kind] ?? 'gray')
-                }
+                color={e.kind === 'state' ? stateColour(e.toState) : (KIND_COLOURS[e.kind] ?? 'gray')}
                 title={
                   <Text size="sm" fw={600}>
                     {e.kind === 'state'

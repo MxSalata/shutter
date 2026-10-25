@@ -92,7 +92,13 @@ export default function CasePage() {
             <PlanPanel view={plan.data} loading={plan.isPending} />
             <RehearsalPanel view={plan.data} write={write} />
             {me ? <ApprovalPanel c={detail} me={me} view={plan.data} approvals={approvals.data} /> : null}
-            <ExecutionPanel caseId={caseId} open={open} write={write} />
+            <ExecutionPanel
+              caseId={caseId}
+              open={open}
+              write={write}
+              planned={!!plan.data?.plan}
+              byHand={detail.disposition === 'handled_by_hand'}
+            />
           </Stack>
         </Grid.Col>
         <Grid.Col span={{ base: 12, xl: 4 }}>

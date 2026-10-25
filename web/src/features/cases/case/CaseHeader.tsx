@@ -1,8 +1,10 @@
-import { Anchor, Badge, Group, Stack, Text, Title, Tooltip } from '@mantine/core';
+import { Anchor, Group, Stack, Text, Title } from '@mantine/core';
+import { IconSparkles } from '@tabler/icons-react';
 import { Link } from 'react-router';
 import type { CaseDetail } from '@/api/types';
 import { PortalLink } from '@/components/PortalLink';
 import { DispositionBadge, StateBadge } from '@/components/StateBadge';
+import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
 import { displayZone, humanize } from '@/lib/format';
 import { clampHeadline } from '@/lib/headline';
@@ -54,15 +56,12 @@ export function CaseHeader({ c }: { c: CaseDetail }) {
         <StateBadge state={c.state} size="lg" />
         <DispositionBadge disposition={c.disposition} />
         {c.candidateEntry ? (
-          <Tooltip
-            label="No entry of the scenario catalogue fits this case, so it is flagged as a candidate for a new one"
-            multiline
-            maw={300}
-          >
-            <Badge color="violet" variant="light" tabIndex={0} style={{ textTransform: 'none' }}>
-              New pattern
-            </Badge>
-          </Tooltip>
+          <StatusBadge
+            tone="info"
+            label="New pattern"
+            hint="No entry of the scenario catalogue fits this case, so it is flagged as a candidate for a new one"
+            icon={IconSparkles}
+          />
         ) : null}
       </Group>
       {c.headline ? (
