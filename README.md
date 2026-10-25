@@ -97,7 +97,7 @@ In the Management Portal, the Visual Trace of a case shows each step as a messag
 
 ## Run it
 
-Shutter runs on InterSystems IRIS for Health Community with AI Hub, build `2026.3.0AI.154.0`, from InterSystems' Early Access programme. That image is not on a public registry: you load the file once and tag it, and `docker compose up` does the rest.
+Shutter runs on InterSystems IRIS for Health Community with AI Hub, build `2026.3.0AI.154.0`, from InterSystems' Early Access programme. That image is not on a public registry: you load the file once and tag it, and `docker compose up` does the rest. Allow about 25 GB of free disk for this route (the 5.4 GB file, the 11 GB image it loads and Shutter's image, which shares most of its layers); the `.tar.gz` can be deleted once it is loaded.
 
 ### With the AI Hub image (the main route, live agents)
 
@@ -114,16 +114,16 @@ cp .env.example .env
 docker compose up -d
 ```
 
-The x64 file loads as `docker.iscinternal.com/docker-intersystems/intersystems/irishealth-community:2026.3.0AI.154.0`; if `docker images` shows another name, tag that one. No Dockerfile edit is needed: its base image comes from the build argument `IRIS_IMAGE`, which defaults to `irishealth-community:2026.3.0AI.154.0`.
+If `docker images` shows the image much smaller than 11 GB (a load that was cut off can leave it half unpacked, with no error), run the load again. The x64 file loads as `docker.iscinternal.com/docker-intersystems/intersystems/irishealth-community:2026.3.0AI.154.0`; if `docker images` shows another name, tag that one. No Dockerfile edit is needed: its base image comes from the build argument `IRIS_IMAGE`, which defaults to `irishealth-community:2026.3.0AI.154.0`.
 
-3. The first `up` builds the image, which takes a few minutes. Check it:
+3. The first `up` builds the image: about 10 to 15 minutes, most of it in the install step (measured at 14.5 minutes on 8 cores and 5 GB of memory). Check it:
 
 ```sh
 docker compose ps
 curl http://localhost:52773/api/shutter/health
 ```
 
-The health report says `"ok":true` once the production is running.
+The health report says `"ok":true` once the production is running, which can take up to a minute after `up` returns; until then `docker compose ps` shows `health: starting`.
 
 **The model.** The provider is Anthropic and the model `claude-opus-5-5` (`SHUTTER_MODEL` in `.env`). For live agents, set `ANTHROPIC_API_KEY` in `.env` before `docker compose up`; without a key the agents replay recorded runs and nothing is charged. The recording of every scenario on 19 October 2026 took 56 agent runs and cost 5.31 USD, so a full live pass on your own key costs about 5 USD.
 
@@ -135,10 +135,13 @@ Without the Early Access file, build the replay edition on InterSystems' public 
 git clone https://github.com/MxSalata/shutter.git
 cd shutter
 cp .env.example .env
-SHUTTER_IMAGE=containers.intersystems.com/intersystems/irishealth-community:2026.2 SHUTTER_WITH_AIHUB=0 docker compose up -d --build
+sed -i.bak -e 's|^SHUTTER_IMAGE=.*|SHUTTER_IMAGE=containers.intersystems.com/intersystems/irishealth-community:2026.2|' -e 's|^SHUTTER_WITH_AIHUB=.*|SHUTTER_WITH_AIHUB=0|' .env
+docker compose up -d --build
 ```
 
-It is the image CI builds and plays S2 and S19 on.
+The two settings stay in `.env`, so a later `docker compose build` or `up --build` builds the replay edition again. The build takes about 8 minutes. It is the image CI builds and plays S2 and S19 on.
+
+Both routes use the same image name, container and data volume. To switch from one to the other, run `docker compose down -v` first: it removes the instance's data, so the other edition starts clean.
 
 ### Open it
 
