@@ -16,8 +16,10 @@ patient by design, and the scenario list holds the test data, so --demo checks t
 findings and events, and the incidents) for names, dates of birth and note text; identifiers are shown there by design
 too, except the NHS number. NHS numbers (PID-3 typed NH) are looked for everywhere, as written and as "999 100 1018",
 and so is anything shaped like one: ten digits, plain or spaced 3 3 4, whose modulus 11 check digit is valid, so a real
-NHS number fails the check even when no fixture holds it. Prints each hit and exits 1 when there is any. Standard
-library only.
+NHS number fails the check even when no fixture holds it. A production review's recording (key review:...) is checked
+the same way, and more strictly: its agent sees item names, setting values, counts, header ids and case ids, never a
+case's evidence, so not even a case's token for an identifier (MRN-T1, ENC-T1) may appear in it. Prints each hit and
+exits 1 when there is any. Standard library only.
 """
 import argparse
 import glob
@@ -33,6 +35,8 @@ MONTHS = ["January", "February", "March", "April", "May", "June", "July", "Augus
 
 # Ten digits, plain or spaced (or hyphenated) 3 3 4, as an NHS number is written
 NHS_SHAPE = re.compile(r"(?<![\w-])(\d{3})[ -]?(\d{3})[ -]?(\d{4})(?![\w-])")
+# A case's token for an identifier (Shutter.Store.CaseToken): what a board member sees in place of the value
+CASE_TOKEN = re.compile(r"(?<![\w-])(?:MRN|NHS|PID|ENC|VISIT|NAME|DOB)-T\d+(?![\w-])")
 
 
 def nhs_valid(digits):
@@ -155,6 +159,11 @@ def main():
             if digits not in reported:
                 hits += 1
                 print(f"{os.path.relpath(path)}: NHS number {digits!r} by its shape and check digit (as {written!r})")
+        # A review's context carries no case evidence, so a token there means a case's identifiers reached it
+        if not demo and str(data.get("key", "")).startswith("review:"):
+            for token in sorted(set(CASE_TOKEN.findall(text))):
+                hits += 1
+                print(f"{os.path.relpath(path)}: case token {token!r} in a production review's recording")
     print(f"{len(values)} personal values from the fixtures, {len(files)} files checked, {hits} findings")
     return 1 if hits else 0
 
