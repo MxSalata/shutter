@@ -38,6 +38,11 @@ ClassMethod Check(json As %String) As %DynamicArray
         } Else {
             Set seen(id) = i
         }
+        // The finding's code, item and setting (v1.22): the code non-empty, item and setting present as strings ("" allowed).
+        If (r.%GetTypeOf("code") '= "string") || (r.%Get("code") = "") Do problems.%Push("ranking[" _ i _ "] needs the finding's code, copied from the finding")
+        For field = "item", "setting" {
+            If '$LISTFIND($LISTBUILD("string", "null", "unassigned"), r.%GetTypeOf(field)) Do problems.%Push("ranking[" _ i _ "] " _ field _ " must be a string, the finding's own")
+        }
         Set rank = ##class(Shutter.Util.Json).Str(r, "rank")
         If $ISOBJECT(rank) Set rank = ""
         If (rank = "") || (rank '= +rank) || (+rank '= (+rank \ 1)) || (+rank < 1) || (+rank > n) {

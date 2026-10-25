@@ -16,4 +16,12 @@ Property Explanation As %String(%JSONFIELDNAME = "explanation", MAXLEN = 600) [ 
 /// What limits the explanation: no cases in the window, an indicative count only, a class default not confirmed at run time.
 Property ConfidenceNote As %String(%JSONFIELDNAME = "confidence_note", MAXLEN = 300);
 
+/// The finding's code, item and setting, copied from the finding, so the ranking can be matched to the findings of another
+/// run of the same configuration (a recording replayed on another instance) by what they are, not by their numbers.
+Property Code As %String(%JSONFIELDNAME = "code", MAXLEN = 64) [ Required ];
+
+Property Item As %String(%JSONFIELDNAME = "item", MAXLEN = 128);
+
+Property Setting As %String(%JSONFIELDNAME = "setting", MAXLEN = 64);
+
 }

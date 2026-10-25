@@ -233,8 +233,9 @@ Method OnAgent(r As Shutter.Store.Review, callrequest As %Library.Persistent, ca
             If '$ISOBJECT(parsed) || $$$ISERR(psc) {
                 Set problem = "The agent's result is not valid JSON"
             } Else {
-                Set problem = ##class(Shutter.Store.Review).RankingProblem(r.Findings(), parsed)
-                If problem = "" Set ranking = parsed
+                // The ranking is matched to this review's findings by code, item and setting (v1.22), so a recording made
+                // on another instance's findings still explains the ones that are here.
+                If ##class(Shutter.Store.Review).MatchRanking(r.Findings(), parsed, .matched, .problem) Set ranking = matched
             }
         }
         Set sc = r.StoreAgent(callresponse, ranking, problem, ..HeaderIdOf(callrequest))
