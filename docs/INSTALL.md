@@ -49,6 +49,7 @@ Environment variables read when the installer runs:
 | `SHUTTER_DEMO_PASSWORD` | The demo users' password (default `shutter`); demo only. |
 | `SHUTTER_MESSAGE_PURGE` | `1` creates the daily task "Shutter message purge" (`Ens.Util.Tasks.Purge`, every message type in the namespace). On by default in the demo, off otherwise: only a namespace that holds nothing but Shutter should purge this way. |
 | `SHUTTER_MESSAGE_DAYS` | Days the purge keeps (default 90). |
+| `SHUTTER_ESCALATION_DAYS` | Days after a case closes before the daily task "Shutter retention" removes the text of its escalation emails (the hospital number, the NHS number and the date of birth) and their `.eml` files; the rows stay with their digest, recipients and who sent them. Default: `SHUTTER_MESSAGE_DAYS` (90); `0` keeps them. An instance upgraded in place runs the default, 90, until the task's `EscalationDays` is changed in the Task Manager. |
 
 The production's name comes from `^Shutter.Config("production")`, which `InstallInto` records (default
 `Shutter.Production`); the health report (`GET /api/shutter/health`) and the readiness report (`Shutter.Setup.Doctor`)

@@ -12,6 +12,7 @@ services:
         SHUTTER_DEMO_PASSWORD: ${SHUTTER_DEMO_PASSWORD:-}
         SHUTTER_MESSAGE_DAYS: ${SHUTTER_MESSAGE_DAYS:-}
         SHUTTER_MESSAGE_PURGE: ${SHUTTER_MESSAGE_PURGE:-}
+        SHUTTER_ESCALATION_DAYS: ${SHUTTER_ESCALATION_DAYS:-}
     image: shutter:dev
     container_name: shutter
     restart: unless-stopped
