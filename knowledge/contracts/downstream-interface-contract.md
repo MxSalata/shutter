@@ -9,8 +9,9 @@ effective_from: 2026-10-20
 # Demo Bed Management: interface contract for senders
 
 Issued by the supplier of the demo bed-management system (the downstream system) to every system that sends patient
-movements to it. Version 1.2, in force from 19 October 2026. Changes from 1.1: the system's name and its base path
-(`/downstream/api`); nothing else. Changes from 1.0: the epoch (WIC-1.4), the capability profile (WIC-7), and what an
+movements to it. Version 1.3, in force from 20 October 2026. Changes from 1.2: the HL7 versions taken (2.3.1, 2.4 and
+2.5.1), the full trigger table (WIC-6) and what the downstream system is sent (WIC-6.2). Changes from 1.1: the system's
+name and its base path (`/downstream/api`); nothing else. Changes from 1.0: the epoch (WIC-1.4), the capability profile (WIC-7), and what an
 unavailable receipt lookup means (WIC-5.2).
 
 ## WIC-1 What the downstream system does
@@ -109,10 +110,10 @@ The integration engine maps each ADT message to one operation:
 | Operation field | HL7 |
 |---|---|
 | `source_system` | MSH-3 |
-| `patient_id`, `patient_id_authority` | PID-3, first repetition: the ID and the assigning authority |
+| `patient_id`, `patient_id_authority` | PID-3, the repetition whose identifier type (PID-3.5) is MR, else the first repetition: the ID and the assigning authority (`MRN1001^^^HOSP^MR` gives `MRN1001` and `HOSP`) |
 | `encounter_id` | PV1-19 |
-| `event` | MSH-9.2: A01 admit, A02 transfer, A03 discharge, A06, A07 and A08 update, A11 cancel admit, A12 cancel transfer, A13 cancel discharge, A40 merge (see WIC-6.2) |
-| `ward` | PV1-3.1 for A01 and A02; null otherwise |
+| `event` | MSH-9.2: A01 admit, A02 transfer, A03 discharge, A04 register (an admit when PV1-2 is I and PV1-3.1 is present), A05 preadmit, A06, A07 and A08 update, A11 cancel admit, A12 cancel transfer, A13 cancel discharge, A28 person add, A31 person update, A40 merge (see WIC-6.2); any other trigger does not map |
+| `ward` | PV1-3.1 for an admit (A01, or an A04 that counts as one) and A02; null otherwise |
 | `event_time` | EVN-6 if present, else EVN-2, as UTC |
 | `source_message_id` | MSH-10 |
 

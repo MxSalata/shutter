@@ -9,7 +9,8 @@ effective_from: 2026-10-20
 # Ward location: dependency inventory and effect contracts
 
 Integration team register of what depends on the downstream system's record, and what each operation is
-expected to change. Version 1.0, in force from 1 October 2026.
+expected to change. Version 1.1, in force from 20 October 2026. Changes from 1.0: it also applies to the HL7 v2 ADT feed
+(WIC-6); nothing else.
 
 ## DEP-1 Who consumes the ward location
 

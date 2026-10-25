@@ -9,7 +9,9 @@ effective_from: 2026-10-20
 # Recovery playbooks for failed ward movements
 
 Integration team runbook for movements that didn't reach the downstream system, or whose outcome is
-unclear. Version 1.0, in force from 1 October 2026.
+unclear. Version 1.2, in force from 20 October 2026. Changes from 1.1: merges go to the PAS team (RP-2.6) and withheld
+cases are closed by hand (RP-2.7). Changes from 1.0: a release by the site's policy (RP-2.1), chains resent in event
+order (RP-3.5) and the scenario catalogue (RP-3.6).
 
 ## RP-1 The outcomes
 
