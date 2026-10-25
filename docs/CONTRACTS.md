@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.19, 25 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.20, 25 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -451,7 +451,7 @@ reads it through `Shutter.Store.SiteProfile`.
   sent the case's escalation, and `Shutter_Approver` holds `Shutter_Operate` too, so one approver may escalate and close
   a case, or close one that was never escalated, as the case page offers for a withheld case. The validator accepts only
   `true` or `false`. It belongs to question 7, who approves what, so the questionnaire still has twelve questions; the
-  shipped seed profile answers `false` (its file's `version` is 4 since v1.19). `Shutter.Store.SiteProfile.CloseNeedsApprover()`
+  shipped seed profile answers `false` (its file's `version` is 4 since v1.20). `Shutter.Store.SiteProfile.CloseNeedsApprover()`
   reads it. `approvers.role` and `approvers.escalation` stay on record only: the permissions themselves are the
   resources of section 5.
 - `merges` (v1.14): `forbidden` (the default when absent) or `allowed`, the only values the validator accepts. A receiver entry's `merges` and `cancels` (booleans, default false) say what it takes (1.1). A merge is delivered only under `allowed` to a receiver with `merges: true`; the gate's `MERGE_WITHHELD` blocks any write of a merge otherwise, so the exact repeat of a merge the receiver already holds (a receipt present) is E3's reconcile, and no other merge is ever resent by Shutter. `Shutter.Store.SiteProfile.MergesAllowed()` and `ReceiverFlag(name, flag)` read them.
@@ -677,7 +677,7 @@ sent, and references. No name, address or note text. A person reviews it, choose
 bound to the digest of the text the person read.
 
 - The site profile's `teams` (array of `{id, name, mailbox, cc?: [...], receivers?: [...], sources?: [...]}` (v1.14: `sources` lists sending applications, MSH-3, such as `PAS`; a merge goes first to the team whose `sources` lists the case's source system, then to the receiver's team, then to the first team; the draft words a merge "Merge of <prior identifier> into <patient identifier>" and a cancel "Cancellation of the transfer at ..."; a cancel carries no ward, section 2); a withheld case's draft says Shutter withheld the message and asks the team to mark the case handled rather than to reinvestigate; `id`, `name` and
-  `mailbox` required, ids unique) and `mail` (`allowed_domains`: every mailbox and cc must end in one of them when set, checked when the profile is saved and again at `PATCH` and at the send; `from`: the sender of the emails when set, else the `Escalation Mail` operation's `From` setting, default `shutter@localhost`; the shipped seed profile sets `allowed_domains` to `["example.nhs.uk"]`, the domain of its teams' mailboxes, and no `from`, v1.19). The team for a case is the one whose `receivers` names the case's receiver, else the first, else the
+  `mailbox` required, ids unique) and `mail` (`allowed_domains`: every mailbox and cc must end in one of them when set, checked when the profile is saved and again at `PATCH` and at the send; `from`: the sender of the emails when set, else the `Escalation Mail` operation's `From` setting, default `shutter@localhost`; the shipped seed profile sets `allowed_domains` to `["example.nhs.uk"]`, the domain of its teams' mailboxes, and no `from`, v1.20). The team for a case is the one whose `receivers` names the case's receiver, else the first, else the
   profile's `approvers.escalation` text with no mailbox (the person fills one in).
 - `GET /cases/{id}/escalations`; `POST /cases/{id}/escalations` with `{teamId?}` answers 201 with the draft (409
   `wrong_state` unless the case is blocked, escalated or failed; 500 `draft_failed` when `teamId` names no team of the
@@ -798,7 +798,7 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
-- v1.19, 25 Oct 2026: the shipped seed profile sets `mail.allowed_domains` to `example.nhs.uk`, the domain of its
+- v1.20, 25 Oct 2026: the shipped seed profile sets `mail.allowed_domains` to `example.nhs.uk`, the domain of its
   teams' mailboxes, so an escalation from the demo goes only to those mailboxes' domain; its file's `version` is 4 (6.4,
   10). Nothing in the server changes.
 - v1.18, 20 Oct 2026: `planCreatedBy` on the case and the cases list (5).

@@ -137,7 +137,9 @@ Shape A:
    (`approvers.close_needs_approver`). Shutter checks the role of whoever closes the case, not that a second person
    does: an approver may escalate and close the same case.
 4. Fill in the site profile (the web application's questionnaire): receivers, tiers, what each takes, API paths or
-   none, the policy per tier, teams and mailboxes, the feed's time zone, `merges: forbidden`.
+   none, the policy per tier, teams and mailboxes, the mail domains allowed for them (`mail.allowed_domains`: replace
+   the shipped `example.nhs.uk` with the trust's, or a team's own mailbox fails the check), the feed's time zone,
+   `merges: forbidden`.
 5. Set the `Escalation Mail` operation's SMTP server.
 6. In each watched production, add `Shutter.Intake.Forwarder` with Shutter's address and credential, and call it from
    the process that delivers to each receiver on a failed delivery.
