@@ -342,7 +342,7 @@ def scenarios():
             {"file": b[0], "expect": "delivery_fails"},
             {"wait": 5},
             {"fault": "off"},
-            {"file": d[0]},
+            {"file": d[0], "expect": "indexed"},
         ],
         "expected": {"disposition": "resend", "write": True, "final_state": "admitted", "final_ward": "WARD-B",
                      "failed_operation_key": b[2]["operation_key"], "other_encounter": "ENC-2009"},
@@ -637,10 +637,13 @@ def scenarios():
             {"wait": 5},
             {"fault": "off"},
         ],
-        # Rules and site policy until the board's runs are recorded. Site policy escalates on the catalogue's E13 (an
-        # event time the receiver's record can't hold) before any write is planned; rules alone propose the resend, and
-        # the gate blocks it, so their resend is acceptable here and the block is what they must meet.
-        "expected": {"disposition": "escalate", "write": False, "final_state": "admitted", "final_ward": "WARD-A",
+        # Rules and site policy until the board's runs are recorded; more evidence is acceptable, as in S13. Site
+        # policy escalates on the catalogue's E13 (an event time the receiver's record can't hold) before any write is
+        # planned. Rules alone propose the resend, which is wrong, and the gate blocks it: rules mode's pass is the
+        # gate's catch, not a right answer from rules (S13, with no rules expectation of its own, counts the same
+        # outcome as differing).
+        "expected": {"disposition": "escalate", "acceptable": ["more_evidence"], "write": False,
+                     "final_state": "admitted", "final_ward": "WARD-A",
                      "failed_operation_key": b[2]["operation_key"], "modes": ["rules", "policy"],
                      "by_mode": {"rules": {"acceptable": ["resend"], "blocked_by": "EVENT_TIME_IMPLAUSIBLE",
                                            "final_reason": "EVENT_TIME_IMPLAUSIBLE"}}},

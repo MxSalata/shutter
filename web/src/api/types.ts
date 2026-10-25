@@ -59,6 +59,8 @@ export interface ScenarioExpected {
   other_encounter?: string;
   /** The modes the scenario is defined for, when not all of them: in another mode its card doesn't apply. */
   modes?: Mode[];
+  /** A mode's own additions to the expected outcome, which replace the fields they name in that mode (S21's rules). */
+  by_mode?: Partial<Record<Mode, Partial<ScenarioExpected>>>;
 }
 
 export interface ScenarioRun {

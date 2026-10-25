@@ -295,7 +295,8 @@
         "fault": "off"
       },
       {
-        "file": "S9-03-A04.hl7"
+        "file": "S9-03-A04.hl7",
+        "expect": "indexed"
       }
     ],
     "expected": {
@@ -898,6 +899,9 @@
     ],
     "expected": {
       "disposition": "escalate",
+      "acceptable": [
+        "more_evidence"
+      ],
       "write": false,
       "final_state": "admitted",
       "final_ward": "WARD-A",

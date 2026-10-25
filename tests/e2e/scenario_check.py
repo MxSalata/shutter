@@ -22,7 +22,9 @@ A scenario that names the modes it is defined for (expected.modes: S7, S11, S12,
 the others. S7 is not defined for site policy, which resends without asking anyone, so no plan waits for its later
 transfer; S20 is defined for rules only and S21 for rules and site policy until the board's runs for them are recorded.
 expected.by_mode adds to or replaces the expected outcome in one mode (S21: rules alone propose the resend and the gate
-blocks it, where site policy escalates on the catalogue's E13 before any write is planned).
+blocks it, where site policy escalates on the catalogue's E13 before any write is planned). S21's rules pass is the
+gate's catch, not a right answer from rules: S13's identical rules run, judged by its own expectation, differs. So
+--markdown labels a cell judged by its mode's own expectation, which a count of what rules alone get right leaves out.
 
 Besides the outcome, expected.blocked_by is a reason code the case met on the way (in any round, so a dispatch block
 that led to a re-plan counts), expected.final_reason the code the closed case names for stopping (GET
@@ -349,7 +351,13 @@ def write_markdown(path, modes, rows):
             expected = "; ".join(f"{x['encounter']} {x['chain']} {x['path']} {x['writes']}w" for x in e["encounters"])
         else:
             expected = f"{e['disposition']}, {'one write' if e['write'] else 'no write'}, downstream {e['final_state']} {e['final_ward'] or ''}".strip()
-        cells = [("as expected: " if ok else "**differs**: ") + outcome for ok, outcome in (row["results"][m] for m in modes)]
+        cells = []
+        for m in modes:
+            ok, outcome = row["results"][m]
+            # A pass by the mode's own expectation (S21's rules: the gate's catch) is no pass by the Expected column
+            own = m in e.get("by_mode", {})
+            label = "**differs**" if not ok else "as this mode's own expectation says" if own else "as expected"
+            cells.append(f"{label}: {outcome}")
         lines.append(f"| {s['id']} {s['title']} | {expected} | " + " | ".join(cells) + " |")
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
