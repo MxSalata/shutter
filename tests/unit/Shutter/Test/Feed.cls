@@ -53,6 +53,23 @@ ClassMethod Update() As %String [ SqlProc ]
     Quit $SELECT($$$ISOK(sc): "ok", 1: "error: " _ $SYSTEM.Status.GetErrorText(sc))
 }
 
+/// Stops and starts the production, so that every job runs the classes compiled since it started: a branch loaded by hand
+/// needs it before a regression (Ens.Director.UpdateProduction alone leaves the running jobs on the old code). Returns "ok"
+/// or the error text.
+ClassMethod Restart() As %String [ SqlProc ]
+{
+    If '$SYSTEM.Security.Check("%Development", "USE") Quit "error: a development helper; %Development is required"
+    Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)
+    If $$$ISERR(sc) Quit "error: " _ $SYSTEM.Status.GetErrorText(sc)
+    If name = "" Set name = ##class(Shutter.Setup).ProductionName()
+    If state = 1 {
+        Set sc = ##class(Ens.Director).StopProduction(60, 0)
+        If $$$ISERR(sc) Quit "error: " _ $SYSTEM.Status.GetErrorText(sc)
+    }
+    Set sc = ##class(Ens.Director).StartProduction(name)
+    Quit $SELECT($$$ISOK(sc): "ok: " _ name, 1: "error: " _ $SYSTEM.Status.GetErrorText(sc))
+}
+
 /// Sets the investigation mode for the cases the feed opens next (board, single, rules or policy), as a scenario run
 /// does, and returns it.
 ClassMethod Mode(mode As %String) As %String [ SqlProc ]
