@@ -74,7 +74,7 @@ ClassMethod FromRequest(request As Shutter.Bridge.Msg.AgentRequest, op As Shutte
     Set s.Mode = $SELECT(request.ModeOverride '= "": request.ModeOverride, 1: ##class(Shutter.Bridge.Operation.Agent).ResolveMode(op.Mode, s.MockConfig))
     Set s.RunnerClass = op.Runner
     Set s.ProviderConfig = op.ProviderConfig, s.Model = op.Model
-    Set s.MaxIterations = op.MaxIterations
+    Set s.MaxIterations = $SELECT(+request.MaxIterations > 0: +request.MaxIterations, 1: op.MaxIterations)
     Set s.TokenBudget = $SELECT(request.TokenBudget '= "": request.TokenBudget, 1: op.TokenBudget)
     Set s.RequestTimeoutSeconds = op.RequestTimeoutSeconds
     Set s.RecordKey = request.RecordKey

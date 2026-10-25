@@ -50,3 +50,30 @@ test.describe('the guided path', () => {
     await expect(page.getByRole('heading', { name: 'Incident I-000001', exact: true })).toBeVisible();
   });
 });
+
+test.describe('the production review', () => {
+  test('shows a finished review of each production, read only', async ({ page }) => {
+    await signIn(page);
+    await page.getByRole('link', { name: /Production review/ }).click();
+    await expect(page.getByRole('heading', { name: 'Production review', exact: true })).toBeVisible();
+    const past = page.getByRole('region', { name: 'Past reviews' });
+    for (const [id, production] of [
+      ['PR-000001', 'Shutter.Production'],
+      ['PR-000003', 'Hospital.Production'],
+    ]) {
+      await go(page, '/reviews');
+      await past.getByRole('link', { name: id, exact: true }).click();
+      await expect(page.getByRole('heading', { name: `Review ${id}`, exact: true })).toBeVisible();
+      await expect(page.getByText(`${production} in`, { exact: false }).first()).toBeVisible();
+      const findings = page.getByRole('region', { name: 'Findings' });
+      for (const code of ['NO_ALERT_CONSUMER', 'ALERTING_OFF', 'QUEUE_ALERTS_OFF', 'FEED_SILENCE_UNWATCHED'])
+        await expect(findings.getByText(code, { exact: true })).toBeVisible();
+      // The recorded reviews carry no count of HL7 TCP items, so the page says nothing about them
+      await expect(findings).not.toContainText('No HL7');
+      await expect(page.getByRole('region', { name: "The agent's ranking" })).toContainText(
+        'No recorded explanation for this configuration',
+      );
+    }
+    await expect(page.getByRole('region', { name: 'Findings' }).getByText('PURGE_MISSING')).toBeVisible();
+  });
+});

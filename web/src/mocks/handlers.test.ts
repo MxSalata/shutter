@@ -11,6 +11,9 @@ import type {
   Escalation,
   LibraryMember,
   PlanView,
+  ReviewDetail,
+  ReviewList,
+  ReviewTarget,
   ScenarioList,
   Settings,
   SiteProfileView,
@@ -213,10 +216,104 @@ describe('the costs', () => {
   it('are summed from the recorded runs when the recording has none, a replay at no cost', async () => {
     const costs = await api.get<Costs>('/costs');
     const runs = Object.values(fixtures.cases).flatMap((c) => (c.runs ?? []) as unknown[]);
-    expect(costs.totals).toEqual({ spentUsd: 0, liveRuns: 0, replayedRuns: runs.length });
+    expect(costs.totals).toEqual({ spentUsd: 0, liveRuns: 0, replayedRuns: runs.length, reviewRuns: 2 });
     expect(costs.byModel.reduce((n, m) => n + m.runs, 0)).toBe(runs.length);
     expect(costs.byModel.every((m) => m.costUsd === 0)).toBe(true);
     expect(costs.byCase.find((c) => c.caseId === HELD)?.runs).toBe(recorded.runs.length);
+  });
+
+  it("list the reviews whose agent answered apart from the board's runs, newest first, a replay at no cost", async () => {
+    const costs = await api.get<Costs>('/costs');
+    expect(costs.byReview).toEqual([
+      {
+        reviewId: 'PR-000003',
+        production: 'Hospital.Production',
+        model: '',
+        mode: 'replay',
+        costUsd: 0,
+        startedAt: '2026-10-25T11:35:14Z',
+      },
+      {
+        reviewId: 'PR-000001',
+        production: 'Shutter.Production',
+        model: '',
+        mode: 'replay',
+        costUsd: 0,
+        startedAt: '2026-10-25T11:33:36Z',
+      },
+    ]);
+  });
+});
+
+describe('the production reviews', () => {
+  beforeEach(() => resetMock('approver'));
+  const signIn = (username: string) => api.post('/session', { username, password: 'shutter' });
+
+  it('offer both recorded productions as targets and list their reviews newest first', async () => {
+    const { items } = await api.get<{ items: ReviewTarget[] }>('/production-reviews/targets');
+    expect(items.map((t) => [t.production, t.own, t.watched])).toEqual([
+      ['Shutter.Production', true, false],
+      ['Hospital.Production', false, true],
+    ]);
+    const list = await api.get<ReviewList>('/production-reviews');
+    expect(list.items.map((r) => r.reviewId)).toEqual(['PR-000004', 'PR-000003', 'PR-000002', 'PR-000001']);
+    const hospital = await api.get<ReviewList>('/production-reviews?namespace=HOSPITAL&limit=1');
+    expect(hospital).toEqual({ items: [expect.objectContaining({ reviewId: 'PR-000003' })], total: 2 });
+  });
+
+  it('serve a finished review of each production, in baseline order', async () => {
+    for (const id of ['PR-000001', 'PR-000003']) {
+      const r = await api.get<ReviewDetail>(`/production-reviews/${id}`);
+      expect(r.state).toBe('done');
+      expect(r.findings.map((f) => f.id)).toEqual(r.findings.map((_, i) => `F${i + 1}`));
+    }
+    expect((await refusal(api.get('/production-reviews/PR-999999'))).status).toBe(404);
+  });
+
+  it('start a review for an operator: sweeping on the first read, then the recorded review under its new id', async () => {
+    await signIn('operator');
+    const started = await api.post<{ reviewId: string; state: string; requestedBy: string }>(
+      '/production-reviews',
+      { namespace: 'HOSPITAL', production: 'Hospital.Production', windowDays: 7, agent: false },
+    );
+    expect(started).toEqual({ reviewId: 'PR-000005', state: 'sweeping', requestedBy: 'operator' });
+    const again = await refusal(
+      api.post('/production-reviews', { namespace: 'HOSPITAL', production: 'Hospital.Production' }),
+    );
+    expect([again.status, again.code, (again.body as { reviewId: string }).reviewId]).toEqual([
+      409,
+      'wrong_state',
+      'PR-000005',
+    ]);
+    const first = await api.get<ReviewDetail>('/production-reviews/PR-000005');
+    expect([first.state, first.findings, first.agent.state]).toEqual(['sweeping', [], 'pending']);
+    const done = await api.get<ReviewDetail>('/production-reviews/PR-000005');
+    expect([done.state, done.agentState, done.findings.length]).toEqual(['done', 'skipped', 9]);
+  });
+
+  it('refuse a target the server does not know and a window outside 1 to 90 days', async () => {
+    const other = await refusal(
+      api.post('/production-reviews', { namespace: 'USER', production: 'Demo.Production' }),
+    );
+    expect([other.status, other.code]).toEqual([400, 'bad_request']);
+    const wide = await refusal(api.post('/production-reviews', { windowDays: 91 }));
+    expect([wide.status, wide.code]).toEqual([400, 'bad_request']);
+  });
+
+  it('keep annotations to approvers, and the demo refuses them politely', async () => {
+    const body = { findingId: 'F2', status: 'intended', reason: 'The feed is watched by hand' };
+    const demo = await refusal(api.post('/production-reviews/PR-000001/annotations', body));
+    expect([demo.status, demo.code]).toEqual([403, 'demo']);
+    expect(demo.detail).toMatch(/^The online demo keeps no annotations\./);
+    const unknown = await refusal(
+      api.post('/production-reviews/PR-000001/annotations', { ...body, findingId: 'F99' }),
+    );
+    expect(unknown.status).toBe(404);
+    const removed = await refusal(api.del('/production-reviews/annotations/16'));
+    expect([removed.status, removed.code]).toEqual([403, 'demo']);
+    await signIn('operator');
+    const operator = await refusal(api.post('/production-reviews/PR-000001/annotations', body));
+    expect([operator.status, operator.code]).toEqual([403, 'forbidden']);
   });
 });
 

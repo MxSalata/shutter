@@ -44,6 +44,9 @@ Property RecordKey As %String(MAXLEN = 300);
 /// A token budget for this run; empty uses the operation's setting.
 Property TokenBudget As %Integer;
 
+/// The most model turns for this run; empty or 0 uses the operation's setting.
+Property MaxIterations As %Integer;
+
 Storage Default
 {
 <Data name="AgentRequestDefaultData">
@@ -86,6 +89,9 @@ Storage Default
 </Value>
 <Value name="13">
 <Value>TokenBudget</Value>
+</Value>
+<Value name="14">
+<Value>MaxIterations</Value>
 </Value>
 </Data>
 <DefaultData>AgentRequestDefaultData</DefaultData>

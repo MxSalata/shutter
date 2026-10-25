@@ -57,6 +57,12 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/incidents/:id/approvals" Method="POST" Call="IncidentApprove"/>
   <Route Url="/incidents/:id/chains/:seq/approvals" Method="POST" Call="IncidentChainApprove"/>
   <Route Url="/costs" Method="GET" Call="Costs"/>
+  <Route Url="/production-reviews/targets" Method="GET" Call="ProductionReviewTargets"/>
+  <Route Url="/production-reviews" Method="GET" Call="ProductionReviews"/>
+  <Route Url="/production-reviews" Method="POST" Call="ProductionReviewStart"/>
+  <Route Url="/production-reviews/annotations/:annotationId" Method="DELETE" Call="ProductionReviewAnnotationDelete"/>
+  <Route Url="/production-reviews/:id" Method="GET" Call="ProductionReviewGet"/>
+  <Route Url="/production-reviews/:id/annotations" Method="POST" Call="ProductionReviewAnnotate"/>
 </Routes>
 }
 
@@ -1366,8 +1372,173 @@ ClassMethod Costs() As %Status
     Set byCase = []
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT %EXACT(c.CaseId) AS CaseId, COUNT(*) AS Runs, SUM(CASE WHEN a.Mode = 'replay' THEN 1 ELSE 0 END) AS Replays, SUM(CASE WHEN a.Mode = 'replay' THEN 0 ELSE a.CostUSD END) AS Cost FROM Shutter_Store.AgentRun a JOIN Shutter_Store.""Case"" c ON a.""Case"" = c.ID WHERE 1=1" _ where _ " GROUP BY %EXACT(c.CaseId) ORDER BY %EXACT(c.CaseId) DESC", args...)
     While rs.%Next() { Set r = {} Set r.caseId = rs.%Get("CaseId"), r.runs = +rs.%Get("Runs"), r.replayedRuns = +rs.%Get("Replays"), r.costUsd = +rs.%Get("Cost") Do byCase.%Push(r) }
-    Set o.byModel = byModel, o.byDay = byDay, o.byCase = byCase
+    // The production reviews' agent runs (Shutter.Store.Review, CONTRACTS 13) are not AgentRun rows: they are listed
+    // apart, counted in reviewRuns, and what they spent (a replay or a mimic run spends nothing) is added to spentUsd.
+    Set byReview = [], reviewRuns = 0, reviewSpent = 0
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ReviewId, Production, Model, Mode, CostUSD, StartedAt FROM Shutter_Store.Review WHERE Mode IS NOT NULL" _ where _ " ORDER BY ID DESC", args...)
+    While rs.%Next() {
+        Set r = {}
+        Set r.reviewId = rs.%Get("ReviewId"), r.production = rs.%Get("Production"), r.model = rs.%Get("Model"), r.mode = rs.%Get("Mode")
+        Set r.costUsd = $SELECT((rs.%Get("Mode") = "replay") || (rs.%Get("Model") = "mock"): 0, 1: +rs.%Get("CostUSD"))
+        Set r.startedAt = rs.%Get("StartedAt")
+        Do byReview.%Push(r)
+        Set reviewRuns = reviewRuns + 1, reviewSpent = reviewSpent + r.costUsd
+    }
+    Set totals.reviewRuns = reviewRuns
+    Set totals.spentUsd = +totals.spentUsd + reviewSpent
+    Set o.byModel = byModel, o.byDay = byDay, o.byCase = byCase, o.byReview = byReview
     Quit ..Json(o)
+}
+
+// ---- production reviews (CONTRACTS 13) ----
+
+/// The productions a review may be asked for: Shutter's own and the watched ones it knows (Shutter.Review.Sweep.Targets).
+ClassMethod ProductionReviewTargets() As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set items = "", problem = ""
+    Try {
+        Set items = ##class(Shutter.Review.Sweep).Targets()
+    } Catch ex {
+        Set problem = ex.DisplayString()
+    }
+    If problem '= "" Quit ..Fail("500 Internal Server Error", "targets_failed", "The review targets could not be listed: " _ problem)
+    If '$ISOBJECT(items) Set items = []
+    Set o = {}
+    Set o.items = items
+    Quit ..Json(o)
+}
+
+/// The reviews, newest first: ?namespace=, ?production= filter, ?limit= (50, at most 500); total counts the filter's rows.
+ClassMethod ProductionReviews() As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set ns = $GET(%request.Data("namespace", 1)), prod = $GET(%request.Data("production", 1))
+    Set limit = +$GET(%request.Data("limit", 1))
+    If limit < 1 Set limit = 50
+    If limit > 500 Set limit = 500
+    Set o = {}
+    Set o.items = ##class(Shutter.Store.Review).List(ns, prod, limit)
+    Set o.total = ##class(Shutter.Store.Review).Count(ns, prod)
+    Quit ..Json(o)
+}
+
+/// Start a review (CONTRACTS 13): {namespace?, production?, windowDays? (7; 1 to 90), agent? (true)}. The target must be
+/// one GET /production-reviews/targets lists (400 bad_request otherwise), so a caller's string never becomes a namespace
+/// switch. The request goes through the API service to the Case Review item, which opens the review and answers at once
+/// with its id while the sweep goes on: 202 {reviewId, state, requestedBy}; 409 wrong_state while a review of the same
+/// production is still sweeping or ranking; 503 no_service when the production is not running. Shutter_Operate: the
+/// review reads only, and a live agent run spends model credit as a scenario run does.
+ClassMethod ProductionReviewStart() As %Status
+{
+    If '..Allow("Shutter_Operate", 1) Quit $$$OK
+    Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
+    If '$ISOBJECT(body) || $$$ISERR(psc) Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object: {namespace?, production?, windowDays?, agent?}")
+    If $CLASSNAME(body) '= "%Library.DynamicObject" Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object: {namespace?, production?, windowDays?, agent?}")
+    Set ns = $ZSTRIP(##class(Shutter.Util.Json).Str(body, "namespace"), "<>W")
+    Set prod = $ZSTRIP(##class(Shutter.Util.Json).Str(body, "production"), "<>W")
+    If ns = "" Set ns = $NAMESPACE
+    If prod = "" Set prod = ##class(Shutter.Setup).ProductionName()
+    Set days = ##class(Shutter.Util.Json).Str(body, "windowDays", 7)
+    If (days = "") || (days '= +days) || (+days '= (+days \ 1)) || (+days < 1) || (+days > 90) Quit ..Fail("400 Bad Request", "bad_request", "windowDays must be a whole number of days from 1 to 90")
+    Set agent = ##class(Shutter.Util.Json).Bool(body, "agent", 1)
+    Set known = 0
+    Try {
+        Set known = ##class(Shutter.Review.Sweep).IsTarget(ns, prod)
+    } Catch ex {
+        Set known = 0
+    }
+    If 'known Quit ..Fail("400 Bad Request", "bad_request", prod _ " in " _ ns _ " is not a production Shutter knows: GET /production-reviews/targets lists them")
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    Set running = ##class(Shutter.Store.Review).Running(ns, prod)
+    If $ISOBJECT(running) {
+        Set extra = {} Set extra.reviewId = running.ReviewId, extra.state = running.State
+        Quit ..Fail("409 Conflict", "wrong_state", "A review of " _ prod _ " in " _ ns _ " is already " _ running.State _ " (" _ running.ReviewId _ "); wait for it to finish", extra)
+    }
+    Set msg = ##class(Shutter.Msg.ReviewRequest).%New()
+    Set msg.Namespace = ns, msg.Production = prod, msg.WindowDays = +days, msg.Agent = agent, msg.RequestedBy = ..User()
+    Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
+    If $$$ISERR(sc) || '$ISOBJECT(service) Quit ..Fail("503 Service Unavailable", "no_service", "The API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
+    // Synchronous: the Case Review item answers with the review id at once and goes on with the sweep.
+    Set service.Target = "Case Review"
+    Set sc = service.ProcessInput(msg, .started)
+    If $$$ISERR(sc) Quit ..Fail("503 Service Unavailable", "not_queued", "The review could not be started: " _ $SYSTEM.Status.GetErrorText(sc))
+    If '$ISOBJECT(started) || 'started.%IsA("Shutter.Msg.ReviewStarted") Quit ..Fail("502 Bad Gateway", "no_answer", "The Case Review item did not answer")
+    If started.ReviewId = "" Quit ..Fail("500 Internal Server Error", "review_failed", $SELECT(started.Error '= "": started.Error, 1: "No review was opened"))
+    If started.Error '= "" {
+        // Another review of the production won the race.
+        Set extra = {} Set extra.reviewId = started.ReviewId, extra.state = started.State
+        Quit ..Fail("409 Conflict", "wrong_state", started.Error, extra)
+    }
+    Set reply = {}
+    Set reply.reviewId = started.ReviewId, reply.state = started.State, reply.requestedBy = ..User()
+    Set text = reply.%ToJSON()
+    Do ..Remember(bodyText, "202 Accepted", text)
+    Set %response.Status = "202 Accepted"
+    Write text
+    Quit $$$OK
+}
+
+/// One review with its findings in baseline order, the annotations as they stand now and the agent's part; a review
+/// still sweeping or ranking shows what is stored so far.
+ClassMethod ProductionReviewGet(id As %String) As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set r = ##class(Shutter.Store.Review).ByReviewId(id)
+    If '$ISOBJECT(r) Quit ..Fail("404 Not Found", "not_found", "No review " _ id)
+    Quit ..Json(r.ToObject(1))
+}
+
+/// Annotate a finding (Shutter_Approve): {findingId, status (intended|accepted_risk|false_positive), reason, expiresAt?,
+/// owner?}. The annotation binds the finding's code, item, setting and effective value, so every later review's matching
+/// finding carries the status until the value changes, the annotation expires or it is revoked. 201 the annotation; 404
+/// not_found for an unknown review or finding id; 400 bad_request for a status outside the three or a missing reason.
+ClassMethod ProductionReviewAnnotate(id As %String) As %Status
+{
+    If '..Allow("Shutter_Approve", 1) Quit $$$OK
+    Set review = ##class(Shutter.Store.Review).ByReviewId(id)
+    If '$ISOBJECT(review) Quit ..Fail("404 Not Found", "not_found", "No review " _ id)
+    Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
+    If '$ISOBJECT(body) || $$$ISERR(psc) Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with findingId, status and reason")
+    If $CLASSNAME(body) '= "%Library.DynamicObject" Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with findingId, status and reason")
+    Set findingId = $ZSTRIP(##class(Shutter.Util.Json).Str(body, "findingId"), "<>W")
+    Set status = $ZSTRIP(##class(Shutter.Util.Json).Str(body, "status"), "<>W")
+    Set reason = $ZSTRIP($EXTRACT(##class(Shutter.Util.Json).Str(body, "reason"), 1, 2000), "<>W")
+    Set expiresAt = $ZSTRIP(##class(Shutter.Util.Json).Str(body, "expiresAt"), "<>W")
+    Set owner = $ZSTRIP($EXTRACT(##class(Shutter.Util.Json).Str(body, "owner"), 1, 100), "<>W")
+    If owner = "" Set owner = ..User()
+    If findingId = "" Quit ..Fail("400 Bad Request", "bad_request", "findingId is required: the finding's id in this review (F1, F2, ...)")
+    If '##class(Shutter.Store.ReviewAnnotation).IsStatus(status) Quit ..Fail("400 Bad Request", "bad_request", "status must be intended, accepted_risk or false_positive")
+    If reason = "" Quit ..Fail("400 Bad Request", "bad_request", "reason is required: why the finding is intended, an accepted risk or a false positive")
+    If (expiresAt '= "") && '$MATCH(expiresAt, "^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}(:[0-9]{2})?Z)?$") Quit ..Fail("400 Bad Request", "bad_request", "expiresAt must be an ISO 8601 UTC time, for example 2026-12-31T00:00:00Z")
+    If '$ISOBJECT(review.Finding(findingId)) Quit ..Fail("404 Not Found", "not_found", "No finding " _ findingId _ " in review " _ id)
+    Set rc = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    Set sc = ##class(Shutter.Store.ReviewAnnotation).Create(review, findingId, status, reason, owner, expiresAt, ..User(), .a)
+    If $$$ISERR(sc) || '$ISOBJECT(a) Quit ..Fail("500 Internal Server Error", "annotation_failed", $SYSTEM.Status.GetErrorText(sc))
+    Set text = a.ToObject().%ToJSON()
+    Do ..Remember(bodyText, "201 Created", text)
+    Set %response.Status = "201 Created"
+    Write text
+    Quit $$$OK
+}
+
+/// Revoke an annotation (Shutter_Approve): the finding reopens as new at the next read; the row is kept for the record.
+/// 204; 404 not_found for an unknown id. Revoking twice is a 204 too.
+ClassMethod ProductionReviewAnnotationDelete(annotationId As %String) As %Status
+{
+    If '..Allow("Shutter_Approve", 1) Quit $$$OK
+    Set a = ##class(Shutter.Store.ReviewAnnotation).ById(annotationId)
+    If '$ISOBJECT(a) Quit ..Fail("404 Not Found", "not_found", "No annotation " _ annotationId)
+    If 'a.Revoked {
+        Set sc = a.Revoke(..User())
+        If $$$ISERR(sc) Quit ..Fail("500 Internal Server Error", "annotation_failed", $SYSTEM.Status.GetErrorText(sc))
+    }
+    Set %response.Status = "204 No Content"
+    Quit $$$OK
 }
 
 }

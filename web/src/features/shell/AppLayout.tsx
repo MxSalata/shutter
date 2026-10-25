@@ -18,6 +18,7 @@ import {
   IconBooks,
   IconBuildingHospital,
   IconChartBar,
+  IconClipboardSearch,
   IconContrast,
   IconDeviceDesktop,
   IconFlask,
@@ -65,6 +66,13 @@ const NAV = [
     icon: IconStack2,
     color: 'orange',
     hint: 'Many failures to one receiver, released in order',
+  },
+  {
+    to: '/reviews',
+    label: 'Production review',
+    icon: IconClipboardSearch,
+    color: 'cyan',
+    hint: "A read-only pass over a production's settings and failures",
   },
   {
     to: '/site-profile',

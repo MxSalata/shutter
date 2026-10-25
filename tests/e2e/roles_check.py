@@ -11,8 +11,11 @@ and sends an escalation, the edit refusing a second @, a line break in the subje
 and the case's timeline names who sent it and the digest of the text sent; that closing a case by hand (POST
 /cases/{id}/close) is the operator's by default, with who, when and the reason on the case's record, cancels every
 pending email, and leaves no email to edit or send; and that with the site profile's approvers.close_needs_approver
-on, the operator is refused (403) and the approver closes the case, while a misspelt approvers key is refused (400). The profile is put back with the answers it had, saved from the API: from then on a change of the
-seed file no longer replaces it, as for any profile a person saved.
+on, the operator is refused (403) and the approver closes the case, while a misspelt approvers key is refused (400); and
+that reading the production reviews and starting one (agent false) is the operator's, while annotating a finding and
+revoking an annotation need Shutter_Approve (403 for the operator), every review route is 401 signed out and each change
+is 403 csrf without the X-Requested-With header. The profile is put back with the answers it had, saved from the API:
+from then on a change of the seed file no longer replaces it, as for any profile a person saved.
 
 It closes two cases that are escalated, blocked or failed, the newest first, so run it after the scenarios (CI runs it
 after them), and not on an instance someone else is using. Exit status 1 when a check fails. Standard library only.
@@ -36,13 +39,13 @@ class Session:
         self.base = url.rstrip("/") + "/api/shutter"
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 
-    def call(self, method, path, body=None, idempotent=False):
+    def call(self, method, path, body=None, idempotent=False, csrf=True):
         data = None if body is None else json.dumps(body).encode()
         request = urllib.request.Request(self.base + path, data=data, method=method)
         request.add_header("Accept", "application/json")
         if body is not None:
             request.add_header("Content-Type", "application/json")
-        if method != "GET":
+        if method != "GET" and csrf:
             request.add_header("X-Requested-With", "Shutter")
         if idempotent:
             request.add_header("Idempotency-Key", str(uuid.uuid4()))
@@ -116,6 +119,55 @@ def main():
         check("operator: POST /cases/{id}/approvals is 403 forbidden, naming Shutter_Approve",
               status == 403 and error_of(body) == "forbidden" and "Shutter_Approve" in (body or {}).get("detail", ""),
               f"{status} {body}")
+
+    # ---- the production review: reading and starting one is Shutter_Operate, annotating is Shutter_Approve ----
+    signed_out = Session(args.url)
+    for path in ("/production-reviews/targets", "/production-reviews", "/production-reviews/PR-000001"):
+        status, body = signed_out.call("GET", path)
+        check(f"GET {path} signed out: 401 unauthenticated", status == 401 and error_of(body) == "unauthenticated", f"{status} {body}")
+    for method, path in (("POST", "/production-reviews"), ("POST", "/production-reviews/PR-000001/annotations"),
+                         ("DELETE", "/production-reviews/annotations/0")):
+        status, body = signed_out.call(method, path, {} if method == "POST" else None, idempotent=method == "POST")
+        check(f"{method} {path} signed out: 401 unauthenticated", status == 401 and error_of(body) == "unauthenticated", f"{status} {body}")
+    status, body = operator.call("GET", "/production-reviews/targets")
+    targets = (body or {}).get("items") or []
+    check("operator: GET /production-reviews/targets: 200 with Shutter's production",
+          status == 200 and any(t.get("production") == "Shutter.Production" for t in targets), f"{status} {body}")
+    status, body = operator.call("GET", "/production-reviews?limit=1")
+    check("operator: GET /production-reviews: 200", status == 200 and isinstance((body or {}).get("items"), list), f"{status} {body}")
+    review = {"production": "Shutter.Production", "agent": False}
+    status, body = operator.call("POST", "/production-reviews", review, idempotent=True, csrf=False)
+    check("operator: POST /production-reviews without X-Requested-With is 403 csrf", status == 403 and error_of(body) == "csrf", f"{status} {body}")
+    status, started = operator.call("POST", "/production-reviews", review, idempotent=True)
+    if status == 409 and error_of(started) == "wrong_state":
+        # Another review of the production is running: wait for it, then start this one
+        running = (started or {}).get("reviewId")
+        wait(lambda: (operator.call("GET", f"/production-reviews/{running}")[1] or {}).get("state") in ("done", "failed"), args.timeout)
+        status, started = operator.call("POST", "/production-reviews", review, idempotent=True)
+    check("operator: POST /production-reviews: 202 sweeping, requested by the operator",
+          status == 202 and (started or {}).get("state") == "sweeping" and (started or {}).get("requestedBy") == "operator", f"{status} {started}")
+    review_id = (started or {}).get("reviewId") or "PR-000001"
+    reviewed = wait(lambda: (lambda r: r if r.get("state") in ("done", "failed") else None)(
+        operator.call("GET", f"/production-reviews/{review_id}")[1] or {}), args.timeout) or {}
+    check(f"operator: GET /production-reviews/{review_id}: the review, done", reviewed.get("state") == "done", reviewed.get("state"))
+    annotations = f"/production-reviews/{review_id}/annotations"
+    note = {"findingId": "F1", "status": "intended", "reason": "roles check"}
+    status, body = operator.call("POST", annotations, note, idempotent=True)
+    check(f"operator: POST {annotations} is 403 forbidden, naming Shutter_Approve",
+          status == 403 and error_of(body) == "forbidden" and "Shutter_Approve" in (body or {}).get("detail", ""), f"{status} {body}")
+    status, body = operator.call("DELETE", "/production-reviews/annotations/0")
+    check("operator: DELETE /production-reviews/annotations/{id} is 403 forbidden",
+          status == 403 and error_of(body) == "forbidden" and "Shutter_Approve" in (body or {}).get("detail", ""), f"{status} {body}")
+    status, body = approver.call("POST", annotations, note, idempotent=True, csrf=False)
+    check(f"approver: POST {annotations} without X-Requested-With is 403 csrf", status == 403 and error_of(body) == "csrf", f"{status} {body}")
+    status, body = approver.call("DELETE", "/production-reviews/annotations/0", csrf=False)
+    check("approver: DELETE /production-reviews/annotations/{id} without X-Requested-With is 403 csrf",
+          status == 403 and error_of(body) == "csrf", f"{status} {body}")
+    # Past the role and the header, with nothing stored: a status outside the three, and an annotation that does not exist
+    status, body = approver.call("POST", annotations, {**note, "status": "ignored"}, idempotent=True)
+    check(f"approver: POST {annotations} with an unknown status is 400 bad_request", status == 400 and error_of(body) == "bad_request", f"{status} {body}")
+    status, body = approver.call("DELETE", "/production-reviews/annotations/0")
+    check("approver: DELETE /production-reviews/annotations/0 is 404 not_found", status == 404 and error_of(body) == "not_found", f"{status} {body}")
 
     # ---- the agent library: an approver's change ----
     status, library = approver.call("GET", "/library")
