@@ -231,7 +231,7 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
         If $EXTRACT(completionkey, 1, 7) = "member:" { Set sc = ..OnMember(case, $EXTRACT(completionkey, 8, *), callresponse) Quit }
         If completionkey = "coordinator" { Set sc = ..OnCoordinator(case, callresponse) Quit }
         If completionkey = "gate:proposal" { Set sc = ..OnGateProposal(case, callresponse) Quit }
-        If completionkey = "rehearsal" { Set sc = ..OnRehearsal(case, callresponse) Quit }
+        If completionkey = "rehearsal" { Set sc = ..OnRehearsal(case, callrequest, callresponse) Quit }
         If completionkey = "approval" { Set sc = ..OnApproval(case, callresponse) Quit }
         If completionkey = "preflight" { Set sc = ..OnPreflight(case, callresponse) Quit }
         If completionkey = "gate:dispatch" { Set sc = ..OnGateDispatch(case, callresponse) Quit }
@@ -842,15 +842,30 @@ Method WardOperationFor(case As Shutter.Store.Case, plan As Shutter.Store.Plan, 
     Quit w
 }
 
-Method OnRehearsal(case As Shutter.Store.Case, result As Shutter.Msg.WardResult) As %Status
+/// The receiver's answer to the dry run <var>sent</var>: the rehearsal is recorded with what was sent (the dispatch gate
+/// checks the write against it), and the case goes on to its release or blocks.
+Method OnRehearsal(case As Shutter.Store.Case, sent As Shutter.Msg.WardOperation, result As Shutter.Msg.WardResult) As %Status
 {
     Set plan = ##class(Shutter.Store.Plan).%OpenId(..PlanId)
-    Set sc = ##class(Shutter.Store.Rehearsal).Create(case, plan, result.HttpStatus, result.ResponseObject(), .r)
+    Set sc = ##class(Shutter.Store.Rehearsal).Create(case, plan, sent, result.HttpStatus, result.ResponseObject(), .r)
     Quit:$$$ISERR(sc) sc
     // A dry run that would apply validated the expected version: that is the receiver's version now.
     If result.Outcome = "would_apply" Set ..ReceiverVersion = $SELECT(result.EncounterVersion '= "": result.EncounterVersion, 1: plan.ExpectedVersion)
     If result.Epoch '= "" Set ..ReceiverEpoch = result.Epoch
-    Do case.Note("artifact", "Rehearsal: " _ result.Outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "") _ ", rolled back by the receiver", "system", "rehearsal:" _ r.%Id())
+    // A receiver that applied the dry run does not honour dry_run (v1.19): the operation is in effect, so it is recorded as
+    // an execution, an alert is raised and the effect is verified; it is never reported as rolled back.
+    If result.IsInEffect() {
+        $$$LOGALERT("Receiver " _ ..WardTarget _ " applied a dry run of " _ sent.OperationKey _ " for " _ case.CaseId _ " (HTTP " _ result.HttpStatus _ "): it does not honour dry_run")
+        Set sc = ##class(Shutter.Store.ExecutionAttempt).Create(case, plan, "", r, result.HttpStatus, result.Outcome, result.ResponseObject(), "written by the receiver during a rehearsal", .attempt)
+        Quit:$$$ISERR(sc) sc
+        Set ..AttemptId = attempt.%Id()
+        Do case.Note("execution", "The receiver applied the rehearsal (HTTP " _ result.HttpStatus _ "): it does not honour dry_run and the operation is in effect", "system", "attempt:" _ attempt.%Id())
+        Set sc = case.Transition("verifying", "The receiver applied the dry run instead of rolling it back; verifying the effect", "system", "attempt:" _ attempt.%Id())
+        Quit:$$$ISERR(sc) sc
+        Quit ..SendVerify(case)
+    }
+    Set rolledBack = (result.Outcome = "would_apply") || (result.Outcome = "would_not_apply")
+    Do case.Note("artifact", "Rehearsal: " _ result.Outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "") _ $SELECT(rolledBack: ", rolled back by the receiver", 1: ""), "system", "rehearsal:" _ r.%Id())
     If result.Outcome '= "would_apply" {
         Set case.Headline = "Rehearsal failed: " _ result.Outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "")
         Quit case.Transition("blocked", "The rehearsal shows the action would not apply: " _ result.Outcome _ $SELECT(result.Error '= "": ", " _ result.Error, 1: ""), "system", "rehearsal:" _ r.%Id())
@@ -1037,8 +1052,10 @@ Method OnApproval(case As Shutter.Store.Case, result As EnsLib.Workflow.TaskResp
     Set comment = result.%FormValues.GetAt("Comment")
     Set digest = result.%FormValues.GetAt("PlanDigest")
     Set taskId = result.%Id()
+    // The latest rehearsal of this plan: the approval binds it, and the dispatch gate's rehearsal check requires the bound
+    // one to be of the plan it releases (none bound blocks DRY_RUN_MISSING).
     Set rehearsal = ""
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 ID FROM Shutter_Store.Rehearsal WHERE ""Case"" = ? ORDER BY ID DESC", case.%Id())
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 ID FROM Shutter_Store.Rehearsal WHERE Plan = ? ORDER BY ID DESC", ..PlanId)
     If rs.%Next() Set rehearsal = ##class(Shutter.Store.Rehearsal).%OpenId(rs.%Get("ID"))
     If action '= "approve" {
         Set sc = ##class(Shutter.Store.Approval).Create(case, plan, case.CurrentSnapshot, ##class(Shutter.Operation.Gate).#POLICYVERSION, rehearsal, plan.ExpectedVersion, user, "rejected", comment, taskId, ..ApprovalValidSeconds, .a)
@@ -1141,7 +1158,7 @@ Method OnExecute(case As Shutter.Store.Case, result As Shutter.Msg.WardResult) A
     Set plan = ##class(Shutter.Store.Plan).%OpenId(..PlanId)
     Set approval = ##class(Shutter.Store.Approval).%OpenId(..ApprovalId)
     Set outcome = $CASE(result.Outcome, "applied": "applied", "already_committed": "already_committed", "version_conflict": "version_conflict", "uncertain": "uncertain", "unavailable": "error", "error": "error", : "refused")
-    Set sc = ##class(Shutter.Store.ExecutionAttempt).Create(case, plan, approval, result.HttpStatus, outcome, result.ResponseObject(), result.Error, .attempt)
+    Set sc = ##class(Shutter.Store.ExecutionAttempt).Create(case, plan, approval, $SELECT($ISOBJECT(approval): approval.Rehearsal, 1: ""), result.HttpStatus, outcome, result.ResponseObject(), result.Error, .attempt)
     Quit:$$$ISERR(sc) sc
     Set ..AttemptId = attempt.%Id()
     Do case.Note("execution", "Dispatch: " _ outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "") _ ", HTTP " _ result.HttpStatus, "system", "attempt:" _ attempt.%Id())

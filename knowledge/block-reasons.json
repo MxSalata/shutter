@@ -445,6 +445,42 @@
       "owner": "Integration team",
       "reevaluate_when": "A message that names the encounter arrives, or a person decides",
       "text": "Shutter writes only to an encounter whose state and version it can read and compare. A patient-level message names none, so there is nothing to check a write against."
+    },
+    {
+      "code": "DRY_RUN_UNSUPPORTED",
+      "title": "The downstream system offers no dry run",
+      "prerequisite": "dry_run shown in the downstream system's capability profile (WIC-2.5)",
+      "next_action": "Escalate for manual handling. Reconcile and superseded remain possible; a resend is not offered to a receiver that cannot rehearse it.",
+      "owner": "Downstream system team",
+      "reevaluate_when": "The capability profile changes",
+      "text": "Without a dry run nothing shows that the exact request would apply before it is written, so resending is not offered."
+    },
+    {
+      "code": "DRY_RUN_MISSING",
+      "title": "The exact request was never rehearsed",
+      "prerequisite": "A dry run of this plan, bound to its approval (WIC-2.5)",
+      "next_action": "Investigate again: the case rehearses the plan before any approval.",
+      "owner": "Operator",
+      "reevaluate_when": "A new plan is rehearsed",
+      "text": "The approval carries no dry run of this plan, so the write would be blind."
+    },
+    {
+      "code": "DRY_RUN_FAILED",
+      "title": "The rehearsal of this plan reported a refusal",
+      "prerequisite": "A dry run of the exact request that would apply (WIC-2.5)",
+      "next_action": "Escalate with the rehearsal's reason (RP-2.5).",
+      "owner": "Operator",
+      "reevaluate_when": "The encounter's state changes",
+      "text": "The dry run bound to the approval said the request would not apply; nothing is dispatched on it."
+    },
+    {
+      "code": "DRY_RUN_STALE",
+      "title": "The rehearsal was checked against another version",
+      "prerequisite": "A dry run at the version and epoch the write is conditional on, with the same payload",
+      "next_action": "Collect fresh evidence and investigate again; the case rehearses the new plan.",
+      "owner": "Operator",
+      "reevaluate_when": "A new investigation completes",
+      "text": "The dry run was checked against a different receiver version, epoch or payload from the write's, so it proves nothing about this write."
     }
   ]
 }

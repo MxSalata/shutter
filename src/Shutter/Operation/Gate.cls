@@ -1,6 +1,6 @@
 /// The deterministic gate. It checks what can be checked mechanically about a plan against the
 /// snapshot: identity, conformance, intent, ordering, state transition, effect completeness,
-/// authorization, concurrency, evidence freshness and connector capability. Each check is pass,
+/// authorization, rehearsal, concurrency, evidence freshness and connector capability. Each check is pass,
 /// block or unknown with a reason code; an unknown prerequisite blocks a write as surely as a
 /// block does. The board may explain these results; it cannot override them.
 Class Shutter.Operation.Gate Extends Ens.BusinessOperation
@@ -9,7 +9,7 @@ Class Shutter.Operation.Gate Extends Ens.BusinessOperation
 Parameter INVOCATION = "Queue";
 
 /// Bumped whenever a check changes; recorded on every decision and bound by approvals.
-Parameter POLICYVERSION = "2026-10-20.1";
+Parameter POLICYVERSION = "2026-10-25.1";
 
 Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shutter.Msg.GateResult) As %Status
 {
@@ -156,7 +156,9 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         Do ..Check(checks, "effect", "unknown", "RECEIPT_UNREADABLE", "The receipt lookup failed (HTTP " _ receiptStatus _ ")")
     }
 
-    // Authorization: at approval and dispatch, a valid approval for exactly this plan.
+    // Authorization: at approval and dispatch, a valid approval for exactly this plan. The rehearsal check below reads
+    // the same approval.
+    Set approval = ""
     If request.Stage = "proposal" {
         Do ..Check(checks, "authorization", "pass", "NOT_YET_REQUIRED", "Authorization is checked at approval and dispatch")
     } Else {
@@ -174,6 +176,33 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
                 If (why = "") && ((plan.CatalogueEntry = "") || (plan.CreatedBy '= ("policy:" _ plan.CatalogueEntry))) Set why = "plan_origin"
             }
             Do ..Check(checks, "authorization", $SELECT(why = "": "pass", 1: "block"), $SELECT(why = "": "APPROVAL_VALID", why = "policy_requires_approval": "POLICY_REQUIRES_APPROVAL", 1: "APPROVAL_" _ $ZCONVERT(why, "U")), $SELECT(why = "": "Approved by " _ approval.Approver _ " for plan digest " _ $EXTRACT(approval.PlanDigest, 1, 19), 1: "The approval no longer authorises this dispatch: " _ why))
+        }
+    }
+
+    // Rehearsal (CONTRACTS 6.5): a write goes only after a dry run of this exact plan at the receiver, the one the approval
+    // binds: it reported that the action would apply, and it was checked against the version, epoch and payload the write
+    // carries. A rehearsal with no version from the receiver proves nothing about the version, and is stale.
+    If 'isWrite {
+        Do ..Check(checks, "rehearsal", "pass", "NOT_APPLICABLE", "No write proposed")
+    } ElseIf request.Stage = "proposal" {
+        Do ..Check(checks, "rehearsal", "pass", "NOT_YET_REQUIRED", "The dry run follows the proposal gate; it is checked at dispatch")
+    } Else {
+        Set rehearsal = $SELECT($ISOBJECT(approval): approval.Rehearsal, 1: "")
+        Set opDigest = ##class(Shutter.Util.Json).Str(summary.%Get("operation"), "payload_digest")
+        If '$ISOBJECT(rehearsal) || (rehearsal.PlanGetObjectId() '= plan.%Id()) {
+            Do ..Check(checks, "rehearsal", "block", "DRY_RUN_MISSING", "No dry run of this plan is bound to the approval: the exact action was never rehearsed at the receiver")
+        } ElseIf 'rehearsal.WouldApply {
+            Do ..Check(checks, "rehearsal", "block", "DRY_RUN_FAILED", "The receiver's dry run of this plan reported it would not apply" _ $SELECT(rehearsal.Reason '= "": " (" _ rehearsal.Reason _ ")", 1: ""))
+        } Else {
+            Set versionStale = (rehearsal.ReceiverVersion '= plan.ExpectedVersion) || ((rehearsal.ExpectedVersion '= "") && (rehearsal.ExpectedVersion '= plan.ExpectedVersion))
+            Set payloadStale = (rehearsal.PayloadDigest '= "") && (rehearsal.PayloadDigest '= opDigest)
+            Set epochStale = (rehearsal.Epoch '= "") && (request.ReceiverEpoch '= "") && (rehearsal.Epoch '= request.ReceiverEpoch)
+            Set against = "version " _ $SELECT(rehearsal.ReceiverVersion = "": "unknown", 1: rehearsal.ReceiverVersion) _ $SELECT(rehearsal.Epoch '= "": " in epoch " _ rehearsal.Epoch, 1: "") _ $SELECT(rehearsal.PayloadDigest '= "": " with payload " _ $EXTRACT(rehearsal.PayloadDigest, 1, 19), 1: "")
+            If versionStale || payloadStale || epochStale {
+                Do ..Check(checks, "rehearsal", "block", "DRY_RUN_STALE", "The dry run was checked against " _ against _ "; the write is conditional on version " _ plan.ExpectedVersion _ $SELECT(request.ReceiverEpoch '= "": " and the receiver is in epoch " _ request.ReceiverEpoch, 1: "") _ $SELECT(payloadStale: ", and its payload digest is " _ $EXTRACT(opDigest, 1, 19), 1: ""))
+            } Else {
+                Do ..Check(checks, "rehearsal", "pass", "REHEARSED", "The receiver's dry run of this exact action at " _ against _ " would apply; it was rolled back")
+            }
         }
     }
 
@@ -208,7 +237,14 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         Do ..Check(checks, "capability", "unknown", "CAPABILITIES_UNREADABLE", "The receiver's capability profile could not be read, so its guarantees are unknown")
     } Else {
         Set capable = ##class(Shutter.Util.Json).Bool(route, "conditional_writes") && ##class(Shutter.Util.Json).Bool(route, "receipts")
-        Do ..Check(checks, "capability", $SELECT(capable: "pass", 1: "block"), $SELECT(capable: "CONNECTOR_CAPABLE", 1: "CONNECTOR_INCAPABLE"), $SELECT(capable: "The receiver guarantees conditional writes and receipts", 1: "The receiver reports no conditional writes: a resend cannot be made safe, so only investigation and reconciliation are open"))
+        If 'capable {
+            Do ..Check(checks, "capability", "block", "CONNECTOR_INCAPABLE", "The receiver reports no conditional writes: a resend cannot be made safe, so only investigation and reconciliation are open")
+        } ElseIf '##class(Shutter.Util.Json).Bool(route, "dry_run") {
+            // No dry run means the exact action cannot be rehearsed before it is written (v1.19): no resend to this receiver.
+            Do ..Check(checks, "capability", "block", "DRY_RUN_UNSUPPORTED", "The receiver reports no dry run: the exact action cannot be rehearsed before it is written, so a resend is not offered; investigation, reconciliation and escalation remain")
+        } Else {
+            Do ..Check(checks, "capability", "pass", "CONNECTOR_CAPABLE", "The receiver guarantees conditional writes, receipts and dry runs")
+        }
     }
 
     // Catalogue (CONTRACTS 6.5): the plan's entry and outcome against the matcher's result in the evidence.
