@@ -119,6 +119,8 @@ Method TestFutureLaterEventSupersedesNothing()
     Set k = ..Conditions(c, s)
     Do $$$AssertEquals(k."later_applied", "none", "the future-timed transfer does not close the genuine failure")
     Do $$$AssertEquals(k."event_time", "later_event_future", "the order is a person's question")
+    Set m = ##class(Shutter.Catalogue.Matcher).Match(k)
+    Do $$$AssertEquals(m.decision _ " " _ m.entry, "person E13", "the catalogue sends the doubtful order to a person, with no board")
     Set later = ##class(Shutter.Catalogue.Matcher).Later(s, c, "single")
     Do $$$AssertNotTrue(later.%Get(0).plausible, "flagged for the gate")
 }
@@ -163,6 +165,8 @@ Method TestFeedRowTimedAfterItWasSent()
     Set k = ..Conditions(c, s)
     Do $$$AssertEquals(k."later_applied", "none", "a row timed after it was sent supersedes nothing")
     Do $$$AssertEquals(k."event_time", "later_event_future", "and asks for a person")
+    Set m = ##class(Shutter.Catalogue.Matcher).Match(k)
+    Do $$$AssertEquals(m.decision _ " " _ m.entry, "person E13", "the catalogue sends the doubtful order to a person, with no board")
 }
 
 /// Describe: the words the gate's ordering check and the verifier use for a later event (CONTRACTS 6.1).

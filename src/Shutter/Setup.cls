@@ -81,7 +81,7 @@ ClassMethod RootStatus(root As %String = "") As %Status [ Private ]
 }
 
 /// Install as a %Status: what the module's manifest invokes (the Invoke checks the status, so a failed install stops
-/// the load) and what Install wraps. The housekeeping tasks read SHUTTER_MESSAGE_DAYS and SHUTTER_MESSAGE_PURGE from
+/// the load) and what Install wraps. The housekeeping tasks read SHUTTER_MESSAGE_DAYS, SHUTTER_MESSAGE_PURGE and SHUTTER_ESCALATION_DAYS from
 /// the environment of the process that runs the install (EnsureRetentionTasks).
 /// With a production named (IPM: -Dproduction=Your.Production), the install is shape B: Shutter's items go into that
 /// production (InstallIntoStatus) and Shutter.Production is neither started nor made the auto-start production.
