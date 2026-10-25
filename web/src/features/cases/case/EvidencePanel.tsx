@@ -11,6 +11,7 @@ import { formatTime, keyLabel, parseTime } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
 import { describeEntry, describeItem } from './derive';
 import { SHOW_EVIDENCE } from './evidenceLinks';
+import { EncounterTimeline } from './EncounterTimeline';
 import { NotYet, Section } from './Section';
 
 const KIND_LABELS: Record<string, string> = {
@@ -98,7 +99,10 @@ export function EvidencePanel({ caseId, open }: { caseId: string; open: boolean 
       const kind = (e as CustomEvent<string>).detail;
       const seqs = (s?.items ?? []).filter((item) => item.kind === kind).map((item) => String(item.seq));
       if (!seqs.length) {
-        document.getElementById('evidence')?.scrollIntoView?.({ block: 'start' });
+        // A kind drawn outside the list (the encounter timeline) is shown where it is drawn, else the section's top
+        const drawn = document.getElementById(`evidence-${kind}`);
+        (drawn ?? document.getElementById('evidence'))?.scrollIntoView?.({ block: 'start' });
+        drawn?.focus({ preventScroll: true });
         return;
       }
       setOpened((open) => [...new Set([...open, ...seqs])]);
@@ -149,6 +153,7 @@ export function EvidencePanel({ caseId, open }: { caseId: string; open: boolean 
               <Digest value={s.digest} label="snapshot digest" />
             </Group>
           </Group>
+          <EncounterTimeline summary={s.summary} />
           <Accordion variant="separated" multiple chevronPosition="left" value={opened} onChange={setOpened}>
             {s.items.map((item, index) => {
               const data = asObject(item.data) ?? {};
