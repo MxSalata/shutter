@@ -1,4 +1,4 @@
-import { Accordion, Card, Group, Stack, Table, Text, ThemeIcon } from '@mantine/core';
+import { Accordion, Card, Group, Stack, Text, ThemeIcon } from '@mantine/core';
 import { IconCheck, IconMinus, IconX } from '@tabler/icons-react';
 import { Fragment, type ReactNode } from 'react';
 import { useHealth, useLibrary } from '@/api/hooks';
@@ -7,6 +7,7 @@ import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { JsonBlock } from '@/components/JsonBlock';
 import { Timestamp } from '@/components/Timestamp';
+import { StackTable } from '@/components/StackTable';
 import { DEMO } from '@/demo';
 import { humanize, keyLabel } from '@/lib/format';
 
@@ -121,19 +122,19 @@ function DefaultBoard() {
     others ? `${others} other${others === 1 ? '' : 's'}` : '',
   ].filter(Boolean);
   return (
-    <Table.Tr>
-      <Table.Th w={220} style={{ fontWeight: 500 }}>
+    <StackTable.Tr>
+      <StackTable.Th w={220} style={{ fontWeight: 500 }}>
         <Text size="sm" c="dimmed">
           Default board
         </Text>
-      </Table.Th>
-      <Table.Td>
+      </StackTable.Th>
+      <StackTable.Td>
         <Text size="sm">{parts.length ? parts.join(' and ') : 'nobody'}</Text>
         <Text size="xs" c="dimmed">
           From the agent library; the generalist answers only in single investigator mode
         </Text>
-      </Table.Td>
-    </Table.Tr>
+      </StackTable.Td>
+    </StackTable.Tr>
   );
 }
 
@@ -165,30 +166,30 @@ export default function HealthPage() {
                 &ldquo;Not in the demo&rdquo; is a piece that instance did not have: expected, not a fault.
               </Text>
             ) : null}
-            <Table className="kv-list" withRowBorders={false} verticalSpacing={4}>
-              <Table.Tbody>
+            <StackTable className="kv-list" withRowBorders={false} verticalSpacing={4}>
+              <StackTable.Tbody>
                 {Object.entries(report).map(([k, v]) => (
                   <Fragment key={k}>
-                    <Table.Tr>
-                      <Table.Th w={220} style={{ fontWeight: 500 }}>
+                    <StackTable.Tr>
+                      <StackTable.Th w={220} style={{ fontWeight: 500 }}>
                         <Text size="sm" c="dimmed">
                           {label(k)}
                         </Text>
-                      </Table.Th>
-                      <Table.Td>
+                      </StackTable.Th>
+                      <StackTable.Td>
                         <Value k={k} value={v} />
                         {k === 'mode' ? (
                           <Text size="xs" c="dimmed">
                             Set by the last scenario run or a reset; live failures are investigated in it too
                           </Text>
                         ) : null}
-                      </Table.Td>
-                    </Table.Tr>
+                      </StackTable.Td>
+                    </StackTable.Tr>
                     {k === 'board_members' ? <DefaultBoard /> : null}
                   </Fragment>
                 ))}
-              </Table.Tbody>
-            </Table>
+              </StackTable.Tbody>
+            </StackTable>
             <Accordion variant="contained" chevronPosition="left">
               <Accordion.Item value="raw">
                 <Accordion.Control>

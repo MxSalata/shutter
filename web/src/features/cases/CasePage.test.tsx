@@ -100,6 +100,18 @@ describe('CasePage', () => {
     const gate = await screen.findByRole('region', { name: 'The gate' });
     expect(await within(gate).findByText(/^Passed \d+ of \d+ applicable checks$/)).toBeInTheDocument();
     expect((await within(gate).findAllByText('Not applicable')).length).toBeGreaterThan(0);
+    // Each check's row keeps its cells announced as cells, each named for the stacked layout on a phone
+    const check = within(gate).getAllByRole('columnheader', { name: 'Check' })[0].closest('table')!;
+    expect(check).toHaveAttribute('role', 'table');
+    const rows = within(check).getAllByRole('row').slice(1);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const r of rows) {
+      expect(
+        within(r)
+          .getAllByRole('cell')
+          .map((c) => c.getAttribute('data-label')),
+      ).toEqual([null, 'Result', 'Reason code', 'Detail']);
+    }
   });
 
   it('says a blocked resend that never went out has nothing to verify, with no "yet"', async () => {

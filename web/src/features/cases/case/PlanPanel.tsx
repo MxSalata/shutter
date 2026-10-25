@@ -11,6 +11,7 @@ import { asArray, asObject } from '@/lib/json';
 import { checksOf } from './derive';
 import { humanize } from '@/lib/format';
 import { KeyValueList } from '@/components/KeyValueList';
+import { StackTable } from '@/components/StackTable';
 import { NotYet, Section } from './Section';
 
 const STAGES: Record<string, string> = {
@@ -46,44 +47,44 @@ function GateTable({ d }: { d: GateDecision }) {
       </Group>
       {/* On a phone each check stacks: its name and question, then the result, the code and the detail */}
       <Table.ScrollContainer minWidth={560} className="stack-scroll">
-        <Table verticalSpacing={4} className="stack-table">
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th w={150}>Check</Table.Th>
-              <Table.Th w={150}>Result</Table.Th>
-              <Table.Th w={210}>Reason code</Table.Th>
-              <Table.Th>Detail</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
+        <StackTable verticalSpacing={4} className="stack-table">
+          <StackTable.Thead>
+            <StackTable.Tr>
+              <StackTable.Th w={150}>Check</StackTable.Th>
+              <StackTable.Th w={150}>Result</StackTable.Th>
+              <StackTable.Th w={210}>Reason code</StackTable.Th>
+              <StackTable.Th>Detail</StackTable.Th>
+            </StackTable.Tr>
+          </StackTable.Thead>
+          <StackTable.Tbody>
             {checks.map((c) => {
               const r = CHECK_STATES[checkState(c)];
               return (
-                <Table.Tr key={c.check}>
-                  <Table.Td>
+                <StackTable.Tr key={c.check}>
+                  <StackTable.Td>
                     <Text size="sm">{humanize(c.check)}</Text>
                     {CHECK_QUESTIONS[c.check] ? (
                       <Text size="xs" c="dimmed">
                         {CHECK_QUESTIONS[c.check]}
                       </Text>
                     ) : null}
-                  </Table.Td>
-                  <Table.Td data-label="Result">
+                  </StackTable.Td>
+                  <StackTable.Td data-label="Result">
                     <StatusBadge {...r} hint={undefined} size="sm" />
-                  </Table.Td>
-                  <Table.Td data-label="Reason code">
+                  </StackTable.Td>
+                  <StackTable.Td data-label="Reason code">
                     <Text size="xs" className="mono-wrap">
                       {c.reason_code}
                     </Text>
-                  </Table.Td>
-                  <Table.Td data-label="Detail">
+                  </StackTable.Td>
+                  <StackTable.Td data-label="Detail">
                     <Text size="sm">{c.detail}</Text>
-                  </Table.Td>
-                </Table.Tr>
+                  </StackTable.Td>
+                </StackTable.Tr>
               );
             })}
-          </Table.Tbody>
-        </Table>
+          </StackTable.Tbody>
+        </StackTable>
       </Table.ScrollContainer>
     </Stack>
   );

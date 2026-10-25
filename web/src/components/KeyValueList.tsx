@@ -1,25 +1,26 @@
-import { Table, Text } from '@mantine/core';
+import { Text } from '@mantine/core';
+import { StackTable } from './StackTable';
 import type { ReactNode } from 'react';
 
 /** Label and value rows; empty values are left out. On a phone each label sits over its value (`kv-list`). */
 export function KeyValueList({ rows }: { rows: [string, ReactNode][] }) {
   const shown = rows.filter(([, v]) => v !== undefined && v !== null && v !== '');
   return (
-    <Table className="kv-list" withRowBorders={false} verticalSpacing={4} highlightOnHover={false}>
-      <Table.Tbody>
+    <StackTable className="kv-list" withRowBorders={false} verticalSpacing={4} highlightOnHover={false}>
+      <StackTable.Tbody>
         {shown.map(([k, v]) => (
-          <Table.Tr key={k}>
-            <Table.Th w={190} style={{ verticalAlign: 'top', fontWeight: 500 }}>
+          <StackTable.Tr key={k}>
+            <StackTable.Th w={190} style={{ verticalAlign: 'top', fontWeight: 500 }}>
               <Text size="sm" c="dimmed">
                 {k}
               </Text>
-            </Table.Th>
-            <Table.Td style={{ verticalAlign: 'top', minWidth: 0 }}>
+            </StackTable.Th>
+            <StackTable.Td style={{ verticalAlign: 'top', minWidth: 0 }}>
               {typeof v === 'string' ? <Text size="sm">{v}</Text> : v}
-            </Table.Td>
-          </Table.Tr>
+            </StackTable.Td>
+          </StackTable.Tr>
         ))}
-      </Table.Tbody>
-    </Table>
+      </StackTable.Tbody>
+    </StackTable>
   );
 }

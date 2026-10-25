@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import type { ReviewFinding } from '@/api/types';
 import { PortalLink } from '@/components/PortalLink';
 import { Timestamp } from '@/components/Timestamp';
+import { StackTable } from '@/components/StackTable';
 import { formatInt } from '@/lib/format';
 import { ConfidenceText, FindingStatusBadge, SeverityBadge } from './badges';
 import { foundList, headerLink, SOURCE_LABELS, subjectOf } from './review';
@@ -28,8 +29,8 @@ function FindingRow({
 }) {
   const found = foundList(f);
   return (
-    <Table.Tr>
-      <Table.Td style={{ verticalAlign: 'top' }} miw={150} maw={170}>
+    <StackTable.Tr>
+      <StackTable.Td style={{ verticalAlign: 'top' }} miw={150} maw={170}>
         <Stack gap={6} align="flex-start">
           <Group gap={6} align="baseline">
             <Text size="sm" fw={600}>
@@ -74,8 +75,8 @@ function FindingRow({
             ) : null}
           </Stack>
         </Stack>
-      </Table.Td>
-      <Table.Td
+      </StackTable.Td>
+      <StackTable.Td
         data-label="Check, item and what was found"
         style={{ verticalAlign: 'top' }}
         miw={230}
@@ -118,8 +119,8 @@ function FindingRow({
             </Text>
           </div>
         </Stack>
-      </Table.Td>
-      <Table.Td data-label="Why, and what to do" style={{ verticalAlign: 'top' }} miw={300}>
+      </StackTable.Td>
+      <StackTable.Td data-label="Why, and what to do" style={{ verticalAlign: 'top' }} miw={300}>
         <Stack gap={4}>
           {f.explanation ? (
             <Text size="sm" fw={500}>
@@ -141,8 +142,8 @@ function FindingRow({
             {f.action}
           </Text>
         </Stack>
-      </Table.Td>
-      <Table.Td data-label="Cases and evidence" style={{ verticalAlign: 'top' }} miw={180} maw={220}>
+      </StackTable.Td>
+      <StackTable.Td data-label="Cases and evidence" style={{ verticalAlign: 'top' }} miw={180} maw={220}>
         <Stack gap={8}>
           <div>
             {f.cases.count ? (
@@ -206,8 +207,8 @@ function FindingRow({
             )}
           </div>
         </Stack>
-      </Table.Td>
-    </Table.Tr>
+      </StackTable.Td>
+    </StackTable.Tr>
   );
 }
 
@@ -232,16 +233,16 @@ export function FindingsTable({
   return (
     // Four columns fit a laptop; below 1200 px each finding stacks, every part under its name
     <Table.ScrollContainer minWidth={880} className="stack-scroll-wide">
-      <Table className="stack-table-wide">
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Finding</Table.Th>
-            <Table.Th>Check, item and what was found</Table.Th>
-            <Table.Th>Why, and what to do</Table.Th>
-            <Table.Th>Cases and evidence</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
+      <StackTable className="stack-table-wide">
+        <StackTable.Thead>
+          <StackTable.Tr>
+            <StackTable.Th>Finding</StackTable.Th>
+            <StackTable.Th>Check, item and what was found</StackTable.Th>
+            <StackTable.Th>Why, and what to do</StackTable.Th>
+            <StackTable.Th>Cases and evidence</StackTable.Th>
+          </StackTable.Tr>
+        </StackTable.Thead>
+        <StackTable.Tbody>
           {findings.map((f, i) => (
             <FindingRow
               key={f.id}
@@ -253,8 +254,8 @@ export function FindingsTable({
               onUnmark={onUnmark}
             />
           ))}
-        </Table.Tbody>
-      </Table>
+        </StackTable.Tbody>
+      </StackTable>
     </Table.ScrollContainer>
   );
 }

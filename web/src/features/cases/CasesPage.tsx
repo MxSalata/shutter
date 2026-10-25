@@ -8,6 +8,7 @@ import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { CASE_STATE_NAMES, DispositionBadge, StateBadge } from '@/components/StateBadge';
 import { Timestamp } from '@/components/Timestamp';
+import { StackTable } from '@/components/StackTable';
 import { caseState } from '@/lib/status';
 import { humanize } from '@/lib/format';
 import { clampHeadline } from '@/lib/headline';
@@ -76,6 +77,84 @@ export function InvestigatedBy({ c }: { c: CaseSummary }) {
   );
 }
 
+/** The list's cases; on a phone each case is a card: its id, then each column's value under the column's name. */
+export function CasesTable({ items }: { items: CaseSummary[] }) {
+  return (
+    <Table.ScrollContainer minWidth={760} className="stack-scroll">
+      <StackTable className="stack-table">
+        <StackTable.Thead>
+          <StackTable.Tr>
+            <StackTable.Th>Case</StackTable.Th>
+            <StackTable.Th>State</StackTable.Th>
+            <StackTable.Th>Proposed action</StackTable.Th>
+            <StackTable.Th>What failed</StackTable.Th>
+            <StackTable.Th>Scenario</StackTable.Th>
+            <StackTable.Th>Investigated by</StackTable.Th>
+            <StackTable.Th>Opened</StackTable.Th>
+          </StackTable.Tr>
+        </StackTable.Thead>
+        <StackTable.Tbody>
+          {items.map((c) => (
+            <StackTable.Tr key={c.caseId}>
+              <StackTable.Td>
+                <Group gap={6} wrap="nowrap">
+                  <Anchor
+                    component={Link}
+                    to={`/cases/${encodeURIComponent(c.caseId)}`}
+                    fw={600}
+                    size="sm"
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    {c.caseId}
+                  </Anchor>
+                  <ForwardedBadge c={c} />
+                </Group>
+              </StackTable.Td>
+              <StackTable.Td data-label="State">
+                <StateBadge state={c.state} />
+              </StackTable.Td>
+              <StackTable.Td data-label="Proposed action">
+                <DispositionBadge disposition={c.disposition} />
+              </StackTable.Td>
+              <StackTable.Td data-label="What failed" maw={420}>
+                <Text size="sm" lineClamp={2}>
+                  {clampHeadline(c.headline) ||
+                    `${humanize(c.event)}${c.ward ? ` to ${c.ward}` : ''} for ${c.encounterId}`}
+                </Text>
+                {c.incidentId ? (
+                  <Text size="xs" c="dimmed">
+                    In incident{' '}
+                    <Anchor
+                      component={Link}
+                      to={`/incidents/${encodeURIComponent(c.incidentId)}`}
+                      size="xs"
+                      underline="always"
+                    >
+                      {c.incidentId}
+                    </Anchor>
+                  </Text>
+                ) : null}
+              </StackTable.Td>
+              <StackTable.Td data-label="Scenario">
+                <Text size="sm">{c.scenario || 'none'}</Text>
+                <Text size="xs" c="dimmed">
+                  {humanize(c.mode)}
+                </Text>
+              </StackTable.Td>
+              <StackTable.Td data-label="Investigated by">
+                <InvestigatedBy c={c} />
+              </StackTable.Td>
+              <StackTable.Td data-label="Opened">
+                <Timestamp iso={c.openedAt} age />
+              </StackTable.Td>
+            </StackTable.Tr>
+          ))}
+        </StackTable.Tbody>
+      </StackTable>
+    </Table.ScrollContainer>
+  );
+}
+
 export default function CasesPage() {
   const [state, setState] = useState<string | null>(null);
   const [scenario, setScenario] = useState<string | null>(null);
@@ -140,81 +219,7 @@ export default function CasesPage() {
             No cases{state || scenario ? ' match these filters' : ' yet: play a scenario to open one'}.
           </Text>
         ) : null}
-        {cases.data && cases.data.items.length > 0 ? (
-          // On a phone each case is a card: its id, then each column's value under the column's name
-          <Table.ScrollContainer minWidth={760} className="stack-scroll">
-            <Table className="stack-table">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Case</Table.Th>
-                  <Table.Th>State</Table.Th>
-                  <Table.Th>Proposed action</Table.Th>
-                  <Table.Th>What failed</Table.Th>
-                  <Table.Th>Scenario</Table.Th>
-                  <Table.Th>Investigated by</Table.Th>
-                  <Table.Th>Opened</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {cases.data.items.map((c) => (
-                  <Table.Tr key={c.caseId}>
-                    <Table.Td>
-                      <Group gap={6} wrap="nowrap">
-                        <Anchor
-                          component={Link}
-                          to={`/cases/${encodeURIComponent(c.caseId)}`}
-                          fw={600}
-                          size="sm"
-                          style={{ whiteSpace: 'nowrap' }}
-                        >
-                          {c.caseId}
-                        </Anchor>
-                        <ForwardedBadge c={c} />
-                      </Group>
-                    </Table.Td>
-                    <Table.Td data-label="State">
-                      <StateBadge state={c.state} />
-                    </Table.Td>
-                    <Table.Td data-label="Proposed action">
-                      <DispositionBadge disposition={c.disposition} />
-                    </Table.Td>
-                    <Table.Td data-label="What failed" maw={420}>
-                      <Text size="sm" lineClamp={2}>
-                        {clampHeadline(c.headline) ||
-                          `${humanize(c.event)}${c.ward ? ` to ${c.ward}` : ''} for ${c.encounterId}`}
-                      </Text>
-                      {c.incidentId ? (
-                        <Text size="xs" c="dimmed">
-                          In incident{' '}
-                          <Anchor
-                            component={Link}
-                            to={`/incidents/${encodeURIComponent(c.incidentId)}`}
-                            size="xs"
-                            underline="always"
-                          >
-                            {c.incidentId}
-                          </Anchor>
-                        </Text>
-                      ) : null}
-                    </Table.Td>
-                    <Table.Td data-label="Scenario">
-                      <Text size="sm">{c.scenario || 'none'}</Text>
-                      <Text size="xs" c="dimmed">
-                        {humanize(c.mode)}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td data-label="Investigated by">
-                      <InvestigatedBy c={c} />
-                    </Table.Td>
-                    <Table.Td data-label="Opened">
-                      <Timestamp iso={c.openedAt} age />
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </Table.ScrollContainer>
-        ) : null}
+        {cases.data && cases.data.items.length > 0 ? <CasesTable items={cases.data.items} /> : null}
         {total > PAGE ? (
           <Group justify="flex-end" mt="sm">
             <Pagination

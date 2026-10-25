@@ -5,6 +5,7 @@ import { Digest } from '@/components/Digest';
 import { KeyValueList } from '@/components/KeyValueList';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
+import { StackTable } from '@/components/StackTable';
 import { APPROVALS } from '@/lib/status';
 import { NotYet, Section } from '../../cases/case/Section';
 import { describePolicy } from '../describe';
@@ -97,34 +98,34 @@ export function IncidentApprovalPanel({
       ) : null}
       {inc.tasks.length ? (
         <Table.ScrollContainer minWidth={520} className="stack-scroll">
-          <Table verticalSpacing={4} className="stack-table">
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Approval task</Table.Th>
-                <Table.Th>Answer</Table.Th>
-                <Table.Th>By</Table.Th>
-                <Table.Th>Completed</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
+          <StackTable verticalSpacing={4} className="stack-table">
+            <StackTable.Thead>
+              <StackTable.Tr>
+                <StackTable.Th>Approval task</StackTable.Th>
+                <StackTable.Th>Answer</StackTable.Th>
+                <StackTable.Th>By</StackTable.Th>
+                <StackTable.Th>Completed</StackTable.Th>
+              </StackTable.Tr>
+            </StackTable.Thead>
+            <StackTable.Tbody>
               {inc.tasks.map((t) => (
-                <Table.Tr key={t.taskId}>
-                  <Table.Td>
+                <StackTable.Tr key={t.taskId}>
+                  <StackTable.Td>
                     <Text size="sm">{t.subject}</Text>
-                  </Table.Td>
-                  <Table.Td data-label="Answer">
+                  </StackTable.Td>
+                  <StackTable.Td data-label="Answer">
                     <Text size="sm">{t.complete ? t.action || 'done' : 'open'}</Text>
-                  </Table.Td>
-                  <Table.Td data-label="By">
+                  </StackTable.Td>
+                  <StackTable.Td data-label="By">
                     <Text size="sm">{t.userName || t.assignedTo || 'unassigned'}</Text>
-                  </Table.Td>
-                  <Table.Td data-label="Completed">
+                  </StackTable.Td>
+                  <StackTable.Td data-label="Completed">
                     <Timestamp iso={t.timeCompleted} />
-                  </Table.Td>
-                </Table.Tr>
+                  </StackTable.Td>
+                </StackTable.Tr>
               ))}
-            </Table.Tbody>
-          </Table>
+            </StackTable.Tbody>
+          </StackTable>
         </Table.ScrollContainer>
       ) : null}
     </Section>
