@@ -1,5 +1,16 @@
-import { Anchor, Card, Group, SimpleGrid, Stack, Table, Text, VisuallyHidden } from '@mantine/core';
-import { IconEqual } from '@tabler/icons-react';
+import {
+  Anchor,
+  Button,
+  Card,
+  Group,
+  Paper,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  VisuallyHidden,
+} from '@mantine/core';
+import { IconArrowsLeftRight, IconEqual } from '@tabler/icons-react';
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router';
 import { useAttempts, useCase, useCases, useClosure, usePlan, useSnapshot } from '@/api/hooks';
@@ -180,5 +191,44 @@ export function S8Compare({ caseId, focus }: { caseId: string; focus: boolean })
         {rules && board ? <Pair rulesId={rules.caseId} boardId={board.caseId} caseId={caseId} /> : null}
       </Section>
     </div>
+  );
+}
+
+/**
+ * A compact strip near the top of an S8 case played by rules alone or by the board: the same failure's other run,
+ * linked, and a button to the side by side. Shown only when both runs exist.
+ */
+export function CounterpartStrip({ c, onCompare }: { c: CaseDetail; onCompare: () => void }) {
+  const mine = c.scenario === 'S8' && (c.mode === 'rules' || c.mode === 'board');
+  const cases = useCases({ scenario: 'S8', limit: 50 }, mine);
+  const { rules, board } = s8Pair(cases.data?.items ?? []);
+  if (!mine || !rules || !board) return null;
+  const other = c.mode === 'board' ? rules : board;
+  if (other.caseId === c.caseId) return null;
+  const thisRun = c.mode === 'board' ? "the board's run" : 'the run by rules alone';
+  const otherRun = c.mode === 'board' ? 'Rules alone' : 'The board';
+  return (
+    <Paper withBorder p="xs" mb="md" component="section" aria-label="Same failure, two runs">
+      <Group gap="sm" wrap="wrap" justify="space-between">
+        <Group gap={6} wrap="wrap">
+          <Text size="sm" fw={600}>
+            Same failure, two runs:
+          </Text>
+          <Text size="sm">{`this is ${thisRun}. ${otherRun} played it as`}</Text>
+          <Anchor component={Link} to={`/cases/${encodeURIComponent(other.caseId)}`} size="sm" fw={600}>
+            {other.caseId}
+          </Anchor>
+          <StateBadge state={other.state} />
+        </Group>
+        <Button
+          size="xs"
+          variant="default"
+          leftSection={<IconArrowsLeftRight size={14} />}
+          onClick={onCompare}
+        >
+          Compare the two runs
+        </Button>
+      </Group>
+    </Paper>
   );
 }

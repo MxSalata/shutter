@@ -221,11 +221,30 @@ describe('CasePage', () => {
     ).toBeVisible();
   });
 
+  it('links an S8 board case to its rules-only run near the top, and opens the side by side from there', async () => {
+    renderCase('C-000008');
+    const strip = await screen.findByRole('region', { name: 'Same failure, two runs' });
+    expect(within(strip).getByText(/this is the board's run\. Rules alone played it as/)).toBeInTheDocument();
+    expect(within(strip).getByRole('link', { name: 'C-000021' })).toHaveAttribute('href', '/cases/C-000021');
+    expect(strip.compareDocumentPosition(await outcome()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await userEvent.click(within(strip).getByRole('button', { name: 'Compare the two runs' }));
+    expect(await screen.findByRole('button', { name: /^Why the board matters/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: 'S8 side by side: rules alone and the board' }),
+      ).toHaveFocus(),
+    );
+  });
+
   it('shows no side by side on a case of another scenario', async () => {
     renderCase('C-000009');
     expect(await screen.findByRole('region', { name: 'Outcome' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Why the board matters/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: /S8 side by side/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Same failure, two runs' })).not.toBeInTheDocument();
   });
 
   it('opens the story step a link names once: closed by the reader, it stays closed after a tab change', async () => {

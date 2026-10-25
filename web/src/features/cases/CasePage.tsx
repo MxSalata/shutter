@@ -17,6 +17,7 @@ import { CaseTimeline } from './case/CaseTimeline';
 import { CaseStory, type StoryStep } from './case/CaseStory';
 import { DecisionCard } from './case/DecisionCard';
 import { PortalLinks } from './case/PortalLinks';
+import { CounterpartStrip } from './case/S8Compare';
 import { SHOW_EVIDENCE } from './case/evidenceLinks';
 import { rounds } from './case/derive';
 import { provenanceOf } from './case/outcome';
@@ -111,6 +112,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
     <>
       <CaseHeader c={c} provenance={provenanceOf(c.mode, facts.runs)} />
       <Lifecycle c={c} events={events.data ?? []} />
+      <CounterpartStrip c={c} onCompare={() => openStep('compare', 's8-compare')} />
       <Stack gap="md">
         <DecisionCard
           facts={facts}

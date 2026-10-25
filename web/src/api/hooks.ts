@@ -167,7 +167,8 @@ export interface CaseFilters {
   offset?: number;
 }
 
-export function useCases(filters: CaseFilters) {
+/** The cases list; `enabled` false leaves it unread, for a panel that needs it only for some cases. */
+export function useCases(filters: CaseFilters, enabled = true) {
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(filters)) if (v !== undefined && v !== '') params.set(k, String(v));
   const query = params.toString();
@@ -175,6 +176,7 @@ export function useCases(filters: CaseFilters) {
     queryKey: keys.cases(filters),
     queryFn: () => api.get<CaseList>(`/cases${query ? `?${query}` : ''}`),
     refetchInterval: (q) => (q.state.data?.items.some((c) => isOpen(c.state)) ? LIVE * 2 : CALM),
+    enabled,
   });
 }
 
