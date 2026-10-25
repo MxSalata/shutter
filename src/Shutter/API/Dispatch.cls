@@ -647,7 +647,7 @@ ClassMethod CasePreview(caseId As %String) As %Status
     If '$ISOBJECT(case) Quit $$$OK
     If case.IsClosed() Quit ..Fail("409 Conflict", "wrong_state", "The case is closed")
     // A preview is a dry run: it goes only to a receiver whose capability profile, as the case's evidence read it, reports one
-    // (v1.19); to any other it would be a live write conditional on nothing, so nothing is sent.
+    // (v1.21); to any other it would be a live write conditional on nothing, so nothing is sent.
     Set snap = case.CurrentSnapshot
     Set route = $SELECT($ISOBJECT(snap): snap.SummaryObject().%Get("route"), 1: "")
     If '$ISOBJECT(route) || (##class(Shutter.Util.Json).Str(route, "capabilities_http_status") '= 200) || '##class(Shutter.Util.Json).Bool(route, "dry_run") {

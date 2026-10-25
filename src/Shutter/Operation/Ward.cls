@@ -21,7 +21,7 @@ Method OnWardOperation(request As Shutter.Msg.WardOperation, Output response As 
 {
     Set response = ##class(Shutter.Msg.WardResult).%New()
     If request.Purpose = "read" Quit ..Read(request, response)
-    // A dry run goes only to a receiver whose entry in the site profile declares one (CONTRACTS 6.4; v1.19). The gate offers
+    // A dry run goes only to a receiver whose entry in the site profile declares one (CONTRACTS 6.4; v1.21). The gate offers
     // no resend to a receiver without dry runs; this is the second line, so that a receiver that would write the dry run
     // never gets it. An entry that leaves the flag out declares nothing against it.
     If request.DryRun && '##class(Shutter.Util.Json).Bool(##class(Shutter.Store.SiteProfile).ReceiverFeatures(..%ConfigName), "dry_run", 1) {

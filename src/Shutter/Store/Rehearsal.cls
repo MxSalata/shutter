@@ -28,7 +28,7 @@ Property Epoch As %Integer(%JSONFIELDNAME = "epoch");
 
 Property ResponseJSON As %String(%JSONFIELDNAME = "response", MAXLEN = "");
 
-/// What was sent (v1.19): the receiver version the dry run was conditional on, and the digest of the payload. The dispatch
+/// What was sent (v1.21): the receiver version the dry run was conditional on, and the digest of the payload. The dispatch
 /// gate's rehearsal check compares them with the write it releases.
 Property ExpectedVersion As %Integer(%JSONFIELDNAME = "expectedVersion");
 

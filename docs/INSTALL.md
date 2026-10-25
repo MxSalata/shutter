@@ -96,7 +96,9 @@ is no receipt lookup and no resend: the gate blocks any write and the case is es
 
 **3.5 Security and operations.** Only holders of `Shutter_Forwarder` can open cases; the web application keeps its
 roles. Escalation mail goes through the `Escalation Mail` operation's `SMTPServer` setting; unset, it writes `.eml`
-files under `<mgr>/shutter/out/mail`.
+files under `<mgr>/shutter/out/mail`. The daily task "Shutter retention" removes the text of each escalation email
+and its `.eml` file `SHUTTER_ESCALATION_DAYS` days after the case closed (section 2); the row stays with its digest,
+the recipients and who sent it.
 
 **The worked example: Hospital PAS.** The demo image carries a second, tiny production in its own namespace, the
 hospital's side of shape A: an HL7 service (`PAS In`), a delivery (`Downstream Out`) that fails, and the forwarder. Its
@@ -136,11 +138,17 @@ Shape A:
    saves the site profile and changes the agent library. A trust that wants only an approver to close a case handled
    by hand answers yes to "Closing a case by hand needs an approver" in the site profile
    (`approvers.close_needs_approver`). Shutter checks the role of whoever closes the case, not that a second person
-   does: an approver may escalate and close the same case.
+   does: an approver may escalate and close the same case. An approver who decides in the Management Portal's Workflow
+   inbox pastes the plan digest from the task's message into its `PlanDigest` field (the field starts empty, and an
+   approval without it, or with another digest, blocks the case; the recovery is a reinvestigation); the web
+   application sends it for them. Whoever approves must hold `Shutter_Approve` and be a member of the Workflow role
+   "Shutter Approvers": a holder outside the role is refused (403).
 4. Fill in the site profile (the web application's questionnaire): receivers, tiers, what each takes, API paths or
-   none, the policy per tier, teams and mailboxes, the mail domains allowed for them (`mail.allowed_domains`: replace
-   the shipped `example.nhs.uk` with the trust's, or a team's own mailbox fails the check), the feed's time zone,
-   `merges: forbidden`.
+   none, the policy per tier, teams and mailboxes, and the mail domains they must lie in (`mail.allowed_domains`: every
+   team mailbox and every address a person types must be one bare address in one of those domains or under one; with
+   no domain set no email can go, and a profile that names a team mailbox without one is refused, so replace the
+   shipped `example.nhs.uk` with the trust's; a profile saved before this rule that names teams and no domains sends
+   nothing until an approver saves the list), the feed's time zone, `merges: forbidden`.
 5. Set the `Escalation Mail` operation's SMTP server.
 6. In each watched production, add `Shutter.Intake.Forwarder` with Shutter's address and credential, and call it from
    the process that delivers to each receiver on a failed delivery.

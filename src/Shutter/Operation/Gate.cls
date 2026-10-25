@@ -241,7 +241,7 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         If 'capable {
             Do ..Check(checks, "capability", "block", "CONNECTOR_INCAPABLE", "The receiver reports no conditional writes: a resend cannot be made safe, so only investigation and reconciliation are open")
         } ElseIf '##class(Shutter.Util.Json).Bool(route, "dry_run") {
-            // No dry run means the exact action cannot be rehearsed before it is written (v1.19): no resend to this receiver.
+            // No dry run means the exact action cannot be rehearsed before it is written (v1.21): no resend to this receiver.
             Do ..Check(checks, "capability", "block", "DRY_RUN_UNSUPPORTED", "The receiver reports no dry run: the exact action cannot be rehearsed before it is written, so a resend is not offered; investigation, reconciliation and escalation remain")
         } Else {
             Do ..Check(checks, "capability", "pass", "CONNECTOR_CAPABLE", "The receiver guarantees conditional writes, receipts and dry runs")

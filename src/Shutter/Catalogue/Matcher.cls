@@ -3,7 +3,7 @@
 /// its result is the snapshot summary's "catalogue" item, which the workflow, the gate and the app read.
 /// Since T31 (CONTRACTS v1.14) the vocabulary has "event" (the failed operation's event word, the three cancels folded
 /// to cancel), "delivery" takes "withheld" (an operation Shutter never sent: a merge under the site's policy, a cancel
-/// the receiver cannot reverse) with "receiver_answer: none", and "later_applied" takes "cancelled" and "merge". Since v1.19
+/// the receiver cannot reverse) with "receiver_answer: none", and "later_applied" takes "cancelled" and "merge". Since v1.21
 /// "later_delivery" says how the event that gave later_applied its word reached the receiver (applied, or only sent).
 Class Shutter.Catalogue.Matcher
 {
@@ -34,7 +34,7 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     // timeline and the receiver's history (Later, which the gate's ordering check reads too)
     Set later = ..Later(summary, case, chainKind)
     Set c."later_applied" = ..LaterApplied(summary, case, later)
-    // later_delivery (v1.19): whether that event reached the receiver, or was only sent (the undelivered later transfer)
+    // later_delivery (v1.21): whether that event reached the receiver, or was only sent (the undelivered later transfer)
     Set c."later_delivery" = ..LaterDelivery(later, c."later_applied")
     // event_time (T28): the failed event's time against the admission, the message, the recording time and the clock,
     // and the times of the later events it is ordered against
@@ -160,7 +160,7 @@ ClassMethod LaterApplied(summary As %DynamicObject, case As Shutter.Store.Case, 
 
 /// The events for the encounter that bear on the failed operation's order, from the snapshot's timeline and the
 /// receiver's history, each as {word, event, ward, event_time, from (timeline or history), delivered, plausible,
-/// operation_key, and case_id when a case was opened for that key (v1.19)}. later_applied, the gate's ordering check
+/// operation_key, and case_id when a case was opened for that key (v1.21)}. later_applied, the gate's ordering check
 /// (Shutter.Operation.Gate) and the verifier's superseded branch (Shutter.Operation.Verify) all read them, so they agree.
 /// - An applied (or already committed) event whose time is later than the failed event's; a cancel from the failed
 ///   event's own time on (T31), never the case's own operation. word is the precedence word (cancelled, merge,
@@ -251,7 +251,7 @@ ClassMethod CaseIdFor(key As %String) As %String [ Private ]
     Quit caseId
 }
 
-/// The delivery of the event that gave later_applied its word (6.1, v1.19): applied when a plausible later event with
+/// The delivery of the event that gave later_applied its word (6.1, v1.21): applied when a plausible later event with
 /// that word is in the receiver's history or was applied in the timeline, sent when the only one is a later transfer the
 /// feed sent whose delivery failed or is uncertain, none when later_applied is none.
 ClassMethod LaterDelivery(later As %DynamicArray, word As %String) As %String [ Private ]
@@ -289,7 +289,7 @@ ClassMethod Describe(ev As %DynamicObject, withOrigin As %Boolean = 1) As %Strin
 
 /// Whether a later event's time is plausible: no more than five minutes after the time it was sent or applied (when
 /// known) and after the evidence was taken. A time that cannot be read is not; a reference time that cannot be read
-/// skips its own check, as an empty one does (v1.19), so one receiver's odd clock form never makes every later event
+/// skips its own check, as an empty one does (v1.21), so one receiver's odd clock form never makes every later event
 /// implausible.
 ClassMethod PlausibleLater(time As %String, sentOrApplied As %String, observed As %String) As %Boolean [ Private ]
 {
@@ -326,7 +326,7 @@ ClassMethod Behind(reference As %String, time As %String) As %String [ Private ]
 
 /// A UTC timestamp as the message store or the receiver writes it, in the ISO form with a Z, to the second: from the
 /// ISO form with a Z (2026-10-15T09:20:00Z, a fraction allowed) or the ODBC form the message store writes in UTC
-/// (2026-10-15 09:20:00.123). "" for any other form (v1.19): a time with an offset (2026-10-15T10:20:00+01:00) or in
+/// (2026-10-15 09:20:00.123). "" for any other form (v1.21): a time with an offset (2026-10-15T10:20:00+01:00) or in
 /// another shape is never read as UTC, and the check that would use it is skipped.
 ClassMethod AsUTC(ts As %String) As %String [ Private ]
 {
@@ -380,7 +380,7 @@ ClassMethod EventTimePlausibility(summary As %DynamicObject, case As Shutter.Sto
 /// later_event_future or plausible, for the later events' times. A later event whose time is not plausible is a doubt
 /// only when believing it would change the reading: when no plausible later transfer, discharge or cancel settles the
 /// order already, and the event outranks what the plausible ones give (by later_applied's precedence). An update never
-/// is one, since it supersedes nothing. A settled order has one exception (v1.19): a cancel with a doubtful time may
+/// is one, since it supersedes nothing. A settled order has one exception (v1.21): a cancel with a doubtful time may
 /// have reversed the very transfer or discharge that settles it, so it is a doubt.
 ClassMethod LaterTimeDoubt(summary As %DynamicObject, case As Shutter.Store.Case, later As %DynamicArray) As %String [ Private ]
 {
@@ -480,7 +480,7 @@ ClassMethod Item(summary As %DynamicObject, kind As %String) As %DynamicObject [
 }
 
 /// The conditions and the match for an existing case, for checks over SQL, with the chain kind of the case's stored
-/// chain item (Shutter.Store.ChainItem.KindFor: single outside a chain) unless the caller gives one (v1.19).
+/// chain item (Shutter.Store.ChainItem.KindFor: single outside a chain) unless the caller gives one (v1.21).
 ClassMethod ForCase(caseId As %String, chainKind As %String = "") As %String [ SqlProc ]
 {
     Set case = ##class(Shutter.Store.Case).ByCaseId(caseId)

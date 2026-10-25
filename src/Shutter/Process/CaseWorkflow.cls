@@ -879,7 +879,7 @@ Method OnRehearsal(case As Shutter.Store.Case, sent As Shutter.Msg.WardOperation
     // A dry run that would apply validated the expected version: that is the receiver's version now.
     If result.Outcome = "would_apply" Set ..ReceiverVersion = $SELECT(result.EncounterVersion '= "": result.EncounterVersion, 1: plan.ExpectedVersion)
     If result.Epoch '= "" Set ..ReceiverEpoch = result.Epoch
-    // A receiver that applied the dry run does not honour dry_run (v1.19): the operation is in effect, so it is recorded as
+    // A receiver that applied the dry run does not honour dry_run (v1.21): the operation is in effect, so it is recorded as
     // an execution, an alert is raised and the effect is verified; it is never reported as rolled back.
     If result.IsInEffect() {
         $$$LOGALERT("Receiver " _ ..WardTarget _ " applied a dry run of " _ sent.OperationKey _ " for " _ case.CaseId _ " (HTTP " _ result.HttpStatus _ "): it does not honour dry_run")

@@ -28,7 +28,7 @@ Property ResponseJSON As %String(%JSONFIELDNAME = "response", MAXLEN = "");
 
 Property Error As %String(%JSONFIELDNAME = "error", MAXLEN = 2000);
 
-/// The dry run the write stood on (v1.19): the approval's bound rehearsal, or the rehearsal itself when the receiver
+/// The dry run the write stood on (v1.21): the approval's bound rehearsal, or the rehearsal itself when the receiver
 /// applied it instead of rolling it back.
 Property Rehearsal As Shutter.Store.Rehearsal(%JSONFIELDNAME = "rehearsalId", %JSONREFERENCE = "ID");
 

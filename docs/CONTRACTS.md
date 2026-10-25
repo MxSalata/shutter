@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.20, 25 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.21, 25 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -34,6 +34,7 @@ The downstream system (`Downstream.*`), a demo bed-management system, stands in 
 - `payload_digest` is the sender's SHA-256 of the canonical payload (section 1.6). The downstream system computes its own and compares them when an operation key is reused.
 - `dry_run: true` runs the whole validation and the write inside a transaction that is always rolled back, and reports what would have happened. Nothing is committed, no receipt is stored, no event is appended.
 - A rehearsal's response also carries what it was checked against (v1.5): `encounter_before`, the encounter as the downstream system held it before the dry run (null when the downstream system has never seen it), `encounter_after` when it would apply, and `epoch`. The case workflow takes the receiver version an approval binds from `encounter_before.version`, never from `encounter_after`.
+- Shutter writes only after a dry run of the same plan (v1.21): the dispatch gate's rehearsal check (6.5) requires the approval's bound rehearsal to be of this plan, to have reported `would_apply`, and to have been checked against the version, epoch and payload the write carries; otherwise `DRY_RUN_MISSING`, `DRY_RUN_FAILED` or `DRY_RUN_STALE` blocks the dispatch. The receiver keeps nothing of a dry run: a write is protected by its own `expected_version`, so a dry run at version 2 says nothing about a write at version 3. A receiver that answers a dry run with 201, or with 200 and `applied: true`, does not honour `dry_run`: Shutter records that rehearsal as an execution attempt (its `rehearsalId` names it), raises an alert in the event log, and verifies the effect; it never reports it as rolled back.
 
 Responses:
 
@@ -99,6 +100,8 @@ The order of checks for a non-dry run: fault `fail_before_accept`; request valid
 
 404 `{"error": "no_receipt"}` when nothing was committed under that key. Absence of a receipt is the downstream system's statement that the operation was not committed under that key, within its retention (unbounded in the demo).
 
+A 404 describes what is committed at the moment the downstream system answers (v1.21). A write whose answer was lost may still be in flight, so the verifier reads a missing receipt as not committed only once its settle window (the Verifier's `UncertainSettleSeconds`, 30 s by default: the connector's 15 s response timeout plus the demo receiver's 10 s wait for the encounter's lock, rounded up) has passed since the attempt with the encounter's version unchanged, or once the version has moved past the one the write was conditional on, so the conditional write can no longer apply; before that it is unknown and read again (5.1). A site whose receiver can take longer to commit after a lost answer raises the setting.
+
 ### 1.4 Transitions and versions
 
 | From | `admit` | `transfer` | `discharge` | `update` |
@@ -141,6 +144,8 @@ The canonical payload is the JSON object with exactly these keys in this order, 
   "last_contract_check": {"at": "2026-10-15T14:00:00Z", "result": "17 of 17 passed"}
 }
 ```
+
+The gate's capability check requires `conditional_writes`, `receipts` and `dry_run` for a write (v1.21): a receiver that reports no dry run blocks every resend with `DRY_RUN_UNSUPPORTED` (a receiver without conditional writes answers `CONNECTOR_INCAPABLE`, which comes first and alone); reconcile and superseded stay open. The connector is the second line: it refuses to send a dry run to a receiver whose site profile entry declares `dry_run: false` (outcome `refused`, reason `dry_run_unsupported`, nothing sent), and the case then blocks at the rehearsal as for any refusal.
 
 - `POST /downstream/api/capabilities` `{"conditional_writes": false}` is the demo switch (demo instances only, like the reset): afterwards any operation that carries `expected_version` is refused with 422 `{"error": "unsupported_precondition"}`, and the read says `"conditional_writes": false`. `{"conditional_writes": true}` restores it; the reset restores it too.
 - `epoch` is an integer that increments at every reset. It appears here, in every encounter read (`"epoch"` beside `"version"`) and in every receipt. An approval binds the epoch it was given, so an approval from before a reset cannot authorise a dispatch after it even when the version numbers happen to match.
@@ -224,15 +229,17 @@ Step kinds: `file` (drop the file into the ADT In folder; `expect` is `delivered
 - Settings the runner reads, set by `Shutter.Setup`: `^Shutter.Config("fixtures")` (the fixtures directory), `("adtIn")`, `("adtArchive")`; and, set by `Hospital.Setup` when the demo hospital is installed, `("hospitalIn")` and `("hospitalArchive")`. The ADT In service and the hospital's PAS In take `*.hl7` and archive what they have read.
 - The run mode (`board`, `single`, `rules`) is the investigation mode. Whether agents run live, record or replay is the production's setting on the agent items, independent of it.
 
-**The API mimic (v1.17).** A test fixture in `tests/mock` (in neither IPM module nor the image) answers the live runner's model calls without a model, so AI Hub's own agent loop, tools, policies, sessions and the Visual Trace run at no cost. `Shutter.Mock.Setup_Enable()` creates the web application `/shutter-mock` (an OpenAI-compatible chat completions API that answers loopback callers only), the Config Store configuration `AI.LLM.ShutterMock` (provider `openai`, a `base_url` at that application, a placeholder key) and the switch `^Shutter.Config("aihub","mock")`, which `Shutter.Setup.MockConfig()` returns; `Disable()` removes them. While the switch is set:
+**The API mimic (v1.17).** A test fixture in `tests/mock` (in neither IPM module nor the image) answers the live runner's model calls without a model, so AI Hub's own agent loop, tools, policies, sessions and the Visual Trace run at no cost. `Shutter.Mock.Setup_Enable()` creates the web application `/shutter-mock` (an OpenAI-compatible chat completions API that answers loopback callers only), the Config Store configuration `AI.LLM.ShutterMock` (provider `openai`, a `base_url` at that application, a placeholder key) and the switch `^Shutter.Config("aihub","mock")`, which `Shutter.Setup.MockConfig()` returns; `Disable()` removes them, and a failed `Enable()` removes what it had made and clears the switch, so the mimic is on or off and never half set up (v1.21). **The switch counts on a demo instance only (v1.21):** where `^Shutter.Config("demo")` is not set, `MockConfig()` answers `""` whatever the global holds, so every reading of the switch (the mode an item resolves to, the run's spec, `RecordAgentMode`, `GET /settings`) ignores it, and `Enable()` refuses there. Whenever the switch is set, the production's start (`Shutter.Production.OnStart`) logs a warning saying whether it is honoured (a demo) or ignored (a site), and `Shutter.Setup.Doctor()` reports it as `mock_config`. While the switch is set on a demo:
 
 - an agent item set to `auto` resolves to `live` (`Shutter.Bridge.Operation.Agent.ResolveMode`), whatever the instance's recorded mode; an item's explicit mode stands, and switching the mimic off brings back what the instance says;
-- the live runner sets the mimic's provider on the agent before `%Init`, so the agent class's own `AI.LLM.Shutter` is never read, with the run's context as the API key (`smk1.` and base64url JSON: the replay key, the case, the member, the terminal tool and the production message); a provider that cannot be made fails the run, and no other provider is tried;
+- the live runner sets the mimic's provider on the agent before `%Init`, so the agent class's own `AI.LLM.Shutter` is never read, with the run's context as the API key (`smk1.` and base64url JSON: the replay key, the case, the member, the terminal tool and the production message); a provider that cannot be made fails the run, and no other provider is tried. That `%Init` leaves a provider set before it alone is proven by the mock's `SelfTest` on build 154, not documented by the framework, so after `%Init` the runner checks that the agent's provider is still the one it set (the mimic's, or an item's `ProviderConfig`) and otherwise ends the run with status `error`, `The agent replaced the runner's provider`, before any model call (v1.21);
 - the switch is read once per run, by `Shutter.Bridge.RunSpec.FromRequest`, which resolves the mode with that reading and keeps it in the spec's `MockConfig`; the runner follows the spec, not the switch, so a run resolved under the mimic goes to it (or fails) even if the switch goes before the run starts;
-- every run is labelled model `mock` with `ProviderConfig` `ShutterMock`, its `CostUSD` is 0, and `GET /costs` counts it in `totals.mockRuns`, not in `liveRuns`;
-- record mode is refused: the runner answers status `refused`, `RecordAgentMode("record")` answers `refused: the API mimic is on` and leaves the mode as it was, `Shutter.Bridge.Record.Store` refuses a response whose model is `mock`, and `scripts/check-records.py` fails on a recording whose `model` or `response.model` is `mock` or whose `provider_config` is `ShutterMock`.
+- every run is labelled model `mock` with `ProviderConfig` `ShutterMock`, its `CostUSD` is 0, and `GET /costs` counts it in `totals.mockRuns`, not in `liveRuns`; `GET /settings` says so (v1.21): `mock` true, `mockConfig` the configuration's name, `mockModel` the model id sent on the wire, and each agent item that resolves to `live` carries `answeredBy: "the API mimic"` (`effectiveMode` stays `live`, the mode the runs record, so the Settings page, the runs and `/costs` agree). With the mimic off, `mock` is false, `mockConfig` and `mockModel` are empty, and a `live` or `record` item's `answeredBy` is its provider configuration (the item's `ProviderConfig`, under `AI.LLM` when it has fewer than three parts, else the instance's `AI.LLM.Shutter`); a replaying item has none;
+- record mode is refused: the runner answers status `refused`, `RecordAgentMode("record")` answers `refused: the API mimic is on` and leaves the mode as it was (the production's start logs that answer when `SHUTTER_AGENT_MODE` asked for a mode it did not get, v1.21), `Shutter.Bridge.Record.Store`, `ImportJSON` and `ImportDir` refuse a recording the mimic answered (`Record.IsMock`: model `mock`, or a response whose `model` is `mock` or whose `provider_config` is `ShutterMock`; `ImportJSON` answers `ERROR: ...`, `ImportDir` a failed status naming the file; the imports since v1.21), and `scripts/check-records.py` fails on a recording file whose `model` or `response.model` is `mock` or whose `provider_config` is `ShutterMock`.
 
 The mimic replays the member's recording turn by turn when the case's material facts (scenario, event, catalogue entry, outcome, matches and conditions, the receiver's version and state, the receipt, conditional writes and the specialists' dispositions) are the recorded case's, and otherwise answers from the catalogue match the evidence carries; every text it writes starts with `[mock]`. How to use it: `tests/mock/README.md`.
+
+The live runner's `TestRun(case, member, mode, budget)` (v1.21), a check over SQL, takes mode `live` or `record` only (`{"error": "mode must be live or record"}` otherwise, so a replay never runs live by mistake), keys each run's tool calls `test:<case>:<member>:<n>` with a counter, one key per run (`run_key` in its answer; a member's runs are found with `LIKE 'test:<case>:<member>:%'`), says in `mock` whether the mimic answered, and writes no `AgentRun` row.
 
 An agent item's `ProviderConfig` (v1.17) names a Config Store configuration resolved as the agent class's `@{config:...}` is (a name of fewer than three parts is under `AI.LLM`, secrets resolved) and is made with `%AI.Provider.Create`, before `%Init`; the run's model is the item's `Model`, else the configuration's `model`, else the class's. Build 154 has no `%AI.Provider.CreateFromConfig`, which the runner called before.
 
@@ -254,7 +261,7 @@ Scenario S7 (a later transfer arriving while the plan awaits approval) is writte
 
 When the feed fails, clinicians enter what happened in the downstream system directly. A step `{"manual": {"encounter_id": "ENC-1020", "event": "transfer", "ward": "WARD-C", "event_time": "2026-10-15T08:40:00Z"}}` is such an entry: a person on the ward moves the patient in the bed-management system itself, not through the feed. The runner applies it through `Downstream.Service` in process as section 1.1's operation, with `dry_run` false and no `expected_version` (a person's entry is not conditional), its own source system (`WARD`, unless the step names `source_system`) and its own operation key in section 2's form, `WARD^HOSP^MRN1020^ENC-1020^transfer^2026-10-15T08:40:00Z`. The patient is the encounter's own as the downstream system holds it, unless the step names `patient_id` and `patient_id_authority` (an admission by hand must); `event_time` is the step's, or the time the step runs when it gives none; `ward` follows section 1.1. The downstream system applies it like any operation: the version moves, the history records the key and a receipt is stored. A fault set for every operation applies to it too, so a scenario switches its fault off first. Any answer but a 201 fails the run with the downstream system's answer.
 
-Scenario S20 is written with it: S2's start, a `wait_for_state` for `awaiting_approval`, then the nurse's transfer to Ward C at 09:40, while the PAS's 09:20 transfer to Ward B waits for its resend to be approved. Shutter's write is conditional on the receiver's version and its approval is bound to that version, so it can never write over the nurse's entry: at dispatch the fresh read finds version 2 where the approval bound version 1, the gate blocks the dispatch (`APPROVAL_RECEIVER_CHANGED`, `RECEIVER_CHANGED`), the approval is void and the case is planned once more on fresh evidence, whose receiver history shows the later transfer. Rules alone propose the resend again at version 2, and the gate's ordering check blocks it (`SUPERSEDED_BY_LATER_EVENT`, a later event "(receiver history)"): nothing is written and Ward C stands. Two `expected` fields say so: `final_reason`, the code the closed case names (`GET /cases/{id}/blocked-reason`), and `last_operation_key`, the key the encounter's history ends with, here the nurse's own. The expected disposition is `superseded`, as S7's is, with `resend` in `expected.acceptable`: the resend rules alone propose is stopped before it reaches the receiver. S20 is defined for `rules` until the board's runs for it are recorded.
+Scenario S20 is written with it: S2's start, a `wait_for_state` for `awaiting_approval`, then the nurse's transfer to Ward C at 09:40, while the PAS's 09:20 transfer to Ward B waits for its resend to be approved. Shutter's write is conditional on the receiver's version and its approval is bound to that version, so it can never write over the nurse's entry: at dispatch the fresh read finds version 2 where the approval bound version 1, the gate blocks the dispatch (`APPROVAL_RECEIVER_CHANGED`, `RECEIVER_CHANGED`), the approval is void and the case is planned once more on fresh evidence, whose receiver history shows the later transfer. The re-plan after a receiver change happens once per investigation (v1.21): a second change before the write, found at the dispatch gate or as a version conflict at the write, blocks the case for a person, so a receiver that keeps changing costs at most one more board run; a reinvestigate starts the count again. Rules alone propose the resend again at version 2, and the gate's ordering check blocks it (`SUPERSEDED_BY_LATER_EVENT`, a later event "(receiver history)"): nothing is written and Ward C stands. Two `expected` fields say so: `final_reason`, the code the closed case names (`GET /cases/{id}/blocked-reason`), and `last_operation_key`, the key the encounter's history ends with, here the nurse's own. The expected disposition is `superseded`, as S7's is, with `resend` in `expected.acceptable`: the resend rules alone propose is stopped before it reaches the receiver. S20 is defined for `rules` until the board's runs for it are recorded.
 
 ## 5. The REST API for the app
 
@@ -279,7 +286,20 @@ is. A site that keeps the two-person rule for closing a case by hand says so in 
 approver closes it, and an operator's `POST /cases/{id}/close` answers 403 `forbidden` with a detail that says the site
 needs an approver, before the body or the case's state is read.
 
-`POST /cases/{id}/close` with `{reason}` (v1.14; `Shutter_Operate`, `X-Requested-With`, an `Idempotency-Key`) answers 202 `{caseId, state: "closing", requestedBy, reason}` and sends `Shutter.Msg.CaseClose` to the Case Workflow item: the case resolves with disposition `handled_by_hand`, its state event names the reason and the latest escalation, the current approval is revoked and an open approval task is cancelled; 400 `bad_request` when the body is not a JSON object or `reason` is empty, 404 `not_found`, 409 `wrong_state` unless the case is escalated, blocked or failed, and 409 `stale_version` (with `currentVersion`) when the body's optional `expectedVersion` is not the case's version. A draft or queued escalation email of the case is cancelled, so the team is not asked to correct a case already handled. It is how a case the team corrected by hand (a withheld merge or cancel, an escalation the PAS team acted on) is closed; `reinvestigate` stays for a correction the receiver's state can prove. The record of a hand closure is the
+**Who decided** (v1.21). The approver of record for `POST /cases/{id}/approvals`, `POST /incidents/{id}/approvals` and
+`POST /incidents/{id}/chains/{seq}/approvals` is the signed-in user: the body names no user, and a field that tries to
+is ignored. The route assigns the case's or the incident's open Workflow task to that user, writes the body's
+`planDigest` into the task's `PlanDigest` form value and completes it; the case or incident workflow then checks that
+digest against the plan (6.4, 7.3). The 202 reply carries `approver`. For a signed-in holder of `Shutter_Approve` who is
+not a member of the task's Workflow role (`Shutter Approvers`) the route answers 403 `forbidden` with a detail naming
+the role, and for a task another approver has accepted in the Workflow inbox 409 `wrong_state` naming them. The same
+step from SQL is `Shutter.Util.Workflow.Decide(caseId, action, digest, comment)` (`SELECT
+Shutter_Util.Workflow_Decide(...)`): the actor is the SQL session's user, never an argument, the same role check
+applies, and an approval with an empty digest is refused (`no_digest`). An approver who decides in the Management
+Portal's Workflow inbox pastes the plan digest from the task's message into its `PlanDigest` field; the task's form
+starts empty, so pressing Approve without it binds nothing and the case blocks (or the incident's chains are rejected).
+
+`POST /cases/{id}/close` with `{reason}` (v1.14; `Shutter_Operate`, `X-Requested-With`, an `Idempotency-Key`) answers 202 `{caseId, state: "closing", requestedBy, reason}` and sends `Shutter.Msg.CaseClose` to the Case Workflow item: the case resolves with disposition `handled_by_hand`, its state event names the reason and the latest escalation, the current approval is revoked and an open approval task is cancelled; 400 `bad_request` when the body is not a JSON object or `reason` is empty, 404 `not_found`, 409 `wrong_state` unless the case is escalated, blocked or failed, and 409 `stale_version` (with `currentVersion`) when the body's optional `expectedVersion` is not the case's version. Every draft or queued escalation email of the case is cancelled, whatever its seq, so the team is not asked to correct a case already handled, and the state event says how many ("; 2 pending emails cancelled"); a failed one stays failed as history; and no escalation of a case that is no longer blocked, escalated or failed can be edited or sent (`PATCH` and `send` answer 409 `wrong_state`, naming the case's state) (v1.21). It is how a case the team corrected by hand (a withheld merge or cancel, an escalation the PAS team acted on) is closed; `reinvestigate` stays for a correction the receiver's state can prove. The record of a hand closure is the
 state event (its actor is who closed it, its time when, its text the reason and the escalation followed, its `ref` that
 escalation), the case's `outcome` ("Handled by hand, recorded by <who>: <reason>") and the closure's `closedAt` and
 `actors`.
@@ -288,6 +308,23 @@ escalation), the case's `outcome` ("Handled by hand, recorded by <who>: <reason>
 current plan's `createdBy`, `run:<id>` for the coordinator's or the single investigator's run, `policy:<entry>` for the
 catalogue and the site's policy, `rules` for rules alone, `withheld` for a withheld merge or cancel that no single
 catalogue entry matched (no agent runs; a person decides). The cases list shows it as who investigated the case.
+
+**The blind-resend preview** (v1.21). `POST /cases/{id}/preview-blind-resend` answers 409 `dry_run_unsupported`, and sends nothing, when the case's evidence shows no readable capability profile or `dry_run` false (a case with no snapshot yet gets the same answer); otherwise 200 `{wouldApply, outcome, reason, encounterAfter, checkedAgainst: {version, epoch}, expectedVersion: null, applied, note}`. `checkedAgainst` is the receiver version and epoch the dry run was checked against (null when the receiver reported none); `expectedVersion` is null because a preview is conditional on nothing; `applied` true means the receiver wrote during the preview and does not honour `dry_run`: the case then carries an `execution` event saying so and an alert is logged, and the note says it. The preview is not stored as a rehearsal and never satisfies the gate's rehearsal check (6.5); the case keeps a note with the outcome and what it was checked against.
+
+### 5.1 Attempts and verification (v1.21)
+
+**The attempt.** One `Shutter.Store.ExecutionAttempt` per dispatch of an approved plan: the operation key, the version the write was conditional on (`expectedVersion`), the HTTP status, the receipt the receiver returned and the outcome: `applied` (201), `already_committed` (200 with the receipt), `version_conflict` (409; the approval is void and the case is planned once more on fresh evidence), `refused` (any other refusal; the case blocks), `uncertain` (no HTTP answer other than a refused connection, a 504, or another 5xx: the answer was lost and the write may or may not have landed), `error` (nothing was sent; the case blocks with "outcome is unknown"). `GET /cases/{id}/attempts` pairs each attempt with its verification; a verification without an attempt belongs to a non-write disposition (reconcile, superseded).
+
+**The verification.** The Verifier (`Shutter.Operation.Verify`) reads the encounter and the receipt and judges them with `Judge`, a pure function of what was read (`Context`: the disposition, the attempt, the two reads, the later events of 6.1 and the clock), recorded as `Shutter.Store.Verification` with its `detail` (everything judged, with `verdict`, `retry`, `attempt_outcome`, `seconds_since_attempt`, `version_moved`). The outcomes:
+
+- `verified`: the receiver holds what the plan intends. For a resend or a reconcile, the operation is committed: the receipt (200) and the history agree, or, for a receiver that keeps no receipts (6.4), the history shows the operation. For a superseded closure, the stale operation has no receipt and is not in the history, and a later event supports the closure: a later transfer or discharge in the receiver's history, else a later transfer the feed sent whose delivery failed or is uncertain (6.1), else the matched catalogue entry whose outcome is none (`CLOSED_BY_CATALOGUE`).
+- `not_committed`: a write whose answer was lost (`uncertain`) was not applied: the receiver holds no receipt for the operation and its history does not show it, and either the settle window has passed since the attempt with the encounter still at the version the write was conditional on, or the version has moved past that one by something else, so the conditional write can no longer apply. The text begins "Not committed:".
+- `unresolved`: nothing is established yet. `detail.retry` says whether another read could settle it: true when a lookup failed (no answer, or a status that is neither 200 nor 404 for the encounter, neither 200, 404 nor -1 for the receipt) or when no receipt is there yet inside the settle window after a lost answer ("the write may still be in flight"); false when a person must decide (the receiver no longer knows the encounter, no later event supports a supersession, a patient-level case, a disposition with nothing to verify).
+- `failed`: the receiver contradicts itself or the plan: a receipt whose operation is missing from the history, an acknowledged write (201 or 200) without a receipt and without its history entry, a history entry without a receipt, a stale operation with a receipt after all, or a reconcile whose receipt is gone ("Nothing to reconcile: the receiver holds no receipt for the operation, though the evidence showed one"). A contradiction never claims that nothing was committed.
+
+`verdict` is what holds of the operation at the receiver: `committed`, `not_committed` or `unknown`; the words "not committed" are written only when they are the verdict.
+
+**What the case does.** The first verification runs at once after the attempt (a lost answer whose write landed, as S3's 504, resolves on the first read). `verified` resolves the case. While `detail.retry` is true the case workflow verifies again after 10, 20 and 40 s (`MaxRefreshes`, 3: reads at about 0, 10, 30 and 70 s after the attempt, the 30 s read being the first past the default settle window). `not_committed` escalates the case: the approval is revoked (it authorised one write, and that write is spent), the headline is "Escalated: the resend was not committed", and the state event reads "Not verified (not_committed): <summary>. The approval is revoked, and nothing is resent without a person: a reinvestigation plans again on fresh evidence" (block reason `WRITE_NOT_COMMITTED`). `unresolved` with `verdict: unknown` after the last read, for a resend, escalates with the headline "Escalated: the resend's outcome is unknown" and "Not verified (unknown): <summary>. Whether the receiver applied the resend is unknown; a person must check at the receiver before anything is resent" (`WRITE_OUTCOME_UNKNOWN`). Any other outcome escalates as "Not verified (<outcome>): <summary>". Nothing is ever dispatched or re-planned from a verification: a person reinvestigates, which collects fresh evidence, makes a new plan and asks for a new approval. The settle window applies to every receiver the site profile describes, with or without a receipt endpoint (6.4).
 
 ## 6. The scenario catalogue and the matcher (v1.6)
 
@@ -308,8 +345,9 @@ conditions that matter; an unlisted condition is a wildcard. A listed condition 
 | `receiver_answer` | `unavailable`, `timeout`, `duplicate`, `version_conflict`, `refused`, `none` | the error item's reason code, else its HTTP status (504 `timeout`, 409 and 422 `refused`, 503 `unavailable`); an uncertain delivery with no code reads `timeout` |
 | `event` | `admit`, `transfer`, `discharge`, `update`, `merge`, `cancel`, `other` | the case's event word (v1.14): the three cancel words fold to `cancel`; an unmapped trigger is `other` (no case carries `register`: a registration is indexed only, or is an `admit`). A withheld case reads `delivery: withheld` and `receiver_answer: none` (no receiver was asked) |
 | `receipt` | `present`, `absent`, `unreadable`, `none` | the receipt lookup: 200, 404, anything else (1.9); `none` when the receiver has no receipt endpoint (6.4), which is a fact about the receiver, not a failed lookup |
-| `later_applied` | `none`, `cancelled`, `merge`, `transfer`, `discharge`, `admit`, `update` | among the applied events for the encounter whose event time is later than the failed operation's (the downstream system's history and the timeline), by precedence: `cancelled` when a `cancel_*` was applied at or after the failed event's time (v1.14: a cancel carries the time of the event it reverses, and the case's own operation never counts), else `merge` when a merge was applied later, else `discharge` if any was applied later, else `transfer`, else `admit` (a later admission, v1.11), else `update` (an A08), else `none`. Since v1.16 a later transfer the feed sent whose delivery failed or is uncertain as well (a failure the connector recorded, not an indexed message or one in flight) counts as later too, for any failed operation but an admission and only when the case is not in an ordered or interleaved chain (the incident sends a chain's failures in event order); a later discharge that failed does not (the encounter is still admitted at the receiver, and the discharge's own case follows a resend of the earlier movement); and an event whose time is not plausible (the `event_time` rule below) counts for nothing. `Shutter.Catalogue.Matcher.Later` lists these events; the gate's ordering check reads the same list |
-| `event_time` | `plausible`, `before_admission`, `future`, `far_from_recorded`, `clock_change`, `later_event_future` | the failed event's time (v1.11, T28): before the admission the message (PV1-44) or the receiver's first history entry names, for anything but an admission; more than five minutes after the message was sent or the evidence was taken; more than a day from the recording time (EVN-2); without an offset, read in `Europe/London`, and within an hour of a British clock change (the order of two events is then not safe); `later_event_future` (v1.16) when the failed event's own time passes these checks but a later event it would be ordered against lies more than five minutes after the feed sent it, the receiver applied it or the evidence was taken, and believing it would change the reading (no plausible later transfer, discharge or cancel settles the order already, the event outranks `later_applied` and it is not an update), so a wrong time could make a genuine failure look overtaken; plausible otherwise. The gate's ordering check blocks a write and a superseded closure on any value but `plausible` (`EVENT_TIME_IMPLAUSIBLE`) |
+| `later_applied` | `none`, `cancelled`, `merge`, `transfer`, `discharge`, `admit`, `update` | among the applied events for the encounter whose event time is later than the failed operation's (the downstream system's history and the timeline), by precedence: `cancelled` when a `cancel_*` was applied at or after the failed event's time (v1.14: a cancel carries the time of the event it reverses, and the case's own operation never counts), else `merge` when a merge was applied later, else `discharge` if any was applied later, else `transfer`, else `admit` (a later admission, v1.11), else `update` (an A08), else `none`. Since v1.16 a later transfer the feed sent whose delivery failed or is uncertain as well (a failure the connector recorded, not an indexed message or one in flight) counts as later too, for any failed operation but an admission and only when the case is not in an ordered or interleaved chain (the incident sends a chain's failures in event order); a later discharge that failed does not (the encounter is still admitted at the receiver, and the discharge's own case follows a resend of the earlier movement); and an event whose time is not plausible (the `event_time` rule below) counts for nothing. `Shutter.Catalogue.Matcher.Later` lists these events; the gate's ordering check reads the same list. Each event it lists carries `operation_key` and, when a case was opened for that key, `case_id` (v1.21). The gate's ordering detail and the verifier's closure describe an event in one voice (`Shutter.Catalogue.Matcher.Describe`): `transfer to WARD-C at <time>` or `discharge at <time>`, with ` (receiver history)` when it comes from the receiver, and for a later transfer the feed sent whose delivery failed or is uncertain `transfer to WARD-C at <time>, sent as <key> (its delivery failed or is uncertain; its case C-0000NN recovers it)`, or `its own case recovers it` when no case is known for the key |
+| `later_delivery` | `applied`, `sent`, `none` | how the event that gave `later_applied` its word reached the downstream system (v1.21): `applied` when a plausible later event with that word is in the receiver's history or was applied in the timeline, `sent` when the only one is a later transfer the feed sent whose delivery failed or is uncertain (its own case recovers it; the location is that case's to recover whatever its fate), `none` when `later_applied` is `none`. An entry that lists `later_applied: transfer` alone matches both; one that wants only a movement the receiver applied adds `later_delivery: applied` |
+| `event_time` | `plausible`, `before_admission`, `future`, `far_from_recorded`, `clock_change`, `later_event_future` | the failed event's time (v1.11, T28): before the admission the message (PV1-44) or the receiver's first history entry names, for anything but an admission; more than five minutes after the message was sent or the evidence was taken; more than a day from the recording time (EVN-2); without an offset, read in `Europe/London`, and within an hour of a British clock change (the order of two events is then not safe); `later_event_future` (v1.16) when the failed event's own time passes these checks but a later event it would be ordered against lies more than five minutes after the feed sent it, the receiver applied it or the evidence was taken, and believing it would change the reading (no plausible later transfer, discharge or cancel settles the order already, the event outranks `later_applied` and it is not an update), so a wrong time could make a genuine failure look overtaken; plausible otherwise. The gate's ordering check blocks a write and a superseded closure on any value but `plausible` (`EVENT_TIME_IMPLAUSIBLE`). Since v1.21 a settled order (a plausible later transfer, discharge or cancel) stands whatever else is doubtful, with one exception: a cancel with a doubtful time behind a settled transfer or discharge is `later_event_future`, since it may have reversed the very event that settles the order (a second doubtful cancel behind a settled cancel changes nothing) |
 | `encounter_state` | `admitted`, `discharged`, `not_found`, `unknown` | the downstream system's state; `not_found` when the receiver answers 404 (it does not know the encounter); `unknown` when the receiver can't be read |
 | `transition` | `allowed`, `invalid`, `unknown` | the failed event from the encounter's current state (1.4): a transfer after a discharge is `invalid` |
 | `patient_match` | `yes`, `no`, `unknown` | the message's PID-3 against the downstream system's patient for the encounter |
@@ -317,6 +355,10 @@ conditions that matter; an unlisted condition is a wildcard. A listed condition 
 | `conditional_writes` | `yes`, `no`, `unknown` | the route's capability profile (1.8) |
 | `free_text` | `yes`, `no` | the message carries free text (an OBX note or an NTE) |
 | `chain` | `single`, `ordered`, `interleaved` | section 7; a case outside an incident is `single` |
+
+**Times the matcher reads** (v1.21). The plausibility rule compares an event's time with the time the feed sent it (`sent_at`), the receiver applied it (`applied_at`) and the evidence was taken (`observed_at`). A time in the ISO 8601 UTC form with a `Z` (a fraction allowed) or in the message store's ODBC form (`2026-10-15 09:20:00.123`, written in UTC) is read; a time with an offset (`2026-10-15T10:20:00+01:00`) or in any other form is never read as UTC: a `sent_at` or `applied_at` of that shape skips its own check, as an empty one does, so one receiver's odd clock form never makes every later event implausible, while an event time the matcher cannot read is implausible and supersedes nothing (and raises `later_event_future` when believing it would change the reading). `Shutter_Catalogue.Matcher_ForCase(caseId, chainKind)` evaluates the stored snapshot again for checks over SQL; since v1.21 it takes the case's stored chain kind (`Shutter.Store.ChainItem.KindFor`, `single` outside a chain) when the caller gives none, so it agrees with the stored match for a chain item.
+
+**The gate's ordering check and the later case** (v1.21). For a write, `SUPERSEDED_BY_LATER_EVENT` blocks on a later applied transfer or discharge, and also on a later applied cancel of the event ("cancel of the event at ..."), merge ("merge at ...") or admission ("admission at ..."), the words `later_applied` counts, so the gate and the matcher agree on all of them; `NO_LATER_EVENT` reads "No later transfer or discharge was applied for this encounter, nor a later cancel, merge or admission". A superseded closure is supported by a later transfer or discharge alone (a cancel there passes through the catalogue, `CLOSED_BY_CATALOGUE`). The verifier reads the same list on the snapshot's timeline and the encounter as read at verification, with the snapshot's observation time and chain kind, so it never cites an event the gate refused: it accepts a later transfer or discharge from the receiver's history, else a plausible later transfer the feed sent whose delivery failed or is uncertain, in the gate's words. When a case closes as superseded on such a transfer and its case is known, that later case gets a note ("Case C-0000AA was closed as superseded on this case's account: its transfer to WARD-B at <time> is not resent, because this case's later movement supersedes it; this case recovers the patient's location"), and the closed case's verification names the key and the case; the patient's location is the later case's to recover whatever its fate, and the two notes are the record.
 
 ### 6.2 An entry's front matter
 
@@ -421,15 +463,21 @@ reads it through `Shutter.Store.SiteProfile`.
   collector, the verifier and the connector read their paths from the entry named by the case's receiver (the
   production item that delivered to it), so a second receiver is configuration, not code. A path left empty means the
   receiver has no such endpoint: no receipt lookup, and the capabilities are the declared features, which the route
-  item records as `capabilities_source`. An entry without `api` takes the downstream system's paths.
+  item records as `capabilities_source`. An entry without `api` takes the downstream system's paths. `dry_run: false` in a receiver's declared features, or in
+  its capability profile, means the gate offers no resend to it (`DRY_RUN_UNSUPPORTED`) and the connector refuses to send
+  a dry run to it (v1.21). Declare all four flags: for a receiver with no capabilities endpoint the route takes the
+  declared features, and a flag left out reads as false there (the connector alone reads an absent flag as true, so the
+  gate is the stricter of the two).
 - `PUT /site-profile` refuses a profile that has not this shape, naming the field (unknown top-level fields and
-  unknown `api` paths or `features` are refused too); every stored version is kept with who stored it and from where,
+  unknown keys under `receivers[].api`, `receivers[].features`, `approvers`, `feed`, `model_content`, `mail`, `teams[]`
+  and `incident` are refused too, each named in the 400 `bad_request` detail, v1.21); every stored version is kept with who stored it and from where,
   `GET /site-profile/history` lists them (v1.9). `feed.time_zone` (v1.11) names the zone of timestamps without an
   offset: `UTC`, `Europe/London` or a fixed offset; the built-in default (`SiteProfile.Default()`, in force only while no
   profile row is stored) is `Europe/London`, a stored profile that does not answer keeps `UTC` (the reading before v1.11),
   and the shipped seed profile says `Europe/London` (v1.12), so the fixtures' times read as British Summer Time (09:20 on
   15 October is 08:20Z). A zone outside these that reaches the reader anyway (the profile's check refuses one, so only a zone
-  set by hand in the namespace's cached `feedZone`, or one passed to the time probe) is read as `UTC` with a warning in the event log, once per job and zone, and the evidence's note says so (v1.16). The questionnaire page asks for `teams` and `mail` (question 9), `feed` (10) and `model_content` (11)
+  set by hand in the namespace's cached `feedZone`, or one passed to the time probe) is read as `UTC` with a warning in the event log, once per job and zone, and the evidence's note says so (v1.16). The questionnaire page asks for `teams` and `mail` (question 9: the mail domains first, since a team mailbox needs
+  one; an empty or absent `mail.allowed_domains` allows no address, v1.21), `feed` (10) and `model_content` (11)
   since v1.12, and since v1.14 for `merges` (12), each receiver's `merges` beside its `cancels` (5) and each team's
   `sources` (9). The body may carry
   `expectedVersion` (the version the caller read, not
@@ -441,7 +489,10 @@ reads it through `Shutter.Store.SiteProfile`.
   dispatch, rehearsed and verified, exactly as an approved case. The case records an approval whose approver is
   `policy`, with the profile's version, the tier, the chain kind and the entry, so the authorization check and the
   closure read as for a person's approval, and the app shows "automatic by site policy".
-- `approval`: one Workflow task for the case, or for the whole incident (section 7).
+- `approval`: one Workflow task for the case, or for the whole incident (section 7). The task's `PlanDigest` form
+  value is empty: the decider supplies the digest (the API from the body it checked, an approver in the Workflow inbox
+  by pasting it from the task's message), and an approval with no digest, or another one, blocks the case (v1.21;
+  before, the value was pre-filled with the plan's digest, so an inbox approval always matched).
 - `per_chain`: one Workflow task per chain of the incident.
 - `board` for a chain kind means the board runs whatever the match says.
 - A tier 3 receiver never takes `automatic` unless the profile says so explicitly; the shipped default does not.
@@ -450,8 +501,10 @@ reads it through `Shutter.Store.SiteProfile`.
   an approver (section 5). It checks the closer's resource only: the server does not compare the closer with whoever
   sent the case's escalation, and `Shutter_Approver` holds `Shutter_Operate` too, so one approver may escalate and close
   a case, or close one that was never escalated, as the case page offers for a withheld case. The validator accepts only
-  `true` or `false`. It belongs to question 7, who approves what, so the questionnaire still has twelve questions; the
-  shipped seed profile answers `false` (its file's `version` is 4 since v1.20). `Shutter.Store.SiteProfile.CloseNeedsApprover()`
+  `true` or `false`, and refuses any other key under `approvers` (`approvers.<key>: unknown setting`; `role` and
+  `escalation` must be strings), so a misspelt switch cannot pass as off (v1.21). It belongs to question 7, who approves what, so the questionnaire still has twelve questions; the
+  shipped seed profile answers `false` and names `example.nhs.uk` as its only allowed mail domain (its file's `version`
+  is 4 since v1.20). `Shutter.Store.SiteProfile.CloseNeedsApprover()`
   reads it. `approvers.role` and `approvers.escalation` stay on record only: the permissions themselves are the
   resources of section 5.
 - `merges` (v1.14): `forbidden` (the default when absent) or `allowed`, the only values the validator accepts. A receiver entry's `merges` and `cancels` (booleans, default false) say what it takes (1.1). A merge is delivered only under `allowed` to a receiver with `merges: true`; the gate's `MERGE_WITHHELD` blocks any write of a merge otherwise, so the exact repeat of a merge the receiver already holds (a receipt present) is E3's reconcile, and no other merge is ever resent by Shutter. `Shutter.Store.SiteProfile.MergesAllowed()` and `ReceiverFlag(name, flag)` read them.
@@ -464,9 +517,11 @@ A new check, `catalogue`, with these reason codes (in `knowledge/block-reasons.j
 - `OUTCOME_NOT_ALLOWED`: the chosen alternative's `when` does not hold for this site (block);
 - `NEW_PATTERN`: no entry matches (block; the case escalates as a candidate entry);
 - `POLICY_REQUIRES_APPROVAL`: an automatic release where the profile requires an approval (block; an internal guard).
-The plan's `catalogue_entry` and `outcome` are bound by the approval's digest like every other field of the plan.
+The plan's `catalogue_entry` and `outcome` are bound by the approval's digest like every other field of the plan. The incident plan's digest binds each item's catalogue entry and outcome the same way (7.2).
 
 Two `intent` checks for withheld cases (v1.14, policy version 2026-10-19.3), appended for every plan on a case of kind `withheld` as `UNMAPPABLE` is, and as guards on any write of a merge or a cancel: `MERGE_WITHHELD` (the case's event is `merge` and the site profile does not allow merges, or the receiver does not take them) and `CANCEL_UNSUPPORTED` (a `cancel_*` event to a receiver whose entry says `cancels: false`). The identity check answers `NO_ENCOUNTER` (pass) for a case whose encounter piece is `-`, and the state-transition and concurrency checks answer `PATIENT_LEVEL_WRITE` (block) for a write on such a case: there is no encounter state or version to check, so a person decides, and nothing is retried.
+
+**The rehearsal check** (v1.21, policy version 2026-10-25.1), between authorization and concurrency: `NOT_APPLICABLE` (pass) for a plan that writes nothing, `NOT_YET_REQUIRED` (pass) at the proposal, and at approval and dispatch `REHEARSED` (pass: the approval's bound rehearsal is of this plan, reported `would_apply`, and was checked against the plan's expected version, the receiver's epoch and the evidence's payload digest), `DRY_RUN_MISSING` (block: no rehearsal bound, or one of another plan), `DRY_RUN_FAILED` (block: the bound rehearsal reported it would not apply) and `DRY_RUN_STALE` (block: checked against another version, a rehearsal with no version from the receiver included, against another epoch than the preflight's, against another payload digest than the evidence's, or sent with an expected version other than the plan's). The capability check adds `DRY_RUN_UNSUPPORTED` (block: the capability profile reports no dry run). The approval binds the latest rehearsal of its plan, not the case's latest. The rehearsal record carries `expectedVersion` and `payloadDigest`, what was sent; the execution attempt carries `rehearsalId`, the approval's bound rehearsal, or the rehearsal itself when the receiver applied it. An approval given under 2026-10-20.1 and not yet dispatched is void at dispatch (`APPROVAL_POLICY_CHANGED`).
 
 ### 6.6 The board and the catalogue
 
@@ -506,9 +561,15 @@ four collections under `knowledge/` (`search_contracts`, `search_lifecycle`, `se
 - Each chain carries the site's policy for the receiver's tier and its kind (`automatic`, `approval`, `per_chain`; `path`
   for a chain whose cases run their own path). Outside policy mode every chain is a board chain (6.3), and a profile
   policy of `board` makes a chain a board chain.
-- The incident's plan lists every chain with its kind, entry, outcome and items in order; its digest covers the chains'
-  operation keys in order, each item's payload digest, the first item's expected version per chain, the receiver's epoch,
-  the catalogue version, the site profile version and the gate's policy version.
+- The incident's plan lists every chain with its kind, who decides it, its policy, its entries and its items in order
+  (case id, event, event time, operation key, payload digest, catalogue entry, outcome, who decides, and the receiver
+  version the item goes at: the chain's first expected version for the first item of a chain a person approves, null
+  otherwise, since the rest go at the version the previous item's verified receipt reports and an automatic or board
+  chain's first item goes on fresh evidence), with the receiver's epoch and the catalogue, site profile and gate policy
+  versions. Its digest is the SHA-256 of that plan as recorded, in canonical JSON (keys sorted, arrays in order, no
+  whitespace), the construction the case plan's digest uses, so `GET /incidents/{id}` `plan` without its `digest`
+  member recomputes it (v1.21; until v1.18 it was a line format over the operation keys, payload digests, first
+  expected versions, epoch and versions alone, so an item's case, entry and outcome were not bound).
 
 ### 7.3 Approval
 
@@ -516,17 +577,22 @@ four collections under `knowledge/` (`search_contracts`, `search_lifecycle`, `se
   incident's policy chains), `per_chain` (one task per chain). Board chains are approved as single cases are today.
 - The task says what is bound and what is not: "resend these, in this order; each one is rehearsed, gated and verified
   just before it goes; the chain stops at the first surprise, and the rest comes back to you".
-- The incident's approval binds the plan's digest and the rule for later items: each item after the first goes at exactly
-  the version the previous item's verified receipt reports.
+- The incident's approval binds the plan's digest: for every item, the case, the operation and its payload, the
+  catalogue entry and outcome the approver read, and the receiver version it goes at; and the rule for later items:
+  each item after the first goes at exactly the version the previous item's verified receipt reports. The task says
+  so, and that each operation goes only under the catalogue entry and outcome listed for it.
 - Task subjects: `Shutter I-nnnnnn: approve the release of N chain(s) to <receiver>` for the shared approval, and
-  `Shutter I-nnnnnn/<seq>: ...` per chain; both carry the `PlanDigest` and `Comment` form fields. An approval with
-  another digest, or none, rejects the chains it covers: their cases are escalated with the reason.
+  `Shutter I-nnnnnn/<seq>: ...` per chain; both carry the `PlanDigest` and `Comment` form fields, `PlanDigest` empty
+  until the decider fills it (v1.21; before, it was pre-filled with the plan's digest, so an inbox approval always
+  matched). An approval with another digest, or none, rejects the chains it covers: their cases are escalated with the
+  reason.
 
 ### 7.4 Release
 
 - The incident releases chains one at a time (or side by side, when the profile allows), and within a chain one item at
-  a time: it tells the case the version to expect, the case runs its own dispatch stage (the preflight read, the
-  dispatch gate, the rehearsal, the write, the verification) and reports back.
+  a time: it tells the case the version to expect, the case runs its own stages (the proposal gate, the rehearsal, the
+  approval it stands under, the preflight read, the dispatch gate with its rehearsal check, the write, the verification)
+  and reports back.
 - The dispatch gate's concurrency check compares the receiver's version with the expected one; any other write in
   between stops the chain: the remaining items go to a person with the reason, and the incident's record says which
   item stopped and why.
@@ -538,8 +604,14 @@ four collections under `knowledge/` (`search_contracts`, `search_lifecycle`, `se
   chain's first expected version from the plan, and the first item of an automatic or board chain goes on fresh
   evidence. A released case whose fresh evidence shows another version blocks (the sequence rule) and its chain stops.
   Chains are released one at a time in sequence order; approved chains go while the others' approvals are pending. A
-  released case under the incident's approval records an approval by the approving user, naming the task and the
-  incident plan's digest, so the gate treats it as a person's.
+  released case under the incident's approval records an approval by the approving user, naming the task, the
+  incident plan's digest and the entry and outcome that plan bound for the item (`incidentPlanDigest`, `boundEntry`,
+  `boundOutcome` on the approval), so the gate treats it as a person's. Before the item is planned, a fresh match that
+  reads another entry or outcome than the approval bound blocks the case ("Not covered by the incident's approval") and
+  its chain stops. At dispatch the gate's authorization check refuses the approval when the case's plan or its fresh
+  evidence names another entry or outcome (`APPROVAL_ITEM_CHANGED`) or the incident's plan digest is no longer the one
+  it bound, or the case no longer belongs to the incident (`APPROVAL_INCIDENT_PLAN_CHANGED`): the case blocks and the
+  chain stops at that item (v1.21).
 
 ### 7.5 The API
 
@@ -547,15 +619,17 @@ four collections under `knowledge/` (`search_contracts`, `search_lifecycle`, `se
   receiver, mode, state (`open`, `classified`, `awaiting_approval`, `releasing`, `closed`), times, the plan's digest and
   the versions it binds, the approval) with `progress`: `chains`, `cases`, `byKind` and `byState`.
 - `GET /incidents/{id}`: the chains with their items (case ids, position, kind, entry, outcome, the expected version
-  rule), the plan's digest, the approvals, progress.
+  rule), the plan's digest (the plan is recorded in full and its digest is recomputable from it, 7.2), the approvals,
+  progress.
 - `POST /incidents/{id}/approvals` with `planDigest`, `decision` (`approve` or `reject`; `action` is accepted too),
-  `comment`; `Idempotency-Key`; 409 `plan_changed` when the digest moved, 409 `wrong_state` when nothing awaits approval.
+  `comment`; `Idempotency-Key`; 409 `plan_changed` when the digest moved, 409 `wrong_state` when nothing awaits approval; the 202 reply carries `approver`, the signed-in user (section 5).
   `POST /incidents/{id}/chains/{seq}/approvals` for `per_chain`.
 - `GET /incidents/{id}/events`; `GET /incidents/{id}/approvals`. `GET /incidents/{id}` also carries the plan, the
   approvals, the Workflow tasks and the workflow trace link.
 - A case carries `incidentId` and `incident` (`incident_id`, `incident_state`, `chain_seq`, `position`, `chain_kind`,
   `decides`, `chain_policy`, `item_state`, `expected_version`); its events say whether it was released automatically,
-  under the incident's approval, or stopped.
+  under the incident's approval, or stopped. An approval given under an incident's carries `incidentPlanDigest`,
+  `boundEntry` and `boundOutcome` in `GET /cases/{id}/approvals` (v1.21).
 - `GET /site-profile` (`Shutter_Operate`, as every read) returns the current profile with its version; `PUT /site-profile`
   (`Shutter_Approve`, `X-Requested-With`) replaces it with the body, which must have the shape of 6.4 (400 `bad_request`
   naming the field otherwise), and answers the same object as the GET with the new version; the questionnaire page writes
@@ -636,7 +710,7 @@ IRIS (the gate, the matcher, the verifier and the app read it); what a model rec
   inside every string value of the reduced object at identifier boundaries (a number equal to an identifier becomes
   the token), so operation keys (`PAS^HOSP^MRN-T1^ENC-T1^transfer^...`), history entries, timeline rows and error
   echoes carry the tokens too. A value already mapped keeps its token whatever kind asks (an encounter id that is
-  also the visit number is one token); a value that itself looks like a token is left as it is, and a value shorter than three characters is never tokenised, except a name part, which is from two (v1.16: a surname such as Li or Ng; a single initial is left, since as a token it would replace every standalone letter). Values of three characters or more are matched whatever their letter case (v1.16: `SMITH` in the message, `Smith` in an error echo); a two-letter name part only as written, so a short word of the summary's own text (`no`, `to`) is never taken for a name. The view fails closed (v1.16): `ModelView.Learn` returns an error when the case names a message that cannot be read or a value's token cannot be stored, and the case workflow then builds no agent request, sends nothing and escalates the case; `ModelView.Reduce` answers `{"error": ...}` instead of a view for a case whose own patient or encounter has no token.
+  also the visit number is one token); a value that itself looks like a token is left as it is, and a value shorter than three characters is never tokenised, except a name part, which is from two (v1.16: a surname such as Li or Ng; a single initial is left, since as a token it would replace every standalone letter). Values of three characters or more are matched whatever their letter case (v1.16: `SMITH` in the message, `Smith` in an error echo); a two-letter name part only as written, so a short word of the summary's own text (`no`, `to`) is never taken for a name. The view fails closed (v1.16): `ModelView.Learn` returns an error when the case names a message that cannot be read or a value's token cannot be stored, and the case workflow then builds no agent request, sends nothing and escalates the case; `ModelView.Reduce` answers `{"error": ...}` instead of a view for a case whose own patient or encounter has no token, and `BuildAgentRequest` then builds no request either: the case is escalated with that text and nothing is sent (v1.21).
 - **Demographics never go**: `patient_name`, `name`, `given_name`, `family_name`, `date_of_birth`, `dob`, `sex`,
   `gender`, `address`, `phone`, `email`, `next_of_kin` and the like are dropped wherever they occur.
 - **Free text never goes.** Each OBX or NTE note becomes `{segment, position, observation_id, value_type,
@@ -677,17 +751,23 @@ sent, and references. No name, address or note text. A person reviews it, choose
 bound to the digest of the text the person read.
 
 - The site profile's `teams` (array of `{id, name, mailbox, cc?: [...], receivers?: [...], sources?: [...]}` (v1.14: `sources` lists sending applications, MSH-3, such as `PAS`; a merge goes first to the team whose `sources` lists the case's source system, then to the receiver's team, then to the first team; the draft words a merge "Merge of <prior identifier> into <patient identifier>" and a cancel "Cancellation of the transfer at ..."; a cancel carries no ward, section 2); a withheld case's draft says Shutter withheld the message and asks the team to mark the case handled rather than to reinvestigate; `id`, `name` and
-  `mailbox` required, ids unique) and `mail` (`allowed_domains`: every mailbox and cc must end in one of them when set, checked when the profile is saved and again at `PATCH` and at the send; `from`: the sender of the emails when set, else the `Escalation Mail` operation's `From` setting, default `shutter@localhost`; the shipped seed profile sets `allowed_domains` to `["example.nhs.uk"]`, the domain of its teams' mailboxes, and no `from`, v1.20). The team for a case is the one whose `receivers` names the case's receiver, else the first, else the
+  `mailbox` required, ids unique) and `mail` (`allowed_domains`, a list of domain names such as `example.nhs.uk`, required before any email can go: every team `mailbox` and `cc`, and every `to` and `cc` a person types, is one bare address, `local@domain`, with exactly one `@`, no display name, brackets or spaces, no line break or other control character, and a domain equal to one of the list or a subdomain of one (`trust.nhs.net` under `nhs.net`), compared without regard to case; an empty or absent list allows no address, so a profile that names a team mailbox without one is refused (400 `bad_request`, `teams[i].mailbox: no allowed mail domains are set in the site profile (mail.allowed_domains)`), and each entry must be a domain name (`mail.allowed_domains[j]: must be a domain name such as example.nhs.uk (letters, digits, hyphens and dots)`); the addresses are checked when the profile is saved, at `PATCH`, at the send and once more by the operation before it writes or sends (v1.21). `from`: the sender of the emails when set, an address of the same shape (the profile is refused otherwise), else the `Escalation Mail` operation's `From` setting, default `shutter@localhost`. The shipped seed profile sets `allowed_domains` to `["example.nhs.uk"]`, the domain of its teams' mailboxes, and no `from`, v1.21). The team for a case is the one whose `receivers` names the case's receiver, else the first, else the
   profile's `approvers.escalation` text with no mailbox (the person fills one in).
 - `GET /cases/{id}/escalations`; `POST /cases/{id}/escalations` with `{teamId?}` answers 201 with the draft (409
   `wrong_state` unless the case is blocked, escalated or failed; 500 `draft_failed` when `teamId` names no team of the
   profile); `PATCH /cases/{id}/escalations/{seq}` (404 `not_found` for an unknown seq; 400 `bad_request` when the body is
-  not a JSON object) with `{subject?, body?, to?, cc?}` edits a draft or a failed email (409 otherwise) and moves
-  `bodyDigest`, the SHA-256 of `to`, `cc`, `subject` and `body` together, so a change of recipient alone moves it;
-  `POST /cases/{id}/escalations/{seq}/send` with `{bodyDigest}` answers 202 with the queued escalation, 409
-  `body_changed` when the digest is not the current text's, 409 `no_recipient` when `to` is empty, and 422
-  `address_not_allowed` (with `field`: `to` or `cc`) when an address is not an address or lies outside the allowed
-  domains; `PATCH` answers the same 422 for a `to` or `cc` it is given. All need
+  not a JSON object, when one of `subject`, `body`, `to` and `cc` is not a string, or when one is longer than its
+  column: the subject 500 characters, `to` and `cc` 2000) with `{subject?, body?, to?, cc?}` edits a draft or a failed
+  email of a case that is blocked, escalated or failed (409 `wrong_state` otherwise, the detail naming the case's state
+  or the escalation's) and moves `bodyDigest`, the SHA-256 of `to`, `cc`, `subject` and `body` together, so a change of
+  recipient alone moves it; `POST /cases/{id}/escalations/{seq}/send` with `{bodyDigest}` answers 202 with the queued
+  escalation, 409 `wrong_state` when the case is no longer blocked, escalated or failed (closed by hand, or reopened) or
+  the escalation is neither a draft nor a failed one, 409 `body_changed` when the digest is not the current text's, 409
+  `no_recipient` when `to` is empty, 422 `address_not_allowed` (with `field`: `to` or `cc`) when an address is not one
+  bare address, lies outside the allowed domains or the profile sets no allowed domain, and 422 `subject_not_allowed`
+  (with `field`: `subject`) when the subject carries a line break or a control character; `PATCH` answers the same 422s
+  for the email as it would stand after the edit (a `to` the edit leaves empty is 422 `address_not_allowed` too)
+  (v1.21). All need
   `Shutter_Operate`; the writes need `X-Requested-With` and take an `Idempotency-Key`. The escalation keeps who drafted,
   edited and sent it (`draftedBy` and `draftedAt`, `editedBy` and `editedAt`, `sentBy`, and `sentAt` when the operation
   delivered it), and the case event of the send names who sent it, to whom and, since v1.17, the digest of the text sent
@@ -695,9 +775,25 @@ bound to the digest of the text the person read.
 - The `Escalation Mail` operation (`Shutter.Operation.EscalationMail`, `EnsLib.EMail.OutboundAdapter`) sends through the
   site's mail server when the adapter's `SMTPServer` is set (first-time configuration; the NHS relay at most trusts),
   and otherwise writes an `.eml` file to its `OutputFolder` (default `<mgr>/shutter/out/mail`), so the demo and CI need
-  no mail server. States: `draft`, `queued`, `sent`, `failed` and `cancelled` (closing the case by hand, `POST /cases/{id}/close` in 5, cancels a draft or queued email);
-  each step is a case event of kind
-  `escalation`. Then `POST /cases/{id}/reinvestigate` verifies the manual correction.
+  no mail server. Before writing or sending, it checks the subject and the addresses once more against the profile as it
+  stands and marks the escalation `failed` with `Refused before sending, <field>: <problem>` when they no longer pass
+  (the domains changed after the send was accepted, or the row was changed outside the API); a failed escalation can be
+  edited and sent again. In the `.eml` every header value is one line: tab, CR and LF become spaces and other control
+  characters are removed, and a header longer than 78 characters is folded at a space or a comma with CRLF and one
+  space (RFC 5322 2.2.3); the SMTP message's subject and addresses go through the same cleaning (v1.21). States:
+  `draft`, `queued`, `sent`, `failed` and `cancelled` (closing the case by hand, `POST /cases/{id}/close` in 5, cancels
+  every draft or queued email of the case); each step is a case event of kind `escalation`. Then
+  `POST /cases/{id}/reinvestigate` verifies the manual correction.
+- Retention (v1.21). The daily task "Shutter retention" removes the text of an escalation (`body`, the one copy of the
+  NHS number and the date of birth outside the message store) and its `.eml` file `EscalationDays` days after the case
+  closed (the task's setting; the installer sets it from `SHUTTER_ESCALATION_DAYS`, else `SHUTTER_MESSAGE_DAYS`, else
+  90; `0` keeps them), for every state but `queued`. The row stays: `state`, `to`, `cc`, `subject`, `bodyDigest`, who
+  drafted, edited and sent it and when, `transport` and `result`; `body` is empty and `purgedAt` says when, and the case
+  gets an `escalation` event ("Escalation 1: the email's text was removed 90 days after the case closed; the digest of
+  the text sent, the recipients and who sent it stay on record"). `PATCH` and `send` on a purged escalation answer 409
+  `wrong_state`. A reopened case's escalations are left until it closes again. When a site switches the case purge on, a
+  purged case's escalation rows and `.eml` files go with it, and the task removes escalation rows whose case went
+  before this rule.
 
 ## 11. The case intake from another production (v1.15)
 
@@ -779,6 +875,15 @@ copy of the message.
   process that runs it (the Dockerfile passes them as build arguments from `.env`; a `zpm load` by hand reads the
   shell's). The task is made once: an existing instance changes it in the Task Manager. The Doctor reports
   `purge_task` and `message_days`.
+- **Escalation retention** (v1.21). The retention task is always made, with `EscalationDays` from
+  `SHUTTER_ESCALATION_DAYS` (else the message days, else 90; `0` keeps the texts; the Dockerfile passes it as a build
+  argument from `.env`); an existing task keeps its settings and runs the class default, 90, until changed in the Task
+  Manager. `Shutter.Setup.EnsureRetentionTasks(ns, days, purge, escalationDays)` returns `retention created (escalation
+  texts N days|kept)` or `retention exists`. The Doctor reports `escalation_days`. The demo's `PurgeStore` removes the
+  `.eml` files of the rows it drops, never the folder.
+- **The aihub module's install** (v1.21) fails when the environment carries a provider key (`ANTHROPIC_API_KEY`) and the
+  provider could not be configured from it, so a live edition is never built on a key that does not work; the image
+  build has no key and is unaffected.
 - **Shape B: Shutter's items inside a site's own production.** `Shutter.Setup.InstallInto(production, root)`
   (`SELECT Shutter.Setup_InstallInto('Your.Production', '/path/to/module/')`, or `zpm "load <dir> -Ddemo=0
   -Dproduction=Your.Production"`), in that production's namespace with the core classes loaded: refuses an empty name or a
@@ -798,6 +903,7 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.21, 25 Oct 2026: the build of 25 October. Gate policy version 2026-10-25.1, so an approval given under 2026-10-20.1 and not yet dispatched is void at dispatch (`APPROVAL_POLICY_CHANGED`). Verification after a write whose answer was lost (1.3, 5.1): the verifier's verdict is a pure function of what was read (`Judge`); a missing receipt straight after an uncertain write is unknown and read again on the retry schedule, not committed only after the settle window (`UncertainSettleSeconds`, 30 s) with the version unchanged or once the version moved past the one the write was conditional on; an acknowledged write without a receipt is a contradiction (never "not committed"), and a reconcile whose receipt is gone claims nothing about what was committed; the case escalates on not committed with the approval revoked and on unknown after the last read, never resends from a verification, and the block reasons `WRITE_NOT_COMMITTED` and `WRITE_OUTCOME_UNKNOWN` name the next action. Supersession (6.1): the matcher's later events carry `operation_key` and `case_id`; `later_delivery` (`applied`, `sent`, `none`); a time with an offset or in another form is never read as UTC and an unreadable reference time skips its own check; a doubtful cancel behind a settled transfer or discharge is a doubt; `Matcher_ForCase` takes the stored chain kind; the gate blocks a write after a later applied cancel, merge or admission and, with the verifier, names an undelivered later transfer by its key and case, whose case is told; the verifier's superseded branch reads the matcher's list, so the three agree. A write stands on its own dry run (1.1, 1.8, 6.5): the gate's rehearsal check (`REHEARSED`, `DRY_RUN_MISSING`, `DRY_RUN_FAILED`, `DRY_RUN_STALE`) releases a write only after a dry run of the same plan at the same version, epoch and payload, and the capability check's `DRY_RUN_UNSUPPORTED` refuses a resend to a receiver without dry runs; the rehearsal records what was sent (`expectedVersion`, `payloadDigest`) and the execution attempt names its rehearsal (`rehearsalId`); the approval binds the latest rehearsal of its plan; a receiver that applies a dry run is recorded as an execution, alerted and verified, never reported as rolled back; the connector refuses a dry run to a receiver whose entry declares none (6.4); the blind-resend preview refuses a receiver without dry runs (409 `dry_run_unsupported`) and reports `checkedAgainst`, `expectedVersion: null` and `applied` (5). Who decided (5): the approver of record is the signed-in user; `Shutter.Util.Workflow.Decide` takes the digest instead of a user name, refuses an approver outside the Workflow role (403 `forbidden` over the API), an empty digest and a task another approver holds (409 `wrong_state`); the approval tasks' `PlanDigest` form value is no longer pre-filled, so an inbox approver pastes it (6.4, 7.3); the 202 reply of the approval routes carries `approver`. The incident's approval binds each item (7.2 to 7.5): the incident plan's digest is the SHA-256 of the plan as recorded in canonical JSON, so each item's case, catalogue entry, outcome, who decides and expected version are bound; a released item whose fresh match names another entry or outcome than the approval bound blocks before planning and, at dispatch, `APPROVAL_ITEM_CHANGED` and `APPROVAL_INCIDENT_PLAN_CHANGED`; the case approval's `incidentPlanDigest`, `boundEntry` and `boundOutcome`. Escalation addresses (10): one bare address per recipient with one `@` and no control characters, a domain in `mail.allowed_domains` or under one; an empty or absent list allows no address, and a profile naming a team mailbox without one is refused; `mail.from` and each domain entry are checked; `subject_not_allowed`; `PATCH` requires strings and answers 400 for a value longer than its column; the operation's last check before writing or sending, and the `.eml`'s header hygiene. Escalation retention (10, 12): `purgedAt`, the text and the `.eml` removed `EscalationDays` days after the case closed (`SHUTTER_ESCALATION_DAYS`, default the message days, 90, on by default on an upgraded instance), 409 `wrong_state` for editing or sending a purged one, the case purge takes escalations and their files, the Doctor's `escalation_days`. The hand close cancels every draft or queued email and says how many, and `PATCH` and `send` refuse a case no longer blocked, escalated or failed (5, 10). Unknown keys under `approvers` and the other sections are refused by name (6.4). The API mimic (4): its switch counts on a demo instance only, a site ignoring a stray one, and `Enable` refuses there and leaves nothing behind when it fails; `GET /settings` names it (`mock`, `mockConfig`, `mockModel`, each item's `answeredBy`), `Setup.Doctor` reports `mock_config`, and the production's start logs a set switch and a `SHUTTER_AGENT_MODE` it did not apply; `Record.ImportJSON` and `ImportDir` refuse a mock recording as `Store` does (`Record.IsMock`); the live runner ends a run whose agent replaced its provider before any model call, and its `TestRun` keys each run's tool calls apart (`test:<case>:<member>:<n>`, `run_key`, `mock`) and takes `live` or `record` only; the aihub install fails when a key in the environment could not configure the provider (12). The re-plan after a receiver change happens once per investigation, and a second change blocks the case for a person (4.3); the cases list reads `planCreatedBy` from the plan row in its own query (the values it sends are unchanged); the plan, gate decision, agent run, case token, finding and approval records refer to their case by id, so a save of any of them never writes the case; a board member's request is not built, and the case is escalated, when the model view fails closed on the evidence or the findings (9).
 - v1.20, 25 Oct 2026: the shipped seed profile sets `mail.allowed_domains` to `example.nhs.uk`, the domain of its
   teams' mailboxes, so an escalation from the demo goes only to those mailboxes' domain; its file's `version` is 4 (6.4,
   10). Nothing in the server changes.
