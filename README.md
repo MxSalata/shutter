@@ -57,7 +57,10 @@ Sign in to your own instance as `approver` / `shutter`, or to the online demo wi
 
 1. **S2, board mode.** A transfer never arrived. Three specialists review the evidence, the coordinator proposes a resend, the gate passes it and the receiver's dry run says it would apply. **Approve**: one conditional write, then "Verified" from the receiver's history.
 2. **S1, board mode, then Rules only.** A later transfer has overtaken the failed one. The board closes the case as superseded and writes nothing; rules alone propose a resend, and the gate blocks it.
-3. **S8, Rules only, then board mode.** Rules alone pass every check; **Approve** the plan and the resend overwrites the bed manager's WARD-C with WARD-B. In board mode the board escalates. This is the case the gate alone can't catch.
+3. **S8, Rules only, then board mode.** Rules alone pass every check; **Approve** the plan and the resend overwrites the bed manager's WARD-C with WARD-B. In board mode the board escalates. This is the case the gate alone can't catch. Either case's page puts the two side by side: what each did at the receiver, and the evidence both read. The board's run in the Visual Trace, each agent a lane between the evidence collector and the gate:
+
+   ![The Visual Trace of S8 in board mode: the failed delivery, the case workflow, the evidence collector, the three specialists, the coordinator and the gate, each in its own lane](https://raw.githubusercontent.com/MxSalata/shutter/main/web/public/s8-visual-trace.png)
+
 4. **S15, any mode.** A patient merge: the gate blocks every plan (`MERGE_WITHHELD`), the board is not convened, **Escalate** drafts the email to the PAS team, and **Mark as handled by the team** closes the case with what they did.
 5. **S11, Site policy mode.** The receiver goes down twice and eight deliveries fail: one incident, a chain per encounter, the single chains settled by the site's policy, the ordered chain waiting for one approval.
 6. **S19, Site policy mode.** The same transfer fails inside the demo hospital's own production (namespace `HOSPITAL`), which Shutter does not own. Its forwarder hands the failure to Shutter, the case names where it came from, and the resend goes through Shutter's connector.

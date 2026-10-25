@@ -68,6 +68,58 @@ describe('CasePage', () => {
     ).toBeTruthy();
   });
 
+  it('leads with a receipt that says an escalated case wrote nothing, and copies it as JSON', async () => {
+    renderCase('C-000008');
+    const receipt = await screen.findByRole('region', { name: 'Receipt' });
+    expect(await within(receipt).findByText('0 writes; waiting for a person')).toBeInTheDocument();
+    expect(await within(receipt).findByText('Escalate: no write to the receiver')).toBeInTheDocument();
+    expect(within(receipt).getByText('No approval needed: the plan writes nothing')).toBeInTheDocument();
+    expect(within(receipt).getByRole('button', { name: 'Copy JSON' })).toBeInTheDocument();
+    const outcome = screen.getByRole('region', { name: 'Closed: handed to a person' });
+    expect(receipt.compareDocumentPosition(outcome) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("names the approver, the write and the verification on a resolved case's receipt", async () => {
+    renderCase('C-000021');
+    const receipt = await screen.findByRole('region', { name: 'Receipt' });
+    expect(await within(receipt).findByText('Approved by approver,')).toBeInTheDocument();
+    expect(await within(receipt).findByText('1, 1 acknowledged')).toBeInTheDocument();
+    expect(within(receipt).getByText('version 2, epoch 227')).toBeInTheDocument();
+    expect(within(receipt).getByText(/^Verified: Committed and current/)).toBeInTheDocument();
+  });
+
+  it("puts S8's rules case beside its board case, with the evidence they share", async () => {
+    renderCase('C-000021');
+    const compare = await screen.findByRole('region', { name: 'S8 side by side: rules alone and the board' });
+    expect(await within(compare).findByText('Wrote WARD-B over WARD-C: version 2 to 3')).toBeInTheDocument();
+    expect(within(compare).getByText('Escalate, citing E7; no write')).toBeInTheDocument();
+    expect(within(compare).getByRole('link', { name: 'C-000008' })).toHaveAttribute(
+      'href',
+      '/cases/C-000008',
+    );
+    expect(within(compare).getAllByText('WARD-C at version 2')).toHaveLength(2);
+    expect(within(compare).getAllByText('differs').length).toBeGreaterThanOrEqual(2);
+    expect(within(compare).getByText(/The digests differ because/)).toBeInTheDocument();
+  });
+
+  it('shows no side by side on a case of another scenario', async () => {
+    renderCase('C-000009');
+    expect(await screen.findByRole('region', { name: 'Receipt' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: /S8 side by side/ })).not.toBeInTheDocument();
+  });
+
+  it("draws the encounter's timeline at the top of the evidence, flagging the two transfers at the same time", async () => {
+    renderCase('C-000008');
+    const evidence = await screen.findByRole('region', { name: 'Evidence' });
+    expect(await within(evidence).findByText('Encounter timeline')).toBeInTheDocument();
+    expect(within(evidence).getAllByText('Same event time')).toHaveLength(2);
+    expect(within(evidence).getByText('This case')).toBeInTheDocument();
+    expect(within(evidence).getByText('BEDMGR')).toBeInTheDocument();
+    expect(within(evidence).getByText('v2')).toBeInTheDocument();
+    expect(within(evidence).queryByText('Clock-change hour')).not.toBeInTheDocument();
+    expect(document.getElementById('evidence-timeline')).not.toBeNull();
+  });
+
   it('says the board was not convened for a withheld merge', async () => {
     renderCase('C-000012');
     const board = await screen.findByRole('region', { name: 'Investigation: withheld for the team' });

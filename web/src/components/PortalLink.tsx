@@ -1,23 +1,46 @@
-import { Anchor, Text, Tooltip } from '@mantine/core';
+import { Anchor, Image, Modal, Stack, Text, Tooltip } from '@mantine/core';
 import { IconExternalLink } from '@tabler/icons-react';
+import { useState } from 'react';
 import { DEMO } from '@/demo';
+import type { Screenshot } from '@/lib/screenshots';
 
 /**
  * A link into the Management Portal (a message trace, a workflow trace, an agent's message). The portal is part of a
- * running IRIS instance, which the demo doesn't have, so there the link is a note saying what it would open.
+ * running IRIS instance, which the demo doesn't have, so there the link is a note saying what it would open, or, when
+ * a screenshot of that page is given, a button that shows it.
  */
 export function PortalLink({
   href,
   children,
   what,
   size = 'sm',
+  screenshot,
 }: {
   href: string;
   children: React.ReactNode;
   /** What the link opens, for the demo's note: "the Visual Trace of session 11714". */
   what: string;
   size?: 'xs' | 'sm';
+  /** A picture of the page the link opens, which the demo shows instead. */
+  screenshot?: Screenshot;
 }) {
+  const [shown, setShown] = useState(false);
+  if (DEMO && screenshot)
+    return (
+      <>
+        <Anchor component="button" type="button" size={size} onClick={() => setShown(true)}>
+          {children} (screenshot)
+        </Anchor>
+        <Modal opened={shown} onClose={() => setShown(false)} title={screenshot.alt} size="auto" centered>
+          <Stack gap="xs">
+            <Image src={screenshot.src} alt={screenshot.alt} maw="min(1880px, 90vw)" />
+            <Text size="sm" c="dimmed" maw={900}>
+              {screenshot.caption} On an IRIS instance this link opens {what} in the Management Portal.
+            </Text>
+          </Stack>
+        </Modal>
+      </>
+    );
   if (DEMO)
     return (
       <Tooltip

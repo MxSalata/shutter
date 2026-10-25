@@ -75,6 +75,7 @@ describe('the demo', () => {
       ['Case C-000002', '/cases/C-000002'],
       ['Case C-000021', '/cases/C-000021'],
       ['Case C-000008', '/cases/C-000008'],
+      ['Rules and board side by side', '/cases/C-000008?show=compare'],
       ['Case C-000012', '/cases/C-000012'],
       ['Incident I-000001', '/incidents/I-000001'],
       ['Settings and costs', '/settings'],
@@ -123,6 +124,22 @@ describe('the demo', () => {
     expect(
       (await within(board).findAllByText("The run's message in the production (on an instance)")).length,
     ).toBe(4);
+    expect(container.querySelectorAll('a[href*="/csp/"]')).toHaveLength(0);
+  });
+
+  it("shows the S8 board case's Visual Trace as a screenshot where it can't link to the portal", async () => {
+    const { container } = renderAt('/cases/C-000008?show=compare');
+    const compare = await screen.findByRole('region', { name: 'S8 side by side: rules alone and the board' });
+    expect(await within(compare).findByText('Wrote WARD-B over WARD-C: version 2 to 3')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Message trace (screenshot)' }));
+    const dialog = await screen.findByRole('dialog', {
+      name: 'The Visual Trace of an S8 case in board mode',
+    });
+    expect(within(dialog).getByRole('img')).toHaveAttribute('src', '/s8-visual-trace.png');
+    expect(
+      within(dialog).getByText(/On an IRIS instance this link opens the Visual Trace/),
+    ).toBeInTheDocument();
+    expect(within(compare).getByRole('button', { name: 'Visual Trace (screenshot)' })).toBeInTheDocument();
     expect(container.querySelectorAll('a[href*="/csp/"]')).toHaveLength(0);
   });
 });
