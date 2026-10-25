@@ -1418,8 +1418,10 @@ ClassMethod ProductionReviews() As %Status
     If limit < 1 Set limit = 50
     If limit > 500 Set limit = 500
     Set o = {}
-    Set o.items = ##class(Shutter.Store.Review).List(ns, prod, limit)
-    Set o.total = ##class(Shutter.Store.Review).Count(ns, prod)
+    Set o.items = ##class(Shutter.Store.Review).List(ns, prod, limit, .sc)
+    If $$$ISERR(sc) Quit ..Fail("500 Internal Server Error", "list_failed", $SYSTEM.Status.GetErrorText(sc))
+    Set o.total = ##class(Shutter.Store.Review).Count(ns, prod, .sc)
+    If $$$ISERR(sc) Quit ..Fail("500 Internal Server Error", "list_failed", $SYSTEM.Status.GetErrorText(sc))
     Quit ..Json(o)
 }
 
