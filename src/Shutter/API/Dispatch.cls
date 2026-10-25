@@ -553,12 +553,16 @@ ClassMethod CaseApprove(caseId As %String) As %Status
         Quit ..Fail("409 Conflict", "stale_version", "expectedVersion is not the case's version", extra)
     }
     Set comment = ##class(Shutter.Util.Json).Str(body, "comment")
-    Set result = ##class(Shutter.Util.Workflow).Decide(caseId, $SELECT(decision = "reject": "Reject", 1: "Approve"), ..User(), comment)
+    // The decider is the signed-in user, never a name from the body; the task takes the digest the body named (CONTRACTS 5).
+    Set result = ##class(Shutter.Util.Workflow).Decide(caseId, $SELECT(decision = "reject": "Reject", 1: "Approve"), digest, comment)
     Set out = ##class(Shutter.Util.Json).Parse(result, .psc)
     If '$ISOBJECT(out) Set out = {"result": (result)}
-    If out.%GetTypeOf("error") '= "unassigned" Quit ..Fail("409 Conflict", "wrong_state", out.error)
+    If out.%GetTypeOf("error") '= "unassigned" {
+        If $LISTFIND($LISTBUILD("not_in_role", "forbidden"), ##class(Shutter.Util.Json).Str(out, "code")) Quit ..Fail("403 Forbidden", "forbidden", out.error)
+        Quit ..Fail("409 Conflict", "wrong_state", out.error)
+    }
     Set reply = {}
-    Set reply.taskId = out."task_id", reply.decision = decision, reply.caseId = caseId
+    Set reply.taskId = out."task_id", reply.decision = decision, reply.caseId = caseId, reply.approver = out.user
     Set text = reply.%ToJSON()
     Do ..Remember(bodyText, "202 Accepted", text)
     Set %response.Status = "202 Accepted"
@@ -1185,12 +1189,16 @@ ClassMethod IncidentDecide(id As %String, seq As %String) As %Status
         Quit ..Fail("409 Conflict", "plan_changed", "planDigest is not the incident plan's digest", extra)
     }
     Set comment = ##class(Shutter.Util.Json).Str(body, "comment")
-    Set result = ##class(Shutter.Util.Workflow).Decide(id _ $SELECT(seq '= "": "/" _ seq, 1: ""), $SELECT(decision = "reject": "Reject", 1: "Approve"), ..User(), comment)
+    // The decider is the signed-in user, never a name from the body; the task takes the digest the body named (CONTRACTS 5).
+    Set result = ##class(Shutter.Util.Workflow).Decide(id _ $SELECT(seq '= "": "/" _ seq, 1: ""), $SELECT(decision = "reject": "Reject", 1: "Approve"), digest, comment)
     Set out = ##class(Shutter.Util.Json).Parse(result, .psc)
     If '$ISOBJECT(out) Set out = {"result": (result)}
-    If out.%GetTypeOf("error") '= "unassigned" Quit ..Fail("409 Conflict", "wrong_state", out.error)
+    If out.%GetTypeOf("error") '= "unassigned" {
+        If $LISTFIND($LISTBUILD("not_in_role", "forbidden"), ##class(Shutter.Util.Json).Str(out, "code")) Quit ..Fail("403 Forbidden", "forbidden", out.error)
+        Quit ..Fail("409 Conflict", "wrong_state", out.error)
+    }
     Set reply = {}
-    Set reply.taskId = out."task_id", reply.decision = decision, reply.incidentId = id
+    Set reply.taskId = out."task_id", reply.decision = decision, reply.incidentId = id, reply.approver = out.user
     If seq '= "" Set reply.chainSeq = +seq
     Set text = reply.%ToJSON()
     Do ..Remember(bodyText, "202 Accepted", text)

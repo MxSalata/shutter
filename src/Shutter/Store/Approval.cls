@@ -1,6 +1,7 @@
 /// A person's decision on an exact plan. It binds the plan digest, the snapshot digest, the gate
 /// policy version, the rehearsal and the receiver version it expects, and it expires. Anything
-/// that changes those makes it invalid; it can also be revoked.
+/// that changes those makes it invalid; it can also be revoked. For an item released under an incident's approval it
+/// also binds the incident plan's digest and the catalogue entry and outcome that approval covered for the item.
 Class Shutter.Store.Approval Extends (%Persistent, %JSON.Adaptor)
 {
 
@@ -49,10 +50,21 @@ Property WorkflowTaskId As %String(%JSONFIELDNAME = "workflowTaskId", MAXLEN = 5
 
 Property Comment As %String(%JSONFIELDNAME = "comment", MAXLEN = 2000);
 
+/// Set only for an approval that stands in for an incident's or a chain's (CONTRACTS 7.4): the incident plan's digest
+/// the person bound, and the catalogue entry and outcome that plan listed for this item. The dispatch gate refuses the
+/// approval when the case's plan or its fresh evidence names another entry or outcome, or the incident's plan moved.
+Property IncidentPlanDigest As %String(%JSONFIELDNAME = "incidentPlanDigest", MAXLEN = 80);
+
+Property BoundEntry As %String(%JSONFIELDNAME = "boundEntry", MAXLEN = 16);
+
+Property BoundOutcome As %String(%JSONFIELDNAME = "boundOutcome", MAXLEN = 32);
+
 ClassMethod Create(case As Shutter.Store.Case, plan As Shutter.Store.Plan, snapshot As Shutter.Store.Snapshot, policyVersion As %String, rehearsal As Shutter.Store.Rehearsal, expectedVersion As %Integer, approver As %String, decision As %String, comment As %String, workflowTaskId As %String, validSeconds As %Integer, Output a As Shutter.Store.Approval, epoch As %Integer = "") As %Status
 {
     Set a = ..%New()
-    Set a.Case = case, a.Plan = plan, a.PlanDigest = plan.Digest
+    // By id, not the caller's copy: a save of the approval never writes the case whole.
+    Do a.CaseSetObjectId(case.%Id())
+    Set a.Plan = plan, a.PlanDigest = plan.Digest
     Set a.SnapshotDigest = $SELECT($ISOBJECT(snapshot): snapshot.Digest, 1: "")
     Set a.MaterialDigest = $SELECT($ISOBJECT(snapshot): snapshot.MaterialDigest, 1: "")
     Set a.PolicyVersion = policyVersion
@@ -67,6 +79,14 @@ ClassMethod Create(case As Shutter.Store.Case, plan As Shutter.Store.Plan, snaps
     Quit a.%Save()
 }
 
+/// Bind an approval given under an incident's to what that approval covered for this item (7.4): the incident plan's
+/// digest, and the item's catalogue entry and outcome as the plan listed them.
+Method BindIncident(digest As %String, entry As %String, outcome As %String) As %Status
+{
+    Set ..IncidentPlanDigest = digest, ..BoundEntry = entry, ..BoundOutcome = outcome
+    Quit ..%Save()
+}
+
 /// Why the approval cannot authorise a dispatch now, or "" when it can.
 Method InvalidReason(plan As Shutter.Store.Plan, snapshot As Shutter.Store.Snapshot, policyVersion As %String, receiverVersion As %Integer, receiverEpoch As %Integer = "") As %String
 {
@@ -74,6 +94,14 @@ Method InvalidReason(plan As Shutter.Store.Plan, snapshot As Shutter.Store.Snaps
     If ..Revoked Quit "revoked"
     If ##class(Shutter.Util.Time).NowUTC() ]] ..ExpiresAt Quit "expired"
     If ..PlanDigest '= plan.Digest Quit "plan_changed"
+    // An approval given under an incident's covers one entry and outcome for the item, and that incident's plan (7.4).
+    If ..IncidentPlanDigest '= "" {
+        Set inc = $SELECT($ISOBJECT(..Case): ..Case.Incident, 1: "")
+        If '$ISOBJECT(inc) || (inc.PlanDigest '= ..IncidentPlanDigest) Quit "incident_plan_changed"
+        If plan.CatalogueEntry '= ..BoundEntry Quit "item_changed"
+        Set cat = $SELECT($ISOBJECT(snapshot): snapshot.SummaryObject().%Get("catalogue"), 1: "")
+        If '$ISOBJECT(cat) || (##class(Shutter.Util.Json).Str(cat, "entry") '= ..BoundEntry) || (##class(Shutter.Util.Json).Str(cat, "outcome") '= ..BoundOutcome) Quit "item_changed"
+    }
     // A refreshed snapshot keeps the approval when nothing material changed (A7).
     If $ISOBJECT(snapshot) && (..SnapshotDigest '= snapshot.Digest) && ((..MaterialDigest = "") || (..MaterialDigest '= snapshot.MaterialDigest)) Quit "snapshot_changed"
     If ..PolicyVersion '= policyVersion Quit "policy_changed"
@@ -153,6 +181,15 @@ Storage Default
 </Value>
 <Value name="20">
 <Value>MaterialDigest</Value>
+</Value>
+<Value name="21">
+<Value>IncidentPlanDigest</Value>
+</Value>
+<Value name="22">
+<Value>BoundEntry</Value>
+</Value>
+<Value name="23">
+<Value>BoundOutcome</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.ApprovalD</DataLocation>

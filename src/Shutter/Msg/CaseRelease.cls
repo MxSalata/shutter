@@ -35,6 +35,12 @@ Property ApprovalRef As %String(MAXLEN = 50);
 /// The incident plan's digest the approval bound.
 Property PlanDigest As %String(MAXLEN = 80);
 
+/// The catalogue entry and outcome the chain bound for this item (ChainItem.Entry, CatalogueOutcome): the incident's
+/// approval covers exactly these (CONTRACTS 7.3).
+Property Entry As %String(MAXLEN = 16);
+
+Property Outcome As %String(MAXLEN = 32);
+
 Storage Default
 {
 <Data name="CaseReleaseDefaultData">
@@ -71,6 +77,12 @@ Storage Default
 </Value>
 <Value name="11">
 <Value>PlanDigest</Value>
+</Value>
+<Value name="12">
+<Value>Entry</Value>
+</Value>
+<Value name="13">
+<Value>Outcome</Value>
 </Value>
 </Data>
 <DefaultData>CaseReleaseDefaultData</DefaultData>

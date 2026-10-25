@@ -32,8 +32,9 @@ Property QuietSeconds As %Integer(%JSONFIELDNAME = "quietSeconds");
 /// The last failure's time, for the quiet period.
 Property LastFailureAt As %String(%JSONFIELDNAME = "lastFailureAt", MAXLEN = 30);
 
-/// The plan's digest (7.2): the chains' operation keys in order, their payload digests, each chain's first
-/// expected version, the receiver's epoch, the catalogue, site profile and gate policy versions.
+/// The plan's digest (7.2): the SHA-256 of the recorded plan in canonical JSON (BuildPlan), which binds every chain and
+/// item as listed (each item's case, operation key, payload digest, catalogue entry, outcome and the version it goes
+/// at), the receiver's epoch and the catalogue, site profile and gate policy versions.
 Property PlanDigest As %String(%JSONFIELDNAME = "planDigest", MAXLEN = 80);
 
 Property PlanJSON As %String(%JSONINCLUDE = "none", MAXLEN = "");
@@ -188,6 +189,61 @@ Method Progress() As %DynamicObject
     }
     Set o.chains = n, o.cases = ..CaseCount(), o.byKind = byKind, o.byState = byState
     Quit o
+}
+
+/// The plan (CONTRACTS 7.2) and its digest. The plan lists every chain with its kind, who decides it, its policy, its
+/// entries and its items in order (case id, operation key, payload digest, catalogue entry, outcome, who decides, and
+/// the receiver version the item goes at: the chain's first expected version for the first item of a chain a person
+/// approves, null otherwise, since the rest go at the version the previous item verifies and an automatic or board
+/// chain's first item goes on fresh evidence), with the receiver's epoch and the catalogue, site profile and gate
+/// policy versions. The digest is the SHA-256 of that plan as recorded, in canonical JSON (Shutter.Util.Digest.OfObject,
+/// as the case plan's digest is made), so GET /incidents/{id}.plan without its digest member recomputes it and every
+/// item's case, entry and outcome are bound. Built once the chains are classified, before their states are decided.
+Method BuildPlan(policyVersion As %String) As %Status
+{
+    Set json = "Shutter.Util.Json"
+    Set profile = ##class(Shutter.Store.SiteProfile).Current()
+    Set ..CatalogueVersion = ##class(Shutter.Catalogue.Entry).CatalogueVersion()
+    Set ..ProfileVersion = $CLASSMETHOD(json, "Str", profile, "version", 0)
+    Set ..PolicyVersion = policyVersion
+    Set plan = {}
+    Set plan."incident_id" = ..IncidentId, plan.receiver = ..Receiver, plan.mode = ..Mode
+    Set plan.chains = [], epoch = ""
+    Set chains = ..ChainList()
+    For i = 1:1:chains.Count() {
+        Set ch = chains.GetAt(i)
+        Set co = {}
+        Set co.seq = ch.Seq, co."encounter_id" = ch.EncounterId, co."patient_id" = ch.PatientId, co.kind = ch.Kind
+        Set co.decides = ch.Decides, co.policy = ch.Policy, co.entries = ch.Entries
+        Do co.%Set("first_expected_version", ch.FirstExpectedVersion, $SELECT(ch.FirstExpectedVersion = "": "null", 1: "number"))
+        Set co.items = []
+        // The first item of a chain a person approves goes at the chain's first expected version (7.4); every other
+        // item goes at the version the previous one verifies, or on fresh evidence, which the plan cannot know yet.
+        Set first = $SELECT((ch.Policy = "approval") || (ch.Policy = "per_chain"): ch.FirstExpectedVersion, 1: "")
+        Set items = ch.Items()
+        Set it = items.%GetIterator()
+        While it.%GetNext(.k, .item) {
+            Set c = ##class(Shutter.Store.Case).ByCaseId(item.%Get("caseId"))
+            Set summary = $SELECT($ISOBJECT(c) && $ISOBJECT(c.CurrentSnapshot): c.CurrentSnapshot.SummaryObject(), 1: {})
+            Set payload = $CLASSMETHOD(json, "Str", summary.%Get("operation"), "payload_digest")
+            If epoch = "" Set epoch = $CLASSMETHOD(json, "Str", summary, "epoch")
+            Set io = {}
+            Set io.position = item.%Get("position"), io."case_id" = item.%Get("caseId"), io."event" = item.%Get("event"), io."event_time" = item.%Get("eventTime")
+            Set io."operation_key" = item.%Get("operationKey"), io."payload_digest" = payload, io.entry = item.%Get("entry"), io.outcome = item.%Get("outcome")
+            Set io.decides = item.%Get("decides")
+            Set expected = $SELECT(item.%Get("position") = 1: first, 1: "")
+            Do io.%Set("expected_version", expected, $SELECT(expected = "": "null", 1: "number"))
+            Do co.items.%Push(io)
+        }
+        Do plan.chains.%Push(co)
+    }
+    Do plan.%Set("receiver_epoch", epoch, $SELECT(epoch = "": "null", 1: "number"))
+    Set plan."catalogue_version" = ..CatalogueVersion, plan."site_profile_version" = ..ProfileVersion, plan."gate_policy_version" = ..PolicyVersion
+    // The digest is of the plan without itself; the plan then records it.
+    Set plan.digest = ##class(Shutter.Util.Digest).OfObject(plan)
+    Set ..PlanJSON = plan.%ToJSON(), ..PlanDigest = plan.digest
+    If epoch '= "" Set ..ReceiverEpoch = epoch
+    Quit ..%Save()
 }
 
 /// The approvals given: the incident's own and each chain's.

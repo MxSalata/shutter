@@ -4,9 +4,11 @@
 /// from a resend that passes every check and change only what the row is about: "case", "summary" and "plan" are merged
 /// into the defaults ("{key}" stands for the case's operation key, null removes a field), "approval" makes an approval
 /// for the plan (the request is then at dispatch, otherwise at proposal), "request" sets the gate request's fields (its
-/// "stage" names another stage), "profile" changes the site profile for the row only. The cases
+/// "stage" names another stage), "profile" changes the site profile for the row only, "incident" makes an incident with
+/// that plan digest and puts the case in it (an approval may then carry "incident_plan_digest", "bound_entry" and
+/// "bound_outcome", what an incident's approval covered for the item). The cases
 /// are named UT-GATE-..., never take a public case number, and are deleted with everything the gate recorded for them
-/// after each test; the site profile is put back as it was.
+/// after each test, as the incidents are; the site profile is put back as it was.
 Class Shutter.Test.Gate Extends %UnitTest.TestCase
 {
 
@@ -14,6 +16,9 @@ Parameter EVENTTIME = "2026-10-19T09:00:00Z";
 
 /// The case rows made by the current test, for the clean-up.
 Property Made As %String [ MultiDimensional ];
+
+/// The incident rows made by the current test.
+Property MadeIncidents As %String [ MultiDimensional ];
 
 /// The stored site profile's text before a row changed it, and whether there was a stored row at all.
 Property SavedProfile As %String;
@@ -27,6 +32,8 @@ Method OnBeforeAllTests() As %Status
     // Rows a run that stopped half-way may have left.
     Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Shutter_Store.""Case"" WHERE CaseId %STARTSWITH 'UT-GATE-'")
     While rs.%Next() { Do ..Purge(rs.%Get("ID")) }
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Shutter_Store.Incident WHERE IncidentId %STARTSWITH 'UT-GATE-I-'")
+    While rs.%Next() { Do ..PurgeIncident(rs.%Get("ID")) }
     Quit $$$OK
 }
 
@@ -40,6 +47,13 @@ Method OnAfterOneTest() As %Status
         Do ..Purge(id)
     }
     Kill i%Made
+    Set id = ""
+    For {
+        Set id = $ORDER(i%MadeIncidents(id))
+        Quit:id=""
+        Do ..PurgeIncident(id)
+    }
+    Kill i%MadeIncidents
     Quit $$$OK
 }
 
@@ -223,6 +237,16 @@ Method Run(row As %DynamicObject) As %DynamicObject
     If row.%IsDefined("profile") Do ..ChangeProfile(row.profile)
     Set case = ..NewCase($SELECT(row.%IsDefined("case"): row.case, 1: {}))
     Set key = case.OperationKey
+    // The incident an approval of the row stands on, when it has one: the case joins it.
+    If row.%IsDefined("incident") {
+        Set inc = ##class(Shutter.Store.Incident).%New()
+        Set inc.IncidentId = "UT-GATE-I-" _ $JOB _ "-" _ $INCREMENT(^||Shutter.Test.Gate)
+        Set inc.Receiver = case.Receiver, inc.Mode = "policy", inc.State = "releasing", inc.OpenedAt = case.OpenedAt
+        Set inc.PlanDigest = ##class(Shutter.Util.Json).Str(row.incident, "plan_digest")
+        Do $$$AssertStatusOK(inc.%Save(), row.name _ ": the incident is saved")
+        Set i%MadeIncidents(inc.%Id()) = ""
+        Do $$$AssertStatusOK(case.SetIncident(inc), row.name _ ": the case belongs to the incident")
+    }
     // The summary the evidence collection would have made, with the row's changes.
     Set summary = ..Fill(..BaseSummary(), key)
     If row.%IsDefined("summary") Do ..Merge(summary, ..Fill(row.summary, key))
@@ -262,6 +286,7 @@ Method Run(row As %DynamicObject) As %DynamicObject
         If a.%IsDefined("policy_version") Set approval.PolicyVersion = a."policy_version"
         If a.%IsDefined("site_profile_version") Set approval.SiteProfileVersion = a."site_profile_version"
         Do approval.%Save()
+        If a.%IsDefined("incident_plan_digest") Do $$$AssertStatusOK(approval.BindIncident(a."incident_plan_digest", ##class(Shutter.Util.Json).Str(a, "bound_entry"), ##class(Shutter.Util.Json).Str(a, "bound_outcome")), row.name _ ": the approval is bound to the incident's")
         Set req.ApprovalId = approval.%Id()
     }
     Set gate = ##class(Shutter.Operation.Gate).%New("Shutter Gate (unit test)")
@@ -400,6 +425,14 @@ ClassMethod Purge(id As %String)
     Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.Snapshot WHERE ""Case"" = ?", id)
     Do ##class(Shutter.Store.Case).%DeleteId(id)
     Kill ^Shutter.Counter("event", id), ^Shutter.Counter("plan", id), ^Shutter.Counter("snapshot", id)
+}
+
+/// Deletes a test incident; its cases are purged by their own rows.
+ClassMethod PurgeIncident(id As %String)
+{
+    Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.IncidentEvent WHERE Incident = ?", id)
+    Do ##class(Shutter.Store.Incident).%DeleteId(id)
+    Kill ^Shutter.Counter("incidentEvent", id)
 }
 
 /// A method's source, as one string.
@@ -649,6 +682,36 @@ XData Rows [ MimeType = application/json ]
    "plan": {"created_by": "policy:"}, "approval": {"approver": "policy"},
    "profile": {"policy": {"2": {"single": "automatic"}}},
    "expect": [["authorization", "block", "APPROVAL_PLAN_ORIGIN"]]},
+  {"group": "authorization", "name": "an approval under an incident, for the item it bound",
+   "incident": {"plan_digest": "sha256:ut-incident"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend"},
+   "expect": [["authorization", "pass", "APPROVAL_VALID"], ["catalogue", "pass", "ENTRY_MATCHED"]], "outcome": "pass"},
+  {"group": "authorization", "name": "an approval under an incident whose item now follows another entry",
+   "incident": {"plan_digest": "sha256:ut-incident"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E4", "bound_outcome": "resend_chain"},
+   "expect": [["authorization", "block", "APPROVAL_ITEM_CHANGED"]], "outcome": "block"},
+  {"group": "authorization", "name": "an approval under an incident whose fresh evidence no longer matches the bound entry",
+   "incident": {"plan_digest": "sha256:ut-incident"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E3", "outcome": "reconcile", "matches": [{"id": "E3", "preferred": {"outcome": "reconcile"}}]}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend"},
+   "expect": [["authorization", "block", "APPROVAL_ITEM_CHANGED"]], "outcome": "block"},
+  {"group": "authorization", "name": "an approval under an incident whose fresh evidence reads another outcome for the same entry",
+   "incident": {"plan_digest": "sha256:ut-incident"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend_chain", "matches": [{"id": "E2", "preferred": {"outcome": "resend_chain"}}]}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend"},
+   "expect": [["authorization", "block", "APPROVAL_ITEM_CHANGED"]]},
+  {"group": "authorization", "name": "an approval under an incident whose plan was built again",
+   "incident": {"plan_digest": "sha256:ut-incident"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "approval": {"incident_plan_digest": "sha256:an-earlier-incident-plan", "bound_entry": "E2", "bound_outcome": "resend"},
+   "expect": [["authorization", "block", "APPROVAL_INCIDENT_PLAN_CHANGED"]], "outcome": "block"},
+  {"group": "authorization", "name": "an approval under an incident the case no longer belongs to",
+   "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend"},
+   "expect": [["authorization", "block", "APPROVAL_INCIDENT_PLAN_CHANGED"]]},
 
   {"group": "concurrency", "name": "a write that names no receiver version",
    "plan": {"action": {"expected_version": null}},

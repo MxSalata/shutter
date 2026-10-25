@@ -82,6 +82,12 @@ Property IncidentApprovalRef As %String(MAXLEN = 50);
 
 Property IncidentPlanDigest As %String(MAXLEN = 80);
 
+/// The catalogue entry and outcome the incident's approval bound for this item (CONTRACTS 7.3): fresh evidence that
+/// reads otherwise is not covered by it.
+Property IncidentEntry As %String(MAXLEN = 16);
+
+Property IncidentOutcome As %String(MAXLEN = 32);
+
 Property IncidentTarget As %String(MAXLEN = 128) [ InitialExpression = "Incident Workflow" ];
 
 /// Seconds a board round, or the coordinator, may take before the case goes on without the missing answers.
@@ -609,6 +615,13 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
 {
     Set json = "Shutter.Util.Json"
     Set entry = $CLASSMETHOD(json, "Str", cat, "entry"), outcome = $CLASSMETHOD(json, "Str", cat, "outcome")
+    // An item released under the incident's approval was approved as one entry and outcome (7.3, 7.4): fresh evidence
+    // that reads otherwise is not covered, so nothing is planned under that approval and the chain stops here. The
+    // dispatch gate checks the same binding on the approval record (Shutter.Store.Approval.InvalidReason).
+    If ..Release && (..ReleasePolicy = "incident") && ((entry '= ..IncidentEntry) || (outcome '= ..IncidentOutcome)) {
+        Set case.Headline = "Not covered by the incident's approval: fresh evidence matches " _ entry _ " " _ outcome _ ", the approval bound " _ ..IncidentEntry _ " " _ ..IncidentOutcome
+        Quit case.Transition("blocked", "Not covered by the approval of incident " _ ..IncidentId _ ": chain " _ ..ChainSeq _ " item " _ ..ChainPosition _ " was approved as " _ ..IncidentEntry _ " (" _ ..IncidentOutcome _ "), but its fresh evidence matches " _ entry _ " (" _ outcome _ "); nothing was dispatched, and a person must look", "system", "incident:" _ ..IncidentId)
+    }
     Set tier = ##class(Shutter.Store.SiteProfile).TierOf($SELECT(case.Receiver '= "": case.Receiver, 1: ..WardTarget))
     Set kind = $SELECT(..Release: ..ChainKind, 1: $CLASSMETHOD(json, "Str", cat.%Get("conditions"), "chain", "single"))
     Set ..Policy = ##class(Shutter.Store.SiteProfile).Policy(tier, kind)
@@ -873,14 +886,22 @@ Method OnRehearsal(case As Shutter.Store.Case, result As Shutter.Msg.WardResult)
     If ..Policy = "incident" Quit ..ReleaseByIncident(case, plan, r)
     Set sc = case.Transition("awaiting_approval", "Rehearsal passed; asking an approver for the exact plan", "system", "rehearsal:" _ r.%Id())
     Quit:$$$ISERR(sc) sc
+    Quit ..SendRequestAsync(..ApprovalTarget, ..ApprovalTask(case, plan), 1, "approval")
+}
+
+/// The approval task for a case's plan (CONTRACTS 6.4). Its PlanDigest form value starts empty: the decider supplies
+/// the digest (the API from the body it checked, an approver in the Workflow inbox by pasting it from this message),
+/// and OnApproval blocks the case when the answer carries none, or another one.
+ClassMethod ApprovalTask(case As Shutter.Store.Case, plan As Shutter.Store.Plan) As EnsLib.Workflow.TaskRequest
+{
     Set task = ##class(EnsLib.Workflow.TaskRequest).%New()
     Set task.%Actions = "Approve,Reject"
     Set task.%Subject = "Shutter " _ case.CaseId _ ": approve plan v" _ plan.Version _ " (" _ plan.Disposition _ ")"
     Set task.%Message = case.Headline _ $CHAR(10) _ "Exact action: " _ plan.ActionType _ " " _ plan.OperationKey _ " at receiver version " _ plan.ExpectedVersion _ $CHAR(10) _ "Plan digest: " _ plan.Digest _ $CHAR(10) _ "Snapshot digest: " _ $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.Digest, 1: "") _ $CHAR(10) _ "Rehearsal: would apply (rolled back)."
+    Set task.%Message = task.%Message _ $CHAR(10) _ "To approve from the Workflow inbox, paste the plan digest above into the PlanDigest field: an approval with no digest, or another one, binds nothing and blocks the case."
     Set task.%Priority = 2
     Set task.%FormFields = "PlanDigest,Comment"
-    Do task.%FormValues.SetAt(plan.Digest, "PlanDigest")
-    Quit ..SendRequestAsync(..ApprovalTarget, task, 1, "approval")
+    Quit task
 }
 
 /// The automatic release (CONTRACTS 6.4): no Workflow task; an approval by "policy" binds the same things a
@@ -937,6 +958,7 @@ Method OnRelease(request As Shutter.Msg.CaseRelease, Output response As %Library
     Set ..ChainKind = $SELECT(request.ChainKind = "": "single", 1: request.ChainKind), ..ChainDecides = request.Decides
     Set ..ExpectedVersion = request.ExpectedVersion, ..ReleasePolicy = request.ReleasePolicy
     Set ..IncidentApprover = request.Approver, ..IncidentApprovalRef = request.ApprovalRef, ..IncidentPlanDigest = request.PlanDigest
+    Set ..IncidentEntry = request.Entry, ..IncidentOutcome = request.Outcome
     Set case.WorkflowSessionId = ..%SessionId
     Do case.%Save()
     Set how = $CASE(..ReleasePolicy, "automatic": "automatic by site policy", "incident": "under the incident's approval by " _ ..IncidentApprover, : "on its own path")
@@ -1030,11 +1052,14 @@ Method WithheldToPerson(case As Shutter.Store.Case) As %Status
 }
 
 /// A released item authorised by the incident's approval (CONTRACTS 7.3): an approval record naming the approver,
-/// the task and the incident plan digest they bound, then the preflight read and the dispatch gate as for any approval.
+/// the task, the incident plan digest they bound and the entry and outcome that plan listed for the item, then the
+/// preflight read and the dispatch gate as for any approval.
 Method ReleaseByIncident(case As Shutter.Store.Case, plan As Shutter.Store.Plan, rehearsal As Shutter.Store.Rehearsal) As %Status
 {
-    Set comment = "Under the approval of incident " _ ..IncidentId _ " by " _ ..IncidentApprover _ " (task " _ ..IncidentApprovalRef _ ", incident plan digest " _ $EXTRACT(..IncidentPlanDigest, 1, 19) _ "): chain " _ ..ChainSeq _ " item " _ ..ChainPosition _ ", " _ ..ChainKind _ "; catalogue " _ ..CatalogueEntry _ " " _ ..CatalogueOutcome _ $SELECT(..ExpectedVersion '= "": "; expected version " _ ..ExpectedVersion, 1: "")
+    Set comment = "Under the approval of incident " _ ..IncidentId _ " by " _ ..IncidentApprover _ " (task " _ ..IncidentApprovalRef _ ", incident plan digest " _ $EXTRACT(..IncidentPlanDigest, 1, 19) _ "): chain " _ ..ChainSeq _ " item " _ ..ChainPosition _ ", " _ ..ChainKind _ "; approved as " _ ..IncidentEntry _ " " _ ..IncidentOutcome _ ", catalogue " _ ..CatalogueEntry _ " " _ ..CatalogueOutcome _ $SELECT(..ExpectedVersion '= "": "; expected version " _ ..ExpectedVersion, 1: "")
     Set sc = ##class(Shutter.Store.Approval).Create(case, plan, case.CurrentSnapshot, ##class(Shutter.Operation.Gate).#POLICYVERSION, rehearsal, plan.ExpectedVersion, ..IncidentApprover, "approved", comment, ..IncidentApprovalRef, ..ApprovalValidSeconds, .a, ..ReceiverEpoch)
+    Quit:$$$ISERR(sc) sc
+    Set sc = a.BindIncident(..IncidentPlanDigest, ..IncidentEntry, ..IncidentOutcome)
     Quit:$$$ISERR(sc) sc
     Set ..ApprovalId = a.%Id()
     Set case.CurrentApproval = a
@@ -1330,6 +1355,12 @@ Storage Default
 </Value>
 <Value name="39">
 <Value>Round</Value>
+</Value>
+<Value name="40">
+<Value>IncidentEntry</Value>
+</Value>
+<Value name="41">
+<Value>IncidentOutcome</Value>
 </Value>
 </Data>
 <DefaultData>CaseWorkflowDefaultData</DefaultData>
