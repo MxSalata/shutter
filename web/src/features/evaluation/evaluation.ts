@@ -132,3 +132,31 @@ export function passName(p: EvaluationPass): string {
   if (p.rounds > 1) parts.push(`pass ${p.round}`);
   return parts.join(' ');
 }
+
+/** A played outcome that was compared with the expected one: as expected or not. */
+const compared = (status: string | undefined) => status === 'as expected' || status === 'differs';
+
+/**
+ * How often a way of playing (`rules`, `board_live`) ended as expected end to end, over the scored passes that were
+ * played the way `over` names (by default the same way), so two ways can be set side by side on one set of passes.
+ */
+export function played(data: Evaluation, how: string, over = how): { matches: number; of: number } {
+  const passes = data.passes.filter((p) => p.scored && compared(p.played?.[over]?.status));
+  return {
+    matches: passes.filter((p) => p.played?.[how]?.status === 'as expected').length,
+    of: passes.length,
+  };
+}
+
+/** The pass's played outcomes in words, for the plan's cell: the board's live run and rules alone. */
+export function playedLine(p: EvaluationPass): string {
+  // A pass that is not scored was planned again: the case's outcome belongs to its last pass
+  if (!p.scored) return '';
+  const words = (st: string | undefined) =>
+    st === 'as expected' ? 'as expected' : st === 'differs' ? 'not as expected' : '';
+  const board = words(p.played?.board_live?.status);
+  const rules = words(p.played?.rules?.status);
+  return [board ? `Played by the board: ${board}` : '', rules ? `by rules alone: ${rules}` : '']
+    .filter(Boolean)
+    .join('; ');
+}

@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import evaluation from '../../../../docs/readme/evaluation.json';
 import evaluationText from '../../../../docs/readme/evaluation.md?raw';
-import { notYetMeasured, passName, type Evaluation, type EvaluationPass } from './evaluation';
+import {
+  notYetMeasured,
+  passName,
+  played,
+  playedLine,
+  type Evaluation,
+  type EvaluationPass,
+} from './evaluation';
 
 const data = evaluation as unknown as Evaluation;
 
@@ -46,5 +53,27 @@ describe('the evaluation', () => {
     expect(
       passName({ ...base, scenario: 'S11', incident: true, encounter: 'ENC-1103', event: 'transfer' }),
     ).toBe('S11 ENC-1103 transfer');
+  });
+});
+
+describe('the played outcomes', () => {
+  it('counts rules alone over the scored passes that were played with rules alone', () => {
+    // The two S11 incident passes were not played end to end, and S7's first pass is not scored
+    expect(played(data, 'rules')).toEqual({ matches: 4, of: 11 });
+  });
+
+  it('counts the board on the same passes as rules alone, so the two figures compare like with like', () => {
+    expect(played(data, 'board_live', 'rules')).toEqual({ matches: 11, of: 11 });
+  });
+
+  it("says how a scored pass ended when played, and nothing for one that wasn't or isn't scored", () => {
+    const s1 = data.passes.find((p) => p.scenario === 'S1')!;
+    expect(playedLine(s1)).toBe('Played by the board: as expected; by rules alone: not as expected');
+    const s2 = data.passes.find((p) => p.scenario === 'S2')!;
+    expect(playedLine(s2)).toBe('Played by the board: as expected; by rules alone: as expected');
+    const unscored = data.passes.find((p) => p.scenario === 'S7' && !p.scored)!;
+    expect(playedLine(unscored)).toBe('');
+    const incident = data.passes.find((p) => p.scenario === 'S11')!;
+    expect(playedLine(incident)).toBe('');
   });
 });

@@ -5,10 +5,13 @@ import boundary from '../../../../docs/readme/boundary.json';
 import { PageHeader } from '@/components/PageHeader';
 import { KeyValueList } from '@/components/KeyValueList';
 import { DispositionBadge } from '@/components/StateBadge';
+import { StackTable } from '@/components/StackTable';
 import { formatDuration, formatInt, formatUsd, formatUtc, humanize } from '@/lib/format';
 import {
   notYetMeasured,
   passName,
+  played,
+  playedLine,
   SPECIALISTS,
   type BoundaryChecks,
   type Evaluation,
@@ -90,28 +93,6 @@ function tokens(p: EvaluationPass): string {
   return parts.join(' · ');
 }
 
-/** How often a way of playing gave the expected outcome end to end, over the scored passes the comparison covers. */
-function played(data: Evaluation, how: string): { matches: number; of: number } {
-  const statuses = data.passes
-    .filter((p) => p.scored)
-    .map((p) => p.played?.[how]?.status)
-    .filter((st) => st === 'as expected' || st === 'differs');
-  return { matches: statuses.filter((st) => st === 'as expected').length, of: statuses.length };
-}
-
-/** The pass's played outcomes in words, for the plan's cell: the board's live run and rules alone. */
-function playedLine(p: EvaluationPass): string {
-  // A pass that is not scored was planned again: the case's outcome belongs to its last pass
-  if (!p.scored) return '';
-  const words = (st: string | undefined) =>
-    st === 'as expected' ? 'as expected' : st === 'differs' ? 'not as expected' : '';
-  const board = words(p.played?.board_live?.status);
-  const rules = words(p.played?.rules?.status);
-  return [board ? `Played by the board: ${board}` : '', rules ? `by rules alone: ${rules}` : '']
-    .filter(Boolean)
-    .join('; ');
-}
-
 /**
  * The headline result with its scope and its limits beside it, never further down the page: what the figure counts,
  * which set it was measured on, and what is planned but not yet reported.
@@ -119,6 +100,8 @@ function playedLine(p: EvaluationPass): string {
 function Headline({ data }: { data: Evaluation }) {
   const t = data.totals;
   const rules = played(data, 'rules');
+  // The board played end to end on the same passes as rules alone, so the two figures count one set
+  const board = played(data, 'board_live', 'rules');
   return (
     <Card padding="md" component="section" aria-labelledby="headline-title" data-tour="evaluation-headline">
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
@@ -140,8 +123,8 @@ function Headline({ data }: { data: Evaluation }) {
           </Text>
           <Text size="sm">
             {rules.of
-              ? 'of the same scenarios, played end to end with no agents, ended as expected'
-              : 'no scenario of these passes was played with rules alone'}
+              ? `scored passes played end to end with rules alone, no agents, ended as expected${board.of ? `; played the same way, the board ended as expected in ${board.matches} of the same ${board.of}` : ''}`
+              : 'no scored pass was played with rules alone'}
           </Text>
         </Stack>
         <Stack gap={2}>
@@ -270,90 +253,90 @@ export default function EvaluationPage({
           </Text>
           {/* On a phone each pass is a card, every column under its name */}
           <Table.ScrollContainer minWidth={960} className="stack-scroll">
-            <Table verticalSpacing="xs" className="stack-table">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Pass</Table.Th>
-                  <Table.Th>Expected</Table.Th>
-                  <Table.Th>Conformance</Table.Th>
-                  <Table.Th>Encounter</Table.Th>
-                  <Table.Th>Impact</Table.Th>
-                  <Table.Th>Plan</Table.Th>
-                  <Table.Th>Entry</Table.Th>
-                  <Table.Th>Agreement</Table.Th>
-                  <Table.Th>Cost and tokens</Table.Th>
-                  <Table.Th>Elapsed</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
+            <StackTable verticalSpacing="xs" className="stack-table">
+              <StackTable.Thead>
+                <StackTable.Tr>
+                  <StackTable.Th>Pass</StackTable.Th>
+                  <StackTable.Th>Expected</StackTable.Th>
+                  <StackTable.Th>Conformance</StackTable.Th>
+                  <StackTable.Th>Encounter</StackTable.Th>
+                  <StackTable.Th>Impact</StackTable.Th>
+                  <StackTable.Th>Plan</StackTable.Th>
+                  <StackTable.Th>Entry</StackTable.Th>
+                  <StackTable.Th>Agreement</StackTable.Th>
+                  <StackTable.Th>Cost and tokens</StackTable.Th>
+                  <StackTable.Th>Elapsed</StackTable.Th>
+                </StackTable.Tr>
+              </StackTable.Thead>
+              <StackTable.Tbody>
                 {data.passes.map((p) => (
-                  <Table.Tr key={passName(p)}>
-                    <Table.Td>
+                  <StackTable.Tr key={passName(p)}>
+                    <StackTable.Td>
                       <Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>
                         {passName(p)}
                       </Text>
                       <Text size="xs" c="dimmed">
                         {p.title}
                       </Text>
-                    </Table.Td>
-                    <Table.Td data-label="Expected">
+                    </StackTable.Td>
+                    <StackTable.Td data-label="Expected">
                       <Text size="sm">{expected(p)}</Text>
-                    </Table.Td>
+                    </StackTable.Td>
                     {SPECIALISTS.map((s) => (
-                      <Table.Td key={s} data-label={humanize(s)}>
+                      <StackTable.Td key={s} data-label={humanize(s)}>
                         <MemberCell m={p.members[s]} p={p} plan={false} />
-                      </Table.Td>
+                      </StackTable.Td>
                     ))}
-                    <Table.Td data-label="Plan">
+                    <StackTable.Td data-label="Plan">
                       <MemberCell m={p.members.coordinator} p={p} plan />
                       {playedLine(p) ? (
                         <Text size="xs" c="dimmed">
                           {playedLine(p)}
                         </Text>
                       ) : null}
-                    </Table.Td>
-                    <Table.Td data-label="Entry">
+                    </StackTable.Td>
+                    <StackTable.Td data-label="Entry">
                       <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
                         {p.catalogue_entry || '-'}
                         {p.entry_decides ? ` (${p.entry_decides})` : ''}
                       </Text>
-                    </Table.Td>
-                    <Table.Td data-label="Agreement">
+                    </StackTable.Td>
+                    <StackTable.Td data-label="Agreement">
                       <Text size="sm">{p.agreement}</Text>
-                    </Table.Td>
-                    <Table.Td data-label="Cost and tokens">
+                    </StackTable.Td>
+                    <StackTable.Td data-label="Cost and tokens">
                       <Text size="sm">{formatUsd(p.cost_usd)}</Text>
                       <Text size="xs" c="dimmed">
                         {tokens(p)}
                       </Text>
-                    </Table.Td>
-                    <Table.Td data-label="Elapsed">
+                    </StackTable.Td>
+                    <StackTable.Td data-label="Elapsed">
                       <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
                         {formatDuration(p.elapsed_ms)}
                       </Text>
-                    </Table.Td>
-                  </Table.Tr>
+                    </StackTable.Td>
+                  </StackTable.Tr>
                 ))}
-                <Table.Tr>
-                  <Table.Th>Total</Table.Th>
-                  <Table.Td colSpan={7}>
+                <StackTable.Tr>
+                  <StackTable.Th>Total</StackTable.Th>
+                  <StackTable.Td colSpan={7}>
                     <Text size="sm">{`${t.passes} passes, ${t.runs} runs`}</Text>
-                  </Table.Td>
-                  <Table.Td data-label="Cost and tokens">
+                  </StackTable.Td>
+                  <StackTable.Td data-label="Cost and tokens">
                     <Text size="sm">{formatUsd(t.cost_usd)}</Text>
                     <Text
                       size="xs"
                       c="dimmed"
                     >{`${formatInt(t.prompt_tokens)} in · ${formatInt(t.cache_read_tokens)} cached · ${formatInt(t.cache_write_tokens)} cache written · ${formatInt(t.completion_tokens)} out`}</Text>
-                  </Table.Td>
-                  <Table.Td data-label="Time">
+                  </StackTable.Td>
+                  <StackTable.Td data-label="Time">
                     <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
                       {`${formatDuration(t.agent_ms)} of agent time`}
                     </Text>
-                  </Table.Td>
-                </Table.Tr>
-              </Table.Tbody>
-            </Table>
+                  </StackTable.Td>
+                </StackTable.Tr>
+              </StackTable.Tbody>
+            </StackTable>
           </Table.ScrollContainer>
         </Card>
 
@@ -409,40 +392,40 @@ export default function EvaluationPage({
             {`What ${refusals.script} tries over HTTP against the approval boundary, and the answer each attempt must get. It runs in ${refusals.runs}, and on any instance of your own (it plays the scenarios it names, so not on one someone else is using).`}
           </Text>
           <Table.ScrollContainer minWidth={800} className="stack-scroll">
-            <Table verticalSpacing="xs" className="stack-table">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Attempt</Table.Th>
-                  <Table.Th>Scenario</Table.Th>
-                  <Table.Th>Answer</Table.Th>
-                  <Table.Th>What it proves</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
+            <StackTable verticalSpacing="xs" className="stack-table">
+              <StackTable.Thead>
+                <StackTable.Tr>
+                  <StackTable.Th>Attempt</StackTable.Th>
+                  <StackTable.Th>Scenario</StackTable.Th>
+                  <StackTable.Th>Answer</StackTable.Th>
+                  <StackTable.Th>What it proves</StackTable.Th>
+                </StackTable.Tr>
+              </StackTable.Thead>
+              <StackTable.Tbody>
                 {refusals.checks.map((c) => (
-                  <Table.Tr key={c.id}>
-                    <Table.Td>
+                  <StackTable.Tr key={c.id}>
+                    <StackTable.Td>
                       <Text size="sm" fw={600}>
                         {c.title}
                       </Text>
-                    </Table.Td>
-                    <Table.Td data-label="Scenario">
+                    </StackTable.Td>
+                    <StackTable.Td data-label="Scenario">
                       <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
                         {c.scenario}
                       </Text>
-                    </Table.Td>
-                    <Table.Td data-label="Answer">
+                    </StackTable.Td>
+                    <StackTable.Td data-label="Answer">
                       <Text size="sm" className="mono-wrap">
                         {c.answer}
                       </Text>
-                    </Table.Td>
-                    <Table.Td data-label="What it proves">
+                    </StackTable.Td>
+                    <StackTable.Td data-label="What it proves">
                       <Text size="sm">{c.proves}</Text>
-                    </Table.Td>
-                  </Table.Tr>
+                    </StackTable.Td>
+                  </StackTable.Tr>
                 ))}
-              </Table.Tbody>
-            </Table>
+              </StackTable.Tbody>
+            </StackTable>
           </Table.ScrollContainer>
         </Card>
 

@@ -36,6 +36,78 @@ describe('EvaluationPage', () => {
     expect(screen.getByText(/\$5\.38 at list prices/)).toBeInTheDocument();
   });
 
+  it('sets rules alone beside the board played end to end on the same passes, apart from the proposed action', () => {
+    renderPage();
+    const headline = screen.getByRole('region', { name: 'The board against the expected outcome' });
+    expect(within(headline).getByText('13 of 13')).toBeInTheDocument();
+    expect(
+      within(headline).getByText("scored passes proposed the scenario's expected action"),
+    ).toBeInTheDocument();
+    expect(within(headline).getByText('4 of 11')).toBeInTheDocument();
+    expect(
+      within(headline).getByText(
+        'scored passes played end to end with rules alone, no agents, ended as expected; played the same way, the board ended as expected in 11 of the same 11',
+      ),
+    ).toBeInTheDocument();
+    expect(headline).not.toHaveTextContent('same scenarios');
+  });
+
+  it('says so when no scored pass was played with rules alone', () => {
+    renderPage({ ...recorded, passes: recorded.passes.map((p) => ({ ...p, played: {} })) });
+    const headline = screen.getByRole('region', { name: 'The board against the expected outcome' });
+    expect(within(headline).getByText('Not played')).toBeInTheDocument();
+    expect(within(headline).getByText('no scored pass was played with rules alone')).toBeInTheDocument();
+  });
+
+  it("puts the totals under the table's own columns: the cost under Cost and tokens, the time under Elapsed", () => {
+    renderPage();
+    const table = screen.getByRole('region', { name: 'Per scenario' });
+    const headers = within(table).getAllByRole('columnheader');
+    const columns = headers.map((h) => h.textContent);
+    const total = within(table).getByRole('rowheader', { name: 'Total' }).closest('tr')!;
+    // Each cell starts at the column after the cells before it, counting their spans
+    let at = 0;
+    const starts = Array.from(total.children).map((c) => {
+      const start = at;
+      at += (c as HTMLTableCellElement).colSpan;
+      return start;
+    });
+    expect(at).toBe(columns.length);
+    const [cost, time] = Array.from(total.children).slice(-2);
+    expect(columns[starts[starts.length - 2]]).toBe('Cost and tokens');
+    expect(cost).toHaveTextContent('$5.38');
+    expect(columns[starts[starts.length - 1]]).toBe('Elapsed');
+    expect(time).toHaveTextContent('of agent time');
+  });
+
+  it('keeps the table, its column headers and its cells announced when it stacks on a phone', () => {
+    renderPage();
+    const region = screen.getByRole('region', { name: 'Per scenario' });
+    const table = within(region).getByRole('table');
+    expect(table).toHaveAttribute('role', 'table');
+    expect(within(table).getAllByRole('rowgroup')).toHaveLength(2);
+    expect(within(table).getByRole('columnheader', { name: 'Expected' })).toHaveAttribute(
+      'role',
+      'columnheader',
+    );
+    const row = within(table).getByText('S8').closest('tr')!;
+    expect(row).toHaveAttribute('role', 'row');
+    const cells = within(row).getAllByRole('cell');
+    expect(cells.every((c) => c.getAttribute('role') === 'cell')).toBe(true);
+    // Every cell but the first, which names the pass, carries its column's name for the stacked layout
+    expect(cells.slice(1).map((c) => c.getAttribute('data-label'))).toEqual([
+      'Expected',
+      'Conformance',
+      'Encounter',
+      'Impact',
+      'Plan',
+      'Entry',
+      'Agreement',
+      'Cost and tokens',
+      'Elapsed',
+    ]);
+  });
+
   it("shows each member's disposition and confidence per pass, and marks a view the plan set aside", () => {
     renderPage();
     const table = screen.getByRole('region', { name: 'Per scenario' });
