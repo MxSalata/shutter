@@ -684,7 +684,8 @@ ClassMethod CaseBlockedReason(caseId As %String) As %Status
     If code = "" {
         Set text = ""
         &sql(SELECT TOP 1 Text INTO :text FROM Shutter_Store.CaseEvent WHERE "Case" = :id AND ToState IN ('blocked','escalated') ORDER BY Seq DESC)
-        Set code = $SELECT(text [ "Rejected by": "REJECTED_BY_APPROVER", text [ "rehearsal": "REHEARSAL_WOULD_NOT_APPLY", text [ "refused": "DISPATCH_REFUSED", text [ "person": "ESCALATED", case.State = "escalated": "ESCALATED", 1: "BLOCKED")
+        // A write whose answer was lost (Verify.Judge): not committed, or unknown after the last read, before the generic person clause.
+        Set code = $SELECT(text [ "Rejected by": "REJECTED_BY_APPROVER", text [ "rehearsal": "REHEARSAL_WOULD_NOT_APPLY", text [ "refused": "DISPATCH_REFUSED", text [ "Not committed:": "WRITE_NOT_COMMITTED", (text [ "Not verified (unknown)") || (text [ "outcome of the resend is unknown"): "WRITE_OUTCOME_UNKNOWN", text [ "person": "ESCALATED", case.State = "escalated": "ESCALATED", 1: "BLOCKED")
     }
     Set o = {}
     Set o.code = code
