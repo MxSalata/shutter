@@ -235,7 +235,7 @@ the reviewer tells by the time of day and by whether the count falls.
 
 PRR-6.5. Event-log errors in the window for one item, grouped by their signature (the error text before its first `#`
 or `:`), with the count, the latest entry and, for the operator only, a clipped example. A group is a pattern, not a
-diagnosis: the same signature from one item hundreds of times is one fault repeating, not hundreds of faults.
+diagnosis: the same signature from one item hundreds of times is one fault repeating, not hundreds of faults. An error group logged outside any item (the production's own start and stop, for example "ErrProductionNotQuiescent" when it was stopped while messages were still moving) is low: worth a look after a restart, not a hazard of an item.
 
 PRR-6.6. The action is to read the latest example and the item's trace for that session. Consistent with the cases of
 the same item in the window when their failure kinds match the signature (a delivery unavailable error and cases with
