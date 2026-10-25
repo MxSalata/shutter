@@ -74,10 +74,10 @@ function VerificationCard({ v }: { v: Verification }) {
 }
 
 /**
- * What the section says before any attempt: a write still to come, no write of Shutter's to verify (a plan that
- * writes nothing, or a correction the team made by hand), or no plan yet.
+ * Why a case has no write of Shutter's to verify: a plan that writes nothing, a correction the team made by hand, a
+ * case that stopped before its write went out; or a write still to come, or no plan yet.
  */
-function Empty({
+function NoWrite({
   write,
   planned,
   byHand,
@@ -90,7 +90,8 @@ function Empty({
 }) {
   // A hand closure reads the same whatever the plan was, and a stopped case's write will not go out now
   const stopped = STOPPED_STATES.includes(state);
-  if (write && !byHand && !stopped) return <NotYet>Nothing dispatched yet.</NotYet>;
+  if (write && !byHand && !stopped)
+    return <NotYet>Nothing to verify yet: nothing has been dispatched.</NotYet>;
   if (byHand || stopped || planned)
     return (
       <Stack gap={4}>
@@ -107,39 +108,68 @@ function Empty({
   return <NotYet>Nothing to verify yet: there is no plan.</NotYet>;
 }
 
-export function ExecutionPanel({
-  caseId,
-  open,
-  write,
-  planned,
-  byHand,
-  state,
-}: {
+interface Props {
   caseId: string;
   open: boolean;
   write: boolean;
   planned: boolean;
   byHand: boolean;
   state: string;
-}) {
+}
+
+/** The writes Shutter sent: each attempt and what the downstream system answered. */
+export function DispatchPanel({ caseId, open, write, planned, byHand, state }: Props) {
   const attempts = useAttempts(caseId, open);
-  const list = attempts.data ?? [];
+  const list = (attempts.data ?? []).filter((x) => x.attempt);
   return (
     <Section
-      id="execution"
-      title={write ? 'Dispatch and verification' : 'Verification'}
-      note="An acknowledgement only says the downstream system answered. Verified means Shutter read its committed history and the receipt afterwards and found the effect there."
+      id="dispatch"
+      title="Dispatch"
+      note="The conditional write, sent only after the release, a fresh read of the receiver and the gate at dispatch. An acknowledgement only says the downstream system answered."
     >
       {attempts.isError ? <ErrorAlert error={attempts.error} title="The attempts could not be read" /> : null}
       {attempts.isSuccess && list.length === 0 ? (
-        <Empty write={write} planned={planned} byHand={byHand} state={state} />
+        write && !byHand && !STOPPED_STATES.includes(state) ? (
+          <NotYet>Nothing dispatched yet.</NotYet>
+        ) : (
+          <Text size="sm" c="dimmed">
+            {planned || byHand || STOPPED_STATES.includes(state)
+              ? 'Nothing was sent: Shutter made no write.'
+              : 'Nothing to send yet: there is no plan.'}
+          </Text>
+        )
       ) : null}
       {list.map((x, i) => (
         <Card key={i} padding="sm" withBorder>
-          <Stack gap="sm">
-            {x.attempt ? <AttemptCard a={x.attempt} /> : null}
-            {x.verification ? <VerificationCard v={x.verification} /> : null}
-          </Stack>
+          <AttemptCard a={x.attempt!} />
+        </Card>
+      ))}
+    </Section>
+  );
+}
+
+/** What the verifier found at the receiver after each write, or why there is nothing of Shutter's to verify. */
+export function VerificationPanel({ caseId, open, write, planned, byHand, state }: Props) {
+  const attempts = useAttempts(caseId, open);
+  const list = (attempts.data ?? []).filter((x) => x.verification);
+  const sent = (attempts.data ?? []).some((x) => x.attempt);
+  return (
+    <Section
+      id="verification"
+      title="Verification"
+      note="Verified means Shutter read the receiver's committed history and the receipt after the write and found the effect there."
+    >
+      {attempts.isError ? <ErrorAlert error={attempts.error} title="The attempts could not be read" /> : null}
+      {attempts.isSuccess && list.length === 0 ? (
+        sent ? (
+          <StatusBadge {...verification('pending')} w="fit-content" />
+        ) : (
+          <NoWrite write={write} planned={planned} byHand={byHand} state={state} />
+        )
+      ) : null}
+      {list.map((x, i) => (
+        <Card key={i} padding="sm" withBorder>
+          <VerificationCard v={x.verification!} />
         </Card>
       ))}
     </Section>

@@ -37,6 +37,11 @@ export interface SafetyReceipt {
   /** Attempts that wrote nothing: refused by the receiver, a version conflict, or an error before sending. */
   notWritten: number;
   verification: string;
+  /**
+   * The verification as a state of lib/status's VERIFICATIONS: the verifier's outcome, pending after a write, by_hand
+   * for a hand correction, not_applicable when there is no write of Shutter's; empty when none of these is known yet.
+   */
+  verificationState: string;
   /** One line that says where the case stands. */
   status: string;
 }
@@ -160,6 +165,15 @@ export function safetyReceipt({
           : STOPPED_STATES.includes(c.state)
             ? `Not applicable: ${humanize(c.state).toLowerCase()} with nothing written`
             : '';
+  const verificationState = last
+    ? last.outcome
+    : sent.length
+      ? 'pending'
+      : c.disposition === 'handled_by_hand'
+        ? 'by_hand'
+        : (p && !writes) || STOPPED_STATES.includes(c.state)
+          ? 'not_applicable'
+          : '';
   const target = `${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`;
   const action = !p
     ? 'No plan yet'
@@ -185,6 +199,7 @@ export function safetyReceipt({
     acknowledged: acknowledged.length,
     notWritten: tried.length - sent.length,
     verification,
+    verificationState,
     status: statusOf(c, sent.length, closure, last?.outcome === 'verified' ? 'verified at the receiver' : ''),
   };
 }

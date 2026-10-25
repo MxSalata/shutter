@@ -9,6 +9,7 @@ import { Timestamp } from '@/components/Timestamp';
 import { displayZone, humanize } from '@/lib/format';
 import { clampHeadline } from '@/lib/headline';
 import { traceScreenshot } from '@/lib/screenshots';
+import type { Status } from '@/lib/tone';
 import { forwardedFrom } from './derive';
 
 /** A labelled fact in a page header. */
@@ -45,7 +46,15 @@ function sourceText(c: CaseDetail): string {
   return `Forwarded from ${from}${c.sourceHeaderId ? `; Shutter's copy is message ${c.sourceHeaderId}` : ''}`;
 }
 
-export function CaseHeader({ c }: { c: CaseDetail }) {
+/** How the case was investigated, as the cases list names it. */
+const MODES: Record<string, string> = {
+  rules: 'Rules only',
+  single: 'One agent',
+  board: 'Board',
+  policy: 'Site policy',
+};
+
+export function CaseHeader({ c, provenance }: { c: CaseDetail; provenance?: Status }) {
   const what = `${humanize(c.event)}${c.ward ? ` to ${c.ward}` : ''}`;
   const place = incidentPlace(c);
   const source = sourceText(c);
@@ -81,11 +90,17 @@ export function CaseHeader({ c }: { c: CaseDetail }) {
             {`${c.priorPatientId || 'a prior record'}${c.priorPatientIdAuthority ? ` (${c.priorPatientIdAuthority})` : ''}${c.priorEncounterId ? `, visit ${c.priorEncounterId}` : ''} into ${c.patientId}${(c.mergeGroups ?? 1) > 1 ? `, and ${(c.mergeGroups ?? 1) - 1} more` : ''}`}
           </Meta>
         ) : null}
+        <Meta label="Scenario">{c.scenario || 'None'}</Meta>
+        <Meta label="Investigated by">{MODES[c.mode] ?? humanize(c.mode)}</Meta>
+        {provenance ? (
+          <Meta label="Provenance">
+            <StatusBadge {...provenance} w="fit-content" />
+          </Meta>
+        ) : null}
         <Meta label="Event time">
           <Timestamp iso={c.eventTime} />
         </Meta>
-        <Meta label="Scenario and mode">{`${c.scenario || 'none'} · ${humanize(c.mode)}`}</Meta>
-        <Meta label="Opened">
+        <Meta label="Case opened">
           <Timestamp iso={c.openedAt} />
         </Meta>
         {c.closedAt ? (

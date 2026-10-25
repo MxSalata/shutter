@@ -152,6 +152,9 @@ export interface CaseDetail extends CaseSummary {
   /** No catalogue entry fitted the case: it is flagged as a candidate for a new entry (CONTRACTS 6.3). */
   candidateEntry?: boolean;
   failureText: string;
+  /** The downstream system's answer to the failed delivery, when it gave one: its HTTP status and reason code. */
+  failureHttpStatus?: number;
+  failureReasonCode?: string;
   patientId: string;
   patientIdAuthority: string;
   /** A merge only (ADT^A40): the patient (MRG-1) and visit (MRG-5) merged into this one, and how many MRG groups. */

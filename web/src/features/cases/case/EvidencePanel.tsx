@@ -1,6 +1,6 @@
 import { Accordion, Group, Stack, Text } from '@mantine/core';
 import { IconCheck, IconClock, IconQuestionMark, IconX } from '@tabler/icons-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSnapshot } from '@/api/hooks';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Digest } from '@/components/Digest';
@@ -10,23 +10,9 @@ import { Timestamp } from '@/components/Timestamp';
 import { asArray, asObject } from '@/lib/json';
 import { formatTime, keyLabel, parseTime } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
-import { describeEntry, describeItem } from './derive';
-import { SHOW_EVIDENCE } from './evidenceLinks';
+import { describeEntry, describeItem, KIND_LABELS } from './derive';
 import { EncounterTimeline } from './EncounterTimeline';
 import { NotYet, Section } from './Section';
-
-const KIND_LABELS: Record<string, string> = {
-  operation: 'The failed operation',
-  error: 'What the connector reported',
-  message: 'The HL7 message',
-  validation: 'Schema validation',
-  ward_state: "The downstream system's encounter",
-  receipt: "The downstream system's receipt for this operation",
-  later_event: 'A later event for the encounter',
-  route: 'The route and what the connector guarantees',
-  source: 'Where the original message lives',
-  note: 'Note',
-};
 
 /**
  * The receiver's guarantees as the evidence recorded them from its capability profile: what the gate's capability
@@ -75,34 +61,40 @@ function CapabilityPassport({ data }: { data: Record<string, unknown> }) {
   );
 }
 
-export function EvidencePanel({ caseId, open }: { caseId: string; open: boolean }) {
+export function EvidencePanel({
+  caseId,
+  open,
+  focus,
+}: {
+  caseId: string;
+  open: boolean;
+  /** Evidence a citation asked to see: its kind, and when it was asked, so a second click on it acts again. */
+  focus?: { kind: string; at: number };
+}) {
   const snap = useSnapshot(caseId, open);
   const s = snap.data;
   const now = useNow();
   const expired = s && parseTime(s.freshUntil) ? parseTime(s.freshUntil)!.getTime() < now : false;
   const [opened, setOpened] = useState<string[]>([]);
-  // A finding's "Cites" badge (BoardPanel) opens every item of the cited kind and focuses the first.
+  // A finding's "Cites" badge (BoardPanel) opens every item of the cited kind and focuses the first; the page
+  // switches to this tab first and passes the kind here. Each request is acted on once, when the snapshot is read:
+  // the items open as the page renders, then the effect scrolls to them.
+  const [shown, setShown] = useState(0);
+  if (focus && s && shown !== focus.at) {
+    setShown(focus.at);
+    const seqs = s.items.filter((item) => item.kind === focus.kind).map((item) => String(item.seq));
+    if (seqs.length) setOpened((open) => [...new Set([...open, ...seqs])]);
+  }
+  const scrolled = useRef(0);
   useEffect(() => {
-    const show = (e: Event) => {
-      const kind = (e as CustomEvent<string>).detail;
-      const seqs = (s?.items ?? []).filter((item) => item.kind === kind).map((item) => String(item.seq));
-      if (!seqs.length) {
-        // A kind drawn outside the list (the encounter timeline) is shown where it is drawn, else the section's top
-        const drawn = document.getElementById(`evidence-${kind}`);
-        (drawn ?? document.getElementById('evidence'))?.scrollIntoView?.({ block: 'start' });
-        drawn?.focus({ preventScroll: true });
-        return;
-      }
-      setOpened((open) => [...new Set([...open, ...seqs])]);
-      window.setTimeout(() => {
-        const target = document.getElementById(`evidence-${kind}`);
-        target?.scrollIntoView?.({ block: 'start' });
-        target?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
-      }, 0);
-    };
-    window.addEventListener(SHOW_EVIDENCE, show);
-    return () => window.removeEventListener(SHOW_EVIDENCE, show);
-  }, [s]);
+    if (!focus || !shown || scrolled.current === shown) return;
+    scrolled.current = shown;
+    const target = document.getElementById(`evidence-${focus.kind}`);
+    // A kind drawn outside the list (the encounter timeline) is shown where it is drawn, else the section's top
+    (target ?? document.getElementById('evidence'))?.scrollIntoView?.({ block: 'start' });
+    const button = target?.querySelector<HTMLButtonElement>(':scope button');
+    (button ?? target)?.focus({ preventScroll: true });
+  }, [focus, shown]);
   return (
     <Section
       id="evidence"

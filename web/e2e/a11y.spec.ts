@@ -32,6 +32,10 @@ const SCREENS: [path: string, heading: string][] = [
   ['/cases/C-000002', 'Case C-000002'],
   ['/cases/C-000007', 'Case C-000007'],
   ['/cases/C-000008', 'Case C-000008'],
+  // The case page's other tabs, and the S8 comparison opened as the guide links to it
+  ['/cases/C-000008?tab=evidence', 'Case C-000008'],
+  ['/cases/C-000007?tab=audit', 'Case C-000007'],
+  ['/cases/C-000008?show=compare', 'Case C-000008'],
   ['/incidents', 'Incidents'],
   ['/incidents/I-000001', 'Incident I-000001'],
   ['/reviews', 'Production review'],
@@ -75,7 +79,7 @@ for (const { colorScheme, contrast, palette } of MODES) {
     });
 
     for (const [path, heading] of SCREENS) {
-      test(heading, async ({ page }) => {
+      test(path.includes('?') ? `${heading} (${path.split('?')[1]})` : heading, async ({ page }) => {
         await signIn(page);
         await go(page, path);
         await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();

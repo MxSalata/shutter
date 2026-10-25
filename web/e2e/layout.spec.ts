@@ -12,6 +12,9 @@ const SCREENS: [path: string, heading: string][] = [
   ['/cases/C-000009', 'Case C-000009'],
   ['/cases/C-000002', 'Case C-000002'],
   ['/cases/C-000007', 'Case C-000007'],
+  ['/cases/C-000008?show=compare', 'Case C-000008'],
+  ['/cases/C-000008?tab=evidence', 'Case C-000008'],
+  ['/cases/C-000007?tab=audit', 'Case C-000007'],
   ['/incidents', 'Incidents'],
   ['/incidents/I-000001', 'Incident I-000001'],
   ['/reviews', 'Production review'],
@@ -35,7 +38,7 @@ for (const width of [360, 1024]) {
     });
 
     for (const [path, heading] of SCREENS) {
-      test(heading, async ({ page }) => {
+      test(path.includes('?') ? `${heading} (${path.split('?')[1]})` : heading, async ({ page }) => {
         await go(page, '/login');
         await page.getByRole('button', { name: /Try the demo/ }).click();
         await expect(page.getByRole('heading', { name: 'Scenarios' })).toBeVisible();

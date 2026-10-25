@@ -59,6 +59,13 @@ function renderCase() {
   );
 }
 
+/** Waits for the case's events, which the panel reads, by their showing in the audit trail. */
+async function eventsRead() {
+  await userEvent.click(await screen.findByRole('tab', { name: 'Audit trail' }));
+  const timeline = await screen.findByRole('region', { name: 'Timeline' });
+  await waitFor(() => expect(within(timeline).queryByText('No events yet.')).toBeNull());
+}
+
 describe('AbandonPanel', () => {
   it('lets an approver abandon a case whose workflow stopped moving, with a reason and the case version', async () => {
     leftCollecting(recorded.events);
@@ -96,7 +103,8 @@ describe('AbandonPanel', () => {
     expect(bodies).toEqual([
       { reason: 'The production restarted mid-run', expectedVersion: expect.any(Number) },
     ]);
-    expect(await screen.findByRole('region', { name: 'Closed: abandoned' })).toBeInTheDocument();
+    const top = await screen.findByRole('region', { name: 'Outcome' });
+    expect(await within(top).findByText('Abandoned · 0 writes')).toBeInTheDocument();
     expect(screen.getByText('Abandoned')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Still working' })).not.toBeInTheDocument();
   });
@@ -140,14 +148,14 @@ describe('AbandonPanel', () => {
     leftCollecting(fresh);
     const { unmount } = renderCase();
     expect(await screen.findByRole('heading', { name: `Case ${ID}` })).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole('region', { name: 'Evidence' })).toBeInTheDocument());
+    await eventsRead();
     expect(screen.queryByRole('region', { name: 'Still working' })).not.toBeInTheDocument();
     unmount();
 
     resetMock('operator');
     leftCollecting(recorded.events);
     renderCase();
-    await waitFor(() => expect(screen.queryByRole('region', { name: 'Evidence' })).toBeInTheDocument());
+    await eventsRead();
     expect(screen.queryByRole('region', { name: 'Still working' })).not.toBeInTheDocument();
   });
   it('names no retry time that has already passed', async () => {
@@ -168,7 +176,7 @@ describe('AbandonPanel', () => {
     leftCollecting(recorded.events);
     state.detail = { ...state.detail, state: 'awaiting_approval' };
     renderCase();
-    await waitFor(() => expect(screen.queryByRole('region', { name: 'Evidence' })).toBeInTheDocument());
+    await eventsRead();
     expect(screen.queryByRole('region', { name: 'Still working' })).not.toBeInTheDocument();
   });
 });

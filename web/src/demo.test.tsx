@@ -148,10 +148,17 @@ describe('the demo', () => {
     expect(await within(approval).findByText('Demo replay')).toBeInTheDocument();
     expect(await screen.findByText('Message trace (on an instance)')).toBeInTheDocument();
     expect(screen.getByText('Workflow trace (on an instance)')).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: /^3\. What was proposed/ }));
     const board = await screen.findByRole('region', { name: 'The board' });
+    for (const row of within(board).getAllByRole('button', { name: /^(Resend|Escalate) / }))
+      if (row.getAttribute('aria-expanded') !== 'true') await userEvent.click(row);
     expect(
       (await within(board).findAllByText("The run's message in the production (on an instance)")).length,
     ).toBe(4);
+    // The audit trail gathers the same links, each a note in the demo
+    await userEvent.click(screen.getByRole('tab', { name: 'Audit trail' }));
+    const portal = await screen.findByRole('region', { name: 'In the Management Portal' });
+    expect(within(portal).getAllByText(/: its message \(on an instance\)$/)).toHaveLength(4);
     expect(container.querySelectorAll('a[href*="/csp/"]')).toHaveLength(0);
   });
 

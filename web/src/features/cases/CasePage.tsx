@@ -1,25 +1,25 @@
-import { Anchor, Container, Grid, Stack } from '@mantine/core';
+import { Anchor, Container, Stack, Tabs } from '@mantine/core';
+import { IconFileSearch, IconHistory, IconListDetails } from '@tabler/icons-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
-import { isOpen, keys, useApprovals, useCase, useCaseEvents, useMe, usePlan } from '@/api/hooks';
+import { isOpen, keys, useCase, useCaseEvents, useMe } from '@/api/hooks';
+import type { CaseDetail } from '@/api/types';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { isApiError } from '@/lib/errors';
 import { CaseHeader } from './case/CaseHeader';
 import { Lifecycle } from './case/Lifecycle';
-import { FailurePanel } from './case/FailurePanel';
 import { EvidencePanel } from './case/EvidencePanel';
-import { BoardPanel } from './case/BoardPanel';
-import { PlanPanel, RehearsalPanel } from './case/PlanPanel';
-import { ApprovalPanel } from './case/ApprovalPanel';
-import { ExecutionPanel } from './case/ExecutionPanel';
-import { OutcomePanel } from './case/OutcomePanel';
 import { EscalationPanel } from './case/EscalationPanel';
 import { AbandonPanel } from './case/AbandonPanel';
 import { CaseTimeline } from './case/CaseTimeline';
-import { ReceiptCard } from './case/ReceiptCard';
-import { S8Compare } from './case/S8Compare';
+import { CaseStory, type StoryStep } from './case/CaseStory';
+import { DecisionCard } from './case/DecisionCard';
+import { PortalLinks } from './case/PortalLinks';
+import { SHOW_EVIDENCE } from './case/evidenceLinks';
+import { provenanceOf } from './case/outcome';
+import { useCaseFacts } from './case/useCaseFacts';
 
 /** The portal's base path (/csp/<namespace>/) for links to messages, read from the case's trace link. */
 function portalBase(visualTrace: string | undefined): string {
@@ -27,22 +27,117 @@ function portalBase(visualTrace: string | undefined): string {
   return m ? m[1] : '/csp/shutter/';
 }
 
-export default function CasePage() {
-  const { caseId = '' } = useParams();
-  const [search] = useSearchParams();
+/** The case page's tabs, kept in the route's search parameters (`?tab=evidence`) so a link opens the right one. */
+const TABS = ['summary', 'evidence', 'audit'] as const;
+type Tab = (typeof TABS)[number];
+
+function CaseBody({ c }: { c: CaseDetail }) {
+  const [search, setSearch] = useSearchParams();
   const me = useMe().data;
-  const c = useCase(caseId);
-  const open = isOpen(c.data?.state);
-  const events = useCaseEvents(caseId, open);
-  const plan = usePlan(caseId, open);
-  const approvals = useApprovals(caseId, open);
+  const open = isOpen(c.state);
+  const events = useCaseEvents(c.caseId, open);
+  const facts = useCaseFacts(c, open);
   const client = useQueryClient();
   // The parts poll only while the case is open: when it closes, fetch them once more so the last events show.
   const wasOpen = useRef(open);
   useEffect(() => {
-    if (wasOpen.current && !open) void client.invalidateQueries({ queryKey: keys.case(caseId) });
+    if (wasOpen.current && !open) void client.invalidateQueries({ queryKey: keys.case(c.caseId) });
     wasOpen.current = open;
-  }, [open, caseId, client]);
+  }, [open, c.caseId, client]);
+
+  const asked = search.get('tab') as Tab | null;
+  const tab: Tab = asked && TABS.includes(asked) ? asked : 'summary';
+  const setTab = useCallback(
+    (next: string | null) =>
+      setSearch(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          if (!next || next === 'summary') params.delete('tab');
+          else params.set('tab', next);
+          return params;
+        },
+        { replace: true },
+      ),
+    [setSearch],
+  );
+  const compare = search.get('show') === 'compare';
+  // The story steps start closed, except where the reader is sent: the approval of a case waiting for one, and the
+  // S8 comparison when the demo's guide links to it. After that they stay as the reader leaves them.
+  const [steps, setSteps] = useState<string[]>(() => [
+    ...(c.state === 'awaiting_approval' ? ['decision'] : []),
+    ...(compare && c.scenario === 'S8' ? ['compare'] : []),
+  ]);
+  const openStep = (step: StoryStep, target: string) => {
+    setSteps((s) => (s.includes(step) ? s : [...s, step]));
+    setTab('summary');
+    window.setTimeout(() => document.getElementById(target)?.scrollIntoView?.({ block: 'start' }), 250);
+  };
+  // A finding's "Cites" badge: the Evidence tab, opened on the cited kind
+  const [focus, setFocus] = useState<{ kind: string; at: number }>();
+  useEffect(() => {
+    const show = (e: Event) => {
+      setTab('evidence');
+      setFocus({ kind: (e as CustomEvent<string>).detail, at: Date.now() });
+    };
+    window.addEventListener(SHOW_EVIDENCE, show);
+    return () => window.removeEventListener(SHOW_EVIDENCE, show);
+  }, [setTab]);
+
+  const stopped = ['blocked', 'escalated', 'failed'].includes(c.state);
+  const base = portalBase(c.links?.visualTrace);
+  return (
+    <>
+      <CaseHeader c={c} provenance={provenanceOf(c.mode, facts.runs)} />
+      <Lifecycle c={c} events={events.data ?? []} />
+      <Stack gap="md">
+        <DecisionCard facts={facts} onReview={() => openStep('decision', 'approval')} />
+        <AbandonPanel c={c} events={events.data} />
+        {/* A stopped case's hand-off to the team is its next action; once closed by hand, it is history */}
+        {stopped ? <EscalationPanel c={c} /> : null}
+        <Tabs value={tab} onChange={setTab} keepMounted={false}>
+          <Tabs.List aria-label="The case in detail">
+            <Tabs.Tab value="summary" leftSection={<IconListDetails size={16} aria-hidden />}>
+              Summary
+            </Tabs.Tab>
+            <Tabs.Tab value="evidence" leftSection={<IconFileSearch size={16} aria-hidden />}>
+              Evidence
+            </Tabs.Tab>
+            <Tabs.Tab value="audit" leftSection={<IconHistory size={16} aria-hidden />}>
+              Audit trail
+            </Tabs.Tab>
+          </Tabs.List>
+          <Tabs.Panel value="summary" pt="md">
+            <CaseStory
+              c={c}
+              me={me}
+              facts={facts}
+              open={open}
+              opened={steps}
+              onChange={setSteps}
+              onShowEvidence={() => setTab('evidence')}
+              portalBase={base}
+              compareFocus={compare}
+            />
+          </Tabs.Panel>
+          <Tabs.Panel value="evidence" pt="md">
+            <EvidencePanel caseId={c.caseId} open={open} focus={focus} />
+          </Tabs.Panel>
+          <Tabs.Panel value="audit" pt="md">
+            <Stack gap="md">
+              <CaseTimeline events={events.data ?? []} />
+              {!stopped ? <EscalationPanel c={c} /> : null}
+              <PortalLinks c={c} runs={facts.runs} portalBase={base} />
+            </Stack>
+          </Tabs.Panel>
+        </Tabs>
+      </Stack>
+    </>
+  );
+}
+
+export default function CasePage() {
+  const { caseId = '' } = useParams();
+  const c = useCase(caseId);
 
   if (c.isPending) return <PageSkeleton label={`Loading case ${caseId}…`} />;
   if (c.isError)
@@ -62,52 +157,6 @@ export default function CasePage() {
         </Anchor>
       </Container>
     );
-
-  const detail = c.data;
-  const write = plan.data?.plan?.disposition === 'resend';
-  return (
-    <>
-      <CaseHeader c={detail} />
-      <Lifecycle c={detail} events={events.data ?? []} />
-      <Grid gutter="md">
-        <Grid.Col span={{ base: 12, xl: 8 }}>
-          <Stack gap="md">
-            <ReceiptCard c={detail} open={open} />
-            <OutcomePanel c={detail} />
-            {/* The board's findings right under the outcome: what the case was decided on, before how it got there */}
-            <BoardPanel
-              caseId={caseId}
-              open={open}
-              mode={detail.mode}
-              withheld={detail.failureKind === 'withheld'}
-              portalBase={portalBase(detail.links?.visualTrace)}
-            />
-            {detail.scenario === 'S8' ? (
-              <S8Compare caseId={caseId} focus={search.get('show') === 'compare'} />
-            ) : null}
-            <EscalationPanel c={detail} />
-            <AbandonPanel c={detail} events={events.data} />
-            <FailurePanel c={detail} />
-            <EvidencePanel caseId={caseId} open={open} />
-            <PlanPanel view={plan.data} loading={plan.isPending} />
-            <RehearsalPanel view={plan.data} write={write} />
-            {me ? <ApprovalPanel c={detail} me={me} view={plan.data} approvals={approvals.data} /> : null}
-            <ExecutionPanel
-              caseId={caseId}
-              open={open}
-              write={write}
-              planned={!!plan.data?.plan}
-              byHand={detail.disposition === 'handled_by_hand'}
-              state={detail.state}
-            />
-          </Stack>
-        </Grid.Col>
-        <Grid.Col span={{ base: 12, xl: 4 }}>
-          <div style={{ position: 'sticky', top: 72 }}>
-            <CaseTimeline events={events.data ?? []} />
-          </div>
-        </Grid.Col>
-      </Grid>
-    </>
-  );
+  // A new case id starts the page afresh: its own tab, steps and evidence request
+  return <CaseBody key={caseId} c={c.data} />;
 }

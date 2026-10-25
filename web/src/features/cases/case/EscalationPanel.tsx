@@ -368,7 +368,8 @@ export function EscalationPanel({ c }: { c: CaseDetail }) {
           </Accordion.Item>
         </Accordion>
       ))}
-      {!stopped ? null : me?.operator ? (
+      {/* Until the user is read, neither the actions nor the note that they need the operator role */}
+      {!stopped || me === undefined ? null : me?.operator ? (
         <Group gap="sm" align="flex-end" wrap="wrap">
           {teams.length ? (
             <NativeSelect

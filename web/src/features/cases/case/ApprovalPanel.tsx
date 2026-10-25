@@ -329,7 +329,7 @@ export function ApprovalPanel({
             {decide.error ? (
               <Alert color="red" variant="light" role="alert">
                 {stale
-                  ? 'The plan or the case changed since this page loaded: close this and review it again.'
+                  ? 'Approval no longer valid: the plan or the case changed since this page loaded, so this decision was not recorded. Close this and review the new plan.'
                   : describeError(decide.error)}
               </Alert>
             ) : null}

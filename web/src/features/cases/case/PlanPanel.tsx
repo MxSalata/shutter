@@ -77,8 +77,8 @@ export function PlanPanel({ view, loading }: { view: PlanView | null | undefined
   return (
     <Section
       id="plan"
-      title="The plan and the gate"
-      note="One plan, bound by its digest. The gate checks it mechanically against the evidence, before the rehearsal and again before dispatch. An unknown blocks a write as surely as a failed check; the agents can explain the gate's result but cannot override it."
+      title="The plan"
+      note="One plan, bound by its digest: what the gate checks, and what a release names."
       aside={p ? <DispositionBadge disposition={p.disposition} /> : null}
     >
       {!p ? (
@@ -147,35 +147,56 @@ export function PlanPanel({ view, loading }: { view: PlanView | null | undefined
               ? `${disagreements.length} disagreement(s) kept in the plan.`
               : 'No disagreements were recorded.'}
           </Text>
-          {(view?.gateDecisions ?? []).length ? (
-            <Accordion
-              variant="separated"
-              multiple
-              defaultValue={[String((view?.gateDecisions ?? []).length - 1)]}
-              chevronPosition="left"
-            >
-              {(view?.gateDecisions ?? []).map((d, i) => (
-                <Accordion.Item key={`${d.stage}-${i}`} value={String(i)}>
-                  <Accordion.Control>
-                    <Group gap="sm" wrap="wrap">
-                      <Text size="sm" fw={600}>
-                        {STAGES[d.stage] ?? humanize(d.stage)}
-                      </Text>
-                      <StatusBadge {...gateOutcome(d.outcome, checksOf(d))} />
-                    </Group>
-                  </Accordion.Control>
-                  <Accordion.Panel>
-                    <GateTable d={d} />
-                  </Accordion.Panel>
-                </Accordion.Item>
-              ))}
-            </Accordion>
-          ) : null}
-          {!(view?.gateDecisions ?? []).length ? (
-            <NotYet>The gate has not checked this plan yet.</NotYet>
-          ) : null}
         </Stack>
       ) : null}
+    </Section>
+  );
+}
+
+/**
+ * The gate's decisions on the plan, the latest open. The gate checks the plan mechanically against the evidence, before
+ * the rehearsal and again before dispatch.
+ */
+export function GatePanel({ view, loading }: { view: PlanView | null | undefined; loading: boolean }) {
+  const decisions = view?.gateDecisions ?? [];
+  return (
+    <Section
+      id="gate"
+      title="The gate"
+      note="Mechanical checks of the plan against the evidence, before the rehearsal and again before dispatch. An unknown blocks a write as surely as a failed check; the agents can explain the gate's result but cannot override it."
+    >
+      {decisions.length ? (
+        <Accordion
+          variant="separated"
+          multiple
+          defaultValue={[String(decisions.length - 1)]}
+          chevronPosition="left"
+        >
+          {decisions.map((d, i) => (
+            <Accordion.Item key={`${d.stage}-${i}`} value={String(i)}>
+              <Accordion.Control>
+                <Group gap="sm" wrap="wrap">
+                  <Text size="sm" fw={600}>
+                    {STAGES[d.stage] ?? humanize(d.stage)}
+                  </Text>
+                  <StatusBadge {...gateOutcome(d.outcome, checksOf(d))} />
+                </Group>
+              </Accordion.Control>
+              <Accordion.Panel>
+                <GateTable d={d} />
+              </Accordion.Panel>
+            </Accordion.Item>
+          ))}
+        </Accordion>
+      ) : (
+        <NotYet>
+          {loading
+            ? 'Loading…'
+            : view?.plan
+              ? 'The gate has not checked this plan yet.'
+              : 'No plan for the gate yet.'}
+        </NotYet>
+      )}
     </Section>
   );
 }

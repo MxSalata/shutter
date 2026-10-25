@@ -20,6 +20,20 @@ export function forwardedFrom(source: {
   return `${str(source.namespace)}${source.production ? ` / ${str(source.production)}` : ''}${source.route ? `, route ${str(source.route)}` : ''}${source.headerId ? `, message header ${str(source.headerId)}` : ''}`;
 }
 
+/** What each kind of observation is, as the evidence lists name them. */
+export const KIND_LABELS: Record<string, string> = {
+  operation: 'The failed operation',
+  error: 'What the connector reported',
+  message: 'The HL7 message',
+  validation: 'Schema validation',
+  ward_state: "The downstream system's encounter",
+  receipt: "The downstream system's receipt for this operation",
+  later_event: 'A later event for the encounter',
+  route: 'The route and what the connector guarantees',
+  source: 'Where the original message lives',
+  note: 'Note',
+};
+
 /** One line that says what an observation found, so the list reads without opening each item. */
 export function describeItem(item: SnapshotItem): string {
   const d = asObject(item.data) ?? {};
@@ -159,4 +173,21 @@ export function describeEntry(x: unknown): string {
   // An observation or a free-text note, as the evidence collector records them: { observation_id, text }
   if (typeof o.text === 'string') return o.text;
   return JSON.stringify(x);
+}
+
+/**
+ * The case's events split into its rounds: a re-plan starts a new round with the move into collecting evidence, so
+ * each round holds its own evidence, plan, gate checks, rehearsal, release, dispatch and verification. Oldest first.
+ */
+export function eventRounds(events: CaseEvent[]): CaseEvent[][] {
+  const rounds: CaseEvent[][] = [];
+  let seenCollecting = false;
+  for (const e of events) {
+    const starts = e.kind === 'state' && e.toState === 'collecting';
+    if (starts && seenCollecting) rounds.push([]);
+    if (starts) seenCollecting = true;
+    if (!rounds.length) rounds.push([]);
+    rounds[rounds.length - 1].push(e);
+  }
+  return rounds;
 }
