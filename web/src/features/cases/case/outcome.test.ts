@@ -209,7 +209,7 @@ describe("the story steps' summaries", () => {
 
   it('says who proposed what, with the dissent kept', () => {
     expect(proposedSummary(factsOf('C-000008'))).toBe(
-      'The coordinator: escalate without writing; 1 specialist dissent kept.',
+      'The coordinator: escalate without writing; Conformance dissented, proposing resend (kept in the plan).',
     );
     expect(proposedSummary(factsOf('C-000021'))).toBe(
       'The rules: resend the operation unchanged, on condition the receiver is at version 2.',

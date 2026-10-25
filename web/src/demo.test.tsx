@@ -149,7 +149,11 @@ describe('the demo', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Details' }));
     expect(await screen.findByText('Message trace (on an instance)')).toBeInTheDocument();
     expect(screen.getByText('Workflow trace (on an instance)')).toBeInTheDocument();
-    await userEvent.click(await screen.findByRole('button', { name: /^3\. What was proposed/ }));
+    // A board case opens what was proposed by itself
+    expect(await screen.findByRole('button', { name: /^3\. What was proposed/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
     const board = await screen.findByRole('region', { name: 'The board' });
     for (const row of within(board).getAllByRole('button', { name: /^(Resend|Escalate) / }))
       if (row.getAttribute('aria-expanded') !== 'true') await userEvent.click(row);

@@ -349,10 +349,17 @@ export function proposedSummary(f: CaseFacts): string {
     p.disposition === 'resend'
       ? `resend the operation unchanged, on condition the receiver is at version ${str(p.expectedVersion)}`
       : `${humanize(p.disposition).toLowerCase()} without writing`;
+  // The specialists whose disagreement the coordinator kept, by name, with what each proposed instead
   const dissent = asArray(
     asObject(runs.filter((r) => r.role === 'coordinator').at(-1)?.result)?.disagreements,
-  ).length;
-  return sentence([`${who}: ${action}`, dissent ? `${plural(dissent, 'specialist dissent')} kept` : '']);
+  )
+    .map((d) => asObject(d) ?? {})
+    .map((d) => {
+      const name = runs.find((r) => r.memberCode === str(d.member))?.member?.name ?? humanize(str(d.member));
+      const said = /^[a-z_]+/.exec(str(d.said))?.[0];
+      return `${name} dissented${said ? `, proposing ${humanize(said).toLowerCase()}` : ''}`;
+    });
+  return sentence([`${who}: ${action}`, ...dissent.map((d) => `${d} (kept in the plan)`)]);
 }
 
 /** The gate's latest result and who or what released the write. */

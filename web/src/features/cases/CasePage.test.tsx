@@ -68,7 +68,7 @@ describe('CasePage', () => {
     expect(within(verification).queryByText(/Acknowledged/)).not.toBeInTheDocument();
   });
 
-  it('puts the six story steps in order, each with a one-line summary, closed until opened', async () => {
+  it('puts the six story steps in order, each with a one-line summary, the board open on a board case', async () => {
     renderCase('C-000008');
     const steps = await screen.findAllByRole('button', { name: /^\d\. / });
     expect(steps.map((b) => b.textContent?.match(/^\d\. [^A-Z]*[A-Z][a-z ]+?(?=[A-Z0-9]|$)/)?.[0])).toEqual([
@@ -79,13 +79,13 @@ describe('CasePage', () => {
       '5. What was written',
       '6. What was verified',
     ]);
-    for (const s of steps) expect(s).toHaveAttribute('aria-expanded', 'false');
+    steps.forEach((s, i) => expect(s).toHaveAttribute('aria-expanded', i === 2 ? 'true' : 'false'));
     await waitFor(() => expect(steps[2]).not.toHaveTextContent('Not read yet'));
     expect(steps[0]).toHaveTextContent(
       'PAS transfer to WARD-B was not delivered: HTTP 503, ward_unavailable.',
     );
     expect(steps[2]).toHaveTextContent(
-      'The coordinator: escalate without writing; 1 specialist dissent kept.',
+      'The coordinator: escalate without writing; Conformance dissented, proposing resend (kept in the plan).',
     );
     expect(steps[4]).toHaveTextContent('0 writes by Shutter.');
   });
@@ -121,7 +121,11 @@ describe('CasePage', () => {
 
   it('shows the coordinator first, then each specialist as a row leading with its verdict, dissent open', async () => {
     renderCase('C-000008');
-    await openStep('What was proposed');
+    // Open from the start on a board case
+    expect(await screen.findByRole('button', { name: /^3\. What was proposed/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
     const board = await screen.findByRole('region', { name: 'The board' });
     const coordinator = (await within(board).findByText('Coordinator')).closest<HTMLElement>(
       '.mantine-Card-root',
@@ -139,6 +143,12 @@ describe('CasePage', () => {
     const name = within(dissent).getByText('Conformance');
     expect(verdict.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(dissent).getByText('Dissent')).toBeInTheDocument();
+    // The dissent's reason in a line, as the coordinator kept it, without a confidence figure
+    expect(
+      within(dissent).getByText(
+        'Proposed resend: the message is structurally valid, the WIC-2.1 fields are present and the WIC-2.2 key matches',
+      ),
+    ).toBeInTheDocument();
     // Its confidence is shown second, as its own and not the gate's
     const row = dissent.closest<HTMLElement>('.mantine-Accordion-item')!;
     expect(await within(row).findByText('Confidence 80%, self-reported; not used by the gate')).toBeVisible();
