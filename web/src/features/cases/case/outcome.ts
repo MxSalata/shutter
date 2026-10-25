@@ -192,10 +192,11 @@ function handoff(f: CaseFacts): string {
   if (f.escalations === undefined) return 'Unknown';
   const list = f.escalations ?? [];
   const sent = list.filter((e) => e.state === 'sent' || e.state === 'queued').at(-1);
+  // Shown beside the label Escalation, so the text does not repeat the word
   if (sent)
-    return `Escalation ${sent.seq} ${sent.state === 'sent' ? 'sent' : 'queued'} to ${sent.teamName || sent.to || "the downstream system's team"}`;
-  if (list.some((e) => e.state === 'draft' || e.state === 'failed')) return 'Escalation: drafted, not sent';
-  return 'Escalation: not sent';
+    return `${sent.state === 'sent' ? 'Sent' : 'Queued'} to ${sent.teamName || sent.to || "the downstream system's team"}`;
+  if (list.some((e) => e.state === 'draft' || e.state === 'failed')) return 'Drafted, not sent';
+  return 'Not sent';
 }
 
 export function nextAction(f: CaseFacts): NextAction {
