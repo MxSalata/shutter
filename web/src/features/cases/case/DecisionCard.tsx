@@ -59,6 +59,7 @@ export function DecisionCard({
   return (
     <Section
       id="outcome"
+      tour="case-outcome"
       title="Outcome"
       aside={
         <CopyButton value={JSON.stringify(r, null, 2)} timeout={1500}>

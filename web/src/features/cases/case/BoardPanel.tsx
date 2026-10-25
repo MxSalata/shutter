@@ -312,6 +312,7 @@ export function BoardPanel({
   return (
     <Section
       id="board"
+      tour="case-board"
       title={title}
       note={note}
       aside={

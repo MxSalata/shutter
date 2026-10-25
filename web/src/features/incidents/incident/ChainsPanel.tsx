@@ -195,6 +195,7 @@ export function ChainsPanel({
   return (
     <Section
       id="chains"
+      tour="incident-chains"
       title="Chains"
       note="One chain per encounter, its failed operations oldest event first. A chain the catalogue settles goes by the site's policy; any other chain's cases each go to the board. Chains are released one at a time, and within a chain one operation at a time, each through its own case's dispatch."
       aside={byState.map(([state, n]) => (

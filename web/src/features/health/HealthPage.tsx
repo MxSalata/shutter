@@ -84,6 +84,7 @@ export default function HealthPage() {
   return (
     <>
       <PageHeader
+        tour="health"
         title="Health"
         subtitle="The installation's own readiness report: namespace, production, web applications, downstream system, knowledge and agents."
       />

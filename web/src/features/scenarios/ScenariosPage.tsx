@@ -314,6 +314,7 @@ export default function ScenariosPage() {
     <>
       {DEMO ? null : induction}
       <PageHeader
+        tour="scenarios"
         title="Scenarios"
         subtitle="Each scenario plays a real failure into the production: HL7 files into the ADT folder and faults on the downstream system. Shutter opens a case, investigates, checks the plan at the gate, has a person or the site's written policy release it, and verifies the result at the receiver."
         actions={
@@ -363,7 +364,7 @@ export default function ScenariosPage() {
             </Text>
           </Alert>
         ) : (
-          <Card padding="md">
+          <Card padding="md" data-tour="scenarios-mode">
             <Stack gap={6}>
               <Text fw={600} size="sm" id="mode-label">
                 Investigation mode
@@ -392,7 +393,7 @@ export default function ScenariosPage() {
           />
         ) : null}
         {scenarios.data ? (
-          <>
+          <div data-tour="scenarios-list">
             {/* The cards' headings sit under this one, not under Start here; the layout does not show it */}
             <Title order={2} className={VisuallyHidden.classes.root}>
               Every scenario
@@ -411,7 +412,7 @@ export default function ScenariosPage() {
                 />
               ))}
             </SimpleGrid>
-          </>
+          </div>
         ) : null}
         {DEMO ? induction : null}
       </Stack>

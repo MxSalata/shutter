@@ -44,6 +44,8 @@ import { useAppearance, type ContrastSetting, type PaletteSetting } from '@/stor
 import { useResolvedContrast } from './useApplyAppearance';
 import { MAIN_ID, SkipLink } from './SkipLink';
 import { DEMO } from '@/demo';
+import { Guide } from '@/features/guide/Guide';
+import { HelpMenu } from '@/features/guide/HelpMenu';
 
 /**
  * The navigation in three groups, by what a visit is for: running and following the recovery, configuring it, and
@@ -255,6 +257,7 @@ export function AppLayout() {
                 </Badge>
               </Tooltip>
             ) : null}
+            <HelpMenu />
             <AppearanceMenu />
             <UserMenu />
           </Group>
@@ -287,6 +290,7 @@ export function AppLayout() {
           <Outlet key={displayZone()} />
         </Suspense>
       </AppShell.Main>
+      <Guide />
     </AppShell>
   );
 }

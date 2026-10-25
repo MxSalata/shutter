@@ -1,10 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
+import { skipWelcome } from './guide';
 
 /**
  * Every screen fits its window at a phone's width (360 px) and a small laptop's (1024 px): the page itself never
  * scrolls sideways. Tables scroll inside their own containers, which is allowed.
  */
 const go = (page: Page, path: string) => page.goto(`./#${path}`);
+
+// The guide's welcome would cover the screens these tests are about; guide.spec.ts tests it
+test.beforeEach(({ page }) => skipWelcome(page));
 
 /**
  * Opens every closed story step of a case page and waits for the panels to finish opening: a closed step is hidden,

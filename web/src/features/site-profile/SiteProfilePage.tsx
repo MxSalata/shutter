@@ -313,6 +313,7 @@ function ProfileForm({
         </Section>
         <Section
           id="site-approvals"
+          tour="site-approvals"
           title="Approvals"
           note="Question 7. Automatic is still gated, rehearsed and verified; only the person's approval is left out."
         >

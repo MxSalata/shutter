@@ -369,6 +369,21 @@
   color: currentColor;
 }
 
+/* The guide. Its controls are at least 44 px high, for touch. A shown section clears the sticky header when it is
+   scrolled to, and carries a dashed outline that only marks it: the step's text says everything. */
+.guide-control {
+  --button-height: 2.75rem;
+  min-height: 2.75rem;
+}
+[data-tour] {
+  scroll-margin-top: 72px;
+}
+[data-tour-active='true'] {
+  outline: 2px dashed var(--mantine-primary-color-filled);
+  outline-offset: 4px;
+  border-radius: var(--mantine-radius-md);
+}
+
 /* Motion is a preference, not a requirement. Recharts animations are switched off in code. */
 @media (prefers-reduced-motion: reduce) {
   *,

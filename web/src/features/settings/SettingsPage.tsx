@@ -185,7 +185,7 @@ export default function SettingsPage() {
                 </Text>
               </Stack>
             </Card>
-            <Card padding="md">
+            <Card padding="md" data-tour="settings-agents">
               <Title order={2} fz="lg" mb={4}>
                 Agent items
               </Title>
@@ -244,7 +244,7 @@ export default function SettingsPage() {
             </Card>
           </>
         ) : null}
-        <Card padding="md">
+        <Card padding="md" data-tour="settings-costs">
           <Title order={2} fz="lg" mb="sm">
             Costs
           </Title>

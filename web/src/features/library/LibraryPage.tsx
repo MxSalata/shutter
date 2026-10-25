@@ -25,6 +25,7 @@ export default function LibraryPage() {
   return (
     <>
       <PageHeader
+        tour="library"
         title="Agent library"
         subtitle="The agents a board is made from. Each specialist reviews the evidence from one perspective with its own knowledge collection; the coordinator turns their findings into one plan. What an agent is (its class, its production item, its tools) is code; which agents sit on the board is a setting."
       />

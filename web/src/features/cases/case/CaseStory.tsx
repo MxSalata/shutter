@@ -43,7 +43,7 @@ function Step({
   children: ReactNode;
 }) {
   return (
-    <Accordion.Item value={value} id={`story-${value}`}>
+    <Accordion.Item value={value} id={`story-${value}`} data-tour={`case-${value}`}>
       <Accordion.Control>
         <Text span display="block" fw={600}>
           {n ? `${n}. ${title}` : title}

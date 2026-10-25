@@ -92,7 +92,7 @@ export default function CasesPage() {
   return (
     <>
       <PageHeader title="Cases" subtitle="Every failed delivery Shutter opened a case for, newest first." />
-      <Card padding="md">
+      <Card padding="md" data-tour="cases-list">
         <Group gap="sm" mb="sm" wrap="wrap">
           <Select
             label="State"

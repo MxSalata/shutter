@@ -1,10 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
+import { skipWelcome } from './guide';
 
 /**
  * What the demo build shows a judge first: the sign-in page's "Try the demo", then the Scenarios page's guided path
  * through the recorded cases, whose links open the cases they name.
  */
 const go = (page: Page, path: string) => page.goto(`./#${path}`);
+
+// The guide's welcome would cover the screens these tests are about; guide.spec.ts tests it
+test.beforeEach(({ page }) => skipWelcome(page));
 
 async function signIn(page: Page) {
   await go(page, '/login');

@@ -15,12 +15,13 @@ React, Mantine and TanStack Query, built with Vite. IRIS serves the build from `
 | `npm run build:www` | Builds into `../www/`, the folder IRIS serves (committed, so an install needs no Node) |
 | `npm run build:demo`, `npm run preview:demo` | The demo: recorded runs on the in-browser mock, with a "Try the demo" sign-in (`dist-demo/`, `VITE_BASE` for GitHub Pages) |
 | `npm run record:demo -- --url http://host:52773` | Records the demo's data from a running Shutter's API into `src/mocks/fixtures.json` (reads only; `SHUTTER_PASSWORD` for the operator's password) |
-| `npm run test:e2e` | axe-core (WCAG 2.1 A and AA) on every screen of the demo in all five appearances (Playwright, Chromium) |
+| `npm run test:e2e` | axe-core (WCAG 2.1 A and AA) on every screen of the demo, and on the guide open, in all five appearances; the layout at a phone's and a laptop's width; the demo's paths and the guide (Playwright, Chromium) |
 
 ## Notes
 
 - Three appearances, light, dark and pastel, plus a high-contrast mode for light and dark, chosen in the appearance menu and remembered per browser; until a choice is made the app follows the system's settings. The colour tokens are tuned for 4.5:1 text contrast on every surface, which the accessibility test checks.
 
+- A first visit opens the guide's welcome: a quick demonstration (Scenarios, an S2 case, an S8 case with rules and the board side by side, an S20 case, the evaluation) or a step or two on every screen. Help in the header resumes it, starts it again or opens one chapter. Its steps are a typed registry (`src/features/guide/registry.ts`) pointing at `data-tour` attributes on the screens; a case step finds the newest case of its scenario and mode through the API. The guide only opens pages and sections, and its place is kept in localStorage (`shutter:guide:v1`) with nothing about cases or patients.
 - Times are shown in UTC, as the HL7 messages and the scenarios carry them; tooltips give the browser's own time.
 - Routes are hash routes (`/shutter/#/cases/C-000011`): IRIS serves the files without rewriting unknown paths.
 - Every change sends `X-Requested-With: Shutter`, and the idempotent ones an `Idempotency-Key` made per action. The keys come from `crypto.getRandomValues` when `randomUUID` is missing: IRIS serves the app over plain http, which is not a secure context.

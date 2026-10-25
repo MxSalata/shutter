@@ -97,7 +97,7 @@ function tokens(p: EvaluationPass): string {
 function Headline({ data }: { data: Evaluation }) {
   const t = data.totals;
   return (
-    <Card padding="md" component="section" aria-labelledby="headline-title">
+    <Card padding="md" component="section" aria-labelledby="headline-title" data-tour="evaluation-headline">
       <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
         <Stack gap={2}>
           <Title order={2} fz="sm" c="dimmed" fw={600} id="headline-title">
@@ -314,7 +314,12 @@ export default function EvaluationPage({
         </Card>
 
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-          <Card padding="md" component="section" aria-labelledby="not-measured-title">
+          <Card
+            padding="md"
+            component="section"
+            aria-labelledby="not-measured-title"
+            data-tour="evaluation-limits"
+          >
             <Title order={2} fz="lg" id="not-measured-title" mb="sm" tabIndex={-1}>
               Not yet measured
             </Title>

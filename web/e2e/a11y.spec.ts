@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { skipWelcome } from './guide';
 
 /**
  * Automated accessibility check (axe-core, WCAG 2.1 A and AA) of the sign-in page and every screen of the demo
@@ -7,6 +8,9 @@ import { expect, test, type Page } from '@playwright/test';
  * fail the run; the rest are printed.
  */
 const go = (page: Page, path: string) => page.goto(`./#${path}`);
+
+// The guide's welcome would cover the screens these tests are about; guide.spec.ts tests it
+test.beforeEach(({ page }) => skipWelcome(page));
 
 /**
  * Opens every closed story step of a case page and waits for the panels to finish opening: a closed step is hidden,
@@ -114,6 +118,34 @@ for (const { colorScheme, contrast, palette } of MODES) {
         expect(await audit(page)).toEqual([]);
       });
     }
+
+    // The guide, open: Help's menu, the welcome, a step, a case section it shows with Continue guide beside it, and
+    // the chapter picker.
+    test('the guide', async ({ page }) => {
+      await signIn(page);
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await page.getByRole('button', { name: 'Help' }).click();
+      await expect(page.getByRole('menuitem', { name: 'Restart guide' })).toBeVisible();
+      expect(await audit(page)).toEqual([]);
+      await page.getByRole('menuitem', { name: 'Restart guide' }).click();
+      const dialog = page.getByRole('dialog');
+      await expect(dialog.getByRole('heading', { name: 'Welcome to Shutter' })).toBeVisible();
+      expect(await audit(page)).toEqual([]);
+      await dialog.getByRole('button', { name: 'Start guide' }).click();
+      await expect(dialog.getByText('Step 1 of 3 · Scenarios')).toBeVisible();
+      expect(await audit(page)).toEqual([]);
+      await dialog.getByRole('button', { name: 'Skip chapter' }).click();
+      await expect(dialog.getByText('Step 1 of 4 · S2: a transfer recovered')).toBeVisible();
+      await dialog.getByRole('button', { name: 'Show this section' }).click();
+      await expect(page.getByRole('region', { name: 'Guide' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Outcome' })).toBeFocused();
+      await expect(page.getByRole('status')).toHaveCount(0);
+      expect(await audit(page)).toEqual([]);
+      await page.getByRole('button', { name: 'Help' }).click();
+      await page.getByRole('menuitem', { name: 'Choose a chapter' }).click();
+      await expect(dialog.getByRole('heading', { name: 'Choose a chapter' })).toBeVisible();
+      expect(await audit(page)).toEqual([]);
+    });
 
     // The appearance menu, open: its items and their current-state labels are audited too.
     test('appearance menu', async ({ page }) => {

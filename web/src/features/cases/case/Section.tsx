@@ -17,12 +17,15 @@ export function Section({
   title,
   note,
   aside,
+  tour,
   children,
 }: {
   id: string;
   title: ReactNode;
   note?: ReactNode;
   aside?: ReactNode;
+  /** The guide's name for the section (`data-tour`). */
+  tour?: string;
   children: ReactNode;
 }) {
   const nested = useContext(Nested);
@@ -47,12 +50,12 @@ export function Section({
   );
   if (nested)
     return (
-      <section id={id} aria-labelledby={`${id}-title`}>
+      <section id={id} aria-labelledby={`${id}-title`} data-tour={tour}>
         {body}
       </section>
     );
   return (
-    <Card padding="md" id={id} component="section" aria-labelledby={`${id}-title`}>
+    <Card padding="md" id={id} component="section" aria-labelledby={`${id}-title`} data-tour={tour}>
       {body}
     </Card>
   );

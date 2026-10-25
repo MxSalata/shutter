@@ -160,6 +160,7 @@ export default function ReviewsPage() {
       <Stack gap="md">
         <Section
           id="start"
+          tour="reviews-start"
           title="Start a review"
           note="Shutter's own production, or a watched one its cases came from. The checks are deterministic; the agent only ranks and explains."
         >
@@ -190,6 +191,7 @@ export default function ReviewsPage() {
         </Section>
         <Section
           id="past"
+          tour="reviews-past"
           title="Past reviews"
           note="Newest first; the last 50 of each production are kept."
           aside={

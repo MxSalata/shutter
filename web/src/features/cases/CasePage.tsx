@@ -2,7 +2,7 @@ import { Anchor, Container, Stack, Tabs } from '@mantine/core';
 import { IconFileSearch, IconHistory, IconListDetails } from '@tabler/icons-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router';
 import { isOpen, keys, useCase, useCaseEvents, useMe } from '@/api/hooks';
 import type { CaseDetail } from '@/api/types';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -30,6 +30,9 @@ function portalBase(visualTrace: string | undefined): string {
 /** The case page's tabs, kept in the route's search parameters (`?tab=evidence`) so a link opens the right one. */
 const TABS = ['summary', 'evidence', 'audit'] as const;
 type Tab = (typeof TABS)[number];
+
+/** The story steps a link may open (`?open=decision`), as the guide does to show one. */
+const STEPS: StoryStep[] = ['failed', 'evidence', 'proposed', 'decision', 'written', 'verified', 'compare'];
 
 function CaseBody({ c }: { c: CaseDetail }) {
   const [search, setSearch] = useSearchParams();
@@ -67,6 +70,14 @@ function CaseBody({ c }: { c: CaseDetail }) {
     ...(c.state === 'awaiting_approval' ? ['decision'] : []),
     ...(compare && c.scenario === 'S8' ? ['compare'] : []),
   ]);
+  // A link that names a story step opens it, on every visit to the link (the location's key), even on this page
+  const asks = search.get('open') as StoryStep | null;
+  const { key: visit } = useLocation();
+  const [visited, setVisited] = useState<string>();
+  if (asks && STEPS.includes(asks) && visited !== visit) {
+    setVisited(visit);
+    if (!steps.includes(asks)) setSteps([...steps, asks]);
+  }
   const openStep = (step: StoryStep, target: string) => {
     setSteps((s) => (s.includes(step) ? s : [...s, step]));
     setTab('summary');

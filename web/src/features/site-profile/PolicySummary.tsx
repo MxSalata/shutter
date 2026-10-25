@@ -27,7 +27,7 @@ const RELEASES: Record<string, { tone: Tone; icon: Icon }> = {
  */
 export function PolicySummary({ profile }: { profile: SiteProfile }) {
   return (
-    <Stack gap="xs">
+    <Stack gap="xs" data-tour="site-summary">
       <Title order={2} fz="lg" id="site-summary-title">
         Who releases each write
       </Title>
