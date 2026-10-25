@@ -112,7 +112,7 @@ The integration engine maps each ADT message to one operation:
 | Operation field | HL7 |
 |---|---|
 | `source_system` | MSH-3 |
-| `patient_id`, `patient_id_authority` | PID-3, the repetition whose identifier type (PID-3.5) is MR, else the first repetition: the ID and the assigning authority (`MRN1001^^^HOSP^MR` gives `MRN1001` and `HOSP`) |
+| `patient_id`, `patient_id_authority` | PID-3, the repetition whose identifier type (PID-3.5) is MR, else the first repetition: the ID and the assigning authority (`H0000001^^^HOSP^MR` gives `H0000001` and `HOSP`) |
 | `encounter_id` | PV1-19 |
 | `event` | MSH-9.2: A01 admit, A02 transfer, A03 discharge, A04 register (an admit when PV1-2 is I and PV1-3.1 is present), A05 preadmit, A06, A07 and A08 update, A11 cancel admit, A12 cancel transfer, A13 cancel discharge, A28 person add, A31 person update, A40 merge (see WIC-6.2); any other trigger does not map |
 | `ward` | PV1-3.1 for an admit (A01, or an A04 that counts as one) and A02; null otherwise |
