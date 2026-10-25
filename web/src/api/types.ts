@@ -894,6 +894,14 @@ export interface ReviewAgent {
   error: string;
   summary: string;
   unknowns: string[];
+  /**
+   * Once the agent answered: the current findings its ranking explained, those it did not (they keep the baseline order
+   * within their tier) and the recorded entries no current finding matched (by code, item and setting).
+   */
+  explained?: number | null;
+  unexplained?: number | null;
+  dropped?: number | null;
+  recordedEntries?: number | null;
 }
 
 export interface ReviewDetail extends ReviewListItem {

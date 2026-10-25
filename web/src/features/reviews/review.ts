@@ -195,3 +195,19 @@ export function expiryForApi(value: string): string {
   const v = value.trim();
   return /^\d{4}-\d{2}-\d{2}$/.test(v) ? `${v}T23:59:59Z` : v;
 }
+
+/**
+ * How much of the review the agent's ranking covers: a recording is matched to the current findings by code, item and
+ * setting, so on another instance some findings can have no explanation and some recorded entries no finding.
+ */
+export function explainedLine(a: Pick<ReviewAgent, 'explained' | 'unexplained' | 'dropped'>): string {
+  if (a.explained === undefined || a.explained === null) return '';
+  const total = a.explained + (a.unexplained ?? 0);
+  const parts = [`${a.explained} of ${total} finding${total === 1 ? '' : 's'} explained`];
+  if (a.unexplained) parts.push('the others keep the baseline order within their tier, with no explanation');
+  if (a.dropped)
+    parts.push(
+      `${a.dropped} recorded explanation${a.dropped === 1 ? '' : 's'} matched no finding here and ${a.dropped === 1 ? 'was' : 'were'} left out`,
+    );
+  return `${parts.join('; ')}.`;
+}

@@ -14,7 +14,7 @@ import { formatDuration, formatInt, formatUsd, humanize } from '@/lib/format';
 import { useAnnotationDialogs } from './AnnotationDialogs';
 import { AgentStateBadge, ReviewStateBadge, SeverityCounts } from './badges';
 import { FindingsTable } from './FindingsTable';
-import { describeAgent, hl7Note, orderedFindings, rankedByAgent, READ_ONLY } from './review';
+import { describeAgent, explainedLine, hl7Note, orderedFindings, rankedByAgent, READ_ONLY } from './review';
 
 function AgentBlock({ r }: { r: ReviewDetail }) {
   const a = r.agent;
@@ -30,6 +30,7 @@ function AgentBlock({ r }: { r: ReviewDetail }) {
       <Alert color={view.colour} variant="light" title={view.title} role="note">
         <Text size="sm">{view.text}</Text>
       </Alert>
+      {explainedLine(a) ? <Text size="sm">{explainedLine(a)}</Text> : null}
       {a.summary ? <Text size="sm">{a.summary}</Text> : null}
       {a.unknowns.length ? (
         <Stack gap={2}>
