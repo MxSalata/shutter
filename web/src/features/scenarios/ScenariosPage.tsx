@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   Group,
+  List,
   Loader,
   SegmentedControl,
   SimpleGrid,
@@ -128,6 +129,10 @@ function RunBanner({ run }: { run: ScenarioRun }) {
 function ExpectedOutcome({ s, mode }: { s: Scenario; mode: Mode }) {
   if (!s.expected) return null;
   const e = { ...s.expected, ...s.expected.by_mode?.[mode] };
+  // An incident has no single end state: it says how many encounters it opens and the writes their chains make
+  const encounters = e.encounters ?? [];
+  const incident = !!e.incident && encounters.length > 0;
+  const incidentWrites = encounters.reduce((n, x) => n + (x.writes || 0), 0);
   return (
     <Stack gap={4}>
       <Text size="xs" fw={600} c="dimmed" tt="uppercase">
@@ -144,7 +149,13 @@ function ExpectedOutcome({ s, mode }: { s: Scenario; mode: Mode }) {
               </Badge>
             </Tooltip>
           ))}
-        {e.write ? (
+        {incident ? (
+          <StatusBadge
+            {...proposedWrites(incidentWrites)}
+            label={`${incidentWrites} conditional write${incidentWrites === 1 ? '' : 's'} in all`}
+            hint={undefined}
+          />
+        ) : e.write ? (
           <StatusBadge {...proposedWrites(1)} label="One conditional write" hint={undefined} />
         ) : (
           <StatusBadge {...writes(0)} label="Nothing written" hint={undefined} />
@@ -159,8 +170,11 @@ function ExpectedOutcome({ s, mode }: { s: Scenario; mode: Mode }) {
         ) : null}
       </Group>
       <Text size="xs" c="dimmed">
-        Ends {e.final_state}
-        {e.final_ward ? ` in ${e.final_ward}` : ''}.
+        {incident
+          ? `Opens one incident of ${encounters.length} encounters, each released as its own chain.`
+          : e.final_state
+            ? `Ends ${e.final_state}${e.final_ward ? ` in ${e.final_ward}` : ''}.`
+            : ''}
         {e.injected_note ? ' The message carries an instruction in a note: agents must not obey it.' : ''}
       </Text>
     </Stack>
@@ -316,7 +330,7 @@ export default function ScenariosPage() {
       <PageHeader
         tour="scenarios"
         title="Scenarios"
-        subtitle="Each scenario plays a real failure into the production: HL7 files into the ADT folder and faults on the downstream system. Shutter opens a case, investigates, checks the plan at the gate, has a person or the site's written policy release it, and verifies the result at the receiver."
+        subtitle="Each scenario plays a known failure into the production: HL7 ADT files into its inbound folder and faults on the downstream system. Shutter opens a case, investigates, checks the plan at the gate, has a person or the site's written policy release it, and verifies the result at the receiver."
         actions={
           <Tooltip
             label={
@@ -376,10 +390,22 @@ export default function ScenariosPage() {
                 data={MODES.map((m) => ({ value: m.value, label: m.label }))}
                 w="fit-content"
               />
+              {/* Each mode said once, here, since the cases list and the case page name them too */}
               <Text size="sm" c="dimmed">
-                {MODES.find((m) => m.value === mode)?.hint}. The gate, the rehearsal and the approval are the
-                same in every mode.
+                The mode chooses who proposes the plan. The gate, the rehearsal and the release, by a person,
+                or the site&apos;s written policy, are the same in every mode.
               </Text>
+              <List size="sm" spacing={2}>
+                {MODES.map((m) => (
+                  <List.Item key={m.value}>
+                    <Text span size="sm" fw={m.value === mode ? 700 : 600}>
+                      {m.label}
+                      {m.value === mode ? ' (chosen)' : ''}:
+                    </Text>{' '}
+                    {m.hint}.
+                  </List.Item>
+                ))}
+              </List>
             </Stack>
           </Card>
         )}
