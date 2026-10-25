@@ -79,6 +79,11 @@ Interoperability production, with a board of IRIS AI Hub agents.
 - **The case record is written only by its own transitions:** the plan, the gate decision, the agent run, the case
   token, the finding and the approval refer to their case by id, so saving one never writes the case whole, and the
   cases list reads each case's plan origin with the case ids in one query.
+- **The boundary, tried over HTTP:** `tests/e2e/boundary_check.py` approves with another plan digest, a stale case
+  version and as an operator, sends one approval twice with its Idempotency-Key and then reuses the key, approves S20
+  after the nurse's move and lets rules alone resend S3, and checks each is refused with nothing written; CI runs it
+  after the roles check, and the Evaluation page lists the attempts from `docs/readme/boundary.json`, which the script
+  writes.
 - **Install:** the `iris-shutter` and `iris-shutter-aihub` IPM modules, a Dockerfile and `docker compose up`, and a
   site install into an existing production.
 

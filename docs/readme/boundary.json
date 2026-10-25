@@ -1,0 +1,62 @@
+{
+  "script": "tests/e2e/boundary_check.py",
+  "runs": "CI's iris job on main, on every push that changes code, after the roles check, on a real IRIS for Health",
+  "checks": [
+    {
+      "id": "plan_digest",
+      "title": "An approval of a plan that is not the one shown",
+      "scenario": "S2, rules only",
+      "answer": "409 stale_version",
+      "proves": "An approval names the digest of the plan the approver read. Any other digest is refused with the current one named, and nothing is stored: no approval, no new case version, no write attempt, and the receiving system's record unchanged."
+    },
+    {
+      "id": "case_version",
+      "title": "An approval from a stale copy of the case",
+      "scenario": "S2, rules only",
+      "answer": "409 stale_version",
+      "proves": "An approval also names the case version it was read at; an older one is refused, with nothing stored and nothing written."
+    },
+    {
+      "id": "operator_approval",
+      "title": "An approval by an operator",
+      "scenario": "S2, rules only",
+      "answer": "403 forbidden",
+      "proves": "Only an approver approves. The operator's request is refused before anything is stored."
+    },
+    {
+      "id": "idempotent_replay",
+      "title": "The same approval sent twice, and its key reused",
+      "scenario": "S2, rules only",
+      "answer": "the same 202, then 409 idempotency_key_reused",
+      "proves": "A repeated request with the same Idempotency-Key gets the first reply again, before and after the case resolves, and the same key with another body is refused. The case has one approval and one write attempt, and the receiving system's history has the operation once. A fresh approval of the resolved case is refused with 409 wrong_state."
+    },
+    {
+      "id": "decider",
+      "title": "A name in the approval's body",
+      "scenario": "S2, rules only",
+      "answer": "ignored",
+      "proves": "The approval records the signed-in approver, never a name the request carries."
+    },
+    {
+      "id": "rehearsed",
+      "title": "The write follows a dry run of the same plan",
+      "scenario": "S2, rules only",
+      "answer": "APPROVAL_VALID and REHEARSED passed",
+      "proves": "The approval binds the receiver's dry run of this exact plan, which would apply at the version the write is conditional on, and the dispatch gate passed APPROVAL_VALID and REHEARSED under the same policy version the approval bound. Without that dry run the gate blocks the write (DRY_RUN_MISSING, DRY_RUN_FAILED, DRY_RUN_STALE: Shutter's unit tests)."
+    },
+    {
+      "id": "receiver_changed",
+      "title": "The receiving system changed after the approval",
+      "scenario": "S20, rules only",
+      "answer": "APPROVAL_RECEIVER_CHANGED, no write",
+      "proves": "A nurse moves the patient by hand while the resend waits. The approval is bound to the receiver's version, so the dispatch gate voids it, the case is planned again on fresh evidence and blocked (SUPERSEDED_BY_LATER_EVENT), no write is attempted, and the nurse's entry is the last in the receiving system's history."
+    },
+    {
+      "id": "already_committed",
+      "title": "A resend of a delivery the receiver already holds",
+      "scenario": "S3, rules only",
+      "answer": "ALREADY_COMMITTED, no write",
+      "proves": "Only the acknowledgement was lost. Rules alone propose a resend, the gate finds the receiver's receipt for the operation and blocks it, and nothing is written."
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 import { Card, List, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
 import evaluation from '../../../../docs/readme/evaluation.json';
 import evaluationText from '../../../../docs/readme/evaluation.md?raw';
+import boundary from '../../../../docs/readme/boundary.json';
 import { PageHeader } from '@/components/PageHeader';
 import { KeyValueList } from '@/components/KeyValueList';
 import { DispositionBadge } from '@/components/StateBadge';
@@ -9,6 +10,7 @@ import {
   notYetMeasured,
   passName,
   SPECIALISTS,
+  type BoundaryChecks,
   type Evaluation,
   type EvaluationConfidence,
   type EvaluationMember,
@@ -17,10 +19,12 @@ import {
 
 /**
  * How the board decides, from docs/readme/evaluation.json: the document scripts/evaluate.py writes from the recorded
- * live runs, read here at build time (never copied by hand), with the "Not yet measured" list from evaluation.md.
+ * live runs, read here at build time (never copied by hand), with the "Not yet measured" list from evaluation.md, and
+ * what the boundary refuses from docs/readme/boundary.json, which tests/e2e/boundary_check.py writes.
  */
 const EVALUATION = evaluation as unknown as Evaluation;
 const NOT_YET = notYetMeasured(evaluationText);
+const BOUNDARY: BoundaryChecks = boundary;
 const day = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
   month: 'long',
@@ -86,8 +90,14 @@ function tokens(p: EvaluationPass): string {
   return parts.join(' · ');
 }
 
-/** The page; a test may pass another document of the same shape. */
-export default function EvaluationPage({ data = EVALUATION }: { data?: Evaluation }) {
+/** The page; a test may pass other documents of the same shapes. */
+export default function EvaluationPage({
+  data = EVALUATION,
+  refusals = BOUNDARY,
+}: {
+  data?: Evaluation;
+  refusals?: BoundaryChecks;
+}) {
   const t = data.totals;
   const scored = data.passes.filter((p) => p.scored);
   const elapsed = scored.map((p) => p.elapsed_ms);
@@ -286,6 +296,51 @@ export default function EvaluationPage({ data = EVALUATION }: { data?: Evaluatio
             </List>
           </Card>
         </SimpleGrid>
+
+        <Card padding="md" component="section" aria-labelledby="boundary-title">
+          <Title order={2} fz="lg" id="boundary-title" mb={4}>
+            What the boundary refuses
+          </Title>
+          <Text size="sm" c="dimmed" mb="sm">
+            {`What ${refusals.script} tries over HTTP against the approval boundary, and the answer each attempt must get. It runs in ${refusals.runs}, and on any instance of your own (it plays the scenarios it names, so not on one someone else is using).`}
+          </Text>
+          <Table.ScrollContainer minWidth={800}>
+            <Table verticalSpacing="xs">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Attempt</Table.Th>
+                  <Table.Th>Scenario</Table.Th>
+                  <Table.Th>Answer</Table.Th>
+                  <Table.Th>What it proves</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {refusals.checks.map((c) => (
+                  <Table.Tr key={c.id}>
+                    <Table.Td>
+                      <Text size="sm" fw={600}>
+                        {c.title}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
+                        {c.scenario}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm" className="mono-wrap">
+                        {c.answer}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm">{c.proves}</Text>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
+        </Card>
 
         <Card padding="md" component="section" aria-labelledby="sources-title">
           <Title order={2} fz="lg" id="sources-title" mb={4}>

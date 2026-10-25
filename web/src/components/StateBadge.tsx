@@ -60,6 +60,7 @@ const DISPOSITION_COLOURS: Record<string, string> = {
   more_evidence: 'yellow',
   escalate: 'orange',
   handled_by_hand: 'grape',
+  abandoned: 'gray',
 };
 
 export const DISPOSITION_HINTS: Record<string, string> = {
@@ -69,6 +70,8 @@ export const DISPOSITION_HINTS: Record<string, string> = {
   more_evidence: 'The evidence does not decide it yet',
   escalate: 'A person must decide',
   handled_by_hand: 'The team corrected the systems by hand, and a person closed the case',
+  abandoned:
+    'An approver gave the case up after its workflow stopped moving; nothing more is sent, and it can be reinvestigated',
 };
 
 export function DispositionBadge({ disposition }: { disposition: string }) {

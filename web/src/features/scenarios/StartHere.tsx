@@ -14,6 +14,8 @@ interface Step {
   /** The scenario whose case the step opens, and the mode it was played in (any mode when not given). */
   scenario?: string;
   mode?: Mode;
+  /** The step also opens its case at the side-by-side of the scenario's rules and board cases. */
+  compare?: boolean;
   /** The step opens the scenario's incident rather than its case. */
   incident?: boolean;
   /** Pages of the app, for a step that opens no case. */
@@ -42,7 +44,8 @@ const STEPS: Step[] = [
     scenario: 'S8',
     mode: 'board',
     title: 'S8 in board mode: escalated, citing catalogue entry E7',
-    text: 'The same failure on the board: the evidence cannot decide which movement is current, so the coordinator escalates to a person, citing entry E7 (two sources at the same time).',
+    text: 'The same failure on the board: the evidence cannot decide which movement is current, so the coordinator escalates to a person, citing entry E7 (two sources at the same time). The side-by-side puts the two cases and the evidence they share next to each other.',
+    compare: true,
   },
   {
     scenario: 'S15',
@@ -85,7 +88,12 @@ function linksFor(step: Step, cases: CaseSummary[]): PageLink[] {
     return id ? [{ to: `/incidents/${encodeURIComponent(id)}`, label: `Incident ${id}` }] : [];
   }
   const c = caseFor(cases, step.scenario, step.mode);
-  return c ? [{ to: `/cases/${encodeURIComponent(c.caseId)}`, label: `Case ${c.caseId}` }] : [];
+  if (!c) return [];
+  const to = `/cases/${encodeURIComponent(c.caseId)}`;
+  return [
+    { to, label: `Case ${c.caseId}` },
+    ...(step.compare ? [{ to: `${to}?show=compare`, label: 'Rules and board side by side' }] : []),
+  ];
 }
 
 export function StartHere() {

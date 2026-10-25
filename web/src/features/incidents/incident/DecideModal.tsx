@@ -69,7 +69,7 @@ export function useDecideDialog(inc: IncidentDetail) {
       <Stack gap="sm">
         <Text size="sm">
           {decision === 'approve'
-            ? `You approve exactly this: resend these ${operations} operation${operations === 1 ? '' : 's'} to ${inc.receiver}, in this order. Each one is rehearsed, gated and verified just before it goes, and goes at exactly the receiver version the one before it verified; a chain stops at the first surprise, and the rest comes back to a person.`
+            ? `You approve exactly this: resend these ${operations} operation${operations === 1 ? '' : 's'} to ${inc.receiver}, in this order. Each one is rehearsed, gated and verified just before it goes, and goes at exactly the receiver version the one before it verified; a chain stops at the first surprise, and the rest comes back to a person. Each operation goes only under the catalogue entry and outcome listed for it; one whose fresh evidence reads differently stops its chain and comes back to a person.`
             : 'You reject the release: nothing is sent for these chains, and their cases go to a person with the reason.'}
         </Text>
         <KeyValueList

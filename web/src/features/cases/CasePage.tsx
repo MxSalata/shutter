@@ -1,7 +1,7 @@
 import { Anchor, Container, Grid, Stack } from '@mantine/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { isOpen, keys, useApprovals, useCase, useCaseEvents, useMe, usePlan } from '@/api/hooks';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
@@ -16,7 +16,10 @@ import { ApprovalPanel } from './case/ApprovalPanel';
 import { ExecutionPanel } from './case/ExecutionPanel';
 import { OutcomePanel } from './case/OutcomePanel';
 import { EscalationPanel } from './case/EscalationPanel';
+import { AbandonPanel } from './case/AbandonPanel';
 import { CaseTimeline } from './case/CaseTimeline';
+import { ReceiptCard } from './case/ReceiptCard';
+import { S8Compare } from './case/S8Compare';
 
 /** The portal's base path (/csp/<namespace>/) for links to messages, read from the case's trace link. */
 function portalBase(visualTrace: string | undefined): string {
@@ -26,6 +29,7 @@ function portalBase(visualTrace: string | undefined): string {
 
 export default function CasePage() {
   const { caseId = '' } = useParams();
+  const [search] = useSearchParams();
   const me = useMe().data;
   const c = useCase(caseId);
   const open = isOpen(c.data?.state);
@@ -68,6 +72,7 @@ export default function CasePage() {
       <Grid gutter="md">
         <Grid.Col span={{ base: 12, xl: 8 }}>
           <Stack gap="md">
+            <ReceiptCard c={detail} open={open} />
             <OutcomePanel c={detail} />
             {/* The board's findings right under the outcome: what the case was decided on, before how it got there */}
             <BoardPanel
@@ -77,7 +82,11 @@ export default function CasePage() {
               withheld={detail.failureKind === 'withheld'}
               portalBase={portalBase(detail.links?.visualTrace)}
             />
+            {detail.scenario === 'S8' ? (
+              <S8Compare caseId={caseId} focus={search.get('show') === 'compare'} />
+            ) : null}
             <EscalationPanel c={detail} />
+            <AbandonPanel c={detail} events={events.data} />
             <FailurePanel c={detail} />
             <EvidencePanel caseId={caseId} open={open} />
             <PlanPanel view={plan.data} loading={plan.isPending} />

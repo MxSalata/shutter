@@ -169,6 +169,10 @@ jobs:
       # docs change rather than leave it to the next code push.
       - name: The evaluation matches the recordings and the scenarios
         run: python3 scripts/evaluate.py --check
+      # The Evaluation page lists what the boundary check tries from docs/readme/boundary.json, which the script writes
+      # from its own list
+      - name: The Evaluation page lists the boundary check's own checks
+        run: python3 tests/e2e/boundary_check.py --check-list docs/readme/boundary.json
 
   # The ObjectScript side on a real IRIS for Health Community 2026.2 (InterSystems' image; the AI Hub build is not on a
   # registry CI can pull from, and the core needs none of it): the namespace, a full load and compile, the installer,
@@ -176,7 +180,7 @@ jobs:
   # runs: S1 to S10, S13, and the withheld merge and cancel (S15, S16) on the board; the two outage scenarios, S11 and
   # S12, and S2 in HL7 2.4 and 2.3.1 (S17, S18) in site-policy mode; S20, a move entered by hand, in rules-only mode;
   # S21, a transfer in the hour the clocks go back, in rules-only and site-policy modes; then the operator's and the
-  # approver's routes.
+  # approver's routes, and the attempts to break the approval boundary.
   iris:
     name: IRIS (the downstream system's contract, scenarios in replay)
     runs-on: [self-hosted, house]
@@ -319,6 +323,12 @@ jobs:
       # scenarios left escalated or blocked, so it runs after them.
       - name: The operator's and the approver's routes
         run: python3 tests/e2e/roles_check.py --url "$IRIS_URL"
+      # Tries to break the approval boundary: another plan digest, a stale case version, an operator's approval and one
+      # approval sent twice with its key then reused (S2), the receiving system changed after the approval (S20), and a
+      # resend of a delivery the receiver already holds (S3), each refused with nothing written. It plays its own
+      # scenarios in rules-only mode, so it runs after the roles check, which needs the cases the scenarios above left.
+      - name: What the approval boundary refuses
+        run: python3 tests/e2e/boundary_check.py --url "$IRIS_URL"
       - name: Readiness report and the IRIS log
         if: always()
         run: |

@@ -30,7 +30,7 @@ Shutter's feed fails forward instead of holding its queue: the connector's `Fail
 - **The board as business operations.** Each agent is an item of `Shutter.Bridge.Operation.Agent` with a live runner (AI Hub) and a replay runner (recordings keyed by scenario, case, member and configuration version). The three specialists get their requests asynchronously, so they work in parallel, each in its own Visual Trace lane, before the coordinator writes one plan.
 - **Sealed evidence.** The Evidence Collector builds one immutable snapshot (the message, the receiver's state, history and receipt lookup, every other operation for the encounter, the receiver's capabilities, the catalogue match) and seals it with a digest. The agents' evidence tools read that snapshot, never the live systems.
 - **Approvals bound to what was approved.** An approval names the plan's digest, the evidence, the gate's policy and the receiver's version; the API refuses a decision on a plan that has changed.
-- **One conditional write, then verification.** A dry run first, then a fresh read and a second gate, one write at the expected version, and a check of the receiver's committed history. "Acknowledged" and "Verified" are never the same label.
+- **One conditional write, then verification.** A dry run first, then a fresh read and a second gate whose rehearsal check requires that dry run to be of the same plan at the same version, epoch and payload, one write at the expected version, and a check of the receiver's committed history. "Acknowledged" and "Verified" are never the same label, and "no answer" is neither: a write whose answer was lost is read again until a receipt, the history or a settle window settles it, "not committed" is said only then, and nothing is ever resent from a verification.
 - **Per-case tokens.** Identifiers become `MRN-T1`, `ENC-T1` before anything reaches a model, and real values return only inside IRIS. `SELECT Shutter_Util.ModelView_Preview('<case id>')` shows what a model would see.
 - **An exact index of the feed.** `Shutter.Index.Message` is an `Ens.CustomSearchTable` over the HL7 traffic: the evidence finds every message for an encounter without opening messages by time range or touching the site's search table settings.
 - **Incidents with ordered chains.** Many failures to one receiver become one incident: a chain per encounter in event order, one approval, release one operation at a time at the version the one before verified, and a stop at the first surprise.
@@ -57,7 +57,10 @@ Sign in to your own instance as `approver` / `shutter`, or to the online demo wi
 
 1. **S2, board mode.** A transfer never arrived. Three specialists review the evidence, the coordinator proposes a resend, the gate passes it and the receiver's dry run says it would apply. **Approve**: one conditional write, then "Verified" from the receiver's history.
 2. **S1, board mode, then Rules only.** A later transfer has overtaken the failed one. The board closes the case as superseded and writes nothing; rules alone propose a resend, and the gate blocks it.
-3. **S8, Rules only, then board mode.** Rules alone pass every check; **Approve** the plan and the resend overwrites the bed manager's WARD-C with WARD-B. In board mode the board escalates. This is the case the gate alone can't catch.
+3. **S8, Rules only, then board mode.** Rules alone pass every check; **Approve** the plan and the resend overwrites the bed manager's WARD-C with WARD-B. In board mode the board escalates. This is the case the gate alone can't catch. Either case's page puts the two side by side: what each did at the receiver, and the evidence both read. The board's run in the Visual Trace, each agent a lane between the evidence collector and the gate:
+
+   ![The Visual Trace of S8 in board mode: the failed delivery, the case workflow, the evidence collector, the three specialists, the coordinator and the gate, each in its own lane](https://raw.githubusercontent.com/MxSalata/shutter/main/web/public/s8-visual-trace.png)
+
 4. **S15, any mode.** A patient merge: the gate blocks every plan (`MERGE_WITHHELD`), the board is not convened, **Escalate** drafts the email to the PAS team, and **Mark as handled by the team** closes the case with what they did.
 5. **S11, Site policy mode.** The receiver goes down twice and eight deliveries fail: one incident, a chain per encounter, the single chains settled by the site's policy, the ordered chain waiting for one approval.
 6. **S19, Site policy mode.** The same transfer fails inside the demo hospital's own production (namespace `HOSPITAL`), which Shutter does not own. Its forwarder hands the failure to Shutter, the case names where it came from, and the resend goes through Shutter's connector.
@@ -76,10 +79,11 @@ In the Management Portal, the Visual Trace of a case shows each step as a messag
 
 ### How it is tested
 
-- CI runs on every push to `main` that changes code (a push of only the README or `docs/` runs nothing). On a real IRIS for Health Community 2026.2 it runs the full install, the receiving system's 23 contract tests and Shutter's 61 unit tests (the trigger table, the gate, the matcher's conditions, supersession, the model view and the case's writes), and 20 scenarios end to end through the REST API, one of them through the demo hospital's own production.
+- CI runs on every push to `main` that changes code (a push of only the README or `docs/` runs nothing). On a real IRIS for Health Community 2026.2 it runs the full install, the receiving system's 23 contract tests and Shutter's 121 unit tests (the trigger table, the gate, the matcher's conditions, supersession, verification, the model view, the case's writes, the Workflow decision and the incident plan, the API mimic, the mail addresses, the site profile's validator, the escalations and abandoning a case), and 20 scenarios end to end through the REST API, one of them through the demo hospital's own production.
+- CI then tries to break the approval boundary over HTTP ([tests/e2e/boundary_check.py](https://github.com/MxSalata/shutter/blob/main/tests/e2e/boundary_check.py)): an approval naming another plan digest or a stale case version (409), an operator's approval (403), one approval sent twice with the same Idempotency-Key (the same reply, one write) and its key reused with another body (409), the receiving system changed after the approval (S20: `APPROVAL_RECEIVER_CHANGED`, no write) and a resend of a delivery the receiver already holds (S3: `ALREADY_COMMITTED`). The Evaluation page lists each attempt and what it proves.
 - CI also checks the recordings and the demo's data for privacy, and runs axe-core on 14 screens (the sign-in page and 13 of the app) in 5 appearances of the web app's demo build. Third-party actions are pinned by commit SHA.
 - The live edition (the aihub module) needs the AI Hub build, which CI can't download, so it is checked by hand on that build, and its recorded runs are what CI replays.
-- The live path itself (AI Hub's agent loop, the tools, the policies, the Visual Trace) also runs on that build with no model, against an API mimic: a test fixture in [tests/mock](https://github.com/MxSalata/shutter/tree/main/tests/mock), in neither module nor the image, whose runs are labelled model `mock`, cost nothing and are never recorded.
+- The live path itself (AI Hub's agent loop, the tools, the policies, the Visual Trace) also runs on that build with no model, against an API mimic: a test fixture in [tests/mock](https://github.com/MxSalata/shutter/tree/main/tests/mock), in neither module nor the image, whose runs are labelled model `mock`, cost nothing and are never recorded, and which the Settings page names while it is on.
 
 ### Limits, plainly
 
@@ -88,11 +92,12 @@ In the Management Portal, the Visual Trace of a case shows each step as a messag
 - The shipped site profile is a demo profile: it releases the single cases the catalogue settles at tier 2 without asking a person. A site answers the profile's induction questions first.
 - A06 and A07 (a change of patient class) are delivered as an update with no location, although an A06 can carry a new location in PV1-3.
 - Uncertain outcomes (timeouts) never form incidents, and each board item runs one request at a time, so a storm of timeouts convenes one paid board pass per message, one after another. A token budget limits each run; nothing limits the total.
-- A case left in a working state by a restart in the middle of a scenario has no route to abandon it yet: "Mark as handled" accepts only escalated, blocked or failed cases.
+- Closed cases are kept (the record is the product); only the escalation emails' text and `.eml` files go, 90 days after the case closed (`SHUTTER_ESCALATION_DAYS`), and a site that wants closed cases removed switches the case purge on in the Task Manager.
+- A case left in a working state by a restart in the middle of a scenario is noted when the production starts (an error-kind event on the case saying so, with the way out), and once nothing of its workflow has moved for 15 minutes an approver can abandon it (`POST /cases/{id}/abandon`, or "Abandon the case" on the case page): the case fails with disposition `abandoned` and can be reinvestigated. Nothing abandons a case by itself, and a case that is merely waiting (a message in flight, an approval task open) is refused with 409 `busy`.
 
 ## Run it
 
-Shutter runs on InterSystems IRIS for Health Community with AI Hub, build `2026.3.0AI.154.0`, from InterSystems' Early Access programme. That image is not on a public registry: you load the file once and tag it, and `docker compose up` does the rest.
+Shutter runs on InterSystems IRIS for Health Community with AI Hub, build `2026.3.0AI.154.0`, from InterSystems' Early Access programme. That image is not on a public registry: you load the file once and tag it, and `docker compose up` does the rest. Allow about 25 GB of free disk for this route (the 5.4 GB file, the 11 GB image it loads and Shutter's image, which shares most of its layers); the `.tar.gz` can be deleted once it is loaded.
 
 ### With the AI Hub image (the main route, live agents)
 
@@ -109,16 +114,16 @@ cp .env.example .env
 docker compose up -d
 ```
 
-The x64 file loads as `docker.iscinternal.com/docker-intersystems/intersystems/irishealth-community:2026.3.0AI.154.0`; if `docker images` shows another name, tag that one. No Dockerfile edit is needed: its base image comes from the build argument `IRIS_IMAGE`, which defaults to `irishealth-community:2026.3.0AI.154.0`.
+If `docker images` shows the image much smaller than 11 GB (a load that was cut off can leave it half unpacked, with no error), run the load again. The x64 file loads as `docker.iscinternal.com/docker-intersystems/intersystems/irishealth-community:2026.3.0AI.154.0`; if `docker images` shows another name, tag that one. No Dockerfile edit is needed: its base image comes from the build argument `IRIS_IMAGE`, which defaults to `irishealth-community:2026.3.0AI.154.0`.
 
-3. The first `up` builds the image, which takes a few minutes. Check it:
+3. The first `up` builds the image: about 10 to 15 minutes, most of it in the install step (measured at 14.5 minutes on 8 cores and 5 GB of memory). Check it:
 
 ```sh
 docker compose ps
 curl http://localhost:52773/api/shutter/health
 ```
 
-The health report says `"ok":true` once the production is running.
+The health report says `"ok":true` once the production is running, which can take up to a minute after `up` returns; until then `docker compose ps` shows `health: starting`.
 
 **The model.** The provider is Anthropic and the model `claude-opus-5-5` (`SHUTTER_MODEL` in `.env`). For live agents, set `ANTHROPIC_API_KEY` in `.env` before `docker compose up`; without a key the agents replay recorded runs and nothing is charged. The recording of every scenario on 19 October 2026 took 56 agent runs and cost 5.31 USD, so a full live pass on your own key costs about 5 USD.
 
@@ -130,10 +135,13 @@ Without the Early Access file, build the replay edition on InterSystems' public 
 git clone https://github.com/MxSalata/shutter.git
 cd shutter
 cp .env.example .env
-SHUTTER_IMAGE=containers.intersystems.com/intersystems/irishealth-community:2026.2 SHUTTER_WITH_AIHUB=0 docker compose up -d --build
+sed -i.bak -e 's|^SHUTTER_IMAGE=.*|SHUTTER_IMAGE=containers.intersystems.com/intersystems/irishealth-community:2026.2|' -e 's|^SHUTTER_WITH_AIHUB=.*|SHUTTER_WITH_AIHUB=0|' .env
+docker compose up -d --build
 ```
 
-It is the image CI builds and plays S2 and S19 on.
+The two settings stay in `.env`, so a later `docker compose build` or `up --build` builds the replay edition again. The build takes about 8 minutes. It is the image CI builds and plays S2 and S19 on.
+
+Both routes use the same image name, container and data volume. To switch from one to the other, run `docker compose down -v` first: it removes the instance's data, so the other edition starts clean.
 
 ### Open it
 

@@ -10,7 +10,7 @@ export function IncidentPlanPanel({ inc }: { inc: IncidentDetail }) {
     <Section
       id="incident-plan"
       title="The plan"
-      note="What an approval binds: the chains' operation keys in order, each operation's payload digest, each chain's first expected version, the receiver's epoch, and the versions of the catalogue, the site profile and the gate's policy. If any of them moves, the digest moves and an earlier approval no longer applies."
+      note="What an approval binds: the plan as recorded below, hashed as canonical JSON: every chain's kind, who decides it and its policy; each operation's case, key, payload digest, catalogue entry, outcome and the receiver version it goes at; the receiver's epoch; and the versions of the catalogue, the site profile and the gate's policy. If any of them moves, the digest moves and an earlier approval no longer applies."
     >
       {!inc.planDigest ? (
         <NotYet>No plan yet: it is made when the chains are formed and classified.</NotYet>

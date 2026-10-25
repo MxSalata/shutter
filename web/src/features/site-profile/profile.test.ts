@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SiteProfile } from '@/api/types';
-import fixtures from '@/mocks/fixtures.json';
+import { recordedSiteProfile } from '@/mocks/profile';
 import {
   checkDraft,
   closeNeedsApprover,
@@ -13,7 +13,7 @@ import {
   validateProfile,
 } from './profile';
 
-const recorded = (fixtures as unknown as { siteProfile: { profile: SiteProfile } }).siteProfile.profile;
+const recorded = recordedSiteProfile()!.profile;
 const copy = (): SiteProfile => structuredClone(recorded);
 const FEED_ZONE = 'feed.time_zone: must be UTC, Europe/London or a fixed offset such as +01:00 (up to 14:00)';
 
@@ -83,7 +83,40 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
     ],
     [
       (p: Record<string, unknown>) => (p.teams = [{ id: 'pas', name: 'PAS team', mailbox: 'pas.team' }]),
-      'teams[0].mailbox: must be an address',
+      'teams[0].mailbox: must be one address with one @',
+    ],
+    [
+      (p: Record<string, unknown>) =>
+        (p.teams = [{ id: 'pas', name: 'PAS team', mailbox: 'a@nhs.net@evil.com' }]),
+      'teams[0].mailbox: must be one address with one @',
+    ],
+    [
+      (p: Record<string, unknown>) =>
+        (p.teams = [{ id: 'pas', name: 'PAS team', mailbox: 'PAS team <pas@example.nhs.uk>' }]),
+      'teams[0].mailbox: must be a bare address, local@domain, with no display name, brackets or spaces',
+    ],
+    [
+      (p: Record<string, unknown>) => (p.teams = [{ id: 'pas', name: 'PAS team', mailbox: 'pas@nhs..net' }]),
+      'teams[0].mailbox: the domain is not a valid domain name',
+    ],
+    [
+      (p: Record<string, unknown>) => {
+        delete p.mail;
+        p.teams = [{ id: 'pas', name: 'PAS team', mailbox: 'pas@example.nhs.uk' }];
+      },
+      'teams[0].mailbox: no allowed mail domains are set in the site profile (mail.allowed_domains)',
+    ],
+    [
+      (p: Record<string, unknown>) => (p.mail = { from: 'shutter@example.nhs.uk\r\nBcc: e@evil.com' }),
+      'mail.from: must not contain line breaks or control characters',
+    ],
+    [
+      (p: Record<string, unknown>) => (p.mail = { allowed_domains: ['nhs net'] }),
+      'mail.allowed_domains[0]: must be a domain name such as example.nhs.uk (letters, digits, hyphens and dots)',
+    ],
+    [
+      (p: Record<string, unknown>) => (p.mail = { allowed_domains: [''] }),
+      'mail.allowed_domains[0]: must be a domain',
     ],
     [
       (p: Record<string, unknown>) => {
@@ -95,14 +128,14 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
     [
       (p: Record<string, unknown>) =>
         (p.teams = [
-          { id: 'pas', name: 'PAS team', mailbox: 'pas@trust.nhs.net' },
-          { id: 'pas', name: 'Integration', mailbox: 'int@trust.nhs.net' },
+          { id: 'pas', name: 'PAS team', mailbox: 'pas@example.nhs.uk' },
+          { id: 'pas', name: 'Integration', mailbox: 'int@example.nhs.uk' },
         ]),
       'teams[1].id: must be unique',
     ],
     [
       (p: Record<string, unknown>) =>
-        (p.teams = [{ id: 'pas', name: 'PAS team', mailbox: 'pas@trust.nhs.net', receivers: [''] }]),
+        (p.teams = [{ id: 'pas', name: 'PAS team', mailbox: 'pas@example.nhs.uk', receivers: [''] }]),
       'teams[0].receivers[0]: must be a receiver name',
     ],
     [
@@ -118,6 +151,16 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
         (p.approvers = { ...p.approvers, close_needs_approver: 'yes' as unknown as boolean }),
       'approvers.close_needs_approver: must be true or false',
     ],
+    [
+      (p: Record<string, unknown>) =>
+        (p.approvers = { ...(p.approvers as object), close_needs_aprover: true }),
+      'approvers.close_needs_aprover: unknown setting',
+    ],
+    [
+      (p: Record<string, unknown>) => (p.approvers = { ...(p.approvers as object), role: 5 }),
+      'approvers.role: must be a string',
+    ],
+    [(p: Record<string, unknown>) => (p.approvers = []), 'approvers: must be an object'],
   ])('refuses a bad profile with the server’s message (%#)', (spoil, message) => {
     const p = copy();
     (spoil as (p: unknown) => void)(p);
@@ -157,7 +200,7 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
 describe('the PUT body', () => {
   it('sends the whole profile as read, without its inner version, with expectedVersion', () => {
     const p = copy();
-    p.approvers = { ...p.approvers, pager: '1234' };
+    p.feed = { time_zone: 'Europe/London' };
     const body = toPutBody(p, 3);
     expect(body).not.toHaveProperty('version');
     expect(body.expectedVersion).toBe(3);
@@ -165,7 +208,9 @@ describe('the PUT body', () => {
     expect(body.receivers[0].features).toEqual(recorded.receivers[0].features);
     expect(body.authoritative_source).toBe(recorded.authoritative_source);
     expect(body.unconditional_resend).toBe(recorded.unconditional_resend);
-    expect(body.approvers?.pager).toBe('1234');
+    expect(body.approvers).toEqual(recorded.approvers);
+    expect(body.mail).toEqual(recorded.mail);
+    expect(body.feed?.time_zone).toBe('Europe/London');
   });
 });
 
