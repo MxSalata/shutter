@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 """Check recording files (fixtures/records/*.json) offline: the key, the member, the agent class, and the
 result's shape as the core stores it (Shutter.Schema.Findings for specialists, Shutter.Schema.Plan for the
-coordinator and the generalist). Mirrors the schema classes' Check methods. A run the API mimic answered
-(model mock, tests/mock) is a problem: no model made it.
+coordinator and the generalist, Shutter.Schema.Review for the production review's agent). Mirrors the schema
+classes' Check methods. A run the API mimic answered (model mock, tests/mock) is a problem: no model made it.
 
     python3 scripts/check-records.py [fixtures/records] [--scenarios fixtures/scenarios.json]
+    python3 scripts/check-records.py --self-test
 
 Exit code 1 when any file has a problem. With --scenarios it also lists, per scenario in that file, the
 members whose round-1 recording is missing, per case (scenario:S11:ENC-1101:transfer|member|cfg). A key in the older
 form without the encounter and event (scenario:S2|member|cfg) is a problem: Shutter.Bridge.Record looks up the long key
 only, so such a recording never replays. A scenario that opens an incident needs recordings only for the encounters
 whose chain the board decides; a withheld merge or cancel, and a scenario played only in site-policy mode, need none.
+A production review's recording (review:SHUTTER:Shutter.Production|review|1|<fingerprint>) is checked the same way, is
+named as Shutter.Bridge.Record.ExportDir names it, and is not counted towards any scenario's board set.
 """
 import argparse
+import decimal
 import glob
 import json
 import os
@@ -26,11 +30,18 @@ MEMBERS = {
     "impact": ("Shutter.Agent.Impact", "findings"),
     "coordinator": ("Shutter.Agent.Coordinator", "plan"),
     "generalist": ("Shutter.Agent.Generalist", "plan"),
+    "review": ("Shutter.Agent.Review", "review"),
 }
 # scenario:<S>:<encounter>:<event>|<member>|<configVersion>[|round<n>], as CaseWorkflow writes it. The pattern still parses
 # the older form without the encounter and event, so that check_file can say why such a recording is refused.
 KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+)(?::(?P<encounter>[^:|]+):(?P<event>[^:|]+))?"
                     r"\|(?P<member>[a-z]+)\|(?P<cfg>\d+)(?:\|round(?P<round>\d+))?$")
+# review:<namespace>:<production>|review|1|<fingerprint>, as Shutter.Process.Review.RecordKeyFor writes it: the
+# fingerprint is the configuration findings' SHA-256 in lower-case hex, empty when the production has none
+REVIEW_KEY_RE = re.compile(r"^review:(?P<namespace>[A-Za-z0-9_%]+):(?P<production>[A-Za-z0-9_.]+)"
+                           r"\|(?P<member>review)\|(?P<cfg>1)\|(?P<fingerprint>[0-9a-f]{64}|)$")
+# The review's agent has no evidence tools: its knowledge search and its terminal are all it can call
+REVIEW_TOOLS = {"search_review", "SubmitReview"}
 
 
 def file_name(m):
@@ -38,6 +49,11 @@ def file_name(m):
     case = [m["encounter"], m["event"]] if m["encounter"] else []
     parts = [re.sub(r"[^A-Za-z0-9._-]", "_", x) for x in ["scenario", m["scenario"], *case, m["member"], m["cfg"]]]
     return "-".join(parts) + (f"-round{m['round']}" if m["round"] else "") + ".json"
+
+
+def review_file_name(key):
+    """The fixture file for a review key, as Shutter.Bridge.Record.ExportDir names it: each of ":|/\\ " becomes "-"."""
+    return key.translate(str.maketrans(":|/\\ ", "-----")) + ".json"
 
 
 def case_of(m):
@@ -124,6 +140,106 @@ def check_plan(r):
     return p
 
 
+def os_text(v):
+    """A JSON value as Shutter.Util.Json.Str reads it: "" for null, 1 or 0 for a boolean, a number in its canonical
+    form (2.0 is "2", 0.5 is ".5"), a string as it is; None for an object or an array."""
+    if isinstance(v, (dict, list)):
+        return None
+    if v is None:
+        return ""
+    if isinstance(v, bool):
+        return "1" if v else "0"
+    if isinstance(v, int):
+        return str(v)
+    if isinstance(v, float):
+        t = format(decimal.Decimal(repr(v)), "f")
+        if "." in t:
+            t = t.rstrip("0").rstrip(".")
+        t = t.replace("-0.", "-.") if t.startswith("-0.") else (t[1:] if t.startswith("0.") else t)
+        return "0" if t in ("", "-0") else t
+    return v
+
+
+def os_len(s):
+    """$LENGTH: characters outside the BMP count as two."""
+    return len(s.encode("utf-16-le")) // 2
+
+
+def check_review(r):
+    """Shutter.Schema.Review.Check, message for message: every finding id once, ranks 1 to n with none twice, an
+    explanation of at most 600 characters, a note of at most 300, a summary of at most 600 and unknowns an array."""
+    if not isinstance(r, dict):
+        return ["review must be a JSON object"]
+    if not isinstance(r.get("ranking"), list):
+        return ["ranking must be an array of {finding_id, rank, explanation, confidence_note}"]
+    p = []
+    ranking = r["ranking"]
+    n = len(ranking)
+    if n == 0:
+        p.append("ranking must list every finding of the review")
+    seen, taken = set(), set()
+    for i, e in enumerate(ranking):
+        if not isinstance(e, dict):
+            p.append(f"ranking[{i}] must be an object")
+            continue
+        fid = os_text(e.get("finding_id"))
+        # An object as the id is a distinct id each time, as an object reference is
+        label = fid if fid is not None else f"<object {i}>"
+        if label == "":
+            p.append(f"ranking[{i}] needs a finding_id")
+        elif label in seen:
+            p.append(f"finding {label} is ranked more than once")
+        else:
+            seen.add(label)
+        # rank must be the canonical form of an integer from 1 to n: "+rank" reads 2 from "2" but "02" is not 2
+        rank = os_text(e.get("rank")) or ""
+        if not re.fullmatch(r"[1-9]\d*", rank) or int(rank) > n:
+            p.append(f"ranking[{i}] rank must be an integer from 1 to {n}, the number of findings ranked")
+        elif int(rank) in taken:
+            p.append(f"rank {int(rank)} is given twice: ranks run 1 to {n} without a gap")
+        else:
+            taken.add(int(rank))
+        named = label if label != "" else f"ranking[{i}]"
+        explanation = os_text(e.get("explanation")) or ""
+        # $ZSTRIP(x, "<>W"): tab, space and the no-break space
+        if explanation.strip("\t \u00a0") == "":
+            p.append(f"ranking[{i}] needs an explanation" + (f" for {label}" if label != "" else ""))
+        elif os_len(explanation) > 600:
+            p.append(f"the explanation of {named} is longer than 600 characters")
+        note = os_text(e.get("confidence_note")) or ""
+        if os_len(note) > 300:
+            p.append(f"the confidence_note of {named} is longer than 300 characters")
+    summary = os_text(r.get("summary"))
+    if summary is None:
+        p.append("summary must be text")
+    elif os_len(summary) > 600:
+        p.append("summary is longer than 600 characters")
+    if "unknowns" in r and r["unknowns"] is not None and not isinstance(r["unknowns"], list):
+        p.append("unknowns must be an array of strings")
+    return p
+
+
+def review_tool_problems(d):
+    """The review's run calls its knowledge search and SubmitReview only, and calls SubmitReview. Tool calls that are
+    empty, missing or not a list mean the run never reached SubmitReview either."""
+    calls = d.get("toolCalls")
+    if isinstance(calls, str):
+        try:
+            calls = json.loads(calls) if calls.strip() else []
+        except ValueError:
+            calls = None
+    if not isinstance(calls, list):
+        calls = []
+    names = [c.get("name") for c in calls if isinstance(c, dict)]
+    p = []
+    other = sorted({str(x) for x in names} - REVIEW_TOOLS)
+    if other:
+        p.append(f"tool calls the review's agent does not have: {', '.join(other)} (it has {', '.join(sorted(REVIEW_TOOLS))})")
+    if "SubmitReview" not in names:
+        p.append("the run never called its terminal tool SubmitReview")
+    return p
+
+
 def mock_problems(d):
     """A run the API mimic answered (tests/mock): no model made it, so it is never a recording."""
     resp = d.get("response") if isinstance(d.get("response"), dict) else {}
@@ -143,12 +259,28 @@ def check_file(path):
         return ["a recording must be a JSON object"], None
     problems += mock_problems(d)
     key = d.get("key", "")
-    m = KEY_RE.match(key)
+    m = KEY_RE.match(key) or REVIEW_KEY_RE.match(key)
     if not m:
-        problems.append(f"key {key!r} is not scenario:S<n>[:<encounter>:<event>]|<member>|<configVersion>[|round<n>]")
+        problems.append(f"key {key!r} is not scenario:S<n>[:<encounter>:<event>]|<member>|<configVersion>[|round<n>]"
+                        " or review:<namespace>:<production>|review|1|<fingerprint>")
         member = d.get("memberCode")
+    elif m.re is REVIEW_KEY_RE:
+        member = m["member"]
+        if d.get("memberCode") != member:
+            problems.append(f"memberCode {d.get('memberCode')!r} differs from the key's member {member!r}")
+        if str(d.get("configVersion")) != m["cfg"]:
+            problems.append(f"configVersion {d.get('configVersion')!r} differs from the key's {m['cfg']!r}")
+        # The review's request carries the fingerprint as its snapshot digest
+        if (d.get("snapshotDigest") or "") != m["fingerprint"]:
+            problems.append(f"snapshotDigest {d.get('snapshotDigest')!r} differs from the key's fingerprint")
+        expected_name = review_file_name(key)
+        if os.path.basename(path) != expected_name:
+            problems.append(f"file name should be {expected_name}")
     else:
         member, cfg = m["member"], m["cfg"]
+        if member == "review":
+            problems.append(f"key {key!r} names the review under a scenario: a review records under"
+                            " review:<namespace>:<production>|review|1|<fingerprint> only")
         if not m["encounter"]:
             problems.append(f"key {key!r} has no encounter and event: Shutter looks up scenario:<S>:<encounter>:<event>|..."
                             " only, so this recording never replays")
@@ -178,7 +310,10 @@ def check_file(path):
         except ValueError:
             problems.append("response.result is not JSON")
             return problems, m
-    problems += (check_findings(result) if kind == "findings" else check_plan(result))
+    if kind == "review":
+        problems += check_review(result) + review_tool_problems(d)
+    else:
+        problems += (check_findings(result) if kind == "findings" else check_plan(result))
     for f in ("transcript", "toolCalls"):
         v = d.get(f)
         if isinstance(v, str) and v.strip() and not v.strip().startswith(("[", "{")):
@@ -186,11 +321,41 @@ def check_file(path):
     return problems, m
 
 
+def self_test():
+    """Synthetic review recordings that prove review_tool_problems: a run with no SubmitReview call is a problem, whether
+    its tool calls are empty, missing, not a list or hold other calls only."""
+    never = "the run never called its terminal tool SubmitReview"
+    submit = json.dumps([{"name": "search_review", "arguments": {}}, {"name": "SubmitReview", "arguments": {}}])
+    cases = [
+        ({"toolCalls": submit}, []),
+        ({"toolCalls": json.loads(submit)}, []),
+        ({"toolCalls": ""}, [never]),
+        ({"toolCalls": "[]"}, [never]),
+        ({}, [never]),
+        ({"toolCalls": None}, [never]),
+        ({"toolCalls": "{}"}, [never]),
+        ({"toolCalls": {"name": "SubmitReview"}}, [never]),
+        ({"toolCalls": "not json"}, [never]),
+        ({"toolCalls": json.dumps([{"name": "search_review"}])}, [never]),
+    ]
+    failed = 0
+    for d, want in cases:
+        got = review_tool_problems(d)
+        if got != want:
+            failed += 1
+            print(f"self-test: {d!r} gave {got!r}, expected {want!r}")
+    print(f"self-test: {len(cases)} cases, {failed} failed")
+    return 1 if failed else 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("directory", nargs="?", default="fixtures/records")
     ap.add_argument("--scenarios", help="fixtures/scenarios.json, to list the scenarios without a full round-1 set")
+    ap.add_argument("--self-test", action="store_true", help="check the review's tool rule on synthetic recordings")
     args = ap.parse_args()
+    if args.self_test:
+        return self_test()
     files = sorted(glob.glob(os.path.join(args.directory, "*.json")))
     if not files:
         print(f"no recordings in {args.directory}", file=sys.stderr)
@@ -199,7 +364,7 @@ def main():
     present = {}
     for path in files:
         problems, m = check_file(path)
-        if m:
+        if m and m.re is KEY_RE:
             present.setdefault(case_of(m), set()).add(m["member"] + (f"|round{m['round']}" if m["round"] else ""))
         if problems:
             bad += 1
