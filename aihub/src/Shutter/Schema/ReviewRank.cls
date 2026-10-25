@@ -18,7 +18,8 @@ Property ConfidenceNote As %String(%JSONFIELDNAME = "confidence_note", MAXLEN = 
 
 /// The finding's code, item and setting, copied from the finding, so the ranking can be matched to the findings of another
 /// run of the same configuration (a recording replayed on another instance) by what they are, not by their numbers.
-Property Code As %String(%JSONFIELDNAME = "code", MAXLEN = 64) [ Required ];
+/// Not Required at import: Check refuses a missing code with a message the agent can act on; a Required import fails first.
+Property Code As %String(%JSONFIELDNAME = "code", MAXLEN = 64);
 
 Property Item As %String(%JSONFIELDNAME = "item", MAXLEN = 128);
 

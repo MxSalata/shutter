@@ -105,7 +105,12 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
         Set response.Error = $EXTRACT(text, 1, 2000)
         Set lower = $ZCONVERT(text, "L")
         Set response.Status = $SELECT($ISOBJECT(monitor) && (monitor.Stopped '= ""): monitor.Stopped, lower [ "budget_exceeded": "budget_exceeded", lower [ "timeout": "timeout", lower [ "timed out": "timeout", lower [ "denied": "denied", lower [ "loop": "loop_detected", 1: "model_error")
-        If $ISOBJECT(submit) && (submit.Result '= "") Set response.ResultJSON = submit.Result
+        If $ISOBJECT(submit) && (submit.Result '= "") {
+            Set response.ResultJSON = submit.Result
+            // The terminal tool accepted a result and only the closing sentence was missing when the turns ran out: the
+            // run did its work, so it is ok, with the stop noted in the error field for the record.
+            If lower [ "maxiterations" Set response.Status = "ok", response.Error = "The turns ran out after the result was accepted: " _ $EXTRACT(response.Error, 1, 300)
+        }
     }
     Do ..FillStats(response, agent, session, monitor, trace)
     // No model answered a run of the mimic's: it is labelled so, costs nothing and is never recorded.
