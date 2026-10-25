@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { api } from '@/api/client';
 import type {
   ApprovalsView,
+  BlindResendPreview,
   CaseDetail,
   CaseEvent,
   CaseList,
@@ -11,6 +12,7 @@ import type {
   LibraryMember,
   PlanView,
   ScenarioList,
+  Settings,
   SiteProfileView,
 } from '@/api/types';
 import { isApiError } from '@/lib/errors';
@@ -82,10 +84,27 @@ describe('the held case', () => {
     );
     expect(r.wouldApply).toBe(true);
     expect(r.encounterAfter?.ward).toBe('WARD-B');
+    // What the dry run was checked against: the version the recorded resend found; a preview is conditional on none
+    const p = r as unknown as BlindResendPreview;
+    expect([p.outcome, p.applied, p.expectedVersion]).toEqual(['would_apply', false, null]);
+    expect(p.checkedAgainst).toEqual({
+      version: (recorded.attempts[0].attempt.response.encounter.version as number) - 1,
+      epoch: null,
+    });
+  });
+
+  it('is abandoned by no one while it waits for its approval: its plan is rejected instead', async () => {
+    const busy = await refusal(api.post(`/cases/${HELD}/abandon`, { reason: 'stuck' }));
+    expect([busy.status, busy.code]).toEqual([409, 'busy']);
+    expect(busy.body).toMatchObject({ state: 'awaiting_approval', inFlight: 1, deferred: true });
+    expect((await api.get<CaseDetail>(`/cases/${HELD}`)).state).toBe('awaiting_approval');
+    expect((await refusal(api.post(`/cases/${HELD}/abandon`, {}))).status).toBe(400);
+    resetMock('operator');
+    expect((await refusal(api.post(`/cases/${HELD}/abandon`, { reason: 'stuck' }))).status).toBe(403);
   });
 
   it('replays the recorded outcome once approved, labelled as a replay', async () => {
-    expect((await decide('approve')).decision).toBe('approve');
+    expect(await decide('approve')).toMatchObject({ decision: 'approve', approver: 'approver' });
     const c = await api.get<CaseDetail>(`/cases/${HELD}`);
     expect(c.state).toBe('resolved');
     expect(c.outcome).toBe(recorded.summary.outcome);
@@ -280,6 +299,59 @@ describe('the roles', () => {
       ],
       ['system', 'escalation:1', `Escalation 1 delivered (file): ${sent.result}`],
     ]);
+  });
+
+  it('refuse a subject with a control character and a field that is not a string', async () => {
+    const draft = await api.post<Escalation>(`/cases/${WITHHELD}/escalations`, {});
+    const subject = await refusal(
+      api.patch(`/cases/${WITHHELD}/escalations/${draft.seq}`, { subject: 'x\r\nBcc: e@evil.com' }),
+    );
+    expect([subject.status, subject.code, (subject.body as { field: string }).field]).toEqual([
+      422,
+      'subject_not_allowed',
+      'subject',
+    ]);
+    const twoAts = await refusal(
+      api.patch(`/cases/${WITHHELD}/escalations/${draft.seq}`, { to: 'pas@example.nhs.uk@evil.com' }),
+    );
+    expect([twoAts.status, twoAts.code]).toEqual([422, 'address_not_allowed']);
+    const list = await refusal(api.patch(`/cases/${WITHHELD}/escalations/${draft.seq}`, { to: ['x'] }));
+    expect([list.status, list.code]).toEqual([400, 'bad_request']);
+  });
+
+  it('cancel every pending email at a hand close, and then neither edit nor send one', async () => {
+    const a = await api.post<Escalation>(`/cases/${WITHHELD}/escalations`, {});
+    await api.post<Escalation>(`/cases/${WITHHELD}/escalations`, {});
+    await api.post(`/cases/${WITHHELD}/close`, { reason: 'merged by hand' });
+    const emails = await api.get<Escalation[]>(`/cases/${WITHHELD}/escalations`);
+    expect(emails.map((e) => e.state)).toEqual(['cancelled', 'cancelled']);
+    const last = (await api.get<CaseEvent[]>(`/cases/${WITHHELD}/events`)).at(-1);
+    expect(last?.text).toBe(
+      'Handled by hand: merged by hand; after escalation 2 to Integration team (draft); 2 pending emails cancelled',
+    );
+    const edit = await refusal(api.patch(`/cases/${WITHHELD}/escalations/${a.seq}`, { subject: 'x' }));
+    expect([edit.status, edit.code]).toEqual([409, 'wrong_state']);
+    expect(edit.detail).toMatch(/^The case is resolved; an escalation is edited only while/);
+    const send = await refusal(
+      api.post(`/cases/${WITHHELD}/escalations/${a.seq}/send`, { bodyDigest: a.bodyDigest }),
+    );
+    expect([send.status, send.code]).toEqual([409, 'wrong_state']);
+    expect(send.detail).toMatch(/^The case is resolved; an escalation is sent only while/);
+  });
+
+  it('keep abandoning to cases still in a working state', async () => {
+    const closed = await refusal(api.post(`/cases/${WITHHELD}/abandon`, { reason: 'stuck' }));
+    expect([closed.status, closed.code]).toEqual([409, 'wrong_state']);
+  });
+});
+
+describe('the settings', () => {
+  beforeEach(() => resetMock('approver'));
+
+  it('say the API mimic is off when the recording does not say', async () => {
+    const s = await api.get<Settings>('/settings');
+    expect([s.mock, s.mockConfig, s.mockModel]).toEqual([false, '', '']);
+    expect(s.agentItems.some((a) => a.answeredBy)).toBe(false);
   });
 });
 

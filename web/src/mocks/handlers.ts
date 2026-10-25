@@ -16,9 +16,15 @@ import type {
   SiteProfileVersionEntry,
   SiteProfileView,
 } from '@/api/types';
-import { addressesProblem, closeNeedsApprover, validateProfile } from '@/features/site-profile/profile';
+import {
+  addressesProblem,
+  closeNeedsApprover,
+  controlProblem,
+  validateProfile,
+} from '@/features/site-profile/profile';
 import { digest, draftEscalation, teamFor } from './escalation';
 import { freshHolds, heldView, type CaseFixture, type Hold } from './hold';
+import { recordedSiteProfile, recordedSiteProfileHistory } from './profile';
 
 /**
  * An in-browser stand-in for Shutter's REST API (CONTRACTS 5), for the demo build, development
@@ -55,15 +61,11 @@ const allCases = () => Object.keys(cases).map((id) => caseOf(id)!);
 const stamp = () => new Date().toISOString().replace(/\.\d+Z$/, 'Z');
 
 /** The recorded site profile and its versions; a save in the demo changes these until the page is reloaded. */
-const recorded = fixtures as unknown as {
-  siteProfile?: SiteProfileView | null;
-  siteProfileHistory?: SiteProfileVersionEntry[] | null;
-};
 let siteProfile: SiteProfileView | null = null;
 let siteProfileHistory: SiteProfileVersionEntry[] = [];
 function resetSiteProfile() {
-  siteProfile = recorded.siteProfile ? structuredClone(recorded.siteProfile) : null;
-  siteProfileHistory = structuredClone(recorded.siteProfileHistory ?? []);
+  siteProfile = recordedSiteProfile();
+  siteProfileHistory = recordedSiteProfileHistory();
 }
 resetSiteProfile();
 
@@ -76,11 +78,16 @@ export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
   resetSiteProfile();
   escalations = {};
   closed = {};
+  abandoned = {};
   trail = {};
 }
 
 /** Cases a person closed as handled by hand in the demo, laid over the recorded case when it is read. */
 let closed: Record<string, { reason: string; by: string; at: string; version: number }> = {};
+/** Cases an approver abandoned in the demo (Case.Abandon), laid over the recorded case the same way. */
+let abandoned: Record<string, { reason: string; by: string; at: string; version: number; from: string }> = {};
+/** How long a case's workflow must have been quiet before it may be abandoned (abandonAfterMinutes). */
+const ABANDON_AFTER_MINUTES = 15;
 
 interface TrailEvent {
   at: string;
@@ -103,10 +110,27 @@ const record = (id: string, line: Partial<TrailEvent> & Pick<TrailEvent, 'kind' 
 function doneHere(id: string, c: CaseFixture): CaseFixture {
   const lines = trail[id] ?? [];
   const close = closed[id];
-  if (!lines.length && !close) return c;
+  const gaveUp = abandoned[id];
+  if (!lines.length && !close && !gaveUp) return c;
   const events = c.events as { seq: number }[];
   const last = events.at(-1)?.seq ?? 0;
   const out = { ...c, events: [...events, ...lines.map((e, i) => ({ ...e, seq: last + i + 1 }))] };
+  if (gaveUp) {
+    const failed = {
+      state: 'failed',
+      disposition: 'abandoned',
+      outcome: `Abandoned, recorded by ${gaveUp.by}: ${gaveUp.reason}. The workflow stopped in ${gaveUp.from}; nothing more is sent`,
+      headline: `Abandoned by ${gaveUp.by}. ${gaveUp.reason.slice(0, 200)}`,
+      closedAt: gaveUp.at,
+      updatedAt: gaveUp.at,
+      version: gaveUp.version,
+    };
+    return {
+      ...out,
+      summary: { ...c.summary, ...failed },
+      detail: { ...c.detail, ...failed },
+    } as unknown as CaseFixture;
+  }
   if (!close) return out as unknown as CaseFixture;
   const outcome = `Handled by hand, recorded by ${close.by}: ${close.reason}`;
   const handled = {
@@ -143,8 +167,17 @@ let escalations: Record<string, Escalation[]> = {};
 const error = (status: number, code: string, detail: string) =>
   HttpResponse.json({ error: code, detail }, { status });
 const signedOut = () => error(401, 'unauthorized', 'Sign in first');
-/** As the server answers a To or Cc it won't send to (CONTRACTS 10): 422 naming the field. */
-const addressRefused = (e: Pick<Escalation, 'to' | 'cc'>) => {
+/** As the server answers a subject or a To or Cc it won't send (CONTRACTS 10): 422 naming the field. */
+const escalationRefused = (e: Pick<Escalation, 'subject' | 'to' | 'cc'>) => {
+  if (controlProblem(e.subject ?? ''))
+    return HttpResponse.json(
+      {
+        error: 'subject_not_allowed',
+        field: 'subject',
+        detail: 'The subject must not contain line breaks or control characters',
+      },
+      { status: 422 },
+    );
   const domains = siteProfile?.profile.mail?.allowed_domains ?? [];
   for (const field of ['to', 'cc'] as const) {
     const problem = addressesProblem(e[field] ?? '', domains);
@@ -155,6 +188,25 @@ const addressRefused = (e: Pick<Escalation, 'to' | 'cc'>) => {
       );
   }
   return null;
+};
+/** The case's state as the demo shows it, with a hand close or an abandon laid over the recording. */
+const stateOf = (id: string) => caseOf(id)?.summary.state ?? '';
+/** An escalation is edited or sent only while its case still stands with the team, as the server refuses it. */
+const standsWithTeam = (id: string, verb: 'edited' | 'sent') => {
+  const state = stateOf(id);
+  return ['blocked', 'escalated', 'failed'].includes(state)
+    ? null
+    : error(
+        409,
+        'wrong_state',
+        `The case is ${state}; an escalation is ${verb} only while the case is blocked, escalated or failed`,
+      );
+};
+/** Cancel every draft or queued email of a case, as a hand close and an abandon do; how many were cancelled. */
+const cancelPending = (id: string) => {
+  const pending = (escalations[id] ?? []).filter((x) => x.state === 'draft' || x.state === 'queued');
+  for (const x of pending) x.state = 'cancelled';
+  return pending.length;
 };
 const guard = (role: 'operator' | 'approver') =>
   !session ? signedOut() : !session[role] ? error(403, 'forbidden', `Needs the ${role} role`) : null;
@@ -295,7 +347,13 @@ async function decideIncident(request: Request, id: string, seq: number | null) 
   if (body.planDigest !== i.detail.planDigest)
     return error(409, 'plan_changed', "planDigest is not the incident plan's digest");
   return HttpResponse.json(
-    { taskId: '1', decision: body.decision, incidentId: id, ...(seq === null ? {} : { chainSeq: seq }) },
+    {
+      taskId: '1',
+      decision: body.decision,
+      incidentId: id,
+      ...(seq === null ? {} : { chainSeq: seq }),
+      approver: session!.username,
+    },
     { status: 202 },
   );
 }
@@ -348,6 +406,7 @@ export const handlers = [
       if (cases[id].summary.scenario === params.id && cases[id].summary.mode === mode) {
         holds[id] = hold;
         delete closed[id];
+        delete abandoned[id];
         delete escalations[id];
         delete trail[id];
       }
@@ -444,7 +503,7 @@ export const handlers = [
     };
     const task = (c.approvals as { tasks?: { taskId?: string }[] }).tasks?.[0];
     return HttpResponse.json(
-      { taskId: task?.taskId ?? '1', decision: body.decision, caseId: id },
+      { taskId: task?.taskId ?? '1', decision: body.decision, caseId: id, approver: session!.username },
       { status: 202 },
     );
   }),
@@ -485,17 +544,14 @@ export const handlers = [
         { error: 'stale_version', detail: 'The case changed since it was read', currentVersion: version },
         { status: 409 },
       );
-    // The latest email the team worked from is named, and cancelled when it had not gone: the team is not asked to
-    // correct a case already handled
+    // The latest email the team worked from is named, and every one not yet sent is cancelled: the team is not asked
+    // to correct a case already handled
     const latest = (escalations[id] ?? []).at(-1);
-    let followed = '';
-    if (latest) {
-      followed = `; after escalation ${latest.seq}${latest.teamName ? ` to ${latest.teamName}` : ''} (${latest.state})`;
-      if (['draft', 'queued'].includes(latest.state)) {
-        latest.state = 'cancelled';
-        followed += ', cancelled';
-      }
-    }
+    let followed = latest
+      ? `; after escalation ${latest.seq}${latest.teamName ? ` to ${latest.teamName}` : ''} (${latest.state})`
+      : '';
+    const cancelled = cancelPending(id);
+    if (cancelled) followed += `; ${cancelled} pending email${cancelled === 1 ? '' : 's'} cancelled`;
     const reason = body.reason.trim();
     closed[id] = { reason, by: session!.username, at: stamp(), version: (version ?? 0) + 1 };
     record(id, {
@@ -511,6 +567,68 @@ export const handlers = [
       { status: 202 },
     );
   }),
+  // Abandon a case its workflow left in a working state (CONTRACTS 5): approver only, refused while it is busy
+  http.post(`${BASE}/cases/:id/abandon`, async ({ request, params }) => {
+    const denied = csrf(request) ?? guard('approver');
+    if (denied) return denied;
+    const id = String(params.id);
+    const c = caseOf(id);
+    if (!c) return error(404, 'not_found', `No case ${id}`);
+    const body = (await request.json().catch(() => null)) as {
+      reason?: unknown;
+      expectedVersion?: unknown;
+    } | null;
+    const reason = typeof body?.reason === 'string' ? body.reason.trim() : '';
+    if (!reason) return error(400, 'bad_request', 'reason is required: why the case is given up');
+    const version = (c.detail as { version?: number }).version ?? 0;
+    if (body?.expectedVersion !== undefined && Number(body.expectedVersion) !== version)
+      return HttpResponse.json(
+        {
+          error: 'stale_version',
+          detail: "expectedVersion is not the case's version",
+          currentVersion: version,
+        },
+        { status: 409 },
+      );
+    const state = c.summary.state;
+    if (['resolved', 'blocked', 'escalated', 'failed'].includes(state))
+      return error(
+        409,
+        'wrong_state',
+        `The case is ${state}; a closed case is marked handled (POST /cases/${id}/close) or reopened (POST /cases/${id}/reinvestigate), not abandoned`,
+      );
+    const newestAt = (c.events as { at?: string }[]).reduce((a, e) => (e.at && e.at > a ? e.at : a), '');
+    const quiet = newestAt && Date.now() - Date.parse(newestAt) >= ABANDON_AFTER_MINUTES * 60_000;
+    // A case held at its approval waits for a person: its plan is rejected instead
+    const deferred = state === 'awaiting_approval';
+    if (deferred || !quiet)
+      return HttpResponse.json(
+        {
+          error: 'busy',
+          detail: deferred
+            ? `The case waits for a person: an approval task is open, so reject the plan (POST /cases/${id}/approvals) instead of abandoning the case`
+            : `The case's workflow has 1 message in flight (newest ${newestAt}); a case counts as left behind once nothing has moved for ${ABANDON_AFTER_MINUTES} minutes`,
+          state,
+          inFlight: 1,
+          newestAt: newestAt || null,
+          deferred,
+        },
+        { status: 409 },
+      );
+    const cancelled = cancelPending(id);
+    abandoned[id] = { reason, by: session!.username, at: stamp(), version: version + 1, from: state };
+    record(id, {
+      kind: 'state',
+      fromState: state,
+      toState: 'failed',
+      text: `Abandoned from ${state}: ${reason}${cancelled ? `; ${cancelled} pending email${cancelled === 1 ? '' : 's'} cancelled` : ''}`,
+      actor: session!.username,
+    });
+    return HttpResponse.json(
+      { caseId: id, state: 'abandoning', requestedBy: session!.username, reason },
+      { status: 202 },
+    );
+  }),
   http.post(`${BASE}/cases/:id/preview-blind-resend`, ({ request, params }) => {
     const denied = csrf(request) ?? guard('operator');
     if (denied) return denied;
@@ -520,12 +638,25 @@ export const handlers = [
     if (['resolved', 'blocked', 'escalated', 'failed'].includes(c.summary.state))
       return error(409, 'wrong_state', 'The case is closed');
     // A held case: what the recorded resend left at the receiver is what sending it again would leave
-    const sent = (cases[id].attempts as { attempt?: { response?: { encounter?: unknown } } }[])[0];
+    type Encounter = { version?: number };
+    const sent = (
+      cases[id].attempts as {
+        attempt?: { response?: { encounter?: Encounter; encounter_before?: Encounter } };
+      }[]
+    )[0];
     const after = sent?.attempt?.response?.encounter ?? null;
+    // The version the dry run would be checked against: the one the recorded resend found
+    const before = sent?.attempt?.response?.encounter_before?.version;
+    const version =
+      typeof before === 'number' ? before : typeof after?.version === 'number' ? after.version - 1 : null;
     return HttpResponse.json({
       wouldApply: true,
+      outcome: 'would_apply',
+      applied: false,
       reason: '',
       encounterAfter: after,
+      checkedAgainst: { version, epoch: null },
+      expectedVersion: null,
       note: after
         ? 'Recorded data: the encounter as the recorded resend left it. The demo has no downstream system to ask.'
         : 'Recorded data: no downstream system to ask.',
@@ -589,13 +720,19 @@ export const handlers = [
   http.patch(`${BASE}/cases/:id/escalations/:seq`, async ({ request, params }) => {
     const denied = csrf(request) ?? guard('operator');
     if (denied) return denied;
-    const e = escalations[String(params.id)]?.find((x) => x.seq === Number(params.seq));
+    const id = String(params.id);
+    const e = escalations[id]?.find((x) => x.seq === Number(params.seq));
     if (!e) return error(404, 'not_found', 'No such escalation');
-    if (!['draft', 'failed'].includes(e.state))
-      return error(409, 'wrong_state', `The escalation is ${e.state}`);
-    const change = (await request.json()) as Pick<Escalation, 'subject' | 'body' | 'to' | 'cc'>;
-    if (!change.to?.trim()) return error(400, 'bad_request', 'to: at least one address');
-    const refused = addressRefused({ to: change.to, cc: change.cc });
+    const standing = standsWithTeam(id, 'edited');
+    if (standing) return standing;
+    if (e.purgedAt || !['draft', 'failed'].includes(e.state))
+      return error(409, 'wrong_state', `The escalation is ${e.purgedAt ? 'purged' : e.state}`);
+    const change = (await request.json()) as Record<string, unknown>;
+    if (['subject', 'body', 'to', 'cc'].some((f) => f in change && typeof change[f] !== 'string'))
+      return error(400, 'bad_request', 'subject, body, to and cc must be strings');
+    const next = { ...e, ...(change as Partial<Pick<Escalation, 'subject' | 'body' | 'to' | 'cc'>>) };
+    if (!next.to?.trim()) return error(400, 'bad_request', 'to: at least one address');
+    const refused = escalationRefused(next);
     if (refused) return refused;
     Object.assign(e, change, { state: 'draft', editedBy: session!.username });
     e.bodyDigest = digest(e.to ?? '', e.cc ?? '', e.subject, e.body);
@@ -606,12 +743,15 @@ export const handlers = [
     if (denied) return denied;
     const e = escalations[String(params.id)]?.find((x) => x.seq === Number(params.seq));
     if (!e) return error(404, 'not_found', 'No such escalation');
+    const standing = standsWithTeam(String(params.id), 'sent');
+    if (standing) return standing;
+    if (e.purgedAt) return error(409, 'wrong_state', 'The escalation is purged');
     const { bodyDigest } = (await request.json()) as { bodyDigest?: string };
     if (bodyDigest !== e.bodyDigest)
       return error(409, 'body_changed', "bodyDigest is not the digest of the escalation's current text");
     if (!e.to) return error(409, 'no_recipient', 'The escalation has no recipient');
     // Again at the send: the allowed domains may have changed since the edit
-    const refused = addressRefused(e);
+    const refused = escalationRefused(e);
     if (refused) return refused;
     Object.assign(e, {
       state: 'sent',
@@ -698,7 +838,12 @@ export const handlers = [
     Object.assign(m, (await request.json()) as object);
     return HttpResponse.json(m);
   }),
-  http.get(`${BASE}/settings`, () => (session ? HttpResponse.json(fixtures.settings) : signedOut())),
+  // A recording from before the API mimic was reported has no mock fields: the mimic was off
+  http.get(`${BASE}/settings`, () =>
+    session
+      ? HttpResponse.json({ mock: false, mockConfig: '', mockModel: '', ...fixtures.settings })
+      : signedOut(),
+  ),
   http.get(`${BASE}/costs`, () => (session ? HttpResponse.json(costs()) : signedOut())),
   http.get(`${BASE}/health`, () =>
     session ? HttpResponse.json({ recorded: fixtures.source, ...fixtures.health }) : signedOut(),

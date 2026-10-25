@@ -20,6 +20,9 @@ function BlindResendPreview({ c, me }: { c: CaseDetail; me: Me }) {
   const why = !me.operator ? 'The preview needs the operator role' : closed ? 'The case is closed' : '';
   const r = preview.data;
   const after = asObject(r?.encounterAfter);
+  // Only a dry run the receiver answered as one was rolled back; one it applied is now in effect.
+  const rolledBack = !!r && !r.applied && (r.outcome === 'would_apply' || r.outcome === 'would_not_apply');
+  const checked = r?.checkedAgainst;
   return (
     <Stack gap="xs">
       <Group gap="sm">
@@ -53,9 +56,15 @@ function BlindResendPreview({ c, me }: { c: CaseDetail; me: Me }) {
       ) : null}
       {r ? (
         <Alert
-          color={r.wouldApply ? 'orange' : 'gray'}
+          color={r.applied ? 'red' : r.wouldApply ? 'orange' : 'gray'}
           variant="light"
-          title={r.wouldApply ? 'A blind resend would apply' : 'A blind resend would be refused'}
+          title={
+            r.applied
+              ? 'The receiver applied the preview'
+              : r.wouldApply
+                ? 'A blind resend would apply'
+                : 'A blind resend would be refused'
+          }
         >
           <Stack gap={4}>
             {after ? (
@@ -66,9 +75,18 @@ function BlindResendPreview({ c, me }: { c: CaseDetail; me: Me }) {
             ) : null}
             {r.reason ? <Text size="sm">Reason: {humanize(r.reason)}</Text> : null}
             {r.note ? <Text size="sm">{r.note}</Text> : null}
-            <Text size="xs" c="dimmed">
-              The downstream system's dry run, rolled back: nothing was written.
-            </Text>
+            {checked && checked.version !== null ? (
+              <Text size="sm">
+                Checked against version {checked.version}
+                {checked.epoch !== null ? `, epoch ${checked.epoch}` : ''}; the preview was conditional on no
+                version.
+              </Text>
+            ) : null}
+            {rolledBack ? (
+              <Text size="xs" c="dimmed">
+                The downstream system's dry run, rolled back: nothing was written.
+              </Text>
+            ) : null}
           </Stack>
         </Alert>
       ) : null}
@@ -104,6 +122,7 @@ export function ApprovalPanel({
   const policy = view?.gateDecisions?.at(-1)?.policyVersion ?? '';
   // A re-plan revokes the earlier approval: only one that still stands is shown as the decision.
   const latest = approvals?.approvals?.filter((a) => !a.revoked).at(-1);
+  const underIncident = Boolean(latest?.incidentPlanDigest);
   const revoked = !latest && Boolean(approvals?.approvals?.some((a) => a.revoked));
 
   const openDialog = (d: 'approve' | 'reject') => {
@@ -120,11 +139,12 @@ export function ApprovalPanel({
         idempotencyKey: key,
       },
       {
-        onSuccess: () => {
+        onSuccess: (reply) => {
           setDecision(null);
+          const by = reply?.approver ? ` by ${reply.approver}` : '';
           notifications.show({
             color: decision === 'approve' ? 'teal' : 'gray',
-            title: decision === 'approve' ? 'Approved' : 'Rejected',
+            title: decision === 'approve' ? `Approved${by}` : `Rejected${by}`,
             message:
               decision !== 'approve'
                 ? 'Nothing will be sent.'
@@ -136,7 +156,9 @@ export function ApprovalPanel({
       },
     );
   };
-  const stale = decide.error && isApiError(decide.error) && decide.error.isConflict;
+  // Only a stale plan or case version asks for a fresh look; any other refusal (a 403 naming the Workflow role, a 409
+  // naming who the task is assigned to) is shown as the server worded it.
+  const stale = decide.error && isApiError(decide.error) && decide.error.code === 'stale_version';
 
   return (
     <Section
@@ -147,7 +169,7 @@ export function ApprovalPanel({
         latest ? (
           <Badge color={latest.decision === 'approved' ? 'teal' : 'red'} style={{ textTransform: 'none' }}>
             {latest.decision === 'approved'
-              ? `Approved by ${latest.approver}`
+              ? `Approved by ${latest.approver}${underIncident ? " under the incident's approval" : ''}`
               : `Rejected by ${latest.approver}`}
           </Badge>
         ) : awaiting ? (
@@ -189,6 +211,20 @@ export function ApprovalPanel({
               ['Receiver version', String(latest?.expectedVersion ?? plan?.expectedVersion ?? '')],
               ['Valid until', latest?.expiresAt ? <Timestamp key="e" iso={latest.expiresAt} /> : ''],
               ['Comment', latest?.comment ?? ''],
+              [
+                'Incident plan digest',
+                latest?.incidentPlanDigest ? (
+                  <Digest key="i" value={latest.incidentPlanDigest} label="incident plan digest" />
+                ) : (
+                  ''
+                ),
+              ],
+              [
+                'Approved as',
+                latest?.incidentPlanDigest
+                  ? `${latest.boundEntry ?? ''} · ${humanize(latest.boundOutcome ?? '')}`
+                  : '',
+              ],
             ]}
           />
           {awaiting ? (

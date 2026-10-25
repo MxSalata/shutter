@@ -30,6 +30,7 @@ function Match({ item }: { item: ChainItem }) {
         <Text size="xs" c="dimmed">
           At release: {item.releaseEntry}
           {item.releaseOutcome ? ` · ${humanize(item.releaseOutcome).toLowerCase()}` : ''}
+          {item.state === 'blocked' ? ' (not covered by the approval: the chain stopped here)' : ''}
         </Text>
       ) : null}
     </Stack>

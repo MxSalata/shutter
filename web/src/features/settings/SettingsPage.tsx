@@ -16,10 +16,15 @@ function Flag({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** How the agents answer, by the mode they run in now; a replaying instance counts the replays it has run. */
-function answering(mode: string, replayed: number | undefined): string {
+/**
+ * How the agents answer, by the mode they run in now; a replaying instance counts the replays it has run. Under the
+ * API mimic (a test fixture) a live item is still live, but no model answers it.
+ */
+function answering(mode: string, replayed: number | undefined, mock = false): string {
   if (mode === 'replay')
     return `replaying recorded live runs${replayed ? ` (${formatInt(replayed)} ${replayed === 1 ? 'replay' : 'replays'} so far)` : ''}`;
+  if (mode === 'live' && mock)
+    return 'running live against the API mimic (tests/mock): no model is called and the runs cost nothing';
   if (mode === 'live') return 'running live on the configured model provider';
   if (mode === 'record') return 'running live and recording each run';
   return humanize(mode).toLowerCase();
@@ -32,7 +37,8 @@ function answering(mode: string, replayed: number | undefined): string {
 function Configured({ s, replayed }: { s: Settings; replayed: number | undefined }) {
   const agents = s.agentItems.filter((a) => a.agentClass && a.enabled !== false);
   const modes = [...new Set(agents.map((a) => a.effectiveMode || a.mode || ''))];
-  const how = modes.length === 1 ? answering(modes[0], replayed) : 'in different modes, as the table shows';
+  const how =
+    modes.length === 1 ? answering(modes[0], replayed, !!s.mock) : 'in different modes, as the table shows';
   const missing = [
     !s.aiHubPresent && 'AI Hub',
     !s.liveRunnerPresent && 'the live runner',
@@ -46,6 +52,7 @@ function Configured({ s, replayed }: { s: Settings; replayed: number | undefined
       <Group gap="sm" wrap="wrap">
         <Flag>Mode: {humanize(s.mode)}</Flag>
         {s.demo ? <Flag>Demo instance</Flag> : null}
+        {s.mock ? <Flag>API mimic on{s.mockConfig ? ` (${s.mockConfig})` : ''}</Flag> : null}
         {s.aiHubPresent ? <Flag>AI Hub present</Flag> : null}
         {s.liveRunnerPresent ? <Flag>Live runner installed</Flag> : null}
         {s.providerConfigured ? <Flag>Model provider configured</Flag> : null}
@@ -57,6 +64,11 @@ function Configured({ s, replayed }: { s: Settings; replayed: number | undefined
           </Group>
         ) : null}
       </Group>
+      {s.mock ? (
+        <Text size="sm">
+          No model answers while the mimic is on; the runs are labelled mock and cost nothing.
+        </Text>
+      ) : null}
       {missing.length ? (
         <Text size="sm">
           Not on this instance: {missing.join(', ').replace(/, ([^,]*)$/, ' and $1')}.
@@ -70,13 +82,14 @@ function Configured({ s, replayed }: { s: Settings; replayed: number | undefined
 }
 
 type ItemColumn = {
-  key: 'mode' | 'model' | 'providerConfig' | 'maxIterations' | 'tokenBudget';
+  key: 'mode' | 'model' | 'providerConfig' | 'answeredBy' | 'maxIterations' | 'tokenBudget';
   label: string;
 };
 const ITEM_COLUMNS: ItemColumn[] = [
   { key: 'mode', label: 'Mode' },
   { key: 'model', label: 'Model' },
   { key: 'providerConfig', label: 'Provider' },
+  { key: 'answeredBy', label: 'Answered by' },
   { key: 'maxIterations', label: 'Iterations' },
   { key: 'tokenBudget', label: 'Token budget' },
 ];

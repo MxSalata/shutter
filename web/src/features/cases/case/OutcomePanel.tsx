@@ -107,7 +107,9 @@ export function OutcomePanel({ c }: { c: CaseDetail }) {
   const title =
     c.disposition === 'handled_by_hand'
       ? 'Closed: handled by the team'
-      : (TITLES[c.state] ?? humanize(c.state));
+      : c.disposition === 'abandoned'
+        ? 'Closed: abandoned'
+        : (TITLES[c.state] ?? humanize(c.state));
   return (
     <Section id="outcome" title={title} note={c.outcome || undefined}>
       {r ? (

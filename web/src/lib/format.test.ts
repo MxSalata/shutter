@@ -52,6 +52,7 @@ describe('formatting', () => {
   it('names the readiness keys whose words alone would say too little', () => {
     expect(keyLabel('purge_task')).toBe('Message purge task');
     expect(keyLabel('message_days')).toBe('Messages kept (days)');
+    expect(keyLabel('escalation_days')).toBe('Escalation texts kept (days)');
     expect(keyLabel('shutter_production')).toBe("Shutter's production");
     expect(keyLabel('production_state')).toBe('Production state');
   });

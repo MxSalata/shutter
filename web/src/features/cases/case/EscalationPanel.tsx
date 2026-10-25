@@ -29,8 +29,8 @@ import type { CaseDetail, Escalation } from '@/api/types';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Timestamp } from '@/components/Timestamp';
 import { describeError, isApiError } from '@/lib/errors';
-import { addressesProblem, closeNeedsApprover } from '../../site-profile/profile';
-import { humanize } from '@/lib/format';
+import { addressesProblem, closeNeedsApprover, controlProblem } from '../../site-profile/profile';
+import { formatZoned, humanize } from '@/lib/format';
 import { Section } from './Section';
 
 const STATE_COLOURS: Record<string, string> = {
@@ -50,7 +50,7 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
   const [subject, setSubject] = useState(draft.subject);
   const [body, setBody] = useState(draft.body);
   const [key] = useState(newIdempotencyKey);
-  const [lastSent, setLastSent] = useState({ to: '', cc: '' });
+  const [lastSent, setLastSent] = useState({ to: '', cc: '', subject: '' });
   const changed =
     to !== (draft.to ?? '') || cc !== (draft.cc ?? '') || subject !== draft.subject || body !== draft.body;
   const busy = edit.isPending || send.isPending;
@@ -59,20 +59,22 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
   const domains = useSiteProfile().data?.profile.mail?.allowed_domains ?? [];
   const toProblem = addressesProblem(to, domains);
   const ccProblem = addressesProblem(cc, domains);
+  // The subject is one header line: no line break or other control character, as the server checks it
+  const subjectProblem = controlProblem(subject);
   // A refusal the server named a field for (the domains changed meanwhile) shows on that field, while it still applies
   const refused =
-    isApiError(error) && error.code === 'address_not_allowed'
+    isApiError(error) && (error.code === 'address_not_allowed' || error.code === 'subject_not_allowed')
       ? ((error.body as { field?: string } | null)?.field ?? '')
       : '';
-  const fieldError = (field: 'to' | 'cc', value: string, problem: string) =>
+  const fieldError = (field: 'to' | 'cc' | 'subject', value: string, problem: string) =>
     problem
       ? `Not allowed: ${problem}`
-      : refused === field && value === (field === 'to' ? lastSent.to : lastSent.cc)
+      : refused === field && value === lastSent[field]
         ? error!.message
         : undefined;
 
   const submit = async () => {
-    setLastSent({ to, cc });
+    setLastSent({ to, cc, subject });
     // An edited draft is stored first; the send then names the digest of the text as stored
     const stored = changed
       ? await edit.mutateAsync({ seq: draft.seq, change: { to, cc, subject, body } })
@@ -115,7 +117,12 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
           onChange={(e) => setCc(e.currentTarget.value)}
           error={fieldError('cc', cc, ccProblem)}
         />
-        <TextInput label="Subject" value={subject} onChange={(e) => setSubject(e.currentTarget.value)} />
+        <TextInput
+          label="Subject"
+          value={subject}
+          onChange={(e) => setSubject(e.currentTarget.value)}
+          error={fieldError('subject', subject, subjectProblem)}
+        />
         <Textarea
           label="Message"
           value={body}
@@ -138,7 +145,9 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
             leftSection={<IconMailForward size={16} />}
             onClick={() => void submit().catch(() => undefined)}
             loading={busy}
-            disabled={!to.trim() || !!toProblem || !!ccProblem || !subject.trim() || !body.trim()}
+            disabled={
+              !to.trim() || !!toProblem || !!ccProblem || !subject.trim() || !!subjectProblem || !body.trim()
+            }
           >
             Send
           </Button>
@@ -173,7 +182,7 @@ function MarkHandled({ c }: { c: CaseDetail }) {
           notifications.show({
             color: 'teal',
             title: `${c.caseId} marked as handled`,
-            message: 'Closed as handled by hand; a draft email of the case is cancelled.',
+            message: 'Closed as handled by hand; any email of the case not yet sent is cancelled.',
           });
         },
       },
@@ -323,8 +332,15 @@ export function EscalationPanel({ c }: { c: CaseDetail }) {
                 <Text size="sm" fw={600}>
                   {e.subject}
                 </Text>
-                <Code block>{e.body}</Code>
-                {stopped && (e.state === 'draft' || e.state === 'failed') && me?.operator ? (
+                {e.purgedAt ? (
+                  <Text size="xs" c="dimmed" className="mono-wrap">
+                    Text removed on {formatZoned(e.purgedAt)} by the retention task; digest of the text sent{' '}
+                    {e.bodyDigest}
+                  </Text>
+                ) : (
+                  <Code block>{e.body}</Code>
+                )}
+                {stopped && (e.state === 'draft' || e.state === 'failed') && !e.purgedAt && me?.operator ? (
                   <Group>
                     <Button size="xs" variant="light" onClick={() => setOpen(e)}>
                       {e.state === 'failed' ? 'Check and send again…' : 'Check and send…'}

@@ -29,7 +29,7 @@ export function IncidentApprovalPanel({
     <Section
       id="incident-approval"
       title="Approval"
-      note="One approval releases the chains the site's policy leaves to a person: resend these, in this order; each one is rehearsed, gated and verified just before it goes; a chain stops at the first surprise, and the rest comes back to a person. It binds the plan's digest, and each operation after the first goes at exactly the version the one before it verified."
+      note="One approval releases the chains the site's policy leaves to a person: resend these, in this order; each one is rehearsed, gated and verified just before it goes; a chain stops at the first surprise, and the rest comes back to a person. It binds the plan's digest, and each operation after the first goes at exactly the version the one before it verified. Each operation goes only under the catalogue entry and outcome listed for it; one whose fresh evidence reads differently stops its chain and comes back to a person."
       aside={
         decision ? (
           <Badge color={decision.decision === 'approved' ? 'teal' : 'red'} style={{ textTransform: 'none' }}>

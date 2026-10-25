@@ -6,16 +6,14 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { SiteProfile } from '@/api/types';
-import fixtures from '@/mocks/fixtures.json';
+import { recordedSiteProfile } from '@/mocks/profile';
 import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
 import { theme } from '@/theme';
 import SiteProfilePage from './SiteProfilePage';
 
 const BASE = '/api/shutter';
-const recorded = (fixtures as unknown as { siteProfile: { profile: SiteProfile; version: number } })
-  .siteProfile;
+const recorded = recordedSiteProfile()!;
 let puts: { body: Record<string, unknown>; headers: Headers }[] = [];
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
@@ -122,17 +120,17 @@ describe('SiteProfilePage', () => {
     const team = screen.getByRole('group', { name: 'Team 3: new' });
     await userEvent.type(within(team).getByRole('textbox', { name: 'Short id' }), 'beds');
     await userEvent.type(within(team).getByRole('textbox', { name: 'Team' }), 'Bed management');
-    await userEvent.type(within(team).getByRole('textbox', { name: 'Mailbox' }), 'beds@trust.nhs.net');
+    await userEvent.type(within(team).getByRole('textbox', { name: 'Mailbox' }), 'beds@example.nhs.uk');
     const copies = within(team).getByRole('textbox', { name: 'Copies' });
-    await userEvent.type(copies, 'oncall@trust.nhs.net, ');
+    await userEvent.type(copies, 'oncall@example.nhs.uk, ');
     // A trailing comma survives while typing the next address
-    expect(copies).toHaveValue('oncall@trust.nhs.net, ');
+    expect(copies).toHaveValue('oncall@example.nhs.uk, ');
     await userEvent.click(within(team).getByRole('checkbox', { name: 'Downstream Out' }));
     await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
     const dialog = await screen.findByRole('dialog');
     expect(
       within(dialog).getByText(
-        'Team added: Bed management <beds@trust.nhs.net>, copies oncall@trust.nhs.net, for Downstream Out',
+        'Team added: Bed management <beds@example.nhs.uk>, copies oncall@example.nhs.uk, for Downstream Out',
       ),
     ).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
@@ -144,8 +142,8 @@ describe('SiteProfilePage', () => {
       {
         id: 'beds',
         name: 'Bed management',
-        mailbox: 'beds@trust.nhs.net',
-        cc: ['oncall@trust.nhs.net'],
+        mailbox: 'beds@example.nhs.uk',
+        cc: ['oncall@example.nhs.uk'],
         receivers: ['Downstream Out'],
         sources: [],
       },
@@ -154,12 +152,9 @@ describe('SiteProfilePage', () => {
 
   // It fills a team form too, about 4.5 s alone, so it gets the same allowance as the team test.
   it('refuses a team mailbox outside the allowed domains before sending, and points at it', async () => {
+    // The profile allows example.nhs.uk, the seed's domain
     renderPage();
-    await userEvent.type(
-      await screen.findByRole('textbox', { name: 'Mail domains allowed for the teams' }),
-      'example.nhs.uk',
-    );
-    await userEvent.click(screen.getByRole('button', { name: 'Add a team' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Add a team' }));
     const team = screen.getByRole('group', { name: 'Team 3: new' });
     await userEvent.type(within(team).getByRole('textbox', { name: 'Short id' }), 'beds');
     await userEvent.type(within(team).getByRole('textbox', { name: 'Team' }), 'Bed management');

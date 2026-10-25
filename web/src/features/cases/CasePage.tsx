@@ -16,6 +16,7 @@ import { ApprovalPanel } from './case/ApprovalPanel';
 import { ExecutionPanel } from './case/ExecutionPanel';
 import { OutcomePanel } from './case/OutcomePanel';
 import { EscalationPanel } from './case/EscalationPanel';
+import { AbandonPanel } from './case/AbandonPanel';
 import { CaseTimeline } from './case/CaseTimeline';
 import { ReceiptCard } from './case/ReceiptCard';
 import { S8Compare } from './case/S8Compare';
@@ -85,6 +86,7 @@ export default function CasePage() {
               <S8Compare caseId={caseId} focus={search.get('show') === 'compare'} />
             ) : null}
             <EscalationPanel c={detail} />
+            <AbandonPanel c={detail} events={events.data} />
             <FailurePanel c={detail} />
             <EvidencePanel caseId={caseId} open={open} />
             <PlanPanel view={plan.data} loading={plan.isPending} />

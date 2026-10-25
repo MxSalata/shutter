@@ -38,7 +38,8 @@ const ATTEMPT: Record<string, { colour: string; label: string; hint: string }> =
 const VERIFIED: Record<string, { colour: string; label: string }> = {
   verified: { colour: 'green', label: 'Verified at the receiver' },
   unresolved: { colour: 'orange', label: 'Not established' },
-  failed: { colour: 'red', label: 'Not committed' },
+  not_committed: { colour: 'red', label: 'Not committed at the receiver' },
+  failed: { colour: 'red', label: 'Contradiction: a person must check' },
 };
 
 function AttemptCard({ a }: { a: Attempt }) {
@@ -78,11 +79,17 @@ function AttemptCard({ a }: { a: Attempt }) {
 
 function VerificationCard({ v }: { v: Verification }) {
   const s = VERIFIED[v.outcome] ?? { colour: 'gray', label: v.outcome };
+  const verdict = asObject(v.detail)?.verdict;
   return (
     <Stack gap={6}>
       <Badge color={s.colour} style={{ textTransform: 'none' }} w="fit-content">
         {s.label}
       </Badge>
+      {typeof verdict === 'string' && verdict ? (
+        <Text size="xs" c="dimmed">
+          Verdict: {verdict}
+        </Text>
+      ) : null}
       <Text size="sm">{v.summary}</Text>
       <Timestamp iso={v.at} size="xs" c="dimmed" />
       <Accordion variant="contained" chevronPosition="left">
