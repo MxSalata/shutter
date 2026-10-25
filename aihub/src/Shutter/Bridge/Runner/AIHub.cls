@@ -21,7 +21,9 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
     Set response.Mode = $SELECT(spec.Mode = "": "live", 1: spec.Mode)
     Set agent = "", session = "", monitor = "", submit = "", trace = "", scope = ""
     Set turns = $SELECT(+spec.MaxIterations > 0: +spec.MaxIterations, 1: 8)
-    Set terminal = $SELECT($ZCONVERT(spec.TerminalTool, "L") [ "plan": "SubmitPlan", 1: "SubmitFindings")
+    // The terminal tool by its name: a review's, a plan's, else a specialist's findings.
+    Set lowerTerminal = $ZCONVERT(spec.TerminalTool, "L")
+    Set terminal = $SELECT(lowerTerminal [ "review": "SubmitReview", lowerTerminal [ "plan": "SubmitPlan", 1: "SubmitFindings")
     // The mimic as the run was resolved, not as the switch is now, so such a run never reaches another provider.
     Set mock = spec.MockConfig
     Try {
@@ -181,13 +183,17 @@ Method FillStats(response As Shutter.Bridge.Msg.AgentResponse, agent, session, m
     If $ISOBJECT(trace) && (+response.ToolCalls = 0) Set response.ToolCalls = trace.Calls
 }
 
-/// The member's knowledge collection, as search tools, when the library is present and built.
+/// The member's knowledge collection, as search tools, when the library is present and built: the board member row's
+/// collection; for an agent with no row (the production review's), the agent class's KNOWLEDGE parameter; else every
+/// collection.
 Method AttachKnowledge(agent, spec As Shutter.Bridge.RunSpec) [ Private ]
 {
     If '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Knowledge.Library") Quit
-    Set collection = "all"
+    Set collection = ""
     Set member = ##class(Shutter.Store.BoardMember).ByCode(spec.MemberCode)
     If $ISOBJECT(member) && (member.KnowledgeCollection '= "") Set collection = member.KnowledgeCollection
+    If (collection = "") && ##class(%Dictionary.CompiledParameter).%ExistsId($CLASSNAME(agent) _ "||KNOWLEDGE") Set collection = $PARAMETER(agent, "KNOWLEDGE")
+    If collection = "" Set collection = "all"
     Set n = $CLASSMETHOD("Shutter.Knowledge.Library", "Attach", agent, collection, .problems)
     If $GET(problems) '= "" $$$LOGWARNING("Knowledge for " _ spec.MemberCode _ ": " _ problems)
     $$$TRACE("Knowledge collections attached for " _ spec.MemberCode _ ": " _ n _ " (" _ collection _ ")")
