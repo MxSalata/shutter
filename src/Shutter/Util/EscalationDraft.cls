@@ -82,6 +82,17 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     }
     Set b = b _ nl
 
+    // A receiver that keeps the history of record (v1.23): the plan carries the correcting steps for its team.
+    Set plan = $SELECT($ISOBJECT(case.CurrentPlan): case.CurrentPlan.PlanObject(), 1: "")
+    Set correction = $SELECT($ISOBJECT(plan): plan.%Get("correction_steps"), 1: "")
+    If $ISOBJECT(correction) && $ISOBJECT(correction.%Get("steps")) {
+        Set b = b _ "CORRECTING THE HISTORY" _ nl
+        Set b = b _ "  " _ ##class(Shutter.Util.HistoryCorrection).Headline(correction) _ "." _ nl
+        Set si = correction.%Get("steps").%GetIterator(), n = 0
+        While si.%GetNext(, .step) { Set n = n + 1, b = b _ "  " _ n _ ". " _ step _ nl }
+        Set b = b _ nl
+    }
+
     Set b = b _ "WHAT " _ $ZCONVERT(receiver, "U") _ " HOLDS" _ nl
     Set state = summary.%Get("ward_state")
     If $ISOBJECT(state) && (state.%Get("state") '= "") {

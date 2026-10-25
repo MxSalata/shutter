@@ -122,6 +122,9 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     Set route.connector = receiver
     Set route.receiver = ##class(Shutter.Store.SiteProfile).ReceiverLabel(receiver)
     Set route.tier = ##class(Shutter.Store.SiteProfile).TierOf(receiver)
+    // The receiver's category and the history policy it derives (v1.23), as the snapshot saw them
+    Set route.category = ##class(Shutter.Store.SiteProfile).ReceiverCategory(receiver)
+    Set route."history_policy" = ##class(Shutter.Store.SiteProfile).ReceiverHistoryPolicy(receiver)
     Set route."capabilities_source" = $SELECT(capsPath = "": "declared by the site profile", 1: "read from " _ capsPath)
     Set route.declared = declared
     Set route."capabilities_http_status" = cstatus

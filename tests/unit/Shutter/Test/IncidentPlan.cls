@@ -7,7 +7,7 @@
 Class Shutter.Test.IncidentPlan Extends %UnitTest.TestCase
 {
 
-Parameter POLICY = "2026-10-25.1";
+Parameter POLICY = "2026-10-26.1";
 
 /// The incidents made by the current test, for the clean-up.
 Property Made As %String [ MultiDimensional ];

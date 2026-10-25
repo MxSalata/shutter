@@ -511,6 +511,9 @@ ClassMethod Rows() As %DynamicArray
 XData Rows [ MimeType = application/json ]
 {
 [
+  {"group": "intent", "name": "a write to a receiver whose category is orders_results",
+   "profile": {"receivers": [{"name": "Downstream Out", "tier": 2, "category": "orders_results"}]},
+   "expect": [["intent", "block", "RECEIVER_NOT_MODELLED"]], "outcome": "block"},
   {"group": "pass", "name": "a resend of the case's own operation, at proposal",
    "expect": [["identity", "pass", "IDENTITY_MATCHES"], ["conformance", "pass", "PARSED"], ["intent", "pass", "EXACT_OPERATION"], ["ordering", "pass", "NO_LATER_EVENT"], ["state_transition", "pass", "TRANSITION_ALLOWED"], ["effect", "pass", "NO_RECEIPT"], ["authorization", "pass", "NOT_YET_REQUIRED"], ["concurrency", "pass", "VERSION_MATCHES"], ["evidence", "pass", "FRESH"], ["capability", "pass", "CONNECTOR_CAPABLE"], ["catalogue", "pass", "NOT_CONFIGURED"]],
    "outcome": "pass"},

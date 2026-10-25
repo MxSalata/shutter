@@ -31,6 +31,7 @@ CONDITIONS = {
     "conditional_writes": {"yes", "no", "unknown"},
     "free_text": {"yes", "no"},
     "chain": {"single", "ordered", "interleaved"},
+    "receiver_category": {"current_state", "history_of_record", "orders_results"},
 }
 OUTCOMES = {"resend", "resend_chain", "resend_latest", "reconcile", "none", "escalate", "resend_unconditional", "correct_history"}
 DECIDES = {"policy", "board", "person"}

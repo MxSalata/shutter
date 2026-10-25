@@ -9,7 +9,7 @@ Class Shutter.Operation.Gate Extends Ens.BusinessOperation
 Parameter INVOCATION = "Queue";
 
 /// Bumped whenever a check changes; recorded on every decision and bound by approvals.
-Parameter POLICYVERSION = "2026-10-25.1";
+Parameter POLICYVERSION = "2026-10-26.1";
 
 Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shutter.Msg.GateResult) As %Status
 {
@@ -58,6 +58,9 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     If 'okDisp {
         Do ..Check(checks, "intent", "block", "UNKNOWN_DISPOSITION", "Disposition '" _ plan.Disposition _ "' is not one the gate knows")
     } ElseIf isWrite {
+        // A receiver whose category is orders_results takes nothing from Shutter yet (v1.23): it keeps orders and
+        // results, which the ADT catalogue does not model, so every write to it is blocked and a person handles it.
+        If ##class(Shutter.Store.SiteProfile).ReceiverCategory(case.Receiver) = "orders_results" Do ..Check(checks, "intent", "block", "RECEIVER_NOT_MODELLED", "The receiver's category is orders_results: order communications and results are not modelled yet, so Shutter sends it nothing")
         // The same two rules guard every write (T31), whatever the case's kind and whoever made the plan: a merge goes
         // only when the site allows merges and the receiver's entry takes them, a cancel only to a receiver whose entry
         // reverses. A withheld case carries the block already (above), so it is not repeated here.

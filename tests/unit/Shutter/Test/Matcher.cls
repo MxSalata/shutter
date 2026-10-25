@@ -26,8 +26,41 @@ ClassMethod Vocabulary() As %DynamicObject
         "simultaneous_sources": ["yes", "no"],
         "conditional_writes": ["yes", "no", "unknown"],
         "free_text": ["yes", "no"],
-        "chain": ["single", "ordered", "interleaved"]
+        "chain": ["single", "ordered", "interleaved"],
+        "receiver_category": ["current_state", "history_of_record", "orders_results"]
     }
+}
+
+/// The stored site profile's text before the tests added their receivers, and whether there was a stored row.
+Property SavedProfile As %String;
+
+Property HadProfileRow As %Boolean [ InitialExpression = 0 ];
+
+/// Two receivers for the tests' duration, one of each category the default receiver is not: UT Records
+/// (history_of_record) and UT Orders (orders_results), beside the profile's own receivers. Put back afterwards.
+Method OnBeforeAllTests() As %Status
+{
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    Set ..HadProfileRow = $ISOBJECT(row), ..SavedProfile = $SELECT($ISOBJECT(row): row.Json, 1: "")
+    Set p = ##class(Shutter.Store.SiteProfile).Current()
+    Set version = +p.version
+    Do p.%Remove("version")
+    Do p.receivers.%Push({"name": "UT Records", "system": "a records system for the tests", "category": "history_of_record", "tier": 2})
+    Do p.receivers.%Push({"name": "UT Orders", "system": "an orders system for the tests", "category": "orders_results", "tier": 2})
+    If '$ISOBJECT(row) Set row = ##class(Shutter.Store.SiteProfile).%New(), row.Version = version
+    Set row.Json = p.%ToJSON()
+    Quit row.%Save()
+}
+
+Method OnAfterAllTests() As %Status
+{
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    If ..HadProfileRow {
+        If $ISOBJECT(row) Set row.Json = ..SavedProfile Do row.%Save()
+    } ElseIf $ISOBJECT(row) {
+        Do ##class(Shutter.Store.SiteProfile).%DeleteId(row.%Id())
+    }
+    Quit $$$OK
 }
 
 Method TestDelivery()
@@ -155,6 +188,43 @@ Method TestWhenHolds()
         Do $$$AssertTrue(##class(Shutter.Catalogue.Matcher).WhenHolds("history_policy: " _ flag, {}), "the site's own history policy")
         Do $$$AssertNotTrue(##class(Shutter.Catalogue.Matcher).WhenHolds("history_policy: not-" _ flag, {}), "another history policy")
     }
+    // The facts carry the case's receiver's policy and category (v1.23), which answer before the site-wide flag.
+    Do $$$AssertTrue(##class(Shutter.Catalogue.Matcher).WhenHolds("history_policy: correct", {"history_policy": "correct"}), "the receiver keeps its history: the when holds")
+    Do $$$AssertNotTrue(##class(Shutter.Catalogue.Matcher).WhenHolds("history_policy: correct", {"history_policy": "current"}), "the receiver keeps what is current: it does not")
+    Do $$$AssertTrue(##class(Shutter.Catalogue.Matcher).WhenHolds("receiver_category: history_of_record", {"receiver_category": "history_of_record"}), "the category as a when")
+    Do $$$AssertNotTrue(##class(Shutter.Catalogue.Matcher).WhenHolds("receiver_category: history_of_record", {"receiver_category": "current_state"}), "another category")
+}
+
+/// The facts and the condition carry the case's receiver's category and policy (v1.23): a receiver the profile does not
+/// name is current_state and current, and the conditions name the category.
+Method TestReceiverFacts()
+{
+    Set case = ..Case({})
+    Set case.Receiver = "UT Receiver Not In Profile"
+    Set f = ##class(Shutter.Catalogue.Matcher).Facts(..Summary({}, case), case)
+    Do $$$AssertEquals(f."history_policy", "current", "an unnamed receiver keeps what is current")
+    Do $$$AssertEquals(f."receiver_category", "current_state", "and is a current_state system")
+    Set c = ##class(Shutter.Catalogue.Matcher).Conditions(case, ..Summary({}, case))
+    Do $$$AssertEquals(c."receiver_category", "current_state", "the condition names the category")
+}
+
+/// The correcting steps for a history_of_record receiver (v1.23): built from the case and the summary, naming the
+/// missing movement, the later one that applied, the current placement, and eight ordered steps.
+Method TestCorrectionSteps()
+{
+    Set row = {"case": {"event": "transfer"}, "summary": {"ward_state": {"state": "admitted", "ward": "WARD-C", "version": 3, "history": [
+        {"event": "admit", "ward": "WARD-A", "event_time": "2026-10-19T08:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-19T08:00:00Z"},
+        {"event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T09:30:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T09:30:00Z"}]}}}
+    Set case = ..Case(row.case)
+    Set case.Ward = "WARD-B", case.SourceMessageId = "MSG-UT-2", case.Receiver = "UT Receiver Not In Profile"
+    Set steps = ##class(Shutter.Util.HistoryCorrection).Steps(case, ..Summary(row, case))
+    Do $$$AssertEquals(steps.missing.ward, "WARD-B", "the missing movement's ward")
+    Do $$$AssertEquals(steps.missing.after, "WARD-A", "it belongs after the admission to A")
+    Do $$$AssertEquals(steps.current.ward, "WARD-C", "the current placement")
+    Do $$$AssertEquals(steps.steps.%Size(), 8, "eight steps")
+    Do $$$AssertTrue(steps.steps.%Get(0) [ "Do not resend", "the first step forbids the resend")
+    Do $$$AssertTrue(steps.steps.%Get(4) [ "historic movement", "the insert is a historic movement")
+    Do $$$AssertTrue(##class(Shutter.Util.HistoryCorrection).Headline(steps) [ "WARD-B", "the headline names the missing ward")
 }
 
 /// Facts: other_source is the other source system of an event the receiver holds at the failed event's own time.
@@ -205,6 +275,7 @@ ClassMethod Case(spec As %DynamicObject) As Shutter.Store.Case
     Set case.PatientIdAuthority = $CLASSMETHOD(json, "Str", spec, "patient_id_authority", "HOSP")
     Set case.EncounterId = "ENC-UT1", case.SourceSystem = "PAS"
     Set case.OperationKey = $CLASSMETHOD(json, "Str", spec, "operation_key", "PAS^HOSP^" _ case.PatientId _ "^ENC-UT1^" _ case.Event _ "^" _ case.EventTime)
+    Set case.Receiver = $CLASSMETHOD(json, "Str", spec, "receiver")
     Quit case
 }
 
@@ -269,8 +340,11 @@ ClassMethod Rows() As %DynamicArray
 XData Rows [ MimeType = application/json ]
 {
 [
+  {"group": "other", "name": "a receiver whose category is history_of_record", "case": {"receiver": "UT Records"}, "expect": {"receiver_category": "history_of_record"}},
+  {"group": "other", "name": "a receiver whose category is orders_results", "case": {"receiver": "UT Orders"}, "expect": {"receiver_category": "orders_results"}},
+  {"group": "other", "name": "a receiver the profile does not name", "case": {"receiver": "UT Nowhere"}, "expect": {"receiver_category": "current_state"}},
   {"group": "delivery", "name": "the plain case",
-   "expect": {"delivery": "failed", "receiver_answer": "unavailable", "event": "transfer", "receipt": "absent", "later_applied": "none", "later_delivery": "none", "event_time": "plausible", "encounter_state": "admitted", "transition": "allowed", "patient_match": "yes", "simultaneous_sources": "no", "conditional_writes": "yes", "free_text": "no", "chain": "single"}},
+   "expect": {"delivery": "failed", "receiver_answer": "unavailable", "event": "transfer", "receipt": "absent", "later_applied": "none", "later_delivery": "none", "event_time": "plausible", "encounter_state": "admitted", "transition": "allowed", "patient_match": "yes", "simultaneous_sources": "no", "conditional_writes": "yes", "free_text": "no", "chain": "single", "receiver_category": "current_state"}},
   {"group": "delivery", "name": "a refusal", "case": {"failure_kind": "rejected"}, "expect": {"delivery": "rejected"}},
   {"group": "delivery", "name": "an uncertain outcome", "case": {"failure_kind": "uncertain_outcome"}, "expect": {"delivery": "uncertain"}},
   {"group": "delivery", "name": "an unmappable message", "case": {"failure_kind": "unmappable"}, "expect": {"delivery": "unmappable"}},

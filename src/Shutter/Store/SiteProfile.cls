@@ -25,8 +25,7 @@ ClassMethod Default() As %DynamicObject
 {
     Set p = {}
     Set p.version = 0
-    Set p.receivers = [{"name": ($PARAMETER("Shutter.Production", "RECEIVER")), "system": "the demo bed-management system", "tier": 2, "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "merges": false, "api": {"base": "/downstream/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "/capabilities", "operations": "/operations"}, "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}}]
-    Set p."history_policy" = "current"
+    Set p.receivers = [{"name": ($PARAMETER("Shutter.Production", "RECEIVER")), "system": "the demo bed-management system", "category": "current_state", "tier": 2, "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "merges": false, "api": {"base": "/downstream/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "/capabilities", "operations": "/operations"}, "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}}]
     Set p."authoritative_source" = ""
     Set p."unconditional_resend" = "forbidden"
     Set p.merges = "forbidden"
@@ -126,6 +125,9 @@ ClassMethod Validate(p As %DynamicObject) As %String
         If $CLASSMETHOD(json, "Str", r, "name") = "" Return at _ ".name: required"
         Set tier = r.%Get("tier")
         If (tier '= +tier) || (tier < 1) || (tier > 3) Return at _ ".tier: must be 1, 2 or 3"
+        // The receiver's category (v1.23) and its own history policy, which the category derives when absent.
+        If r.%IsDefined("category") && '$LISTFIND($LISTBUILD("current_state", "history_of_record", "orders_results"), r.%Get("category")) Return at _ ".category: must be current_state, history_of_record or orders_results"
+        If r.%IsDefined("history_policy") && '$LISTFIND($LISTBUILD("current", "correct"), r.%Get("history_policy")) Return at _ ".history_policy: must be current or correct"
         If r.%IsDefined("cancels") && (r.%GetTypeOf("cancels") '= "boolean") Return at _ ".cancels: must be true or false"
         // Whether the receiver takes merges (T31); false when absent, and a merge still needs the site's merges: allowed.
         If r.%IsDefined("merges") && (r.%GetTypeOf("merges") '= "boolean") Return at _ ".merges: must be true or false"
@@ -424,6 +426,30 @@ ClassMethod ReceiverFeatures(name As %String) As %DynamicObject
     Set r = ..Receiver(name)
     If $ISOBJECT(r) && $ISOBJECT(r.%Get("features")) Quit r.%Get("features")
     Quit {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}
+}
+
+/// The receiver's category (CONTRACTS 6.4, v1.23): current_state (a bed manager or whiteboard, where only the present
+/// placement matters), history_of_record (a PAS, EPR or warehouse, whose movement history must be complete) or
+/// orders_results (order communications or a LIMS, not modelled yet). current_state when the entry names none or the
+/// profile does not name the receiver, which is what every profile written before v1.23 meant.
+ClassMethod ReceiverCategory(name As %String) As %String
+{
+    Set r = ..Receiver(name)
+    Set category = $SELECT($ISOBJECT(r): ##class(Shutter.Util.Json).Str(r, "category"), 1: "")
+    If '$LISTFIND($LISTBUILD("current_state", "history_of_record", "orders_results"), category) Quit "current_state"
+    Quit category
+}
+
+/// The receiver's history policy, current or correct (v1.23): the entry's own history_policy when it has one, else
+/// derived from its category (history_of_record keeps the history straight: correct; the others: current), else, for
+/// an entry with neither, the profile's site-wide history_policy (deprecated since v1.23), else current.
+ClassMethod ReceiverHistoryPolicy(name As %String) As %String
+{
+    Set r = ..Receiver(name)
+    Set own = $SELECT($ISOBJECT(r): ##class(Shutter.Util.Json).Str(r, "history_policy"), 1: "")
+    If $LISTFIND($LISTBUILD("current", "correct"), own) Quit own
+    If $ISOBJECT(r) && (##class(Shutter.Util.Json).Str(r, "category") '= "") Quit $SELECT(..ReceiverCategory(name) = "history_of_record": "correct", 1: "current")
+    Quit $SELECT(..Flag("history_policy", "current") = "correct": "correct", 1: "current")
 }
 
 /// The receiver's description for a person: its system text and base path.

@@ -74,6 +74,8 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     Set notes = $SELECT($ISOBJECT(msg): msg.%Get("notes"), 1: "")
     Set c."free_text" = $SELECT($ISOBJECT(notes) && (notes.%Size() > 0): "yes", 1: "no")
     Set c.chain = $SELECT(chainKind = "": "single", 1: chainKind)
+    // receiver_category (v1.23): what kind of system the case's receiver is, from its site profile entry
+    Set c."receiver_category" = ##class(Shutter.Store.SiteProfile).ReceiverCategory(case.Receiver)
     Quit c
 }
 
@@ -405,6 +407,9 @@ ClassMethod Facts(summary As %DynamicObject, case As Shutter.Store.Case) As %Dyn
 {
     Set f = {}
     Set f."other_source" = ""
+    // The receiver's history policy and category (v1.23), so an entry's when reads the case's receiver, not the site
+    Set f."history_policy" = ##class(Shutter.Store.SiteProfile).ReceiverHistoryPolicy(case.Receiver)
+    Set f."receiver_category" = ##class(Shutter.Store.SiteProfile).ReceiverCategory(case.Receiver)
     Set ward = summary.%Get("ward_state")
     Set history = $SELECT($ISOBJECT(ward): ward.%Get("history"), 1: "")
     If $ISOBJECT(history) {
@@ -429,6 +434,9 @@ ClassMethod WhenHolds(when As %String, facts As %DynamicObject) As %Boolean
     Set flag = $ZSTRIP($PIECE(when, ":", 1), "<>W"), value = $ZSTRIP($PIECE(when, ":", 2, *), "<>W")
     If value = "other_source" Set value = $SELECT($ISOBJECT(facts): ##class(Shutter.Util.Json).Str(facts, "other_source"), 1: "")
     If value = "" Quit 0
+    // A fact of the flag's name (history_policy, receiver_category, from the case's receiver, v1.23) answers before the
+    // site-wide flag, so the catalogue's when reads the receiver the case went to, as the snapshot recorded it.
+    If $ISOBJECT(facts) && (facts.%GetTypeOf(flag) = "string") Quit ##class(Shutter.Util.Json).Str(facts, flag) = value
     Quit ##class(Shutter.Store.SiteProfile).Flag(flag) = value
 }
 
