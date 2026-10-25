@@ -7,7 +7,10 @@ Include Ensemble
 /// enforces the token budget, and reads the result the terminal tool accepted. Failures are
 /// reported in the response's Status, never retried here. When the run was resolved under the API mimic
 /// (the spec's MockConfig), the provider is the mimic's, set before %Init so the class's own
-/// configuration is never read; the run is labelled model mock and is never recorded.
+/// configuration is never read; the run is labelled model mock and is never recorded. That %Init leaves a
+/// provider set before it alone is what the mock's SelfTest proves on build 154, not something the
+/// framework documents, so every run checks it after %Init and ends with status error, before any model
+/// call, when the agent came out with another provider.
 Class Shutter.Bridge.Runner.AIHub Extends Shutter.Bridge.Runner
 {
 
@@ -42,6 +45,10 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
             Set sc = agent.%Init({"caseId": (spec.CorrelationKey), "role": (spec.Role), "member": (spec.MemberCode)})
             If $$$ISERR(sc) {
                 Set response.Status = "model_error", response.Error = "The agent could not start: " _ $SYSTEM.Status.GetErrorText(sc)
+            } ElseIf $ISOBJECT(provider) && (agent.Provider '= provider) {
+                // The provider set before %Init must still be the agent's: a mimic run that reached the class's own
+                // configuration (and the instance's key) would be labelled mock at cost 0, so the run ends here instead.
+                Set response.Status = "error", response.Error = "The agent replaced the runner's provider"
             } Else {
                 // The model: the mimic's; else the item's Model, then its configuration's, then the class's.
                 If mock '= "" {
@@ -251,12 +258,16 @@ ClassMethod Probe(agentClass As %String = "Shutter.Agent.Conformance") As %Strin
 
 /// Run one board member live for an existing case, outside the production: builds the request the
 /// case workflow would build (the snapshot summary, and the specialists' findings for the coordinator),
-/// runs this runner in <var>mode</var> (live or record) and returns the response as JSON. For checks
-/// over SQL once a provider is configured; the tool calls are keyed "test:<case>:<member>".
+/// runs this runner in <var>mode</var> (live or record; any other word is refused, so a replay never runs
+/// live by mistake) and returns the response as JSON. For checks over SQL once a provider is configured.
+/// The tool calls are keyed test:<case>:<member>:<n>, one key per run (run_key in the answer; a member's
+/// runs are found with LIKE 'test:<case>:<member>:%'), so two runs of one member never share a list; mock
+/// says whether the API mimic answered. No AgentRun row is written: a test run is not the case's.
 ClassMethod TestRun(caseId As %String, memberCode As %String = "conformance", mode As %String = "live", tokenBudget As %Integer = 60000) As %String [ SqlProc ]
 {
     // A live run costs money: only a caller who may operate Shutter gets one.
     If '$SYSTEM.Security.Check("Shutter_Operate", "USE") Quit {"error": "TestRun needs the Shutter_Operate resource"}.%ToJSON()
+    If '$LISTFIND($LISTBUILD("live", "record"), $ZCONVERT(mode, "L")) Quit {"error": "mode must be live or record"}.%ToJSON()
     Try {
         Set case = ##class(Shutter.Store.Case).ByCaseId(caseId)
         If '$ISOBJECT(case) Return {"error": ("Unknown case " _ caseId)}.%ToJSON()
@@ -276,9 +287,11 @@ ClassMethod TestRun(caseId As %String, memberCode As %String = "conformance", mo
         Set spec.CorrelationKey = request.CorrelationKey, spec.SnapshotDigest = request.SnapshotDigest
         Set spec.ResultClass = request.ResultClass, spec.TerminalTool = request.TerminalTool
         Set spec.ConfigVersion = request.ConfigVersion
-        Set spec.Mode = mode, spec.RunnerClass = $CLASSNAME(), spec.MockConfig = ##class(Shutter.Setup).MockConfig()
+        Set spec.Mode = $ZCONVERT(mode, "L"), spec.RunnerClass = $CLASSNAME(), spec.MockConfig = ##class(Shutter.Setup).MockConfig()
         Set spec.MaxIterations = 8, spec.TokenBudget = tokenBudget, spec.RequestTimeoutSeconds = 120
-        Set spec.RecordKey = "", spec.EnsMessageId = "test:" _ caseId _ ":" _ memberCode, spec.EnsSessionId = ""
+        // One key per run: a second run of the same member must not append to the first one's tool calls.
+        Set n = $INCREMENT(^Shutter.Counter("testrun"))
+        Set spec.RecordKey = "", spec.EnsMessageId = "test:" _ caseId _ ":" _ memberCode _ ":" _ n, spec.EnsSessionId = ""
         Set response = ##class(Shutter.Bridge.Msg.AgentResponse).%New()
         Set runner = ..%New()
         Set sc = runner.Run(spec, .response)
@@ -286,6 +299,8 @@ ClassMethod TestRun(caseId As %String, memberCode As %String = "conformance", mo
         Set out = response.ToObject()
         If $$$ISERR(sc) Set out."run_error" = $SYSTEM.Status.GetErrorText(sc)
         Set out."tool_calls_detail" = ##class(Shutter.Bridge.ToolCall).ForRun(spec.EnsMessageId)
+        Set out."run_key" = spec.EnsMessageId
+        Do out.%Set("mock", spec.MockConfig '= "", "boolean")
         Return out.%ToJSON()
     } Catch ex {
         Return {"error": (ex.DisplayString())}.%ToJSON()

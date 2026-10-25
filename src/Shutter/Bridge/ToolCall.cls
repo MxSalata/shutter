@@ -3,8 +3,9 @@
 Class Shutter.Bridge.ToolCall Extends (%Persistent, %JSON.Adaptor)
 {
 
-/// The Ens.MessageHeader id of the agent request.
-Property RunKey As %String(%JSONFIELDNAME = "runKey", MAXLEN = 50) [ Required ];
+/// The Ens.MessageHeader id of the agent request, or a test run's own key (test:<case>:<member>:<n>, the live
+/// runner's TestRun).
+Property RunKey As %String(%JSONFIELDNAME = "runKey", MAXLEN = 80) [ Required ];
 
 Property Seq As %Integer(%JSONFIELDNAME = "seq") [ Required ];
 

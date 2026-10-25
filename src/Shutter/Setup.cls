@@ -999,7 +999,9 @@ ClassMethod InstallAIHub(root As %String = "") As %String [ SqlProc ]
 
 /// InstallAIHub as a %Status: what the aihub module's manifest invokes (the Invoke checks the status, so an install
 /// that stopped at an error stops the load, and the image build with it). Writes InstallAIHub's JSON, which holds no
-/// secret. A knowledge base that did not build is reported there and does not fail the install.
+/// secret. What fails the install: an error InstallAIHub caught, and a key in the environment (ANTHROPIC_API_KEY) whose
+/// provider could not be configured (a provider line not starting "ok"). A knowledge base that did not build, and an
+/// environment with no key (the agents replay), are reported there and do not fail it.
 ClassMethod InstallAIHubStatus(root As %String = "") As %Status
 {
     Set sc = $$$OK
@@ -1008,6 +1010,7 @@ ClassMethod InstallAIHubStatus(root As %String = "") As %Status
         Write !, "aihub install: ", json, !
         Set out = ##class(%DynamicObject).%FromJSON(json)
         If out.error '= "" Set sc = $$$ERROR($$$GeneralError, "The aihub install: " _ out.error)
+        If $$$ISOK(sc) && ($SYSTEM.Util.GetEnviron("ANTHROPIC_API_KEY") '= "") && ($EXTRACT(out.provider, 1, 2) '= "ok") Set sc = $$$ERROR($$$GeneralError, "The aihub install: the provider was not configured from ANTHROPIC_API_KEY: " _ out.provider)
     } Catch ex {
         Set sc = ex.AsStatus()
     }

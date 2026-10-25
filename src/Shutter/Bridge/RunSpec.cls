@@ -46,8 +46,9 @@ Property RequestTimeoutSeconds As %Integer;
 
 Property RecordKey As %String(MAXLEN = 300);
 
-/// The production message carrying the request: the key the tool-call audit rows use.
-Property EnsMessageId As %String(MAXLEN = 20);
+/// The production message carrying the request: the key the tool-call audit rows use. A test run outside the
+/// production (the live runner's TestRun) carries its own key here, test:<case>:<member>:<n>.
+Property EnsMessageId As %String(MAXLEN = 80);
 
 Property EnsSessionId As %String(MAXLEN = 20);
 
