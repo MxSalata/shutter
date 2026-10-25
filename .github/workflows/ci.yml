@@ -135,7 +135,8 @@ jobs:
       - name: The scenario catalogue keeps to the condition vocabulary, and catalogue.json is built from it
         run: python3 scripts/build-catalogue.py knowledge/catalogue --check
       # The model gets tokens (MRN-T1, ENC-T1) for the patient's identifiers and never their name, date of birth,
-      # address, phone numbers or note text: nothing personal from the fixtures may appear in what a recorded run saw.
+      # address, phone numbers or note text: nothing personal from the fixtures may appear in what a recorded run saw,
+      # and no NHS number in it or in the demo's agent output.
       - name: Nothing personal from the fixtures reached the model in any recording
         run: python3 tests/privacy_check.py --demo web/src/mocks/fixtures.json
       # The IPM version equals the release tag, so every place that writes the version holds the same one: both
@@ -174,7 +175,8 @@ jobs:
   # the downstream system's contract tests in process and over HTTP, and every scenario end to end with its recorded
   # runs: S1 to S10, S13, and the withheld merge and cancel (S15, S16) on the board; the two outage scenarios, S11 and
   # S12, and S2 in HL7 2.4 and 2.3.1 (S17, S18) in site-policy mode; S20, a move entered by hand, in rules-only mode;
-  # then the operator's and the approver's routes.
+  # S21, a transfer in the hour the clocks go back, in rules-only and site-policy modes; then the operator's and the
+  # approver's routes.
   iris:
     name: IRIS (the downstream system's contract, scenarios in replay)
     runs-on: [self-hosted, house]
@@ -268,14 +270,15 @@ jobs:
         run: python3 tests/e2e/downstream_api_check.py --url "$IRIS_URL" --second-user downstream-client --second-password shutter
       - name: Scenarios S1 to S10, S13, S15 and S16 end to end on the board, in replay
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --approve S1 S2 S3 S4 S5 S6 S7 S8 S9 S10 S13 S15 S16
-      # What the model would see of a case: tokens for the hospital number and the visit number, never the values.
+      # What the model would see of a case: tokens for the hospital number and the visit number, never the values, and
+      # never the NHS number PID-3 carries beside the hospital number.
       - name: The model's view of a case carries tokens, not identifiers
         run: |
           out=$(python3 scripts/iris-sql.py --url "$IRIS_URL" --ns SHUTTER --json "SELECT Shutter_Util.ModelView_Preview('C-000001') AS p")
           echo "$out" | head -40
           echo "$out" | grep -q 'MRN-T1'
           echo "$out" | grep -q 'ENC-T1'
-          if echo "$out" | grep -Eq 'MRN1001|ENC-1001'; then echo "A real identifier reached the model's view"; exit 1; fi
+          if echo "$out" | grep -Eq 'MRN1001|ENC-1001|9991001018'; then echo "A real identifier reached the model's view"; exit 1; fi
       # Times without an offset are read in the feed's zone: British Summer Time in July, GMT in January, and the hour
       # before the October clock change flagged.
       - name: Event times in the feed's time zone
@@ -307,6 +310,10 @@ jobs:
       # bound to the receiver's version, so the dispatch stops, the case is planned again, and her entry stands
       - name: A move entered by hand while the resend awaits approval (S20) in rules-only mode
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes rules --approve S20
+      # A transfer timed 01:30 with no offset on the night the clocks go back, an hour that happens twice: site policy
+      # escalates it on E13, and the resend rules alone propose is blocked by the gate (EVENT_TIME_IMPLAUSIBLE)
+      - name: A transfer in the hour the clocks go back (S21) in rules-only and site-policy modes
+        run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes rules,policy --approve S21
       # The roles over HTTP: the library is the approver's to change, an operator escalates a case and closes it by hand,
       # and under the site profile's two-person rule only an approver closes it. It closes two of the cases the
       # scenarios left escalated or blocked, so it runs after them.

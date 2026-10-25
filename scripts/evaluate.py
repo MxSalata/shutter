@@ -337,7 +337,8 @@ def build():
         elif e.get("incident"):
             why = "an incident whose chains the catalogue and the site's policy settle; the board decides none"
         elif e.get("modes") and "board" not in e["modes"]:
-            why = f"played in {', '.join(e['modes'])} mode only"
+            modes = e["modes"]
+            why = f"played in {' and '.join(modes)} mode{'s' if len(modes) > 1 else ''} only"
         else:
             why = "no recordings"
         without.append({"scenario": sid, "title": s.get("title", ""), "why": why})

@@ -2337,6 +2337,11 @@
    "scenario": "S20",
    "title": "A nurse moves the patient by hand while the plan awaits approval",
    "why": "played in rules mode only"
+  },
+  {
+   "scenario": "S21",
+   "title": "A transfer in the hour the clocks go back",
+   "why": "played in rules and policy modes only"
   }
  ],
  "not_used": [],

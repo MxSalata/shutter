@@ -14,7 +14,10 @@ whole words, so a token like MRN-T1 doesn't count. A recording's key, correlatio
 bookkeeping and are not checked. In the web demo the operator's evidence view (each case's snapshot) shows the
 patient by design, and the scenario list holds the test data, so --demo checks the rest (the agents' runs, plans,
 findings and events, and the incidents) for names, dates of birth and note text; identifiers are shown there by design
-too. Prints each hit and exits 1 when there is any. Standard library only.
+too, except the NHS number. NHS numbers (PID-3 typed NH) are looked for everywhere, as written and as "999 100 1018",
+and so is anything shaped like one: ten digits, plain or spaced 3 3 4, whose modulus 11 check digit is valid, so a real
+NHS number fails the check even when no fixture holds it. Prints each hit and exits 1 when there is any. Standard
+library only.
 """
 import argparse
 import glob
@@ -26,6 +29,21 @@ import sys
 
 MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November",
           "December"]
+
+
+# Ten digits, plain or spaced (or hyphenated) 3 3 4, as an NHS number is written
+NHS_SHAPE = re.compile(r"(?<![\w-])(\d{3})[ -]?(\d{3})[ -]?(\d{4})(?![\w-])")
+
+
+def nhs_valid(digits):
+    """Whether ten digits carry a valid NHS number check digit (modulus 11; a remainder giving 10 is never issued)."""
+    check = (11 - sum(int(d) * (10 - i) for i, d in enumerate(digits[:9])) % 11) % 11
+    return check != 10 and check == int(digits[9])
+
+
+def nhs_shaped(text):
+    """Every NHS number in a text, by its shape and check digit, as (as written, digits)."""
+    return [(m.group(0), "".join(m.groups())) for m in NHS_SHAPE.finditer(text) if nhs_valid("".join(m.groups()))]
 
 
 def segments(path):
@@ -54,7 +72,11 @@ def personal_values(fixture_dir):
             kind = seg[:3]
             if kind == "PID":
                 for rep in field(seg, 3).split("~"):
-                    add("identifier", rep.split("^")[0], [rep.split("^")[0]])
+                    value, kind_code = rep.split("^")[0], (rep.split("^") + [""] * 5)[4].upper()
+                    if kind_code in ("NH", "NHS", "NI") and re.fullmatch(r"\d{10}", value):
+                        add("NHS number", value, [value, f"{value[:3]} {value[3:6]} {value[6:]}"])
+                    else:
+                        add("identifier", value, [value])
                 name = field(seg, 5).split("~")[0].split("^")
                 family, given = (name + ["", ""])[:2]
                 if family and given:
@@ -119,6 +141,7 @@ def main():
         else:
             seen_by_model = {k: data.get(k) for k in ("transcript", "toolCalls", "response")}
         text = json.dumps(seen_by_model, ensure_ascii=False)
+        reported = set()
         for (kind, value), forms in sorted(values.items()):
             if demo and kind == "identifier":
                 continue
@@ -126,6 +149,12 @@ def main():
             if seen:
                 hits += 1
                 print(f"{os.path.relpath(path)}: {kind} {value!r} (as {', '.join(repr(s) for s in seen)})")
+                reported.add(value)
+        # Any other NHS number, by its shape: one no fixture holds is still a patient's
+        for written, digits in sorted(set(nhs_shaped(text))):
+            if digits not in reported:
+                hits += 1
+                print(f"{os.path.relpath(path)}: NHS number {digits!r} by its shape and check digit (as {written!r})")
     print(f"{len(values)} personal values from the fixtures, {len(files)} files checked, {hits} findings")
     return 1 if hits else 0
 

@@ -18,9 +18,11 @@ A scenario whose expected outcome says "incident" (S11) has several cases: the c
 opens, approves its plan and its cases' plans with --approve, and compares each encounter's chain (kind, who decided,
 the catalogue entries), its writes and the downstream system's final state with expected.encounters.
 
-A scenario that names the modes it is defined for (expected.modes: S7, S11, S12, S17, S18, S19, S20) is skipped in the
-others. S7 is not defined for site policy, which resends without asking anyone, so no plan waits for its later
-transfer; S20 is defined for rules only until the board's runs for it are recorded.
+A scenario that names the modes it is defined for (expected.modes: S7, S11, S12, S17, S18, S19, S20, S21) is skipped in
+the others. S7 is not defined for site policy, which resends without asking anyone, so no plan waits for its later
+transfer; S20 is defined for rules only and S21 for rules and site policy until the board's runs for them are recorded.
+expected.by_mode adds to or replaces the expected outcome in one mode (S21: rules alone propose the resend and the gate
+blocks it, where site policy escalates on the catalogue's E13 before any write is planned).
 
 Besides the outcome, expected.blocked_by is a reason code the case met on the way (in any round, so a dispatch block
 that led to a re-plan counts), expected.final_reason the code the closed case names for stopping (GET
@@ -279,7 +281,7 @@ def play_incident(args, operator, approver, scenario, mode):
 
 def judge(args, operator, scenario, mode, final):
     """Compares a settled case with the scenario's expected outcome; returns (as_expected, line, outcome)."""
-    expected = scenario["expected"]
+    expected = {**scenario["expected"], **scenario["expected"].get("by_mode", {}).get(mode, {})}
     caseid = urllib.parse.quote(final["caseId"])
     _, attempts = operator.call("GET", f"/cases/{caseid}/attempts")
     wrote = any((a.get("attempt") or {}).get("outcome") in ("applied", "already_committed") for a in attempts or [])
