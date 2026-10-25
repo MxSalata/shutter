@@ -15,6 +15,7 @@ XData Manifest [ XMLNamespace = INSTALLER ]
 {
 <Manifest>
   <Default Name="NAMESPACE" Value="SHUTTER"/>
+  <Default Name="MGRDIR" Value="#{##class(%File).ManagerDirectory()}"/>
   <Default Name="DBDIR" Value="${MGRDIR}${NAMESPACE}"/>
   <Default Name="DATADIR" Value="${MGRDIR}shutter/db/${NAMESPACE}DATA"/>
   <Default Name="HOSPITAL" Value="HOSPITAL"/>
@@ -50,6 +51,7 @@ XData HospitalManifest [ XMLNamespace = INSTALLER ]
 {
 <Manifest>
   <Default Name="NAMESPACE" Value="SHUTTER"/>
+  <Default Name="MGRDIR" Value="#{##class(%File).ManagerDirectory()}"/>
   <Default Name="HOSPITAL" Value="HOSPITAL"/>
   <Default Name="HOSPITALDBDIR" Value="${MGRDIR}${HOSPITAL}"/>
   <Default Name="HOSPITALDATADIR" Value="${MGRDIR}shutter/db/${HOSPITAL}DATA"/>
