@@ -476,9 +476,10 @@ ClassMethod ByReviewId(id As %String) As Shutter.Store.Review
 }
 
 /// The newest reviews, newest first, as list items (ToObject 0); an empty namespace or production filters nothing.
-ClassMethod List(namespace As %String = "", production As %String = "", limit As %Integer = 50) As %DynamicArray
+/// sc carries an SQL error (the list is then empty), so a reader never takes a failed query for an empty table.
+ClassMethod List(namespace As %String = "", production As %String = "", limit As %Integer = 50, Output sc As %Status) As %DynamicArray
 {
-    Set out = []
+    Set sc = $$$OK, out = []
     Set limit = +limit
     If limit < 1 Set limit = 50
     If limit > 500 Set limit = 500
@@ -486,6 +487,7 @@ ClassMethod List(namespace As %String = "", production As %String = "", limit As
     If namespace '= "" Set where = where _ " AND Namespace = ?", args = args + 1, args(args) = namespace
     If production '= "" Set where = where _ " AND Production = ?", args = args + 1, args(args) = production
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP " _ limit _ " ID FROM Shutter_Store.Review WHERE 1=1" _ where _ " ORDER BY ID DESC", args...)
+    If rs.%SQLCODE < 0 Set sc = ..SqlError(rs) Quit out
     While rs.%Next() {
         Set r = ..%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(r)
@@ -494,30 +496,39 @@ ClassMethod List(namespace As %String = "", production As %String = "", limit As
     Quit out
 }
 
-/// How many reviews there are for the filter List takes.
-ClassMethod Count(namespace As %String = "", production As %String = "") As %Integer
+/// How many reviews there are for the filter List takes; sc carries an SQL error (the count is then 0).
+ClassMethod Count(namespace As %String = "", production As %String = "", Output sc As %Status) As %Integer
 {
-    Set where = "", args = 0
+    Set sc = $$$OK, where = "", args = 0
     If namespace '= "" Set where = where _ " AND Namespace = ?", args = args + 1, args(args) = namespace
     If production '= "" Set where = where _ " AND Production = ?", args = args + 1, args(args) = production
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT COUNT(*) AS N FROM Shutter_Store.Review WHERE 1=1" _ where, args...)
+    If rs.%SQLCODE < 0 Set sc = ..SqlError(rs) Quit 0
     Quit $SELECT(rs.%Next(): +rs.%Get("N"), 1: 0)
 }
 
-/// The review of a production still sweeping or ranking (and started within STALEAFTERSECONDS), or "".
-ClassMethod Running(namespace As %String, production As %String) As Shutter.Store.Review
+/// A failed query as a status: the SQLCODE and the message, so the caller can say what the store could not read.
+ClassMethod SqlError(rs As %SQL.StatementResult) As %Status [ Private ]
 {
-    Set since = ##class(Shutter.Util.Time).FromNow(-..#STALEAFTERSECONDS)
+    Quit $$$ERROR($$$GeneralError, "Shutter_Store.Review query failed: SQLCODE " _ rs.%SQLCODE _ ": " _ rs.%Message)
+}
+
+/// The review of a production still sweeping or ranking (and started within STALEAFTERSECONDS), or "".
+ClassMethod Running(namespace As %String, production As %String, Output sc As %Status) As Shutter.Store.Review
+{
+    Set sc = $$$OK, since = ##class(Shutter.Util.Time).FromNow(-..#STALEAFTERSECONDS)
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 ID FROM Shutter_Store.Review WHERE Namespace = ? AND Production = ? AND State IN ('sweeping', 'ranking') AND StartedAt >= ? ORDER BY ID DESC", namespace, production, since)
+    If rs.%SQLCODE < 0 Set sc = ..SqlError(rs) Quit ""
     If 'rs.%Next() Quit ""
     Quit ..%OpenId(rs.%Get("ID"))
 }
 
 /// Fail the reviews of a production left sweeping or ranking for longer than STALEAFTERSECONDS. Returns how many.
-ClassMethod CloseStale(namespace As %String, production As %String) As %Integer
+ClassMethod CloseStale(namespace As %String, production As %String, Output sc As %Status) As %Integer
 {
-    Set n = 0, since = ##class(Shutter.Util.Time).FromNow(-..#STALEAFTERSECONDS)
+    Set sc = $$$OK, n = 0, since = ##class(Shutter.Util.Time).FromNow(-..#STALEAFTERSECONDS)
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.Review WHERE Namespace = ? AND Production = ? AND State IN ('sweeping', 'ranking') AND StartedAt < ?", namespace, production, since)
+    If rs.%SQLCODE < 0 Set sc = ..SqlError(rs) Quit 0
     While rs.%Next() { Set n = n + 1, ids(n) = rs.%Get("ID") }
     For i = 1:1:n {
         Set r = ..%OpenId(ids(i))
@@ -528,10 +539,11 @@ ClassMethod CloseStale(namespace As %String, production As %String) As %Integer
 }
 
 /// Keep the newest reviews of a production and delete the rest. Returns how many were deleted.
-ClassMethod Trim(namespace As %String, production As %String, keep As %Integer = 50) As %Integer
+ClassMethod Trim(namespace As %String, production As %String, keep As %Integer = 50, Output sc As %Status) As %Integer
 {
-    Set n = 0, seen = 0
+    Set sc = $$$OK, n = 0, seen = 0
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.Review WHERE Namespace = ? AND Production = ? ORDER BY ID DESC", namespace, production)
+    If rs.%SQLCODE < 0 Set sc = ..SqlError(rs) Quit 0
     While rs.%Next() {
         Set seen = seen + 1
         Continue:seen<=keep
