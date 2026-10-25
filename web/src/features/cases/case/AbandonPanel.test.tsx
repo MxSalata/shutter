@@ -101,23 +101,28 @@ describe('AbandonPanel', () => {
     expect(screen.queryByRole('region', { name: 'Still working' })).not.toBeInTheDocument();
   });
 
-  it('keeps the dialog open with the reason a busy case is refused, and when to try again', async () => {
-    leftCollecting(recorded.events);
+  /** The server's busy refusal, its newest message in flight at the given time. */
+  function refusedBusy(newestAt: string) {
     server.use(
       http.post(`/api/shutter/cases/${ID}/abandon`, () =>
         HttpResponse.json(
           {
             error: 'busy',
-            detail: "The case's workflow has 1 message in flight (newest 2026-10-25T09:00:00Z)",
+            detail: `The case's workflow has 1 message in flight (newest ${newestAt})`,
             state: 'collecting',
             inFlight: 1,
-            newestAt: '2026-10-25T09:00:00Z',
+            newestAt,
             deferred: false,
           },
           { status: 409 },
         ),
       ),
     );
+  }
+
+  it('keeps the dialog open with the reason a busy case is refused, and when to try again', async () => {
+    leftCollecting(recorded.events);
+    refusedBusy(new Date(Date.now() - 5 * 60_000).toISOString());
     renderCase();
     const panel = await screen.findByRole('region', { name: 'Still working' });
     await userEvent.click(within(panel).getByRole('button', { name: 'Abandon the case…' }));
@@ -141,6 +146,27 @@ describe('AbandonPanel', () => {
 
     resetMock('operator');
     leftCollecting(recorded.events);
+    renderCase();
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Evidence' })).toBeInTheDocument());
+    expect(screen.queryByRole('region', { name: 'Still working' })).not.toBeInTheDocument();
+  });
+  it('names no retry time that has already passed', async () => {
+    leftCollecting(recorded.events);
+    refusedBusy('2026-10-25T09:00:00Z');
+    renderCase();
+    const panel = await screen.findByRole('region', { name: 'Still working' });
+    await userEvent.click(within(panel).getByRole('button', { name: 'Abandon the case…' }));
+    const dialog = await screen.findByRole('dialog', { name: `Abandon ${ID}` });
+    await userEvent.type(within(dialog).getByRole('textbox', { name: /Why give it up/ }), 'Stuck');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Abandon the case' }));
+    const alert = await within(dialog).findByRole('alert');
+    expect(alert).toHaveTextContent("The case's workflow has 1 message in flight");
+    expect(alert).not.toHaveTextContent(/Try again after/);
+  });
+
+  it('is not offered on a case that waits for an approval, however long', async () => {
+    leftCollecting(recorded.events);
+    state.detail = { ...state.detail, state: 'awaiting_approval' };
     renderCase();
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Evidence' })).toBeInTheDocument());
     expect(screen.queryByRole('region', { name: 'Still working' })).not.toBeInTheDocument();

@@ -14,6 +14,11 @@ import { Section } from './Section';
 /** How long nothing of a case may move before an approver can abandon it: the server's abandonAfterMinutes default. */
 export const ABANDON_AFTER_MINUTES = 15;
 const QUIET_MS = ABANDON_AFTER_MINUTES * 60_000;
+/**
+ * States that wait for a person rather than for work in flight: the open approval task is a deferred message, which
+ * the server counts as in flight whatever its age (409 busy), so abandoning is never offered there.
+ */
+const WAITING_FOR_A_PERSON = ['awaiting_approval', 'grouped'];
 
 /** The newest event's time, any kind: the production's start note counts, so resumed work gets its quiet time. */
 function newestAt(events: CaseEvent[]): string {
@@ -49,7 +54,15 @@ export function AbandonPanel({ c, events }: { c: CaseDetail; events: CaseEvent[]
   const [key, setKey] = useState('');
   const newest = newestAt(events ?? []);
   const quiet = newest ? now - Date.parse(newest) : 0;
-  if (DEMO || !me?.approver || CLOSED_STATES.includes(c.state) || !newest || quiet < QUIET_MS) return null;
+  if (
+    DEMO ||
+    !me?.approver ||
+    CLOSED_STATES.includes(c.state) ||
+    WAITING_FOR_A_PERSON.includes(c.state) ||
+    !newest ||
+    quiet < QUIET_MS
+  )
+    return null;
 
   const open = () => {
     setReason('');
@@ -75,7 +88,9 @@ export function AbandonPanel({ c, events }: { c: CaseDetail; events: CaseEvent[]
   const error = abandon.error;
   const code = isApiError(error) ? error.code : '';
   const busy = isApiError(error) && error.code === 'busy' ? (error.body as Busy | null) : null;
-  const retryAt = busy?.newestAt ? new Date(Date.parse(busy.newestAt) + QUIET_MS).toISOString() : '';
+  const retryMs = busy?.newestAt ? Date.parse(busy.newestAt) + QUIET_MS : 0;
+  // A queued message counts as in flight whatever its age, so a time already past would be refused again.
+  const retryAt = retryMs > now ? new Date(retryMs).toISOString() : '';
   return (
     <Section
       id="abandon"
