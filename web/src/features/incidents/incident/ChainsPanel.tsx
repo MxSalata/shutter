@@ -84,7 +84,7 @@ function ChainCard({
                   disabled={!!why}
                   onClick={() => onDecide('approve', chain)}
                 >
-                  Approve this chain…
+                  Approve this chain
                 </Button>
               </span>
             </Tooltip>
@@ -98,7 +98,7 @@ function ChainCard({
                   disabled={!!why}
                   onClick={() => onDecide('reject', chain)}
                 >
-                  Reject…
+                  Reject this chain
                 </Button>
               </span>
             </Tooltip>

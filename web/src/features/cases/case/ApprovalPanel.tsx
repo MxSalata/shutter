@@ -117,7 +117,7 @@ export function ApprovalPanel({
   const why = !me.approver
     ? 'Deciding needs the approver role: sign in as approver'
     : !awaiting
-      ? `The case is ${humanize(c.state).toLowerCase()}, not awaiting approval`
+      ? `The case is ${humanize(c.state).toLowerCase()}, not waiting for approval`
       : !plan
         ? 'There is no plan to decide on'
         : '';

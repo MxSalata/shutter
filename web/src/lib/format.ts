@@ -155,9 +155,15 @@ export function shortDigest(digest: string | undefined | null, length = 12): str
   return digest.length > length ? `${digest.slice(0, length)}…` : digest;
 }
 
-/** "awaiting_approval" → "Awaiting approval". */
+/** Codes whose words alone would read differently from the status badges. */
+const CODE_WORDS: Record<string, string> = {
+  awaiting_approval: 'Waiting for approval',
+};
+
+/** "release_failed" → "Release failed"; "awaiting_approval" reads "Waiting for approval", as the badges say. */
 export function humanize(code: string | undefined | null): string {
   if (!code) return '';
+  if (CODE_WORDS[code]) return CODE_WORDS[code];
   const text = code.replace(/_/g, ' ').toLowerCase();
   return text.charAt(0).toUpperCase() + text.slice(1);
 }

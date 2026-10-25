@@ -74,7 +74,7 @@ export function IncidentApprovalPanel({
                     disabled={!!why}
                     onClick={() => onDecide('approve')}
                   >
-                    Approve…
+                    Approve release
                   </Button>
                 </span>
               </Tooltip>
@@ -87,7 +87,7 @@ export function IncidentApprovalPanel({
                     disabled={!!why}
                     onClick={() => onDecide('reject')}
                   >
-                    Reject…
+                    Reject release
                   </Button>
                 </span>
               </Tooltip>
@@ -100,7 +100,7 @@ export function IncidentApprovalPanel({
           <Table verticalSpacing={4}>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Workflow task</Table.Th>
+                <Table.Th>Approval task</Table.Th>
                 <Table.Th>Answer</Table.Th>
                 <Table.Th>By</Table.Th>
                 <Table.Th>Completed</Table.Th>
