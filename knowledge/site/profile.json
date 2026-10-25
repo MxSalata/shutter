@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "receivers": [
     {
       "name": "Downstream Out",
@@ -60,6 +60,11 @@
   },
   "feed": {
     "time_zone": "Europe/London"
+  },
+  "mail": {
+    "allowed_domains": [
+      "example.nhs.uk"
+    ]
   },
   "teams": [
     {

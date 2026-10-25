@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.18, 20 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.19, 25 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -411,7 +411,8 @@ reads it through `Shutter.Store.SiteProfile`.
 }
 ```
 
-(`teams` and `mail`, optional, are in section 10.)
+(`teams` and `mail`, optional, are in section 10. The shipped seed profile has both: the integration and PAS teams, and
+`mail.allowed_domains` set to their mailboxes' domain, `example.nhs.uk`.)
 
 - A tier is the receiver's; a policy is read by tier and chain kind.
 - **The receiver description** (v1.8): each receiver entry carries `api` (its `base` path and the paths of its `state`,
@@ -450,7 +451,7 @@ reads it through `Shutter.Store.SiteProfile`.
   sent the case's escalation, and `Shutter_Approver` holds `Shutter_Operate` too, so one approver may escalate and close
   a case, or close one that was never escalated, as the case page offers for a withheld case. The validator accepts only
   `true` or `false`. It belongs to question 7, who approves what, so the questionnaire still has twelve questions; the
-  shipped seed profile answers `false` (its file's `version` is 3). `Shutter.Store.SiteProfile.CloseNeedsApprover()`
+  shipped seed profile answers `false` (its file's `version` is 4 since v1.19). `Shutter.Store.SiteProfile.CloseNeedsApprover()`
   reads it. `approvers.role` and `approvers.escalation` stay on record only: the permissions themselves are the
   resources of section 5.
 - `merges` (v1.14): `forbidden` (the default when absent) or `allowed`, the only values the validator accepts. A receiver entry's `merges` and `cancels` (booleans, default false) say what it takes (1.1). A merge is delivered only under `allowed` to a receiver with `merges: true`; the gate's `MERGE_WITHHELD` blocks any write of a merge otherwise, so the exact repeat of a merge the receiver already holds (a receipt present) is E3's reconcile, and no other merge is ever resent by Shutter. `Shutter.Store.SiteProfile.MergesAllowed()` and `ReceiverFlag(name, flag)` read them.
@@ -676,7 +677,7 @@ sent, and references. No name, address or note text. A person reviews it, choose
 bound to the digest of the text the person read.
 
 - The site profile's `teams` (array of `{id, name, mailbox, cc?: [...], receivers?: [...], sources?: [...]}` (v1.14: `sources` lists sending applications, MSH-3, such as `PAS`; a merge goes first to the team whose `sources` lists the case's source system, then to the receiver's team, then to the first team; the draft words a merge "Merge of <prior identifier> into <patient identifier>" and a cancel "Cancellation of the transfer at ..."; a cancel carries no ward, section 2); a withheld case's draft says Shutter withheld the message and asks the team to mark the case handled rather than to reinvestigate; `id`, `name` and
-  `mailbox` required, ids unique) and `mail` (`allowed_domains`: every mailbox and cc must end in one of them when set, checked when the profile is saved and again at `PATCH` and at the send; `from`: the sender of the emails when set, else the `Escalation Mail` operation's `From` setting, default `shutter@localhost`). The team for a case is the one whose `receivers` names the case's receiver, else the first, else the
+  `mailbox` required, ids unique) and `mail` (`allowed_domains`: every mailbox and cc must end in one of them when set, checked when the profile is saved and again at `PATCH` and at the send; `from`: the sender of the emails when set, else the `Escalation Mail` operation's `From` setting, default `shutter@localhost`; the shipped seed profile sets `allowed_domains` to `["example.nhs.uk"]`, the domain of its teams' mailboxes, and no `from`, v1.19). The team for a case is the one whose `receivers` names the case's receiver, else the first, else the
   profile's `approvers.escalation` text with no mailbox (the person fills one in).
 - `GET /cases/{id}/escalations`; `POST /cases/{id}/escalations` with `{teamId?}` answers 201 with the draft (409
   `wrong_state` unless the case is blocked, escalated or failed; 500 `draft_failed` when `teamId` names no team of the
@@ -797,6 +798,9 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.19, 25 Oct 2026: the shipped seed profile sets `mail.allowed_domains` to `example.nhs.uk`, the domain of its
+  teams' mailboxes, so an escalation from the demo goes only to those mailboxes' domain; its file's `version` is 4 (6.4,
+  10). Nothing in the server changes.
 - v1.18, 20 Oct 2026: `planCreatedBy` on the case and the cases list (5).
 - v1.17, 20 Oct 2026: the roles (5). Who may call each route, in one table; changing the agent library (`PATCH /library/{code}`) needs `Shutter_Approve`, as saving the site profile does; the site profile's `approvers.close_needs_approver` (6.4; `false` by default and in the shipped seed, whose file's `version` is 3), with which closing a case by hand needs an approver and an operator's `POST /cases/{id}/close` answers 403 `forbidden`; the record of a hand closure (5) and the send's case event naming the digest of the text sent (10). The scenario runner's `manual` step, a change a person enters in the downstream system by hand, with its own source (`WARD`) and operation key, applied in process through `Downstream.Service` (4.3); scenario S20, a nurse's move while a resend awaits approval, which the version-bound approval stops at dispatch; `expected.final_reason` and `expected.last_operation_key` (3, 4.3). The API mimic (section 4): the switch `^Shutter.Config("aihub","mock")` and `Shutter.Setup.MockConfig()`; `auto` resolves to `live` while it is set; the live runner's mimic provider before `%Init`; model `mock` at cost 0 and `totals.mockRuns` in `GET /costs`; the switch read once per run, into `RunSpec.MockConfig`; record mode refused by the runner (status `refused`), by `RecordAgentMode` and by `Record.Store`, and mock recordings failed by `check-records.py`. An agent item's `ProviderConfig` is made with `%AI.Provider.Create` from the resolved configuration, with its model, as build 154 has no `CreateFromConfig`.
 - v1.16, 20 Oct 2026: supersession, the model view and corrections. `later_applied` counts, outside a chain and for anything but an admission, a later transfer whose delivery failed or is uncertain as well, and no later event whose time is not plausible; `event_time` gains `later_event_future` for a later event whose doubtful time would change the reading (6.1; the gate's ordering check reads the matcher's own list of later events, so the two agree, and says "a later movement was sent after it" when the superseding movement was not delivered; policy version 2026-10-20.1, so an approval given under 2026-10-19.3 and not yet dispatched is void at dispatch). The model view tokenises name parts from two characters, matches values of three characters or more whatever their case, and fails closed (9). A case is never written whole from a copy older than the stored one: a transition takes the case's lock and refuses a copy whose version is no longer the stored one, a note writes only its time (the version still moves only on transitions, so the routes' `expectedVersion` checks are unchanged), and the incident membership and the current snapshot are written field by field. The scenario runner's `route: "hospital"` file step, the hospital's folders in its reset and the `expected.source` of a forwarded case (4; S19). Corrections: the board has no catalogue tool: the matches and their prose reach it in the evidence (6.6). Closing a case by hand cancels its draft or queued email, so the state `cancelled` is set (10). An unknown `feed.time_zone` is read as `UTC` with a warning (6.4).
