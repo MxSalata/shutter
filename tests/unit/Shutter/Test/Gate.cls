@@ -3,10 +3,11 @@
 /// with no production running it, and asserts the checks the row names (check, result, reason code). The rows start
 /// from a resend that passes every check and change only what the row is about: "case", "summary" and "plan" are merged
 /// into the defaults ("{key}" stands for the case's operation key, null removes a field), "approval" makes an approval
-/// for the plan (the request is then at dispatch, otherwise at proposal), "request" sets the gate request's fields (its
-/// "stage" names another stage), "profile" changes the site profile for the row only, "incident" makes an incident with
-/// that plan digest and puts the case in it (an approval may then carry "incident_plan_digest", "bound_entry" and
-/// "bound_outcome", what an incident's approval covered for the item). The cases
+/// for the plan (the request is then at dispatch, otherwise at proposal) bound to a rehearsal of it that "rehearsal"
+/// changes (NewRehearsal), "request" sets the gate request's fields (its "stage" names another stage), "profile" changes
+/// the site profile for the row only, "incident" makes an incident with that plan digest and puts the case in it (an
+/// approval may then carry "incident_plan_digest", "bound_entry" and "bound_outcome", what an incident's approval covered
+/// for the item). The cases
 /// are named UT-GATE-..., never take a public case number, and are deleted with everything the gate recorded for them
 /// after each test, as the incidents are; the site profile is put back as it was.
 Class Shutter.Test.Gate Extends %UnitTest.TestCase
@@ -115,6 +116,11 @@ Method TestCapability()
 Method TestCatalogue()
 {
     Do ..RunRows("catalogue")
+}
+
+Method TestRehearsal()
+{
+    Do ..RunRows("rehearsal")
 }
 
 /// The gate answers unknown, with the reason, when the case, its snapshot or the plan cannot be found.
@@ -273,10 +279,11 @@ Method Run(row As %DynamicObject) As %DynamicObject
     Set req.ChainKind = ##class(Shutter.Util.Json).Str(r, "chain_kind", "single")
     If r.%IsDefined("receiver_version") Set req.ReceiverVersion = r."receiver_version"
     If r.%IsDefined("receiver_epoch") Set req.ReceiverEpoch = r."receiver_epoch"
-    // The approval, made as the workflow makes it and then changed as the row says.
+    // The approval, made as the workflow makes it and then changed as the row says, bound to the rehearsal the row describes.
     If row.%IsDefined("approval") {
         Set a = row.approval
-        Set sc = ##class(Shutter.Store.Approval).Create(case, plan, snap, ##class(Shutter.Operation.Gate).#POLICYVERSION, "", plan.ExpectedVersion, ##class(Shutter.Util.Json).Str(a, "approver", "user:ut"), ##class(Shutter.Util.Json).Str(a, "decision", "approved"), "unit test", "", +##class(Shutter.Util.Json).Str(a, "valid_seconds", 600), .approval, ##class(Shutter.Util.Json).Str(a, "epoch"))
+        Set rehearsal = ..NewRehearsal(case, snap, plan, $SELECT(row.%IsDefined("rehearsal"): row.rehearsal, 1: {}), row.name)
+        Set sc = ##class(Shutter.Store.Approval).Create(case, plan, snap, ##class(Shutter.Operation.Gate).#POLICYVERSION, rehearsal, plan.ExpectedVersion, ##class(Shutter.Util.Json).Str(a, "approver", "user:ut"), ##class(Shutter.Util.Json).Str(a, "decision", "approved"), "unit test", "", +##class(Shutter.Util.Json).Str(a, "valid_seconds", 600), .approval, ##class(Shutter.Util.Json).Str(a, "epoch"))
         Do $$$AssertStatusOK(sc, row.name _ ": the approval is saved")
         If a.%IsDefined("expected_version") Set approval.ExpectedVersion = a."expected_version"
         If ##class(Shutter.Util.Json).Bool(a, "revoked") Set approval.Revoked = 1
@@ -322,8 +329,39 @@ Method NewCase(spec As %DynamicObject) As Shutter.Store.Case
     Quit case
 }
 
+/// The rehearsal an approval binds, as the workflow records one: a dry run of the plan that the receiver answered from the
+/// spec's fields: would_apply (true), reason, receiver_version (the plan's expected version), epoch (1); what was sent
+/// carries the plan's expected version and the payload_digest ("sha256:ut"). The spec's "plan" "other" makes the dry run
+/// of a second plan of the case, and "none" makes none (the method then returns "").
+Method NewRehearsal(case As Shutter.Store.Case, snap As Shutter.Store.Snapshot, plan As Shutter.Store.Plan, spec As %DynamicObject, name As %String) As Shutter.Store.Rehearsal
+{
+    Set json = "Shutter.Util.Json"
+    Set which = $CLASSMETHOD(json, "Str", spec, "plan", "same")
+    If which = "none" Quit ""
+    Set of = plan
+    If which = "other" {
+        Set other = ..Fill({"disposition": "resend", "action": {"type": "resend", "operation_key": "{key}", "expected_version": 3, "payload_digest": "sha256:ut"}, "summary": "Another plan of the same case"}, case.OperationKey)
+        Set sc = ##class(Shutter.Store.Plan).Create(case, snap, other, "rules", .of)
+        Do $$$AssertStatusOK(sc, name _ ": the other plan is saved")
+    }
+    Set wouldApply = $CLASSMETHOD(json, "Bool", spec, "would_apply", 1)
+    Set version = $SELECT(spec.%IsDefined("receiver_version"): spec."receiver_version", 1: plan.ExpectedVersion)
+    Set response = {"rehearsal": true}
+    Do response.%Set("would_apply", wouldApply, "boolean")
+    If 'wouldApply Set response.reason = $CLASSMETHOD(json, "Str", spec, "reason", "invalid_transition")
+    Set response."encounter_before" = {"version": (version)}
+    Set response.epoch = $SELECT(spec.%IsDefined("epoch"): spec.epoch, 1: 1)
+    Set sent = ##class(Shutter.Msg.WardOperation).%New()
+    Set sent.Purpose = "rehearsal", sent.DryRun = 1, sent.OperationKey = case.OperationKey, sent.CaseId = case.CaseId
+    Set sent.ExpectedVersion = of.ExpectedVersion
+    Set sent.PayloadDigest = $CLASSMETHOD(json, "Str", spec, "payload_digest", "sha256:ut")
+    Set sc = ##class(Shutter.Store.Rehearsal).Create(case, of, sent, 200, response, .r)
+    Do $$$AssertStatusOK(sc, name _ ": the rehearsal is saved")
+    Quit r
+}
+
 /// The evidence of a transfer that can be resent: the receiver knows the encounter (admitted, version 3, the case's
-/// patient), holds no receipt, takes conditional writes and keeps receipts; the message parses; nothing later.
+/// patient), holds no receipt, takes conditional writes, keeps receipts and runs dry runs; the message parses; nothing later.
 ClassMethod BaseSummary() As %DynamicObject
 {
     Quit {
@@ -332,7 +370,7 @@ ClassMethod BaseSummary() As %DynamicObject
         "ward_state": {"patient_id": "MRN-UT1", "patient_id_authority": "HOSP", "state": "admitted", "ward": "WARD-A", "version": 3, "epoch": 1, "history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z", "ward": "WARD-A", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-18T08:00:00Z"}]},
         "receipt_http_status": 404,
         "validation": {"parsed": true},
-        "route": {"capabilities_http_status": 200, "conditional_writes": true, "receipts": true},
+        "route": {"capabilities_http_status": 200, "conditional_writes": true, "receipts": true, "dry_run": true},
         "timeline": []
     }
 }
@@ -418,7 +456,7 @@ Method RestoreProfile()
 /// Deletes a test case and everything the gate and the stores recorded for it.
 ClassMethod Purge(id As %String)
 {
-    For table = "Shutter_Store.GateDecision", "Shutter_Store.Approval", "Shutter_Store.Plan", "Shutter_Store.CaseEvent" {
+    For table = "Shutter_Store.GateDecision", "Shutter_Store.Approval", "Shutter_Store.Rehearsal", "Shutter_Store.Plan", "Shutter_Store.CaseEvent" {
         Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM " _ table _ " WHERE ""Case"" = ?", id)
     }
     Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.SnapshotItem WHERE Snapshot IN (SELECT ID FROM Shutter_Store.Snapshot WHERE ""Case"" = ?)", id)
@@ -786,7 +824,45 @@ XData Rows [ MimeType = application/json ]
    "expect": [["catalogue", "block", "OUTCOME_NOT_ALLOWED"]]},
   {"group": "catalogue", "name": "an allowed alternative the plan does not follow",
    "plan": {"catalogue_entry": "E5", "outcome": "alternative:1"}, "summary": {"catalogue": {"decision": "board", "entry": "E5", "matches": [{"id": "E5", "preferred": {"outcome": "resend_latest"}, "alternatives": [{"outcome": "reconcile", "when": "always"}]}]}},
-   "expect": [["catalogue", "pass", "OUTCOME_ALLOWED"], ["catalogue", "block", "OUTCOME_MISMATCH"]]}
+   "expect": [["catalogue", "pass", "OUTCOME_ALLOWED"], ["catalogue", "block", "OUTCOME_MISMATCH"]]},
+
+  {"group": "capability", "name": "a receiver without dry runs",
+   "summary": {"route": {"dry_run": false}},
+   "expect": [["capability", "block", "DRY_RUN_UNSUPPORTED"]], "outcome": "block"},
+  {"group": "capability", "name": "a receiver without conditional writes or dry runs",
+   "summary": {"route": {"conditional_writes": false, "dry_run": false}},
+   "expect": [["capability", "block", "CONNECTOR_INCAPABLE"]], "absent": [["capability", "DRY_RUN_UNSUPPORTED"]], "outcome": "block"},
+  {"group": "capability", "name": "reconciling needs no dry run either",
+   "plan": {"disposition": "reconcile", "action": {"type": "reconcile"}}, "summary": {"receipt_http_status": 200, "receipt": {"operation_key": "{key}"}, "route": {"dry_run": false}},
+   "expect": [["capability", "pass", "NOT_APPLICABLE"]], "outcome": "pass"},
+
+  {"group": "rehearsal", "name": "at the proposal nothing is rehearsed yet",
+   "request": {"stage": "proposal"},
+   "expect": [["rehearsal", "pass", "NOT_YET_REQUIRED"]], "outcome": "pass"},
+  {"group": "rehearsal", "name": "the same resend at dispatch, with a valid approval bound to its dry run",
+   "approval": {},
+   "expect": [["rehearsal", "pass", "REHEARSED"], ["authorization", "pass", "APPROVAL_VALID"]], "outcome": "pass"},
+  {"group": "rehearsal", "name": "no dry run bound to the approval",
+   "approval": {}, "rehearsal": {"plan": "none"},
+   "expect": [["rehearsal", "block", "DRY_RUN_MISSING"], ["authorization", "pass", "APPROVAL_VALID"]], "outcome": "block"},
+  {"group": "rehearsal", "name": "a dry run of another plan",
+   "approval": {}, "rehearsal": {"plan": "other"},
+   "expect": [["rehearsal", "block", "DRY_RUN_MISSING"]], "outcome": "block"},
+  {"group": "rehearsal", "name": "the dry run said it would not apply",
+   "approval": {}, "rehearsal": {"would_apply": false, "reason": "invalid_transition"},
+   "expect": [["rehearsal", "block", "DRY_RUN_FAILED"]], "outcome": "block"},
+  {"group": "rehearsal", "name": "a dry run checked against another version",
+   "approval": {}, "rehearsal": {"receiver_version": 2},
+   "expect": [["rehearsal", "block", "DRY_RUN_STALE"], ["concurrency", "pass", "VERSION_MATCHES"]], "outcome": "block"},
+  {"group": "rehearsal", "name": "a dry run from before a reset",
+   "approval": {"epoch": 2}, "rehearsal": {"epoch": 1}, "request": {"receiver_epoch": 2},
+   "expect": [["rehearsal", "block", "DRY_RUN_STALE"], ["authorization", "pass", "APPROVAL_VALID"]], "outcome": "block"},
+  {"group": "rehearsal", "name": "a dry run of another payload",
+   "approval": {}, "rehearsal": {"payload_digest": "sha256:other"},
+   "expect": [["rehearsal", "block", "DRY_RUN_STALE"]], "outcome": "block"},
+  {"group": "rehearsal", "name": "a reconcile needs no dry run",
+   "plan": {"disposition": "reconcile", "action": {"type": "reconcile"}}, "summary": {"receipt_http_status": 200, "receipt": {"operation_key": "{key}"}}, "approval": {}, "rehearsal": {"plan": "none"},
+   "expect": [["rehearsal", "pass", "NOT_APPLICABLE"]], "outcome": "pass"}
 ]
 }
 

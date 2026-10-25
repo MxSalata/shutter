@@ -28,10 +28,20 @@ Property Epoch As %Integer(%JSONFIELDNAME = "epoch");
 
 Property ResponseJSON As %String(%JSONFIELDNAME = "response", MAXLEN = "");
 
-ClassMethod Create(case As Shutter.Store.Case, plan As Shutter.Store.Plan, httpStatus As %Integer, response As %DynamicObject, Output r As Shutter.Store.Rehearsal) As %Status
+/// What was sent (v1.19): the receiver version the dry run was conditional on, and the digest of the payload. The dispatch
+/// gate's rehearsal check compares them with the write it releases.
+Property ExpectedVersion As %Integer(%JSONFIELDNAME = "expectedVersion");
+
+Property PayloadDigest As %String(%JSONFIELDNAME = "payloadDigest", MAXLEN = 80);
+
+/// Records a dry run: <var>sent</var> is the operation that went to the receiver, <var>response</var> what it answered.
+ClassMethod Create(case As Shutter.Store.Case, plan As Shutter.Store.Plan, sent As Shutter.Msg.WardOperation, httpStatus As %Integer, response As %DynamicObject, Output r As Shutter.Store.Rehearsal) As %Status
 {
     Set r = ..%New()
-    Set r.Case = case, r.Plan = plan, r.At = ##class(Shutter.Util.Time).NowUTC(), r.HttpStatus = httpStatus
+    // By id, not the caller's copy (as Snapshot.Begin does): a save of the rehearsal never writes the case copy whole.
+    Do r.CaseSetObjectId(case.%Id())
+    Set r.Plan = plan, r.At = ##class(Shutter.Util.Time).NowUTC(), r.HttpStatus = httpStatus
+    If $ISOBJECT(sent) Set r.ExpectedVersion = sent.ExpectedVersion, r.PayloadDigest = sent.PayloadDigest
     Set r.WouldApply = ##class(Shutter.Util.Json).Bool(response, "would_apply")
     Set r.Reason = ##class(Shutter.Util.Json).Str(response, "reason")
     Set before = response.%Get("encounter_before"), after = response.%Get("encounter_after")
@@ -81,6 +91,12 @@ Storage Default
 </Value>
 <Value name="11">
 <Value>ResponseJSON</Value>
+</Value>
+<Value name="12">
+<Value>ExpectedVersion</Value>
+</Value>
+<Value name="13">
+<Value>PayloadDigest</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.RehearsalD</DataLocation>

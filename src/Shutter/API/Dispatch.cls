@@ -646,6 +646,13 @@ ClassMethod CasePreview(caseId As %String) As %Status
     Set case = ..CaseOr404(caseId)
     If '$ISOBJECT(case) Quit $$$OK
     If case.IsClosed() Quit ..Fail("409 Conflict", "wrong_state", "The case is closed")
+    // A preview is a dry run: it goes only to a receiver whose capability profile, as the case's evidence read it, reports one
+    // (v1.19); to any other it would be a live write conditional on nothing, so nothing is sent.
+    Set snap = case.CurrentSnapshot
+    Set route = $SELECT($ISOBJECT(snap): snap.SummaryObject().%Get("route"), 1: "")
+    If '$ISOBJECT(route) || (##class(Shutter.Util.Json).Str(route, "capabilities_http_status") '= 200) || '##class(Shutter.Util.Json).Bool(route, "dry_run") {
+        Quit ..Fail("409 Conflict", "dry_run_unsupported", "The receiver's capability profile reports no dry run (or could not be read), so a preview cannot be made without writing; nothing was sent")
+    }
     Set op = {}
     Set op."operation_key" = case.OperationKey, op."encounter_id" = case.EncounterId
     Set op."patient_id" = case.PatientId, op."patient_id_authority" = case.PatientIdAuthority
@@ -660,12 +667,29 @@ ClassMethod CasePreview(caseId As %String) As %Status
     Set sc = svc.ProcessInput(w, .result)
     If $$$ISERR(sc) || '$ISOBJECT($GET(result)) Quit ..Fail("502 Bad Gateway", "ward_error", $SYSTEM.Status.GetErrorText(sc))
     Set resp = result.ResponseObject()
+    Set applied = result.IsInEffect()
+    Set rolledBack = (result.Outcome = "would_apply") || (result.Outcome = "would_not_apply")
     Set o = {}
     Do o.%Set("wouldApply", result.Outcome = "would_apply", "boolean")
     Set o.outcome = result.Outcome, o.reason = result.ReasonCode
     Set o.encounterAfter = resp.%Get("encounter_after")
-    Set o.note = "What a blind resend with no expected version would do at the downstream system now; the dry run was rolled back and nothing was written"
-    Do case.Note("note", "Blind-resend preview requested by " _ ..User() _ ": " _ result.Outcome, ..User())
+    // What the dry run was checked against; a preview is conditional on nothing, so its expected version is null.
+    Set checked = {}
+    If result.EncounterVersion '= "" { Set checked.version = result.EncounterVersion } Else { Do checked.%Set("version", "", "null") }
+    If result.Epoch '= "" { Set checked.epoch = result.Epoch } Else { Do checked.%Set("epoch", "", "null") }
+    Set o.checkedAgainst = checked
+    Do o.%Set("expectedVersion", "", "null")
+    Do o.%Set("applied", applied, "boolean")
+    Set against = $SELECT(result.EncounterVersion '= "": " at version " _ result.EncounterVersion, 1: "") _ $SELECT(result.Epoch '= "": " (epoch " _ result.Epoch _ ")", 1: "")
+    If applied {
+        // The receiver wrote the preview: it does not honour dry_run. The effect is on the case's record as an execution.
+        Set o.note = "The receiver applied the preview (HTTP " _ result.HttpStatus _ "): it does not honour dry_run and the operation is now in effect"
+        Do ##class(Ens.Util.Log).LogAlert($CLASSNAME(), "CasePreview", "Receiver " _ svc.Target _ " applied a blind-resend preview of " _ case.OperationKey _ " for " _ case.CaseId _ ": it does not honour dry_run")
+        Do case.Note("execution", "The receiver applied the blind-resend preview requested by " _ ..User() _ " (HTTP " _ result.HttpStatus _ "): it does not honour dry_run and the operation is now in effect" _ against, ..User())
+    } Else {
+        Set o.note = $SELECT(rolledBack: "What a blind resend with no expected version would do at the downstream system now" _ against _ "; the dry run was rolled back and nothing was written", 1: "The downstream system did not answer the dry run as one (" _ result.Outcome _ $SELECT(result.Error '= "": ", " _ result.Error, 1: "") _ "); nothing is known to have been written")
+        Do case.Note("note", "Blind-resend preview requested by " _ ..User() _ ": " _ result.Outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "") _ against, ..User())
+    }
     Quit ..Json(o)
 }
 

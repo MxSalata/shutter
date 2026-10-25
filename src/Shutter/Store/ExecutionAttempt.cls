@@ -28,11 +28,18 @@ Property ResponseJSON As %String(%JSONFIELDNAME = "response", MAXLEN = "");
 
 Property Error As %String(%JSONFIELDNAME = "error", MAXLEN = 2000);
 
-ClassMethod Create(case As Shutter.Store.Case, plan As Shutter.Store.Plan, approval As Shutter.Store.Approval, httpStatus As %Integer, outcome As %String, response As %DynamicObject, error As %String, Output e As Shutter.Store.ExecutionAttempt) As %Status
+/// The dry run the write stood on (v1.19): the approval's bound rehearsal, or the rehearsal itself when the receiver
+/// applied it instead of rolling it back.
+Property Rehearsal As Shutter.Store.Rehearsal(%JSONFIELDNAME = "rehearsalId", %JSONREFERENCE = "ID");
+
+ClassMethod Create(case As Shutter.Store.Case, plan As Shutter.Store.Plan, approval As Shutter.Store.Approval, rehearsal As Shutter.Store.Rehearsal = "", httpStatus As %Integer, outcome As %String, response As %DynamicObject, error As %String, Output e As Shutter.Store.ExecutionAttempt) As %Status
 {
     Set e = ..%New()
-    Set e.Case = case, e.Plan = plan
+    // By id, not the caller's copy (as Snapshot.Begin does): a save of the attempt never writes the case copy whole.
+    Do e.CaseSetObjectId(case.%Id())
+    Set e.Plan = plan
     If $ISOBJECT(approval) Set e.Approval = approval
+    If $ISOBJECT(rehearsal) Set e.Rehearsal = rehearsal
     Set e.At = ##class(Shutter.Util.Time).NowUTC()
     Set e.OperationKey = plan.OperationKey, e.ExpectedVersion = plan.ExpectedVersion
     Set e.HttpStatus = httpStatus, e.Outcome = outcome, e.Error = $EXTRACT(error, 1, 2000)
@@ -79,6 +86,9 @@ Storage Default
 </Value>
 <Value name="12">
 <Value>Error</Value>
+</Value>
+<Value name="13">
+<Value>Rehearsal</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter7581.ExecutionAt8F65D</DataLocation>
