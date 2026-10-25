@@ -39,15 +39,14 @@ function BlindResendPreview({ c, me }: { c: CaseDetail; me: Me }) {
         >
           <span>
             <Button
-              variant="light"
-              color="yellow"
+              variant="default"
               size="xs"
               leftSection={<IconEye size={14} />}
               disabled={!!why}
               loading={preview.isPending}
               onClick={() => preview.mutate()}
             >
-              What would a blind resend do?
+              What would resending now do?
             </Button>
           </span>
         </Tooltip>
@@ -65,8 +64,8 @@ function BlindResendPreview({ c, me }: { c: CaseDetail; me: Me }) {
             r.applied
               ? 'The receiver applied the preview'
               : r.wouldApply
-                ? 'A blind resend would apply'
-                : 'A blind resend would be refused'
+                ? 'Resending now, with no version check, would apply'
+                : 'Resending now, with no version check, would be refused'
           }
         >
           <Stack gap={4}>
@@ -256,7 +255,7 @@ export function ApprovalPanel({
                     disabled={!!why}
                     onClick={() => openDialog('approve')}
                   >
-                    Approve…
+                    Approve plan
                   </Button>
                 </span>
               </Tooltip>
@@ -269,7 +268,7 @@ export function ApprovalPanel({
                     disabled={!!why}
                     onClick={() => openDialog('reject')}
                   >
-                    Reject…
+                    Reject plan
                   </Button>
                 </span>
               </Tooltip>

@@ -494,7 +494,12 @@ describe('CasePage', () => {
     );
     const approval = await screen.findByRole('region', { name: 'Approval' });
     expect(await within(approval).findByText('Waiting for approval')).toBeInTheDocument();
-    await userEvent.click(within(approval).getByRole('button', { name: 'Approve…' }));
+    // The preview of a resend with no version check reads as a question, in a neutral tone
+    expect(within(approval).getByRole('button', { name: 'What would resending now do?' })).toHaveAttribute(
+      'data-variant',
+      'default',
+    );
+    await userEvent.click(within(approval).getByRole('button', { name: 'Approve plan' }));
     const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve this plan' }));
     expect(
@@ -520,7 +525,7 @@ describe('CasePage', () => {
     );
     renderCase('C-000002');
     const approval = await screen.findByRole('region', { name: 'Approval' });
-    await userEvent.click(await within(approval).findByRole('button', { name: 'Approve…' }));
+    await userEvent.click(await within(approval).findByRole('button', { name: 'Approve plan' }));
     const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve this plan' }));
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
@@ -532,7 +537,7 @@ describe('CasePage', () => {
   it('closes the held case as blocked when the approver rejects it', async () => {
     renderCase('C-000002');
     const approval = await screen.findByRole('region', { name: 'Approval' });
-    await userEvent.click(await within(approval).findByRole('button', { name: 'Reject…' }));
+    await userEvent.click(await within(approval).findByRole('button', { name: 'Reject plan' }));
     const dialog = await screen.findByRole('dialog', { name: 'Reject plan v1' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Reject this plan' }));
     expect(
