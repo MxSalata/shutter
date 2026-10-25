@@ -40,7 +40,9 @@ ClassMethod Assign(case As Shutter.Store.Case, kind As %String, value As %String
     &sql(SELECT Token INTO :token FROM Shutter_Store.CaseToken WHERE "Case" = :cid AND Value = :value)
     If (SQLCODE = 0) && (token '= "") { LOCK -^Shutter.CaseToken(cid) Quit token }
     Set t = ..%New()
-    Set t.Case = case, t.Kind = kind, t.Seq = +n + 1, t.Token = kind _ "-T" _ (+n + 1), t.Value = value
+    // By id, not the caller's copy, as Snapshot.Begin does: a save of the token never writes the case whole.
+    Do t.CaseSetObjectId(cid)
+    Set t.Kind = kind, t.Seq = +n + 1, t.Token = kind _ "-T" _ (+n + 1), t.Value = value
     Set sc = t.%Save()
     LOCK -^Shutter.CaseToken(cid)
     If $$$ISERR(sc) Quit ""

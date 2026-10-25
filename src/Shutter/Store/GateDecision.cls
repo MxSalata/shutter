@@ -25,7 +25,9 @@ Property At As %String(%JSONFIELDNAME = "at", MAXLEN = 30);
 ClassMethod Create(case As Shutter.Store.Case, plan As Shutter.Store.Plan, stage As %String, policyVersion As %String, outcome As %String, checks As %DynamicArray, summary As %String, Output d As Shutter.Store.GateDecision) As %Status
 {
     Set d = ..%New()
-    Set d.Case = case, d.Plan = plan, d.Stage = stage, d.PolicyVersion = policyVersion
+    // By id, not the caller's copy, as Snapshot.Begin does: a save of the decision never writes the case whole.
+    Do d.CaseSetObjectId(case.%Id())
+    Set d.Plan = plan, d.Stage = stage, d.PolicyVersion = policyVersion
     Set d.Outcome = outcome, d.ChecksJSON = checks.%ToJSON(), d.Summary = $EXTRACT(summary, 1, 2000)
     Set d.At = ##class(Shutter.Util.Time).NowUTC()
     Quit d.%Save()

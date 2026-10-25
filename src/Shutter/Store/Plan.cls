@@ -50,7 +50,9 @@ Property Json As %String(%JSONFIELDNAME = "plan", MAXLEN = "");
 
 Property CreatedAt As %String(%JSONFIELDNAME = "createdAt", MAXLEN = 30);
 
-/// run:<id> for an agent, rules for the rules-only mode, user:<name> for an edit.
+/// Who made the plan (CONTRACTS 5): run:<id> for the coordinator's or the single investigator's run, policy:<entry> for
+/// the catalogue's policy path (an automatic release's approval requires policy:<CatalogueEntry>, Gate.cls), rules for
+/// rules alone, withheld for a withheld merge or cancel no single entry matched.
 Property CreatedBy As %String(%JSONFIELDNAME = "createdBy", MAXLEN = 100);
 
 /// The catalogue the plan was made against (every entry with its version), from the snapshot's match; an approval
@@ -61,7 +63,9 @@ Property CatalogueVersion As %String(%JSONFIELDNAME = "catalogueVersion", MAXLEN
 ClassMethod Create(case As Shutter.Store.Case, snapshot As Shutter.Store.Snapshot, plan As %DynamicObject, createdBy As %String, Output p As Shutter.Store.Plan) As %Status
 {
     Set p = ..%New()
-    Set p.Case = case, p.Snapshot = snapshot
+    // By id, not the caller's copy, as Snapshot.Begin does: a save of the plan never writes the case whole.
+    Do p.CaseSetObjectId(case.%Id())
+    Set p.Snapshot = snapshot
     Set p.Version = $INCREMENT(^Shutter.Counter("plan", case.%Id()))
     Set p.Disposition = ##class(Shutter.Util.Json).Str(plan, "disposition")
     Set action = plan.%Get("action")
