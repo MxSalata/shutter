@@ -31,7 +31,10 @@ Property CreatedAt As %String(%JSONFIELDNAME = "createdAt", MAXLEN = 30);
 ClassMethod Create(run As Shutter.Store.AgentRun, findings As %DynamicObject, Output finding As Shutter.Store.Finding) As %Status
 {
     Set finding = ..%New()
-    Set finding.Run = run, finding.Case = run.Case, finding.Snapshot = run.Snapshot
+    // The case by id from the run's reference, not swizzled, as Snapshot.Begin does: a save of the finding never
+    // writes the case whole.
+    Do finding.CaseSetObjectId(run.CaseGetObjectId())
+    Set finding.Run = run, finding.Snapshot = run.Snapshot
     Set finding.Role = run.Role, finding.MemberCode = run.MemberCode
     Set finding.Disposition = ##class(Shutter.Util.Json).Str(findings, "disposition")
     Set finding.Confidence = +##class(Shutter.Util.Json).Str(findings, "confidence", 0)

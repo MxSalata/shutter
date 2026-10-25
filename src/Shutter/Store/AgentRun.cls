@@ -66,7 +66,9 @@ Property CostUSD As %Numeric(%JSONFIELDNAME = "costUsd", SCALE = 6);
 ClassMethod FromResponse(case As Shutter.Store.Case, snapshot As Shutter.Store.Snapshot, role As %String, memberCode As %String, response As Shutter.Bridge.Msg.AgentResponse, ensMessageId As %String, Output run As Shutter.Store.AgentRun) As %Status
 {
     Set run = ..%New()
-    Set run.Case = case, run.Snapshot = snapshot, run.Role = role, run.MemberCode = memberCode
+    // By id, not the caller's copy, as Snapshot.Begin does: a save of the run never writes the case whole.
+    Do run.CaseSetObjectId(case.%Id())
+    Set run.Snapshot = snapshot, run.Role = role, run.MemberCode = memberCode
     Set run.AgentClass = response.AgentClass, run.ConfigVersion = response.ConfigVersion
     Set run.Mode = response.Mode, run.Model = response.Model, run.ProviderConfig = response.ProviderConfig
     Set run.Status = response.Status, run.StartedAt = response.StartedAt, run.DurationMs = response.DurationMs

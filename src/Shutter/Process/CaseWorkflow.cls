@@ -415,8 +415,22 @@ ClassMethod BuildAgentRequest(case As Shutter.Store.Case, m As Shutter.Store.Boa
     // The map of the case's identifiers is made here, once per case and in one job, in a canonical order.
     Set sc = ##class(Shutter.Util.ModelView).Learn(case, evidence)
     If $$$ISERR(sc) Quit ""
-    Set context.evidence = ##class(Shutter.Util.ModelView).Reduce(case, evidence)
-    If findingsJSON '= "" Set context.findings = ##class(Shutter.Util.ModelView).Reduce(case, ##class(%DynamicArray).%FromJSON(findingsJSON))
+    // Reduce fails closed with an object of the one key error, which the evidence never has at its top and the
+    // findings array never is: then no request, and the status carries its text (ModelViewFailed escalates the case).
+    Set reduced = ##class(Shutter.Util.ModelView).Reduce(case, evidence)
+    If reduced.%IsA("%Library.DynamicObject") && (reduced.%Size() = 1) && reduced.%IsDefined("error") && 'evidence.%IsDefined("error") {
+        Set sc = $$$ERROR($$$GeneralError, reduced.%Get("error"))
+        Quit ""
+    }
+    Set context.evidence = reduced
+    If findingsJSON '= "" {
+        Set reduced = ##class(Shutter.Util.ModelView).Reduce(case, ##class(%DynamicArray).%FromJSON(findingsJSON))
+        If reduced.%IsA("%Library.DynamicObject") {
+            Set sc = $$$ERROR($$$GeneralError, ##class(Shutter.Util.Json).Str(reduced, "error", "The findings could not be reduced to the model's view"))
+            Quit ""
+        }
+        Set context.findings = reduced
+    }
     Set req.Context = context.%ToJSON()
     If m.Role = "coordinator" {
         Set req.Goal = "Read the specialists' findings and the evidence for case " _ case.CaseId _ ". Keep every disagreement. Propose exactly one plan with the recovery playbooks, and submit it with SubmitPlan."
