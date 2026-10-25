@@ -5,7 +5,9 @@ scenario-<S>-<encounter>-<event>-<member>-<cfg>[-roundN].json for the keys that 
 
     python3 scripts/iris-pull-records.py --url http://host:52773 --ns SHUTTER [--like 'scenario:S2:%'] [--dir fixtures/records]
 
-Only recordings whose key starts with "scenario:" are written (the demo scenarios); others are listed. The repository
+Only recordings whose key starts with "scenario:" are written (the demo scenarios), and with --like 'review:%' the
+production review's (review:<namespace>:<production>|review|1|<fingerprint>, named as Shutter.Bridge.Record.ExportDir
+names it: review-SHUTTER-Shutter.Production-review-1-<fingerprint>.json); others are listed. The repository
 has no em dashes, and models write them: in every text of a recording, a spaced em dash becomes a semicolon and any
 other one a hyphen, also where the transcript's JSON text escapes it. Nothing else in a recording is changed.
 """
@@ -20,6 +22,8 @@ import urllib.request
 # scenario:<S>[:<encounter>:<event>]|<member>|<configVersion>[|round<n>], as in scripts/check-records.py
 KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+)(?::(?P<encounter>[^:|]+):(?P<event>[^:|]+))?"
                     r"\|(?P<member>[a-z]+)\|(?P<cfg>\d+)(?:\|round(?P<round>\d+))?$")
+# review:<namespace>:<production>|review|1|<fingerprint>, as in scripts/check-records.py
+REVIEW_KEY_RE = re.compile(r"^review:[A-Za-z0-9_%]+:[A-Za-z0-9_.]+\|review\|1\|(?:[0-9a-f]{64}|)$")
 
 
 def plain(x):
@@ -69,7 +73,7 @@ def main():
     os.makedirs(args.dir, exist_ok=True)
     written, skipped = [], []
     for row in rows:
-        m = KEY_RE.match(row["Key"])
+        m = KEY_RE.match(row["Key"]) or REVIEW_KEY_RE.match(row["Key"])
         if not m:
             skipped.append(row["Key"])
             continue
@@ -85,7 +89,7 @@ def main():
         ordered = {k: d[k] for k in ("key", "agentClass", "configVersion", "memberCode", "snapshotDigest", "correlationKey",
                                      "model", "response", "transcript", "toolCalls", "recordedAt", "label") if k in d}
         ordered = plain(ordered)
-        name = file_name(m)
+        name = file_name(m) if m.re is KEY_RE else row["Key"].translate(str.maketrans(":|/\\ ", "-----")) + ".json"
         path = os.path.join(args.dir, name)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(ordered, f, indent=1, ensure_ascii=False)
