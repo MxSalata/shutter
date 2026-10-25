@@ -1,6 +1,7 @@
 import type { AttemptView, CaseDetail, CaseSummary, Closure, PlanView, Snapshot } from '@/api/types';
 import { asArray, asObject } from '@/lib/json';
 import { displayZone, formatZoned, humanize } from '@/lib/format';
+import { WRITE_OUTCOMES } from './receipt';
 import { encounterTimeline, type TimelineRow } from './timeline';
 
 /**
@@ -99,7 +100,7 @@ export function compareSide({
 }): CompareSide {
   const p = plan?.plan;
   const evidence = evidenceFacts(snapshot);
-  const sent = (attempts ?? []).filter((x) => x.attempt);
+  const sent = (attempts ?? []).filter((x) => WRITE_OUTCOMES.includes(str(x.attempt?.outcome)));
   const written = sent.map((x) => asObject(x.attempt?.receipt)).find((r) => r && r.ward);
   const verified =
     [...(attempts ?? [])].reverse().find((x) => x.verification)?.verification ?? closure?.verification;

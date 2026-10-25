@@ -102,7 +102,18 @@ export function ReceiptCard({ c, open }: { c: CaseDetail; open: boolean }) {
           ],
           [
             'Writes to the receiver',
-            r.writes ? `${r.writes}, ${r.acknowledged} acknowledged` : zero ? '0: nothing was sent' : '0',
+            [
+              r.writes
+                ? `${r.writes}, ${r.acknowledged} acknowledged`
+                : zero
+                  ? '0: nothing was written'
+                  : '0',
+              r.notWritten
+                ? `${r.notWritten} attempt${r.notWritten === 1 ? '' : 's'} the receiver did not take`
+                : '',
+            ]
+              .filter(Boolean)
+              .join('; '),
           ],
           ['Verification', r.verification || (r.writes ? 'Not verified yet' : 'Nothing to verify')],
         ]}

@@ -1,4 +1,4 @@
-import { Anchor, Badge, Card, Group, SimpleGrid, Stack, Table, Text } from '@mantine/core';
+import { Anchor, Badge, Card, Group, SimpleGrid, Stack, Table, Text, VisuallyHidden } from '@mantine/core';
 import { IconCheck } from '@tabler/icons-react';
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router';
@@ -107,16 +107,19 @@ function Pair({ rulesId, boardId, caseId }: { rulesId: string; boardId: string; 
             <Table.Tbody>
               {rows.map((r) => (
                 <Table.Tr key={r.label}>
-                  <Table.Td>
+                  <Table.Th scope="row" fw="normal">
                     <Text size="sm" c="dimmed">
                       {r.label}
                     </Text>
-                  </Table.Td>
+                  </Table.Th>
                   <Table.Td className="mono-wrap">{r.rules}</Table.Td>
                   <Table.Td className="mono-wrap">{r.board}</Table.Td>
                   <Table.Td>
                     {r.same ? (
-                      <IconCheck size={16} color="var(--mantine-color-teal-6)" aria-label="the same" />
+                      <>
+                        <IconCheck size={16} color="var(--mantine-color-teal-6)" aria-hidden />
+                        <VisuallyHidden>the same</VisuallyHidden>
+                      </>
                     ) : (
                       <Text size="xs" c="dimmed">
                         differs

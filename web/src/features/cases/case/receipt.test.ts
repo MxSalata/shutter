@@ -77,4 +77,45 @@ describe('safetyReceipt', () => {
     expect(r.decidedBy).toBe('Site policy, entry E2');
     expect(r.status).toBe('0 writes so far; executing');
   });
+  it('names a revoked approval, and counts only attempts that reached the receiver as writes', () => {
+    const base = fixtures.cases['C-000021'];
+    const c = { ...base.detail, state: 'escalated' } as unknown as CaseDetail;
+    const approvals = {
+      ...base.approvals,
+      approvals: base.approvals.approvals.map((a) => ({ ...a, revoked: true, revokedBy: 'system' })),
+    } as unknown as ApprovalsView;
+    const attempt = (outcome: string) =>
+      ({ attempt: { ...base.attempts[0].attempt, outcome }, verification: null }) as unknown as AttemptView;
+    const r = safetyReceipt({
+      c,
+      plan: base.plan as unknown as PlanView,
+      approvals,
+      attempts: [attempt('error'), attempt('version_conflict'), attempt('uncertain')],
+      closure: null,
+      snapshot: base.snapshot as unknown as Snapshot,
+    });
+    expect(r.decidedBy).toBe('Approved by approver (since revoked by system)');
+    expect(r.planDigest).toBe(base.approvals.approvals[0].planDigest);
+    expect(r.writes).toBe(1);
+    expect(r.acknowledged).toBe(0);
+    expect(r.notWritten).toBe(2);
+    expect(r.status).toBe('1 write; waiting for a person');
+  });
+
+  it('says nobody let a blocked write plan through', () => {
+    const base = fixtures.cases['C-000021'];
+    const c = { ...base.detail, state: 'blocked', planCreatedBy: '' } as unknown as CaseDetail;
+    const attempt = { attempt: { ...base.attempts[0].attempt, outcome: 'error' }, verification: null };
+    const r = safetyReceipt({
+      c,
+      plan: base.plan as unknown as PlanView,
+      approvals: { approvals: [], tasks: [] },
+      attempts: [attempt as unknown as AttemptView],
+      closure: null,
+      snapshot: null,
+    });
+    expect(r.decidedBy).toBe('Nobody: the gate blocked it');
+    expect(r.writes).toBe(0);
+    expect(r.status).toBe('0 writes; blocked, waiting for a person');
+  });
 });

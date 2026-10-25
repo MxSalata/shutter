@@ -30,9 +30,12 @@ export interface SafetyReceipt {
   /** Who let the write through: the approver, the site's policy, or why nobody needed to. */
   decidedBy: string;
   decidedAt: string;
+  /** Writes that reached the receiver and may have landed: applied, already committed or uncertain. */
   writes: number;
   /** Writes the receiver acknowledged (applied or already committed). */
   acknowledged: number;
+  /** Attempts that wrote nothing: refused by the receiver, a version conflict, or an error before sending. */
+  notWritten: number;
   verification: string;
   /** One line that says where the case stands. */
   status: string;
@@ -40,11 +43,18 @@ export interface SafetyReceipt {
 
 const str = (v: unknown) => (v === undefined || v === null ? '' : String(v));
 
-/** The approval in force: the latest one that was not revoked. */
+/** Attempt outcomes where the write reached the receiver and may have landed (CONTRACTS, the attempt). */
+export const WRITE_OUTCOMES = ['applied', 'already_committed', 'uncertain'];
+
+/**
+ * The approval the receipt names: the latest one in force, else the latest revoked one (the server revokes an approval
+ * once its write is spent or not committed, and on a reopen, so a written case's approval is often revoked).
+ */
 function approvalOf(view: ApprovalsView | null | undefined): Approval | undefined {
-  return [...(view?.approvals ?? [])]
-    .filter((a) => !a.revoked)
-    .sort((a, b) => str(b.decidedAt).localeCompare(str(a.decidedAt)))[0];
+  const latest = [...(view?.approvals ?? [])].sort((a, b) =>
+    str(b.decidedAt).localeCompare(str(a.decidedAt)),
+  );
+  return latest.find((a) => !a.revoked) ?? latest[0];
 }
 
 function decider(
@@ -58,12 +68,25 @@ function decider(
       approval.approver === 'policy'
         ? `site policy${approval.comment ? ` (${approval.comment})` : ''}`
         : approval.approver;
-    return `${approval.decision === 'rejected' ? 'Rejected' : 'Approved'} by ${who}`;
+    const revoked = approval.revoked
+      ? ` (since revoked${approval.revokedBy ? ` by ${approval.revokedBy}` : ''})`
+      : '';
+    return `${approval.decision === 'rejected' ? 'Rejected' : 'Approved'} by ${who}${revoked}`;
   }
   const by = c.planCreatedBy ?? plan?.plan?.createdBy ?? '';
   if (by.startsWith('policy:')) return `Site policy, entry ${by.slice('policy:'.length)}`;
   if (!writes) return 'No approval needed: the plan writes nothing';
-  return 'Not approved yet';
+  if (c.disposition === 'handled_by_hand') return 'The team, by hand';
+  switch (c.state) {
+    case 'blocked':
+      return 'Nobody: the gate blocked it';
+    case 'escalated':
+      return 'Nobody yet: a person decides';
+    case 'failed':
+      return 'Nobody: the workflow failed';
+    default:
+      return 'Not approved yet';
+  }
 }
 
 function statusOf(
@@ -106,7 +129,8 @@ export function safetyReceipt({
 }): SafetyReceipt {
   const p = plan?.plan;
   const approval = approvalOf(approvals);
-  const sent = (attempts ?? []).filter((x) => x.attempt);
+  const tried = (attempts ?? []).filter((x) => x.attempt);
+  const sent = tried.filter((x) => WRITE_OUTCOMES.includes(str(x.attempt?.outcome)));
   const acknowledged = sent.filter((x) => ['applied', 'already_committed'].includes(str(x.attempt?.outcome)));
   const last =
     [...(attempts ?? [])].reverse().find((x) => x.verification)?.verification ?? closure?.verification;
@@ -138,6 +162,7 @@ export function safetyReceipt({
     decidedAt: str(approval?.decidedAt),
     writes: sent.length,
     acknowledged: acknowledged.length,
+    notWritten: tried.length - sent.length,
     verification,
     status: statusOf(c, sent.length, closure, last?.outcome === 'verified' ? 'verified at the receiver' : ''),
   };
