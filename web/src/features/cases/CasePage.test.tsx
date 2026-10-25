@@ -371,6 +371,15 @@ describe('CasePage', () => {
     );
   });
 
+  it('names every stage of the progress in words: done, waiting for approval and not yet', async () => {
+    renderCase('C-000002');
+    const progress = await screen.findByLabelText("The case's progress");
+    await waitFor(() => expect(within(progress).getAllByText('done')).toHaveLength(4));
+    expect(within(progress).getByText('waiting for approval')).toBeInTheDocument();
+    expect(within(progress).getAllByText('not yet')).toHaveLength(2);
+    expect(screen.getByText(/^Rehearsal is a dry run of the write at the receiver/)).toBeInTheDocument();
+  });
+
   it('marks the steps a superseded case did not need', async () => {
     renderCase('C-000007');
     expect(await within(await outcome()).findByText('Resolved · 0 writes')).toBeInTheDocument();
