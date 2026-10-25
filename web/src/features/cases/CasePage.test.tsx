@@ -430,7 +430,7 @@ describe('CasePage', () => {
       'true',
     );
     const approval = await screen.findByRole('region', { name: 'Approval' });
-    expect(await within(approval).findByText('Waiting for an approver')).toBeInTheDocument();
+    expect(await within(approval).findByText('Waiting for approval')).toBeInTheDocument();
     await userEvent.click(within(approval).getByRole('button', { name: 'Approve…' }));
     const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve this plan' }));

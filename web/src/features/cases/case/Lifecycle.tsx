@@ -15,7 +15,7 @@ export function Lifecycle({ c, events }: { c: CaseDetail; events: CaseEvent[] })
     <Stack gap={4} mb="md">
       {round > 1 ? (
         <Text size="sm" c="dimmed">
-          Round {round}: the receiver changed after the approval, so the approval was void and the case was
+          Round {round}: the receiver changed after the approval, so the approval was revoked and the case was
           planned again on fresh evidence. The timeline keeps every round.
         </Text>
       ) : null}

@@ -62,7 +62,7 @@ export const CASE_STATES: Record<string, Status> = {
   rehearsing: s('info', 'Rehearsing', "The downstream system's dry run of the exact action", RUNNING),
   awaiting_approval: s(
     'attention',
-    'Awaiting approval',
+    'Waiting for approval',
     'A person with the approver role must release or reject the plan',
     IconUserQuestion,
   ),
@@ -279,7 +279,7 @@ export const PROVENANCE: Record<'live' | 'replay' | 'rules', Status> = {
 export const APPROVALS: Record<string, Status> = {
   awaiting: s(
     'attention',
-    'Awaiting approval',
+    'Waiting for approval',
     'A person with the approver role must release or reject the plan',
     IconUserQuestion,
   ),

@@ -10,7 +10,7 @@ import type {
 } from '@/api/types';
 import { displayZone, humanize } from '@/lib/format';
 import { asArray, asObject } from '@/lib/json';
-import { APPROVALS, caseState, checkState, gateOutcome, PROVENANCE, verification } from '@/lib/status';
+import { APPROVALS, caseState, gateOutcome, PROVENANCE, verification } from '@/lib/status';
 import type { Status } from '@/lib/tone';
 import { checksOf } from './derive';
 import { approvalsByPlan, type SafetyReceipt } from './receipt';
@@ -75,18 +75,17 @@ function sameTimeFact(snapshot: Snapshot | null | undefined): string {
 /** The latest gate decision, or undefined before the gate has checked a plan. */
 const lastGate = (plan: PlanView | null | undefined) => plan?.gateDecisions?.at(-1);
 
-/** The checks that stopped the latest gate decision, as "ordering: SUPERSEDED_BY_LATER_EVENT". */
-function blockingChecks(f: CaseFacts): string[] {
-  const listed = f.blocked?.checks?.length
-    ? f.blocked.checks
-    : (() => {
-        const d = lastGate(f.plan);
-        return d && d.outcome !== 'pass' ? checksOf(d) : [];
-      })();
-  return listed
-    .filter((ch) => ['blocked', 'unknown'].includes(checkState(ch)))
-    .map((ch) => `${humanize(ch.check).toLowerCase()}: ${ch.reason_code}`);
+/**
+ * Whether the gate stopped the case: the blocked reason lists the checks that failed, or the latest gate decision did
+ * not pass. A plan a person rejected is blocked too, but not by the gate.
+ */
+function gateStopped(f: CaseFacts): boolean {
+  if (f.blocked?.checks?.length) return true;
+  const d = lastGate(f.plan);
+  return !!d && d.outcome !== 'pass';
 }
+
+const lowerFirst = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
 
 /** The write the receiver acknowledged, as "version 1 to 2", from the attempt's receipt. */
 function appliedVersions(attempts: AttemptView[] | null | undefined): string {
@@ -146,12 +145,15 @@ export function outcomeReason(f: CaseFacts): string {
     }
     case 'blocked':
     case 'escalated': {
-      const checks = blockingChecks(f);
-      return sentence([
+      // The reason in words; its code stays with the next action's details and the gate's checks
+      const reason =
         f.blocked === undefined
           ? 'reason not read yet'
-          : f.blocked?.title || f.blocked?.code || 'reason unknown',
-        checks.length ? `the gate stopped it on ${checks.join(', ')}` : '',
+          : f.blocked?.title || f.blocked?.code || 'reason unknown';
+      return sentence([
+        c.state === 'blocked' && f.blocked && gateStopped(f)
+          ? `blocked by the gate: ${lowerFirst(reason)}`
+          : reason,
         sameTime,
       ]);
     }
@@ -335,7 +337,11 @@ export function decisionSummary(f: CaseFacts): string {
   const earlier = f.receipt.earlierApproval;
   return sentence([
     gate || 'the gate has not checked the plan yet',
-    by === 'Unknown' ? 'who released it is unknown' : by.charAt(0).toLowerCase() + by.slice(1),
+    f.c.state === 'awaiting_approval'
+      ? 'waiting for approval'
+      : by === 'Unknown'
+        ? 'who released it is unknown'
+        : by.charAt(0).toLowerCase() + by.slice(1),
     earlier ? earlier.charAt(0).toLowerCase() + earlier.slice(1) : '',
   ]);
 }

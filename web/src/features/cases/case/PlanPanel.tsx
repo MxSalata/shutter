@@ -19,6 +19,21 @@ const STAGES: Record<string, string> = {
   dispatch: 'At dispatch, after the approval and a fresh read of the receiver',
 };
 
+/** What each of the gate's checks asks, in a line, under its name. */
+const CHECK_QUESTIONS: Record<string, string> = {
+  identity: 'Same patient and encounter at the receiver?',
+  conformance: 'Does the message parse against its schema?',
+  intent: "Does the plan send only the case's own operation, unchanged?",
+  ordering: 'Has no later event moved the encounter on?',
+  state_transition: "Can the encounter's state at the receiver take this event?",
+  effect: 'Is the operation not committed at the receiver already?',
+  authorization: "Has a person, or the site's written policy, released the write?",
+  concurrency: 'Is the receiver still at the version the plan is conditional on?',
+  evidence: 'Is the evidence recent enough to act on?',
+  capability: 'Does the receiver take conditional writes and keep receipts?',
+  catalogue: 'Does an entry of the scenario catalogue match the evidence?',
+};
+
 function GateTable({ d }: { d: GateDecision }) {
   const checks = checksOf(d);
   return (
@@ -46,6 +61,11 @@ function GateTable({ d }: { d: GateDecision }) {
                 <Table.Tr key={c.check}>
                   <Table.Td>
                     <Text size="sm">{humanize(c.check)}</Text>
+                    {CHECK_QUESTIONS[c.check] ? (
+                      <Text size="xs" c="dimmed">
+                        {CHECK_QUESTIONS[c.check]}
+                      </Text>
+                    ) : null}
                   </Table.Td>
                   <Table.Td>
                     <StatusBadge {...r} hint={undefined} size="sm" />
@@ -90,7 +110,7 @@ export function PlanPanel({
     <Section
       id="plan"
       title="The plan"
-      note="One plan, bound by its digest: what the gate checks, and what a release names."
+      note="One plan, bound by its digest, a fingerprint of its exact content that any change alters: what the gate checks, and what a release names."
       aside={p ? <DispositionBadge disposition={p.disposition} /> : null}
     >
       {!p && error ? <ErrorAlert error={error} title="The plan could not be read" onRetry={onRetry} /> : null}
@@ -125,9 +145,18 @@ export function PlanPanel({
               ['Plan digest', <Digest key="d" value={p.digest} label="plan digest" />],
               [
                 'Catalogue entry',
-                p.catalogueEntry
-                  ? `${p.catalogueEntry}, ${p.outcome === 'preferred' || !p.outcome ? 'the preferred outcome' : humanize(p.outcome).toLowerCase()}${p.why ? `: ${p.why}` : ''}`
-                  : '',
+                p.catalogueEntry ? (
+                  <Stack key="c" gap={0}>
+                    <Text size="sm">
+                      {`${p.catalogueEntry}, ${p.outcome === 'preferred' || !p.outcome ? 'the preferred outcome' : humanize(p.outcome).toLowerCase()}${p.why ? `: ${p.why}` : ''}`}
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      The scenario catalogue lists the failures Shutter knows and the safe outcome of each.
+                    </Text>
+                  </Stack>
+                ) : (
+                  ''
+                ),
               ],
               [
                 'Plan version',

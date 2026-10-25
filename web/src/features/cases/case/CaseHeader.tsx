@@ -63,7 +63,10 @@ export function CaseHeader({ c, provenance }: { c: CaseDetail; provenance?: Stat
       <Group gap="sm" wrap="wrap">
         <Title order={1}>Case {c.caseId}</Title>
         <StateBadge state={c.state} size="lg" />
-        <DispositionBadge disposition={c.disposition} />
+        {/* The state is shown once: an escalated case's proposal to escalate would only repeat it */}
+        {c.state === 'escalated' && c.disposition === 'escalate' ? null : (
+          <DispositionBadge disposition={c.disposition} proposed />
+        )}
         {c.candidateEntry ? (
           <StatusBadge
             tone="info"

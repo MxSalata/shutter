@@ -41,6 +41,16 @@ describe('CaseHeader', () => {
     expect(screen.getByText('chain 2, item 1 · ordered · resolved')).toBeInTheDocument();
   });
 
+  it('labels the disposition as a proposal, and shows an escalated state once', () => {
+    const { unmount } = renderHeader({ ...base, state: 'blocked', disposition: 'resend' });
+    expect(screen.getByText('Blocked')).toBeInTheDocument();
+    expect(screen.getByText('Proposed: Resend')).toBeInTheDocument();
+    unmount();
+    renderHeader({ ...base, state: 'escalated', disposition: 'escalate' });
+    expect(screen.getByText('Escalated')).toBeInTheDocument();
+    expect(screen.queryByText(/Escalate$/)).not.toBeInTheDocument();
+  });
+
   it('says nothing about the catalogue when an entry fits', () => {
     renderHeader({ ...base, candidateEntry: false });
     expect(screen.queryByText('New pattern')).not.toBeInTheDocument();

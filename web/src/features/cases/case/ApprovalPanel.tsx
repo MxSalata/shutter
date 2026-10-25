@@ -184,7 +184,7 @@ export function ApprovalPanel({
             />
           )
         ) : awaiting ? (
-          <StatusBadge {...APPROVALS.awaiting} label="Waiting for an approver" />
+          <StatusBadge {...APPROVALS.awaiting} />
         ) : revoked ? (
           <StatusBadge {...APPROVALS.revoked} label="Approval no longer valid" />
         ) : !write && plan ? (
@@ -212,7 +212,12 @@ export function ApprovalPanel({
             rows={[
               [
                 'Plan digest',
-                <Digest key="p" value={latest?.planDigest || plan?.digest} label="plan digest" />,
+                <Stack key="p" gap={0}>
+                  <Digest value={latest?.planDigest || plan?.digest} label="plan digest" />
+                  <Text size="xs" c="dimmed">
+                    A fingerprint of the exact plan: any change to it gives another digest.
+                  </Text>
+                </Stack>,
               ],
               [
                 'Evidence snapshot',
@@ -276,7 +281,7 @@ export function ApprovalPanel({
               <Table verticalSpacing={4}>
                 <Table.Thead>
                   <Table.Tr>
-                    <Table.Th>Workflow task</Table.Th>
+                    <Table.Th>Approval task</Table.Th>
                     <Table.Th>Answer</Table.Th>
                     <Table.Th>By</Table.Th>
                     <Table.Th>Completed</Table.Th>

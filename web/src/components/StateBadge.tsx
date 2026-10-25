@@ -13,8 +13,22 @@ export function StateBadge({ state, size = 'sm' }: { state: string; size?: 'xs' 
   return <StatusBadge {...caseState(state)} size={size} />;
 }
 
-/** How a case was handled: neutral, except an escalation or a call for more evidence, which need a person. */
-export function DispositionBadge({ disposition }: { disposition: string }) {
+/** The dispositions a plan proposes; a hand correction or an abandoned case is what happened, not a proposal. */
+const PROPOSALS = new Set(['resend', 'reconcile', 'superseded', 'more_evidence', 'escalate']);
+
+/**
+ * How a case was handled: neutral, except an escalation or a call for more evidence, which need a person. With
+ * `proposed`, a proposal reads as one ("Proposed: Resend"), so beside a Blocked state it is not read as advice.
+ */
+export function DispositionBadge({
+  disposition,
+  proposed = false,
+}: {
+  disposition: string;
+  proposed?: boolean;
+}) {
   if (!disposition) return null;
-  return <StatusBadge {...dispositionStatus(disposition)} variant="outline" />;
+  const status = dispositionStatus(disposition);
+  const label = proposed && PROPOSALS.has(disposition) ? `Proposed: ${status.label}` : status.label;
+  return <StatusBadge {...status} label={label} variant="outline" />;
 }

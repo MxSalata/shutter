@@ -40,7 +40,7 @@ export function IncidentApprovalPanel({
             <StatusBadge {...APPROVALS.rejected} label={`Rejected by ${decision.by}`} />
           )
         ) : waiting ? (
-          <StatusBadge {...APPROVALS.awaiting} label="Waiting for an approver" />
+          <StatusBadge {...APPROVALS.awaiting} />
         ) : null
       }
     >
