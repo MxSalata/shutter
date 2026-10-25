@@ -200,6 +200,8 @@ export interface Snapshot {
   id: string | number;
   seq: number;
   digest: string;
+  /** The digest of what a decision rests on, without the observation times (A7), when the API sends it. */
+  materialDigest?: string;
   takenAt: string;
   freshUntil: string;
   summary: unknown;
@@ -323,6 +325,10 @@ export interface Approval {
   revokedBy: string;
   workflowTaskId: string;
   comment: string;
+  /** What else the approval binds, when the API sends it: the receiver's epoch, the evidence and the site profile. */
+  receiverEpoch?: number | string;
+  materialDigest?: string;
+  siteProfileVersion?: string;
 }
 
 export interface WorkflowTask {

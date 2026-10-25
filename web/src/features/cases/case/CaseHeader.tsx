@@ -6,6 +6,7 @@ import { DispositionBadge, StateBadge } from '@/components/StateBadge';
 import { Timestamp } from '@/components/Timestamp';
 import { displayZone, humanize } from '@/lib/format';
 import { clampHeadline } from '@/lib/headline';
+import { traceScreenshot } from '@/lib/screenshots';
 import { forwardedFrom } from './derive';
 
 /** A labelled fact in a page header. */
@@ -113,7 +114,11 @@ export function CaseHeader({ c }: { c: CaseDetail }) {
           <Meta label="In the Management Portal">
             <Group gap="sm">
               {c.links.visualTrace ? (
-                <PortalLink href={c.links.visualTrace} what={`the Visual Trace of session ${c.ensSessionId}`}>
+                <PortalLink
+                  href={c.links.visualTrace}
+                  what={`the Visual Trace of session ${c.ensSessionId}`}
+                  screenshot={traceScreenshot(c)}
+                >
                   Message trace
                 </PortalLink>
               ) : null}
