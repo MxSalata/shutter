@@ -237,6 +237,7 @@ ClassMethod Evaluate(data As %DynamicObject, cases As %DynamicObject, window As 
         Do findings.%Push(##class(Shutter.Review.Checks).Finding("NO_ALERT_CONSUMER", "", "", "", "no Ens.Alert item", "observed"))
     }
     Set alerting = "", queueAlerts = ""
+    Set alertingSource = "", queueSource = ""
     Kill tcpOps, tcpSvcs
     Set iter = items.%GetIterator()
     While iter.%GetNext(.i, .item) {
@@ -297,6 +298,7 @@ ClassMethod Evaluate(data As %DynamicObject, cases As %DynamicObject, window As 
             Set aoe = ..Effective(data, item, "AlertOnError", .aoeSource)
             Set groups = ..Effective(data, item, "AlertGroups", .agSource)
             If ('+aoe) || (groups = "") {
+                Set alertingSource = ..MoreSpecific(alertingSource, $SELECT('+aoe: aoeSource, 1: agSource))
                 Set alerting = alerting _ $SELECT(alerting = "": "", 1: "; ") _ name _ " (AlertOnError " _ +aoe _ $SELECT(aoeSource '= "": ", " _ $TRANSLATE(aoeSource, "_", " "), 1: "") _ $SELECT(groups = "": ", no AlertGroups", 1: "") _ ")"
             }
         }
@@ -304,7 +306,10 @@ ClassMethod Evaluate(data As %DynamicObject, cases As %DynamicObject, window As 
         Set qc = ..Effective(data, item, "QueueCountAlert", .qcSource)
         If isOp && feed {
             Set qw = ..Effective(data, item, "QueueWaitAlert", .qwSource)
-            If ('+qc) && ('+qw) Set queueAlerts = queueAlerts _ $SELECT(queueAlerts = "": "", 1: "; ") _ name
+            If ('+qc) && ('+qw) {
+                Set queueSource = ..MoreSpecific(..MoreSpecific(queueSource, qcSource), qwSource)
+                Set queueAlerts = queueAlerts _ $SELECT(queueAlerts = "": "", 1: "; ") _ name
+            }
         }
         // QUEUE_BACKLOG: the item's queue above its threshold (QueueCountAlert, or 100 when unset); high above 1000.
         Set depth = ..QueueDepth(data, name)
@@ -331,10 +336,10 @@ ClassMethod Evaluate(data As %DynamicObject, cases As %DynamicObject, window As 
         }
     }
     If alerting '= "" {
-        Do findings.%Push(##class(Shutter.Review.Checks).Finding("ALERTING_OFF", "", "", "AlertOnError", alerting, "item"))
+        Do findings.%Push(##class(Shutter.Review.Checks).Finding("ALERTING_OFF", "", "", "AlertOnError", alerting, $SELECT(alertingSource = "": "class_default", 1: alertingSource)))
     }
     If queueAlerts '= "" {
-        Do findings.%Push(##class(Shutter.Review.Checks).Finding("QUEUE_ALERTS_OFF", "", "", "QueueCountAlert", queueAlerts, "class_default"))
+        Do findings.%Push(##class(Shutter.Review.Checks).Finding("QUEUE_ALERTS_OFF", "", "", "QueueCountAlert", queueAlerts, $SELECT(queueSource = "": "class_default", 1: queueSource)))
     }
     // FRAMING_MISMATCH: an HL7 TCP operation that points at this instance, on the port of an HL7 TCP service here, with a
     // framing the service does not take (Flexible takes any).
@@ -674,6 +679,14 @@ ClassMethod QueueCreated(data As %DynamicObject, name As %String) As %String [ P
 
 /// Each finding's cases block from the aggregates: the item's, or the production's total for a finding about the
 /// production or the namespace.
+/// The more specific of two sources of an effective value (item, then default_setting, then class_default): the source an
+/// aggregated finding reports is the most specific one among its items.
+ClassMethod MoreSpecific(a As %String, b As %String) As %String [ Private ]
+{
+    Set rank = $LISTBUILD("class_default", "default_setting", "item")
+    Quit $SELECT($LISTFIND(rank, b) > $LISTFIND(rank, a): b, 1: a)
+}
+
 ClassMethod AttachCases(findings As %DynamicArray, cases As %DynamicObject) [ Private ]
 {
     If '$ISOBJECT(cases) Quit
