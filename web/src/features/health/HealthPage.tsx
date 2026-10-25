@@ -1,44 +1,104 @@
 import { Accordion, Card, Group, Stack, Table, Text, ThemeIcon } from '@mantine/core';
 import { IconCheck, IconMinus, IconX } from '@tabler/icons-react';
-import { Fragment } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { useHealth, useLibrary } from '@/api/hooks';
 import { PageHeader } from '@/components/PageHeader';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { JsonBlock } from '@/components/JsonBlock';
-import { keyLabel } from '@/lib/format';
+import { Timestamp } from '@/components/Timestamp';
+import { DEMO } from '@/demo';
+import { humanize, keyLabel } from '@/lib/format';
 
-/** A report value: true and false as marks, nothing as "not reported", numbers and text as they are (a 1 can be a count). */
-function Value({ value }: { value: unknown }) {
-  if (value === true) {
-    return (
-      <ThemeIcon size="sm" radius="xl" color="green" variant="light" role="img" aria-label="yes">
-        <IconCheck size={14} />
+/** The report's keys in words; any other key is humanized. */
+const LABELS: Record<string, string> = {
+  installed_at: 'Installed',
+  demo: 'Demo installation',
+  adt_in: 'ADT inbound folder',
+  interoperability: 'Interoperability enabled in the namespace',
+  production_class: 'Production class compiled',
+  production_state: 'Production state',
+  aihub_runner: 'AI Hub runner compiled',
+  ai_hub_present: 'AI Hub installed',
+  mock_config: 'API mimic setting',
+  recordings: 'Recorded agent runs',
+  working_cases: 'Cases still in progress',
+  abandon_after_minutes: 'Abandon allowed after (minutes)',
+  license: 'Licence',
+  api_webapp: 'REST API web application',
+  ui_webapp: 'Web app (this page)',
+  wards_webapp: 'Downstream system web application',
+  webapps_checked: 'Web applications checked from',
+};
+const label = (k: string) => LABELS[k] ?? keyLabel(k);
+
+/**
+ * What a No means in the demo, for the checks the instance the demo was recorded on did not have: said in a neutral
+ * tone, since nothing is wrong with the demo.
+ */
+const DEMO_ABSENT: Record<string, string> = {
+  aihub_runner:
+    "Not in the demo: the recorded instance had no AI Hub, so the class that runs agents through it was not compiled. The board's runs in the demo are replays of recorded runs.",
+  ai_hub_present:
+    'Not in the demo: the demo was recorded on an instance without AI Hub. An installation on the AI Hub image has it.',
+  purge_task:
+    'Not in the demo: the recorded instance had no message purge task. An installation makes one when SHUTTER_MESSAGE_PURGE asks for it.',
+};
+
+/** An icon and its word side by side: the icon never carries the meaning alone. */
+function Mark({ color, icon, word }: { color: string; icon: ReactNode; word: string }) {
+  return (
+    <Group gap={6} wrap="nowrap">
+      <ThemeIcon size="sm" radius="xl" color={color} variant="light" aria-hidden>
+        {icon}
       </ThemeIcon>
-    );
-  }
+      <Text size="sm">{word}</Text>
+    </Group>
+  );
+}
+
+/**
+ * A report value: true and false as a mark and a word (a No the demo is expected to show says why, in grey), nothing
+ * as "Not reported", a time as a time, an object as its fields in words, numbers and text as they are (a 1 can be a
+ * count).
+ */
+function Value({ k, value }: { k: string; value: unknown }) {
+  if (value === true) return <Mark color="green" icon={<IconCheck size={14} />} word="Yes" />;
   if (value === false) {
+    const absent = DEMO ? DEMO_ABSENT[k] : undefined;
     return (
-      <ThemeIcon size="sm" radius="xl" color="gray" variant="light" role="img" aria-label="no">
-        <IconX size={14} />
-      </ThemeIcon>
+      <Stack gap={2}>
+        <Mark color="gray" icon={absent ? <IconMinus size={14} /> : <IconX size={14} />} word="No" />
+        {absent ? (
+          <Text size="xs" c="dimmed" maw="80ch">
+            {absent}
+          </Text>
+        ) : null}
+      </Stack>
     );
   }
   if (value === null || value === undefined || value === '') {
+    return <Mark color="yellow" icon={<IconMinus size={14} />} word="Not reported" />;
+  }
+  if (typeof value === 'string' && k.endsWith('_at') && !Number.isNaN(Date.parse(value))) {
+    return <Timestamp iso={value} />;
+  }
+  if (typeof value === 'object' && !Array.isArray(value)) {
     return (
-      <Group gap={6}>
-        <ThemeIcon size="sm" radius="xl" color="yellow" variant="light" role="img" aria-label="not reported">
-          <IconMinus size={14} />
-        </ThemeIcon>
-        <Text size="xs" c="dimmed">
-          not reported
-        </Text>
-      </Group>
+      <Stack gap={0}>
+        {Object.entries(value as Record<string, unknown>).map(([field, v]) => (
+          <Text key={field} size="sm">
+            {`${humanize(field)}: ${typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v)}`}
+          </Text>
+        ))}
+      </Stack>
     );
   }
+  const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
+  // Names, paths and codes in the monospace font; a sentence or a phrase in the text font
   return (
-    <Text size="sm" className="mono-wrap">
-      {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+    <Text size="sm" className={/\s/.test(text) ? undefined : 'mono-wrap'}>
+      {text}
     </Text>
   );
 }
@@ -99,18 +159,24 @@ export default function HealthPage() {
         ) : null}
         {report ? (
           <Stack gap="sm">
-            <Table withRowBorders={false} verticalSpacing={4}>
+            {DEMO ? (
+              <Text size="sm" maw="80ch">
+                The report of the instance the demo was recorded on. A No that carries a note saying
+                &ldquo;Not in the demo&rdquo; is a piece that instance did not have: expected, not a fault.
+              </Text>
+            ) : null}
+            <Table className="kv-list" withRowBorders={false} verticalSpacing={4}>
               <Table.Tbody>
                 {Object.entries(report).map(([k, v]) => (
                   <Fragment key={k}>
                     <Table.Tr>
                       <Table.Th w={220} style={{ fontWeight: 500 }}>
                         <Text size="sm" c="dimmed">
-                          {keyLabel(k)}
+                          {label(k)}
                         </Text>
                       </Table.Th>
                       <Table.Td>
-                        <Value value={v} />
+                        <Value k={k} value={v} />
                         {k === 'mode' ? (
                           <Text size="xs" c="dimmed">
                             Set by the last scenario run or a reset; live failures are investigated in it too
