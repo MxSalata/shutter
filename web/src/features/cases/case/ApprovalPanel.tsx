@@ -10,6 +10,7 @@ import { Digest } from '@/components/Digest';
 import { KeyValueList } from '@/components/KeyValueList';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
+import { StackTable } from '@/components/StackTable';
 import { APPROVALS } from '@/lib/status';
 import { describeError, isApiError } from '@/lib/errors';
 import { asObject } from '@/lib/json';
@@ -39,15 +40,14 @@ function BlindResendPreview({ c, me }: { c: CaseDetail; me: Me }) {
         >
           <span>
             <Button
-              variant="light"
-              color="yellow"
+              variant="default"
               size="xs"
               leftSection={<IconEye size={14} />}
               disabled={!!why}
               loading={preview.isPending}
               onClick={() => preview.mutate()}
             >
-              What would a blind resend do?
+              What would resending now do?
             </Button>
           </span>
         </Tooltip>
@@ -65,8 +65,8 @@ function BlindResendPreview({ c, me }: { c: CaseDetail; me: Me }) {
             r.applied
               ? 'The receiver applied the preview'
               : r.wouldApply
-                ? 'A blind resend would apply'
-                : 'A blind resend would be refused'
+                ? 'Resending now, with no version check, would apply'
+                : 'Resending now, with no version check, would be refused'
           }
         >
           <Stack gap={4}>
@@ -118,7 +118,7 @@ export function ApprovalPanel({
   const why = !me.approver
     ? 'Deciding needs the approver role: sign in as approver'
     : !awaiting
-      ? `The case is ${humanize(c.state).toLowerCase()}, not awaiting approval`
+      ? `The case is ${humanize(c.state).toLowerCase()}, not waiting for approval`
       : !plan
         ? 'There is no plan to decide on'
         : '';
@@ -184,7 +184,7 @@ export function ApprovalPanel({
             />
           )
         ) : awaiting ? (
-          <StatusBadge {...APPROVALS.awaiting} label="Waiting for an approver" />
+          <StatusBadge {...APPROVALS.awaiting} />
         ) : revoked ? (
           <StatusBadge {...APPROVALS.revoked} label="Approval no longer valid" />
         ) : !write && plan ? (
@@ -212,7 +212,12 @@ export function ApprovalPanel({
             rows={[
               [
                 'Plan digest',
-                <Digest key="p" value={latest?.planDigest || plan?.digest} label="plan digest" />,
+                <Stack key="p" gap={0}>
+                  <Digest value={latest?.planDigest || plan?.digest} label="plan digest" />
+                  <Text size="xs" c="dimmed">
+                    A fingerprint of the exact plan: any change to it gives another digest.
+                  </Text>
+                </Stack>,
               ],
               [
                 'Evidence snapshot',
@@ -251,7 +256,7 @@ export function ApprovalPanel({
                     disabled={!!why}
                     onClick={() => openDialog('approve')}
                   >
-                    Approve…
+                    Approve plan
                   </Button>
                 </span>
               </Tooltip>
@@ -264,7 +269,7 @@ export function ApprovalPanel({
                     disabled={!!why}
                     onClick={() => openDialog('reject')}
                   >
-                    Reject…
+                    Reject plan
                   </Button>
                 </span>
               </Tooltip>
@@ -272,35 +277,35 @@ export function ApprovalPanel({
           ) : null}
           <BlindResendPreview c={c} me={me} />
           {approvals?.tasks?.length ? (
-            <Table.ScrollContainer minWidth={520}>
-              <Table verticalSpacing={4}>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Workflow task</Table.Th>
-                    <Table.Th>Answer</Table.Th>
-                    <Table.Th>By</Table.Th>
-                    <Table.Th>Completed</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
+            <Table.ScrollContainer minWidth={520} className="stack-scroll">
+              <StackTable verticalSpacing={4} className="stack-table">
+                <StackTable.Thead>
+                  <StackTable.Tr>
+                    <StackTable.Th>Approval task</StackTable.Th>
+                    <StackTable.Th>Answer</StackTable.Th>
+                    <StackTable.Th>By</StackTable.Th>
+                    <StackTable.Th>Completed</StackTable.Th>
+                  </StackTable.Tr>
+                </StackTable.Thead>
+                <StackTable.Tbody>
                   {approvals.tasks.map((t) => (
-                    <Table.Tr key={t.taskId}>
-                      <Table.Td>
+                    <StackTable.Tr key={t.taskId}>
+                      <StackTable.Td>
                         <Text size="sm">{t.subject}</Text>
-                      </Table.Td>
-                      <Table.Td>
+                      </StackTable.Td>
+                      <StackTable.Td data-label="Answer">
                         <Text size="sm">{t.complete ? t.action || 'done' : 'open'}</Text>
-                      </Table.Td>
-                      <Table.Td>
+                      </StackTable.Td>
+                      <StackTable.Td data-label="By">
                         <Text size="sm">{t.userName || t.assignedTo || 'unassigned'}</Text>
-                      </Table.Td>
-                      <Table.Td>
+                      </StackTable.Td>
+                      <StackTable.Td data-label="Completed">
                         <Timestamp iso={t.timeCompleted} />
-                      </Table.Td>
-                    </Table.Tr>
+                      </StackTable.Td>
+                    </StackTable.Tr>
                   ))}
-                </Table.Tbody>
-              </Table>
+                </StackTable.Tbody>
+              </StackTable>
             </Table.ScrollContainer>
           ) : null}
         </Stack>

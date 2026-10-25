@@ -215,10 +215,13 @@ function SpecialistRow({
   run,
   portalBase,
   dissent,
+  kept,
 }: {
   run: AgentRun;
   portalBase: string;
   dissent: boolean;
+  /** The dissent as the coordinator kept it, in a line: what the specialist proposed and why. */
+  kept?: string;
 }) {
   const result = asObject(run.finding?.findings) ?? asObject(run.result) ?? {};
   return (
@@ -234,6 +237,7 @@ function SpecialistRow({
               <StatusBadge tone="attention" size="xs" label="Dissent" icon={IconMessageExclamation} />
             ) : null}
           </Group>
+          {kept ? <Text size="sm">{kept}</Text> : null}
           <Text size="sm" c="dimmed" lineClamp={2}>
             {String(result.summary ?? run.finding?.summary ?? run.content ?? '')}
           </Text>
@@ -309,6 +313,20 @@ export function BoardPanel({
     !!coordinator &&
     (dissenters.has(r.memberCode) ||
       (!!dispositionOf(r) && dispositionOf(r) !== String(coordinatorResult.disposition ?? '')));
+  // The dissent's reason as the coordinator recorded it, without the specialist's self-reported confidence
+  const keptDissent = (r: AgentRun) => {
+    const d = disagreements
+      .map((x) => asObject(x) ?? {})
+      .find((x) => String(x.member ?? '') === r.memberCode);
+    // The recorded text puts a confidence after the disposition, "resend (confidence 0.8): why" or
+    // "resend (0.8): why", or the reason itself in brackets, "resend (why)". Keep the disposition and
+    // the reason, never the figure.
+    const said = String(d?.said ?? '')
+      .trim()
+      .replace(/^([a-z_]+)\s*\((?:confidence\s*)?[0-9.]+%?\)/i, '$1')
+      .replace(/^([a-z_]+)\s*\(([^()]+)\)$/i, '$1: $2');
+    return said ? `Proposed ${said.charAt(0).toLowerCase()}${said.slice(1)}` : undefined;
+  };
   return (
     <Section
       id="board"
@@ -380,6 +398,7 @@ export function BoardPanel({
                 run={r}
                 portalBase={portalBase}
                 dissent={dissents(r)}
+                kept={keptDissent(r)}
               />
             ))}
           </Accordion>

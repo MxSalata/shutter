@@ -1,14 +1,14 @@
-import { Button, CopyButton, Group, List, SimpleGrid, Stack, Text } from '@mantine/core';
+import { Button, Code, CopyButton, Group, List, SimpleGrid, Stack, Text } from '@mantine/core';
 import {
   IconCheck,
+  IconChevronDown,
   IconCircleCheck,
   IconCopy,
   IconHandStop,
   IconProgress,
   IconUserQuestion,
 } from '@tabler/icons-react';
-import type { ReactNode } from 'react';
-import { Digest } from '@/components/Digest';
+import { useState, type ReactNode } from 'react';
 import { KeyValueList } from '@/components/KeyValueList';
 import { StatusBadge, StatusNotice } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
@@ -17,7 +17,8 @@ import { gateOutcome, verification, writes } from '@/lib/status';
 import { Reinvestigate } from './Closure';
 import { checksOf } from './derive';
 import { nextAction, outcomeHeadline, outcomeReason, releaseStatus, type CaseFacts } from './outcome';
-import { Section } from './Section';
+import { EscalationPanel } from './EscalationPanel';
+import { NestedSections, Section } from './Section';
 
 /** The gate's outcome in a word on the badge; the counts are written beside it. */
 const GATE_LABELS: Record<string, string> = { pass: 'Passed', block: 'Blocked', unknown: 'Unknown' };
@@ -43,9 +44,12 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
  */
 export function DecisionCard({
   facts,
+  round = 1,
   onReview,
 }: {
   facts: CaseFacts;
+  /** The case's round of evidence and planning: a re-plan after the receiver changed starts another. */
+  round?: number;
   /** Opens the gate and decision step, where the approval is decided. */
   onReview?: () => void;
 }) {
@@ -56,6 +60,19 @@ export function DecisionCard({
   const next = nextAction(facts);
   const b = facts.blocked;
   const stopped = c.state === 'blocked' || c.state === 'escalated' || c.state === 'failed';
+  const [why, setWhy] = useState(false);
+  const hasWhy =
+    next.kind === 'person' &&
+    !!(b?.title || b?.code || b?.prerequisite || next.lookAgain || b?.checks?.length);
+  const writesDetail = [
+    r.writes ? `${r.acknowledged} acknowledged` : '',
+    r.notWritten ? `${r.notWritten} attempt${r.notWritten === 1 ? '' : 's'} the receiver did not take` : '',
+    r.writes && r.expectedVersion
+      ? `conditional on version ${r.expectedVersion}${r.receiverEpoch ? `, epoch ${r.receiverEpoch}` : ''}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('; ');
   return (
     <Section
       id="outcome"
@@ -83,16 +100,16 @@ export function DecisionCard({
         <Text size="sm" maw="75ch">
           {outcomeReason(facts)}
         </Text>
+        {round > 1 ? (
+          <Text size="sm" maw="75ch">
+            {`Round ${round}: the receiver changed after the approval, so the approval was revoked and the case was planned again on fresh evidence. The audit trail keeps every round.`}
+          </Text>
+        ) : null}
       </Stack>
       <SimpleGrid component="dl" cols={{ base: 1, sm: 2, md: 3 }} spacing="md" verticalSpacing="sm" m={0}>
         <Fact label="Proposal">
+          {/* The catalogue entry and the plan digest are the plan's, in step 3, and in the copied receipt */}
           <Text size="sm">{r.action}</Text>
-          {r.catalogueEntry ? (
-            <Text size="xs" c="dimmed">
-              Catalogue entry {r.catalogueEntry}
-            </Text>
-          ) : null}
-          {r.planDigest ? <Digest value={r.planDigest} label="plan digest" /> : null}
         </Fact>
         <Fact label="Gate">
           {gate && gateStatus ? (
@@ -121,19 +138,12 @@ export function DecisionCard({
           ) : (
             <>
               <StatusBadge {...writes(r.writes)} w="fit-content" />
-              <Text size="xs" c="dimmed">
-                {[
-                  r.writes ? `${r.acknowledged} acknowledged` : 'Nothing was written to the receiver',
-                  r.notWritten
-                    ? `${r.notWritten} attempt${r.notWritten === 1 ? '' : 's'} the receiver did not take`
-                    : '',
-                  r.expectedVersion
-                    ? `conditional on version ${r.expectedVersion}${r.receiverEpoch ? `, epoch ${r.receiverEpoch}` : ''}`
-                    : '',
-                ]
-                  .filter(Boolean)
-                  .join('; ')}
-              </Text>
+              {/* The badge says 0 writes; the words add only what it does not say */}
+              {writesDetail ? (
+                <Text size="xs" c="dimmed">
+                  {writesDetail}
+                </Text>
+              ) : null}
             </>
           )}
         </Fact>
@@ -141,7 +151,8 @@ export function DecisionCard({
           {r.verificationState ? (
             <StatusBadge {...verification(r.verificationState)} w="fit-content" />
           ) : null}
-          {r.verification !== verification(r.verificationState).label ? (
+          {r.verification !== verification(r.verificationState).label &&
+          r.verificationState !== 'not_applicable' ? (
             <Text size="xs" c={r.verificationState ? 'dimmed' : undefined}>
               {r.verification || (stopped || c.state === 'resolved' ? 'Unknown' : 'Not verified yet')}
             </Text>
@@ -167,31 +178,66 @@ export function DecisionCard({
                 ? IconHandStop
                 : IconUserQuestion
         }
-        title={`Next action: ${next.action}`}
+        title={
+          <Text span fz="md" fw={700} lh={1.4}>
+            {`Next action: ${next.action}`}
+          </Text>
+        }
       >
         <Stack gap="xs">
+          {/* What (the title), who and why; the reason's code, what must hold and when to look again behind Why? */}
           {next.kind === 'person' ? (
             <KeyValueList
               rows={[
-                ['Whose', next.role],
-                ['Why it waits', next.blocking],
-                ['Reason', b?.title ?? ''],
-                ['Reason code', b?.code ?? ''],
-                ['Hand-off', next.handoff],
-                ['Look again when', next.lookAgain],
+                ['Who', next.role],
+                ['Why', b?.text || next.blocking],
+                ['Escalation', next.escalate ? next.handoff : ''],
               ]}
             />
           ) : null}
-          {b?.text ? <Text size="sm">{b.text}</Text> : null}
-          {b?.checks?.length ? (
-            <List size="sm" spacing={2}>
-              {b.checks.map((ch) => (
-                <List.Item key={ch.check}>
-                  {humanize(ch.check)}: {ch.reason_code}, {ch.detail}
-                </List.Item>
-              ))}
-            </List>
+          {hasWhy ? (
+            <Group>
+              <Button
+                size="xs"
+                variant="default"
+                onClick={() => setWhy((w) => !w)}
+                aria-expanded={why}
+                aria-controls="next-action-why"
+                leftSection={
+                  <IconChevronDown
+                    size={14}
+                    aria-hidden
+                    style={{ transform: why ? 'rotate(180deg)' : undefined, transition: 'transform 150ms' }}
+                  />
+                }
+              >
+                Why?
+              </Button>
+            </Group>
           ) : null}
+          {hasWhy && why ? (
+            <Stack id="next-action-why" gap="xs">
+              <KeyValueList
+                rows={[
+                  ['Reason', b?.title ?? ''],
+                  ['Reason code', b?.code ? <Code key="c">{b.code}</Code> : ''],
+                  ['Why it waits', b?.text && b.prerequisite ? b.prerequisite : ''],
+                  ['Look again when', next.lookAgain],
+                ]}
+              />
+              {b?.checks?.length ? (
+                <List size="sm" spacing={2}>
+                  {b.checks.map((ch) => (
+                    <List.Item key={ch.check}>
+                      {humanize(ch.check)}: {ch.reason_code}, {ch.detail}
+                    </List.Item>
+                  ))}
+                </List>
+              ) : null}
+            </Stack>
+          ) : (
+            <div id="next-action-why" hidden />
+          )}
           {c.state === 'awaiting_approval' && onReview ? (
             <Group>
               {/* A light button on the tinted notice falls short of 4.5:1 in dark mode: the default surface keeps it */}
@@ -202,6 +248,12 @@ export function DecisionCard({
           ) : null}
           {/* A withheld case (a merge or a cancel Shutter never sends) has nothing new to find: the team closes it */}
           {stopped && c.failureKind !== 'withheld' ? <Reinvestigate c={c} /> : null}
+          {/* The hand-off to the team, here with the action it serves: the main button only when it is the action */}
+          {stopped ? (
+            <NestedSections>
+              <EscalationPanel c={c} primary={next.escalate} />
+            </NestedSections>
+          ) : null}
         </Stack>
       </StatusNotice>
     </Section>

@@ -19,7 +19,7 @@ export type Meaning = Record<string, Status>;
 const m = (tone: Tone, hint: string, icon?: Icon) => ({ tone, hint, icon });
 const RUNNING = IconProgress;
 
-/** Labels from the codes: "awaiting_approval" reads "Awaiting approval". */
+/** Labels from the codes: "awaiting_approval" reads "Waiting for approval". */
 const label = (meaning: Record<string, Omit<Status, 'label'>>): Meaning =>
   Object.fromEntries(Object.entries(meaning).map(([k, v]) => [k, { ...v, label: humanize(k) }]));
 

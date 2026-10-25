@@ -1,5 +1,6 @@
-import { Anchor, Group, Stack, Text, Title } from '@mantine/core';
-import { IconSparkles } from '@tabler/icons-react';
+import { Anchor, Button, Group, Stack, Text, Title } from '@mantine/core';
+import { IconChevronDown, IconSparkles } from '@tabler/icons-react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 import type { CaseDetail } from '@/api/types';
 import { PortalLink } from '@/components/PortalLink';
@@ -7,10 +8,10 @@ import { DispositionBadge, StateBadge } from '@/components/StateBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
 import { displayZone, humanize } from '@/lib/format';
-import { clampHeadline } from '@/lib/headline';
 import { traceScreenshot } from '@/lib/screenshots';
 import type { Status } from '@/lib/tone';
 import { forwardedFrom } from './derive';
+import { headerSentence } from './outcome';
 
 /** A labelled fact in a page header. */
 export function Meta({ label, children }: { label: string; children: React.ReactNode }) {
@@ -58,12 +59,16 @@ export function CaseHeader({ c, provenance }: { c: CaseDetail; provenance?: Stat
   const what = `${humanize(c.event)}${c.ward ? ` to ${c.ward}` : ''}`;
   const place = incidentPlace(c);
   const source = sourceText(c);
+  const [details, setDetails] = useState(false);
   return (
     <Stack gap="sm" mb="md">
       <Group gap="sm" wrap="wrap">
         <Title order={1}>Case {c.caseId}</Title>
         <StateBadge state={c.state} size="lg" />
-        <DispositionBadge disposition={c.disposition} />
+        {/* The state is shown once: an escalated case's proposal to escalate would only repeat it */}
+        {c.state === 'escalated' && c.disposition === 'escalate' ? null : (
+          <DispositionBadge disposition={c.disposition} proposed />
+        )}
         {c.candidateEntry ? (
           <StatusBadge
             tone="info"
@@ -73,11 +78,9 @@ export function CaseHeader({ c, provenance }: { c: CaseDetail; provenance?: Stat
           />
         ) : null}
       </Group>
-      {c.headline ? (
-        <Text size="md" fw={500}>
-          {clampHeadline(c.headline)}
-        </Text>
-      ) : null}
+      <Text size="md" fw={500} maw="90ch">
+        {headerSentence(c)}
+      </Text>
       <Group gap="xl" wrap="wrap" align="flex-start">
         <Meta label="What">
           {c.encounterId && c.encounterId !== '-'
@@ -91,23 +94,6 @@ export function CaseHeader({ c, provenance }: { c: CaseDetail; provenance?: Stat
           </Meta>
         ) : null}
         <Meta label="Scenario">{c.scenario || 'None'}</Meta>
-        <Meta label="Investigated by">{MODES[c.mode] ?? humanize(c.mode)}</Meta>
-        {provenance ? (
-          <Meta label="Provenance">
-            <StatusBadge {...provenance} w="fit-content" />
-          </Meta>
-        ) : null}
-        <Meta label="Event time">
-          <Timestamp iso={c.eventTime} />
-        </Meta>
-        <Meta label="Case opened">
-          <Timestamp iso={c.openedAt} />
-        </Meta>
-        {c.closedAt ? (
-          <Meta label="Closed">
-            <Timestamp iso={c.closedAt} />
-          </Meta>
-        ) : null}
         {c.incidentId ? (
           <Meta label="Incident">
             <Stack gap={0}>
@@ -122,32 +108,74 @@ export function CaseHeader({ c, provenance }: { c: CaseDetail; provenance?: Stat
             </Stack>
           </Meta>
         ) : null}
-        <Meta label="Case version">{String(c.version ?? '')}</Meta>
-        <Meta label="Times">{`In ${displayZone()}, as the PAS sends them; UTC in the tooltips`}</Meta>
-        {c.links?.visualTrace || c.links?.workflowTrace ? (
-          <Meta label="In the Management Portal">
-            <Group gap="sm">
-              {c.links.visualTrace ? (
-                <PortalLink
-                  href={c.links.visualTrace}
-                  what={`the Visual Trace of session ${c.ensSessionId}`}
-                  screenshot={traceScreenshot(c)}
-                >
-                  Message trace
-                </PortalLink>
-              ) : null}
-              {c.links.workflowTrace ? (
-                <PortalLink
-                  href={c.links.workflowTrace}
-                  what={`the trace of the case's workflow session ${c.workflowSessionId}`}
-                >
-                  Workflow trace
-                </PortalLink>
-              ) : null}
-            </Group>
-          </Meta>
-        ) : null}
+        <Meta label="Event time">
+          <Timestamp iso={c.eventTime} />
+        </Meta>
+        <Button
+          variant="subtle"
+          size="compact-sm"
+          color="gray"
+          onClick={() => setDetails((d) => !d)}
+          aria-expanded={details}
+          aria-controls="case-details"
+          leftSection={
+            <IconChevronDown
+              size={14}
+              aria-hidden
+              style={{ transform: details ? 'rotate(180deg)' : undefined, transition: 'transform 150ms' }}
+            />
+          }
+          style={{ alignSelf: 'center' }}
+        >
+          Details
+        </Button>
       </Group>
+      {/* Who investigated, the record's times and version, and the portal: kept a click away from the outcome */}
+      {details ? (
+        <Group id="case-details" gap="xl" wrap="wrap" align="flex-start">
+          <Meta label="Investigated by">{MODES[c.mode] ?? humanize(c.mode)}</Meta>
+          {provenance ? (
+            <Meta label="Provenance">
+              <StatusBadge {...provenance} w="fit-content" />
+            </Meta>
+          ) : null}
+          <Meta label="Case opened">
+            <Timestamp iso={c.openedAt} />
+          </Meta>
+          {c.closedAt ? (
+            <Meta label="Closed">
+              <Timestamp iso={c.closedAt} />
+            </Meta>
+          ) : null}
+          <Meta label="Case version">{String(c.version ?? '')}</Meta>
+          <Meta label="Times">{`In ${displayZone()}, as the PAS sends them; UTC in the tooltips`}</Meta>
+          {c.links?.visualTrace || c.links?.workflowTrace ? (
+            <Meta label="In the Management Portal">
+              <Group gap="sm">
+                {c.links.visualTrace ? (
+                  <PortalLink
+                    href={c.links.visualTrace}
+                    what={`the Visual Trace of session ${c.ensSessionId}`}
+                    screenshot={traceScreenshot(c)}
+                  >
+                    Message trace
+                  </PortalLink>
+                ) : null}
+                {c.links.workflowTrace ? (
+                  <PortalLink
+                    href={c.links.workflowTrace}
+                    what={`the trace of the case's workflow session ${c.workflowSessionId}`}
+                  >
+                    Workflow trace
+                  </PortalLink>
+                ) : null}
+              </Group>
+            </Meta>
+          ) : null}
+        </Group>
+      ) : (
+        <div id="case-details" hidden />
+      )}
     </Stack>
   );
 }

@@ -88,21 +88,22 @@ describe('the outcome sentence', () => {
     );
     const next = nextAction(f);
     expect(next).toMatchObject({ kind: 'person', role: 'Operator' });
-    expect(next.handoff).toBe('Outstanding: no escalation sent yet');
+    expect(next.handoff).toBe('Not sent');
+    expect(next.escalate).toBe(true);
+    // S20's next step is to close the case as superseded, not to escalate it
+    expect(nextAction(factsOf('C-000053')).escalate).toBe(false);
   });
 
   it('says whether the hand-off went out', () => {
     const sent = { seq: 1, state: 'sent', teamName: 'Integration team' } as Escalation;
-    expect(nextAction(factsOf('C-000008', { escalations: [sent] })).handoff).toBe(
-      'Escalation 1 sent to Integration team',
-    );
+    expect(nextAction(factsOf('C-000008', { escalations: [sent] })).handoff).toBe('Sent to Integration team');
     expect(nextAction(factsOf('C-000008', { escalations: undefined })).handoff).toBe('Unknown');
   });
 
-  it("names the gate's blocking check on a blocked rules case", () => {
+  it('says in words that the gate blocked a rules case, leaving its reason code to the details', () => {
     const f = factsOf('C-000053');
     expect(outcomeHeadline(f)).toBe('Blocked · 0 writes');
-    expect(outcomeReason(f)).toMatch(/the gate stopped it on ordering: SUPERSEDED_BY_LATER_EVENT/);
+    expect(outcomeReason(f)).toBe('Blocked by the gate: a later event made this movement obsolete.');
   });
 
   it('says writes are unknown, never 0, while the attempts are not read', () => {
@@ -180,13 +181,13 @@ describe('the outcome sentence', () => {
       approvals: { approvals: [], tasks: [] },
       attempts: [],
     });
-    expect(outcomeHeadline(f)).toBe('Awaiting approval · 0 writes');
+    expect(outcomeHeadline(f)).toBe('Waiting for approval · 0 writes');
     expect(nextAction(f)).toMatchObject({
       kind: 'person',
       role: 'Approver',
       action: 'Approve or reject plan v1',
     });
-    expect(releaseStatus(f)?.label).toBe('Awaiting approval');
+    expect(releaseStatus(f)?.label).toBe('Waiting for approval');
   });
 });
 
@@ -206,7 +207,7 @@ describe("the story steps' summaries", () => {
 
   it('says who proposed what, with the dissent kept', () => {
     expect(proposedSummary(factsOf('C-000008'))).toBe(
-      'The coordinator: escalate without writing; 1 specialist dissent kept.',
+      'The coordinator: escalate without writing; Conformance dissented, proposing resend (kept in the plan).',
     );
     expect(proposedSummary(factsOf('C-000021'))).toBe(
       'The rules: resend the operation unchanged, on condition the receiver is at version 2.',

@@ -5,10 +5,13 @@ import boundary from '../../../../docs/readme/boundary.json';
 import { PageHeader } from '@/components/PageHeader';
 import { KeyValueList } from '@/components/KeyValueList';
 import { DispositionBadge } from '@/components/StateBadge';
+import { StackTable } from '@/components/StackTable';
 import { formatDuration, formatInt, formatUsd, formatUtc, humanize } from '@/lib/format';
 import {
   notYetMeasured,
   passName,
+  played,
+  playedLine,
   SPECIALISTS,
   type BoundaryChecks,
   type Evaluation,
@@ -96,9 +99,12 @@ function tokens(p: EvaluationPass): string {
  */
 function Headline({ data }: { data: Evaluation }) {
   const t = data.totals;
+  const rules = played(data, 'rules');
+  // The board played end to end on the same passes as rules alone, so the two figures count one set
+  const board = played(data, 'board_live', 'rules');
   return (
     <Card padding="md" component="section" aria-labelledby="headline-title" data-tour="evaluation-headline">
-      <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
+      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
         <Stack gap={2}>
           <Title order={2} fz="sm" c="dimmed" fw={600} id="headline-title">
             The board against the expected outcome
@@ -106,7 +112,20 @@ function Headline({ data }: { data: Evaluation }) {
           <Text fz={28} fw={650} className="tabular">
             {t.scored_passes ? `${t.board_matches} of ${t.scored_passes}` : 'None scored'}
           </Text>
-          <Text size="sm">scored passes gave the scenario's expected outcome</Text>
+          <Text size="sm">scored passes proposed the scenario's expected action</Text>
+        </Stack>
+        <Stack gap={2}>
+          <Text size="sm" c="dimmed" fw={600}>
+            Rules alone, the baseline
+          </Text>
+          <Text fz={28} fw={650} className="tabular">
+            {rules.of ? `${rules.matches} of ${rules.of}` : 'Not played'}
+          </Text>
+          <Text size="sm">
+            {rules.of
+              ? `scored passes played end to end with rules alone, no agents, ended as expected${board.of ? `; played the same way, the board ended as expected in ${board.matches} of the same ${board.of}` : ''}`
+              : 'no scored pass was played with rules alone'}
+          </Text>
         </Stack>
         <Stack gap={2}>
           <Text size="sm" fw={600}>
@@ -165,7 +184,7 @@ export default function EvaluationPage({
     <>
       <PageHeader
         title="Evaluation"
-        subtitle="How the board decides: its disposition against each scenario's expected outcome, every member's own view and confidence, how far they agreed, and what each pass cost in tokens, money and time."
+        subtitle="How the board decides: the action it proposed against each scenario's expected outcome and against rules alone, every member's own view and confidence, how far they agreed, and what each pass cost in tokens, money and time."
       />
       <Stack gap="md">
         <Headline data={data} />
@@ -177,9 +196,10 @@ export default function EvaluationPage({
             <Text size="sm" c="dimmed">
               A pass is one board decision on one case: the three specialists in parallel (conformance,
               encounter, impact), then the coordinator, who writes the plan. A case planned again after a
-              change has a pass per plan. A specialist decides from its own view only, so its disposition is
-              what that view alone would decide, not a verdict on the case; its confidence is in that answer.
-              Shutter stores and shows the confidence, and no rule in the core or the gate reads it.
+              change has a pass per plan. A specialist decides from its own view only, so the action it
+              proposes is what that view alone would choose, not a verdict on the case; its confidence is in
+              that answer. Shutter stores and shows the confidence, and no rule in the core or the gate reads
+              it.
             </Text>
             <KeyValueList
               rows={[
@@ -224,92 +244,99 @@ export default function EvaluationPage({
             Per scenario
           </Title>
           <Text size="sm" c="dimmed" mb="sm">
-            Each member's disposition and confidence, the plan's disposition, the catalogue entry the plan
-            cites with who it says decides (policy: the catalogue alone may settle it in site-policy mode;
-            board: it needs the board's judgement; person: only a person may act), the agreement, and the
-            tokens, cost and time of the pass. In a scored pass, "outweighed" marks a view the plan set aside
-            for another, and "differs" a plan that is not the expected outcome.
+            Each member's proposed action and confidence; the plan's action, with how the scenario ended when
+            played end to end by the board and by rules alone; the catalogue entry the plan cites with who it
+            says decides (policy: the catalogue alone may settle it in site-policy mode; board: it needs the
+            board's judgement; person: only a person may act), the agreement, and the tokens, cost and time of
+            the pass. In a scored pass, "outweighed" marks a view the plan set aside for another, and
+            "differs" a plan that is not the expected outcome.
           </Text>
-          <Table.ScrollContainer minWidth={1100}>
-            <Table verticalSpacing="xs">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Pass</Table.Th>
-                  <Table.Th>Expected</Table.Th>
-                  <Table.Th>Conformance</Table.Th>
-                  <Table.Th>Encounter</Table.Th>
-                  <Table.Th>Impact</Table.Th>
-                  <Table.Th>Plan</Table.Th>
-                  <Table.Th>Entry</Table.Th>
-                  <Table.Th>Agreement</Table.Th>
-                  <Table.Th>Tokens</Table.Th>
-                  <Table.Th>Cost</Table.Th>
-                  <Table.Th>Elapsed</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
+          {/* On a phone each pass is a card, every column under its name */}
+          <Table.ScrollContainer minWidth={960} className="stack-scroll">
+            <StackTable verticalSpacing="xs" className="stack-table">
+              <StackTable.Thead>
+                <StackTable.Tr>
+                  <StackTable.Th>Pass</StackTable.Th>
+                  <StackTable.Th>Expected</StackTable.Th>
+                  <StackTable.Th>Conformance</StackTable.Th>
+                  <StackTable.Th>Encounter</StackTable.Th>
+                  <StackTable.Th>Impact</StackTable.Th>
+                  <StackTable.Th>Plan</StackTable.Th>
+                  <StackTable.Th>Entry</StackTable.Th>
+                  <StackTable.Th>Agreement</StackTable.Th>
+                  <StackTable.Th>Cost and tokens</StackTable.Th>
+                  <StackTable.Th>Elapsed</StackTable.Th>
+                </StackTable.Tr>
+              </StackTable.Thead>
+              <StackTable.Tbody>
                 {data.passes.map((p) => (
-                  <Table.Tr key={passName(p)}>
-                    <Table.Td>
+                  <StackTable.Tr key={passName(p)}>
+                    <StackTable.Td>
                       <Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>
                         {passName(p)}
                       </Text>
                       <Text size="xs" c="dimmed">
                         {p.title}
                       </Text>
-                    </Table.Td>
-                    <Table.Td>
+                    </StackTable.Td>
+                    <StackTable.Td data-label="Expected">
                       <Text size="sm">{expected(p)}</Text>
-                    </Table.Td>
+                    </StackTable.Td>
                     {SPECIALISTS.map((s) => (
-                      <Table.Td key={s}>
+                      <StackTable.Td key={s} data-label={humanize(s)}>
                         <MemberCell m={p.members[s]} p={p} plan={false} />
-                      </Table.Td>
+                      </StackTable.Td>
                     ))}
-                    <Table.Td>
+                    <StackTable.Td data-label="Plan">
                       <MemberCell m={p.members.coordinator} p={p} plan />
-                    </Table.Td>
-                    <Table.Td>
+                      {playedLine(p) ? (
+                        <Text size="xs" c="dimmed">
+                          {playedLine(p)}
+                        </Text>
+                      ) : null}
+                    </StackTable.Td>
+                    <StackTable.Td data-label="Entry">
                       <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
                         {p.catalogue_entry || '-'}
                         {p.entry_decides ? ` (${p.entry_decides})` : ''}
                       </Text>
-                    </Table.Td>
-                    <Table.Td>
+                    </StackTable.Td>
+                    <StackTable.Td data-label="Agreement">
                       <Text size="sm">{p.agreement}</Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Text size="xs">{tokens(p)}</Text>
-                    </Table.Td>
-                    <Table.Td>
+                    </StackTable.Td>
+                    <StackTable.Td data-label="Cost and tokens">
                       <Text size="sm">{formatUsd(p.cost_usd)}</Text>
-                    </Table.Td>
-                    <Table.Td>
+                      <Text size="xs" c="dimmed">
+                        {tokens(p)}
+                      </Text>
+                    </StackTable.Td>
+                    <StackTable.Td data-label="Elapsed">
                       <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
                         {formatDuration(p.elapsed_ms)}
                       </Text>
-                    </Table.Td>
-                  </Table.Tr>
+                    </StackTable.Td>
+                  </StackTable.Tr>
                 ))}
-                <Table.Tr>
-                  <Table.Th>Total</Table.Th>
-                  <Table.Td colSpan={7}>
+                <StackTable.Tr>
+                  <StackTable.Th>Total</StackTable.Th>
+                  <StackTable.Td colSpan={7}>
                     <Text size="sm">{`${t.passes} passes, ${t.runs} runs`}</Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="xs">{`${formatInt(t.prompt_tokens)} in · ${formatInt(t.cache_read_tokens)} cached · ${formatInt(t.cache_write_tokens)} cache written · ${formatInt(t.completion_tokens)} out`}</Text>
-                  </Table.Td>
-                  <Table.Td>
+                  </StackTable.Td>
+                  <StackTable.Td data-label="Cost and tokens">
                     <Text size="sm">{formatUsd(t.cost_usd)}</Text>
-                  </Table.Td>
-                  <Table.Td>
+                    <Text
+                      size="xs"
+                      c="dimmed"
+                    >{`${formatInt(t.prompt_tokens)} in · ${formatInt(t.cache_read_tokens)} cached · ${formatInt(t.cache_write_tokens)} cache written · ${formatInt(t.completion_tokens)} out`}</Text>
+                  </StackTable.Td>
+                  <StackTable.Td data-label="Time">
                     <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
                       {`${formatDuration(t.agent_ms)} of agent time`}
                     </Text>
-                  </Table.Td>
-                </Table.Tr>
-              </Table.Tbody>
-            </Table>
+                  </StackTable.Td>
+                </StackTable.Tr>
+              </StackTable.Tbody>
+            </StackTable>
           </Table.ScrollContainer>
         </Card>
 
@@ -364,41 +391,41 @@ export default function EvaluationPage({
           <Text size="sm" c="dimmed" mb="sm">
             {`What ${refusals.script} tries over HTTP against the approval boundary, and the answer each attempt must get. It runs in ${refusals.runs}, and on any instance of your own (it plays the scenarios it names, so not on one someone else is using).`}
           </Text>
-          <Table.ScrollContainer minWidth={800}>
-            <Table verticalSpacing="xs">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Attempt</Table.Th>
-                  <Table.Th>Scenario</Table.Th>
-                  <Table.Th>Answer</Table.Th>
-                  <Table.Th>What it proves</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
+          <Table.ScrollContainer minWidth={800} className="stack-scroll">
+            <StackTable verticalSpacing="xs" className="stack-table">
+              <StackTable.Thead>
+                <StackTable.Tr>
+                  <StackTable.Th>Attempt</StackTable.Th>
+                  <StackTable.Th>Scenario</StackTable.Th>
+                  <StackTable.Th>Answer</StackTable.Th>
+                  <StackTable.Th>What it proves</StackTable.Th>
+                </StackTable.Tr>
+              </StackTable.Thead>
+              <StackTable.Tbody>
                 {refusals.checks.map((c) => (
-                  <Table.Tr key={c.id}>
-                    <Table.Td>
+                  <StackTable.Tr key={c.id}>
+                    <StackTable.Td>
                       <Text size="sm" fw={600}>
                         {c.title}
                       </Text>
-                    </Table.Td>
-                    <Table.Td>
+                    </StackTable.Td>
+                    <StackTable.Td data-label="Scenario">
                       <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
                         {c.scenario}
                       </Text>
-                    </Table.Td>
-                    <Table.Td>
+                    </StackTable.Td>
+                    <StackTable.Td data-label="Answer">
                       <Text size="sm" className="mono-wrap">
                         {c.answer}
                       </Text>
-                    </Table.Td>
-                    <Table.Td>
+                    </StackTable.Td>
+                    <StackTable.Td data-label="What it proves">
                       <Text size="sm">{c.proves}</Text>
-                    </Table.Td>
-                  </Table.Tr>
+                    </StackTable.Td>
+                  </StackTable.Tr>
                 ))}
-              </Table.Tbody>
-            </Table>
+              </StackTable.Tbody>
+            </StackTable>
           </Table.ScrollContainer>
         </Card>
 

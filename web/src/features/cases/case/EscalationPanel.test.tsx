@@ -51,10 +51,8 @@ describe('EscalationPanel', () => {
   it('drafts an email from the case, which a person checks and sends to the team', async () => {
     renderCase('C-000008');
     const panel = await screen.findByRole('region', { name: 'Escalations' });
-    await userEvent.click(
-      await within(panel).findByRole('button', { name: /Escalate to system administrators/ }),
-    );
-    const dialog = await screen.findByRole('dialog', { name: 'Escalate to system administrators' });
+    await userEvent.click(await within(panel).findByRole('button', { name: /^Escalate to /i }));
+    const dialog = await screen.findByRole('dialog', { name: /^Escalate to / });
     const message = within(dialog).getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement;
     expect(message.value).toContain('Hospital number: MRN1008 (HOSP)');
     expect(message.value).toContain('Transfer to WARD-B at 2026-10-15 08:20 UTC');
@@ -79,10 +77,8 @@ describe('EscalationPanel', () => {
     server.use(http.get('/api/shutter/site-profile', () => HttpResponse.json(view)));
     renderCase('C-000008');
     const panel = await screen.findByRole('region', { name: 'Escalations' });
-    await userEvent.click(
-      await within(panel).findByRole('button', { name: /Escalate to system administrators/ }),
-    );
-    const dialog = await screen.findByRole('dialog', { name: 'Escalate to system administrators' });
+    await userEvent.click(await within(panel).findByRole('button', { name: /^Escalate to /i }));
+    const dialog = await screen.findByRole('dialog', { name: /^Escalate to / });
     const to = within(dialog).getByRole('textbox', { name: /To/ });
     await waitFor(() => expect(to).toHaveAccessibleDescription(/in nhs\.uk/));
     await userEvent.clear(to);
@@ -116,10 +112,8 @@ describe('EscalationPanel', () => {
     );
     renderCase('C-000008');
     const panel = await screen.findByRole('region', { name: 'Escalations' });
-    await userEvent.click(
-      await within(panel).findByRole('button', { name: /Escalate to system administrators/ }),
-    );
-    const dialog = await screen.findByRole('dialog', { name: 'Escalate to system administrators' });
+    await userEvent.click(await within(panel).findByRole('button', { name: /^Escalate to /i }));
+    const dialog = await screen.findByRole('dialog', { name: /^Escalate to / });
     // Addresses the page lets through, which the server refuses: the domains changed meanwhile
     const to = within(dialog).getByRole('textbox', { name: /To/ });
     await userEvent.clear(to);
@@ -145,10 +139,8 @@ describe('EscalationPanel', () => {
     renderCase('C-000008');
     const panel = await screen.findByRole('region', { name: 'Escalations' });
     expect(within(panel).queryByRole('button', { name: /Mark as handled/ })).not.toBeInTheDocument();
-    await userEvent.click(
-      await within(panel).findByRole('button', { name: /Escalate to system administrators/ }),
-    );
-    const dialog = await screen.findByRole('dialog', { name: 'Escalate to system administrators' });
+    await userEvent.click(await within(panel).findByRole('button', { name: /^Escalate to /i }));
+    const dialog = await screen.findByRole('dialog', { name: /^Escalate to / });
     const to = within(dialog).getByRole('textbox', { name: /To/ });
     if (!(to as HTMLInputElement).value) await userEvent.type(to, 'bed.management@example.nhs.uk');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Send' }));
@@ -173,7 +165,7 @@ describe('EscalationPanel', () => {
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Escalations' })).toBeNull());
     await userEvent.click(screen.getByRole('tab', { name: 'Audit trail' }));
     const record = await screen.findByRole('region', { name: 'Escalations' });
-    expect(within(record).queryByRole('button', { name: /Escalate to system administrators/ })).toBeNull();
+    expect(within(record).queryByRole('button', { name: /^Escalate to /i })).toBeNull();
     expect(within(record).queryByRole('button', { name: /Mark as handled/ })).not.toBeInTheDocument();
     expect(within(record).getByText('Sent')).toBeInTheDocument();
     expect(within(record).getByText(/^Digest of the text sent: demo:/)).toBeInTheDocument();
@@ -210,7 +202,7 @@ describe('EscalationPanel', () => {
     ).toBeInTheDocument();
     expect(within(panel).queryByRole('button', { name: /Mark as handled/ })).not.toBeInTheDocument();
     // Escalating stays the operator's
-    expect(within(panel).getByRole('button', { name: /Escalate to system administrators/ })).toBeEnabled();
+    expect(within(panel).getByRole('button', { name: /^Escalate to /i })).toBeEnabled();
   });
 
   it('offers an approver the closing under the two-person rule', async () => {
@@ -242,10 +234,8 @@ describe('EscalationPanel', () => {
   it('refuses a second @ and, with no allowed domains in the profile, every address', async () => {
     renderCase('C-000008');
     const panel = await screen.findByRole('region', { name: 'Escalations' });
-    await userEvent.click(
-      await within(panel).findByRole('button', { name: /Escalate to system administrators/ }),
-    );
-    const dialog = await screen.findByRole('dialog', { name: 'Escalate to system administrators' });
+    await userEvent.click(await within(panel).findByRole('button', { name: /^Escalate to /i }));
+    const dialog = await screen.findByRole('dialog', { name: /^Escalate to / });
     const to = within(dialog).getByRole('textbox', { name: /To/ });
     await waitFor(() => expect(to).toHaveAccessibleDescription(/in example\.nhs\.uk/));
     await userEvent.clear(to);
@@ -262,10 +252,8 @@ describe('EscalationPanel', () => {
     server.use(http.get('/api/shutter/site-profile', () => HttpResponse.json(view)));
     renderCase('C-000008');
     const panel = await screen.findByRole('region', { name: 'Escalations' });
-    await userEvent.click(
-      await within(panel).findByRole('button', { name: /Escalate to system administrators/ }),
-    );
-    const dialog = await screen.findByRole('dialog', { name: 'Escalate to system administrators' });
+    await userEvent.click(await within(panel).findByRole('button', { name: /^Escalate to /i }));
+    const dialog = await screen.findByRole('dialog', { name: /^Escalate to / });
     const to = within(dialog).getByRole('textbox', { name: /To/ });
     await userEvent.clear(to);
     await userEvent.type(to, 'bed.management@example.nhs.uk');
@@ -290,10 +278,8 @@ describe('EscalationPanel', () => {
     );
     renderCase('C-000008');
     const panel = await screen.findByRole('region', { name: 'Escalations' });
-    await userEvent.click(
-      await within(panel).findByRole('button', { name: /Escalate to system administrators/ }),
-    );
-    const dialog = await screen.findByRole('dialog', { name: 'Escalate to system administrators' });
+    await userEvent.click(await within(panel).findByRole('button', { name: /^Escalate to /i }));
+    const dialog = await screen.findByRole('dialog', { name: /^Escalate to / });
     const subject = within(dialog).getByRole('textbox', { name: 'Subject' });
     // A text input drops CR and LF from its value, so the control character here is a tab, which it keeps
     fireEvent.change(subject, { target: { value: 'x\tBcc: e@evil.com' } });

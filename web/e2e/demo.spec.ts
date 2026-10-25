@@ -32,9 +32,11 @@ test.describe('the guided path', () => {
     await card.getByRole('link', { name: 'Case C-000002', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Case C-000002', exact: true })).toBeVisible();
     const outcome = page.getByRole('region', { name: 'Outcome' });
-    await expect(outcome).toContainText('Awaiting approval · 0 writes');
+    await expect(outcome).toContainText('Waiting for approval · 0 writes');
     await expect(outcome).toContainText('Next action: Approve or reject plan v1');
-    await expect(page.getByRole('region', { name: 'Approval' })).toContainText('Waiting for an approver');
+    await expect(page.getByRole('region', { name: 'Approval', exact: true })).toContainText(
+      'Waiting for approval',
+    );
   });
 
   test('opens the S8 comparison from the guide, behind why the board matters', async ({ page }) => {
@@ -70,10 +72,14 @@ test.describe('the guided path', () => {
     await expect(page.getByRole('region', { name: 'In the Management Portal' })).toBeVisible();
   });
 
-  test('the cases list says who investigated each case', async ({ page }) => {
+  test('the cases list says who investigated each case and what its plan proposed', async ({ page }) => {
     await signIn(page);
     await go(page, '/cases');
     await expect(page.getByRole('columnheader', { name: 'Investigated by' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Proposed action' })).toBeVisible();
+    await expect(
+      page.getByText(/^State is where the case is now\. Proposed action is what its plan proposed/),
+    ).toBeVisible();
     const row = (id: string) => page.getByRole('row').filter({ has: page.getByRole('link', { name: id }) });
     await expect(row('C-000002')).toContainText('Board');
     await expect(row('C-000021')).toContainText('Rules only');

@@ -1,9 +1,10 @@
 import { MantineProvider } from '@mantine/core';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { CaseSummary } from '@/api/types';
 import { theme } from '@/theme';
-import { ForwardedBadge, InvestigatedBy, investigatedBy } from './CasesPage';
+import { MemoryRouter } from 'react-router';
+import { CasesTable, ForwardedBadge, InvestigatedBy, investigatedBy } from './CasesPage';
 
 // The list's tag on its own: the page's filters (two Selects) take tens of seconds to render under jsdom, and so
 // does opening the tag's tooltip; forwardedFrom's tests cover what the tooltip says.
@@ -102,5 +103,48 @@ describe('investigatedBy', () => {
     );
     expect(screen.getByText('Site policy')).toBeInTheDocument();
     expect(screen.getByText('entry E2')).toBeInTheDocument();
+  });
+});
+
+describe('CasesTable', () => {
+  it('names each cell after its column for the stacked layout, and keeps the table announced as one', () => {
+    render(
+      <MantineProvider theme={theme}>
+        <MemoryRouter>
+          <CasesTable
+            items={[
+              {
+                ...base,
+                encounterId: 'ENC-1',
+                disposition: 'resend',
+                scenario: 'S2',
+                mode: 'board',
+                openedAt: '2026-10-25T08:00:00Z',
+              } as CaseSummary,
+            ]}
+          />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+    const table = screen.getByRole('table');
+    expect(table).toHaveAttribute('role', 'table');
+    expect(
+      within(table)
+        .getAllByRole('columnheader')
+        .map((h) => h.textContent),
+    ).toEqual(['Case', 'State', 'Proposed action', 'What failed', 'Scenario', 'Investigated by', 'Opened']);
+    const row = within(table).getByRole('link', { name: 'C-000123' }).closest('tr')!;
+    expect(row).toHaveAttribute('role', 'row');
+    const cells = within(row).getAllByRole('cell');
+    // The first cell is the case id, the card's title on a phone; every other one carries its column's name
+    expect(cells[0]).not.toHaveAttribute('data-label');
+    expect(cells.slice(1).map((c) => c.getAttribute('data-label'))).toEqual([
+      'State',
+      'Proposed action',
+      'What failed',
+      'Scenario',
+      'Investigated by',
+      'Opened',
+    ]);
   });
 });

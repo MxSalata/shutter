@@ -17,7 +17,9 @@ import { CaseTimeline } from './case/CaseTimeline';
 import { CaseStory, type StoryStep } from './case/CaseStory';
 import { DecisionCard } from './case/DecisionCard';
 import { PortalLinks } from './case/PortalLinks';
+import { CounterpartStrip } from './case/S8Compare';
 import { SHOW_EVIDENCE } from './case/evidenceLinks';
+import { rounds } from './case/derive';
 import { provenanceOf } from './case/outcome';
 import { useCaseFacts } from './case/useCaseFacts';
 
@@ -68,7 +70,9 @@ function CaseBody({ c }: { c: CaseDetail }) {
   const compare = search.get('show') === 'compare';
   // The story steps start closed, except where the reader is sent: the approval of a case waiting for one, and the
   // S8 comparison when the demo's guide links to it. After that they stay as the reader leaves them.
+  // On a board case, what was proposed opens too: the specialists, their verdicts and any dissent are the point of it.
   const [steps, setSteps] = useState<string[]>(() => [
+    ...(c.mode === 'board' && c.failureKind !== 'withheld' ? ['proposed'] : []),
     ...(c.state === 'awaiting_approval' ? ['decision'] : []),
     ...(compare && c.scenario === 'S8' ? ['compare'] : []),
   ]);
@@ -108,11 +112,14 @@ function CaseBody({ c }: { c: CaseDetail }) {
     <>
       <CaseHeader c={c} provenance={provenanceOf(c.mode, facts.runs)} />
       <Lifecycle c={c} events={events.data ?? []} />
+      <CounterpartStrip c={c} onCompare={() => openStep('compare', 's8-compare')} />
       <Stack gap="md">
-        <DecisionCard facts={facts} onReview={() => openStep('decision', 'approval')} />
+        <DecisionCard
+          facts={facts}
+          round={rounds(events.data ?? [])}
+          onReview={() => openStep('decision', 'approval')}
+        />
         <AbandonPanel c={c} events={events.data} />
-        {/* A stopped case's hand-off to the team is its next action; once closed by hand, it is history */}
-        {stopped ? <EscalationPanel c={c} /> : null}
         <Tabs value={tab} onChange={setTab} keepMounted={false}>
           <Tabs.List aria-label="The case in detail">
             <Tabs.Tab value="summary" leftSection={<IconListDetails size={16} aria-hidden />}>
@@ -144,6 +151,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
           <Tabs.Panel value="audit" pt="md">
             <Stack gap="md">
               <CaseTimeline events={events.data ?? []} />
+              {/* A stopped case's hand-off is part of its next action; once closed by hand, it is history here */}
               {!stopped ? <EscalationPanel c={c} /> : null}
               <PortalLinks c={c} runs={facts.runs} portalBase={base} />
             </Stack>

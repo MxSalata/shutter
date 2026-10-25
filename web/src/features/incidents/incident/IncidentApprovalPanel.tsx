@@ -5,6 +5,7 @@ import { Digest } from '@/components/Digest';
 import { KeyValueList } from '@/components/KeyValueList';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
+import { StackTable } from '@/components/StackTable';
 import { APPROVALS } from '@/lib/status';
 import { NotYet, Section } from '../../cases/case/Section';
 import { describePolicy } from '../describe';
@@ -40,7 +41,7 @@ export function IncidentApprovalPanel({
             <StatusBadge {...APPROVALS.rejected} label={`Rejected by ${decision.by}`} />
           )
         ) : waiting ? (
-          <StatusBadge {...APPROVALS.awaiting} label="Waiting for an approver" />
+          <StatusBadge {...APPROVALS.awaiting} />
         ) : null
       }
     >
@@ -74,7 +75,7 @@ export function IncidentApprovalPanel({
                     disabled={!!why}
                     onClick={() => onDecide('approve')}
                   >
-                    Approve…
+                    Approve release
                   </Button>
                 </span>
               </Tooltip>
@@ -87,7 +88,7 @@ export function IncidentApprovalPanel({
                     disabled={!!why}
                     onClick={() => onDecide('reject')}
                   >
-                    Reject…
+                    Reject release
                   </Button>
                 </span>
               </Tooltip>
@@ -96,35 +97,35 @@ export function IncidentApprovalPanel({
         </Stack>
       ) : null}
       {inc.tasks.length ? (
-        <Table.ScrollContainer minWidth={520}>
-          <Table verticalSpacing={4}>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Workflow task</Table.Th>
-                <Table.Th>Answer</Table.Th>
-                <Table.Th>By</Table.Th>
-                <Table.Th>Completed</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
+        <Table.ScrollContainer minWidth={520} className="stack-scroll">
+          <StackTable verticalSpacing={4} className="stack-table">
+            <StackTable.Thead>
+              <StackTable.Tr>
+                <StackTable.Th>Approval task</StackTable.Th>
+                <StackTable.Th>Answer</StackTable.Th>
+                <StackTable.Th>By</StackTable.Th>
+                <StackTable.Th>Completed</StackTable.Th>
+              </StackTable.Tr>
+            </StackTable.Thead>
+            <StackTable.Tbody>
               {inc.tasks.map((t) => (
-                <Table.Tr key={t.taskId}>
-                  <Table.Td>
+                <StackTable.Tr key={t.taskId}>
+                  <StackTable.Td>
                     <Text size="sm">{t.subject}</Text>
-                  </Table.Td>
-                  <Table.Td>
+                  </StackTable.Td>
+                  <StackTable.Td data-label="Answer">
                     <Text size="sm">{t.complete ? t.action || 'done' : 'open'}</Text>
-                  </Table.Td>
-                  <Table.Td>
+                  </StackTable.Td>
+                  <StackTable.Td data-label="By">
                     <Text size="sm">{t.userName || t.assignedTo || 'unassigned'}</Text>
-                  </Table.Td>
-                  <Table.Td>
+                  </StackTable.Td>
+                  <StackTable.Td data-label="Completed">
                     <Timestamp iso={t.timeCompleted} />
-                  </Table.Td>
-                </Table.Tr>
+                  </StackTable.Td>
+                </StackTable.Tr>
               ))}
-            </Table.Tbody>
-          </Table>
+            </StackTable.Tbody>
+          </StackTable>
         </Table.ScrollContainer>
       ) : null}
     </Section>

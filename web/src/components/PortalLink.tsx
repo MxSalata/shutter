@@ -1,5 +1,5 @@
 import { Anchor, Image, Modal, Stack, Text, Tooltip } from '@mantine/core';
-import { IconExternalLink } from '@tabler/icons-react';
+import { IconExternalLink, IconExternalLinkOff } from '@tabler/icons-react';
 import { useState } from 'react';
 import { DEMO } from '@/demo';
 import type { Screenshot } from '@/lib/screenshots';
@@ -48,7 +48,9 @@ export function PortalLink({
         multiline
         maw={300}
       >
-        <Text span size={size} tabIndex={0} style={{ textDecoration: 'underline dotted', cursor: 'help' }}>
+        {/* Not a link here: dimmed and plain, with an icon that says so, and the tooltip says where it would go */}
+        <Text span size={size} c="dimmed" tabIndex={0} style={{ cursor: 'help', whiteSpace: 'nowrap' }}>
+          <IconExternalLinkOff size={12} aria-hidden style={{ verticalAlign: 'middle', marginRight: 2 }} />
           {children} (on an instance)
         </Text>
       </Tooltip>

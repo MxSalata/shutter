@@ -47,7 +47,9 @@ describe('formatting', () => {
     expect(displayZone()).toBe('Europe/London');
   });
   it('turns codes into words', () => {
-    expect(humanize('awaiting_approval')).toBe('Awaiting approval');
+    expect(humanize('release_failed')).toBe('Release failed');
+    // As the status badges say it
+    expect(humanize('awaiting_approval')).toBe('Waiting for approval');
   });
   it('names the readiness keys whose words alone would say too little', () => {
     expect(keyLabel('purge_task')).toBe('Message purge task');

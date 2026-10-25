@@ -144,7 +144,7 @@ describe('IncidentPage', () => {
     served = waiting();
     renderAt('/incidents/I-000001');
     const approval = await screen.findByRole('region', { name: 'Approval' });
-    expect(within(approval).getByText('Waiting for an approver')).toBeInTheDocument();
+    expect(within(approval).getByText('Waiting for approval')).toBeInTheDocument();
     await userEvent.click(within(approval).getByRole('button', { name: /Approve/ }));
     const dialog = await screen.findByRole('dialog');
     expect(

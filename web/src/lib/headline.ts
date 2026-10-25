@@ -16,8 +16,29 @@ const OPENINGS = [
   /^Handled by the team\. /,
 ];
 
+/**
+ * The gate's headline, as Case writes it: "Blocked by the gate: Blocked: ordering SUPERSEDED_BY_LATER_EVENT (policy
+ * 2026-10-20.1, stage proposal)". It reads as the checks that failed, in words; the codes stay on the case page.
+ */
+const GATE_HEADLINE = /^Blocked by the gate: Blocked: (.+?)(?: \(policy [^)]*\))?$/;
+
+function gateHeadline(headline: string): string {
+  const m = GATE_HEADLINE.exec(headline);
+  if (!m) return '';
+  const checks = m[1]
+    .split(', ')
+    .map((part) => /^([a-z_]+) [A-Z_]+$/.exec(part)?.[1])
+    .filter((x): x is string => !!x)
+    .map((x) => x.replace(/_/g, ' '));
+  if (!checks.length) return '';
+  const names = checks.length === 1 ? checks[0] : `${checks.slice(0, -1).join(', ')} and ${checks.at(-1)}`;
+  return `Blocked by the gate: the ${names} check${checks.length === 1 ? '' : 's'} failed.`;
+}
+
 export function clampHeadline(headline: string | undefined | null): string {
   if (!headline) return '';
+  const gate = gateHeadline(headline);
+  if (gate) return gate;
   // The server cuts at a whole word itself since 20 October 2026; a cut it made before then could leave a full stop
   // or a bracket before its ellipsis.
   headline = headline.replace(/[\s.,;:(-]+…$/, '…');

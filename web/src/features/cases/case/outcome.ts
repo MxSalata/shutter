@@ -10,7 +10,7 @@ import type {
 } from '@/api/types';
 import { displayZone, humanize } from '@/lib/format';
 import { asArray, asObject } from '@/lib/json';
-import { APPROVALS, caseState, checkState, gateOutcome, PROVENANCE, verification } from '@/lib/status';
+import { APPROVALS, caseState, gateOutcome, PROVENANCE, verification } from '@/lib/status';
 import type { Status } from '@/lib/tone';
 import { checksOf } from './derive';
 import { approvalsByPlan, type SafetyReceipt } from './receipt';
@@ -75,18 +75,17 @@ function sameTimeFact(snapshot: Snapshot | null | undefined): string {
 /** The latest gate decision, or undefined before the gate has checked a plan. */
 const lastGate = (plan: PlanView | null | undefined) => plan?.gateDecisions?.at(-1);
 
-/** The checks that stopped the latest gate decision, as "ordering: SUPERSEDED_BY_LATER_EVENT". */
-function blockingChecks(f: CaseFacts): string[] {
-  const listed = f.blocked?.checks?.length
-    ? f.blocked.checks
-    : (() => {
-        const d = lastGate(f.plan);
-        return d && d.outcome !== 'pass' ? checksOf(d) : [];
-      })();
-  return listed
-    .filter((ch) => ['blocked', 'unknown'].includes(checkState(ch)))
-    .map((ch) => `${humanize(ch.check).toLowerCase()}: ${ch.reason_code}`);
+/**
+ * Whether the gate stopped the case: the blocked reason lists the checks that failed, or the latest gate decision did
+ * not pass. A plan a person rejected is blocked too, but not by the gate.
+ */
+function gateStopped(f: CaseFacts): boolean {
+  if (f.blocked?.checks?.length) return true;
+  const d = lastGate(f.plan);
+  return !!d && d.outcome !== 'pass';
 }
+
+const lowerFirst = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
 
 /** The write the receiver acknowledged, as "version 1 to 2", from the attempt's receipt. */
 function appliedVersions(attempts: AttemptView[] | null | undefined): string {
@@ -146,12 +145,15 @@ export function outcomeReason(f: CaseFacts): string {
     }
     case 'blocked':
     case 'escalated': {
-      const checks = blockingChecks(f);
-      return sentence([
+      // The reason in words; its code stays with the next action's details and the gate's checks
+      const reason =
         f.blocked === undefined
           ? 'reason not read yet'
-          : f.blocked?.title || f.blocked?.code || 'reason unknown',
-        checks.length ? `the gate stopped it on ${checks.join(', ')}` : '',
+          : f.blocked?.title || f.blocked?.code || 'reason unknown';
+      return sentence([
+        c.state === 'blocked' && f.blocked && gateStopped(f)
+          ? `blocked by the gate: ${lowerFirst(reason)}`
+          : reason,
         sameTime,
       ]);
     }
@@ -182,22 +184,24 @@ export interface NextAction {
   lookAgain: string;
   /** For a stopped case: whether the hand-off to the team went out. */
   handoff: string;
+  /** Whether escalating to the team is the next step itself, not only a way out of it. */
+  escalate: boolean;
 }
 
 function handoff(f: CaseFacts): string {
   if (f.escalations === undefined) return 'Unknown';
   const list = f.escalations ?? [];
   const sent = list.filter((e) => e.state === 'sent' || e.state === 'queued').at(-1);
+  // Shown beside the label Escalation, so the text does not repeat the word
   if (sent)
-    return `Escalation ${sent.seq} ${sent.state === 'sent' ? 'sent' : 'queued'} to ${sent.teamName || sent.to || 'the team'}`;
-  if (list.some((e) => e.state === 'draft' || e.state === 'failed'))
-    return 'Outstanding: an escalation is drafted but not sent';
-  return 'Outstanding: no escalation sent yet';
+    return `${sent.state === 'sent' ? 'Sent' : 'Queued'} to ${sent.teamName || sent.to || "the downstream system's team"}`;
+  if (list.some((e) => e.state === 'draft' || e.state === 'failed')) return 'Drafted, not sent';
+  return 'Not sent';
 }
 
 export function nextAction(f: CaseFacts): NextAction {
   const { c } = f;
-  const none = { blocking: '', lookAgain: '', handoff: '' };
+  const none = { blocking: '', lookAgain: '', handoff: '', escalate: false };
   if (c.state === 'resolved') return { kind: 'none', action: 'No pending action', role: '', ...none };
   if (c.state === 'failed')
     return {
@@ -207,6 +211,7 @@ export function nextAction(f: CaseFacts): NextAction {
       blocking: c.disposition === 'abandoned' ? 'The case was abandoned' : 'The workflow failed',
       lookAgain: '',
       handoff: '',
+      escalate: false,
     };
   if (c.state === 'blocked' || c.state === 'escalated') {
     const b = f.blocked;
@@ -218,6 +223,8 @@ export function nextAction(f: CaseFacts): NextAction {
       blocking: b?.prerequisite || b?.text || unknown,
       lookAgain: b?.reevaluateWhen ?? '',
       handoff: handoff(f),
+      // An escalated case goes to the team; a blocked one only when its reason says to escalate
+      escalate: c.state === 'escalated' || /escalat/i.test(b?.nextAction ?? ''),
     };
   }
   if (c.state === 'awaiting_approval')
@@ -228,6 +235,7 @@ export function nextAction(f: CaseFacts): NextAction {
       blocking: 'The write waits for a person to release it; the gate checks it again at dispatch',
       lookAgain: '',
       handoff: '',
+      escalate: false,
     };
   return {
     kind: 'shutter',
@@ -248,13 +256,35 @@ const FAILURES: Record<string, string> = {
 };
 
 /** "PAS transfer to WARD-B was not delivered: HTTP 503, ward_unavailable." */
-export function failedSummary(c: CaseDetail): string {
-  const what = `${c.sourceSystem ? `${c.sourceSystem} ` : ''}${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`;
+export function failedSummary(
+  c: CaseDetail,
+  what = `${c.sourceSystem ? `${c.sourceSystem} ` : ''}${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`,
+): string {
   const how = FAILURES[c.failureKind] ?? (humanize(c.failureKind).toLowerCase() || 'failed');
   const detail = [c.failureHttpStatus ? `HTTP ${str(c.failureHttpStatus)}` : '', str(c.failureReasonCode)]
     .filter(Boolean)
     .join(', ');
   return sentence([`${what} ${how}${detail ? `: ${detail}` : ''}`]);
+}
+
+/** The sending systems a header names, glossed at first use. */
+const SYSTEMS: Record<string, string> = {
+  PAS: 'patient administration system',
+  BEDMGR: 'bed manager',
+};
+
+/**
+ * The header's one sentence: what failed, put together from the case's facts and never cut. What Shutter did about it
+ * is the Outcome card's.
+ */
+export function headerSentence(c: CaseDetail): string {
+  const system = c.sourceSystem
+    ? `${c.sourceSystem}${SYSTEMS[c.sourceSystem] ? ` (${SYSTEMS[c.sourceSystem]})` : ''} `
+    : '';
+  const what = `${system}${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`;
+  const summary = failedSummary(c, what);
+  // A system's name keeps its capitals; an event's first letter is lowered after "The"
+  return `The ${system ? summary : summary.charAt(0).toLowerCase() + summary.slice(1)}`;
 }
 
 /** What the receiver holds, whether it has a receipt for this operation, and the facts that complicate it. */
@@ -320,10 +350,17 @@ export function proposedSummary(f: CaseFacts): string {
     p.disposition === 'resend'
       ? `resend the operation unchanged, on condition the receiver is at version ${str(p.expectedVersion)}`
       : `${humanize(p.disposition).toLowerCase()} without writing`;
+  // The specialists whose disagreement the coordinator kept, by name, with what each proposed instead
   const dissent = asArray(
     asObject(runs.filter((r) => r.role === 'coordinator').at(-1)?.result)?.disagreements,
-  ).length;
-  return sentence([`${who}: ${action}`, dissent ? `${plural(dissent, 'specialist dissent')} kept` : '']);
+  )
+    .map((d) => asObject(d) ?? {})
+    .map((d) => {
+      const name = runs.find((r) => r.memberCode === str(d.member))?.member?.name ?? humanize(str(d.member));
+      const said = /^[a-z_]+/.exec(str(d.said))?.[0];
+      return `${name} dissented${said ? `, proposing ${humanize(said).toLowerCase()}` : ''}`;
+    });
+  return sentence([`${who}: ${action}`, ...dissent.map((d) => `${d} (kept in the plan)`)]);
 }
 
 /** The gate's latest result and who or what released the write. */
@@ -335,7 +372,11 @@ export function decisionSummary(f: CaseFacts): string {
   const earlier = f.receipt.earlierApproval;
   return sentence([
     gate || 'the gate has not checked the plan yet',
-    by === 'Unknown' ? 'who released it is unknown' : by.charAt(0).toLowerCase() + by.slice(1),
+    f.c.state === 'awaiting_approval'
+      ? 'waiting for approval'
+      : by === 'Unknown'
+        ? 'who released it is unknown'
+        : by.charAt(0).toLowerCase() + by.slice(1),
     earlier ? earlier.charAt(0).toLowerCase() + earlier.slice(1) : '',
   ]);
 }

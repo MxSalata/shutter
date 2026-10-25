@@ -19,8 +19,7 @@ describe('clampHeadline', () => {
   });
 
   it('leaves a headline whose summary was not cut as it is', () => {
-    for (const id of ['C-000012', 'C-000020', 'C-000031'])
-      expect(clampHeadline(recorded(id))).toBe(recorded(id));
+    for (const id of ['C-000012', 'C-000031']) expect(clampHeadline(recorded(id))).toBe(recorded(id));
     expect(clampHeadline('Blocked at dispatch: the receiver could not be read (timeout)')).toBe(
       'Blocked at dispatch: the receiver could not be read (timeout)',
     );
@@ -63,8 +62,22 @@ describe('clampHeadline', () => {
     expect(clampHeadline(`Rejected by approver: ${cut}`)).toBe(`Rejected by approver: ${clampHeadline(cut)}`);
   });
 
+  it("reads the gate's headline as the checks that failed, without doubling Blocked or the raw codes", () => {
+    expect(
+      clampHeadline(
+        'Blocked by the gate: Blocked: ordering SUPERSEDED_BY_LATER_EVENT (policy 2026-10-20.1, stage proposal)',
+      ),
+    ).toBe('Blocked by the gate: the ordering check failed.');
+    expect(
+      clampHeadline(
+        'Blocked by the gate: Blocked: ordering SUPERSEDED_BY_LATER_EVENT, state_transition INVALID_TRANSITION (policy 2026-10-20.1, stage proposal)',
+      ),
+    ).toBe('Blocked by the gate: the ordering and state transition checks failed.');
+  });
+
   it('never leaves a recorded headline ending mid-word', () => {
     for (const c of Object.values(fixtures.cases)) {
+      if (c.summary.headline.startsWith('Blocked by the gate: ')) continue;
       const shown = clampHeadline(c.summary.headline);
       expect(shown === c.summary.headline || /[^\s.,;:(-]…$/.test(shown)).toBe(true);
     }

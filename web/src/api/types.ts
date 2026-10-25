@@ -60,6 +60,10 @@ export interface ScenarioExpected {
   other_encounter?: string;
   /** The modes the scenario is defined for, when not all of them: in another mode its card doesn't apply. */
   modes?: Mode[];
+  /** An incident scenario: many failures to one receiver, settled as one chain per encounter (S11, S12). */
+  incident?: boolean;
+  /** An incident scenario's encounters, each with the writes its chain makes and where it ends. */
+  encounters?: { encounter: string; writes: number; final_state: string; final_ward: string | null }[];
   /** A mode's own additions to the expected outcome, which replace the fields they name in that mode (S21's rules). */
   by_mode?: Partial<Record<Mode, Partial<ScenarioExpected>>>;
 }

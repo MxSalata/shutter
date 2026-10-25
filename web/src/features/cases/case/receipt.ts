@@ -133,7 +133,7 @@ function decider(
     case 'failed':
       return 'Nobody: the workflow failed';
     default:
-      return 'Not approved yet';
+      return 'Nobody yet';
   }
 }
 

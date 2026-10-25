@@ -646,8 +646,9 @@ function Profile({ view }: { view: SiteProfileView }) {
           />
           {shipped ? (
             <Alert color="blue" variant="light" title="Shutter is running on the shipped answers">
-              Check the twelve questions below and save them, changed or not, so Shutter acts as this site
-              does.
+              They are in force now, but they are defaults, not this site&apos;s choices. Check the twelve
+              questions below, change what differs here and save, or confirm them unchanged: either way they
+              are then recorded as this site&apos;s answers.
               {editable ? '' : ' An approver answers them.'}
             </Alert>
           ) : null}

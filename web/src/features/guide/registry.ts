@@ -46,7 +46,7 @@ export const CHAPTERS: GuideChapter[] = [
       {
         id: 'start',
         title: 'Start with S2, then S8',
-        text: 'Each scenario plays a real failure into the production. S2 shows a failed transfer recovered; S8 shows why a write may be withheld. Running a scenario sends test messages and changes the demonstration environment, so it is always your own action: the guide never runs one.',
+        text: "Each scenario plays a known HL7 ADT failure into the production; in the online demo, the runs are recorded. S2, Never-accepted transfer, still current, shows a failed transfer recovered; S8, Event times that can't be compared, shows why a write may be withheld. Running a scenario sends test messages and changes the demonstration environment, so it is always your own action: the guide never runs one.",
         place: { page: '/scenarios' },
         target: 'scenarios',
       },
@@ -73,7 +73,7 @@ export const CHAPTERS: GuideChapter[] = [
       {
         id: 'list',
         title: 'Every failed delivery opens a case',
-        text: 'The state says where a case stands; the disposition says how it was handled. Filter by state or scenario, for example to find the cases waiting for an approval.',
+        text: 'The state says where a case stands; the proposed action says what its plan proposed, which the gate can still stop. Filter by state or scenario, for example to find the cases waiting for approval.',
         place: { page: '/cases' },
         target: 'cases-list',
       },
@@ -108,7 +108,7 @@ export const CHAPTERS: GuideChapter[] = [
       {
         id: 'decision',
         title: 'The gate, the dry run and the release',
-        text: "The gate checks the plan and a dry run at the receiver rolls back. Then the write waits to be released; on this case, a person releases it with Approve. Approving is always your own action, never the guide's.",
+        text: "The gate checks the plan and a dry run at the receiver rolls back. Then the write waits to be released; on this case, a person releases it with Approve plan. Approving is always your own action, never the guide's.",
         place: { scenario: 'S2', mode: 'board' },
         target: 'case-decision',
         open: 'decision',

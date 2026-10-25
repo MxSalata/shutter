@@ -58,6 +58,12 @@ export default function LoginPage() {
               <Text size="sm" c="dimmed" ta="center">
                 {APP_TAGLINE}
               </Text>
+              {/* What it is for, in a line, before anyone signs in */}
+              <Text size="sm" ta="center">
+                For HL7 ADT feeds on InterSystems IRIS for Health: when a patient movement fails to reach a
+                downstream system, Shutter investigates why and writes a fix only when its gate passes and a
+                person, or the site&apos;s written policy, releases it.
+              </Text>
             </Stack>
             {message ? (
               <Alert color="red" variant="light" role="alert">

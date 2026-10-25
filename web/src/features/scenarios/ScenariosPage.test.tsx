@@ -101,6 +101,29 @@ describe('ScenariosPage', () => {
     expect(within(s).getByText('Nothing written')).toBeInTheDocument();
   });
 
+  it('says how many encounters an incident scenario opens and the writes their chains make in all', async () => {
+    renderScenarios();
+    for (const id of ['S11', 'S12']) {
+      const def = (definitions as unknown as Scenario[]).find((d) => d.id === id)!;
+      const encounters = def.expected!.encounters!;
+      const writes = encounters.reduce((n, e) => n + (e.writes || 0), 0);
+      const c = await card(id);
+      expect(
+        within(c).getByText(
+          `Opens one incident of ${encounters.length} encounters, each released as its own chain.`,
+        ),
+      ).toBeInTheDocument();
+      expect(within(c).getByText(`${writes} conditional writes in all`)).toBeInTheDocument();
+    }
+    // The catalogue's two incidents, as it defines them today
+    expect(within(await card('S11')).getByText(/of 6 encounters/)).toBeInTheDocument();
+    expect(within(await card('S12')).getByText(/of 4 encounters/)).toBeInTheDocument();
+    // A scenario of one case ends in a state, with no incident line
+    const s2 = await card('S2');
+    expect(within(s2).queryByText(/Opens one incident/)).not.toBeInTheDocument();
+    expect(within(s2).getByText(/^Ends /)).toBeInTheDocument();
+  });
+
   it('offers runs on a demo instance', async () => {
     const client = renderScenarios();
     await waitFor(() => expect(client.getQueryState(keys.health)?.status).toBe('success'));
