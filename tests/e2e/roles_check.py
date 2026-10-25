@@ -4,12 +4,14 @@
     python3 tests/e2e/roles_check.py [--url http://localhost:52773] [--timeout 60]
 
 Signs in as the demo users `operator` and `approver` (password from SHUTTER_PASSWORD, default "shutter") and checks
-that GET /me names each one's roles; that changing the agent library (PATCH /library/{code}) is refused to the
+that GET /me names each one's roles; that deciding a case's approval needs Shutter_Approve (403 for the operator);
+that changing the agent library (PATCH /library/{code}) is refused to the
 operator (403) and allowed to the approver (200), and the item is then put back as it was; that the operator drafts
-and sends an escalation, and the case's timeline names who sent it and the digest of the text sent; that closing a
-case by hand (POST /cases/{id}/close) is the operator's by default, with who, when and the reason on the case's record;
-and that with the site profile's approvers.close_needs_approver on, the operator is refused (403) and the approver
-closes the case. The profile is put back with the answers it had, saved from the API: from then on a change of the
+and sends an escalation, the edit refusing a second @, a line break in the subject and a field that is not a string,
+and the case's timeline names who sent it and the digest of the text sent; that closing a case by hand (POST
+/cases/{id}/close) is the operator's by default, with who, when and the reason on the case's record, cancels every
+pending email, and leaves no email to edit or send; and that with the site profile's approvers.close_needs_approver
+on, the operator is refused (403) and the approver closes the case, while a misspelt approvers key is refused (400). The profile is put back with the answers it had, saved from the API: from then on a change of the
 seed file no longer replaces it, as for any profile a person saved.
 
 It closes two cases that are escalated, blocked or failed, the newest first, so run it after the scenarios (CI runs it
@@ -22,6 +24,7 @@ import os
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 
@@ -104,6 +107,16 @@ def main():
     check("approver: GET /me says operator and approver",
           status == 200 and body.get("operator") is True and body.get("approver") is True, f"{status} {body}")
 
+    # ---- deciding needs Shutter_Approve, checked before the case or its state is read: any case serves ----
+    _, listing = operator.call("GET", "/cases?limit=1")
+    any_case = next((c["caseId"] for c in (listing or {}).get("items", [])), "")
+    if check("a case to decide on (run the scenarios first)", bool(any_case), listing):
+        status, body = operator.call("POST", f"/cases/{urllib.parse.quote(any_case)}/approvals",
+                                     {"decision": "approve", "planDigest": "sha256:0", "expectedVersion": 1}, idempotent=True)
+        check("operator: POST /cases/{id}/approvals is 403 forbidden, naming Shutter_Approve",
+              status == 403 and error_of(body) == "forbidden" and "Shutter_Approve" in (body or {}).get("detail", ""),
+              f"{status} {body}")
+
     # ---- the agent library: an approver's change ----
     status, library = approver.call("GET", "/library")
     if not check("GET /library: 200 with members", status == 200 and isinstance(library, list) and library, f"{status} {library}"):
@@ -173,6 +186,15 @@ def main():
             profile_changed = True
             check("the two-person rule switched off for the default", status == 200, f"{status} {body}")
 
+        # Two drafts the hand close must cancel, with any the case already had
+        drafts = []
+        for _ in range(2):
+            status, d = operator.call("POST", f"/cases/{first}/escalations", {}, idempotent=True)
+            check(f"operator: a draft on {first}: 201", status == 201 and (d or {}).get("state") == "draft", f"{status} {d}")
+            drafts.append(d or {})
+        _, items = operator.call("GET", f"/cases/{first}/escalations")
+        pending = sum(1 for x in items or [] if x.get("state") in ("draft", "queued"))
+
         reason = f"Corrected by hand at the receiver (roles check {stamp})"
         status, body = close(operator, first, reason)
         check(f"operator: POST /cases/{first}/close by default: 202 closing",
@@ -188,6 +210,24 @@ def main():
         check("its closure says who recorded it and why, and when it closed",
               closure.get("disposition") == "handled_by_hand" and closure.get("outcome") == f"Handled by hand, recorded by operator: {reason}"
               and bool(closure.get("closedAt")) and "operator" in (closure.get("actors") or []), closure)
+        _, items = operator.call("GET", f"/cases/{first}/escalations")
+        states = {x.get("seq"): x.get("state") for x in items or []}
+        check("the hand close cancelled both drafts", all(states.get(d.get("seq")) == "cancelled" for d in drafts), states)
+        check(f"and its state event counts the {pending} pending email(s) cancelled",
+              f"; {pending} pending email{'' if pending == 1 else 's'} cancelled" in event.get("text", ""), event.get("text"))
+        a = drafts[0]
+        status, body = operator.call("PATCH", f"/cases/{first}/escalations/{a.get('seq')}", {"subject": "x"}, idempotent=True)
+        check("operator: PATCH on a closed case's escalation is 409 wrong_state",
+              status == 409 and error_of(body) == "wrong_state" and (body or {}).get("detail", "").startswith("The case is resolved"),
+              f"{status} {body}")
+        status, body = operator.call("POST", f"/cases/{first}/escalations/{a.get('seq')}/send",
+                                     {"bodyDigest": a.get("bodyDigest")}, idempotent=True)
+        check("operator: a send on a closed case's escalation is 409 wrong_state",
+              status == 409 and error_of(body) == "wrong_state" and (body or {}).get("detail", "").startswith("The case is resolved"),
+              f"{status} {body}")
+        _, items = operator.call("GET", f"/cases/{first}/escalations")
+        check("and the draft is still cancelled",
+              next((x for x in items or [] if x.get("seq") == a.get("seq")), {}).get("state") == "cancelled", items)
 
         # ---- an escalation: the operator's, with who sent it and the digest of the text sent ----
         status, draft = operator.call("POST", f"/cases/{second}/escalations", {}, idempotent=True)
@@ -195,6 +235,16 @@ def main():
         check(f"operator: POST /cases/{second}/escalations: 201 draft with a recipient",
               status == 201 and draft.get("state") == "draft" and bool(draft.get("to")), f"{status} {draft}")
         seq, digest = draft.get("seq"), draft.get("bodyDigest")
+        # The address and subject rules at the edit: one bare address in the allowed domains, a subject of one line
+        for change, code, field, why in (
+            ({"to": "pas@example.nhs.uk@evil.com"}, "address_not_allowed", "to", "a second @"),
+            ({"subject": "x\r\nBcc: e@evil.com"}, "subject_not_allowed", "subject", "a line break in the subject"),
+        ):
+            status, body = operator.call("PATCH", f"/cases/{second}/escalations/{seq}", change, idempotent=True)
+            check(f"operator: PATCH with {why} is 422 {code} on {field}",
+                  status == 422 and error_of(body) == code and (body or {}).get("field") == field, f"{status} {body}")
+        status, body = operator.call("PATCH", f"/cases/{second}/escalations/{seq}", {"to": ["x"]}, idempotent=True)
+        check("operator: PATCH with a list for to is 400 bad_request", status == 400 and error_of(body) == "bad_request", f"{status} {body}")
         status, body = operator.call("POST", f"/cases/{second}/escalations/{seq}/send", {"bodyDigest": digest}, idempotent=True)
         check("operator: the send bound to the digest: 202 queued", status == 202 and (body or {}).get("sentBy") == "operator", f"{status} {body}")
 
@@ -216,6 +266,13 @@ def main():
         profile_changed = True
         check("approver: PUT /site-profile with approvers.close_needs_approver: 200",
               status == 200 and ((body or {}).get("profile", {}).get("approvers") or {}).get("close_needs_approver") is True, f"{status} {body}")
+        _, kept = approver.call("GET", "/site-profile")
+        status, body = put_profile({**saved, "approvers": {**(saved.get("approvers") or {}), "close_needs_aprover": True}})
+        check("approver: PUT /site-profile with a misspelt approvers key is 400, naming it",
+              status == 400 and error_of(body) == "bad_request"
+              and (body or {}).get("detail", "").endswith("approvers.close_needs_aprover: unknown setting"), f"{status} {body}")
+        _, now = approver.call("GET", "/site-profile")
+        check("and the stored profile's version is unchanged", (now or {}).get("version") == (kept or {}).get("version"), now)
         before = case(second)
         reason = f"Corrected by the team after escalation {seq} (roles check {stamp})"
         status, body = close(operator, second, reason)

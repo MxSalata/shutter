@@ -174,6 +174,7 @@ const KEY_LABELS: Record<string, string> = {
   wards_webapp: 'Downstream webapp',
   purge_task: 'Message purge task',
   message_days: 'Messages kept (days)',
+  escalation_days: 'Escalation texts kept (days)',
   shutter_production: "Shutter's production",
 };
 

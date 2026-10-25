@@ -252,9 +252,13 @@ export function useDecideApproval(caseId: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ decision, idempotencyKey }: { decision: ApprovalDecision; idempotencyKey: string }) =>
-      api.post<{ taskId: string; decision: string }>(`/cases/${seg(caseId)}/approvals`, decision, {
-        idempotencyKey,
-      }),
+      api.post<{ taskId: string; decision: string; caseId: string; approver: string }>(
+        `/cases/${seg(caseId)}/approvals`,
+        decision,
+        {
+          idempotencyKey,
+        },
+      ),
     onSettled: async () => {
       await client.invalidateQueries({ queryKey: keys.case(caseId) });
     },
@@ -299,6 +303,35 @@ export function useCloseCase(caseId: string) {
         { idempotencyKey },
       ),
     onSettled: async () => {
+      await client.invalidateQueries({ queryKey: keys.case(caseId) });
+      await client.invalidateQueries({ queryKey: keys.escalations(caseId) });
+    },
+  });
+}
+
+/**
+ * Abandon a case its workflow left in a working state (CONTRACTS 5): approver only, refused with 409 busy while the
+ * workflow has a message in flight. The case then fails with disposition abandoned and can be reinvestigated.
+ */
+export function useAbandonCase(caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      reason,
+      expectedVersion,
+      idempotencyKey,
+    }: {
+      reason: string;
+      expectedVersion: number;
+      idempotencyKey: string;
+    }) =>
+      api.post<{ caseId: string; state: string; requestedBy: string; reason: string }>(
+        `/cases/${seg(caseId)}/abandon`,
+        { reason, expectedVersion },
+        { idempotencyKey },
+      ),
+    onSettled: async () => {
+      // The case's key is the prefix of its parts (events, closure, approvals), so they refetch too.
       await client.invalidateQueries({ queryKey: keys.case(caseId) });
       await client.invalidateQueries({ queryKey: keys.escalations(caseId) });
     },
@@ -419,7 +452,7 @@ export function useDecideIncident(incidentId: string) {
       chainSeq?: number;
       idempotencyKey: string;
     }) =>
-      api.post<{ taskId: string; decision: string; incidentId: string; chainSeq?: number }>(
+      api.post<{ taskId: string; decision: string; incidentId: string; chainSeq?: number; approver: string }>(
         chainSeq === undefined
           ? `/incidents/${seg(incidentId)}/approvals`
           : `/incidents/${seg(incidentId)}/chains/${chainSeq}/approvals`,

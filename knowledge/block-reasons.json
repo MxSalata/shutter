@@ -89,11 +89,11 @@
     {
       "code": "SUPERSEDED_BY_LATER_EVENT",
       "title": "A later event made this movement obsolete",
-      "prerequisite": "No later location event that supersedes this one: a transfer or discharge the downstream system applied, or a later transfer the PAS sent whose delivery failed too (ELS-2.1, ELS-2.3)",
+      "prerequisite": "No later location event that supersedes this one: a transfer or discharge the downstream system applied, a later transfer the PAS sent whose delivery failed too, or a later cancel, merge or admission the downstream system applied (ELS-2.1, ELS-2.3)",
       "next_action": "Close the case as superseded, recording the superseding event. Nothing is sent.",
       "owner": "Operator",
       "reevaluate_when": "Only if the later event is itself reversed",
-      "text": "The encounter has a later transfer or discharge with a plausible event time: one the downstream system applied, or a later transfer the PAS sent whose delivery failed too, which its own case recovers. Resending would move the patient's record backwards."
+      "text": "The encounter has a later transfer or discharge with a plausible event time: one the downstream system applied, a later transfer the PAS sent whose delivery failed too, which its own case recovers, or a later cancel, merge or admission the downstream system applied. Resending would move the patient's record backwards."
     },
     {
       "code": "SUPERSESSION_UNSUPPORTED",

@@ -16,6 +16,7 @@ import { ApprovalPanel } from './case/ApprovalPanel';
 import { ExecutionPanel } from './case/ExecutionPanel';
 import { OutcomePanel } from './case/OutcomePanel';
 import { EscalationPanel } from './case/EscalationPanel';
+import { AbandonPanel } from './case/AbandonPanel';
 import { CaseTimeline } from './case/CaseTimeline';
 
 /** The portal's base path (/csp/<namespace>/) for links to messages, read from the case's trace link. */
@@ -78,6 +79,7 @@ export default function CasePage() {
               portalBase={portalBase(detail.links?.visualTrace)}
             />
             <EscalationPanel c={detail} />
+            <AbandonPanel c={detail} events={events.data} />
             <FailurePanel c={detail} />
             <EvidencePanel caseId={caseId} open={open} />
             <PlanPanel view={plan.data} loading={plan.isPending} />

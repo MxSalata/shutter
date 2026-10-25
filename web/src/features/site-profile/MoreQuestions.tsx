@@ -247,7 +247,7 @@ function Teams({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: Set
         <ListInput
           id="site-mail-allowed_domains"
           label="Mail domains allowed for the teams"
-          description="Every team mailbox and copy, and every address typed into an escalation, must be in one of these or a subdomain (nhs.net takes trust.nhs.net); empty allows any"
+          description="Every team mailbox and copy, and every address typed into an escalation, must be in one of these or a subdomain (nhs.net takes trust.nhs.net); empty allows none: a team mailbox needs a domain first"
           value={draft.mail?.allowed_domains ?? []}
           onList={(list) =>
             setDraft((d) => {

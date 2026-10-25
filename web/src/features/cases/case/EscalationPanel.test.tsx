@@ -1,13 +1,13 @@
 import { MantineProvider } from '@mantine/core';
 import { Notifications, notifications } from '@mantine/notifications';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { SiteProfile } from '@/api/types';
-import fixtures from '@/mocks/fixtures.json';
+import type { Escalation } from '@/api/types';
+import { recordedSiteProfile } from '@/mocks/profile';
 import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
 import { theme } from '@/theme';
@@ -72,9 +72,7 @@ describe('EscalationPanel', () => {
   });
 
   it("checks the addresses against the site's allowed domains as they are typed", async () => {
-    const view = structuredClone(
-      (fixtures as unknown as { siteProfile: { profile: SiteProfile } }).siteProfile,
-    );
+    const view = recordedSiteProfile()!;
     view.profile.mail = { allowed_domains: ['nhs.uk'] };
     server.use(http.get('/api/shutter/site-profile', () => HttpResponse.json(view)));
     renderCase('C-000008');
@@ -93,7 +91,7 @@ describe('EscalationPanel', () => {
     await userEvent.type(to, 'bed.management@trust.nhs.uk');
     await userEvent.type(within(dialog).getByRole('textbox', { name: /Cc/ }), 'oncall');
     expect(within(dialog).getByRole('textbox', { name: /Cc/ })).toHaveAccessibleDescription(
-      /Not allowed: oncall: must be an address/,
+      /Not allowed: oncall: must be one address with one @/,
     );
     expect(within(dialog).getByRole('button', { name: 'Send' })).toBeDisabled();
     expect(sent).toEqual([{ path: '/api/shutter/cases/C-000008/escalations', body: {} }]);
@@ -106,7 +104,7 @@ describe('EscalationPanel', () => {
           {
             error: 'address_not_allowed',
             field: 'cc',
-            detail: 'The cc address is not allowed: it@trust.nhs.uk: not in the allowed domains',
+            detail: 'The cc address is not allowed: it@example.nhs.uk: not in the allowed domains',
           },
           { status: 422 },
         ),
@@ -116,12 +114,15 @@ describe('EscalationPanel', () => {
     const panel = await screen.findByRole('region', { name: 'Escalations' });
     await userEvent.click(within(panel).getByRole('button', { name: /Escalate to system administrators/ }));
     const dialog = await screen.findByRole('dialog', { name: 'Escalate to system administrators' });
-    await userEvent.type(within(dialog).getByRole('textbox', { name: /To/ }), 'bed.management@trust.nhs.uk');
+    // Addresses the page lets through, which the server refuses: the domains changed meanwhile
+    const to = within(dialog).getByRole('textbox', { name: /To/ });
+    await userEvent.clear(to);
+    await userEvent.type(to, 'bed.management@example.nhs.uk');
     const cc = within(dialog).getByRole('textbox', { name: /Cc/ });
-    await userEvent.type(cc, 'it@trust.nhs.uk');
+    await userEvent.type(cc, 'it@example.nhs.uk');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Send' }));
     await waitFor(() =>
-      expect(cc).toHaveAccessibleDescription(/The cc address is not allowed: it@trust\.nhs\.uk/),
+      expect(cc).toHaveAccessibleDescription(/The cc address is not allowed: it@example\.nhs\.uk/),
     );
     expect(within(dialog).getByRole('alert')).toHaveTextContent('Nothing was sent');
     // Changing the address clears the server's word on it
@@ -185,9 +186,7 @@ describe('EscalationPanel', () => {
   });
 
   it("keeps the closing from an operator where the site's two-person rule needs an approver", async () => {
-    const view = structuredClone(
-      (fixtures as unknown as { siteProfile: { profile: SiteProfile } }).siteProfile,
-    );
+    const view = recordedSiteProfile()!;
     view.profile.approvers = { ...view.profile.approvers, close_needs_approver: true };
     server.use(http.get('/api/shutter/site-profile', () => HttpResponse.json(view)));
     resetMock('operator');
@@ -202,9 +201,7 @@ describe('EscalationPanel', () => {
   });
 
   it('offers an approver the closing under the two-person rule', async () => {
-    const view = structuredClone(
-      (fixtures as unknown as { siteProfile: { profile: SiteProfile } }).siteProfile,
-    );
+    const view = recordedSiteProfile()!;
     view.profile.approvers = { ...view.profile.approvers, close_needs_approver: true };
     server.use(http.get('/api/shutter/site-profile', () => HttpResponse.json(view)));
     renderCase('C-000012');
@@ -227,6 +224,96 @@ describe('EscalationPanel', () => {
       await within(panel).findByText('Escalating and marking a case handled need the operator role.'),
     ).toBeInTheDocument();
     expect(within(panel).queryByRole('button', { name: /Mark as handled/ })).not.toBeInTheDocument();
+  });
+
+  it('refuses a second @ and, with no allowed domains in the profile, every address', async () => {
+    renderCase('C-000008');
+    const panel = await screen.findByRole('region', { name: 'Escalations' });
+    await userEvent.click(within(panel).getByRole('button', { name: /Escalate to system administrators/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Escalate to system administrators' });
+    const to = within(dialog).getByRole('textbox', { name: /To/ });
+    await waitFor(() => expect(to).toHaveAccessibleDescription(/in example\.nhs\.uk/));
+    await userEvent.clear(to);
+    await userEvent.type(to, 'a@nhs.net@evil.com');
+    expect(to).toHaveAccessibleDescription(
+      /Not allowed: a@nhs\.net@evil\.com: must be one address with one @/,
+    );
+    expect(within(dialog).getByRole('button', { name: 'Send' })).toBeDisabled();
+  });
+
+  it('allows no address while the site profile names no mail domains', async () => {
+    const view = recordedSiteProfile()!;
+    view.profile.mail = {};
+    server.use(http.get('/api/shutter/site-profile', () => HttpResponse.json(view)));
+    renderCase('C-000008');
+    const panel = await screen.findByRole('region', { name: 'Escalations' });
+    await userEvent.click(within(panel).getByRole('button', { name: /Escalate to system administrators/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Escalate to system administrators' });
+    const to = within(dialog).getByRole('textbox', { name: /To/ });
+    await userEvent.clear(to);
+    await userEvent.type(to, 'bed.management@example.nhs.uk');
+    expect(to).toHaveAccessibleDescription(
+      /bed\.management@example\.nhs\.uk: no allowed mail domains are set in the site profile \(mail\.allowed_domains\)/,
+    );
+    expect(within(dialog).getByRole('button', { name: 'Send' })).toBeDisabled();
+  });
+
+  it('keeps a control character out of the subject, and shows the server refusing one on the subject', async () => {
+    server.use(
+      http.patch('/api/shutter/cases/:id/escalations/:seq', () =>
+        HttpResponse.json(
+          {
+            error: 'subject_not_allowed',
+            field: 'subject',
+            detail: 'The subject must not contain line breaks or control characters',
+          },
+          { status: 422 },
+        ),
+      ),
+    );
+    renderCase('C-000008');
+    const panel = await screen.findByRole('region', { name: 'Escalations' });
+    await userEvent.click(within(panel).getByRole('button', { name: /Escalate to system administrators/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Escalate to system administrators' });
+    const subject = within(dialog).getByRole('textbox', { name: 'Subject' });
+    // A text input drops CR and LF from its value, so the control character here is a tab, which it keeps
+    fireEvent.change(subject, { target: { value: 'x\tBcc: e@evil.com' } });
+    expect(subject).toHaveAccessibleDescription(
+      /Not allowed: must not contain line breaks or control characters/,
+    );
+    expect(within(dialog).getByRole('button', { name: 'Send' })).toBeDisabled();
+    // A subject the page lets through but the server refuses: its word shows on the field it names
+    fireEvent.change(subject, { target: { value: 'Correct encounter by hand' } });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Send' }));
+    await waitFor(() =>
+      expect(subject).toHaveAccessibleDescription(/The subject must not contain line breaks/),
+    );
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Nothing was sent');
+  });
+
+  it('shows the digest, not the text, of an escalation the retention task purged, and offers no send', async () => {
+    const purged: Escalation = {
+      caseId: 'C-000008',
+      seq: 1,
+      state: 'failed',
+      teamName: 'Integration team',
+      to: 'integration@example.nhs.uk',
+      subject: 'Correct encounter by hand',
+      body: '',
+      bodyDigest: 'sha256:abc123',
+      result: 'The mail server refused the message',
+      purgedAt: '2026-10-20T09:00:00Z',
+    };
+    server.use(http.get('/api/shutter/cases/:id/escalations', () => HttpResponse.json([purged])));
+    renderCase('C-000008');
+    const panel = await screen.findByRole('region', { name: 'Escalations' });
+    await userEvent.click(await within(panel).findByRole('button', { name: /Escalation 1/ }));
+    expect(
+      await within(panel).findByText(
+        /^Text removed on .* by the retention task; digest of the text sent sha256:abc123$/,
+      ),
+    ).toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: /Check and send/ })).not.toBeInTheDocument();
   });
 
   it('is not offered on a case Shutter resolved', async () => {

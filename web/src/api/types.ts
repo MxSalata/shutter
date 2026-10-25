@@ -25,7 +25,8 @@ export const CLOSED_STATES: readonly CaseState[] = ['resolved', 'blocked', 'esca
 
 export type Mode = 'board' | 'single' | 'rules' | 'policy';
 
-export type Disposition = 'resend' | 'reconcile' | 'superseded' | 'more_evidence' | 'escalate';
+export type Disposition =
+  'resend' | 'reconcile' | 'superseded' | 'more_evidence' | 'escalate' | 'handled_by_hand' | 'abandoned';
 
 export interface Me {
   username: string;
@@ -323,6 +324,10 @@ export interface Approval {
   revokedBy: string;
   workflowTaskId: string;
   comment: string;
+  /** Set only on an approval given under an incident's: the incident plan's digest, and the entry and outcome it covered. */
+  incidentPlanDigest?: string;
+  boundEntry?: string;
+  boundOutcome?: string;
 }
 
 export interface WorkflowTask {
@@ -336,7 +341,8 @@ export interface WorkflowTask {
   assignedTo: string;
   timeCreated: string;
   timeCompleted: string;
-  planDigest: string;
+  /** The digest the decider named: empty while the task is open. */
+  planDigest?: string;
 }
 
 export interface ApprovalsView {
@@ -357,7 +363,8 @@ export interface Attempt {
 
 export interface Verification {
   at: string;
-  outcome: 'verified' | 'unresolved' | 'failed' | string;
+  /** failed: the receiver contradicts itself or the plan, a person must check; not_committed: the write did not land. */
+  outcome: 'verified' | 'not_committed' | 'unresolved' | 'failed' | string;
   summary: string;
   detail: unknown;
 }
@@ -391,8 +398,16 @@ export interface BlockedReason {
 
 export interface BlindResendPreview {
   wouldApply: boolean;
+  /** would_apply or would_not_apply for a dry run the receiver rolled back; anything else is not one. */
+  outcome: string;
+  /** True when the receiver wrote the preview: it does not honour dry_run, and the operation is now in effect. */
+  applied: boolean;
   reason: string;
   encounterAfter: unknown;
+  /** The receiver version and epoch the dry run was checked against. */
+  checkedAgainst: { version: number | null; epoch: number | null };
+  /** A preview is conditional on no version. */
+  expectedVersion: null;
   note: string;
 }
 
@@ -579,6 +594,8 @@ export interface Escalation {
   /** smtp, or file when no mail server is configured. */
   transport?: string;
   result?: string;
+  /** When the retention task removed the text: body is then empty, and bodyDigest is what was sent. */
+  purgedAt?: string;
 }
 
 export interface SiteTeam {
@@ -624,7 +641,7 @@ export interface SiteProfile {
   merges?: string;
   policy: Record<string, Partial<Record<ChainKind, string>>>;
   /** close_needs_approver: closing a case by hand needs an approver (the two-person rule); off when absent. */
-  approvers?: { role?: string; escalation?: string; close_needs_approver?: boolean; [key: string]: unknown };
+  approvers?: { role?: string; escalation?: string; close_needs_approver?: boolean };
   incident?: { threshold?: number; window_minutes?: number; quiet_seconds?: number };
   /** Who corrects the systems by hand when Shutter can't, and where their email goes (T29). */
   teams?: SiteTeam[];
@@ -684,6 +701,8 @@ export interface AgentItem {
   providerConfig?: string;
   maxIterations?: number | string;
   tokenBudget?: number | string;
+  /** Who answers a run that goes to a model: the API mimic while it is on, else the provider configuration; absent when replaying. */
+  answeredBy?: string;
 }
 
 export interface ModelPrice {
@@ -709,6 +728,13 @@ export interface Settings {
   prices: ModelPrice[];
   aiHubPresent: boolean;
   liveRunnerPresent: boolean;
+  /**
+   * The API mimic (tests/mock), a test fixture that answers live runs without a model: on, the configuration it set and
+   * the model name it answers as. effectiveMode stays "live" for the items it answers.
+   */
+  mock?: boolean;
+  mockConfig?: string;
+  mockModel?: string;
 }
 
 export interface Costs {

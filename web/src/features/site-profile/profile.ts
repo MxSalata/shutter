@@ -127,29 +127,70 @@ const members = (x: object): [string, unknown][] =>
 const ZONES = ['UTC', 'Europe/London'];
 const FIXED_OFFSET = /^[+-](0[0-9]|1[0-4]):[0-5][0-9]$/;
 
+// The ports of Shutter.Util.Mail (CONTRACTS 10): the same address passes or fails here as at the server.
+// $ZSTRIP's C class: $CHAR(0) to $CHAR(31) and $CHAR(127) to $CHAR(159).
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
+const DOMAIN = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
+
+/** The port of ControlProblem: "" when the text has no line break or other control character. */
+export function controlProblem(text: string): string {
+  return CONTROL.test(text) ? 'must not contain line breaks or control characters' : '';
+}
+
+/** The port of DomainProblem: "" when the text is a domain name, case ignored and whitespace not stripped. */
+function domainProblem(domain: string): string {
+  const d = domain.toLowerCase();
+  return d !== '' && d.length <= 253 && DOMAIN.test(d)
+    ? ''
+    : 'must be a domain name such as example.nhs.uk (letters, digits, hyphens and dots)';
+}
+
+/** The port of ShapeProblem: "" when the text is one bare address, local@domain. */
+function shapeProblem(address: string): string {
+  const control = controlProblem(address);
+  if (control) return control;
+  const parts = address.split('@');
+  if (parts.length !== 2) return 'must be one address with one @';
+  if (/\s/.test(address) || /[<>,;"()[\]\\]/.test(address))
+    return 'must be a bare address, local@domain, with no display name, brackets or spaces';
+  if (parts[0] === '' || parts[1] === '') return 'must be an address';
+  if (domainProblem(parts[1])) return 'the domain is not a valid domain name';
+  return '';
+}
+
+/** The port of Domains: each allowed domain trimmed and lowercased, empty entries left out. */
+function allowedDomains(domains: unknown[]): string[] {
+  return domains
+    .filter((d): d is string => typeof d === 'string')
+    .map((d) => d.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/** The port of AddressProblem: "" when fine, else why the address is refused. No allowed domains allow no address. */
+function mailboxProblem(mailbox: string, domains: string[]): string {
+  const shape = shapeProblem(mailbox);
+  if (shape) return shape;
+  if (domains.length === 0)
+    return 'no allowed mail domains are set in the site profile (mail.allowed_domains)';
+  const domain = mailbox.split('@')[1].toLowerCase();
+  return domains.some((d) => domain === d || domain.endsWith(`.${d}`)) ? '' : 'not in the allowed domains';
+}
+
 /**
- * The port of AddressesProblem: the first address of a comma-separated list that is not an address, or not in the
- * allowed domains when there are any, as "<address>: <why>"; "" when every address is fine.
+ * The port of AddressesProblem: the first address of a comma-separated list that is not one bare address inside the
+ * allowed domains, as "<address>: <why>"; "" when every address is fine. A control character anywhere refuses the list.
  */
 export function addressesProblem(list: string, domains: string[] = []): string {
-  const allowed = domains.filter(Boolean).map((d) => d.toLowerCase());
+  const control = controlProblem(list);
+  if (control) return control;
+  const allowed = allowedDomains(domains);
   for (const a of list.split(',').map((x) => x.trim())) {
     if (!a) continue;
     const problem = mailboxProblem(a, allowed);
     if (problem) return `${a}: ${problem}`;
   }
   return '';
-}
-
-/** The port of MailboxProblem: "" when fine, else why the mailbox is refused. */
-function mailboxProblem(mailbox: string, domains: string[]): string {
-  const at = mailbox.indexOf('@');
-  const local = at < 0 ? '' : mailbox.slice(0, at);
-  const host = at < 0 ? '' : mailbox.slice(at + 1).split('@')[0];
-  if (at < 0 || local === '' || host === '') return 'must be an address';
-  if (domains.length === 0) return '';
-  const domain = host.toLowerCase();
-  return domains.some((d) => domain === d || domain.endsWith(`.${d}`)) ? '' : 'not in the allowed domains';
 }
 
 /** The port of SiteProfile.Validate: "" when the profile is valid, else the server's message for the first problem. */
@@ -221,15 +262,18 @@ export function validateProfile(p: unknown): string {
         return `policy.${tier}.${kind}: must be automatic, approval, per_chain or board`;
     }
   }
-  if ('approvers' in p && !isObject(p.approvers)) return 'approvers: must be an object';
-  // The two-person rule for closing a case by hand: off unless the site says so.
-  if (
-    isObject(p.approvers) &&
-    !Array.isArray(p.approvers) &&
-    'close_needs_approver' in p.approvers &&
-    typeof p.approvers.close_needs_approver !== 'boolean'
-  )
-    return 'approvers.close_needs_approver: must be true or false';
+  // Who approves what; close_needs_approver is the two-person rule for closing a case by hand, off unless the site says
+  // so. Every key is named, so a misspelt switch cannot pass as off.
+  if ('approvers' in p) {
+    if (!isObject(p.approvers) || Array.isArray(p.approvers)) return 'approvers: must be an object';
+    for (const [k, v] of members(p.approvers)) {
+      if (!['role', 'escalation', 'close_needs_approver'].includes(k))
+        return `approvers.${k}: unknown setting`;
+      if (k === 'close_needs_approver' && typeof v !== 'boolean')
+        return 'approvers.close_needs_approver: must be true or false';
+      if (k !== 'close_needs_approver' && typeof v !== 'string') return `approvers.${k}: must be a string`;
+    }
+  }
   // The feed: the time zone of timestamps that carry no offset.
   if ('feed' in p) {
     if (!isObject(p.feed)) return 'feed: must be an object';
@@ -247,19 +291,26 @@ export function validateProfile(p: unknown): string {
       if (typeof v !== 'boolean') return `model_content.${k}: must be true or false`;
     }
   }
-  // The teams an escalation can go to, and the mail rules.
-  const domains: string[] = [];
+  // The teams an escalation can go to, and the mail rules: the sender and every mailbox are bare addresses, and a
+  // mailbox needs a domain in mail.allowed_domains, so a team while the list is empty or absent is refused.
+  let domains: string[] = [];
   if ('mail' in p) {
     if (!isObject(p.mail)) return 'mail: must be an object';
     for (const [k, v] of members(p.mail)) {
       if (!['from', 'allowed_domains'].includes(k)) return `mail.${k}: unknown setting`;
-      if (k === 'from' && typeof v !== 'string') return 'mail.from: must be a string';
+      if (k === 'from') {
+        if (typeof v !== 'string') return 'mail.from: must be a string';
+        const problem = v === '' ? '' : shapeProblem(v);
+        if (problem) return `mail.from: ${problem}`;
+      }
       if (k === 'allowed_domains') {
         if (!Array.isArray(v)) return 'mail.allowed_domains: must be an array of domains';
         for (const [j, d] of members(v)) {
           if (typeof d !== 'string' || d === '') return `mail.allowed_domains[${j}]: must be a domain`;
-          domains.push(d.toLowerCase());
+          const problem = domainProblem(d);
+          if (problem) return `mail.allowed_domains[${j}]: ${problem}`;
         }
+        domains = allowedDomains(v);
       }
     }
   }

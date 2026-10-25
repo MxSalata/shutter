@@ -157,19 +157,38 @@ def play(args, operator, approver, scenario, mode):
             return c
         if c["state"] == "awaiting_approval" and args.approve and not approved and run_state() != "running":
             _, view = operator.call("GET", f"/cases/{urllib.parse.quote(case['caseId'])}/plan")
+            # The body names someone else: the approver of record must still be the signed-in user
             decision = {"decision": "approve", "planDigest": view["plan"]["digest"], "expectedVersion": c["version"],
-                        "comment": "scenario check"}
+                        "comment": "scenario check", "user": "mallory"}
             status, body = approver.call("POST", f"/cases/{urllib.parse.quote(case['caseId'])}/approvals", decision,
                                          idempotent=True)
             if status != 202:
                 raise RuntimeError(f"the approval was refused: HTTP {status} {body}")
+            if (body or {}).get("approver") != "approver":
+                raise RuntimeError(f"the approval was recorded for {(body or {}).get('approver')!r}, not approver")
             approved = True
         if c["state"] == "awaiting_approval" and not args.approve:
             return c
         return None
 
     final = wait(f"{scenario['id']} {case['caseId']}: the outcome", settled, args.timeout)
+    if approved:
+        approver_of_record(operator, case["caseId"])
     return judge(args, operator, scenario, mode, final)
+
+
+def approver_of_record(operator, case_id):
+    """Raises unless the case's approval, and the Workflow task it completed, name the signed-in approver."""
+    _, a = operator.call("GET", f"/cases/{urllib.parse.quote(case_id)}/approvals")
+    approvals = (a or {}).get("approvals") or []
+    # The one that stands; a verification that found the write not committed revokes it, which leaves the last one
+    current = [x for x in approvals if not x.get("revoked")] or approvals
+    if not current or current[-1].get("approver") != "approver":
+        raise RuntimeError(f"the approval of record is not approver: {current[-1:]}")
+    tasks = {str(t.get("taskId")): t for t in (a or {}).get("tasks") or []}
+    task = tasks.get(str(current[-1].get("workflowTaskId")))
+    if not task or task.get("userName") != "approver":
+        raise RuntimeError(f"the approval's task is not approver's: {task}")
 
 
 def path_of(chain):
