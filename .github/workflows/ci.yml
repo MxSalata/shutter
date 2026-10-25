@@ -86,8 +86,12 @@ jobs:
       # system libraries come with it (a GitHub cache restore once reported a hit without the headless shell)
       - name: Install Playwright's Chromium
         run: npx playwright install --with-deps chromium
+      # A free port of its own for the demo preview, since runners can share one host
       - name: Accessibility of every screen in every appearance (axe-core, WCAG 2.1 A/AA)
-        run: npm run test:e2e
+        run: |
+          E2E_PORT=$(node -e "const s = require('net').createServer(); s.listen(0, '127.0.0.1', () => { console.log(s.address().port); s.close(); })")
+          export E2E_PORT
+          npm run test:e2e
         env:
           CI: 'true'
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -186,28 +190,39 @@ jobs:
   # S21, a transfer in the hour the clocks go back, in rules-only and site-policy modes; then the operator's and the
   # approver's routes, the attempts to break the approval boundary, and the production review.
   iris:
-    name: IRIS (the downstream system's contract, scenarios in replay)
+    name: IRIS ${{ matrix.shard }} (the downstream system's contract, scenarios in replay)
     runs-on: [self-hosted, house]
+    # Three shards, each on its own IRIS, so the scenarios run side by side when several runners are free: the board's
+    # scenarios and the routes (which need their cases), the site-policy and rules scenarios, and the in-process tests
+    # with the boundary and the production review.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [board, policy, checks]
     if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
     timeout-minutes: 45
     env:
-      IRIS_URL: http://localhost:52773
+      # A name of this run's own: runners that share one Docker must never touch another job's container
+      CTR: ci-${{ github.run_id }}-${{ github.run_attempt }}-iris-${{ matrix.shard }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
-      # The runner keeps Docker between jobs: a container a cancelled run left behind would hold the name and the port
+      # Docker picks a free host port on the loopback interface, so jobs side by side never compete for one
       - name: Start IRIS with the repository mounted
-        run: >-
-          docker rm -f iris shutter > /dev/null 2>&1 || true;
-          docker run -d --name iris -p 52773:52773 -v "$GITHUB_WORKSPACE:/home/irisowner/dev:ro" "$IRIS_IMAGE"
-          --check-caps false --ISCAgent false
+        run: |
+          docker rm -f "$CTR" > /dev/null 2>&1 || true
+          docker run -d --name "$CTR" -p 127.0.0.1::52773 -v "$GITHUB_WORKSPACE:/home/irisowner/dev:ro" "$IRIS_IMAGE" \
+            --check-caps false --ISCAgent false
+          port=$(docker port "$CTR" 52773/tcp | head -1 | sed 's/.*://')
+          echo "IRIS_URL=http://127.0.0.1:$port" >> "$GITHUB_ENV"
+          echo "IRIS answers on http://127.0.0.1:$port"
       # The official image ships its accounts' passwords expired; the demonstration password SYS stays.
       - name: Wait for IRIS, lift the expired passwords, and wait for the Atelier API
         run: |
           for i in $(seq 1 60); do
-            if docker exec iris iris session IRIS -U %SYS '##class(Security.Users).UnExpireUserPasswords("*")' > /dev/null 2>&1; then
+            if docker exec "$CTR" iris session IRIS -U %SYS '##class(Security.Users).UnExpireUserPasswords("*")' > /dev/null 2>&1; then
               echo "IRIS took commands after $((i*5)) s"
               break
             fi
@@ -220,7 +235,7 @@ jobs:
             sleep 5
           done
           echo "The Atelier API did not come up (last HTTP status: '$code')"
-          docker logs iris 2>&1 | tail -80
+          docker logs "$CTR" 2>&1 | tail -80
           exit 1
       # The namespace and the installer run in an IRIS terminal session, as iris.script runs them in the image: IRIS for
       # Health's installer and the production's start write their progress to the current device, which over the SQL
@@ -229,7 +244,7 @@ jobs:
         run: |
           python3 scripts/iris-load.py --url "$IRIS_URL" --ns USER src/Shutter/Setup.cls
           out=$(printf '%s\n' 'Set r = ##class(Shutter.Setup).CreateNamespace("SHUTTER") Write !,"RESULT: ",r,!' 'Halt' \
-            | docker exec -i iris iris session IRIS -U USER)
+            | docker exec -i "$CTR" iris session IRIS -U USER)
           echo "$out" | tail -20
           echo "$out" | grep -q '^RESULT: ok'
       - name: Load and compile the core, the downstream system and its tests
@@ -237,7 +252,7 @@ jobs:
       - name: Install (roles, demo users, web applications, the production)
         run: |
           out=$(printf '%s\n' 'Set r = ##class(Shutter.Setup).Install("/home/irisowner/dev/") Write !,"RESULT: ",r,!' 'Halt' \
-            | docker exec -i iris iris session IRIS -U SHUTTER)
+            | docker exec -i "$CTR" iris session IRIS -U SHUTTER)
           echo "$out" | tail -30
           echo "$out" | grep -q '^RESULT: ok'
       # The demo hospital (shape A): its own namespace, with Shutter's packages mapped from SHUTTER, and its production,
@@ -247,14 +262,15 @@ jobs:
         run: |
           python3 scripts/iris-load.py --url "$IRIS_URL" --ns SHUTTER Installer.cls
           out=$(printf '%s\n' 'Set r = ##class(Shutter.Installer).RunHospital("SHUTTER") Write !,"RESULT: ",r,!' 'Halt' \
-            | docker exec -i iris iris session IRIS -U SHUTTER)
+            | docker exec -i "$CTR" iris session IRIS -U SHUTTER)
           echo "$out" | tail -20
           echo "$out" | grep -q '^RESULT: ok'
           out=$(printf '%s\n' 'Set r = ##class(Hospital.Setup).Install("SHUTTER") Write !,"RESULT: ",r,!' 'Halt' \
-            | docker exec -i iris iris session IRIS -U HOSPITAL)
+            | docker exec -i "$CTR" iris session IRIS -U HOSPITAL)
           echo "$out" | tail -20
           echo "$out" | grep -q '^RESULT: ok'
       - name: The downstream system's contract tests, in process
+        if: matrix.shard == 'checks'
         run: |
           out=$(python3 scripts/iris-sql.py --url "$IRIS_URL" --ns SHUTTER --json "SELECT Downstream_Test.Run_Contract() AS r")
           echo "$out"
@@ -266,6 +282,7 @@ jobs:
       # The trigger table, merges and cancels, the gate's checks, the matcher's conditions, supersession, the model view
       # and the case's writes
       - name: Shutter's unit tests, in process
+        if: matrix.shard == 'checks'
         run: |
           out=$(python3 scripts/iris-sql.py --url "$IRIS_URL" --ns SHUTTER --json "SELECT Shutter_Test.Run_Triggers() AS r")
           echo "$out"
@@ -275,12 +292,15 @@ jobs:
           r = json.loads(r) if isinstance(r, str) else r
           sys.exit(0 if r.get("failed") == 0 and r.get("passed", 0) > 0 else 1)'
       - name: The downstream system's API over HTTP
+        if: matrix.shard == 'board'
         run: python3 tests/e2e/downstream_api_check.py --url "$IRIS_URL" --second-user downstream-client --second-password shutter
       - name: Scenarios S1 to S10, S13, S15 and S16 end to end on the board, in replay
+        if: matrix.shard == 'board'
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --approve S1 S2 S3 S4 S5 S6 S7 S8 S9 S10 S13 S15 S16
       # What the model would see of a case: tokens for the hospital number and the visit number, never the values, and
       # never the NHS number PID-3 carries beside the hospital number.
       - name: The model's view of a case carries tokens, not identifiers
+        if: matrix.shard == 'board'
         run: |
           out=$(python3 scripts/iris-sql.py --url "$IRIS_URL" --ns SHUTTER --json "SELECT Shutter_Util.ModelView_Preview('C-000001') AS p")
           echo "$out" | head -40
@@ -290,6 +310,7 @@ jobs:
       # Times without an offset are read in the feed's zone: British Summer Time in July, GMT in January, and the hour
       # before the October clock change flagged.
       - name: Event times in the feed's time zone
+        if: matrix.shard == 'board'
         run: |
           out=$(python3 scripts/iris-sql.py --url "$IRIS_URL" --ns SHUTTER --json "SELECT Shutter_Util.Time_Probe('20260715094500', 'Europe/London') AS summer, Shutter_Util.Time_Probe('20260115094500', 'Europe/London') AS winter, Shutter_Util.Time_Probe('20261025013000', 'Europe/London') AS change, Shutter_Util.Time_Probe('20260715094500+0200', 'Europe/London') AS offset, Shutter_Util.Time_Probe('20260715094500', 'UTC') AS utc")
           echo "$out"
@@ -306,47 +327,54 @@ jobs:
       # An outage opens an incident: each patient's chain is checked for its kind, who decided it, its catalogue
       # entries, its writes and the downstream system's final state.
       - name: The outage scenarios S11 and S12 in site-policy mode
+        if: matrix.shard == 'policy'
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes policy --approve S11 S12
       # The fields Shutter reads sit at the same positions in HL7 2.3.1, 2.4 and 2.5.1
       - name: S2 in HL7 2.4 and 2.3.1 (S17, S18) in site-policy mode
+        if: matrix.shard == 'policy'
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes policy --approve S17 S18
       # Shape A: the transfer fails in the demo hospital's own production, its forwarder hands the case to Shutter, and
       # the case names its source
       - name: S2 in the demo hospital's production (S19) in site-policy mode
+        if: matrix.shard == 'policy'
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes policy --approve S19
       # A nurse moves the patient by hand in the downstream system while the resend waits for approval: the approval is
       # bound to the receiver's version, so the dispatch stops, the case is planned again, and her entry stands
       - name: A move entered by hand while the resend awaits approval (S20) in rules-only mode
+        if: matrix.shard == 'policy'
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes rules --approve S20
       # A transfer timed 01:30 with no offset on the night the clocks go back, an hour that happens twice: site policy
       # escalates it on E13, and the resend rules alone propose is blocked by the gate (EVENT_TIME_IMPLAUSIBLE)
       - name: A transfer in the hour the clocks go back (S21) in rules-only and site-policy modes
+        if: matrix.shard == 'policy'
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes rules,policy --approve S21
       # The roles over HTTP: the library is the approver's to change, an operator escalates a case and closes it by hand,
       # and under the site profile's two-person rule only an approver closes it. It closes two of the cases the
       # scenarios left escalated or blocked, so it runs after them.
       - name: The operator's and the approver's routes
+        if: matrix.shard == 'board'
         run: python3 tests/e2e/roles_check.py --url "$IRIS_URL"
       # Tries to break the approval boundary: another plan digest, a stale case version, an operator's approval and one
       # approval sent twice with its key then reused (S2), the receiving system changed after the approval (S20), and a
       # resend of a delivery the receiver already holds (S3), each refused with nothing written. It plays its own
       # scenarios in rules-only mode, so it runs after the roles check, which needs the cases the scenarios above left.
       - name: What the approval boundary refuses
+        if: matrix.shard == 'checks'
         run: python3 tests/e2e/boundary_check.py --url "$IRIS_URL"
       # The production review of both productions, read-only: the demo's findings, the fingerprint stable across two
       # runs, an approver's annotation seen by a fresh review and revoked, and the agent's part with no recording. It runs
       # after the scenarios, whose failed deliveries are the window's errors.
       - name: The production review of Shutter's production and the hospital's
+        if: matrix.shard == 'checks'
         run: python3 tests/e2e/review_check.py --url "$IRIS_URL"
       - name: Readiness report and the IRIS log
         if: always()
         run: |
           python3 scripts/iris-sql.py --url "$IRIS_URL" --ns SHUTTER "SELECT Shutter.Setup_Doctor() AS r" || true
-          docker logs iris 2>&1 | tail -80 || true
-      # The next job on the runner needs the port and the name
+          docker logs "$CTR" 2>&1 | tail -80 || true
       - name: Remove the IRIS container
         if: always()
-        run: docker rm -f iris > /dev/null 2>&1 || true
+        run: docker rm -f "$CTR" > /dev/null 2>&1 || true
 
   # Merged Dependabot pull requests change the bundle but not the committed www/, which IRIS serves and the IPM package
   # and the image ship. These two jobs make them a patch release. They run on every push to main and read the history,
@@ -534,6 +562,8 @@ jobs:
       && (needs.dependency-release-build.result == 'success' || needs.dependency-release-build.result == 'skipped')
       && (needs.www-after-dependabot-merge.result == 'success' || needs.www-after-dependabot-merge.result == 'skipped') }}
     timeout-minutes: 30
+    env:
+      CTR: ci-${{ github.run_id }}-${{ github.run_attempt }}-image
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -550,36 +580,40 @@ jobs:
           docker build --progress plain
           --build-arg IRIS_IMAGE="$IRIS_IMAGE"
           --build-arg WITH_AIHUB=0
-          -t shutter:ci .
+          -t "shutter:ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" .
       - name: Start it
-        # The startup alerts are cleared by the production's own start; no after-start script is needed. A container a
-        # cancelled run left behind is removed first: the runner keeps Docker between jobs.
-        run: >-
-          docker rm -f iris shutter > /dev/null 2>&1 || true;
-          docker run -d --name shutter -p 52773:52773 shutter:ci
-          --check-caps false --ISCAgent false
+        # The startup alerts are cleared by the production's own start; no after-start script is needed. The container and
+        # the image carry this run's id, and Docker picks the host port, so jobs that share one Docker never collide.
+        run: |
+          docker rm -f "$CTR" > /dev/null 2>&1 || true
+          docker run -d --name "$CTR" -p 127.0.0.1::52773 "shutter:ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --check-caps false --ISCAgent false
+          port=$(docker port "$CTR" 52773/tcp | head -1 | sed 's/.*://')
+          echo "IRIS_URL=http://127.0.0.1:$port" >> "$GITHUB_ENV"
       - name: Wait for the web application
         run: |
           code=
           for i in $(seq 1 60); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:52773/shutter/index.html || true)
+            code=$(curl -s -o /dev/null -w '%{http_code}' $IRIS_URL/shutter/index.html || true)
             if [ "$code" = "200" ]; then echo "The web application answered after $((i*5)) s"; exit 0; fi
             sleep 5
           done
           echo "The web application did not come up (last HTTP status: '$code')"
-          docker logs shutter 2>&1 | tail -100
+          docker logs "$CTR" 2>&1 | tail -100
           exit 1
       - name: Scenario S2 end to end on the built image
-        run: python3 tests/e2e/scenario_check.py --url http://localhost:52773 --approve S2
+        run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --approve S2
       # The image installs the demo hospital at build time (iris.script) and starts its production with the instance
       - name: Scenario S19 through the built image's demo hospital
-        run: python3 tests/e2e/scenario_check.py --url http://localhost:52773 --modes policy --approve S19
+        run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes policy --approve S19
       - name: IRIS log
         if: always()
-        run: docker logs shutter 2>&1 | tail -100 || true
+        run: docker logs "$CTR" 2>&1 | tail -100 || true
       - name: Remove the container
         if: always()
-        run: docker rm -f shutter > /dev/null 2>&1 || true
+        run: |
+          docker rm -f "$CTR" > /dev/null 2>&1 || true
+          docker image rm "shutter:ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" > /dev/null 2>&1 || true
 
   # Publishes the demo to GitHub Pages. Skipped (not failed) until the repository is public, Pages is enabled
   # (Settings, Pages, Source: GitHub Actions) and the repository variable DEPLOY_DEMO is 'true'. The four checks are
