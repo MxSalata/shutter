@@ -119,4 +119,11 @@ describe('safetyReceipt', () => {
     expect(r.writes).toBe(0);
     expect(r.status).toBe('0 writes; blocked, waiting for a person');
   });
+
+  it('says a blocked resend that never went out has nothing to verify', () => {
+    const r = receiptOf('C-000014');
+    expect(r.disposition).toBe('resend');
+    expect(r.writes).toBe(0);
+    expect(r.verification).toBe('Not applicable: blocked with nothing written');
+  });
 });

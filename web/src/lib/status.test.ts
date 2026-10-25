@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { caseState, checkCounts, checkState, disposition, gateOutcome, writes } from './status';
+import {
+  caseState,
+  checkCounts,
+  checkState,
+  disposition,
+  gateOutcome,
+  NOT_APPLICABLE_CODES,
+  writes,
+} from './status';
 
 const check = (result: string, reason_code: string) => ({ result, reason_code });
 
@@ -20,6 +28,18 @@ describe('status', () => {
     expect(checkState(check('pass', 'NOT_YET_REQUIRED'))).toBe('not_applicable');
     expect(checkState(check('block', 'SUPERSEDED_BY_LATER_EVENT'))).toBe('blocked');
     expect(checkState(check('unknown', ''))).toBe('unknown');
+  });
+
+  it("counts none of the gate's passes without a check as passed", () => {
+    // Gate.cls: no write proposed, a later stage's check, no catalogue installed, no encounter to compare
+    expect(NOT_APPLICABLE_CODES).toEqual([
+      'NOT_APPLICABLE',
+      'NOT_YET_REQUIRED',
+      'NOT_CONFIGURED',
+      'NO_ENCOUNTER',
+    ]);
+    for (const code of NOT_APPLICABLE_CODES) expect(checkState(check('pass', code))).toBe('not_applicable');
+    expect(checkState(check('pass', 'NEW_ENCOUNTER'))).toBe('passed');
   });
 
   it('counts only the applicable checks as passed', () => {

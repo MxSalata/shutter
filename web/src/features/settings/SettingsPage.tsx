@@ -50,7 +50,7 @@ function Configured({ s, replayed }: { s: Settings; replayed: number | undefined
         {`${agents.length} ${s.aiHubPresent ? 'AI Hub ' : ''}${agents.length === 1 ? 'agent' : 'agents'}, ${how}`}
       </Text>
       <Group gap="sm" wrap="wrap">
-        <Flag>Last scenario investigation: {humanize(s.mode)}</Flag>
+        <Flag>Investigation mode for new cases: {humanize(s.mode)}</Flag>
         {s.demo ? <Flag>Demo instance</Flag> : null}
         {s.mock ? <Flag>API mimic on{s.mockConfig ? ` (${s.mockConfig})` : ''}</Flag> : null}
         {s.aiHubPresent ? <Flag>AI Hub present</Flag> : null}
@@ -64,6 +64,10 @@ function Configured({ s, replayed }: { s: Settings; replayed: number | undefined
           </Group>
         ) : null}
       </Group>
+      <Text size="xs" c="dimmed">
+        The last scenario run or a reset sets the investigation mode, and live failures are investigated in it
+        too.
+      </Text>
       {s.mock ? (
         <Text size="sm">
           No model answers while the mimic is on; the runs are labelled mock and cost nothing.

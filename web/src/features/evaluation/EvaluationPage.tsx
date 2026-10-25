@@ -122,7 +122,8 @@ function Headline({ data }: { data: Evaluation }) {
           </Text>
           <Text size="sm">
             Planned, not yet reported: repeat runs of each scenario, held-out variants, and a comparison with
-            a single investigator. A match here shows agreement with the catalogue, not general reliability.{' '}
+            a single investigator. A match shows agreement with each scenario's expected outcome, on scenarios
+            the catalogue was written alongside; it is not evidence of general reliability.{' '}
             {/* The hash is the router's, so the link scrolls rather than changing it */}
             <Anchor
               component="button"

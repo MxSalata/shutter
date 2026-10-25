@@ -55,6 +55,16 @@ describe('CasePage', () => {
     expect((await within(gate).findAllByText('Not applicable')).length).toBeGreaterThan(0);
   });
 
+  it('says a blocked resend that never went out has nothing to verify, with no "yet"', async () => {
+    renderCase('C-000014');
+    const verification = await screen.findByRole('region', { name: 'Dispatch and verification' });
+    expect(await within(verification).findByText('Not applicable: no Shutter write')).toBeInTheDocument();
+    expect(within(verification).getByText(/was blocked with nothing written/)).toBeInTheDocument();
+    expect(within(verification).queryByText(/yet/)).not.toBeInTheDocument();
+    const receipt = await screen.findByRole('region', { name: 'Receipt' });
+    expect(within(receipt).getByText('Not applicable: blocked with nothing written')).toBeInTheDocument();
+  });
+
   it('shows the board right under the outcome, each member leading with its verdict', async () => {
     renderCase('C-000008');
     const outcome = await screen.findByRole('region', { name: 'Closed: handed to a person' });

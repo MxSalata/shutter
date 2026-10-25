@@ -46,6 +46,9 @@ const str = (v: unknown) => (v === undefined || v === null ? '' : String(v));
 /** Attempt outcomes where the write reached the receiver and may have landed (CONTRACTS, the attempt). */
 export const WRITE_OUTCOMES = ['applied', 'already_committed', 'uncertain'];
 
+/** Case states that stop a case: with no write sent by then, there is no write of Shutter's to verify. */
+export const STOPPED_STATES = ['blocked', 'failed', 'escalated'];
+
 /**
  * The approval the receipt names: the latest one in force, else the latest revoked one (the server revokes an approval
  * once its write is spent or not committed, and on a reopen, so a written case's approval is often revoked).
@@ -144,7 +147,8 @@ export function safetyReceipt({
   const gate = decisions.length ? decisions[decisions.length - 1] : undefined;
   const disposition = p?.disposition || c.disposition || '';
   const writes = disposition === 'resend';
-  // With no verification yet: one still to come after a write, or none to make (no Shutter write, a hand correction)
+  // With no verification yet: one still to come after a write, or none to make (no Shutter write, a hand
+  // correction, a case that stopped before its write went out)
   const verification = last
     ? `${humanize(last.outcome)}${last.summary ? `: ${last.summary}` : ''}`
     : sent.length
@@ -153,7 +157,9 @@ export function safetyReceipt({
         ? 'Not verified by Shutter: the team corrected it by hand'
         : p && !writes
           ? 'Not applicable: no Shutter write'
-          : '';
+          : STOPPED_STATES.includes(c.state)
+            ? `Not applicable: ${humanize(c.state).toLowerCase()} with nothing written`
+            : '';
   const target = `${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`;
   const action = !p
     ? 'No plan yet'

@@ -63,13 +63,13 @@ export const CASE_STATES: Record<string, Status> = {
   awaiting_approval: s(
     'attention',
     'Awaiting approval',
-    "A person, or the site's written policy, must release the plan",
+    'A person with the approver role must release or reject the plan',
     IconUserQuestion,
   ),
   approved: s(
     'info',
-    'Approved',
-    'Released; the receiver is read once more and the gate checks again before dispatch',
+    'Released',
+    "Released by a person or the site's written policy; the receiver is read once more and the gate checks again before dispatch",
     RUNNING,
   ),
   executing: s('info', 'Executing', 'The conditional write is being sent', RUNNING),
@@ -142,13 +142,16 @@ export const CHECK_STATES: Record<CheckState, Status> = {
   not_applicable: s(
     'neutral',
     'Not applicable',
-    'Not checked here: the plan writes nothing, or the check belongs to a later stage',
+    'Not checked here: the plan writes nothing, the check belongs to a later stage, or there is nothing to check against',
     IconMinus,
   ),
 };
 
-/** The reason codes the gate gives a check it passes without checking anything. */
-const NOT_APPLICABLE_CODES = ['NOT_APPLICABLE', 'NOT_YET_REQUIRED'];
+/**
+ * The reason codes the gate (Gate.cls) gives a check it passes without checking anything: no write proposed, a check
+ * of a later stage, no catalogue installed, a message that names no encounter to compare.
+ */
+export const NOT_APPLICABLE_CODES = ['NOT_APPLICABLE', 'NOT_YET_REQUIRED', 'NOT_CONFIGURED', 'NO_ENCOUNTER'];
 
 export function checkState(c: { result: string; reason_code?: string }): CheckState {
   if (c.result === 'block') return 'blocked';

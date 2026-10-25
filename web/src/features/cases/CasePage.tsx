@@ -98,6 +98,7 @@ export default function CasePage() {
               write={write}
               planned={!!plan.data?.plan}
               byHand={detail.disposition === 'handled_by_hand'}
+              state={detail.state}
             />
           </Stack>
         </Grid.Col>

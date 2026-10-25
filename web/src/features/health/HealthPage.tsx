@@ -44,16 +44,17 @@ function Value({ value }: { value: unknown }) {
 }
 
 /**
- * The board a case convenes by default, apart from the registered agents the report counts: the library's members
- * on the default board, by role ("3 specialists and the coordinator").
+ * The board a case convenes by default, apart from the enabled agents the report counts: the library's members on
+ * the default board, by role, and the enabled coordinator ("3 specialists and the coordinator").
  */
 function DefaultBoard() {
   const library = useLibrary();
   if (!library.data) return null;
   const board = library.data.filter((m) => m.enabled && m.inDefaultBoard);
   const specialists = board.filter((m) => m.role === 'specialist').length;
-  const coordinator = board.some((m) => m.role === 'coordinator');
-  const others = board.length - specialists - (coordinator ? 1 : 0);
+  // The server convenes any enabled coordinator, whether or not it is marked for the default board
+  const coordinator = library.data.some((m) => m.enabled && m.role === 'coordinator');
+  const others = board.filter((m) => m.role !== 'specialist' && m.role !== 'coordinator').length;
   const parts = [
     specialists ? `${specialists} specialist${specialists === 1 ? '' : 's'}` : '',
     coordinator ? 'the coordinator' : '',
@@ -109,6 +110,11 @@ export default function HealthPage() {
                       </Table.Th>
                       <Table.Td>
                         <Value value={v} />
+                        {k === 'mode' ? (
+                          <Text size="xs" c="dimmed">
+                            Set by the last scenario run or a reset; live failures are investigated in it too
+                          </Text>
+                        ) : null}
                       </Table.Td>
                     </Table.Tr>
                     {k === 'board_members' ? <DefaultBoard /> : null}

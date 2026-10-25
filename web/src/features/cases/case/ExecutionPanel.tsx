@@ -7,8 +7,9 @@ import { KeyValueList } from '@/components/KeyValueList';
 import { Digest } from '@/components/Digest';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
-import { attempt, verification } from '@/lib/status';
+import { attempt, caseState, verification } from '@/lib/status';
 import { asObject } from '@/lib/json';
+import { STOPPED_STATES } from './receipt';
 import { NotYet, Section } from './Section';
 
 function AttemptCard({ a }: { a: Attempt }) {
@@ -76,16 +77,30 @@ function VerificationCard({ v }: { v: Verification }) {
  * What the section says before any attempt: a write still to come, no write of Shutter's to verify (a plan that
  * writes nothing, or a correction the team made by hand), or no plan yet.
  */
-function Empty({ write, planned, byHand }: { write: boolean; planned: boolean; byHand: boolean }) {
-  if (write) return <NotYet>Nothing dispatched yet.</NotYet>;
-  if (byHand || planned)
+function Empty({
+  write,
+  planned,
+  byHand,
+  state,
+}: {
+  write: boolean;
+  planned: boolean;
+  byHand: boolean;
+  state: string;
+}) {
+  // A hand closure reads the same whatever the plan was, and a stopped case's write will not go out now
+  const stopped = STOPPED_STATES.includes(state);
+  if (write && !byHand && !stopped) return <NotYet>Nothing dispatched yet.</NotYet>;
+  if (byHand || stopped || planned)
     return (
       <Stack gap={4}>
         <StatusBadge {...verification(byHand ? 'by_hand' : 'not_applicable')} w="fit-content" />
         <Text size="sm" c="dimmed">
           {byHand
             ? 'The team corrected the systems by hand and a person closed the case; Shutter wrote nothing and did not check the correction.'
-            : "The plan writes nothing to the receiver, so there is no write of Shutter's to verify."}
+            : planned && !write
+              ? "The plan writes nothing to the receiver, so there is no write of Shutter's to verify."
+              : `The case was ${caseState(state).label.toLowerCase()} with nothing written, so there is no write of Shutter's to verify.`}
         </Text>
       </Stack>
     );
@@ -98,12 +113,14 @@ export function ExecutionPanel({
   write,
   planned,
   byHand,
+  state,
 }: {
   caseId: string;
   open: boolean;
   write: boolean;
   planned: boolean;
   byHand: boolean;
+  state: string;
 }) {
   const attempts = useAttempts(caseId, open);
   const list = attempts.data ?? [];
@@ -115,7 +132,7 @@ export function ExecutionPanel({
     >
       {attempts.isError ? <ErrorAlert error={attempts.error} title="The attempts could not be read" /> : null}
       {attempts.isSuccess && list.length === 0 ? (
-        <Empty write={write} planned={planned} byHand={byHand} />
+        <Empty write={write} planned={planned} byHand={byHand} state={state} />
       ) : null}
       {list.map((x, i) => (
         <Card key={i} padding="sm" withBorder>
