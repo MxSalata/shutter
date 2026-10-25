@@ -276,7 +276,7 @@
   {
     "id": "S9",
     "title": "One patient, two encounters",
-    "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; the same patient is admitted at 09:30 to Ward C under another visit number. That admission belongs to another encounter and supersedes nothing: the transfer is still due.",
+    "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; at 09:30 the same patient is registered for an outpatient clinic under another visit number. That attendance belongs to another encounter and supersedes nothing: the transfer is still due.",
     "steps": [
       {
         "file": "S9-01-A01.hl7"
@@ -295,7 +295,8 @@
         "fault": "off"
       },
       {
-        "file": "S9-03-A01.hl7"
+        "file": "S9-03-A04.hl7",
+        "expect": "indexed"
       }
     ],
     "expected": {
@@ -872,6 +873,52 @@
       "modes": [
         "rules"
       ]
+    }
+  },
+  {
+    "id": "S21",
+    "title": "A transfer in the hour the clocks go back",
+    "summary": "The patient is admitted to Ward A at 00:20 on Sunday 25 October 2026, the night British clocks go back; then the transfer to Ward B, timed 01:30 with no offset, fails because the downstream system is down. 01:30 happens twice that night, an hour apart, so the transfer's time can't be ordered safely against anything near it: nothing is written, and the case goes to a person to confirm the time.",
+    "steps": [
+      {
+        "file": "S21-01-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S21-02-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      }
+    ],
+    "expected": {
+      "disposition": "escalate",
+      "acceptable": [
+        "more_evidence"
+      ],
+      "write": false,
+      "final_state": "admitted",
+      "final_ward": "WARD-A",
+      "failed_operation_key": "PAS^HOSP^MRN1021^ENC-1021^transfer^2026-10-25T00:30:00Z",
+      "modes": [
+        "rules",
+        "policy"
+      ],
+      "by_mode": {
+        "rules": {
+          "acceptable": [
+            "resend"
+          ],
+          "blocked_by": "EVENT_TIME_IMPLAUSIBLE",
+          "final_reason": "EVENT_TIME_IMPLAUSIBLE"
+        }
+      }
     }
   }
 ]

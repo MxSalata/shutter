@@ -6,10 +6,12 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { keys } from '@/api/hooks';
+import type { Scenario } from '@/api/types';
 import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
 import { theme } from '@/theme';
 import ScenariosPage from './ScenariosPage';
+import definitions from '../../../../fixtures/scenarios.json';
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());
@@ -76,6 +78,27 @@ describe('ScenariosPage', () => {
       ),
     ).toBeInTheDocument();
     expect(within(await card('S2')).getByRole('button', { name: 'Run S2' })).toBeEnabled();
+  });
+
+  it("shows a mode's own expected outcome: S21's resend that the gate blocks, in Rules only mode only", async () => {
+    const s21 = (definitions as unknown as Scenario[]).find((d) => d.id === 'S21')!;
+    server.use(
+      http.get('/api/shutter/scenarios', () =>
+        HttpResponse.json({ scenarios: [{ ...s21, latestCase: null }], run: null }),
+      ),
+    );
+    renderScenarios();
+    await userEvent.click(await screen.findByRole('radio', { name: 'Site policy' }));
+    let s = await card('S21');
+    expect(within(s).getByText('or More evidence')).toBeInTheDocument();
+    expect(within(s).queryByText('or Resend')).not.toBeInTheDocument();
+    expect(within(s).queryByText('EVENT_TIME_IMPLAUSIBLE')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'Rules only' }));
+    s = await card('S21');
+    expect(within(s).getByText('or Resend')).toBeInTheDocument();
+    expect(within(s).queryByText('or More evidence')).not.toBeInTheDocument();
+    expect(within(s).getByText('EVENT_TIME_IMPLAUSIBLE')).toBeInTheDocument();
+    expect(within(s).getByText('Nothing written')).toBeInTheDocument();
   });
 
   it('offers runs on a demo instance', async () => {

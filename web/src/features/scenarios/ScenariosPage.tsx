@@ -122,9 +122,10 @@ function RunBanner({ run }: { run: ScenarioRun }) {
   );
 }
 
-function ExpectedOutcome({ s }: { s: Scenario }) {
-  const e = s.expected;
-  if (!e) return null;
+/** What should happen in the mode: the scenario's expected outcome with the mode's own additions (expected.by_mode). */
+function ExpectedOutcome({ s, mode }: { s: Scenario; mode: Mode }) {
+  if (!s.expected) return null;
+  const e = { ...s.expected, ...s.expected.by_mode?.[mode] };
   return (
     <Stack gap={4}>
       <Text size="xs" fw={600} c="dimmed" tt="uppercase">
@@ -225,7 +226,7 @@ function ScenarioCard({
             Not defined for {modeLabel(mode)} mode. Its modes: {modes.join(', ')}.
           </Text>
         ) : null}
-        <ExpectedOutcome s={s} />
+        <ExpectedOutcome s={s} mode={mode} />
         <div style={{ flex: 1 }} />
         {s.latestCase ? (
           <Group gap={6} wrap="nowrap">

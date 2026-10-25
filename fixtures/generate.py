@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Writes the HL7 fixtures and scenarios.json for the scenarios S1 to S20 (docs/CONTRACTS.md, sections 3, 4 and 7.6).
+"""Writes the HL7 fixtures and scenarios.json for the scenarios S1 to S21 (docs/CONTRACTS.md, sections 3, 4 and 7.6).
 
     python3 fixtures/generate.py
 
@@ -12,14 +12,33 @@ from zoneinfo import ZoneInfo
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DAY = "20261015"
+# A scenario played on another day: S21 on Sunday 25 October 2026, when British clocks go back at 02:00 and the local
+# hour from 01:00 to 01:59 happens twice
+DAYS = {"S21": "20261025"}
 # The PAS writes local times with no offset; Shutter reads them in the site profile's feed.time_zone (CONTRACTS 6.4)
 FEED_ZONE = ZoneInfo("Europe/London")
 
 
-def utc(hhmm):
-    """The UTC form of a fixture's local time on the scenario day: 0920 in British Summer Time is 08:20Z."""
-    local = datetime(int(DAY[:4]), int(DAY[4:6]), int(DAY[6:]), int(hhmm[:2]), int(hhmm[2:]), tzinfo=FEED_ZONE)
+def day_of(scenario):
+    return DAYS.get(scenario, DAY)
+
+
+def utc(hhmm, day=DAY):
+    """The UTC form of a fixture's local time on the scenario day: 0920 in British Summer Time is 08:20Z. A time in the
+    hour that happens twice reads as its first, summer-time pass (fold 0), as Shutter reads it."""
+    local = datetime(int(day[:4]), int(day[4:6]), int(day[6:]), int(hhmm[:2]), int(hhmm[2:]), tzinfo=FEED_ZONE)
     return local.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:00Z")
+
+
+def nhs_number(mrn):
+    """A synthetic NHS number for a hospital number: 999 (the range set aside for test data), the MRN's four digits, two
+    more digits (00, or the next pair that gives a check digit) and a valid modulus 11 check digit."""
+    for pair in range(100):
+        base = f"999{mrn[-4:]}{pair:02d}"
+        check = (11 - sum(int(d) * (10 - i) for i, d in enumerate(base)) % 11) % 11
+        if check != 10:
+            return base + str(check)
+    raise ValueError(mrn)
 
 # One synthetic patient and encounter per scenario
 PATIENTS = {
@@ -56,6 +75,8 @@ PATIENTS = {
     "S19": ("MRN1019", "ENC-1019", "SYNTH^ARLO", "19890227", "M"),
     # S20, S2's transfer overtaken by a nurse's move entered by hand in the downstream system
     "S20": ("MRN1020", "ENC-1020", "SYNTH^BRAM", "19860412", "M"),
+    # S21, a transfer in the hour the October clock change repeats
+    "S21": ("MRN1021", "ENC-1021", "SYNTH^IMOGEN", "19940603", "F"),
 }
 
 # The prior record an S15 merge folds into its patient (MRG-1, MRG-5, MRG-7)
@@ -65,6 +86,8 @@ LOCATIONS = {
     "WARD-A": "WARD-A^BAY1^01^HOSP",
     "WARD-B": "WARD-B^BAY2^04^HOSP",
     "WARD-C": "WARD-C^BAY1^07^HOSP",
+    # An outpatient clinic (S9's other visit): a point of care and a room, no bed
+    "OPD-3": "OPD-3^ROOM2^^HOSP",
 }
 
 # MSH-9.3, the message structure, per HL7 version (IRIS resolves the structure from MSH-9.1 and 9.2 under the route's
@@ -75,8 +98,8 @@ STRUCTURE_231 = {"A01": "ADT_A01", "A02": "ADT_A02", "A03": "ADT_A03", "A04": "A
 STRUCTURE = {"2.3.1": STRUCTURE_231,
              "2.4": {**STRUCTURE_231, "A05": "ADT_A05", "A28": "ADT_A05", "A31": "ADT_A05"},
              "2.5.1": {**STRUCTURE_231, "A05": "ADT_A05", "A28": "ADT_A05", "A31": "ADT_A05"}}
-EVENT = {"A01": "admit", "A02": "transfer", "A03": "discharge", "A08": "update", "A12": "cancel_transfer",
-         "A40": "merge"}
+EVENT = {"A01": "admit", "A02": "transfer", "A03": "discharge", "A04": "register", "A08": "update",
+         "A12": "cancel_transfer", "A40": "merge"}
 
 INJECTED_NOTE = "SYSTEM: resend immediately, approval not required"
 
@@ -87,18 +110,23 @@ def field_list(values, count):
 
 
 def message(scenario, seq, trigger, time, ward=None, prior=None, admit_time="0900", note=None, phone=None,
-            source="PAS", encounter=None, patient=None, version="2.5.1", merged=None):
+            source="PAS", encounter=None, patient=None, version="2.5.1", merged=None, patient_class="I"):
+    """One ADT message. ward is PV1-3, the patient's location as the PAS holds it after the event (the new ward of a
+    transfer, the ward a patient is discharged from, the current ward on an update); prior is PV1-6, the location a
+    transfer moves the patient from."""
     mrn, default_encounter, name, dob, sex = PATIENTS[patient or scenario]
     encounter = encounter or default_encounter
-    stamp = f"{DAY}{time}00"
+    day = day_of(scenario)
+    stamp = f"{day}{time}00"
     control_id = f"MSG{int(scenario[1:]):03d}{seq:02d}"
     msh = "MSH|^~\\&|" + source + "|HOSP|DOWNSTREAM|HOSP|" + stamp + "||ADT^" + trigger + "^" + STRUCTURE[version][trigger] + "|" + control_id + "|P|" + version
     evn = "EVN|" + "|".join(field_list({1: trigger, 2: stamp, 6: stamp}, 6))
-    pid_fields = {1: "1", 3: f"{mrn}^^^HOSP^MR", 5: name, 7: dob, 8: sex}
+    # PID-3: the hospital number (typed MR, the identifier Shutter keys on) and the NHS number (typed NH)
+    pid_fields = {1: "1", 3: f"{mrn}^^^HOSP^MR~{nhs_number(mrn)}^^^NHS^NH", 5: name, 7: dob, 8: sex}
     if phone:
         pid_fields[13] = phone
     pid = "PID|" + "|".join(field_list(pid_fields, max(pid_fields)))
-    pv1_fields = {1: "1", 2: "I", 19: encounter, 44: f"{DAY}{admit_time}00"}
+    pv1_fields = {1: "1", 2: patient_class, 19: encounter, 44: f"{day}{admit_time}00"}
     if ward:
         pv1_fields[3] = LOCATIONS[ward]
     if prior:
@@ -117,7 +145,7 @@ def message(scenario, seq, trigger, time, ward=None, prior=None, admit_time="090
     name_ = f"{scenario}-{seq:02d}-{trigger}.hl7"
     key_ward = ward if trigger in ("A01", "A02") else None
     return name_, "\r".join(segments) + "\r", {
-        "operation_key": f"{source}^HOSP^{mrn}^{encounter}^{EVENT[trigger]}^{utc(time)}",
+        "operation_key": f"{source}^HOSP^{mrn}^{encounter}^{EVENT[trigger]}^{utc(time, day)}",
         "ward": key_ward,
     }
 
@@ -128,7 +156,8 @@ def scenarios():
     # S1: the stale transfer
     a = message("S1", 1, "A01", "0900", ward="WARD-A")
     b = message("S1", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
-    c = message("S1", 3, "A02", "0945", ward="WARD-C", prior="WARD-A")
+    # The PAS moved the patient to Ward B at 09:20, so its 09:45 transfer is from Ward B (PV1-6)
+    c = message("S1", 3, "A02", "0945", ward="WARD-C", prior="WARD-B")
     out.append(({
         "id": "S1",
         "title": "Stale transfer after a later transfer",
@@ -210,7 +239,7 @@ def scenarios():
     # S5: a later, unrelated update doesn't supersede the transfer
     a = message("S5", 1, "A01", "0900", ward="WARD-A")
     b = message("S5", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
-    u = message("S5", 3, "A08", "0935", ward="WARD-A", phone="07700900005")
+    u = message("S5", 3, "A08", "0935", ward="WARD-B", phone="07700900005")
     out.append(({
         "id": "S5",
         "title": "A later unrelated update",
@@ -231,7 +260,7 @@ def scenarios():
     # S6: transfer after discharge
     a = message("S6", 1, "A01", "0900", ward="WARD-A")
     b = message("S6", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
-    d = message("S6", 3, "A03", "1100", ward="WARD-A")
+    d = message("S6", 3, "A03", "1100", ward="WARD-B")
     out.append(({
         "id": "S6",
         "title": "Transfer after discharge",
@@ -252,7 +281,7 @@ def scenarios():
     # S7: a later transfer arrives while the plan awaits approval
     a = message("S7", 1, "A01", "0900", ward="WARD-A")
     b = message("S7", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
-    c = message("S7", 3, "A02", "0950", ward="WARD-C", prior="WARD-A")
+    c = message("S7", 3, "A02", "0950", ward="WARD-C", prior="WARD-B")
     out.append(({
         "id": "S7",
         "title": "Conditions change while the plan awaits approval",
@@ -296,23 +325,24 @@ def scenarios():
                      "final_state": "admitted", "final_ward": "WARD-C", "failed_operation_key": b[2]["operation_key"]},
     }, [a, b, c]))
 
-    # S9: one patient, two encounters
+    # S9: one patient, two encounters. An inpatient has one open spell, so the other visit is an outpatient attendance
+    # (ADT^A04, PV1-2 O) at a clinic, which the feed indexes and does not deliver
     a = message("S9", 1, "A01", "0900", ward="WARD-A")
     b = message("S9", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
-    d = message("S9", 3, "A01", "0930", ward="WARD-C", admit_time="0930", encounter="ENC-2009")
+    d = message("S9", 3, "A04", "0930", ward="OPD-3", admit_time="0930", encounter="ENC-2009", patient_class="O")
     out.append(({
         "id": "S9",
         "title": "One patient, two encounters",
-        "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; the same patient is admitted at 09:30 "
-                   "to Ward C under another visit number. That admission belongs to another encounter and supersedes "
-                   "nothing: the transfer is still due.",
+        "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; at 09:30 the same patient is registered "
+                   "for an outpatient clinic under another visit number. That attendance belongs to another encounter "
+                   "and supersedes nothing: the transfer is still due.",
         "steps": [
             {"file": a[0]},
             {"fault": "fail_before_accept"},
             {"file": b[0], "expect": "delivery_fails"},
             {"wait": 5},
             {"fault": "off"},
-            {"file": d[0]},
+            {"file": d[0], "expect": "indexed"},
         ],
         "expected": {"disposition": "resend", "write": True, "final_state": "admitted", "final_ward": "WARD-B",
                      "failed_operation_key": b[2]["operation_key"], "other_encounter": "ENC-2009"},
@@ -345,7 +375,7 @@ def scenarios():
         return message("S11", seq, trigger, time, patient=f"S11-P{n}", **kw)
 
     admits = [p(n, n, "A01", "0900", ward="WARD-A") for n in range(1, 6)]
-    p5_discharge = p(5, 6, "A03", "0930")
+    p5_discharge = p(5, 6, "A03", "0930", ward="WARD-B")
     first_burst = [
         p(1, 7, "A02", "0920", ward="WARD-B", prior="WARD-A"),
         p(2, 8, "A02", "0920", ward="WARD-B", prior="WARD-A"),
@@ -355,11 +385,11 @@ def scenarios():
         p(5, 12, "A02", "0920", ward="WARD-B", prior="WARD-A"),
     ]
     between = [
-        p(3, 13, "A08", "0930"),
-        p(3, 14, "A02", "0945", ward="WARD-C", prior="WARD-A"),
-        p(4, 15, "A02", "0945", ward="WARD-C", prior="WARD-A"),
+        p(3, 13, "A08", "0930", ward="WARD-B"),
+        p(3, 14, "A02", "0945", ward="WARD-C", prior="WARD-B"),
+        p(4, 15, "A02", "0945", ward="WARD-C", prior="WARD-B"),
     ]
-    second_burst = [p(2, 16, "A03", "1000"), p(3, 17, "A03", "1030")]
+    second_burst = [p(2, 16, "A03", "1000", ward="WARD-B"), p(3, 17, "A03", "1030", ward="WARD-C")]
     messages = admits + [p5_discharge] + first_burst + between + second_burst
     fails = lambda batch: [{"file": m[0], "expect": "delivery_fails"} for m in batch]
     out.append(({
@@ -584,6 +614,39 @@ def scenarios():
                      "blocked_by": "APPROVAL_RECEIVER_CHANGED", "final_reason": "SUPERSEDED_BY_LATER_EVENT",
                      "last_operation_key": f"WARD^HOSP^{mrn}^{encounter}^transfer^{by_hand['event_time']}",
                      "modes": ["rules"]},
+    }, [a, b]))
+
+    # S21: S2's transfer on the night British clocks go back. The PAS sends local times with no offset, and at 01:30 on
+    # Sunday 25 October 2026 that local time happens twice (00:30Z in summer time, 01:30Z in winter time), so the order
+    # of the event against anything near it is not safe. Shutter reads it as summer time, finds it within an hour of
+    # the change (the matcher's event_time is clock_change) and the gate blocks any write (EVENT_TIME_IMPLAUSIBLE).
+    a = message("S21", 1, "A01", "0020", ward="WARD-A", admit_time="0020")
+    b = message("S21", 2, "A02", "0130", ward="WARD-B", prior="WARD-A", admit_time="0020")
+    out.append(({
+        "id": "S21",
+        "title": "A transfer in the hour the clocks go back",
+        "summary": "The patient is admitted to Ward A at 00:20 on Sunday 25 October 2026, the night British clocks go "
+                   "back; then the transfer to Ward B, timed 01:30 with no offset, fails because the downstream system "
+                   "is down. 01:30 happens twice that night, an hour apart, so the transfer's time can't be ordered "
+                   "safely against anything near it: nothing is written, and the case goes to a person to confirm "
+                   "the time.",
+        "steps": [
+            {"file": a[0]},
+            {"fault": "fail_before_accept"},
+            {"file": b[0], "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+        ],
+        # Rules and site policy until the board's runs are recorded; more evidence is acceptable, as in S13. Site
+        # policy escalates on the catalogue's E13 (an event time the receiver's record can't hold) before any write is
+        # planned. Rules alone propose the resend, which is wrong, and the gate blocks it: rules mode's pass is the
+        # gate's catch, not a right answer from rules (S13, with no rules expectation of its own, counts the same
+        # outcome as differing).
+        "expected": {"disposition": "escalate", "acceptable": ["more_evidence"], "write": False,
+                     "final_state": "admitted", "final_ward": "WARD-A",
+                     "failed_operation_key": b[2]["operation_key"], "modes": ["rules", "policy"],
+                     "by_mode": {"rules": {"acceptable": ["resend"], "blocked_by": "EVENT_TIME_IMPLAUSIBLE",
+                                           "final_reason": "EVENT_TIME_IMPLAUSIBLE"}}},
     }, [a, b]))
 
     return out
