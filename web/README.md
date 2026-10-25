@@ -1,6 +1,6 @@
 # Shutter web application
 
-The operator's and the approver's screens: the scenarios, the cases, and for each case its evidence, the board's findings, the plan with the gate's checks, the rehearsal, the approval, the dispatch and the verification. It reads and writes only through Shutter's REST API (`/api/shutter`, `docs/CONTRACTS.md` section 5).
+The operator's and the approver's screens: the scenarios, the cases, and for each case its evidence, the board's findings, the plan with the gate's checks, the rehearsal, the approval, the dispatch and the verification; and the production review, a read-only pass over a production's settings and failures with an approver's annotations. It reads and writes only through Shutter's REST API (`/api/shutter`, `docs/CONTRACTS.md` section 5).
 
 React, Mantine and TanStack Query, built with Vite. IRIS serves the build from `www/` at the repository root, at `/shutter/`; the setup creates that web application when `www/` exists.
 

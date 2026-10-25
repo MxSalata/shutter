@@ -10,6 +10,8 @@ import { theme } from '@/theme';
 import { Timestamp } from '@/components/Timestamp';
 import LoginPage from '@/features/auth/LoginPage';
 import CasePage from '@/features/cases/CasePage';
+import ReviewPage from '@/features/reviews/ReviewPage';
+import ReviewsPage from '@/features/reviews/ReviewsPage';
 import ScenariosPage from '@/features/scenarios/ScenariosPage';
 import SettingsPage from '@/features/settings/SettingsPage';
 
@@ -28,6 +30,8 @@ function renderAt(path: string) {
       { path: '/scenarios', element: <ScenariosPage /> },
       { path: '/cases/:caseId', element: <CasePage /> },
       { path: '/settings', element: <SettingsPage /> },
+      { path: '/reviews', element: <ReviewsPage /> },
+      { path: '/reviews/:reviewId', element: <ReviewPage /> },
     ],
     { initialEntries: [path] },
   );
@@ -102,6 +106,30 @@ describe('the demo', () => {
     const last = screen.getByRole('button', { name: 'Run S19' });
     expect(card.compareDocumentPosition(prompt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(last.compareDocumentPosition(prompt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('shows the recorded reviews of both productions and starts none', async () => {
+    renderAt('/reviews');
+    const past = await screen.findByRole('region', { name: 'Past reviews' });
+    expect(await within(past).findByRole('link', { name: 'PR-000003' })).toBeInTheDocument();
+    expect(within(past).getAllByText('Shutter.Production')).toHaveLength(2);
+    expect(within(past).getAllByText('Hospital.Production')).toHaveLength(2);
+    expect(
+      screen.getByText(/The online demo shows the recorded reviews of both productions/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start the review' })).not.toBeInTheDocument();
+  });
+
+  it('says before an annotation that the demo keeps none, and shows its polite refusal', async () => {
+    renderAt('/reviews/PR-000003');
+    expect(await screen.findByRole('heading', { name: 'Review PR-000003' })).toBeInTheDocument();
+    const findings = screen.getByRole('region', { name: 'Findings' });
+    await userEvent.click((await within(findings).findAllByRole('button', { name: 'Annotate…' }))[0]);
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/The online demo keeps no annotations: it answers/)).toBeInTheDocument();
+    await userEvent.type(within(dialog).getByRole('textbox', { name: /Reason/ }), 'Tried in the demo');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Mark as intended' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/never in the production/);
   });
 
   it('shows a recorded time as its date and time, never as an age', () => {

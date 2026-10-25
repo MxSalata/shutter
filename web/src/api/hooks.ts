@@ -24,6 +24,12 @@ import {
   type Me,
   type Mode,
   type PlanView,
+  type ReviewAnnotation,
+  type ReviewDetail,
+  type ReviewList,
+  type ReviewStarted,
+  type ReviewState,
+  type ReviewTarget,
   type RunStarted,
   type AgentRun,
   type Scenario,
@@ -56,6 +62,9 @@ export const keys = {
   settings: ['settings'] as const,
   costs: ['costs'] as const,
   health: ['health'] as const,
+  reviewTargets: ['production-reviews', 'targets'] as const,
+  reviews: (filters: ReviewFilters) => ['production-reviews', filters] as const,
+  review: (id: string) => ['production-review', id] as const,
 };
 
 // ---- the session (5.1) ----
@@ -526,6 +535,106 @@ export function useCosts() {
 
 export function useHealth() {
   return useQuery({ queryKey: keys.health, queryFn: () => api.get<Health>('/health') });
+}
+
+// ---- the production review (CONTRACTS 13) ----
+
+export interface ReviewFilters {
+  namespace?: string;
+  production?: string;
+  limit?: number;
+}
+
+/** A review the production item is still working on: the sweep, then the agent's ranking. */
+export function isReviewRunning(state: ReviewState | string | undefined): boolean {
+  return state === 'sweeping' || state === 'ranking';
+}
+
+export function useReviewTargets() {
+  return useQuery({
+    queryKey: keys.reviewTargets,
+    queryFn: () => api.get<{ items: ReviewTarget[] }>('/production-reviews/targets'),
+    staleTime: 60_000,
+  });
+}
+
+export function useReviews(filters: ReviewFilters = {}) {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(filters)) if (v !== undefined && v !== '') params.set(k, String(v));
+  const query = params.toString();
+  return useQuery({
+    queryKey: keys.reviews(filters),
+    queryFn: () => api.get<ReviewList>(`/production-reviews${query ? `?${query}` : ''}`),
+    refetchInterval: (q) => (q.state.data?.items.some((r) => isReviewRunning(r.state)) ? LIVE * 2 : CALM),
+  });
+}
+
+/** One review; it is read every 2 s while it sweeps or ranks (the sweep takes seconds, the agent up to 600 s). */
+export function useReview(reviewId: string) {
+  return useQuery({
+    queryKey: keys.review(reviewId),
+    queryFn: () => api.get<ReviewDetail>(`/production-reviews/${seg(reviewId)}`),
+    refetchInterval: (q) => (isReviewRunning(q.state.data?.state) ? 2_000 : false),
+  });
+}
+
+/** Starts a review: operators; it reads only, and a live agent run spends model credit as a scenario run does. */
+export function useStartReview() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      target,
+      idempotencyKey,
+    }: {
+      target: { namespace: string; production: string; windowDays: number; agent: boolean };
+      idempotencyKey: string;
+    }) => api.post<ReviewStarted>('/production-reviews', target, { idempotencyKey }),
+    onSettled: async () => {
+      await client.invalidateQueries({ queryKey: ['production-reviews'] });
+    },
+  });
+}
+
+/**
+ * An annotation is computed when a review is read, so it applies to every review of that production: after a change,
+ * every review read here is read again.
+ */
+async function refreshReviews(client: ReturnType<typeof useQueryClient>) {
+  await client.invalidateQueries({ queryKey: ['production-review'] });
+  await client.invalidateQueries({ queryKey: ['production-reviews'] });
+}
+
+/** Marks a finding intended, an accepted risk or a false positive: approvers; a Shutter record, never a production edit. */
+export function useAnnotateFinding(reviewId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      annotation,
+      idempotencyKey,
+    }: {
+      annotation: {
+        findingId: string;
+        status: ReviewAnnotation['status'];
+        reason: string;
+        expiresAt?: string;
+      };
+      idempotencyKey: string;
+    }) =>
+      api.post<ReviewAnnotation>(`/production-reviews/${seg(reviewId)}/annotations`, annotation, {
+        idempotencyKey,
+      }),
+    onSettled: () => refreshReviews(client),
+  });
+}
+
+/** Revokes an annotation (kept for the record): the finding is new again in every review of the production. */
+export function useRemoveAnnotation() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (annotationId: string) =>
+      api.del<null>(`/production-reviews/annotations/${seg(annotationId)}`),
+    onSettled: () => refreshReviews(client),
+  });
 }
 
 export type { ScenarioRun };
