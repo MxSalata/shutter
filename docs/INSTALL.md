@@ -102,6 +102,17 @@ the recipients and who sent it. A case the workflow left in a working state (aft
 work) is noted when the production starts, and an approver abandons it with `POST /cases/{id}/abandon` once nothing of
 its workflow has moved for `abandonAfterMinutes` (15 by default; 409 `busy` while something has).
 
+**3.6 The production review.** `POST /api/shutter/production-reviews` (an operator's; CONTRACTS 13) runs on request
+only, never at the production's start, in the Doctor or on a timer: one read-only pass over a production's effective
+settings, event log errors and failed messages over a window of 1 to 90 days, tied to the cases Shutter opened for it.
+It runs in a production job (the Case Review item), so it reads the production, the watched namespace and the message
+purge task in `%SYS` as the production's own user, not as the signed-in caller, and it needs nothing configured: the
+targets are Shutter's own production and every watched one Shutter knows (`GET /api/shutter/production-reviews/targets`),
+each read in its own namespace, as the demo hospital's `Hospital.Production` is read in HOSPITAL. It changes nothing in
+a production; a person applies any change in the Management Portal. Marking a finding intended, an accepted risk or a
+false positive is an approver's annotation (`POST /api/shutter/production-reviews/{id}/annotations`), bound to the
+finding's exact value: it reopens when the value moves, when it expires or when an approver revokes it.
+
 **The worked example: Hospital PAS.** The demo image carries a second, tiny production in its own namespace, the
 hospital's side of shape A: an HL7 service (`PAS In`), a delivery (`Downstream Out`) that fails, and the forwarder. Its
 failures appear as cases in Shutter's own production in SHUTTER, each recording where the original lives; nothing in
@@ -135,9 +146,10 @@ Shape A:
 2. Load `iris-shutter` with `-Ddemo=0` (and `iris-shutter-aihub` on an AI Hub build, the provider key in the
    environment). Check `/api/shutter/health`.
 3. Map the trust's users to `Shutter_Operator` and `Shutter_Approver`; add the approvers to the Workflow role; create
-   the forwarder's user with `Shutter_Forwarder`. An operator escalates a case (the escalation is the sign-off) and
-   marks it handled once the team has corrected the systems; an approver also approves plans and incident releases,
-   saves the site profile and changes the agent library. A trust that wants only an approver to close a case handled
+   the forwarder's user with `Shutter_Forwarder`. An operator escalates a case (the escalation is the sign-off),
+   marks it handled once the team has corrected the systems and starts a production review (3.6); an approver also
+   approves plans and incident releases, saves the site profile, changes the agent library and marks a review's
+   finding intended. A trust that wants only an approver to close a case handled
    by hand answers yes to "Closing a case by hand needs an approver" in the site profile
    (`approvers.close_needs_approver`). Shutter checks the role of whoever closes the case, not that a second person
    does: an approver may escalate and close the same case. An approver who decides in the Management Portal's Workflow
