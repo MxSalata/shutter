@@ -52,6 +52,10 @@ Property Transport As %String(%JSONFIELDNAME = "transport", MAXLEN = 16);
 /// The mail server's answer, the file written, or the error.
 Property Result As %String(%JSONFIELDNAME = "result", MAXLEN = 2000);
 
+/// When the email's text was removed by the retention task (Shutter.Util.RetentionTask); the digest, the recipients
+/// and the timeline stay.
+Property PurgedAt As %String(%JSONFIELDNAME = "purgedAt", MAXLEN = 30);
+
 /// A new draft for the case, addressed to a team of the site profile (the receiver's, when teamId is empty).
 ClassMethod Draft(case As Shutter.Store.Case, teamId As %String, user As %String, Output esc As Shutter.Store.Escalation) As %Status
 {
@@ -113,26 +117,64 @@ Method ToObject() As %DynamicObject
     Set sc = ..%JSONExportToString(.json)
     Set o = $SELECT($$$ISOK(sc): ##class(%DynamicObject).%FromJSON(json), 1: {})
     Set o.caseId = ..Case.CaseId
+    // An empty body is left out of the export; a purged escalation says so with an empty one.
+    If ..PurgedAt '= "" Set o.body = ""
     Quit o
 }
 
-/// Edit a draft (or a failed send) before it goes: the digest follows the new text.
+/// What is wrong with a subject and its recipients (CONTRACTS 10), with the field named: the subject must carry no line
+/// break or other control character, and to and cc must be bare addresses inside the allowed domains (Shutter.Util.Mail;
+/// an empty list allows none). "" when they pass. The domains default to the site profile's; a test passes its own.
+ClassMethod Problem(subject As %String, to As %String, cc As %String, Output field As %String, domains As %List = {##class(Shutter.Store.SiteProfile).AllowedDomains()}) As %String
+{
+    Set field = "subject", problem = ##class(Shutter.Util.Mail).ControlProblem(subject)
+    If problem '= "" Quit problem
+    Set field = "to", problem = ##class(Shutter.Util.Mail).AddressesProblem(to, domains)
+    If problem '= "" Quit problem
+    Set field = "cc", problem = ##class(Shutter.Util.Mail).AddressesProblem(cc, domains)
+    If problem '= "" Quit problem
+    Set field = ""
+    Quit ""
+}
+
+/// The escalation's own subject and recipients against the profile as it stands now.
+Method Check(Output field As %String) As %String
+{
+    Quit ..Problem(..Subject, ..ToAddr, ..CcAddr, .field)
+}
+
+/// Why a purged escalation can be neither edited nor sent, or "" when its text is still there.
+Method PurgedProblem() As %String [ Private ]
+{
+    If ..PurgedAt = "" Quit ""
+    Quit "Escalation " _ ..Seq _ "'s text was removed on " _ ..PurgedAt _ " by the retention task; it cannot be edited or sent"
+}
+
+/// Edit a draft (or a failed send) before it goes: the digest follows the new text. The subject and the addresses are
+/// checked first; an error that starts with the field's name ("to: ...") is the person's to correct.
 Method Edit(subject As %String, body As %String, to As %String, cc As %String, user As %String) As %Status
 {
     If '$LISTFIND($LISTBUILD("draft", "failed"), ..State) Quit $$$ERROR($$$GeneralError, "Escalation " _ ..Seq _ " is " _ ..State _ ": only a draft or a failed send can be edited")
+    If ..PurgedProblem() '= "" Quit $$$ERROR($$$GeneralError, ..PurgedProblem())
     If to = "" Quit $$$ERROR($$$GeneralError, "to: at least one address")
+    Set problem = ..Problem(subject, to, cc, .field)
+    If problem '= "" Quit $$$ERROR($$$GeneralError, field _ ": " _ problem)
     Set ..Subject = subject, ..Body = body, ..ToAddr = to, ..CcAddr = cc
     Set ..EditedBy = user, ..EditedAt = ##class(Shutter.Util.Time).NowUTC(), ..State = "draft"
     Do ..Redigest()
     Quit ..%Save()
 }
 
-/// Queue the send: the digest must be the one of the text the person last read.
+/// Queue the send: the digest must be the one of the text the person last read, and the subject and addresses must
+/// still pass (the allowed domains may have changed since the edit, or the row was changed outside the API).
 Method Queue(bodyDigest As %String, user As %String) As %Status
 {
     If '$LISTFIND($LISTBUILD("draft", "failed"), ..State) Quit $$$ERROR($$$GeneralError, "Escalation " _ ..Seq _ " is " _ ..State)
+    If ..PurgedProblem() '= "" Quit $$$ERROR($$$GeneralError, ..PurgedProblem())
     If bodyDigest '= ..BodyDigest Quit $$$ERROR($$$GeneralError, "bodyDigest is not the digest of the escalation's current text")
     If ..ToAddr = "" Quit $$$ERROR($$$GeneralError, "The escalation has no recipient")
+    Set problem = ..Check(.field)
+    If problem '= "" Quit $$$ERROR($$$GeneralError, field _ ": " _ problem)
     Set ..State = "queued", ..SentBy = user
     Set sc = ..%Save()
     Quit:$$$ISERR(sc) sc
@@ -159,6 +201,52 @@ Method MarkFailed(error As %String) As %Status
 Method Redigest() [ Private ]
 {
     Set ..BodyDigest = ##class(Shutter.Util.Digest).SHA256Hex(..ToAddr _ $CHAR(10) _ ..CcAddr _ $CHAR(10) _ ..Subject _ $CHAR(10) _ ..Body)
+}
+
+/// Remove the email's text (the body: the one copy of the NHS number and the date of birth outside the message store)
+/// and, for a file transport, the .eml file, days days after the case closed; the row stays with its digest, its
+/// recipients, who drafted, edited and sent it, and a line on the case's timeline says the text went.
+Method PurgeText(days As %Integer) As %Status
+{
+    If ..Transport = "file" Do ..RemoveFile(..Result, ..Seq)
+    Set ..Body = "", ..PurgedAt = ##class(Shutter.Util.Time).NowUTC()
+    Set sc = ..%Save()
+    Quit:$$$ISERR(sc) sc
+    Quit ..Note("Escalation " _ ..Seq _ ": the email's text was removed " _ days _ " days after the case closed; the digest of the text sent, the recipients and who sent it stay on record", "system")
+}
+
+/// The retention task's pass (Shutter.Util.RetentionTask): the text of every escalation of a case closed before the
+/// cutoff goes (PurgeText), queued ones excepted, since the mail operation is about to read them; a case reopened since
+/// keeps its texts until it closes again. Rows whose case was purged before escalations were part of the case purge are
+/// removed with their files. Returns how many rows were purged.
+ClassMethod PurgeTextBefore(cutoff As %String, days As %Integer) As %Integer
+{
+    Set n = 0
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT e.ID FROM Shutter_Store.Escalation e, Shutter_Store.""Case"" c WHERE c.ID = e.""Case"" AND e.PurgedAt IS NULL AND e.State <> 'queued' AND c.State IN ('resolved', 'blocked', 'escalated', 'failed') AND c.ClosedAt IS NOT NULL AND c.ClosedAt < ?", cutoff)
+    While rs.%Next() {
+        Set e = ..%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(e)
+        If $$$ISOK(e.PurgeText(days)) Set n = n + 1
+    }
+    Set orphans = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, Seq, Transport, Result FROM Shutter_Store.Escalation WHERE ""Case"" NOT IN (SELECT ID FROM Shutter_Store.""Case"")")
+    While orphans.%Next() {
+        If orphans.%Get("Transport") = "file" Do ..RemoveFile(orphans.%Get("Result"), orphans.%Get("Seq"))
+        If $$$ISOK(..%DeleteId(orphans.%Get("ID"))) Set n = n + 1
+    }
+    Quit n
+}
+
+/// Delete the .eml file an escalation was written to, by the path its Result holds. Only a file named as the mail
+/// operation names them, <CaseId>-escalation-<Seq>.eml, is touched: anything else answers 0 and is left alone. A file
+/// already gone counts as removed.
+ClassMethod RemoveFile(path As %String, seq As %Integer) As %Boolean
+{
+    If path = "" Quit 0
+    Set name = $PIECE($TRANSLATE(path, "\", "/"), "/", *), suffix = "-escalation-" _ (+seq) _ ".eml"
+    Set start = $LENGTH(name) - $LENGTH(suffix) + 1
+    If (start < 2) || ($EXTRACT(name, start, *) '= suffix) Quit 0
+    If '##class(%File).Exists(path) Quit 1
+    Quit ''##class(%File).Delete(path)
 }
 
 /// A line on the case's timeline, so the record says who it went to (RP-4.3).
@@ -231,6 +319,9 @@ Storage Default
 </Value>
 <Value name="20">
 <Value>Result</Value>
+</Value>
+<Value name="21">
+<Value>PurgedAt</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.EscalationD</DataLocation>

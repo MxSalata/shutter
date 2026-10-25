@@ -167,10 +167,18 @@ ClassMethod Validate(p As %DynamicObject) As %String
             If '$LISTFIND($LISTBUILD("automatic", "approval", "per_chain", "board"), value) Return "policy." _ tier _ "." _ kind _ ": must be automatic, approval, per_chain or board"
         }
     }
-    If p.%IsDefined("approvers") && '$ISOBJECT(p.%Get("approvers")) Quit "approvers: must be an object"
-    // The two-person rule for closing a case by hand: off unless the site says so.
-    Set approvers = p.%Get("approvers")
-    If $ISOBJECT(approvers) && approvers.%IsA("%DynamicObject") && approvers.%IsDefined("close_needs_approver") && (approvers.%GetTypeOf("close_needs_approver") '= "boolean") Quit "approvers.close_needs_approver: must be true or false"
+    // Who approves what: the role and escalation texts stay on record; close_needs_approver is the two-person rule for
+    // closing a case by hand, off unless the site says so. Every key is named, so a misspelt switch cannot pass as off.
+    If p.%IsDefined("approvers") {
+        Set approvers = p.%Get("approvers")
+        If '$ISOBJECT(approvers) || approvers.%IsA("%DynamicArray") Quit "approvers: must be an object"
+        Set ai = approvers.%GetIterator()
+        While ai.%GetNext(.k, .v) {
+            If '$LISTFIND($LISTBUILD("role", "escalation", "close_needs_approver"), k) Return "approvers." _ k _ ": unknown setting"
+            If (k = "close_needs_approver") && (approvers.%GetTypeOf(k) '= "boolean") Return "approvers.close_needs_approver: must be true or false"
+            If (k '= "close_needs_approver") && (approvers.%GetTypeOf(k) '= "string") Return "approvers." _ k _ ": must be a string"
+        }
+    }
     // The feed: the time zone of timestamps that carry no offset (T28).
     If p.%IsDefined("feed") {
         Set feed = p.%Get("feed")
@@ -191,7 +199,9 @@ ClassMethod Validate(p As %DynamicObject) As %String
             If mc.%GetTypeOf(k) '= "boolean" Return "model_content." _ k _ ": must be true or false"
         }
     }
-    // The teams an escalation can go to, and the mail rules (T29).
+    // The teams an escalation can go to, and the mail rules (T29, CONTRACTS 10): the sender and every mailbox are bare
+    // addresses (Shutter.Util.Mail), and a mailbox needs a domain in mail.allowed_domains, so a profile that names a
+    // team while the list is empty or absent is refused.
     Set domains = ""
     If p.%IsDefined("mail") {
         Set mail = p.%Get("mail")
@@ -199,14 +209,22 @@ ClassMethod Validate(p As %DynamicObject) As %String
         Set mi = mail.%GetIterator()
         While mi.%GetNext(.k, .v) {
             If '$LISTFIND($LISTBUILD("from", "allowed_domains"), k) Return "mail." _ k _ ": unknown setting"
-            If (k = "from") && (mail.%GetTypeOf(k) '= "string") Return "mail.from: must be a string"
+            If (k = "from") {
+                If mail.%GetTypeOf(k) '= "string" Return "mail.from: must be a string"
+                If v '= "" {
+                    Set problem = ##class(Shutter.Util.Mail).ShapeProblem(v)
+                    If problem '= "" Return "mail.from: " _ problem
+                }
+            }
             If (k = "allowed_domains") {
                 If '$ISOBJECT(v) || v.%IsA("%DynamicObject") Return "mail.allowed_domains: must be an array of domains"
                 Set di = v.%GetIterator()
                 While di.%GetNext(.j, .d) {
                     If (v.%GetTypeOf(j) '= "string") || (d = "") Return "mail.allowed_domains[" _ j _ "]: must be a domain"
-                    Set domains = domains _ $LISTBUILD($ZCONVERT(d, "L"))
+                    Set problem = ##class(Shutter.Util.Mail).DomainProblem(d)
+                    If problem '= "" Return "mail.allowed_domains[" _ j _ "]: " _ problem
                 }
+                Set domains = ##class(Shutter.Util.Mail).Domains(v)
             }
         }
     }
@@ -224,7 +242,7 @@ ClassMethod Validate(p As %DynamicObject) As %String
             For f = "id", "name", "mailbox" { If ($CLASSMETHOD(json, "Str", t, f) = "") || (t.%GetTypeOf(f) '= "string") Return at _ "." _ f _ ": required" }
             If $LISTFIND(ids, t.%Get("id")) Return at _ ".id: must be unique"
             Set ids = ids _ $LISTBUILD(t.%Get("id"))
-            Set problem = ..MailboxProblem(t.%Get("mailbox"), domains)
+            Set problem = ##class(Shutter.Util.Mail).AddressProblem(t.%Get("mailbox"), domains)
             If problem '= "" Return at _ ".mailbox: " _ problem
             If t.%IsDefined("cc") {
                 Set cc = t.%Get("cc")
@@ -232,7 +250,7 @@ ClassMethod Validate(p As %DynamicObject) As %String
                 Set ci = cc.%GetIterator()
                 While ci.%GetNext(.j, .m) {
                     If cc.%GetTypeOf(j) '= "string" Return at _ ".cc[" _ j _ "]: must be a mailbox"
-                    Set problem = ..MailboxProblem(m, domains)
+                    Set problem = ##class(Shutter.Util.Mail).AddressProblem(m, domains)
                     If problem '= "" Return at _ ".cc[" _ j _ "]: " _ problem
                 }
             }
@@ -279,38 +297,18 @@ ClassMethod SeedFromFile(path As %String) As %Status
     Quit ..Store(p.%ToJSON(), path)
 }
 
-/// The receiver's tier (the production item's name), default 2.
-/// A mailbox's problem: not an address, or outside the allowed domains when the profile names them. "" when fine.
-/// The problem with a list of addresses a person typed (comma separated) against the profile's mail.allowed_domains:
-/// "" when every address is an address inside the allowed domains (or no domains are set), else the first offending
-/// address and why.
-ClassMethod AddressesProblem(list As %String) As %String
+/// The site's allowed mail domains (mail.allowed_domains) as a $LIST, lowercased; an empty list when the profile names
+/// none, which allows no address (Shutter.Util.Mail).
+ClassMethod AllowedDomains() As %List
 {
-    Set domains = "", allowed = ..Mail().%Get("allowed_domains")
-    If $ISOBJECT(allowed) {
-        Set di = allowed.%GetIterator()
-        While di.%GetNext(.j, .d) { If d '= "" Set domains = domains _ $LISTBUILD($ZCONVERT(d, "L")) }
-    }
-    For i = 1:1:$LENGTH(list, ",") {
-        Set a = $ZSTRIP($PIECE(list, ",", i), "<>W")
-        Continue:a=""
-        Set problem = ..MailboxProblem(a, domains)
-        If problem '= "" Quit
-    }
-    Quit $SELECT($GET(problem) = "": "", 1: a _ ": " _ problem)
+    Quit ##class(Shutter.Util.Mail).Domains(..Mail().%Get("allowed_domains"))
 }
 
-ClassMethod MailboxProblem(mailbox As %String, domains As %List) As %String [ Private ]
+/// The problem with a list of addresses a person typed (comma separated) against the profile's mail.allowed_domains:
+/// "" when every address is one bare address inside the allowed domains, else the first offending address and why.
+ClassMethod AddressesProblem(list As %String) As %String
 {
-    If (mailbox '[ "@") || ($PIECE(mailbox, "@", 2) = "") || ($PIECE(mailbox, "@", 1) = "") Quit "must be an address"
-    If $LISTLENGTH(domains) = 0 Quit ""
-    Set domain = $ZCONVERT($PIECE(mailbox, "@", 2), "L")
-    For i = 1:1:$LISTLENGTH(domains) {
-        Set d = $LIST(domains, i)
-        If (domain = d) || ($EXTRACT(domain, * - $LENGTH(d), *) = ("." _ d)) Quit
-    }
-    If (domain = d) || ($EXTRACT(domain, * - $LENGTH(d), *) = ("." _ d)) Quit ""
-    Quit "not in the allowed domains"
+    Quit ##class(Shutter.Util.Mail).AddressesProblem(list, ..AllowedDomains())
 }
 
 /// The time zone of the feed's timestamps that carry no offset (T28): UTC, Europe/London or a fixed offset. A
@@ -357,6 +355,7 @@ ClassMethod Mail() As %DynamicObject
     Quit $SELECT($ISOBJECT(mail) && mail.%IsA("%DynamicObject"): mail, 1: {})
 }
 
+/// The receiver's tier (the production item's name), default 2.
 ClassMethod TierOf(receiver As %String) As %Integer
 {
     Set p = ..Current()

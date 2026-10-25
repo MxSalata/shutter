@@ -745,26 +745,43 @@ ClassMethod CaseEscalationPatch(caseId As %String, seq As %String) As %Status
     If '$ISOBJECT(body) || $$$ISERR(psc) Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with subject, body, to and cc")
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
+    // An escalation is edited only while its case still stands with the team (blocked, escalated or failed): after a
+    // hand close or a reopening nothing more is written for the team to act on.
+    If '$LISTFIND($LISTBUILD("blocked", "escalated", "failed"), case.State) Quit ..Fail("409 Conflict", "wrong_state", "The case is " _ case.State _ "; an escalation is edited only while the case is blocked, escalated or failed")
     Set json = "Shutter.Util.Json"
-    // The addresses a person types must be addresses inside the site's allowed domains, when it names any.
-    Set problem = ""
-    For field = "to", "cc" {
-        Continue:'body.%IsDefined(field)
-        Set problem = ##class(Shutter.Store.SiteProfile).AddressesProblem($CLASSMETHOD(json, "Str", body, field))
-        If problem '= "" {
-            Set extra = {} Set extra.field = field
-            Do ..Fail("422 Unprocessable Entity", "address_not_allowed", "The " _ field _ " address is not allowed: " _ problem, extra)
-            Quit
-        }
+    For field = "subject", "body", "to", "cc" {
+        If body.%IsDefined(field) && (body.%GetTypeOf(field) '= "string") Return ..Fail("400 Bad Request", "bad_request", "subject, body, to and cc must be strings")
     }
-    If problem '= "" Quit $$$OK
-    Set sc = esc.Edit($SELECT(body.%IsDefined("subject"): $CLASSMETHOD(json, "Str", body, "subject"), 1: esc.Subject), $SELECT(body.%IsDefined("body"): $CLASSMETHOD(json, "Str", body, "body"), 1: esc.Body), $SELECT(body.%IsDefined("to"): $CLASSMETHOD(json, "Str", body, "to"), 1: esc.ToAddr), $SELECT(body.%IsDefined("cc"): $CLASSMETHOD(json, "Str", body, "cc"), 1: esc.CcAddr), ..User())
-    If $$$ISERR(sc) Quit ..Fail("409 Conflict", "wrong_state", $SYSTEM.Status.GetErrorText(sc))
+    Set subject = $SELECT(body.%IsDefined("subject"): $CLASSMETHOD(json, "Str", body, "subject"), 1: esc.Subject)
+    Set text = $SELECT(body.%IsDefined("body"): $CLASSMETHOD(json, "Str", body, "body"), 1: esc.Body)
+    Set to = $SELECT(body.%IsDefined("to"): $CLASSMETHOD(json, "Str", body, "to"), 1: esc.ToAddr)
+    Set cc = $SELECT(body.%IsDefined("cc"): $CLASSMETHOD(json, "Str", body, "cc"), 1: esc.CcAddr)
+    // The email as it would stand: the subject carries no line break, and the addresses a person types are bare
+    // addresses inside the site's allowed domains (CONTRACTS 10).
+    Set problem = ##class(Shutter.Store.Escalation).Problem(subject, to, cc, .field)
+    If problem '= "" Quit ..EscalationRefused(field, problem)
+    Set sc = esc.Edit(subject, text, to, cc, ..User())
+    If $$$ISERR(sc) {
+        Set why = $SYSTEM.Status.GetErrorText(sc)
+        Set field = $SELECT($EXTRACT(why, 1, 9) = "subject: ": "subject", $EXTRACT(why, 1, 4) = "to: ": "to", $EXTRACT(why, 1, 4) = "cc: ": "cc", 1: "")
+        If field '= "" Quit ..EscalationRefused(field, $PIECE(why, ": ", 2, *))
+        If $ZCONVERT(why, "U") [ "MAXLEN" Quit ..Fail("400 Bad Request", "bad_request", "too long: the subject at most 500 characters, to and cc at most 2000")
+        Quit ..Fail("409 Conflict", "wrong_state", why)
+    }
     Set text = esc.ToObject().%ToJSON()
     Do ..Remember(bodyText, "200 OK", text)
     Set %response.ContentType = "application/json"
     Write text
     Quit $$$OK
+}
+
+/// The 422 of an escalation's subject or address the rules refuse (CONTRACTS 10): subject_not_allowed for the subject,
+/// address_not_allowed for to and cc, the field named.
+ClassMethod EscalationRefused(field As %String, problem As %String) As %Status [ Private ]
+{
+    Set extra = {} Set extra.field = field
+    If field = "subject" Quit ..Fail("422 Unprocessable Entity", "subject_not_allowed", "The subject must not contain line breaks or control characters", extra)
+    Quit ..Fail("422 Unprocessable Entity", "address_not_allowed", "The " _ field _ " address is not allowed: " _ problem, extra)
 }
 
 /// Send a draft: the body's digest must be the one the person read; the mail goes through the Escalation Mail
@@ -781,23 +798,19 @@ ClassMethod CaseEscalationSend(caseId As %String, seq As %String) As %Status
     If '$ISOBJECT(body) Set body = {}
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
+    // Sent only while the case still stands with the team: a case closed by hand or reopened takes no more email.
+    If '$LISTFIND($LISTBUILD("blocked", "escalated", "failed"), case.State) Quit ..Fail("409 Conflict", "wrong_state", "The case is " _ case.State _ "; an escalation is sent only while the case is blocked, escalated or failed")
     Set digest = ##class(Shutter.Util.Json).Str(body, "bodyDigest")
     If digest = "" Quit ..Fail("400 Bad Request", "bad_request", "bodyDigest is required: the digest of the body as read")
     If esc.ToAddr = "" Quit ..Fail("409 Conflict", "no_recipient", "The escalation has no recipient; edit it with a team mailbox first")
     // Checked again at the send: the allowed domains may have changed since the draft was edited.
-    Set problem = ""
-    For field = "to", "cc" {
-        Set problem = ##class(Shutter.Store.SiteProfile).AddressesProblem($SELECT(field = "to": esc.ToAddr, 1: esc.CcAddr))
-        If problem '= "" {
-            Set extra = {} Set extra.field = field
-            Do ..Fail("422 Unprocessable Entity", "address_not_allowed", "The " _ field _ " address is not allowed: " _ problem, extra)
-            Quit
-        }
-    }
-    If problem '= "" Quit $$$OK
+    Set problem = esc.Check(.field)
+    If problem '= "" Quit ..EscalationRefused(field, problem)
     Set sc = esc.Queue(digest, ..User())
     If $$$ISERR(sc) {
         Set why = $SYSTEM.Status.GetErrorText(sc)
+        Set field = $SELECT($EXTRACT(why, 1, 9) = "subject: ": "subject", $EXTRACT(why, 1, 4) = "to: ": "to", $EXTRACT(why, 1, 4) = "cc: ": "cc", 1: "")
+        If field '= "" Quit ..EscalationRefused(field, $PIECE(why, ": ", 2, *))
         Set extra = {} Set extra.bodyDigest = esc.BodyDigest, extra.state = esc.State
         Quit ..Fail("409 Conflict", $SELECT($ZCONVERT(why, "L") [ "digest": "body_changed", 1: "wrong_state"), why, extra)
     }

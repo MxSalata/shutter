@@ -709,25 +709,29 @@ ClassMethod CopyItem(item As Ens.Config.Item, target As Ens.Config.Production) A
 
 /// The two daily housekeeping tasks (A14): "Shutter message purge" (the standard Ens.Util.Tasks.Purge: every message
 /// type in the namespace, bodies too, sessions kept whole) and "Shutter retention" (Shutter.Util.RetentionTask:
-/// idempotency keys older than a day, closed cases past the retention only when switched on). The retention task is
+/// idempotency keys older than a day, the text and .eml file of each escalation email escalationDays days after its
+/// case closed, closed cases past the retention only when switched on). The retention task is
 /// always made; the purge task only when purge is 1, keeping days days of messages, because a namespace-wide purge
 /// belongs only in a namespace that holds nothing but Shutter. The defaults come from the environment of the process
 /// that runs the install (the shell that runs zpm, not the running container): days from SHUTTER_MESSAGE_DAYS (90 when
 /// unset or not a positive whole number), purge from SHUTTER_MESSAGE_PURGE (1 or 0; when unset, 1 on a demo instance
-/// and 0 otherwise, read from ^Shutter.Config("demo")). Each task is made once: on an instance that already has it,
+/// and 0 otherwise, read from ^Shutter.Config("demo")), escalationDays from SHUTTER_ESCALATION_DAYS (the message days
+/// when unset or not a whole number; 0 keeps the texts). Each task is made once: on an instance that already has it,
 /// change the days or remove the purge in the Task Manager (System Operation > Task Manager); this method leaves an
-/// existing task as it is, whatever the arguments say. Returns "message purge created (N days)|exists|off; retention
-/// created|exists", or "ERROR: ..." . From SQL with no arguments (SELECT Shutter.Setup_EnsureRetentionTasks()) the
+/// existing task as it is, whatever the arguments say (a retention task made before EscalationDays existed runs the
+/// class default, 90). Returns "message purge created (N days)|exists|off; retention created (escalation texts N
+/// days|kept)|exists", or "ERROR: ..." . From SQL with no arguments (SELECT Shutter.Setup_EnsureRetentionTasks()) the
 /// defaults above apply.
-ClassMethod EnsureRetentionTasks(ns As %String = "", days As %String = "", purge As %String = "") As %String [ SqlProc ]
+ClassMethod EnsureRetentionTasks(ns As %String = "", days As %String = "", purge As %String = "", escalationDays As %String = "") As %String [ SqlProc ]
 {
     If '$SYSTEM.Security.Check("%Admin_Task", "USE") && '$SYSTEM.Security.Check("Shutter_Operate", "USE") Quit "Shutter_Operate is required"
     // SQL hands an empty argument to a procedure as $CHAR(0).
     If ns = $CHAR(0) Set ns = ""
     If days = $CHAR(0) Set days = ""
     If purge = $CHAR(0) Set purge = ""
+    If escalationDays = $CHAR(0) Set escalationDays = ""
     If ns = "" Set ns = $NAMESPACE
-    Set days = ..MessageDays(days), purge = ..MessagePurge(purge)
+    Set days = ..MessageDays(days), purge = ..MessagePurge(purge), escalationDays = ..EscalationDays(escalationDays, days)
     Set exists = (..TaskId("Shutter message purge") '= ""), made = 0
     If purge && 'exists {
         Set sc = ..EnsureTask("Shutter message purge", ns, "Ens.Util.Tasks.Purge", "Shutter: purge messages, logs and traces older than " _ days _ " days, sessions kept whole", $LISTBUILD("NumberOfDaysToKeep", days, "BodiesToo", 1, "KeepIntegrity", 1, "TypesToPurge", "all"), 9600, .made)
@@ -737,9 +741,12 @@ ClassMethod EnsureRetentionTasks(ns As %String = "", days As %String = "", purge
     // The install's record, for a Doctor report by a caller without access to the Task Manager.
     Set ^|ns|Shutter.Config("purgeTask") = exists
     Set out = "message purge " _ $SELECT(made: "created (" _ days _ " days)", exists: "exists", 1: "off")
-    Set sc = ..EnsureTask("Shutter retention", ns, "Shutter.Util.RetentionTask", "Shutter: idempotency keys older than a day, and closed cases past the retention when switched on", $LISTBUILD("RetentionDays", 30, "PurgeClosedCases", 0), 9900, .made)
+    Set texts = $SELECT(escalationDays > 0: "escalation emails' text " _ escalationDays _ " days after their case closed, ", 1: "")
+    Set sc = ..EnsureTask("Shutter retention", ns, "Shutter.Util.RetentionTask", "Shutter: idempotency keys older than a day, " _ texts _ "and closed cases past the retention when switched on", $LISTBUILD("RetentionDays", 30, "PurgeClosedCases", 0, "EscalationDays", escalationDays), 9900, .made)
     If $$$ISERR(sc) Quit "ERROR: " _ $SYSTEM.Status.GetErrorText(sc)
-    Quit out _ "; retention " _ $SELECT(made: "created", 1: "exists")
+    // The install's record, for a Doctor report by a caller without access to the Task Manager.
+    If made Set ^|ns|Shutter.Config("escalationDays") = escalationDays
+    Quit out _ "; retention " _ $SELECT(made: "created (escalation texts " _ $SELECT(escalationDays > 0: escalationDays _ " days", 1: "kept") _ ")", 1: "exists")
 }
 
 /// The days of messages the purge task keeps: the argument, else SHUTTER_MESSAGE_DAYS, else 90; a value that is not a
@@ -749,6 +756,17 @@ ClassMethod MessageDays(days As %String = "") As %Integer [ Private ]
     Set days = $ZSTRIP(days, "<>W")
     If days = "" Set days = $ZSTRIP($SYSTEM.Util.GetEnviron("SHUTTER_MESSAGE_DAYS"), "<>W")
     If (days '?1.N) || (+days < 1) Quit 90
+    Quit +days
+}
+
+/// The days after a case closes before its escalation emails' text and .eml files go: the argument, else
+/// SHUTTER_ESCALATION_DAYS, else the message days, so one knob governs both by default; 0 keeps the texts; a value that
+/// is not a whole number counts as unset.
+ClassMethod EscalationDays(days As %String = "", messageDays As %Integer = 90) As %Integer [ Private ]
+{
+    Set days = $ZSTRIP(days, "<>W")
+    If days = "" Set days = $ZSTRIP($SYSTEM.Util.GetEnviron("SHUTTER_ESCALATION_DAYS"), "<>W")
+    If days '?1.N Quit +messageDays
     Quit +days
 }
 
@@ -800,13 +818,18 @@ ClassMethod EnsureTask(name As %String, ns As %String, class As %String, descrip
     Quit sc
 }
 
-/// Empty Shutter's own tables (cases and everything attached to them, their escalation emails included, recordings
-/// excepted) on a demo instance. Refused elsewhere. Returns the number of tables emptied or the error.
+/// Empty Shutter's own tables (cases and everything attached to them, their escalation emails and the .eml files of
+/// those rows included, recordings excepted) on a demo instance. Refused elsewhere. Returns the number of tables
+/// emptied or the error.
 ClassMethod PurgeStore() As %String [ SqlProc ]
 {
     If '$SYSTEM.Security.Check("Shutter_Operate", "USE") Quit "Shutter_Operate is required"
     If '$GET(^Shutter.Config("demo")) Quit "ERROR: not a demo instance"
     Set n = 0
+    // The .eml files of the escalations about to go, by the paths their rows hold: never the folder, which may hold
+    // another instance's files.
+    Set emails = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Seq, Result FROM Shutter_Store.Escalation WHERE Transport = 'file'")
+    While emails.%Next() { Do ##class(Shutter.Store.Escalation).RemoveFile(emails.%Get("Result"), emails.%Get("Seq")) }
     For cls = "Shutter.Store.CaseToken", "Shutter.Store.ChainItem", "Shutter.Store.Chain", "Shutter.Store.IncidentEvent", "Shutter.Store.Incident", "Shutter.Store.Verification", "Shutter.Store.ExecutionAttempt", "Shutter.Store.Approval", "Shutter.Store.Rehearsal", "Shutter.Store.GateDecision", "Shutter.Store.Plan", "Shutter.Store.Finding", "Shutter.Store.AgentRun", "Shutter.Store.SnapshotItem", "Shutter.Store.Snapshot", "Shutter.Store.CaseEvent", "Shutter.Store.Escalation", "Shutter.Store.Case", "Shutter.Store.Idempotency", "Shutter.Bridge.ToolCall" {
         Set sc = $CLASSMETHOD(cls, "%KillExtent")
         If $$$ISERR(sc) Quit
@@ -949,6 +972,18 @@ ClassMethod Doctor() As %String [ SqlProc ]
                 }
             }
         }
+        // The retention task's escalation days (the escalation emails' text goes that long after the case closed; 0
+        // keeps it): the task's setting, or the class default, 90, which a task made before the setting existed runs.
+        Set taskId = ..TaskId("Shutter retention")
+        If taskId '= "" {
+            Set r."escalation_days" = 90
+            Set task = ##class(%SYS.Task).%OpenId(taskId)
+            If $ISOBJECT(task) && $LISTVALID(task.Settings) {
+                For i = 1:2:$LISTLENGTH(task.Settings) {
+                    If $LISTGET(task.Settings, i) = "EscalationDays" Set r."escalation_days" = +$LISTGET(task.Settings, i + 1)
+                }
+            }
+        }
         Set r."webapps_checked" = "live"
     } Catch ex {
         // A caller without %SYS access gets what the install recorded.
@@ -957,6 +992,7 @@ ClassMethod Doctor() As %String [ SqlProc ]
         Do r.%Set("wards_webapp", ''$GET(^Shutter.Config("webapp", "/downstream/api")), "boolean")
         Do r.%Set("purge_task", ''$GET(^Shutter.Config("purgeTask")), "boolean")
         If $GET(^Shutter.Config("purgeTask")) && ($GET(^Shutter.Config("messageDays")) '= "") Set r."message_days" = +^Shutter.Config("messageDays")
+        If $GET(^Shutter.Config("escalationDays")) '= "" Set r."escalation_days" = +^Shutter.Config("escalationDays")
         Set r."webapps_checked" = "install record"
     }
     Quit r.%ToJSON()

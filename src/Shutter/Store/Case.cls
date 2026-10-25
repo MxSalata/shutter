@@ -199,9 +199,9 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
 
 /// Delete the closed cases whose closing is older than a time, with everything that hangs off them (events, snapshots
 /// and their items, plans, approvals, rehearsals, gate decisions, attempts, verifications, agent runs and their tool
-/// calls, chain items), and the closed incidents older than it with their chains, items, events and the cases they
-/// held. Cases an open incident still holds stay. Returns how many cases went. Housekeeping only
-/// (Shutter.Util.RetentionTask, switched on by a site): the record is the product.
+/// calls, chain items, escalation emails and their .eml files), and the closed incidents older than it with their
+/// chains, items, events and the cases they held. Cases an open incident still holds stay. Returns how many cases went.
+/// Housekeeping only (Shutter.Util.RetentionTask, switched on by a site): the record is the product.
 ClassMethod PurgeClosedBefore(cutoff As %String) As %Integer
 {
     Set n = 0
@@ -235,9 +235,13 @@ ClassMethod PurgeCase(id As %String) As %Status [ Private ]
     // The tool calls of the case's runs, and their counters.
     Set keys = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT EnsMessageId FROM Shutter_Store.AgentRun WHERE ""Case"" = ? AND EnsMessageId IS NOT NULL", id)
     While keys.%Next() { Kill ^Shutter.Counter("toolcall", keys.%Get("EnsMessageId")) }
+    // The .eml files of the case's escalations, removed once their rows are gone (a rollback leaves both).
+    Set files = ""
+    Set emails = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Seq, Result FROM Shutter_Store.Escalation WHERE ""Case"" = ? AND Transport = 'file'", id)
+    While emails.%Next() { Set files = files _ $LISTBUILD($LISTBUILD(emails.%Get("Seq"), emails.%Get("Result"))) }
     TSTART
     Set sc = ..Exec("DELETE FROM Shutter_Bridge.ToolCall WHERE RunKey IN (SELECT EnsMessageId FROM Shutter_Store.AgentRun WHERE ""Case"" = ? AND EnsMessageId IS NOT NULL)", id)
-    For table = "Shutter_Store.CaseToken", "Shutter_Store.ChainItem", "Shutter_Store.Verification", "Shutter_Store.ExecutionAttempt", "Shutter_Store.Approval", "Shutter_Store.Rehearsal", "Shutter_Store.GateDecision", "Shutter_Store.Finding", "Shutter_Store.AgentRun", "Shutter_Store.Plan" {
+    For table = "Shutter_Store.CaseToken", "Shutter_Store.ChainItem", "Shutter_Store.Verification", "Shutter_Store.ExecutionAttempt", "Shutter_Store.Approval", "Shutter_Store.Rehearsal", "Shutter_Store.GateDecision", "Shutter_Store.Finding", "Shutter_Store.AgentRun", "Shutter_Store.Plan", "Shutter_Store.Escalation" {
         If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM " _ table _ " WHERE ""Case"" = ?", id)
     }
     If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM Shutter_Store.SnapshotItem WHERE Snapshot IN (SELECT ID FROM Shutter_Store.Snapshot WHERE ""Case"" = ?)", id)
@@ -246,6 +250,7 @@ ClassMethod PurgeCase(id As %String) As %Status [ Private ]
     If $$$ISOK(sc) Set sc = ..%DeleteId(id)
     If $$$ISOK(sc) { TCOMMIT } Else { TROLLBACK  Quit sc }
     Kill ^Shutter.Counter("event", id), ^Shutter.Counter("plan", id), ^Shutter.Counter("snapshot", id)
+    For i = 1:1:$LISTLENGTH(files) { Do ##class(Shutter.Store.Escalation).RemoveFile($LIST($LIST(files, i), 2), $LIST($LIST(files, i), 1)) }
     Quit sc
 }
 
@@ -419,8 +424,10 @@ Method %OnBeforeSave(insert As %Boolean) As %Status [ Private, ServerOnly = 1 ]
 
 /// Close a case the team handled by hand (T31, 2.6): an escalated, blocked or failed case resolves with disposition
 /// handled_by_hand, and its state event names the reason and, when the case was escalated, the latest escalation
-/// it followed. The current approval, if any, is revoked as a reopening revokes it. An open Workflow task is the
-/// workflow's to cancel (Shutter.Process.CaseWorkflow.OnClose), since the engine answers the instance that raised it.
+/// it followed. Every draft or queued escalation email of the case is cancelled, whatever its seq, and the event says
+/// how many (a failed send stays failed, as history). The current approval, if any, is revoked as a reopening revokes
+/// it. An open Workflow task is the workflow's to cancel (Shutter.Process.CaseWorkflow.OnClose), since the engine
+/// answers the instance that raised it.
 ClassMethod CloseByHand(case As Shutter.Store.Case, reason As %String, actor As %String, expectedVersion As %Integer = "") As %Status
 {
     If '$ISOBJECT(case) Quit $$$ERROR($$$GeneralError, "No case to close")
@@ -435,10 +442,19 @@ ClassMethod CloseByHand(case As Shutter.Store.Case, reason As %String, actor As 
         Set esc = ##class(Shutter.Store.Escalation).BySeq(case, +seq)
         Set followed = "; after escalation " _ (+seq)
         If $ISOBJECT(esc) Set followed = followed _ $SELECT(esc.TeamName '= "": " to " _ esc.TeamName, 1: "") _ " (" _ esc.State _ ")"
-        // An email not yet sent would tell the team to correct a case already handled: it is cancelled.
-        If $ISOBJECT(esc) && ((esc.State = "draft") || (esc.State = "queued")) { Set esc.State = "cancelled" Do esc.%Save() Set followed = followed _ ", cancelled" }
         Set ref = "escalation:" _ (+seq)
     }
+    // An email not yet sent would tell the team to correct a case already handled: every draft or queued one is
+    // cancelled, not only the latest (the mail operation skips a queued row cancelled before it reads it).
+    Set cancelled = 0
+    Set pending = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.Escalation WHERE ""Case"" = ? AND State IN ('draft', 'queued') ORDER BY Seq", cid)
+    While pending.%Next() {
+        Set e = ##class(Shutter.Store.Escalation).%OpenId(pending.%Get("ID"))
+        Continue:'$ISOBJECT(e)
+        Set e.State = "cancelled"
+        If $$$ISOK(e.%Save()) Set cancelled = cancelled + 1
+    }
+    If cancelled > 0 Set followed = followed _ "; " _ cancelled _ " pending email" _ $SELECT(cancelled = 1: "", 1: "s") _ " cancelled"
     If $ISOBJECT(case.CurrentApproval) && 'case.CurrentApproval.Revoked Do case.CurrentApproval.Revoke(who _ ": the case was handled by hand")
     Set case.Disposition = "handled_by_hand"
     Set case.Headline = "Handled by the team. " _ ##class(Shutter.Util.Json).Clip(reason, 200)

@@ -19,6 +19,7 @@ ARG WITH_AIHUB=1
 ARG SHUTTER_DEMO_PASSWORD=
 ARG SHUTTER_MESSAGE_DAYS=
 ARG SHUTTER_MESSAGE_PURGE=
+ARG SHUTTER_ESCALATION_DAYS=
 
 # Create the namespace, install the package manager (the pinned installer in vendor/ipm) and load the
 # modules while the image is built, so that `docker compose up` starts an instance that is ready. A
@@ -26,6 +27,6 @@ ARG SHUTTER_MESSAGE_PURGE=
 # would answer 404. The production is set to start with the instance; SHUTTER_BUILD tells the install
 # not to start it here.
 RUN iris start IRIS \
- && SHUTTER_BUILD=1 SHUTTER_DEMO_PASSWORD="${SHUTTER_DEMO_PASSWORD}" SHUTTER_MESSAGE_DAYS="${SHUTTER_MESSAGE_DAYS}" SHUTTER_MESSAGE_PURGE="${SHUTTER_MESSAGE_PURGE}" iris session IRIS < /home/irisowner/dev/iris.script \
+ && SHUTTER_BUILD=1 SHUTTER_DEMO_PASSWORD="${SHUTTER_DEMO_PASSWORD}" SHUTTER_MESSAGE_DAYS="${SHUTTER_MESSAGE_DAYS}" SHUTTER_MESSAGE_PURGE="${SHUTTER_MESSAGE_PURGE}" SHUTTER_ESCALATION_DAYS="${SHUTTER_ESCALATION_DAYS}" iris session IRIS < /home/irisowner/dev/iris.script \
  && if [ "${WITH_AIHUB}" = "1" ]; then SHUTTER_BUILD=1 iris session IRIS < /home/irisowner/dev/aihub.script; fi \
  && iris stop IRIS quietly

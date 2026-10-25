@@ -25,6 +25,11 @@ Method OnEscalationSend(request As Shutter.Msg.EscalationSend, Output response A
     Set esc = ##class(Shutter.Store.Escalation).%OpenId(request.EscalationId)
     If '$ISOBJECT(esc) Quit $$$ERROR($$$GeneralError, "No escalation " _ request.EscalationId)
     If esc.State '= "queued" Quit $$$OK
+    // The last check before anything leaves: the subject and the addresses against the profile as it stands now (the
+    // allowed domains may have changed since the send was accepted, or the row was changed outside the API). A refused
+    // escalation fails with the reason on the timeline; it can be edited and sent again.
+    Set problem = esc.Check(.field)
+    If problem '= "" Do esc.MarkFailed("Refused before sending, " _ field _ ": " _ problem) Quit $$$OK
     Try {
         If ..Adapter.SMTPServer = "" {
             Set file = ..WriteFile(esc)
@@ -48,24 +53,30 @@ Method OnEscalationSend(request As Shutter.Msg.EscalationSend, Output response A
     Quit $$$OK
 }
 
-/// The sender: the site profile's mail.from when the site set one, else this operation's From setting.
+/// The sender: the site profile's mail.from when the site set one and it is a bare address, else this operation's From
+/// setting (a profile stored before the address rules is warned about in the event log).
 Method Sender() As %String
 {
     Set from = $ZSTRIP(##class(Shutter.Util.Json).Str(##class(Shutter.Store.SiteProfile).Mail(), "from"), "<>W")
+    If (from '= "") && (##class(Shutter.Util.Mail).ShapeProblem(from) '= "") {
+        $$$LOGWARNING("The site profile's mail.from (" _ ##class(Shutter.Util.Mail).HeaderValue(from) _ ") is not a bare address; the operation's From setting is used instead")
+        Set from = ""
+    }
     Quit $SELECT(from '= "": from, 1: ..From)
 }
 
 Method Mail(esc As Shutter.Store.Escalation) As %Net.MailMessage
 {
     Set mail = ##class(%Net.MailMessage).%New()
-    Set mail.From = ..Sender(), mail.Subject = esc.Subject, mail.Charset = "UTF-8"
-    For i = 1:1:$LENGTH(esc.ToAddr, ",") { Set a = $ZSTRIP($PIECE(esc.ToAddr, ",", i), "<>W") Do:a'="" mail.To.Insert(a) }
-    For i = 1:1:$LENGTH(esc.CcAddr, ",") { Set a = $ZSTRIP($PIECE(esc.CcAddr, ",", i), "<>W") Do:a'="" mail.Cc.Insert(a) }
+    Set mail.From = ..Sender(), mail.Subject = ##class(Shutter.Util.Mail).HeaderValue(esc.Subject), mail.Charset = "UTF-8"
+    For i = 1:1:$LENGTH(esc.ToAddr, ",") { Set a = ##class(Shutter.Util.Mail).HeaderValue($ZSTRIP($PIECE(esc.ToAddr, ",", i), "<>W")) Do:a'="" mail.To.Insert(a) }
+    For i = 1:1:$LENGTH(esc.CcAddr, ",") { Set a = ##class(Shutter.Util.Mail).HeaderValue($ZSTRIP($PIECE(esc.CcAddr, ",", i), "<>W")) Do:a'="" mail.Cc.Insert(a) }
     Do mail.TextData.Write(esc.Body)
     Quit mail
 }
 
-/// The email as an .eml file (RFC 5322, plain text), named after the case and the escalation.
+/// The email as an .eml file (RFC 5322, plain text), named after the case and the escalation. Every header goes
+/// through Header, so no value can end its line or start another header.
 Method WriteFile(esc As Shutter.Store.Escalation) As %String
 {
     Set dir = ..OutputFolder
@@ -76,18 +87,45 @@ Method WriteFile(esc As Shutter.Store.Escalation) As %String
     Set f.TranslateTable = "UTF8", f.LineTerminator = $CHAR(13, 10)
     Set sc = f.LinkToFile(path)
     $$$ThrowOnError(sc)
-    Do f.WriteLine("From: " _ ..Sender())
-    Do f.WriteLine("To: " _ esc.ToAddr)
-    Do:esc.CcAddr'="" f.WriteLine("Cc: " _ esc.CcAddr)
-    Do f.WriteLine("Subject: " _ esc.Subject)
+    Do ..Header(f, "From", ..Sender())
+    Do ..Header(f, "To", esc.ToAddr)
+    Do:esc.CcAddr'="" ..Header(f, "Cc", esc.CcAddr)
+    Do ..Header(f, "Subject", esc.Subject)
     Set ts = $ZTIMESTAMP
-    Do f.WriteLine("Date: " _ $ZDATE(ts, 11) _ ", " _ $ZDATE(ts, 2) _ " " _ $ZTIME($PIECE(ts, ",", 2) \ 1, 1) _ " +0000")
-    Do f.WriteLine("MIME-Version: 1.0")
-    Do f.WriteLine("Content-Type: text/plain; charset=UTF-8")
+    Do ..Header(f, "Date", $ZDATE(ts, 11) _ ", " _ $ZDATE(ts, 2) _ " " _ $ZTIME($PIECE(ts, ",", 2) \ 1, 1) _ " +0000")
+    Do ..Header(f, "MIME-Version", "1.0")
+    Do ..Header(f, "Content-Type", "text/plain; charset=UTF-8")
     Do f.WriteLine("")
     Do f.Write(esc.Body)
     $$$ThrowOnError(f.%Save())
     Quit path
+}
+
+/// One header of the .eml: the value's control characters become spaces (Shutter.Util.Mail.HeaderValue), so the
+/// header stays one logical line, and a line longer than 78 characters is folded at a space or a comma with CRLF and
+/// one space (RFC 5322 2.2.3); a line with nowhere to fold is written whole.
+Method Header(f As %Stream.FileCharacter, name As %String, value As %String) [ Private ]
+{
+    Set text = name _ ": " _ ##class(Shutter.Util.Mail).HeaderValue(value)
+    // The first line keeps the header's name and at least one character of its value; a continuation line keeps its
+    // leading space and at least one character.
+    Set least = $LENGTH(name) + 4
+    While $LENGTH(text) > 78 {
+        Set cut = 0
+        For i = 78:-1:least { If " ," [ $EXTRACT(text, i) Set cut = i Quit }
+        Quit:cut=0
+        // The fold replaces the space it breaks at, so the unfolded header reads exactly as the value; after a comma
+        // the continuation's leading space is the one the list may already carry.
+        Set head = $EXTRACT(text, 1, cut), rest = $EXTRACT(text, cut + 1, *)
+        If $EXTRACT(head, *) = " " {
+            Set head = $EXTRACT(head, 1, * - 1)
+        } Else {
+            Set rest = $ZSTRIP(rest, "<W")
+        }
+        Do f.WriteLine(head)
+        Set text = " " _ rest, least = 3
+    }
+    Do f.WriteLine(text)
 }
 
 XData MessageMap
