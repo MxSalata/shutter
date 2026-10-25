@@ -100,7 +100,43 @@ ClassMethod AddTarget(out As %DynamicArray, ByRef seen, namespace As %String, pr
     Do out.%Push(t)
 }
 
+/// The targets as JSON, for scripts that reach IRIS through SQL: SELECT Shutter_Review.Sweep_TargetsJSON().
+ClassMethod TargetsJSON() As %String(MAXLEN = "") [ SqlProc ]
+{
+    Set out = ""
+    Try {
+        Set out = ..Targets().%ToJSON()
+    } Catch ex {
+        Set out = {"error": (ex.DisplayString())}.%ToJSON()
+    }
+    Quit out
+}
+
 // ---- one run ----
+
+/// One run as JSON, for scripts that reach IRIS through SQL and for a check on an instance:
+/// SELECT Shutter_Review.Sweep_RunJSON('HOSPITAL', 'Hospital.Production', 7). Nothing is stored. The namespace and
+/// production default to Shutter's own; an argument SQL hands over as $CHAR(0) counts as empty.
+ClassMethod RunJSON(namespace As %String = "", production As %String = "", windowDays As %Integer = 7) As %String(MAXLEN = "") [ SqlProc ]
+{
+    If namespace = $CHAR(0) Set namespace = ""
+    If production = $CHAR(0) Set production = ""
+    If windowDays = $CHAR(0) Set windowDays = 7
+    If namespace = "" Set namespace = $NAMESPACE
+    If production = "" Set production = ##class(Shutter.Setup).ProductionName()
+    Set out = ""
+    Try {
+        Set sc = ..Run(namespace, production, +windowDays, .result)
+        If $$$ISERR(sc) {
+            Set out = {"error": ($SYSTEM.Status.GetErrorText(sc))}.%ToJSON()
+        } Else {
+            Set out = result.%ToJSON()
+        }
+    } Catch ex {
+        Set out = {"error": (ex.DisplayString())}.%ToJSON()
+    }
+    Quit out
+}
 
 /// One review of one production over the last windowDays (1 to 90; 7 when out of range): the reader's data, the case
 /// aggregates, the checks, the fingerprint, the baseline rank and the annotations. result = {namespace, production,
