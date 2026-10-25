@@ -76,7 +76,12 @@ function StoryCard({
             fz="xs"
             fw={700}
             tt="uppercase"
-            style={{ letterSpacing: '0.04em', color: tone ? toneText(tone) : 'var(--mantine-color-dimmed)' }}
+            // The label keeps the body's text colour: a tone's text colour on its own tint falls short of 4.5:1 in
+            // some appearances, and the icon beside it already carries the tone
+            style={{
+              letterSpacing: '0.04em',
+              color: tone ? 'var(--mantine-color-text)' : 'var(--mantine-color-dimmed)',
+            }}
           >
             {label}
           </Title>
