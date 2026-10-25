@@ -1,18 +1,20 @@
 ---
 id: downstream-interface-contract
-version: 1.3
+version: 1.4
 collection: contracts
 applies_to: [downstream-api-v1, hl7-v2-adt]
-effective_from: 2026-10-20
+effective_from: 2026-10-25
 ---
 
 # Demo Bed Management: interface contract for senders
 
 Issued by the supplier of the demo bed-management system (the downstream system) to every system that sends patient
-movements to it. Version 1.3, in force from 20 October 2026. Changes from 1.2: the HL7 versions taken (2.3.1, 2.4 and
-2.5.1), the full trigger table (WIC-6) and what the downstream system is sent (WIC-6.2). Changes from 1.1: the system's
-name and its base path (`/downstream/api`); nothing else. Changes from 1.0: the epoch (WIC-1.4), the capability profile (WIC-7), and what an
-unavailable receipt lookup means (WIC-5.2).
+movements to it. Version 1.4, in force from 25 October 2026. Changes from 1.3: the patient identifier is the PID-3
+repetition typed MR, else the first (WIC-6); A04, A05, A28 and A31 in the event row, and the ward of an A04 that
+counts as an admit. Changes from 1.2: the HL7 versions taken (2.3.1, 2.4 and 2.5.1), the update, cancel and merge
+triggers in the event row (WIC-6) and what the downstream system is sent (WIC-6.2). Changes from 1.1: the system's
+name and its base path (`/downstream/api`); nothing else. Changes from 1.0: the epoch (WIC-1.4), the capability
+profile (WIC-7), and what an unavailable receipt lookup means (WIC-5.2).
 
 ## WIC-1 What the downstream system does
 
