@@ -34,7 +34,9 @@ test.describe('the guided path', () => {
     const outcome = page.getByRole('region', { name: 'Outcome' });
     await expect(outcome).toContainText('Waiting for approval · 0 writes');
     await expect(outcome).toContainText('Next action: Approve or reject plan v1');
-    await expect(page.getByRole('region', { name: 'Approval' })).toContainText('Waiting for approval');
+    await expect(page.getByRole('region', { name: 'Approval', exact: true })).toContainText(
+      'Waiting for approval',
+    );
   });
 
   test('opens the S8 comparison from the guide, behind why the board matters', async ({ page }) => {
