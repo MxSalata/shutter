@@ -11,7 +11,7 @@ Property Attempt As Shutter.Store.ExecutionAttempt(%JSONFIELDNAME = "attemptId",
 
 Property At As %String(%JSONFIELDNAME = "at", MAXLEN = 30);
 
-/// verified, superseded_after, unresolved, failed.
+/// verified, not_committed, unresolved, failed (Shutter.Operation.Verify.Judge).
 Property Outcome As %String(%JSONFIELDNAME = "outcome", MAXLEN = 32);
 
 Property Summary As %String(%JSONFIELDNAME = "summary", MAXLEN = 2000);

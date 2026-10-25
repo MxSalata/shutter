@@ -1202,7 +1202,7 @@ Method OnExecute(case As Shutter.Store.Case, result As Shutter.Msg.WardResult) A
     Set ..AttemptId = attempt.%Id()
     Do case.Note("execution", "Dispatch: " _ outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "") _ ", HTTP " _ result.HttpStatus, "system", "attempt:" _ attempt.%Id())
     If (outcome = "applied") || (outcome = "already_committed") || (outcome = "uncertain") {
-        Set sc = case.Transition("verifying", $SELECT(outcome = "uncertain": "The receiver did not answer; reconciling by operation key", 1: "The receiver acknowledged; verifying the effect"), "system", "attempt:" _ attempt.%Id())
+        Set sc = case.Transition("verifying", $SELECT(outcome = "uncertain": "The receiver did not answer; reconciling by operation key, reading again until a receipt, the history or the settle window settles it", 1: "The receiver acknowledged; verifying the effect"), "system", "attempt:" _ attempt.%Id())
         Quit:$$$ISERR(sc) sc
         Quit ..SendVerify(case)
     }
@@ -1230,26 +1230,63 @@ Method SendVerify(case As Shutter.Store.Case) As %Status
 
 Method OnVerify(case As Shutter.Store.Case, result As Shutter.Msg.VerifyResult) As %Status
 {
+    Set json = "Shutter.Util.Json"
+    Set detail = $CLASSMETHOD(json, "Parse", result.DetailJSON, .dsc)
     If result.Outcome = "verified" {
         Set case.Outcome = result.Summary
+        // A closure on a later transfer the feed sent whose delivery failed or is uncertain is written on that transfer's
+        // case too (CONTRACTS 6.1): the person handling it sees what was dropped on its account.
+        If $ISOBJECT(detail) Do ..NoteSupersededBy(case, detail.%Get("superseded_by"))
         Quit case.Transition("resolved", "Verified: " _ result.Summary, "system", "verification:" _ result.VerificationId)
     }
-    // A verification whose lookups failed decided nothing: it is asked again with a growing wait, up to the limit.
-    Set detail = ##class(Shutter.Util.Json).Parse(result.DetailJSON, .dsc)
+    // A verification that established nothing yet is asked again with a growing wait, up to the limit (reads at about 0,
+    // 10, 30 and 70 s after the attempt). The verifier says whether another read could settle it (detail.retry: a lookup
+    // failed, or no receipt yet inside the settle window after a write whose answer was lost); a verification written
+    // before it said so is read again when a lookup failed.
+    Set retry = 0, unreadable = 0, es = "", rs = ""
     If $ISOBJECT(detail) {
-        Set es = ##class(Shutter.Util.Json).Str(detail, "encounter_http_status"), rs = ##class(Shutter.Util.Json).Str(detail, "receipt_http_status")
+        Set es = $CLASSMETHOD(json, "Str", detail, "encounter_http_status"), rs = $CLASSMETHOD(json, "Str", detail, "receipt_http_status")
         Set unreadable = ((es '= 200) && (es '= 404)) || ((rs '= 200) && (rs '= 404) && (rs '= -1))
-        If unreadable && (..Refreshes < ..MaxRefreshes) {
-            Set ..Refreshes = ..Refreshes + 1
-            Set wait = 10 * (2 ** (..Refreshes - 1))
-            Do case.Note("note", "The verification could not read the receiver (encounter HTTP " _ es _ ", receipt HTTP " _ rs _ "); verifying again in " _ wait _ " s (" _ ..Refreshes _ " of " _ ..MaxRefreshes _ ")", "system", "verification:" _ result.VerificationId)
-            Set alarm = ##class(Ens.AlarmRequest).%New()
-            Set alarm.Timeout = wait
-            Quit ..SendRequestAsync("Ens.Alarm", alarm, 1, "verify:retry")
-        }
+        Set retry = $SELECT(detail.%IsDefined("retry"): $CLASSMETHOD(json, "Bool", detail, "retry"), 1: unreadable)
+    }
+    If retry && (..Refreshes < ..MaxRefreshes) {
+        Set ..Refreshes = ..Refreshes + 1
+        Set wait = 10 * (2 ** (..Refreshes - 1))
+        Set why = $SELECT(unreadable: "could not read the receiver (encounter HTTP " _ es _ ", receipt HTTP " _ rs _ ")", 1: "established nothing yet (" _ result.Summary _ ")")
+        Do case.Note("note", "The verification " _ why _ "; verifying again in " _ wait _ " s (" _ ..Refreshes _ " of " _ ..MaxRefreshes _ ")", "system", "verification:" _ result.VerificationId)
+        Set alarm = ##class(Ens.AlarmRequest).%New()
+        Set alarm.Timeout = wait
+        Quit ..SendRequestAsync("Ens.Alarm", alarm, 1, "verify:retry")
     }
     Set case.Outcome = result.Summary
+    // A write whose answer was lost and that was not committed (CONTRACTS 5.1): the approval authorised one write and it
+    // is spent, so nothing is resent from here; a person reinvestigates, which plans again on fresh evidence.
+    If result.Outcome = "not_committed" {
+        Set approval = ##class(Shutter.Store.Approval).%OpenId(..ApprovalId)
+        If $ISOBJECT(approval) Do approval.Revoke("system: the write was not committed")
+        Set case.Headline = "Escalated: the resend was not committed"
+        Quit case.Transition("escalated", "Not verified (not_committed): " _ result.Summary _ ". The approval is revoked, and nothing is resent without a person: a reinvestigation plans again on fresh evidence", "system", "verification:" _ result.VerificationId)
+    }
+    // A write whose outcome the reads could not settle: unknown is the verdict, and a person checks at the receiver.
+    If (result.Outcome = "unresolved") && $ISOBJECT(detail) && ($CLASSMETHOD(json, "Str", detail, "disposition") = "resend") && ($CLASSMETHOD(json, "Str", detail, "verdict") = "unknown") && $ISOBJECT(detail.%Get("attempt")) {
+        Set case.Headline = "Escalated: the resend's outcome is unknown"
+        Quit case.Transition("escalated", "Not verified (unknown): " _ result.Summary _ ". Whether the receiver applied the resend is unknown; a person must check at the receiver before anything is resent", "system", "verification:" _ result.VerificationId)
+    }
     Quit case.Transition("escalated", "Not verified (" _ result.Outcome _ "): " _ result.Summary, "system", "verification:" _ result.VerificationId)
+}
+
+/// Writes on the later transfer's case that this case was closed as superseded on its account, when the verifier's
+/// support (detail.superseded_by) was a later transfer the feed sent whose delivery failed or is uncertain and whose
+/// case is known (CONTRACTS 6.1). Never on this case, and never an error for the closure.
+Method NoteSupersededBy(case As Shutter.Store.Case, by As %DynamicObject)
+{
+    If '$ISOBJECT(by) Quit
+    Set otherId = ##class(Shutter.Util.Json).Str(by, "case_id")
+    If (otherId = "") || (otherId = case.CaseId) Quit
+    Set other = ##class(Shutter.Store.Case).ByCaseId(otherId)
+    If '$ISOBJECT(other) Quit
+    Set sc = other.Note("note", "Case " _ case.CaseId _ " was closed as superseded on this case's account: its " _ case.Event _ $SELECT(case.Ward '= "": " to " _ case.Ward, 1: "") _ " at " _ case.EventTime _ " is not resent, because this case's later movement supersedes it; this case recovers the patient's location", "system", "case:" _ case.CaseId)
+    If $$$ISERR(sc) $$$LOGWARNING("Could not note the supersession on " _ otherId _ ": " _ $SYSTEM.Status.GetErrorText(sc))
 }
 
 Storage Default

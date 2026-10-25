@@ -499,6 +499,24 @@
       "owner": "Operator",
       "reevaluate_when": "A new investigation completes",
       "text": "The dry run was checked against a different receiver version, epoch or payload from the write's, so it proves nothing about this write."
+    },
+    {
+      "code": "WRITE_NOT_COMMITTED",
+      "title": "The resend was not committed",
+      "prerequisite": "A receipt for the operation key, or the operation in the downstream system's history, once the receiver has had its settle window after a write whose answer was lost",
+      "next_action": "Check the receiver's history and receipts for the operation key; reinvestigate the case when the receiver's state is known. Never resend blind.",
+      "owner": "Integration team",
+      "reevaluate_when": "The receiver's state for the encounter is known, and a person has decided whether the movement is still due",
+      "text": "The write's answer was lost. After the settle window the receiver holds no receipt for the operation and its history does not show it, and the encounter is still at the version the write was conditional on (or moved past it by something else, so the conditional write can no longer apply): nothing was applied. The approval authorised one write and it is spent; a reinvestigation makes a new plan on fresh evidence."
+    },
+    {
+      "code": "WRITE_OUTCOME_UNKNOWN",
+      "title": "The resend's outcome is unknown",
+      "prerequisite": "A receipt, the history or the settle window settling what the receiver did with a write whose answer was lost",
+      "next_action": "Check the receiver's history and receipts for the operation key; reinvestigate the case when the receiver's state is known. Never resend blind.",
+      "owner": "Integration team",
+      "reevaluate_when": "The receiver can be read again, or its team confirms what it applied",
+      "text": "The write's answer was lost, and the reads that followed could not settle whether the receiver applied it: a lookup failed, the receiver no longer knows the encounter, or the budget of reads ran out. Nothing is established either way, so nothing is resent until a person has checked at the receiver."
     }
   ]
 }

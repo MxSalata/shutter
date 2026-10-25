@@ -1,4 +1,4 @@
-/// What the verifier established: verified, superseded_after, unresolved or failed.
+/// What the verifier established: verified, not_committed, unresolved or failed (Shutter.Operation.Verify.Judge).
 Class Shutter.Msg.VerifyResult Extends Ens.Response
 {
 

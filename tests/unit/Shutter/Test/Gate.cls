@@ -7,7 +7,7 @@
 /// changes (NewRehearsal), "request" sets the gate request's fields (its "stage" names another stage), "profile" changes
 /// the site profile for the row only, "incident" makes an incident with that plan digest and puts the case in it (an
 /// approval may then carry "incident_plan_digest", "bound_entry" and "bound_outcome", what an incident's approval covered
-/// for the item). The cases
+/// for the item), "contains" lists [check, reason code, text] triples the check's detail must contain. The cases
 /// are named UT-GATE-..., never take a public case number, and are deleted with everything the gate recorded for them
 /// after each test, as the incidents are; the site profile is put back as it was.
 Class Shutter.Test.Gate Extends %UnitTest.TestCase
@@ -229,6 +229,13 @@ Method RunRows(group As %String)
                 Do $$$AssertEquals(..Found(checks, e.%Get(0), e.%Get(1)), "", row.name _ ": no " _ e.%Get(0) _ " " _ e.%Get(1))
             }
         }
+        If row.%IsDefined("contains") {
+            Set it2 = row.contains.%GetIterator()
+            While it2.%GetNext(.j, .e) {
+                Set d = ..Detail(checks, e.%Get(0), e.%Get(1))
+                Do $$$AssertTrue(d [ e.%Get(2), row.name _ ": " _ e.%Get(0) _ " " _ e.%Get(1) _ " says '" _ e.%Get(2) _ "'" _ $SELECT(d [ e.%Get(2): "", 1: " (it says: " _ d _ ")"))
+            }
+        }
         If row.%IsDefined("outcome") Do $$$AssertEquals(run.response.Outcome, row.outcome, row.name _ ": the outcome")
         Do $$$AssertEquals(run.response.Error, "", row.name _ ": the gate reported no error")
         // Each row's records go before the next row, so the profile and the cases of one row never meet another's.
@@ -407,6 +414,14 @@ ClassMethod Found(checks As %DynamicArray, name As %String, code As %String) As 
     Quit ""
 }
 
+/// The detail of the check with that name and reason code, or "" when the gate gave none.
+ClassMethod Detail(checks As %DynamicArray, name As %String, code As %String) As %String
+{
+    Set iter = checks.%GetIterator()
+    While iter.%GetNext(.i, .c) { If (c.check = name) && (c."reason_code" = code) Return c.detail }
+    Quit ""
+}
+
 /// What a check gave, for a failure message: "result CODE" for each entry of that name.
 ClassMethod Codes(checks As %DynamicArray, name As %String) As %String
 {
@@ -491,7 +506,8 @@ ClassMethod Rows() As %DynamicArray
 }
 
 /// The table: group (the test that runs the row), name, what the row changes, and the checks it expects as
-/// [check, result, reason code]; "absent" lists [check, reason code] pairs the gate must not give.
+/// [check, result, reason code]; "absent" lists [check, reason code] pairs the gate must not give; "contains" lists
+/// [check, reason code, text] triples the check's detail must contain.
 XData Rows [ MimeType = application/json ]
 {
 [
@@ -605,13 +621,41 @@ XData Rows [ MimeType = application/json ]
    "expect": [["ordering", "pass", "NO_LATER_EVENT"]]},
   {"group": "ordering", "name": "a later discharge in the receiver's own history",
    "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z"}, {"event": "discharge", "event_time": "2026-10-19T11:00:00Z"}]}},
-   "expect": [["ordering", "block", "SUPERSEDED_BY_LATER_EVENT"]]},
+   "expect": [["ordering", "block", "SUPERSEDED_BY_LATER_EVENT"]], "contains": [["ordering", "SUPERSEDED_BY_LATER_EVENT", "discharge at 2026-10-19T11:00:00Z (receiver history)"]]},
+  {"group": "ordering", "name": "a resend after a later cancel of the event was applied",
+   "summary": {"timeline": [{"later": false, "outcome": "applied", "event": "cancel_transfer", "event_time": "2026-10-19T09:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^cancel_transfer^2026-10-19T09:00:00Z"}]},
+   "expect": [["ordering", "block", "SUPERSEDED_BY_LATER_EVENT"]], "contains": [["ordering", "SUPERSEDED_BY_LATER_EVENT", "A later event was applied: cancel of the event at 2026-10-19T09:00:00Z"]], "outcome": "block"},
+  {"group": "ordering", "name": "a resend after a later merge was applied",
+   "summary": {"timeline": [{"later": true, "outcome": "applied", "event": "merge", "event_time": "2026-10-19T12:00:00Z"}]},
+   "expect": [["ordering", "block", "SUPERSEDED_BY_LATER_EVENT"]], "contains": [["ordering", "SUPERSEDED_BY_LATER_EVENT", "merge at 2026-10-19T12:00:00Z"]], "outcome": "block"},
+  {"group": "ordering", "name": "a resend after a later admission was applied",
+   "summary": {"timeline": [{"later": true, "outcome": "applied", "event": "admit", "ward": "WARD-A", "event_time": "2026-10-19T12:00:00Z"}]},
+   "expect": [["ordering", "block", "SUPERSEDED_BY_LATER_EVENT"]], "contains": [["ordering", "SUPERSEDED_BY_LATER_EVENT", "admission at 2026-10-19T12:00:00Z"]], "outcome": "block"},
+  {"group": "ordering", "name": "a resend after a later cancel the receiver did not apply",
+   "summary": {"timeline": [{"later": false, "outcome": "failed", "event": "cancel_transfer", "event_time": "2026-10-19T09:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^cancel_transfer^2026-10-19T09:00:00Z"}]},
+   "expect": [["ordering", "pass", "NO_LATER_EVENT"]]},
+  {"group": "ordering", "name": "a write with both an undelivered later transfer and a discharge in the receiver's history names the history",
+   "summary": {"timeline": [{"later": true, "source": "feed", "outcome": "failed", "event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T10:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T10:00:00Z"}], "ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z"}, {"event": "discharge", "event_time": "2026-10-19T11:00:00Z"}]}},
+   "expect": [["ordering", "block", "SUPERSEDED_BY_LATER_EVENT"]], "contains": [["ordering", "SUPERSEDED_BY_LATER_EVENT", "A later event was applied: discharge at 2026-10-19T11:00:00Z (receiver history)"]]},
+  {"group": "ordering", "name": "the snapshot's chain kind outranks the request's: ordered in the conditions, single in the request",
+   "summary": {"catalogue": {"conditions": {"chain": "ordered"}}, "timeline": [{"later": true, "source": "feed", "outcome": "failed", "event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T10:00:00Z"}]},
+   "request": {"chain_kind": "single"},
+   "expect": [["ordering", "pass", "NO_LATER_EVENT"]]},
+  {"group": "ordering", "name": "a later transfer timed after the evidence was taken supersedes nothing, and the doubt blocks",
+   "summary": {"observed_at": "2026-10-19T13:00:00Z", "catalogue": {"conditions": {"event_time": "later_event_future"}}, "timeline": [{"later": true, "outcome": "applied", "event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T14:00:00Z"}]},
+   "expect": [["ordering", "block", "EVENT_TIME_IMPLAUSIBLE"]], "absent": [["ordering", "SUPERSEDED_BY_LATER_EVENT"]], "outcome": "block"},
   {"group": "ordering", "name": "superseded, with a doubtful event time",
    "plan": {"disposition": "superseded", "action": null}, "summary": {"catalogue": {"conditions": {"event_time": "clock_change"}}, "timeline": [{"later": true, "outcome": "applied", "event": "transfer", "event_time": "2026-10-19T10:00:00Z"}]},
    "expect": [["ordering", "block", "EVENT_TIME_IMPLAUSIBLE"]], "outcome": "block"},
   {"group": "ordering", "name": "superseded, with the later transfer in evidence",
    "plan": {"disposition": "superseded", "action": null}, "summary": {"timeline": [{"later": true, "outcome": "applied", "event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T10:00:00Z"}]},
-   "expect": [["ordering", "pass", "SUPERSEDED_BY_LATER_EVENT"]], "outcome": "pass"},
+   "expect": [["ordering", "pass", "SUPERSEDED_BY_LATER_EVENT"]], "contains": [["ordering", "SUPERSEDED_BY_LATER_EVENT", "transfer to WARD-C at 2026-10-19T10:00:00Z"]], "outcome": "pass"},
+  {"group": "ordering", "name": "superseded, with a later transfer the feed sent that failed too",
+   "plan": {"disposition": "superseded", "action": null}, "summary": {"timeline": [{"later": true, "source": "feed", "outcome": "failed", "event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T10:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T10:00:00Z"}]},
+   "expect": [["ordering", "pass", "SUPERSEDED_BY_LATER_EVENT"]], "contains": [["ordering", "SUPERSEDED_BY_LATER_EVENT", "its own case recovers it"], ["ordering", "SUPERSEDED_BY_LATER_EVENT", "sent as PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T10:00:00Z (its delivery failed or is uncertain"]], "outcome": "pass"},
+  {"group": "ordering", "name": "superseded, with a later cancel alone: the closure rests on a transfer or a discharge",
+   "plan": {"disposition": "superseded", "action": null}, "summary": {"timeline": [{"later": false, "outcome": "applied", "event": "cancel_transfer", "event_time": "2026-10-19T09:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^cancel_transfer^2026-10-19T09:00:00Z"}]},
+   "expect": [["ordering", "block", "SUPERSESSION_UNSUPPORTED"]], "outcome": "block"},
   {"group": "ordering", "name": "superseded by a catalogue entry whose preferred outcome is none",
    "plan": {"disposition": "superseded", "action": null, "catalogue_entry": "E1", "outcome": "preferred"},
    "summary": {"catalogue": {"decision": "policy", "entry": "E1", "matches": [{"id": "E1", "preferred": {"outcome": "none"}, "alternatives": []}], "facts": {"other_source": ""}}},

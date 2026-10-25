@@ -57,6 +57,7 @@ Method TestLaterAppliedTransferStillSupersedes()
     Set s = ..Summary(c, [(..Row("transfer", "WARD-C", "2026-10-15T09:00:00Z", "applied"))], [])
     Set k = ..Conditions(c, s)
     Do $$$AssertEquals(k."later_applied", "transfer", "an applied later transfer")
+    Do $$$AssertEquals(k."later_delivery", "applied", "which reached the receiver")
     Do $$$AssertEquals(k."event_time", "plausible", "its time is sound")
 }
 
@@ -65,9 +66,12 @@ Method TestLaterFailedTransferSupersedesOutsideAChain()
     Set c = ..Case()
     Set s = ..Summary(c, [(..Row("transfer", "WARD-C", "2026-10-15T09:00:00Z", "unavailable"))], [])
     Do $$$AssertEquals(..Conditions(c, s)."later_applied", "transfer", "a later transfer whose delivery failed too makes the earlier one stale")
+    Do $$$AssertEquals(..Conditions(c, s)."later_delivery", "sent", "the later word reached the receiver only as a message the feed sent")
     Set later = ##class(Shutter.Catalogue.Matcher).Later(s, c, "single")
     Do $$$AssertEquals(later.%Size(), 1, "one later event")
     Do $$$AssertNotTrue(later.%Get(0).delivered, "marked as not delivered, for the gate's wording")
+    Do $$$AssertEquals(later.%Get(0)."operation_key", "PAS^HOSP^MRN9001^ENC-9001^transfer^2026-10-15T09:00:00Z", "named by the key it was sent as")
+    Do $$$AssertNotTrue(later.%Get(0).%IsDefined("case_id"), "no case is known for it here")
     Do $$$AssertEquals(..Conditions(c, s, "ordered")."later_applied", "none", "in an ordered chain the incident sends both in order")
     Do $$$AssertEquals(..Conditions(c, s, "interleaved")."later_applied", "none", "nor in an interleaved chain")
 }
@@ -159,6 +163,29 @@ Method TestFeedRowTimedAfterItWasSent()
     Set k = ..Conditions(c, s)
     Do $$$AssertEquals(k."later_applied", "none", "a row timed after it was sent supersedes nothing")
     Do $$$AssertEquals(k."event_time", "later_event_future", "and asks for a person")
+}
+
+/// Describe: the words the gate's ordering check and the verifier use for a later event (CONTRACTS 6.1).
+Method TestDescribe()
+{
+    Set c = ..Case()
+    Set s = ..Summary(c, [(..Row("transfer", "WARD-C", "2026-10-15T09:00:00Z", "unavailable"))], [])
+    Set later = ##class(Shutter.Catalogue.Matcher).Later(s, c, "single")
+    Set ev = later.%Get(0)
+    Do $$$AssertEquals(##class(Shutter.Catalogue.Matcher).Describe(ev), "transfer to WARD-C at 2026-10-15T09:00:00Z, sent as PAS^HOSP^MRN9001^ENC-9001^transfer^2026-10-15T09:00:00Z (its delivery failed or is uncertain; its own case recovers it)", "an undelivered later transfer, with the key it was sent as")
+    Do $$$AssertEquals(##class(Shutter.Catalogue.Matcher).Describe(ev, 0), "transfer to WARD-C at 2026-10-15T09:00:00Z", "the bare description")
+    Set ev."case_id" = "C-000042"
+    Do $$$AssertEquals(##class(Shutter.Catalogue.Matcher).Describe(ev), "transfer to WARD-C at 2026-10-15T09:00:00Z, sent as PAS^HOSP^MRN9001^ENC-9001^transfer^2026-10-15T09:00:00Z (its delivery failed or is uncertain; its case C-000042 recovers it)", "its case, when one is known")
+    Set h = {"word": "discharge", "event": "discharge", "ward": "", "event_time": "2026-10-15T10:00:00Z", "from": "history", "delivered": true, "plausible": true}
+    Do $$$AssertEquals(##class(Shutter.Catalogue.Matcher).Describe(h), "discharge at 2026-10-15T10:00:00Z (receiver history)", "a discharge from the receiver's history")
+    Set h.word = "cancelled", h.event = "cancel_transfer", h.ward = "WARD-B"
+    Do $$$AssertEquals(##class(Shutter.Catalogue.Matcher).Describe(h), "cancel of the event at 2026-10-15T10:00:00Z (receiver history)", "a cancel, with no ward")
+    Set h.word = "merge", h.event = "merge"
+    Do $$$AssertEquals(##class(Shutter.Catalogue.Matcher).Describe(h, 0), "merge at 2026-10-15T10:00:00Z", "a merge")
+    Set h.word = "admit", h.event = "admit", h.ward = "WARD-A"
+    Do $$$AssertEquals(##class(Shutter.Catalogue.Matcher).Describe(h, 0), "admission at 2026-10-15T10:00:00Z", "an admission")
+    Set t = {"word": "transfer", "event": "transfer", "ward": "WARD-C", "event_time": "2026-10-15T09:00:00Z", "from": "timeline", "delivered": true, "plausible": true}
+    Do $$$AssertEquals(##class(Shutter.Catalogue.Matcher).Describe(t), "transfer to WARD-C at 2026-10-15T09:00:00Z", "an applied feed transfer carries no origin")
 }
 
 Method TestOwnTimeChecksComeFirst()
