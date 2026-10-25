@@ -318,7 +318,13 @@ export function BoardPanel({
     const d = disagreements
       .map((x) => asObject(x) ?? {})
       .find((x) => String(x.member ?? '') === r.memberCode);
-    const said = String(d?.said ?? '').replace(/\s*\(confidence [^)]*\)/, '');
+    // The recorded text puts a confidence after the disposition, "resend (confidence 0.8): why" or
+    // "resend (0.8): why", or the reason itself in brackets, "resend (why)". Keep the disposition and
+    // the reason, never the figure.
+    const said = String(d?.said ?? '')
+      .trim()
+      .replace(/^([a-z_]+)\s*\((?:confidence\s*)?[0-9.]+%?\)/i, '$1')
+      .replace(/^([a-z_]+)\s*\(([^()]+)\)$/i, '$1: $2');
     return said ? `Proposed ${said.charAt(0).toLowerCase()}${said.slice(1)}` : undefined;
   };
   return (

@@ -163,6 +163,31 @@ describe('CasePage', () => {
     );
   });
 
+  it('leaves the confidence out of a dissent recorded as "resend (0.8): why"', async () => {
+    renderCase('C-000039');
+    await openStep('What was proposed');
+    const board = await screen.findByRole('region', { name: 'The board' });
+    const dissent = await within(board).findByRole('button', { name: /Conformance/ });
+    expect(
+      within(dissent).getByText(
+        'Proposed resend: MSG01109 conforms as a message and the 503 does not come from its content',
+      ),
+    ).toBeInTheDocument();
+    expect(within(dissent).queryByText(/0\.8/)).not.toBeInTheDocument();
+  });
+
+  it('reads a dissent recorded as "resend (why)" with its reason after a colon', async () => {
+    renderCase('C-000010');
+    await openStep('What was proposed');
+    const board = await screen.findByRole('region', { name: 'The board' });
+    const dissent = await within(board).findByRole('button', { name: /Conformance/ });
+    expect(
+      within(dissent).getByText(
+        'Proposed resend: the message conforms and the 503 was not caused by content',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('leads with an outcome that says an escalated case wrote nothing, and copies the receipt as JSON', async () => {
     renderCase('C-000008');
     const top = await outcome();
@@ -339,7 +364,9 @@ describe('CasePage', () => {
       ),
     ).toBeInTheDocument();
     expect(within(top).getByText('Operator')).toBeInTheDocument();
-    expect(await within(top).findByText('Escalation: not sent')).toBeInTheDocument();
+    // The row's label says Escalation once; its value says only whether it went out
+    expect(await within(top).findByRole('row', { name: 'Escalation Not sent' })).toBeInTheDocument();
+    expect(within(top).queryByText(/Escalation: /)).not.toBeInTheDocument();
     // The reason, its code and when to look again wait behind Why?
     expect(within(top).queryByText('ESCALATED')).not.toBeInTheDocument();
     await userEvent.click(within(top).getByRole('button', { name: 'Why?' }));
@@ -363,7 +390,7 @@ describe('CasePage', () => {
         'Next action: Close the case as superseded, recording the superseding event. Nothing is sent.',
       ),
     ).toBeInTheDocument();
-    expect(within(top).queryByText(/^Escalation: /)).not.toBeInTheDocument();
+    expect(within(top).queryByRole('row', { name: /^Escalation / })).not.toBeInTheDocument();
     const escalations = await within(top).findByRole('region', { name: 'Escalations' });
     expect(await within(escalations).findByRole('button', { name: /^Escalate to / })).toHaveAttribute(
       'data-variant',
