@@ -6,7 +6,7 @@ import { useAnnotateFinding, useRemoveAnnotation } from '@/api/hooks';
 import type { ReviewAnnotation, ReviewDetail, ReviewFinding } from '@/api/types';
 import { DEMO } from '@/demo';
 import { describeError } from '@/lib/errors';
-import { expiryProblem, STATUS_LABELS, subjectOf } from './review';
+import { expiryForApi, expiryProblem, STATUS_LABELS, subjectOf } from './review';
 
 type Status = ReviewAnnotation['status'];
 
@@ -52,7 +52,7 @@ export function useAnnotationDialogs(review: ReviewDetail) {
           findingId: marking.id,
           status,
           reason: reason.trim(),
-          ...(expires.trim() ? { expiresAt: expires.trim() } : {}),
+          ...(expires.trim() ? { expiresAt: expiryForApi(expires) } : {}),
         },
         idempotencyKey: key,
       },
@@ -126,7 +126,7 @@ export function useAnnotationDialogs(review: ReviewDetail) {
             />
             <TextInput
               label="Expires on (optional)"
-              description="YYYY-MM-DD; after it, the finding is new again"
+              description="YYYY-MM-DD. The annotation lapses at the end of that day, UTC; the finding is new again after it."
               placeholder="YYYY-MM-DD"
               value={expires}
               onChange={(e) => setExpires(e.currentTarget.value)}

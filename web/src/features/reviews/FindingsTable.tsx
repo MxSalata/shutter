@@ -5,7 +5,7 @@ import { PortalLink } from '@/components/PortalLink';
 import { Timestamp } from '@/components/Timestamp';
 import { formatInt } from '@/lib/format';
 import { ConfidenceText, SeverityBadge, StatusBadge } from './badges';
-import { foundList, headerLink, SOURCE_LABELS, subjectOf } from './review';
+import { evidenceIsHeader, foundList, headerLink, SOURCE_LABELS, subjectOf } from './review';
 
 function FindingRow({
   f,
@@ -127,7 +127,10 @@ function FindingRow({
         {f.evidence.count || f.evidence.latestHeaderId !== '' || f.evidence.latestAt ? (
           <Stack gap={2}>
             <Text size="sm">{formatInt(f.evidence.count)} seen</Text>
-            {f.evidence.latestHeaderId !== '' ? (
+            {f.evidence.latestHeaderId !== '' && !evidenceIsHeader(f) ? (
+              <Text size="xs">Rule log entry {f.evidence.latestHeaderId}</Text>
+            ) : null}
+            {f.evidence.latestHeaderId !== '' && evidenceIsHeader(f) ? (
               <PortalLink
                 href={headerLink(namespace, f.evidence.latestHeaderId)}
                 what={`message header ${f.evidence.latestHeaderId} in ${namespace}`}
@@ -159,11 +162,23 @@ function FindingRow({
           ) : null}
           {approver ? (
             f.annotationId ? (
-              <Button size="compact-xs" variant="subtle" color="red" onClick={() => onUnmark(f)}>
+              <Button
+                size="compact-xs"
+                variant="subtle"
+                color="red"
+                onClick={() => onUnmark(f)}
+                aria-label={`Remove the annotation of ${f.id}`}
+              >
                 Remove annotation
               </Button>
             ) : (
-              <Button size="compact-xs" variant="light" color="grape" onClick={() => onMark(f)}>
+              <Button
+                size="compact-xs"
+                variant="light"
+                color="grape"
+                onClick={() => onMark(f)}
+                aria-label={`Annotate ${f.id}, ${f.code}`}
+              >
                 Annotate…
               </Button>
             )

@@ -14,7 +14,7 @@ import { formatDuration, formatInt, formatUsd, humanize } from '@/lib/format';
 import { useAnnotationDialogs } from './AnnotationDialogs';
 import { AgentStateBadge, ReviewStateBadge, SeverityCounts } from './badges';
 import { FindingsTable } from './FindingsTable';
-import { describeAgent, hasHl7Operation, orderedFindings, rankedByAgent, READ_ONLY } from './review';
+import { describeAgent, noHl7TcpItem, orderedFindings, rankedByAgent, READ_ONLY } from './review';
 
 function AgentBlock({ r }: { r: ReviewDetail }) {
   const a = r.agent;
@@ -159,6 +159,10 @@ function Review({ r }: { r: ReviewDetail }) {
                 <Text size="sm">{formatInt(s.messageErrorsInWindow)} messages in error in the window</Text>
               </Group>
             </Stack>
+          ) : r.state === 'failed' ? (
+            <Text size="sm">
+              There is no result because the review failed{r.error ? `: ${r.error}` : '.'}
+            </Text>
           ) : (
             <NotYet>Not yet: the sweep is still reading.</NotYet>
           )}
@@ -178,10 +182,10 @@ function Review({ r }: { r: ReviewDetail }) {
             </Badge>
           }
         >
-          {!running && !r.unreadable && !hasHl7Operation(r.findings) ? (
+          {noHl7TcpItem(r) ? (
             <Text size="sm" c="dimmed">
-              No HL7 TCP item in this production: the HL7 checks (reply code actions, framing, pool size on an
-              ordered feed) had no subject, which is not the same as no finding.
+              No HL7 TCP item in this production: the reply code and framing checks had no subject, which is
+              not the same as no finding.
             </Text>
           ) : null}
           {findings.length ? (
@@ -193,7 +197,13 @@ function Review({ r }: { r: ReviewDetail }) {
               onUnmark={dialogs.unmark}
             />
           ) : (
-            <NotYet>{running ? 'Not yet: the sweep is still reading.' : 'No findings.'}</NotYet>
+            <NotYet>
+              {running
+                ? 'Not yet: the sweep is still reading.'
+                : r.state === 'failed'
+                  ? 'No findings: the review failed.'
+                  : 'No findings.'}
+            </NotYet>
           )}
         </Section>
       </Stack>

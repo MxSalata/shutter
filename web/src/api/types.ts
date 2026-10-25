@@ -806,6 +806,8 @@ export interface ReviewSummary {
   items?: number;
   errorsInWindow?: number;
   messageErrorsInWindow?: number;
+  /** HL7 TCP items in the production, when the server counts them; absent from older reviews. */
+  hl7TcpItems?: number;
 }
 
 export interface ReviewListItem {

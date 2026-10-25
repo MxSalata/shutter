@@ -182,12 +182,87 @@ describe('ReviewPage', () => {
     expect(first.getByRole('link', { name: 'C-000055' })).toHaveAttribute('href', '/cases/C-000055');
     expect(first.getByRole('link', { name: /Latest header 4342/ })).toHaveAttribute(
       'href',
-      '/csp/shutter/EnsPortal.MessageContents.zen?HeaderId=4342',
+      '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderId=4342',
     );
     const alerting = within(rows()[1]);
     expect(alerting.getByText("Source: the item's own setting")).toBeInTheDocument();
     expect(alerting.getAllByRole('listitem')).toHaveLength(4);
-    expect(findings().getByText(/No HL7 TCP item in this production/)).toBeInTheDocument();
+    // The recorded review has no count of HL7 TCP items, so the page says nothing about them
+    expect(findings().queryByText(/No HL7 TCP item/)).not.toBeInTheDocument();
+  });
+
+  it('says there is no HL7 TCP item when the server counted none, naming the checks it covers', async () => {
+    const r = structuredClone(recorded['PR-000001']);
+    r.summary = { ...r.summary, hl7TcpItems: 0 };
+    server.use(http.get(`${BASE}/production-reviews/PR-000001`, () => HttpResponse.json(r)));
+    renderAt('/reviews/PR-000001');
+    await screen.findByRole('heading', { name: 'Review PR-000001' });
+    expect(
+      findings().getByText(
+        'No HL7 TCP item in this production: the reply code and framing checks had no subject, which is not the same as no finding.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('shows a failed review as failed, with no result, no HL7 note and the agent not asked', async () => {
+    const r = structuredClone(recorded['PR-000001']);
+    Object.assign(r, {
+      state: 'failed',
+      error: 'The production could not be opened',
+      summary: { hl7TcpItems: 0 },
+      findings: [],
+      fingerprint: '',
+      finishedAt: r.startedAt,
+    });
+    r.agent = { ...r.agent, state: 'pending' };
+    r.agentState = 'pending';
+    server.use(http.get(`${BASE}/production-reviews/PR-000001`, () => HttpResponse.json(r)));
+    renderAt('/reviews/PR-000001');
+    const summary = within(await screen.findByRole('region', { name: 'Summary' }));
+    expect(
+      summary.getByText('There is no result because the review failed: The production could not be opened'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/the sweep is still reading/)).not.toBeInTheDocument();
+    expect(findings().queryByText(/No HL7 TCP item/)).not.toBeInTheDocument();
+    expect(findings().getByText('No findings: the review failed.')).toBeInTheDocument();
+    const agent = within(screen.getByRole('region', { name: "The agent's ranking" }));
+    expect(agent.getByText(/not asked because the sweep failed/)).toBeInTheDocument();
+  });
+
+  it("shows a rule error's latest rule log entry as text, and links the other evidence to its header", async () => {
+    const r = structuredClone(recorded['PR-000001']);
+    const base = r.findings[0];
+    r.findings = [
+      {
+        ...base,
+        id: 'F1',
+        code: 'RULE_ERRORS',
+        item: 'ADT Router',
+        evidence: { ...base.evidence, latestHeaderId: 812 },
+      },
+      ...(['ERRORS_GROUPED', 'MESSAGE_ERRORS', 'SUSPENDED_MESSAGES'] as const).map((code, i) => ({
+        ...base,
+        id: `F${i + 2}`,
+        code,
+        evidence: { ...base.evidence, latestHeaderId: 900 + i },
+      })),
+    ];
+    server.use(http.get(`${BASE}/production-reviews/PR-000001`, () => HttpResponse.json(r)));
+    renderAt('/reviews/PR-000001');
+    await screen.findByRole('heading', { name: 'Review PR-000001' });
+    const rule = within(rows()[0]);
+    expect(rule.getByText('Rule log entry 812')).toBeInTheDocument();
+    expect(rule.queryByRole('link', { name: /header/ })).not.toBeInTheDocument();
+    rows()
+      .slice(1)
+      .forEach((row, i) =>
+        expect(
+          within(row).getByRole('link', { name: new RegExp(`Latest header ${900 + i}`) }),
+        ).toHaveAttribute(
+          'href',
+          `/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderId=${900 + i}`,
+        ),
+      );
   });
 
   it("sorts by the agent's rank when it answered, with its explanation, summary and unknowns", async () => {
@@ -221,7 +296,9 @@ describe('ReviewPage', () => {
     );
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
-    await userEvent.click(await within(rows()[1]).findByRole('button', { name: 'Annotate…' }));
+    await userEvent.click(
+      await within(rows()[1]).findByRole('button', { name: 'Annotate F2, ALERTING_OFF' }),
+    );
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/never a change to the production/)).toBeInTheDocument();
     const mark = within(dialog).getByRole('button', { name: 'Mark as intended' });
@@ -238,7 +315,7 @@ describe('ReviewPage', () => {
         findingId: 'F2',
         status: 'intended',
         reason: 'Alerts go to the night desk',
-        expiresAt: '2099-01-31',
+        expiresAt: '2099-01-31T23:59:59Z',
       },
       key: expect.stringMatching(/^[0-9a-f-]{36}$/),
     });
@@ -255,7 +332,9 @@ describe('ReviewPage', () => {
     );
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
-    await userEvent.click(await within(rows()[0]).findByRole('button', { name: 'Remove annotation' }));
+    await userEvent.click(
+      await within(rows()[0]).findByRole('button', { name: 'Remove the annotation of F1' }),
+    );
     const dialog = await screen.findByRole('dialog');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Remove the annotation' }));
     expect(await screen.findByText('Annotation removed')).toBeInTheDocument();
@@ -265,7 +344,10 @@ describe('ReviewPage', () => {
   it("shows the server's refusal of an annotation in the dialog", async () => {
     renderAt('/reviews/PR-000003');
     await screen.findByRole('heading', { name: 'Review PR-000003' });
-    await userEvent.click(await within(rows()[0]).findByRole('button', { name: 'Annotate…' }));
+    const first = recorded['PR-000003'].findings[0];
+    await userEvent.click(
+      await within(rows()[0]).findByRole('button', { name: `Annotate ${first.id}, ${first.code}` }),
+    );
     const dialog = await screen.findByRole('dialog');
     await userEvent.click(within(dialog).getByRole('radio', { name: /False positive/ }));
     await userEvent.type(
@@ -283,7 +365,7 @@ describe('ReviewPage', () => {
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
     expect(within(rows()[0]).getByText('Intended')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Annotate|Remove annotation/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Annotate|Remove the annotation/ })).not.toBeInTheDocument();
   });
 
   it('says plainly when there is no such review', async () => {

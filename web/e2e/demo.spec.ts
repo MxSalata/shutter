@@ -68,7 +68,8 @@ test.describe('the production review', () => {
       const findings = page.getByRole('region', { name: 'Findings' });
       for (const code of ['NO_ALERT_CONSUMER', 'ALERTING_OFF', 'QUEUE_ALERTS_OFF', 'FEED_SILENCE_UNWATCHED'])
         await expect(findings.getByText(code, { exact: true })).toBeVisible();
-      await expect(findings).toContainText('No HL7 TCP item in this production');
+      // The recorded reviews carry no count of HL7 TCP items, so the page says nothing about them
+      await expect(findings).not.toContainText('No HL7 TCP item');
       await expect(page.getByRole('region', { name: "The agent's ranking" })).toContainText(
         'No recorded explanation for this configuration',
       );

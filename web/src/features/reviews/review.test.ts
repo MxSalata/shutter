@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type { ReviewAgent, ReviewDetail, ReviewFinding } from '@/api/types';
+import type { ReviewAgent, ReviewDetail } from '@/api/types';
 import fixtures from '@/mocks/fixtures.json';
 import {
   describeAgent,
+  evidenceIsHeader,
+  expiryForApi,
   expiryProblem,
   foundList,
-  hasHl7Operation,
   headerLink,
+  noHl7TcpItem,
   orderedFindings,
   rankedByAgent,
   subjectOf,
@@ -79,16 +81,24 @@ describe('what a finding is about', () => {
     ]);
   });
 
-  it('sees an HL7 TCP operation only from an item class under EnsLib.HL7.Operation', () => {
-    expect(hasHl7Operation(own.findings)).toBe(false);
-    expect(hasHl7Operation(hospital.findings)).toBe(false);
-    const f: Pick<ReviewFinding, 'itemClass'> = { itemClass: 'EnsLib.HL7.Operation.TCPOperation' };
-    expect(hasHl7Operation([...own.findings, f])).toBe(true);
-    expect(hasHl7Operation([{ itemClass: 'EnsLib.HL7.Service.FileService' }])).toBe(false);
+  it('says there is no HL7 TCP item only when the server counted none', () => {
+    expect(noHl7TcpItem(own)).toBe(false);
+    expect(noHl7TcpItem({ ...own, summary: { ...own.summary, hl7TcpItems: 0 } })).toBe(true);
+    expect(noHl7TcpItem({ ...own, summary: { ...own.summary, hl7TcpItems: 2 } })).toBe(false);
+    expect(noHl7TcpItem({ ...own, state: 'failed', summary: { hl7TcpItems: 0 } })).toBe(false);
+    expect(noHl7TcpItem({ ...own, unreadable: true, summary: { hl7TcpItems: 0 } })).toBe(false);
+  });
+
+  it('reads a rule log row id as no message header', () => {
+    expect(evidenceIsHeader({ code: 'RULE_ERRORS' })).toBe(false);
+    for (const code of ['ERRORS_GROUPED', 'MESSAGE_ERRORS', 'SUSPENDED_MESSAGES'])
+      expect(evidenceIsHeader({ code })).toBe(true);
   });
 
   it('links a header to the Management Portal of its own namespace', () => {
-    expect(headerLink('HOSPITAL', 66)).toBe('/csp/hospital/EnsPortal.MessageContents.zen?HeaderId=66');
+    expect(headerLink('HOSPITAL', 66)).toBe(
+      '/csp/healthshare/hospital/EnsPortal.MessageContents.zen?HeaderId=66',
+    );
   });
 
   it('names a target with its namespace and whose it is', () => {
@@ -128,6 +138,12 @@ describe("the agent's state in words", () => {
     expect(describeAgent(agent({ state: 'ok', mode: 'live' }), 'done').title).toBe('Ranked and explained');
     expect(describeAgent(agent({ state: 'pending' }), 'ranking').title).toBe('Ranking');
   });
+
+  it('says the agent was not asked when the sweep failed', () => {
+    const failed = describeAgent(agent({ state: 'pending' }), 'failed');
+    expect(failed.title).toBe('Not asked');
+    expect(failed.text).toMatch(/not asked because the sweep failed/);
+  });
 });
 
 describe('an expiry', () => {
@@ -137,5 +153,11 @@ describe('an expiry', () => {
     expect(expiryProblem('2026-12-31T18:00Z', '2026-10-25')).toBeNull();
     expect(expiryProblem('31/12/2026', '2026-10-25')).toMatch(/YYYY-MM-DD/);
     expect(expiryProblem('2026-10-25', '2026-10-25')).toBe('An expiry is a date after today');
+  });
+
+  it('is sent as the end of its day in UTC, a time as given', () => {
+    expect(expiryForApi(' 2026-12-31 ')).toBe('2026-12-31T23:59:59Z');
+    expect(expiryForApi('2026-12-31T18:00Z')).toBe('2026-12-31T18:00Z');
+    expect(expiryForApi('')).toBe('');
   });
 });

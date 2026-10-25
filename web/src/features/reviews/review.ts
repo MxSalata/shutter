@@ -70,11 +70,19 @@ export function orderedFindings(review: Pick<ReviewDetail, 'agent' | 'findings'>
 }
 
 /**
- * The HL7 checks (reply codes, framing, pool size on an operation) need an HL7 TCP operation. The review does not list
- * the items, only the findings, so an item class under EnsLib.HL7.Operation among them is the one sign of one.
+ * Whether the page says the production has no HL7 TCP item: only when the server counted them and found none. The
+ * reply code and framing checks need one; without the count the page says nothing either way.
  */
-export function hasHl7Operation(findings: Pick<ReviewFinding, 'itemClass'>[]): boolean {
-  return findings.some((f) => f.itemClass.startsWith('EnsLib.HL7.Operation'));
+export function noHl7TcpItem(review: Pick<ReviewDetail, 'state' | 'unreadable' | 'summary'>): boolean {
+  return review.state === 'done' && !review.unreadable && review.summary.hl7TcpItems === 0;
+}
+
+/**
+ * Whether a finding's evidence.latestHeaderId is a message header. For RULE_ERRORS it is the id of a row in the rule
+ * log (Ens_Rule.Log), which has no message page.
+ */
+export function evidenceIsHeader(f: Pick<ReviewFinding, 'code'>): boolean {
+  return f.code !== 'RULE_ERRORS';
 }
 
 /** The items a production-wide finding lists (ALERTING_OFF, QUEUE_ALERTS_OFF write them "; " separated). */
@@ -94,6 +102,12 @@ export interface AgentView {
 
 /** The agent's part in plain words, one per state; the deterministic report stands whatever it says. */
 export function describeAgent(agent: ReviewAgent, reviewState: string): AgentView {
+  if (reviewState === 'failed')
+    return {
+      title: 'Not asked',
+      colour: 'gray',
+      text: 'The agent was not asked because the sweep failed: there are no findings to rank.',
+    };
   switch (agent.state) {
     case 'ok':
       return {
@@ -148,9 +162,13 @@ export function targetLabel(t: ReviewTarget): string {
 export const targetKey = (t: Pick<ReviewTarget, 'namespace' | 'production'>) =>
   `${t.namespace}|${t.production}`;
 
-/** The Management Portal page of a message header, in the namespace that holds it. */
+/**
+ * The Management Portal page of a message header, in the namespace that holds it. The review carries no portal link of
+ * its own (a case does, from Dispatch.PortalPath, the namespace's default web application), so the path is built: on
+ * IRIS for Health a namespace's default application is /csp/healthshare/<namespace>/, and /csp/<namespace>/ is a 404.
+ */
 export function headerLink(namespace: string, headerId: number | string): string {
-  return `/csp/${namespace.toLowerCase()}/EnsPortal.MessageContents.zen?HeaderId=${encodeURIComponent(String(headerId))}`;
+  return `/csp/healthshare/${namespace.toLowerCase()}/EnsPortal.MessageContents.zen?HeaderId=${encodeURIComponent(String(headerId))}`;
 }
 
 /**
@@ -167,4 +185,13 @@ export function expiryProblem(
     return 'Give a date as YYYY-MM-DD, or leave it empty for no expiry';
   if (v.slice(0, 10) <= today) return 'An expiry is a date after today';
   return null;
+}
+
+/**
+ * The expiry as it is sent. The server ends a date-only expiry at 00:00 UTC of that date, so a date is sent as the
+ * last second of that day in UTC, which is what the field promises; a time is sent as given, and "" is no expiry.
+ */
+export function expiryForApi(value: string): string {
+  const v = value.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) ? `${v}T23:59:59Z` : v;
 }

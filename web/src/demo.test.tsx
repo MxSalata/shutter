@@ -124,7 +124,7 @@ describe('the demo', () => {
     renderAt('/reviews/PR-000003');
     expect(await screen.findByRole('heading', { name: 'Review PR-000003' })).toBeInTheDocument();
     const findings = screen.getByRole('region', { name: 'Findings' });
-    await userEvent.click((await within(findings).findAllByRole('button', { name: 'Annotate…' }))[0]);
+    await userEvent.click((await within(findings).findAllByRole('button', { name: /^Annotate F\d+, / }))[0]);
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/The online demo keeps no annotations: it answers/)).toBeInTheDocument();
     await userEvent.type(within(dialog).getByRole('textbox', { name: /Reason/ }), 'Tried in the demo');
