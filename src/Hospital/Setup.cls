@@ -34,6 +34,7 @@ ClassMethod InstallStatus(shutterNs As %String = "SHUTTER") As %Status
         Set ^Shutter.Config("feedZone") = $SELECT(zone '= "": zone, 1: "UTC")
         Set sc = ..ApplyDefaultSettings() Quit:$$$ISERR(sc)
         Do ..RecordInShutter(shutterNs)
+        Set sc = ..RefreshShutterSecurity(shutterNs) Quit:$$$ISERR(sc)
         Set sc = ..StartProduction() Quit:$$$ISERR(sc)
     } Catch ex {
         Set sc = ex.AsStatus()
@@ -106,6 +107,22 @@ ClassMethod ShutterFeedTimeZone(shutterNs As %String) As %String [ Private ]
         Set zone = ""
     }
     Quit zone
+}
+
+/// Shutter's roles brought up to date now that this namespace is recorded as the watched hospital: its operator and
+/// approver read the hospital's databases from now on (the review targets and their state), and the SQL grants are
+/// renewed with the roles. Shutter.Setup is not mapped into this namespace, so it is called in Shutter's.
+ClassMethod RefreshShutterSecurity(shutterNs As %String) As %Status [ Private ]
+{
+    Set sc = $$$OK
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = shutterNs
+        Set sc = $CLASSMETHOD("Shutter.Setup", "RefreshSecurity", shutterNs)
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    Quit sc
 }
 
 /// Where the hospital's feed is, written into Shutter's configuration for the scenario runner: hospitalIn and
