@@ -98,7 +98,9 @@ is no receipt lookup and no resend: the gate blocks any write and the case is es
 roles. Escalation mail goes through the `Escalation Mail` operation's `SMTPServer` setting; unset, it writes `.eml`
 files under `<mgr>/shutter/out/mail`. The daily task "Shutter retention" removes the text of each escalation email
 and its `.eml` file `SHUTTER_ESCALATION_DAYS` days after the case closed (section 2); the row stays with its digest,
-the recipients and who sent it.
+the recipients and who sent it. A case the workflow left in a working state (after a container killed in the middle of its
+work) is noted when the production starts, and an approver abandons it with `POST /cases/{id}/abandon` once nothing of
+its workflow has moved for `abandonAfterMinutes` (15 by default; 409 `busy` while something has).
 
 **The worked example: Hospital PAS.** The demo image carries a second, tiny production in its own namespace, the
 hospital's side of shape A: an HL7 service (`PAS In`), a delivery (`Downstream Out`) that fails, and the forwarder. Its

@@ -75,6 +75,7 @@ Interoperability production, with a board of IRIS AI Hub agents.
   never writes over her entry (S20), and a transfer timed in the hour that happens twice when British clocks go back,
   which nothing writes (S21). Their messages carry what a real PAS feed sends: an NHS number beside the hospital
   number in PID-3, the prior location of a transfer and the location on an update or a discharge.
+- **A case the workflow left behind can be abandoned.** The production's start notes every case still in a working state (an error-kind event saying when it started and the way out), and an approver abandons a case whose workflow has had nothing in flight for 15 minutes (`POST /cases/{id}/abandon`; 409 `busy` while it has, with what is in flight): the case fails with disposition `abandoned`, its approval is revoked, its pending escalation emails and open approval task are cancelled, and it can be reinvestigated. The Doctor and `GET /health` report `working_cases` and `abandon_after_minutes`.
 - **The case record is written only by its own transitions:** the plan, the gate decision, the agent run, the case
   token, the finding and the approval refer to their case by id, so saving one never writes the case whole, and the
   cases list reads each case's plan origin with the case ids in one query.
