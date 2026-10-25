@@ -182,6 +182,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--fixtures", default="fixtures")
     parser.add_argument("--records", default="fixtures/records")
+    parser.add_argument("--knowledge", default="knowledge",
+                        help="the knowledge the agents search, which reaches the model in search results")
     parser.add_argument("--demo", help="also check the web demo's recorded answers (web/src/mocks/fixtures.json)")
     parser.add_argument("--self-test", action="store_true", help="check the case-token rule on synthetic recordings")
     args = parser.parse_args()
@@ -192,6 +194,19 @@ def main():
     if args.demo:
         files.append(args.demo)
     hits = 0
+    # The knowledge reaches the model through every search, so a fixture's value in it lands in every recording that
+    # searched it: no personal value or NHS number from the fixtures may appear in a knowledge file at all.
+    for path in sorted(glob.glob(os.path.join(args.knowledge, "**", "*.md"), recursive=True)):
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        for (kind, value), forms in sorted(values.items()):
+            seen = sorted(f for f in forms if re.search(rf"(?<![\w-]){re.escape(f)}(?![\w-])", text, re.IGNORECASE))
+            if seen:
+                hits += 1
+                print(f"{os.path.relpath(path)}: {kind} {value!r} from the fixtures (as {', '.join(repr(s) for s in seen)})")
+        for written, digits in sorted(set(nhs_shaped(text))):
+            hits += 1
+            print(f"{os.path.relpath(path)}: NHS number {digits!r} by its shape and check digit (as {written!r})")
     for path in files:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
