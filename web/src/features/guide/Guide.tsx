@@ -19,6 +19,7 @@ import {
   IconArrowRight,
   IconCheck,
   IconEye,
+  IconMapPin,
   IconPlayerPlay,
   IconPlayerSkipForward,
   IconX,
@@ -227,12 +228,15 @@ function Chapters() {
       <Stack gap={6} component="ul" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
         {CHAPTERS.map((c, i) => {
           const done = progress.completed.includes(c.id);
+          const current = progress.chapter === c.id;
           return (
             <li key={c.id}>
               <GuideButton
-                variant={progress.chapter === c.id ? 'light' : 'default'}
+                variant={current ? 'light' : 'default'}
                 fullWidth
                 justify="space-between"
+                // The current chapter says so in words and with a mark, not by its tint alone
+                leftSection={current ? <IconMapPin size={16} aria-hidden /> : null}
                 rightSection={done ? <IconCheck size={16} aria-hidden /> : null}
                 onClick={() => choose(c.id)}
                 data-autofocus={i === 0 || undefined}
@@ -240,7 +244,12 @@ function Chapters() {
               >
                 {c.title}
                 {done ? <VisuallyHidden> (finished)</VisuallyHidden> : null}
-                {progress.chapter === c.id ? <VisuallyHidden> (current)</VisuallyHidden> : null}
+                {current ? (
+                  <Text span size="xs" fw={600}>
+                    {' '}
+                    (current)
+                  </Text>
+                ) : null}
               </GuideButton>
             </li>
           );

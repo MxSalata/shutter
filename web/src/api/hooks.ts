@@ -102,7 +102,8 @@ export function useSignOut() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: () => api.del<unknown>('/session'),
-    // Whatever the server answered, this browser forgets everything it showed, the guide's place included.
+    // Whatever the server answered, this browser forgets everything it showed. The guide closes and drops its copy in
+    // memory; the place stored on the device stays, like the appearance settings.
     onSettled: () => {
       useGuide.getState().reset();
       client.clear();

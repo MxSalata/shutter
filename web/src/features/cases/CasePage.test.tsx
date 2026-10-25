@@ -216,6 +216,21 @@ describe('CasePage', () => {
     expect(screen.queryByRole('region', { name: /S8 side by side/ })).not.toBeInTheDocument();
   });
 
+  it('opens the story step a link names once: closed by the reader, it stays closed after a tab change', async () => {
+    const router = renderCase('C-000008', '?open=proposed');
+    const step = await screen.findByRole('button', { name: /^3\. What was proposed/ });
+    await waitFor(() => expect(step).toHaveAttribute('aria-expanded', 'true'));
+    await userEvent.click(step);
+    expect(step).toHaveAttribute('aria-expanded', 'false');
+    await openTab('Evidence');
+    expect(router.state.location.search).toBe('?tab=evidence');
+    await openTab('Summary');
+    expect(await screen.findByRole('button', { name: /^3\. What was proposed/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  });
+
   it('keeps the tab in the address, and opens the one the address names', async () => {
     const router = renderCase('C-000008', '?tab=evidence');
     expect(await screen.findByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');

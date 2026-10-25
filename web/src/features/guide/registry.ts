@@ -53,7 +53,7 @@ export const CHAPTERS: GuideChapter[] = [
       {
         id: 'mode',
         title: 'Who makes the proposal',
-        text: `The investigation mode chooses who proposes the plan: the board of specialists, the site's policy, or rules alone. The mode changes only the proposal: in every mode, ${RELEASE}.`,
+        text: `The investigation mode chooses who proposes the plan: the board of specialists, a single investigator, the site's policy, or rules alone. The mode changes only the proposal: in every mode, ${RELEASE}.`,
         place: { page: '/scenarios' },
         target: 'scenarios-mode',
       },
@@ -176,20 +176,20 @@ export const CHAPTERS: GuideChapter[] = [
   },
   {
     id: 's20',
-    title: 'S20: an approval no longer valid',
+    title: 'S20 in Rules only mode: an approval no longer valid',
     steps: [
       {
         id: 'receipt',
         title: 'Blocked, nothing written',
-        text: 'A nurse moved the patient by hand while the plan waited for its approval. The receiver changed, so the earlier approval no longer holds, and the gate blocks the plan: a later event made the movement obsolete.',
-        place: { scenario: 'S20' },
+        text: 'On this Rules only case, a nurse moved the patient by hand while the plan waited for its approval. The receiver changed, so the earlier approval no longer holds, and the gate blocks the plan: a later event made the movement obsolete.',
+        place: { scenario: 'S20', mode: 'rules' },
         target: 'case-outcome',
       },
       {
         id: 'decision',
         title: 'An approval releases one exact plan',
         text: 'The gate and decision step shows the earlier approval as history, tied to the plan it released, and the checks that block the current plan. A changed receiver needs a new decision.',
-        place: { scenario: 'S20' },
+        place: { scenario: 'S20', mode: 'rules' },
         target: 'case-decision',
         open: 'decision',
       },
@@ -340,8 +340,8 @@ export const CHAPTERS: GuideChapter[] = [
     steps: [
       {
         id: 'report',
-        title: 'Readiness for the mode you use',
-        text: "The installation's own readiness report. A missing live model is expected while the agents replay recordings, and blocking for live operation. The report as the API sends it stays available below.",
+        title: "The installation's readiness",
+        text: "The installation's own readiness report, field by field. While the agents replay recordings, as in the demonstration, no AI Hub is needed; live agents need one. The report as the API sends it stays available below.",
         place: { page: '/health' },
         target: 'health',
       },

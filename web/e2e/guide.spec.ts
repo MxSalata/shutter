@@ -73,10 +73,12 @@ test.describe('the guide', () => {
       page.getByRole('heading', { name: 'S8 side by side: rules alone and the board' }),
     ).toBeVisible();
 
-    // S20 has only a Rules only recording: the newest case of the scenario is the one shown
+    // S20's chapter shows its Rules only case
     await page.getByRole('button', { name: 'Continue guide' }).click();
     await dialog.getByRole('button', { name: 'Next' }).click();
-    await expect(dialog.getByText('Step 1 of 2 · S20: an approval no longer valid')).toBeVisible();
+    await expect(
+      dialog.getByText('Step 1 of 2 · S20 in Rules only mode: an approval no longer valid'),
+    ).toBeVisible();
     await dialog.getByRole('button', { name: 'Show this section' }).click();
     await expect(page).toHaveURL(/#\/cases\/C-000053$/);
     await expect(page.getByRole('heading', { name: 'Outcome' })).toBeFocused();
@@ -92,7 +94,9 @@ test.describe('the guide', () => {
     await expect(dialog).toBeHidden();
     await page.getByRole('button', { name: 'Help' }).click();
     await page.getByRole('menuitem', { name: 'Resume guide' }).click();
-    await expect(dialog.getByText('Step 1 of 2 · S20: an approval no longer valid')).toBeVisible();
+    await expect(
+      dialog.getByText('Step 1 of 2 · S20 in Rules only mode: an approval no longer valid'),
+    ).toBeVisible();
 
     // To the end: the evaluation, then Finish
     await dialog.getByRole('button', { name: 'Skip chapter' }).click();

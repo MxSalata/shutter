@@ -69,7 +69,7 @@ export function start(p: GuideProgress, scope: GuideScope): GuideProgress {
   return { ...p, scope, chapter: SCOPES[scope][0], step: 0 };
 }
 
-/** The end of the guide: every chapter of the scope is marked finished and the welcome does not open again. */
+/** The end of the guide: the chapters finished so far are kept, and the welcome no longer opens by itself. */
 function finish(p: GuideProgress, completed: string[]): GuideProgress {
   return { ...p, chapter: null, step: 0, completed, dismissed: true };
 }

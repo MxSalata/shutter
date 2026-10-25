@@ -18,6 +18,9 @@ function sources(dir: string): string {
 }
 const SOURCE = sources(join(__dirname, '..', '..'));
 
+/** The case story's steps, as CaseStory's StoryStep type lists them. */
+const STORY_STEPS = ['failed', 'evidence', 'proposed', 'decision', 'written', 'verified', 'compare'];
+
 describe('the guide registry', () => {
   it('has unique chapter ids and step ids within each chapter', () => {
     const ids = CHAPTERS.map((c) => c.id);
@@ -35,15 +38,15 @@ describe('the guide registry', () => {
   });
 
   it('points every step at a target a screen carries, by attribute', () => {
+    // A story step's section carries data-tour={`case-${value}`}: only the story's own steps may lean on that form
+    const story = SOURCE.includes('data-tour={`case-${value}`}');
     for (const c of CHAPTERS)
       for (const s of c.steps) {
-        // A story step's target is the step itself: data-tour={`case-${value}`}
-        const own = s.open && s.target === `case-${s.open}`;
         const named =
           SOURCE.includes(`data-tour="${s.target}"`) ||
           SOURCE.includes(`tour="${s.target}"`) ||
-          (s.target.startsWith('case-') && SOURCE.includes('data-tour={`case-${value}`}'));
-        expect(named || own, `${c.id}/${s.id}: ${s.target}`).toBe(true);
+          (story && s.target.startsWith('case-') && STORY_STEPS.includes(s.target.slice(5)));
+        expect(named, `${c.id}/${s.id}: ${s.target}`).toBe(true);
       }
   });
 

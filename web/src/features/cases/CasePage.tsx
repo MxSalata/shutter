@@ -55,6 +55,8 @@ function CaseBody({ c }: { c: CaseDetail }) {
       setSearch(
         (prev) => {
           const params = new URLSearchParams(prev);
+          // The story step a link opened has been shown: a later tab change must not open it again
+          params.delete('open');
           if (!next || next === 'summary') params.delete('tab');
           else params.set('tab', next);
           return params;
@@ -70,7 +72,8 @@ function CaseBody({ c }: { c: CaseDetail }) {
     ...(c.state === 'awaiting_approval' ? ['decision'] : []),
     ...(compare && c.scenario === 'S8' ? ['compare'] : []),
   ]);
-  // A link that names a story step opens it, on every visit to the link (the location's key), even on this page
+  // A link that names a story step opens it, on every navigation to the link (the location's key), even on this
+  // page; a tab change drops the parameter, so a step the reader closed stays closed
   const asks = search.get('open') as StoryStep | null;
   const { key: visit } = useLocation();
   const [visited, setVisited] = useState<string>();

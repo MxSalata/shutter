@@ -4,7 +4,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, Outlet, RouterProvider } from 'react-router';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
 import { theme } from '@/theme';
@@ -14,7 +14,7 @@ import ScenariosPage from '@/features/scenarios/ScenariosPage';
 import { INITIAL } from './controller';
 import { Guide } from './Guide';
 import { HelpMenu } from './HelpMenu';
-import { forgetProgress, GUIDE_KEY } from './storage';
+import { forgetProgress, GUIDE_KEY, saveProgress } from './storage';
 import { useGuide } from './store';
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
@@ -90,6 +90,7 @@ describe('the guide', () => {
     forgetProgress();
     useGuide.setState({ progress: INITIAL, phase: 'closed', snoozed: false, shownAt: 0 });
   });
+  afterEach(() => vi.restoreAllMocks());
 
   it('welcomes a first visit, read only, with the release wording and a choice of scope', async () => {
     renderApp();
@@ -187,11 +188,15 @@ describe('the guide', () => {
     renderApp();
     const d = await dialog();
     expect(
-      await within(d).findByText(/There is no S20 case here yet\. The guide never plays a scenario/),
+      await within(d).findByText(
+        /There is no S20 case in Rules only mode here yet\. The guide never plays a scenario/,
+      ),
     ).toBeInTheDocument();
     expect(within(d).queryByRole('button', { name: 'Show this section' })).not.toBeInTheDocument();
     await userEvent.click(within(d).getByRole('button', { name: 'Skip this step' }));
-    expect(await within(d).findByText('Step 2 of 2 · S20: an approval no longer valid')).toBeInTheDocument();
+    expect(
+      await within(d).findByText('Step 2 of 2 · S20 in Rules only mode: an approval no longer valid'),
+    ).toBeInTheDocument();
     server.events.removeAllListeners();
     expect(posts).toEqual([]);
   });
@@ -243,8 +248,24 @@ describe('the guide', () => {
     );
   });
 
-  it('forgets its place in memory on sign-out', () => {
+  it('drops its place in memory on sign-out and keeps the one stored on the device', () => {
+    const stored = { ...INITIAL, chapter: 's8', step: 1 };
+    saveProgress(stored);
     useGuide.setState({ progress: { ...INITIAL, chapter: 's2' }, phase: 'step' });
+    useGuide.getState().reset();
+    expect(useGuide.getState()).toMatchObject({ phase: 'closed', progress: stored });
+  });
+
+  it('drops its place on sign-out when the device refuses storage, kept only in memory', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('refused');
+    });
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('refused');
+    });
+    const kept = { ...INITIAL, chapter: 's2', step: 1 };
+    saveProgress(kept);
+    useGuide.setState({ progress: kept, phase: 'step' });
     useGuide.getState().reset();
     expect(useGuide.getState()).toMatchObject({ phase: 'closed', progress: INITIAL });
   });
