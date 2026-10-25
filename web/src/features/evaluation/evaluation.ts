@@ -91,6 +91,16 @@ export interface Evaluation {
   };
 }
 
+/**
+ * What tests/e2e/boundary_check.py tries against the approval boundary (docs/readme/boundary.json, which the script
+ * writes from its own list with --write-list, and CI checks with --check-list).
+ */
+export interface BoundaryChecks {
+  script: string;
+  runs: string;
+  checks: { id: string; title: string; scenario: string; answer: string; proves: string }[];
+}
+
 /** The specialists in the order the board runs them; the coordinator's plan follows. */
 export const SPECIALISTS = ['conformance', 'encounter', 'impact'] as const;
 
