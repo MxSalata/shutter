@@ -390,10 +390,12 @@ export function EscalationPanel({
                 { value: '', label: RECIPIENT.charAt(0).toUpperCase() + RECIPIENT.slice(1) },
                 ...teams.map((t) => ({ value: t.id, label: `${t.name} (${t.mailbox})` })),
               ]}
-              w={300}
+              w={{ base: '100%', xs: 300 }}
             />
           ) : null}
           <Button
+            className="wrap-button"
+            maw="100%"
             leftSection={<IconMailForward size={16} />}
             variant={pending || !primary ? 'default' : 'filled'}
             loading={draft.isPending}

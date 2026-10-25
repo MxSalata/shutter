@@ -1,11 +1,11 @@
 import { Table, Text } from '@mantine/core';
 import type { ReactNode } from 'react';
 
-/** Label and value rows; empty values are left out. */
+/** Label and value rows; empty values are left out. On a phone each label sits over its value (`kv-list`). */
 export function KeyValueList({ rows }: { rows: [string, ReactNode][] }) {
   const shown = rows.filter(([, v]) => v !== undefined && v !== null && v !== '');
   return (
-    <Table withRowBorders={false} verticalSpacing={4} highlightOnHover={false}>
+    <Table className="kv-list" withRowBorders={false} verticalSpacing={4} highlightOnHover={false}>
       <Table.Tbody>
         {shown.map(([k, v]) => (
           <Table.Tr key={k}>

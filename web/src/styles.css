@@ -478,3 +478,126 @@ body {
   max-height: 420px;
   margin: 0;
 }
+
+/*
+ * Tables that stack on a phone. Below 36em (576 px) a table marked `stack-table` shows each row as a block, every
+ * cell on its own line under the name of its column, which the cell carries in `data-label`; the header row stays
+ * for screen readers only. Its scroll container (`stack-scroll`) drops its minimum width there, so nothing is cut
+ * off and nothing scrolls sideways. `stack-table-wide` stacks below 75em (1200 px) too: a table with long prose in
+ * several columns reads better stacked than scrolled on a laptop.
+ */
+@media (max-width: 35.99em) {
+  .stack-scroll {
+    --table-min-width: 0 !important;
+  }
+  .stack-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .stack-table,
+  .stack-table tbody,
+  .stack-table tr,
+  .stack-table td {
+    display: block;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+  .stack-table tr {
+    padding: var(--mantine-spacing-xs) 0;
+    border-bottom: calc(0.0625rem * var(--mantine-scale)) solid var(--table-border-color);
+  }
+  .stack-table tr:last-of-type {
+    border-bottom: 0;
+  }
+  .stack-table td {
+    border: 0;
+    padding: 2px 0;
+  }
+  .stack-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: var(--mantine-font-size-xs);
+    font-weight: 600;
+    color: var(--mantine-color-dimmed);
+  }
+}
+@media (max-width: 74.99em) {
+  .stack-scroll-wide {
+    --table-min-width: 0 !important;
+  }
+  .stack-table-wide thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .stack-table-wide,
+  .stack-table-wide tbody,
+  .stack-table-wide tr,
+  .stack-table-wide td {
+    display: block;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+  .stack-table-wide tr {
+    padding: var(--mantine-spacing-sm) 0;
+    border-bottom: calc(0.0625rem * var(--mantine-scale)) solid var(--table-border-color);
+  }
+  .stack-table-wide tr:last-of-type {
+    border-bottom: 0;
+  }
+  .stack-table-wide td {
+    border: 0;
+    padding: 4px 0;
+  }
+  .stack-table-wide td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: var(--mantine-font-size-xs);
+    font-weight: 600;
+    color: var(--mantine-color-dimmed);
+  }
+}
+
+/* Label and value lists put the label over the value on a phone, so the value keeps the whole width. */
+@media (max-width: 35.99em) {
+  .kv-list,
+  .kv-list tbody,
+  .kv-list tr,
+  .kv-list th,
+  .kv-list td {
+    display: block;
+    width: 100% !important;
+  }
+  .kv-list th {
+    padding-bottom: 0;
+  }
+  .kv-list td {
+    padding-top: 0;
+    padding-bottom: 6px;
+  }
+}
+
+/* A button whose label names a team or a record can be longer than a phone is wide: its label wraps rather than
+   pushing the card out. */
+.wrap-button {
+  height: auto;
+  min-height: var(--button-height);
+  padding-block: 6px;
+}
+.wrap-button .mantine-Button-inner {
+  height: auto;
+}
+.wrap-button .mantine-Button-label {
+  white-space: normal;
+  text-align: left;
+  line-height: 1.3;
+}

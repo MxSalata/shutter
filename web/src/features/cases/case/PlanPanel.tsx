@@ -44,8 +44,9 @@ function GateTable({ d }: { d: GateDecision }) {
         </Text>
         <Timestamp iso={d.at} size="xs" c="dimmed" />
       </Group>
-      <Table.ScrollContainer minWidth={560}>
-        <Table verticalSpacing={4}>
+      {/* On a phone each check stacks: its name and question, then the result, the code and the detail */}
+      <Table.ScrollContainer minWidth={560} className="stack-scroll">
+        <Table verticalSpacing={4} className="stack-table">
           <Table.Thead>
             <Table.Tr>
               <Table.Th w={150}>Check</Table.Th>
@@ -67,15 +68,15 @@ function GateTable({ d }: { d: GateDecision }) {
                       </Text>
                     ) : null}
                   </Table.Td>
-                  <Table.Td>
+                  <Table.Td data-label="Result">
                     <StatusBadge {...r} hint={undefined} size="sm" />
                   </Table.Td>
-                  <Table.Td>
+                  <Table.Td data-label="Reason code">
                     <Text size="xs" className="mono-wrap">
                       {c.reason_code}
                     </Text>
                   </Table.Td>
-                  <Table.Td>
+                  <Table.Td data-label="Detail">
                     <Text size="sm">{c.detail}</Text>
                   </Table.Td>
                 </Table.Tr>

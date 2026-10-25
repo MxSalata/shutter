@@ -276,8 +276,8 @@ export function ApprovalPanel({
           ) : null}
           <BlindResendPreview c={c} me={me} />
           {approvals?.tasks?.length ? (
-            <Table.ScrollContainer minWidth={520}>
-              <Table verticalSpacing={4}>
+            <Table.ScrollContainer minWidth={520} className="stack-scroll">
+              <Table verticalSpacing={4} className="stack-table">
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>Approval task</Table.Th>
@@ -292,13 +292,13 @@ export function ApprovalPanel({
                       <Table.Td>
                         <Text size="sm">{t.subject}</Text>
                       </Table.Td>
-                      <Table.Td>
+                      <Table.Td data-label="Answer">
                         <Text size="sm">{t.complete ? t.action || 'done' : 'open'}</Text>
                       </Table.Td>
-                      <Table.Td>
+                      <Table.Td data-label="By">
                         <Text size="sm">{t.userName || t.assignedTo || 'unassigned'}</Text>
                       </Table.Td>
-                      <Table.Td>
+                      <Table.Td data-label="Completed">
                         <Timestamp iso={t.timeCompleted} />
                       </Table.Td>
                     </Table.Tr>

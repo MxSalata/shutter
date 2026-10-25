@@ -141,8 +141,9 @@ export default function CasesPage() {
           </Text>
         ) : null}
         {cases.data && cases.data.items.length > 0 ? (
-          <Table.ScrollContainer minWidth={760}>
-            <Table>
+          // On a phone each case is a card: its id, then each column's value under the column's name
+          <Table.ScrollContainer minWidth={760} className="stack-scroll">
+            <Table className="stack-table">
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Case</Table.Th>
@@ -164,19 +165,20 @@ export default function CasesPage() {
                           to={`/cases/${encodeURIComponent(c.caseId)}`}
                           fw={600}
                           size="sm"
+                          style={{ whiteSpace: 'nowrap' }}
                         >
                           {c.caseId}
                         </Anchor>
                         <ForwardedBadge c={c} />
                       </Group>
                     </Table.Td>
-                    <Table.Td>
+                    <Table.Td data-label="State">
                       <StateBadge state={c.state} />
                     </Table.Td>
-                    <Table.Td>
+                    <Table.Td data-label="Proposed action">
                       <DispositionBadge disposition={c.disposition} />
                     </Table.Td>
-                    <Table.Td maw={420}>
+                    <Table.Td data-label="What failed" maw={420}>
                       <Text size="sm" lineClamp={2}>
                         {clampHeadline(c.headline) ||
                           `${humanize(c.event)}${c.ward ? ` to ${c.ward}` : ''} for ${c.encounterId}`}
@@ -195,16 +197,16 @@ export default function CasesPage() {
                         </Text>
                       ) : null}
                     </Table.Td>
-                    <Table.Td>
+                    <Table.Td data-label="Scenario">
                       <Text size="sm">{c.scenario || 'none'}</Text>
                       <Text size="xs" c="dimmed">
                         {humanize(c.mode)}
                       </Text>
                     </Table.Td>
-                    <Table.Td>
+                    <Table.Td data-label="Investigated by">
                       <InvestigatedBy c={c} />
                     </Table.Td>
-                    <Table.Td>
+                    <Table.Td data-label="Opened">
                       <Timestamp iso={c.openedAt} age />
                     </Table.Td>
                   </Table.Tr>
