@@ -2,7 +2,9 @@
 /// /shutter-mock (Shutter.Mock.API, unauthenticated, loopback callers only) with a role for this namespace's
 /// databases, the Config Store configuration AI.LLM.ShutterMock (provider openai, base_url that web application, a
 /// placeholder key) and the switch ^Shutter.Config("aihub","mock"), which Shutter.Setup MockConfig reads. Disable
-/// removes all three. A test fixture: in tests/mock, outside both IPM modules and the image.
+/// removes all three. Enable runs on a demo instance only (the switch counts on no other), and when it fails it leaves
+/// the mimic off: the switch cleared and what it had made removed, with Disable's own code. A test fixture: in
+/// tests/mock, outside both IPM modules and the image.
 Class Shutter.Mock.Setup
 {
 
@@ -15,20 +17,24 @@ Parameter FQN = "AI.LLM.ShutterMock";
 Parameter ROLE = "Shutter_MockClient";
 
 /// Switch the mimic on. <var>model</var> is the model id sent on the wire (the runs are labelled mock whatever it
-/// is). Refused while the agent mode is record. Returns Status() as JSON, or {"error": ...}.
+/// is). Refused while the agent mode is record, on an instance that is not a demo (the switch counts on a demo only,
+/// Shutter.Setup MockConfig) and while UnknownUser is disabled, before anything is made. A failure after that leaves the
+/// mimic off (Failed): the switch cleared, and the configuration, the web application and the role removed. Returns
+/// Status() as JSON, or {"error": ...}.
 ClassMethod Enable(model As %String = "mock") As %String [ SqlProc ]
 {
     Try {
         If '$SYSTEM.Security.Check("%Admin_Secure", "USE") Return {"error": "Enable needs %Admin_Secure: it creates a web application and a role"}.%ToJSON()
         If $ZCONVERT($GET(^Shutter.Config("aihub", "mode")), "L") = "record" Return {"error": "refused: the agent mode is record; set replay or live first"}.%ToJSON()
         If '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Bridge.Runner.AIHub") Return {"error": "the live runner (the aihub module) is not installed"}.%ToJSON()
+        If '$GET(^Shutter.Config("demo")) Return {"error": "refused: this is not a demo instance, and the mimic's switch counts on a demo only"}.%ToJSON()
+        If '..UnknownUserEnabled() Return {"error": "UnknownUser is disabled on this instance, so the unauthenticated web application cannot answer"}.%ToJSON()
         If $ZSTRIP(model, "<>W") = "" Set model = "mock"
         Set ns = $NAMESPACE
         Set db = ##class(Shutter.Setup).DatabaseResource(ns), code = ##class(Shutter.Setup).DatabaseResource(ns, 1)
         Set resources = db _ ":RW" _ $SELECT((code '= "") && (code '= db): "," _ code _ ":R", 1: "")
-        Set sc = ..Web(ns, resources, .unknown)
-        If $$$ISERR(sc) Return {"error": ("web application: " _ $SYSTEM.Status.GetErrorText(sc))}.%ToJSON()
-        If 'unknown Return {"error": "UnknownUser is disabled on this instance, so the unauthenticated web application cannot answer"}.%ToJSON()
+        Set sc = ..Web(ns, resources)
+        If $$$ISERR(sc) Return ..Failed("web application: " _ $SYSTEM.Status.GetErrorText(sc))
         // The address the production already reaches the downstream system at, from inside the instance.
         Set host = $GET(^Shutter.Config("downstreamHost"), $GET(^Shutter.Config("wardHost"), "127.0.0.1"))
         Set port = $GET(^Shutter.Config("downstreamPort"), $GET(^Shutter.Config("wardPort"), 52773))
@@ -36,36 +42,78 @@ ClassMethod Enable(model As %String = "mock") As %String [ SqlProc ]
         If ##class(%ConfigStore.Configuration).Exists(..#FQN) Do ##class(%ConfigStore.Configuration).Delete(..#FQN)
         Set details = {"model_provider": "openai", "model": (model), "api_key": "shutter-mock-placeholder", "base_url": ("http://" _ host _ ":" _ port _ ..#WEBAPP _ "/v1")}
         Set sc = ##class(%ConfigStore.Configuration).Create("AI", "LLM", "", ..#CONFIG, details, "Shutter API mimic", "Answers the live runner without a model (tests/mock)")
-        If $$$ISERR(sc) Return {"error": ("config store: " _ $SYSTEM.Status.GetErrorText(sc))}.%ToJSON()
+        If $$$ISERR(sc) Return ..Failed("config store: " _ $SYSTEM.Status.GetErrorText(sc))
         Set ^Shutter.Config("aihub", "mockModel") = model
         Set ^Shutter.Config("aihub", "mock") = ..#FQN
         Return ..Status()
     } Catch ex {
-        Return {"error": (ex.DisplayString())}.%ToJSON()
+        Return ..Failed(ex.DisplayString())
     }
 }
 
+/// A failed Enable: the switch cleared and what Enable makes removed (Remove), so nothing of the mimic is left behind,
+/// and the error as JSON.
+ClassMethod Failed(error As %String) As %String [ Private ]
+{
+    Kill ^Shutter.Config("aihub", "mock"), ^Shutter.Config("aihub", "mockModel")
+    Do ..Remove()
+    Quit {"error": (error)}.%ToJSON()
+}
+
 /// Switch the mimic off: the switch first, so the next run resolves its mode as before, then its options, the
-/// configuration, the web application and the role. The call log stays unless <var>clearLog</var> is 1. Returns
-/// Status() as JSON.
+/// configuration, the web application and the role (Remove). The call log stays unless <var>clearLog</var> is 1.
+/// Returns Status() as JSON, or {"error": ...} when something could not be removed.
 ClassMethod Disable(clearLog As %Boolean = 0) As %String [ SqlProc ]
 {
     Try {
         If '$SYSTEM.Security.Check("%Admin_Secure", "USE") Return {"error": "Disable needs %Admin_Secure"}.%ToJSON()
         Kill ^Shutter.Config("aihub", "mock"), ^Shutter.Config("aihub", "mockModel")
         Kill ^Shutter.Config("aihub", "mockDebug"), ^Shutter.Config("aihub", "mockReplay"), ^Shutter.Config("aihub", "mockStrict")
-        If ##class(%ConfigStore.Configuration).Exists(..#FQN) Do ##class(%ConfigStore.Configuration).Delete(..#FQN)
-        New $NAMESPACE
-        Set ns = $NAMESPACE
         If clearLog Kill ^Shutter.MockLog
-        Set $NAMESPACE = "%SYS"
-        If ##class(Security.Applications).Exists(..#WEBAPP) Do ##class(Security.Applications).Delete(..#WEBAPP)
-        If ##class(Security.Roles).Exists(..#ROLE) Do ##class(Security.Roles).Delete(..#ROLE)
-        Set $NAMESPACE = ns
+        Set sc = ..Remove()
+        If $$$ISERR(sc) Return {"error": ($SYSTEM.Status.GetErrorText(sc))}.%ToJSON()
         Return ..Status()
     } Catch ex {
         Return {"error": (ex.DisplayString())}.%ToJSON()
     }
+}
+
+/// Removes what Enable makes beyond the switch, quietly when absent: the Config Store configuration, then in %SYS the
+/// web application and the role. Shared by Disable and a failed Enable. Returns the first error met, having tried each.
+ClassMethod Remove() As %Status [ Private ]
+{
+    Set sc = $$$OK
+    Try {
+        If ##class(%ConfigStore.Configuration).Exists(..#FQN) Do ##class(%ConfigStore.Configuration).Delete(..#FQN)
+        New $NAMESPACE
+        Set $NAMESPACE = "%SYS"
+        If ##class(Security.Applications).Exists(..#WEBAPP) {
+            Set one = ##class(Security.Applications).Delete(..#WEBAPP)
+            If $$$ISOK(sc) Set sc = one
+        }
+        If ##class(Security.Roles).Exists(..#ROLE) {
+            Set one = ##class(Security.Roles).Delete(..#ROLE)
+            If $$$ISOK(sc) Set sc = one
+        }
+    } Catch ex {
+        If $$$ISOK(sc) Set sc = ex.AsStatus()
+    }
+    Quit sc
+}
+
+/// Whether UnknownUser is enabled, read in %SYS: the unauthenticated web application answers through that account.
+ClassMethod UnknownUserEnabled() As %Boolean [ Private ]
+{
+    Set enabled = 0
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = "%SYS"
+        Set sc = ##class(Security.Users).Get("UnknownUser", .user)
+        If $$$ISOK(sc) Set enabled = ''$GET(user("Enabled"))
+    } Catch ex {
+        Set enabled = 0
+    }
+    Quit enabled
 }
 
 /// What is in place: the switch, the configuration (it holds no secret), the web application and the role, the
@@ -82,6 +130,8 @@ ClassMethod Status() As %String [ SqlProc ]
             Set sc = ##class(%ConfigStore.Configuration).GetDetails(..#FQN, .details, 0, 0)
             If $$$ISOK(sc) Set o."base_url" = details.%Get("base_url"), o.provider = details.%Get("model_provider")
         }
+        // The switch counts on a demo instance only (Enable refuses elsewhere).
+        Do o.%Set("demo", ''$GET(^Shutter.Config("demo")), "boolean")
         Set o."agent_mode" = $GET(^Shutter.Config("aihub", "mode"), "auto")
         Set o."auto_resolves_to" = ##class(Shutter.Bridge.Operation.Agent).ResolveMode("auto")
         // What the production's start applies (Shutter.Production OnStart): the mode the environment names, and
@@ -107,10 +157,12 @@ ClassMethod Status() As %String [ SqlProc ]
 /// the mimic's base_url, the run's token as its key) and an agent keeps it through %Init, so the class's own
 /// configuration (AI.LLM.Shutter) is never read; that provider lists models, passes AI Hub's TestConfiguration and
 /// answers a ping, all at the mimic, as the call log shows; and a response labelled mock is refused as a recording.
-/// Calls nothing but the mimic. Returns {ok, ...} as JSON, with the ping's request body.
+/// Calls nothing but the mimic. Returns {ok, ...} as JSON, with the ping's request body. The mockDebug option, switched
+/// on for the ping's body, is put back as it was whatever happens, so a failed test leaves no request bodies piling up.
 ClassMethod SelfTest() As %String [ SqlProc ]
 {
     Set o = {}, problems = []
+    Set debug = $GET(^Shutter.Config("aihub", "mockDebug")), touched = 0
     Try {
         Set mock = ##class(Shutter.Setup).MockConfig()
         If mock = "" Return {"ok": false, "problems": ["the mimic is off: run Enable first"]}.%ToJSON()
@@ -131,8 +183,7 @@ ClassMethod SelfTest() As %String [ SqlProc ]
         If 'o."agent_keeps_provider" Do problems.%Push("%Init replaced the provider")
         // 3. The wire, with the ping's body kept.
         Set mark = +$GET(^Shutter.MockLog)
-        Set debug = $GET(^Shutter.Config("aihub", "mockDebug"))
-        Set ^Shutter.Config("aihub", "mockDebug") = 1
+        Set ^Shutter.Config("aihub", "mockDebug") = 1, touched = 1
         Set ids = []
         Set models = provider.ListModels()
         Set iter = models.%GetIterator()
@@ -145,7 +196,6 @@ ClassMethod SelfTest() As %String [ SqlProc ]
         Set r = provider.ChatComplete(model, [{"role": "user", "content": "ping"}])
         Set o.ping = r.Content, o."ping_usage" = r.Usage
         If r.Content '= "pong" Do problems.%Push("the ping was not answered pong")
-        If debug = "" { Kill ^Shutter.Config("aihub", "mockDebug") } Else { Set ^Shutter.Config("aihub", "mockDebug") = debug }
         // 4. The call log: each call arrived at the mimic, with the run's token.
         // The model list is fetched once and then kept by AI Hub's library, so only the first test logs it.
         Set calls = [], pinged = 0
@@ -177,6 +227,10 @@ ClassMethod SelfTest() As %String [ SqlProc ]
         }
     } Catch ex {
         Do problems.%Push(ex.DisplayString())
+    }
+    // The debug option as it was, on the straight path and after a throw alike.
+    If touched {
+        If debug = "" { Kill ^Shutter.Config("aihub", "mockDebug") } Else { Set ^Shutter.Config("aihub", "mockDebug") = debug }
     }
     Do o.%Set("ok", problems.%Size() = 0, "boolean")
     Set o.problems = problems
@@ -365,10 +419,10 @@ ClassMethod Licences() As %String [ SqlProc ]
     Quit o.%ToJSON()
 }
 
-/// The role and the web application, in %SYS; <var>unknown</var> says whether UnknownUser is enabled.
-ClassMethod Web(ns As %String, resources As %String, Output unknown As %Boolean) As %Status
+/// The role and the web application, in %SYS: created when missing, brought to this definition when they exist.
+ClassMethod Web(ns As %String, resources As %String) As %Status
 {
-    Set sc = $$$OK, unknown = 0
+    Set sc = $$$OK
     Try {
         New $NAMESPACE
         Set $NAMESPACE = "%SYS"
@@ -393,11 +447,6 @@ ClassMethod Web(ns As %String, resources As %String, Output unknown As %Boolean)
         } Else {
             Set sc = ##class(Security.Applications).Create(..#WEBAPP, .props)
         }
-        Quit:$$$ISERR(sc)
-        Kill user
-        Set sc = ##class(Security.Users).Get("UnknownUser", .user)
-        Set unknown = $$$ISOK(sc) && $GET(user("Enabled"))
-        Set sc = $$$OK
     } Catch ex {
         Set sc = ex.AsStatus()
     }
