@@ -8,9 +8,11 @@ operator it lists the review targets (Shutter's own production and the demo hosp
 agent false: each review ends done with the demo's configuration findings by code (NO_ALERT_CONSUMER, ALERTING_OFF,
 QUEUE_ALERTS_OFF and FEED_SILENCE_UNWATCHED in both, PURGE_MISSING in the hospital's), in baseline order, and with the
 same fingerprint both times: 64 hex characters over the configuration findings alone, which the script computes again.
-Once the scenarios have run, the failed deliveries show as MESSAGE_ERRORS and ERRORS_GROUPED, which are counts and do
-not enter the fingerprint. A second start while a review of the production runs is 409 wrong_state, when the first is
-still sweeping. The approver marks one configuration finding intended (201; the operator's annotation is 403), a fresh
+When a review's own summary or case aggregates count errors in its window, they show as MESSAGE_ERRORS and
+ERRORS_GROUPED on an item, which are counts with their latest message and do not enter the fingerprint. A second start
+while a review of the production runs is 409 wrong_state naming it; when the first had already finished it is 202
+instead, and that extra review must give the same fingerprint. The newest review the script started is the first in the
+production's listing. The approver marks one configuration finding intended (201; the operator's annotation is 403), a fresh
 review of the production shows it intended, and after the approver's DELETE (204; the operator's is 403) it reads new
 again. A review with agent true ends with agent.state no_record (a replay instance with no recording for the
 configuration's record key) or ok (every finding ranked within its severity tier and explained).
@@ -174,12 +176,21 @@ def main():
     check("GET /production-reviews/PR-999999 is 404 not_found", status == 404 and (body or {}).get("error") == "not_found",
           f"{status} {body}")
 
-    # Failed deliveries the scenarios left in the window: Shutter's own cases, and the hospital's from S19
-    played = {("SHUTTER", "Shutter.Production"): bool(get("/cases?limit=1").get("items")),
-              ("HOSPITAL", "Hospital.Production"): bool(get("/cases?scenario=S19&limit=1").get("items"))}
+    def latest(f):
+        """A counted finding's latest message: the header id, or for an error group whose log rows name no message (the
+        production's own start and stop errors), its latest event log row."""
+        e = f.get("evidence") or {}
+        return str(e.get("latestHeaderId") or "") != "" or (f.get("code") == "ERRORS_GROUPED"
+                                                            and str(e.get("latestLogId") or "") != "")
+
+    def errors_in_window(r):
+        """Whether the review's own data counts errors in its window: message errors, or cases it opened."""
+        total = ((r.get("caseAggregates") or {}).get("_total") or {}).get("count") or 0
+        return ((r.get("summary") or {}).get("messageErrorsInWindow") or 0) > 0 or total > 0
 
     # ---- each production, reviewed twice with agent false ----
     reviews = {}
+    newest = {}  # the newest reviewId the script started, by production
     for (ns, prod), codes in EXPECTED.items():
         first = review(ns, prod)
         if not first:
@@ -204,27 +215,42 @@ def main():
         counted = [f for f in findings if f.get("code") in ("MESSAGE_ERRORS", "ERRORS_GROUPED")]
         check(f"{prod}: the window's errors are indicative counts with their latest message",
               all(f.get("confidence") == "indicative" and f.get("source") == "observed"
-                  and (f.get("evidence") or {}).get("count", 0) > 0 for f in counted),
-              [(f.get("id"), f.get("confidence"), f.get("source"), (f.get("evidence") or {}).get("count")) for f in counted])
-        if played[(ns, prod)]:
-            check(f"{prod}: the scenarios' failed deliveries show as MESSAGE_ERRORS and ERRORS_GROUPED on an item",
+                  and (f.get("evidence") or {}).get("count", 0) > 0 and latest(f) for f in counted),
+              [(f.get("id"), f.get("code"), f.get("confidence"), f.get("source"), (f.get("evidence") or {}).get("count"),
+                (f.get("evidence") or {}).get("latestHeaderId"), (f.get("evidence") or {}).get("latestLogId"))
+               for f in counted])
+        if errors_in_window(first):
+            check(f"{prod}: the window's errors (summary {(first.get('summary') or {}).get('messageErrorsInWindow')} "
+                  f"message errors, cases) show as MESSAGE_ERRORS and ERRORS_GROUPED on an item",
                   any(f.get("code") == "MESSAGE_ERRORS" and f.get("item") for f in findings)
                   and any(f.get("code") == "ERRORS_GROUPED" and f.get("item") for f in findings), f"found {sorted(found)}")
+        else:
+            print(f"note {prod}: {first.get('reviewId')} counts no errors in its window, so no item-level error findings to see")
 
         # The second run, and a start while it is still sweeping
         started = start(ns, prod, False)
         if not started:
             continue
+        newest[(ns, prod)] = started["reviewId"]
         status, body = operator.call("POST", "/production-reviews", {"namespace": ns, "production": prod, "agent": False},
                                      key=str(uuid.uuid4()))
         if status == 409:
             check(f"{prod}: a start while {started['reviewId']} runs is 409 wrong_state naming it",
                   (body or {}).get("error") == "wrong_state" and (body or {}).get("reviewId") == started["reviewId"],
                   f"{status} {body}")
+        elif status == 202:
+            extra_id = (body or {}).get("reviewId") or ""
+            print(f"note {prod}: {started['reviewId']} had finished before the second start (202 {extra_id}), so no 409 to see")
+            if check(f"{prod}: the extra start's 202 names a new review", re.fullmatch(r"PR-\d{6}", extra_id) is not None
+                     and extra_id != started["reviewId"], f"{body}"):
+                newest[(ns, prod)] = extra_id
+                extra = wait(lambda: finished(extra_id), args.timeout) or {}
+                check(f"{prod}: the extra review {extra_id} ends done with the same fingerprint",
+                      extra.get("state") == "done" and extra.get("fingerprint") == fp,
+                      f"{extra.get('state') or 'still running'} {extra.get('fingerprint')}")
         else:
-            print(f"note {prod}: {started['reviewId']} had finished before the second start ({status}), so no 409 to see")
-            if status == 202 and (body or {}).get("reviewId"):
-                wait(lambda: finished(body["reviewId"]), args.timeout)
+            check(f"{prod}: a start while {started['reviewId']} runs is 409 wrong_state (or 202 once it has finished)",
+                  False, f"{status} {body}")
         second = wait(lambda: finished(started["reviewId"]), args.timeout) or {}
         check(f"{prod}: a second review gives the same fingerprint and the same configuration findings",
               second.get("state") == "done" and second.get("fingerprint") == fp
@@ -234,9 +260,9 @@ def main():
 
     _, listing = operator.call("GET", "/production-reviews?production=Shutter.Production&limit=5")
     items = (listing or {}).get("items") or []
-    newest = (reviews.get(("SHUTTER", "Shutter.Production")) or {}).get("reviewId")
-    check("operator: GET /production-reviews?production= lists the newest review first",
-          bool(items) and items[0].get("reviewId") == newest and all(i.get("production") == "Shutter.Production" for i in items)
+    latest = newest.get(("SHUTTER", "Shutter.Production"))
+    check(f"operator: GET /production-reviews?production= lists the newest review first ({latest})",
+          bool(items) and items[0].get("reviewId") == latest and all(i.get("production") == "Shutter.Production" for i in items)
           and (listing or {}).get("total", 0) >= len(items), [i.get("reviewId") for i in items])
 
     # ---- an annotation: the approver's, bound to the finding's value, seen by a fresh review, then revoked ----
