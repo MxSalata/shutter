@@ -201,9 +201,16 @@ ClassMethod Summary(findings As %DynamicArray, data As %DynamicObject) As %Dynam
     Set s.bySeverity = by
     Set s.findings = findings.%Size()
     Set s.intended = intended
-    Set s.items = 0, s.errorsInWindow = 0, s.messageErrorsInWindow = 0
+    Set s.items = 0, s.errorsInWindow = 0, s.messageErrorsInWindow = 0, s.hl7Operations = 0, s.hl7TcpItems = 0
     If $ISOBJECT(data) {
         Set s.items = data.items.%Size()
+        // The subjects of the HL7 checks, so a page can tell "no HL7 item here" from "nothing found".
+        Set iter = data.items.%GetIterator()
+        While iter.%GetNext(.i, .it) {
+            Set cls = ##class(Shutter.Util.Json).Str(it, "className")
+            If ..IsHL7Operation(cls) Set s.hl7Operations = s.hl7Operations + 1
+            If ..IsHL7TCPOperation(cls) || ..IsHL7TCPService(cls) Set s.hl7TcpItems = s.hl7TcpItems + 1
+        }
         Set iter = data.logErrors.%GetIterator()
         While iter.%GetNext(.i, .g) {
             Set s.errorsInWindow = s.errorsInWindow + g.count
@@ -434,7 +441,7 @@ ClassMethod Evaluate(data As %DynamicObject, cases As %DynamicObject, window As 
             Set f.why = f.why _ " The item is no longer in the production."
         }
         Set latestMessageId = ##class(Shutter.Util.Json).Str(g, "latestMessageId")
-        Set f.evidence.latestHeaderId = $SELECT(latestMessageId '= "": latestMessageId, 1: ##class(Shutter.Util.Json).Str(g, "latestId"))
+        Set f.evidence.latestHeaderId = latestMessageId, f.evidence.latestLogId = ##class(Shutter.Util.Json).Str(g, "latestId")
         Set f.evidence.latestAt = ##class(Shutter.Util.Json).Str(g, "latestAt")
         Set f.evidence.example = ##class(Shutter.Util.Json).Str(g, "exampleText")
         Do findings.%Push(f)
@@ -447,7 +454,7 @@ ClassMethod Evaluate(data As %DynamicObject, cases As %DynamicObject, window As 
         Set ruleRows = ruleRows + 1
         Set ruleName = ##class(Shutter.Util.Json).Str(r, "ruleName"), ruleSet = ##class(Shutter.Util.Json).Str(r, "ruleSet")
         Set f = ##class(Shutter.Review.Checks).Finding("RULE_ERRORS", ruleName, ruleName, "", $SELECT(ruleSet '= "": "rule set " _ ruleSet, 1: "rule log"), "observed", r.count)
-        Set f.evidence.latestHeaderId = ##class(Shutter.Util.Json).Str(r, "latestId")
+        Set f.evidence.latestRuleLogId = ##class(Shutter.Util.Json).Str(r, "latestId")
         Set f.evidence.example = ##class(Shutter.Util.Json).Str(r, "errorMsg")
         Do findings.%Push(f)
     }
@@ -468,7 +475,7 @@ ClassMethod Evaluate(data As %DynamicObject, cases As %DynamicObject, window As 
             Set transform = $ORDER(transforms(transform), 1, agg)
             Quit:transform=""
             Set f = ##class(Shutter.Review.Checks).Finding("RULE_ERRORS", transform, transform, "", "from the error text", "observed", $LIST(agg, 1))
-            Set f.evidence.latestHeaderId = $LIST(agg, 2), f.evidence.example = $LIST(agg, 3)
+            Set f.evidence.latestLogId = $LIST(agg, 2), f.evidence.example = $LIST(agg, 3)
             Do findings.%Push(f)
         }
     }

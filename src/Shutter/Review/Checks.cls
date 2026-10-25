@@ -88,7 +88,7 @@ ClassMethod Finding(code As %String, item As %String = "", itemClass As %String 
     Set f.why = ..Fill(##class(Shutter.Util.Json).Str(rule, "why"), values)
     Set f.action = ..Fill(##class(Shutter.Util.Json).Str(rule, "action"), values)
     Set f.cases = {"count": 0, "unique": 0, "latest": []}
-    Set f.evidence = {"count": (+count), "latestHeaderId": "", "latestAt": "", "example": ""}
+    Set f.evidence = {"count": (+count), "latestHeaderId": "", "latestLogId": "", "latestRuleLogId": "", "latestAt": "", "example": ""}
     Set f.status = "new"
     Set f.annotationId = ""
     Do f.%Set("rank", "", "null")
