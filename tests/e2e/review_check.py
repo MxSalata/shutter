@@ -15,7 +15,8 @@ instead, and that extra review must give the same fingerprint. The newest review
 production's listing. The approver marks one configuration finding intended (201; the operator's annotation is 403), a fresh
 review of the production shows it intended, and after the approver's DELETE (204; the operator's is 403) it reads new
 again. A review with agent true ends with agent.state no_record (a replay instance with no recording for the
-configuration's record key) or ok (every finding ranked within its severity tier and explained).
+configuration's record key) or ok (every finding ranked within its severity tier; the ones the recording matched by code, item and setting
+explained and first in their tier).
 
 A review only reads the production, and the script deletes the annotation it made, so it may run on an instance in
 use; on an instance with a provider key and the Agent Board item in live mode, the agent run spends model credit.
@@ -344,11 +345,24 @@ def main():
         key = f"review:{ns}:{prod}|review|1|{r.get('fingerprint')}"
         if agent.get("state") == "ok":
             ranked = sorted(findings, key=lambda f: f.get("rank") or 0)
-            check(f"{prod}: agent ok: every finding ranked 1 to {len(findings)} within its severity tier, and explained",
+            check(f"{prod}: agent ok: every finding ranked 1 to {len(findings)} within its severity tier",
                   sorted(f.get("rank") or 0 for f in findings) == list(range(1, len(findings) + 1))
                   and [TIERS.index(f["severity"]) for f in ranked] == sorted(TIERS.index(f["severity"]) for f in ranked)
-                  and all(f.get("explanation") for f in findings) and agent.get("recordKey") == key,
+                  and agent.get("recordKey") == key,
                   [(f.get("id"), f.get("rank"), f.get("severity")) for f in findings])
+            # A recording is matched by code, item and setting: findings it has no entry for keep the baseline order
+            # after the explained ones of their tier, with no explanation, and its entries with no finding drop.
+            explained = [f for f in findings if f.get("explanation")]
+            first_unexplained = {}
+            for f in ranked:
+                if not f.get("explanation"):
+                    first_unexplained.setdefault(f["severity"], f["rank"])
+            check(f"{prod}: the recording explains {agent.get('explained')} of the findings, the others follow them in their tier",
+                  (agent.get("explained") or 0) >= 1 and agent.get("explained") == len(explained)
+                  and (agent.get("explained") or 0) + (agent.get("unexplained") or 0) == len(findings)
+                  and isinstance(agent.get("dropped"), int)
+                  and all(f["rank"] < first_unexplained.get(f["severity"], len(findings) + 1) for f in explained),
+                  {k: agent.get(k) for k in ("explained", "unexplained", "dropped", "recordedEntries")})
         else:
             check(f"{prod}: agent no_record: a replay with no recording for {key}",
                   agent.get("state") == "no_record" and agent.get("mode") == "replay" and agent.get("recordKey") == key

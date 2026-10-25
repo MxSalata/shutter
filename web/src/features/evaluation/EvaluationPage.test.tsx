@@ -23,7 +23,7 @@ describe('EvaluationPage', () => {
     renderPage();
     expect(screen.getByRole('heading', { name: 'Evaluation' })).toBeInTheDocument();
     expect(
-      screen.getByText(/^Every figure here comes from the recorded live runs of 19 October 2026: 56 runs/),
+      screen.getByText(/^Every figure here comes from the recorded live runs of 25 October 2026: 56 runs/),
     ).toBeInTheDocument();
     expect(screen.getByText(/Nothing on this page was measured on this instance/)).toBeInTheDocument();
   });
@@ -31,9 +31,9 @@ describe('EvaluationPage', () => {
   it('gives the board against the expected outcome, the agreement, the tokens and the cost', () => {
     renderPage();
     expect(screen.getByText(/^13 of 13 scored passes/)).toBeInTheDocument();
-    expect(screen.getByText(/^unanimous in 7, with the majority in 6/)).toBeInTheDocument();
-    expect(screen.getByText(/1,010,261 uncached input/)).toBeInTheDocument();
-    expect(screen.getByText(/\$5\.31 at list prices/)).toBeInTheDocument();
+    expect(screen.getByText(/^unanimous in 7, with the majority in 7/)).toBeInTheDocument();
+    expect(screen.getByText(/1,033,046 uncached input/)).toBeInTheDocument();
+    expect(screen.getByText(/\$5\.38 at list prices/)).toBeInTheDocument();
   });
 
   it("shows each member's disposition and confidence per pass, and marks a view the plan set aside", () => {
@@ -50,7 +50,7 @@ describe('EvaluationPage', () => {
     expect(cells[6]).toHaveTextContent('E7 (board)');
     expect(cells[7]).toHaveTextContent('with the majority');
     expect(cells[9]).toHaveTextContent('$0.37');
-    expect(cells[10]).toHaveTextContent('31.3 s');
+    expect(cells[10]).toHaveTextContent('30.9 s');
     const unscored = within(table).getByText('S7 pass 1').closest('tr')!;
     expect(unscored).toHaveTextContent('Not scored: planned again after the change');
     expect(within(table).getByText('S11 ENC-1103 transfer')).toBeInTheDocument();
@@ -79,7 +79,7 @@ describe('EvaluationPage', () => {
     };
     const { unmount } = renderPage(allAgreed);
     expect(
-      screen.getByText(/the findings with the expected outcome: 31, from 0\.72 to 0\.95/),
+      screen.getByText(/the findings with the expected outcome: 32, from 0\.70 to 0\.95/),
     ).toHaveTextContent(/and those another view outweighed: none$/);
     unmount();
 
