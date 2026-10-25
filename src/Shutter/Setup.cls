@@ -922,6 +922,8 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Do r.%Set("ward_classes", ''##class(%Dictionary.CompiledClass).%ExistsId("Downstream.API"), "boolean")
     Do r.%Set("aihub_runner", ''##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Bridge.Runner.AIHub"), "boolean")
     Do r.%Set("ai_hub_present", ''##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent"), "boolean")
+    // The API mimic's switch as set (tests/mock), "" when off; it counts on a demo instance only (MockConfig).
+    Set r."mock_config" = $GET(^Shutter.Config("aihub", "mock"))
     &sql(SELECT COUNT(*) INTO :members FROM Shutter_Store.BoardMember WHERE Enabled = 1)
     Set r."board_members" = +members
     &sql(SELECT COUNT(*) INTO :records FROM Shutter_Bridge.Record)
@@ -997,7 +999,9 @@ ClassMethod InstallAIHub(root As %String = "") As %String [ SqlProc ]
 
 /// InstallAIHub as a %Status: what the aihub module's manifest invokes (the Invoke checks the status, so an install
 /// that stopped at an error stops the load, and the image build with it). Writes InstallAIHub's JSON, which holds no
-/// secret. A knowledge base that did not build is reported there and does not fail the install.
+/// secret. What fails the install: an error InstallAIHub caught, and a key in the environment (ANTHROPIC_API_KEY) whose
+/// provider could not be configured (a provider line not starting "ok"). A knowledge base that did not build, and an
+/// environment with no key (the agents replay), are reported there and do not fail it.
 ClassMethod InstallAIHubStatus(root As %String = "") As %Status
 {
     Set sc = $$$OK
@@ -1006,6 +1010,7 @@ ClassMethod InstallAIHubStatus(root As %String = "") As %Status
         Write !, "aihub install: ", json, !
         Set out = ##class(%DynamicObject).%FromJSON(json)
         If out.error '= "" Set sc = $$$ERROR($$$GeneralError, "The aihub install: " _ out.error)
+        If $$$ISOK(sc) && ($SYSTEM.Util.GetEnviron("ANTHROPIC_API_KEY") '= "") && ($EXTRACT(out.provider, 1, 2) '= "ok") Set sc = $$$ERROR($$$GeneralError, "The aihub install: the provider was not configured from ANTHROPIC_API_KEY: " _ out.provider)
     } Catch ex {
         Set sc = ex.AsStatus()
     }
@@ -1216,9 +1221,12 @@ ClassMethod ProviderConfigured() As %Boolean
 
 /// The Config Store configuration of the API mimic while it is switched on, else "". The mimic is a test fixture
 /// (tests/mock, in neither module nor the image) that answers the live runner's model calls without a model: while
-/// it is on, every live run goes to it and is labelled model mock at cost 0, and record mode is refused.
+/// it is on, every live run goes to it and is labelled model mock at cost 0, and record mode is refused. It counts on
+/// a demo instance only (^Shutter.Config("demo")): on a site the switch is ignored, so this answers "" there whatever
+/// the global holds (Shutter.Production OnStart warns about such a switch, and Doctor's mock_config shows it).
 ClassMethod MockConfig() As %String
 {
+    If '$GET(^Shutter.Config("demo")) Quit ""
     Quit $GET(^Shutter.Config("aihub", "mock"))
 }
 

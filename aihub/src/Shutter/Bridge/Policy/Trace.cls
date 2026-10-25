@@ -5,8 +5,9 @@ Include Ensemble
 Class Shutter.Bridge.Policy.Trace Extends %AI.Policy.Audit
 {
 
-/// The Ens.MessageHeader id of the agent request.
-Property RunKey As %String(MAXLEN = 50);
+/// The Ens.MessageHeader id of the agent request, or a test run's own key (test:<case>:<member>:<n>, the runner's
+/// TestRun).
+Property RunKey As %String(MAXLEN = 80);
 
 Property Calls As %Integer [ InitialExpression = 0 ];
 

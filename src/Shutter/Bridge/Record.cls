@@ -45,22 +45,40 @@ ClassMethod Find(key As %String) As Shutter.Bridge.Record
     Quit ""
 }
 
-/// Store or replace the recording of a run. A run the API mimic answered (model mock) is refused: no model made it.
+/// Store or replace the recording of a run. A run the API mimic answered (model mock, or its response saying so: IsMock)
+/// is refused before anything is written: no model made it.
 ClassMethod Store(spec As Shutter.Bridge.RunSpec, response As Shutter.Bridge.Msg.AgentResponse, transcript As %String = "", toolCalls As %String = "", Output record As Shutter.Bridge.Record) As %Status
 {
     Set record = ""
-    If response.Model = "mock" Quit $$$ERROR($$$GeneralError, "A run the API mimic answered is never stored as a recording")
+    // The refusal is judged on what the row would hold, before the stored row under the key is touched.
+    Set draft = ..%New()
+    Set draft.Model = response.Model, draft.ResponseJSON = response.ToObject().%ToJSON()
+    If ..IsMock(draft) Quit $$$ERROR($$$GeneralError, "A run the API mimic answered is never stored as a recording")
     Set key = spec.ReplayKey()
     Set record = ..Find(key)
     If '$ISOBJECT(record) Set record = ..%New(), record.Key = key
     Set record.AgentClass = spec.AgentClass, record.ConfigVersion = spec.ConfigVersion
     Set record.MemberCode = spec.MemberCode, record.SnapshotDigest = spec.SnapshotDigest
     Set record.CorrelationKey = spec.CorrelationKey, record.Model = response.Model
-    Set record.ResponseJSON = response.ToObject().%ToJSON()
+    Set record.ResponseJSON = draft.ResponseJSON
     Set record.TranscriptJSON = transcript, record.ToolCallsJSON = toolCalls
     Set record.RecordedAt = ##class(Shutter.Util.Time).NowUTC()
     Set record.Label = "Recorded from a live run (" _ response.Model _ ", " _ spec.Mode _ " mode), " _ (+response.PromptTokens) _ " in / " _ (+response.CompletionTokens) _ " out tokens"
     Quit record.%Save()
+}
+
+/// Whether a recording is one the API mimic answered: its model is mock, or the response it holds says model mock or
+/// provider configuration ShutterMock. Such a recording is never stored (Store) or imported (ImportJSON, ImportDir): no
+/// model made it, and a replay of it would pass the mimic's answer off as a model's.
+ClassMethod IsMock(record As Shutter.Bridge.Record) As %Boolean
+{
+    If '$ISOBJECT(record) Quit 0
+    If record.Model = "mock" Quit 1
+    If record.ResponseJSON = "" Quit 0
+    Set o = ##class(Shutter.Util.Json).Parse(record.ResponseJSON, .sc)
+    If '$ISOBJECT(o) || 'o.%IsA("%DynamicObject") Quit 0
+    If ##class(Shutter.Util.Json).Str(o, "model") = "mock" Quit 1
+    Quit ##class(Shutter.Util.Json).Str(o, "provider_config") = "ShutterMock"
 }
 
 /// Fill a response from this recording.
@@ -94,13 +112,15 @@ ClassMethod ExportDir(dir As %String) As %Status
 }
 
 /// Import one recording from its JSON (the export shape), replacing an existing key. Returns the
-/// key, or the error text. Callable through SQL for loading fixtures from outside the instance.
+/// key, or the error text. A recording the API mimic answered (IsMock) is refused. Callable through SQL for loading
+/// fixtures from outside the instance.
 ClassMethod ImportJSON(json As %String) As %String [ SqlProc ]
 {
     Set json = ..Normalise(json)
     Set r = ..%New()
     Set sc = r.%JSONImport(json)
     If $$$ISERR(sc) Quit "ERROR: " _ $SYSTEM.Status.GetErrorText(sc)
+    If ..IsMock(r) Quit "ERROR: a recording the API mimic answered (model mock) is never imported"
     Set existing = ..Find(r.Key)
     If $ISOBJECT(existing) {
         Set sc = existing.%JSONImport(json)
@@ -128,7 +148,8 @@ ClassMethod Normalise(json As %String) As %String
     }
 }
 
-/// Import every *.json recording in a directory, replacing existing keys. Returns the count.
+/// Import every *.json recording in a directory, replacing existing keys. Returns the count. A file holding a recording
+/// the API mimic answered (IsMock) fails the import, named in the error.
 ClassMethod ImportDir(dir As %String, Output count As %Integer) As %Status
 {
     Set count = 0, sc = $$$OK
@@ -143,6 +164,7 @@ ClassMethod ImportDir(dir As %String, Output count As %Integer) As %Status
         Set r = ..%New()
         Set sc = r.%JSONImport(json)
         Quit:$$$ISERR(sc)
+        If ..IsMock(r) Set sc = $$$ERROR($$$GeneralError, path _ ": a recording the API mimic answered (model mock) is never imported") Quit
         Set existing = ..Find(r.Key)
         If $ISOBJECT(existing) {
             Set sc = existing.%JSONImport(json)
