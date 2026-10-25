@@ -132,6 +132,10 @@ jobs:
           echo "$out"
           [ "$code" = "0" ] || exit "$code"
           if echo "$out" | grep -q ': missing '; then echo "A scenario lacks recordings for its board"; exit 1; fi
+      - name: The recording checks refuse what they must (their own synthetic recordings)
+        run: |
+          python3 scripts/check-records.py --self-test
+          python3 tests/privacy_check.py --self-test
       - name: The scenario catalogue keeps to the condition vocabulary, and catalogue.json is built from it
         run: python3 scripts/build-catalogue.py knowledge/catalogue --check
       # The model gets tokens (MRN-T1, ENC-T1) for the patient's identifiers and never their name, date of birth,

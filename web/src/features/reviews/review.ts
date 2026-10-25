@@ -70,19 +70,19 @@ export function orderedFindings(review: Pick<ReviewDetail, 'agent' | 'findings'>
 }
 
 /**
- * Whether the page says the production has no HL7 TCP item: only when the server counted them and found none. The
- * reply code and framing checks need one; without the count the page says nothing either way.
+ * What the page says about the HL7 checks that had no subject, only from the server's counts: the reply code checks need
+ * an HL7 operation, the framing check an HL7 TCP item. Without the counts (older reviews) it says nothing either way.
  */
-export function noHl7TcpItem(review: Pick<ReviewDetail, 'state' | 'unreadable' | 'summary'>): boolean {
-  return review.state === 'done' && !review.unreadable && review.summary.hl7TcpItems === 0;
-}
-
-/**
- * Whether a finding's evidence.latestHeaderId is a message header. For RULE_ERRORS it is the id of a row in the rule
- * log (Ens_Rule.Log), which has no message page.
- */
-export function evidenceIsHeader(f: Pick<ReviewFinding, 'code'>): boolean {
-  return f.code !== 'RULE_ERRORS';
+export function hl7Note(review: Pick<ReviewDetail, 'state' | 'unreadable' | 'summary'>): string {
+  if (review.state !== 'done' || review.unreadable) return '';
+  const noOps = review.summary.hl7Operations === 0;
+  const noTcp = review.summary.hl7TcpItems === 0;
+  const tail = 'which is not the same as no finding.';
+  if (noOps && noTcp)
+    return `No HL7 operation or HL7 TCP item in this production: the reply code and framing checks had no subject, ${tail}`;
+  if (noOps) return `No HL7 operation in this production: the reply code checks had no subject, ${tail}`;
+  if (noTcp) return `No HL7 TCP item in this production: the framing check had no subject, ${tail}`;
+  return '';
 }
 
 /** The items a production-wide finding lists (ALERTING_OFF, QUEUE_ALERTS_OFF write them "; " separated). */

@@ -188,18 +188,18 @@ describe('ReviewPage', () => {
     expect(alerting.getByText("Source: the item's own setting")).toBeInTheDocument();
     expect(alerting.getAllByRole('listitem')).toHaveLength(4);
     // The recorded review has no count of HL7 TCP items, so the page says nothing about them
-    expect(findings().queryByText(/No HL7 TCP item/)).not.toBeInTheDocument();
+    expect(findings().queryByText(/^No HL7/)).not.toBeInTheDocument();
   });
 
-  it('says there is no HL7 TCP item when the server counted none, naming the checks it covers', async () => {
+  it('says there is no HL7 item when the server counted none, naming the checks it covers', async () => {
     const r = structuredClone(recorded['PR-000001']);
-    r.summary = { ...r.summary, hl7TcpItems: 0 };
+    r.summary = { ...r.summary, hl7Operations: 0, hl7TcpItems: 0 };
     server.use(http.get(`${BASE}/production-reviews/PR-000001`, () => HttpResponse.json(r)));
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
     expect(
       findings().getByText(
-        'No HL7 TCP item in this production: the reply code and framing checks had no subject, which is not the same as no finding.',
+        'No HL7 operation or HL7 TCP item in this production: the reply code and framing checks had no subject, which is not the same as no finding.',
       ),
     ).toBeInTheDocument();
   });
@@ -209,7 +209,7 @@ describe('ReviewPage', () => {
     Object.assign(r, {
       state: 'failed',
       error: 'The production could not be opened',
-      summary: { hl7TcpItems: 0 },
+      summary: { hl7Operations: 0, hl7TcpItems: 0 },
       findings: [],
       fingerprint: '',
       finishedAt: r.startedAt,
@@ -223,13 +223,13 @@ describe('ReviewPage', () => {
       summary.getByText('There is no result because the review failed: The production could not be opened'),
     ).toBeInTheDocument();
     expect(screen.queryByText(/the sweep is still reading/)).not.toBeInTheDocument();
-    expect(findings().queryByText(/No HL7 TCP item/)).not.toBeInTheDocument();
+    expect(findings().queryByText(/^No HL7/)).not.toBeInTheDocument();
     expect(findings().getByText('No findings: the review failed.')).toBeInTheDocument();
     const agent = within(screen.getByRole('region', { name: "The agent's ranking" }));
     expect(agent.getByText(/not asked because the sweep failed/)).toBeInTheDocument();
   });
 
-  it("shows a rule error's latest rule log entry as text, and links the other evidence to its header", async () => {
+  it('shows log entries as text, and links the evidence that names a message header', async () => {
     const r = structuredClone(recorded['PR-000001']);
     const base = r.findings[0];
     r.findings = [
@@ -238,7 +238,7 @@ describe('ReviewPage', () => {
         id: 'F1',
         code: 'RULE_ERRORS',
         item: 'ADT Router',
-        evidence: { ...base.evidence, latestHeaderId: 812 },
+        evidence: { ...base.evidence, latestHeaderId: '', latestRuleLogId: 812 },
       },
       ...(['ERRORS_GROUPED', 'MESSAGE_ERRORS', 'SUSPENDED_MESSAGES'] as const).map((code, i) => ({
         ...base,

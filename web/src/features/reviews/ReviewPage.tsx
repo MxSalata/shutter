@@ -14,7 +14,7 @@ import { formatDuration, formatInt, formatUsd, humanize } from '@/lib/format';
 import { useAnnotationDialogs } from './AnnotationDialogs';
 import { AgentStateBadge, ReviewStateBadge, SeverityCounts } from './badges';
 import { FindingsTable } from './FindingsTable';
-import { describeAgent, noHl7TcpItem, orderedFindings, rankedByAgent, READ_ONLY } from './review';
+import { describeAgent, hl7Note, orderedFindings, rankedByAgent, READ_ONLY } from './review';
 
 function AgentBlock({ r }: { r: ReviewDetail }) {
   const a = r.agent;
@@ -182,10 +182,9 @@ function Review({ r }: { r: ReviewDetail }) {
             </Badge>
           }
         >
-          {noHl7TcpItem(r) ? (
+          {hl7Note(r) ? (
             <Text size="sm" c="dimmed">
-              No HL7 TCP item in this production: the reply code and framing checks had no subject, which is
-              not the same as no finding.
+              {hl7Note(r)}
             </Text>
           ) : null}
           {findings.length ? (

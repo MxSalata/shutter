@@ -3,12 +3,11 @@ import type { ReviewAgent, ReviewDetail } from '@/api/types';
 import fixtures from '@/mocks/fixtures.json';
 import {
   describeAgent,
-  evidenceIsHeader,
   expiryForApi,
   expiryProblem,
   foundList,
   headerLink,
-  noHl7TcpItem,
+  hl7Note,
   orderedFindings,
   rankedByAgent,
   subjectOf,
@@ -81,18 +80,17 @@ describe('what a finding is about', () => {
     ]);
   });
 
-  it('says there is no HL7 TCP item only when the server counted none', () => {
-    expect(noHl7TcpItem(own)).toBe(false);
-    expect(noHl7TcpItem({ ...own, summary: { ...own.summary, hl7TcpItems: 0 } })).toBe(true);
-    expect(noHl7TcpItem({ ...own, summary: { ...own.summary, hl7TcpItems: 2 } })).toBe(false);
-    expect(noHl7TcpItem({ ...own, state: 'failed', summary: { hl7TcpItems: 0 } })).toBe(false);
-    expect(noHl7TcpItem({ ...own, unreadable: true, summary: { hl7TcpItems: 0 } })).toBe(false);
-  });
-
-  it('reads a rule log row id as no message header', () => {
-    expect(evidenceIsHeader({ code: 'RULE_ERRORS' })).toBe(false);
-    for (const code of ['ERRORS_GROUPED', 'MESSAGE_ERRORS', 'SUSPENDED_MESSAGES'])
-      expect(evidenceIsHeader({ code })).toBe(true);
+  it('names the HL7 checks with no subject only from the counts the server sent', () => {
+    const at = (summary: object) => hl7Note({ ...own, summary: { ...own.summary, ...summary } });
+    expect(hl7Note(own)).toBe('');
+    expect(at({ hl7Operations: 0, hl7TcpItems: 0 })).toMatch(
+      /^No HL7 operation or HL7 TCP item .* reply code and framing/,
+    );
+    expect(at({ hl7Operations: 0, hl7TcpItems: 1 })).toMatch(/^No HL7 operation .* the reply code checks/);
+    expect(at({ hl7Operations: 1, hl7TcpItems: 0 })).toMatch(/^No HL7 TCP item .* the framing check/);
+    expect(at({ hl7Operations: 2, hl7TcpItems: 2 })).toBe('');
+    expect(hl7Note({ ...own, state: 'failed', summary: { hl7Operations: 0, hl7TcpItems: 0 } })).toBe('');
+    expect(hl7Note({ ...own, unreadable: true, summary: { hl7Operations: 0, hl7TcpItems: 0 } })).toBe('');
   });
 
   it('links a header to the Management Portal of its own namespace', () => {

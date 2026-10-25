@@ -5,7 +5,11 @@ import { PortalLink } from '@/components/PortalLink';
 import { Timestamp } from '@/components/Timestamp';
 import { formatInt } from '@/lib/format';
 import { ConfidenceText, SeverityBadge, StatusBadge } from './badges';
-import { evidenceIsHeader, foundList, headerLink, SOURCE_LABELS, subjectOf } from './review';
+import { foundList, headerLink, SOURCE_LABELS, subjectOf } from './review';
+
+const present = (v: number | string | undefined) => v !== undefined && v !== null && v !== '';
+/** Whether the evidence names a log row (an event log or rule log entry, which have no message page). */
+const logIds = (f: ReviewFinding) => present(f.evidence.latestLogId) || present(f.evidence.latestRuleLogId);
 
 function FindingRow({
   f,
@@ -124,13 +128,16 @@ function FindingRow({
         )}
       </Table.Td>
       <Table.Td style={{ verticalAlign: 'top' }} miw={200} maw={240}>
-        {f.evidence.count || f.evidence.latestHeaderId !== '' || f.evidence.latestAt ? (
+        {f.evidence.count || f.evidence.latestHeaderId !== '' || f.evidence.latestAt || logIds(f) ? (
           <Stack gap={2}>
             <Text size="sm">{formatInt(f.evidence.count)} seen</Text>
-            {f.evidence.latestHeaderId !== '' && !evidenceIsHeader(f) ? (
-              <Text size="xs">Rule log entry {f.evidence.latestHeaderId}</Text>
+            {present(f.evidence.latestLogId) ? (
+              <Text size="xs">Event log entry {f.evidence.latestLogId}</Text>
             ) : null}
-            {f.evidence.latestHeaderId !== '' && evidenceIsHeader(f) ? (
+            {present(f.evidence.latestRuleLogId) ? (
+              <Text size="xs">Rule log entry {f.evidence.latestRuleLogId}</Text>
+            ) : null}
+            {f.evidence.latestHeaderId !== '' ? (
               <PortalLink
                 href={headerLink(namespace, f.evidence.latestHeaderId)}
                 what={`message header ${f.evidence.latestHeaderId} in ${namespace}`}

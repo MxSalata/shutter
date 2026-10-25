@@ -806,7 +806,9 @@ export interface ReviewSummary {
   items?: number;
   errorsInWindow?: number;
   messageErrorsInWindow?: number;
-  /** HL7 TCP items in the production, when the server counts them; absent from older reviews. */
+  /** HL7 operations (the reply code checks' subject), when the server counts them; absent from older reviews. */
+  hl7Operations?: number;
+  /** HL7 TCP operations and services (the framing check's subject), when the server counts them. */
   hl7TcpItems?: number;
 }
 
@@ -845,8 +847,18 @@ export interface ReviewFinding {
   why: string;
   action: string;
   cases: { count: number; unique: number; latest: string[] };
-  /** latestHeaderId and latestAt are "" when nothing was observed; example is the latest error text. */
-  evidence: { count: number; latestHeaderId: number | string; latestAt: string; example: string };
+  /**
+   * latestHeaderId (a message header only) and latestAt are "" when nothing was observed; latestLogId is an event log
+   * row and latestRuleLogId a rule log row, when the server sends them; example is the latest error text.
+   */
+  evidence: {
+    count: number;
+    latestHeaderId: number | string;
+    latestLogId?: number | string;
+    latestRuleLogId?: number | string;
+    latestAt: string;
+    example: string;
+  };
   status: FindingStatus;
   annotationId: string;
   /** null until the agent answered, then 1..n within the severity tiers. */
