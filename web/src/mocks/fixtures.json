@@ -62464,5 +62464,1881 @@
     }
    }
   }
- ]
+ ],
+ "productionReviews": {
+  "targets": [
+   {
+    "namespace": "SHUTTER",
+    "production": "Shutter.Production",
+    "productionState": "running",
+    "own": true,
+    "watched": false
+   },
+   {
+    "namespace": "HOSPITAL",
+    "production": "Hospital.Production",
+    "productionState": "running",
+    "own": false,
+    "watched": true
+   }
+  ],
+  "list": [
+   {
+    "reviewId": "PR-000004",
+    "namespace": "SHUTTER",
+    "production": "Shutter.Production",
+    "productionState": "running",
+    "startedAt": "2026-10-25T11:37:17Z",
+    "finishedAt": "2026-10-25T11:37:17Z",
+    "state": "done",
+    "agentState": "skipped",
+    "summary": {
+     "bySeverity": {
+      "high": 0,
+      "medium": 10,
+      "low": 3,
+      "info": 0
+     },
+     "findings": 13,
+     "intended": 1,
+     "items": 21,
+     "errorsInWindow": 721,
+     "messageErrorsInWindow": 720
+    },
+    "requestedBy": "operator"
+   },
+   {
+    "reviewId": "PR-000003",
+    "namespace": "HOSPITAL",
+    "production": "Hospital.Production",
+    "productionState": "running",
+    "startedAt": "2026-10-25T11:35:14Z",
+    "finishedAt": "2026-10-25T11:35:14Z",
+    "state": "done",
+    "agentState": "no_record",
+    "summary": {
+     "bySeverity": {
+      "high": 1,
+      "medium": 6,
+      "low": 2,
+      "info": 0
+     },
+     "findings": 9,
+     "intended": 0,
+     "items": 4,
+     "errorsInWindow": 12,
+     "messageErrorsInWindow": 8
+    },
+    "requestedBy": "operator"
+   },
+   {
+    "reviewId": "PR-000002",
+    "namespace": "HOSPITAL",
+    "production": "Hospital.Production",
+    "productionState": "running",
+    "startedAt": "2026-10-25T11:33:39Z",
+    "finishedAt": "2026-10-25T11:33:40Z",
+    "state": "done",
+    "agentState": "skipped",
+    "summary": {
+     "bySeverity": {
+      "high": 1,
+      "medium": 6,
+      "low": 2,
+      "info": 0
+     },
+     "findings": 9,
+     "intended": 0,
+     "items": 4,
+     "errorsInWindow": 12,
+     "messageErrorsInWindow": 8
+    },
+    "requestedBy": "operator"
+   },
+   {
+    "reviewId": "PR-000001",
+    "namespace": "SHUTTER",
+    "production": "Shutter.Production",
+    "productionState": "running",
+    "startedAt": "2026-10-25T11:33:36Z",
+    "finishedAt": "2026-10-25T11:33:38Z",
+    "state": "done",
+    "agentState": "no_record",
+    "summary": {
+     "bySeverity": {
+      "high": 0,
+      "medium": 11,
+      "low": 2,
+      "info": 0
+     },
+     "findings": 13,
+     "intended": 0,
+     "items": 21,
+     "errorsInWindow": 714,
+     "messageErrorsInWindow": 713
+    },
+    "requestedBy": "operator"
+   }
+  ],
+  "reviews": {
+   "PR-000001": {
+    "reviewId": "PR-000001",
+    "namespace": "SHUTTER",
+    "production": "Shutter.Production",
+    "productionState": "running",
+    "startedAt": "2026-10-25T11:33:36Z",
+    "finishedAt": "2026-10-25T11:33:38Z",
+    "state": "done",
+    "agentState": "no_record",
+    "requestedBy": "operator",
+    "error": "",
+    "window": {
+     "days": 7,
+     "from": "2026-10-18T11:33:36Z",
+     "to": "2026-10-25T11:33:36Z"
+    },
+    "fingerprint": "5717d0353964f447383262e2af230c20fa3a57350691f3ffc5337f244c08fdad",
+    "unreadable": false,
+    "summary": {
+     "bySeverity": {
+      "high": 0,
+      "medium": 11,
+      "low": 2,
+      "info": 0
+     },
+     "findings": 13,
+     "intended": 1,
+     "items": 21,
+     "errorsInWindow": 714,
+     "messageErrorsInWindow": 713
+    },
+    "findings": [
+     {
+      "id": "F1",
+      "code": "ERRORS_GROUPED",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "",
+      "itemClass": "",
+      "setting": "",
+      "found": "ERROR <Ens>ErrProductionNotQuiescent",
+      "source": "observed",
+      "suggested": "Each distinct signature understood, and either fixed or recorded here as expected.",
+      "why": "1 error(s) with the signature ERROR <Ens>ErrProductionNotQuiescent in the window, logged by . The count is consistent with repeated failures of the same kind; the signature is the event log's text before its first colon, and the latest text is kept as the example. The errors carry no item name: they are the production's own (a start, a stop, the director).",
+      "action": "Open the event log filtered on  and the latest entry of this signature; compare the count with the cases opened in the same window.",
+      "cases": {
+       "count": 54,
+       "unique": 30,
+       "latest": [
+        "C-000055",
+        "C-000054",
+        "C-000053",
+        "C-000051",
+        "C-000050"
+       ]
+      },
+      "evidence": {
+       "count": 1,
+       "latestHeaderId": 4342,
+       "latestAt": "2026-10-19T12:15:48Z",
+       "example": "ERROR <Ens>ErrProductionNotQuiescent: IRIS can not become quiescent"
+      },
+      "status": "intended",
+      "annotationId": "16",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F2",
+      "code": "ALERTING_OFF",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "item": "",
+      "itemClass": "",
+      "setting": "AlertOnError",
+      "found": "ADT In (AlertOnError 0, class default, no AlertGroups); HL7 Index (AlertOnError 0, class default, no AlertGroups); ADT to Downstream (AlertOnError 0, class default, no AlertGroups); Downstream Out (AlertOnError 0, class default, no AlertGroups)",
+      "source": "item",
+      "suggested": "AlertOnError 1 on every item on the feed (the service, the delivering process and the connector), with AlertGroups naming the team that owns the interface.",
+      "why": "Items on the clinical feed raise no alert on error, or name no alert group: ADT In (AlertOnError 0, class default, no AlertGroups); HL7 Index (AlertOnError 0, class default, no AlertGroups); ADT to Downstream (AlertOnError 0, class default, no AlertGroups); Downstream Out (AlertOnError 0, class default, no AlertGroups). A failure on them reaches the event log and waits for someone to read it.",
+      "action": "Switch on AlertOnError and set AlertGroups on the items listed; confirm that one alert reaches the owner.",
+      "cases": {
+       "count": 54,
+       "unique": 30,
+       "latest": [
+        "C-000055",
+        "C-000054",
+        "C-000053",
+        "C-000051",
+        "C-000050"
+       ]
+      },
+      "evidence": {
+       "count": 0,
+       "latestHeaderId": "",
+       "latestAt": "",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F3",
+      "code": "NO_ALERT_CONSUMER",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "item": "",
+      "itemClass": "",
+      "setting": "",
+      "found": "no Ens.Alert item",
+      "source": "observed",
+      "suggested": "An Ens.Alert business process, or the site's alert operation, routing alerts to a staffed owner by email or a ticket; or a documented external monitor that reads the event log's alerts.",
+      "why": "The production has no Ens.Alert item: an alert raised by any item (AlertOnError, a queue alert, an inactivity alert) has nowhere to go, so an error writes an alert to the event log that nobody receives.",
+      "action": "Add an alert consumer to the production (Add Process, Ens.Alert) and switch on AlertOnError on the feed-path items; send one deliberate alert to prove the path.",
+      "cases": {
+       "count": 54,
+       "unique": 30,
+       "latest": [
+        "C-000055",
+        "C-000054",
+        "C-000053",
+        "C-000051",
+        "C-000050"
+       ]
+      },
+      "evidence": {
+       "count": 0,
+       "latestHeaderId": "",
+       "latestAt": "",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F4",
+      "code": "ERRORS_GROUPED",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "ADT to Downstream",
+      "itemClass": "Shutter.Process.ADTToWard",
+      "setting": "",
+      "found": "ERROR <Ens>ErrBPTerminated",
+      "source": "observed",
+      "suggested": "Each distinct signature understood, and either fixed or recorded here as expected.",
+      "why": "445 error(s) with the signature ERROR <Ens>ErrBPTerminated in the window, logged by ADT to Downstream. The count is consistent with repeated failures of the same kind; the signature is the event log's text before its first colon, and the latest text is kept as the example.",
+      "action": "Open the event log filtered on ADT to Downstream and the latest entry of this signature; compare the count with the cases opened in the same window.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 445,
+       "latestHeaderId": 22102,
+       "latestAt": "2026-10-25T11:29:25Z",
+       "example": "ERROR <Ens>ErrBPTerminated: Terminating BP ADT to Downstream # due to error: ERROR #5001: Delivery unavailable (ward_unavailable), HTTP 503: The downstream system is unavailable. A case was opened\r\n  > ERROR #5001: Delivery unavailable (ward_unavailable), HTTP 503: The downstream system is unavailable. A case was opened"
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F5",
+      "code": "MESSAGE_ERRORS",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "ADT to Downstream",
+      "itemClass": "Shutter.Process.ADTToWard",
+      "setting": "",
+      "found": "445 in Error from ADT In",
+      "source": "observed",
+      "suggested": "Every failed delivery accounted for: a case, a resend or a discard with a reason.",
+      "why": "445 message(s) to ADT to Downstream ended in an error status in the window (445 in Error from ADT In). The count is consistent with deliveries that failed; the error text is in the event log of the same session.",
+      "action": "Compare the count with the cases opened for ADT to Downstream in the same window; a failed message without a case needs a person's decision.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 445,
+       "latestHeaderId": "22102",
+       "latestAt": "2026-10-25T11:29:25Z",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F6",
+      "code": "ERRORS_GROUPED",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "Case Workflow",
+      "itemClass": "Shutter.Process.CaseWorkflow",
+      "setting": "",
+      "found": "ERROR <Ens>ErrException",
+      "source": "observed",
+      "suggested": "Each distinct signature understood, and either fixed or recorded here as expected.",
+      "why": "1 error(s) with the signature ERROR <Ens>ErrException in the window, logged by Case Workflow. The count is consistent with repeated failures of the same kind; the signature is the event log's text before its first colon, and the latest text is kept as the example.",
+      "action": "Open the event log filtered on Case Workflow and the latest entry of this signature; compare the count with the cases opened in the same window.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 1,
+       "latestHeaderId": 11562,
+       "latestAt": "2026-10-20T01:09:34Z",
+       "example": "ERROR <Ens>ErrException: <PROPERTY DOES NOT EXIST>CloseByHand+16^Shutter.Store.Case.1 *UpdatedAt,Shutter.Store.Escalation -- logged as '-' number - @'        If $ISOBJECT(esc) && ((esc.State = \"draft\") || (esc.State = \"queued\")) { Set esc.State = \"cancelled\" Set esc.UpdatedAt = ##class(Shutter.Util.Time).NowUTC() Do esc.%Save() Set followed = followed _ \", cancelled\" }'"
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F7",
+      "code": "ERRORS_GROUPED",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "ADT to Ward",
+      "itemClass": "",
+      "setting": "",
+      "found": "ERROR <Ens>ErrBPTerminated",
+      "source": "observed",
+      "suggested": "Each distinct signature understood, and either fixed or recorded here as expected.",
+      "why": "266 error(s) with the signature ERROR <Ens>ErrBPTerminated in the window, logged by ADT to Ward. The count is consistent with repeated failures of the same kind; the signature is the event log's text before its first colon, and the latest text is kept as the example. The item is no longer in the production.",
+      "action": "Open the event log filtered on ADT to Ward and the latest entry of this signature; compare the count with the cases opened in the same window.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 266,
+       "latestHeaderId": 8595,
+       "latestAt": "2026-10-19T15:32:42Z",
+       "example": "ERROR <Ens>ErrBPTerminated: Terminating BP ADT to Ward # due to error: ERROR #5001: Delivery unavailable (ward_unavailable), HTTP 503: The ward system is unavailable. A case was opened\r\n  > ERROR #5001: Delivery unavailable (ward_unavailable), HTTP 503: The ward system is unavailable. A case was opened"
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F8",
+      "code": "MESSAGE_ERRORS",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "ADT to Ward",
+      "itemClass": "",
+      "setting": "",
+      "found": "266 in Error from ADT In",
+      "source": "observed",
+      "suggested": "Every failed delivery accounted for: a case, a resend or a discard with a reason.",
+      "why": "266 message(s) to ADT to Ward ended in an error status in the window (266 in Error from ADT In). The count is consistent with deliveries that failed; the error text is in the event log of the same session.",
+      "action": "Compare the count with the cases opened for ADT to Ward in the same window; a failed message without a case needs a person's decision.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 266,
+       "latestHeaderId": "8595",
+       "latestAt": "2026-10-19T15:32:42Z",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F9",
+      "code": "ERRORS_GROUPED",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "Case Workflow",
+      "itemClass": "Shutter.Process.CaseWorkflow",
+      "setting": "",
+      "found": "ERROR <Ens>ErrBPTerminated",
+      "source": "observed",
+      "suggested": "Each distinct signature understood, and either fixed or recorded here as expected.",
+      "why": "1 error(s) with the signature ERROR <Ens>ErrBPTerminated in the window, logged by Case Workflow. The count is consistent with repeated failures of the same kind; the signature is the event log's text before its first colon, and the latest text is kept as the example.",
+      "action": "Open the event log filtered on Case Workflow and the latest entry of this signature; compare the count with the cases opened in the same window.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 1,
+       "latestHeaderId": 430,
+       "latestAt": "2026-10-18T15:33:48Z",
+       "example": "ERROR <Ens>ErrBPTerminated: Terminating BP Case Workflow # due to error: ERROR #5002: ObjectScript error: <UNDEFINED>OnEvidence+9^Shutter.Process.CaseWorkflow.1 *summary\r\n  > ERROR #5002: ObjectScript error: <UNDEFINED>OnEvidence+9^Shutter.Process.CaseWorkflow.1 *summary"
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F10",
+      "code": "MESSAGE_ERRORS",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "Case Workflow",
+      "itemClass": "Shutter.Process.CaseWorkflow",
+      "setting": "",
+      "found": "1 in Error from Evidence Collector",
+      "source": "observed",
+      "suggested": "Every failed delivery accounted for: a case, a resend or a discard with a reason.",
+      "why": "1 message(s) to Case Workflow ended in an error status in the window (1 in Error from Evidence Collector). The count is consistent with deliveries that failed; the error text is in the event log of the same session.",
+      "action": "Compare the count with the cases opened for Case Workflow in the same window; a failed message without a case needs a person's decision.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 1,
+       "latestHeaderId": "456",
+       "latestAt": "2026-10-18T15:33:48Z",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F11",
+      "code": "MESSAGE_ERRORS",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "Case Workflow",
+      "itemClass": "Shutter.Process.CaseWorkflow",
+      "setting": "",
+      "found": "1 in Error from ADT to Ward",
+      "source": "observed",
+      "suggested": "Every failed delivery accounted for: a case, a resend or a discard with a reason.",
+      "why": "1 message(s) to Case Workflow ended in an error status in the window (1 in Error from ADT to Ward). The count is consistent with deliveries that failed; the error text is in the event log of the same session.",
+      "action": "Compare the count with the cases opened for Case Workflow in the same window; a failed message without a case needs a person's decision.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 1,
+       "latestHeaderId": "430",
+       "latestAt": "2026-10-18T15:32:47Z",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F12",
+      "code": "QUEUE_ALERTS_OFF",
+      "severity": "low",
+      "confidence": "confirmed",
+      "item": "",
+      "itemClass": "",
+      "setting": "QueueCountAlert",
+      "found": "Downstream Out",
+      "source": "class_default",
+      "suggested": "Thresholds agreed for the interface (a count above the normal burst, a wait of a few minutes) with an owner for the backlog.",
+      "why": "QueueCountAlert and QueueWaitAlert are 0 on Downstream Out: a growing backlog or an old message in the queue raises nothing, so patients' locations can lag while throughput looks healthy.",
+      "action": "Set QueueCountAlert and QueueWaitAlert on the operations listed, then review the thresholds after a week against the real queue.",
+      "cases": {
+       "count": 54,
+       "unique": 30,
+       "latest": [
+        "C-000055",
+        "C-000054",
+        "C-000053",
+        "C-000051",
+        "C-000050"
+       ]
+      },
+      "evidence": {
+       "count": 0,
+       "latestHeaderId": "",
+       "latestAt": "",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F13",
+      "code": "FEED_SILENCE_UNWATCHED",
+      "severity": "low",
+      "confidence": "consistent",
+      "item": "ADT In",
+      "itemClass": "EnsLib.HL7.Service.FileService",
+      "setting": "InactivityTimeout",
+      "found": "0",
+      "source": "class_default",
+      "suggested": "An InactivityTimeout longer than the feed's normal quiet period, in seconds, with AlertOnError on; or a documented external check on the feed's arrival rate.",
+      "why": "InactivityTimeout 0 on ADT In: a feed that falls silent (the sender stopped, the folder or port no longer reached) is never noticed by the production itself, and the silence is consistent with messages going nowhere.",
+      "action": "Set InactivityTimeout on ADT In to the agreed silence. Scheduled quiet periods (nights, weekends) belong on the item's Schedule, or in an annotation here.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 0,
+       "latestHeaderId": "",
+       "latestAt": "",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     }
+    ],
+    "caseAggregates": {
+     "Downstream Out": {
+      "count": 54,
+      "unique": 30,
+      "byFailureKind": {
+       "rejected": 3,
+       "withheld": 4,
+       "delivery_failed": 44,
+       "uncertain_outcome": 3
+      },
+      "byOutcome": {
+       "(none)": 4,
+       "refused": 3,
+       "uncertain": 3,
+       "unavailable": 44
+      },
+      "byReasonCode": {
+       "(none)": 3,
+       "merge": 2,
+       "ward_unavailable": 44,
+       "duplicate_message": 3,
+       "cancel_unsupported": 2
+      },
+      "byState": {
+       "blocked": 6,
+       "resolved": 38,
+       "escalated": 10
+      },
+      "latest": [
+       "C-000055",
+       "C-000054",
+       "C-000053",
+       "C-000051",
+       "C-000050"
+      ]
+     },
+     "_total": {
+      "count": 54,
+      "unique": 30,
+      "byFailureKind": {
+       "rejected": 3,
+       "withheld": 4,
+       "delivery_failed": 44,
+       "uncertain_outcome": 3
+      },
+      "byOutcome": {
+       "(none)": 4,
+       "refused": 3,
+       "uncertain": 3,
+       "unavailable": 44
+      },
+      "byReasonCode": {
+       "(none)": 3,
+       "merge": 2,
+       "ward_unavailable": 44,
+       "duplicate_message": 3,
+       "cancel_unsupported": 2
+      },
+      "byState": {
+       "blocked": 6,
+       "resolved": 38,
+       "escalated": 10
+      },
+      "latest": [
+       "C-000055",
+       "C-000054",
+       "C-000053",
+       "C-000051",
+       "C-000050"
+      ]
+     }
+    },
+    "agent": {
+     "state": "no_record",
+     "mode": "replay",
+     "model": "",
+     "providerConfig": "",
+     "costUsd": 0,
+     "promptTokens": 0,
+     "completionTokens": 0,
+     "cacheReadTokens": 0,
+     "cacheCreationTokens": 0,
+     "durationMs": 0,
+     "recordKey": "review:SHUTTER:Shutter.Production|review|1|5717d0353964f447383262e2af230c20fa3a57350691f3ffc5337f244c08fdad",
+     "ensMessageId": "22147",
+     "error": "No recording for review:SHUTTER:Shutter.Production|review|1|5717d0353964f447383262e2af230c20fa3a57350691f3ffc5337f244c08fdad",
+     "summary": "",
+     "unknowns": []
+    }
+   },
+   "PR-000002": {
+    "reviewId": "PR-000002",
+    "namespace": "HOSPITAL",
+    "production": "Hospital.Production",
+    "productionState": "running",
+    "startedAt": "2026-10-25T11:33:39Z",
+    "finishedAt": "2026-10-25T11:33:40Z",
+    "state": "done",
+    "agentState": "skipped",
+    "requestedBy": "operator",
+    "error": "",
+    "window": {
+     "days": 7,
+     "from": "2026-10-18T11:33:39Z",
+     "to": "2026-10-25T11:33:39Z"
+    },
+    "fingerprint": "b6122fd365332db550537e998be379514e0fc39cf16e427d1b5472b42197ce7b",
+    "unreadable": false,
+    "summary": {
+     "bySeverity": {
+      "high": 1,
+      "medium": 6,
+      "low": 2,
+      "info": 0
+     },
+     "findings": 9,
+     "intended": 0,
+     "items": 4,
+     "errorsInWindow": 12,
+     "messageErrorsInWindow": 8
+    },
+    "findings": [
+     {
+      "id": "F1",
+      "code": "PURGE_MISSING",
+      "severity": "high",
+      "confidence": "confirmed",
+      "item": "",
+      "itemClass": "",
+      "setting": "",
+      "found": "no Ens.Util.Tasks.Purge task for the namespace",
+      "source": "observed",
+      "suggested": "A scheduled Ens.Util.Tasks.Purge for the namespace, keeping the days the incident and audit process needs (Shutter's own install makes one of 90 days, bodies too, sessions kept whole).",
+      "why": "No message purge task (Ens.Util.Tasks.Purge) runs for this namespace: messages, the event log and traces grow until the database fills, and when it does the production stops.",
+      "action": "Create the task in the Task Manager (System Operation, Task Manager, New Task, class Ens.Util.Tasks.Purge) for this namespace; for Shutter's own namespace, Shutter.Setup.EnsureRetentionTasks makes it.",
+      "cases": {
+       "count": 1,
+       "unique": 1,
+       "latest": [
+        "C-000052"
+       ]
+      },
+      "evidence": {
+       "count": 0,
+       "latestHeaderId": "",
+       "latestAt": "",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F2",
+      "code": "ERRORS_GROUPED",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "",
+      "itemClass": "",
+      "setting": "",
+      "found": "ERROR <Ens>ErrInvalidProduction",
+      "source": "observed",
+      "suggested": "Each distinct signature understood, and either fixed or recorded here as expected.",
+      "why": "3 error(s) with the signature ERROR <Ens>ErrInvalidProduction in the window, logged by . The count is consistent with repeated failures of the same kind; the signature is the event log's text before its first colon, and the latest text is kept as the example. The errors carry no item name: they are the production's own (a start, a stop, the director).",
+      "action": "Open the event log filtered on  and the latest entry of this signature; compare the count with the cases opened in the same window.",
+      "cases": {
+       "count": 1,
+       "unique": 1,
+       "latest": [
+        "C-000052"
+       ]
+      },
+      "evidence": {
+       "count": 3,
+       "latestHeaderId": 4,
+       "latestAt": "2026-10-20T04:53:24Z",
+       "example": "ERROR <Ens>ErrInvalidProduction: Invalid Production"
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F3",
+      "code": "ERRORS_GROUPED",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "",
+      "itemClass": "",
+      "setting": "",
+      "found": "ERROR <Ens>ErrProductionNotRegistered",
+      "source": "observed",
+      "suggested": "Each distinct signature understood, and either fixed or recorded here as expected.",
+      "why": "1 error(s) with the signature ERROR <Ens>ErrProductionNotRegistered in the window, logged by . The count is consistent with repeated failures of the same kind; the signature is the event log's text before its first colon, and the latest text is kept as the example. The errors carry no item name: they are the production's own (a start, a stop, the director).",
+      "action": "Open the event log filtered on  and the latest entry of this signature; compare the count with the cases opened in the same window.",
+      "cases": {
+       "count": 1,
+       "unique": 1,
+       "latest": [
+        "C-000052"
+       ]
+      },
+      "evidence": {
+       "count": 1,
+       "latestHeaderId": 1,
+       "latestAt": "2026-10-20T04:53:24Z",
+       "example": "ERROR <Ens>ErrProductionNotRegistered: Failed to open Production definition 'Hospital.Production': ERROR #5809: Object to Load not found, class 'Ens.Config.Production', ID 'Hospital.Production'"
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F4",
+      "code": "ALERTING_OFF",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "item": "",
+      "itemClass": "",
+      "setting": "AlertOnError",
+      "found": "PAS In (AlertOnError 0, class default, no AlertGroups); PAS to Downstream (AlertOnError 0, class default, no AlertGroups); Downstream Out (AlertOnError 0, class default, no AlertGroups)",
+      "source": "item",
+      "suggested": "AlertOnError 1 on every item on the feed (the service, the delivering process and the connector), with AlertGroups naming the team that owns the interface.",
+      "why": "Items on the clinical feed raise no alert on error, or name no alert group: PAS In (AlertOnError 0, class default, no AlertGroups); PAS to Downstream (AlertOnError 0, class default, no AlertGroups); Downstream Out (AlertOnError 0, class default, no AlertGroups). A failure on them reaches the event log and waits for someone to read it.",
+      "action": "Switch on AlertOnError and set AlertGroups on the items listed; confirm that one alert reaches the owner.",
+      "cases": {
+       "count": 1,
+       "unique": 1,
+       "latest": [
+        "C-000052"
+       ]
+      },
+      "evidence": {
+       "count": 0,
+       "latestHeaderId": "",
+       "latestAt": "",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F5",
+      "code": "NO_ALERT_CONSUMER",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "item": "",
+      "itemClass": "",
+      "setting": "",
+      "found": "no Ens.Alert item",
+      "source": "observed",
+      "suggested": "An Ens.Alert business process, or the site's alert operation, routing alerts to a staffed owner by email or a ticket; or a documented external monitor that reads the event log's alerts.",
+      "why": "The production has no Ens.Alert item: an alert raised by any item (AlertOnError, a queue alert, an inactivity alert) has nowhere to go, so an error writes an alert to the event log that nobody receives.",
+      "action": "Add an alert consumer to the production (Add Process, Ens.Alert) and switch on AlertOnError on the feed-path items; send one deliberate alert to prove the path.",
+      "cases": {
+       "count": 1,
+       "unique": 1,
+       "latest": [
+        "C-000052"
+       ]
+      },
+      "evidence": {
+       "count": 0,
+       "latestHeaderId": "",
+       "latestAt": "",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F6",
+      "code": "ERRORS_GROUPED",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "PAS to Downstream",
+      "itemClass": "Hospital.Process.PASToDownstream",
+      "setting": "",
+      "found": "ERROR <Ens>ErrBPTerminated",
+      "source": "observed",
+      "suggested": "Each distinct signature understood, and either fixed or recorded here as expected.",
+      "why": "8 error(s) with the signature ERROR <Ens>ErrBPTerminated in the window, logged by PAS to Downstream. The count is consistent with repeated failures of the same kind; the signature is the event log's text before its first colon, and the latest text is kept as the example.",
+      "action": "Open the event log filtered on PAS to Downstream and the latest entry of this signature; compare the count with the cases opened in the same window.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 8,
+       "latestHeaderId": 66,
+       "latestAt": "2026-10-25T07:45:05Z",
+       "example": "ERROR <Ens>ErrBPTerminated: Terminating BP PAS to Downstream # due to error: ERROR #5001: Delivery unavailable (ward_unavailable), HTTP 503: The ward system is unavailable. Handed to Shutter\r\n  > ERROR #5001: Delivery unavailable (ward_unavailable), HTTP 503: The ward system is unavailable. Handed to Shutter"
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F7",
+      "code": "MESSAGE_ERRORS",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "PAS to Downstream",
+      "itemClass": "Hospital.Process.PASToDownstream",
+      "setting": "",
+      "found": "8 in Error from PAS In",
+      "source": "observed",
+      "suggested": "Every failed delivery accounted for: a case, a resend or a discard with a reason.",
+      "why": "8 message(s) to PAS to Downstream ended in an error status in the window (8 in Error from PAS In). The count is consistent with deliveries that failed; the error text is in the event log of the same session.",
+      "action": "Compare the count with the cases opened for PAS to Downstream in the same window; a failed message without a case needs a person's decision.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 8,
+       "latestHeaderId": "66",
+       "latestAt": "2026-10-25T07:45:05Z",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F8",
+      "code": "FEED_SILENCE_UNWATCHED",
+      "severity": "low",
+      "confidence": "consistent",
+      "item": "PAS In",
+      "itemClass": "EnsLib.HL7.Service.FileService",
+      "setting": "InactivityTimeout",
+      "found": "0",
+      "source": "class_default",
+      "suggested": "An InactivityTimeout longer than the feed's normal quiet period, in seconds, with AlertOnError on; or a documented external check on the feed's arrival rate.",
+      "why": "InactivityTimeout 0 on PAS In: a feed that falls silent (the sender stopped, the folder or port no longer reached) is never noticed by the production itself, and the silence is consistent with messages going nowhere.",
+      "action": "Set InactivityTimeout on PAS In to the agreed silence. Scheduled quiet periods (nights, weekends) belong on the item's Schedule, or in an annotation here.",
+      "cases": {
+       "count": 1,
+       "unique": 1,
+       "latest": [
+        "C-000052"
+       ]
+      },
+      "evidence": {
+       "count": 0,
+       "latestHeaderId": "",
+       "latestAt": "",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F9",
+      "code": "QUEUE_ALERTS_OFF",
+      "severity": "low",
+      "confidence": "confirmed",
+      "item": "",
+      "itemClass": "",
+      "setting": "QueueCountAlert",
+      "found": "Downstream Out",
+      "source": "class_default",
+      "suggested": "Thresholds agreed for the interface (a count above the normal burst, a wait of a few minutes) with an owner for the backlog.",
+      "why": "QueueCountAlert and QueueWaitAlert are 0 on Downstream Out: a growing backlog or an old message in the queue raises nothing, so patients' locations can lag while throughput looks healthy.",
+      "action": "Set QueueCountAlert and QueueWaitAlert on the operations listed, then review the thresholds after a week against the real queue.",
+      "cases": {
+       "count": 1,
+       "unique": 1,
+       "latest": [
+        "C-000052"
+       ]
+      },
+      "evidence": {
+       "count": 0,
+       "latestHeaderId": "",
+       "latestAt": "",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     }
+    ],
+    "caseAggregates": {
+     "PAS In": {
+      "count": 1,
+      "unique": 1,
+      "byFailureKind": {
+       "delivery_failed": 1
+      },
+      "byOutcome": {
+       "unavailable": 1
+      },
+      "byReasonCode": {
+       "ward_unavailable": 1
+      },
+      "byState": {
+       "resolved": 1
+      },
+      "latest": [
+       "C-000052"
+      ]
+     },
+     "_total": {
+      "count": 1,
+      "unique": 1,
+      "byFailureKind": {
+       "delivery_failed": 1
+      },
+      "byOutcome": {
+       "unavailable": 1
+      },
+      "byReasonCode": {
+       "ward_unavailable": 1
+      },
+      "byState": {
+       "resolved": 1
+      },
+      "latest": [
+       "C-000052"
+      ]
+     }
+    },
+    "agent": {
+     "state": "skipped",
+     "mode": null,
+     "model": null,
+     "providerConfig": null,
+     "costUsd": null,
+     "promptTokens": null,
+     "completionTokens": null,
+     "cacheReadTokens": null,
+     "cacheCreationTokens": null,
+     "durationMs": null,
+     "recordKey": null,
+     "ensMessageId": null,
+     "error": "",
+     "summary": "",
+     "unknowns": []
+    }
+   },
+   "PR-000003": {
+    "reviewId": "PR-000003",
+    "namespace": "HOSPITAL",
+    "production": "Hospital.Production",
+    "productionState": "running",
+    "startedAt": "2026-10-25T11:35:14Z",
+    "finishedAt": "2026-10-25T11:35:14Z",
+    "state": "done",
+    "agentState": "no_record",
+    "requestedBy": "operator",
+    "error": "",
+    "window": {
+     "days": 7,
+     "from": "2026-10-18T11:35:14Z",
+     "to": "2026-10-25T11:35:14Z"
+    },
+    "fingerprint": "b6122fd365332db550537e998be379514e0fc39cf16e427d1b5472b42197ce7b",
+    "unreadable": false,
+    "summary": {
+     "bySeverity": {
+      "high": 1,
+      "medium": 6,
+      "low": 2,
+      "info": 0
+     },
+     "findings": 9,
+     "intended": 0,
+     "items": 4,
+     "errorsInWindow": 12,
+     "messageErrorsInWindow": 8
+    },
+    "findings": [
+     {
+      "id": "F1",
+      "code": "PURGE_MISSING",
+      "severity": "high",
+      "confidence": "confirmed",
+      "item": "",
+      "itemClass": "",
+      "setting": "",
+      "found": "no Ens.Util.Tasks.Purge task for the namespace",
+      "source": "observed",
+      "suggested": "A scheduled Ens.Util.Tasks.Purge for the namespace, keeping the days the incident and audit process needs (Shutter's own install makes one of 90 days, bodies too, sessions kept whole).",
+      "why": "No message purge task (Ens.Util.Tasks.Purge) runs for this namespace: messages, the event log and traces grow until the database fills, and when it does the production stops.",
+      "action": "Create the task in the Task Manager (System Operation, Task Manager, New Task, class Ens.Util.Tasks.Purge) for this namespace; for Shutter's own namespace, Shutter.Setup.EnsureRetentionTasks makes it.",
+      "cases": {
+       "count": 1,
+       "unique": 1,
+       "latest": [
+        "C-000052"
+       ]
+      },
+      "evidence": {
+       "count": 0,
+       "latestHeaderId": "",
+       "latestAt": "",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F2",
+      "code": "ERRORS_GROUPED",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "",
+      "itemClass": "",
+      "setting": "",
+      "found": "ERROR <Ens>ErrInvalidProduction",
+      "source": "observed",
+      "suggested": "Each distinct signature understood, and either fixed or recorded here as expected.",
+      "why": "3 error(s) with the signature ERROR <Ens>ErrInvalidProduction in the window, logged by . The count is consistent with repeated failures of the same kind; the signature is the event log's text before its first colon, and the latest text is kept as the example. The errors carry no item name: they are the production's own (a start, a stop, the director).",
+      "action": "Open the event log filtered on  and the latest entry of this signature; compare the count with the cases opened in the same window.",
+      "cases": {
+       "count": 1,
+       "unique": 1,
+       "latest": [
+        "C-000052"
+       ]
+      },
+      "evidence": {
+       "count": 3,
+       "latestHeaderId": 4,
+       "latestAt": "2026-10-20T04:53:24Z",
+       "example": "ERROR <Ens>ErrInvalidProduction: Invalid Production"
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F3",
+      "code": "ERRORS_GROUPED",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "",
+      "itemClass": "",
+      "setting": "",
+      "found": "ERROR <Ens>ErrProductionNotRegistered",
+      "source": "observed",
+      "suggested": "Each distinct signature understood, and either fixed or recorded here as expected.",
+      "why": "1 error(s) with the signature ERROR <Ens>ErrProductionNotRegistered in the window, logged by . The count is consistent with repeated failures of the same kind; the signature is the event log's text before its first colon, and the latest text is kept as the example. The errors carry no item name: they are the production's own (a start, a stop, the director).",
+      "action": "Open the event log filtered on  and the latest entry of this signature; compare the count with the cases opened in the same window.",
+      "cases": {
+       "count": 1,
+       "unique": 1,
+       "latest": [
+        "C-000052"
+       ]
+      },
+      "evidence": {
+       "count": 1,
+       "latestHeaderId": 1,
+       "latestAt": "2026-10-20T04:53:24Z",
+       "example": "ERROR <Ens>ErrProductionNotRegistered: Failed to open Production definition 'Hospital.Production': ERROR #5809: Object to Load not found, class 'Ens.Config.Production', ID 'Hospital.Production'"
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F4",
+      "code": "ALERTING_OFF",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "item": "",
+      "itemClass": "",
+      "setting": "AlertOnError",
+      "found": "PAS In (AlertOnError 0, class default, no AlertGroups); PAS to Downstream (AlertOnError 0, class default, no AlertGroups); Downstream Out (AlertOnError 0, class default, no AlertGroups)",
+      "source": "item",
+      "suggested": "AlertOnError 1 on every item on the feed (the service, the delivering process and the connector), with AlertGroups naming the team that owns the interface.",
+      "why": "Items on the clinical feed raise no alert on error, or name no alert group: PAS In (AlertOnError 0, class default, no AlertGroups); PAS to Downstream (AlertOnError 0, class default, no AlertGroups); Downstream Out (AlertOnError 0, class default, no AlertGroups). A failure on them reaches the event log and waits for someone to read it.",
+      "action": "Switch on AlertOnError and set AlertGroups on the items listed; confirm that one alert reaches the owner.",
+      "cases": {
+       "count": 1,
+       "unique": 1,
+       "latest": [
+        "C-000052"
+       ]
+      },
+      "evidence": {
+       "count": 0,
+       "latestHeaderId": "",
+       "latestAt": "",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F5",
+      "code": "NO_ALERT_CONSUMER",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "item": "",
+      "itemClass": "",
+      "setting": "",
+      "found": "no Ens.Alert item",
+      "source": "observed",
+      "suggested": "An Ens.Alert business process, or the site's alert operation, routing alerts to a staffed owner by email or a ticket; or a documented external monitor that reads the event log's alerts.",
+      "why": "The production has no Ens.Alert item: an alert raised by any item (AlertOnError, a queue alert, an inactivity alert) has nowhere to go, so an error writes an alert to the event log that nobody receives.",
+      "action": "Add an alert consumer to the production (Add Process, Ens.Alert) and switch on AlertOnError on the feed-path items; send one deliberate alert to prove the path.",
+      "cases": {
+       "count": 1,
+       "unique": 1,
+       "latest": [
+        "C-000052"
+       ]
+      },
+      "evidence": {
+       "count": 0,
+       "latestHeaderId": "",
+       "latestAt": "",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F6",
+      "code": "ERRORS_GROUPED",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "PAS to Downstream",
+      "itemClass": "Hospital.Process.PASToDownstream",
+      "setting": "",
+      "found": "ERROR <Ens>ErrBPTerminated",
+      "source": "observed",
+      "suggested": "Each distinct signature understood, and either fixed or recorded here as expected.",
+      "why": "8 error(s) with the signature ERROR <Ens>ErrBPTerminated in the window, logged by PAS to Downstream. The count is consistent with repeated failures of the same kind; the signature is the event log's text before its first colon, and the latest text is kept as the example.",
+      "action": "Open the event log filtered on PAS to Downstream and the latest entry of this signature; compare the count with the cases opened in the same window.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 8,
+       "latestHeaderId": 66,
+       "latestAt": "2026-10-25T07:45:05Z",
+       "example": "ERROR <Ens>ErrBPTerminated: Terminating BP PAS to Downstream # due to error: ERROR #5001: Delivery unavailable (ward_unavailable), HTTP 503: The ward system is unavailable. Handed to Shutter\r\n  > ERROR #5001: Delivery unavailable (ward_unavailable), HTTP 503: The ward system is unavailable. Handed to Shutter"
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F7",
+      "code": "MESSAGE_ERRORS",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "PAS to Downstream",
+      "itemClass": "Hospital.Process.PASToDownstream",
+      "setting": "",
+      "found": "8 in Error from PAS In",
+      "source": "observed",
+      "suggested": "Every failed delivery accounted for: a case, a resend or a discard with a reason.",
+      "why": "8 message(s) to PAS to Downstream ended in an error status in the window (8 in Error from PAS In). The count is consistent with deliveries that failed; the error text is in the event log of the same session.",
+      "action": "Compare the count with the cases opened for PAS to Downstream in the same window; a failed message without a case needs a person's decision.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 8,
+       "latestHeaderId": "66",
+       "latestAt": "2026-10-25T07:45:05Z",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F8",
+      "code": "FEED_SILENCE_UNWATCHED",
+      "severity": "low",
+      "confidence": "consistent",
+      "item": "PAS In",
+      "itemClass": "EnsLib.HL7.Service.FileService",
+      "setting": "InactivityTimeout",
+      "found": "0",
+      "source": "class_default",
+      "suggested": "An InactivityTimeout longer than the feed's normal quiet period, in seconds, with AlertOnError on; or a documented external check on the feed's arrival rate.",
+      "why": "InactivityTimeout 0 on PAS In: a feed that falls silent (the sender stopped, the folder or port no longer reached) is never noticed by the production itself, and the silence is consistent with messages going nowhere.",
+      "action": "Set InactivityTimeout on PAS In to the agreed silence. Scheduled quiet periods (nights, weekends) belong on the item's Schedule, or in an annotation here.",
+      "cases": {
+       "count": 1,
+       "unique": 1,
+       "latest": [
+        "C-000052"
+       ]
+      },
+      "evidence": {
+       "count": 0,
+       "latestHeaderId": "",
+       "latestAt": "",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F9",
+      "code": "QUEUE_ALERTS_OFF",
+      "severity": "low",
+      "confidence": "confirmed",
+      "item": "",
+      "itemClass": "",
+      "setting": "QueueCountAlert",
+      "found": "Downstream Out",
+      "source": "class_default",
+      "suggested": "Thresholds agreed for the interface (a count above the normal burst, a wait of a few minutes) with an owner for the backlog.",
+      "why": "QueueCountAlert and QueueWaitAlert are 0 on Downstream Out: a growing backlog or an old message in the queue raises nothing, so patients' locations can lag while throughput looks healthy.",
+      "action": "Set QueueCountAlert and QueueWaitAlert on the operations listed, then review the thresholds after a week against the real queue.",
+      "cases": {
+       "count": 1,
+       "unique": 1,
+       "latest": [
+        "C-000052"
+       ]
+      },
+      "evidence": {
+       "count": 0,
+       "latestHeaderId": "",
+       "latestAt": "",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     }
+    ],
+    "caseAggregates": {
+     "PAS In": {
+      "count": 1,
+      "unique": 1,
+      "byFailureKind": {
+       "delivery_failed": 1
+      },
+      "byOutcome": {
+       "unavailable": 1
+      },
+      "byReasonCode": {
+       "ward_unavailable": 1
+      },
+      "byState": {
+       "resolved": 1
+      },
+      "latest": [
+       "C-000052"
+      ]
+     },
+     "_total": {
+      "count": 1,
+      "unique": 1,
+      "byFailureKind": {
+       "delivery_failed": 1
+      },
+      "byOutcome": {
+       "unavailable": 1
+      },
+      "byReasonCode": {
+       "ward_unavailable": 1
+      },
+      "byState": {
+       "resolved": 1
+      },
+      "latest": [
+       "C-000052"
+      ]
+     }
+    },
+    "agent": {
+     "state": "no_record",
+     "mode": "replay",
+     "model": "",
+     "providerConfig": "",
+     "costUsd": 0,
+     "promptTokens": 0,
+     "completionTokens": 0,
+     "cacheReadTokens": 0,
+     "cacheCreationTokens": 0,
+     "durationMs": 0,
+     "recordKey": "review:HOSPITAL:Hospital.Production|review|1|b6122fd365332db550537e998be379514e0fc39cf16e427d1b5472b42197ce7b",
+     "ensMessageId": "22196",
+     "error": "No recording for review:HOSPITAL:Hospital.Production|review|1|b6122fd365332db550537e998be379514e0fc39cf16e427d1b5472b42197ce7b",
+     "summary": "",
+     "unknowns": []
+    }
+   },
+   "PR-000004": {
+    "reviewId": "PR-000004",
+    "namespace": "SHUTTER",
+    "production": "Shutter.Production",
+    "productionState": "running",
+    "startedAt": "2026-10-25T11:37:17Z",
+    "finishedAt": "2026-10-25T11:37:17Z",
+    "state": "done",
+    "agentState": "skipped",
+    "requestedBy": "operator",
+    "error": "",
+    "window": {
+     "days": 7,
+     "from": "2026-10-18T11:37:17Z",
+     "to": "2026-10-25T11:37:17Z"
+    },
+    "fingerprint": "5717d0353964f447383262e2af230c20fa3a57350691f3ffc5337f244c08fdad",
+    "unreadable": false,
+    "summary": {
+     "bySeverity": {
+      "high": 0,
+      "medium": 10,
+      "low": 3,
+      "info": 0
+     },
+     "findings": 13,
+     "intended": 1,
+     "items": 21,
+     "errorsInWindow": 721,
+     "messageErrorsInWindow": 720
+    },
+    "findings": [
+     {
+      "id": "F1",
+      "code": "ERRORS_GROUPED",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "ADT to Downstream",
+      "itemClass": "Shutter.Process.ADTToWard",
+      "setting": "",
+      "found": "ERROR <Ens>ErrBPTerminated",
+      "source": "observed",
+      "suggested": "Each distinct signature understood, and either fixed or recorded here as expected.",
+      "why": "452 error(s) with the signature ERROR <Ens>ErrBPTerminated in the window, logged by ADT to Downstream. The count is consistent with repeated failures of the same kind; the signature is the event log's text before its first colon, and the latest text is kept as the example.",
+      "action": "Open the event log filtered on ADT to Downstream and the latest entry of this signature; compare the count with the cases opened in the same window.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 452,
+       "latestHeaderId": 22302,
+       "latestAt": "2026-10-25T11:37:04Z",
+       "example": "ERROR <Ens>ErrBPTerminated: Terminating BP ADT to Downstream # due to error: ERROR #5001: Delivery unavailable (ward_unavailable), HTTP 503: The downstream system is unavailable. A case was opened\r\n  > ERROR #5001: Delivery unavailable (ward_unavailable), HTTP 503: The downstream system is unavailable. A case was opened"
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F2",
+      "code": "MESSAGE_ERRORS",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "ADT to Downstream",
+      "itemClass": "Shutter.Process.ADTToWard",
+      "setting": "",
+      "found": "452 in Error from ADT In",
+      "source": "observed",
+      "suggested": "Every failed delivery accounted for: a case, a resend or a discard with a reason.",
+      "why": "452 message(s) to ADT to Downstream ended in an error status in the window (452 in Error from ADT In). The count is consistent with deliveries that failed; the error text is in the event log of the same session.",
+      "action": "Compare the count with the cases opened for ADT to Downstream in the same window; a failed message without a case needs a person's decision.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 452,
+       "latestHeaderId": "22302",
+       "latestAt": "2026-10-25T11:37:04Z",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F3",
+      "code": "ERRORS_GROUPED",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "Case Workflow",
+      "itemClass": "Shutter.Process.CaseWorkflow",
+      "setting": "",
+      "found": "ERROR <Ens>ErrException",
+      "source": "observed",
+      "suggested": "Each distinct signature understood, and either fixed or recorded here as expected.",
+      "why": "1 error(s) with the signature ERROR <Ens>ErrException in the window, logged by Case Workflow. The count is consistent with repeated failures of the same kind; the signature is the event log's text before its first colon, and the latest text is kept as the example.",
+      "action": "Open the event log filtered on Case Workflow and the latest entry of this signature; compare the count with the cases opened in the same window.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 1,
+       "latestHeaderId": 11562,
+       "latestAt": "2026-10-20T01:09:34Z",
+       "example": "ERROR <Ens>ErrException: <PROPERTY DOES NOT EXIST>CloseByHand+16^Shutter.Store.Case.1 *UpdatedAt,Shutter.Store.Escalation -- logged as '-' number - @'        If $ISOBJECT(esc) && ((esc.State = \"draft\") || (esc.State = \"queued\")) { Set esc.State = \"cancelled\" Set esc.UpdatedAt = ##class(Shutter.Util.Time).NowUTC() Do esc.%Save() Set followed = followed _ \", cancelled\" }'"
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F4",
+      "code": "ERRORS_GROUPED",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "ADT to Ward",
+      "itemClass": "",
+      "setting": "",
+      "found": "ERROR <Ens>ErrBPTerminated",
+      "source": "observed",
+      "suggested": "Each distinct signature understood, and either fixed or recorded here as expected.",
+      "why": "266 error(s) with the signature ERROR <Ens>ErrBPTerminated in the window, logged by ADT to Ward. The count is consistent with repeated failures of the same kind; the signature is the event log's text before its first colon, and the latest text is kept as the example. The item is no longer in the production.",
+      "action": "Open the event log filtered on ADT to Ward and the latest entry of this signature; compare the count with the cases opened in the same window.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 266,
+       "latestHeaderId": 8595,
+       "latestAt": "2026-10-19T15:32:42Z",
+       "example": "ERROR <Ens>ErrBPTerminated: Terminating BP ADT to Ward # due to error: ERROR #5001: Delivery unavailable (ward_unavailable), HTTP 503: The ward system is unavailable. A case was opened\r\n  > ERROR #5001: Delivery unavailable (ward_unavailable), HTTP 503: The ward system is unavailable. A case was opened"
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F5",
+      "code": "MESSAGE_ERRORS",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "ADT to Ward",
+      "itemClass": "",
+      "setting": "",
+      "found": "266 in Error from ADT In",
+      "source": "observed",
+      "suggested": "Every failed delivery accounted for: a case, a resend or a discard with a reason.",
+      "why": "266 message(s) to ADT to Ward ended in an error status in the window (266 in Error from ADT In). The count is consistent with deliveries that failed; the error text is in the event log of the same session.",
+      "action": "Compare the count with the cases opened for ADT to Ward in the same window; a failed message without a case needs a person's decision.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 266,
+       "latestHeaderId": "8595",
+       "latestAt": "2026-10-19T15:32:42Z",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F6",
+      "code": "ERRORS_GROUPED",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "Case Workflow",
+      "itemClass": "Shutter.Process.CaseWorkflow",
+      "setting": "",
+      "found": "ERROR <Ens>ErrBPTerminated",
+      "source": "observed",
+      "suggested": "Each distinct signature understood, and either fixed or recorded here as expected.",
+      "why": "1 error(s) with the signature ERROR <Ens>ErrBPTerminated in the window, logged by Case Workflow. The count is consistent with repeated failures of the same kind; the signature is the event log's text before its first colon, and the latest text is kept as the example.",
+      "action": "Open the event log filtered on Case Workflow and the latest entry of this signature; compare the count with the cases opened in the same window.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 1,
+       "latestHeaderId": 430,
+       "latestAt": "2026-10-18T15:33:48Z",
+       "example": "ERROR <Ens>ErrBPTerminated: Terminating BP Case Workflow # due to error: ERROR #5002: ObjectScript error: <UNDEFINED>OnEvidence+9^Shutter.Process.CaseWorkflow.1 *summary\r\n  > ERROR #5002: ObjectScript error: <UNDEFINED>OnEvidence+9^Shutter.Process.CaseWorkflow.1 *summary"
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F7",
+      "code": "MESSAGE_ERRORS",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "Case Workflow",
+      "itemClass": "Shutter.Process.CaseWorkflow",
+      "setting": "",
+      "found": "1 in Error from Evidence Collector",
+      "source": "observed",
+      "suggested": "Every failed delivery accounted for: a case, a resend or a discard with a reason.",
+      "why": "1 message(s) to Case Workflow ended in an error status in the window (1 in Error from Evidence Collector). The count is consistent with deliveries that failed; the error text is in the event log of the same session.",
+      "action": "Compare the count with the cases opened for Case Workflow in the same window; a failed message without a case needs a person's decision.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 1,
+       "latestHeaderId": "456",
+       "latestAt": "2026-10-18T15:33:48Z",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F8",
+      "code": "MESSAGE_ERRORS",
+      "severity": "medium",
+      "confidence": "indicative",
+      "item": "Case Workflow",
+      "itemClass": "Shutter.Process.CaseWorkflow",
+      "setting": "",
+      "found": "1 in Error from ADT to Ward",
+      "source": "observed",
+      "suggested": "Every failed delivery accounted for: a case, a resend or a discard with a reason.",
+      "why": "1 message(s) to Case Workflow ended in an error status in the window (1 in Error from ADT to Ward). The count is consistent with deliveries that failed; the error text is in the event log of the same session.",
+      "action": "Compare the count with the cases opened for Case Workflow in the same window; a failed message without a case needs a person's decision.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 1,
+       "latestHeaderId": "430",
+       "latestAt": "2026-10-18T15:32:47Z",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F9",
+      "code": "ALERTING_OFF",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "item": "",
+      "itemClass": "",
+      "setting": "AlertOnError",
+      "found": "ADT In (AlertOnError 0, class default, no AlertGroups); HL7 Index (AlertOnError 0, class default, no AlertGroups); ADT to Downstream (AlertOnError 0, class default, no AlertGroups); Downstream Out (AlertOnError 0, class default, no AlertGroups)",
+      "source": "item",
+      "suggested": "AlertOnError 1 on every item on the feed (the service, the delivering process and the connector), with AlertGroups naming the team that owns the interface.",
+      "why": "Items on the clinical feed raise no alert on error, or name no alert group: ADT In (AlertOnError 0, class default, no AlertGroups); HL7 Index (AlertOnError 0, class default, no AlertGroups); ADT to Downstream (AlertOnError 0, class default, no AlertGroups); Downstream Out (AlertOnError 0, class default, no AlertGroups). A failure on them reaches the event log and waits for someone to read it.",
+      "action": "Switch on AlertOnError and set AlertGroups on the items listed; confirm that one alert reaches the owner.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 0,
+       "latestHeaderId": "",
+       "latestAt": "",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F10",
+      "code": "NO_ALERT_CONSUMER",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "item": "",
+      "itemClass": "",
+      "setting": "",
+      "found": "no Ens.Alert item",
+      "source": "observed",
+      "suggested": "An Ens.Alert business process, or the site's alert operation, routing alerts to a staffed owner by email or a ticket; or a documented external monitor that reads the event log's alerts.",
+      "why": "The production has no Ens.Alert item: an alert raised by any item (AlertOnError, a queue alert, an inactivity alert) has nowhere to go, so an error writes an alert to the event log that nobody receives.",
+      "action": "Add an alert consumer to the production (Add Process, Ens.Alert) and switch on AlertOnError on the feed-path items; send one deliberate alert to prove the path.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 0,
+       "latestHeaderId": "",
+       "latestAt": "",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F11",
+      "code": "ERRORS_GROUPED",
+      "severity": "low",
+      "confidence": "indicative",
+      "item": "",
+      "itemClass": "",
+      "setting": "",
+      "found": "ERROR <Ens>ErrProductionNotQuiescent",
+      "source": "observed",
+      "suggested": "Each distinct signature understood, and either fixed or recorded here as expected.",
+      "why": "1 error(s) with the signature ERROR <Ens>ErrProductionNotQuiescent in the window, logged by . The count is consistent with repeated failures of the same kind; the signature is the event log's text before its first colon, and the latest text is kept as the example. The errors carry no item name: they are the production's own (a start, a stop, the director).",
+      "action": "Open the event log filtered on  and the latest entry of this signature; compare the count with the cases opened in the same window.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 1,
+       "latestHeaderId": 4342,
+       "latestAt": "2026-10-19T12:15:48Z",
+       "example": "ERROR <Ens>ErrProductionNotQuiescent: IRIS can not become quiescent"
+      },
+      "status": "intended",
+      "annotationId": "16",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F12",
+      "code": "FEED_SILENCE_UNWATCHED",
+      "severity": "low",
+      "confidence": "consistent",
+      "item": "ADT In",
+      "itemClass": "EnsLib.HL7.Service.FileService",
+      "setting": "InactivityTimeout",
+      "found": "0",
+      "source": "class_default",
+      "suggested": "An InactivityTimeout longer than the feed's normal quiet period, in seconds, with AlertOnError on; or a documented external check on the feed's arrival rate.",
+      "why": "InactivityTimeout 0 on ADT In: a feed that falls silent (the sender stopped, the folder or port no longer reached) is never noticed by the production itself, and the silence is consistent with messages going nowhere.",
+      "action": "Set InactivityTimeout on ADT In to the agreed silence. Scheduled quiet periods (nights, weekends) belong on the item's Schedule, or in an annotation here.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 0,
+       "latestHeaderId": "",
+       "latestAt": "",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     },
+     {
+      "id": "F13",
+      "code": "QUEUE_ALERTS_OFF",
+      "severity": "low",
+      "confidence": "confirmed",
+      "item": "",
+      "itemClass": "",
+      "setting": "QueueCountAlert",
+      "found": "Downstream Out",
+      "source": "class_default",
+      "suggested": "Thresholds agreed for the interface (a count above the normal burst, a wait of a few minutes) with an owner for the backlog.",
+      "why": "QueueCountAlert and QueueWaitAlert are 0 on Downstream Out: a growing backlog or an old message in the queue raises nothing, so patients' locations can lag while throughput looks healthy.",
+      "action": "Set QueueCountAlert and QueueWaitAlert on the operations listed, then review the thresholds after a week against the real queue.",
+      "cases": {
+       "count": 0,
+       "unique": 0,
+       "latest": []
+      },
+      "evidence": {
+       "count": 0,
+       "latestHeaderId": "",
+       "latestAt": "",
+       "example": ""
+      },
+      "status": "new",
+      "annotationId": "",
+      "rank": null,
+      "explanation": ""
+     }
+    ],
+    "caseAggregates": {
+     "Downstream Out": {
+      "count": 61,
+      "unique": 30,
+      "byFailureKind": {
+       "rejected": 3,
+       "withheld": 4,
+       "delivery_failed": 49,
+       "uncertain_outcome": 5
+      },
+      "byOutcome": {
+       "(none)": 4,
+       "refused": 3,
+       "uncertain": 5,
+       "unavailable": 49
+      },
+      "byReasonCode": {
+       "(none)": 5,
+       "merge": 2,
+       "ward_unavailable": 49,
+       "duplicate_message": 3,
+       "cancel_unsupported": 2
+      },
+      "byState": {
+       "blocked": 8,
+       "detected": 1,
+       "resolved": 42,
+       "escalated": 10
+      },
+      "latest": [
+       "C-000062",
+       "C-000061",
+       "C-000060",
+       "C-000059",
+       "C-000058"
+      ]
+     },
+     "_total": {
+      "count": 61,
+      "unique": 30,
+      "byFailureKind": {
+       "rejected": 3,
+       "withheld": 4,
+       "delivery_failed": 49,
+       "uncertain_outcome": 5
+      },
+      "byOutcome": {
+       "(none)": 4,
+       "refused": 3,
+       "uncertain": 5,
+       "unavailable": 49
+      },
+      "byReasonCode": {
+       "(none)": 5,
+       "merge": 2,
+       "ward_unavailable": 49,
+       "duplicate_message": 3,
+       "cancel_unsupported": 2
+      },
+      "byState": {
+       "blocked": 8,
+       "detected": 1,
+       "resolved": 42,
+       "escalated": 10
+      },
+      "latest": [
+       "C-000062",
+       "C-000061",
+       "C-000060",
+       "C-000059",
+       "C-000058"
+      ]
+     }
+    },
+    "agent": {
+     "state": "skipped",
+     "mode": null,
+     "model": null,
+     "providerConfig": null,
+     "costUsd": null,
+     "promptTokens": null,
+     "completionTokens": null,
+     "cacheReadTokens": null,
+     "cacheCreationTokens": null,
+     "durationMs": null,
+     "recordKey": null,
+     "ensMessageId": null,
+     "error": "",
+     "summary": "",
+     "unknowns": []
+    }
+   }
+  }
+ }
 }

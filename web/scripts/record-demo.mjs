@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 /**
  * Records the demo's data from a running Shutter: signs in to the REST API (docs/CONTRACTS.md, section 5), reads
- * every read route for the scenarios, every case, every incident, the library, the settings, the costs and the health
- * report, and writes them to src/mocks/fixtures.json, which the in-browser mock serves in the demo build and the tests.
+ * every read route for the scenarios, every case, every incident, every production review, the library, the settings, the
+ * costs and the health report, and writes them to src/mocks/fixtures.json, which the in-browser mock serves in the demo build and the tests.
  *
  *   node scripts/record-demo.mjs [--url http://localhost:52773] [--user operator] [--out src/mocks/fixtures.json]
- *                                [--cases C-000002,C-000008,...] [--incidents I-000001,...]
+ *                                [--cases C-000002,C-000008,...] [--incidents I-000001,...] [--reviews PR-000001,...]
  *
  * --cases keeps only the cases named (one per scenario and mode reads better than every rehearsal of the same run),
  * and the costs are then those of the kept cases' runs. --incidents keeps only the incidents named; the cases a kept
- * incident holds are kept with it, so its chains link to them.
+ * incident holds are kept with it, so its chains link to them. --reviews keeps only the production reviews named, and
+ * their agent runs are then the costs' byReview.
  * The password comes from SHUTTER_PASSWORD (default: the demo installer's "shutter"). Only reads: nothing is
  * changed on the instance. Node 22 or later (fetch).
  */
@@ -29,6 +30,7 @@ const password = process.env.SHUTTER_PASSWORD ?? 'shutter';
 const out = args.out ?? 'src/mocks/fixtures.json';
 const only = args.cases ? new Set(args.cases.split(',').map((c) => c.trim())) : null;
 const onlyIncidents = args.incidents ? new Set(args.incidents.split(',').map((i) => i.trim())) : null;
+const onlyReviews = args.reviews ? new Set(args.reviews.split(',').map((r) => r.trim())) : null;
 
 let cookie = '';
 
@@ -93,6 +95,15 @@ for (const summary of kept) {
       : null,
   };
 }
+// The production reviews (CONTRACTS 13): the targets, the list and each review as GET answers it. An instance without
+// the routes answers 404, and the demo then has no reviews.
+const reviewTargets = await read('/production-reviews/targets');
+const reviewList = await read('/production-reviews?limit=500');
+const keptReviews = (reviewList?.items ?? []).filter((r) => !onlyReviews || onlyReviews.has(r.reviewId));
+const reviews = {};
+for (const item of keptReviews)
+  reviews[item.reviewId] = await read(`/production-reviews/${encodeURIComponent(item.reviewId)}`);
+
 const recordedAt = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
 
 // What the kept cases are, said from their own runs: live (or recorded live) agent runs, or replays.
@@ -171,15 +182,29 @@ function costsOfKept() {
       costUsd: usd(caseCost),
     });
   }
+  // The reviews whose agent answered (any mode), newest first, as the route lists them apart from the board's runs
+  const byReview = Object.values(reviews)
+    .filter((r) => r?.agent?.mode)
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+    .map((r) => ({
+      reviewId: r.reviewId,
+      production: r.production,
+      model: r.agent.model ?? '',
+      mode: r.agent.mode,
+      costUsd: r.agent.mode === 'replay' ? 0 : (r.agent.costUsd ?? 0),
+      startedAt: r.startedAt,
+    }));
+  totals.spentUsd += byReview.reduce((sum, r) => sum + r.costUsd, 0);
   const sorted = (rows, key) => rows.sort((a, b) => key(a).localeCompare(key(b)));
   return {
-    totals: { ...totals, spentUsd: usd(totals.spentUsd) },
+    totals: { ...totals, spentUsd: usd(totals.spentUsd), reviewRuns: byReview.length },
     byModel: sorted([...byModel.values()], (m) => `${m.model}|${m.mode}`).map((m) => ({
       ...m,
       costUsd: usd(m.costUsd),
     })),
     byDay: sorted([...byDay.values()], (d) => d.day).map((d) => ({ ...d, costUsd: usd(d.costUsd) })),
     byCase: sorted(byCase, (c) => c.caseId).reverse(),
+    byReview,
   };
 }
 
@@ -194,13 +219,14 @@ const fixtures = {
   incidents,
   library: await read('/library'),
   settings: await read('/settings'),
-  costs: only ? costsOfKept() : await read('/costs'),
+  costs: only || onlyReviews ? costsOfKept() : await read('/costs'),
   health: await read('/health'),
   siteProfile: await read('/site-profile'),
   siteProfileHistory: await read('/site-profile/history'),
+  productionReviews: { targets: reviewTargets?.items ?? [], list: keptReviews, reviews },
 };
 await call('DELETE', '/session');
 writeFileSync(out, `${JSON.stringify(fixtures, null, 1)}\n`);
 console.log(
-  `wrote ${out}: ${kept.length} cases, ${incidentCount} incidents, ${fixtures.scenarios.length} scenarios`,
+  `wrote ${out}: ${kept.length} cases, ${incidentCount} incidents, ${keptReviews.length} reviews, ${fixtures.scenarios.length} scenarios`,
 );

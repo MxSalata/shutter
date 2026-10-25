@@ -11,6 +11,10 @@ import type {
   IncidentEvent,
   IncidentSummary,
   Me,
+  ReviewAgent,
+  ReviewDetail,
+  ReviewListItem,
+  ReviewTarget,
   ScenarioRun,
   SiteProfile,
   SiteProfileVersionEntry,
@@ -41,6 +45,14 @@ interface IncidentFixture {
 }
 /** Recorded incidents (S11 and S12); a recording from before the incident routes has none. */
 const incidents = (fixtures as unknown as { incidents?: Record<string, IncidentFixture> }).incidents ?? {};
+interface ReviewFixtures {
+  targets: ReviewTarget[];
+  list: ReviewListItem[];
+  reviews: Record<string, ReviewDetail>;
+}
+/** Recorded production reviews (CONTRACTS 13): the targets, the list and each review as GET returned it. */
+const recordedReviews: ReviewFixtures = (fixtures as unknown as { productionReviews?: ReviewFixtures })
+  .productionReviews ?? { targets: [], list: [], reviews: {} };
 
 const USERS: Record<string, Me> = {
   operator: { username: 'operator', operator: true, approver: false },
@@ -80,6 +92,7 @@ export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
   closed = {};
   abandoned = {};
   trail = {};
+  startedReviews = {};
 }
 
 /** Cases a person closed as handled by hand in the demo, laid over the recorded case when it is read. */
@@ -161,6 +174,72 @@ function doneHere(id: string, c: CaseFixture): CaseFixture {
   } as unknown as CaseFixture;
 }
 
+/**
+ * Reviews started here: the newest recorded review of the same target (with the agent or without, as asked) under a
+ * new id, read once as sweeping and then as done. The mock reads no production; the window stays the recording's.
+ */
+let startedReviews: Record<string, { review: ReviewDetail; reads: number }> = {};
+const reviewOf = (id: string): ReviewDetail | undefined =>
+  startedReviews[id]?.review ?? recordedReviews.reviews[id];
+const allReviews = (): ReviewDetail[] => [
+  ...Object.values(recordedReviews.reviews),
+  ...Object.values(startedReviews).map((s) => s.review),
+];
+/** The list's line of a review: the recorded line when there is one (its summary as stored), else from the review. */
+const listItemOf = (r: ReviewDetail): ReviewListItem =>
+  recordedReviews.list.find((x) => x.reviewId === r.reviewId) ?? {
+    reviewId: r.reviewId,
+    namespace: r.namespace,
+    production: r.production,
+    productionState: r.productionState,
+    startedAt: r.startedAt,
+    finishedAt: r.finishedAt,
+    state: r.state,
+    agentState: r.agentState,
+    summary: r.summary,
+    requestedBy: r.requestedBy,
+  };
+/** What GET answers while the item is still sweeping: no findings yet, and the agent's part empty. */
+function sweeping(r: ReviewDetail): ReviewDetail {
+  const agent: ReviewAgent = {
+    state: 'pending',
+    mode: null,
+    model: null,
+    providerConfig: null,
+    costUsd: null,
+    promptTokens: null,
+    completionTokens: null,
+    cacheReadTokens: null,
+    cacheCreationTokens: null,
+    durationMs: null,
+    recordKey: null,
+    ensMessageId: null,
+    error: '',
+    summary: '',
+    unknowns: [],
+  };
+  return {
+    ...r,
+    state: 'sweeping',
+    agentState: 'pending',
+    finishedAt: null,
+    fingerprint: '',
+    summary: {},
+    findings: [],
+    caseAggregates: {},
+    agent,
+  };
+}
+/** The online demo keeps no annotations: it says so, as the server words a refusal. */
+const annotationsRefused = () =>
+  error(
+    403,
+    'demo',
+    "The online demo keeps no annotations. On an instance an approver's annotation is stored in Shutter, never in the production, and applies to every review of this production until the value changes, it expires or it is removed.",
+  );
+const ANNOTATION_STATUSES = ['intended', 'accepted_risk', 'false_positive'];
+const EXPIRES_AT = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?Z)?$/;
+
 /** Escalations drafted and sent in the demo, by case: nothing leaves the browser. */
 let escalations: Record<string, Escalation[]> = {};
 
@@ -231,7 +310,7 @@ const definedModes: Record<string, string[]> = Object.fromEntries(
  */
 function costs(): Costs {
   const answer = fixtures.costs as unknown as Partial<Costs>;
-  if (answer.byModel?.length) return answer as Costs;
+  if (answer.byModel?.length) return answer.byReview ? (answer as Costs) : withReviews(answer as Costs);
   const runs = Object.values(cases).flatMap((c) =>
     ((c.runs ?? []) as unknown as AgentRun[]).map((r) => ({ ...r, caseId: c.summary.caseId })),
   );
@@ -269,7 +348,7 @@ function costs(): Costs {
     byCase.set(r.caseId, k);
   }
   const replayedRuns = runs.filter((r) => r.mode === 'replay').length;
-  return {
+  return withReviews({
     totals: {
       spentUsd: runs.reduce((sum, r) => sum + cost(r), 0),
       liveRuns: runs.length - replayedRuns,
@@ -280,6 +359,31 @@ function costs(): Costs {
     ),
     byDay: [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day)),
     byCase: [...byCase.values()].sort((a, b) => b.caseId.localeCompare(a.caseId)),
+  });
+}
+
+/**
+ * The reviews' agent runs added as the route adds them: the reviews whose agent answered, in any mode (a mode is set),
+ * newest first; spentUsd includes their live cost, and a replay spends nothing.
+ */
+function withReviews(c: Costs): Costs {
+  const answered = allReviews()
+    .filter((r) => r.agent.mode)
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt) || b.reviewId.localeCompare(a.reviewId));
+  const byReview = answered.map((r) => ({
+    reviewId: r.reviewId,
+    production: r.production,
+    model: r.agent.model ?? '',
+    mode: r.agent.mode ?? '',
+    costUsd: r.agent.mode === 'replay' ? 0 : Number(r.agent.costUsd) || 0,
+    startedAt: r.startedAt,
+  }));
+  const spent = byReview.reduce((sum, r) => sum + r.costUsd, 0);
+  const totals = c.totals ?? { spentUsd: 0, liveRuns: 0, replayedRuns: 0 };
+  return {
+    ...c,
+    totals: { ...totals, spentUsd: totals.spentUsd + spent, reviewRuns: answered.length },
+    byReview,
   };
 }
 
@@ -845,6 +949,123 @@ export const handlers = [
       : signedOut(),
   ),
   http.get(`${BASE}/costs`, () => (session ? HttpResponse.json(costs()) : signedOut())),
+
+  // The production review (CONTRACTS 13): the recorded reviews of both productions, read only
+  http.get(`${BASE}/production-reviews/targets`, () =>
+    session ? HttpResponse.json({ items: recordedReviews.targets }) : signedOut(),
+  ),
+  http.get(`${BASE}/production-reviews`, ({ request }) => {
+    if (!session) return signedOut();
+    const url = new URL(request.url);
+    const namespace = url.searchParams.get('namespace');
+    const production = url.searchParams.get('production');
+    const limit = Number(url.searchParams.get('limit') ?? 50);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500)
+      return error(400, 'bad_request', 'limit must be from 1 to 500');
+    const items = allReviews()
+      .filter(
+        (r) => (!namespace || r.namespace === namespace) && (!production || r.production === production),
+      )
+      .map((r) => (startedReviews[r.reviewId]?.reads === 0 ? listItemOf(sweeping(r)) : listItemOf(r)))
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt) || b.reviewId.localeCompare(a.reviewId));
+    return HttpResponse.json({ items: items.slice(0, limit), total: items.length });
+  }),
+  http.get(`${BASE}/production-reviews/:id`, ({ params }) => {
+    if (!session) return signedOut();
+    const id = String(params.id);
+    const started = startedReviews[id];
+    if (started) return HttpResponse.json(started.reads++ === 0 ? sweeping(started.review) : started.review);
+    const r = recordedReviews.reviews[id];
+    return r ? HttpResponse.json(r) : error(404, 'not_found', `No review ${id}`);
+  }),
+  http.post(`${BASE}/production-reviews`, async ({ request }) => {
+    const denied = csrf(request) ?? guard('operator');
+    if (denied) return denied;
+    const body = (await request.json().catch(() => null)) as {
+      namespace?: string;
+      production?: string;
+      windowDays?: number;
+      agent?: boolean;
+    } | null;
+    if (!body || typeof body !== 'object' || Array.isArray(body))
+      return error(400, 'bad_request', 'The body must be a JSON object');
+    const own = recordedReviews.targets.find((t) => t.own);
+    const namespace = body.namespace ?? own?.namespace;
+    const production = body.production ?? own?.production;
+    const target = recordedReviews.targets.find(
+      (t) => t.namespace === namespace && t.production === production,
+    );
+    if (!target)
+      return error(400, 'bad_request', `${production ?? ''} in ${namespace ?? ''} is not a review target`);
+    const days = body.windowDays ?? 7;
+    if (!Number.isInteger(days) || days < 1 || days > 90)
+      return error(400, 'bad_request', 'windowDays must be a whole number from 1 to 90');
+    const busy = allReviews().find(
+      (r) =>
+        r.namespace === namespace && r.production === production && startedReviews[r.reviewId]?.reads === 0,
+    );
+    if (busy)
+      return HttpResponse.json(
+        {
+          error: 'wrong_state',
+          detail: `Review ${busy.reviewId} of ${production} is still sweeping`,
+          reviewId: busy.reviewId,
+          state: 'sweeping',
+        },
+        { status: 409 },
+      );
+    const agent = body.agent ?? true;
+    const ofTarget = Object.values(recordedReviews.reviews)
+      .filter((r) => r.namespace === namespace && r.production === production)
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+    const base = ofTarget.find((r) => (r.agent.state !== 'skipped') === agent) ?? ofTarget[0];
+    if (!base) return error(503, 'not_queued', `The demo has no recorded review of ${production}`);
+    const last = Math.max(0, ...allReviews().map((r) => Number(r.reviewId.slice(3)) || 0));
+    const reviewId = `PR-${String(last + 1).padStart(6, '0')}`;
+    const at = stamp();
+    startedReviews[reviewId] = {
+      review: {
+        ...structuredClone(base),
+        reviewId,
+        startedAt: at,
+        finishedAt: at,
+        requestedBy: session!.username,
+      },
+      reads: 0,
+    };
+    return HttpResponse.json(
+      { reviewId, state: 'sweeping', requestedBy: session!.username },
+      { status: 202 },
+    );
+  }),
+  http.post(`${BASE}/production-reviews/:id/annotations`, async ({ request, params }) => {
+    const denied = csrf(request) ?? guard('approver');
+    if (denied) return denied;
+    const r = reviewOf(String(params.id));
+    if (!r) return error(404, 'not_found', `No review ${String(params.id)}`);
+    const body = (await request.json().catch(() => ({}))) as {
+      findingId?: string;
+      status?: string;
+      reason?: string;
+      expiresAt?: string;
+    };
+    if (!r.findings.some((f) => f.id === body.findingId))
+      return error(404, 'not_found', `No finding ${body.findingId ?? ''} in ${r.reviewId}`);
+    if (!ANNOTATION_STATUSES.includes(body.status ?? ''))
+      return error(400, 'bad_request', 'status must be intended, accepted_risk or false_positive');
+    if (!body.reason?.trim()) return error(400, 'bad_request', 'A reason is needed');
+    if (body.expiresAt && !EXPIRES_AT.test(body.expiresAt))
+      return error(400, 'bad_request', 'expiresAt must be an ISO UTC time');
+    return annotationsRefused();
+  }),
+  http.delete(`${BASE}/production-reviews/annotations/:annotationId`, ({ request, params }) => {
+    const denied = csrf(request) ?? guard('approver');
+    if (denied) return denied;
+    const id = String(params.annotationId);
+    if (!allReviews().some((r) => r.findings.some((f) => f.annotationId === id)))
+      return error(404, 'not_found', `No annotation ${id}`);
+    return annotationsRefused();
+  }),
   http.get(`${BASE}/health`, () =>
     session ? HttpResponse.json({ recorded: fixtures.source, ...fixtures.health }) : signedOut(),
   ),

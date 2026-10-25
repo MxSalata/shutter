@@ -258,6 +258,9 @@ export default function SettingsPage() {
               {costs.data.totals.mockRuns
                 ? `; ${formatInt(costs.data.totals.mockRuns)} ${costs.data.totals.mockRuns === 1 ? 'run' : 'runs'} against the API mimic cost nothing, since no model answered them`
                 : ''}
+              {costs.data.totals.reviewRuns
+                ? `; the production reviews' agent answered ${formatInt(costs.data.totals.reviewRuns)} ${costs.data.totals.reviewRuns === 1 ? 'time' : 'times'}, listed apart below`
+                : ''}
               .
             </Text>
           ) : null}
@@ -337,6 +340,55 @@ export default function SettingsPage() {
                 )}
               </Stack>
             </SimpleGrid>
+          ) : null}
+          {costs.data?.byReview?.length ? (
+            <Stack gap={4} mt="md">
+              <Text size="sm" fw={600}>
+                By production review
+              </Text>
+              <Table.ScrollContainer minWidth={560}>
+                <Table>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Review</Table.Th>
+                      <Table.Th>Production</Table.Th>
+                      <Table.Th>Model</Table.Th>
+                      <Table.Th>Cost</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {costs.data.byReview.map((r) => (
+                      <Table.Tr key={r.reviewId}>
+                        <Table.Td>
+                          <Anchor
+                            component={Link}
+                            to={`/reviews/${encodeURIComponent(r.reviewId)}`}
+                            size="sm"
+                          >
+                            {r.reviewId}
+                          </Anchor>
+                        </Table.Td>
+                        <Table.Td>{r.production}</Table.Td>
+                        <Table.Td>
+                          {r.model || (
+                            <Text span size="sm" c="dimmed">
+                              none
+                            </Text>
+                          )}
+                          {r.mode ? (
+                            <Text span size="xs" c="dimmed">
+                              {' '}
+                              · {r.mode === 'replay' ? 'replayed' : r.mode}
+                            </Text>
+                          ) : null}
+                        </Table.Td>
+                        <Table.Td>{formatUsd(r.costUsd)}</Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </Table.ScrollContainer>
+            </Stack>
           ) : null}
         </Card>
       </Stack>

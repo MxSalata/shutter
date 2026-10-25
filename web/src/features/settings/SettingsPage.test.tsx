@@ -1,6 +1,6 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -81,5 +81,18 @@ describe('SettingsPage', () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/API mimic on/)).not.toBeInTheDocument();
     expect(screen.getByText('AI.LLM.Shutter')).toBeInTheDocument();
+  });
+
+  it("lists the production reviews' agent runs apart, a replay at no cost", async () => {
+    renderSettings(settings(false));
+    expect(
+      await screen.findByText(/the production reviews' agent answered 2 times, listed apart below/),
+    ).toBeInTheDocument();
+    const table = screen.getByText('By production review').parentElement!;
+    const rows = within(table).getAllByRole('row').slice(1);
+    expect(rows.map((r) => within(r).getByRole('link').textContent)).toEqual(['PR-000003', 'PR-000001']);
+    expect(within(rows[0]).getByText('Hospital.Production')).toBeInTheDocument();
+    expect(within(rows[0]).getByText(/replayed/)).toBeInTheDocument();
+    expect(within(rows[0]).getByText('$0.00')).toBeInTheDocument();
   });
 });

@@ -748,7 +748,14 @@ export interface Costs {
    * What was spent: live and record runs. A replay reuses a recording's tokens and costs nothing, and so does a run the
    * API mimic answered (model mock, a test fixture), counted in mockRuns and not in liveRuns.
    */
-  totals?: { spentUsd: number; liveRuns: number; replayedRuns: number; mockRuns?: number };
+  totals?: {
+    spentUsd: number;
+    liveRuns: number;
+    replayedRuns: number;
+    mockRuns?: number;
+    /** Production reviews whose agent answered, in any mode (CONTRACTS 13); spentUsd includes their live runs. */
+    reviewRuns?: number;
+  };
   byModel: {
     model: string;
     /** live, record or replay: replays have their own rows, at no cost. */
@@ -761,6 +768,152 @@ export interface Costs {
   }[];
   byDay: { day: string; runs: number; replayedRuns?: number; costUsd: number }[];
   byCase: { caseId: string; runs: number; replayedRuns?: number; costUsd: number }[];
+  /** The production reviews' agent runs, apart from the board's: a replay or a mimic run costs nothing. */
+  byReview?: {
+    reviewId: string;
+    production: string;
+    model: string;
+    mode: string;
+    costUsd: number;
+    startedAt: string;
+  }[];
+}
+
+// ---- the production review (CONTRACTS 13) ----
+
+/** A production a review may read: Shutter's own, or a watched one its cases came from. */
+export interface ReviewTarget {
+  namespace: string;
+  production: string;
+  productionState: string;
+  own: boolean;
+  watched: boolean;
+}
+
+export type ReviewState = 'sweeping' | 'ranking' | 'done' | 'failed';
+export type ReviewAgentState = 'pending' | 'ok' | 'no_record' | 'skipped' | 'schema_failed' | 'error';
+export type Severity = 'high' | 'medium' | 'low' | 'info';
+export type ReviewConfidence = 'confirmed' | 'consistent' | 'indicative';
+export type FindingSource = 'item' | 'default_setting' | 'class_default' | 'observed';
+export type FindingStatus = 'new' | 'intended' | 'accepted_risk' | 'false_positive';
+
+/** The review's counts; {} while it is still sweeping. */
+export interface ReviewSummary {
+  bySeverity?: Record<Severity, number>;
+  findings?: number;
+  /** Findings with a status other than new, as the annotations stand now. */
+  intended?: number;
+  items?: number;
+  errorsInWindow?: number;
+  messageErrorsInWindow?: number;
+  /** HL7 TCP items in the production, when the server counts them; absent from older reviews. */
+  hl7TcpItems?: number;
+}
+
+export interface ReviewListItem {
+  reviewId: string;
+  namespace: string;
+  production: string;
+  productionState: string;
+  startedAt: string;
+  /** null while the review is sweeping or ranking. */
+  finishedAt: string | null;
+  state: ReviewState;
+  agentState: ReviewAgentState;
+  summary: ReviewSummary;
+  requestedBy: string;
+}
+
+export interface ReviewList {
+  items: ReviewListItem[];
+  total: number;
+}
+
+/** One check's finding (CONTRACTS 13.2). item is "" for a finding about the production or the namespace. */
+export interface ReviewFinding {
+  id: string;
+  code: string;
+  severity: Severity;
+  confidence: ReviewConfidence;
+  item: string;
+  itemClass: string;
+  setting: string;
+  /** Always text: a value, a count, a signature, or a "; " separated list of items. */
+  found: string;
+  source: FindingSource;
+  suggested: string;
+  why: string;
+  action: string;
+  cases: { count: number; unique: number; latest: string[] };
+  /** latestHeaderId and latestAt are "" when nothing was observed; example is the latest error text. */
+  evidence: { count: number; latestHeaderId: number | string; latestAt: string; example: string };
+  status: FindingStatus;
+  annotationId: string;
+  /** null until the agent answered, then 1..n within the severity tiers. */
+  rank: number | null;
+  explanation: string;
+}
+
+/** Counts by kind (byFailureKind, byOutcome, byReasonCode, byState) and the newest case ids, per item and "_total". */
+export interface CaseAggregate {
+  count: number;
+  unique: number;
+  byFailureKind?: Record<string, number>;
+  byOutcome?: Record<string, number>;
+  byReasonCode?: Record<string, number>;
+  byState?: Record<string, number>;
+  latest: string[];
+}
+
+/** The agent's part; every field from mode to ensMessageId is null until the agent answered. */
+export interface ReviewAgent {
+  state: ReviewAgentState;
+  mode: string | null;
+  model: string | null;
+  providerConfig: string | null;
+  costUsd: number | null;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheCreationTokens: number | null;
+  durationMs: number | null;
+  recordKey: string | null;
+  ensMessageId: string | null;
+  error: string;
+  summary: string;
+  unknowns: string[];
+}
+
+export interface ReviewDetail extends ReviewListItem {
+  /** The sweep's failure text, "" otherwise. */
+  error: string;
+  window: { days: number; from: string; to: string };
+  /** "" when there is no configuration finding. */
+  fingerprint: string;
+  unreadable: boolean;
+  /** In baseline order (severity tier, unique cases, recency); [] while sweeping. */
+  findings: ReviewFinding[];
+  caseAggregates: Record<string, CaseAggregate>;
+  agent: ReviewAgent;
+}
+
+export interface ReviewStarted {
+  reviewId: string;
+  state: ReviewState;
+  requestedBy: string;
+}
+
+export interface ReviewAnnotation {
+  annotationId: string;
+  code: string;
+  item: string;
+  setting: string;
+  valueFingerprint: string;
+  status: Exclude<FindingStatus, 'new'>;
+  reason: string;
+  owner: string;
+  expiresAt: string | null;
+  createdAt: string;
 }
 
 /** The readiness report (Shutter.Setup.Doctor); a user without the operator role gets only a few of its keys. */
