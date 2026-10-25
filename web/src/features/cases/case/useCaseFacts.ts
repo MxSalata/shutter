@@ -24,10 +24,12 @@ export function useCaseFacts(c: CaseDetail, open: boolean): CaseFacts {
   const blocked = useBlockedReason(c.caseId, stopped);
   const escalations = useEscalations(c.caseId, stopped || handled);
   const runs = useRuns(c.caseId, open);
+  // Approvals not read stay undefined, so who released a write reads unknown rather than "not approved"
+  const approvalsRead = approvals.isSuccess ? approvals.data : undefined;
   const receipt = safetyReceipt({
     c,
     plan: plan.data,
-    approvals: approvals.data,
+    approvals: approvalsRead,
     attempts: attempts.data,
     closure: closure.data,
     snapshot: snapshot.data,
@@ -37,7 +39,9 @@ export function useCaseFacts(c: CaseDetail, open: boolean): CaseFacts {
     c,
     receipt,
     plan: plan.isSuccess ? plan.data : undefined,
-    approvals: approvals.data,
+    planError: plan.isError ? plan.error : undefined,
+    retryPlan: () => void plan.refetch(),
+    approvals: approvalsRead,
     attempts: attempts.isSuccess ? attempts.data : undefined,
     blocked: blocked.isSuccess ? blocked.data : stopped ? undefined : null,
     snapshot: snapshot.data,

@@ -2,6 +2,7 @@ import { Accordion, Group, List, Stack, Table, Text } from '@mantine/core';
 import { IconCircleCheck, IconCircleX } from '@tabler/icons-react';
 import type { GateDecision, PlanView } from '@/api/types';
 import { Digest } from '@/components/Digest';
+import { ErrorAlert } from '@/components/ErrorAlert';
 import { DispositionBadge } from '@/components/StateBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
@@ -67,7 +68,18 @@ function GateTable({ d }: { d: GateDecision }) {
   );
 }
 
-export function PlanPanel({ view, loading }: { view: PlanView | null | undefined; loading: boolean }) {
+export function PlanPanel({
+  view,
+  loading,
+  error,
+  onRetry,
+}: {
+  view: PlanView | null | undefined;
+  loading: boolean;
+  /** The plan's read error: shown in place of the panel's body. */
+  error?: unknown;
+  onRetry?: () => void;
+}) {
   const p = view?.plan;
   const body = asObject(p?.plan) ?? {};
   const action = asObject(body.action) ?? {};
@@ -81,7 +93,8 @@ export function PlanPanel({ view, loading }: { view: PlanView | null | undefined
       note="One plan, bound by its digest: what the gate checks, and what a release names."
       aside={p ? <DispositionBadge disposition={p.disposition} /> : null}
     >
-      {!p ? (
+      {!p && error ? <ErrorAlert error={error} title="The plan could not be read" onRetry={onRetry} /> : null}
+      {!p && !error ? (
         <NotYet>{loading ? 'Loading…' : 'No plan yet: the investigation is still running.'}</NotYet>
       ) : null}
       {p ? (
@@ -157,7 +170,18 @@ export function PlanPanel({ view, loading }: { view: PlanView | null | undefined
  * The gate's decisions on the plan, the latest open. The gate checks the plan mechanically against the evidence, before
  * the rehearsal and again before dispatch.
  */
-export function GatePanel({ view, loading }: { view: PlanView | null | undefined; loading: boolean }) {
+export function GatePanel({
+  view,
+  loading,
+  error,
+  onRetry,
+}: {
+  view: PlanView | null | undefined;
+  loading: boolean;
+  /** The plan's read error: shown in place of the panel's body. */
+  error?: unknown;
+  onRetry?: () => void;
+}) {
   const decisions = view?.gateDecisions ?? [];
   return (
     <Section
@@ -188,6 +212,8 @@ export function GatePanel({ view, loading }: { view: PlanView | null | undefined
             </Accordion.Item>
           ))}
         </Accordion>
+      ) : error && !view ? (
+        <ErrorAlert error={error} title="The gate's decisions could not be read" onRetry={onRetry} />
       ) : (
         <NotYet>
           {loading

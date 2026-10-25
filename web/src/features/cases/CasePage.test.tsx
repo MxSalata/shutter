@@ -330,20 +330,60 @@ describe('CasePage', () => {
     expect(within(evidence).getByRole('button', { name: /The HL7 message/ })).toHaveAttribute(
       'aria-expanded',
       'false',
-    );
+    ); // The request is acted on once: a later visit to the tab opens nothing by itself
+    await openTab('Summary');
+    await openTab('Evidence');
+    const again = await screen.findByRole('region', { name: 'Evidence' });
+    const item2 = await within(again).findByRole('button', { name: /The downstream system's encounter/ });
+    expect(item2).toHaveAttribute('aria-expanded', 'false');
+    expect(item2).not.toHaveFocus();
   });
 
-  it('does not show a revoked approval as the decision', async () => {
+  it("does not show an earlier plan's revoked approval as the release", async () => {
+    // S7: plan v1's approval was revoked when the receiver changed; plan v2 supersedes and writes nothing
     renderCase('C-000007');
+    const top = await outcome();
+    expect(await within(top).findByText('No approval needed: the plan writes nothing')).toBeInTheDocument();
+    expect(within(top).getByText('Not required')).toBeInTheDocument();
+    expect(within(top).queryByText(/Approved by/)).not.toBeInTheDocument();
+    expect(within(top).queryByText('Approval revoked')).not.toBeInTheDocument();
     await openStep('Gate and decision');
     const approval = await screen.findByRole('region', { name: 'Approval' });
-    expect(await within(approval).findByText('Earlier approval revoked')).toBeInTheDocument();
+    expect(
+      await within(approval).findByText(
+        /^Earlier approval of plan v1 revoked by system: the receiver changed before dispatch\. It does not release the current plan\.$/,
+      ),
+    ).toBeInTheDocument();
     expect(within(approval).queryByText(/^Approved by/)).not.toBeInTheDocument();
+  });
+
+  it('names nobody as the release of a blocked plan, and the earlier approval as history', async () => {
+    renderCase('C-000053');
     const top = await outcome();
-    expect(within(top).getByText('Approval revoked')).toBeInTheDocument();
-    // The receipt names who approved it, and that the approval was revoked since
-    expect(within(top).getByText(/^Approved by approver \(since revoked by system/)).toBeInTheDocument();
-    expect(within(top).queryByText('Approved')).not.toBeInTheDocument();
+    expect(await within(top).findByText('Nobody: the gate blocked it')).toBeInTheDocument();
+    expect(within(top).queryByText(/Approved by/)).not.toBeInTheDocument();
+    expect(within(top).queryByText('Approval revoked')).not.toBeInTheDocument();
+    const step = await openStep('Gate and decision');
+    expect(step).toHaveTextContent(/nobody: the gate blocked it; earlier approval of plan v1 revoked/);
+  });
+
+  it('moves focus to the approval when the reader asks to review the plan', async () => {
+    renderCase('C-000002');
+    const top = await outcome();
+    await userEvent.click(await within(top).findByRole('button', { name: 'Review the plan and decide' }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Approval' })).toHaveFocus());
+  });
+
+  it('shows a plan that could not be read as an error, not as loading', async () => {
+    server.use(
+      http.get('/api/shutter/cases/C-000009/plan', () =>
+        HttpResponse.json({ error: 'internal', detail: 'The plan could not be read' }, { status: 500 }),
+      ),
+    );
+    renderCase('C-000009');
+    await openStep('Gate and decision');
+    expect(await screen.findByText("The gate's decisions could not be read")).toBeInTheDocument();
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
   });
 
   it('offers to reinvestigate a case that stopped, and sends the reason', async () => {

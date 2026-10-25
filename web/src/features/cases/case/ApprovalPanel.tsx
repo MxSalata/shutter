@@ -14,6 +14,7 @@ import { APPROVALS } from '@/lib/status';
 import { describeError, isApiError } from '@/lib/errors';
 import { asObject } from '@/lib/json';
 import { humanize } from '@/lib/format';
+import { approvalsByPlan, earlierApprovalText } from './receipt';
 import { NotYet, Section } from './Section';
 
 function BlindResendPreview({ c, me }: { c: CaseDetail; me: Me }) {
@@ -122,10 +123,13 @@ export function ApprovalPanel({
         ? 'There is no plan to decide on'
         : '';
   const policy = view?.gateDecisions?.at(-1)?.policyVersion ?? '';
-  // A re-plan revokes the earlier approval: only one that still stands is shown as the decision.
-  const latest = approvals?.approvals?.filter((a) => !a.revoked).at(-1);
+  // Only the current plan's approval that still stands is shown as the decision; a re-plan revokes the earlier
+  // plan's, which is history.
+  const { current, earlier } = approvalsByPlan(approvals, view);
+  const latest = current.filter((a) => !a.revoked).at(-1);
   const underIncident = Boolean(latest?.incidentPlanDigest);
-  const revoked = !latest && Boolean(approvals?.approvals?.some((a) => a.revoked));
+  const revoked = !latest && current.some((a) => a.revoked);
+  const history = earlierApprovalText(earlier, view);
 
   const openDialog = (d: 'approve' | 'reject') => {
     setDecision(d);
@@ -182,13 +186,19 @@ export function ApprovalPanel({
         ) : awaiting ? (
           <StatusBadge {...APPROVALS.awaiting} label="Waiting for an approver" />
         ) : revoked ? (
-          <StatusBadge {...APPROVALS.revoked} label="Earlier approval revoked" />
+          <StatusBadge {...APPROVALS.revoked} label="Approval no longer valid" />
         ) : !write && plan ? (
           <StatusBadge {...APPROVALS.not_required} />
         ) : null
       }
     >
       {!write && plan ? <NotYet>No approval needed: the plan writes nothing.</NotYet> : null}
+      {history ? (
+        <Group gap="xs" wrap="wrap">
+          <StatusBadge {...APPROVALS.revoked} tone="neutral" label="Earlier plan" />
+          <Text size="sm">{`${history}. It does not release the current plan.`}</Text>
+        </Group>
+      ) : null}
       {write || awaiting ? (
         <Stack gap="sm">
           {DEMO && awaiting ? (

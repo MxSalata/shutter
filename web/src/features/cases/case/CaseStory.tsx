@@ -90,6 +90,12 @@ export function CaseStory({
 }) {
   const plan = facts.plan;
   const write = plan?.plan?.disposition === 'resend';
+  const planRead = {
+    view: plan,
+    loading: plan === undefined && !facts.planError,
+    error: facts.planError,
+    onRetry: facts.retryPlan,
+  };
   const execution = {
     caseId: c.caseId,
     open,
@@ -140,10 +146,10 @@ export function CaseStory({
           withheld={c.failureKind === 'withheld'}
           portalBase={portalBase}
         />
-        <PlanPanel view={plan} loading={plan === undefined} />
+        <PlanPanel {...planRead} />
       </Step>
       <Step value="decision" n={4} title="Gate and decision" summary={decisionSummary(facts)}>
-        <GatePanel view={plan} loading={plan === undefined} />
+        <GatePanel {...planRead} />
         {me ? <ApprovalPanel c={c} me={me} view={plan} approvals={facts.approvals} /> : null}
       </Step>
       <Step value="written" n={5} title="What was written" summary={writtenSummary(facts)}>

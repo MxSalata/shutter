@@ -447,6 +447,13 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* A list item that quotes a digest or an operation key wraps it rather than widening the page. */
+.mantine-List-itemWrapper,
+.mantine-List-itemLabel {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* Pre-formatted JSON keeps its shape and scrolls inside its box. */
 .json-block {
   font-family: var(--mantine-font-family-monospace);

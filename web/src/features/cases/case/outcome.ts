@@ -13,7 +13,7 @@ import { asArray, asObject } from '@/lib/json';
 import { APPROVALS, caseState, checkState, gateOutcome, PROVENANCE, verification } from '@/lib/status';
 import type { Status } from '@/lib/tone';
 import { checksOf } from './derive';
-import type { SafetyReceipt } from './receipt';
+import { approvalsByPlan, type SafetyReceipt } from './receipt';
 import { encounterTimeline } from './timeline';
 
 /**
@@ -26,6 +26,9 @@ export interface CaseFacts {
   c: CaseDetail;
   receipt: SafetyReceipt;
   plan: PlanView | null | undefined;
+  /** The plan's read error, when it failed: the plan's panels show it instead of loading. */
+  planError?: unknown;
+  retryPlan?: () => void;
   approvals: ApprovalsView | null | undefined;
   /** Undefined while the attempts are not read: the writes are then unknown. */
   attempts: AttemptView[] | null | undefined;
@@ -122,7 +125,11 @@ export function outcomeReason(f: CaseFacts): string {
       approvals.some((a) => a.revoked)
         ? `an earlier approval was revoked${approvals.find((a) => a.revoked)?.revokedBy ? ` by ${approvals.find((a) => a.revoked)?.revokedBy}` : ''}`
         : '',
-      gate && gate.outcome !== 'pass' ? `the latest plan was blocked by the gate at ${gate.stage}` : '',
+      gate?.outcome === 'block'
+        ? `the latest plan was blocked by the gate at ${gate.stage}`
+        : gate && gate.outcome !== 'pass'
+          ? `the gate's result on the latest plan at ${gate.stage} was ${gateOutcome(gate.outcome, checksOf(gate)).label.toLowerCase()}`
+          : '',
       'Shutter did not verify the correction',
     ]);
   }
@@ -295,6 +302,9 @@ export function proposedSummary(f: CaseFacts): string {
   if (!p) return f.plan === undefined ? 'Not read yet.' : 'No plan yet.';
   const by = p.createdBy ?? '';
   const runs = f.runs ?? [];
+  // A withheld merge or cancel has no agent run: nobody proposed a write, and a person decides
+  if (by === 'withheld')
+    return 'Nobody proposed a write: Shutter withholds merges and cancels; a person decides.';
   const who = by.startsWith('policy:')
     ? `the site's policy, entry ${by.slice('policy:'.length)}`
     : by === 'rules'
@@ -303,7 +313,9 @@ export function proposedSummary(f: CaseFacts): string {
         ? 'the coordinator'
         : runs.some((r) => r.role === 'generalist')
           ? 'one agent'
-          : by || 'unknown';
+          : by.startsWith('run:') || !by
+            ? 'unknown'
+            : by;
   const action =
     p.disposition === 'resend'
       ? `resend the operation unchanged, on condition the receiver is at version ${str(p.expectedVersion)}`
@@ -320,9 +332,11 @@ export function decisionSummary(f: CaseFacts): string {
   const gate = d ? `gate ${gateOutcome(d.outcome, checksOf(d)).label.toLowerCase()} at ${d.stage}` : '';
   if (!f.plan?.plan) return f.plan === undefined ? 'Not read yet.' : 'No plan for the gate yet.';
   const by = f.receipt.decidedBy;
+  const earlier = f.receipt.earlierApproval;
   return sentence([
     gate || 'the gate has not checked the plan yet',
-    by.charAt(0).toLowerCase() + by.slice(1),
+    by === 'Unknown' ? 'who released it is unknown' : by.charAt(0).toLowerCase() + by.slice(1),
+    earlier ? earlier.charAt(0).toLowerCase() + earlier.slice(1) : '',
   ]);
 }
 
@@ -348,22 +362,24 @@ export function verifiedSummary(f: CaseFacts): string {
 }
 
 /**
- * The release as a status, its badge beside the receipt's words for who decided: a person's approval or rejection,
- * the site's written policy, an approval waiting, an earlier approval revoked, or none needed for a plan that writes
- * nothing. Only an approval still in force is the decision; a revoked one is history.
+ * The release as a status, its badge beside the receipt's words for who decided: a person's approval or rejection of
+ * the current plan, the site's written policy, an approval waiting, the current plan's approval revoked, or none
+ * needed for a plan that writes nothing. Only the current plan's approval can be its release: an earlier plan's is
+ * history, named in the gate and decision step. Undefined when there is no status to show, or the approvals are not
+ * read.
  */
 export function releaseStatus(f: CaseFacts): Status | undefined {
-  const all = f.approvals?.approvals ?? [];
-  const latest = all.filter((a) => !a.revoked).at(-1);
   const write = f.plan?.plan?.disposition === 'resend';
-  if (latest) {
-    if (latest.decision !== 'approved') return APPROVALS.rejected;
-    return latest.approver === 'policy' ? { ...APPROVALS.policy, label: 'Site policy' } : APPROVALS.approved;
-  }
-  if (f.c.state === 'awaiting_approval') return APPROVALS.awaiting;
-  if (all.some((a) => a.revoked)) return APPROVALS.revoked;
   if (f.plan?.plan && !write) return APPROVALS.not_required;
-  return undefined;
+  if (f.c.state === 'awaiting_approval') return APPROVALS.awaiting;
+  if (f.approvals === undefined) return undefined;
+  const { current } = approvalsByPlan(f.approvals, f.plan);
+  const latest = current.filter((a) => !a.revoked).at(-1) ?? current.at(-1);
+  if (!latest) return undefined;
+  if (latest.decision !== 'approved') return APPROVALS.rejected;
+  // Revoked once its write was sent, the approval still released that write; revoked before, it released nothing
+  if (latest.revoked && !f.receipt.writes) return APPROVALS.revoked;
+  return latest.approver === 'policy' ? { ...APPROVALS.policy, label: 'Site policy' } : APPROVALS.approved;
 }
 
 /** Where an agent's answer came from on this case: the rules, a live model, a recorded replay, or the site's policy. */

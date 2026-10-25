@@ -131,7 +131,46 @@ describe('the outcome sentence', () => {
       'The team corrected the systems by hand and a person closed the case; an earlier approval was revoked by system; the latest plan was blocked by the gate at proposal; Shutter did not verify the correction.',
     );
     expect(nextAction(f).action).toBe('No pending action');
-    expect(releaseStatus(f)?.label).toBe('Approval revoked');
+    // The revoked approval is plan v1's, not the latest plan's: it is history, not the release
+    expect(releaseStatus(f)).toBeUndefined();
+    expect(f.receipt.decidedBy).toBe('The team, by hand');
+  });
+
+  it("does not read a gate's unknown result on a hand closure as blocked", () => {
+    const recorded = factsOf('C-000053');
+    const plan = recorded.plan!;
+    const f = factsOf('C-000053', {
+      c: { ...recorded.c, state: 'resolved', disposition: 'handled_by_hand' },
+      plan: { ...plan, gateDecisions: plan.gateDecisions.map((d) => ({ ...d, outcome: 'unknown' })) },
+    });
+    expect(outcomeReason(f)).not.toMatch(/blocked by the gate/);
+    expect(outcomeReason(f)).toMatch(/the gate's result on the latest plan at proposal was unknown/);
+  });
+
+  it("names only the current plan's approval as the release, and an earlier plan's as history", () => {
+    // S7: plan v1 approved, the approval revoked when the receiver changed, plan v2 supersedes and writes nothing
+    const s7 = factsOf('C-000007');
+    expect(releaseStatus(s7)?.label).toBe('Not required');
+    expect(s7.receipt.decidedBy).toBe('No approval needed: the plan writes nothing');
+    expect(s7.receipt.planDigest).toBe(s7.plan!.plan.digest);
+    expect(decisionSummary(s7)).toMatch(
+      /; earlier approval of plan v1 revoked by system: the receiver changed before dispatch\.$/,
+    );
+    // S20 and S7 on rules: the gate blocked plan v2, which nobody released
+    for (const id of ['C-000053', 'C-000020'] as const) {
+      const f = factsOf(id);
+      expect(releaseStatus(f)).toBeUndefined();
+      expect(f.receipt.decidedBy).toBe('Nobody: the gate blocked it');
+      expect(decisionSummary(f)).not.toMatch(/approved by/);
+      expect(decisionSummary(f)).toMatch(/nobody: the gate blocked it; earlier approval of plan v1 revoked/);
+    }
+  });
+
+  it('says who released a write is unknown while the approvals are not read', () => {
+    const f = factsOf('C-000021', { approvals: undefined });
+    expect(f.receipt.decidedBy).toBe('Unknown');
+    expect(releaseStatus(f)).toBeUndefined();
+    expect(decisionSummary(f)).toMatch(/; who released it is unknown\.$/);
   });
 
   it('names the approver role while a write waits for release', () => {
@@ -172,6 +211,22 @@ describe("the story steps' summaries", () => {
     expect(proposedSummary(factsOf('C-000021'))).toBe(
       'The rules: resend the operation unchanged, on condition the receiver is at version 2.',
     );
+  });
+
+  it('says nobody proposed a write on a withheld case, and unknown for a run not read', () => {
+    const plan = factsOf('C-000008').plan!;
+    const withheld = factsOf('C-000008', {
+      plan: { ...plan, plan: { ...plan.plan, createdBy: 'withheld' } },
+      runs: [],
+    });
+    expect(proposedSummary(withheld)).toBe(
+      'Nobody proposed a write: Shutter withholds merges and cancels; a person decides.',
+    );
+    const unread = factsOf('C-000008', {
+      plan: { ...plan, plan: { ...plan.plan, createdBy: 'run:12' } },
+      runs: undefined,
+    });
+    expect(proposedSummary(unread)).toMatch(/^Unknown: /);
   });
 
   it('says the gate and the release apart', () => {

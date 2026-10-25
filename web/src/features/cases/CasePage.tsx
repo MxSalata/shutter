@@ -70,10 +70,15 @@ function CaseBody({ c }: { c: CaseDetail }) {
   const openStep = (step: StoryStep, target: string) => {
     setSteps((s) => (s.includes(step) ? s : [...s, step]));
     setTab('summary');
-    window.setTimeout(() => document.getElementById(target)?.scrollIntoView?.({ block: 'start' }), 250);
+    window.setTimeout(() => {
+      document.getElementById(target)?.scrollIntoView?.({ block: 'start' });
+      // Focus follows the scroll, so a keyboard or screen reader user lands on the section, not back at the button
+      document.getElementById(`${target}-title`)?.focus({ preventScroll: true });
+    }, 250);
   };
   // A finding's "Cites" badge: the Evidence tab, opened on the cited kind
   const [focus, setFocus] = useState<{ kind: string; at: number }>();
+  const clearFocus = useCallback(() => setFocus(undefined), []);
   useEffect(() => {
     const show = (e: Event) => {
       setTab('evidence');
@@ -120,7 +125,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
             />
           </Tabs.Panel>
           <Tabs.Panel value="evidence" pt="md">
-            <EvidencePanel caseId={c.caseId} open={open} focus={focus} />
+            <EvidencePanel caseId={c.caseId} open={open} focus={focus} onFocused={clearFocus} />
           </Tabs.Panel>
           <Tabs.Panel value="audit" pt="md">
             <Stack gap="md">

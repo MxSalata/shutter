@@ -65,11 +65,14 @@ export function EvidencePanel({
   caseId,
   open,
   focus,
+  onFocused,
 }: {
   caseId: string;
   open: boolean;
   /** Evidence a citation asked to see: its kind, and when it was asked, so a second click on it acts again. */
   focus?: { kind: string; at: number };
+  /** Called once the request is acted on, so a later visit to the tab does not act on it again. */
+  onFocused?: () => void;
 }) {
   const snap = useSnapshot(caseId, open);
   const s = snap.data;
@@ -94,7 +97,8 @@ export function EvidencePanel({
     (target ?? document.getElementById('evidence'))?.scrollIntoView?.({ block: 'start' });
     const button = target?.querySelector<HTMLButtonElement>(':scope button');
     (button ?? target)?.focus({ preventScroll: true });
-  }, [focus, shown]);
+    onFocused?.();
+  }, [focus, shown, onFocused]);
   return (
     <Section
       id="evidence"
