@@ -146,6 +146,7 @@ describe('the demo', () => {
     const { container } = renderAt('/cases/C-000002');
     const approval = await screen.findByRole('region', { name: 'Approval' });
     expect(await within(approval).findByText('Demo replay')).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Details' }));
     expect(await screen.findByText('Message trace (on an instance)')).toBeInTheDocument();
     expect(screen.getByText('Workflow trace (on an instance)')).toBeInTheDocument();
     await userEvent.click(await screen.findByRole('button', { name: /^3\. What was proposed/ }));
@@ -166,6 +167,7 @@ describe('the demo', () => {
     const { container } = renderAt('/cases/C-000008?show=compare');
     const compare = await screen.findByRole('region', { name: 'S8 side by side: rules alone and the board' });
     expect(await within(compare).findByText('Wrote WARD-B over WARD-C: version 2 to 3')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Details' }));
     await userEvent.click(screen.getByRole('button', { name: 'Message trace (screenshot)' }));
     const dialog = await screen.findByRole('dialog', {
       name: 'The Visual Trace of an S8 case in board mode',

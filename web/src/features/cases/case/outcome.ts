@@ -250,13 +250,35 @@ const FAILURES: Record<string, string> = {
 };
 
 /** "PAS transfer to WARD-B was not delivered: HTTP 503, ward_unavailable." */
-export function failedSummary(c: CaseDetail): string {
-  const what = `${c.sourceSystem ? `${c.sourceSystem} ` : ''}${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`;
+export function failedSummary(
+  c: CaseDetail,
+  what = `${c.sourceSystem ? `${c.sourceSystem} ` : ''}${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`,
+): string {
   const how = FAILURES[c.failureKind] ?? (humanize(c.failureKind).toLowerCase() || 'failed');
   const detail = [c.failureHttpStatus ? `HTTP ${str(c.failureHttpStatus)}` : '', str(c.failureReasonCode)]
     .filter(Boolean)
     .join(', ');
   return sentence([`${what} ${how}${detail ? `: ${detail}` : ''}`]);
+}
+
+/** The sending systems a header names, glossed at first use. */
+const SYSTEMS: Record<string, string> = {
+  PAS: 'patient administration system',
+  BEDMGR: 'bed manager',
+};
+
+/**
+ * The header's one sentence: what failed, put together from the case's facts and never cut. What Shutter did about it
+ * is the Outcome card's.
+ */
+export function headerSentence(c: CaseDetail): string {
+  const system = c.sourceSystem
+    ? `${c.sourceSystem}${SYSTEMS[c.sourceSystem] ? ` (${SYSTEMS[c.sourceSystem]})` : ''} `
+    : '';
+  const what = `${system}${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`;
+  const summary = failedSummary(c, what);
+  // A system's name keeps its capitals; an event's first letter is lowered after "The"
+  return `The ${system ? summary : summary.charAt(0).toLowerCase() + summary.slice(1)}`;
 }
 
 /** What the receiver holds, whether it has a receipt for this operation, and the facts that complicate it. */

@@ -8,7 +8,6 @@ import {
   IconUserQuestion,
 } from '@tabler/icons-react';
 import type { ReactNode } from 'react';
-import { Digest } from '@/components/Digest';
 import { KeyValueList } from '@/components/KeyValueList';
 import { StatusBadge, StatusNotice } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
@@ -43,9 +42,12 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
  */
 export function DecisionCard({
   facts,
+  round = 1,
   onReview,
 }: {
   facts: CaseFacts;
+  /** The case's round of evidence and planning: a re-plan after the receiver changed starts another. */
+  round?: number;
   /** Opens the gate and decision step, where the approval is decided. */
   onReview?: () => void;
 }) {
@@ -56,6 +58,15 @@ export function DecisionCard({
   const next = nextAction(facts);
   const b = facts.blocked;
   const stopped = c.state === 'blocked' || c.state === 'escalated' || c.state === 'failed';
+  const writesDetail = [
+    r.writes ? `${r.acknowledged} acknowledged` : '',
+    r.notWritten ? `${r.notWritten} attempt${r.notWritten === 1 ? '' : 's'} the receiver did not take` : '',
+    r.writes && r.expectedVersion
+      ? `conditional on version ${r.expectedVersion}${r.receiverEpoch ? `, epoch ${r.receiverEpoch}` : ''}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('; ');
   return (
     <Section
       id="outcome"
@@ -83,16 +94,16 @@ export function DecisionCard({
         <Text size="sm" maw="75ch">
           {outcomeReason(facts)}
         </Text>
+        {round > 1 ? (
+          <Text size="sm" maw="75ch">
+            {`Round ${round}: the receiver changed after the approval, so the approval was revoked and the case was planned again on fresh evidence. The audit trail keeps every round.`}
+          </Text>
+        ) : null}
       </Stack>
       <SimpleGrid component="dl" cols={{ base: 1, sm: 2, md: 3 }} spacing="md" verticalSpacing="sm" m={0}>
         <Fact label="Proposal">
+          {/* The catalogue entry and the plan digest are the plan's, in step 3, and in the copied receipt */}
           <Text size="sm">{r.action}</Text>
-          {r.catalogueEntry ? (
-            <Text size="xs" c="dimmed">
-              Catalogue entry {r.catalogueEntry}
-            </Text>
-          ) : null}
-          {r.planDigest ? <Digest value={r.planDigest} label="plan digest" /> : null}
         </Fact>
         <Fact label="Gate">
           {gate && gateStatus ? (
@@ -121,19 +132,12 @@ export function DecisionCard({
           ) : (
             <>
               <StatusBadge {...writes(r.writes)} w="fit-content" />
-              <Text size="xs" c="dimmed">
-                {[
-                  r.writes ? `${r.acknowledged} acknowledged` : 'Nothing was written to the receiver',
-                  r.notWritten
-                    ? `${r.notWritten} attempt${r.notWritten === 1 ? '' : 's'} the receiver did not take`
-                    : '',
-                  r.expectedVersion
-                    ? `conditional on version ${r.expectedVersion}${r.receiverEpoch ? `, epoch ${r.receiverEpoch}` : ''}`
-                    : '',
-                ]
-                  .filter(Boolean)
-                  .join('; ')}
-              </Text>
+              {/* The badge says 0 writes; the words add only what it does not say */}
+              {writesDetail ? (
+                <Text size="xs" c="dimmed">
+                  {writesDetail}
+                </Text>
+              ) : null}
             </>
           )}
         </Fact>
@@ -141,7 +145,8 @@ export function DecisionCard({
           {r.verificationState ? (
             <StatusBadge {...verification(r.verificationState)} w="fit-content" />
           ) : null}
-          {r.verification !== verification(r.verificationState).label ? (
+          {r.verification !== verification(r.verificationState).label &&
+          r.verificationState !== 'not_applicable' ? (
             <Text size="xs" c={r.verificationState ? 'dimmed' : undefined}>
               {r.verification || (stopped || c.state === 'resolved' ? 'Unknown' : 'Not verified yet')}
             </Text>

@@ -113,8 +113,10 @@ describe('CasePage', () => {
     const dispatch = await screen.findByRole('region', { name: 'Dispatch' });
     expect(await within(dispatch).findByText('Nothing was sent: Shutter made no write.')).toBeInTheDocument();
     expect(within(dispatch).queryByText(/yet/)).not.toBeInTheDocument();
+    // The badge alone: a sentence would only repeat it
     const top = await outcome();
-    expect(within(top).getByText('Not applicable: blocked with nothing written')).toBeInTheDocument();
+    expect(within(top).getByText('Not applicable: no Shutter write')).toBeInTheDocument();
+    expect(within(top).queryByText('Not applicable: blocked with nothing written')).not.toBeInTheDocument();
   });
 
   it('shows the coordinator first, then each specialist as a row leading with its verdict, dissent open', async () => {
@@ -376,6 +378,11 @@ describe('CasePage', () => {
     renderCase('C-000053');
     const top = await outcome();
     expect(await within(top).findByText('Nobody: the gate blocked it')).toBeInTheDocument();
+    expect(
+      await within(top).findByText(
+        /^Round 2: the receiver changed after the approval, so the approval was revoked/,
+      ),
+    ).toBeInTheDocument();
     expect(within(top).queryByText(/Approved by/)).not.toBeInTheDocument();
     expect(within(top).queryByText('Approval revoked')).not.toBeInTheDocument();
     const step = await openStep('Gate and decision');
@@ -478,14 +485,24 @@ describe('CasePage', () => {
     expect(await within(approval).findByText('Rejected by approver')).toBeInTheDocument();
   });
 
-  it('ends a headline the server cut mid-word with an ellipsis', async () => {
-    renderCase('C-000008');
-    expect(await screen.findByText(/That state was set by…$/)).toBeInTheDocument();
-    expect(screen.queryByText(/set by BE$/)).not.toBeInTheDocument();
+  it('says in one whole sentence what failed, leaving what Shutter did to the outcome', async () => {
+    renderCase('C-000053');
+    expect(
+      await screen.findByText(
+        'The PAS (patient administration system) transfer to WARD-B was not delivered: HTTP 503, ward_unavailable.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/SUPERSEDED_BY_LATER_EVENT \(policy/)).not.toBeInTheDocument();
   });
 
-  it("names the case's provenance in the header", async () => {
+  it("keeps the case's provenance, times and version behind Details, after the outcome", async () => {
     renderCase('C-000008');
+    const details = await screen.findByRole('button', { name: 'Details' });
+    expect(details).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Case version')).not.toBeInTheDocument();
+    await userEvent.click(details);
+    expect(details).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Case version')).toBeInTheDocument();
     expect(await screen.findByText('Provenance')).toBeInTheDocument();
     expect(await screen.findByText('Recorded replay')).toBeInTheDocument();
     expect(screen.getByText('Investigated by')).toBeInTheDocument();

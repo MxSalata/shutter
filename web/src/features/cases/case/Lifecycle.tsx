@@ -1,24 +1,17 @@
 import { Stack, Stepper, Text } from '@mantine/core';
 import { IconMinus, IconUserQuestion, IconX } from '@tabler/icons-react';
 import type { CaseDetail, CaseEvent } from '@/api/types';
-import { PHASES, phaseStatuses, rounds } from './derive';
+import { PHASES, phaseStatuses } from './derive';
 
 export function Lifecycle({ c, events }: { c: CaseDetail; events: CaseEvent[] }) {
   const statuses = phaseStatuses(c.state, events);
   const firstOpen = statuses.findIndex((s) => s === 'current' || s === 'pending' || s === 'stopped');
   const active = firstOpen < 0 ? PHASES.length : firstOpen;
-  const round = rounds(events);
   // Where the case stopped: an escalation is a person's turn (attention), a block or a failure is red
   const handedOver = c.state === 'escalated';
   const stopColour = handedOver ? 'yellow' : 'red';
   return (
     <Stack gap={4} mb="md">
-      {round > 1 ? (
-        <Text size="sm" c="dimmed">
-          Round {round}: the receiver changed after the approval, so the approval was revoked and the case was
-          planned again on fresh evidence. The timeline keeps every round.
-        </Text>
-      ) : null}
       <Stepper active={active} size="xs" allowNextStepsSelect={false} aria-label="The case's progress">
         {PHASES.map((p, i) => {
           const s = statuses[i];

@@ -18,6 +18,7 @@ import { CaseStory, type StoryStep } from './case/CaseStory';
 import { DecisionCard } from './case/DecisionCard';
 import { PortalLinks } from './case/PortalLinks';
 import { SHOW_EVIDENCE } from './case/evidenceLinks';
+import { rounds } from './case/derive';
 import { provenanceOf } from './case/outcome';
 import { useCaseFacts } from './case/useCaseFacts';
 
@@ -109,7 +110,11 @@ function CaseBody({ c }: { c: CaseDetail }) {
       <CaseHeader c={c} provenance={provenanceOf(c.mode, facts.runs)} />
       <Lifecycle c={c} events={events.data ?? []} />
       <Stack gap="md">
-        <DecisionCard facts={facts} onReview={() => openStep('decision', 'approval')} />
+        <DecisionCard
+          facts={facts}
+          round={rounds(events.data ?? [])}
+          onReview={() => openStep('decision', 'approval')}
+        />
         <AbandonPanel c={c} events={events.data} />
         {/* A stopped case's hand-off to the team is its next action; once closed by hand, it is history */}
         {stopped ? <EscalationPanel c={c} /> : null}
