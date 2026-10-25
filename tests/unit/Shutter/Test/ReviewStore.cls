@@ -47,6 +47,37 @@ ClassMethod PurgeAll()
     Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.Review WHERE Production = ?", ..#PROD)
 }
 
+/// A ranking is matched to the findings by code, item and setting (v1.22): a recording whose numbers differ still explains
+/// the findings that are here; what matches nothing is dropped; what has no entry stays unexplained; the tiers hold.
+Method TestMatchRanking()
+{
+    Set findings = [{"id": "F1", "code": "PURGE_MISSING", "item": "", "setting": "", "severity": "high"}, {"id": "F2", "code": "ERRORS_GROUPED", "item": "ADT to Downstream", "setting": "", "severity": "medium"}, {"id": "F3", "code": "ALERTING_OFF", "item": "", "setting": "AlertOnError", "severity": "medium"}, {"id": "F4", "code": "QUEUE_ALERTS_OFF", "item": "", "setting": "QueueCountAlert", "severity": "low"}]
+    // Recorded on another instance: other numbers, an item that is not here, and no entry for the queue alerts.
+    Set recorded = {"summary": "s", "unknowns": ["u"], "ranking": [{"finding_id": "F7", "rank": 1, "explanation": "purge", "code": "PURGE_MISSING", "item": "", "setting": ""}, {"finding_id": "F2", "rank": 2, "explanation": "gone", "code": "ERRORS_GROUPED", "item": "ADT to Ward", "setting": ""}, {"finding_id": "F3", "rank": 3, "explanation": "alerting", "code": "ALERTING_OFF", "item": "", "setting": "AlertOnError"}, {"finding_id": "F5", "rank": 4, "explanation": "errors", "code": "ERRORS_GROUPED", "item": "ADT to Downstream", "setting": ""}]}
+    Set ok = ##class(Shutter.Store.Review).MatchRanking(findings, recorded, .matched, .problem)
+    Do $$$AssertTrue(ok, "a ranking with matches is accepted: " _ problem)
+    Do $$$AssertEquals(matched.ranking.%Size(), 3, "three entries matched a finding")
+    Do $$$AssertEquals(matched.dropped, 1, "the entry for an item that is not here is dropped")
+    Do $$$AssertEquals(matched.unexplained, 1, "the finding with no entry stays unexplained")
+    Do $$$AssertEquals(matched."recorded_entries", 4, "the recording had four entries")
+    Do $$$AssertEquals(matched.ranking.%Get(0)."finding_id" _ " " _ matched.ranking.%Get(1)."finding_id" _ " " _ matched.ranking.%Get(2)."finding_id", "F1 F3 F2", "matched by code, item and setting, in the recorded order, with the current ids")
+    Do $$$AssertEquals(matched.ranking.%Get(2).rank, 3, "re-ranked 1 to m")
+    Do $$$AssertEquals(matched.ranking.%Get(2).explanation, "errors", "each keeps its explanation")
+    Do $$$AssertEquals(matched.summary, "s", "and the summary")
+    // A ranking whose order puts a lower tier above a higher one is refused whole.
+    Set bad = {"ranking": [{"finding_id": "a", "rank": 1, "explanation": "x", "code": "QUEUE_ALERTS_OFF", "item": "", "setting": "QueueCountAlert"}, {"finding_id": "b", "rank": 2, "explanation": "y", "code": "PURGE_MISSING", "item": "", "setting": ""}]}
+    Do $$$AssertNotTrue(##class(Shutter.Store.Review).MatchRanking(findings, bad, .m2, .p2), "a low above a high is refused")
+    Do $$$AssertTrue(p2 [ "higher severity tier", "naming the tier rule: " _ p2)
+    // Nothing matching is refused too.
+    Set none = {"ranking": [{"finding_id": "z", "rank": 1, "explanation": "x", "code": "NOTHING", "item": "", "setting": ""}]}
+    Do $$$AssertNotTrue(##class(Shutter.Store.Review).MatchRanking(findings, none, .m3, .p3), "no match at all is refused")
+    // An entry without code, item and setting is matched by its finding id, as before v1.22.
+    Set legacy = {"ranking": [{"finding_id": "F2", "rank": 1, "explanation": "by id"}]}
+    Do $$$AssertTrue(##class(Shutter.Store.Review).MatchRanking(findings, legacy, .m4, .p4), "a legacy entry matches by id: " _ p4)
+    Do $$$AssertEquals(m4.ranking.%Get(0)."finding_id", "F2", "the id it named")
+    Do $$$AssertEquals(m4.unexplained, 3, "the other three stay unexplained")
+}
+
 /// A review of the test production, opened as the process opens one.
 Method NewReview(Output r As Shutter.Store.Review, days As %Integer = 7, requestedBy As %String = "operator") As %Status
 {

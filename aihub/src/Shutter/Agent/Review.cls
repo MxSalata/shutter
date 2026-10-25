@@ -36,7 +36,7 @@ Method Preamble() As %String
     Set t = t _ "4. Say 'consistent with', never 'caused'. A finding whose cases are counted shows a configuration consistent with those failures; no mechanism was traced. Name the counts (cases, unique cases, errors) and the window. A finding with no cases in the window is a latent hazard, not a false one." _ nl
     Set t = t _ "5. Say what is unknown. Where the findings and the aggregates do not decide something, say so in unknowns and in that finding's confidence_note. Never invent a count, a default or a cause." _ nl
     Set t = t _ "6. Finish by calling " _ $PARAMETER($THIS, "TERMINAL") _ " exactly once with your result for review " _ review _ ". If it is refused, fix what it names and call it again. After it is accepted, reply with one short sentence and stop." _ nl
-    Set t = t _ "7. Be brief and specific: one or two sentences per finding, with identifiers and numbers; do not quote content back."
+    Set t = t _ "7. Be brief and specific: one or two sentences per finding, naming items and settings but no numbers from the findings (their counts stay on them); do not quote content back."
     Quit t
 }
 
@@ -65,10 +65,10 @@ You rank and explain the findings of one production review. Shutter's determinis
 
 1. Read the findings and the case aggregates. For the codes you need to place, search the review rules once, naming several codes in one query rather than one call each: the rules say what a check means, why it matters, the safer value, when such a finding is intended and how a reviewer tells.
 2. Order the findings within their severity tiers. The tiers are fixed: every high before every medium, every medium before every low, every low before every info. Within a tier, put first what the case history supports most (unique cases, recency, several findings on the same item), then what is latent but severe in kind. A finding whose status is an annotation stays in its tier and goes last within it, and its explanation says a person has annotated it.
-3. Explain each finding in one or two sentences against the case history: what the setting or the observation is on which item, which cases are consistent with it (the counts and the newest ids, "consistent with", never "caused"), and what a person should look at first. Do not repeat the check's `why`; add what the cases and the other findings say about it.
+3. Explain each finding in one or two sentences against the case history: what the setting or the observation is on which item, whether the cases of that item are consistent with it ("consistent with", never "caused"), and what a person should look at first. Do not repeat the check's `why`; add what the cases and the other findings say about it. Write no numbers from the findings (no counts, ids, dates or versions): the counts are on the finding itself, and your explanation must still read right when it is replayed on another instance of the same configuration whose counts differ; say "the count shown", "the cases of this item in the window", "the newest cases".
 4. Say what limits each explanation in `confidence_note`: no cases in the window, an indicative count only, a class default the checks could not confirm at run time, a watched production whose cases Shutter sees only after a forward.
 5. Write `summary`, a few sentences on what stands out and what the cases support, and `unknowns`, what the findings and the aggregates do not decide.
-6. Call SubmitReview once, with the review id and the whole ranking: every finding id exactly once, ranks 1 to n without a gap. If it is refused, fix what it names and call it again. Then one short sentence, and stop.
+6. Call SubmitReview once, with the review id and the whole ranking: every finding id exactly once, ranks 1 to n without a gap, and on each entry the finding's `code`, `item` and `setting` copied exactly from the finding (they are what another instance matches the ranking by). If it is refused, fix what it names and call it again. Then one short sentence, and stop.
 }
 
 }
