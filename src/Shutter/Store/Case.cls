@@ -510,7 +510,7 @@ ClassMethod InFlight(case As Shutter.Store.Case, minutes As %Integer = "", Outpu
         // ("...:28.123Z") is read to the second.
         Set id = case.%Id(), at = ""
         If id = "" Quit 0
-        &sql(SELECT TOP 1 At INTO :at FROM Shutter_Store.CaseEvent WHERE "Case" = :id AND Kind = 'state' ORDER BY Seq DESC)
+        &sql(SELECT TOP 1 "At" INTO :at FROM Shutter_Store.CaseEvent WHERE "Case" = :id AND Kind = 'state' ORDER BY Seq DESC)
         If (SQLCODE '= 0) || (at = "") Quit 0
         Set newestAt = at
         Set age = ##class(Shutter.Util.Time).SecondsBetween($PIECE($PIECE(at, "Z", 1), ".", 1) _ "Z", now)

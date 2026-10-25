@@ -213,10 +213,10 @@ ClassMethod Reason(case As Shutter.Store.Case, Output failing As %DynamicArray) 
 ClassMethod Attempts(case As Shutter.Store.Case) As %String
 {
     Set out = "", n = 0
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT At, Outcome, ExpectedVersion, HttpStatus FROM Shutter_Store.ExecutionAttempt WHERE ""Case"" = ? ORDER BY ID", case.%Id())
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ""At"" AS AttemptAt, Outcome, ExpectedVersion, HttpStatus FROM Shutter_Store.ExecutionAttempt WHERE ""Case"" = ? ORDER BY ID", case.%Id())
     While rs.%Next() {
         Set n = n + 1
-        Set out = out _ $SELECT(out = "": "", 1: "; ") _ "a write at " _ $TRANSLATE($EXTRACT(rs.%Get("At"), 1, 16), "T", " ") _ " UTC expecting version " _ rs.%Get("ExpectedVersion") _ ": " _ rs.%Get("Outcome") _ " (HTTP " _ rs.%Get("HttpStatus") _ ")"
+        Set out = out _ $SELECT(out = "": "", 1: "; ") _ "a write at " _ $TRANSLATE($EXTRACT(rs.%Get("AttemptAt"), 1, 16), "T", " ") _ " UTC expecting version " _ rs.%Get("ExpectedVersion") _ ": " _ rs.%Get("Outcome") _ " (HTTP " _ rs.%Get("HttpStatus") _ ")"
     }
     Quit $SELECT(n = 0: "Nothing: Shutter sent no write for this case.", 1: out _ ".")
 }

@@ -213,9 +213,9 @@ Method Approve(c As Shutter.Store.Case) As Shutter.Store.Approval
 /// The test case's latest event of a kind, or empty fields.
 Method LastEvent(kind As %String) As %DynamicObject
 {
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 Text, Ref, Actor, FromState, ToState, At FROM Shutter_Store.CaseEvent WHERE ""Case"" = ? AND Kind = ? ORDER BY Seq DESC", ..CaseRowId, kind)
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 Text, Ref, Actor, FromState, ToState, ""At"" AS EventAt FROM Shutter_Store.CaseEvent WHERE ""Case"" = ? AND Kind = ? ORDER BY Seq DESC", ..CaseRowId, kind)
     If 'rs.%Next() Quit {"text": "", "ref": "", "actor": "", "fromState": "", "toState": "", "at": ""}
-    Quit {"text": (rs.%Get("Text")), "ref": (rs.%Get("Ref")), "actor": (rs.%Get("Actor")), "fromState": (rs.%Get("FromState")), "toState": (rs.%Get("ToState")), "at": (rs.%Get("At"))}
+    Quit {"text": (rs.%Get("Text")), "ref": (rs.%Get("Ref")), "actor": (rs.%Get("Actor")), "fromState": (rs.%Get("FromState")), "toState": (rs.%Get("ToState")), "at": (rs.%Get("EventAt"))}
 }
 
 /// How many events the test case has.
