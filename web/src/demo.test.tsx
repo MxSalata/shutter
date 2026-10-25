@@ -149,10 +149,10 @@ describe('the demo', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Details' }));
     expect(await screen.findByText('Message trace (on an instance)')).toBeInTheDocument();
     expect(screen.getByText('Workflow trace (on an instance)')).toBeInTheDocument();
-    // A board case shows its board under the outcome; each card's finding or reasoning opens on demand
+    // A board case shows its board under the outcome; each card's finding or run opens on demand
     const board = await screen.findByRole('region', { name: 'The board' });
     for (const more of await within(board).findAllByRole('button', {
-      name: /^Show the (finding|reasoning)$/,
+      name: /^Show the (finding|run)$/,
     }))
       await userEvent.click(more);
     expect(

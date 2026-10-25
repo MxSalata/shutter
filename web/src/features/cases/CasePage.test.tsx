@@ -398,6 +398,67 @@ describe('CasePage', () => {
     expect(within(board).queryByText(/^No agents/)).not.toBeInTheDocument();
   });
 
+  it('shows the board at the top of a site policy case the policy left to the board, and points step 3 to it', async () => {
+    renderCase('C-000033');
+    const top = await outcome();
+    const board = await screen.findByRole('region', { name: 'The board' });
+    expect(await within(board).findByRole('article', { name: 'Coordinator' })).toBeInTheDocument();
+    expect(top.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await openStep('What was proposed');
+    expect(
+      screen.getByText(
+        "The specialists' findings and the coordinator's are on the board, under the outcome.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole('region', { name: 'The board' })).toHaveLength(1);
+  });
+
+  it('keeps a site policy case the policy settled in step 3, with no board at the top', async () => {
+    renderCase('C-000027');
+    await openStep('What was proposed');
+    expect(await screen.findByRole('region', { name: 'Investigation: site policy' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'The board' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/are on the board, under the outcome/)).not.toBeInTheDocument();
+  });
+
+  it('keeps a withheld case in step 3, with no board at the top', async () => {
+    renderCase('C-000013');
+    await openStep('What was proposed');
+    expect(
+      await screen.findByRole('region', { name: 'Investigation: withheld for the team' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'The board' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/are on the board, under the outcome/)).not.toBeInTheDocument();
+  });
+
+  it('keeps a rules case in step 3, with no board at the top', async () => {
+    renderCase('C-000014');
+    await openStep('What was proposed');
+    expect(await screen.findByRole('region', { name: 'Investigation: rules only' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'The board' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/are on the board, under the outcome/)).not.toBeInTheDocument();
+  });
+
+  it("waits for a site policy case's runs before it lays out the board and the steps", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    const recorded = fixtures.cases['C-000033'];
+    server.use(
+      http.get('/api/shutter/cases/C-000033/runs', async () => {
+        await gate;
+        return HttpResponse.json(recorded.runs);
+      }),
+    );
+    renderCase('C-000033');
+    await outcome();
+    expect(await screen.findByText('Loading the investigation…')).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Summary' })).not.toBeInTheDocument();
+    release();
+    expect(await screen.findByRole('region', { name: 'The board' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Summary' })).toBeInTheDocument();
+    expect(screen.queryByText('Loading the investigation…')).not.toBeInTheDocument();
+  });
+
   it('says why an escalated case stopped, what comes next, whose it is and whether it was handed off', async () => {
     renderCase('C-000008');
     const top = await outcome();
@@ -417,12 +478,17 @@ describe('CasePage', () => {
     expect(within(top).getByText('ESCALATED')).toBeInTheDocument();
     expect(within(top).getByText('A decision only a person can make')).toBeInTheDocument();
     expect(within(top).getByText('New evidence arrives')).toBeInTheDocument();
-    // Escalating is the action here, so its button is the main one, inside the next action
-    const escalations = within(top).getByRole('region', { name: 'Escalations' });
+    // Escalating is the action here, so its button is the main one; the hand-off follows the board, which stays
+    // directly under the receipt
+    const escalations = await screen.findByRole('region', { name: 'Escalations' });
+    expect(within(top).queryByRole('region', { name: 'Escalations' })).not.toBeInTheDocument();
     expect(within(escalations).getByRole('button', { name: /^Escalate to / })).toHaveAttribute(
       'data-variant',
       'filled',
     );
+    const board = await screen.findByRole('region', { name: 'The board' });
+    expect(top.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(board.compareDocumentPosition(escalations) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('makes escalating a secondary choice when the next action is to close the case, and hides its status', async () => {
@@ -434,11 +500,18 @@ describe('CasePage', () => {
       ),
     ).toBeInTheDocument();
     expect(within(top).queryByRole('row', { name: /^Escalation / })).not.toBeInTheDocument();
-    const escalations = await within(top).findByRole('region', { name: 'Escalations' });
+    const escalations = await screen.findByRole('region', { name: 'Escalations' });
     expect(await within(escalations).findByRole('button', { name: /^Escalate to / })).toHaveAttribute(
       'data-variant',
       'default',
     );
+  });
+
+  it('says a case waiting for approval is not verified yet in the receipt, so no fact is empty', async () => {
+    renderCase('C-000002');
+    const top = await outcome();
+    const fact = await within(top).findByText('Verification', { selector: 'dt' });
+    await waitFor(() => expect(fact.nextElementSibling).toHaveTextContent('Not verified yet'));
   });
 
   it('names every stage of the progress in words: done, waiting for approval and not yet', async () => {
@@ -661,7 +734,7 @@ describe('CasePage', () => {
       );
     await userEvent.click(
       within(within(board).getByRole('article', { name: 'Coordinator' })).getByRole('button', {
-        name: 'Show the reasoning',
+        name: 'Show the run',
       }),
     );
     expect((await within(board).findAllByText('Recorded replay · claude-opus-5-5')).length).toBe(4);

@@ -106,10 +106,10 @@ function RunStats({ run, portalBase }: { run: AgentRun; portalBase: string }) {
   );
 }
 
-function ResultLists({ result }: { result: Record<string, unknown> }) {
+function ResultLists({ result, omit = [] }: { result: Record<string, unknown>; omit?: string[] }) {
   return (
     <>
-      {LISTS.map(([key, label]) => {
+      {LISTS.filter(([key]) => !omit.includes(key)).map(([key, label]) => {
         const items = asArray(result[key]);
         if (!items.length) return null;
         return (
@@ -243,7 +243,7 @@ function Eyebrow({ children }: { children: ReactNode }) {
   );
 }
 
-/** A toggle for the rest of a card, the finding or the reasoning in full, named for the card it sits in. */
+/** A toggle for the rest of a card, the finding in full or the run, named for the card it sits in. */
 function MoreToggle({
   open,
   onToggle,
@@ -361,8 +361,9 @@ function SpecialistCard({
 }
 
 /**
- * The coordinator as the board's last card: the plan it proposed, its reason, and every dissent it kept with why, or
- * that there was none; its lists and its run on demand.
+ * The coordinator as the board's last card: the plan it proposed, its reason in full, every dissent it kept with why,
+ * or that there was none, and its lists (violations, superseding evidence and the rest), always shown; its run on
+ * demand.
  */
 function CoordinatorCard({
   run,
@@ -393,9 +394,7 @@ function CoordinatorCard({
           Coordinator
         </Title>
         <DispositionBadge disposition={String(result.disposition ?? '')} proposed />
-        <Text size="sm" lineClamp={open ? undefined : 5}>
-          {String(result.summary ?? run.content ?? '')}
-        </Text>
+        <Text size="sm">{String(result.summary ?? run.content ?? '')}</Text>
         {kept.length ? (
           kept.map((d) => (
             <Stack
@@ -419,20 +418,21 @@ function CoordinatorCard({
             No disagreements to keep: the specialists agreed.
           </Text>
         )}
+        {/* The disagreements are the dissents kept above */}
+        <ResultLists result={result} omit={['disagreements']} />
         <MoreToggle
           open={open}
           onToggle={() => setOpen((o) => !o)}
-          controls={`agent-${key}-finding`}
+          controls={`agent-${key}-run`}
           describedBy={`agent-${key}`}
-          label="the reasoning"
+          label="the run"
         />
         {open ? (
-          <Stack id={`agent-${key}-finding`} gap="xs">
-            <ResultLists result={result} />
+          <div id={`agent-${key}-run`}>
             <RunStats run={run} portalBase={portalBase} />
-          </Stack>
+          </div>
         ) : (
-          <div id={`agent-${key}-finding`} hidden />
+          <div id={`agent-${key}-run`} hidden />
         )}
       </Stack>
     </Card>

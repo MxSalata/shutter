@@ -37,6 +37,8 @@ export interface CaseFacts {
   /** Undefined while not read: whether a hand-off went out is then unknown. */
   escalations?: Escalation[] | null;
   runs?: AgentRun[] | null;
+  /** Whether the agent runs have been read, or failed to be: until then the page cannot tell where the board goes. */
+  runsSettled?: boolean;
 }
 
 const str = (v: unknown) => (v === undefined || v === null ? '' : String(v));

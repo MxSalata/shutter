@@ -47,5 +47,6 @@ export function useCaseFacts(c: CaseDetail, open: boolean): CaseFacts {
     snapshot: snapshot.data,
     escalations: escalations.isSuccess ? escalations.data : undefined,
     runs: runs.isSuccess ? runs.data : undefined,
+    runsSettled: runs.isSuccess || runs.isError,
   };
 }

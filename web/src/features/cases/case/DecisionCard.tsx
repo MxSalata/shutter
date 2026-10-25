@@ -27,8 +27,7 @@ import {
   releaseStatus,
   type CaseFacts,
 } from './outcome';
-import { EscalationPanel } from './EscalationPanel';
-import { NestedSections, Section } from './Section';
+import { Section } from './Section';
 
 /** The gate's outcome in a word on the badge; the counts are written beside it. */
 const GATE_LABELS: Record<string, string> = { pass: 'Passed', block: 'Blocked', unknown: 'Unknown' };
@@ -99,7 +98,7 @@ function StoryCard({
  * The top of the case: three cards, what happened (the failure and what the evidence says), what Shutter did (the
  * outcome and its reason) and what needs you now (the next action, in its tone when someone has to act); then the
  * decision receipt as a band of labelled facts (the proposal, the gate, who or what released the write, the writes
- * and the verification), and for a stopped case the hand-off to the team. Every line is put together from the case's
+ * and the verification). A stopped case's hand-off to the team follows the board, on the page. Every line is put together from the case's
  * structured facts. The receipt copies as JSON.
  */
 export function DecisionCard({
@@ -321,24 +320,25 @@ export function DecisionCard({
             </Fact>
             <Fact label="Verification">
               {r.verificationState ? (
-                <StatusBadge {...verification(r.verificationState)} size="md" w="fit-content" />
-              ) : null}
-              {r.verification !== verification(r.verificationState).label &&
-              r.verificationState !== 'not_applicable' ? (
-                <Text size="xs" c={r.verificationState ? 'dimmed' : undefined}>
+                <>
+                  <StatusBadge {...verification(r.verificationState)} size="md" w="fit-content" />
+                  {r.verification !== verification(r.verificationState).label &&
+                  r.verificationState !== 'not_applicable' ? (
+                    <Text size="xs" c="dimmed">
+                      {r.verification}
+                    </Text>
+                  ) : null}
+                </>
+              ) : (
+                // No verification state yet: the words stand alone, so the fact is never empty
+                <Text size="sm">
                   {r.verification || (stopped || c.state === 'resolved' ? 'Unknown' : 'Not verified yet')}
                 </Text>
-              ) : null}
+              )}
             </Fact>
           </SimpleGrid>
         </Stack>
       </Paper>
-      {/* The hand-off to the team, with the action it serves: the main button only when it is the action */}
-      {stopped ? (
-        <NestedSections>
-          <EscalationPanel c={c} primary={next.escalate} />
-        </NestedSections>
-      ) : null}
     </Section>
   );
 }
