@@ -117,7 +117,8 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     If request.%IsA("Shutter.Msg.CaseRelease") Quit ..OnRelease(request, .response)
     If request.%IsA("Shutter.Msg.Reinvestigate") Quit ..OnReinvestigate(request, .response)
     If request.%IsA("Shutter.Msg.CaseClose") Quit ..OnClose(request, .response)
-    If 'request.%IsA("Shutter.Msg.CaseIntake") Quit $$$ERROR($$$GeneralError, "Case Workflow expects a case intake, a case release, a reinvestigation or a close, got " _ $CLASSNAME(request))
+    If request.%IsA("Shutter.Msg.CaseAbandon") Quit ..OnAbandon(request, .response)
+    If 'request.%IsA("Shutter.Msg.CaseIntake") Quit $$$ERROR($$$GeneralError, "Case Workflow expects a case intake, a case release, a reinvestigation, a close or an abandon, got " _ $CLASSNAME(request))
     Set op = ##class(Shutter.Util.Json).Parse(request.OperationJSON, .sc)
     If $$$ISERR(sc) Quit sc
     Set sc = ##class(Shutter.Store.Case).Open(op, request.FailureKind, request.FailureText, request.EnsSessionId, request.SourceHeaderId, request.Mode, .case, .opened)
@@ -1026,28 +1027,62 @@ Method OnClose(request As Shutter.Msg.CaseClose, Output response As %Library.Per
     Quit:$$$ISERR(sc) sc
     Set started.State = case.State
     $$$TRACE("Case " _ case.CaseId _ " handled by hand, closed by " _ who)
-    // An approval task still open (the case was abandoned while it waited for an approver) is completed as cancelled,
-    // so it leaves the inbox and the instance waiting on it ends: that instance finds the case closed and ignores the
-    // answer (OnResponse). The case is resolved first, so the answer can never reach an open case.
+    Quit ..CancelOpenTask(case, request.Actor, "the case was handled by hand")
+}
+
+/// A working case an approver gave up (CONTRACTS 5): a fresh instance fails it with disposition abandoned
+/// (Shutter.Store.Case.Abandon), cancels its open approval task, if any, and ends. The case keeps the workflow session
+/// of the instance that stopped, so its trace link still shows where it stopped; that instance, if it ever answers,
+/// finds the case closed and ignores the answer (OnResponse). The route refused the request while anything of that
+/// session was in flight; the transition's version check guards the moment in between, and a refused abandon leaves the
+/// case as it was.
+Method OnAbandon(request As Shutter.Msg.CaseAbandon, Output response As %Library.Persistent) As %Status
+{
+    Set case = ##class(Shutter.Store.Case).ByCaseId(request.CaseId)
+    If '$ISOBJECT(case) Quit $$$ERROR($$$GeneralError, "No case " _ request.CaseId _ " to abandon")
+    Set started = ##class(Shutter.Msg.CaseStarted).%New()
+    Set started.CaseId = case.CaseId, started.Opened = 0, started.State = case.State
+    Set response = started
+    If case.IsClosed() {
+        $$$LOGWARNING("Case " _ case.CaseId _ " is " _ case.State _ "; a closed case is marked handled or reopened, not abandoned")
+        Quit $$$OK
+    }
+    Set ..CaseId = case.CaseId, ..Mode = case.Mode
+    Set who = $SELECT(request.Actor = "": "a person", 1: request.Actor)
+    Set sc = ##class(Shutter.Store.Case).Abandon(case, request.Reason, who, request.ExpectedVersion)
+    Quit:$$$ISERR(sc) sc
+    Set started.State = case.State
+    $$$TRACE("Case " _ case.CaseId _ " abandoned by " _ who)
+    Quit ..CancelOpenTask(case, request.Actor, "the case was abandoned")
+}
+
+/// An approval task still open for a case just closed (it was closed by hand or abandoned while it waited for an
+/// approver) is completed as cancelled, so it leaves the inbox and the instance waiting on it ends: that instance finds
+/// the case closed and ignores the answer (OnResponse). The case is closed first, so the answer can never reach an open
+/// case. The engine records the actor as the person who closed it when the Workflow role lets it; the task's comment
+/// and the case's approval event say why ("Cancelled: <why>"). Nothing here fails the caller: a refusal is logged and
+/// noted on the case.
+Method CancelOpenTask(case As Shutter.Store.Case, actor As %String, why As %String) As %Status
+{
     Set task = ##class(Shutter.Util.Workflow).OpenTaskFor(case.CaseId)
-    If $ISOBJECT(task) {
-        Set taskId = task.%Id()
-        If request.Actor '= "" {
-            // The engine records who closed it; a refusal (the user is outside the Workflow role) changes nothing below.
-            Set asc = ##class(EnsLib.Workflow.Engine).AssignTask(task, request.Actor)
-            If $$$ISERR(asc) { $$$TRACE("Approval task " _ taskId _ " was not assigned to " _ request.Actor _ ": " _ $SYSTEM.Status.GetErrorText(asc)) }
-            Set task.%UserName = request.Actor
-        }
-        Do task.%FormValues.SetAt("Cancelled: the case was handled by hand", "Comment")
-        If '$LISTFIND($LISTFROMSTRING(task.%Actions, ","), "Cancel") Set task.%Actions = task.%Actions _ $SELECT(task.%Actions = "": "", 1: ",") _ "Cancel"
-        Do task.%Save()
-        Set tsc = ##class(EnsLib.Workflow.Engine).CompleteTask(task, "Cancel")
-        If $$$ISERR(tsc) {
-            $$$LOGWARNING("The approval task " _ taskId _ " of case " _ case.CaseId _ " could not be cancelled: " _ $SYSTEM.Status.GetErrorText(tsc))
-            Do case.Note("error", "The approval task " _ taskId _ " could not be cancelled: " _ $EXTRACT($SYSTEM.Status.GetErrorText(tsc), 1, 400), "system", "task:" _ taskId)
-        } Else {
-            Do case.Note("approval", "Approval task " _ taskId _ " cancelled: the case was handled by hand", who, "task:" _ taskId)
-        }
+    If '$ISOBJECT(task) Quit $$$OK
+    Set who = $SELECT(actor = "": "a person", 1: actor)
+    Set taskId = task.%Id()
+    If actor '= "" {
+        // The engine records who closed it; a refusal (the user is outside the Workflow role) changes nothing below.
+        Set asc = ##class(EnsLib.Workflow.Engine).AssignTask(task, actor)
+        If $$$ISERR(asc) { $$$TRACE("Approval task " _ taskId _ " was not assigned to " _ actor _ ": " _ $SYSTEM.Status.GetErrorText(asc)) }
+        Set task.%UserName = actor
+    }
+    Do task.%FormValues.SetAt("Cancelled: " _ why, "Comment")
+    If '$LISTFIND($LISTFROMSTRING(task.%Actions, ","), "Cancel") Set task.%Actions = task.%Actions _ $SELECT(task.%Actions = "": "", 1: ",") _ "Cancel"
+    Do task.%Save()
+    Set tsc = ##class(EnsLib.Workflow.Engine).CompleteTask(task, "Cancel")
+    If $$$ISERR(tsc) {
+        $$$LOGWARNING("The approval task " _ taskId _ " of case " _ case.CaseId _ " could not be cancelled: " _ $SYSTEM.Status.GetErrorText(tsc))
+        Do case.Note("error", "The approval task " _ taskId _ " could not be cancelled: " _ $EXTRACT($SYSTEM.Status.GetErrorText(tsc), 1, 400), "system", "task:" _ taskId)
+    } Else {
+        Do case.Note("approval", "Approval task " _ taskId _ " cancelled: " _ why, who, "task:" _ taskId)
     }
     Quit $$$OK
 }

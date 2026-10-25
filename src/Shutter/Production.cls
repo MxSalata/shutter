@@ -65,6 +65,15 @@ ClassMethod OnStart(pTimeStarted As %String) As %Status
     } Catch ex {
         $$$LOGERROR("Re-reading the knowledge files failed: " _ ex.DisplayString())
     }
+    Try {
+        // The cases a stop left in a working state: each gets a note saying the production started while it was there,
+        // and that an approver can abandon it if it does not move on (Shutter.Store.Case.MarkOpenAtStart). Marking only:
+        // a clean stop and start resumes the work in flight, so nothing here closes a case.
+        Set n = ##class(Shutter.Store.Case).MarkOpenAtStart()
+        If n > 0 $$$LOGINFO("The production started with " _ n _ " case" _ $SELECT(n = 1: "", 1: "s") _ " in a working state; each carries a note, and an approver can abandon one that does not move on within " _ ##class(Shutter.Store.Case).AbandonAfterMinutes() _ " minutes (POST /cases/{id}/abandon)")
+    } Catch ex {
+        $$$LOGWARNING("Noting the cases in a working state failed: " _ ex.DisplayString())
+    }
     Quit $$$OK
 }
 

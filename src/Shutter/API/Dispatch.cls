@@ -36,6 +36,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/cases/:caseId/blocked-reason" Method="GET" Call="CaseBlockedReason"/>
   <Route Url="/cases/:caseId/reinvestigate" Method="POST" Call="CaseReinvestigate"/>
   <Route Url="/cases/:caseId/close" Method="POST" Call="CaseClose"/>
+  <Route Url="/cases/:caseId/abandon" Method="POST" Call="CaseAbandon"/>
   <Route Url="/intake" Method="POST" Call="Intake"/>
   <Route Url="/cases/:caseId/escalations" Method="GET" Call="CaseEscalations"/>
   <Route Url="/cases/:caseId/escalations" Method="POST" Call="CaseEscalationCreate"/>
@@ -920,6 +921,65 @@ ClassMethod CaseClose(caseId As %String) As %Status
     If $$$ISERR(sc) Quit ..Fail("503 Service Unavailable", "not_queued", "The case could not be closed: " _ $SYSTEM.Status.GetErrorText(sc))
     Set reply = {}
     Set reply.caseId = caseId, reply.state = "closing", reply.requestedBy = ..User(), reply.reason = reason
+    Set text = reply.%ToJSON()
+    Do ..Remember(bodyText, "202 Accepted", text)
+    Set %response.Status = "202 Accepted"
+    Write text
+    Quit $$$OK
+}
+
+/// Abandon a case the workflow left in a working state (CONTRACTS 5): an approver gives up a case whose instance
+/// stopped moving (a restart in the middle of its work, an answer that never came), through the Case Workflow item as
+/// a close runs through it, so it shows in the trace. Approver only, whatever the site profile says. Refused while the
+/// case's workflow has a message in flight (409 busy, with what is in flight: Shutter.Store.Case.InFlight), so a case
+/// that is merely waiting, on an approver among others, is not thrown away; a closed case is marked handled or
+/// reopened instead (409 wrong_state).
+ClassMethod CaseAbandon(caseId As %String) As %Status
+{
+    If '..Allow("Shutter_Approve", 1) Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
+    If '$ISOBJECT(body) || $$$ISERR(psc) Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with reason")
+    If $CLASSNAME(body) '= "%Library.DynamicObject" Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with reason")
+    Set reason = ""
+    If $LISTFIND($LISTBUILD("string", "number"), body.%GetTypeOf("reason")) Set reason = $ZSTRIP($EXTRACT(##class(Shutter.Util.Json).Str(body, "reason"), 1, 2000), "<>W")
+    If reason = "" Quit ..Fail("400 Bad Request", "bad_request", "reason is required: why the case is given up")
+    Set expected = ##class(Shutter.Util.Json).Str(body, "expectedVersion")
+    If (expected '= "") && (+expected '= case.Version) {
+        Set extra = {} Set extra.currentVersion = case.Version
+        Quit ..Fail("409 Conflict", "stale_version", "expectedVersion is not the case's version", extra)
+    }
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    If case.IsClosed() Quit ..Fail("409 Conflict", "wrong_state", "The case is " _ case.State _ "; a closed case is marked handled (POST /cases/" _ caseId _ "/close) or reopened (POST /cases/" _ caseId _ "/reinvestigate), not abandoned")
+    Set minutes = ##class(Shutter.Store.Case).AbandonAfterMinutes()
+    Set inFlight = ##class(Shutter.Store.Case).InFlight(case, minutes, .newestAt, .deferred, .session)
+    If inFlight > 0 {
+        Set extra = {}
+        Set extra.state = case.State, extra.inFlight = inFlight
+        If newestAt '= "" { Set extra.newestAt = newestAt } Else { Do extra.%Set("newestAt", "", "null") }
+        Do extra.%Set("deferred", ''deferred, "boolean")
+        If deferred {
+            Set detail = "The case waits for a person: an approval task is open, so reject the plan (POST /cases/" _ caseId _ "/approvals) instead of abandoning the case"
+        } ElseIf session = "" {
+            Set detail = "The case moved at " _ newestAt _ " and has no workflow session yet; a case counts as left behind once nothing has moved for " _ minutes _ " minutes"
+        } Else {
+            Set detail = "The case's workflow has " _ inFlight _ " message" _ $SELECT(inFlight = 1: "", 1: "s") _ " in flight (newest " _ newestAt _ "); a case counts as left behind once nothing has moved for " _ minutes _ " minutes"
+        }
+        Quit ..Fail("409 Conflict", "busy", detail, extra)
+    }
+    Set msg = ##class(Shutter.Msg.CaseAbandon).%New()
+    Set msg.CaseId = caseId, msg.Reason = reason, msg.Actor = ..User()
+    If expected '= "" Set msg.ExpectedVersion = +expected
+    Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
+    If $$$ISERR(sc) || '$ISOBJECT(service) Quit ..Fail("503 Service Unavailable", "no_service", "The API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
+    Set service.Target = "Case Workflow", service.Async = 1
+    Set sc = service.ProcessInput(msg)
+    If $$$ISERR(sc) Quit ..Fail("503 Service Unavailable", "not_queued", "The case could not be abandoned: " _ $SYSTEM.Status.GetErrorText(sc))
+    Set reply = {}
+    Set reply.caseId = caseId, reply.state = "abandoning", reply.requestedBy = ..User(), reply.reason = reason
     Set text = reply.%ToJSON()
     Do ..Remember(bodyText, "202 Accepted", text)
     Set %response.Status = "202 Accepted"

@@ -108,7 +108,7 @@ Property OriginHeaderId As %String(%JSONFIELDNAME = "originHeaderId", MAXLEN = 4
 /// The production session of the case workflow, once it runs.
 Property WorkflowSessionId As %String(%JSONFIELDNAME = "workflowSessionId", MAXLEN = 20);
 
-/// The decided disposition: resend, reconcile, superseded, more_evidence, escalate; handled_by_hand when the team closed the case (CloseByHand).
+/// The decided disposition: resend, reconcile, superseded, more_evidence, escalate; handled_by_hand when the team closed the case (CloseByHand); abandoned when an approver gave up a case the workflow left behind (Abandon).
 Property Disposition As %String(%JSONFIELDNAME = "disposition", MAXLEN = 32);
 
 /// The catalogue had no entry for this case's pattern (CONTRACTS 6.3): a reviewer may write one.
@@ -445,8 +445,23 @@ ClassMethod CloseByHand(case As Shutter.Store.Case, reason As %String, actor As 
         Set ref = "escalation:" _ (+seq)
     }
     // An email not yet sent would tell the team to correct a case already handled: every draft or queued one is
-    // cancelled, not only the latest (the mail operation skips a queued row cancelled before it reads it).
-    Set cancelled = 0
+    // cancelled, not only the latest (CancelPendingEscalations; an abandon cancels them the same way).
+    Set cancelled = ..CancelPendingEscalations(case)
+    If cancelled > 0 Set followed = followed _ "; " _ cancelled _ " pending email" _ $SELECT(cancelled = 1: "", 1: "s") _ " cancelled"
+    If $ISOBJECT(case.CurrentApproval) && 'case.CurrentApproval.Revoked Do case.CurrentApproval.Revoke(who _ ": the case was handled by hand")
+    Set case.Disposition = "handled_by_hand"
+    Set case.Headline = "Handled by the team. " _ ##class(Shutter.Util.Json).Clip(reason, 200)
+    Set case.Outcome = "Handled by hand, recorded by " _ who _ ": " _ reason
+    Quit case.Transition("resolved", "Handled by hand: " _ reason _ followed, who, ref, expectedVersion)
+}
+
+/// Cancel every draft or queued escalation email of a case, whatever its seq, so the team is not asked to correct a
+/// case already closed (the mail operation skips a queued row cancelled before it reads it; a failed send stays
+/// failed, as history). Returns how many were cancelled.
+ClassMethod CancelPendingEscalations(case As Shutter.Store.Case) As %Integer
+{
+    Set cancelled = 0, cid = case.%Id()
+    If cid = "" Quit 0
     Set pending = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.Escalation WHERE ""Case"" = ? AND State IN ('draft', 'queued') ORDER BY Seq", cid)
     While pending.%Next() {
         Set e = ##class(Shutter.Store.Escalation).%OpenId(pending.%Get("ID"))
@@ -454,12 +469,111 @@ ClassMethod CloseByHand(case As Shutter.Store.Case, reason As %String, actor As 
         Set e.State = "cancelled"
         If $$$ISOK(e.%Save()) Set cancelled = cancelled + 1
     }
-    If cancelled > 0 Set followed = followed _ "; " _ cancelled _ " pending email" _ $SELECT(cancelled = 1: "", 1: "s") _ " cancelled"
-    If $ISOBJECT(case.CurrentApproval) && 'case.CurrentApproval.Revoked Do case.CurrentApproval.Revoke(who _ ": the case was handled by hand")
-    Set case.Disposition = "handled_by_hand"
-    Set case.Headline = "Handled by the team. " _ ##class(Shutter.Util.Json).Clip(reason, 200)
-    Set case.Outcome = "Handled by hand, recorded by " _ who _ ": " _ reason
-    Quit case.Transition("resolved", "Handled by hand: " _ reason _ followed, who, ref, expectedVersion)
+    Quit cancelled
+}
+
+/// The quiet minutes after which a working case counts as left behind by its workflow (CONTRACTS 5): the abandon
+/// route's busy rule, the start sweep's note and the Doctor read it from ^Shutter.Config("abandonAfterMinutes"), 15
+/// when unset. It must exceed the longest wait the workflow arms (the board timeout, 600 s), so a value of 10 or less
+/// reads as 11.
+ClassMethod AbandonAfterMinutes() As %Integer
+{
+    Set n = +$GET(^Shutter.Config("abandonAfterMinutes"))
+    If n <= 0 Quit 15
+    If n < 11 Quit 11
+    Quit n
+}
+
+/// How many messages of the case's workflow are in flight, which tells a busy case from one left behind (CONTRACTS 5).
+/// For the case's workflow session (its incident's for a grouped case, which the incident's instance drives): every
+/// Ens.MessageHeader created, queued or deferred, whatever its age (a deferred one is an approval task a person must
+/// answer: the case waits, and the plan is rejected instead of the case abandoned), and a delivered one (taken by its
+/// target, not yet answered) created within the last <var>minutes</var> (AbandonAfterMinutes when not given). A case
+/// with no session yet is judged by its last state event alone: busy while that is younger than the minutes. Never by
+/// UpdatedAt, which a note writes (the start sweep's note would make every stranded case look fresh). newestAt is the
+/// newest header's time (the state event's for a case with no session) as ISO UTC, deferred 1 when a deferred header
+/// exists, session the workflow session judged ("" when the state event decided).
+ClassMethod InFlight(case As Shutter.Store.Case, minutes As %Integer = "", Output newestAt As %String, Output deferred As %Boolean, Output session As %String) As %Integer
+{
+    Set newestAt = "", deferred = 0, session = ""
+    If '$ISOBJECT(case) Quit 0
+    If (minutes = "") || (+minutes <= 0) Set minutes = ..AbandonAfterMinutes()
+    Set now = ##class(Shutter.Util.Time).NowUTC()
+    Set cutoff = ##class(Shutter.Util.Time).FromNow(-(minutes * 60))
+    Set ws = case.WorkflowSessionId
+    If case.State = "grouped" {
+        Set inc = case.StoredIncident()
+        If $ISOBJECT(inc) && (inc.WorkflowSessionId '= "") Set ws = inc.WorkflowSessionId
+    }
+    If ws = "" {
+        // No session yet: the last state event's time stands for the workflow's last step. A time with milliseconds
+        // ("...:28.123Z") is read to the second.
+        Set id = case.%Id(), at = ""
+        If id = "" Quit 0
+        &sql(SELECT TOP 1 At INTO :at FROM Shutter_Store.CaseEvent WHERE "Case" = :id AND Kind = 'state' ORDER BY Seq DESC)
+        If (SQLCODE '= 0) || (at = "") Quit 0
+        Set newestAt = at
+        Set age = ##class(Shutter.Util.Time).SecondsBetween($PIECE($PIECE(at, "Z", 1), ".", 1) _ "Z", now)
+        Quit $SELECT(age < (minutes * 60): 1, 1: 0)
+    }
+    Set session = ws
+    // Header Status is Ens.DataType.MessageStatus: 1 Created, 2 Queued, 3 Delivered, 6 Deferred (4 Discarded, 8 Error
+    // and 9 Completed are over). TimeCreated is UTC in the ODBC form, "yyyy-mm-dd hh:mm:ss.fff".
+    Set odbcCutoff = $TRANSLATE($PIECE(cutoff, "Z", 1), "T", " ")
+    Set n = 0
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT COUNT(*) AS n, SUM(CASE WHEN Status = 6 THEN 1 ELSE 0 END) AS deferred FROM Ens.MessageHeader WHERE SessionId = ? AND (Status IN (1, 2, 6) OR (Status = 3 AND TimeCreated >= ?))", ws, odbcCutoff)
+    If rs.%Next() {
+        Set n = +rs.%Get("n")
+        Set deferred = (+rs.%Get("deferred") > 0)
+    }
+    Set rn = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT MAX(TimeCreated) AS t FROM Ens.MessageHeader WHERE SessionId = ?", ws)
+    If rn.%Next() && (rn.%Get("t") '= "") Set newestAt = $TRANSLATE($PIECE(rn.%Get("t"), ".", 1), " ", "T") _ "Z"
+    Quit n
+}
+
+/// Give up a case the workflow left in a working state (CONTRACTS 5): an approver's record that nothing more happens
+/// to it. Refused for a closed case (resolved, blocked, escalated or failed: it is marked handled or reinvestigated
+/// instead) and, before anything changes, for an expected version that is not the case's. The current approval, if
+/// any, is revoked, every draft or queued escalation email is cancelled as a hand close cancels them, the disposition
+/// is abandoned, and the case fails with the reason, the actor and the version check; the state event is the record.
+/// Whether the case is busy or left behind is the route's question (InFlight), asked before the request reaches the
+/// workflow; an open approval task is the workflow's to cancel (Shutter.Process.CaseWorkflow.OnAbandon). A failed case
+/// reopens through a reinvestigation, so a wrong abandon is recoverable.
+ClassMethod Abandon(case As Shutter.Store.Case, reason As %String, actor As %String, expectedVersion As %Integer = "") As %Status
+{
+    If '$ISOBJECT(case) Quit $$$ERROR($$$GeneralError, "No case to abandon")
+    If case.IsClosed() Quit $$$ERROR($$$GeneralError, "The case is " _ case.State _ "; a closed case is marked handled (/close) or reopened (/reinvestigate), not abandoned")
+    If (expectedVersion '= "") && (expectedVersion '= case.Version) Quit $$$ERROR($$$GeneralError, "Stale case version: expected " _ expectedVersion _ ", current " _ case.Version)
+    Set who = $SELECT(actor = "": "a person", 1: actor)
+    Set reason = $ZSTRIP($EXTRACT(reason, 1, 2000), "<>W")
+    Set from = case.State
+    Set cancelled = ..CancelPendingEscalations(case)
+    If $ISOBJECT(case.CurrentApproval) && 'case.CurrentApproval.Revoked Do case.CurrentApproval.Revoke(who _ ": the case was abandoned")
+    Set case.Disposition = "abandoned"
+    Set case.Headline = "Abandoned by " _ who _ ". " _ ##class(Shutter.Util.Json).Clip(reason, 200)
+    Set case.Outcome = "Abandoned, recorded by " _ who _ ": " _ reason _ ". The workflow stopped in " _ from _ "; nothing more is sent"
+    Set text = "Abandoned from " _ from _ ": " _ reason
+    If cancelled > 0 Set text = text _ "; " _ cancelled _ " pending email" _ $SELECT(cancelled = 1: "", 1: "s") _ " cancelled"
+    Quit case.Transition("failed", text, who, "", expectedVersion)
+}
+
+/// At the production's start, note every case still in a working state (Shutter.Production.OnStart): the production
+/// started while the case was <state>; work in flight resumes after a clean stop and start (queued requests keep their
+/// place and suspended alarms reload); if the case does not move on within the quiet minutes, an approver can abandon
+/// it. Marking only: nothing here closes a case, since a clean restart resumes the work and a failure written here
+/// would be wrong. The note is an error-kind event, the audit trail of the restart; the version does not move. Returns
+/// how many cases were noted.
+ClassMethod MarkOpenAtStart() As %Integer
+{
+    Set n = 0, now = ##class(Shutter.Util.Time).NowUTC(), minutes = ..AbandonAfterMinutes()
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE State NOT IN ('resolved', 'blocked', 'escalated', 'failed') ORDER BY ID")
+    While rs.%Next() {
+        Set case = ..%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(case)
+        Set text = "The production started at " _ now _ " while this case was " _ case.State _ ". Work in flight resumes when the production was stopped cleanly; if the case does not move on within " _ minutes _ " minutes, an approver can abandon it (POST /cases/" _ case.CaseId _ "/abandon, or ""Abandon the case"" on the case page)"
+        If $$$ISOK(case.Note("error", text, "system", "start:" _ now)) Set n = n + 1
+    }
+    Quit n
 }
 
 /// Record something that is not a state change: a note, an artefact, an error. Only the time of the change is written
