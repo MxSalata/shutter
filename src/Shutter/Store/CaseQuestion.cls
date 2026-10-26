@@ -321,7 +321,7 @@ Method ToObject(full As %Boolean = 1) As %DynamicObject
     If $ISOBJECT(resolved) { Set o.resolved = resolved } Else { Set o.resolved = {} }
     Set runs = []
     Set qid = ..QuestionId
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, Role, MemberCode, Status, Mode, Model, CostUSD, DurationMs, EnsMessageId, Error FROM Shutter_Store.AgentRun WHERE QuestionId = ? ORDER BY ID", qid)
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, ""Role"", MemberCode, Status, Mode, Model, CostUSD, DurationMs, EnsMessageId, Error FROM Shutter_Store.AgentRun WHERE QuestionId = ? ORDER BY ID", qid)
     While rs.%Next() {
         Set r = {}
         Set r.runId = rs.%Get("ID"), r.role = rs.%Get("Role"), r.member = rs.%Get("MemberCode"), r.status = rs.%Get("Status")
