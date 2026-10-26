@@ -9,7 +9,7 @@ Class Shutter.Operation.Gate Extends Ens.BusinessOperation
 Parameter INVOCATION = "Queue";
 
 /// Bumped whenever a check changes; recorded on every decision and bound by approvals.
-Parameter POLICYVERSION = "2026-10-26.1";
+Parameter POLICYVERSION = "2026-10-26.2";
 
 Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shutter.Msg.GateResult) As %Status
 {
@@ -89,6 +89,9 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     Set chainKind = $SELECT($ISOBJECT(conds): ##class(Shutter.Util.Json).Str(conds, "chain"), 1: "")
     If chainKind = "" Set chainKind = request.ChainKind
     If isWrite {
+        // The occupied bed (v1.28): a write into a bed another encounter holds waits for them to leave, or never goes.
+        Set bedConflict = $SELECT($ISOBJECT(conds): ##class(Shutter.Util.Json).Str(conds, "bed_conflict", "none"), 1: "none")
+        If bedConflict '= "none" Do ..BedConflictCheck(checks, case, summary, bedConflict)
         Set superseding = ..Superseding(summary, case, chainKind, .delivered, 1)
         If timeDoubt {
             Do ..Check(checks, "ordering", "block", "EVENT_TIME_IMPLAUSIBLE", whose _ " is not plausible (" _ eventTime _ "): " _ $CASE(eventTime, "before_admission": "it precedes the admission", "future": "it lies in the future", "far_from_recorded": "it is more than a day from when the event was recorded", "clock_change": "it lies within an hour of a clock change and came without an offset", "later_event_future": "it lies in the future, so it cannot settle the order", : eventTime) _ "; a person decides")
@@ -322,11 +325,51 @@ ClassMethod ClosedByCatalogue(plan As Shutter.Store.Plan, summary As %DynamicObj
     Quit ##class(Shutter.Util.Json).Str(matched.%Get("preferred"), "outcome") = "none"
 }
 
+/// The ordering check's row for a write into an occupied bed (v1.28), from the matcher's bed_conflict condition and the
+/// evidence's bed_conflict section: OCCUPANT_MOVED_OUT (pass: the occupant has left, and the receiver refuses again if the
+/// bed is held after all), WAITING_FOR_OCCUPANT_CASE (block: the occupant's movement out is in another case still working,
+/// or its delivery has no answer yet; the case waits and is checked again when that case closes),
+/// OCCUPANT_CASE_FAILED (block: that case ended without freeing the bed, so a person decides), BED_OCCUPIED (block: the
+/// occupant stays, or could not be read; a resend can only fail again or double-book the bed).
+Method BedConflictCheck(checks As %DynamicArray, case As Shutter.Store.Case, summary As %DynamicObject, status As %String) [ Private ]
+{
+    Set json = "Shutter.Util.Json"
+    Set bc = summary.%Get("bed_conflict")
+    If '$ISOBJECT(bc) Set bc = {}
+    Set where = $CLASSMETHOD(json, "Str", bc, "ward") _ $SELECT($CLASSMETHOD(json, "Str", bc, "bed") '= "": " bed " _ $CLASSMETHOD(json, "Str", bc, "bed"), 1: "")
+    Set occ = bc.%Get("occupant"), mv = bc.%Get("occupant_movement")
+    Set occId = $SELECT($ISOBJECT(occ): $CLASSMETHOD(json, "Str", occ, "encounter_id"), 1: "")
+    Set since = $CLASSMETHOD(json, "Str", bc, "since")
+    Set held = "The destination bed " _ where _ " is held by encounter " _ $SELECT(occId '= "": occId, 1: "another patient's") _ $SELECT(since '= "": " since " _ since, 1: "")
+    If status = "occupant_left" {
+        Do ..Check(checks, "ordering", "pass", "OCCUPANT_MOVED_OUT", "The bed's occupant" _ $SELECT(occId '= "": " (encounter " _ occId _ ")", 1: "") _ " has left: " _ $CLASSMETHOD(json, "Str", bc, "note") _ ". The resend is conditional on this encounter's version, and the receiver refuses it again if the bed is held after all")
+        Quit
+    }
+    If status = "occupant_leaving" {
+        Set otherId = $SELECT($ISOBJECT(mv): $CLASSMETHOD(json, "Str", mv, "case_id"), 1: "")
+        Set movement = $SELECT($ISOBJECT(mv): "their " _ $CLASSMETHOD(json, "Str", mv, "event") _ $SELECT($CLASSMETHOD(json, "Str", mv, "ward") '= "": " to " _ $CLASSMETHOD(json, "Str", mv, "ward"), 1: "") _ " (" _ $CLASSMETHOD(json, "Str", mv, "delivery") _ ")", 1: "their movement out")
+        If otherId = "" {
+            Do ..Check(checks, "ordering", "block", "WAITING_FOR_OCCUPANT_CASE", held _ ", and " _ movement _ " has no case yet; the resend waits until it has one and that case closes")
+            Quit
+        }
+        Set other = ##class(Shutter.Store.Case).ByCaseId(otherId)
+        Set otherState = $SELECT($ISOBJECT(other): other.State, 1: "")
+        If (otherState = "") || '$LISTFIND($LISTBUILD("resolved", "blocked", "escalated", "failed"), otherState) {
+            Do ..Check(checks, "ordering", "block", "WAITING_FOR_OCCUPANT_CASE", held _ "; case " _ otherId _ " is about " _ movement _ $SELECT(otherState '= "": " and is " _ otherState, 1: "") _ ". The resend waits, and the case is checked again when that case closes")
+            Quit
+        }
+        Do ..Check(checks, "ordering", "block", "OCCUPANT_CASE_FAILED", held _ "; case " _ otherId _ " about " _ movement _ " ended " _ otherState _ " without freeing the bed, so a person decides")
+        Quit
+    }
+    // occupant_staying, or unknown.
+    Do ..Check(checks, "ordering", "block", "BED_OCCUPIED", held _ $SELECT(status = "unknown": ", and who holds it or whether they are leaving could not be read", 1: " and no movement out of it is known") _ ": a resend can only fail again or double-book the bed; a person decides")
+}
+
 /// The disposition a catalogue outcome allows (CONTRACTS 6.3): a plan that follows an entry's outcome must act
 /// accordingly, or it is blocked with OUTCOME_MISMATCH (C4).
 ClassMethod DispositionFor(outcome As %String) As %String
 {
-    Quit $CASE(outcome, "resend": "resend", "resend_chain": "resend", "resend_latest": "resend", "reconcile": "reconcile", "none": "superseded", "escalate": "escalate", "resend_unconditional": "escalate", "correct_history": "escalate", : "")
+    Quit $CASE(outcome, "resend": "resend", "resend_chain": "resend", "resend_latest": "resend", "resend_after_occupant": "resend", "reconcile": "reconcile", "none": "superseded", "escalate": "escalate", "resend_unconditional": "escalate", "correct_history": "escalate", : "")
 }
 
 Method OutcomeConsistency(checks As %DynamicArray, plan As Shutter.Store.Plan, outcome As %String) [ Private ]

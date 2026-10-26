@@ -58,7 +58,7 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     Set wardOp = ##class(Shutter.Msg.WardOperation).FromOperation(op)
     Set wardOp.Purpose = "normal"
     Set wardOp.SourceHeaderId = ..%PrimaryRequestHeader.%Id()
-    $$$TRACE("Operation " _ wardOp.OperationKey _ " (" _ wardOp.Event _ $SELECT(wardOp.Ward '= "": " to " _ wardOp.Ward, 1: "") _ ")")
+    $$$TRACE("Operation " _ wardOp.OperationKey _ " (" _ wardOp.Event _ $SELECT(wardOp.Ward '= "": " to " _ wardOp.Ward, 1: "") _ $SELECT(wardOp.Bed '= "": " bed " _ wardOp.Bed, 1: "") _ ")")
     Set sc = ..SendRequestSync(..WardTarget, wardOp, .result, ..DeliveryTimeout)
     If $$$ISERR(sc) || '$ISOBJECT($GET(result)) {
         Set text = "The connector did not answer: " _ $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "no response")

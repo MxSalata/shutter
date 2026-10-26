@@ -62,6 +62,17 @@ Property Event As %String(%JSONFIELDNAME = "event", MAXLEN = 32);
 
 Property Ward As %String(%JSONFIELDNAME = "ward", MAXLEN = 100);
 
+/// The bed within the ward (PV1-3's second component; v1.28), for an admission or a transfer; empty for a ward-level placement.
+/// Beside the canonical payload, so it is not in the digest.
+Property Bed As %String(%JSONFIELDNAME = "bed", MAXLEN = 64);
+
+/// The case this one waits on (v1.28): the case about the occupant's movement out of the bed this case's write needs, set
+/// when the gate blocks with WAITING_FOR_OCCUPANT_CASE and cleared by a reopening; when that case closes, this one is
+/// reinvestigated (ReleaseWaiting).
+Property WaitsOnCase As %String(%JSONFIELDNAME = "waitsOn", MAXLEN = 32);
+
+Index WaitsIdx On WaitsOnCase;
+
 /// A merge's prior record (A40, CONTRACTS 2): the patient identifier the merge discards (MRG-1) with its assigning
 /// authority, the prior visit (MRG-5), and how many MRG segments the message carried (one per PATIENT group); the
 /// identifiers are the first group's.
@@ -174,6 +185,7 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
     Set case.SourceMessageId = ##class(Shutter.Util.Json).Str(op, "source_message_id")
     Set case.Event = op."event"
     Set case.Ward = ##class(Shutter.Util.Json).Str(op, "ward")
+    Set case.Bed = $EXTRACT(##class(Shutter.Util.Json).Str(op, "bed"), 1, 64)
     Set case.PriorPatientId = ##class(Shutter.Util.Json).Str(op, "prior_patient_id")
     Set case.PriorPatientIdAuthority = ##class(Shutter.Util.Json).Str(op, "prior_patient_id_authority")
     Set case.PriorEncounterId = ##class(Shutter.Util.Json).Str(op, "prior_encounter_id")
@@ -331,7 +343,35 @@ Method Transition(toState As %String, text As %String = "", actor As %String = "
         Set sc = ex.AsStatus()
     }
     Do ..Unlock()
+    // A case that closes releases the cases waiting on it (v1.28): each is reinvestigated on fresh evidence.
+    If $$$ISOK(sc) && $LISTFIND($LISTBUILD("resolved", "blocked", "escalated", "failed"), toState) Do ..ReleaseWaiting(toState)
     Quit sc
+}
+
+/// The blocked cases whose WaitsOnCase names this case are reopened through the production (Shutter.Msg.Reinvestigate to
+/// the Case Workflow), so each plans afresh on the bed as it is now: the gate passes the resend when the occupant has left,
+/// and escalates the case when this one ended without freeing the bed. Returns how many were released; never fails the
+/// caller (a production that is not running leaves them blocked, with the wait on the case for a person to see).
+Method ReleaseWaiting(toState As %String) As %Integer
+{
+    Set n = 0
+    Try {
+        Set me = ..CaseId
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT CaseId FROM Shutter_Store.""Case"" WHERE WaitsOnCase = ? AND State = 'blocked' ORDER BY ID", me)
+        While rs.%Next() {
+            Set waiting = rs.%Get("CaseId")
+            Set msg = ##class(Shutter.Msg.Reinvestigate).%New()
+            Set msg.CaseId = waiting, msg.RequestedBy = "system"
+            Set msg.Reason = "case " _ me _ " about the bed's occupant closed as " _ toState _ "; the bed is checked again"
+            Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
+            If $$$ISERR(sc) || '$ISOBJECT(service) Quit
+            Set service.Target = "Case Workflow", service.Async = 1
+            Set sc = service.ProcessInput(msg)
+            If $$$ISOK(sc) Set n = n + 1
+        }
+    } Catch ex {
+    }
+    Quit n
 }
 
 /// The case's lock (^Shutter.CaseLock), taken around the read and write of the stored case by Transition, Note,
@@ -642,7 +682,7 @@ ClassMethod NextId() As %String [ Private ]
 /// clause is left out when the key's encounter piece is the literal "-" (no visit number).
 ClassMethod DescribeFailure(case As Shutter.Store.Case) As %String [ Private ]
 {
-    Set what = $CASE(case.Event, "admit": "admission", "transfer": "transfer to " _ case.Ward, "discharge": "discharge", "update": "update", "merge": $SELECT(case.PriorPatientId '= "": "merge of " _ case.PriorPatientId _ " into " _ case.PatientId, 1: "merge into " _ case.PatientId), "cancel_admit": "cancellation of the admission", "cancel_transfer": "cancellation of the transfer" _ $SELECT(case.Ward '= "": " to " _ case.Ward, 1: ""), "cancel_discharge": "cancellation of the discharge", "register": "registration", "preadmit": "pre-admission", "person_add": "person record", "person_update": "person update", "": "message", : case.Event _ " message")
+    Set what = $CASE(case.Event, "admit": "admission", "transfer": "transfer to " _ case.Ward _ $SELECT(case.Bed '= "": " bed " _ case.Bed, 1: ""), "discharge": "discharge", "update": "update", "merge": $SELECT(case.PriorPatientId '= "": "merge of " _ case.PriorPatientId _ " into " _ case.PatientId, 1: "merge into " _ case.PatientId), "cancel_admit": "cancellation of the admission", "cancel_transfer": "cancellation of the transfer" _ $SELECT(case.Ward '= "": " to " _ case.Ward, 1: ""), "cancel_discharge": "cancellation of the discharge", "register": "registration", "preadmit": "pre-admission", "person_add": "person record", "person_update": "person update", "": "message", : case.Event _ " message")
     Set when = $REPLACE($PIECE(case.EventTime, "Z", 1), "T", " ")
     Set how = $CASE(case.FailureKind, "delivery_failed": "was not delivered", "uncertain_outcome": "has an uncertain outcome", "rejected": "was rejected", "unmappable": "could not be mapped to an operation for the downstream system", "withheld": $SELECT(case.Event = "merge": "was withheld by the site's policy", 1: "was withheld: the receiver cannot reverse it"), : "failed")
     // A cancel or a merge happens at its time; the movements keep "of".
@@ -797,6 +837,12 @@ Storage Default
 </Value>
 <Value name="43">
 <Value>OriginHeaderId</Value>
+</Value>
+<Value name="44">
+<Value>Bed</Value>
+</Value>
+<Value name="45">
+<Value>WaitsOnCase</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>

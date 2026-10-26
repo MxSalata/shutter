@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.27, 26 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.28, 26 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -195,6 +195,7 @@ From an HL7 v2 ADT message (2.3.1, 2.4 or 2.5.1: the fields sit at the same posi
 | `encounter_id` | PV1-19 (visit number); required for the delivered events; for the indexed events and a merge, the literal `-` when absent, never empty (v1.14) |
 | `event` | MSH-9.2, by the trigger table below (v1.14): A01 `admit`, A02 `transfer`, A03 `discharge`, A04 `register`, A05 `preadmit`, A06 and A07 `update`, A08 `update`, A11 `cancel_admit`, A12 `cancel_transfer`, A13 `cancel_discharge`, A28 `person_add`, A31 `person_update`, A40 `merge`; anything else does not map (an `unmappable` case) |
 | `ward` | PV1-3.1 (assigned patient location, point of care) for `admit` and `transfer`; null otherwise |
+| `bed` | PV1-3.2 (the bed component) for `admit` and `transfer`, at most 64 characters; null otherwise (v1.28). Beside the canonical payload, so no digest changes; the ward message sends it to the receiver (1.1), the case keeps it (`bed`) and the headline names it |
 | `prior_patient_id`, `prior_patient_id_authority`, `prior_encounter_id`, `merge_groups` | a merge only (v1.14): MRG-1 (the repetition typed MR, else the first), MRG-5, and the number of MRG segments; carried on the case and, for a delivered merge, in the request body outside the payload digest (1.6); a message with several PATIENT groups is one merge case whose evidence lists every group |
 | `event_time` | EVN-6 (event occurred) if present, else EVN-2 (recorded), as ISO 8601 UTC |
 | `source_message_id` | MSH-10 |
@@ -399,6 +400,7 @@ conditions that matter; an unlisted condition is a wildcard. A listed condition 
 | `free_text` | `yes`, `no` | the message carries free text (an OBX note or an NTE) |
 | `chain` | `single`, `ordered`, `interleaved` | section 7; a case outside an incident is `single` |
 | `receiver_category` | `current_state`, `history_of_record`, `orders_results` | the case's receiver's category in the site profile (6.4, v1.23); `current_state` when its entry names none |
+| `bed_conflict` | `none`, `occupant_leaving`, `occupant_left`, `occupant_staying`, `unknown` | who holds the bed a `bed_occupied` refusal (1.1) named, from the `bed_conflict` section the evidence adds for such a refusal (v1.28): `occupant_left` (the occupant's encounter is discharged or placed elsewhere now), `occupant_leaving` (a transfer or discharge of the occupant after `since` was sent and not applied: failed, uncertain or pending, in another case when one was opened), `occupant_staying` (they still hold the bed and no movement out is known), `unknown` (no occupant named, or they could not be read); `none` without such a refusal. The fact `occupant_case` names the case about the occupant's movement, or is empty |
 
 **Flags read per receiver** (v1.23). An entry's `when` names a flag (`history_policy: correct`, `authoritative_source:
 other_source`). The matcher's facts carry `history_policy` and `receiver_category` for the case's receiver, from its site
@@ -407,6 +409,22 @@ the catalogue, the gate and the model view judge the receiver the case went to, 
 profile edit later does not flip a decided case.
 
 **Times the matcher reads** (v1.21). The plausibility rule compares an event's time with the time the feed sent it (`sent_at`), the receiver applied it (`applied_at`) and the evidence was taken (`observed_at`). A time in the ISO 8601 UTC form with a `Z` (a fraction allowed) or in the message store's ODBC form (`2026-10-15 09:20:00.123`, written in UTC) is read; a time with an offset (`2026-10-15T10:20:00+01:00`) or in any other form is never read as UTC: a `sent_at` or `applied_at` of that shape skips its own check, as an empty one does, so one receiver's odd clock form never makes every later event implausible, while an event time the matcher cannot read is implausible and supersedes nothing (and raises `later_event_future` when believing it would change the reading). `Shutter_Catalogue.Matcher_ForCase(caseId, chainKind)` evaluates the stored snapshot again for checks over SQL; since v1.21 it takes the case's stored chain kind (`Shutter.Store.ChainItem.KindFor`, `single` outside a chain) when the caller gives none, so it agrees with the stored match for a chain item.
+
+**The occupied bed** (v1.28). For a `bed_occupied` refusal (1.1) the evidence reads the occupant's encounter on the case's
+receiver and the feed's deliveries for it (`Shutter.Index.Timeline.Deliveries`) and adds the section `bed_conflict`
+(`Shutter.Util.BedConflict`): `{refused, ward, bed, since, occupant: {encounter_id, version, read_http_status, state?, ward?,
+bed?} | null, occupant_movement: {event, ward, bed, event_time, operation_key, delivery: applied | failed | uncertain |
+pending, outcome?, case_id?} | null, status, note}`; the condition `bed_conflict` is its `status`. The gate's ordering check
+reads it for a write: `OCCUPANT_MOVED_OUT` passes (the occupant has left; the resend stays conditional on the case's own
+version, and the receiver refuses it again if the bed is held after all), `WAITING_FOR_OCCUPANT_CASE` blocks while the case
+about the occupant's movement is still working or the movement's delivery has no case yet, `OCCUPANT_CASE_FAILED` blocks when
+that case ended (resolved, blocked, escalated or failed) without freeing the bed, and `BED_OCCUPIED` blocks a write into a bed
+whose occupant stays or could not be read (a resend can only fail again or double-book). The workflow turns the first block
+into a wait: the case blocks with `waitsOn` naming the other case (5), and when that case closes (`Shutter.Store.Case.Transition`
+to a closed state) every case waiting on it is reinvestigated on fresh evidence (`Shutter.Msg.Reinvestigate` through the API
+service), so it resends once the occupant has left or escalates at once (`OCCUPANT_CASE_FAILED`) for the bed manager. A
+reopening clears `waitsOn`. Gate policy version `2026-10-26.2`, so an approval given under `2026-10-26.1` and not yet
+dispatched is void at dispatch.
 
 **The gate's ordering check and the later case** (v1.21). For a write, `SUPERSEDED_BY_LATER_EVENT` blocks on a later applied transfer or discharge, and also on a later applied cancel of the event ("cancel of the event at ..."), merge ("merge at ...") or admission ("admission at ..."), the words `later_applied` counts, so the gate and the matcher agree on all of them; `NO_LATER_EVENT` reads "No later transfer or discharge was applied for this encounter, nor a later cancel, merge or admission". A superseded closure is supported by a later transfer or discharge alone (a cancel there passes through the catalogue, `CLOSED_BY_CATALOGUE`). The verifier reads the same list on the snapshot's timeline and the encounter as read at verification, with the snapshot's observation time and chain kind, so it never cites an event the gate refused: it accepts a later transfer or discharge from the receiver's history, else a plausible later transfer the feed sent whose delivery failed or is uncertain, in the gate's words. When a case closes as superseded on such a transfer and its case is known, that later case gets a note ("Case C-0000AA was closed as superseded on this case's account: its transfer to WARD-B at <time> is not resent, because this case's later movement supersedes it; this case recovers the patient's location"), and the closed case's verification names the key and the case; the patient's location is the later case's to recover whatever its fate, and the two notes are the record.
 
@@ -436,7 +454,7 @@ checks: [ordering, effect, state_transition, identity, capability]
   (the board chooses among the outcomes), `person` (always escalated, with the entry named).
 - `outcome` is one of `resend` (the case's own operation, conditional on the receiver's version), `resend_chain` (every
   item of an ordered chain, in event order), `resend_latest` (the chain's latest item only; the earlier ones are
-  superseded), `reconcile`, `none`, `escalate`, `resend_unconditional` (never automatic; needs the site flag `unconditional_resend: allowed`, the only value besides `forbidden` the profile validator accepts), `correct_history` (not implemented: always escalated with the steps named).
+  superseded), `reconcile`, `none`, `escalate`, `resend_unconditional` (never automatic; needs the site flag `unconditional_resend: allowed`, the only value besides `forbidden` the profile validator accepts), `correct_history` (always escalated, with the correcting steps on the plan), `resend_after_occupant` (v1.28: a resend into a bed whose occupant is leaving, which waits for the case about their movement; the policy path's plan carries `waits_on` and the precondition, and the gate holds the write with `WAITING_FOR_OCCUPANT_CASE` until that case closes).
 - An alternative has `outcome`, `why` and `when`: `always` for a choice left to the board, or a site profile condition
   `<flag>: <value>` such as `history_policy: correct` or `unconditional_resend: allowed`. The value may be the
   symbol `other_source`, which stands for the other source system of the simultaneous event the matcher found
@@ -797,6 +815,9 @@ IRIS (the gate, the matcher, the verifier and the app read it); what a model rec
   free_text_present, instruction_like, note}`, where `note` says the text stays in IRIS (or that a binary or reference
   value is never sent); the text stays in IRIS. `instruction_like` is a word-list flag (ignore, override, you must, resend, approve and the like),
   not a verdict. The site profile's `model_content.free_text: true` sends the text; the default is off.
+- **The bed's occupant is a token** (v1.28). The `bed_conflict` section names the occupant by their encounter id only,
+  which the collector learns as one of the case's tokens (`ENC-T2`); the occupant's state read keeps `state`, `ward`, `bed`
+  and `version`, and nothing of their patient record is read or kept.
 - **Allowlists by shape.** The summary, the operation, the message (`message_control_id`, `message_type`, the
   sending and receiving applications, the times, `patient_identifier`, `patient_class`, `assigned_location`,
   `visit_number`, `admit_time`, `notes`, `segment_count`, `doc_type`, `error`), the validation, a receiver's body
@@ -915,6 +936,9 @@ copy of the message.
   stored copy's header as `SourceHeaderId`, and the receiver and source fields. The case workflow answers as soon as the
   case row is saved (`Reply`), so the route carries the case id within seconds. The HL7 Index's `Routes` names
   `Case Intake` beside `ADT In`, so the stored copies are indexed.
+- The case carries `bed` (PV1-3's bed component for an admission or a transfer, else null; v1.28) and `waitsOn` (the case it
+  waits on while the gate holds its write with `WAITING_FOR_OCCUPANT_CASE`, 6.5; null otherwise; cleared by a reopening), on
+  `GET /cases` items and `GET /cases/{id}` alike.
 - The case carries `receiver` (the intake's, else the connector item), `sourceNamespace`, `sourceProduction`,
   `sourceRoute` and `originHeaderId`; the evidence snapshot has an item of kind `source` and the summary a `source`
   object `{namespace, production, route, header_id}` (kept for the model view, since it carries no patient data). The
@@ -1201,6 +1225,15 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.28, 26 Oct 2026: the occupied bed, Shutter's side (2, 5, 6.1, 6.3, 6.5, 9): PV1-3's bed component becomes the
+  operation's `bed` beside the canonical payload (digests unchanged), carried by the ward message, the case, the evidence, the
+  rehearsal and the recovery write, kept by the model view; for a `bed_occupied` refusal the evidence reads the occupant's
+  encounter and the feed's deliveries for it and adds the `bed_conflict` section (`Shutter.Util.BedConflict`), the matcher's
+  condition `bed_conflict` and fact `occupant_case`, the outcome `resend_after_occupant` (`waits_on` on the plan), the gate's
+  `OCCUPANT_MOVED_OUT`, `WAITING_FOR_OCCUPANT_CASE`, `OCCUPANT_CASE_FAILED` and `BED_OCCUPIED` (policy version 2026-10-26.2),
+  the case's `waitsOn` with the release of waiting cases when the awaited case closes; a case's timeline lists its own
+  receiver's deliveries (`receiver` on each row) and the correction steps count a movement once. The catalogue entries (E16,
+  E17), the block reasons and the scenarios S23a and S23b are the knowledge side of the same change.
 - v1.27, 26 Oct 2026: questions about a case (14.2 to 14.5): `Shutter.Store.CaseQuestion` (a turn of a conversation: tier,
   source, state, the facts handed over, the answer, the members' answers, the resolved change, the runs), the Case Question
   item (`Shutter.Process.Question`, in `INSTALLITEMS`) asking the Explain agent or the board's members and coordinator through

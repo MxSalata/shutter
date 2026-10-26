@@ -18,31 +18,37 @@ Class Shutter.Util.ModelView Extends %RegisteredObject
 /// Keys that never leave IRIS, wherever they occur.
 Parameter DENYLIST = ",patient_name,name,given_name,family_name,date_of_birth,dob,birth_date,birth_time,sex,gender,address,phone,telephone,email,next_of_kin,mother_maiden_name,maiden_name,religion,ethnicity,ethnic_group,marital_status,nationality,ssn,national_id,language,headline,";
 
-Parameter SUMMARYKEEP = ",case_id,scenario,operation,failure,message,validation,ward_state,ward_state_http_status,receipt,receipt_http_status,timeline,later_events,route,source,epoch,observed_at,incident,catalogue,fresh_until,snapshot_id,snapshot_digest,taken_at,";
+Parameter SUMMARYKEEP = ",case_id,scenario,operation,failure,message,validation,ward_state,ward_state_http_status,receipt,receipt_http_status,bed_conflict,timeline,later_events,route,source,epoch,observed_at,incident,catalogue,fresh_until,snapshot_id,snapshot_digest,taken_at,";
 
 /// What the source of a case from another production keeps (CONTRACTS 11): the namespace, the production, the route
 /// and the header id there, operational names with no patient data.
 Parameter SOURCEKEEP = ",namespace,production,route,header_id,";
 
-Parameter OPERATIONKEEP = ",operation_key,encounter_id,patient_id,patient_id_authority,event,ward,event_time,source_system,source_message_id,payload_digest,prior_patient_id,prior_patient_id_authority,prior_encounter_id,";
+Parameter OPERATIONKEEP = ",operation_key,encounter_id,patient_id,patient_id_authority,event,ward,bed,event_time,source_system,source_message_id,payload_digest,prior_patient_id,prior_patient_id_authority,prior_encounter_id,";
 
 Parameter MESSAGEKEEP = ",message_control_id,message_type,sending_application,sending_facility,receiving_application,message_time,hl7_version,message_version,event_recorded,event_occurred,patient_identifier,patient_class,assigned_location,visit_number,admit_time,prior_patient_identifier,prior_visit_number,merge_groups,prior_identifiers,notes,segment_count,doc_type,error,";
 
 Parameter VALIDATIONKEEP = ",parsed,doc_type,schema_category,spec,error,note,message_version,route_category,route_standard,version_agrees,version_note,";
 
 /// What a receiver's body keeps.
-Parameter WARDKEEP = ",encounter_id,patient_id,patient_id_authority,state,ward,location,version,epoch,history,error,status,http_status,";
+Parameter WARDKEEP = ",encounter_id,patient_id,patient_id_authority,state,ward,bed,location,version,epoch,history,error,status,http_status,read_http_status,";
+
+/// What the occupied-bed section keeps (v1.28): the bed, since when, the occupant's encounter (a token) and their movement.
+Parameter BEDCONFLICTKEEP = ",refused,ward,bed,since,occupant,occupant_movement,status,note,";
+
+/// What the occupant's movement keeps: operational fields and the case about it.
+Parameter MOVEMENTKEEP = ",event,ward,bed,event_time,operation_key,delivery,outcome,case_id,";
 
 /// What a history entry keeps (Downstream.Event.ToJSON: event, ward, event_time, applied_at, version_after, operation_key).
-Parameter HISTORYKEEP = ",event,ward,location,event_time,applied_at,version,version_before,version_after,operation_key,source_system,";
+Parameter HISTORYKEEP = ",event,ward,bed,location,event_time,applied_at,version,version_before,version_after,operation_key,source_system,";
 
 /// What a receipt keeps (Downstream.Receipt.ToJSON): all of it is operational.
-Parameter RECEIPTKEEP = ",operation_key,encounter_id,event,ward,event_time,applied_at,version_before,version_after,payload_digest,source_message_id,status,epoch,error,";
+Parameter RECEIPTKEEP = ",operation_key,encounter_id,event,ward,bed,event_time,applied_at,version_before,version_after,payload_digest,source_message_id,status,epoch,error,";
 
 /// What the failure and the receiver's error keep.
 Parameter FAILUREKEEP = ",kind,outcome,reason_code,http_status,status,text,error,message,ens_session_id,source_header_id,instruction_like,";
 
-Parameter TIMELINEKEEP = ",event,ward,event_time,operation_key,source_message_id,ens_header_id,ens_session_id,sent_at,source,later,this_case,outcome,reason_code,http_status,version_after,route,receiver,message_type,";
+Parameter TIMELINEKEEP = ",event,ward,bed,event_time,operation_key,source_message_id,ens_header_id,ens_session_id,sent_at,source,later,this_case,outcome,reason_code,http_status,version_after,route,receiver,message_type,";
 
 Parameter ROUTEKEEP = ",feed,connector,receiver,tier,category,history_policy,capabilities_source,declared,capabilities_http_status,capabilities,conditional_writes,receipts,dry_run,epoch,note,";
 
@@ -151,6 +157,8 @@ ClassMethod KeepFor(node As %DynamicObject, parentKey As %String) As %String [ P
     If node.%IsDefined("applied_at") && node.%IsDefined("payload_digest") Quit ..#RECEIPTKEEP
     If node.%IsDefined("operation_key") && node.%IsDefined("payload_digest") Quit ..#OPERATIONKEEP
     If node.%IsDefined("operation_key") && (node.%IsDefined("sent_at") || node.%IsDefined("this_case")) Quit ..#TIMELINEKEEP
+    If node.%IsDefined("refused") && node.%IsDefined("occupant_movement") Quit ..#BEDCONFLICTKEEP
+    If node.%IsDefined("delivery") && node.%IsDefined("event_time") && 'node.%IsDefined("sent_at") Quit ..#MOVEMENTKEEP
     If node.%IsDefined("state") || node.%IsDefined("history") Quit ..#WARDKEEP
     If node.%IsDefined("kind") && (node.%IsDefined("text") || node.%IsDefined("outcome")) && 'node.%IsDefined("data") && 'node.%IsDefined("item") && 'node.%IsDefined("items") Quit ..#FAILUREKEEP
     If node.%IsDefined("connector") && node.%IsDefined("capabilities_source") Quit ..#ROUTEKEEP

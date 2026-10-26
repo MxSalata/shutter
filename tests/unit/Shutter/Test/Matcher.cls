@@ -27,7 +27,8 @@ ClassMethod Vocabulary() As %DynamicObject
         "conditional_writes": ["yes", "no", "unknown"],
         "free_text": ["yes", "no"],
         "chain": ["single", "ordered", "interleaved"],
-        "receiver_category": ["current_state", "history_of_record", "orders_results"]
+        "receiver_category": ["current_state", "history_of_record", "orders_results"],
+        "bed_conflict": ["none", "occupant_leaving", "occupant_left", "occupant_staying", "unknown"]
     }
 }
 
@@ -106,6 +107,19 @@ Method TestTransition()
 Method TestSimultaneousSources()
 {
     Do ..RunRows("simultaneous_sources")
+}
+
+/// The occupied bed (v1.28): the condition is the status of the section the evidence adds to a bed_occupied refusal, none
+/// without one; the fact occupant_case names the case about the occupant's movement out.
+Method TestBedConflict()
+{
+    Do ..RunRows("bed_conflict")
+    Set case = ..Case({"failure_kind": "rejected"})
+    Set summary = ..Summary({"summary": {"bed_conflict": {"refused": true, "status": "occupant_leaving", "occupant": {"encounter_id": "ENC-OCC"}, "occupant_movement": {"event": "transfer", "delivery": "failed", "case_id": "C-000041"}}}}, case)
+    Set facts = ##class(Shutter.Catalogue.Matcher).Facts(summary, case)
+    Do $$$AssertEquals(facts."occupant_case", "C-000041", "the fact names the occupant's case")
+    Set facts = ##class(Shutter.Catalogue.Matcher).Facts(..Summary({"summary": {}}, case), case)
+    Do $$$AssertEquals(facts."occupant_case", "", "and is empty without a conflict")
 }
 
 Method TestCapabilitiesFreeTextChain()
@@ -485,6 +499,11 @@ XData Rows [ MimeType = application/json ]
   {"group": "simultaneous_sources", "name": "the case's own operation in the history", "summary": {"ward_state": {"history": [{"event": "transfer", "event_time": "2026-10-19T09:00:00Z", "operation_key": "{key}"}]}}, "expect": {"simultaneous_sources": "no"}},
   {"group": "simultaneous_sources", "name": "another source at another time", "summary": {"ward_state": {"history": [{"event": "transfer", "event_time": "2026-10-19T09:01:00Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T09:01:00Z"}]}}, "expect": {"simultaneous_sources": "no"}},
   {"group": "simultaneous_sources", "name": "no history", "summary": {"ward_state": {"history": null}}, "expect": {"simultaneous_sources": "no"}},
+  {"group": "bed_conflict", "name": "no refusal for an occupied bed", "summary": {}, "expect": {"bed_conflict": "none"}},
+  {"group": "bed_conflict", "name": "the occupant is leaving", "case": {"failure_kind": "rejected"}, "summary": {"failure": {"kind": "rejected", "reason_code": "bed_occupied", "http_status": 409}, "bed_conflict": {"refused": true, "ward": "WARD-B", "bed": "B2", "status": "occupant_leaving", "occupant": {"encounter_id": "ENC-OCC"}, "occupant_movement": {"event": "transfer", "delivery": "failed", "case_id": "C-000041"}}}, "expect": {"bed_conflict": "occupant_leaving", "receiver_answer": "refused", "delivery": "rejected"}},
+  {"group": "bed_conflict", "name": "the occupant has left", "summary": {"bed_conflict": {"refused": true, "status": "occupant_left", "occupant": {"encounter_id": "ENC-OCC"}, "occupant_movement": {"event": "discharge", "delivery": "applied"}}}, "expect": {"bed_conflict": "occupant_left"}},
+  {"group": "bed_conflict", "name": "two patients in one bed", "summary": {"bed_conflict": {"refused": true, "status": "occupant_staying", "occupant": {"encounter_id": "ENC-OCC"}, "occupant_movement": null}}, "expect": {"bed_conflict": "occupant_staying"}},
+  {"group": "bed_conflict", "name": "the occupant could not be read", "summary": {"bed_conflict": {"refused": true, "status": "unknown", "occupant": null, "occupant_movement": null}}, "expect": {"bed_conflict": "unknown"}},
 
   {"group": "other", "name": "a receiver without conditional writes", "summary": {"route": {"capabilities": {"conditional_writes": false}}}, "expect": {"conditional_writes": "no"}},
   {"group": "other", "name": "a capability profile that does not say", "summary": {"route": {"capabilities": {"conditional_writes": null}}}, "expect": {"conditional_writes": "unknown"}},
