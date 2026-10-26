@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.24, 26 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.25, 26 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -263,6 +263,20 @@ The live runner's `TestRun(case, member, mode, budget)` (v1.21), a check over SQ
 
 An agent item's `ProviderConfig` (v1.17) names a Config Store configuration resolved as the agent class's `@{config:...}` is (a name of fewer than three parts is under `AI.LLM`, secrets resolved) and is made with `%AI.Provider.Create`, before `%Init`; the run's model is the item's `Model`, else the configuration's `model`, else the class's. Build 154 has no `%AI.Provider.CreateFromConfig`, which the runner called before.
 
+**Two receivers** (v1.25). The production feeds every receiver the site profile lists (the demo: the bed manager, Downstream
+Out, and the patient records system, Records Out, each a connector and a feed process), so one message makes one delivery
+per receiver, and **a case is one failed delivery to one receiver**: the open-case lookup is by operation key and receiver
+(`Shutter.Store.Case.FindOpen`), the evidence, the rehearsal, the preflight read and the write go to the case's receiver
+(`Shutter.Process.CaseWorkflow.WardTargetFor`), and the incident detector already groups by receiver. A fault step names
+the receivers it applies to, `{"fault": "fail_before_accept", "receivers": ["Downstream Out", "Records Out"]}`; without the
+list it applies to the bed manager alone, so S1 to S21 keep their meaning. The reset resets every receiver whose entry
+names a demo namespace (6.4), and its answer lists them under `receivers`. A scenario's expectations may be given per
+receiver under `expected.by_receiver` (`scenario_check.py` reads them); `expected.modes` names the modes the scenario is
+played in, and a scenario played in policy mode only needs no board recordings. S22, "One overtaken transfer, two
+systems", fails the same 10:20 transfer at both receivers after the admission and before the 10:45 transfer applies at
+both: the bed manager's case (category `current_state`) closes superseded with no write (E1 preferred); the records
+system's case (category `history_of_record`) escalates with the correcting steps (E1 alternative 1, `correct_history`).
+
 ## 4.1 Scenario steps that wait (v1.4)
 
 A step `{"wait_for_state": "awaiting_approval", "timeout": 120}` makes the runner wait until the newest case of the running scenario reaches that state (or the timeout passes, which the runner reports). The runner reads the case in the same namespace:
@@ -443,7 +457,11 @@ The investigation mode decides who settles the case:
 - `rules`: no agents and no catalogue path: a plain resend for the gate to judge.
 
 In `policy` mode the matcher's decision is:
-- **One match, `decides: policy`:** the case takes the site's policy path (6.4) with the preferred outcome. No board.
+- **One match, `decides: policy`:** the case takes the site's policy path (6.4) with the entry's outcome. No board. The
+  outcome is the preferred one, unless an alternative's `when` names a flag (`history_policy`, `authoritative_source`,
+  `unconditional_resend`) that holds for the case's receiver: then that alternative applies (v1.25; the plan names it
+  `alternative:<n>` as the board would, and `outcome_ref` in the match says which). `when: always` marks a board option,
+  never a policy.
 - **One match, `decides: board`, or several matches:** the board runs; the coordinator's plan names `catalogue_entry`
   and `outcome` (`preferred` or `alternative:<n>`) with `why`.
 - **One match, `decides: person`:** the case is escalated at once, naming the entry; the board does not run.
@@ -506,6 +524,11 @@ reads it through `Shutter.Store.SiteProfile`.
   (`current` | `correct`) is derived from the category (`history_of_record` -> `correct`, the others -> `current`) and may
   be set on the entry to override it. The site-wide `history_policy` is deprecated: still accepted, read only for an entry
   with neither a category nor its own policy, and no longer in the seed (profile version 5).
+- **A demo receiver's namespace** (v1.25): `receivers[].demo.namespace` names the namespace a demo receiver runs in, where
+  the scenario runner resets it and sets its faults (`Shutter.Store.SiteProfile.ReceiverNamespace`); absent, the receiver
+  is the namespace's own. The shipped seed (profile version 6) lists two receivers: Downstream Out (`current_state`) and
+  Records Out (`history_of_record`, `/records/api`, `demo.namespace` RECORDS), and the PAS team takes Records Out's
+  escalations.
 - **A gated history correction is planned, not in this version.** It would be a receiver feature `history_correction`
   and an operation (1.1 with `"correction": true`) that inserts the movement into the history at its own time without
   changing the current placement, bumps the version, stores a receipt and honours `dry_run` and `expected_version`; a plan
@@ -924,6 +947,15 @@ copy of the message.
 
 ## 12. The install (v1.15)
 
+**The demo records system** (v1.25): `Shutter.Installer`'s manifest makes a third namespace, `RECORDS`, with the demo
+receiver package (`Downstream`) mapped from Shutter's code database and its own data database, so the same code serves
+two systems from two namespaces; `Shutter.Installer.RunRecords('SHUTTER')` makes it alone on an instance that has Shutter
+(CI, a development instance; run again it only renews what follows). `Shutter.Setup.InstallRecords` makes the web
+application `/records/api` (dispatch class `Downstream.API`, resource `Downstream_API`) on that namespace, sets its demo
+flag, and refreshes the roles: the production's client of the receivers' APIs (`Shutter_DownstreamClient`) takes the
+records namespace's data read-write and its code read. The production's "ADT to Records" and "Records Out" items are
+demo items, switched off on a site install with the others.
+
 - **The demo flag.** The module manifest declares the IPM parameters `demo` (default 1) and `production` (default empty)
   and invokes `Shutter.Setup.InstallStatus(${root}, ${demo}, ${production})`, whose `%Status` IPM checks: a failed install
   stops the load and the Docker build. `zpm "load <dir> -Ddemo=0"` installs for a site. Every install creates
@@ -1064,6 +1096,12 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.25, 26 Oct 2026: two receivers (4, 6.3, 6.4, 12): the demo patient records system (namespace RECORDS, `/records/api`,
+  Records Out, category history_of_record) fed beside the bed manager; a case is one failed delivery to one receiver
+  (the open-case lookup by key and receiver; the workflow's reads, rehearsals and writes go to the case's receiver); fault
+  steps name their receivers, the reset covers every demo receiver, `expected.by_receiver`, `expected.modes`; the policy
+  path takes a flag alternative whose `when` holds for the case's receiver (`outcome_ref`); `receivers[].demo.namespace`;
+  the seed's second receiver (profile version 6); S22.
 - v1.24, 26 Oct 2026: beds at the receiver (1.1 to 1.4, 1.6): the operation's optional `bed` (PV1-3's bed component, for an
   admission or a transfer only; `ward` stays the ward); the refusal 409 `bed_occupied` with the occupant named by its
   encounter id, its `since` and its version, answered the same to a dry run, with nothing applied, no receipt and the

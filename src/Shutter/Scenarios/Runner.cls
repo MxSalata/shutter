@@ -214,8 +214,15 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
         If step.%IsDefined("fault") {
             Set request = {"mode": (step.fault)}
             Do:step.%IsDefined("operation_key") request.%Set("operation_key", step."operation_key")
-            Set answer = ##class(Downstream.Service).SetFault(request, .status)
-            Set:status'=200 error = "the downstream system refused the fault step: " _ answer.%ToJSON()
+            // The receivers the fault applies to (v1.25): the step's list, else the bed manager alone, so the scenarios
+            // written before keep their meaning. Each demo receiver is reached in its own namespace.
+            Set targets = $SELECT(step.%IsDefined("receivers") && $ISOBJECT(step.receivers): step.receivers, 1: [($PARAMETER("Shutter.Production", "RECEIVER"))])
+            Set ri = targets.%GetIterator()
+            While ri.%GetNext(, .name) {
+                Set answer = ..InReceiver(name, "SetFault", request, .status)
+                Set:status'=200 error = "the receiver " _ name _ " refused the fault step: " _ $SELECT($ISOBJECT(answer): answer.%ToJSON(), 1: "HTTP " _ status)
+                Quit:error'=""
+            }
             Quit:error'=""
         } ElseIf step.%IsDefined("file") {
             // A step with the route "hospital" drops the file into the demo hospital's own inbound folder (T33), so
@@ -262,7 +269,7 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
 ClassMethod Describe(step As %DynamicObject) As %String
 {
     Quit:step.%IsDefined("file") "delivering " _ step.file _ $SELECT(step.%IsDefined("route") && (step.route = "hospital"): " to the demo hospital", 1: "")
-    Quit:step.%IsDefined("fault") "setting the downstream system's fault to " _ step.fault
+    Quit:step.%IsDefined("fault") "setting the fault to " _ step.fault _ $SELECT(step.%IsDefined("receivers") && $ISOBJECT(step.receivers): " on " _ $REPLACE($REPLACE($REPLACE(step.receivers.%ToJSON(), "[", ""), "]", ""), """", ""), 1: " on the downstream system")
     Quit:step.%IsDefined("wait") "waiting " _ step.wait _ " s"
     Quit:step.%IsDefined("wait_for_state") "waiting for the case to reach " _ step."wait_for_state"
     Quit:step.%IsDefined("capabilities") "changing the downstream system's capabilities"
@@ -365,6 +372,13 @@ ClassMethod Reset() As %String [ SqlProc ]
 {
     Set resetAt = ##class(Downstream.Service).Now()
     Set ward = ##class(Downstream.Service).Reset(.status)
+    // Every other demo receiver the profile lists, in its own namespace (v1.25): the records system beside the bed manager.
+    Set receivers = {}, names = ##class(Shutter.Store.SiteProfile).ReceiverNames(), ni = names.%GetIterator()
+    While ni.%GetNext(, .name) {
+        Continue:##class(Shutter.Store.SiteProfile).ReceiverNamespace(name)=$NAMESPACE
+        Set answer = ..InReceiver(name, "Reset", "", .rstatus)
+        Do receivers.%Set(name, $SELECT($ISOBJECT(answer): answer, 1: {"error": ("HTTP " _ rstatus)}))
+    }
     Set emptied = []
     For setting = "adtIn", "adtArchive", "hospitalIn", "hospitalArchive" {
         Set dir = $GET(^Shutter.Config(setting))
@@ -383,7 +397,26 @@ ClassMethod Reset() As %String [ SqlProc ]
     // A run record left queued or finished goes with the reset (a queued run whose player stopped would otherwise
     // refuse every later run); one that is playing stays, since that run's own reset comes through here
     Kill:'..Running() ^Shutter.Scenarios("run")
-    Quit {"ward": (ward), "emptied": (emptied), "mode": "board", "reset_at": (resetAt), "abandoned_incidents": (abandoned)}.%ToJSON()
+    Quit {"ward": (ward), "receivers": (receivers), "emptied": (emptied), "mode": "board", "reset_at": (resetAt), "abandoned_incidents": (abandoned)}.%ToJSON()
+}
+
+/// A call on the demo receiver package in the namespace a receiver runs in (its profile entry's demo.namespace, else this
+/// one): SetFault with a request, or Reset. The namespace is restored on return.
+ClassMethod InReceiver(name As %String, method As %String, request As %DynamicObject = "", Output status As %Integer) As %DynamicObject
+{
+    Set status = 0, answer = ""
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = ##class(Shutter.Store.SiteProfile).ReceiverNamespace(name)
+        If method = "Reset" {
+            Set answer = ##class(Downstream.Service).Reset(.status)
+        } Else {
+            Set answer = ##class(Downstream.Service).SetFault(request, .status)
+        }
+    } Catch ex {
+        Set status = 500, answer = {"error": ($ZCONVERT(ex.DisplayString(), "O", "JSON"))}
+    }
+    Quit answer
 }
 
 }

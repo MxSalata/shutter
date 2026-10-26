@@ -121,7 +121,7 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     If 'request.%IsA("Shutter.Msg.CaseIntake") Quit $$$ERROR($$$GeneralError, "Case Workflow expects a case intake, a case release, a reinvestigation, a close or an abandon, got " _ $CLASSNAME(request))
     Set op = ##class(Shutter.Util.Json).Parse(request.OperationJSON, .sc)
     If $$$ISERR(sc) Quit sc
-    Set sc = ##class(Shutter.Store.Case).Open(op, request.FailureKind, request.FailureText, request.EnsSessionId, request.SourceHeaderId, request.Mode, .case, .opened)
+    Set sc = ##class(Shutter.Store.Case).Open(op, request.FailureKind, request.FailureText, request.EnsSessionId, request.SourceHeaderId, request.Mode, .case, .opened, $SELECT(request.Receiver '= "": request.Receiver, 1: ..WardTarget))
     If $$$ISERR(sc) Quit sc
     Set started = ##class(Shutter.Msg.CaseStarted).%New()
     Set started.CaseId = case.CaseId, started.Opened = opened, started.State = case.State
@@ -631,9 +631,17 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
     Set ..Policy = ##class(Shutter.Store.SiteProfile).Policy(tier, kind)
     // A released item is authorised by its incident (7.3): by site policy, or under the incident's approval.
     If ..Release Set ..Policy = $SELECT(..ReleasePolicy = "incident": "incident", ..ReleasePolicy = "automatic": "automatic", 1: ..Policy)
-    Set ..CatalogueEntry = entry, ..CatalogueOutcome = "preferred"
+    // The outcome the matcher settled on: the preferred one, or a site-policy alternative whose when holds for the case's
+    // receiver (CONTRACTS 6.3, v1.25); the plan names it as the board would.
+    Set ref = $CLASSMETHOD(json, "Str", cat, "outcome_ref", "preferred")
+    Set ..CatalogueEntry = entry, ..CatalogueOutcome = ref
     Set m = cat.%Get("matches").%Get(0)
-    Set title = $CLASSMETHOD(json, "Str", m, "title"), why = $CLASSMETHOD(json, "Str", m.%Get("preferred"), "why")
+    Set chosen = m.%Get("preferred")
+    If $EXTRACT(ref, 1, 12) = "alternative:" {
+        Set alts = m.%Get("alternatives"), n = +$PIECE(ref, ":", 2)
+        If $ISOBJECT(alts) && (n >= 1) && (n <= alts.%Size()) Set chosen = alts.%Get(n - 1)
+    }
+    Set title = $CLASSMETHOD(json, "Str", m, "title"), why = $CLASSMETHOD(json, "Str", chosen, "why")
     Set profile = ##class(Shutter.Store.SiteProfile).Current()
     Do case.Note("note", "Catalogue " _ entry _ " (" _ title _ ") matched alone: " _ outcome _ ". Site policy for tier " _ tier _ ", " _ kind _ ": " _ ..Policy _ " (profile v" _ $CLASSMETHOD(json, "Str", profile, "version", 0) _ ")", "system")
     If ..Policy = "board" {
@@ -657,7 +665,7 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
     Set ward = summary.%Get("ward_state")
     Set version = $SELECT($ISOBJECT(ward): $CLASSMETHOD(json, "Str", ward, "version", 0), 1: 0)
     Set plan = {}
-    Set plan."catalogue_entry" = entry, plan.outcome = "preferred", plan.why = why
+    Set plan."catalogue_entry" = entry, plan.outcome = ref, plan.why = why
     Set plan."evidence_refs" = ["catalogue", "ward_state", "receipt", "timeline", "route"], plan.disagreements = []
     Set action = {}
     If (outcome = "resend") || (outcome = "resend_chain") || (outcome = "resend_latest") {
@@ -704,6 +712,14 @@ Method NotModelledToPerson(case As Shutter.Store.Case) As %Status
     Set plan.summary = "Receiver category orders_results: not modelled yet, a person handles the failure"
     Set plan.preconditions = [], plan."evidence_refs" = ["route"], plan.disagreements = []
     Quit ..AdoptPlan(case, plan, "policy:not_modelled")
+}
+
+/// The connector a case's reads, rehearsals and writes go to (v1.25): the case's receiver when the site profile names it
+/// as a receiver (a connector of this production, by the profile's rule), else this item's WardTarget setting.
+Method WardTargetFor(case As Shutter.Store.Case) As %String
+{
+    If (case.Receiver '= "") && $ISOBJECT(##class(Shutter.Store.SiteProfile).Receiver(case.Receiver)) Quit case.Receiver
+    Quit ..WardTarget
 }
 
 /// One entry matched and it decides by a person: an escalate plan naming it, through the gate, to escalated.
@@ -827,7 +843,7 @@ Method OnGateProposal(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
     If plan.IsWrite() {
         Set sc = case.Transition("rehearsing", "Rehearsing the exact action as a dry run", "system")
         Quit:$$$ISERR(sc) sc
-        Quit ..SendRequestAsync(..WardTarget, ..WardOperationFor(case, plan, 1), 1, "rehearsal")
+        Quit ..SendRequestAsync(..WardTargetFor(case), ..WardOperationFor(case, plan, 1), 1, "rehearsal")
     }
     // superseded or reconcile: nothing is written; verify what the receiver holds and close.
     Set sc = case.Transition("verifying", "No write; verifying the receiver's state", "system")
@@ -909,7 +925,7 @@ Method OnRehearsal(case As Shutter.Store.Case, sent As Shutter.Msg.WardOperation
     // A receiver that applied the dry run does not honour dry_run (v1.21): the operation is in effect, so it is recorded as
     // an execution, an alert is raised and the effect is verified; it is never reported as rolled back.
     If result.IsInEffect() {
-        $$$LOGALERT("Receiver " _ ..WardTarget _ " applied a dry run of " _ sent.OperationKey _ " for " _ case.CaseId _ " (HTTP " _ result.HttpStatus _ "): it does not honour dry_run")
+        $$$LOGALERT("Receiver " _ ..WardTargetFor(case) _ " applied a dry run of " _ sent.OperationKey _ " for " _ case.CaseId _ " (HTTP " _ result.HttpStatus _ "): it does not honour dry_run")
         Set sc = ##class(Shutter.Store.ExecutionAttempt).Create(case, plan, "", r, result.HttpStatus, result.Outcome, result.ResponseObject(), "written by the receiver during a rehearsal", .attempt)
         Quit:$$$ISERR(sc) sc
         Set ..AttemptId = attempt.%Id()
@@ -1184,7 +1200,7 @@ Method SendPreflight(case As Shutter.Store.Case) As %Status
 {
     Set read = ##class(Shutter.Msg.WardOperation).%New()
     Set read.Purpose = "read", read.EncounterId = case.EncounterId, read.OperationKey = case.OperationKey, read.CaseId = case.CaseId
-    Quit ..SendRequestAsync(..WardTarget, read, 1, "preflight")
+    Quit ..SendRequestAsync(..WardTargetFor(case), read, 1, "preflight")
 }
 
 Method OnPreflight(case As Shutter.Store.Case, result As Shutter.Msg.WardResult) As %Status
@@ -1250,7 +1266,7 @@ Method OnGateDispatch(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
     Set ..Refreshes = 0
     Set sc = case.Transition("executing", "Dispatching the conditional write (expected version " _ plan.ExpectedVersion _ ")", "system", "gate:" _ result.DecisionId)
     Quit:$$$ISERR(sc) sc
-    Quit ..SendRequestAsync(..WardTarget, ..WardOperationFor(case, plan, 0), 1, "execute")
+    Quit ..SendRequestAsync(..WardTargetFor(case), ..WardOperationFor(case, plan, 0), 1, "execute")
 }
 
 Method OnExecute(case As Shutter.Store.Case, result As Shutter.Msg.WardResult) As %Status

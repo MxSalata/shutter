@@ -202,6 +202,14 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     // code in the image and the data in the volume).
     Set db = ..DatabaseResource(ns), code = ..DatabaseResource(ns, 1)
     Set codeRead = $SELECT((code '= "") && (code '= db): "," _ code _ ":R", 1: "")
+    // The demo records system's databases (v1.25): the production's client of the receivers' APIs writes to it through
+    // /records/api, so its role takes that namespace's data read-write and its code read, as it has Shutter's.
+    Set recordsRW = ""
+    If ##class(Config.Namespaces).Exists("RECORDS") {
+        Set rdb = ..DatabaseResource("RECORDS"), rcode = ..DatabaseResource("RECORDS", 1)
+        If (rdb '= "") && (rdb '= db) Set recordsRW = recordsRW _ "," _ rdb _ ":RW"
+        If (rcode '= "") && (rcode '= rdb) && (rcode '= db) && (rcode '= code) Set recordsRW = recordsRW _ "," _ rcode _ ":R"
+    }
     Set watchRead = ""
     If (hospital '= "") && ($ZCONVERT(hospital, "U") '= $ZCONVERT(ns, "U")) && ##class(Config.Namespaces).Exists(hospital) {
         For res = ..DatabaseResource(hospital), ..DatabaseResource(hospital, 1) {
@@ -217,7 +225,7 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     Quit:$$$ISERR(sc) sc
     // The production's client of the downstream API needs the database as well as the downstream system's own
     // resource (the Downstream_API role carries only that), or the web application answers 403.
-    Set sc = ..EnsureRole("Shutter_DownstreamClient", "Shutter: the production's client of the downstream API, with the namespace's databases", db _ ":RW" _ codeRead, "")
+    Set sc = ..EnsureRole("Shutter_DownstreamClient", "Shutter: the production's client of the downstream API, with the namespace's databases", db _ ":RW" _ codeRead _ recordsRW, "")
     Quit:$$$ISERR(sc) sc
     // Every caller of the API web application gets read access to the namespace's databases, so
     // that the sign-in route can run for an anonymous session; data routes still check resources.
@@ -284,6 +292,42 @@ ClassMethod RefreshSecurity(ns As %String) As %Status
     Set sc = ..CreateSecurity(ns, ''$GET(^|ns|Shutter.Config("demo"), 1))
     Quit:$$$ISERR(sc) sc
     Quit ..GrantSqlPrivileges(ns)
+}
+
+/// The demo records system's web application, /records/api, on the RECORDS namespace with the demo receiver package's
+/// dispatch class and resource, and its demo flag (^Downstream.Config("demo") in that namespace), so the scenario
+/// runner can reset it and set its faults (CONTRACTS 12, v1.25). shutterNs records the application for Uninstall.
+ClassMethod InstallRecords(recordsNs As %String = "RECORDS", shutterNs As %String = "") As %Status
+{
+    Set sc = $$$OK
+    If shutterNs = "" Set shutterNs = $NAMESPACE
+    Try {
+        Set ^|recordsNs|Downstream.Config("demo") = 1
+        New $NAMESPACE
+        Set $NAMESPACE = "%SYS"
+        If '##class(Config.Namespaces).Exists(recordsNs) Set sc = $$$ERROR($$$GeneralError, "The records namespace " _ recordsNs _ " does not exist") Quit
+        Kill props
+        Set props("NameSpace") = recordsNs
+        Set props("Description") = "Shutter: the demo patient records system's API (the second demo receiver)"
+        Set props("Enabled") = 1
+        Set props("AutheEnabled") = 32
+        Set props("DispatchClass") = "Downstream.API"
+        If ##class(Security.Resources).Exists("Downstream_API") Set props("Resource") = "Downstream_API"
+        Set props("UseCookies") = 2
+        Set props("CookiePath") = "/records/api/"
+        If ##class(Security.Applications).Exists("/records/api") {
+            Set sc = ##class(Security.Applications).Modify("/records/api", .props)
+        } Else {
+            Set sc = ##class(Security.Applications).Create("/records/api", .props)
+        }
+        Quit:$$$ISERR(sc)
+        Set ^|shutterNs|Shutter.Config("webapp", "/records/api") = 1
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    Quit:$$$ISERR(sc) sc
+    // The roles take the records databases (CreateSecurity reads the namespace), and the SQL grants are renewed.
+    Quit ..RefreshSecurity(shutterNs)
 }
 
 /// A role with exactly these resources and granted roles: created when missing, modified when it exists. Runs in %SYS.
@@ -459,6 +503,8 @@ ClassMethod CreateWebApps(ns As %String, root As %String, demo As %Boolean = 1) 
         }
         Quit:$$$ISERR(sc) sc
         Set ^|ns|Shutter.Config("webapp", "/downstream/api") = 1
+        // The demo records system (v1.25), when its namespace is there (the image's installer makes it before the load).
+        If ##class(Config.Namespaces).Exists("RECORDS") Set sc = ..InstallRecords("RECORDS", ns) Quit:$$$ISERR(sc)
     }
     Kill props
     Set props("NameSpace") = ns
@@ -600,7 +646,7 @@ ClassMethod DisableDemoItems() As %Status
     Try {
         Set prod = ##class(Ens.Config.Production).%OpenId("Shutter.Production", , .sc)
         If '$ISOBJECT(prod) Quit
-        Set demoItems = $LISTBUILD("ADT In", "ADT to Downstream", "Downstream Out", "Scenario Player"), changed = 0
+        Set demoItems = $LISTBUILD("ADT In", "ADT to Downstream", "Downstream Out", "ADT to Records", "Records Out", "Scenario Player"), changed = 0
         For i = 1:1:prod.Items.Count() {
             Set item = prod.Items.GetAt(i)
             If $LISTFIND(demoItems, item.Name) && item.Enabled {

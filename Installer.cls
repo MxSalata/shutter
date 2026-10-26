@@ -21,6 +21,9 @@ XData Manifest [ XMLNamespace = INSTALLER ]
   <Default Name="HOSPITAL" Value="HOSPITAL"/>
   <Default Name="HOSPITALDBDIR" Value="${MGRDIR}${HOSPITAL}"/>
   <Default Name="HOSPITALDATADIR" Value="${MGRDIR}shutter/db/${HOSPITAL}DATA"/>
+  <Default Name="RECORDS" Value="RECORDS"/>
+  <Default Name="RECORDSDBDIR" Value="${MGRDIR}${RECORDS}"/>
+  <Default Name="RECORDSDATADIR" Value="${MGRDIR}shutter/db/${RECORDS}DATA"/>
   <Namespace Name="${NAMESPACE}" Create="yes" Code="${NAMESPACE}" Data="${NAMESPACE}DATA" Ensemble="1">
     <Configuration>
       <Database Name="${NAMESPACE}" Dir="${DBDIR}" Create="yes" Resource="%DB_${NAMESPACE}"/>
@@ -41,7 +44,71 @@ XData Manifest [ XMLNamespace = INSTALLER ]
       <ClassMapping Package="Hospital" From="${NAMESPACE}"/>
     </Configuration>
   </Namespace>
+  <!-- The demo records system (v1.25): the demo receiver package once more, in a namespace of its own with its own data,
+       so a second receiver of category history_of_record stands beside the bed manager; its web application
+       /records/api is made by Shutter.Setup (InstallRecords), which also sets its demo flag. -->
+  <Namespace Name="${RECORDS}" Create="yes" Code="${RECORDS}" Data="${RECORDS}DATA" Ensemble="0">
+    <Configuration>
+      <Database Name="${RECORDS}" Dir="${RECORDSDBDIR}" Create="yes" Resource="%DB_${RECORDS}"/>
+      <Database Name="${RECORDS}DATA" Dir="${RECORDSDATADIR}" Create="yes" Resource="%DB_${RECORDS}DATA"/>
+      <ClassMapping Package="Downstream" From="${NAMESPACE}"/>
+    </Configuration>
+  </Namespace>
 </Manifest>
+}
+
+/// The demo records system's namespace alone (v1.25), for an instance that already has Shutter (a development instance,
+/// CI): the demo receiver package mapped from Shutter's code database, its own data database.
+XData RecordsManifest [ XMLNamespace = INSTALLER ]
+{
+<Manifest>
+  <Default Name="NAMESPACE" Value="SHUTTER"/>
+  <Default Name="MGRDIR" Value="#{##class(%File).ManagerDirectory()}"/>
+  <Default Name="RECORDS" Value="RECORDS"/>
+  <Default Name="RECORDSDBDIR" Value="${MGRDIR}${RECORDS}"/>
+  <Default Name="RECORDSDATADIR" Value="${MGRDIR}shutter/db/${RECORDS}DATA"/>
+  <Namespace Name="${RECORDS}" Create="yes" Code="${RECORDS}" Data="${RECORDS}DATA" Ensemble="0">
+    <Configuration>
+      <Database Name="${RECORDS}" Dir="${RECORDSDBDIR}" Create="yes" Resource="%DB_${RECORDS}"/>
+      <Database Name="${RECORDS}DATA" Dir="${RECORDSDATADIR}" Create="yes" Resource="%DB_${RECORDS}DATA"/>
+      <ClassMapping Package="Downstream" From="${NAMESPACE}"/>
+    </Configuration>
+  </Namespace>
+</Manifest>
+}
+
+/// Makes the RECORDS namespace (RecordsManifest) and then its web application and demo flag (Shutter.Setup.InstallRecords).
+/// SELECT Shutter.Installer_RunRecords('SHUTTER') on an instance reached through its REST API.
+ClassMethod RunRecords(shutterNs As %String = "SHUTTER") As %String [ SqlProc ]
+{
+    If (shutterNs = "") || (shutterNs = $CHAR(0)) Set shutterNs = "SHUTTER"
+    Set vars("NAMESPACE") = $ZCONVERT(shutterNs, "U")
+    // The manifest once: run again on an instance that has the namespace, it only renews the web application and the roles.
+    Set sc = $SELECT(..NamespaceExists("RECORDS"): $$$OK, 1: ..setupRecords(.vars))
+    If $$$ISOK(sc) {
+        New $NAMESPACE
+        Set $NAMESPACE = $ZCONVERT(shutterNs, "U")
+        Set sc = $CLASSMETHOD("Shutter.Setup", "InstallRecords", "RECORDS")
+    }
+    Quit $SELECT($$$ISOK(sc): "ok", 1: $SYSTEM.Status.GetErrorText(sc))
+}
+
+/// Whether a namespace exists, read in %SYS.
+ClassMethod NamespaceExists(ns As %String) As %Boolean
+{
+    Set exists = 0
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = "%SYS"
+        Set exists = ##class(Config.Namespaces).Exists(ns)
+    } Catch ex {
+    }
+    Quit exists
+}
+
+ClassMethod setupRecords(ByRef pVars, pLogLevel As %Integer = 3, pInstaller As %Installer.Installer, pLogger As %Installer.AbstractLogger) As %Status [ CodeMode = objectgenerator, Internal ]
+{
+    Quit ##class(%Installer.Manifest).%Generate(%compiledclass, %code, "RecordsManifest")
 }
 
 /// The demo hospital's namespace alone, for an instance that already has Shutter (a development instance, CI):

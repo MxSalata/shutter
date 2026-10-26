@@ -42,6 +42,10 @@ ClassMethod Steps(case As Shutter.Store.Case, summary As %DynamicObject) As %Dyn
         Set li = events.%GetIterator()
         While li.%GetNext(, .e) {
             Continue:'$CLASSMETHOD(json, "Bool", e, "delivered", 1)
+            // The matcher reads the same movement from the timeline, the history and the index: one row each.
+            Set sig = $CLASSMETHOD(json, "Str", e, "event") _ "|" _ $CLASSMETHOD(json, "Str", e, "ward") _ "|" _ $CLASSMETHOD(json, "Str", e, "event_time")
+            Continue:(("|" _ seen _ "|") [ ("|" _ sig _ "|"))
+            Set seen = seen _ $SELECT(seen = "": "", 1: "|") _ sig
             Set row = {}
             Set row.event = $CLASSMETHOD(json, "Str", e, "event"), row.ward = $CLASSMETHOD(json, "Str", e, "ward"), row."event_time" = $CLASSMETHOD(json, "Str", e, "event_time")
             Do later.%Push(row)

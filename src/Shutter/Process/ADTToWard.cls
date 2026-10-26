@@ -89,6 +89,9 @@ Method OpenCase(op As %DynamicObject, kind As %String, text As %String, result A
     Set intake.SourceHeaderId = ..%PrimaryRequestHeader.%Id()
     Set intake.EnsSessionId = ..%SessionId
     Set intake.Mode = $GET(^Shutter.Config("mode"), "board")
+    // The connector this process delivers to: the case's receiver, whose profile entry the evidence, the gate, the
+    // rehearsal and the write read (v1.25: a second receiver is configuration).
+    Set intake.Receiver = ..WardTarget
     If $ISOBJECT(result) {
         Set r = {}
         Set r."http_status" = result.HttpStatus, r.outcome = result.Outcome, r."reason_code" = result.ReasonCode
