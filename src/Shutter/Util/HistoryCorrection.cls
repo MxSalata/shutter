@@ -42,12 +42,12 @@ ClassMethod Steps(case As Shutter.Store.Case, summary As %DynamicObject) As %Dyn
         Set li = events.%GetIterator()
         While li.%GetNext(, .e) {
             Continue:'$CLASSMETHOD(json, "Bool", e, "delivered", 1)
-            // The matcher reads the same movement from the timeline, the history and the index: one row each.
-            Set sig = $CLASSMETHOD(json, "Str", e, "event") _ "|" _ $CLASSMETHOD(json, "Str", e, "ward") _ "|" _ $CLASSMETHOD(json, "Str", e, "event_time")
-            Continue:(("|" _ seen _ "|") [ ("|" _ sig _ "|"))
-            Set seen = seen _ $SELECT(seen = "": "", 1: "|") _ sig
+            // The matcher reads the same movement from the timeline, the history and the index, whose times can differ in form
+            // (an offset, fractional seconds) or by the receiver's clock: the same event to the same ward within a minute is
+            // one movement.
             Set row = {}
             Set row.event = $CLASSMETHOD(json, "Str", e, "event"), row.ward = $CLASSMETHOD(json, "Str", e, "ward"), row."event_time" = $CLASSMETHOD(json, "Str", e, "event_time")
+            Continue:..SameMovement(later, row)
             Do later.%Push(row)
         }
     } Catch ex {
@@ -64,6 +64,20 @@ ClassMethod Steps(case As Shutter.Store.Case, summary As %DynamicObject) As %Dyn
 }
 
 /// The checklist, in order, in plain words; every value comes from the facts above.
+/// Whether a movement is already in the list: the same event to the same ward within 60 seconds.
+ClassMethod SameMovement(list As %DynamicArray, row As %DynamicObject) As %Boolean
+{
+    Set li = list.%GetIterator()
+    While li.%GetNext(, .k) {
+        Continue:((k.event '= row.event) || (k.ward '= row.ward))
+        If k."event_time" = row."event_time" Return 1
+        Set gap = ""
+        Try { Set gap = ##class(Shutter.Util.Time).SecondsBetween(k."event_time", row."event_time") } Catch { Set gap = "" }
+        If (gap '= "") && ($ZABS(gap) <= 60) Return 1
+    }
+    Quit 0
+}
+
 ClassMethod Checklist(f As %DynamicObject) As %DynamicArray [ Private ]
 {
     Set json = "Shutter.Util.Json"

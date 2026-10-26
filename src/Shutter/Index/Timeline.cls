@@ -25,13 +25,16 @@ ClassMethod Typed(case As Shutter.Store.Case, since As %String) As %DynamicArray
 {
     Set out = []
     If ..NoEncounter(case.EncounterId) Quit out
-    Set sql = "SELECT w.ID AS WID, w.Event, w.Ward, w.EventTime, w.OperationKey, w.SourceMessageId, h.ID AS HeaderId, h.SessionId, h.TimeCreated "
+    // One row per feed message for the case's receiver (v1.28): with two receivers each message is delivered twice, and the
+    // other receiver's delivery is another case's story. A case without a receiver (older rows) sees every delivery.
+    Set sql = "SELECT w.ID AS WID, w.Event, w.Ward, w.EventTime, w.OperationKey, w.SourceMessageId, h.ID AS HeaderId, h.SessionId, h.TimeCreated, h.TargetConfigName AS Receiver "
         _ "FROM Shutter_Msg.WardOperation w JOIN Ens.MessageHeader h ON h.MessageBodyId = CAST(w.ID AS VARCHAR(20)) AND h.MessageBodyClassName = 'Shutter.Msg.WardOperation' "
-        _ "WHERE w.EncounterId = ? AND w.Purpose = 'normal' AND h.TimeCreated >= ? ORDER BY w.EventTime, w.ID"
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, case.EncounterId, since)
+        _ "WHERE w.EncounterId = ? AND w.Purpose = 'normal' AND h.TimeCreated >= ? AND (? = '' OR h.TargetConfigName = ?) ORDER BY w.EventTime, w.ID"
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, case.EncounterId, since, case.Receiver, case.Receiver)
     While rs.%Next() {
         Set ev = {}
         Set ev."event" = rs.%Get("Event"), ev.ward = rs.%Get("Ward"), ev."event_time" = rs.%Get("EventTime")
+        Set ev.receiver = rs.%Get("Receiver")
         Set ev."operation_key" = rs.%Get("OperationKey"), ev."source_message_id" = rs.%Get("SourceMessageId")
         Set ev."ens_header_id" = rs.%Get("HeaderId"), ev."ens_session_id" = rs.%Get("SessionId")
         Set ev."sent_at" = rs.%Get("TimeCreated"), ev.source = "feed"
