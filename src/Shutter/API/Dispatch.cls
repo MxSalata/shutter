@@ -58,6 +58,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/incidents/:id/chains/:seq/approvals" Method="POST" Call="IncidentChainApprove"/>
   <Route Url="/costs" Method="GET" Call="Costs"/>
   <Route Url="/production-reviews/targets" Method="GET" Call="ProductionReviewTargets"/>
+  <Route Url="/cases/:id/whatif" Method="GET" Call="CaseWhatIf"/>
   <Route Url="/production-reviews" Method="GET" Call="ProductionReviews"/>
   <Route Url="/production-reviews" Method="POST" Call="ProductionReviewStart"/>
   <Route Url="/production-reviews/annotations/:annotationId" Method="DELETE" Call="ProductionReviewAnnotationDelete"/>
@@ -1416,6 +1417,16 @@ ClassMethod ProductionReviewTargets() As %Status
 }
 
 /// The reviews, newest first: ?namespace=, ?production= filter, ?limit= (50, at most 500); total counts the filter's rows.
+/// What the case's outcome turned on in the site profile, and what it would have done under the catalogue's alternatives
+/// (CONTRACTS 14): deterministic, no model, for the case page's card and the case chat's agents. Shutter_Operate.
+ClassMethod CaseWhatIf(id As %String) As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set case = ##class(Shutter.Store.Case).ByCaseId(id)
+    If '$ISOBJECT(case) Quit ..Fail("404 Not Found", "not_found", "No case " _ id)
+    Quit ..Json(##class(Shutter.Util.WhatIf).ForCase(case))
+}
+
 ClassMethod ProductionReviews() As %Status
 {
     If '..Allow() Quit $$$OK
