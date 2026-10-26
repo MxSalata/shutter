@@ -348,7 +348,7 @@ Method Transition(toState As %String, text As %String = "", actor As %String = "
     Quit sc
 }
 
-/// The blocked cases whose WaitsOnCase names this case are reopened through the production (Shutter.Msg.Reinvestigate to
+/// The blocked or escalated cases whose WaitsOnCase names this case are reopened through the production (Shutter.Msg.Reinvestigate to
 /// the Case Workflow), so each plans afresh on the bed as it is now: the gate passes the resend when the occupant has left,
 /// and escalates the case when this one ended without freeing the bed. Returns how many were released; never fails the
 /// caller (a production that is not running leaves them blocked, with the wait on the case for a person to see).
@@ -357,7 +357,7 @@ Method ReleaseWaiting(toState As %String) As %Integer
     Set n = 0
     Try {
         Set me = ..CaseId
-        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT CaseId FROM Shutter_Store.""Case"" WHERE WaitsOnCase = ? AND State = 'blocked' ORDER BY ID", me)
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT CaseId FROM Shutter_Store.""Case"" WHERE WaitsOnCase = ? AND State IN ('blocked', 'escalated') ORDER BY ID", me)
         While rs.%Next() {
             Set waiting = rs.%Get("CaseId")
             Set msg = ##class(Shutter.Msg.Reinvestigate).%New()

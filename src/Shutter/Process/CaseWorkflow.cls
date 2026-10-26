@@ -745,6 +745,8 @@ Method BedWaitOutcome(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
         Set case.Headline = "Waiting for the occupant of " _ where _ " to leave" _ $SELECT(other '= "": " (case " _ other _ ")", 1: "")
         Quit case.Transition("blocked", "The destination bed " _ where _ " is held by a patient who is leaving: " _ $SELECT(other '= "": "case " _ other _ " is about their movement, and this case is checked again when it closes", 1: "their movement's delivery has no answer yet; reinvestigate once it has") _ ". Nothing was dispatched", "gate", "gate:" _ result.DecisionId)
     }
+    // The wait stays on the escalated case too, so that the awaited case closing later (resolved by hand, say) releases it.
+    Set case.WaitsOnCase = other
     Set case.Headline = "The occupant of " _ where _ " did not leave: a person decides"
     Quit case.Transition("escalated", "The destination bed " _ where _ " is still held" _ $SELECT(other '= "": ", and case " _ other _ " about the occupant's movement ended without freeing it", 1: "") _ "; a person decides, with the bed manager. Nothing was dispatched", "gate", "gate:" _ result.DecisionId)
 }
