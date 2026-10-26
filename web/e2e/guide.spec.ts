@@ -40,7 +40,7 @@ test.describe('the guide', () => {
 
     await dialog.getByRole('button', { name: 'Show this section' }).click();
     await expect(dialog).toBeHidden();
-    await expect(page.getByRole('heading', { name: 'Scenarios', level: 1 })).toBeFocused();
+    await expect(page.getByRole('heading', { name: 'Try these three first', level: 2 })).toBeFocused();
     const guide = page.getByRole('region', { name: 'Guide' });
     await expect(guide).toContainText('Step 1 of 3 · Scenarios');
     // Continue guide is the next stop after the heading

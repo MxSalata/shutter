@@ -143,7 +143,7 @@ describe('the guide', () => {
     // The announcement is short: the step, never the page
     await waitFor(() =>
       expect(document.querySelector('[data-guide-announcer]')).toHaveTextContent(
-        'Step 1 of 3 · Scenarios: Start with S2, then S8',
+        'Step 1 of 3 · Scenarios: Start with S2, S8 and S20',
       ),
     );
   });
@@ -152,7 +152,8 @@ describe('the guide', () => {
     await startQuick('/scenarios');
     await userEvent.click(within(await dialog()).getByRole('button', { name: 'Show this section' }));
     await noDialog();
-    const heading = screen.getByRole('heading', { name: 'Scenarios', level: 1 });
+    // The step shows the three scenarios to try first
+    const heading = await screen.findByRole('heading', { name: 'Try these three first', level: 2 });
     await waitFor(() => expect(heading).toHaveFocus());
     expect(heading).toHaveAttribute('tabindex', '-1');
     expect(heading.closest('[data-tour]')).toHaveAttribute('data-tour-active', 'true');
