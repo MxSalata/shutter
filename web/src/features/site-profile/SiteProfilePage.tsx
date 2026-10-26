@@ -17,10 +17,11 @@ import {
 import { notifications } from '@mantine/notifications';
 import { IconChevronDown, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
-import { keys, useMe, useSaveSiteProfile, useSiteProfile } from '@/api/hooks';
-import type { SiteProfile, SiteProfileView, SiteReceiver } from '@/api/types';
+import { keys, useMe, useSaveSiteProfile, useSiteProfile, useWhatIf } from '@/api/hooks';
+import type { SiteProfile, SiteProfileView, SiteReceiver, WhatIf } from '@/api/types';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { KeyValueList } from '@/components/KeyValueList';
 import { PageHeader } from '@/components/PageHeader';
@@ -56,6 +57,18 @@ import {
 } from './profile';
 import { ReviewModal, type SaveProblem } from './ReviewModal';
 import { VersionsPanel } from './VersionsPanel';
+import { SuggestionCard } from './SuggestionCard';
+import {
+  FACT_PARAM,
+  SUGGEST_PARAM,
+  applySuggestion,
+  parseSuggestion,
+  revertSuggestion,
+  suggestionFromFact,
+  type Applied,
+  type SuggestedChange,
+  type SuggestionRef,
+} from './suggestion';
 
 /** A choice between known values; a stored value the page doesn't know is shown and kept, never replaced silently. */
 function Choice({
@@ -613,12 +626,50 @@ function OtherSettings({ profile }: { profile: SiteProfile }) {
 const clone = <T,>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
 const readProfile = () => api.get<SiteProfileView>('/site-profile');
 
-function Profile({ view }: { view: SiteProfileView }) {
+/** A suggestion as the page shows it: the case and fact from the address, and the change read from the case's facts. */
+interface Suggested {
+  ref: SuggestionRef;
+  s?: SuggestedChange;
+  result: Applied;
+}
+
+/**
+ * The change a case's What-if fact suggests, built from the facts GET /cases/{id}/whatif gives now, never from the
+ * address: the address names only the case and the fact.
+ */
+function readSuggestion(
+  ref: SuggestionRef,
+  whatif: WhatIf | null | undefined,
+  failed: boolean,
+  profile: SiteProfile,
+): Suggested {
+  if (failed) return { ref, result: { ok: false, reason: 'unreadable' } };
+  const fact = whatif?.facts.find((f) => f.id === ref.fact);
+  if (!fact) return { ref, result: { ok: false, reason: 'no_fact' } };
+  const s = suggestionFromFact(ref.caseId, fact);
+  return { ref, s, result: applySuggestion(profile, s) };
+}
+
+function Profile({
+  view,
+  suggestion,
+}: {
+  view: SiteProfileView;
+  /** The change a case suggested (`?suggest=&fact=`), read once from its facts when the page opened. */
+  suggestion: Suggested | null;
+}) {
   const me = useMe().data;
   const editable = !!me?.approver;
   const client = useQueryClient();
   const save = useSaveSiteProfile();
-  const [draft, setDraftState] = useState<SiteProfile>(() => clone(view.profile));
+  // A change a case's What-if card suggested (`?suggest=`): applied to the draft once, when the page opens; the
+  // approver saves it through the review below, as any other change
+  const [search, setSearch] = useSearchParams();
+  const [suggested] = useState(suggestion);
+  const [showSuggestion, setShowSuggestion] = useState(!!suggested);
+  const [draft, setDraftState] = useState<SiteProfile>(() =>
+    suggested?.result.ok ? suggested.result.profile : clone(view.profile),
+  );
   const [base, setBase] = useState<SiteProfileView>(view);
   const [problem, setProblem] = useState<Problem>(null);
   const [reviewing, setReviewing] = useState(0);
@@ -688,7 +739,23 @@ function Profile({ view }: { view: SiteProfileView }) {
     v.updatedBy === me?.username &&
     diffProfiles(v.profile, draft).length === 0;
 
+  /** The suggestion has been saved or set aside: it leaves the page and the address, so a reload does not bring it back. */
+  const dropSuggestion = () => {
+    setShowSuggestion(false);
+    if (search.has(SUGGEST_PARAM) || search.has(FACT_PARAM))
+      setSearch(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          params.delete(SUGGEST_PARAM);
+          params.delete(FACT_PARAM);
+          return params;
+        },
+        { replace: true },
+      );
+  };
+
   const done = (v: SiteProfileView) => {
+    dropSuggestion();
     reseed(v);
     setReviewing(0);
     notifications.show({
@@ -749,6 +816,25 @@ function Profile({ view }: { view: SiteProfileView }) {
   const canReview = dirty || shipped;
   return (
     <Stack gap="md">
+      {suggested && showSuggestion ? (
+        <SuggestionCard
+          caseId={suggested.ref.caseId}
+          s={suggested.s}
+          result={suggested.result}
+          version={base.version}
+          editable={editable}
+          onReview={review}
+          onDiscard={() => {
+            // Only the suggested field goes back to the stored value: other edits in the draft stay
+            const s = suggested.s;
+            if (suggested.result.ok && s) {
+              setProblem(null);
+              setDraftState((prev) => revertSuggestion(prev, base.profile, s));
+            }
+            dropSuggestion();
+          }}
+        />
+      ) : null}
       <Card padding="md">
         <Stack gap="sm">
           <KeyValueList
@@ -841,6 +927,11 @@ function Profile({ view }: { view: SiteProfileView }) {
 
 export default function SiteProfilePage() {
   const view = useSiteProfile();
+  // A change a case suggested: the address names the case and the fact, and the change is read from the case's facts
+  const [search] = useSearchParams();
+  const [ref] = useState(() => parseSuggestion(search));
+  const whatif = useWhatIf(ref?.caseId ?? '', !!ref);
+  const waiting = !!ref && whatif.isPending;
   // Who is signed in decides whether the form can be changed: wait for it, so the form never flashes disabled.
   const me = useMe();
   // Profile keeps its own copy from its first props: a background refetch never overwrites what someone is typing.
@@ -850,7 +941,7 @@ export default function SiteProfilePage() {
         title="Site profile"
         subtitle="The site's answers to the induction questions. Shutter reads them for each receiver's category and tier, the approval each chain needs, who may close a case by hand, when many failures become an incident, who an escalation goes to, the feed's time zone, what the model may see and whether a merge is ever sent. Every saved version is kept."
       />
-      {view.isPending || me.isPending ? <PageSkeleton label="Loading the site profile…" /> : null}
+      {view.isPending || me.isPending || waiting ? <PageSkeleton label="Loading the site profile…" /> : null}
       {view.isError ? (
         <ErrorAlert
           error={view.error}
@@ -862,7 +953,12 @@ export default function SiteProfilePage() {
           onRetry={() => void view.refetch()}
         />
       ) : null}
-      {view.data && !me.isPending ? <Profile view={view.data} /> : null}
+      {view.data && !me.isPending && !waiting ? (
+        <Profile
+          view={view.data}
+          suggestion={ref ? readSuggestion(ref, whatif.data, whatif.isError, view.data.profile) : null}
+        />
+      ) : null}
     </>
   );
 }

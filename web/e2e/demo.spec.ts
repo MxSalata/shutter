@@ -142,3 +142,63 @@ test.describe('the production review', () => {
     await expect(page.getByRole('region', { name: 'Findings' }).getByText('PURGE_MISSING')).toBeVisible();
   });
 });
+
+test.describe('Ask about this case', () => {
+  test('opens beside the case, asks a suggested question, and takes the What-if change to the Site profile as a draft', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await go(page, '/cases/C-000008');
+    const button = page.getByRole('button', { name: 'Ask about this case' });
+    await button.click();
+    await expect(page).toHaveURL(/#\/cases\/C-000008\?ask=1$/);
+    const panel = page.getByRole('region', { name: 'Ask about this case' });
+    await expect(panel.getByRole('heading', { name: 'Ask about this case' })).toBeFocused();
+    // Beside the case at laptop width: the case's heading stays in view on the left
+    const side = await panel.boundingBox();
+    const title = await page.getByRole('heading', { name: 'Case C-000008', exact: true }).boundingBox();
+    expect(side!.x).toBeGreaterThan(title!.x + 200);
+    await expect(panel).toContainText('Read-only.');
+    const example = panel.getByRole('region', { name: 'Example conversation' });
+    await expect(example).toContainText(
+      'Example (sample data). With an API key you can ask your own questions.',
+    );
+    await expect(example.getByRole('article')).toHaveCount(3);
+    await expect(panel).toContainText(
+      'Free text needs a model key. In this demo, pick a suggested question above.',
+    );
+
+    await panel.getByRole('tab', { name: /Ask the board/ }).click();
+    await panel.getByRole('button', { name: 'What did the dissenting specialist say?' }).click();
+    const thread = panel.getByRole('region', { name: 'Conversation' });
+    await expect(
+      thread.getByRole('heading', { name: 'What did the dissenting specialist say?' }),
+    ).toBeFocused();
+    await expect(thread).toContainText('Conformance proposed a resend with confidence 0.8');
+
+    const card = panel.getByRole('region', { name: 'What if: the setting behind this outcome' });
+    await expect(card).toContainText('If it were BEDMGR');
+    await card.getByRole('link', { name: 'Open in Site profile' }).click();
+    await expect(page).toHaveURL(/#\/site-profile\?suggest=/);
+    const draft = page.getByRole('region', { name: 'A suggested change from case C-000008' });
+    await expect(draft.getByRole('heading', { name: 'A suggested change from case C-000008' })).toBeFocused();
+    await expect(draft.getByRole('table')).toContainText('BEDMGR');
+    await draft.getByRole('button', { name: 'Review and save…' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText(/Authoritative source: from .* to BEDMGR/);
+    await dialog.getByRole('button', { name: 'Save version 11' }).click();
+    await expect(page.getByText('Version 11 saved')).toBeVisible();
+    await expect(page).toHaveURL(/#\/site-profile$/);
+  });
+
+  test('closes with Escape, returning focus to its button', async ({ page }) => {
+    await signIn(page);
+    await go(page, '/cases/C-000008?ask=1');
+    const panel = page.getByRole('region', { name: 'Ask about this case' });
+    await expect(panel.getByRole('heading', { name: 'Ask about this case' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Ask about this case' })).toBeFocused();
+    await expect(page).toHaveURL(/#\/cases\/C-000008$/);
+  });
+});

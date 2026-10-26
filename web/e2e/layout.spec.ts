@@ -27,6 +27,9 @@ async function openSteps(page: Page) {
   );
 }
 
+/** The Site profile page with a change a case's What-if card suggested, pre-filled: the address names the case and the fact. */
+const SUGGESTION = '/site-profile?suggest=C-000008&fact=W1';
+
 const SCREENS: [path: string, heading: string, steps?: 'open'][] = [
   ['/scenarios', 'Scenarios'],
   ['/cases', 'Cases'],
@@ -36,6 +39,9 @@ const SCREENS: [path: string, heading: string, steps?: 'open'][] = [
   ['/cases/C-000008?show=compare', 'Case C-000008'],
   ['/cases/C-000008?tab=evidence', 'Case C-000008'],
   ['/cases/C-000007?tab=audit', 'Case C-000007'],
+  // Ask about this case, open: the example conversation, the suggested questions and the What-if card
+  ['/cases/C-000008?ask=1', 'Case C-000008'],
+  ['/cases/C-000002?ask=1', 'Case C-000002'],
   // Every story step open, on a case that waits for a person, one escalated by the board, a resolved one and two
   // blocked ones with the gate's checks and the next action
   ['/cases/C-000002', 'Case C-000002', 'open'],
@@ -49,6 +55,7 @@ const SCREENS: [path: string, heading: string, steps?: 'open'][] = [
   ['/reviews/PR-000001', 'Review PR-000001'],
   ['/reviews/PR-000003', 'Review PR-000003'],
   ['/site-profile', 'Site profile'],
+  [SUGGESTION, 'Site profile'],
   ['/library', 'Agent library'],
   ['/settings', 'Settings and costs'],
   ['/evaluation', 'Evaluation'],
@@ -66,7 +73,12 @@ for (const width of [360, 1024]) {
     });
 
     for (const [path, heading, steps] of SCREENS) {
-      const name = path.includes('?') ? `${heading} (${path.split('?')[1]})` : heading;
+      const name =
+        path === SUGGESTION
+          ? `${heading} (a suggested change)`
+          : path.includes('?')
+            ? `${heading} (${path.split('?')[1]})`
+            : heading;
       test(steps ? `${name}, every step open` : name, async ({ page }) => {
         await go(page, '/login');
         await page.getByRole('button', { name: /Try the demo/ }).click();
@@ -106,6 +118,22 @@ test.describe('a phone at 390 px', () => {
     await go(page, '/login');
     await page.getByRole('button', { name: /Try the demo/ }).click();
     await expect(page.getByRole('heading', { name: 'Scenarios' })).toBeVisible();
+  });
+
+  test('Ask about this case opens as a full-screen sheet', async ({ page }) => {
+    await go(page, '/cases/C-000008');
+    await page.getByRole('button', { name: 'Ask about this case' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Ask about this case' });
+    await expect(sheet.getByRole('region', { name: 'Example conversation' })).toBeVisible();
+    // Focus starts on the sheet's heading, as it does on the panel beside the case
+    await expect(sheet.getByRole('heading', { name: 'Ask about this case' })).toBeFocused();
+    await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'));
+    const box = await sheet.boundingBox();
+    expect(Math.round(box!.width)).toBe(390);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Ask about this case' })).toBeFocused();
   });
 
   test('a review stacks each finding, the Found half before the explanation half', async ({ page }) => {

@@ -66,12 +66,20 @@ test.describe('the guide', () => {
     await dialog.getByRole('button', { name: 'Skip chapter' }).click();
     await dialog.getByRole('button', { name: 'Next' }).click();
     await dialog.getByRole('button', { name: 'Next' }).click();
-    await expect(dialog.getByText('Step 3 of 3 · S8: a write withheld')).toBeVisible();
+    await expect(dialog.getByText('Step 3 of 4 · S8: a write withheld')).toBeVisible();
     await dialog.getByRole('button', { name: 'Show this section' }).click();
     await expect(page).toHaveURL(/#\/cases\/C-000008\?open=compare$/);
     await expect(
       page.getByRole('heading', { name: 'S8 side by side: rules alone and the board' }),
     ).toBeVisible();
+
+    // Then the button that opens Ask about this case
+    await page.getByRole('button', { name: 'Continue guide' }).click();
+    await dialog.getByRole('button', { name: 'Next' }).click();
+    await expect(dialog.getByText('Step 4 of 4 · S8: a write withheld')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Show this section' }).click();
+    await expect(page.getByRole('button', { name: 'Ask about this case' })).toBeVisible();
+    await expect(page.locator('[data-tour="case-ask"]')).toHaveAttribute('data-tour-active', 'true');
 
     // S20's chapter shows its Rules only case
     await page.getByRole('button', { name: 'Continue guide' }).click();

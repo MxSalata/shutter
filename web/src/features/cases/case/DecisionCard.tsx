@@ -158,7 +158,8 @@ export function DecisionCard({
   const marked = next.kind !== 'none';
   return (
     <Section id="outcome" tour="case-outcome" title="Outcome">
-      <SimpleGrid cols={{ base: 1, md: 3 }} spacing="sm">
+      {/* By the width the card has, not the window's: beside Ask about this case the page's column is narrower */}
+      <SimpleGrid type="container" cols={{ base: 1, '700px': 3 }} spacing="sm">
         <StoryCard label="What happened" title={failedTitle(c)}>
           <Text size="sm">{evidenceSummary(facts.snapshot)}</Text>
         </StoryCard>
@@ -305,7 +306,8 @@ export function DecisionCard({
           <SimpleGrid
             component="dl"
             className="receipt-facts"
-            cols={{ base: 1, sm: 3, lg: 5 }}
+            type="container"
+            cols={{ base: 1, '500px': 3, '900px': 5 }}
             spacing="md"
             verticalSpacing="sm"
             m={0}

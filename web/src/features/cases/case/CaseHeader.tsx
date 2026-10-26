@@ -55,7 +55,16 @@ const MODES: Record<string, string> = {
   policy: 'Site policy',
 };
 
-export function CaseHeader({ c, provenance }: { c: CaseDetail; provenance?: Status }) {
+export function CaseHeader({
+  c,
+  provenance,
+  actions,
+}: {
+  c: CaseDetail;
+  provenance?: Status;
+  /** Shown at the end of the title row: Ask about this case. */
+  actions?: React.ReactNode;
+}) {
   const what = `${humanize(c.event)}${c.ward ? ` to ${c.ward}` : ''}`;
   const place = incidentPlace(c);
   const source = sourceText(c);
@@ -77,6 +86,7 @@ export function CaseHeader({ c, provenance }: { c: CaseDetail; provenance?: Stat
             icon={IconSparkles}
           />
         ) : null}
+        {actions ? <Group ml="auto">{actions}</Group> : null}
       </Group>
       <Text size="md" fw={500} maw="90ch">
         {headerSentence(c)}

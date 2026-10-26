@@ -46,6 +46,9 @@ async function audit(page: Page) {
   return blocking.map((v) => `${v.id} (${v.impact}) ×${v.nodes.length}: ${v.nodes[0]?.target.join(' ')}`);
 }
 
+/** The Site profile page with a change a case's What-if card suggested, pre-filled: the address names the case and the fact. */
+const SUGGESTION = '/site-profile?suggest=C-000008&fact=W1';
+
 const SCREENS: [path: string, heading: string, steps?: 'open'][] = [
   ['/scenarios', 'Scenarios'],
   ['/cases', 'Cases'],
@@ -56,6 +59,9 @@ const SCREENS: [path: string, heading: string, steps?: 'open'][] = [
   // The case page's other tabs, and the S8 comparison opened as the guide links to it
   ['/cases/C-000008?tab=evidence', 'Case C-000008'],
   ['/cases/C-000007?tab=audit', 'Case C-000007'],
+  // Ask about this case, open: the example conversation, the suggested questions and the What-if card
+  ['/cases/C-000008?ask=1', 'Case C-000008'],
+  ['/cases/C-000002?ask=1', 'Case C-000002'],
   ['/cases/C-000008?show=compare', 'Case C-000008'],
   // Every story step open, on a case that waits for a person, one escalated by the board, a resolved one and two
   // blocked ones with the gate's checks and the next action
@@ -72,6 +78,7 @@ const SCREENS: [path: string, heading: string, steps?: 'open'][] = [
   ['/reviews/PR-000001', 'Review PR-000001'],
   ['/reviews/PR-000003', 'Review PR-000003'],
   ['/site-profile', 'Site profile'],
+  [SUGGESTION, 'Site profile'],
   ['/library', 'Agent library'],
   ['/settings', 'Settings and costs'],
   ['/evaluation', 'Evaluation'],
@@ -109,7 +116,12 @@ for (const { colorScheme, contrast, palette } of MODES) {
     });
 
     for (const [path, heading, steps] of SCREENS) {
-      const name = path.includes('?') ? `${heading} (${path.split('?')[1]})` : heading;
+      const name =
+        path === SUGGESTION
+          ? `${heading} (a suggested change)`
+          : path.includes('?')
+            ? `${heading} (${path.split('?')[1]})`
+            : heading;
       test(steps ? `${name}, every step open` : name, async ({ page }) => {
         await signIn(page);
         await go(page, path);
@@ -146,6 +158,22 @@ for (const { colorScheme, contrast, palette } of MODES) {
       await page.getByRole('button', { name: 'Help' }).click();
       await page.getByRole('menuitem', { name: 'Choose a chapter' }).click();
       await expect(dialog.getByRole('heading', { name: 'Choose a chapter' })).toBeVisible();
+      expect(await audit(page)).toEqual([]);
+    });
+
+    // Ask about this case on a phone: the full-screen sheet with the example, the chips and the What-if card
+    test('Ask about this case on a phone', async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await signIn(page);
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await go(page, '/cases/C-000008?ask=1');
+      const sheet = page.getByRole('dialog', { name: 'Ask about this case' });
+      await expect(
+        sheet.getByRole('region', { name: 'What if: the setting behind this outcome' }),
+      ).toBeVisible();
+      await expect(page.getByRole('status')).toHaveCount(0);
+      expect(await audit(page)).toEqual([]);
+      await sheet.getByRole('tab', { name: /Ask the board/ }).click();
       expect(await audit(page)).toEqual([]);
     });
 

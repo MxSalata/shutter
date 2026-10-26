@@ -1,0 +1,55 @@
+{
+  "scenario": "S2",
+  "conversations": [
+    {
+      "id": "c1",
+      "turns": [
+        {
+          "turn": 1,
+          "tier": "explain",
+          "text": "Why was the transfer resent?"
+        },
+        {
+          "turn": 2,
+          "tier": "explain",
+          "text": "How will we know it reached the receiver?"
+        },
+        {
+          "turn": 3,
+          "tier": "board",
+          "text": "Would any site profile setting have changed this?"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "turns": [
+        {
+          "turn": 1,
+          "tier": "explain",
+          "text": "What did the gate check before the write?"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "turns": [
+        {
+          "turn": 1,
+          "tier": "board",
+          "text": "Did the specialists disagree on anything?"
+        }
+      ]
+    },
+    {
+      "id": "c4",
+      "turns": [
+        {
+          "turn": 1,
+          "tier": "board",
+          "text": "What if the receiver had moved on before the resend?"
+        }
+      ]
+    }
+  ]
+}
