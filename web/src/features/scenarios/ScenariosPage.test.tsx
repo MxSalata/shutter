@@ -95,6 +95,50 @@ describe('ScenariosPage', () => {
     expect(s8).toHaveAttribute('href', '/cases/C-000008');
   });
 
+  it("says what you will see only as the scenarios' definitions and the recorded case have it", async () => {
+    const def = (id: string) =>
+      scenarioDefs.find((d) => d.id === id)!.expected as Scenario['expected'] & {
+        final_reason?: string;
+      };
+    // S2: one conditional resend, a write
+    expect(def('S2')).toMatchObject({ disposition: 'resend', write: true });
+    // S8: escalated to a person, nothing written
+    expect(def('S8')).toMatchObject({ disposition: 'escalate', write: false });
+    // S20, played in rules mode: the approval bound to the receiver's version stops holding, the later move
+    // supersedes the resend, nothing is written
+    expect(def('S20')).toMatchObject({
+      write: false,
+      blocked_by: 'APPROVAL_RECEIVER_CHANGED',
+      final_reason: 'SUPERSEDED_BY_LATER_EVENT',
+      modes: ['rules'],
+    });
+    renderScenarios();
+    const first = await screen.findByRole('region', { name: 'Try these three first' });
+    // The catalogue entry S8 cites comes from its latest board case's plan, not from the page
+    const cases = recording.cases as unknown as Record<
+      string,
+      { plan: { plan: { catalogueEntry?: string } } }
+    >;
+    const entry = cases['C-000008'].plan.plan.catalogueEntry!;
+    expect(entry).toBe('E7');
+    expect(
+      await within(first).findByText(`citing catalogue entry ${entry},`, { exact: false }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the guide's first target while the scenarios load, and when they cannot be read", async () => {
+    server.use(http.get('*/scenarios', () => HttpResponse.json({ error: 'down' }, { status: 503 })));
+    renderScenarios();
+    const first = screen.getByRole('region', { name: 'Try these three first' });
+    expect(first).toHaveAttribute('data-tour', 'scenarios');
+    expect(within(first).getByText('Loading the scenarios…')).toBeInTheDocument();
+    expect(
+      await within(first).findByText(
+        'The scenarios could not be read, so these three cannot be offered yet.',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('counts the scenarios each mode plays, and the list by outcome, from the list itself', async () => {
     renderScenarios();
     const rules = await screen.findByRole('radio', { name: 'Rules only' });

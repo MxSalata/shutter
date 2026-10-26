@@ -297,16 +297,20 @@ describe('ReviewPage', () => {
       explanation.compareDocumentPosition(first.getByText('Why it matters')) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(screen.getByText('12 of 13 findings explained by the agent')).toBeInTheDocument();
+    // The explained count is stated once, directly above the finding cards, with what it leaves out
+    const list = within(screen.getByRole('region', { name: 'Findings' }));
+    const count = list.getByText('12 of 13 findings explained by the agent');
+    expect(count.compareDocumentPosition(rows()[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByText(/of 13 findings explained/)).toHaveLength(1);
+    expect(
+      list.getByText(
+        'The others keep the baseline order within their tier, with no explanation; 2 recorded explanations matched no finding here and were left out. A finding with no explanation shows the deterministic text only.',
+      ),
+    ).toBeInTheDocument();
     const agent = within(screen.getByRole('region', { name: "The agent's ranking" }));
     expect(agent.getByText('Ranked and explained (recorded)')).toBeInTheDocument();
     expect(agent.getByText('The downstream errors outnumber the rest.')).toBeInTheDocument();
     expect(agent.getByText('Whether the ward was down for maintenance')).toBeInTheDocument();
-    expect(
-      agent.getByText(
-        '12 of 13 findings explained; the others keep the baseline order within their tier, with no explanation; 2 recorded explanations matched no finding here and were left out.',
-      ),
-    ).toBeInTheDocument();
   });
 
   it('lets an approver mark a finding intended with a reason and an expiry, and reads the review again', async () => {

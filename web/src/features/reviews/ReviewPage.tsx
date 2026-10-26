@@ -32,7 +32,7 @@ import { SEVERITY_STATUS } from '@/lib/status';
 import {
   describeAgent,
   explainedCount,
-  explainedLine,
+  explainedNotes,
   hl7Note,
   orderedFindings,
   rankedByAgent,
@@ -58,10 +58,14 @@ function Explained({ r }: { r: ReviewDetail }) {
         maw={420}
         aria-label={`${explained} of ${total} findings explained by the agent`}
       />
-      {explainedLine(r.agent) ? <Text size="sm">{explainedLine(r.agent)}</Text> : null}
-      {explained < total ? (
+      {explainedNotes(r.agent) || explained < total ? (
         <Text size="xs" c="dimmed">
-          A finding with no explanation shows the deterministic text only.
+          {[
+            explainedNotes(r.agent),
+            explained < total ? 'A finding with no explanation shows the deterministic text only.' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
         </Text>
       ) : null}
     </Stack>
@@ -116,7 +120,6 @@ function AgentBlock({ r }: { r: ReviewDetail }) {
       <Alert color={view.colour} variant="light" title={view.title} role="note">
         <Text size="sm">{view.text}</Text>
       </Alert>
-      <Explained r={r} />
       {a.summary ? <Text size="sm">{a.summary}</Text> : null}
       {a.unknowns.length ? (
         <Stack gap={2}>
@@ -235,6 +238,8 @@ function Review({ r }: { r: ReviewDetail }) {
               {hl7Note(r)}
             </Text>
           ) : null}
+          {/* How many of these the agent explained, stated once, directly above the cards */}
+          <Explained r={r} />
           {findings.length ? (
             <FindingCards
               findings={findings}

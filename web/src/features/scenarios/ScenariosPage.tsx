@@ -15,6 +15,7 @@ import {
   Text,
   Title,
   Tooltip,
+  VisuallyHidden,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconPlayerPlay, IconRefresh, IconShieldX } from '@tabler/icons-react';
@@ -250,12 +251,12 @@ function ScenarioRow({
               maxHeight={38}
               showLabel={
                 <Text span size="xs">
-                  More
+                  More<VisuallyHidden> about {s.id}</VisuallyHidden>
                 </Text>
               }
               hideLabel={
                 <Text span size="xs">
-                  Less
+                  Less<VisuallyHidden> about {s.id}</VisuallyHidden>
                 </Text>
               }
               fz="xs"
@@ -543,14 +544,14 @@ export default function ScenariosPage() {
       <Stack gap="md">
         <ScenariosHero />
         {current ? <RunBanner run={current} /> : null}
-        {scenarios.data ? (
-          <TryFirst
-            scenarios={scenarios.data.scenarios}
-            why={whyNot}
-            starting={(s, m) => run.isPending && run.variables?.id === s.id && run.variables?.mode === m}
-            onRun={start}
-          />
-        ) : null}
+        {/* Always rendered, loading or not, so the guide's first step has its target */}
+        <TryFirst
+          scenarios={scenarios.data?.scenarios}
+          failed={scenarios.isError}
+          why={whyNot}
+          starting={(s, m) => run.isPending && run.variables?.id === s.id && run.variables?.mode === m}
+          onRun={start}
+        />
         {/* The demo's guided path through the recorded cases, past the first three */}
         {DEMO ? <StartHere /> : null}
         {playerOff ? (
