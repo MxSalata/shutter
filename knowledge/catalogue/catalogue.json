@@ -486,5 +486,59 @@
   ],
   "prose": "# E15 A cancellation the receiver cannot reverse\n\n## Meaning\n\nThe failed operation cancels an earlier movement (ADT^A11, A12 or A13), and the receiver's entry in the site profile\nsays it takes no cancels. Shutter withholds the cancel and sends nothing: the receiver would refuse it, or apply it in\na way nobody can check. A person corrects the receiver by hand, then marks the case handled on the case page.\n\n## Telling it apart\n\nA receiver whose entry declares `cancels: true` takes the cancel, and this entry does not apply. A movement that a\nlater cancel already undid is E1: there is nothing left to resend.\n\n## Cite\n\nThe cancel and the movement it names, the receiver's `cancels` setting, and the receiver's current state of the\nencounter.",
   "source": "E15.md"
+ },
+ {
+  "id": "E16",
+  "version": 1,
+  "title": "The destination bed is held by a patient who is leaving",
+  "scenarios": [
+   "S23a"
+  ],
+  "pattern": {
+   "bed_conflict": [
+    "occupant_leaving",
+    "occupant_left"
+   ],
+   "receipt": "absent"
+  },
+  "decides": "policy",
+  "preferred": {
+   "outcome": "resend_after_occupant",
+   "why": "The receiver refused the movement because another encounter holds the destination bed, and that encounter's movement out of the bed exists (failed, uncertain or pending in another case, or applied since the refusal); once it has left, the refused movement is still due, so it is resent unchanged after the occupant's case resolves (RP-2.1)."
+  },
+  "checks": [
+   "identity",
+   "ordering",
+   "state_transition",
+   "effect",
+   "capability",
+   "concurrency"
+  ],
+  "prose": "# E16 The destination bed is held by a patient who is leaving\n\n## Meaning\n\nThe receiver understood the transfer or admission and said no: the bed it names is held by another patient's encounter.\nThe other patient is on the way out: their transfer or discharge out of that bed was sent but failed or is still in\nanother case, or it has been applied since the refusal. This is an ordering problem in disguise. Resending now fails\nagain; resending after the occupant's movement lands puts both patients where the source system says they are.\n\n## Telling it apart\n\nThe failure's answer is `bed_occupied`, and the evidence's `bed_conflict` section finds a movement out of the bed for the\noccupant (`occupant_leaving`: not applied yet, with the case about it when there is one; `occupant_left`: applied since the\nrefusal). When no movement out is known, or the occupant cannot be read, it is E17.\n\n## What happens\n\nThe plan resends the case's own operation unchanged, conditional on this encounter's version, and waits on the occupant's\ncase. The gate holds it (`WAITING_FOR_OCCUPANT_CASE`) until that case resolves, passes it once the occupant has left\n(`OCCUPANT_MOVED_OUT`), and escalates if that case ends without freeing the bed (`OCCUPANT_CASE_FAILED`). The receiver\nrefuses again if the bed is still held, so nothing is double-booked.\n\n## Cite\n\nThe refusal (ward, bed, since), the occupant as the evidence names it (a token, never their identifiers), their movement\nout with its delivery and case, and this encounter's current version.",
+  "source": "E16.md"
+ },
+ {
+  "id": "E17",
+  "version": 1,
+  "title": "Two patients are allocated to one bed",
+  "scenarios": [
+   "S23b"
+  ],
+  "pattern": {
+   "bed_conflict": [
+    "occupant_staying",
+    "unknown"
+   ]
+  },
+  "decides": "person",
+  "preferred": {
+   "outcome": "escalate",
+   "why": "The receiver refused the movement because another encounter holds the destination bed, and no movement out of the bed is known for it (or it could not be read); a resend can only fail again or double-book the bed, so the bed manager decides."
+  },
+  "checks": [
+   "ordering"
+  ],
+  "prose": "# E17 Two patients are allocated to one bed\n\n## Meaning\n\nThe source system has put two patients in one bed: the receiver holds one there, and the failed movement puts another in\nthe same bed, with nothing to say the first is leaving. That is a real clash on the ward, not a delivery fault. No write is\nsafe: a resend is refused again, and a receiver without the check would double-book the bed.\n\n## Telling it apart\n\nThe failure's answer is `bed_occupied`, and the evidence's `bed_conflict` section finds no movement out of the bed for the\noccupant (`occupant_staying`), or could not read the occupant (`unknown`). A known movement out is E16.\n\n## What happens\n\nThe case escalates to the bed manager with the conflict laid out: the ward and bed, since when it has been held and by\nwhich encounter (as the receiver names it), and the refused movement. The gate blocks any resend (`BED_OCCUPIED`). Once a\nperson frees or reallocates the bed, the case can be reinvestigated.\n\n## Cite\n\nThe refusal (ward, bed, since), the occupant's encounter and its current placement, and that no movement out was found.",
+  "source": "E17.md"
  }
 ]

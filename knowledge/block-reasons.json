@@ -526,6 +526,42 @@
       "owner": "Integration team",
       "reevaluate_when": "The receiver can be read again, or its team confirms what it applied",
       "text": "The write's answer was lost, and the reads that followed could not settle whether the receiver applied it: a lookup failed, the receiver no longer knows the encounter, or the budget of reads ran out. Nothing is established either way, so nothing is resent until a person has checked at the receiver."
+    },
+    {
+      "code": "WAITING_FOR_OCCUPANT_CASE",
+      "title": "Waiting for the bed's occupant to leave",
+      "prerequisite": "The destination bed is free: the occupant's movement out has been applied (E16)",
+      "next_action": "Nothing to do yet. The case is checked again when the case about the occupant's movement closes; recover that case first if it needs a person.",
+      "owner": "Operator",
+      "reevaluate_when": "The occupant's case resolves, or their movement out is applied",
+      "text": "The receiver refused this movement because another patient's encounter holds the bed, and that patient's movement out is still being recovered in another case. Resending now would be refused again, so this case waits for that one."
+    },
+    {
+      "code": "OCCUPANT_CASE_FAILED",
+      "title": "The bed's occupant is not leaving after all",
+      "prerequisite": "The case about the occupant's movement out resolves, so the bed frees (E16)",
+      "next_action": "Escalate to the bed manager with the conflict: the bed, the occupant's encounter, the refused movement. Nothing is sent.",
+      "owner": "Downstream system team",
+      "reevaluate_when": "A person frees or reallocates the bed, or the occupant's case is resolved by hand",
+      "text": "The case about the occupant's movement out of the bed ended escalated, failed or abandoned, so the bed will not free itself. A person must decide where each patient is."
+    },
+    {
+      "code": "BED_OCCUPIED",
+      "title": "Two patients for one bed",
+      "prerequisite": "The destination bed is free, or a movement out of it is known for its occupant (E16, E17)",
+      "next_action": "Escalate to the bed manager with the conflict laid out. Nothing is sent: a resend would be refused again or double-book the bed.",
+      "owner": "Downstream system team",
+      "reevaluate_when": "A person frees or reallocates the bed",
+      "text": "The receiver holds another patient's encounter in the destination bed and nothing says they are leaving, or the occupant could not be read. That is a clash on the ward, not a delivery fault."
+    },
+    {
+      "code": "OCCUPANT_MOVED_OUT",
+      "title": "The bed's occupant has left",
+      "prerequisite": "The occupant's movement out of the bed is applied at the receiver (E16)",
+      "next_action": "None: a pass. The resend goes ahead under the tier's approval policy, conditional on this encounter's version.",
+      "owner": "Operator",
+      "reevaluate_when": "Not applicable",
+      "text": "The patient who held the destination bed has moved out of it at the receiver, so the refused movement can be sent again. The receiver refuses it again if the bed is held after all."
     }
   ]
 }
