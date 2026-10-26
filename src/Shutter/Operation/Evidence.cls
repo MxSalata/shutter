@@ -81,6 +81,24 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     If noEncounter Do wardItem.%Set("not_applicable", 1, "boolean")
     Do snap.AddItem("ward_state", "ward_api", now, wardItem) Set count = count + 1
 
+    // 4b. A refusal for an occupied bed (v1.28): who holds the bed and whether they are leaving, from the refusal the
+    // connector recorded, the occupant's encounter read now and the feed's deliveries for it (Shutter.Util.BedConflict). The
+    // occupant is named by their encounter id only, a token for the model; no demographic of theirs is read.
+    Set conflict = ""
+    If (case.FailureReasonCode = "bed_occupied") && 'noEncounter {
+        Set refusal = ##class(Shutter.Index.Timeline).LastRefusal(case)
+        Set occ = $SELECT($ISOBJECT(refusal): refusal.%Get("occupant"), 1: "")
+        Set occId = $SELECT($ISOBJECT(occ): ##class(Shutter.Util.Json).Str(occ, "encounter_id"), 1: "")
+        Set occRead = {}, ostatus = 0, deliveries = []
+        If (occId '= "") && (occId '= case.EncounterId) {
+            Set opath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", occId)
+            If opath '= "" Set occRead = ..WardGet(opath, .ostatus)
+            Set deliveries = ##class(Shutter.Index.Timeline).Deliveries(occId, receiver)
+        }
+        Set conflict = ##class(Shutter.Util.BedConflict).Build(refusal, case.Ward, case.Bed, occRead, ostatus, deliveries)
+        Do snap.AddItem("bed_conflict", "ward_api", now, conflict) Set count = count + 1
+    }
+
     // 5. The receipt for the operation key, if any.
     If noEncounter {
         Set rstatus = -1, receipt = {"note": "Not applicable: the case names no encounter"}
@@ -152,6 +170,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     Set summary."ward_state_http_status" = status
     Set summary.receipt = receipt
     Set summary."receipt_http_status" = rstatus
+    If $ISOBJECT(conflict) Set summary."bed_conflict" = conflict
     Set summary.timeline = timeline
     Set summary."later_events" = laterCount
     Set summary.route = route

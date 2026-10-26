@@ -76,6 +76,10 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     Set c.chain = $SELECT(chainKind = "": "single", 1: chainKind)
     // receiver_category (v1.23): what kind of system the case's receiver is, from its site profile entry
     Set c."receiver_category" = ##class(Shutter.Store.SiteProfile).ReceiverCategory(case.Receiver)
+    // bed_conflict (v1.28): who holds a refused bed and whether they are leaving, from the section the evidence adds to a
+    // bed_occupied refusal (Shutter.Util.BedConflict); none when the receiver refused nothing of the kind.
+    Set bc = summary.%Get("bed_conflict")
+    Set c."bed_conflict" = $SELECT($ISOBJECT(bc): $CLASSMETHOD(json, "Str", bc, "status", "unknown"), 1: "none")
     Quit c
 }
 
@@ -423,6 +427,9 @@ ClassMethod Facts(summary As %DynamicObject, case As Shutter.Store.Case) As %Dyn
     // The receiver's history policy and category (v1.23), so an entry's when reads the case's receiver, not the site
     Set f."history_policy" = ##class(Shutter.Store.SiteProfile).ReceiverHistoryPolicy(case.Receiver)
     Set f."receiver_category" = ##class(Shutter.Store.SiteProfile).ReceiverCategory(case.Receiver)
+    // The case about the occupant's movement out of a refused bed (v1.28), for the plan's precondition and the gate.
+    Set bc = summary.%Get("bed_conflict"), mv = $SELECT($ISOBJECT(bc): bc.%Get("occupant_movement"), 1: "")
+    Set f."occupant_case" = $SELECT($ISOBJECT(mv): ##class(Shutter.Util.Json).Str(mv, "case_id"), 1: "")
     Set ward = summary.%Get("ward_state")
     Set history = $SELECT($ISOBJECT(ward): ward.%Get("history"), 1: "")
     If $ISOBJECT(history) {

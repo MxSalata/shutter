@@ -32,8 +32,9 @@ CONDITIONS = {
     "free_text": {"yes", "no"},
     "chain": {"single", "ordered", "interleaved"},
     "receiver_category": {"current_state", "history_of_record", "orders_results"},
+    "bed_conflict": {"none", "occupant_leaving", "occupant_left", "occupant_staying", "unknown"},
 }
-OUTCOMES = {"resend", "resend_chain", "resend_latest", "reconcile", "none", "escalate", "resend_unconditional", "correct_history"}
+OUTCOMES = {"resend", "resend_chain", "resend_latest", "reconcile", "none", "escalate", "resend_unconditional", "correct_history", "resend_after_occupant"}
 DECIDES = {"policy", "board", "person"}
 GATE_CHECKS = {"identity", "conformance", "intent", "ordering", "state_transition", "effect", "authorization", "concurrency", "evidence", "capability", "catalogue"}
 

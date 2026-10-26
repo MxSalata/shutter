@@ -140,4 +140,61 @@ ClassMethod Merge(a As %DynamicArray, b As %DynamicArray) As %DynamicArray
     Quit out
 }
 
+/// The feed's deliveries for an encounter to a receiver (v1.28), oldest event first, with the outcome the connector recorded
+/// and the case opened for each key, when one was: what the evidence reads about a bed's occupant. Rows:
+/// {event, ward, bed, event_time, operation_key, source_message_id, ens_header_id, sent_at, receiver, outcome (unknown
+/// when no answer is recorded), reason_code?, http_status?, version_after?, case_id?}. An empty receiver sees every delivery.
+ClassMethod Deliveries(encounterId As %String, receiver As %String = "") As %DynamicArray
+{
+    Set out = []
+    If ..NoEncounter(encounterId) Quit out
+    Set resetAt = $GET(^Shutter.Config("resetAt"))
+    Set since = $SELECT(resetAt = "": "2000-01-01 00:00:00", 1: $TRANSLATE($PIECE(resetAt, "Z", 1), "T", " "))
+    Set sql = "SELECT w.ID AS WID, w.Event, w.Ward, w.Bed, w.EventTime, w.OperationKey, w.SourceMessageId, h.ID AS HeaderId, h.TimeCreated, h.TargetConfigName AS Receiver "
+        _ "FROM Shutter_Msg.WardOperation w JOIN Ens.MessageHeader h ON h.MessageBodyId = CAST(w.ID AS VARCHAR(20)) AND h.MessageBodyClassName = 'Shutter.Msg.WardOperation' "
+        _ "WHERE w.EncounterId = ? AND w.Purpose = 'normal' AND h.TimeCreated >= ? AND (? = '' OR h.TargetConfigName = ?) ORDER BY w.EventTime, w.ID"
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, encounterId, since, receiver, receiver)
+    While rs.%Next() {
+        Set ev = {}
+        Set ev."event" = rs.%Get("Event"), ev.ward = rs.%Get("Ward"), ev.bed = rs.%Get("Bed"), ev."event_time" = rs.%Get("EventTime")
+        Set ev."operation_key" = rs.%Get("OperationKey"), ev."source_message_id" = rs.%Get("SourceMessageId")
+        Set ev."ens_header_id" = rs.%Get("HeaderId"), ev."sent_at" = rs.%Get("TimeCreated"), ev.receiver = rs.%Get("Receiver")
+        Set ev.outcome = "unknown"
+        Set r = ..ResultFor(rs.%Get("HeaderId"))
+        If $ISOBJECT(r) {
+            Set ev.outcome = r.Outcome, ev."reason_code" = r.ReasonCode, ev."http_status" = r.HttpStatus
+            If r.EncounterVersion '= "" Set ev."version_after" = r.EncounterVersion
+        }
+        Set caseId = "", key = rs.%Get("OperationKey")
+        &sql(SELECT TOP 1 CaseId INTO :caseId FROM Shutter_Store."Case" WHERE OperationKey = :key AND (Receiver = :receiver OR :receiver = '') ORDER BY ID DESC)
+        If (SQLCODE = 0) && (caseId '= "") Set ev."case_id" = caseId
+        Do out.%Push(ev)
+    }
+    Quit out
+}
+
+/// The connector's answer to a ward operation's header, or "".
+ClassMethod ResultFor(headerId As %String) As Shutter.Msg.WardResult
+{
+    Set rid = ""
+    &sql(SELECT TOP 1 MessageBodyId INTO :rid FROM Ens.MessageHeader WHERE CorrespondingMessageId = :headerId AND MessageBodyClassName = 'Shutter.Msg.WardResult')
+    If (SQLCODE '= 0) || (rid = "") Quit ""
+    Quit ##class(Shutter.Msg.WardResult).%OpenId(rid)
+}
+
+/// The body of the receiver's answer to the newest delivery of the case's operation to its receiver (v1.28: the 409
+/// bed_occupied refusal with its occupant), as the connector recorded it; "" when none is recorded or it is not JSON.
+ClassMethod LastRefusal(case As Shutter.Store.Case) As %DynamicObject
+{
+    Set sql = "SELECT TOP 1 h.ID AS HeaderId FROM Shutter_Msg.WardOperation w JOIN Ens.MessageHeader h ON h.MessageBodyId = CAST(w.ID AS VARCHAR(20)) AND h.MessageBodyClassName = 'Shutter.Msg.WardOperation' "
+        _ "WHERE w.OperationKey = ? AND w.Purpose = 'normal' AND (? = '' OR h.TargetConfigName = ?) ORDER BY w.ID DESC"
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, case.OperationKey, case.Receiver, case.Receiver)
+    If 'rs.%Next() Quit ""
+    Set r = ..ResultFor(rs.%Get("HeaderId"))
+    If '$ISOBJECT(r) || (r.ResponseJSON = "") Quit ""
+    Set body = ##class(Shutter.Util.Json).Parse(r.ResponseJSON, .sc)
+    If '$ISOBJECT(body) || $$$ISERR(sc) || 'body.%IsA("%Library.DynamicObject") Quit ""
+    Quit body
+}
+
 }
