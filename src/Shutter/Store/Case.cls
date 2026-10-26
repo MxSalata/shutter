@@ -66,6 +66,13 @@ Property Ward As %String(%JSONFIELDNAME = "ward", MAXLEN = 100);
 /// Beside the canonical payload, so it is not in the digest.
 Property Bed As %String(%JSONFIELDNAME = "bed", MAXLEN = 64);
 
+/// The case this one waits on (v1.28): the case about the occupant's movement out of the bed this case's write needs, set
+/// when the gate blocks with WAITING_FOR_OCCUPANT_CASE and cleared by a reopening; when that case closes, this one is
+/// reinvestigated (ReleaseWaiting).
+Property WaitsOnCase As %String(%JSONFIELDNAME = "waitsOn", MAXLEN = 32);
+
+Index WaitsIdx On WaitsOnCase;
+
 /// A merge's prior record (A40, CONTRACTS 2): the patient identifier the merge discards (MRG-1) with its assigning
 /// authority, the prior visit (MRG-5), and how many MRG segments the message carried (one per PATIENT group); the
 /// identifiers are the first group's.
@@ -336,7 +343,35 @@ Method Transition(toState As %String, text As %String = "", actor As %String = "
         Set sc = ex.AsStatus()
     }
     Do ..Unlock()
+    // A case that closes releases the cases waiting on it (v1.28): each is reinvestigated on fresh evidence.
+    If $$$ISOK(sc) && $LISTFIND($LISTBUILD("resolved", "blocked", "escalated", "failed"), toState) Do ..ReleaseWaiting(toState)
     Quit sc
+}
+
+/// The blocked cases whose WaitsOnCase names this case are reopened through the production (Shutter.Msg.Reinvestigate to
+/// the Case Workflow), so each plans afresh on the bed as it is now: the gate passes the resend when the occupant has left,
+/// and escalates the case when this one ended without freeing the bed. Returns how many were released; never fails the
+/// caller (a production that is not running leaves them blocked, with the wait on the case for a person to see).
+Method ReleaseWaiting(toState As %String) As %Integer
+{
+    Set n = 0
+    Try {
+        Set me = ..CaseId
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT CaseId FROM Shutter_Store.""Case"" WHERE WaitsOnCase = ? AND State = 'blocked' ORDER BY ID", me)
+        While rs.%Next() {
+            Set waiting = rs.%Get("CaseId")
+            Set msg = ##class(Shutter.Msg.Reinvestigate).%New()
+            Set msg.CaseId = waiting, msg.RequestedBy = "system"
+            Set msg.Reason = "case " _ me _ " about the bed's occupant closed as " _ toState _ "; the bed is checked again"
+            Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
+            If $$$ISERR(sc) || '$ISOBJECT(service) Quit
+            Set service.Target = "Case Workflow", service.Async = 1
+            Set sc = service.ProcessInput(msg)
+            If $$$ISOK(sc) Set n = n + 1
+        }
+    } Catch ex {
+    }
+    Quit n
 }
 
 /// The case's lock (^Shutter.CaseLock), taken around the read and write of the stored case by Transition, Note,
@@ -805,6 +840,9 @@ Storage Default
 </Value>
 <Value name="44">
 <Value>Bed</Value>
+</Value>
+<Value name="45">
+<Value>WaitsOnCase</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>

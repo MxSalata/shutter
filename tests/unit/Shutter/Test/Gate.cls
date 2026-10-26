@@ -189,7 +189,7 @@ Method TestEveryReasonCodeHasARow()
         While it2.%GetNext(.j, .e) { Set asserted(e.%Get(2)) = "" }
     }
     Set codes = ""
-    For method = "OnGateRequest", "OutcomeConsistency" {
+    For method = "OnGateRequest", "OutcomeConsistency", "BedConflictCheck" {
         Set source = ..Source("Shutter.Operation.Gate", method)
         Set m = ##class(%Regex.Matcher).%New("""([A-Z][A-Z_]*[A-Z])""", source)
         While m.Locate() { Set codes(m.Group(1)) = "" }
@@ -262,7 +262,15 @@ Method Run(row As %DynamicObject) As %DynamicObject
     }
     // The summary the evidence collection would have made, with the row's changes.
     Set summary = ..Fill(..BaseSummary(), key)
-    If row.%IsDefined("summary") Do ..Merge(summary, ..Fill(row.summary, key))
+    // A second case the row's summary names as "{other}" (v1.28: the case about a bed's occupant), in the state the row says.
+    Set otherId = ""
+    If row.%IsDefined("other_case") {
+        Set other = ..NewCase({"encounter_id": "ENC-OCC"})
+        Set other.State = ##class(Shutter.Util.Json).Str(row."other_case", "state", "escalated")
+        Do $$$AssertStatusOK(other.%Save(), row.name _ ": the other case is saved")
+        Set otherId = other.CaseId
+    }
+    If row.%IsDefined("summary") Do ..Merge(summary, ..Fill(##class(%DynamicAbstractObject).%FromJSON($REPLACE(row.summary.%ToJSON(), "{other}", otherId)), key))
     Set fresh = 300
     If row.%IsDefined("snapshot") Set fresh = +row.snapshot."fresh_seconds"
     Set snap = ##class(Shutter.Store.Snapshot).Begin(case, fresh)
@@ -585,6 +593,24 @@ XData Rows [ MimeType = application/json ]
    "plan": {"disposition": "escalate", "action": null},
    "expect": [["intent", "pass", "NO_WRITE"], ["ordering", "pass", "NOT_APPLICABLE"], ["state_transition", "pass", "NOT_APPLICABLE"], ["concurrency", "pass", "NOT_APPLICABLE"], ["capability", "pass", "NOT_APPLICABLE"]], "outcome": "pass"},
 
+  {"group": "ordering", "name": "a resend into a bed whose occupant has left",
+   "summary": {"catalogue": {"conditions": {"bed_conflict": "occupant_left"}}, "bed_conflict": {"refused": true, "ward": "WARD-B", "bed": "B2", "since": "2026-10-18T08:10:00Z", "status": "occupant_left", "note": "The occupant's encounter is discharged now, so the bed is free of them", "occupant": {"encounter_id": "ENC-OCC"}, "occupant_movement": {"event": "discharge", "delivery": "applied"}}},
+   "expect": [["ordering", "pass", "OCCUPANT_MOVED_OUT"], ["ordering", "pass", "NO_LATER_EVENT"]]},
+  {"group": "ordering", "name": "a resend into a bed whose occupant is leaving in a case still working",
+   "summary": {"catalogue": {"conditions": {"bed_conflict": "occupant_leaving"}}, "bed_conflict": {"refused": true, "ward": "WARD-B", "bed": "B2", "since": "2026-10-18T08:10:00Z", "status": "occupant_leaving", "occupant": {"encounter_id": "ENC-OCC"}, "occupant_movement": {"event": "transfer", "ward": "WARD-C", "delivery": "failed", "case_id": "UT-NO-SUCH-CASE"}}},
+   "expect": [["ordering", "block", "WAITING_FOR_OCCUPANT_CASE"]], "outcome": "block"},
+  {"group": "ordering", "name": "a resend into a bed whose occupant's movement has no case yet",
+   "summary": {"catalogue": {"conditions": {"bed_conflict": "occupant_leaving"}}, "bed_conflict": {"refused": true, "ward": "WARD-B", "bed": "B2", "status": "occupant_leaving", "occupant": {"encounter_id": "ENC-OCC"}, "occupant_movement": {"event": "transfer", "ward": "WARD-C", "delivery": "pending"}}},
+   "expect": [["ordering", "block", "WAITING_FOR_OCCUPANT_CASE"]], "outcome": "block"},
+  {"group": "ordering", "name": "a resend into a bed whose occupant's case ended without freeing it",
+   "summary": {"catalogue": {"conditions": {"bed_conflict": "occupant_leaving"}}, "bed_conflict": {"refused": true, "ward": "WARD-B", "bed": "B2", "status": "occupant_leaving", "occupant": {"encounter_id": "ENC-OCC"}, "occupant_movement": {"event": "transfer", "ward": "WARD-C", "delivery": "failed", "case_id": "{other}"}}}, "other_case": {"state": "escalated"},
+   "expect": [["ordering", "block", "OCCUPANT_CASE_FAILED"]], "outcome": "block"},
+  {"group": "ordering", "name": "a resend into a bed whose occupant stays",
+   "summary": {"catalogue": {"conditions": {"bed_conflict": "occupant_staying"}}, "bed_conflict": {"refused": true, "ward": "WARD-B", "bed": "B2", "since": "2026-10-18T08:10:00Z", "status": "occupant_staying", "occupant": {"encounter_id": "ENC-OCC"}, "occupant_movement": null}},
+   "expect": [["ordering", "block", "BED_OCCUPIED"]], "outcome": "block"},
+  {"group": "ordering", "name": "a resend into a bed whose occupant could not be read",
+   "summary": {"catalogue": {"conditions": {"bed_conflict": "unknown"}}, "bed_conflict": {"refused": true, "ward": "WARD-B", "bed": "B2", "status": "unknown", "occupant": null, "occupant_movement": null}},
+   "expect": [["ordering", "block", "BED_OCCUPIED"]], "outcome": "block"},
   {"group": "ordering", "name": "a resend whose event time is in the future",
    "summary": {"catalogue": {"conditions": {"event_time": "future"}}},
    "expect": [["ordering", "block", "EVENT_TIME_IMPLAUSIBLE"]], "outcome": "block"},

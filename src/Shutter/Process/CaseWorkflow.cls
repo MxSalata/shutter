@@ -674,6 +674,16 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
         Set action."payload_digest" = $CLASSMETHOD(json, "Str", summary.%Get("operation"), "payload_digest")
         Set plan.preconditions = [("The receiver's version is still " _ version _ " at dispatch"), "No later event for the encounter before dispatch"]
         Set plan.summary = "Catalogue " _ entry _ ", " _ title _ ": resend the operation unchanged at receiver version " _ version _ ", by site policy (" _ ..Policy _ ")"
+    } ElseIf outcome = "resend_after_occupant" {
+        // The destination bed is held by a patient who is leaving (v1.28): a resend that waits for their movement's case,
+        // which the gate holds with WAITING_FOR_OCCUPANT_CASE until that case closes.
+        Set occCase = $CLASSMETHOD(json, "Str", cat.%Get("facts"), "occupant_case")
+        Set plan.disposition = "resend"
+        Set action.type = "resend", action."operation_key" = case.OperationKey, action."expected_version" = +version
+        Set action."payload_digest" = $CLASSMETHOD(json, "Str", summary.%Get("operation"), "payload_digest")
+        If occCase '= "" Set plan."waits_on" = occCase
+        Set plan.preconditions = [("The receiver's version is still " _ version _ " at dispatch"), "No later event for the encounter before dispatch", ("The bed's occupant has left" _ $SELECT(occCase '= "": ": case " _ occCase _ " about their movement has resolved", 1: ""))]
+        Set plan.summary = "Catalogue " _ entry _ ", " _ title _ ": resend the operation unchanged once the bed's occupant has left" _ $SELECT(occCase '= "": " (case " _ occCase _ ")", 1: "") _ ", at receiver version " _ version _ ", by site policy (" _ ..Policy _ ")"
     } ElseIf outcome = "reconcile" {
         Set plan.disposition = "reconcile"
         Set action.type = "reconcile", action."operation_key" = case.OperationKey
@@ -702,6 +712,43 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
 
 /// The receiver's category is orders_results (v1.23): an escalate plan naming the reason, through the gate (which blocks
 /// any write to such a receiver with RECEIVER_NOT_MODELLED), to escalated; no board and no investigator.
+/// A gate that did not pass because the destination bed is held (v1.28): with WAITING_FOR_OCCUPANT_CASE the case blocks
+/// waiting on the occupant's case (WaitsOnCase, released by Shutter.Store.Case when that case closes); with
+/// OCCUPANT_CASE_FAILED it escalates at once, since the bed will not free itself. waited says whether either applied.
+Method BedWaitOutcome(case As Shutter.Store.Case, result As Shutter.Msg.GateResult, Output waited As %Boolean) As %Status
+{
+    Set waited = 0
+    Set code = ""
+    Set checks = ##class(Shutter.Util.Json).Parse(result.ChecksJSON, .psc)
+    If $ISOBJECT(checks) && checks.%IsA("%Library.DynamicArray") {
+        Set ci = checks.%GetIterator()
+        While ci.%GetNext(, .c) {
+            Continue:'$ISOBJECT(c)
+            Set rc = ##class(Shutter.Util.Json).Str(c, "reason_code")
+            If (rc = "WAITING_FOR_OCCUPANT_CASE") || (rc = "OCCUPANT_CASE_FAILED") Set code = rc Quit
+        }
+    }
+    If code = "" Quit $$$OK
+    Set waited = 1
+    Set other = "", where = ""
+    Set snap = case.CurrentSnapshot
+    If $ISOBJECT(snap) {
+        Set bc = snap.SummaryObject().%Get("bed_conflict")
+        If $ISOBJECT(bc) {
+            Set mv = bc.%Get("occupant_movement")
+            If $ISOBJECT(mv) Set other = ##class(Shutter.Util.Json).Str(mv, "case_id")
+            Set where = ##class(Shutter.Util.Json).Str(bc, "ward") _ $SELECT(##class(Shutter.Util.Json).Str(bc, "bed") '= "": " bed " _ ##class(Shutter.Util.Json).Str(bc, "bed"), 1: "")
+        }
+    }
+    If code = "WAITING_FOR_OCCUPANT_CASE" {
+        Set case.WaitsOnCase = other
+        Set case.Headline = "Waiting for the occupant of " _ where _ " to leave" _ $SELECT(other '= "": " (case " _ other _ ")", 1: "")
+        Quit case.Transition("blocked", "The destination bed " _ where _ " is held by a patient who is leaving: " _ $SELECT(other '= "": "case " _ other _ " is about their movement, and this case is checked again when it closes", 1: "their movement's delivery has no answer yet; reinvestigate once it has") _ ". Nothing was dispatched", "gate", "gate:" _ result.DecisionId)
+    }
+    Set case.Headline = "The occupant of " _ where _ " did not leave: a person decides"
+    Quit case.Transition("escalated", "The destination bed " _ where _ " is still held" _ $SELECT(other '= "": ", and case " _ other _ " about the occupant's movement ended without freeing it", 1: "") _ "; a person decides, with the bed manager. Nothing was dispatched", "gate", "gate:" _ result.DecisionId)
+}
+
 Method NotModelledToPerson(case As Shutter.Store.Case) As %Status
 {
     Set ..Policy = "person", ..CatalogueEntry = "", ..CatalogueOutcome = ""
@@ -837,6 +884,8 @@ Method OnGateProposal(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
             Set alarm.Timeout = wait
             Quit ..SendRequestAsync("Ens.Alarm", alarm, 1, "refresh:retry")
         }
+        Set sc = ..BedWaitOutcome(case, result, .waited)
+        If waited Quit sc
         Set case.Headline = "Blocked by the gate: " _ result.Summary
         Quit case.Transition("blocked", "The gate did not pass the plan; a person must decide", "gate", "gate:" _ result.DecisionId)
     }
@@ -1040,6 +1089,8 @@ Method OnReinvestigate(request As Shutter.Msg.Reinvestigate, Output response As 
     }
     Set ..CaseId = case.CaseId, ..Mode = case.Mode, ..Reopened = 1
     Set case.WorkflowSessionId = ..%SessionId, case.ClosedAt = ""
+    // A wait on another case ends with the reopening; the fresh gate sets it again if the bed is still held (v1.28).
+    Set case.WaitsOnCase = ""
     If $ISOBJECT(case.CurrentApproval) && 'case.CurrentApproval.Revoked Do case.CurrentApproval.Revoke(request.RequestedBy _ ": the case was reopened")
     Do case.%Save()
     Set who = $SELECT(request.RequestedBy = "": "a person", 1: request.RequestedBy)
@@ -1258,6 +1309,8 @@ Method OnGateDispatch(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
             Do case.Note("note", "The dispatch gate could not decide (" _ result.Summary _ "); refreshing the evidence (" _ ..Refreshes _ " of " _ ..MaxRefreshes _ ") and checking again; the approval stands if nothing material changed", "gate", "gate:" _ result.DecisionId)
             Quit ..StartEvidence(case)
         }
+        Set sc = ..BedWaitOutcome(case, result, .waited)
+        If waited Quit sc
         Set case.Headline = "Blocked at dispatch: " _ result.Summary
         Quit case.Transition("blocked", "The gate did not pass the dispatch: " _ result.Summary, "gate", "gate:" _ result.DecisionId)
     }
