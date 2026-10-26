@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.25, 26 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.26, 26 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -1090,12 +1090,34 @@ All routes under `Shutter_Operate` unless said (5); `X-Requested-With: Shutter` 
 
 **Matching a recorded ranking (v1.22).** The agent's ranking entries carry the finding's `code`, `item` and `setting` beside the `finding_id` (`Shutter.Schema.ReviewRank`; `Check` requires a non-empty `code` and `item` and `setting` present as strings, `""` allowed); the agent's instructions make it copy them from the finding and write explanations without numbers from the findings (no counts, ids, dates or versions: "the count shown", "the cases of this item in the window"), so a recorded explanation reads right on another instance of the same configuration whose counts differ. When the agent answers, live or replayed, `Shutter.Store.Review.MatchRanking` matches each entry, in rank order, to the first unmatched current finding with the same code, item and setting (an entry without them matches by `finding_id`, as before); the matched entries keep their recorded order, re-ranked 1 to m, and are what the review stores; an entry matching nothing is dropped and a finding with no entry stays unexplained. The whole ranking is refused (`schema_failed`, the baseline order stands) when it is not a ranking, names a finding twice, puts a lower tier above a higher one among the matched entries, or matches nothing at all. So the record key covers the configuration findings and the recording made on one instance explains the configuration findings of every instance that reaches the same configuration, and the volatile findings where the same item has the same error groups; the recording is made on an instance with a provider after the scenario set the demo plays, and the page says how many findings the recorded run explains. The agent's explanations name another finding by its code and item, never by its id, for the same reason. A run whose `SubmitReview` was accepted ends `ok` even when its turns ran out before the closing sentence (the runner notes the stop in `error`); the request gives it 4 turns.
 
+## 14. Ask about this case: the deterministic card (v1.26)
+
+`GET /cases/{id}/whatif` (Shutter_Operate; 404 `not_found`) answers, with no model and from the case's snapshot and the
+site profile alone, what the case's outcome turned on and what it would have done under the catalogue's alternatives
+(`Shutter.Util.WhatIf`): `{case_id, receiver, category, entry, outcome, outcome_ref, disposition, profile_version, note,
+facts: [...]}`. Each fact is `{id: "W<n>", kind: "alternative" | "policy", role: "setting" | "alternative" | "policy",
+flag, field, receiver?, current, from, to, holds_now, would, alternative?: {n, outcome, disposition, when, why}, affects:
+[text], suggested_change: {field, receiver?, from, to, why, affects, valid, problem?, stale}}`. For the matched entry, every
+alternative whose `when` names a profile flag is a fact: `history_policy` reads the receiver's `receivers[].category` (or
+its `history_policy` override), `authoritative_source` the site's with the other source the facts saw, the others the
+site's flag; a fact that holds now is the setting behind the outcome (`role: setting`), and its change undoes it;
+otherwise the change is what would make the alternative apply and `would` says what the case would have done (the gate's
+disposition for the outcome). When the case wrote, the tier's approval policy is a fact one step stricter. A change is
+validated by applying it to a copy of the profile and running the validator (`valid`, `problem`), and is `stale` when its
+`from` no longer matches the profile. The fields a change may name: `receivers[].category`, `receivers[].history_policy`,
+`receivers[].tier`, `receivers[].cancels`, `receivers[].merges`, `authoritative_source`, `unconditional_resend`, `merges`,
+`policy.<tier>.<kind>`. Nothing here writes: the page pre-fills a draft on the Site profile page, which an approver saves
+under that page's rules. The case chat's agents (the Explain agent and the board's question mode, `case-chat` hand-off)
+receive these facts and may name no other setting or change.
+
 ## Repository layout
 
 The core IPM module is the repository root (`module.xml`, sources under `src/`): it compiles on any 2026.2 Community image and replays recorded runs. The aihub module is `aihub/` (`aihub/module.xml`, sources under `aihub/src/`): the live runner, the agents, tools, schemas, policies and knowledge bases, which need the `%AI` package. Both modules contribute classes to the `Shutter` package; nothing under `src/` may reference `%AI`.
 
 ## Changes
 
+- v1.26, 26 Oct 2026: the deterministic card for "Ask about this case" (14): `GET /cases/{id}/whatif`, the facts the case
+  chat's agents may name, the typed suggested change validated against the profile schema.
 - v1.25, 26 Oct 2026: two receivers (4, 6.3, 6.4, 12): the demo patient records system (namespace RECORDS, `/records/api`,
   Records Out, category history_of_record) fed beside the bed manager; a case is one failed delivery to one receiver
   (the open-case lookup by key and receiver; the workflow's reads, rehearsals and writes go to the case's receiver); fault
