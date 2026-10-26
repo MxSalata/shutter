@@ -30,7 +30,10 @@ gate's catch, not a right answer from rules: S13's identical rules run, judged b
 Besides the outcome, expected.blocked_by is a reason code the case met on the way (in any round, so a dispatch block
 that led to a re-plan counts), expected.final_reason the code the closed case names for stopping (GET
 /cases/{id}/blocked-reason), and expected.last_operation_key the operation the downstream system's history for the
-encounter ends with (S20: the nurse's own entry still stands).
+encounter ends with (S20: the nurse's own entry still stands). A case blocked only until another case closes
+(WAITING_FOR_OCCUPANT_CASE, S23a) is waited for, not judged, and with --approve the other case is approved when its tier
+asks; expected.waits_on_key is the operation key of the case it waited on (waitsOn), and expected.case_by_key judges the
+case of expected.failed_operation_key rather than the run's newest.
 
 A scenario whose message goes to several receivers and fails at more than one (S22) gives its expectations per receiver
 under expected.by_receiver: one case per failed delivery and receiver, each judged by its receiver's own disposition,
@@ -156,6 +159,9 @@ def play(args, operator, approver, scenario, mode):
     def newest_case():
         _, body = operator.call("GET", f"/cases?scenario={scenario['id']}&limit=5")
         items = [c for c in (body or {}).get("items", []) if c.get("openedAt", "") >= started_at]
+        if expected.get("case_by_key"):
+            # Two patients' cases (S23a): the one judged is the failed operation's own
+            items = [c for c in items if c.get("operationKey") == expected["failed_operation_key"]]
         return items[0] if items else None
 
     by_receiver = expected.get("by_receiver")
@@ -187,9 +193,17 @@ def settle(args, operator, approver, scenario, case, run_state):
     """Waits for a case to close (or to wait for approval without --approve), approving it with --approve."""
     approved = False
 
+    others = set()
+
     def settled():
         nonlocal approved
         _, c = operator.call("GET", f"/cases/{urllib.parse.quote(case['caseId'])}")
+        if c["state"] == "blocked" and waiting_on_another(operator, case["caseId"]):
+            # S23a: the case waits for the case about its bed's occupant, and is released when that one closes. With
+            # --approve, that case is approved as this one would be.
+            if args.approve and run_state() != "running":
+                approve_others(operator, approver, scenario, case["caseId"], others)
+            return None
         if c["state"] in CLOSED:
             return c
         if c["state"] == "awaiting_approval" and args.approve and not approved and run_state() != "running":
@@ -212,6 +226,29 @@ def settle(args, operator, approver, scenario, case, run_state):
     if approved:
         approver_of_record(operator, case["caseId"])
     return final
+
+
+def waiting_on_another(operator, case_id):
+    """Whether a blocked case is held only until another case closes (WAITING_FOR_OCCUPANT_CASE)."""
+    status, reason = operator.call("GET", f"/cases/{urllib.parse.quote(case_id)}/blocked-reason")
+    return status == 200 and (reason or {}).get("code") == "WAITING_FOR_OCCUPANT_CASE"
+
+
+def approve_others(operator, approver, scenario, case_id, done):
+    """Approves the scenario's other cases that wait for approval (the occupant's case in S23a), once each."""
+    _, body = operator.call("GET", f"/cases?scenario={scenario['id']}&limit=20")
+    for other in (body or {}).get("items", []):
+        oid = other.get("caseId")
+        if oid == case_id or oid in done or other.get("state") != "awaiting_approval":
+            continue
+        _, c = operator.call("GET", f"/cases/{urllib.parse.quote(oid)}")
+        _, view = operator.call("GET", f"/cases/{urllib.parse.quote(oid)}/plan")
+        decision = {"decision": "approve", "planDigest": view["plan"]["digest"], "expectedVersion": c["version"],
+                    "comment": "scenario check"}
+        status, out = approver.call("POST", f"/cases/{urllib.parse.quote(oid)}/approvals", decision, idempotent=True)
+        if status != 202:
+            raise RuntimeError(f"the approval of {oid} was refused: HTTP {status} {out}")
+        done.add(oid)
 
 
 def approver_of_record(operator, case_id):
@@ -421,6 +458,17 @@ def judge(args, operator, scenario, mode, final, receiver=None):
         if last != expected["last_operation_key"]:
             differences.append(f"the downstream system's history ends with {last or 'nothing'}, "
                                f"expected {expected['last_operation_key']}")
+    if expected.get("waits_on_key"):
+        # The case it waited on (S23a): the case about the occupant's movement, named by that movement's operation key
+        _, c = operator.call("GET", f"/cases/{caseid}")
+        other = (c or {}).get("waitsOn")
+        if not other:
+            differences.append("the case names no case it waited on (waitsOn)")
+        else:
+            _, o = operator.call("GET", f"/cases/{urllib.parse.quote(other)}")
+            if (o or {}).get("operationKey") != expected["waits_on_key"]:
+                differences.append(f"waited on {other} ({(o or {}).get('operationKey')}), expected the case of "
+                                   f"{expected['waits_on_key']}")
     if expected.get("source"):
         # A case forwarded from another production names where it came from (CONTRACTS 11)
         _, case = operator.call("GET", f"/cases/{caseid}")

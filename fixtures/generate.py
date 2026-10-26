@@ -77,6 +77,9 @@ PATIENTS = {
     "S20": ("MRN1020", "ENC-1020", "SYNTH^BRAM", "19860412", "M"),
     # S21, a transfer in the hour the October clock change repeats
     "S21": ("MRN1021", "ENC-1021", "SYNTH^IMOGEN", "19940603", "F"),
+    # S23a and S23b, a transfer into a bed another patient holds: P1 holds WARD-B bed 02, P2 is moved into it
+    "S23-P1": ("MRN1231", "ENC-1231", "SYNTH^CORA", "19810919", "F"),
+    "S23-P2": ("MRN1232", "ENC-1232", "SYNTH^DEV", "19750128", "M"),
 }
 
 # The prior record an S15 merge folds into its patient (MRG-1, MRG-5, MRG-7)
@@ -119,7 +122,8 @@ def message(scenario, seq, trigger, time, ward=None, prior=None, admit_time="090
     encounter = encounter or default_encounter
     day = day_of(scenario)
     stamp = f"{day}{time}00"
-    control_id = f"MSG{int(scenario[1:]):03d}{seq:02d}"
+    # S23a and S23b share the number 23: their messages' sequence numbers keep the control ids apart
+    control_id = f"MSG{int(scenario[1:3] if scenario[1:3].isdigit() else scenario[1:]):03d}{seq:02d}"
     msh = "MSH|^~\\&|" + source + "|HOSP|DOWNSTREAM|HOSP|" + stamp + "||ADT^" + trigger + "^" + STRUCTURE[version][trigger] + "|" + control_id + "|P|" + version
     evn = "EVN|" + "|".join(field_list({1: trigger, 2: stamp, 6: stamp}, 6))
     # PID-3: the hospital number (typed MR, the identifier Shutter keys on) and the NHS number (typed NH)
@@ -656,6 +660,64 @@ def scenarios():
                                            "final_reason": "EVENT_TIME_IMPLAUSIBLE"}}},
     }, [a, b]))
 
+    # S23a: the destination bed is held by a patient who is leaving. P1 lies in WARD-B bed 02; P1's transfer to Ward C
+    # fails because the downstream system is down; then P2's transfer into WARD-B bed 02 is refused, bed_occupied. P2's
+    # case waits on P1's (WAITING_FOR_OCCUPANT_CASE); P1's resend lands, P1's case resolves, P2's case is released and
+    # its transfer is resent into the bed P1 has left (E16).
+    def r(n, scenario, seq, trigger, time, **kw):
+        return message(scenario, seq, trigger, time, patient=f"S23-P{n}", **kw)
+
+    a1 = r(1, "S23a", 1, "A01", "0900", ward="WARD-B", bed="02")
+    a2 = r(2, "S23a", 2, "A01", "0905", ward="WARD-A", bed="03")
+    a3 = r(1, "S23a", 3, "A02", "0920", ward="WARD-C", prior="WARD-B")
+    a4 = r(2, "S23a", 4, "A02", "0930", ward="WARD-B", prior="WARD-A", bed="02")
+    out.append(({
+        "id": "S23a",
+        "title": "The bed is held by a patient who is leaving",
+        "summary": "Two patients: one in Ward B bed 02, one in Ward A. The first patient's 09:20 transfer to Ward C fails "
+                   "because the downstream system is down. At 09:30 the second patient's transfer into Ward B bed 02 is "
+                   "refused: the bed is occupied. Shutter reads who holds the bed and finds them leaving in another case. "
+                   "Here that case resends the first transfer within seconds, so when the second case reads its "
+                   "evidence the bed is free, and the second transfer is resent into it. Had the first case still been "
+                   "working, the second would have waited for it.",
+        "steps": [
+            {"file": a1[0]},
+            {"file": a2[0]},
+            {"fault": "fail_before_accept"},
+            {"file": a3[0], "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+            {"file": a4[0], "expect": "delivery_fails"},
+        ],
+        # Site policy (E16 and E2): the refused transfer's own case is judged. The occupant's resend lands before that
+        # case reads its evidence, so the bed is free by then (the gate's OCCUPANT_MOVED_OUT) and no wait is seen; the
+        # wait (WAITING_FOR_OCCUPANT_CASE, expected.waits_on_key) needs an occupant's case that takes longer, such as one
+        # awaiting approval. The board's runs come with the re-record.
+        "expected": {"disposition": "resend", "write": True, "final_state": "admitted", "final_ward": "WARD-B",
+                     "failed_operation_key": a4[2]["operation_key"], "case_by_key": True, "modes": ["policy"]},
+    }, [a1, a2, a3, a4]))
+
+    # S23b: two patients allocated to one bed. As S23a, but the first patient is not leaving: no movement out of Ward B
+    # bed 02 is known, so the refused transfer escalates to the bed manager (E17) and nothing is written.
+    b1 = r(1, "S23b", 11, "A01", "0900", ward="WARD-B", bed="02")
+    b2 = r(2, "S23b", 12, "A01", "0905", ward="WARD-A", bed="03")
+    b3 = r(2, "S23b", 13, "A02", "0930", ward="WARD-B", prior="WARD-A", bed="02")
+    out.append(({
+        "id": "S23b",
+        "title": "Two patients for one bed",
+        "summary": "Two patients: one in Ward B bed 02, one in Ward A. At 09:30 the second patient's transfer into Ward B "
+                   "bed 02 is refused: the bed is occupied, and nothing says the first patient is leaving. A resend "
+                   "would be refused again or double-book the bed, so the case goes to the bed manager with the "
+                   "conflict laid out, and nothing is written.",
+        "steps": [
+            {"file": b1[0]},
+            {"file": b2[0]},
+            {"file": b3[0], "expect": "delivery_fails"},
+        ],
+        "expected": {"disposition": "escalate", "write": False, "final_state": "admitted", "final_ward": "WARD-A",
+                     "failed_operation_key": b3[2]["operation_key"], "modes": ["policy"]},
+    }, [b1, b2, b3]))
+
     return out
 
 
@@ -668,8 +730,21 @@ def main():
             with open(os.path.join(folder, name), "w", encoding="utf-8", newline="") as f:
                 f.write(text)
         listing.append(scenario)
-    # The containers read scenarios.json live from this working copy: replace it in one step
+    # The containers read scenarios.json live from this working copy: replace it in one step. A scenario written into
+    # the file by hand (S22, whose fixtures come from elsewhere) is kept, in its place before the generated ones after it.
     target = os.path.join(HERE, "scenarios.json")
+    generated = {s["id"] for s in listing}
+    try:
+        with open(target, encoding="utf-8") as f:
+            existing = json.load(f)
+    except (OSError, ValueError):
+        existing = []
+    for i, kept in enumerate(existing):
+        if kept["id"] not in generated:
+            after = [e["id"] for e in existing[:i] if e["id"] in generated]
+            at = max((n for n, s in enumerate(listing) if s["id"] in after), default=-1) + 1
+            listing.insert(at, kept)
+            generated.add(kept["id"])
     with open(target + ".tmp", "w", encoding="utf-8") as f:
         json.dump(listing, f, indent=2)
         f.write("\n")
