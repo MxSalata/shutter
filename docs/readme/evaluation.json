@@ -2358,6 +2358,11 @@
    "scenario": "S21",
    "title": "A transfer in the hour the clocks go back",
    "why": "played in rules and policy modes only"
+  },
+  {
+   "scenario": "S22",
+   "title": "One overtaken transfer, two systems",
+   "why": "played in policy mode only"
   }
  ],
  "not_used": [],

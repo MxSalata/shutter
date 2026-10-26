@@ -1,4 +1,8 @@
 import '@testing-library/jest-dom/vitest';
+import { configure } from '@testing-library/react';
+
+// findBy and waitFor wait 1 s by default; a loaded CI runner renders a page with its mock fetches in more than that.
+configure({ asyncUtilTimeout: 5_000 });
 
 // jsdom lacks a few browser APIs Mantine relies on.
 if (!window.matchMedia) {
