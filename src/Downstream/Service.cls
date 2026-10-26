@@ -92,17 +92,73 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
     Set now = ..Now()
     Set ward = $SELECT((event = "admit") || (event = "transfer"): request.%Get("ward"), 1: "")
     Set bed = $SELECT((event = "admit") || (event = "transfer"): request.%Get("bed"), 1: "")
-    If bed '= "" {
-        // A bed held by another open encounter refuses the placement, in a rehearsal too (section 1.1). The bed's lock
-        // keeps two encounters from taking it at once, and is held until the write is committed or rolled back.
-        Lock +^Downstream.Lock("bed", ward, bed):10
+    // The beds this operation takes or frees are locked until the write is committed or rolled back, the one it
+    // leaves too: a rehearsal's write is visible to other processes until its rollback (section 1.1)
+    Set beds = ..Beds(encounter, event, ward, bed)
+    For i = 1:1:$LISTLENGTH(beds) {
+        Lock +^Downstream.Lock("bed", $LIST($LIST(beds, i), 1), $LIST($LIST(beds, i), 2)):10
         If '$TEST {
+            Do ..Unlock(beds, i - 1)
             Set status = 503
-            Quit {"error": "ward_unavailable", "detail": "another operation holds the bed"}
+            Return {"error": "ward_unavailable", "detail": "another operation holds the bed"}
         }
+    }
+    Try {
+        Set result = ..Place(request, encounter, key, digest, dryRun, current, ward, bed, now, .status)
+    } Catch ex {
+        TROLLBACK:$TLEVEL 1
+        Set status = 500
+        Set result = {"error": "internal_error", "detail": (ex.DisplayString())}
+    }
+    Do ..Unlock(beds)
+    If 'dryRun, status = 201, ..FaultFor(key) = "commit_drop_response" {
+        // Committed, then the response is lost
+        Set status = 504
+        Quit ""
+    }
+    Quit result
+}
+
+/// The beds an operation on <var>encounter</var> takes or frees, as a list of (ward, bed) in collation order, so two
+/// operations always lock them in the same order: the bed it is placed in, and the bed it leaves.
+ClassMethod Beds(encounter As Downstream.Encounter, event As %String, ward As %String, bed As %String) As %List [ Private ]
+{
+    Set:bed'="" touched(ward, bed) = ""
+    If $ISOBJECT(encounter), (event = "transfer") || (event = "discharge"), encounter.Bed '= "" {
+        Set touched(encounter.Ward, encounter.Bed) = ""
+    }
+    Set beds = "", w = ""
+    For {
+        Set w = $ORDER(touched(w))
+        Quit:w=""
+        Set b = ""
+        For {
+            Set b = $ORDER(touched(w, b))
+            Quit:b=""
+            Set beds = beds _ $LISTBUILD($LISTBUILD(w, b))
+        }
+    }
+    Quit beds
+}
+
+/// Releases the first <var>count</var> of <var>beds</var>' locks, all of them by default.
+ClassMethod Unlock(beds As %List, count As %Integer = -1) [ Private ]
+{
+    Set:count<0 count = $LISTLENGTH(beds)
+    For i = 1:1:count {
+        Lock -^Downstream.Lock("bed", $LIST($LIST(beds, i), 1), $LIST($LIST(beds, i), 2))
+    }
+}
+
+/// The bed check, then the write, with the encounter and its beds locked.
+ClassMethod Place(request As %DynamicObject, encounter As Downstream.Encounter, key As %String, digest As %String, dryRun As %Boolean, current As %Integer, ward As %String, bed As %String, now As %String, Output status As %Integer) As %DynamicObject [ Private ]
+{
+    Set encounterId = request.%Get("encounter_id")
+    Set event = request.%Get("event")
+    If bed '= "" {
+        // A bed held by another open encounter refuses the placement, in a rehearsal too (section 1.1)
         Set occupied = ..Occupied(ward, bed, encounterId, key)
         If $ISOBJECT(occupied) {
-            Lock -^Downstream.Lock("bed", ward, bed)
             Set status = 409
             Quit occupied
         }
@@ -154,12 +210,6 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
         TROLLBACK:$TLEVEL 1
         Set status = 500
         Set result = {"error": "internal_error", "detail": (ex.DisplayString())}
-    }
-    Lock:bed'="" -^Downstream.Lock("bed", ward, bed)
-    If 'dryRun, status = 201, ..FaultFor(key) = "commit_drop_response" {
-        // Committed, then the response is lost
-        Set status = 504
-        Quit ""
     }
     Quit result
 }
@@ -262,8 +312,13 @@ ClassMethod Validate(request As %DynamicObject) As %String
         Return "ward must be null for " _ event
     }
     // A bed is optional, and only for a placement (section 1.1)
-    If (event '= "admit"), (event '= "transfer"), request.%IsDefined("bed"), request.%GetTypeOf("bed") '= "null" {
-        Return "bed must be null for " _ event
+    If request.%IsDefined("bed"), request.%GetTypeOf("bed") '= "null" {
+        If (event '= "admit") && (event '= "transfer") {
+            Return "bed must be null for " _ event
+        }
+        If (request.%GetTypeOf("bed") '= "string") || (request.%Get("bed") = "") || ($LENGTH(request.%Get("bed")) > 64) {
+            Return "bed must be null or a bed name of 1 to 64 characters"
+        }
     }
     If '$MATCH(request.%Get("event_time"), "\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z") {
         Return "event_time must be ISO 8601 UTC, for example 2026-10-15T09:20:00Z"

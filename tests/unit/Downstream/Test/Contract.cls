@@ -404,6 +404,15 @@ Method TestAdmitIntoOccupiedBedRefused()
     Do $$$AssertTrue('body.applied, "nothing applied")
     Do ##class(Downstream.Service).GetEncounter(..Encounter(23), .status)
     Do $$$AssertEquals(status, 404, "and the encounter was never created")
+    Do admit.%Set("dry_run", 1, "boolean")
+    Set body = ##class(Downstream.Service).Apply(admit, .status)
+    Do $$$AssertEquals(status, 409, "a rehearsal of the refused admission is refused too")
+    Do $$$AssertEquals(body.error, "bed_occupied", "as bed_occupied")
+    Do ##class(Downstream.Service).GetEncounter(..Encounter(23), .status)
+    Do $$$AssertEquals(status, 404, "the encounter still does not exist")
+    Set read = ##class(Downstream.Service).GetEncounter(occupant, .status)
+    Do $$$AssertEquals(read.bed, bed, "the occupant keeps the bed")
+    Do $$$AssertEquals(read.version, 2, "at its version")
 }
 
 Method TestBedFreedByDischarge()
@@ -468,6 +477,118 @@ Method TestBedOnlyForPlacements()
     Do $$$AssertEquals(body.detail, "bed must be null for discharge", "as invalid_request")
 }
 
+Method TestBedMustBeABedName()
+{
+    Set encounter = ..Encounter(32)
+    Set admit = ..Request(encounter, "admit", "WARD-B", "2026-10-15T08:10:00Z")
+    For type = "number", "boolean", "object", "empty", "long" {
+        If type = "number" {
+            Do admit.%Set("bed", 2, "number")
+        } ElseIf type = "boolean" {
+            Do admit.%Set("bed", 0, "boolean")
+        } ElseIf type = "object" {
+            Do admit.%Set("bed", {"bed": "B2"})
+        } ElseIf type = "empty" {
+            Do admit.%Set("bed", "")
+        } Else {
+            Do admit.%Set("bed", $TRANSLATE($JUSTIFY("", 65), " ", "B"))
+        }
+        Set body = ##class(Downstream.Service).Apply(admit, .status)
+        Do $$$AssertEquals(status, 422, "a bed given as " _ type _ " is refused")
+        Do $$$AssertEquals(body.error, "invalid_request", "as invalid_request")
+    }
+    Do ##class(Downstream.Service).GetEncounter(encounter, .status)
+    Do $$$AssertEquals(status, 404, "and nothing was admitted")
+    Do admit.%Set("bed", $EXTRACT(..Bed(9) _ $TRANSLATE($JUSTIFY("", 64), " ", "B"), 1, 64))
+    Do ##class(Downstream.Service).Apply(admit, .status)
+    Do $$$AssertEquals(status, 201, "a bed name of 64 characters applies")
+}
+
+Method TestSameBedInAnotherWard()
+{
+    Set occupant = ..Encounter(33), mover = ..Encounter(34), bed = ..Bed(10)
+    Do ##class(Downstream.Service).Apply(..Place(occupant, "admit", "WARD-B", bed, "2026-10-15T08:10:00Z"), .status)
+    Set body = ##class(Downstream.Service).Apply(..Place(mover, "admit", "WARD-C", bed, "2026-10-15T09:00:00Z"), .status)
+    Do $$$AssertEquals(status, 201, "a bed of the same name on another ward is another bed")
+    Do $$$AssertEquals(body.encounter.ward, "WARD-C", "the patient is on Ward C")
+    Do $$$AssertEquals(body.encounter.bed, bed, "in that ward's bed")
+}
+
+Method TestResendNamingAnotherBed()
+{
+    Set encounter = ..Encounter(35), bed = ..Bed(11)
+    Set admit = ..Place(encounter, "admit", "WARD-B", bed, "2026-10-15T08:10:00Z")
+    Do ##class(Downstream.Service).Apply(admit, .status)
+    Do $$$AssertEquals(status, 201, "the admission applies")
+    Do admit.%Set("bed", ..Bed(12))
+    Set body = ##class(Downstream.Service).Apply(admit, .status)
+    Do $$$AssertEquals(status, 200, "a resend under the committed key naming another bed answers 200")
+    Do $$$AssertEquals(body.reason, "already_committed", "as already committed, since the bed is not in the digest")
+    Do $$$AssertEquals(body.receipt.bed, bed, "with the receipt's bed, the one committed")
+    Do $$$AssertEquals(body.encounter.bed, bed, "and the patient stays in it")
+    Do $$$AssertEquals(body.encounter.version, 1, "with nothing more applied")
+}
+
+/// Holds the bed's lock in a process of its own until <var>flag</var> is killed, for at most 60 seconds.
+ClassMethod HoldBed(ward As %String, bed As %String, flag As %String)
+{
+    Lock +^Downstream.Lock("bed", ward, bed):5
+    Quit:'$TEST
+    Set @flag = 2
+    For i = 1:1:600 {
+        Quit:$GET(@flag)'=2
+        Hang 0.1
+    }
+    Lock -^Downstream.Lock("bed", ward, bed)
+    Kill @flag
+}
+
+/// Starts <method>HoldBed</method> and waits until it holds the lock; returns the flag that releases it.
+Method Hold(ward As %String, bed As %String) As %String
+{
+    Set flag = $NAME(^IRIS.Temp.DownstreamTest(..Prefix, ward, bed))
+    Set @flag = 1
+    Job ##class(Downstream.Test.Contract).HoldBed(ward, bed, flag)
+    For i = 1:1:50 {
+        Quit:$GET(@flag)=2
+        Hang 0.1
+    }
+    Quit flag
+}
+
+/// Releases a bed <method>Hold</method> holds, and waits until its process lets go.
+Method Release(flag As %String)
+{
+    Set @flag = 0
+    For i = 1:1:50 {
+        Quit:'$DATA(@flag)
+        Hang 0.1
+    }
+}
+
+Method TestBedLockWaits()
+{
+    Set occupant = ..Encounter(36), mover = ..Encounter(37), bed = ..Bed(13)
+    Do ##class(Downstream.Service).Apply(..Place(occupant, "admit", "WARD-B", bed, "2026-10-15T08:10:00Z"), .status)
+    Do ..Admit(mover)
+    Set flag = ..Hold("WARD-B", ..Bed(14))
+    Do $$$AssertEquals($GET(@flag), 2, "another process holds the bed")
+    Set body = ##class(Downstream.Service).Apply(..Place(mover, "transfer", "WARD-B", ..Bed(14), "2026-10-15T09:00:00Z"), .status)
+    Do ..Release(flag)
+    Do $$$AssertEquals(status, 503, "a placement into a bed another operation holds waits, then answers 503")
+    Do $$$AssertEquals(body.error, "ward_unavailable", "as ward_unavailable")
+    // The bed an operation leaves is locked too, so a rehearsal's rolled back write never frees it for another
+    Set flag = ..Hold("WARD-B", bed)
+    Set body = ##class(Downstream.Service).Apply(..Place(occupant, "transfer", "WARD-C", "", "2026-10-15T09:10:00Z"), .status)
+    Do ..Release(flag)
+    Do $$$AssertEquals(status, 503, "a transfer out of a bed another operation holds waits, then answers 503")
+    Set read = ##class(Downstream.Service).GetEncounter(occupant, .status)
+    Do $$$AssertEquals(read.bed, bed, "the occupant keeps the bed")
+    Do $$$AssertEquals(read.version, 1, "at its version")
+    Do ##class(Downstream.Service).Apply(..Place(mover, "transfer", "WARD-B", ..Bed(14), "2026-10-15T09:00:00Z"), .status)
+    Do $$$AssertEquals(status, 201, "once the bed is released the placement applies")
+}
+
 Method TestBedNotInDigest()
 {
     Set transfer = {"operation_key": "PAS^HOSP^MRN1001^ENC-1001^transfer^2026-10-15T09:20:00Z", "encounter_id": "ENC-1001", "patient_id": "MRN1001", "patient_id_authority": "HOSP", "event": "transfer", "ward": "WARD-B", "bed": "B2", "event_time": "2026-10-15T09:20:00Z", "source_system": "PAS"}
@@ -479,6 +600,7 @@ Method OnAfterAllTests() As %Status
     For table = "Downstream.Receipt", "Downstream.Event", "Downstream.Encounter" {
         Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM " _ table _ " WHERE EncounterId LIKE ?", ..Prefix _ "-%")
     }
+    Kill ^IRIS.Temp.DownstreamTest(..Prefix)
     Quit $$$OK
 }
 
