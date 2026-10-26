@@ -13,6 +13,14 @@ ClassMethod InBed() As %DynamicObject
     Quit {"encounter_id": "ENC-1231", "state": "admitted", "ward": "WARD-B", "bed": "B2", "version": 3, "history": [{"event": "admit", "ward": "WARD-B", "bed": "B2", "event_time": "2026-10-15T08:10:00Z", "operation_key": "k-admit"}]}
 }
 
+/// The evidence stores the section as a snapshot item of its own kind (found on core: a kind outside the list fails the
+/// evidence, and the case with it).
+Method TestSnapshotItemKind()
+{
+    Do $$$AssertStatusOK(##class(Shutter.Store.SnapshotItem).KindIsValid("bed_conflict"), "bed_conflict is a snapshot item kind")
+    Do $$$AssertStatusNotOK(##class(Shutter.Store.SnapshotItem).KindIsValid("no_such_kind"), "an unknown kind is refused")
+}
+
 Method TestNoOccupantOrNoRead()
 {
     Set out = ##class(Shutter.Util.BedConflict).Build({"error": "bed_occupied", "ward": "WARD-B", "bed": "B2"}, "WARD-B", "B2", "", 0, [])
