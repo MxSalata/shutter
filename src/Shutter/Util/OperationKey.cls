@@ -60,7 +60,7 @@ ClassMethod FromHL7(message As EnsLib.HL7.Message, Output sc As %Status) As %Dyn
         Set patientId = ..PatientIdentifier(message, .authority)
         Set encounterId = ..Value(message, "PV1", "19.1")
         Set ward = ..Value(message, "PV1", "3.1")
-        Set bed = ..Value(message, "PV1", "3.2")
+        Set bed = ..BedOf(..Value(message, "PV1", "3.2"), ..Value(message, "PV1", "3.3"))
         Set eventTime = message.GetValueAt("EVN:6.1")
         If eventTime = "" Set eventTime = message.GetValueAt("EVN:2.1")
         Set event = ..EventForTrigger(trigger)
@@ -89,7 +89,7 @@ ClassMethod FromHL7(message As EnsLib.HL7.Message, Output sc As %Status) As %Dyn
         } Else {
             Do op.%Set("ward", "", "null")
         }
-        // The bed (PV1-3's second component) travels beside the canonical payload (CONTRACTS 1.24: not in the digest), for an
+        // The bed (PV1-3's bed component, with its room) travels beside the canonical payload (CONTRACTS 1.24: not in the digest), for an
         // admission or a transfer only; a placement without one is at ward level.
         If ((event = "admit") || (event = "transfer")) && (bed '= "") { Set op."bed" = $EXTRACT(bed, 1, 64) } Else { Do op.%Set("bed", "", "null") }
         Set op."event_time" = isoTime
@@ -107,6 +107,16 @@ ClassMethod FromHL7(message As EnsLib.HL7.Message, Output sc As %Status) As %Dyn
 /// The prior record of a merge (A40) from the message's MRG segments, added to the operation: prior_patient_id and
 /// prior_patient_id_authority (MRG-1, the repetition typed MR by CX.5, else the first), prior_encounter_id (MRG-5),
 /// both from the first MRG, and merge_groups, how many MRG segments the message has (one per PATIENT group).
+/// The bed of a PL location (PV1-3), named within its ward: the bed component (PV1-3.3), prefixed by the room (PV1-3.2) when
+/// one is given, as BAY1-01, since beds are numbered within a bay; "" when the location names no bed (a ward or bay level
+/// placement), whatever the room says. At most 64 characters.
+ClassMethod BedOf(room As %String, bed As %String) As %String
+{
+    Set room = $ZSTRIP(room, "<>W"), bed = $ZSTRIP(bed, "<>W")
+    If bed = "" Quit ""
+    Quit $EXTRACT($SELECT(room = "": bed, 1: room _ "-" _ bed), 1, 64)
+}
+
 ClassMethod MergeFields(message As EnsLib.HL7.Message, op As %DynamicObject)
 {
     Set index = "", groups = 0
@@ -141,7 +151,7 @@ ClassMethod Unmapped(request As EnsLib.HL7.Message, headerId As %String) As %Dyn
     Set op."event" = $SELECT(trigger = "": "", 1: trigger)
     Set ward = ..Value(request, "PV1", "3.1")
     If ward '= "" { Set op."ward" = ward } Else { Do op.%Set("ward", "", "null") }
-    Set bed = ..Value(request, "PV1", "3.2")
+    Set bed = ..BedOf(..Value(request, "PV1", "3.2"), ..Value(request, "PV1", "3.3"))
     If bed '= "" { Set op."bed" = $EXTRACT(bed, 1, 64) } Else { Do op.%Set("bed", "", "null") }
     Set raw = request.GetValueAt("EVN:6.1")
     If raw = "" Set raw = request.GetValueAt("EVN:2.1")

@@ -195,7 +195,7 @@ From an HL7 v2 ADT message (2.3.1, 2.4 or 2.5.1: the fields sit at the same posi
 | `encounter_id` | PV1-19 (visit number); required for the delivered events; for the indexed events and a merge, the literal `-` when absent, never empty (v1.14) |
 | `event` | MSH-9.2, by the trigger table below (v1.14): A01 `admit`, A02 `transfer`, A03 `discharge`, A04 `register`, A05 `preadmit`, A06 and A07 `update`, A08 `update`, A11 `cancel_admit`, A12 `cancel_transfer`, A13 `cancel_discharge`, A28 `person_add`, A31 `person_update`, A40 `merge`; anything else does not map (an `unmappable` case) |
 | `ward` | PV1-3.1 (assigned patient location, point of care) for `admit` and `transfer`; null otherwise |
-| `bed` | PV1-3.2 (the bed component) for `admit` and `transfer`, at most 64 characters; null otherwise (v1.28). Beside the canonical payload, so no digest changes; the ward message sends it to the receiver (1.1), the case keeps it (`bed`) and the headline names it |
+| `bed` | the bed component PV1-3.3, prefixed by the room PV1-3.2 when one is given (`BAY1-01`: beds are numbered within a bay, and a bed is named within its ward), for `admit` and `transfer`, at most 64 characters; null otherwise, and null when PV1-3 names no bed component (v1.28). Beside the canonical payload, so no digest changes; the ward message sends it to the receiver (1.1), the case keeps it (`bed`) and the headline names it |
 | `prior_patient_id`, `prior_patient_id_authority`, `prior_encounter_id`, `merge_groups` | a merge only (v1.14): MRG-1 (the repetition typed MR, else the first), MRG-5, and the number of MRG segments; carried on the case and, for a delivered merge, in the request body outside the payload digest (1.6); a message with several PATIENT groups is one merge case whose evidence lists every group |
 | `event_time` | EVN-6 (event occurred) if present, else EVN-2 (recorded), as ISO 8601 UTC |
 | `source_message_id` | MSH-10 |
@@ -936,7 +936,7 @@ copy of the message.
   stored copy's header as `SourceHeaderId`, and the receiver and source fields. The case workflow answers as soon as the
   case row is saved (`Reply`), so the route carries the case id within seconds. The HL7 Index's `Routes` names
   `Case Intake` beside `ADT In`, so the stored copies are indexed.
-- The case carries `bed` (PV1-3's bed component for an admission or a transfer, else null; v1.28) and `waitsOn` (the case it
+- The case carries `bed` (PV1-3's room and bed components for an admission or a transfer, else null; v1.28) and `waitsOn` (the case it
   waits on while the gate holds its write with `WAITING_FOR_OCCUPANT_CASE`, 6.5; null otherwise; cleared by a reopening), on
   `GET /cases` items and `GET /cases/{id}` alike.
 - The case carries `receiver` (the intake's, else the connector item), `sourceNamespace`, `sourceProduction`,
