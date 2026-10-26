@@ -42,7 +42,7 @@ Parameter RECEIPTKEEP = ",operation_key,encounter_id,event,ward,event_time,appli
 /// What the failure and the receiver's error keep.
 Parameter FAILUREKEEP = ",kind,outcome,reason_code,http_status,status,text,error,message,ens_session_id,source_header_id,instruction_like,";
 
-Parameter TIMELINEKEEP = ",event,ward,event_time,operation_key,source_message_id,ens_header_id,ens_session_id,sent_at,source,later,this_case,outcome,reason_code,http_status,version_after,route,message_type,";
+Parameter TIMELINEKEEP = ",event,ward,event_time,operation_key,source_message_id,ens_header_id,ens_session_id,sent_at,source,later,this_case,outcome,reason_code,http_status,version_after,route,receiver,message_type,";
 
 Parameter ROUTEKEEP = ",feed,connector,receiver,tier,category,history_policy,capabilities_source,declared,capabilities_http_status,capabilities,conditional_writes,receipts,dry_run,epoch,note,";
 

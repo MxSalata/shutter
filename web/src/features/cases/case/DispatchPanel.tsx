@@ -11,6 +11,7 @@ import { attempt, caseState, verification } from '@/lib/status';
 import { asObject } from '@/lib/json';
 import { STOPPED_STATES } from './receipt';
 import { NotYet, Section } from './Section';
+import { receiverNoun } from './receiver';
 
 function AttemptCard({ a }: { a: Attempt }) {
   const s = attempt(a.outcome);
@@ -115,17 +116,19 @@ interface Props {
   planned: boolean;
   byHand: boolean;
   state: string;
+  /** The case's receiver (its production item). */
+  receiver?: string;
 }
 
-/** The writes Shutter sent: each attempt and what the downstream system answered. */
-export function DispatchPanel({ caseId, open, write, planned, byHand, state }: Props) {
+/** The writes Shutter sent: each attempt and what the receiver answered. */
+export function DispatchPanel({ caseId, open, write, planned, byHand, state, receiver }: Props) {
   const attempts = useAttempts(caseId, open);
   const list = (attempts.data ?? []).filter((x) => x.attempt);
   return (
     <Section
       id="dispatch"
       title="Dispatch"
-      note="The conditional write, sent only after the release, a fresh read of the receiver and the gate at dispatch. An acknowledgement only says the downstream system answered."
+      note={`The conditional write, sent only after the release, a fresh read of the receiver and the gate at dispatch. An acknowledgement only says ${receiverNoun(receiver)} answered.`}
     >
       {attempts.isError ? <ErrorAlert error={attempts.error} title="The attempts could not be read" /> : null}
       {attempts.isSuccess && list.length === 0 ? (

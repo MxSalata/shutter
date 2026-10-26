@@ -52,18 +52,103 @@ function renderPage(query = '') {
   );
 }
 
+/** The first receiver's questions: the seed lists two receivers, each asked the same ones. */
+const receiver1 = () => within(screen.getByRole('group', { name: 'Receiver 1: Downstream Out' }));
+const inReceiver1 = async () =>
+  within(await screen.findByRole('group', { name: 'Receiver 1: Downstream Out' }));
+
 describe('SiteProfilePage', () => {
   it('shows the answers in force, where they came from, and asks for the induction', async () => {
     renderPage();
     expect(await screen.findByText('Seeded from knowledge/site/profile.json')).toBeInTheDocument();
     expect(screen.getByText('Shutter is running on the shipped answers')).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /2, operations/ })).toBeChecked();
-    expect(screen.getByRole('radio', { name: 'In arrival order' })).toBeChecked();
-    expect(screen.getByRole('switch', { name: /accepts cancels/ })).not.toBeChecked();
+    expect((await inReceiver1()).getByRole('radio', { name: /2, operations/ })).toBeChecked();
+    expect((await inReceiver1()).getByRole('radio', { name: 'In arrival order' })).toBeChecked();
+    expect(screen.getByRole('switch', { name: /Downstream Out accepts cancels/ })).not.toBeChecked();
     expect(screen.getByRole('combobox', { name: 'Tier 2, ordered chains' })).toHaveValue('approval');
     expect(screen.getByRole('textbox', { name: 'Failures' })).toHaveValue('5');
     const summary = screen.getByRole('list', { name: 'Who releases each write' });
     expect(within(summary).getAllByText("automatic: the site's written policy").length).toBeGreaterThan(0);
+  });
+
+  it('shows each receiver as a card with its category in plain words, and the kind no receiver has', async () => {
+    renderPage();
+    const cards = await screen.findByRole('list', { name: 'The receivers and what each needs' });
+    const beds = within(cards).getByRole('listitem', { name: 'Downstream Out' });
+    expect(within(beds).getByText('Current state')).toBeInTheDocument();
+    expect(within(beds).getByText(/An overtaken failure closes with no write/)).toBeInTheDocument();
+    expect(within(beds).getAllByText('A person, one approval').length).toBeGreaterThan(0);
+    const records = within(cards).getByRole('listitem', { name: 'Records Out' });
+    expect(within(records).getByText('History of record')).toBeInTheDocument();
+    expect(within(records).getByText(/asks for a correction by hand/)).toBeInTheDocument();
+    expect(within(cards).getByText('Orders and results')).toBeInTheDocument();
+    expect(within(cards).getByText('Not modelled yet')).toBeInTheDocument();
+  });
+
+  it('says where a receiver with no category answered takes its history policy from', async () => {
+    const legacy = structuredClone(recorded);
+    const { category: _c, history_policy: _h, ...beds } = legacy.profile.receivers[0];
+    legacy.profile = { ...legacy.profile, receivers: [beds], history_policy: 'correct' };
+    server.use(http.get(`${BASE}/site-profile`, () => HttpResponse.json(legacy)));
+    renderPage();
+    const cards = await screen.findByRole('list', { name: 'The receivers and what each needs' });
+    const card = within(cards).getByRole('listitem', { name: 'Downstream Out' });
+    expect(within(card).getByText('Not answered: read as current state')).toBeInTheDocument();
+    expect(within(card).getByText(/asks for a correction by hand/)).toBeInTheDocument();
+    expect(
+      within(card).getByText(
+        'Read from the site-wide history policy (correct the history), since no category is answered for this receiver.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("asks each receiver's category, explains it, and sends it with the profile", async () => {
+    renderPage();
+    const select = (await inReceiver1()).getByRole('combobox', { name: 'Category of Downstream Out' });
+    expect(select).toHaveValue('current_state');
+    await userEvent.selectOptions(select, 'history_of_record');
+    expect(receiver1().getByText(/A PAS, an electronic patient record/)).toBeInTheDocument();
+    await userEvent.click(receiver1().getByRole('button', { name: 'Advanced: its history policy' }));
+    expect(
+      receiver1().getByRole('combobox', { name: /When a failure at it has been overtaken/ }),
+    ).toHaveValue('');
+    await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByText('Downstream Out, category: from current state to history of record'),
+    ).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
+    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
+    const sent = puts[0].body.receivers as { category?: string; history_policy?: string }[];
+    expect(sent.map((r) => r.category)).toEqual(['history_of_record', 'history_of_record']);
+    expect(sent[0].history_policy).toBeUndefined();
+  });
+
+  it("shows the validator's message for a category the server would refuse, at its field", async () => {
+    server.use(
+      http.put(`${BASE}/site-profile`, () =>
+        HttpResponse.json(
+          {
+            error: 'bad_request',
+            detail:
+              'The profile is not valid (CONTRACTS 6.4): receivers[1].category: must be current_state, history_of_record or orders_results',
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Confirm these answers…' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm as version 11' }));
+    expect(
+      await screen.findByText(
+        'Receiver 2, category: must be current_state, history_of_record or orders_results',
+      ),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Category of Records Out' })).toHaveFocus(),
+    );
   });
 
   it('asks whether closing a case by hand needs an approver, and sends the answer with the profile', async () => {
@@ -80,8 +165,8 @@ describe('SiteProfilePage', () => {
     expect(
       within(dialog).getByText('Closing a case by hand: only an approver, from now on'),
     ).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
-    expect(await screen.findByText('Version 10 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
+    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
     expect(puts[0].body.approvers).toEqual({ ...recorded.profile.approvers, close_needs_approver: true });
   });
 
@@ -89,7 +174,7 @@ describe('SiteProfilePage', () => {
     resetMock('operator');
     renderPage();
     expect(await screen.findByText(/Changing the answers needs the approver role/)).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /2, operations/ })).toBeDisabled();
+    expect((await inReceiver1()).getByRole('radio', { name: /2, operations/ })).toBeDisabled();
     expect(screen.getByRole('switch', { name: /^Closing a case by hand needs an approver/ })).toBeDisabled();
     expect(
       screen.queryByRole('button', { name: /Review and save|Confirm these answers/ }),
@@ -98,15 +183,15 @@ describe('SiteProfilePage', () => {
 
   it('saves a change as the next version, sending the whole profile with expectedVersion', async () => {
     renderPage();
-    await userEvent.click(await screen.findByRole('radio', { name: /3, clinical safety/ }));
+    await userEvent.click((await inReceiver1()).getByRole('radio', { name: /3, clinical safety/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
     const dialog = await screen.findByRole('dialog');
     expect(
       within(dialog).getByText('Downstream Out, tier: from 2, operations to 3, clinical safety'),
     ).toBeInTheDocument();
-    expect(within(dialog).getByText(/made under version 9 are refused at release/)).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
-    expect(await screen.findByText('Version 10 saved')).toBeInTheDocument();
+    expect(within(dialog).getByText(/made under version 10 are refused at release/)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
+    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
     expect(puts).toHaveLength(1);
     expect(puts[0].headers.get('X-Requested-With')).toBe('Shutter');
     const { version: _v, ...expected } = structuredClone(recorded.profile);
@@ -136,8 +221,8 @@ describe('SiteProfilePage', () => {
         'Team added: Bed management <beds@example.nhs.uk>, copies oncall@example.nhs.uk, for Downstream Out',
       ),
     ).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
-    expect(await screen.findByText('Version 10 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
+    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
     // The seed's two teams first, as stored, then the new one
     const teams = puts[0].body.teams as { id: string }[];
     expect(teams.map((t) => t.id)).toEqual(['integration', 'pas', 'beds']);
@@ -183,8 +268,8 @@ describe('SiteProfilePage', () => {
     expect(
       within(dialog).getByText(/Feed time zone: from Europe\/London to -03:30\. Every operation key/),
     ).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
-    expect(await screen.findByText('Version 10 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
+    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
     expect(puts[0].body.feed).toEqual({ time_zone: '-03:30' });
   });
 
@@ -216,8 +301,8 @@ describe('SiteProfilePage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('Note text: sent to the model from now on')).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
-    expect(await screen.findByText('Version 10 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
+    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
     expect(puts[0].body.model_content).toEqual({ free_text: true });
   });
 
@@ -225,7 +310,7 @@ describe('SiteProfilePage', () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Confirm these answers…' }));
     const dialog = await screen.findByRole('dialog');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm as version 10' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm as version 11' }));
     expect(await screen.findByText('Saved in Shutter')).toBeInTheDocument();
     const { version: _v, ...expected } = structuredClone(recorded.profile);
     expect(puts[0].body).toEqual({ ...expected, expectedVersion: recorded.version });
@@ -239,7 +324,7 @@ describe('SiteProfilePage', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
     const dialog = await screen.findByRole('dialog');
-    const save = within(dialog).getByRole('button', { name: 'Save version 10' });
+    const save = within(dialog).getByRole('button', { name: 'Save version 11' });
     expect(save).toBeDisabled();
     expect(within(dialog).getByText('Fewer releases wait for a person')).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('checkbox', { name: /I mean it/ }));
@@ -248,7 +333,7 @@ describe('SiteProfilePage', () => {
 
   it('checks an answer before anything is sent, and points at the field', async () => {
     renderPage();
-    const name = await screen.findByRole('textbox', { name: /Production item/ });
+    const name = (await inReceiver1()).getByRole('textbox', { name: /Production item/ });
     await userEvent.clear(name);
     await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -259,28 +344,28 @@ describe('SiteProfilePage', () => {
 
   it('keeps the edits when someone else saved meanwhile, and saves them against the newer version', async () => {
     renderPage();
-    await userEvent.click(await screen.findByRole('radio', { name: /3, clinical safety/ }));
-    // Someone else saves version 10 while this page holds version 9
+    await userEvent.click((await inReceiver1()).getByRole('radio', { name: /3, clinical safety/ }));
+    // Someone else saves version 11 while this page holds version 10
     const theirs = structuredClone(recorded.profile);
     delete theirs.version;
     theirs.incident = { ...theirs.incident, threshold: 8 };
     const res = await fetch(`${BASE}/site-profile`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'Shutter' },
-      body: JSON.stringify({ ...theirs, expectedVersion: 9 }),
+      body: JSON.stringify({ ...theirs, expectedVersion: 10 }),
     });
     expect(res.status).toBe(200);
     await userEvent.click(screen.getByRole('button', { name: 'Review and save\u2026' }));
     let dialog = await screen.findByRole('dialog');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
-    expect(await within(dialog).findByText(/Version 10 was saved by someone else/)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
+    expect(await within(dialog).findByText(/Version 11 was saved by someone else/)).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }));
     await userEvent.click(screen.getByRole('button', { name: 'Review and save\u2026' }));
     dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('Incidents, failures: from 8 to 5')).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
-    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
-    expect(puts.at(-1)?.body.expectedVersion).toBe(10);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 12' }));
+    expect(await screen.findByText('Version 12 saved')).toBeInTheDocument();
+    expect(puts.at(-1)?.body.expectedVersion).toBe(11);
   });
 
   it('counts a save whose answer was lost as saved when the stored profile is ours', async () => {
@@ -295,11 +380,11 @@ describe('SiteProfilePage', () => {
       }),
     );
     renderPage();
-    await userEvent.click(await screen.findByRole('radio', { name: /3, clinical safety/ }));
+    await userEvent.click((await inReceiver1()).getByRole('radio', { name: /3, clinical safety/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Review and save\u2026' }));
     const dialog = await screen.findByRole('dialog');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
-    expect(await screen.findByText('Version 10 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
+    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
   });
 
   it('marks the field a server refusal names, and focuses its chosen radio', async () => {
@@ -315,12 +400,12 @@ describe('SiteProfilePage', () => {
       ),
     );
     renderPage();
-    await userEvent.click(await screen.findByRole('radio', { name: /3, clinical safety/ }));
+    await userEvent.click((await inReceiver1()).getByRole('radio', { name: /3, clinical safety/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Review and save\u2026' }));
     const dialog = await screen.findByRole('dialog');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
     expect(await screen.findByText('Receiver 1, tier: must be 1, 2 or 3')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole('radio', { name: /3, clinical safety/ })).toHaveFocus());
+    await waitFor(() => expect(receiver1().getByRole('radio', { name: /3, clinical safety/ })).toHaveFocus());
   });
 
   it('lists the versions with what each changed', async () => {

@@ -97,6 +97,8 @@ export function CaseHeader({
             ? `${what}, encounter ${c.encounterId}`
             : `${what}, no encounter`}
         </Meta>
+        {/* A case is one failed delivery to one receiver; one recorded before the server named it went to the bed manager */}
+        <Meta label="Receiver">{c.receiver || 'Downstream Out'}</Meta>
         {source ? <Meta label="Source">{source}</Meta> : null}
         {c.event === 'merge' ? (
           <Meta label="Merge">

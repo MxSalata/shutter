@@ -86,7 +86,7 @@ XData ProductionDefinition
     <Setting Target="Adapter" Name="FileSpec">*.hl7</Setting>
     <Setting Target="Adapter" Name="CallInterval">1</Setting>
     <Setting Target="Adapter" Name="DeleteFromServer">1</Setting>
-    <Setting Target="Host" Name="TargetConfigNames">ADT to Downstream</Setting>
+    <Setting Target="Host" Name="TargetConfigNames">ADT to Downstream,ADT to Records</Setting>
     <Setting Target="Host" Name="MessageSchemaCategory">2.5.1</Setting>
     <Setting Target="Host" Name="AckMode">Never</Setting>
     <Setting Target="Host" Name="UseAckCommitCodes">0</Setting>
@@ -103,6 +103,15 @@ XData ProductionDefinition
     <Setting Target="Adapter" Name="ConnectTimeout">5</Setting>
     <Setting Target="Host" Name="FailureTimeout">0</Setting>
   </Item>
+  <Item Name="ADT to Records" Category="Feed" ClassName="Shutter.Process.ADTToWard" PoolSize="1" Enabled="true" Foreground="false" Comment="The same feed to the demo patient records system (category history_of_record): builds the operation, delivers it to Records Out, opens a case on failure" LogTraceEvents="true" Schedule="">
+    <Setting Target="Host" Name="WardTarget">Records Out</Setting>
+  </Item>
+  <Item Name="Records Out" Category="Feed,Recovery" ClassName="Shutter.Operation.Ward" PoolSize="1" Enabled="true" Foreground="false" Comment="The connector to the demo patient records system (the second demo receiver, /records/api): feed, rehearsals and recovery writes" LogTraceEvents="true" Schedule="">
+    <Setting Target="Adapter" Name="Credentials">DownstreamAPI</Setting>
+    <Setting Target="Adapter" Name="ResponseTimeout">15</Setting>
+    <Setting Target="Adapter" Name="ConnectTimeout">5</Setting>
+    <Setting Target="Host" Name="FailureTimeout">0</Setting>
+  </Item>
   <Item Name="Escalation Mail" Category="Recovery" ClassName="Shutter.Operation.EscalationMail" PoolSize="1" Enabled="true" Foreground="false" Comment="Escalation emails a person reviewed: through the site's mail server, or as .eml files under the output folder when no server is set" LogTraceEvents="true" Schedule="">
     <Setting Target="Host" Name="FailureTimeout">0</Setting>
   </Item>
@@ -110,6 +119,8 @@ XData ProductionDefinition
     <Setting Target="Host" Name="SettleSeconds">15</Setting>
   </Item>
   <Item Name="Case Review" Category="Recovery" ClassName="Shutter.Process.Review" PoolSize="1" Enabled="true" Foreground="false" Comment="One instance per production review: the read-only sweep of a production's settings, errors and failures over a window, stored, then the review agent's ranking of the findings" LogTraceEvents="true" Schedule="">
+  </Item>
+  <Item Name="Case Question" Category="Recovery" ClassName="Shutter.Process.Question" PoolSize="1" Enabled="true" Foreground="false" Comment="One instance per question about a case: the Explain agent, or the board's members and then the coordinator, asked through the Agent Board item with the case's model view and the what-if facts; the answer checked against them before it is stored; nothing written" LogTraceEvents="true" Schedule="">
   </Item>
   <Item Name="Case Intake" Category="Recovery" ClassName="Shutter.Process.Intake" PoolSize="1" Enabled="true" Foreground="false" Comment="A failed delivery another production reported through POST /api/shutter/intake: stores Shutter's own copy of the message, maps it and opens the case through the case workflow" LogTraceEvents="true" Schedule="">
   </Item>

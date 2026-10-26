@@ -22,11 +22,43 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
     expect(validateProfile(recorded)).toBe('');
   });
 
+  it('serves the seed: two receivers, each with its category, and no site-wide history policy', () => {
+    expect(recorded.version).toBe(6);
+    expect(recorded.receivers.map((r) => [r.name, r.category])).toEqual([
+      ['Downstream Out', 'current_state'],
+      ['Records Out', 'history_of_record'],
+    ]);
+    expect(recorded.receivers[1].demo).toEqual({ namespace: 'RECORDS' });
+    expect('history_policy' in recorded).toBe(false);
+  });
+
+  it('accepts a receiver with no category, as every profile before categories', () => {
+    const p = copy();
+    delete p.receivers[0].category;
+    expect(validateProfile(p)).toBe('');
+  });
+
   it.each([
     [(p: Record<string, unknown>) => (p.expectedVersion = 3), 'expectedVersion: unknown field'],
     [(p: Record<string, unknown>) => (p.receivers = []), 'receivers: must be a non-empty array'],
     [(p: SiteProfile) => (p.receivers[0].name = ''), 'receivers[0].name: required'],
     [(p: SiteProfile) => (p.receivers[0].tier = 4), 'receivers[0].tier: must be 1, 2 or 3'],
+    [
+      (p: SiteProfile) => (p.receivers[1].category = 'records'),
+      'receivers[1].category: must be current_state, history_of_record or orders_results',
+    ],
+    [
+      (p: SiteProfile) => (p.receivers[0].history_policy = 'keep'),
+      'receivers[0].history_policy: must be current or correct',
+    ],
+    [
+      (p: SiteProfile) => ((p.receivers[1] as Record<string, unknown>).demo = 'RECORDS'),
+      'receivers[1].demo: must be an object',
+    ],
+    [
+      (p: SiteProfile) => ((p.receivers[1] as Record<string, unknown>).demo = { namespace: 7 }),
+      'receivers[1].demo.namespace: must be a string',
+    ],
     [
       (p: SiteProfile) => ((p.receivers[0] as Record<string, unknown>).cancels = 'no'),
       'receivers[0].cancels: must be true or false',
@@ -193,7 +225,9 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
   it('refuses a second receiver with the same name, which the core would silently shadow', () => {
     const p = copy();
     p.receivers.push({ ...p.receivers[0] });
-    expect(checkDraft(p)).toBe('receivers[1].name: another receiver already has this name');
+    expect(checkDraft(p)).toBe(
+      `receivers[${p.receivers.length - 1}].name: another receiver already has this name`,
+    );
   });
 });
 
@@ -289,6 +323,21 @@ describe('diffProfiles', () => {
     const policy = diffProfiles(recorded, p).find((c) => c.path === 'policy.3.single');
     expect(policy?.lessOversight).toBe(true);
     expect(policy?.tier3Automatic).toBe(true);
+  });
+
+  it("says a receiver's category changed, and what an overtaken failure does there now", () => {
+    const p = copy();
+    p.receivers[0].category = 'history_of_record';
+    const texts = diffProfiles(recorded, p).map((c) => c.text);
+    expect(texts).toContain('Downstream Out, category: from current state to history of record');
+    expect(texts).toContain(
+      'Downstream Out, an overtaken failure: the history is corrected by hand (from its category)',
+    );
+    const q = copy();
+    q.receivers[1].history_policy = 'current';
+    expect(diffProfiles(recorded, q).map((c) => c.text)).toEqual([
+      'Records Out, an overtaken failure: kept as current, closed with no write (set on the receiver, not from its category)',
+    ]);
   });
 
   it('names the teams, mail, zone and note-text changes', () => {

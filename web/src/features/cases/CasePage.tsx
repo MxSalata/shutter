@@ -188,7 +188,13 @@ function CaseBody({ c }: { c: CaseDetail }) {
               />
             </Tabs.Panel>
             <Tabs.Panel value="evidence" pt="md">
-              <EvidencePanel caseId={c.caseId} open={open} focus={focus} onFocused={clearFocus} />
+              <EvidencePanel
+                caseId={c.caseId}
+                receiver={c.receiver}
+                open={open}
+                focus={focus}
+                onFocused={clearFocus}
+              />
             </Tabs.Panel>
             <Tabs.Panel value="audit" pt="md">
               <Stack gap="md">

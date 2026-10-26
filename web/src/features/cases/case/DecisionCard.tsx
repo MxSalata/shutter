@@ -15,6 +15,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
 import { humanize } from '@/lib/format';
 import { gateOutcome, verification, writes } from '@/lib/status';
+import { CATEGORY_TEXT } from '@/lib/categories';
 import { TONE_COLOURS, toneText, type Tone } from '@/lib/tone';
 import { Reinvestigate } from './Closure';
 import { checksOf } from './derive';
@@ -27,6 +28,7 @@ import {
   releaseStatus,
   type CaseFacts,
 } from './outcome';
+import { caseReceiver, correctionStepsOf } from './receiver';
 import { Section } from './Section';
 
 /** The gate's outcome in a word on the badge; the counts are written beside it. */
@@ -149,6 +151,9 @@ export function DecisionCard({
           ? IconHandStop
           : IconUserQuestion;
   const colour = TONE_COLOURS[tone];
+  const receiver = caseReceiver(c, facts.snapshot);
+  const category = receiver.category ? CATEGORY_TEXT[receiver.category] : undefined;
+  const correction = correctionStepsOf(facts.plan);
   // The third card is drawn in its tone only when someone has to act; its icon and words say the same without colour
   const marked = next.kind !== 'none';
   return (
@@ -159,6 +164,24 @@ export function DecisionCard({
           <Text size="sm">{evidenceSummary(facts.snapshot)}</Text>
         </StoryCard>
         <StoryCard label="What Shutter did" title={outcomeHeadline(facts)}>
+          {/* The receiver the case is about, and its category as the evidence recorded it */}
+          <Group gap={6} wrap="wrap" data-testid="case-receiver">
+            <Text size="sm">At {receiver.name}</Text>
+            {category ? (
+              <StatusBadge
+                tone="neutral"
+                icon={null}
+                label={category.label}
+                hint={`${category.gist}. ${category.overtaken}`}
+              />
+            ) : null}
+          </Group>
+          {/* The category's meaning in words, not only in the badge's tooltip, which touch screens never show */}
+          {category ? (
+            <Text size="sm" c="dimmed" data-testid="case-receiver-gist">
+              {`${category.gist}.`}
+            </Text>
+          ) : null}
           <Text size="sm">{outcomeReason(facts)}</Text>
           {round > 1 ? (
             <Text size="sm">
@@ -245,6 +268,18 @@ export function DecisionCard({
           ) : (
             <div id="next-action-why" hidden />
           )}
+          {correction ? (
+            <Stack gap={4} data-testid="correction-steps">
+              <Title order={4} fz="sm">
+                {`Correcting the history at ${correction.receiver || receiver.name}`}
+              </Title>
+              <List type="ordered" size="sm" spacing={4}>
+                {correction.steps.map((step, i) => (
+                  <List.Item key={i}>{step}</List.Item>
+                ))}
+              </List>
+            </Stack>
+          ) : null}
           {/* A withheld case (a merge or a cancel Shutter never sends) has nothing new to find: the team closes it */}
           {stopped && c.failureKind !== 'withheld' ? <Reinvestigate c={c} /> : null}
         </StoryCard>

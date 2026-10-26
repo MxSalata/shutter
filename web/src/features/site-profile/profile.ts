@@ -1,4 +1,5 @@
 import type { ChainKind, SiteProfile, SiteReceiver, SiteTeam } from '@/api/types';
+import { CATEGORY_TEXT, categoryOf, historyPolicyOf } from '@/lib/categories';
 
 /**
  * The site profile's questionnaire, without React: labels, the diff the review and the history show, the port of
@@ -92,6 +93,7 @@ export function newReceiver(): SiteReceiver {
   return {
     name: '',
     system: '',
+    category: 'current_state',
     tier: 2,
     applies: 'arrival_order',
     resend_timestamp: 'original',
@@ -222,6 +224,20 @@ export function validateProfile(p: unknown): string {
     if (typeof r.name !== 'string' || r.name === '') return `${at}.name: required`;
     if (!numeric(r.tier) || asNumber(r.tier) < 1 || asNumber(r.tier) > 3)
       return `${at}.tier: must be 1, 2 or 3`;
+    // The receiver's category (v1.23) and its own history policy, which the category derives when absent.
+    if (
+      'category' in r &&
+      !['current_state', 'history_of_record', 'orders_results'].includes(r.category as string)
+    )
+      return `${at}.category: must be current_state, history_of_record or orders_results`;
+    if ('history_policy' in r && !['current', 'correct'].includes(r.history_policy as string))
+      return `${at}.history_policy: must be current or correct`;
+    // A demo receiver's namespace (v1.25): where the scenario runner resets it and sets its faults.
+    if ('demo' in r) {
+      if (!isObject(r.demo) || Array.isArray(r.demo)) return `${at}.demo: must be an object`;
+      if ('namespace' in r.demo && typeof r.demo.namespace !== 'string')
+        return `${at}.demo.namespace: must be a string`;
+    }
     if ('cancels' in r && typeof r.cancels !== 'boolean') return `${at}.cancels: must be true or false`;
     if ('merges' in r && typeof r.merges !== 'boolean') return `${at}.merges: must be true or false`;
     if ('api' in r) {
@@ -396,7 +412,10 @@ export function problemField(text: string): { path: string; message: string } | 
 
 /** The DOM id of the control for a path, or "" when the page has no control for it (api, features). */
 export function fieldId(path: string): string {
-  let m = /^receivers\[(\d+)\]\.(name|system|tier|applies|resend_timestamp|cancels|merges)$/.exec(path);
+  let m =
+    /^receivers\[(\d+)\]\.(name|system|category|history_policy|tier|applies|resend_timestamp|cancels|merges)$/.exec(
+      path,
+    );
   if (m) return `site-receivers-${m[1]}-${m[2]}`;
   m = /^policy\.([123])\.(single|ordered|interleaved)$/.exec(path);
   if (m) return `site-policy-${m[1]}-${m[2]}`;
@@ -464,6 +483,16 @@ function receiverChanges(a: SiteReceiver, b: SiteReceiver, p: SiteProfile): Chan
         path: String(key),
         text: `${name}, ${label}: from ${show(labels, a[key])} to ${show(labels, b[key])}`,
       });
+  if (categoryOf(a) !== categoryOf(b))
+    out.push({
+      path: 'category',
+      text: `${name}, category: from ${CATEGORY_TEXT[categoryOf(a)].label.toLowerCase()} to ${CATEGORY_TEXT[categoryOf(b)].label.toLowerCase()}`,
+    });
+  if (historyPolicyOf(a, p) !== historyPolicyOf(b, p) || !same(a.history_policy, b.history_policy))
+    out.push({
+      path: 'history_policy',
+      text: `${name}, an overtaken failure: ${historyPolicyOf(b, p) === 'correct' ? 'the history is corrected by hand' : 'kept as current, closed with no write'}${b.history_policy ? ' (set on the receiver, not from its category)' : ' (from its category)'}`,
+    });
   if (!same(a.tier, b.tier)) {
     const toRow = p.policy?.[String(b.tier)] ?? {};
     const fromRow = p.policy?.[String(a.tier)] ?? {};
@@ -508,7 +537,7 @@ export function diffProfiles(a: SiteProfile | undefined, b: SiteProfile): Change
   if (!same(before.history_policy, b.history_policy))
     out.push({
       path: 'history_policy',
-      text: `History policy: from ${show(HISTORY_LABELS, before.history_policy)} to ${show(HISTORY_LABELS, b.history_policy)}`,
+      text: `Site-wide history policy, read only for a receiver with no category: from ${show(HISTORY_LABELS, before.history_policy)} to ${show(HISTORY_LABELS, b.history_policy)}`,
     });
   for (const tier of TIERS)
     for (const kind of KINDS) {

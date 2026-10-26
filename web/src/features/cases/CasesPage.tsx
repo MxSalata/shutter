@@ -13,7 +13,7 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { useCases, useScenarios, type CaseFilters } from '@/api/hooks';
 import type { CaseSummary } from '@/api/types';
 import { PageHeader } from '@/components/PageHeader';
@@ -44,9 +44,16 @@ const BEFORE_PLAN = new Set(['detected', 'collecting', 'investigating', 'grouped
 
 /** What reached the receiver and what the verifier found, when the server sends them; a closed case with no write says so. */
 function AtReceiver({ c }: { c: CaseSummary }) {
-  if (c.writes === undefined) return null;
+  // A case is one failed delivery to one receiver: with two receivers fed, the list says which
+  const name = c.receiver ? (
+    <Text size="xs" c="dimmed">
+      {c.receiver}
+    </Text>
+  ) : null;
+  if (c.writes === undefined) return name;
   return (
     <Stack gap={4} align="flex-start">
+      {name}
       <StatusBadge {...writes(c.writes)} />
       {c.verification ? <StatusBadge {...verification(c.verification)} /> : null}
     </Stack>
@@ -237,7 +244,9 @@ export function AttentionTile({
 
 export default function CasesPage() {
   const [state, setState] = useState<string | null>(null);
-  const [scenario, setScenario] = useState<string | null>(null);
+  // A link from the Scenarios page names its scenario (S22: one case per receiver)
+  const [params] = useSearchParams();
+  const [scenario, setScenario] = useState<string | null>(params.get('scenario'));
   const [page, setPage] = useState(1);
   const filters: CaseFilters = {
     state: state ?? undefined,

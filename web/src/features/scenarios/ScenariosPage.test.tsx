@@ -207,6 +207,32 @@ describe('ScenariosPage', () => {
     expect(within(s).getByText('Nothing written')).toBeInTheDocument();
   });
 
+  it("links each receiver's case of a scenario that opens one per receiver, beside its latest", async () => {
+    const s22 = scenarioDefs.find((d) => d.id === 'S22')!;
+    const s2 = scenarioDefs.find((d) => d.id === 'S2')!;
+    const latest = { caseId: 'C-000055', state: 'escalated', disposition: 'escalate', headline: '' };
+    server.use(
+      http.get('/api/shutter/scenarios', () =>
+        HttpResponse.json({
+          scenarios: [
+            { ...s22, latestCase: latest },
+            { ...s2, latestCase: { ...latest, caseId: 'C-000002' } },
+          ],
+          run: null,
+        }),
+      ),
+    );
+    renderScenarios();
+    await userEvent.click(await screen.findByRole('radio', { name: 'Site policy' }));
+    const row = await card('S22');
+    expect(within(row).getByRole('link', { name: 'C-000055' })).toBeInTheDocument();
+    expect(within(row).getByRole('link', { name: "Each receiver's case for S22" })).toHaveAttribute(
+      'href',
+      '/cases?scenario=S22',
+    );
+    expect(within(await card('S2')).queryByRole('link', { name: /Each receiver/ })).not.toBeInTheDocument();
+  });
+
   it('says how many encounters an incident scenario opens and the writes their chains make in all', async () => {
     renderScenarios();
     for (const id of ['S11', 'S12']) {

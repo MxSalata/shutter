@@ -41,6 +41,7 @@ import type { Tone } from '@/lib/tone';
 import { describeError, isApiError } from '@/lib/errors';
 import { addressesProblem, closeNeedsApprover, controlProblem } from '../../site-profile/profile';
 import { formatZoned, humanize } from '@/lib/format';
+import { receiverNoun, receiverTeam } from './receiver';
 import { Section } from './Section';
 
 /** An escalation email's states: sending it is an action taken, not a result verified, so sent is information. */
@@ -59,9 +60,6 @@ const EMAIL_ICONS: Record<string, Icon> = {
   cancelled: IconMinus,
 };
 
-/** Who an escalation goes to, by one name wherever it is named: the team that owns the downstream system. */
-const RECIPIENT = "the downstream system's team";
-
 /** The dialog: a draft Shutter built from the case, which the person checks, edits and sends. */
 function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalation; onClose: () => void }) {
   const edit = useEditEscalation(c.caseId);
@@ -71,6 +69,8 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
   const [subject, setSubject] = useState(draft.subject);
   const [body, setBody] = useState(draft.body);
   const [key] = useState(newIdempotencyKey);
+  // Who an escalation goes to, by one name wherever it is named: the team that owns the case's receiver
+  const recipient = receiverTeam(c.receiver);
   const [lastSent, setLastSent] = useState({ to: '', cc: '', subject: '' });
   const changed =
     to !== (draft.to ?? '') || cc !== (draft.cc ?? '') || subject !== draft.subject || body !== draft.body;
@@ -113,15 +113,15 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
     <Modal
       opened
       onClose={() => (busy ? undefined : onClose())}
-      title={`Escalate to ${draft.teamName || RECIPIENT}`}
+      title={`Escalate to ${draft.teamName || recipient}`}
       size="xl"
     >
       <Stack gap="sm">
         <Text size="sm">
           Shutter drafted this from its record of the case: the patient&apos;s identifiers and date of birth,
-          the event, why it stopped, what the downstream system holds and the encounter&apos;s messages. No
-          name, address or note text. Check it, change what you need, and send it to{' '}
-          {draft.teamName || RECIPIENT}, who compare the systems and correct them by hand.
+          the event, why it stopped, what {receiverNoun(c.receiver)} holds and the encounter&apos;s messages.
+          No name, address or note text. Check it, change what you need, and send it to{' '}
+          {draft.teamName || recipient}, who compare the systems and correct them by hand.
         </Text>
         <TextInput
           label="To"
@@ -250,7 +250,7 @@ function MarkHandled({ c }: { c: CaseDetail }) {
 
 /**
  * Escalations: when Shutter can't safely recover a message, a person sends the case to the team that owns the
- * downstream system, who compare the systems and correct them by hand, outside HL7 (T29). Once the team has closed the
+ * case's receiver, who compare the systems and correct them by hand, outside HL7 (T29). Once the team has closed the
  * case, the emails stay on the page as its record: who sent each, when, and the digest of the text sent.
  */
 export function EscalationPanel({
@@ -271,6 +271,7 @@ export function EscalationPanel({
   const teams = profile?.teams ?? [];
   const [teamId, setTeamId] = useState('');
   const [open, setOpen] = useState<Escalation | null>(null);
+  const recipient = receiverTeam(c.receiver);
   const escalations = list.data ?? [];
   if (!stopped && !(handled && escalations.length)) return null;
   const pending = escalations.find((e) => e.state === 'draft' || e.state === 'failed');
@@ -295,7 +296,7 @@ export function EscalationPanel({
       title="Escalations"
       note={
         stopped
-          ? `When Shutter can't safely recover a message, don't guess: send the case to ${RECIPIENT}, so they compare the systems and correct them by hand. Shutter drafts the email from its record; a person checks it and sends it.`
+          ? `When Shutter can't safely recover a message, don't guess: send the case to ${recipient}, so they compare the systems and correct them by hand. Shutter drafts the email from its record; a person checks it and sends it.`
           : 'The emails sent before the team corrected the systems by hand and the case was closed.'
       }
     >
@@ -387,7 +388,7 @@ export function EscalationPanel({
               value={teamId}
               onChange={(e) => setTeamId(e.currentTarget.value)}
               data={[
-                { value: '', label: RECIPIENT.charAt(0).toUpperCase() + RECIPIENT.slice(1) },
+                { value: '', label: recipient.charAt(0).toUpperCase() + recipient.slice(1) },
                 ...teams.map((t) => ({ value: t.id, label: `${t.name} (${t.mailbox})` })),
               ]}
               w={{ base: '100%', xs: 300 }}
@@ -401,7 +402,7 @@ export function EscalationPanel({
             loading={draft.isPending}
             onClick={start}
           >
-            {`Escalate to ${teams.find((t) => t.id === teamId)?.name ?? RECIPIENT}…`}
+            {`Escalate to ${teams.find((t) => t.id === teamId)?.name ?? recipient}…`}
           </Button>
         </Group>
       ) : (

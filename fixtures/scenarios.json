@@ -920,5 +920,64 @@
         }
       }
     }
+  },
+  {
+    "id": "S22",
+    "title": "One overtaken transfer, two systems",
+    "summary": "The same feed goes to the bed manager and to the patient records system. Admit to Ward A applies at both; the 10:20 transfer to Ward B fails at both before acceptance; the 10:45 transfer to Ward C applies at both. The bed manager (category current_state) closes its case superseded with no write; the records system (category history_of_record) escalates its case with the correcting steps, since its history is missing a movement.",
+    "steps": [
+      {
+        "file": "S22-01-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept",
+        "receivers": [
+          "Downstream Out",
+          "Records Out"
+        ]
+      },
+      {
+        "file": "S22-02-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off",
+        "receivers": [
+          "Downstream Out",
+          "Records Out"
+        ]
+      },
+      {
+        "file": "S22-03-A02.hl7"
+      }
+    ],
+    "expected": {
+      "modes": [
+        "policy"
+      ],
+      "write": false,
+      "final_state": "admitted",
+      "final_ward": "WARD-C",
+      "failed_operation_key": "PAS^HOSP^MRN1022^ENC-1022^transfer^2026-10-16T09:20:00Z",
+      "by_receiver": {
+        "Downstream Out": {
+          "disposition": "superseded",
+          "outcome": "none",
+          "write": false,
+          "final_state": "admitted",
+          "final_ward": "WARD-C"
+        },
+        "Records Out": {
+          "disposition": "escalate",
+          "outcome": "correct_history",
+          "write": false,
+          "final_state": "admitted",
+          "final_ward": "WARD-C"
+        }
+      }
+    }
   }
 ]

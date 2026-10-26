@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "receivers": [
     {
       "name": "Downstream Out",
@@ -22,6 +22,32 @@
         "receipts": true,
         "history": true,
         "dry_run": true
+      }
+    },
+    {
+      "name": "Records Out",
+      "system": "the demo patient records system",
+      "category": "history_of_record",
+      "tier": 2,
+      "applies": "arrival_order",
+      "resend_timestamp": "original",
+      "cancels": false,
+      "merges": false,
+      "api": {
+        "base": "/records/api",
+        "state": "/encounters/{encounter}",
+        "receipt": "/receipts/{key}",
+        "capabilities": "/capabilities",
+        "operations": "/operations"
+      },
+      "features": {
+        "conditional_writes": true,
+        "receipts": true,
+        "history": true,
+        "dry_run": true
+      },
+      "demo": {
+        "namespace": "RECORDS"
       }
     }
   ],

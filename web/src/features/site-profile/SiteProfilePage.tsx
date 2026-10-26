@@ -15,7 +15,7 @@ import {
   TextInput,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconChevronDown, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -31,8 +31,10 @@ import { DEMO } from '@/demo';
 import { describeError, isApiError } from '@/lib/errors';
 import { humanize } from '@/lib/format';
 import { Section } from '../cases/case/Section';
+import { CATEGORIES, CATEGORY_TEXT, categoryOf, derivedPolicy } from '@/lib/categories';
 import { MoreQuestions } from './MoreQuestions';
 import { PolicySummary } from './PolicySummary';
+import { ReceiverCards } from './ReceiverCards';
 import { Effect, Question } from './Question';
 import {
   KINDS,
@@ -99,6 +101,112 @@ function Choice({
 
 type Problem = { path: string; message: string } | null;
 
+/**
+ * The receiver's category, with what it means, and the history policy override behind "Advanced": the category derives
+ * the policy, and an override is for a records system that keeps only the present placement, or a bed manager that
+ * wants its history straight.
+ */
+function CategoryFields({
+  r,
+  i,
+  err,
+  update,
+}: {
+  r: SiteReceiver;
+  i: number;
+  err: (key: string) => string | undefined;
+  update: (fn: (r: SiteReceiver) => void) => void;
+}) {
+  const id = (key: string) => `site-receivers-${i}-${key}`;
+  const category = categoryOf(r);
+  const known = !r.category || (CATEGORIES as string[]).includes(String(r.category));
+  const [shown, setAdvanced] = useState(!!r.history_policy);
+  // A problem with the override opens it, so the alert's link reaches the field
+  const advanced = shown || !!err('history_policy');
+  const text = CATEGORY_TEXT[category];
+  const derived = derivedPolicy(category);
+  const policyKnown = !r.history_policy || ['current', 'correct'].includes(String(r.history_policy));
+  return (
+    <Stack gap={6}>
+      <NativeSelect
+        id={id('category')}
+        label={`Category of ${r.name || 'this receiver'}`}
+        description={r.category ? undefined : 'Not answered: read as current state, as before categories'}
+        value={r.category ? String(r.category) : ''}
+        onChange={(e) => {
+          const v = e.currentTarget.value;
+          update((x) => {
+            if (v) x.category = v;
+            else delete x.category;
+          });
+        }}
+        data={[
+          ...(!known ? [{ value: String(r.category), label: `Kept as stored: ${String(r.category)}` }] : []),
+          ...(!r.category ? [{ value: '', label: 'Not answered: current state' }] : []),
+          ...CATEGORIES.map((c) => ({
+            value: c,
+            label: `${CATEGORY_TEXT[c].label}: ${CATEGORY_TEXT[c].gist.toLowerCase()}${CATEGORY_TEXT[c].modelled ? '' : ' (not modelled yet)'}`,
+          })),
+        ]}
+        error={err('category')}
+      />
+      <Text size="sm" id={id('category-meaning')}>
+        {text.examples}. {text.overtaken}
+      </Text>
+      <Group>
+        <Button
+          variant="subtle"
+          size="compact-sm"
+          color="gray"
+          onClick={() => setAdvanced((a) => !a)}
+          aria-expanded={advanced}
+          aria-controls={id('advanced')}
+          leftSection={
+            <IconChevronDown
+              size={14}
+              aria-hidden
+              style={{ transform: advanced ? 'rotate(180deg)' : undefined, transition: 'transform 150ms' }}
+            />
+          }
+        >
+          Advanced: its history policy
+        </Button>
+      </Group>
+      {advanced ? (
+        <div id={id('advanced')}>
+          <NativeSelect
+            id={id('history_policy')}
+            label="When a failure at it has been overtaken"
+            description="The category decides this. Set it here only when this system differs from its kind."
+            value={r.history_policy ? String(r.history_policy) : ''}
+            onChange={(e) => {
+              const v = e.currentTarget.value;
+              update((x) => {
+                if (v) x.history_policy = v;
+                else delete x.history_policy;
+              });
+            }}
+            data={[
+              ...(!policyKnown
+                ? [{ value: String(r.history_policy), label: `Kept as stored: ${String(r.history_policy)}` }]
+                : []),
+              {
+                value: '',
+                label: `From its category: ${derived === 'correct' ? 'correct the history by hand' : 'keep what is current'}`,
+              },
+              { value: 'current', label: 'Keep what is current: close with no write' },
+              { value: 'correct', label: 'Correct the history: escalate with the steps named' },
+            ]}
+            error={err('history_policy')}
+          />
+        </div>
+      ) : (
+        <div id={id('advanced')} hidden />
+      )}
+    </Stack>
+  );
+}
+
 function ReceiverFields({
   r,
   i,
@@ -154,7 +262,9 @@ function ReceiverFields({
             error={err('system')}
           />
         </SimpleGrid>
-        <Question n={2} text="Its tier" acts />
+        <Question n={2} text="What kind of system is it?" acts />
+        <CategoryFields r={r} i={i} err={err} update={update} />
+        <Question n={3} text="Its tier" acts />
         <Choice
           id={id('tier')}
           label={`Tier of ${r.name || 'this receiver'}`}
@@ -167,7 +277,7 @@ function ReceiverFields({
           }
           error={err('tier')}
         />
-        <Question n={3} text="Does it apply messages in arrival order or by event time?" acts={false} />
+        <Question n={4} text="Does it apply messages in arrival order or by event time?" acts={false} />
         <Choice
           id={id('applies')}
           label={`${r.name || 'This receiver'} applies messages`}
@@ -188,7 +298,7 @@ function ReceiverFields({
           error={err('applies')}
         />
         <Question
-          n={4}
+          n={5}
           text="Does it take a resend with its original MSH-7, or need a fresh one?"
           acts={false}
         />
@@ -207,7 +317,7 @@ function ReceiverFields({
           }
           error={err('resend_timestamp')}
         />
-        <Question n={5} text="Does it accept cancels (A11, A12, A13) and merges (A40)?" acts />
+        <Question n={6} text="Does it accept cancels (A11, A12, A13) and merges (A40)?" acts />
         <Switch
           id={id('cancels')}
           label={`${r.name || 'This receiver'} accepts cancels`}
@@ -273,7 +383,7 @@ function ProfileForm({
         <Section
           id="site-receivers"
           title="Receivers"
-          note="Questions 1 to 5, for each system this production feeds. The tier picks the row of the approval table below."
+          note="Questions 1 to 6, for each system this production feeds. The category sets what an overtaken failure does to it; the tier picks the row of the approval table below."
         >
           <Question n={1} text="Which receivers does this production feed, and what does each do?" acts />
           {draft.receivers.map((r, i) => (
@@ -298,32 +408,39 @@ function ProfileForm({
             </Button>
           </Group>
         </Section>
-        <Section id="site-history" title="History" note="Question 6.">
-          <Question n={6} text="The site's history policy" acts />
-          <Choice
-            id="site-history-policy"
-            label="When a failure has been overtaken"
-            value={draft.history_policy}
-            options={[
-              [
-                'current',
-                'Keep what is current',
-                'Resend only what is still true; earlier events that were overtaken stay as they are',
-              ],
-              [
-                'correct',
-                'Correct history',
-                'Allows the catalogue’s alternatives that cancel and replay; they always go to a person with the steps named',
-              ],
-            ]}
-            onChange={(v) =>
-              setDraft((d) => {
-                d.history_policy = v;
-              })
-            }
-            error={err('history_policy')}
-          />
-        </Section>
+        {/* The site-wide answer is read only for a receiver with neither a category nor its own policy: shown only then */}
+        {draft.history_policy !== undefined &&
+        draft.receivers.some((r) => !r.category && !r.history_policy) ? (
+          <Section
+            id="site-history"
+            title="Site-wide history policy"
+            note="Read only for a receiver with no category of its own. Give each receiver its category above, and this answer is no longer read."
+          >
+            <Choice
+              id="site-history-policy"
+              label="When a failure has been overtaken, at a receiver with no category"
+              value={draft.history_policy}
+              options={[
+                [
+                  'current',
+                  'Keep what is current',
+                  'Resend only what is still true; earlier events that were overtaken stay as they are',
+                ],
+                [
+                  'correct',
+                  'Correct history',
+                  'Allows the catalogue’s alternatives that cancel and replay; they always go to a person with the steps named',
+                ],
+              ]}
+              onChange={(v) =>
+                setDraft((d) => {
+                  d.history_policy = v;
+                })
+              }
+              error={err('history_policy')}
+            />
+          </Section>
+        ) : null}
         <Section
           id="site-approvals"
           tour="site-approvals"
@@ -491,6 +608,14 @@ function OtherSettings({ profile }: { profile: SiteProfile }) {
                 'the downstream system’s defaults'
               ),
             ]),
+            ...profile.receivers
+              .map((r, i): [string, ReactNode] => [
+                `Receiver ${i + 1} demo namespace`,
+                r.demo?.namespace
+                  ? `${r.demo.namespace}: the scenario runner resets it and sets its faults there`
+                  : '',
+              ])
+              .filter(([, v]) => v),
           ]}
         />
       </Stack>
@@ -745,6 +870,7 @@ function Profile({
           ) : null}
         </Stack>
       </Card>
+      <ReceiverCards profile={draft} />
       <Card padding="md">
         <PolicySummary profile={draft} />
       </Card>
@@ -813,7 +939,7 @@ export default function SiteProfilePage() {
     <>
       <PageHeader
         title="Site profile"
-        subtitle="The site's answers to the induction questions. Shutter reads them for each receiver's tier, the approval each chain needs, who may close a case by hand, when many failures become an incident, who an escalation goes to, the feed's time zone, what the model may see and whether a merge is ever sent. Every saved version is kept."
+        subtitle="The site's answers to the induction questions. Shutter reads them for each receiver's category and tier, the approval each chain needs, who may close a case by hand, when many failures become an incident, who an escalation goes to, the feed's time zone, what the model may see and whether a merge is ever sent. Every saved version is kept."
       />
       {view.isPending || me.isPending || waiting ? <PageSkeleton label="Loading the site profile…" /> : null}
       {view.isError ? (

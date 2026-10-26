@@ -21,7 +21,7 @@ export function forwardedFrom(source: {
 }
 
 /** What each kind of observation is, as the evidence lists name them. */
-export const KIND_LABELS: Record<string, string> = {
+const KIND_LABELS: Record<string, string> = {
   operation: 'The failed operation',
   error: 'What the connector reported',
   message: 'The HL7 message',
@@ -34,8 +34,19 @@ export const KIND_LABELS: Record<string, string> = {
   note: 'Note',
 };
 
+/**
+ * The label of an observation's kind; the receiver's own observations name the case's receiver (its production item)
+ * when the case names one.
+ */
+export function kindLabel(kind: string, receiver?: string): string | undefined {
+  if (receiver && kind === 'ward_state') return `${receiver}'s encounter`;
+  if (receiver && kind === 'receipt') return `${receiver}'s receipt for this operation`;
+  return KIND_LABELS[kind];
+}
+
 /** One line that says what an observation found, so the list reads without opening each item. */
-export function describeItem(item: SnapshotItem): string {
+export function describeItem(item: SnapshotItem, receiver?: string): string {
+  const noun = receiver || 'the downstream system';
   const d = asObject(item.data) ?? {};
   switch (item.kind) {
     case 'operation':
@@ -61,7 +72,7 @@ export function describeItem(item: SnapshotItem): string {
       const b = asObject(d.body) ?? {};
       if (status === 200)
         return `${humanize(str(b.state))}${b.ward ? ` in ${str(b.ward)}` : ''}, version ${str(b.version)}${b.epoch !== undefined ? `, epoch ${str(b.epoch)}` : ''}; ${asArray(b.history).length} operations in its history`;
-      if (status === 404) return 'The downstream system has no such encounter';
+      if (status === 404) return `${noun.charAt(0).toUpperCase()}${noun.slice(1)} has no such encounter`;
       return `Could not be read (HTTP ${status || 'none'}): unknown`;
     }
     case 'receipt': {
@@ -70,7 +81,7 @@ export function describeItem(item: SnapshotItem): string {
       const b = asObject(d.body) ?? {};
       if (status === 200)
         return `Committed: version ${str(b.version_before)} to ${str(b.version_after)}, at ${formatTime(str(b.applied_at))}`;
-      if (status === 404) return 'No receipt: the downstream system did not commit this operation';
+      if (status === 404) return `No receipt: ${noun} did not commit this operation`;
       return `The lookup did not answer (HTTP ${status || 'none'}): committed or not is unknown`;
     }
     case 'later_event':

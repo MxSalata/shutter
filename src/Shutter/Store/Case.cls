@@ -137,11 +137,12 @@ Property CurrentApproval As Shutter.Store.Approval(%JSONFIELDNAME = "currentAppr
 
 /// Open a case for an operation, or return the open one for the same key. The operation is the
 /// downstream operation as built by Shutter.Util.OperationKey.FromHL7.
-ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %String, ensSessionId As %String, sourceHeaderId As %String, mode As %String, Output case As Shutter.Store.Case, Output opened As %Boolean) As %Status
+ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %String, ensSessionId As %String, sourceHeaderId As %String, mode As %String, Output case As Shutter.Store.Case, Output opened As %Boolean, receiver As %String = "") As %Status
 {
     Set sc = $$$OK, opened = 0
     Set key = op."operation_key"
-    Set case = ..FindOpen(key)
+    // One case per failed delivery to one receiver (v1.25): the lookup is by the key and the receiver when it is known.
+    Set case = ..FindOpen(key, receiver)
     If $ISOBJECT(case) {
         // An open case from before the last scenario reset belongs to an earlier run: close it.
         Set resetAt = $GET(^Shutter.Config("resetAt"))
@@ -163,6 +164,7 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
     Set case = ..%New()
     Set case.CaseId = ..NextId()
     Set case.OperationKey = key
+    If receiver '= "" Set case.Receiver = receiver
     Set case.FailureKind = failureKind
     Set case.FailureText = $EXTRACT(failureText, 1, 2000)
     Set case.EncounterId = op."encounter_id"
@@ -241,7 +243,7 @@ ClassMethod PurgeCase(id As %String) As %Status [ Private ]
     While emails.%Next() { Set files = files _ $LISTBUILD($LISTBUILD(emails.%Get("Seq"), emails.%Get("Result"))) }
     TSTART
     Set sc = ..Exec("DELETE FROM Shutter_Bridge.ToolCall WHERE RunKey IN (SELECT EnsMessageId FROM Shutter_Store.AgentRun WHERE ""Case"" = ? AND EnsMessageId IS NOT NULL)", id)
-    For table = "Shutter_Store.CaseToken", "Shutter_Store.ChainItem", "Shutter_Store.Verification", "Shutter_Store.ExecutionAttempt", "Shutter_Store.Approval", "Shutter_Store.Rehearsal", "Shutter_Store.GateDecision", "Shutter_Store.Finding", "Shutter_Store.AgentRun", "Shutter_Store.Plan", "Shutter_Store.Escalation" {
+    For table = "Shutter_Store.CaseToken", "Shutter_Store.ChainItem", "Shutter_Store.Verification", "Shutter_Store.ExecutionAttempt", "Shutter_Store.Approval", "Shutter_Store.Rehearsal", "Shutter_Store.GateDecision", "Shutter_Store.Finding", "Shutter_Store.AgentRun", "Shutter_Store.CaseQuestion", "Shutter_Store.Plan", "Shutter_Store.Escalation" {
         If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM " _ table _ " WHERE ""Case"" = ?", id)
     }
     If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM Shutter_Store.SnapshotItem WHERE Snapshot IN (SELECT ID FROM Shutter_Store.Snapshot WHERE ""Case"" = ?)", id)
@@ -274,11 +276,17 @@ Method PayloadDigest() As %String
     Quit ##class(Shutter.Util.Digest).WardPayloadDigest(op)
 }
 
-/// The open case for an operation key, if any (closed states are resolved, blocked, escalated, failed).
-ClassMethod FindOpen(operationKey As %String) As Shutter.Store.Case
+/// The open case for an operation key, if any (closed states are resolved, blocked, escalated, failed); with a receiver
+/// (v1.25), the open case of that receiver for the key, since the same message goes to every receiver the production
+/// feeds and each failed delivery is a case of its own.
+ClassMethod FindOpen(operationKey As %String, receiver As %String = "") As Shutter.Store.Case
 {
     Set id = ""
-    &sql(SELECT TOP 1 ID INTO :id FROM Shutter_Store."Case" WHERE OperationKey = :operationKey AND State NOT IN ('resolved','blocked','escalated','failed') ORDER BY ID DESC)
+    If receiver = "" {
+        &sql(SELECT TOP 1 ID INTO :id FROM Shutter_Store."Case" WHERE OperationKey = :operationKey AND State NOT IN ('resolved','blocked','escalated','failed') ORDER BY ID DESC)
+    } Else {
+        &sql(SELECT TOP 1 ID INTO :id FROM Shutter_Store."Case" WHERE OperationKey = :operationKey AND Receiver = :receiver AND State NOT IN ('resolved','blocked','escalated','failed') ORDER BY ID DESC)
+    }
     If (SQLCODE '= 0) || (id = "") Quit ""
     Quit ..%OpenId(id)
 }

@@ -7,7 +7,7 @@ Include Ensemble
 Class Shutter.Knowledge.Library
 {
 
-Parameter COLLECTIONS = "contracts,lifecycle,effects,playbooks,review";
+Parameter COLLECTIONS = "contracts,lifecycle,effects,playbooks,review,explain";
 
 /// The vector store table of a collection.
 ClassMethod TableFor(collection As %String) As %String
@@ -23,6 +23,7 @@ ClassMethod DescriptionFor(collection As %String) As %String
         "effects": "The dependency inventory and effect contracts: which systems read the downstream system's data and what a movement changes for them",
         "playbooks": "The recovery playbooks: the outcomes (resend, reconcile, superseded, more evidence, escalate), their preconditions and what each writes",
         "review": "The production review rules: what each check of a production review means, why it matters, the safer value, when such a finding is intended and how a reviewer tells",
+        "explain": "Shutter in plain words: what each outcome, disposition and gate check means for the person reading a case, and what each site profile setting changes",
         : "Shutter knowledge: " _ collection)
 }
 

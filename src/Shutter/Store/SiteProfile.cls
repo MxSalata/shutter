@@ -128,6 +128,12 @@ ClassMethod Validate(p As %DynamicObject) As %String
         // The receiver's category (v1.23) and its own history policy, which the category derives when absent.
         If r.%IsDefined("category") && '$LISTFIND($LISTBUILD("current_state", "history_of_record", "orders_results"), r.%Get("category")) Return at _ ".category: must be current_state, history_of_record or orders_results"
         If r.%IsDefined("history_policy") && '$LISTFIND($LISTBUILD("current", "correct"), r.%Get("history_policy")) Return at _ ".history_policy: must be current or correct"
+        // A demo receiver's namespace (v1.25): where the scenario runner resets it and sets its faults.
+        If r.%IsDefined("demo") {
+            Set demo = r.%Get("demo")
+            If '$ISOBJECT(demo) || demo.%IsA("%Library.DynamicArray") Return at _ ".demo: must be an object"
+            If demo.%IsDefined("namespace") && (demo.%GetTypeOf("namespace") '= "string") Return at _ ".demo.namespace: must be a string"
+        }
         If r.%IsDefined("cancels") && (r.%GetTypeOf("cancels") '= "boolean") Return at _ ".cancels: must be true or false"
         // Whether the receiver takes merges (T31); false when absent, and a merge still needs the site's merges: allowed.
         If r.%IsDefined("merges") && (r.%GetTypeOf("merges") '= "boolean") Return at _ ".merges: must be true or false"
@@ -450,6 +456,26 @@ ClassMethod ReceiverHistoryPolicy(name As %String) As %String
     If $LISTFIND($LISTBUILD("current", "correct"), own) Quit own
     If $ISOBJECT(r) && (##class(Shutter.Util.Json).Str(r, "category") '= "") Quit $SELECT(..ReceiverCategory(name) = "history_of_record": "correct", 1: "current")
     Quit $SELECT(..Flag("history_policy", "current") = "correct": "correct", 1: "current")
+}
+
+/// The namespace a demo receiver runs in (its entry's demo.namespace, v1.25), or this namespace: where the scenario
+/// runner resets the receiver and sets its faults.
+ClassMethod ReceiverNamespace(name As %String) As %String
+{
+    Set r = ..Receiver(name)
+    Set demo = $SELECT($ISOBJECT(r): r.%Get("demo"), 1: "")
+    Set ns = $SELECT($ISOBJECT(demo): ##class(Shutter.Util.Json).Str(demo, "namespace"), 1: "")
+    Quit $SELECT(ns = "": $NAMESPACE, 1: $ZCONVERT(ns, "U"))
+}
+
+/// The names of the receivers the profile lists, in order.
+ClassMethod ReceiverNames() As %DynamicArray
+{
+    Set out = [], list = ..Current().%Get("receivers")
+    If '$ISOBJECT(list) Quit out
+    Set iter = list.%GetIterator()
+    While iter.%GetNext(.i, .r) { Set n = $SELECT($ISOBJECT(r): ##class(Shutter.Util.Json).Str(r, "name"), 1: "") If n '= "" Do out.%Push(n) }
+    Quit out
 }
 
 /// The receiver's description for a person: its system text and base path.

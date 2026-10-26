@@ -269,6 +269,14 @@ jobs:
             | docker exec -i "$CTR" iris session IRIS -U HOSPITAL)
           echo "$out" | tail -20
           echo "$out" | grep -q '^RESULT: ok'
+      # The demo records system (v1.25): the demo receiver package in a namespace of its own behind /records/api, the
+      # second receiver (category history_of_record) the production feeds beside the bed manager.
+      - name: The demo records system's namespace
+        run: |
+          out=$(printf '%s\n' 'Set r = ##class(Shutter.Installer).RunRecords("SHUTTER") Write !,"RESULT: ",r,!' 'Halt' \
+            | docker exec -i "$CTR" iris session IRIS -U SHUTTER)
+          echo "$out" | tail -20
+          echo "$out" | grep -q '^RESULT: ok'
       - name: The downstream system's contract tests, in process
         if: matrix.shard == 'checks'
         run: |
@@ -348,6 +356,11 @@ jobs:
       - name: A transfer in the hour the clocks go back (S21) in rules-only and site-policy modes
         if: matrix.shard == 'policy'
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes rules,policy --approve S21
+      # The same overtaken transfer fails at the bed manager and at the patient records system: the bed manager's case
+      # closes superseded with no write, the records system's escalates with the steps that correct its history
+      - name: One overtaken transfer at two receivers (S22) in site-policy mode
+        if: matrix.shard == 'policy'
+        run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes policy --approve S22
       # The roles over HTTP: the library is the approver's to change, an operator escalates a case and closes it by hand,
       # and under the site profile's two-person rule only an approver closes it. It closes two of the cases the
       # scenarios left escalated or blocked, so it runs after them.
