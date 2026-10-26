@@ -44,9 +44,16 @@ const BEFORE_PLAN = new Set(['detected', 'collecting', 'investigating', 'grouped
 
 /** What reached the receiver and what the verifier found, when the server sends them; a closed case with no write says so. */
 function AtReceiver({ c }: { c: CaseSummary }) {
-  if (c.writes === undefined) return null;
+  // A case is one failed delivery to one receiver: with two receivers fed, the list says which
+  const name = c.receiver ? (
+    <Text size="xs" c="dimmed">
+      {c.receiver}
+    </Text>
+  ) : null;
+  if (c.writes === undefined) return name;
   return (
     <Stack gap={4} align="flex-start">
+      {name}
       <StatusBadge {...writes(c.writes)} />
       {c.verification ? <StatusBadge {...verification(c.verification)} /> : null}
     </Stack>

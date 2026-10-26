@@ -32,7 +32,13 @@ export function teamFor(profile: SiteProfile | undefined, receiver: string, team
 }
 
 export function draftEscalation(
-  recorded: { detail: Json; snapshot?: Json | null; blockedReason?: Json | null; attempts?: unknown },
+  recorded: {
+    detail: Json;
+    snapshot?: Json | null;
+    blockedReason?: Json | null;
+    attempts?: unknown;
+    plan?: Json | null;
+  },
   team: { id?: string; name?: string; mailbox?: string; cc?: string[] },
   seq: number,
   user: string,
@@ -44,6 +50,19 @@ export function draftEscalation(
     Json | undefined;
   const reason = recorded.blockedReason ?? undefined;
   const catalogue = reason?.catalogue as Json | undefined;
+  // A receiver that keeps the history of record: the plan carries the correcting steps for its team (CONTRACTS 10)
+  const inner = ((recorded.plan?.plan as Json | undefined)?.plan ?? undefined) as Json | undefined;
+  const correction = inner?.correction_steps as Json | undefined;
+  const steps = Array.isArray(correction?.steps) ? (correction.steps as string[]) : [];
+  const missing = (correction?.missing as Json | undefined) ?? {};
+  const correcting = steps.length
+    ? [
+        'CORRECTING THE HISTORY',
+        `  the ${str(missing, 'event')}${str(missing, 'ward') ? ` to ${str(missing, 'ward')}` : ''} at ${str(missing, 'event_time')} is missing from the history ${str(correction, 'receiver')} keeps; ${steps.length} steps for its team are on the plan.`,
+        ...steps.map((step, i) => `  ${i + 1}. ${step}`),
+        '',
+      ]
+    : [];
   const lines = [
     `To ${team.name || 'the team'},`,
     '',
@@ -66,6 +85,7 @@ export function draftEscalation(
       ? `  ${str(catalogue, 'title')} (${str(reason, 'code')})\n  ${str(catalogue, 'text')}\n  Next action: ${str(catalogue, 'nextAction')}`
       : `  The case is ${str(c, 'state')}: ${str(c, 'headline')}`,
     '',
+    ...correcting,
     `WHAT ${receiver.toUpperCase()} HOLDS`,
     state
       ? [

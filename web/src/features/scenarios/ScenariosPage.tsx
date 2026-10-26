@@ -137,10 +137,39 @@ function ExpectedOutcome({ s, mode }: { s: Scenario; mode: Mode }) {
   const encounters = e.encounters ?? [];
   const incident = !!e.incident && encounters.length > 0;
   const incidentWrites = encounters.reduce((n, x) => n + (x.writes || 0), 0);
+  // One failure at several receivers: each receiver's case ends its own way
+  if (e.by_receiver) {
+    return (
+      <Stack gap={4}>
+        {Object.entries(e.by_receiver).map(([receiver, x]) => (
+          <Group key={receiver} gap={6}>
+            <Text size="xs" fw={600}>
+              {receiver}
+            </Text>
+            <DispositionBadge disposition={x.disposition} />
+            {x.write ? (
+              <StatusBadge {...proposedWrites(1)} label="One conditional write" hint={undefined} />
+            ) : (
+              <StatusBadge {...writes(0)} label="Nothing written" hint={undefined} />
+            )}
+            {x.outcome === 'correct_history' ? (
+              <Text size="xs" c="dimmed">
+                with the steps that correct its history
+              </Text>
+            ) : null}
+          </Group>
+        ))}
+        <Text size="xs" c="dimmed">
+          One case per receiver.{' '}
+          {e.final_state ? `Each ends ${e.final_state}${e.final_ward ? ` in ${e.final_ward}` : ''}.` : ''}
+        </Text>
+      </Stack>
+    );
+  }
   return (
     <Stack gap={4}>
       <Group gap={6}>
-        <DispositionBadge disposition={e.disposition} />
+        <DispositionBadge disposition={e.disposition ?? ''} />
         {e.acceptable
           ?.filter((a) => a !== e.disposition)
           .map((a) => (
@@ -183,7 +212,7 @@ function ExpectedOutcome({ s, mode }: { s: Scenario; mode: Mode }) {
 }
 
 /** The list's outcome groups: an incident scenario settles a chain per encounter, any other ends in one disposition. */
-const OUTCOMES = ['resend', 'reconcile', 'superseded', 'escalate', 'incident'] as const;
+const OUTCOMES = ['resend', 'reconcile', 'superseded', 'escalate', 'incident', 'receivers'] as const;
 type Outcome = (typeof OUTCOMES)[number] | 'other';
 
 /** What a scenario should end in, in the mode, as the list groups it. */
@@ -191,7 +220,8 @@ function outcomeOf(s: Scenario, mode: Mode): Outcome {
   if (!s.expected) return 'other';
   const e = { ...s.expected, ...s.expected.by_mode?.[mode] };
   if (e.incident) return 'incident';
-  return (OUTCOMES as readonly string[]).includes(e.disposition) ? (e.disposition as Outcome) : 'other';
+  if (e.by_receiver) return 'receivers';
+  return (OUTCOMES as readonly string[]).includes(e.disposition ?? '') ? (e.disposition as Outcome) : 'other';
 }
 
 const OUTCOME_LABELS: Record<Outcome, string> = {
@@ -200,6 +230,7 @@ const OUTCOME_LABELS: Record<Outcome, string> = {
   superseded: 'Superseded',
   escalate: 'Escalate',
   incident: 'Incident chains',
+  receivers: 'Per receiver',
   other: 'Other',
 };
 

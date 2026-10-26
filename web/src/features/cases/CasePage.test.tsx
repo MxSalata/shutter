@@ -796,6 +796,32 @@ describe('CasePage', () => {
     expect(await screen.findByRole('region', { name: 'Outcome' })).toBeInTheDocument();
   });
 
+  it("names the case's receiver and its category beside the outcome, and lists the steps that correct its history", async () => {
+    renderCase('C-000055');
+    const region = await outcome();
+    const receiver = await within(region).findByTestId('case-receiver');
+    expect(within(receiver).getByText('At Records Out')).toBeInTheDocument();
+    expect(await within(receiver).findByText('History of record')).toBeInTheDocument();
+    const steps = await within(region).findByTestId('correction-steps');
+    expect(
+      within(steps).getByRole('heading', { name: 'Correcting the history at Records Out' }),
+    ).toBeInTheDocument();
+    const items = within(within(steps).getByRole('list')).getAllByRole('listitem');
+    expect(items).toHaveLength(8);
+    expect(items[0]).toHaveTextContent(/^Hold the case/);
+    expect(items[4]).toHaveTextContent(/as a historic movement at its own time/);
+    expect(screen.getByText('Records Out')).toBeInTheDocument();
+  });
+
+  it("names the bed manager's category on the same transfer's case there, with no correction steps", async () => {
+    renderCase('C-000054');
+    const region = await outcome();
+    const receiver = await within(region).findByTestId('case-receiver');
+    expect(within(receiver).getByText('At Downstream Out')).toBeInTheDocument();
+    expect(await within(receiver).findByText('Current state')).toBeInTheDocument();
+    expect(within(region).queryByTestId('correction-steps')).not.toBeInTheDocument();
+  });
+
   it('says so when there is no such case', async () => {
     renderCase('C-999999');
     expect(await screen.findByText('There is no case C-999999')).toBeInTheDocument();
