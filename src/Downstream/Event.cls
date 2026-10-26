@@ -11,6 +11,9 @@ Property Event As %String(VALUELIST = ",admit,transfer,discharge,update") [ Requ
 
 Property Ward As %String(COLLATION = "EXACT", MAXLEN = 64);
 
+/// The bed the operation placed the patient in; empty for a ward-level placement and for other events.
+Property Bed As %String(COLLATION = "EXACT", MAXLEN = 64);
+
 /// The source event's time, ISO 8601 UTC. Stored, never used for ordering.
 Property EventTime As %String(MAXLEN = 32) [ Required ];
 
@@ -31,6 +34,7 @@ Method ToJSON() As %DynamicObject
 {
     Set out = {"version_after": (..VersionAfter), "event": (..Event)}
     If ..Ward = "" { Do out.%Set("ward", "", "null") } Else { Do out.%Set("ward", ..Ward) }
+    If ..Bed = "" { Do out.%Set("bed", "", "null") } Else { Do out.%Set("bed", ..Bed) }
     Do out.%Set("event_time", ..EventTime)
     Do out.%Set("applied_at", ..AppliedAt)
     Do out.%Set("operation_key", ..OperationKey)
@@ -63,6 +67,9 @@ Storage Default
 </Value>
 <Value name="8">
 <Value>OperationKey</Value>
+</Value>
+<Value name="9">
+<Value>Bed</Value>
 </Value>
 </Data>
 <DataLocation>^Downstream.EventD</DataLocation>

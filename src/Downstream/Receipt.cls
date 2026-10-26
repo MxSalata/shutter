@@ -11,6 +11,10 @@ Property Event As %String(VALUELIST = ",admit,transfer,discharge,update") [ Requ
 
 Property Ward As %String(COLLATION = "EXACT", MAXLEN = 64);
 
+/// The bed, which is not part of the payload digest: a resend under this key that names another bed is answered with
+/// this receipt, and its bed shows what was committed.
+Property Bed As %String(COLLATION = "EXACT", MAXLEN = 64);
+
 Property EventTime As %String(MAXLEN = 32) [ Required ];
 
 Property AppliedAt As %String(MAXLEN = 32) [ Required ];
@@ -41,6 +45,7 @@ Method ToJSON() As %DynamicObject
 {
     Set out = {"operation_key": (..OperationKey), "encounter_id": (..EncounterId), "event": (..Event)}
     If ..Ward = "" { Do out.%Set("ward", "", "null") } Else { Do out.%Set("ward", ..Ward) }
+    If ..Bed = "" { Do out.%Set("bed", "", "null") } Else { Do out.%Set("bed", ..Bed) }
     Do out.%Set("event_time", ..EventTime)
     Do out.%Set("applied_at", ..AppliedAt)
     Do out.%Set("version_before", ..VersionBefore, "number")
@@ -96,6 +101,9 @@ Storage Default
 </Value>
 <Value name="13">
 <Value>Epoch</Value>
+</Value>
+<Value name="14">
+<Value>Bed</Value>
 </Value>
 </Data>
 <DataLocation>^Downstream.ReceiptD</DataLocation>

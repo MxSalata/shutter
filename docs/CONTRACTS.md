@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.23, 25 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.24, 26 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -28,6 +28,7 @@ The downstream system (`Downstream.*`), a demo bed-management system, stands in 
 ```
 
 - `event` is one of `admit`, `transfer`, `discharge`, `update`. `ward` is required for `admit` and `transfer` and must be null for `discharge` and `update`.
+- `bed` is optional (v1.24): the bed within the ward, PV1-3's bed component, for an `admit` or `transfer` only (null or absent otherwise, or 422 `invalid_request`). `ward` stays the ward. A placement without a bed is ward-level, as every placement was before v1.24, and never conflicts with anyone. A placement into a bed that another admitted encounter holds is refused with 409 `bed_occupied` (below), in a dry run too; the encounter's own bed is never a conflict, so a transfer into the bed it already holds applies as any other transfer does. A discharge, or a transfer to another bed or to ward level, frees the bed the encounter held.
 - A receiver that declares `cancels: true` in its site profile entry (6.4) also takes `cancel_admit`, `cancel_transfer` and `cancel_discharge`, each the reversal of the named event on the encounter; one that declares `merges: true` takes `merge`, with `prior_patient_id`, `prior_patient_id_authority` and `prior_encounter_id` beside the fields above (v1.14). The demo receiver declares neither and refuses them with 422 `invalid_request`; Shutter never sends them to it (section 2).
 - `event_time` is the source event's time (see section 2), in ISO 8601 UTC with a `Z`. The downstream system stores it but **does not order by it**: operations are applied in arrival order. That is the receiver contract, and it is why a stale transfer applied late moves a patient backwards.
 - `expected_version` is optional. When present, the operation applies only if the encounter's current version equals it. Normal traffic omits it; recovery always sends it.
@@ -45,6 +46,7 @@ Responses:
 | 200 | `{"applied": false, "rehearsal": true, "would_apply": true, "encounter_after": {…}}` or `{"applied": false, "rehearsal": true, "would_apply": false, "reason": "<one of the error codes below>", …}` | `dry_run` |
 | 409 | `{"error": "version_conflict", "expected_version": 1, "current_version": 2}` | `expected_version` present and different from the current version |
 | 409 | `{"error": "key_reused_with_different_payload", "operation_key": "…"}` | The key was committed with another payload digest |
+| 409 | `{"error": "bed_occupied", "detail": "…", "ward": "…", "bed": "…", "occupant": {…}, "operation_key": "…", "applied": false}` | The placement's bed is held by another admitted encounter (v1.24, below); a dry run answers the same |
 | 422 | `{"error": "invalid_transition", "state": "discharged", "event": "transfer"}` | The transition is not allowed (section 1.4) |
 | 422 | `{"error": "unknown_encounter", "encounter_id": "…"}` | `transfer`, `discharge` or `update` for an encounter the downstream system has never admitted |
 | 422 | `{"error": "patient_mismatch", "encounter_id": "…"}` | The encounter exists for another patient (identity never silently changes) |
@@ -55,7 +57,23 @@ Responses:
 
 Decided with the downstream system (15 Oct): faults apply to real operations only, never to a dry run; a discharge sets `ward` to null; for an `admit`, `expected_version` 0 means "not yet seen"; the per-encounter lock waits 10 s and then answers 503 `ward_unavailable`; a reset answers 200 `{"reset": true}`; the dry run relies on a transaction rollback, so the database must be journaled (the default).
 
-The order of checks for a non-dry run: fault `fail_before_accept`; request validity (including `patient_mismatch` and `payload_digest_mismatch`); a committed receipt for this key (return it, 200, before any version check, so a retry of an identical committed operation never looks like a version conflict); key reuse with a different digest (409); encounter existence (422); `expected_version` (409); transition (422); then, in one transaction: update the encounter, append the event, increment the version, store the receipt, commit; then fault `commit_drop_response` (504) or the 201.
+The order of checks for a non-dry run: fault `fail_before_accept`; request validity (including `patient_mismatch` and `payload_digest_mismatch`); a committed receipt for this key (return it, 200, before any version check, so a retry of an identical committed operation never looks like a version conflict); key reuse with a different digest (409); encounter existence (422); `expected_version` (409); transition (422); the bed (409 `bed_occupied`, v1.24); then, in one transaction: update the encounter, append the event, increment the version, store the receipt, commit; then fault `commit_drop_response` (504) or the 201.
+
+**The bed occupied (v1.24).** The refusal is the receiver's own answer, the HL7 AE or AR of a bed-management system: it understood the placement and said no. It answers the same, HTTP 409 and this body, to a real operation and to a dry run, so a rehearsal never reports a placement as one that would apply while the bed is held:
+
+```json
+{
+  "error": "bed_occupied",
+  "detail": "Bed WARD-B/B2 is occupied by encounter ENC-1231 since 2026-10-15T08:10:00Z",
+  "ward": "WARD-B",
+  "bed": "B2",
+  "occupant": {"encounter_id": "ENC-1231", "since": "2026-10-15T08:10:00Z", "version": 3},
+  "operation_key": "<the refused operation's key>",
+  "applied": false
+}
+```
+
+Nothing is applied, no receipt is stored and the encounter's version does not move (a first admission that is refused leaves no encounter). `occupant` names the other encounter by its own id only, never by patient identifiers; Shutter's evidence tokenises it before any model sees it (9). `since` is the event time of the placement that put the occupant in that bed, the oldest of its admissions and transfers into it since it last held another place (an `update` moves nothing), and `version` is the occupant's current version. Two placements into one bed are taken one at a time: the bed is locked from the check to the commit, with the same 10 s wait and 503 `ward_unavailable` as the encounter's lock.
 
 ### 1.2 Read an encounter
 
@@ -68,16 +86,17 @@ The order of checks for a non-dry run: fault `fail_before_accept`; request valid
   "patient_id_authority": "HOSP",
   "state": "admitted",
   "ward": "WARD-C",
+  "bed": null,
   "version": 3,
   "updated_at": "2026-10-15T09:45:02Z",
   "history": [
-    {"version_after": 1, "event": "admit", "ward": "WARD-A", "event_time": "2026-10-15T09:00:00Z", "applied_at": "…", "operation_key": "…"},
-    {"version_after": 2, "event": "transfer", "ward": "WARD-C", "event_time": "2026-10-15T09:45:00Z", "applied_at": "…", "operation_key": "…"}
+    {"version_after": 1, "event": "admit", "ward": "WARD-A", "bed": "A4", "event_time": "2026-10-15T09:00:00Z", "applied_at": "…", "operation_key": "…"},
+    {"version_after": 2, "event": "transfer", "ward": "WARD-C", "bed": null, "event_time": "2026-10-15T09:45:00Z", "applied_at": "…", "operation_key": "…"}
   ]
 }
 ```
 
-404 `{"error": "unknown_encounter"}` when the downstream system has never seen it. `state` is `admitted` or `discharged`. `history` is in application order, oldest first, and is immutable.
+404 `{"error": "unknown_encounter"}` when the downstream system has never seen it. `state` is `admitted` or `discharged`. `history` is in application order, oldest first, and is immutable. `bed` (v1.24) is the bed the encounter holds, null for a ward-level placement and once discharged; each history row carries the bed its operation placed the patient in, null for a ward-level placement, a discharge and an update.
 
 ### 1.3 Read a receipt
 
@@ -89,6 +108,7 @@ The order of checks for a non-dry run: fault `fail_before_accept`; request valid
   "encounter_id": "ENC-1001",
   "event": "transfer",
   "ward": "WARD-B",
+  "bed": "B2",
   "event_time": "…",
   "applied_at": "…",
   "version_before": 1,
@@ -98,7 +118,7 @@ The order of checks for a non-dry run: fault `fail_before_accept`; request valid
 }
 ```
 
-404 `{"error": "no_receipt"}` when nothing was committed under that key. Absence of a receipt is the downstream system's statement that the operation was not committed under that key, within its retention (unbounded in the demo).
+`bed` (v1.24) is the committed operation's bed, null when it had none. 404 `{"error": "no_receipt"}` when nothing was committed under that key. Absence of a receipt is the downstream system's statement that the operation was not committed under that key, within its retention (unbounded in the demo).
 
 A 404 describes what is committed at the moment the downstream system answers (v1.21). A write whose answer was lost may still be in flight, so the verifier reads a missing receipt as not committed only once its settle window (the Verifier's `UncertainSettleSeconds`, 30 s by default: the connector's 15 s response timeout plus the demo receiver's 10 s wait for the encounter's lock, rounded up) has passed since the attempt with the encounter's version unchanged, or once the version has moved past the one the write was conditional on, so the conditional write can no longer apply; before that it is unknown and read again (5.1). A site whose receiver can take longer to commit after a lost answer raises the setting.
 
@@ -122,7 +142,7 @@ For a receiver that takes them (1.1, v1.14): `cancel_admit` and `cancel_transfer
 
 ### 1.6 Canonical payload and digest
 
-The canonical payload is the JSON object with exactly these keys in this order, no whitespace, strings as given, null for absent `ward`: `operation_key`, `encounter_id`, `patient_id`, `patient_id_authority`, `event`, `ward`, `event_time`, `source_system`. `payload_digest` is `"sha256:"` followed by the lower-case hex SHA-256 of that UTF-8 string. `source_message_id`, `expected_version` and `dry_run` are not part of it, so a resend of the same business operation from a different message has the same digest.
+The canonical payload is the JSON object with exactly these keys in this order, no whitespace, strings as given, null for absent `ward`: `operation_key`, `encounter_id`, `patient_id`, `patient_id_authority`, `event`, `ward`, `event_time`, `source_system`. `payload_digest` is `"sha256:"` followed by the lower-case hex SHA-256 of that UTF-8 string. `source_message_id`, `expected_version` and `dry_run` are not part of it, so a resend of the same business operation from a different message has the same digest. Nor is `bed` (v1.24): a ward-level operation's digest is what it was before beds, and Shutter's own digest of a key, already recorded on its cases and approvals, still matches the receiver's. The key and the ward bind the business operation; a resend under a committed key that names another bed answers `already_committed` with the receipt, whose `bed` shows what was committed, and a sender compares that rather than relying on a digest mismatch.
 
 ### 1.7 Reset
 
@@ -1039,6 +1059,13 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.24, 26 Oct 2026: beds at the receiver (1.1 to 1.4, 1.6): the operation's optional `bed` (PV1-3's bed component, for an
+  admission or a transfer only; `ward` stays the ward); the refusal 409 `bed_occupied` with the occupant named by its
+  encounter id, its `since` and its version, answered the same to a dry run, with nothing applied, no receipt and the
+  version unchanged; the bed's lock; `bed` on the encounter read, its history rows and the receipt, null for a ward-level
+  placement; a discharge or a transfer out frees the bed, and the encounter's own bed never conflicts. The bed is not part
+  of the canonical payload, so every digest from before is unchanged. Shutter's side (the mapping of PV1-3's bed, the
+  evidence, the matcher and the gate) is not built yet.
 - v1.23, 25 Oct 2026: system categories per receiver (6.1, 6.3, 6.4, 6.5, 10): `receivers[].category` (`current_state`,
   `history_of_record`, `orders_results`; `current_state` when absent) with `receivers[].history_policy` derived from it
   and overridable; the site-wide `history_policy` deprecated and out of the seed (profile version 5); the condition

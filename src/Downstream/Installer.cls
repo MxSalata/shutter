@@ -5,7 +5,7 @@ Class Downstream.Installer
 
 /// Creates the resource and the role when missing, removes the names from before the rename (the
 /// <code>Wards_API</code> role and resource) when they exist, and marks the instance as a demo when <var>demo</var>
-/// is true. Safe to run again.
+/// is true, and builds the bed index. Safe to run again.
 ClassMethod Install(demo As %Boolean = 1) As %Status
 {
     Set sc = $$$OK
@@ -23,6 +23,8 @@ ClassMethod Install(demo As %Boolean = 1) As %Status
         If $$$ISOK(sc), demo {
             Set ^Downstream.Config("demo") = 1
         }
+        // The bed index came after the table: encounters from before it are indexed once (small, and safe to repeat)
+        If $$$ISOK(sc) Set sc = ##class(Downstream.Encounter).%BuildIndices($LISTBUILD("WardBedIdx"))
     } Catch ex {
         Set $NAMESPACE = namespace
         Set sc = ex.AsStatus()

@@ -4,13 +4,22 @@ Class Downstream.Test.Run
 
 /// Loads and runs the test classes under <var>repo</var><code>tests/unit/Downstream</code> (the repository as the
 /// container mounts it) with the unit test manager, keeping them loaded afterwards. Returns JSON: the result index,
-/// how many test methods passed and failed, and the names of the failures.
+/// how many test methods passed and failed, and the names of the failures. When <var>repo</var> has no such folder, the
+/// test class already loaded is run as it is.
 ClassMethod Contract(repo As %String = "/home/irisowner/dev/") As %String [ SqlProc ]
 {
+    If (repo = "") || (repo = $CHAR(0)) Set repo = "/home/irisowner/dev/"
     Set root = $GET(^UnitTestRoot)
     Set ^UnitTestRoot = repo _ "tests/unit/"
     Set before = $ORDER(^UnitTest.Result(""), -1)
-    Set sc = ##class(%UnitTest.Manager).RunTest("Downstream", "/nodelete")
+    If ##class(%File).DirectoryExists(repo _ "tests/unit/Downstream") {
+        Set sc = ##class(%UnitTest.Manager).RunTest("Downstream", "/nodelete")
+    } Else {
+        // The tests are not on the mounted path (a worktree loaded them by hand): run the loaded test class as it is,
+        // with the manager pointed at a root directory that exists.
+        Set ^UnitTestRoot = $SYSTEM.Util.ManagerDirectory()
+        Set sc = ##class(%UnitTest.Manager).DebugRunTestCase("", "Downstream.Test.Contract", "/noload/nodelete")
+    }
     If root = "" {
         Kill ^UnitTestRoot
     } Else {
