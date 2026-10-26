@@ -17,6 +17,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 import { useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { keys, useMe, useSaveSiteProfile, useSiteProfile } from '@/api/hooks';
@@ -54,6 +55,8 @@ import {
 } from './profile';
 import { ReviewModal, type SaveProblem } from './ReviewModal';
 import { VersionsPanel } from './VersionsPanel';
+import { SuggestionCard } from './SuggestionCard';
+import { SUGGEST_PARAM, applySuggestion, parseSuggestion } from './suggestion';
 
 /** A choice between known values; a stored value the page doesn't know is shown and kept, never replaced silently. */
 function Choice({
@@ -493,7 +496,17 @@ function Profile({ view }: { view: SiteProfileView }) {
   const editable = !!me?.approver;
   const client = useQueryClient();
   const save = useSaveSiteProfile();
-  const [draft, setDraftState] = useState<SiteProfile>(() => clone(view.profile));
+  // A change a case's What-if card suggested (`?suggest=`): applied to the draft once, when the page opens; the
+  // approver saves it through the review below, as any other change
+  const [search, setSearch] = useSearchParams();
+  const [suggested] = useState(() => {
+    const s = parseSuggestion(search.get(SUGGEST_PARAM));
+    return s ? { s, result: applySuggestion(view.profile, s) } : null;
+  });
+  const [showSuggestion, setShowSuggestion] = useState(!!suggested);
+  const [draft, setDraftState] = useState<SiteProfile>(() =>
+    suggested?.result.ok ? suggested.result.profile : clone(view.profile),
+  );
   const [base, setBase] = useState<SiteProfileView>(view);
   const [problem, setProblem] = useState<Problem>(null);
   const [reviewing, setReviewing] = useState(0);
@@ -563,7 +576,22 @@ function Profile({ view }: { view: SiteProfileView }) {
     v.updatedBy === me?.username &&
     diffProfiles(v.profile, draft).length === 0;
 
+  /** The suggestion has been saved or set aside: it leaves the page and the address, so a reload does not bring it back. */
+  const dropSuggestion = () => {
+    setShowSuggestion(false);
+    if (search.has(SUGGEST_PARAM))
+      setSearch(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          params.delete(SUGGEST_PARAM);
+          return params;
+        },
+        { replace: true },
+      );
+  };
+
   const done = (v: SiteProfileView) => {
+    dropSuggestion();
     reseed(v);
     setReviewing(0);
     notifications.show({
@@ -624,6 +652,19 @@ function Profile({ view }: { view: SiteProfileView }) {
   const canReview = dirty || shipped;
   return (
     <Stack gap="md">
+      {suggested && showSuggestion ? (
+        <SuggestionCard
+          s={suggested.s}
+          result={suggested.result}
+          version={base.version}
+          editable={editable}
+          onReview={review}
+          onDiscard={() => {
+            if (suggested.result.ok) reseed(base);
+            dropSuggestion();
+          }}
+        />
+      ) : null}
       <Card padding="md">
         <Stack gap="sm">
           <KeyValueList

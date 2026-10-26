@@ -454,6 +454,7 @@ function receiverChanges(a: SiteReceiver, b: SiteReceiver, p: SiteProfile): Chan
   const name = b.name || a.name || 'a receiver';
   const fields: [keyof SiteReceiver, string, Record<string, string>][] = [
     ['system', 'what it does', {}],
+    ['category', 'category', {}],
     ['applies', 'applies messages', APPLIES_LABELS],
     ['resend_timestamp', 'resends need', RESEND_LABELS],
   ];

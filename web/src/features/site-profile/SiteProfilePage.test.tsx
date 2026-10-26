@@ -11,10 +11,12 @@ import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
 import { theme } from '@/theme';
 import SiteProfilePage from './SiteProfilePage';
+import { suggestionHref } from './suggestion';
 
 const BASE = '/api/shutter';
 const recorded = recordedSiteProfile()!;
 let puts: { body: Record<string, unknown>; headers: Headers }[] = [];
+let lastRouter: ReturnType<typeof createMemoryRouter> | undefined;
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());
@@ -34,11 +36,12 @@ beforeEach(() => {
   });
 });
 
-function renderPage() {
+function renderPage(query = '') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter([{ path: '/site-profile', element: <SiteProfilePage /> }], {
-    initialEntries: ['/site-profile'],
+    initialEntries: [`/site-profile${query}`],
   });
+  lastRouter = router;
   return render(
     <MantineProvider theme={theme}>
       <Notifications />
@@ -326,5 +329,78 @@ describe('SiteProfilePage', () => {
     expect(await within(versions).findByRole('button', { name: /Version 8/ })).toBeInTheDocument();
     await userEvent.click(within(versions).getByRole('button', { name: /Version 8/ }));
     expect(await within(versions).findByText('The first stored version.')).toBeInTheDocument();
+  });
+});
+
+describe('SiteProfilePage, a change a case suggested', () => {
+  const suggestion = suggestionHref({
+    caseId: 'C-000008',
+    fact: 'W1',
+    field: 'authoritative_source',
+    from: '',
+    to: 'BEDMGR',
+    why: "The bed manager's WARD-C placement would stand.",
+    affects: ['every case where the PAS and the bed manager move an encounter at the same event time'],
+  }).replace('/site-profile', '');
+
+  it('opens as a pre-filled draft with the change as a diff, and saves only through the review', async () => {
+    renderPage(suggestion);
+    const heading = await screen.findByRole('heading', { name: 'A suggested change from case C-000008' });
+    await waitFor(() => expect(heading).toHaveFocus());
+    const card = screen.getByRole('region', { name: 'A suggested change from case C-000008' });
+    const table = within(card).getByRole('table', { name: 'The change in this draft' });
+    expect(within(table).getByRole('columnheader', { name: 'Now, version 9' })).toBeInTheDocument();
+    const row = within(table)
+      .getByRole('rowheader', { name: /Authoritative source/ })
+      .closest('tr')!;
+    expect(row).toHaveTextContent('none named');
+    expect(row).toHaveTextContent('BEDMGR');
+    expect(within(card).getByText(/every case where the PAS and the bed manager/)).toBeInTheDocument();
+    expect(within(card).getByRole('link', { name: 'Back to case C-000008' })).toHaveAttribute(
+      'href',
+      '/cases/C-000008?ask=1',
+    );
+    // Nothing is saved by opening it
+    expect(puts).toEqual([]);
+    await userEvent.click(within(card).getByRole('button', { name: 'Review and save…' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/Authoritative source: from .* to BEDMGR/)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
+    expect(await screen.findByText('Version 10 saved')).toBeInTheDocument();
+    expect(puts).toHaveLength(1);
+    expect(puts[0].body).toMatchObject({ authoritative_source: 'BEDMGR', expectedVersion: 9 });
+    // Saved: the suggestion leaves the page and the address
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: /A suggested change/ })).not.toBeInTheDocument(),
+    );
+    expect(lastRouter!.state.location.search).toBe('');
+  });
+
+  it('discards the suggestion, putting the stored answers back', async () => {
+    renderPage(suggestion);
+    const card = await screen.findByRole('region', { name: 'A suggested change from case C-000008' });
+    await userEvent.click(within(card).getByRole('button', { name: 'Discard the suggestion' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: /A suggested change/ })).toBeNull());
+    expect(screen.getByRole('button', { name: 'Confirm these answers…' })).toBeInTheDocument();
+    expect(lastRouter!.state.location.search).toBe('');
+  });
+
+  it('pre-fills nothing when the profile changed since the facts were read', async () => {
+    const stored = recordedSiteProfile()!;
+    stored.profile.authoritative_source = 'PAS';
+    server.use(http.get(`${BASE}/site-profile`, () => HttpResponse.json(stored)));
+    renderPage(suggestion);
+    const card = await screen.findByRole('region', { name: 'A suggested change from case C-000008' });
+    expect(within(card).getByText('Not pre-filled')).toBeInTheDocument();
+    expect(within(card).getByText(/authoritative source is now PAS, not none named/)).toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: 'Review and save…' })).not.toBeInTheDocument();
+  });
+
+  it('shows an operator the draft, and that an approver saves it', async () => {
+    resetMock('operator');
+    renderPage(suggestion);
+    const card = await screen.findByRole('region', { name: 'A suggested change from case C-000008' });
+    expect(within(card).getByText(/Saving it needs the approver role/)).toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: 'Review and save…' })).not.toBeInTheDocument();
   });
 });
