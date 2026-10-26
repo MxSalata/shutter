@@ -10,7 +10,7 @@ import { Timestamp } from '@/components/Timestamp';
 import { asArray, asObject } from '@/lib/json';
 import { formatTime, keyLabel, parseTime } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
-import { describeEntry, describeItem, KIND_LABELS } from './derive';
+import { describeEntry, describeItem, kindLabel } from './derive';
 import { EncounterTimeline } from './EncounterTimeline';
 import { NotYet, Section } from './Section';
 
@@ -66,8 +66,11 @@ export function EvidencePanel({
   open,
   focus,
   onFocused,
+  receiver,
 }: {
   caseId: string;
+  /** The case's receiver (its production item), named in its own observations' labels. */
+  receiver?: string;
   open: boolean;
   /** Evidence a citation asked to see: its kind, and when it was asked, so a second click on it acts again. */
   focus?: { kind: string; at: number };
@@ -155,10 +158,10 @@ export function EvidencePanel({
                   <Accordion.Control>
                     <Stack gap={0}>
                       <Text size="sm" fw={600}>
-                        {KIND_LABELS[item.kind] ?? keyLabel(item.kind)}
+                        {kindLabel(item.kind, receiver) ?? keyLabel(item.kind)}
                       </Text>
                       <Text size="sm" c="dimmed" lineClamp={2}>
-                        {describeItem(item)}
+                        {describeItem(item, receiver)}
                       </Text>
                     </Stack>
                   </Accordion.Control>

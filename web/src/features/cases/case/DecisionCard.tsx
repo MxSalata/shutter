@@ -175,6 +175,12 @@ export function DecisionCard({
               />
             ) : null}
           </Group>
+          {/* The category's meaning in words, not only in the badge's tooltip, which touch screens never show */}
+          {category ? (
+            <Text size="sm" c="dimmed" data-testid="case-receiver-gist">
+              {`${category.gist}.`}
+            </Text>
+          ) : null}
           <Text size="sm">{outcomeReason(facts)}</Text>
           {round > 1 ? (
             <Text size="sm">

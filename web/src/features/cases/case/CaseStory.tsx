@@ -7,7 +7,7 @@ import { keyLabel } from '@/lib/format';
 import { ApprovalPanel } from './ApprovalPanel';
 import { BoardPanel } from './BoardPanel';
 import { ClosureRecord } from './Closure';
-import { describeItem, KIND_LABELS } from './derive';
+import { describeItem, kindLabel } from './derive';
 import { DispatchPanel, VerificationPanel } from './DispatchPanel';
 import { FailurePanel } from './FailurePanel';
 import {
@@ -98,6 +98,7 @@ export function CaseStory({
     loading: plan === undefined && !facts.planError,
     error: facts.planError,
     onRetry: facts.retryPlan,
+    receiver: c.receiver,
   };
   const execution = {
     caseId: c.caseId,
@@ -106,6 +107,7 @@ export function CaseStory({
     planned: !!plan?.plan,
     byHand: c.disposition === 'handled_by_hand',
     state: c.state,
+    receiver: c.receiver,
   };
   const key = (facts.snapshot?.items ?? []).filter((x) => KEY_KINDS.includes(x.kind));
   return (
@@ -123,7 +125,12 @@ export function CaseStory({
       <Step value="evidence" n={2} title="What the evidence says" summary={evidenceSummary(facts.snapshot)}>
         <Stack gap="sm">
           {key.length ? (
-            <KeyValueList rows={key.map((x) => [KIND_LABELS[x.kind] ?? keyLabel(x.kind), describeItem(x)])} />
+            <KeyValueList
+              rows={key.map((x) => [
+                kindLabel(x.kind, c.receiver) ?? keyLabel(x.kind),
+                describeItem(x, c.receiver),
+              ])}
+            />
           ) : null}
           <Text size="sm" c="dimmed">
             Every observation, its source, time and digest, and the encounter's timeline are on the Evidence
@@ -162,7 +169,7 @@ export function CaseStory({
         {me ? <ApprovalPanel c={c} me={me} view={plan} approvals={facts.approvals} /> : null}
       </Step>
       <Step value="written" n={5} title="What was written" summary={writtenSummary(facts)}>
-        <RehearsalPanel view={plan} write={write} />
+        <RehearsalPanel view={plan} write={write} receiver={c.receiver} />
         <DispatchPanel {...execution} />
       </Step>
       <Step value="verified" n={6} title="What was verified" summary={verifiedSummary(facts)}>

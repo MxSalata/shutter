@@ -13,6 +13,7 @@ import { humanize } from '@/lib/format';
 import { KeyValueList } from '@/components/KeyValueList';
 import { StackTable } from '@/components/StackTable';
 import { NotYet, Section } from './Section';
+import { capitalReceiverNoun, receiverNoun } from './receiver';
 
 const STAGES: Record<string, string> = {
   proposal: 'At proposal, before the rehearsal',
@@ -95,9 +96,12 @@ export function PlanPanel({
   loading,
   error,
   onRetry,
+  receiver,
 }: {
   view: PlanView | null | undefined;
   loading: boolean;
+  /** The case's receiver (its production item), named where the plan says what it writes. */
+  receiver?: string;
   /** The plan's read error: shown in place of the panel's body. */
   error?: unknown;
   onRetry?: () => void;
@@ -130,7 +134,7 @@ export function PlanPanel({
                 'Exact action',
                 write
                   ? `${humanize(p.actionType || String(action.type ?? 'resend'))} the case's operation`
-                  : 'Nothing is written to the downstream system',
+                  : `Nothing is written to ${receiverNoun(receiver)}`,
               ],
               [
                 'Conditional on receiver version',
@@ -258,8 +262,18 @@ export function GatePanel({
   );
 }
 
-/** The downstream system's dry run of the exact action, read from the rehearsal's own response (CONTRACTS 1.4, WIC-2.5). */
-export function RehearsalPanel({ view, write }: { view: PlanView | null | undefined; write: boolean }) {
+/** The receiver's dry run of the exact action, read from the rehearsal's own response (CONTRACTS 1.4, WIC-2.5). */
+export function RehearsalPanel({
+  view,
+  write,
+  receiver,
+}: {
+  view: PlanView | null | undefined;
+  write: boolean;
+  /** The case's receiver (its production item). */
+  receiver?: string;
+}) {
+  const noun = receiverNoun(receiver);
   const r = view?.rehearsal;
   const response = asObject(r?.response) ?? {};
   const before = asObject(response.encounter_before);
@@ -267,12 +281,12 @@ export function RehearsalPanel({ view, write }: { view: PlanView | null | undefi
   const describe = (e: Record<string, unknown> | undefined) =>
     e
       ? `${humanize(String(e.state ?? ''))}${e.ward ? ` in ${String(e.ward)}` : ''}, version ${String(e.version ?? '')}`
-      : 'not known to the downstream system';
+      : `not known to ${noun}`;
   return (
     <Section
       id="rehearsal"
       title="Rehearsal"
-      note="A dry run of the exact action on the downstream system itself, inside a transaction it rolls back. It shows the action would validate and apply against the state it read; it reserves nothing. The dispatch is a separate conditional write, checked again first."
+      note={`A dry run of the exact action on ${noun} itself, inside a transaction it rolls back. It shows the action would validate and apply against the state it read; it reserves nothing. The dispatch is a separate conditional write, checked again first.`}
       aside={
         r ? (
           <StatusBadge
@@ -296,7 +310,10 @@ export function RehearsalPanel({ view, write }: { view: PlanView | null | undefi
             ],
             ['Would leave', after ? describe(after) : ''],
             ['Epoch', response.epoch !== undefined ? String(response.epoch) : ''],
-            ['The downstream system answered', `HTTP ${r.httpStatus}${r.reason ? `, ${r.reason}` : ''}`],
+            [
+              `${capitalReceiverNoun(receiver)} answered`,
+              `HTTP ${r.httpStatus}${r.reason ? `, ${r.reason}` : ''}`,
+            ],
             ['Rolled back', 'Yes: nothing was committed and no receipt was stored'],
             ['When', <Timestamp key="t" iso={r.at} />],
           ]}

@@ -82,6 +82,23 @@ describe('SiteProfilePage', () => {
     expect(within(cards).getByText('Not modelled yet')).toBeInTheDocument();
   });
 
+  it('says where a receiver with no category answered takes its history policy from', async () => {
+    const legacy = structuredClone(recorded);
+    const { category: _c, history_policy: _h, ...beds } = legacy.profile.receivers[0];
+    legacy.profile = { ...legacy.profile, receivers: [beds], history_policy: 'correct' };
+    server.use(http.get(`${BASE}/site-profile`, () => HttpResponse.json(legacy)));
+    renderPage();
+    const cards = await screen.findByRole('list', { name: 'The receivers and what each needs' });
+    const card = within(cards).getByRole('listitem', { name: 'Downstream Out' });
+    expect(within(card).getByText('Not answered: read as current state')).toBeInTheDocument();
+    expect(within(card).getByText(/asks for a correction by hand/)).toBeInTheDocument();
+    expect(
+      within(card).getByText(
+        'Read from the site-wide history policy (correct the history), since no category is answered for this receiver.',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("asks each receiver's category, explains it, and sends it with the profile", async () => {
     renderPage();
     const select = (await inReceiver1()).getByRole('combobox', { name: 'Category of Downstream Out' });

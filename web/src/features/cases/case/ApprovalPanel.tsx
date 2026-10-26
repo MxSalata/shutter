@@ -17,6 +17,7 @@ import { asObject } from '@/lib/json';
 import { humanize } from '@/lib/format';
 import { approvalsByPlan, earlierApprovalText } from './receipt';
 import { NotYet, Section } from './Section';
+import { capitalReceiverNoun, receiverNoun } from './receiver';
 
 function BlindResendPreview({ c, me }: { c: CaseDetail; me: Me }) {
   const preview = usePreviewBlindResend(c.caseId);
@@ -33,7 +34,7 @@ function BlindResendPreview({ c, me }: { c: CaseDetail; me: Me }) {
         <Tooltip
           label={
             why ||
-            'Ask the downstream system what the original message would do if it were simply sent again, with no version check. Nothing is written.'
+            `Ask ${receiverNoun(c.receiver)} what the original message would do if it were simply sent again, with no version check. Nothing is written.`
           }
           multiline
           maw={320}
@@ -72,7 +73,7 @@ function BlindResendPreview({ c, me }: { c: CaseDetail; me: Me }) {
           <Stack gap={4}>
             {after ? (
               <Text size="sm">
-                Afterwards the downstream system would hold {humanize(String(after.state ?? ''))}
+                Afterwards {receiverNoun(c.receiver)} would hold {humanize(String(after.state ?? ''))}
                 {after.ward ? ` in ${String(after.ward)}` : ''}, version {String(after.version ?? '')}.
               </Text>
             ) : null}
@@ -87,7 +88,7 @@ function BlindResendPreview({ c, me }: { c: CaseDetail; me: Me }) {
             ) : null}
             {rolledBack ? (
               <Text size="xs" c="dimmed">
-                The downstream system's dry run, rolled back: nothing was written.
+                {capitalReceiverNoun(c.receiver)}&apos;s dry run, rolled back: nothing was written.
               </Text>
             ) : null}
           </Stack>
@@ -325,7 +326,7 @@ export function ApprovalPanel({
             <Text size="sm">
               {decision === 'approve'
                 ? `You approve exactly this: ${humanize(plan.actionType || 'resend').toLowerCase()} the ${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''} for ${c.encounterId}, conditional on receiver version ${String(plan.expectedVersion)}.`
-                : 'You reject the plan: nothing is sent to the downstream system, and the case closes as blocked for a person to take further.'}
+                : `You reject the plan: nothing is sent to ${receiverNoun(c.receiver)}, and the case closes as blocked for a person to take further.`}
             </Text>
             <KeyValueList
               rows={[

@@ -320,6 +320,17 @@ function ScenarioRow({
               {s.latestCase.caseId}
             </Anchor>
             <StateBadge state={s.latestCase.state} size="xs" />
+            {/* One failure at several receivers opens a case at each: the latest is one of them */}
+            {s.expected.by_receiver ? (
+              <Anchor
+                component={Link}
+                to={`/cases?scenario=${encodeURIComponent(s.id)}`}
+                size="xs"
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                Each receiver&apos;s case<VisuallyHidden> for {s.id}</VisuallyHidden>
+              </Anchor>
+            ) : null}
           </Stack>
         ) : (
           <Text size="xs" c="dimmed">

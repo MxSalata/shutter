@@ -10,7 +10,14 @@ import {
 } from '@tabler/icons-react';
 import type { ChainKind, ReceiverCategory, SiteProfile, SiteReceiver } from '@/api/types';
 import { StatusBadge, StatusNotice } from '@/components/StatusBadge';
-import { CATEGORIES, CATEGORY_TEXT, categoryOf, derivedPolicy, historyPolicyOf } from '@/lib/categories';
+import {
+  CATEGORIES,
+  CATEGORY_TEXT,
+  HISTORY_POLICY_TEXT,
+  categoryOf,
+  derivedPolicy,
+  historyPolicyOf,
+} from '@/lib/categories';
 import type { Tone } from '@/lib/tone';
 import { KINDS, KIND_LABELS, TIER_LABELS } from './profile';
 
@@ -44,6 +51,8 @@ function ReceiverCard({ r, profile, i }: { r: SiteReceiver; profile: SiteProfile
   const text = CATEGORY_TEXT[category];
   const policy = historyPolicyOf(r, profile);
   const overridden = !!r.history_policy && policy !== derivedPolicy(category);
+  // An entry with neither a category nor its own policy is read as current state, with the deprecated site-wide policy
+  const unanswered = !r.history_policy && (r.category === undefined || r.category === '');
   const tier = String(r.tier);
   const titleId = `site-receiver-card-${i}`;
   return (
@@ -61,7 +70,13 @@ function ReceiverCard({ r, profile, i }: { r: SiteReceiver; profile: SiteProfile
             <StatusBadge
               tone={text.modelled ? 'info' : 'neutral'}
               icon={text.modelled ? undefined : IconCircleDashed}
-              label={text.modelled ? text.label : `${text.label}: not modelled yet`}
+              label={
+                unanswered
+                  ? `Not answered: read as ${text.label.toLowerCase()}`
+                  : text.modelled
+                    ? text.label
+                    : `${text.label}: not modelled yet`
+              }
             />
           </Group>
           <Title order={3} fz="md" id={titleId}>
@@ -88,6 +103,11 @@ function ReceiverCard({ r, profile, i }: { r: SiteReceiver; profile: SiteProfile
           {overridden ? (
             <Text size="xs" c="dimmed">
               {`Set on this receiver: ${policy === 'correct' ? 'correct the history' : 'keep what is current'}, not what its category gives.`}
+            </Text>
+          ) : null}
+          {unanswered ? (
+            <Text size="xs" c="dimmed">
+              {`Read from the site-wide history policy (${HISTORY_POLICY_TEXT[policy]}), since no category is answered for this receiver.`}
             </Text>
           ) : null}
         </Stack>

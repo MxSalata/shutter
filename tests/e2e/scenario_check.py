@@ -34,7 +34,7 @@ encounter ends with (S20: the nurse's own entry still stands).
 
 A scenario whose message goes to several receivers and fails at more than one (S22) gives its expectations per receiver
 under expected.by_receiver: one case per failed delivery and receiver, each judged by its receiver's own disposition,
-outcome (the catalogue outcome the plan took, such as correct_history), write, final state and ward. Each receiver's
+outcome (the catalogue outcome the plan took, such as none or correct_history), write, final state and ward. Each receiver's
 state is read through its own API, at the base path its entry in the site profile names (GET /site-profile).
 
 It plays scenarios: each run resets the downstream system. Don't run it on an instance someone else is using.

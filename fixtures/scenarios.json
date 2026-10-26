@@ -965,6 +965,7 @@
       "by_receiver": {
         "Downstream Out": {
           "disposition": "superseded",
+          "outcome": "none",
           "write": false,
           "final_state": "admitted",
           "final_ward": "WARD-C"

@@ -359,7 +359,7 @@ describe('CasePage', () => {
     renderCase('C-000008');
     await openStep('What the evidence says');
     const step = await screen.findByRole('region', { name: /What the evidence says/ });
-    expect(within(step).getByText("The downstream system's encounter")).toBeInTheDocument();
+    expect(within(step).getByText("Downstream Out's encounter")).toBeInTheDocument();
     await userEvent.click(within(step).getByRole('button', { name: 'Open the evidence' }));
     expect(await screen.findByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
   });
@@ -548,7 +548,7 @@ describe('CasePage', () => {
     await userEvent.click(cites[0]);
     expect(await screen.findByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
     const evidence = await screen.findByRole('region', { name: 'Evidence' });
-    const item = await within(evidence).findByRole('button', { name: /The downstream system's encounter/ });
+    const item = await within(evidence).findByRole('button', { name: /Downstream Out's encounter/ });
     await waitFor(() => expect(item).toHaveAttribute('aria-expanded', 'true'));
     expect(within(evidence).getAllByText(/^Observed \d/).length).toBeGreaterThan(0);
     // Only the cited kind opens
@@ -559,7 +559,7 @@ describe('CasePage', () => {
     await openTab('Summary');
     await openTab('Evidence');
     const again = await screen.findByRole('region', { name: 'Evidence' });
-    const item2 = await within(again).findByRole('button', { name: /The downstream system's encounter/ });
+    const item2 = await within(again).findByRole('button', { name: /Downstream Out's encounter/ });
     expect(item2).toHaveAttribute('aria-expanded', 'false');
     expect(item2).not.toHaveFocus();
   });
@@ -802,6 +802,11 @@ describe('CasePage', () => {
     const receiver = await within(region).findByTestId('case-receiver');
     expect(within(receiver).getByText('At Records Out')).toBeInTheDocument();
     expect(await within(receiver).findByText('History of record')).toBeInTheDocument();
+    expect(within(region).getByTestId('case-receiver-gist')).toHaveTextContent(
+      'The history must be complete.',
+    );
+    // The escalation goes to the team that owns this receiver, not a generic downstream system
+    expect((await screen.findAllByText(/the Records Out team/)).length).toBeGreaterThan(0);
     const steps = await within(region).findByTestId('correction-steps');
     expect(
       within(steps).getByRole('heading', { name: 'Correcting the history at Records Out' }),
@@ -819,6 +824,9 @@ describe('CasePage', () => {
     const receiver = await within(region).findByTestId('case-receiver');
     expect(within(receiver).getByText('At Downstream Out')).toBeInTheDocument();
     expect(await within(receiver).findByText('Current state')).toBeInTheDocument();
+    expect(within(region).getByTestId('case-receiver-gist')).toHaveTextContent(
+      "Only today's placement matters.",
+    );
     expect(within(region).queryByTestId('correction-steps')).not.toBeInTheDocument();
   });
 

@@ -13,7 +13,7 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { useCases, useScenarios, type CaseFilters } from '@/api/hooks';
 import type { CaseSummary } from '@/api/types';
 import { PageHeader } from '@/components/PageHeader';
@@ -244,7 +244,9 @@ export function AttentionTile({
 
 export default function CasesPage() {
   const [state, setState] = useState<string | null>(null);
-  const [scenario, setScenario] = useState<string | null>(null);
+  // A link from the Scenarios page names its scenario (S22: one case per receiver)
+  const [params] = useSearchParams();
+  const [scenario, setScenario] = useState<string | null>(params.get('scenario'));
   const [page, setPage] = useState(1);
   const filters: CaseFilters = {
     state: state ?? undefined,

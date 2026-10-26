@@ -35,6 +35,25 @@ export function caseReceiver(c: CaseDetail, snapshot: Snapshot | null | undefine
   };
 }
 
+/**
+ * The receiver as a sentence names it: the case's production item (Records Out), or "the downstream system" for a case
+ * recorded before cases named their receiver.
+ */
+export function receiverNoun(name?: string): string {
+  return name || 'the downstream system';
+}
+
+/** The same at the start of a sentence. */
+export function capitalReceiverNoun(name?: string): string {
+  const n = receiverNoun(name);
+  return n.charAt(0).toUpperCase() + n.slice(1);
+}
+
+/** Who an escalation goes to when no team is chosen: the team that owns the case's receiver. */
+export function receiverTeam(name?: string): string {
+  return name ? `the ${name} team` : "the downstream system's team";
+}
+
 /** "Records Out, history of record" for beside the outcome; the name alone when the evidence names no category. */
 export function receiverLine(r: CaseReceiver): string {
   return r.category ? `${r.name}, ${CATEGORY_TEXT[r.category].label.toLowerCase()}` : r.name;
