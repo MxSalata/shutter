@@ -394,8 +394,13 @@ ClassMethod Cases() As %Status
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT COUNT(*) AS N FROM Shutter_Store.""Case"" WHERE 1=1" _ where, args...)
     If rs.%Next() Set total = rs.%Get("N")
     // One page: only the first offset + limit ids are read, newest first, and the offset is skipped (E8).
-    // The current plan's origin comes with the ids, so the list opens no plan row for its one column.
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP " _ (offset + limit) _ " c.ID, p.CreatedBy AS PlanCreatedBy FROM Shutter_Store.""Case"" c LEFT JOIN Shutter_Store.Plan p ON c.CurrentPlan = p.ID WHERE 1=1" _ where _ " ORDER BY c.ID DESC", args...)
+    // The current plan's origin, the writes and the latest verification come with the ids, so the list opens no plan,
+    // attempt or verification row for its columns. A write is an attempt that reached the receiver and may have landed
+    // (applied, already committed or uncertain), as the case page's receipt counts them.
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP " _ (offset + limit) _ " c.ID, p.CreatedBy AS PlanCreatedBy,"
+        _ " (SELECT COUNT(*) FROM Shutter_Store.ExecutionAttempt a WHERE a.""Case"" = c.ID AND a.Outcome IN ('applied', 'already_committed', 'uncertain')) AS Writes,"
+        _ " (SELECT TOP 1 v.Outcome FROM Shutter_Store.Verification v WHERE v.""Case"" = c.ID ORDER BY v.ID DESC) AS Verification"
+        _ " FROM Shutter_Store.""Case"" c LEFT JOIN Shutter_Store.Plan p ON c.CurrentPlan = p.ID WHERE 1=1" _ where _ " ORDER BY c.ID DESC", args...)
     Set items = [], n = 0
     While rs.%Next() {
         Set n = n + 1
@@ -406,6 +411,7 @@ ClassMethod Cases() As %Status
         If $ISOBJECT(c.Incident) Set o.incidentId = c.Incident.IncidentId
         // Who made the current plan (the board's or the investigator's run, the site's policy, rules alone)
         If rs.%Get("PlanCreatedBy") '= "" Set o.planCreatedBy = rs.%Get("PlanCreatedBy")
+        Set o.writes = +rs.%Get("Writes"), o.verification = rs.%Get("Verification")
         Do items.%Push(o)
     }
     Set out = {}

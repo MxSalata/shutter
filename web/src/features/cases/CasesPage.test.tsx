@@ -133,6 +133,8 @@ describe('CasesTable', () => {
                 scenario: 'S2',
                 mode: 'board',
                 openedAt: '2026-10-25T08:00:00Z',
+                writes: 1,
+                verification: 'verified',
               } as CaseSummary,
             ]}
           />
@@ -145,7 +147,15 @@ describe('CasesTable', () => {
       within(table)
         .getAllByRole('columnheader')
         .map((h) => h.textContent),
-    ).toEqual(['Case', 'State', 'Proposed action', 'What failed', 'Scenario', 'Investigated by']);
+    ).toEqual([
+      'Case',
+      'State',
+      'Proposed action',
+      'At the receiver',
+      'What failed',
+      'Scenario',
+      'Investigated by',
+    ]);
     const row = within(table).getByRole('link', { name: 'C-000123' }).closest('tr')!;
     expect(row).toHaveAttribute('role', 'row');
     const cells = within(row).getAllByRole('cell');
@@ -154,10 +164,14 @@ describe('CasesTable', () => {
     expect(cells.slice(1).map((c) => c.getAttribute('data-label'))).toEqual([
       'State',
       'Proposed action',
+      'At the receiver',
       'What failed',
       'Scenario',
       'Investigated by',
     ]);
+    // What was written and what the verifier found
+    expect(cells[3]).toHaveTextContent('1 write');
+    expect(cells[3]).toHaveTextContent('Effect verified at the receiver');
     // When it was opened sits under the case id
     expect(within(cells[0]).getByRole('time')).toHaveAttribute('datetime', '2026-10-25T08:00:00Z');
   });
@@ -212,5 +226,21 @@ describe('ToneLegend', () => {
     const legend = screen.getByRole('list', { name: 'What the colours mean' });
     expect(within(legend).getAllByRole('listitem')).toHaveLength(5);
     expect(legend).toHaveTextContent('Attentiona person is needed');
+  });
+});
+
+describe('the list from the mock', () => {
+  beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+  afterAll(() => server.close());
+  beforeEach(() => resetMock('approver'));
+
+  it('counts writes and the latest verification from the recorded attempts, as the API does', async () => {
+    const res = await fetch(`${location.origin}/api/shutter/cases?limit=500`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { items: CaseSummary[] };
+    const resolved = body.items.find((c) => c.caseId === 'C-000015');
+    const blocked = body.items.find((c) => c.caseId === 'C-000014');
+    expect(resolved).toMatchObject({ writes: 1, verification: 'verified' });
+    expect(blocked).toMatchObject({ writes: 0, verification: '' });
   });
 });

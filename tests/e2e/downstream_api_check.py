@@ -167,6 +167,30 @@ def main():
     status, text = api.call("GET", f"/receipts/{key}")
     check("while the receipt stands", status == 200, f"{status} {text[:120]}")
 
+    # Beds (CONTRACTS 1.1, v1.24): a placement into a bed another encounter holds is refused, live and rehearsed alike
+    bed = "B-" + prefix[len("ENC-HT-"):]
+    held = operation(20, "admit", "WARD-B", "08:10", bed=bed)
+    status, text = api.call("POST", "/operations", held)
+    check("an admit into a bed: 201, the read shows the bed", status == 201 and ((parse(text) or {}).get("encounter") or {}).get("bed") == bed, f"{status} {text[:160]}")
+    api.call("POST", "/operations", operation(21, "admit", "WARD-A", "09:00"))
+    into = operation(21, "transfer", "WARD-B", "09:20", bed=bed)
+    expected = {"error": "bed_occupied", "detail": f"Bed WARD-B/{bed} is occupied by encounter {held['encounter_id']} since 2026-10-15T08:10:00Z",
+                "ward": "WARD-B", "bed": bed, "occupant": {"encounter_id": held["encounter_id"], "since": "2026-10-15T08:10:00Z", "version": 1},
+                "operation_key": into["operation_key"], "applied": False}
+    status, text = api.call("POST", "/operations", into)
+    check("a transfer into the held bed: 409 bed_occupied, the occupant by its encounter only", status == 409 and parse(text) == expected, f"{status} {text[:240]}")
+    status, text = api.call("POST", "/operations", dict(into, expected_version=1, dry_run=True))
+    check("its dry run: the same 409 and body", status == 409 and parse(text) == expected, f"{status} {text[:240]}")
+    status, text = api.call("GET", f"/encounters/{into['encounter_id']}")
+    body = parse(text) or {}
+    check("nothing applied: version 1, no bed", body.get("version") == 1 and body.get("bed") is None and body.get("history", [{}])[0].get("bed", "absent") is None, text[:200])
+    api.call("POST", "/operations", operation(20, "discharge", None, "09:30"))
+    status, text = api.call("POST", "/operations", into)
+    check("after the occupant's discharge the transfer applies", status == 201 and ((parse(text) or {}).get("receipt") or {}).get("bed") == bed, f"{status} {text[:160]}")
+    if args.second_user:
+        status, text = Downstream(args.url, args.second_user, args.second_password).call("POST", "/operations", operation(22, "admit", "WARD-B", "09:40", bed=bed))
+        check(f"{args.second_user}: the bed check needs no SQL privileges (409 bed_occupied)", status == 409 and (parse(text) or {}).get("error") == "bed_occupied", f"{status} {text[:160]}")
+
     status, text = api.call("GET", "/faults")
     check("the fault setting is back as it was", parse(text) == saved, f"{text[:160]} vs {saved}")
 

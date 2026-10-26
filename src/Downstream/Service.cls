@@ -91,6 +91,78 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
     }
     Set now = ..Now()
     Set ward = $SELECT((event = "admit") || (event = "transfer"): request.%Get("ward"), 1: "")
+    Set bed = $SELECT((event = "admit") || (event = "transfer"): request.%Get("bed"), 1: "")
+    // The beds this operation takes or frees are locked until the write is committed or rolled back, the one it
+    // leaves too: a rehearsal's write is visible to other processes until its rollback (section 1.1)
+    Set beds = ..Beds(encounter, event, ward, bed)
+    For i = 1:1:$LISTLENGTH(beds) {
+        Lock +^Downstream.Lock("bed", $LIST($LIST(beds, i), 1), $LIST($LIST(beds, i), 2)):10
+        If '$TEST {
+            Do ..Unlock(beds, i - 1)
+            Set status = 503
+            Return {"error": "ward_unavailable", "detail": "another operation holds the bed"}
+        }
+    }
+    Try {
+        Set result = ..Place(request, encounter, key, digest, dryRun, current, ward, bed, now, .status)
+    } Catch ex {
+        TROLLBACK:$TLEVEL 1
+        Set status = 500
+        Set result = {"error": "internal_error", "detail": (ex.DisplayString())}
+    }
+    Do ..Unlock(beds)
+    If 'dryRun, status = 201, ..FaultFor(key) = "commit_drop_response" {
+        // Committed, then the response is lost
+        Set status = 504
+        Quit ""
+    }
+    Quit result
+}
+
+/// The beds an operation on <var>encounter</var> takes or frees, as a list of (ward, bed) in collation order, so two
+/// operations always lock them in the same order: the bed it is placed in, and the bed it leaves.
+ClassMethod Beds(encounter As Downstream.Encounter, event As %String, ward As %String, bed As %String) As %List [ Private ]
+{
+    Set:bed'="" touched(ward, bed) = ""
+    If $ISOBJECT(encounter), (event = "transfer") || (event = "discharge"), encounter.Bed '= "" {
+        Set touched(encounter.Ward, encounter.Bed) = ""
+    }
+    Set beds = "", w = ""
+    For {
+        Set w = $ORDER(touched(w))
+        Quit:w=""
+        Set b = ""
+        For {
+            Set b = $ORDER(touched(w, b))
+            Quit:b=""
+            Set beds = beds _ $LISTBUILD($LISTBUILD(w, b))
+        }
+    }
+    Quit beds
+}
+
+/// Releases the first <var>count</var> of <var>beds</var>' locks, all of them by default.
+ClassMethod Unlock(beds As %List, count As %Integer = -1) [ Private ]
+{
+    Set:count<0 count = $LISTLENGTH(beds)
+    For i = 1:1:count {
+        Lock -^Downstream.Lock("bed", $LIST($LIST(beds, i), 1), $LIST($LIST(beds, i), 2))
+    }
+}
+
+/// The bed check, then the write, with the encounter and its beds locked.
+ClassMethod Place(request As %DynamicObject, encounter As Downstream.Encounter, key As %String, digest As %String, dryRun As %Boolean, current As %Integer, ward As %String, bed As %String, now As %String, Output status As %Integer) As %DynamicObject [ Private ]
+{
+    Set encounterId = request.%Get("encounter_id")
+    Set event = request.%Get("event")
+    If bed '= "" {
+        // A bed held by another open encounter refuses the placement, in a rehearsal too (section 1.1)
+        Set occupied = ..Occupied(ward, bed, encounterId, key)
+        If $ISOBJECT(occupied) {
+            Set status = 409
+            Quit occupied
+        }
+    }
     // What a rehearsal is checked against, read before anything changes
     Set before = $SELECT(dryRun: ..EncounterJSON(encounterId), 1: "")
     TSTART
@@ -102,22 +174,22 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
             Set encounter.PatientIdAuthority = request.%Get("patient_id_authority")
         }
         If event = "admit" {
-            Set encounter.State = "admitted", encounter.Ward = ward
+            Set encounter.State = "admitted", encounter.Ward = ward, encounter.Bed = bed
         } ElseIf event = "transfer" {
-            Set encounter.Ward = ward
+            Set encounter.Ward = ward, encounter.Bed = bed
         } ElseIf event = "discharge" {
-            Set encounter.State = "discharged", encounter.Ward = ""
+            Set encounter.State = "discharged", encounter.Ward = "", encounter.Bed = ""
         }
         Set encounter.Version = current + 1
         Set encounter.UpdatedAt = now
         $$$ThrowOnError(encounter.%Save())
         Set history = ##class(Downstream.Event).%New()
         Set history.EncounterId = encounterId, history.VersionAfter = encounter.Version, history.Event = event
-        Set history.Ward = ward, history.EventTime = request.%Get("event_time"), history.AppliedAt = now
+        Set history.Ward = ward, history.Bed = bed, history.EventTime = request.%Get("event_time"), history.AppliedAt = now
         Set history.OperationKey = key
         $$$ThrowOnError(history.%Save())
         Set receipt = ##class(Downstream.Receipt).%New()
-        Set receipt.OperationKey = key, receipt.EncounterId = encounterId, receipt.Event = event, receipt.Ward = ward
+        Set receipt.OperationKey = key, receipt.EncounterId = encounterId, receipt.Event = event, receipt.Ward = ward, receipt.Bed = bed
         Set receipt.EventTime = history.EventTime, receipt.AppliedAt = now
         Set receipt.VersionBefore = current, receipt.VersionAfter = encounter.Version
         Set receipt.PayloadDigest = digest, receipt.SourceMessageId = request.%Get("source_message_id")
@@ -139,12 +211,43 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
         Set status = 500
         Set result = {"error": "internal_error", "detail": (ex.DisplayString())}
     }
-    If 'dryRun, status = 201, ..FaultFor(key) = "commit_drop_response" {
-        // Committed, then the response is lost
-        Set status = 504
-        Quit ""
-    }
     Quit result
+}
+
+/// The 409 <code>bed_occupied</code> answer when another admitted encounter holds <var>bed</var> in <var>ward</var>,
+/// otherwise an empty string. The encounter itself never conflicts with its own bed. The occupant is named by its
+/// encounter id only, never by patient identifiers.
+ClassMethod Occupied(ward As %String, bed As %String, encounterId As %String, key As %String) As %DynamicObject [ Private ]
+{
+    // The index WardBedIdx, read directly: the API's users have no SQL privileges
+    Set id = ""
+    For {
+        Set id = $ORDER(^Downstream.EncounterI("WardBedIdx", ward, bed, id))
+        Quit:id=""
+        Set occupant = ##class(Downstream.Encounter).%OpenId(id)
+        Continue:'$ISOBJECT(occupant)
+        Continue:(occupant.EncounterId=encounterId)||(occupant.State'="admitted")||(occupant.Ward'=ward)||(occupant.Bed'=bed)
+        Set since = ..BedSince(occupant)
+        Set holder = {"encounter_id": (occupant.EncounterId), "since": (since)}
+        Do holder.%Set("version", occupant.Version, "number")
+        Return {"error": "bed_occupied", "detail": ("Bed " _ ward _ "/" _ bed _ " is occupied by encounter " _ occupant.EncounterId _ " since " _ since), "ward": (ward), "bed": (bed), "occupant": (holder), "operation_key": (key), "applied": false}
+    }
+    Quit ""
+}
+
+/// The event time of the placement that put <var>encounter</var> in its current bed: the oldest of the admissions and
+/// transfers into that bed since it last held another place (an update moves nothing).
+ClassMethod BedSince(encounter As Downstream.Encounter) As %String [ Private ]
+{
+    Set since = encounter.UpdatedAt
+    For version = encounter.Version:-1:1 {
+        Set event = ##class(Downstream.Event).EncounterVersionIdxOpen(encounter.EncounterId, version)
+        Quit:'$ISOBJECT(event)
+        Continue:event.Event="update"
+        Quit:(event.Ward'=encounter.Ward)||(event.Bed'=encounter.Bed)
+        Set since = event.EventTime
+    }
+    Quit since
 }
 
 /// A refusal: as itself for a real operation, or for a rehearsal as a result that would not apply.
@@ -208,6 +311,15 @@ ClassMethod Validate(request As %DynamicObject) As %String
     } ElseIf request.%IsDefined("ward"), request.%GetTypeOf("ward") '= "null" {
         Return "ward must be null for " _ event
     }
+    // A bed is optional, and only for a placement (section 1.1)
+    If request.%IsDefined("bed"), request.%GetTypeOf("bed") '= "null" {
+        If (event '= "admit") && (event '= "transfer") {
+            Return "bed must be null for " _ event
+        }
+        If (request.%GetTypeOf("bed") '= "string") || (request.%Get("bed") = "") || ($LENGTH(request.%Get("bed")) > 64) {
+            Return "bed must be null or a bed name of 1 to 64 characters"
+        }
+    }
     If '$MATCH(request.%Get("event_time"), "\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z") {
         Return "event_time must be ISO 8601 UTC, for example 2026-10-15T09:20:00Z"
     }
@@ -219,7 +331,8 @@ ClassMethod Validate(request As %DynamicObject) As %String
     Return ""
 }
 
-/// The canonical payload (section 1.6): these keys in this order, strings as given, null for no ward.
+/// The canonical payload (section 1.6): these keys in this order, strings as given, null for no ward. The bed is not
+/// part of it, so a ward-level operation's digest is what it was before beds.
 ClassMethod Canonical(request As %DynamicObject) As %String
 {
     Set canonical = {}

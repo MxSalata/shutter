@@ -1,4 +1,4 @@
-/// An encounter in the downstream system: its state, its current ward and a version that every applied
+/// An encounter in the downstream system: its state, its current ward and bed and a version that every applied
 /// operation increments. The history of what was applied is in <class>Downstream.Event</class>.
 Class Downstream.Encounter Extends %Persistent
 {
@@ -15,6 +15,9 @@ Property State As %String(VALUELIST = ",admitted,discharged") [ Required ];
 /// The ward the patient is in. Empty once discharged.
 Property Ward As %String(COLLATION = "EXACT", MAXLEN = 64);
 
+/// The bed within the ward (PV1-3's bed component). Empty for a ward-level placement and once discharged.
+Property Bed As %String(COLLATION = "EXACT", MAXLEN = 64);
+
 Property Version As %Integer [ InitialExpression = 0, Required ];
 
 /// When the last operation was applied, ISO 8601 UTC.
@@ -22,11 +25,15 @@ Property UpdatedAt As %String(MAXLEN = 32);
 
 Index EncounterIdIdx On EncounterId [ Unique ];
 
+/// Who holds a bed: <method>Downstream.Service.Occupant</method> reads it.
+Index WardBedIdx On (Ward, Bed);
+
 /// The encounter as the API returns it, with its history oldest first.
 Method ToJSON() As %DynamicObject
 {
     Set out = {"encounter_id": (..EncounterId), "patient_id": (..PatientId), "patient_id_authority": (..PatientIdAuthority), "state": (..State)}
     If ..Ward = "" { Do out.%Set("ward", "", "null") } Else { Do out.%Set("ward", ..Ward) }
+    If ..Bed = "" { Do out.%Set("bed", "", "null") } Else { Do out.%Set("bed", ..Bed) }
     Do out.%Set("version", ..Version, "number")
     Do out.%Set("updated_at", ..UpdatedAt)
     Do out.%Set("epoch", ##class(Downstream.Service).Epoch(), "number")
@@ -67,6 +74,9 @@ Storage Default
 </Value>
 <Value name="8">
 <Value>UpdatedAt</Value>
+</Value>
+<Value name="9">
+<Value>Bed</Value>
 </Value>
 </Data>
 <DataLocation>^Downstream.EncounterD</DataLocation>
