@@ -46,8 +46,8 @@ function renderAt(path: string) {
 }
 
 const findings = () => within(screen.getByRole('region', { name: 'Findings' }));
-/** The findings table's rows, header row left out. */
-const rows = () => findings().getAllByRole('row').slice(1);
+/** The findings, one card each, most severe first. */
+const rows = () => findings().getAllByRole('article');
 
 /** PR-000001 as the agent would leave it: ranked, explained, with its summary and unknowns. */
 function ranked(): ReviewDetail {
@@ -170,9 +170,21 @@ describe('ReviewPage', () => {
   it('shows the review read only, in baseline order, with the agent plainly not recorded', async () => {
     renderAt('/reviews/PR-000001');
     expect(await screen.findByRole('heading', { name: 'Review PR-000001' })).toBeInTheDocument();
+    expect(screen.getByText(/^Shutter.Production in SHUTTER, \d+ days? of history\.$/)).toBeInTheDocument();
+    // Read only, said plainly before anything else
+    const note = screen.getAllByRole('note')[0];
+    expect(note).toHaveTextContent('Read only');
+    expect(note).toHaveTextContent('The review never changes the production');
+    // No finding was explained: the page says so, and no card carries an explanation
+    expect(screen.getByText('0 of 13 findings explained by the agent')).toBeInTheDocument();
     expect(
-      screen.getByText(/Shutter.Production in SHUTTER\. The review never changes the production/),
+      screen.getByRole('progressbar', { name: '0 of 13 findings explained by the agent' }),
     ).toBeInTheDocument();
+    expect(findings().queryByText(/^The agent's explanation/)).not.toBeInTheDocument();
+    // The counts as tiles, from the review's summary
+    const summary = within(screen.getByRole('region', { name: 'Summary' }));
+    expect(summary.getByText('event log errors in the window').previousSibling).toHaveTextContent('714');
+    expect(summary.getByText('Medium').closest('.mantine-Paper-root')).toHaveTextContent('11');
     const agent = within(screen.getByRole('region', { name: "The agent's ranking" }));
     expect(agent.getByText('No recorded explanation for this configuration')).toBeInTheDocument();
     expect(findings().getByText(/In the deterministic order/)).toBeInTheDocument();
@@ -277,9 +289,15 @@ describe('ReviewPage', () => {
     ).toBeInTheDocument();
     const first = within(rows()[0]);
     expect(first.getByText('F5')).toBeInTheDocument();
+    // The agent's explanation sits beside the finding, above the deterministic text
+    const explanation = first.getByRole('note');
+    expect(explanation).toHaveTextContent("The agent's explanation, rank 1 (recorded)");
+    expect(explanation).toHaveTextContent('Consistent with the cases of ADT to Downstream.');
     expect(
-      first.getByText('Agent, rank 1: Consistent with the cases of ADT to Downstream.'),
-    ).toBeInTheDocument();
+      explanation.compareDocumentPosition(first.getByText('Why it matters')) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByText('12 of 13 findings explained by the agent')).toBeInTheDocument();
     const agent = within(screen.getByRole('region', { name: "The agent's ranking" }));
     expect(agent.getByText('Ranked and explained (recorded)')).toBeInTheDocument();
     expect(agent.getByText('The downstream errors outnumber the rest.')).toBeInTheDocument();

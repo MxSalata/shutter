@@ -204,3 +204,20 @@ export function explainedLine(a: Pick<ReviewAgent, 'explained' | 'unexplained' |
     );
   return `${parts.join('; ')}.`;
 }
+
+/**
+ * How many findings the agent explained, of how many: the server's counts once the agent answered, else the findings
+ * that carry an explanation (none, for a review with no recorded explanation).
+ */
+export function explainedCount(review: Pick<ReviewDetail, 'agent' | 'findings'>): {
+  explained: number;
+  total: number;
+} {
+  const a = review.agent;
+  if (a.explained !== undefined && a.explained !== null)
+    return { explained: a.explained, total: a.explained + (a.unexplained ?? 0) };
+  return {
+    explained: review.findings.filter((f) => f.explanation).length,
+    total: review.findings.length,
+  };
+}
