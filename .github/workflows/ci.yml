@@ -269,6 +269,14 @@ jobs:
             | docker exec -i "$CTR" iris session IRIS -U HOSPITAL)
           echo "$out" | tail -20
           echo "$out" | grep -q '^RESULT: ok'
+      # The demo records system (v1.25): the demo receiver package in a namespace of its own behind /records/api, the
+      # second receiver (category history_of_record) the production feeds beside the bed manager.
+      - name: The demo records system's namespace
+        run: |
+          out=$(printf '%s\n' 'Set r = ##class(Shutter.Installer).RunRecords("SHUTTER") Write !,"RESULT: ",r,!' 'Halt' \
+            | docker exec -i "$CTR" iris session IRIS -U SHUTTER)
+          echo "$out" | tail -20
+          echo "$out" | grep -q '^RESULT: ok'
       - name: The downstream system's contract tests, in process
         if: matrix.shard == 'checks'
         run: |

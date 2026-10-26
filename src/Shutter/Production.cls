@@ -86,7 +86,7 @@ XData ProductionDefinition
     <Setting Target="Adapter" Name="FileSpec">*.hl7</Setting>
     <Setting Target="Adapter" Name="CallInterval">1</Setting>
     <Setting Target="Adapter" Name="DeleteFromServer">1</Setting>
-    <Setting Target="Host" Name="TargetConfigNames">ADT to Downstream</Setting>
+    <Setting Target="Host" Name="TargetConfigNames">ADT to Downstream,ADT to Records</Setting>
     <Setting Target="Host" Name="MessageSchemaCategory">2.5.1</Setting>
     <Setting Target="Host" Name="AckMode">Never</Setting>
     <Setting Target="Host" Name="UseAckCommitCodes">0</Setting>
@@ -98,6 +98,15 @@ XData ProductionDefinition
   <Item Name="ADT to Downstream" Category="Feed" ClassName="Shutter.Process.ADTToWard" PoolSize="1" Enabled="true" Foreground="false" Comment="Builds the downstream operation, delivers it, opens a case on failure" LogTraceEvents="true" Schedule="">
   </Item>
   <Item Name="Downstream Out" Category="Feed,Recovery" ClassName="Shutter.Operation.Ward" PoolSize="1" Enabled="true" Foreground="false" Comment="The one connector to the downstream system (the demo bed-management system): feed, rehearsals and recovery writes" LogTraceEvents="true" Schedule="">
+    <Setting Target="Adapter" Name="Credentials">DownstreamAPI</Setting>
+    <Setting Target="Adapter" Name="ResponseTimeout">15</Setting>
+    <Setting Target="Adapter" Name="ConnectTimeout">5</Setting>
+    <Setting Target="Host" Name="FailureTimeout">0</Setting>
+  </Item>
+  <Item Name="ADT to Records" Category="Feed" ClassName="Shutter.Process.ADTToWard" PoolSize="1" Enabled="true" Foreground="false" Comment="The same feed to the demo patient records system (category history_of_record): builds the operation, delivers it to Records Out, opens a case on failure" LogTraceEvents="true" Schedule="">
+    <Setting Target="Host" Name="WardTarget">Records Out</Setting>
+  </Item>
+  <Item Name="Records Out" Category="Feed,Recovery" ClassName="Shutter.Operation.Ward" PoolSize="1" Enabled="true" Foreground="false" Comment="The connector to the demo patient records system (the second demo receiver, /records/api): feed, rehearsals and recovery writes" LogTraceEvents="true" Schedule="">
     <Setting Target="Adapter" Name="Credentials">DownstreamAPI</Setting>
     <Setting Target="Adapter" Name="ResponseTimeout">15</Setting>
     <Setting Target="Adapter" Name="ConnectTimeout">5</Setting>

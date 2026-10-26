@@ -116,7 +116,20 @@ ClassMethod Match(conditions As %DynamicObject, facts As %DynamicObject = "") As
         Set out.decision = $SELECT($LISTFIND($LISTBUILD("policy", "board", "person"), decides): decides, 1: "board")
         Set out.entry = m.id
         Set pref = m.%Get("preferred")
-        Set out.outcome = $SELECT($ISOBJECT(pref): ##class(Shutter.Util.Json).Str(pref, "outcome"), 1: "")
+        Set out.outcome = $SELECT($ISOBJECT(pref): ##class(Shutter.Util.Json).Str(pref, "outcome"), 1: ""), out."outcome_ref" = "preferred"
+        // A site-policy alternative (v1.25): an alternative whose when names a flag (history_policy, authoritative_source,
+        // unconditional_resend) that holds for this case's receiver applies instead of the preferred outcome, as the entry
+        // says it should when the site or the receiver chooses so. "always" is a board option, not a policy.
+        Set alts = m.%Get("alternatives")
+        If $ISOBJECT(alts) {
+            Set ai = alts.%GetIterator()
+            While ai.%GetNext(.n, .alt) {
+                Continue:'$ISOBJECT(alt)
+                Set when = $ZSTRIP(##class(Shutter.Util.Json).Str(alt, "when"), "<>W")
+                Continue:((when = "") || (when = "always") || (when '[ ":"))
+                If ..WhenHolds(when, out.facts) Set out.outcome = ##class(Shutter.Util.Json).Str(alt, "outcome"), out."outcome_ref" = "alternative:" _ (n + 1) Quit
+            }
+        }
     }
     Quit out
 }
