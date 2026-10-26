@@ -59,6 +59,10 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/costs" Method="GET" Call="Costs"/>
   <Route Url="/production-reviews/targets" Method="GET" Call="ProductionReviewTargets"/>
   <Route Url="/cases/:id/whatif" Method="GET" Call="CaseWhatIf"/>
+  <Route Url="/cases/:caseId/questions" Method="GET" Call="CaseQuestions"/>
+  <Route Url="/cases/:caseId/questions" Method="POST" Call="CaseQuestionAsk"/>
+  <Route Url="/cases/:caseId/questions/suggested" Method="GET" Call="CaseQuestionsSuggested"/>
+  <Route Url="/cases/:caseId/questions/:qid" Method="GET" Call="CaseQuestionGet"/>
   <Route Url="/production-reviews" Method="GET" Call="ProductionReviews"/>
   <Route Url="/production-reviews" Method="POST" Call="ProductionReviewStart"/>
   <Route Url="/production-reviews/annotations/:annotationId" Method="DELETE" Call="ProductionReviewAnnotationDelete"/>
@@ -1393,8 +1397,112 @@ ClassMethod Costs() As %Status
     }
     Set totals.reviewRuns = reviewRuns
     Set totals.spentUsd = +totals.spentUsd + reviewSpent
-    Set o.byModel = byModel, o.byDay = byDay, o.byCase = byCase, o.byReview = byReview
+    // The questions' runs (CONTRACTS 14.2) are AgentRun rows naming their question: already in the totals above, and
+    // listed by question here, with questionRuns counting them.
+    Set byQuestion = [], questionRuns = 0
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT %EXACT(a.QuestionId) AS QuestionId, %EXACT(c.CaseId) AS CaseId, COUNT(*) AS Runs, SUM(CASE WHEN a.Mode = 'replay' THEN 1 ELSE 0 END) AS Replays, SUM(CASE WHEN a.Mode = 'replay' OR a.Model = 'mock' THEN 0 ELSE a.CostUSD END) AS Cost FROM Shutter_Store.AgentRun a JOIN Shutter_Store.""Case"" c ON a.""Case"" = c.ID WHERE a.QuestionId IS NOT NULL" _ where _ " GROUP BY %EXACT(a.QuestionId), %EXACT(c.CaseId) ORDER BY %EXACT(a.QuestionId)", args...)
+    While rs.%Next() {
+        Set r = {}
+        Set r.questionId = rs.%Get("QuestionId"), r.caseId = rs.%Get("CaseId"), r.runs = +rs.%Get("Runs"), r.replayedRuns = +rs.%Get("Replays"), r.costUsd = +rs.%Get("Cost")
+        Do byQuestion.%Push(r)
+        Set questionRuns = questionRuns + r.runs
+    }
+    Set totals.questionRuns = questionRuns
+    Set o.byModel = byModel, o.byDay = byDay, o.byCase = byCase, o.byReview = byReview, o.byQuestion = byQuestion
     Quit ..Json(o)
+}
+
+// ---- questions about a case (CONTRACTS 14.2) ----
+
+/// The questions asked about a case, oldest first: {items: [...], total}. A question left pending or answering for 15
+/// minutes is marked failed on the way.
+ClassMethod CaseQuestions(caseId As %String) As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set o = {}
+    Set o.items = ##class(Shutter.Store.CaseQuestion).ListForCase(case)
+    Set o.total = o.items.%Size()
+    Quit ..Json(o)
+}
+
+/// The scenario's suggested conversations with what has been asked (knowledge/questions/<S>.json); a case without a
+/// scenario, or a scenario without a file, has none.
+ClassMethod CaseQuestionsSuggested(caseId As %String) As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Quit ..Json(##class(Shutter.Store.CaseQuestion).Suggested(case))
+}
+
+/// One question with its answer, the facts it was checked against, the members' answers, the resolved change and its runs.
+ClassMethod CaseQuestionGet(caseId As %String, qid As %String) As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set q = ##class(Shutter.Store.CaseQuestion).ByQuestionId(qid)
+    If '$ISOBJECT(q) || (q.Case.%Id() '= case.%Id()) Quit ..Fail("404 Not Found", "not_found", "No question " _ qid _ " about " _ caseId)
+    Quit ..Json(q.ToObject(1))
+}
+
+/// Ask about a case (CONTRACTS 14.2): {tier: "explain" | "board", question | suggested: {conversation, turn}, conversation?}.
+/// A suggested turn comes from the scenario's file (its tier when the body gives none) and is recorded and replayable; a
+/// free question, alone or as a follow-up inside a conversation, runs live only. The request goes through the API service
+/// to the Case Question item, which opens the question and answers at once with its id while the agents run: 202
+/// {questionId, conversation, turn, tier, source, state, askedBy}. 400 bad_request for a body that is not what is listed,
+/// 404 unknown_suggested for a turn the file does not have, 409 no_evidence for a case whose evidence is not collected yet.
+/// Nothing is written by a question, whatever its text; a live run spends model credit as a scenario run does.
+ClassMethod CaseQuestionAsk(caseId As %String) As %Status
+{
+    If '..Allow("Shutter_Operate", 1) Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set shape = "The body must be a JSON object: {tier, question | suggested: {conversation, turn}, conversation?}"
+    Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
+    If '$ISOBJECT(body) || $$$ISERR(psc) || ($CLASSNAME(body) '= "%Library.DynamicObject") Quit ..Fail("400 Bad Request", "bad_request", shape)
+    Set tier = $ZSTRIP(##class(Shutter.Util.Json).Str(body, "tier"), "<>W")
+    Set conversation = $ZSTRIP(##class(Shutter.Util.Json).Str(body, "conversation"), "<>W")
+    Set text = "", source = "free", turn = 0
+    Set suggested = body.%Get("suggested")
+    If $ISOBJECT(suggested) && suggested.%IsA("%Library.DynamicObject") {
+        Set conversation = $ZSTRIP(##class(Shutter.Util.Json).Str(suggested, "conversation"), "<>W"), turn = +##class(Shutter.Util.Json).Str(suggested, "turn")
+        If (conversation = "") || (turn < 1) Quit ..Fail("400 Bad Request", "bad_request", "suggested needs the conversation's id and a turn from 1")
+        If '##class(Shutter.Store.CaseQuestion).SuggestedTurn(case, conversation, turn, .stier, .text) Quit ..Fail("404 Not Found", "unknown_suggested", "The case's scenario has no suggested turn " _ conversation _ "." _ turn _ " (GET /cases/" _ caseId _ "/questions/suggested lists them)")
+        If tier = "" Set tier = stier
+        Set source = "suggested"
+    } Else {
+        Set text = $ZSTRIP(##class(Shutter.Util.Json).Str(body, "question"), "<>W")
+        If text = "" Quit ..Fail("400 Bad Request", "bad_request", "question is required, or suggested: {conversation, turn}; " _ shape)
+        If $LENGTH(text) > 2000 Quit ..Fail("400 Bad Request", "bad_request", "question is at most 2000 characters")
+        If $LENGTH(conversation) > 64 Quit ..Fail("400 Bad Request", "bad_request", "conversation is at most 64 characters")
+    }
+    If (tier '= "explain") && (tier '= "board") Quit ..Fail("400 Bad Request", "bad_request", "tier must be explain or board")
+    If '$ISOBJECT(case.CurrentSnapshot) Quit ..Fail("409 Conflict", "no_evidence", "The case's evidence is not collected yet; ask once it is")
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    Set msg = ##class(Shutter.Msg.QuestionRequest).%New()
+    Set msg.CaseId = case.CaseId, msg.Tier = tier, msg.Source = source, msg.Text = text
+    Set msg.Conversation = conversation, msg.Turn = turn, msg.AskedBy = ..User()
+    Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
+    If $$$ISERR(sc) || '$ISOBJECT(service) Quit ..Fail("503 Service Unavailable", "no_service", "The API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
+    // Synchronous: the Case Question item answers with the question's id at once and goes on with the agents.
+    Set service.Target = "Case Question"
+    Set sc = service.ProcessInput(msg, .started)
+    If $$$ISERR(sc) Quit ..Fail("503 Service Unavailable", "not_queued", "The question could not be sent: " _ $SYSTEM.Status.GetErrorText(sc))
+    If '$ISOBJECT(started) || 'started.%IsA("Shutter.Msg.QuestionStarted") Quit ..Fail("502 Bad Gateway", "no_answer", "The Case Question item did not answer")
+    If started.QuestionId = "" Quit ..Fail("500 Internal Server Error", "question_failed", $SELECT(started.Error '= "": started.Error, 1: "No question was opened"))
+    Set reply = {}
+    Set reply.questionId = started.QuestionId, reply.conversation = started.Conversation, reply.turn = started.Turn
+    Set reply.tier = tier, reply.source = source, reply.state = started.State, reply.askedBy = ..User()
+    Set replyText = reply.%ToJSON()
+    Do ..Remember(bodyText, "202 Accepted", replyText)
+    Set %response.Status = "202 Accepted"
+    Write replyText
+    Quit $$$OK
 }
 
 // ---- production reviews (CONTRACTS 13) ----
