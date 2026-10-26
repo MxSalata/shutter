@@ -110,10 +110,11 @@ def field_list(values, count):
 
 
 def message(scenario, seq, trigger, time, ward=None, prior=None, admit_time="0900", note=None, phone=None,
-            source="PAS", encounter=None, patient=None, version="2.5.1", merged=None, patient_class="I"):
+            source="PAS", encounter=None, patient=None, version="2.5.1", merged=None, patient_class="I", bed=None):
     """One ADT message. ward is PV1-3, the patient's location as the PAS holds it after the event (the new ward of a
     transfer, the ward a patient is discharged from, the current ward on an update); prior is PV1-6, the location a
-    transfer moves the patient from."""
+    transfer moves the patient from. bed replaces PV1-3's bed component, for scenarios with several patients on one
+    ward (each needs a bed of its own, since the receiver keeps one encounter per bed)."""
     mrn, default_encounter, name, dob, sex = PATIENTS[patient or scenario]
     encounter = encounter or default_encounter
     day = day_of(scenario)
@@ -129,6 +130,10 @@ def message(scenario, seq, trigger, time, ward=None, prior=None, admit_time="090
     pv1_fields = {1: "1", 2: patient_class, 19: encounter, 44: f"{day}{admit_time}00"}
     if ward:
         pv1_fields[3] = LOCATIONS[ward]
+        if bed:
+            parts = LOCATIONS[ward].split("^")
+            parts[2] = bed
+            pv1_fields[3] = "^".join(parts)
     if prior:
         pv1_fields[6] = LOCATIONS[prior]
     if trigger == "A03":
@@ -372,7 +377,8 @@ def scenarios():
 
     # S11: an outage burst, eight failures for six patients (CONTRACTS 7.6)
     def p(n, seq, trigger, time, **kw):
-        return message("S11", seq, trigger, time, patient=f"S11-P{n}", **kw)
+        # Each patient in a bed of their own on every ward (the receiver keeps one encounter per bed)
+        return message("S11", seq, trigger, time, patient=f"S11-P{n}", bed=f"{n:02d}", **kw)
 
     admits = [p(n, n, "A01", "0900", ward="WARD-A") for n in range(1, 6)]
     p5_discharge = p(5, 6, "A03", "0930", ward="WARD-B")
@@ -429,7 +435,8 @@ def scenarios():
     # S12: a lost admission at the head of a chain (the review's E-03). The outage takes P1's admission and its
     # transfer, and three other patients' transfers: five failures, so an incident opens.
     def q(n, seq, trigger, time, **kw):
-        return message("S12", seq, trigger, time, patient=f"S12-P{n}", **kw)
+        # Each patient in a bed of their own on every ward (the receiver keeps one encounter per bed)
+        return message("S12", seq, trigger, time, patient=f"S12-P{n}", bed=f"{n:02d}", **kw)
 
     applied = [q(n, n - 1, "A01", "0900", ward="WARD-A") for n in range(2, 5)]
     lost = [
