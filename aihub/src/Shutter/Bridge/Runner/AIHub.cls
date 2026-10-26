@@ -21,9 +21,12 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
     Set response.Mode = $SELECT(spec.Mode = "": "live", 1: spec.Mode)
     Set agent = "", session = "", monitor = "", submit = "", trace = "", scope = ""
     Set turns = $SELECT(+spec.MaxIterations > 0: +spec.MaxIterations, 1: 8)
-    // The terminal tool by its name: a review's, a plan's, else a specialist's findings.
+    // The terminal tool by its name: a board answer's (before an answer's, which it contains), an answer's, a review's,
+    // a plan's, else a specialist's findings.
     Set lowerTerminal = $ZCONVERT(spec.TerminalTool, "L")
-    Set terminal = $SELECT(lowerTerminal [ "review": "SubmitReview", lowerTerminal [ "plan": "SubmitPlan", 1: "SubmitFindings")
+    Set terminal = $SELECT(lowerTerminal [ "boardanswer": "SubmitBoardAnswer", lowerTerminal [ "answer": "SubmitAnswer", lowerTerminal [ "review": "SubmitReview", lowerTerminal [ "plan": "SubmitPlan", 1: "SubmitFindings")
+    // A question's run is keyed by its question id; its agent, tools and scope work on the question's case.
+    Set caseKey = ..CaseKeyOf(spec, .question)
     // The mimic as the run was resolved, not as the switch is now, so such a run never reaches another provider.
     Set mock = spec.MockConfig
     Try {
@@ -42,9 +45,14 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
                 Set provider = ..ProviderFrom(spec.ProviderConfig, .model)
             }
             Set agent = $CLASSMETHOD(spec.AgentClass, "%New")
-            If agent.%IsA("Shutter.Agent.Base") Set agent.CaseId = spec.CorrelationKey
+            If agent.%IsA("Shutter.Agent.Base") {
+                Set agent.CaseId = caseKey
+                // A question (CONTRACTS 14.3): the agent swaps its investigation for the question's rules and answers
+                // through the request's terminal tool.
+                If $ISOBJECT(question) Set agent.QuestionTier = question.Tier, agent.Terminal = terminal
+            }
             If $ISOBJECT(provider) Set agent.Provider = provider
-            Set sc = agent.%Init({"caseId": (spec.CorrelationKey), "role": (spec.Role), "member": (spec.MemberCode)})
+            Set sc = agent.%Init({"caseId": (caseKey), "role": (spec.Role), "member": (spec.MemberCode)})
             If $$$ISERR(sc) {
                 Set response.Status = "model_error", response.Error = "The agent could not start: " _ $SYSTEM.Status.GetErrorText(sc)
             } ElseIf $ISOBJECT(provider) && (agent.Provider '= provider) {
@@ -63,13 +71,14 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
                 Set agent.MaxIterations = turns
                 // The terminal tool: an instance this runner keeps, so the accepted result is read from it.
                 Set submit = $CLASSMETHOD("Shutter.Tools." _ terminal, "%New")
-                Set submit.CaseId = spec.CorrelationKey
+                Set submit.CaseId = caseKey
+                If terminal = "SubmitBoardAnswer" Set submit.FactIds = ..FactIdsOf(spec.Context)
                 Do agent.ToolManager.AddTool(submit)
                 // The member's knowledge collection as search tools, when the library is built.
                 Do ..AttachKnowledge(agent, spec)
                 // Policies: the run is held to its case; every tool call is audited into the trace.
                 Set scope = ##class(Shutter.Bridge.Policy.Scope).%New()
-                Set scope.CaseId = spec.CorrelationKey
+                Set scope.CaseId = caseKey
                 Do agent.ToolManager.SetAuthPolicy(scope)
                 Set trace = ##class(Shutter.Bridge.Policy.Trace).%New()
                 Set trace.RunKey = spec.EnsMessageId
@@ -82,7 +91,7 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
                 If +spec.RequestTimeoutSeconds > 0 Set monitor.Deadline = $ZHOROLOG + (spec.RequestTimeoutSeconds * turns)
                 // The tag carries a code of this run, so text inside the evidence cannot close it (B9).
                 Set nonce = $ZHEX($RANDOM(1048576)) _ $ZHEX($RANDOM(1048576))
-                Set prompt = spec.Goal _ $CHAR(10, 10) _ "<evidence-" _ nonce _ " case=""" _ spec.CorrelationKey _ """>" _ $CHAR(10) _ spec.Context _ $CHAR(10) _ "</evidence-" _ nonce _ ">"
+                Set prompt = spec.Goal _ $CHAR(10, 10) _ "<evidence-" _ nonce _ " case=""" _ caseKey _ """>" _ $CHAR(10) _ spec.Context _ $CHAR(10) _ "</evidence-" _ nonce _ ">"
                 $$$TRACE("Running " _ spec.AgentClass _ " for " _ spec.CorrelationKey _ ": up to " _ turns _ " turns, budget " _ (+spec.TokenBudget) _ " tokens")
                 // Run(session, goal, callback) on build 154; the turn limit is the MaxIterations property.
                 Set final = agent.Run(session, prompt, monitor)
@@ -131,6 +140,32 @@ ClassMethod ProviderFrom(name As %String, Output model As %String) As %AI.Provid
     $$$ThrowOnError(##class(%ConfigStore.Configuration).GetDetails(fqn, .details, 0, 1))
     Set model = details.%Get("model")
     Quit ##class(%AI.Provider).Create(details.%Get("model_provider"), details)
+}
+
+/// The case a run works on: the correlation key, or for a question's run (keyed by its question id, CONTRACTS 14.2) the
+/// question's case, with the question in <var>question</var> ("" otherwise).
+ClassMethod CaseKeyOf(spec As Shutter.Bridge.RunSpec, Output question As %RegisteredObject) As %String
+{
+    Set question = ""
+    Set key = spec.CorrelationKey
+    If ($EXTRACT(key, 1, 2) '= "Q-") || '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Store.CaseQuestion") Quit key
+    Set question = $CLASSMETHOD("Shutter.Store.CaseQuestion", "ByQuestionId", key)
+    If '$ISOBJECT(question) || '$ISOBJECT(question.Case) Set question = "" Quit key
+    Quit question.Case.CaseId
+}
+
+/// The ids of a question context's whatif.facts, comma separated: the only facts a board answer may name.
+ClassMethod FactIdsOf(context As %String) As %String
+{
+    Set ids = ""
+    Set o = ##class(Shutter.Util.Json).Parse(context, .sc)
+    If '$ISOBJECT(o) || '$ISOBJECT(o.whatif) || (o.whatif.%GetTypeOf("facts") '= "array") Quit ""
+    Set it = o.whatif.facts.%GetIterator()
+    While it.%GetNext(, .f) {
+        Set id = $SELECT($ISOBJECT(f): ##class(Shutter.Util.Json).Str(f, "id"), 1: "")
+        If (id '= "") && '$ISOBJECT(id) Set ids = ids _ $SELECT(ids = "": "", 1: ",") _ id
+    }
+    Quit ids
 }
 
 /// The API mimic's provider for one run: its configuration's openai provider, base_url and model, with the run's
