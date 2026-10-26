@@ -22,7 +22,7 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { CASE_STATE_NAMES, DispositionBadge, StateBadge } from '@/components/StateBadge';
 import { Timestamp } from '@/components/Timestamp';
 import { StackTable } from '@/components/StackTable';
-import { caseState } from '@/lib/status';
+import { caseState, verification, writes } from '@/lib/status';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ToneLegend } from '@/components/ToneLegend';
 import { humanize } from '@/lib/format';
@@ -41,6 +41,18 @@ const BEFORE_PLAN = new Set(['detected', 'collecting', 'investigating', 'grouped
  * withheld one says a person decides, and any other reads the mode, which in site-policy mode cannot tell the policy
  * from the board.
  */
+
+/** What reached the receiver and what the verifier found, when the server sends them; a closed case with no write says so. */
+function AtReceiver({ c }: { c: CaseSummary }) {
+  if (c.writes === undefined) return null;
+  return (
+    <Stack gap={4} align="flex-start">
+      <StatusBadge {...writes(c.writes)} />
+      {c.verification ? <StatusBadge {...verification(c.verification)} /> : null}
+    </Stack>
+  );
+}
+
 export function investigatedBy(c: CaseSummary): { who: string; entry?: string } {
   const by = c.planCreatedBy ?? '';
   if (by.startsWith('run:')) return { who: c.mode === 'single' ? 'Single investigator' : 'Board' };
@@ -111,6 +123,7 @@ export function CasesTable({ items }: { items: CaseSummary[] }) {
             <StackTable.Th>Case</StackTable.Th>
             <StackTable.Th>State</StackTable.Th>
             <StackTable.Th>Proposed action</StackTable.Th>
+            <StackTable.Th>At the receiver</StackTable.Th>
             <StackTable.Th>What failed</StackTable.Th>
             <StackTable.Th>Scenario</StackTable.Th>
             <StackTable.Th>Investigated by</StackTable.Th>
@@ -144,6 +157,9 @@ export function CasesTable({ items }: { items: CaseSummary[] }) {
                     {proposalNote(c)}
                   </Text>
                 ) : null}
+              </StackTable.Td>
+              <StackTable.Td data-label="At the receiver">
+                <AtReceiver c={c} />
               </StackTable.Td>
               <StackTable.Td data-label="What failed" maw={420}>
                 <Text size="sm" lineClamp={2}>
@@ -287,9 +303,9 @@ export default function CasesPage() {
         {/* What the columns mean, once: a proposal beside a Blocked state is what was proposed and stopped */}
         <Text size="sm" c="dimmed" mb="sm" maw="100ch">
           State is where the case is now. Proposed action is what its plan proposed, which the gate can still
-          stop: Blocked beside Resend is a resend that was proposed and blocked. Investigated by is who made
-          the plan: the rules alone, one agent, the board (three specialists and a coordinator) or the
-          site&apos;s written policy.
+          stop: Blocked beside Resend is a resend that was proposed and blocked. At the receiver is what was
+          written and what the verifier found there. Investigated by is who made the plan: the rules alone,
+          one agent, the board (three specialists and a coordinator) or the site&apos;s written policy.
         </Text>
         {cases.isPending ? <PageSkeleton label="Loading the cases…" /> : null}
         {cases.isError ? (

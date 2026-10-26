@@ -393,6 +393,19 @@ function planOrigin(c: CaseFixture): { planCreatedBy?: string } {
   return by ? { planCreatedBy: by } : {};
 }
 
+/** The list's writes and latest verification, from the recorded attempts, as the API's summary counts them. */
+function writesOf(c: CaseFixture): { writes: number; verification: string } {
+  const rows = (c.attempts ?? []) as {
+    attempt?: { outcome?: string } | null;
+    verification?: { outcome?: string } | null;
+  }[];
+  const writes = rows.filter((r) =>
+    ['applied', 'already_committed', 'uncertain'].includes(r.attempt?.outcome ?? ''),
+  );
+  const latest = [...rows].reverse().find((r) => r.verification)?.verification?.outcome ?? '';
+  return { writes: writes.length, verification: latest };
+}
+
 /** The HL7 files a scenario delivers, in order, as its steps name them. */
 function filesOf(scenario: string): string[] {
   const steps = fixtures.scenarios.find((s) => s.id === scenario)?.steps ?? [];
@@ -544,7 +557,7 @@ export const handlers = [
     const scenario = url.searchParams.get('scenario');
     // The list names who made each case's current plan, from the recorded plan, as the API's summary does
     const items = allCases()
-      .map((c) => ({ ...c.summary, ...planOrigin(c) }))
+      .map((c) => ({ ...c.summary, ...planOrigin(c), ...writesOf(c) }))
       .filter((c) => (!state || c.state === state) && (!scenario || c.scenario === scenario))
       .sort((a, b) => b.openedAt.localeCompare(a.openedAt));
     return HttpResponse.json({ items, total: items.length });

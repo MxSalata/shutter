@@ -124,6 +124,10 @@ export interface CaseSummary {
   workflowSessionId: string;
   /** How the delivery failed (delivery_failed, uncertain, unmappable, withheld for a merge or a cancel never sent). */
   failureKind: string;
+  /** Attempts that reached the receiver and may have landed (applied, already committed, uncertain), when sent. */
+  writes?: number;
+  /** The latest verification's outcome, or "" when there is none, when sent. */
+  verification?: string;
   /** The incident that holds the case, when one does (CONTRACTS 7.5). */
   incidentId?: string;
   /**
