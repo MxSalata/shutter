@@ -698,3 +698,58 @@ body {
   border-width: 2px;
   border-color: var(--mantine-color-text);
 }
+
+/* The tone legend is a plain list. */
+.tone-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/*
+ * The cases list's attention tiles: a bordered button each, its edge in the tone of its state; the chosen one is
+ * outlined in the text colour, and says so in words.
+ */
+.attention-tile {
+  display: block;
+  padding: var(--mantine-spacing-sm);
+  border: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
+  border-left-width: 4px;
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-body);
+}
+.attention-tile[data-tone='attention'] {
+  border-left-color: var(--mantine-color-yellow-filled);
+}
+.attention-tile[data-tone='blocking'] {
+  border-left-color: var(--mantine-color-red-filled);
+}
+.attention-tile[data-chosen] {
+  outline: 2px solid var(--mantine-color-text);
+  outline-offset: 1px;
+}
+.attention-tile:hover {
+  background: var(--mantine-color-default-hover);
+}
+
+/* A case that needs a person, or was stopped, carries an edge in its state's tone beside its badge. */
+.case-row[data-tone='attention'] td:first-child {
+  box-shadow: inset 3px 0 0 var(--mantine-color-yellow-filled);
+}
+.case-row[data-tone='blocking'] td:first-child {
+  box-shadow: inset 3px 0 0 var(--mantine-color-red-filled);
+}
+@media (max-width: 35.99em) {
+  .case-row[data-tone='attention'] td:first-child,
+  .case-row[data-tone='blocking'] td:first-child {
+    box-shadow: none;
+  }
+  .stack-table tr.case-row[data-tone='attention'] {
+    box-shadow: inset 3px 0 0 var(--mantine-color-yellow-filled);
+    padding-left: var(--mantine-spacing-xs);
+  }
+  .stack-table tr.case-row[data-tone='blocking'] {
+    box-shadow: inset 3px 0 0 var(--mantine-color-red-filled);
+    padding-left: var(--mantine-spacing-xs);
+  }
+}

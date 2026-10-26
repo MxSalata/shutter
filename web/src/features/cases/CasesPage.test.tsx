@@ -1,10 +1,23 @@
 import { MantineProvider } from '@mantine/core';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { server } from '@/mocks/node';
+import { resetMock } from '@/mocks/handlers';
+import recording from '@/mocks/fixtures.json';
+import { ToneLegend } from '@/components/ToneLegend';
 import type { CaseSummary } from '@/api/types';
 import { theme } from '@/theme';
 import { MemoryRouter } from 'react-router';
-import { CasesTable, ForwardedBadge, InvestigatedBy, investigatedBy } from './CasesPage';
+import {
+  AttentionTile,
+  CasesTable,
+  ForwardedBadge,
+  InvestigatedBy,
+  investigatedBy,
+  proposalNote,
+} from './CasesPage';
 
 // The list's tag on its own: the page's filters (two Selects) take tens of seconds to render under jsdom, and so
 // does opening the tag's tooltip; forwardedFrom's tests cover what the tooltip says.
@@ -132,7 +145,7 @@ describe('CasesTable', () => {
       within(table)
         .getAllByRole('columnheader')
         .map((h) => h.textContent),
-    ).toEqual(['Case', 'State', 'Proposed action', 'What failed', 'Scenario', 'Investigated by', 'Opened']);
+    ).toEqual(['Case', 'State', 'Proposed action', 'What failed', 'Scenario', 'Investigated by']);
     const row = within(table).getByRole('link', { name: 'C-000123' }).closest('tr')!;
     expect(row).toHaveAttribute('role', 'row');
     const cells = within(row).getAllByRole('cell');
@@ -144,7 +157,60 @@ describe('CasesTable', () => {
       'What failed',
       'Scenario',
       'Investigated by',
-      'Opened',
     ]);
+    // When it was opened sits under the case id
+    expect(within(cells[0]).getByRole('time')).toHaveAttribute('datetime', '2026-10-25T08:00:00Z');
+  });
+});
+
+describe('proposalNote', () => {
+  it('says what a stopped, held or escalated state means for the proposal beside it, and nothing otherwise', () => {
+    expect(proposalNote({ state: 'blocked', disposition: 'resend' })).toBe('Stopped: nothing more is sent');
+    expect(proposalNote({ state: 'awaiting_approval', disposition: 'resend' })).toBe(
+      'Waiting for a person to release it',
+    );
+    expect(proposalNote({ state: 'escalated', disposition: 'escalate' })).toBe('A person decides');
+    expect(proposalNote({ state: 'resolved', disposition: 'resend' })).toBe('');
+    expect(proposalNote({ state: 'blocked', disposition: '' })).toBe('');
+  });
+});
+
+describe('AttentionTile', () => {
+  beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+  afterEach(() => server.resetHandlers());
+  afterAll(() => server.close());
+  beforeEach(() => resetMock('approver'));
+
+  const summaries = Object.values(recording.cases as unknown as Record<string, { summary: CaseSummary }>).map(
+    (c) => c.summary,
+  );
+
+  it("counts the cases in its state from the API's total, and filters the list when pressed", async () => {
+    const choose = vi.fn();
+    render(
+      <MantineProvider theme={theme}>
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <AttentionTile state="blocked" chosen={false} onChoose={choose} />
+        </QueryClientProvider>
+      </MantineProvider>,
+    );
+    const blocked = summaries.filter((c) => c.state === 'blocked').length;
+    const tile = await screen.findByRole('button', { name: new RegExp(`^${blocked}\\s*Blocked`) });
+    expect(tile).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(tile);
+    expect(choose).toHaveBeenCalledOnce();
+  });
+});
+
+describe('ToneLegend', () => {
+  it('says once what each of the five tones means, in words beside each badge', () => {
+    render(
+      <MantineProvider theme={theme}>
+        <ToneLegend />
+      </MantineProvider>,
+    );
+    const legend = screen.getByRole('list', { name: 'What the colours mean' });
+    expect(within(legend).getAllByRole('listitem')).toHaveLength(5);
+    expect(legend).toHaveTextContent('Attentiona person is needed');
   });
 });
