@@ -2,10 +2,11 @@ import type { SiteProfile, WhatIfFact } from '@/api/types';
 import { KIND_LABELS, TIERS } from './profile';
 
 /**
- * A suggested change to the site profile, as a case's What-if card offers it: one field, the value it had when the
- * facts were computed and the value suggested. It travels to the Site profile page in the `suggest` query parameter
- * and becomes a pre-filled draft there, which an approver reviews and saves through the page's own save; nothing is
- * changed by opening it.
+ * A suggested change to the site profile, as a case's What-if fact gives it: one field, the value it had when the facts
+ * were computed and the value suggested, with why and what it reaches. Only the case and the fact's id travel to the
+ * Site profile page (the `suggest` and `fact` query parameters); the page reads the fact again from
+ * GET /cases/{id}/whatif and makes the change a pre-filled draft, which an approver reviews and saves through the
+ * page's own save. Nothing is changed by opening it, and no wording comes from the address.
  */
 export interface SuggestedChange {
   /** The case the suggestion came from, and its What-if fact. */
@@ -19,7 +20,14 @@ export interface SuggestedChange {
   affects?: string[];
 }
 
+/** What the address carries: the case and the fact, nothing else. */
+export interface SuggestionRef {
+  caseId: string;
+  fact: string;
+}
+
 export const SUGGEST_PARAM = 'suggest';
+export const FACT_PARAM = 'fact';
 
 export function suggestionFromFact(caseId: string, f: WhatIfFact): SuggestedChange {
   return {
@@ -34,34 +42,17 @@ export function suggestionFromFact(caseId: string, f: WhatIfFact): SuggestedChan
   };
 }
 
-/** The Site profile page's address with the suggestion in its query. */
-export function suggestionHref(s: SuggestedChange): string {
-  return `/site-profile?${new URLSearchParams({ [SUGGEST_PARAM]: JSON.stringify(s) }).toString()}`;
+/** The Site profile page's address for a case's What-if fact. */
+export function suggestionHref(ref: SuggestionRef): string {
+  return `/site-profile?${new URLSearchParams({ [SUGGEST_PARAM]: ref.caseId, [FACT_PARAM]: ref.fact }).toString()}`;
 }
 
-const isValue = (v: unknown): v is string | boolean => typeof v === 'string' || typeof v === 'boolean';
-
-/** The suggestion in a query parameter, or null when there is none or it is not one. */
-export function parseSuggestion(raw: string | null): SuggestedChange | null {
-  if (!raw) return null;
-  try {
-    const v = JSON.parse(raw) as Record<string, unknown>;
-    if (!v || typeof v !== 'object') return null;
-    if (typeof v.field !== 'string' || !v.field || !isValue(v.to)) return null;
-    if (!(v.from === null || isValue(v.from))) return null;
-    return {
-      caseId: typeof v.caseId === 'string' ? v.caseId : '',
-      fact: typeof v.fact === 'string' ? v.fact : '',
-      field: v.field,
-      ...(typeof v.receiver === 'string' && v.receiver ? { receiver: v.receiver } : {}),
-      from: v.from,
-      to: v.to,
-      ...(typeof v.why === 'string' ? { why: v.why } : {}),
-      ...(Array.isArray(v.affects) ? { affects: v.affects.filter((a) => typeof a === 'string') } : {}),
-    };
-  } catch {
-    return null;
-  }
+/** The case and fact in the address, or null when there are none or they are not ids. */
+export function parseSuggestion(search: URLSearchParams): SuggestionRef | null {
+  const caseId = search.get(SUGGEST_PARAM) ?? '';
+  const fact = search.get(FACT_PARAM) ?? '';
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(caseId) || !/^W\d{1,4}$/.test(fact)) return null;
+  return { caseId, fact };
 }
 
 /** Where a field lives in the profile: a top-level setting, a tier's approval policy or a receiver's own field. */
@@ -72,7 +63,15 @@ type Place =
 
 const TOP = ['authoritative_source', 'unconditional_resend', 'history_policy', 'merges'] as const;
 /** The receivers' fields a suggestion may name; their endpoints, name and features are never suggested. */
-const RECEIVER_KEYS = ['category', 'cancels', 'merges', 'tier', 'applies', 'resend_timestamp'];
+const RECEIVER_KEYS = [
+  'category',
+  'history_policy',
+  'cancels',
+  'merges',
+  'tier',
+  'applies',
+  'resend_timestamp',
+];
 
 function placeOf(field: string): Place | null {
   if ((TOP as readonly string[]).includes(field)) return { kind: 'top', key: field as (typeof TOP)[number] };
@@ -88,44 +87,108 @@ function placeOf(field: string): Place | null {
 const norm = (v: unknown) => (v === undefined || v === null ? '' : v);
 const same = (a: unknown, b: unknown) => String(norm(a)) === String(norm(b));
 
+const CATEGORIES = ['current_state', 'history_of_record', 'orders_results'];
+
+const category = (v: unknown) => (CATEGORIES.includes(String(v)) ? String(v) : 'current_state');
+const policyOf = (v: unknown) => (v === 'correct' ? 'correct' : 'current');
+
+/**
+ * A field's value as the server reads it (Shutter.Store.SiteProfile ReceiverCategory and ReceiverHistoryPolicy): a
+ * receiver with no category, or one it does not know, is current_state; a receiver's history policy is its own when it
+ * has one, else correct for a history_of_record receiver and current for another category, else the site-wide one; a
+ * profile with no history policy is current. The suggestion's `from` and `to` and the profile's value are all read this
+ * way before they are compared, so an absent value matches the default it stands for.
+ */
+function effective(
+  profile: SiteProfile,
+  s: Pick<SuggestedChange, 'field' | 'receiver'>,
+  v: unknown,
+): unknown {
+  if (s.field === 'receivers[].category') return category(v);
+  if (s.field === 'history_policy') return policyOf(v);
+  if (s.field === 'receivers[].history_policy') {
+    if (v === 'current' || v === 'correct') return v;
+    const r = profile.receivers.find((x) => x.name === s.receiver);
+    if (r && r.category !== undefined && r.category !== null && r.category !== '')
+      return category(r.category) === 'history_of_record' ? 'correct' : 'current';
+    return policyOf(profile.history_policy);
+  }
+  return norm(v);
+}
+
+/** The field in a profile: its value as stored, and how to set it or put a stored value back. */
+type Located = { get: () => unknown; set: (v: unknown) => void };
+
+function locate(
+  profile: SiteProfile,
+  s: Pick<SuggestedChange, 'field' | 'receiver'>,
+): Located | 'unsupported' | 'no_receiver' {
+  const place = placeOf(s.field);
+  if (!place) return 'unsupported';
+  const write = (o: Record<string, unknown>, key: string, v: unknown) => {
+    if (v === undefined) delete o[key];
+    else o[key] = v;
+  };
+  if (place.kind === 'top') {
+    const o = profile as unknown as Record<string, unknown>;
+    return { get: () => o[place.key], set: (v) => write(o, place.key, v) };
+  }
+  if (place.kind === 'policy')
+    return {
+      get: () => profile.policy?.[place.tier]?.[place.chain],
+      set: (v) => {
+        profile.policy = profile.policy ?? {};
+        const row = { ...(profile.policy[place.tier] ?? {}) } as Record<string, unknown>;
+        write(row, place.chain, v === undefined ? undefined : String(v));
+        profile.policy[place.tier] = row;
+      },
+    };
+  const r = profile.receivers.find((x) => x.name === s.receiver);
+  if (!r) return 'no_receiver';
+  return {
+    get: () => r[place.key],
+    set: (v) => write(r, place.key, place.key === 'tier' && v !== undefined ? Number(v) : v),
+  };
+}
+
 export type Applied =
   | { ok: true; profile: SiteProfile }
-  | { ok: false; reason: 'unsupported' | 'no_receiver' | 'stale' | 'already'; current?: unknown };
+  | {
+      ok: false;
+      reason: 'unsupported' | 'no_receiver' | 'stale' | 'already' | 'no_fact' | 'unreadable';
+      current?: unknown;
+    };
 
 /**
  * The profile with the suggestion applied, on a copy. Refused when the page cannot place the field, when the receiver
  * is not in the profile, when the field no longer holds the suggestion's `from` (the profile changed since), or when it
- * already holds `to`.
+ * already holds `to`; both compared as the server reads them.
  */
 export function applySuggestion(profile: SiteProfile, s: SuggestedChange): Applied {
-  const place = placeOf(s.field);
-  if (!place) return { ok: false, reason: 'unsupported' };
   const next = JSON.parse(JSON.stringify(profile)) as SiteProfile;
-  let current: unknown;
-  let set: (v: unknown) => void;
-  if (place.kind === 'top') {
-    current = next[place.key];
-    set = (v) => {
-      (next as unknown as Record<string, unknown>)[place.key] = v;
-    };
-  } else if (place.kind === 'policy') {
-    current = next.policy?.[place.tier]?.[place.chain];
-    set = (v) => {
-      next.policy = next.policy ?? {};
-      next.policy[place.tier] = { ...(next.policy[place.tier] ?? {}), [place.chain]: String(v) };
-    };
-  } else {
-    const r = next.receivers.find((x) => x.name === s.receiver);
-    if (!r) return { ok: false, reason: 'no_receiver' };
-    current = r[place.key];
-    set = (v) => {
-      r[place.key] = place.key === 'tier' ? Number(v) : v;
-    };
-  }
-  if (same(current, s.to)) return { ok: false, reason: 'already', current };
-  if (!same(current, s.from)) return { ok: false, reason: 'stale', current };
-  set(s.to);
+  const at = locate(next, s);
+  if (typeof at === 'string') return { ok: false, reason: at };
+  const current = at.get();
+  const read = (v: unknown) => effective(next, s, v);
+  const now = read(current);
+  if (same(now, read(s.to))) return { ok: false, reason: 'already', current: now };
+  if (!same(now, read(s.from))) return { ok: false, reason: 'stale', current: now };
+  at.set(s.to);
   return { ok: true, profile: next };
+}
+
+/**
+ * The draft with the suggested field put back as the stored profile has it, on a copy: every other edit in the draft
+ * stays as it is.
+ */
+export function revertSuggestion(draft: SiteProfile, stored: SiteProfile, s: SuggestedChange): SiteProfile {
+  const next = JSON.parse(JSON.stringify(draft)) as SiteProfile;
+  const into = locate(next, s);
+  const from = locate(stored, s);
+  if (typeof into === 'string' || typeof from === 'string') return next;
+  const v = from.get();
+  into.set(v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
+  return next;
 }
 
 const FIELD_LABELS: Record<string, string> = {
@@ -134,6 +197,7 @@ const FIELD_LABELS: Record<string, string> = {
   history_policy: 'History policy',
   merges: 'Merges',
   'receivers[].category': 'Category',
+  'receivers[].history_policy': 'History policy',
   'receivers[].cancels': 'Accepts cancels',
   'receivers[].merges': 'Takes merges',
   'receivers[].tier': 'Tier',

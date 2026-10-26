@@ -9,7 +9,8 @@ import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
 import { theme } from '@/theme';
 import CasePage from '../CasePage';
-import { SAMPLE_LABEL } from './labels';
+import type { CaseQuestion } from '@/api/types';
+import { SAMPLE_LABEL, answersBadge, provenanceText } from './labels';
 import { WhatIfCard } from './WhatIfCard';
 
 // The demo's answers are labelled as sample data: the page reads the build's DEMO flag, switched here per test
@@ -19,6 +20,13 @@ vi.mock('@/demo', () => ({
     return demo.value;
   },
   DEMO_USER: { username: 'approver', password: 'shutter' },
+}));
+// The constant the re-record flips once real recordings replace the sample answers
+const recorded = vi.hoisted(() => ({ value: false }));
+vi.mock('./recorded', () => ({
+  get DEMO_ANSWERS_RECORDED() {
+    return recorded.value;
+  },
 }));
 
 const BASE = '/api/shutter';
@@ -30,6 +38,7 @@ afterAll(() => server.close());
 beforeEach(() => {
   resetMock('approver');
   demo.value = true;
+  recorded.value = false;
   posts = [];
   server.events.removeAllListeners();
   server.events.on('request:start', async ({ request }) => {
@@ -227,14 +236,8 @@ describe('Ask about this case', () => {
     expect(card).not.toHaveTextContent(/PAS were authoritative/);
     const open = within(card).getByRole('link', { name: 'Open in Site profile' });
     const href = open.getAttribute('href')!;
-    expect(href.startsWith('/site-profile?suggest=')).toBe(true);
-    expect(JSON.parse(new URLSearchParams(href.split('?')[1]).get('suggest')!)).toMatchObject({
-      caseId: 'C-000008',
-      fact: 'W1',
-      field: 'authoritative_source',
-      from: '',
-      to: 'BEDMGR',
-    });
+    // The link names the case and the fact only: the Site profile page reads the change from the facts again
+    expect(href).toBe('/site-profile?suggest=C-000008&fact=W1');
     expect(open).toHaveAccessibleDescription(
       /Opens a pre-filled draft\. An approver reviews it and saves it\./,
     );
@@ -259,6 +262,58 @@ describe('Ask about this case', () => {
       ),
     ).toBeInTheDocument();
     await waitFor(() => expect(within(p).queryByRole('region', { name: /What if/ })).not.toBeInTheDocument());
+  });
+});
+
+describe('where the answers came from', () => {
+  const question = (over: Partial<CaseQuestion>): CaseQuestion => ({
+    questionId: 'Q-1',
+    caseId: 'C-000008',
+    conversation: 'c1',
+    turn: 1,
+    tier: 'explain',
+    source: 'suggested',
+    question: 'Why was nothing written?',
+    state: 'answered',
+    answer: null,
+    askedBy: 'approver',
+    askedAt: '2026-10-25T10:00:00Z',
+    ...over,
+  });
+  const chipsBadge = (p: HTMLElement) =>
+    within(within(p).getByRole('tabpanel')).queryByText(/^(Sample|Recorded) answers$/);
+
+  it('reads sample data on the badge and on every turn in the demo, until the re-record flips the constant', async () => {
+    renderCase('C-000008');
+    let p = await panel();
+    let thread = await within(p).findByRole('region', { name: 'Example conversation' });
+    expect(chipsBadge(p)).toHaveTextContent('Sample answers');
+    expect(within(thread).getAllByText(/Example \(sample data\)\./).length).toBeGreaterThan(0);
+    await userEvent.keyboard('{Escape}');
+
+    // Flipped: the sample answers are no longer called samples, and none is called recorded without a recording
+    recorded.value = true;
+    await userEvent.click(screen.getByRole('button', { name: 'Ask about this case' }));
+    p = await panel();
+    thread = await within(p).findByRole('region', { name: 'Example conversation' });
+    expect(within(thread).queryByText(/Example \(sample data\)/)).not.toBeInTheDocument();
+    expect(chipsBadge(p)).not.toBeInTheDocument();
+  });
+
+  it('calls answers recorded only when one carries its recording', () => {
+    demo.value = false;
+    const replayed = question({ recording: null });
+    const live = question({ recording: { recordedAt: '2026-10-25T10:00:00Z', model: 'model-x' } });
+    expect(answersBadge([replayed])).toBeNull();
+    expect(provenanceText(replayed)).toBe('Answered');
+    expect(answersBadge([replayed, live])).toBe('Recorded answers');
+    expect(provenanceText(live)).toBe('Recorded live on 25 October 2026 with model-x');
+    demo.value = true;
+    expect(answersBadge([live])).toBe('Sample answers');
+    expect(provenanceText(live)).toBe(SAMPLE_LABEL);
+    recorded.value = true;
+    expect(answersBadge([live])).toBe('Recorded answers');
+    expect(provenanceText(live)).toBe('Recorded live on 25 October 2026 with model-x');
   });
 });
 
@@ -312,6 +367,49 @@ describe('WhatIfCard', () => {
       within(card).getByText(/correct the history, proposed as escalate\. The case would have escalated/),
     ).toBeInTheDocument();
     expect(within(card).getByText('an overtaken transfer at this receiver')).toBeInTheDocument();
+  });
+
+  it("states a policy fact's value today and what the other value would do (the handoff's W3)", async () => {
+    server.use(
+      http.get(`${BASE}/cases/:id/whatif`, () =>
+        HttpResponse.json({
+          entry: 'E3',
+          outcome: 'resend',
+          disposition: 'resend',
+          facts: [
+            {
+              id: 'W3',
+              kind: 'policy',
+              field: 'policy.2.single',
+              from: 'automatic',
+              to: 'approval',
+              would: 'An approver would have been asked before the resend',
+              affects: ['every tier 2 single case'],
+            },
+          ],
+        }),
+      ),
+    );
+    renderCard();
+    const card = await screen.findByRole('region', { name: 'What if: the setting behind this outcome' });
+    expect(
+      within(card).getByRole('heading', { name: 'W3: Approval of tier 2 single failures' }),
+    ).toBeInTheDocument();
+    expect(within(card).getByText('Approval of tier 2 single failures is automatic.')).toBeInTheDocument();
+    expect(within(card).getByText('If it were approval')).toBeInTheDocument();
+    expect(within(card).getByText('An approver would have been asked before the resend')).toBeInTheDocument();
+    // Not the catalogue entry's wording: a policy fact does not turn on the entry's alternative
+    expect(card).not.toHaveTextContent(/catalogue entry E3/);
+    expect(card).not.toHaveTextContent(/alternative applies/);
+    expect(
+      within(card).getByText(
+        /Suggested change: set approval of tier 2 single failures from automatic to approval\./,
+      ),
+    ).toBeInTheDocument();
+    expect(within(card).getByRole('link', { name: 'Open in Site profile' })).toHaveAttribute(
+      'href',
+      '/site-profile?suggest=C-000008&fact=W3',
+    );
   });
 
   it('offers no draft for a stale fact, and says why', async () => {

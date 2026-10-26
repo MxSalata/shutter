@@ -1,13 +1,7 @@
 import type { CaseQuestion, QuestionTier } from '@/api/types';
 import { DEMO } from '@/demo';
 import { parseTime } from '@/lib/format';
-
-/**
- * Whether the demo's answers are real recorded runs. The demo serves sample answers (mocks/questions.ts) until the live
- * re-record replaces them with recordings; the re-record sets this to true in the same change, and only then does the
- * demo call them recorded. Until then every demo answer reads "Example (sample data)".
- */
-export const DEMO_ANSWERS_RECORDED = false;
+import { DEMO_ANSWERS_RECORDED } from './recorded';
 
 /** The label of a demo answer that is not a recording. */
 export const SAMPLE_LABEL = 'Example (sample data)';
@@ -44,4 +38,15 @@ export function provenanceText(q: CaseQuestion): string {
   if (q.recording && at) return `Recorded live on ${day.format(at)} with ${q.recording.model}`;
   if (q.source === 'free') return 'Answered live';
   return 'Answered';
+}
+
+/**
+ * The badge beside the suggested questions, from the same source as each answer's provenance: sample answers in the
+ * demo until the re-record, recorded answers only when an answer shown carries its recording, otherwise none.
+ */
+export function answersBadge(asked: CaseQuestion[]): string | null {
+  if (DEMO && !DEMO_ANSWERS_RECORDED) return 'Sample answers';
+  if (asked.some((q) => q.source === 'suggested' && !!q.recording && !!parseTime(q.recording.recordedAt)))
+    return 'Recorded answers';
+  return null;
 }

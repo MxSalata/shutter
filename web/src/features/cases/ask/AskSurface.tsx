@@ -61,8 +61,8 @@ function Beside({ onClose, children }: { onClose: () => void; children: ReactNod
 
 /**
  * The case page with the panel: side by side from laptop width (75em), where the case stays readable beside it; below
- * that a drawer from the right, the whole screen on a phone. Focus goes to the panel's heading when it opens and back to
- * the button when it closes (the drawer does both itself).
+ * that a drawer from the right, the whole screen on a phone. Focus goes to the panel's heading when it opens, in either
+ * layout, and back to the button when it closes.
  */
 export function AskSurface({
   caseId,
@@ -88,20 +88,25 @@ export function AskSurface({
           </Beside>
         ) : null}
       </div>
-      <Drawer
-        opened={open && !wide}
-        onClose={onClose}
-        position="right"
-        size={phone ? '100%' : 480}
-        title={TITLE}
-        styles={{ title: { fontWeight: 600, fontSize: 'var(--mantine-font-size-lg)' } }}
-      >
-        {open && !wide ? (
-          <div id={ASK_PANEL_ID}>
-            <AskPanel caseId={caseId} />
-          </div>
-        ) : null}
-      </Drawer>
+      <Drawer.Root opened={open && !wide} onClose={onClose} position="right" size={phone ? '100%' : 480}>
+        <Drawer.Overlay />
+        <Drawer.Content>
+          <Drawer.Header>
+            {/* The drawer's focus trap starts on its heading, as the panel beside the case does */}
+            <Drawer.Title data-autofocus tabIndex={-1} fw={600} fz="lg">
+              {TITLE}
+            </Drawer.Title>
+            <Drawer.CloseButton aria-label="Close Ask about this case" />
+          </Drawer.Header>
+          <Drawer.Body>
+            {open && !wide ? (
+              <div id={ASK_PANEL_ID}>
+                <AskPanel caseId={caseId} />
+              </div>
+            ) : null}
+          </Drawer.Body>
+        </Drawer.Content>
+      </Drawer.Root>
     </>
   );
 }

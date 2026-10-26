@@ -28,7 +28,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { DEMO } from '@/demo';
 import { keyLabel } from '@/lib/format';
 import { showEvidence } from '../case/evidenceLinks';
-import { MEMBER_NAMES, TIERS, provenanceText, tierLabel } from './labels';
+import { MEMBER_NAMES, TIERS, answersBadge, provenanceText, tierLabel } from './labels';
 import { WHATIF_ID, WhatIfCard } from './WhatIfCard';
 
 /** A turn's heading id, which takes focus when its answer is asked for or shown. */
@@ -287,6 +287,7 @@ export function AskPanel({ caseId }: { caseId: string }) {
   const thisTurnAsked = (conversation: string, turn: number) => !!askedTurn(conversation, turn);
   const example = shown === conversations[0]?.id && thread.length > 0;
   const head = thread[0];
+  const badge = answersBadge(asked);
 
   return (
     <Stack gap="md">
@@ -316,9 +317,9 @@ export function AskPanel({ caseId }: { caseId: string }) {
                 <Text size="xs" c="dimmed" id={`ask-chips-${t.value}`}>
                   Suggested questions
                 </Text>
-                {conversations.length ? (
+                {conversations.length && badge ? (
                   <Badge size="sm" variant="light" color="gray" style={{ textTransform: 'none' }}>
-                    {DEMO ? 'Sample answers' : 'Recorded answers'}
+                    {badge}
                   </Badge>
                 ) : null}
               </Group>

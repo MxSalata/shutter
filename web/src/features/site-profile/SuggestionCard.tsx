@@ -5,7 +5,11 @@ import { StatusNotice } from '@/components/StatusBadge';
 import { fieldLabel, valueLabel, type Applied, type SuggestedChange } from './suggestion';
 
 /** Why a suggestion could not be pre-filled, in words. */
-function refusal(s: SuggestedChange, r: Exclude<Applied, { ok: true }>): string {
+function refusal(caseId: string, s: SuggestedChange | undefined, r: Exclude<Applied, { ok: true }>): string {
+  if (r.reason === 'unreadable' || !s)
+    return r.reason === 'unreadable'
+      ? `The What-if facts of case ${caseId} could not be read, so nothing was pre-filled. Open the case again and try once more.`
+      : `Case ${caseId} has no such What-if fact now, so nothing was pre-filled. Open the case again for its current facts.`;
   const label = fieldLabel(s.field, s.receiver);
   switch (r.reason) {
     case 'stale':
@@ -21,9 +25,11 @@ function refusal(s: SuggestedChange, r: Exclude<Applied, { ok: true }>): string 
 
 /**
  * A change suggested by a case's What-if card, shown above the form as a pre-filled draft: the setting, its value now
- * and in the draft, why and what it reaches. Saving goes through the page's own review and save, approvers only.
+ * and in the draft, why and what it reaches, all read from the case's facts. Saving goes through the page's own review
+ * and save, approvers only.
  */
 export function SuggestionCard({
+  caseId,
   s,
   result,
   version,
@@ -31,7 +37,9 @@ export function SuggestionCard({
   onReview,
   onDiscard,
 }: {
-  s: SuggestedChange;
+  caseId: string;
+  /** The change read from the case's facts; absent when they could not be read or no longer name the fact. */
+  s?: SuggestedChange;
   result: Applied;
   version: number;
   editable: boolean;
@@ -41,8 +49,7 @@ export function SuggestionCard({
   const heading = useRef<HTMLHeadingElement>(null);
   // Arriving from a case, the reader lands on the suggestion, not at the top of the form
   useEffect(() => heading.current?.focus(), []);
-  const label = fieldLabel(s.field, s.receiver);
-  const back = s.caseId ? `/cases/${encodeURIComponent(s.caseId)}?ask=1` : null;
+  const back = `/cases/${encodeURIComponent(caseId)}?ask=1`;
   return (
     <Card
       padding="md"
@@ -54,9 +61,9 @@ export function SuggestionCard({
     >
       <Stack gap="sm">
         <Title order={2} fz="lg" id="site-suggestion-title" tabIndex={-1} ref={heading}>
-          {s.caseId ? `A suggested change from case ${s.caseId}` : 'A suggested change'}
+          {s ? `A suggested change from case ${caseId}` : 'A suggested change'}
         </Title>
-        {result.ok ? (
+        {result.ok && s ? (
           <>
             <Text size="sm">
               The form below is a draft with this one change. Nothing is saved until an approver reviews and
@@ -74,7 +81,7 @@ export function SuggestionCard({
               <Table.Tbody>
                 <Table.Tr>
                   <Table.Th scope="row" fw={400}>
-                    {label} <Code>{s.field}</Code>
+                    {fieldLabel(s.field, s.receiver)} <Code>{s.field}</Code>
                   </Table.Th>
                   <Table.Td>{valueLabel(s.field, s.from)}</Table.Td>
                   <Table.Td fw={700}>{valueLabel(s.field, s.to)}</Table.Td>
@@ -95,7 +102,7 @@ export function SuggestionCard({
           </>
         ) : (
           <StatusNotice tone="attention" title="Not pre-filled">
-            {refusal(s, result)}
+            {refusal(caseId, s, result as Exclude<Applied, { ok: true }>)}
           </StatusNotice>
         )}
         <Group gap="sm">
@@ -103,11 +110,9 @@ export function SuggestionCard({
           <Button variant="default" onClick={onDiscard}>
             {result.ok ? 'Discard the suggestion' : 'Dismiss'}
           </Button>
-          {back ? (
-            <Anchor component={Link} to={back} size="sm">
-              Back to case {s.caseId}
-            </Anchor>
-          ) : null}
+          <Anchor component={Link} to={back} size="sm">
+            Back to case {caseId}
+          </Anchor>
         </Group>
         {result.ok && !editable ? (
           <Text size="sm" c="dimmed">

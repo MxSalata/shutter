@@ -7,12 +7,7 @@ import { ErrorAlert } from '@/components/ErrorAlert';
 import { StatusBadge, StatusNotice } from '@/components/StatusBadge';
 import { humanize } from '@/lib/format';
 import { disposition as dispositionStatus } from '@/lib/status';
-import {
-  fieldLabel,
-  suggestionFromFact,
-  suggestionHref,
-  valueLabel,
-} from '@/features/site-profile/suggestion';
+import { fieldLabel, suggestionHref, valueLabel } from '@/features/site-profile/suggestion';
 
 export const WHATIF_ID = 'ask-whatif';
 
@@ -35,9 +30,17 @@ function todayText(w: WhatIf): string {
   return `The case matched catalogue entry ${w.entry}, whose outcome here is ${outcomeWords(w.outcome)}${disposition ? `; the plan proposed ${disposition}` : ''}.`;
 }
 
+/**
+ * Today for one fact: a catalogue alternative's fact turns on the entry the case matched, so it says what that entry gave;
+ * a policy fact (a tier's approval policy, a receiver's cancels or merges) states the setting's value now instead.
+ */
+function factToday(w: WhatIf, f: WhatIfFact, setting: string, from: string): string {
+  return f.kind === 'policy' ? `${setting} is ${from}.` : todayText(w);
+}
+
 /** Under the other value: the alternative the catalogue gives, and what the case would have done. */
 function alternativeText(w: WhatIf, f: WhatIfFact): string {
-  const a = f.alternative;
+  const a = f.kind === 'policy' ? undefined : f.alternative;
   if (!a) return f.would;
   const disposition = dispositionWords(a.disposition);
   return `Entry ${w.entry}'s alternative applies: ${outcomeWords(a.outcome)}${disposition ? `, proposed as ${disposition}` : ''}. ${f.would}`;
@@ -75,7 +78,7 @@ function Fact({
           <Text fw={600} size="sm">
             Today
           </Text>
-          <Text size="sm">{todayText(w)}</Text>
+          <Text size="sm">{factToday(w, f, setting, from)}</Text>
         </Card>
         <Card withBorder padding="sm">
           <Text fw={600} size="sm">
@@ -117,7 +120,7 @@ function Fact({
         <Stack gap={6}>
           <Button
             component={Link}
-            to={suggestionHref(suggestionFromFact(caseId, f))}
+            to={suggestionHref({ caseId, fact: f.id })}
             leftSection={<IconAdjustments size={16} aria-hidden />}
             w="fit-content"
             aria-describedby={`${titleId}-note`}

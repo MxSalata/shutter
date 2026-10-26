@@ -46,18 +46,8 @@ async function audit(page: Page) {
   return blocking.map((v) => `${v.id} (${v.impact}) ×${v.nodes.length}: ${v.nodes[0]?.target.join(' ')}`);
 }
 
-/** The Site profile page with a change a case's What-if card suggested, pre-filled. */
-const SUGGESTION = `/site-profile?suggest=${encodeURIComponent(
-  JSON.stringify({
-    caseId: 'C-000008',
-    fact: 'W1',
-    field: 'authoritative_source',
-    from: '',
-    to: 'BEDMGR',
-    why: "The bed manager's WARD-C placement would stand.",
-    affects: ['every case where the PAS and the bed manager move an encounter at the same event time'],
-  }),
-)}`;
+/** The Site profile page with a change a case's What-if card suggested, pre-filled: the address names the case and the fact. */
+const SUGGESTION = '/site-profile?suggest=C-000008&fact=W1';
 
 const SCREENS: [path: string, heading: string, steps?: 'open'][] = [
   ['/scenarios', 'Scenarios'],

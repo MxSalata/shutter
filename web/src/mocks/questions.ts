@@ -14,7 +14,7 @@ import s8 from '../../../knowledge/questions/S8.json';
  * plans of C-000008 (S8, board) and C-000002 (S2, board) in fixtures.json, so that the panel can be shown and tested
  * before the server's question routes exist. The live re-record replaces them with real recorded runs (every message a
  * real run, never hand-written); until then the page labels them "Example (sample data)" (DEMO_ANSWERS_RECORDED in
- * features/cases/ask/labels.ts). The What-if facts are what Shutter.Util.WhatIf should compute for these two cases from
+ * features/cases/ask/recorded.ts). The What-if facts are what Shutter.Util.WhatIf should compute for these two cases from
  * catalogue entries E7 and E2 and the recorded site profile (version 9).
  */
 
@@ -45,7 +45,7 @@ const SAMPLE_ANSWERS: Record<string, Record<string, SampleAnswer>> = {
     },
     'c1.3': {
       answer:
-        "If the site named the bed manager (BEDMGR) as the authoritative source for ward placement, catalogue entry E7's alternative would apply: the bed manager's WARD-C placement stands, and this PAS transfer closes with nothing written, without waiting for a person. Today the profile names no authoritative source, so the case escalated. It is a decision for the site: it applies to every case where the PAS and the bed manager move an encounter at the same event time, not only to this one.",
+        "If the site named the bed manager (BEDMGR) as the authoritative source for ward placement, catalogue entry E7's alternative would apply: the bed manager's WARD-C placement stands, and the board would close this PAS transfer with nothing written. Today the profile names no authoritative source, so the case escalated. It is a decision for the site: it applies to every case where the PAS and the bed manager move an encounter at the same event time, not only to this one.",
       perspectives: [
         {
           member: 'conformance',
@@ -220,11 +220,13 @@ const SAMPLE_WHATIF: Record<string, WhatIf> = {
         to: 'BEDMGR',
         alternative: {
           outcome: 'none',
+          // An assumption to confirm with the server's author: entry E7 gives the alternative's outcome (none) only;
+          // the disposition the board would propose under it is not in the catalogue entry
           disposition: 'superseded',
           when: 'authoritative_source: other_source',
         },
         would:
-          "The bed manager's WARD-C placement would stand, and this PAS transfer would close with nothing written instead of going to a person.",
+          "The bed manager's WARD-C placement would stand, and the board would close this PAS transfer with nothing written.",
         affects: ['every case where the PAS and the bed manager move an encounter at the same event time'],
       },
     ],

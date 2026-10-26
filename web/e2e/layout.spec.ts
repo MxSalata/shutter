@@ -27,18 +27,8 @@ async function openSteps(page: Page) {
   );
 }
 
-/** The Site profile page with a change a case's What-if card suggested, pre-filled. */
-const SUGGESTION = `/site-profile?suggest=${encodeURIComponent(
-  JSON.stringify({
-    caseId: 'C-000008',
-    fact: 'W1',
-    field: 'authoritative_source',
-    from: '',
-    to: 'BEDMGR',
-    why: "The bed manager's WARD-C placement would stand.",
-    affects: ['every case where the PAS and the bed manager move an encounter at the same event time'],
-  }),
-)}`;
+/** The Site profile page with a change a case's What-if card suggested, pre-filled: the address names the case and the fact. */
+const SUGGESTION = '/site-profile?suggest=C-000008&fact=W1';
 
 const SCREENS: [path: string, heading: string, steps?: 'open'][] = [
   ['/scenarios', 'Scenarios'],
@@ -135,6 +125,8 @@ test.describe('a phone at 390 px', () => {
     await page.getByRole('button', { name: 'Ask about this case' }).click();
     const sheet = page.getByRole('dialog', { name: 'Ask about this case' });
     await expect(sheet.getByRole('region', { name: 'Example conversation' })).toBeVisible();
+    // Focus starts on the sheet's heading, as it does on the panel beside the case
+    await expect(sheet.getByRole('heading', { name: 'Ask about this case' })).toBeFocused();
     await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'));
     const box = await sheet.boundingBox();
     expect(Math.round(box!.width)).toBe(390);

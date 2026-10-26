@@ -333,15 +333,7 @@ describe('SiteProfilePage', () => {
 });
 
 describe('SiteProfilePage, a change a case suggested', () => {
-  const suggestion = suggestionHref({
-    caseId: 'C-000008',
-    fact: 'W1',
-    field: 'authoritative_source',
-    from: '',
-    to: 'BEDMGR',
-    why: "The bed manager's WARD-C placement would stand.",
-    affects: ['every case where the PAS and the bed manager move an encounter at the same event time'],
-  }).replace('/site-profile', '');
+  const suggestion = suggestionHref({ caseId: 'C-000008', fact: 'W1' }).replace('/site-profile', '');
 
   it('opens as a pre-filled draft with the change as a diff, and saves only through the review', async () => {
     renderPage(suggestion);
@@ -383,6 +375,52 @@ describe('SiteProfilePage, a change a case suggested', () => {
     await waitFor(() => expect(screen.queryByRole('region', { name: /A suggested change/ })).toBeNull());
     expect(screen.getByRole('button', { name: 'Confirm these answers…' })).toBeInTheDocument();
     expect(lastRouter!.state.location.search).toBe('');
+  });
+
+  it('discards only the suggested change, keeping the other edits in the draft', async () => {
+    renderPage(suggestion);
+    const card = await screen.findByRole('region', { name: 'A suggested change from case C-000008' });
+    const cancels = screen.getByRole('switch', { name: /accepts cancels/ });
+    await userEvent.click(cancels);
+    await userEvent.click(within(card).getByRole('button', { name: 'Discard the suggestion' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: /A suggested change/ })).toBeNull());
+    expect(screen.getByRole('switch', { name: /accepts cancels/ })).toBeChecked();
+    await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).queryByText(/Authoritative source: from/)).not.toBeInTheDocument();
+    expect(within(dialog).getAllByText(/cancels/i).length).toBeGreaterThan(0);
+  });
+
+  it("takes the change and its wording from the case's facts, never from the address", async () => {
+    // An address with words of its own: only the case and the fact are read from it
+    renderPage(
+      `?suggest=C-000008&fact=W1&why=${encodeURIComponent('Trust this link')}&to=PAS&affects=everything`,
+    );
+    const card = await screen.findByRole('region', { name: 'A suggested change from case C-000008' });
+    expect(card).not.toHaveTextContent(/Trust this link/);
+    const row = within(within(card).getByRole('table', { name: 'The change in this draft' }))
+      .getByRole('rowheader', { name: /Authoritative source/ })
+      .closest('tr')!;
+    expect(row).toHaveTextContent('BEDMGR');
+    expect(row).not.toHaveTextContent('PAS');
+    expect(within(card).getByText(/every case where the PAS and the bed manager/)).toBeInTheDocument();
+  });
+
+  it('pre-fills nothing for a fact the case does not have, or facts that cannot be read', async () => {
+    renderPage('?suggest=C-000008&fact=W9');
+    const card = await screen.findByRole('region', { name: 'A suggested change' });
+    expect(within(card).getByText(/Case C-000008 has no such What-if fact now/)).toBeInTheDocument();
+    expect(within(card).queryByRole('table')).not.toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: 'Review and save…' })).not.toBeInTheDocument();
+  });
+
+  it('says so when the case facts cannot be read', async () => {
+    server.use(
+      http.get(`${BASE}/cases/:id/whatif`, () => HttpResponse.json({ error: 'boom' }, { status: 500 })),
+    );
+    renderPage(suggestion);
+    const card = await screen.findByRole('region', { name: 'A suggested change' });
+    expect(within(card).getByText(/could not be read, so nothing was pre-filled/)).toBeInTheDocument();
   });
 
   it('pre-fills nothing when the profile changed since the facts were read', async () => {
