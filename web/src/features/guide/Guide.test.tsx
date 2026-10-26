@@ -143,7 +143,7 @@ describe('the guide', () => {
     // The announcement is short: the step, never the page
     await waitFor(() =>
       expect(document.querySelector('[data-guide-announcer]')).toHaveTextContent(
-        'Step 1 of 3 · Scenarios: Start with S2, then S8',
+        'Step 1 of 3 · Scenarios: Start with S2, S8 and S20',
       ),
     );
   });
@@ -152,7 +152,8 @@ describe('the guide', () => {
     await startQuick('/scenarios');
     await userEvent.click(within(await dialog()).getByRole('button', { name: 'Show this section' }));
     await noDialog();
-    const heading = screen.getByRole('heading', { name: 'Scenarios', level: 1 });
+    // The step shows the three scenarios to try first
+    const heading = await screen.findByRole('heading', { name: 'Try these three first', level: 2 });
     await waitFor(() => expect(heading).toHaveFocus());
     expect(heading).toHaveAttribute('tabindex', '-1');
     expect(heading.closest('[data-tour]')).toHaveAttribute('data-tour-active', 'true');
@@ -165,16 +166,15 @@ describe('the guide', () => {
     await waitFor(() => expect(heading.closest('[data-tour]')).not.toHaveAttribute('data-tour-active'));
   });
 
-  it("finds the case through the API and opens the story step it shows: S8's kept dissent", async () => {
+  it("finds the case through the API and shows the section the step names: S8's kept dissent", async () => {
     useGuide.setState({ progress: { ...INITIAL, chapter: 's8', step: 1 }, phase: 'step' });
     const router = renderApp();
     const d = await dialog();
     expect(within(d).getByText('Step 2 of 3 · S8: a write withheld')).toBeInTheDocument();
     await userEvent.click(await within(d).findByRole('button', { name: 'Show this section' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/cases/C-000008'));
-    expect(router.state.location.search).toBe('?open=proposed');
-    const step = await screen.findByRole('button', { name: /^3\. What was proposed/ });
-    await waitFor(() => expect(step).toHaveAttribute('aria-expanded', 'true'));
+    // The board sits under the outcome, so no story step needs opening
+    expect(router.state.location.search).toBe('');
     await waitFor(() => expect(screen.getByRole('heading', { name: 'The board' })).toHaveFocus());
   });
 

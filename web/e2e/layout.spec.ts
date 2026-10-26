@@ -97,3 +97,36 @@ for (const width of [360, 1024]) {
     }
   });
 }
+
+/** A phone of 390 px: the review's finding cards stack, what was found above the explanation half. */
+test.describe('a phone at 390 px', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test.beforeEach(async ({ page }) => {
+    await go(page, '/login');
+    await page.getByRole('button', { name: /Try the demo/ }).click();
+    await expect(page.getByRole('heading', { name: 'Scenarios' })).toBeVisible();
+  });
+
+  test('a review stacks each finding, the Found half before the explanation half', async ({ page }) => {
+    await go(page, '/reviews/PR-000001');
+    await expect(page.getByRole('heading', { name: 'Review PR-000001', exact: true })).toBeVisible();
+    await expect(page.getByRole('status')).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    const card = page.getByRole('region', { name: 'Findings' }).getByRole('article').first();
+    const found = await card.getByText('Found', { exact: true }).boundingBox();
+    const why = await card.getByText('Why it matters', { exact: true }).boundingBox();
+    expect(found && why).toBeTruthy();
+    // One column: the halves share a left edge, and the explanation half starts below the Found half
+    expect(Math.abs(found!.x - why!.x)).toBeLessThanOrEqual(1);
+    expect(why!.y).toBeGreaterThan(found!.y + found!.height);
+  });
+
+  test("each scenario's description toggle is named after its scenario", async ({ page }) => {
+    await go(page, '/scenarios');
+    const list = page.getByRole('region', { name: 'Every scenario' });
+    await expect(list.getByRole('button', { name: /^Run S\d+$/ }).first()).toBeVisible();
+    await expect(list.getByRole('button', { name: /^More about S\d+$/ }).first()).toBeVisible();
+    await expect(list.getByRole('button', { name: 'More', exact: true })).toHaveCount(0);
+  });
+});

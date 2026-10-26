@@ -89,14 +89,13 @@ describe('the demo', () => {
     expect(within(card).getByText(/^A short path through the recorded cases\./)).toBeInTheDocument();
   });
 
-  it("puts the scenario cards' headings under their own heading, not under Start here", async () => {
+  it('puts the list of every scenario after the guided path, its rows under their own heading', async () => {
     renderAt('/scenarios');
     const start = await screen.findByRole('heading', { name: 'Start here', level: 2 });
     const run = await screen.findByRole('button', { name: 'Run S2' });
     const every = screen.getByRole('heading', { name: 'Every scenario', level: 2 });
-    const card = within(run.closest<HTMLElement>('.mantine-Card-root')!).getByRole('heading', { level: 3 });
     expect(start.compareDocumentPosition(every) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(every.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(every.compareDocumentPosition(run) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('keeps the induction prompt below the scenarios, under the guided path', async () => {
@@ -149,14 +148,12 @@ describe('the demo', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Details' }));
     expect(await screen.findByText('Message trace (on an instance)')).toBeInTheDocument();
     expect(screen.getByText('Workflow trace (on an instance)')).toBeInTheDocument();
-    // A board case opens what was proposed by itself
-    expect(await screen.findByRole('button', { name: /^3\. What was proposed/ })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
+    // A board case shows its board under the outcome; each card's finding or run opens on demand
     const board = await screen.findByRole('region', { name: 'The board' });
-    for (const row of within(board).getAllByRole('button', { name: /^(Resend|Escalate) / }))
-      if (row.getAttribute('aria-expanded') !== 'true') await userEvent.click(row);
+    for (const more of await within(board).findAllByRole('button', {
+      name: /^Show the (finding|run)$/,
+    }))
+      await userEvent.click(more);
     expect(
       (await within(board).findAllByText("The run's message in the production (on an instance)")).length,
     ).toBe(4);

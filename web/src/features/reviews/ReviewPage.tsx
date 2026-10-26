@@ -1,4 +1,17 @@
-import { Alert, Anchor, Badge, Container, Group, List, Loader, Stack, Text } from '@mantine/core';
+import {
+  Alert,
+  Anchor,
+  Badge,
+  Container,
+  List,
+  Loader,
+  Paper,
+  Progress,
+  SimpleGrid,
+  Stack,
+  Text,
+} from '@mantine/core';
+import { IconEye } from '@tabler/icons-react';
 import { Link, useParams } from 'react-router';
 import { isReviewRunning, useMe, useReview } from '@/api/hooks';
 import type { ReviewDetail } from '@/api/types';
@@ -12,9 +25,85 @@ import { NotYet, Section } from '@/features/cases/case/Section';
 import { isApiError } from '@/lib/errors';
 import { formatDuration, formatInt, formatUsd, humanize } from '@/lib/format';
 import { useAnnotationDialogs } from './AnnotationDialogs';
-import { AgentStateBadge, ReviewStateBadge, SeverityCounts } from './badges';
-import { FindingsTable } from './FindingsTable';
-import { describeAgent, explainedLine, hl7Note, orderedFindings, rankedByAgent, READ_ONLY } from './review';
+import { AgentStateBadge, ReviewStateBadge } from './badges';
+import { FindingCards } from './FindingCards';
+import { StatusBadge, StatusNotice } from '@/components/StatusBadge';
+import { SEVERITY_STATUS } from '@/lib/status';
+import {
+  describeAgent,
+  explainedCount,
+  explainedNotes,
+  hl7Note,
+  orderedFindings,
+  rankedByAgent,
+  READ_ONLY,
+  SEVERITIES,
+} from './review';
+
+/**
+ * "2 of 9 findings explained", with a bar: the server's own counts when the agent answered, else the findings that
+ * carry an explanation, so a review with no recorded explanation says 0 of 9 rather than nothing.
+ */
+function Explained({ r }: { r: ReviewDetail }) {
+  if (r.state !== 'done' || !r.findings.length) return null;
+  const { explained, total } = explainedCount(r);
+  return (
+    <Stack gap={4}>
+      <Text size="sm" fw={600}>
+        {`${explained} of ${total} ${total === 1 ? 'finding' : 'findings'} explained by the agent`}
+      </Text>
+      <Progress
+        value={total ? (explained / total) * 100 : 0}
+        size="sm"
+        maw={420}
+        aria-label={`${explained} of ${total} findings explained by the agent`}
+      />
+      {explainedNotes(r.agent) || explained < total ? (
+        <Text size="xs" c="dimmed">
+          {[
+            explainedNotes(r.agent),
+            explained < total ? 'A finding with no explanation shows the deterministic text only.' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        </Text>
+      ) : null}
+    </Stack>
+  );
+}
+
+/** The review's counts as a row of tiles: the findings, each severity with findings, the errors in the window. */
+function Counts({ r }: { r: ReviewDetail }) {
+  const s = r.summary;
+  if (!s.bySeverity) return null;
+  const tiles: { key: string; figure: string; label: React.ReactNode }[] = [
+    { key: 'findings', figure: formatInt(s.findings), label: s.findings === 1 ? 'finding' : 'findings' },
+    ...SEVERITIES.filter((sev) => (s.bySeverity?.[sev] ?? 0) > 0).map((sev) => ({
+      key: sev,
+      figure: formatInt(s.bySeverity![sev]),
+      label: <StatusBadge {...SEVERITY_STATUS[sev]} size="sm" />,
+    })),
+    { key: 'errors', figure: formatInt(s.errorsInWindow), label: 'event log errors in the window' },
+    {
+      key: 'messages',
+      figure: formatInt(s.messageErrorsInWindow),
+      label: 'messages in error in the window',
+    },
+    ...(s.intended ? [{ key: 'marked', figure: formatInt(s.intended), label: 'marked by an approver' }] : []),
+  ];
+  return (
+    <SimpleGrid cols={{ base: 2, sm: 3, lg: tiles.length }} spacing="xs">
+      {tiles.map((t) => (
+        <Paper key={t.key} withBorder p="sm" radius="md">
+          <Text fz={24} fw={700} lh={1.1} className="tabular">
+            {t.figure}
+          </Text>
+          {typeof t.label === 'string' ? <Text size="xs">{t.label}</Text> : t.label}
+        </Paper>
+      ))}
+    </SimpleGrid>
+  );
+}
 
 function AgentBlock({ r }: { r: ReviewDetail }) {
   const a = r.agent;
@@ -31,7 +120,6 @@ function AgentBlock({ r }: { r: ReviewDetail }) {
       <Alert color={view.colour} variant="light" title={view.title} role="note">
         <Text size="sm">{view.text}</Text>
       </Alert>
-      {explainedLine(a) ? <Text size="sm">{explainedLine(a)}</Text> : null}
       {a.summary ? <Text size="sm">{a.summary}</Text> : null}
       {a.unknowns.length ? (
         <Stack gap={2}>
@@ -79,14 +167,20 @@ function Review({ r }: { r: ReviewDetail }) {
     <>
       <PageHeader
         title={`Review ${r.reviewId}`}
-        subtitle={`${r.production} in ${r.namespace}. ${READ_ONLY}`}
+        subtitle={`${r.production} in ${r.namespace}${r.window ? `, ${r.window.days} ${r.window.days === 1 ? 'day' : 'days'} of history` : ''}.`}
         actions={
-          <Anchor component={Link} to="/reviews" size="sm">
-            All reviews
-          </Anchor>
+          <>
+            <ReviewStateBadge state={r.state} />
+            <Anchor component={Link} to="/reviews" size="sm">
+              All reviews
+            </Anchor>
+          </>
         }
       />
       <Stack gap="md">
+        <StatusNotice tone="info" role="note" icon={IconEye} title="Read only">
+          <Text size="sm">{READ_ONLY}</Text>
+        </StatusNotice>
         {running ? (
           <Alert
             color="blue"
@@ -109,8 +203,65 @@ function Review({ r }: { r: ReviewDetail }) {
           </Alert>
         ) : null}
         <Section
+          id="summary"
+          title="Summary"
+          note="Severity is how bad the hazard is; confidence, kept apart, is how the finding was read."
+        >
+          {s.bySeverity ? (
+            <Counts r={r} />
+          ) : r.state === 'failed' ? (
+            <Text size="sm">
+              There is no result because the review failed{r.error ? `: ${r.error}` : '.'}
+            </Text>
+          ) : (
+            <NotYet>Not yet: the sweep is still reading.</NotYet>
+          )}
+        </Section>
+        <AgentBlock r={r} />
+        <Section
+          id="findings"
+          tour="review-findings"
+          title="Findings"
+          note={
+            rankedByAgent(r)
+              ? "In the agent's order: within each severity tier, as it ranked them."
+              : 'In the deterministic order: severity tier, then unique cases, then the most recent evidence.'
+          }
+          aside={
+            <Badge variant="light" color="gray" style={{ textTransform: 'none' }}>
+              {findings.length}
+            </Badge>
+          }
+        >
+          {hl7Note(r) ? (
+            <Text size="sm" c="dimmed">
+              {hl7Note(r)}
+            </Text>
+          ) : null}
+          {/* How many of these the agent explained, stated once, directly above the cards */}
+          <Explained r={r} />
+          {findings.length ? (
+            <FindingCards
+              findings={findings}
+              recorded={r.agent.mode === 'replay'}
+              namespace={r.namespace}
+              approver={!!me?.approver}
+              onMark={dialogs.mark}
+              onUnmark={dialogs.unmark}
+            />
+          ) : (
+            <NotYet>
+              {running
+                ? 'Not yet: the sweep is still reading.'
+                : r.state === 'failed'
+                  ? 'No findings: the review failed.'
+                  : 'No findings.'}
+            </NotYet>
+          )}
+        </Section>
+        <Section
           id="review"
-          title="The review"
+          title="About this review"
           aside={<ReviewStateBadge state={r.state} />}
           note={r.unreadable ? 'The namespace could not be read: the one finding says why.' : undefined}
         >
@@ -143,70 +294,6 @@ function Review({ r }: { r: ReviewDetail }) {
               ],
             ]}
           />
-        </Section>
-        <Section
-          id="summary"
-          title="Summary"
-          note="Severity is how bad the hazard is; confidence, kept apart, is how the finding was read."
-        >
-          {s.bySeverity ? (
-            <Stack gap="xs">
-              <SeverityCounts summary={s} />
-              <Group gap="lg" wrap="wrap">
-                <Text size="sm">
-                  {formatInt(s.findings)} {s.findings === 1 ? 'finding' : 'findings'}
-                </Text>
-                {s.intended ? <Text size="sm">{formatInt(s.intended)} marked by an approver</Text> : null}
-                <Text size="sm">{formatInt(s.errorsInWindow)} event log errors in the window</Text>
-                <Text size="sm">{formatInt(s.messageErrorsInWindow)} messages in error in the window</Text>
-              </Group>
-            </Stack>
-          ) : r.state === 'failed' ? (
-            <Text size="sm">
-              There is no result because the review failed{r.error ? `: ${r.error}` : '.'}
-            </Text>
-          ) : (
-            <NotYet>Not yet: the sweep is still reading.</NotYet>
-          )}
-        </Section>
-        <AgentBlock r={r} />
-        <Section
-          id="findings"
-          tour="review-findings"
-          title="Findings"
-          note={
-            rankedByAgent(r)
-              ? "In the agent's order: within each severity tier, as it ranked them."
-              : 'In the deterministic order: severity tier, then unique cases, then the most recent evidence.'
-          }
-          aside={
-            <Badge variant="light" color="gray" style={{ textTransform: 'none' }}>
-              {findings.length}
-            </Badge>
-          }
-        >
-          {hl7Note(r) ? (
-            <Text size="sm" c="dimmed">
-              {hl7Note(r)}
-            </Text>
-          ) : null}
-          {findings.length ? (
-            <FindingsTable
-              findings={findings}
-              namespace={r.namespace}
-              approver={!!me?.approver}
-              onMark={dialogs.mark}
-              onUnmark={dialogs.unmark}
-            />
-          ) : (
-            <NotYet>
-              {running
-                ? 'Not yet: the sweep is still reading.'
-                : r.state === 'failed'
-                  ? 'No findings: the review failed.'
-                  : 'No findings.'}
-            </NotYet>
-          )}
         </Section>
       </Stack>
       {dialogs.modals}

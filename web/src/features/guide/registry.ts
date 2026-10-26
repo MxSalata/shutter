@@ -45,8 +45,8 @@ export const CHAPTERS: GuideChapter[] = [
     steps: [
       {
         id: 'start',
-        title: 'Start with S2, then S8',
-        text: "Each scenario plays a known HL7 ADT failure into the production; in the online demo, the runs are recorded. S2, Never-accepted transfer, still current, shows a failed transfer recovered; S8, Event times that can't be compared, shows why a write may be withheld. Running a scenario sends test messages and changes the demonstration environment, so it is always your own action: the guide never runs one.",
+        title: 'Start with S2, S8 and S20',
+        text: "Each scenario plays a known HL7 ADT failure into the production; in the online demo, the runs are recorded. S2, Never-accepted transfer, still current, shows a failed transfer recovered; S8, Event times that can't be compared, shows why a write may be withheld; S20 shows the gate stopping a write. Running a scenario sends test messages and changes the demonstration environment, so it is always your own action: the guide never runs one.",
         place: { page: '/scenarios' },
         target: 'scenarios',
       },
@@ -60,7 +60,7 @@ export const CHAPTERS: GuideChapter[] = [
       {
         id: 'expected',
         title: 'Expected outcome and latest case',
-        text: 'Each card says what the scenario should end in; Latest case shows what actually happened. Open a case from there to read its evidence and its receipt.',
+        text: 'Each row says what the scenario should end in; Latest case shows what actually happened. Filter the list by outcome, and open a case from there to read its evidence and its receipt.',
         place: { page: '/scenarios' },
         target: 'scenarios-list',
       },
@@ -137,10 +137,9 @@ export const CHAPTERS: GuideChapter[] = [
       {
         id: 'dissent',
         title: 'The dissent the coordinator kept',
-        text: "Conformance proposed a resend: the message itself is valid. The coordinator kept that dissent in the plan, open here, while choosing escalation. A specialist's confidence is its own report; the gate does not use it.",
+        text: "Conformance proposed a resend: the message itself is valid. The coordinator kept that dissent in the plan, on its card beside the three specialists, while choosing escalation. A specialist's confidence is its own report; the gate does not use it.",
         place: { scenario: 'S8', mode: 'board' },
         target: 'case-board',
-        open: 'proposed',
       },
       {
         id: 'compare',

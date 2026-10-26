@@ -53,7 +53,7 @@ describe('CasePage', () => {
     expect(
       await within(await outcome()).findByText('Resolved · 1 write · Effect verified at the receiver'),
     ).toBeInTheDocument();
-    await openStep('What was proposed');
+    // A board case shows its board under the outcome, with no step to open
     const board = await screen.findByRole('region', { name: 'The board' });
     expect(await within(board).findByText('Conformance')).toBeInTheDocument();
     expect(await within(board).findByText('Encounter Integrity')).toBeInTheDocument();
@@ -68,7 +68,7 @@ describe('CasePage', () => {
     expect(within(verification).queryByText(/Acknowledged/)).not.toBeInTheDocument();
   });
 
-  it('puts the six story steps in order, each with a one-line summary, the board open on a board case', async () => {
+  it('puts the six story steps in order, each with a one-line summary, the board above them on a board case', async () => {
     renderCase('C-000008');
     const steps = await screen.findAllByRole('button', { name: /^\d\. / });
     expect(steps.map((b) => b.textContent?.match(/^\d\. [^A-Z]*[A-Z][a-z ]+?(?=[A-Z0-9]|$)/)?.[0])).toEqual([
@@ -79,7 +79,9 @@ describe('CasePage', () => {
       '5. What was written',
       '6. What was verified',
     ]);
-    steps.forEach((s, i) => expect(s).toHaveAttribute('aria-expanded', i === 2 ? 'true' : 'false'));
+    steps.forEach((s) => expect(s).toHaveAttribute('aria-expanded', 'false'));
+    const board = screen.getByRole('region', { name: 'The board' });
+    expect(board.compareDocumentPosition(steps[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await waitFor(() => expect(steps[2]).not.toHaveTextContent('Not read yet'));
     expect(steps[0]).toHaveTextContent(
       'PAS transfer to WARD-B was not delivered: HTTP 503, ward_unavailable.',
@@ -131,68 +133,73 @@ describe('CasePage', () => {
     expect(within(top).queryByText('Not applicable: blocked with nothing written')).not.toBeInTheDocument();
   });
 
-  it('shows the coordinator first, then each specialist as a row leading with its verdict, dissent open', async () => {
+  it('shows the three specialists and then the coordinator as cards, each with its proposal and the dissent in view', async () => {
     renderCase('C-000008');
-    // Open from the start on a board case
-    expect(await screen.findByRole('button', { name: /^3\. What was proposed/ })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
     const board = await screen.findByRole('region', { name: 'The board' });
-    const coordinator = (await within(board).findByText('Coordinator')).closest<HTMLElement>(
-      '.mantine-Card-root',
-    )!;
-    const plan = within(coordinator).getByText('Escalate');
+    // Under the outcome, before the story's steps
+    expect((await outcome()).compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const cards = await within(board).findAllByRole('article');
     expect(
-      plan.compareDocumentPosition(within(coordinator).getByText('Coordinator')) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    // The dissenting specialist's row is open, with its verdict before its name
-    const dissent = within(board).getByRole('button', { name: /Conformance/ });
-    expect(dissent).toHaveAttribute('aria-expanded', 'true');
-    expect(coordinator.compareDocumentPosition(dissent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const verdict = within(dissent).getByText('Resend');
-    const name = within(dissent).getByText('Conformance');
-    expect(verdict.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      cards.map((c) => c.getAttribute('aria-labelledby') && within(c).getByRole('heading').textContent),
+    ).toEqual(['Conformance', 'Encounter Integrity', 'Impact Analysis', 'Coordinator']);
+    // The dissenting specialist says so in words, with what it proposed and the dissent as the coordinator kept it,
+    // without a confidence figure in that line
+    const dissent = within(board).getByRole('article', { name: 'Conformance' });
     expect(within(dissent).getByText('Dissent')).toBeInTheDocument();
-    // The dissent's reason in a line, as the coordinator kept it, without a confidence figure
+    expect(within(dissent).getByText('Proposed: Resend')).toBeInTheDocument();
     expect(
       within(dissent).getByText(
         'Proposed resend: the message is structurally valid, the WIC-2.1 fields are present and the WIC-2.2 key matches',
       ),
     ).toBeInTheDocument();
-    // Its confidence is shown second, as its own and not the gate's
-    const row = dissent.closest<HTMLElement>('.mantine-Accordion-item')!;
-    expect(await within(row).findByText('Confidence 80%, self-reported; not used by the gate')).toBeVisible();
-    // The specialists who agreed with the plan stay closed
-    expect(within(board).getByRole('button', { name: /^Escalate Encounter Integrity/ })).toHaveAttribute(
+    // Its confidence is its own, marked as self-reported; the board says once that the gate does not use it
+    expect(within(dissent).getByText('Confidence 80%, self-reported')).toBeVisible();
+    expect(
+      within(board).getByText(/A confidence is the agent's own report and is not used by the gate/),
+    ).toBeInTheDocument();
+    // The specialists who agreed with the plan carry no dissent
+    const agreed = within(board).getByRole('article', { name: 'Encounter Integrity' });
+    expect(within(agreed).getByText('Proposed: Escalate')).toBeInTheDocument();
+    expect(within(agreed).queryByText('Dissent')).not.toBeInTheDocument();
+    expect(within(agreed).getByText('Confidence 85%, self-reported')).toBeInTheDocument();
+    // The coordinator's card: the plan it proposed and the dissent it kept, with its recorded reason
+    const coordinator = within(board).getByRole('article', { name: 'Coordinator' });
+    expect(within(coordinator).getByText('Proposed: Escalate')).toBeInTheDocument();
+    expect(within(coordinator).getByText('Dissent kept: Conformance')).toBeInTheDocument();
+    expect(
+      within(coordinator).getByText(/^The message is acceptable as a message, but the member itself left/),
+    ).toBeInTheDocument();
+    // The whole finding waits behind its toggle, named for its card
+    const more = within(dissent).getByRole('button', { name: 'Show the finding' });
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+    expect(more).toHaveAccessibleDescription('Conformance');
+    await userEvent.click(more);
+    expect(within(dissent).getByRole('button', { name: 'Hide the finding' })).toHaveAttribute(
       'aria-expanded',
-      'false',
+      'true',
     );
-    expect(within(board).getByRole('button', { name: /^Escalate Impact Analysis/ })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
+    expect(
+      await within(dissent).findByText('Is the message itself acceptable to the receiver?'),
+    ).toBeInTheDocument();
   });
 
   it('leaves the confidence out of a dissent recorded as "resend (0.8): why"', async () => {
     renderCase('C-000039');
-    await openStep('What was proposed');
     const board = await screen.findByRole('region', { name: 'The board' });
-    const dissent = await within(board).findByRole('button', { name: /Conformance/ });
+    const dissent = await within(board).findByRole('article', { name: 'Conformance' });
     expect(
       within(dissent).getByText(
         'Proposed resend: MSG01109 conforms as a message and the 503 does not come from its content',
       ),
     ).toBeInTheDocument();
     expect(within(dissent).queryByText(/0\.8/)).not.toBeInTheDocument();
+    expect(within(dissent).queryByText(/^Proposed resend: .*confidence/)).not.toBeInTheDocument();
   });
 
   it('reads a dissent recorded as "resend (why)" with its reason after a colon', async () => {
     renderCase('C-000010');
-    await openStep('What was proposed');
     const board = await screen.findByRole('region', { name: 'The board' });
-    const dissent = await within(board).findByRole('button', { name: /Conformance/ });
+    const dissent = await within(board).findByRole('article', { name: 'Conformance' });
     expect(
       within(dissent).getByText(
         'Proposed resend: the message conforms and the 503 was not caused by content',
@@ -213,6 +220,26 @@ describe('CasePage', () => {
     expect(within(top).getByText('No approval needed: the plan writes nothing')).toBeInTheDocument();
     expect(within(top).getByText('0 writes')).toBeInTheDocument();
     expect(within(top).getByRole('button', { name: 'Copy receipt as JSON' })).toBeInTheDocument();
+    // Three cards first, each under its heading: what happened, what Shutter did and what needs you now, the last in
+    // the attention tone since a person has to act; then the receipt as its own band
+    const headings = within(top)
+      .getAllByRole('heading', { level: 3 })
+      .map((h) => h.textContent);
+    expect(headings.slice(0, 4)).toEqual([
+      'What happened',
+      'What Shutter did',
+      'What needs you now',
+      'Decision receipt',
+    ]);
+    expect(within(top).getByText('Transfer was not delivered')).toBeInTheDocument();
+    expect(
+      within(top).getByText(
+        'The receiver holds the encounter admitted in WARD-C at version 2; no receipt for this operation; PAS and BEDMGR have the same event time.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(top).getByRole('heading', { name: 'What needs you now' }).closest('[data-tone]'),
+    ).toHaveAttribute('data-tone', 'attention');
     // The receipt's facts are labelled, as a description list
     for (const label of ['Proposal', 'Gate', 'Released by', 'Writes', 'Verification'])
       expect(within(top).getByText(label, { selector: 'dt' })).toBeInTheDocument();
@@ -228,7 +255,11 @@ describe('CasePage', () => {
       await within(top).findByText('1 acknowledged; conditional on version 2, epoch 227'),
     ).toBeInTheDocument();
     expect(within(top).getByText(/^Verified: Committed and current/)).toBeInTheDocument();
-    expect(within(top).getByText('Next action: No pending action')).toBeInTheDocument();
+    expect(within(top).getByText('No pending action')).toBeInTheDocument();
+    // Nothing waits for a person: the card is not drawn in a tone that asks for one
+    expect(
+      within(top).getByRole('heading', { name: 'What needs you now' }).closest('[data-tone]'),
+    ).toHaveAttribute('data-tone', 'neutral');
   });
 
   it("puts S8's rules case beside its board case behind why the board matters", async () => {
@@ -367,12 +398,73 @@ describe('CasePage', () => {
     expect(within(board).queryByText(/^No agents/)).not.toBeInTheDocument();
   });
 
+  it('shows the board at the top of a site policy case the policy left to the board, and points step 3 to it', async () => {
+    renderCase('C-000033');
+    const top = await outcome();
+    const board = await screen.findByRole('region', { name: 'The board' });
+    expect(await within(board).findByRole('article', { name: 'Coordinator' })).toBeInTheDocument();
+    expect(top.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await openStep('What was proposed');
+    expect(
+      screen.getByText(
+        "The specialists' findings and the coordinator's are on the board, under the outcome.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole('region', { name: 'The board' })).toHaveLength(1);
+  });
+
+  it('keeps a site policy case the policy settled in step 3, with no board at the top', async () => {
+    renderCase('C-000027');
+    await openStep('What was proposed');
+    expect(await screen.findByRole('region', { name: 'Investigation: site policy' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'The board' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/are on the board, under the outcome/)).not.toBeInTheDocument();
+  });
+
+  it('keeps a withheld case in step 3, with no board at the top', async () => {
+    renderCase('C-000013');
+    await openStep('What was proposed');
+    expect(
+      await screen.findByRole('region', { name: 'Investigation: withheld for the team' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'The board' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/are on the board, under the outcome/)).not.toBeInTheDocument();
+  });
+
+  it('keeps a rules case in step 3, with no board at the top', async () => {
+    renderCase('C-000014');
+    await openStep('What was proposed');
+    expect(await screen.findByRole('region', { name: 'Investigation: rules only' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'The board' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/are on the board, under the outcome/)).not.toBeInTheDocument();
+  });
+
+  it("waits for a site policy case's runs before it lays out the board and the steps", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    const recorded = fixtures.cases['C-000033'];
+    server.use(
+      http.get('/api/shutter/cases/C-000033/runs', async () => {
+        await gate;
+        return HttpResponse.json(recorded.runs);
+      }),
+    );
+    renderCase('C-000033');
+    await outcome();
+    expect(await screen.findByText('Loading the investigation…')).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Summary' })).not.toBeInTheDocument();
+    release();
+    expect(await screen.findByRole('region', { name: 'The board' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Summary' })).toBeInTheDocument();
+    expect(screen.queryByText('Loading the investigation…')).not.toBeInTheDocument();
+  });
+
   it('says why an escalated case stopped, what comes next, whose it is and whether it was handed off', async () => {
     renderCase('C-000008');
     const top = await outcome();
     expect(
       await within(top).findByText(
-        "Next action: Read the findings and the gate's notes, then decide how to recover the message by hand.",
+        "Read the findings and the gate's notes, then decide how to recover the message by hand.",
       ),
     ).toBeInTheDocument();
     expect(within(top).getByText('Operator')).toBeInTheDocument();
@@ -386,12 +478,17 @@ describe('CasePage', () => {
     expect(within(top).getByText('ESCALATED')).toBeInTheDocument();
     expect(within(top).getByText('A decision only a person can make')).toBeInTheDocument();
     expect(within(top).getByText('New evidence arrives')).toBeInTheDocument();
-    // Escalating is the action here, so its button is the main one, inside the next action
-    const escalations = within(top).getByRole('region', { name: 'Escalations' });
+    // Escalating is the action here, so its button is the main one; the hand-off follows the board, which stays
+    // directly under the receipt
+    const escalations = await screen.findByRole('region', { name: 'Escalations' });
+    expect(within(top).queryByRole('region', { name: 'Escalations' })).not.toBeInTheDocument();
     expect(within(escalations).getByRole('button', { name: /^Escalate to / })).toHaveAttribute(
       'data-variant',
       'filled',
     );
+    const board = await screen.findByRole('region', { name: 'The board' });
+    expect(top.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(board.compareDocumentPosition(escalations) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('makes escalating a secondary choice when the next action is to close the case, and hides its status', async () => {
@@ -399,15 +496,22 @@ describe('CasePage', () => {
     const top = await outcome();
     expect(
       await within(top).findByText(
-        'Next action: Close the case as superseded, recording the superseding event. Nothing is sent.',
+        'Close the case as superseded, recording the superseding event. Nothing is sent.',
       ),
     ).toBeInTheDocument();
     expect(within(top).queryByRole('row', { name: /^Escalation / })).not.toBeInTheDocument();
-    const escalations = await within(top).findByRole('region', { name: 'Escalations' });
+    const escalations = await screen.findByRole('region', { name: 'Escalations' });
     expect(await within(escalations).findByRole('button', { name: /^Escalate to / })).toHaveAttribute(
       'data-variant',
       'default',
     );
+  });
+
+  it('says a case waiting for approval is not verified yet in the receipt, so no fact is empty', async () => {
+    renderCase('C-000002');
+    const top = await outcome();
+    const fact = await within(top).findByText('Verification', { selector: 'dt' });
+    await waitFor(() => expect(fact.nextElementSibling).toHaveTextContent('Not verified yet'));
   });
 
   it('names every stage of the progress in words: done, waiting for approval and not yet', async () => {
@@ -436,9 +540,9 @@ describe('CasePage', () => {
 
   it('opens cited evidence on its tab instead of following a link', async () => {
     renderCase('C-000009');
-    await openStep('What was proposed');
     const board = await screen.findByRole('region', { name: 'The board' });
-    await userEvent.click(within(board).getByRole('button', { name: /Encounter Integrity/ }));
+    const card = await within(board).findByRole('article', { name: 'Encounter Integrity' });
+    await userEvent.click(within(card).getByRole('button', { name: 'Show the finding' }));
     const cites = await within(board).findAllByRole('button', { name: 'Downstream state' });
     expect(cites[0]).not.toHaveAttribute('href');
     await userEvent.click(cites[0]);
@@ -534,7 +638,7 @@ describe('CasePage', () => {
   it('opens the decision on a held case, and the approval then replays its recorded outcome', async () => {
     renderCase('C-000002');
     const top = await outcome();
-    expect(await within(top).findByText('Next action: Approve or reject plan v1')).toBeInTheDocument();
+    expect(await within(top).findByText('Approve or reject plan v1')).toBeInTheDocument();
     expect(within(top).getByText('Approver')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /^4\. Gate and decision/ })).toHaveAttribute(
       'aria-expanded',
@@ -621,10 +725,18 @@ describe('CasePage', () => {
 
   it("shows a replayed run's model and what the recorded run cost, not $0.00", async () => {
     renderCase('C-000009');
-    await openStep('What was proposed');
     const board = await screen.findByRole('region', { name: 'The board' });
-    for (const name of [/Conformance/, /Encounter Integrity/, /Impact Analysis/])
-      await userEvent.click(within(board).getByRole('button', { name }));
+    for (const name of ['Conformance', 'Encounter Integrity', 'Impact Analysis'])
+      await userEvent.click(
+        within(await within(board).findByRole('article', { name })).getByRole('button', {
+          name: 'Show the finding',
+        }),
+      );
+    await userEvent.click(
+      within(within(board).getByRole('article', { name: 'Coordinator' })).getByRole('button', {
+        name: 'Show the run',
+      }),
+    );
     expect((await within(board).findAllByText('Recorded replay · claude-opus-5-5')).length).toBe(4);
     expect((await within(board).findAllByText(/\$\d+\.\d+ when recorded, nothing now/)).length).toBe(4);
     expect(within(board).queryByText(/\$0\.00/)).not.toBeInTheDocument();

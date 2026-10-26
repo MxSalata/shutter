@@ -1,4 +1,17 @@
-import { Anchor, Badge, Card, Group, Pagination, Select, Table, Text, Tooltip } from '@mantine/core';
+import {
+  Anchor,
+  Badge,
+  Card,
+  Group,
+  Pagination,
+  Select,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  Tooltip,
+  UnstyledButton,
+} from '@mantine/core';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useCases, useScenarios, type CaseFilters } from '@/api/hooks';
@@ -10,6 +23,8 @@ import { CASE_STATE_NAMES, DispositionBadge, StateBadge } from '@/components/Sta
 import { Timestamp } from '@/components/Timestamp';
 import { StackTable } from '@/components/StackTable';
 import { caseState } from '@/lib/status';
+import { StatusBadge } from '@/components/StatusBadge';
+import { ToneLegend } from '@/components/ToneLegend';
 import { humanize } from '@/lib/format';
 import { clampHeadline } from '@/lib/headline';
 import { forwardedFrom } from './case/derive';
@@ -77,6 +92,15 @@ export function InvestigatedBy({ c }: { c: CaseSummary }) {
   );
 }
 
+/** What the state means for the proposal beside it, where the two could read as a contradiction or a person is due. */
+export function proposalNote(c: Pick<CaseSummary, 'state' | 'disposition'>): string {
+  if (!c.disposition) return '';
+  if (c.state === 'blocked') return 'Stopped: nothing more is sent';
+  if (c.state === 'awaiting_approval') return 'Waiting for a person to release it';
+  if (c.state === 'escalated') return 'A person decides';
+  return '';
+}
+
 /** The list's cases; on a phone each case is a card: its id, then each column's value under the column's name. */
 export function CasesTable({ items }: { items: CaseSummary[] }) {
   return (
@@ -90,12 +114,11 @@ export function CasesTable({ items }: { items: CaseSummary[] }) {
             <StackTable.Th>What failed</StackTable.Th>
             <StackTable.Th>Scenario</StackTable.Th>
             <StackTable.Th>Investigated by</StackTable.Th>
-            <StackTable.Th>Opened</StackTable.Th>
           </StackTable.Tr>
         </StackTable.Thead>
         <StackTable.Tbody>
           {items.map((c) => (
-            <StackTable.Tr key={c.caseId}>
+            <StackTable.Tr key={c.caseId} data-tone={caseState(c.state).tone} className="case-row">
               <StackTable.Td>
                 <Group gap={6} wrap="nowrap">
                   <Anchor
@@ -109,12 +132,18 @@ export function CasesTable({ items }: { items: CaseSummary[] }) {
                   </Anchor>
                   <ForwardedBadge c={c} />
                 </Group>
+                <Timestamp iso={c.openedAt} age size="xs" />
               </StackTable.Td>
               <StackTable.Td data-label="State">
                 <StateBadge state={c.state} />
               </StackTable.Td>
               <StackTable.Td data-label="Proposed action">
                 <DispositionBadge disposition={c.disposition} />
+                {proposalNote(c) ? (
+                  <Text size="xs" c="dimmed" mt={2}>
+                    {proposalNote(c)}
+                  </Text>
+                ) : null}
               </StackTable.Td>
               <StackTable.Td data-label="What failed" maw={420}>
                 <Text size="sm" lineClamp={2}>
@@ -144,14 +173,49 @@ export function CasesTable({ items }: { items: CaseSummary[] }) {
               <StackTable.Td data-label="Investigated by">
                 <InvestigatedBy c={c} />
               </StackTable.Td>
-              <StackTable.Td data-label="Opened">
-                <Timestamp iso={c.openedAt} age />
-              </StackTable.Td>
             </StackTable.Tr>
           ))}
         </StackTable.Tbody>
       </StackTable>
     </Table.ScrollContainer>
+  );
+}
+
+/** The states that need a person, first: each a tile that filters the list, with its count from the API. */
+const ATTENTION = ['awaiting_approval', 'escalated', 'blocked'] as const;
+
+export function AttentionTile({
+  state,
+  chosen,
+  onChoose,
+}: {
+  state: (typeof ATTENTION)[number];
+  chosen: boolean;
+  onChoose: () => void;
+}) {
+  const count = useCases({ state, limit: 1 });
+  const status = caseState(state);
+  const n = count.data?.total;
+  return (
+    <UnstyledButton
+      onClick={onChoose}
+      aria-pressed={chosen}
+      className="attention-tile"
+      data-tone={status.tone}
+      data-chosen={chosen || undefined}
+    >
+      <Group gap="sm" wrap="nowrap" align="center">
+        <Text fz={26} fw={700} lh={1.1} className="tabular" miw={32}>
+          {n === undefined ? '…' : n}
+        </Text>
+        <Stack gap={2} align="flex-start">
+          <StatusBadge {...status} hint={undefined} />
+          <Text size="xs" c="dimmed">
+            {chosen ? 'Showing these; press again for every case' : 'Show these'}
+          </Text>
+        </Stack>
+      </Group>
+    </UnstyledButton>
   );
 }
 
@@ -171,7 +235,28 @@ export default function CasesPage() {
 
   return (
     <>
-      <PageHeader title="Cases" subtitle="Every failed delivery Shutter opened a case for, newest first." />
+      <PageHeader
+        title="Cases"
+        subtitle="Every failed delivery Shutter opened a case for, newest first. The cases that need a person come first here."
+      />
+      <section aria-labelledby="attention-title">
+        <Text id="attention-title" fw={600} size="sm" mb={6}>
+          Needs a person
+        </Text>
+        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xs" mb="md" maw={760}>
+          {ATTENTION.map((a) => (
+            <AttentionTile
+              key={a}
+              state={a}
+              chosen={state === a}
+              onChoose={() => {
+                setState(state === a ? null : a);
+                setPage(1);
+              }}
+            />
+          ))}
+        </SimpleGrid>
+      </section>
       <Card padding="md" data-tour="cases-list">
         <Group gap="sm" mb="sm" wrap="wrap">
           <Select
@@ -220,6 +305,7 @@ export default function CasesPage() {
           </Text>
         ) : null}
         {cases.data && cases.data.items.length > 0 ? <CasesTable items={cases.data.items} /> : null}
+        <ToneLegend mt="sm" />
         {total > PAGE ? (
           <Group justify="flex-end" mt="sm">
             <Pagination

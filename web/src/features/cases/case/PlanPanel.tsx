@@ -45,9 +45,9 @@ function GateTable({ d }: { d: GateDecision }) {
         </Text>
         <Timestamp iso={d.at} size="xs" c="dimmed" />
       </Group>
-      {/* On a phone each check stacks: its name and question, then the result, the code and the detail */}
+      {/* On a phone each check is a card: its name and question beside the result, then the code and the detail */}
       <Table.ScrollContainer minWidth={560} className="stack-scroll">
-        <StackTable verticalSpacing={4} className="stack-table">
+        <StackTable verticalSpacing={4} className="stack-table stack-cards">
           <StackTable.Thead>
             <StackTable.Tr>
               <StackTable.Th w={150}>Check</StackTable.Th>

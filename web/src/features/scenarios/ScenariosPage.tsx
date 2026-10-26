@@ -4,12 +4,14 @@ import {
   Badge,
   Button,
   Card,
+  Chip,
   Group,
-  List,
   Loader,
-  SegmentedControl,
+  Radio,
   SimpleGrid,
+  Spoiler,
   Stack,
+  Table,
   Text,
   Title,
   Tooltip,
@@ -35,10 +37,12 @@ import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { DispositionBadge, StateBadge } from '@/components/StateBadge';
 import { StatusBadge } from '@/components/StatusBadge';
+import { StackTable } from '@/components/StackTable';
 import { proposedWrites, writes } from '@/lib/status';
 import { describeError } from '@/lib/errors';
 import { formatAge, humanize } from '@/lib/format';
 import { StartHere } from './StartHere';
+import { ScenariosHero, TryFirst } from './TryFirst';
 
 const ALL_MODES: { value: Mode; label: string; hint: string }[] = [
   {
@@ -135,9 +139,6 @@ function ExpectedOutcome({ s, mode }: { s: Scenario; mode: Mode }) {
   const incidentWrites = encounters.reduce((n, x) => n + (x.writes || 0), 0);
   return (
     <Stack gap={4}>
-      <Text size="xs" fw={600} c="dimmed" tt="uppercase">
-        What should happen
-      </Text>
       <Group gap={6}>
         <DispositionBadge disposition={e.disposition} />
         {e.acceptable
@@ -181,7 +182,29 @@ function ExpectedOutcome({ s, mode }: { s: Scenario; mode: Mode }) {
   );
 }
 
-function ScenarioCard({
+/** The list's outcome groups: an incident scenario settles a chain per encounter, any other ends in one disposition. */
+const OUTCOMES = ['resend', 'reconcile', 'superseded', 'escalate', 'incident'] as const;
+type Outcome = (typeof OUTCOMES)[number] | 'other';
+
+/** What a scenario should end in, in the mode, as the list groups it. */
+function outcomeOf(s: Scenario, mode: Mode): Outcome {
+  if (!s.expected) return 'other';
+  const e = { ...s.expected, ...s.expected.by_mode?.[mode] };
+  if (e.incident) return 'incident';
+  return (OUTCOMES as readonly string[]).includes(e.disposition) ? (e.disposition as Outcome) : 'other';
+}
+
+const OUTCOME_LABELS: Record<Outcome, string> = {
+  resend: 'Resend',
+  reconcile: 'Reconcile',
+  superseded: 'Superseded',
+  escalate: 'Escalate',
+  incident: 'Incident chains',
+  other: 'Other',
+};
+
+/** One scenario in the list: its id, title and what it plays; what should happen; its latest case; Run. */
+function ScenarioRow({
   s,
   mode,
   canRun,
@@ -198,77 +221,98 @@ function ScenarioCard({
   onRun: () => void;
   starting: boolean;
 }) {
-  // With the player switched off there is no mode to play in, so no card is greyed out for one.
+  // With the player switched off there is no mode to play in, so no row is greyed out for one.
   const defined = playerOff || definedFor(s, mode);
   const modes = (s.expected?.modes ?? []).filter((m) => MODES.some((x) => x.value === m)).map(modeLabel);
   const why = playerOff
     ? PLAYER_OFF
     : !defined
-      ? `${s.id} is not defined for ${modeLabel(mode)} mode: it would not end as its card says. Its modes: ${modes.join(', ')}.`
+      ? `${s.id} is not defined for ${modeLabel(mode)} mode: it would not end as its row says. Its modes: ${modes.join(', ')}.`
       : !canRun
         ? 'Running a scenario needs the operator role'
         : busy;
   return (
-    <Card
-      padding="md"
-      bg={defined ? undefined : 'var(--mantine-color-default-hover)'}
+    <StackTable.Tr
+      data-scenario={s.id}
       data-defined={defined ? undefined : 'false'}
+      bg={defined ? undefined : 'var(--mantine-color-default-hover)'}
     >
-      <Stack gap="sm" h="100%">
-        <Group justify="space-between" wrap="nowrap" align="flex-start">
-          <Stack gap={2} style={{ minWidth: 0 }}>
-            <Text size="xs" c="dimmed" fw={600}>
-              {s.id}
-            </Text>
-            <Title order={3} fz="md">
-              {s.title}
-            </Title>
-          </Stack>
-          <Tooltip label={why || `Play ${s.id} in ${humanize(mode)} mode`} multiline maw={260}>
-            <span>
-              <Button
-                size="xs"
-                leftSection={<IconPlayerPlay size={14} />}
-                disabled={!!why}
-                loading={starting}
-                onClick={onRun}
-                aria-label={`Run ${s.id}`}
-              >
-                Run
-              </Button>
-            </span>
-          </Tooltip>
-        </Group>
-        <Text size="sm">{s.summary}</Text>
-        {!defined ? (
-          <Text size="xs" fw={600}>
-            Not defined for {modeLabel(mode)} mode. Its modes: {modes.join(', ')}.
+      <StackTable.Th scope="row" style={{ verticalAlign: 'top', fontWeight: 'inherit' }} maw={420}>
+        <Group gap={8} wrap="nowrap" align="baseline">
+          <Text size="sm" fw={700} miw={30}>
+            {s.id}
           </Text>
-        ) : null}
-        <ExpectedOutcome s={s} mode={mode} />
-        <div style={{ flex: 1 }} />
-        {s.latestCase ? (
-          <Group gap={6} wrap="nowrap">
-            <Text size="xs" c="dimmed">
-              Latest case
+          <Stack gap={2} style={{ minWidth: 0 }}>
+            <Text size="sm" fw={600}>
+              {s.title}
             </Text>
+            {/* The whole scenario stays a click away; two lines keep the list scannable */}
+            <Spoiler
+              maxHeight={38}
+              showLabel={
+                <Text span size="xs">
+                  More<VisuallyHidden> about {s.id}</VisuallyHidden>
+                </Text>
+              }
+              hideLabel={
+                <Text span size="xs">
+                  Less<VisuallyHidden> about {s.id}</VisuallyHidden>
+                </Text>
+              }
+              fz="xs"
+            >
+              <Text size="xs" c="dimmed">
+                {s.summary}
+              </Text>
+            </Spoiler>
+            {!defined ? (
+              <Text size="xs" fw={600}>
+                Not defined for {modeLabel(mode)} mode. Its modes: {modes.join(', ')}.
+              </Text>
+            ) : null}
+          </Stack>
+        </Group>
+      </StackTable.Th>
+      <StackTable.Td data-label="What should happen" style={{ verticalAlign: 'top' }} miw={220}>
+        <ExpectedOutcome s={s} mode={mode} />
+      </StackTable.Td>
+      <StackTable.Td data-label="Latest case" style={{ verticalAlign: 'top' }}>
+        {s.latestCase ? (
+          <Stack gap={4} align="flex-start">
             <Anchor
               component={Link}
               to={`/cases/${encodeURIComponent(s.latestCase.caseId)}`}
               size="sm"
               fw={600}
+              style={{ whiteSpace: 'nowrap' }}
             >
               {s.latestCase.caseId}
             </Anchor>
             <StateBadge state={s.latestCase.state} size="xs" />
-          </Group>
+          </Stack>
         ) : (
           <Text size="xs" c="dimmed">
             Not played since the last reset
           </Text>
         )}
-      </Stack>
-    </Card>
+      </StackTable.Td>
+      <StackTable.Td data-label="Play" style={{ verticalAlign: 'top' }}>
+        <Tooltip label={why || `Play ${s.id} in ${humanize(mode)} mode`} multiline maw={260}>
+          <span>
+            <Button
+              size="xs"
+              leftSection={<IconPlayerPlay size={14} />}
+              disabled={!!why}
+              loading={starting}
+              onClick={onRun}
+              aria-label={`Run ${s.id}`}
+            >
+              Run
+            </Button>
+          </span>
+        </Tooltip>
+      </StackTable.Td>
+    </StackTable.Tr>
   );
 }
 
@@ -294,6 +338,127 @@ function InductionPrompt({ below = false }: { below?: boolean }) {
   );
 }
 
+/** The run modes, once, as a choice of cards: who proposes the plan, and how many scenarios each mode plays. */
+function RunModes({
+  mode,
+  onChange,
+  scenarios,
+}: {
+  mode: Mode;
+  onChange: (m: Mode) => void;
+  scenarios: Scenario[] | undefined;
+}) {
+  return (
+    <Card padding="md" data-tour="scenarios-mode">
+      <Radio.Group
+        value={mode}
+        onChange={(v) => onChange(v as Mode)}
+        name="run-mode"
+        label={
+          <Text span fw={600} size="md">
+            Run mode
+          </Text>
+        }
+        description="Chosen once here, used by every Run button in the list. The mode chooses who proposes the plan. The gate, the rehearsal and the release, by a person, or the site's written policy, are the same in every mode."
+      >
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: MODES.length }} spacing="sm" mt="sm">
+          {MODES.map((m) => {
+            const n = scenarios?.filter((s) => definedFor(s, m.value)).length;
+            return (
+              <Radio.Card
+                key={m.value}
+                value={m.value}
+                radius="md"
+                p="sm"
+                className="mode-card"
+                aria-labelledby={`mode-${m.value}-label`}
+                aria-describedby={`mode-${m.value}-hint`}
+              >
+                <Group gap="xs" wrap="nowrap" align="flex-start">
+                  <Radio.Indicator mt={2} />
+                  <Stack gap={2} style={{ minWidth: 0 }}>
+                    <Group gap={6} align="baseline">
+                      <Text size="sm" fw={700} id={`mode-${m.value}-label`}>
+                        {m.label}
+                      </Text>
+                      {m.value === 'board' ? (
+                        <Text span size="xs" c="dimmed">
+                          default
+                        </Text>
+                      ) : null}
+                    </Group>
+                    <Text size="sm" id={`mode-${m.value}-hint`}>
+                      {m.hint}.{scenarios ? ` Plays ${n} of the ${scenarios.length} scenarios.` : ''}
+                    </Text>
+                  </Stack>
+                </Group>
+              </Radio.Card>
+            );
+          })}
+        </SimpleGrid>
+      </Radio.Group>
+    </Card>
+  );
+}
+
+/** Every scenario, filtered by what it should end in; the counts are the list's own. */
+function AllScenarios({
+  scenarios,
+  mode,
+  row,
+}: {
+  scenarios: Scenario[];
+  mode: Mode;
+  row: (s: Scenario) => React.ReactNode;
+}) {
+  const [outcome, setOutcome] = useState<string>('all');
+  const counts = new Map<Outcome, number>();
+  for (const s of scenarios) counts.set(outcomeOf(s, mode), (counts.get(outcomeOf(s, mode)) ?? 0) + 1);
+  const groups = ([...OUTCOMES, 'other'] as Outcome[]).filter((o) => counts.get(o));
+  // A filter the mode leaves empty falls back to every scenario rather than an empty list
+  const chosen = outcome !== 'all' && counts.get(outcome as Outcome) ? outcome : 'all';
+  const shown = chosen === 'all' ? scenarios : scenarios.filter((s) => outcomeOf(s, mode) === chosen);
+  return (
+    <Card padding="md" component="section" aria-labelledby="every-scenario-title" data-tour="scenarios-list">
+      <Stack gap="sm">
+        <Group gap="xs" align="baseline" wrap="wrap">
+          <Title order={2} fz="lg" id="every-scenario-title">
+            Every scenario
+          </Title>
+          <Text size="sm" c="dimmed">
+            {scenarios.length} in all. Filter by what should happen in {modeLabel(mode)} mode.
+          </Text>
+        </Group>
+        <Chip.Group multiple={false} value={chosen} onChange={(v) => setOutcome(v as string)}>
+          <Group gap={6} wrap="wrap" role="group" aria-label="What should happen">
+            <Chip value="all" size="sm">
+              All {scenarios.length}
+            </Chip>
+            {groups.map((o) => (
+              <Chip key={o} value={o} size="sm">
+                {OUTCOME_LABELS[o]} {counts.get(o)}
+              </Chip>
+            ))}
+          </Group>
+        </Chip.Group>
+        <Table.ScrollContainer minWidth={760} className="stack-scroll">
+          <StackTable className="stack-table" verticalSpacing="sm">
+            <StackTable.Thead>
+              <StackTable.Tr>
+                <StackTable.Th>Scenario</StackTable.Th>
+                <StackTable.Th>What should happen</StackTable.Th>
+                <StackTable.Th>Latest case</StackTable.Th>
+                <StackTable.Th>Play</StackTable.Th>
+              </StackTable.Tr>
+            </StackTable.Thead>
+            <StackTable.Tbody>{shown.map(row)}</StackTable.Tbody>
+          </StackTable>
+        </Table.ScrollContainer>
+      </Stack>
+    </Card>
+  );
+}
+
 export default function ScenariosPage() {
   const me = useMe().data;
   const scenarios = useScenarios();
@@ -306,20 +471,32 @@ export default function ScenariosPage() {
   const current = scenarios.data?.run ?? null;
   const busy = isPlaying(current) ? `A run of ${current?.scenario} is still playing` : '';
 
-  const start = (s: Scenario) =>
+  const start = (s: Scenario, m: Mode = mode) =>
     run.mutate(
-      { id: s.id, mode },
+      { id: s.id, mode: m },
       {
         onSuccess: () =>
           notifications.show({
             color: 'blue',
             title: `${s.id} started`,
-            message: `${humanize(mode)} mode. The case appears in a few seconds.`,
+            message: `${humanize(m)} mode. The case appears in a few seconds.`,
           }),
         onError: (e) =>
           notifications.show({ color: 'red', title: `${s.id} did not start`, message: describeError(e) }),
       },
     );
+  const pending = run.isPending ? 'Starting…' : '';
+  /** Why a featured scenario cannot be played in its own mode now, or "". */
+  const whyNot = (s: Scenario, m: Mode) =>
+    playerOff
+      ? PLAYER_OFF
+      : !definedFor(s, m)
+        ? `${s.id} is not defined for ${modeLabel(m)} mode`
+        : !MODES.some((x) => x.value === m)
+          ? `${modeLabel(m)} mode has no recordings here`
+          : !canRun
+            ? 'Running a scenario needs the operator role'
+            : busy || pending;
 
   // The induction prompt leads the page on an instance, as the owner's questionnaire is designed; the demo, whose
   // profile is a recording nobody answers, keeps it below the fold, under the scenarios, so the guided path comes first.
@@ -328,9 +505,7 @@ export default function ScenariosPage() {
     <>
       {DEMO ? null : induction}
       <PageHeader
-        tour="scenarios"
         title="Scenarios"
-        subtitle="Each scenario plays a known failure into the production: HL7 ADT files into its inbound folder and faults on the downstream system. Shutter opens a case, investigates, checks the plan at the gate, has a person or the site's written policy release it, and verifies the result at the receiver."
         actions={
           <Tooltip
             label={
@@ -367,7 +542,17 @@ export default function ScenariosPage() {
         }
       />
       <Stack gap="md">
-        {/* The demo's guided path through the recorded cases: the first thing a judge sees */}
+        <ScenariosHero />
+        {current ? <RunBanner run={current} /> : null}
+        {/* Always rendered, loading or not, so the guide's first step has its target */}
+        <TryFirst
+          scenarios={scenarios.data?.scenarios}
+          failed={scenarios.isError}
+          why={whyNot}
+          starting={(s, m) => run.isPending && run.variables?.id === s.id && run.variables?.mode === m}
+          onRun={start}
+        />
+        {/* The demo's guided path through the recorded cases, past the first three */}
         {DEMO ? <StartHere /> : null}
         {playerOff ? (
           <Alert color="gray" variant="light" title="The Scenario Player is switched off">
@@ -378,38 +563,8 @@ export default function ScenariosPage() {
             </Text>
           </Alert>
         ) : (
-          <Card padding="md" data-tour="scenarios-mode">
-            <Stack gap={6}>
-              <Text fw={600} size="sm" id="mode-label">
-                Investigation mode
-              </Text>
-              <SegmentedControl
-                aria-labelledby="mode-label"
-                value={mode}
-                onChange={(v) => setMode(v as Mode)}
-                data={MODES.map((m) => ({ value: m.value, label: m.label }))}
-                w="fit-content"
-              />
-              {/* Each mode said once, here, since the cases list and the case page name them too */}
-              <Text size="sm" c="dimmed">
-                The mode chooses who proposes the plan. The gate, the rehearsal and the release, by a person,
-                or the site&apos;s written policy, are the same in every mode.
-              </Text>
-              <List size="sm" spacing={2}>
-                {MODES.map((m) => (
-                  <List.Item key={m.value}>
-                    <Text span size="sm" fw={m.value === mode ? 700 : 600}>
-                      {m.label}
-                      {m.value === mode ? ' (chosen)' : ''}:
-                    </Text>{' '}
-                    {m.hint}.
-                  </List.Item>
-                ))}
-              </List>
-            </Stack>
-          </Card>
+          <RunModes mode={mode} onChange={setMode} scenarios={scenarios.data?.scenarios} />
         )}
-        {current ? <RunBanner run={current} /> : null}
         {scenarios.isPending ? <PageSkeleton label="Loading the scenarios…" /> : null}
         {scenarios.isError ? (
           <ErrorAlert
@@ -419,26 +574,22 @@ export default function ScenariosPage() {
           />
         ) : null}
         {scenarios.data ? (
-          <div data-tour="scenarios-list">
-            {/* The cards' headings sit under this one, not under Start here; the layout does not show it */}
-            <Title order={2} className={VisuallyHidden.classes.root}>
-              Every scenario
-            </Title>
-            <SimpleGrid cols={{ base: 1, md: 2, xl: 3 }} spacing="md">
-              {scenarios.data.scenarios.map((s) => (
-                <ScenarioCard
-                  key={s.id}
-                  s={s}
-                  mode={mode}
-                  canRun={canRun}
-                  playerOff={playerOff}
-                  busy={busy || (run.isPending ? 'Starting…' : '')}
-                  starting={run.isPending && run.variables?.id === s.id}
-                  onRun={() => start(s)}
-                />
-              ))}
-            </SimpleGrid>
-          </div>
+          <AllScenarios
+            scenarios={scenarios.data.scenarios}
+            mode={mode}
+            row={(s) => (
+              <ScenarioRow
+                key={s.id}
+                s={s}
+                mode={mode}
+                canRun={canRun}
+                playerOff={playerOff}
+                busy={busy || pending}
+                starting={run.isPending && run.variables?.id === s.id && run.variables?.mode === mode}
+                onRun={() => start(s)}
+              />
+            )}
+          />
         ) : null}
         {DEMO ? induction : null}
       </Stack>

@@ -33,7 +33,8 @@ test.describe('the guided path', () => {
     await expect(page.getByRole('heading', { name: 'Case C-000002', exact: true })).toBeVisible();
     const outcome = page.getByRole('region', { name: 'Outcome' });
     await expect(outcome).toContainText('Waiting for approval · 0 writes');
-    await expect(outcome).toContainText('Next action: Approve or reject plan v1');
+    await expect(outcome.getByRole('heading', { name: 'What needs you now' })).toBeVisible();
+    await expect(outcome).toContainText('Approve or reject plan v1');
     await expect(page.getByRole('region', { name: 'Approval', exact: true })).toContainText(
       'Waiting for approval',
     );

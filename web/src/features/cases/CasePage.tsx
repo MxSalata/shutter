@@ -15,12 +15,13 @@ import { EscalationPanel } from './case/EscalationPanel';
 import { AbandonPanel } from './case/AbandonPanel';
 import { CaseTimeline } from './case/CaseTimeline';
 import { CaseStory, type StoryStep } from './case/CaseStory';
+import { BoardPanel } from './case/BoardPanel';
 import { DecisionCard } from './case/DecisionCard';
 import { PortalLinks } from './case/PortalLinks';
 import { CounterpartStrip } from './case/S8Compare';
 import { SHOW_EVIDENCE } from './case/evidenceLinks';
 import { rounds } from './case/derive';
-import { provenanceOf } from './case/outcome';
+import { nextAction, provenanceOf } from './case/outcome';
 import { useCaseFacts } from './case/useCaseFacts';
 
 /** The portal's base path (/csp/<namespace>/) for links to messages, read from the case's trace link. */
@@ -70,9 +71,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
   const compare = search.get('show') === 'compare';
   // The story steps start closed, except where the reader is sent: the approval of a case waiting for one, and the
   // S8 comparison when the demo's guide links to it. After that they stay as the reader leaves them.
-  // On a board case, what was proposed opens too: the specialists, their verdicts and any dissent are the point of it.
   const [steps, setSteps] = useState<string[]>(() => [
-    ...(c.mode === 'board' && c.failureKind !== 'withheld' ? ['proposed'] : []),
     ...(c.state === 'awaiting_approval' ? ['decision'] : []),
     ...(compare && c.scenario === 'S8' ? ['compare'] : []),
   ]);
@@ -106,6 +105,15 @@ function CaseBody({ c }: { c: CaseDetail }) {
     return () => window.removeEventListener(SHOW_EVIDENCE, show);
   }, [setTab]);
 
+  // A board case shows its board under the outcome: the specialists, their proposals and any dissent are the point
+  // of it. So does a site policy case the policy left to the board, once its runs show the board sat. A withheld
+  // merge or cancel convenes no board, and the other modes keep their investigation in step 3.
+  const boardOnTop =
+    c.failureKind !== 'withheld' &&
+    (c.mode === 'board' || (c.mode === 'policy' && !!facts.runs?.some((r) => r.role === 'coordinator')));
+  // Until a policy case's runs are read, where its board goes is not known: the rest of the page waits for them, so
+  // the board does not push the steps down, nor step 3 change, once they arrive
+  const placing = c.mode === 'policy' && c.failureKind !== 'withheld' && !facts.runsSettled;
   const stopped = ['blocked', 'escalated', 'failed'].includes(c.state);
   const base = portalBase(c.links?.visualTrace);
   return (
@@ -119,44 +127,52 @@ function CaseBody({ c }: { c: CaseDetail }) {
           round={rounds(events.data ?? [])}
           onReview={() => openStep('decision', 'approval')}
         />
-        <AbandonPanel c={c} events={events.data} />
-        <Tabs value={tab} onChange={setTab} keepMounted={false}>
-          <Tabs.List aria-label="The case in detail">
-            <Tabs.Tab value="summary" leftSection={<IconListDetails size={16} aria-hidden />}>
-              Summary
-            </Tabs.Tab>
-            <Tabs.Tab value="evidence" leftSection={<IconFileSearch size={16} aria-hidden />}>
-              Evidence
-            </Tabs.Tab>
-            <Tabs.Tab value="audit" leftSection={<IconHistory size={16} aria-hidden />}>
-              Audit trail
-            </Tabs.Tab>
-          </Tabs.List>
-          <Tabs.Panel value="summary" pt="md">
-            <CaseStory
-              c={c}
-              me={me}
-              facts={facts}
-              open={open}
-              opened={steps}
-              onChange={setSteps}
-              onShowEvidence={() => setTab('evidence')}
-              portalBase={base}
-              compareFocus={compare}
-            />
-          </Tabs.Panel>
-          <Tabs.Panel value="evidence" pt="md">
-            <EvidencePanel caseId={c.caseId} open={open} focus={focus} onFocused={clearFocus} />
-          </Tabs.Panel>
-          <Tabs.Panel value="audit" pt="md">
-            <Stack gap="md">
-              <CaseTimeline events={events.data ?? []} />
-              {/* A stopped case's hand-off is part of its next action; once closed by hand, it is history here */}
-              {!stopped ? <EscalationPanel c={c} /> : null}
-              <PortalLinks c={c} runs={facts.runs} portalBase={base} />
-            </Stack>
-          </Tabs.Panel>
-        </Tabs>
+        {placing ? <PageSkeleton label="Loading the investigation…" /> : null}
+        {boardOnTop ? <BoardPanel caseId={c.caseId} open={open} mode={c.mode} portalBase={base} /> : null}
+        {/* A stopped case's hand-off to the team, with the action it serves, after the board so the board stays
+            under the receipt; the main button only when escalating is the action */}
+        {stopped && !placing ? <EscalationPanel c={c} primary={nextAction(facts).escalate} /> : null}
+        {placing ? null : <AbandonPanel c={c} events={events.data} />}
+        {placing ? null : (
+          <Tabs value={tab} onChange={setTab} keepMounted={false}>
+            <Tabs.List aria-label="The case in detail">
+              <Tabs.Tab value="summary" leftSection={<IconListDetails size={16} aria-hidden />}>
+                Summary
+              </Tabs.Tab>
+              <Tabs.Tab value="evidence" leftSection={<IconFileSearch size={16} aria-hidden />}>
+                Evidence
+              </Tabs.Tab>
+              <Tabs.Tab value="audit" leftSection={<IconHistory size={16} aria-hidden />}>
+                Audit trail
+              </Tabs.Tab>
+            </Tabs.List>
+            <Tabs.Panel value="summary" pt="md">
+              <CaseStory
+                c={c}
+                me={me}
+                facts={facts}
+                open={open}
+                opened={steps}
+                onChange={setSteps}
+                onShowEvidence={() => setTab('evidence')}
+                portalBase={base}
+                compareFocus={compare}
+                boardOnTop={boardOnTop}
+              />
+            </Tabs.Panel>
+            <Tabs.Panel value="evidence" pt="md">
+              <EvidencePanel caseId={c.caseId} open={open} focus={focus} onFocused={clearFocus} />
+            </Tabs.Panel>
+            <Tabs.Panel value="audit" pt="md">
+              <Stack gap="md">
+                <CaseTimeline events={events.data ?? []} />
+                {/* A stopped case's hand-off is part of its next action; once closed by hand, it is history here */}
+                {!stopped ? <EscalationPanel c={c} /> : null}
+                <PortalLinks c={c} runs={facts.runs} portalBase={base} />
+              </Stack>
+            </Tabs.Panel>
+          </Tabs>
+        )}
       </Stack>
     </>
   );

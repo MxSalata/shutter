@@ -190,17 +190,34 @@ export function expiryForApi(value: string): string {
 }
 
 /**
- * How much of the review the agent's ranking covers: a recording is matched to the current findings by code, item and
- * setting, so on another instance some findings can have no explanation and some recorded entries no finding.
+ * What the explained count leaves out: a recording is matched to the current findings by code, item and setting, so
+ * on another instance some findings can have no explanation and some recorded entries no finding. The count itself is
+ * stated once, by explainedCount, beside the findings.
  */
-export function explainedLine(a: Pick<ReviewAgent, 'explained' | 'unexplained' | 'dropped'>): string {
+export function explainedNotes(a: Pick<ReviewAgent, 'explained' | 'unexplained' | 'dropped'>): string {
   if (a.explained === undefined || a.explained === null) return '';
-  const total = a.explained + (a.unexplained ?? 0);
-  const parts = [`${a.explained} of ${total} finding${total === 1 ? '' : 's'} explained`];
-  if (a.unexplained) parts.push('the others keep the baseline order within their tier, with no explanation');
+  const parts: string[] = [];
+  if (a.unexplained) parts.push('The others keep the baseline order within their tier, with no explanation');
   if (a.dropped)
     parts.push(
       `${a.dropped} recorded explanation${a.dropped === 1 ? '' : 's'} matched no finding here and ${a.dropped === 1 ? 'was' : 'were'} left out`,
     );
-  return `${parts.join('; ')}.`;
+  return parts.length ? `${parts.join('; ')}.` : '';
+}
+
+/**
+ * How many findings the agent explained, of how many: the server's counts once the agent answered, else the findings
+ * that carry an explanation (none, for a review with no recorded explanation).
+ */
+export function explainedCount(review: Pick<ReviewDetail, 'agent' | 'findings'>): {
+  explained: number;
+  total: number;
+} {
+  const a = review.agent;
+  if (a.explained !== undefined && a.explained !== null)
+    return { explained: a.explained, total: a.explained + (a.unexplained ?? 0) };
+  return {
+    explained: review.findings.filter((f) => f.explanation).length,
+    total: review.findings.length,
+  };
 }
