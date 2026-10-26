@@ -170,7 +170,7 @@ describe('the guide', () => {
     useGuide.setState({ progress: { ...INITIAL, chapter: 's8', step: 1 }, phase: 'step' });
     const router = renderApp();
     const d = await dialog();
-    expect(within(d).getByText('Step 2 of 3 · S8: a write withheld')).toBeInTheDocument();
+    expect(within(d).getByText('Step 2 of 4 · S8: a write withheld')).toBeInTheDocument();
     await userEvent.click(await within(d).findByRole('button', { name: 'Show this section' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/cases/C-000008'));
     // The board sits under the outcome, so no story step needs opening

@@ -753,3 +753,59 @@ body {
     padding-left: var(--mantine-spacing-xs);
   }
 }
+
+/*
+ * Ask about this case: beside the case at laptop width, the panel keeps to the right of the page and scrolls on its own
+ * under the header; narrower, it opens as a drawer (a full-screen sheet on a phone). Its surfaces reuse the tuned
+ * tokens: the hovered surface for the read-only notice, the border colour for the turns, the attention edge for the
+ * What-if card, so nothing on them needs a contrast rule of its own.
+ */
+.ask-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
+  gap: var(--mantine-spacing-md);
+  align-items: start;
+}
+/* Beside the panel the case's column is narrower than a laptop's: its tables wrap their cells instead of scrolling. */
+.ask-layout .stack-scroll {
+  --table-min-width: 0 !important;
+}
+.ask-aside {
+  position: sticky;
+  top: calc(56px + var(--mantine-spacing-md));
+  max-height: calc(100dvh - 56px - 2 * var(--mantine-spacing-md));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.ask-readonly {
+  background: var(--mantine-color-default-hover);
+  border-radius: var(--mantine-radius-md);
+}
+.ask-tier {
+  border: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  height: auto;
+  padding-block: 6px;
+}
+.ask-tier[data-active] {
+  border: 2px solid var(--mantine-primary-color-filled);
+}
+.ask-tier .mantine-Tabs-tabLabel {
+  white-space: normal;
+  text-align: left;
+}
+.ask-thread {
+  border: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+}
+.ask-turn + .ask-turn {
+  border-top: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
+  padding-top: var(--mantine-spacing-sm);
+}
+.ask-locked {
+  border: calc(0.0625rem * var(--mantine-scale)) dashed var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+}
+.ask-whatif {
+  border-left: 4px solid var(--mantine-color-yellow-filled);
+}

@@ -149,6 +149,13 @@ export const CHAPTERS: GuideChapter[] = [
         target: 'case-compare',
         open: 'compare',
       },
+      {
+        id: 'ask',
+        title: 'Ask about this case',
+        text: 'Ask about this case opens a read-only panel beside the case: Explain answers in plain words, and Ask the board puts the question to the three specialists and the coordinator. Its What-if card names the site profile setting the outcome turns on, here the authoritative source, and opens the change as a draft on the Site profile page, which an approver reviews and saves.',
+        place: { scenario: 'S8', mode: 'board' },
+        target: 'case-ask',
+      },
     ],
   },
   {

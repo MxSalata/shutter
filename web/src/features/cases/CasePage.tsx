@@ -23,6 +23,7 @@ import { SHOW_EVIDENCE } from './case/evidenceLinks';
 import { rounds } from './case/derive';
 import { nextAction, provenanceOf } from './case/outcome';
 import { useCaseFacts } from './case/useCaseFacts';
+import { AskButton, AskSurface } from './ask/AskSurface';
 
 /** The portal's base path (/csp/<namespace>/) for links to messages, read from the case's trace link. */
 function portalBase(visualTrace: string | undefined): string {
@@ -69,6 +70,26 @@ function CaseBody({ c }: { c: CaseDetail }) {
     [setSearch],
   );
   const compare = search.get('show') === 'compare';
+  // Ask about this case, kept in the address (`?ask=1`) so a link opens it; closing it returns focus to its button
+  const asking = search.get('ask') === '1';
+  const askButton = useRef<HTMLButtonElement>(null);
+  const setAsking = useCallback(
+    (on: boolean) =>
+      setSearch(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          if (on) params.set('ask', '1');
+          else params.delete('ask');
+          return params;
+        },
+        { replace: true },
+      ),
+    [setSearch],
+  );
+  const closeAsk = useCallback(() => {
+    setAsking(false);
+    window.setTimeout(() => askButton.current?.focus(), 0);
+  }, [setAsking]);
   // The story steps start closed, except where the reader is sent: the approval of a case waiting for one, and the
   // S8 comparison when the demo's guide links to it. After that they stay as the reader leaves them.
   const [steps, setSteps] = useState<string[]>(() => [
@@ -117,8 +138,14 @@ function CaseBody({ c }: { c: CaseDetail }) {
   const stopped = ['blocked', 'escalated', 'failed'].includes(c.state);
   const base = portalBase(c.links?.visualTrace);
   return (
-    <>
-      <CaseHeader c={c} provenance={provenanceOf(c.mode, facts.runs)} />
+    <AskSurface caseId={c.caseId} open={asking} onClose={closeAsk}>
+      <CaseHeader
+        c={c}
+        provenance={provenanceOf(c.mode, facts.runs)}
+        actions={
+          <AskButton ref={askButton} open={asking} onToggle={() => (asking ? closeAsk() : setAsking(true))} />
+        }
+      />
       <Lifecycle c={c} events={events.data ?? []} />
       <CounterpartStrip c={c} onCompare={() => openStep('compare', 's8-compare')} />
       <Stack gap="md">
@@ -174,7 +201,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
           </Tabs>
         )}
       </Stack>
-    </>
+    </AskSurface>
   );
 }
 
