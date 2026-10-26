@@ -62,6 +62,10 @@ Property Event As %String(%JSONFIELDNAME = "event", MAXLEN = 32);
 
 Property Ward As %String(%JSONFIELDNAME = "ward", MAXLEN = 100);
 
+/// The bed within the ward (PV1-3's second component; v1.28), for an admission or a transfer; empty for a ward-level placement.
+/// Beside the canonical payload, so it is not in the digest.
+Property Bed As %String(%JSONFIELDNAME = "bed", MAXLEN = 64);
+
 /// A merge's prior record (A40, CONTRACTS 2): the patient identifier the merge discards (MRG-1) with its assigning
 /// authority, the prior visit (MRG-5), and how many MRG segments the message carried (one per PATIENT group); the
 /// identifiers are the first group's.
@@ -174,6 +178,7 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
     Set case.SourceMessageId = ##class(Shutter.Util.Json).Str(op, "source_message_id")
     Set case.Event = op."event"
     Set case.Ward = ##class(Shutter.Util.Json).Str(op, "ward")
+    Set case.Bed = $EXTRACT(##class(Shutter.Util.Json).Str(op, "bed"), 1, 64)
     Set case.PriorPatientId = ##class(Shutter.Util.Json).Str(op, "prior_patient_id")
     Set case.PriorPatientIdAuthority = ##class(Shutter.Util.Json).Str(op, "prior_patient_id_authority")
     Set case.PriorEncounterId = ##class(Shutter.Util.Json).Str(op, "prior_encounter_id")
@@ -642,7 +647,7 @@ ClassMethod NextId() As %String [ Private ]
 /// clause is left out when the key's encounter piece is the literal "-" (no visit number).
 ClassMethod DescribeFailure(case As Shutter.Store.Case) As %String [ Private ]
 {
-    Set what = $CASE(case.Event, "admit": "admission", "transfer": "transfer to " _ case.Ward, "discharge": "discharge", "update": "update", "merge": $SELECT(case.PriorPatientId '= "": "merge of " _ case.PriorPatientId _ " into " _ case.PatientId, 1: "merge into " _ case.PatientId), "cancel_admit": "cancellation of the admission", "cancel_transfer": "cancellation of the transfer" _ $SELECT(case.Ward '= "": " to " _ case.Ward, 1: ""), "cancel_discharge": "cancellation of the discharge", "register": "registration", "preadmit": "pre-admission", "person_add": "person record", "person_update": "person update", "": "message", : case.Event _ " message")
+    Set what = $CASE(case.Event, "admit": "admission", "transfer": "transfer to " _ case.Ward _ $SELECT(case.Bed '= "": " bed " _ case.Bed, 1: ""), "discharge": "discharge", "update": "update", "merge": $SELECT(case.PriorPatientId '= "": "merge of " _ case.PriorPatientId _ " into " _ case.PatientId, 1: "merge into " _ case.PatientId), "cancel_admit": "cancellation of the admission", "cancel_transfer": "cancellation of the transfer" _ $SELECT(case.Ward '= "": " to " _ case.Ward, 1: ""), "cancel_discharge": "cancellation of the discharge", "register": "registration", "preadmit": "pre-admission", "person_add": "person record", "person_update": "person update", "": "message", : case.Event _ " message")
     Set when = $REPLACE($PIECE(case.EventTime, "Z", 1), "T", " ")
     Set how = $CASE(case.FailureKind, "delivery_failed": "was not delivered", "uncertain_outcome": "has an uncertain outcome", "rejected": "was rejected", "unmappable": "could not be mapped to an operation for the downstream system", "withheld": $SELECT(case.Event = "merge": "was withheld by the site's policy", 1: "was withheld: the receiver cannot reverse it"), : "failed")
     // A cancel or a merge happens at its time; the movements keep "of".
@@ -797,6 +802,9 @@ Storage Default
 </Value>
 <Value name="43">
 <Value>OriginHeaderId</Value>
+</Value>
+<Value name="44">
+<Value>Bed</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>

@@ -188,6 +188,8 @@ Method OperationOf(case As Shutter.Store.Case) As %DynamicObject [ Private ]
     Set op."patient_id" = case.PatientId, op."patient_id_authority" = case.PatientIdAuthority
     Set op."event" = case.Event
     If case.Ward '= "" { Set op."ward" = case.Ward } Else { Do op.%Set("ward", "", "null") }
+    // The bed travels beside the canonical payload (v1.28): the recovery write and the rehearsal carry it, the digest does not.
+    If case.Bed '= "" { Set op."bed" = case.Bed } Else { Do op.%Set("bed", "", "null") }
     Set op."event_time" = case.EventTime, op."source_system" = case.SourceSystem, op."source_message_id" = case.SourceMessageId
     Set op."payload_digest" = ##class(Shutter.Util.Digest).WardPayloadDigest(op)
     // A merge (ADT^A40): the prior patient and visit the merge discards, as the case carries them. The payload
