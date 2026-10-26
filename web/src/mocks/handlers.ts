@@ -4,6 +4,8 @@ import definitions from '../../../fixtures/scenarios.json';
 import type {
   AgentRun,
   ApprovalDecision,
+  AskQuestion,
+  CaseQuestion,
   CaseState,
   Costs,
   Escalation,
@@ -29,6 +31,7 @@ import {
 import { digest, draftEscalation, teamFor } from './escalation';
 import { freshHolds, heldView, type CaseFixture, type Hold } from './hold';
 import { recordedSiteProfile, recordedSiteProfileHistory } from './profile';
+import { resetQuestionIds, sampleQuestion, startingQuestions, suggestedFor, whatIfFor } from './questions';
 
 /**
  * An in-browser stand-in for Shutter's REST API (CONTRACTS 5), for the demo build, development
@@ -93,7 +96,16 @@ export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
   abandoned = {};
   trail = {};
   startedReviews = {};
+  asked = {};
+  resetQuestionIds();
 }
+
+/**
+ * The questions asked about each case here, read on first use: a showcase case starts with its example conversation.
+ * The answers are sample data until the re-record (questions.ts).
+ */
+let asked: Record<string, CaseQuestion[]> = {};
+const questionsOf = (id: string) => (asked[id] ??= startingQuestions(id, stamp()));
 
 /** Cases a person closed as handled by hand in the demo, laid over the recorded case when it is read. */
 let closed: Record<string, { reason: string; by: string; at: string; version: number }> = {};
@@ -778,6 +790,67 @@ export const handlers = [
         ? 'Recorded data: the encounter as the recorded resend left it. The demo has no downstream system to ask.'
         : 'Recorded data: no downstream system to ask.',
     });
+  }),
+
+  // Asking about a case (the case-chat design): reading needs a session, asking the operator role; nothing is written
+  // to the case, the receiver or the profile. A question in the asker's own words runs live only, and the demo has no key.
+  http.get(`${BASE}/cases/:id/whatif`, ({ params }) => {
+    if (!session) return signedOut();
+    const id = String(params.id);
+    if (!caseOf(id)) return error(404, 'not_found', `No case ${id}`);
+    const w = whatIfFor(id);
+    return w ? HttpResponse.json(w) : error(404, 'no_whatif', `No what-if facts for ${id}`);
+  }),
+  http.get(`${BASE}/cases/:id/questions/suggested`, ({ params }) => {
+    if (!session) return signedOut();
+    const id = String(params.id);
+    if (!caseOf(id)) return error(404, 'not_found', `No case ${id}`);
+    const s = suggestedFor(id);
+    return s
+      ? HttpResponse.json(s)
+      : error(404, 'no_questions', `No suggested questions for ${id}'s scenario`);
+  }),
+  http.get(`${BASE}/cases/:id/questions`, ({ params }) => {
+    if (!session) return signedOut();
+    const id = String(params.id);
+    if (!caseOf(id)) return error(404, 'not_found', `No case ${id}`);
+    return HttpResponse.json({ items: questionsOf(id) });
+  }),
+  http.get(`${BASE}/cases/:id/questions/:qid`, ({ params }) => {
+    if (!session) return signedOut();
+    const id = String(params.id);
+    const q = caseOf(id) ? questionsOf(id).find((x) => x.questionId === params.qid) : undefined;
+    return q ? HttpResponse.json(q) : error(404, 'not_found', `No question ${String(params.qid)}`);
+  }),
+  http.post(`${BASE}/cases/:id/questions`, async ({ request, params }) => {
+    const denied = csrf(request) ?? guard('operator');
+    if (denied) return denied;
+    const id = String(params.id);
+    if (!caseOf(id)) return error(404, 'not_found', `No case ${id}`);
+    const body = (await request.json()) as Partial<AskQuestion>;
+    if (body.tier !== 'explain' && body.tier !== 'board')
+      return error(400, 'invalid_request', 'tier must be explain or board');
+    if (!body.suggested)
+      return error(
+        409,
+        'live_only',
+        'A question in your own words runs live, and no model key is configured here',
+      );
+    const { conversation, turn } = body.suggested;
+    // The turn's tier is the file's: a suggested turn asked in another tier has no recording
+    const fileTurn = suggestedFor(id)
+      ?.conversations.find((c) => c.id === conversation)
+      ?.turns.find((t) => t.turn === turn);
+    if (!fileTurn || fileTurn.tier !== body.tier)
+      return error(404, 'no_recording', `No recorded answer for ${conversation} turn ${turn}`);
+    const list = questionsOf(id);
+    const done = list.find((q) => q.conversation === conversation && q.turn === turn);
+    if (done) return HttpResponse.json({ questionId: done.questionId, conversation, turn }, { status: 202 });
+    const q = sampleQuestion(id, conversation, turn, session!.username, stamp());
+    if (!q) return error(404, 'no_recording', `No recorded answer for ${conversation} turn ${turn}`);
+    await delay();
+    list.push(q);
+    return HttpResponse.json({ questionId: q.questionId, conversation, turn }, { status: 202 });
   }),
 
   http.get(`${BASE}/incidents`, ({ request }) => {

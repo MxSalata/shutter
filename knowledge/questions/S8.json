@@ -1,0 +1,53 @@
+{
+  "scenario": "S8",
+  "conversations": [
+    {
+      "id": "c1",
+      "turns": [
+        { "turn": 1, "tier": "explain", "text": "Why was nothing written?" },
+        {
+          "turn": 2,
+          "tier": "explain",
+          "text": "What would make this safe to resend?"
+        },
+        {
+          "turn": 3,
+          "tier": "board",
+          "text": "What if we trusted the bed manager's times?"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "turns": [
+        { "turn": 1, "tier": "explain", "text": "Which movement is current?" }
+      ]
+    },
+    {
+      "id": "c3",
+      "turns": [
+        { "turn": 1, "tier": "explain", "text": "What should I check first?" }
+      ]
+    },
+    {
+      "id": "c4",
+      "turns": [
+        {
+          "turn": 1,
+          "tier": "board",
+          "text": "What did the dissenting specialist say?"
+        }
+      ]
+    },
+    {
+      "id": "c5",
+      "turns": [
+        {
+          "turn": 1,
+          "tier": "board",
+          "text": "What would a resend have changed downstream?"
+        }
+      ]
+    }
+  ]
+}

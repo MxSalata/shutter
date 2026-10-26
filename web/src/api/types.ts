@@ -952,3 +952,124 @@ export type Health = Record<string, unknown> & {
   /** False on a site install: no demo, and the Scenario Player is switched off (CONTRACTS 12). */
   demo?: boolean;
 };
+
+// ---- asking about a case (the case-chat design of 25 Oct; CONTRACTS 14 once the server has it) ----
+
+/** The two tiers: one agent in plain words, or the three specialists and the coordinator. */
+export type QuestionTier = 'explain' | 'board';
+
+/** A suggested question's place in its scenario's file: the conversation and its 1-based turn. */
+export interface QuestionRef {
+  conversation: string;
+  turn: number;
+}
+
+/** One turn of a suggested conversation, as knowledge/questions/<S>.json writes it. */
+export interface SuggestedTurn {
+  turn: number;
+  tier: QuestionTier;
+  text: string;
+}
+
+/** GET /cases/{id}/questions/suggested: the scenario's recorded conversations (knowledge/questions/<S>.json). */
+export interface SuggestedQuestions {
+  scenario: string;
+  conversations: { id: string; turns: SuggestedTurn[] }[];
+}
+
+/**
+ * One fact Shutter.Util.WhatIf computes from the case's snapshot: a setting of the site profile its outcome turns on,
+ * the value that would change it, and what the case would have done then. The only settings an agent may name.
+ */
+export interface WhatIfFact {
+  /** W1, W2...: what an answer cites. */
+  id: string;
+  /** alternative: a catalogue alternative's `when`; policy: the tier's approval policy, or a receiver's cancels or merges. */
+  kind: 'alternative' | 'policy' | string;
+  /** The profile field: authoritative_source, history_policy, receivers[].category, policy.2.single... */
+  field: string;
+  /** For a receivers[] field: the receiver's name. */
+  receiver?: string;
+  from: string | boolean | null;
+  to: string | boolean;
+  alternative?: { outcome: string; disposition?: string; when?: string };
+  /** What the case would have done under the other value, in a sentence. */
+  would: string;
+  /** The kinds of case the change would reach. */
+  affects: string[];
+  /** Set when `from` is no longer the profile's current value: the change would not apply as it stands. */
+  stale?: boolean;
+}
+
+/** GET /cases/{id}/whatif: the deterministic card, no model. */
+export interface WhatIf {
+  /** The matched catalogue entry, and the outcome and disposition the case has now. */
+  entry: string;
+  outcome: string;
+  disposition: string;
+  facts: WhatIfFact[];
+  /** The site profile version the facts were computed against. */
+  profileVersion?: number;
+}
+
+/** Shutter.Schema.Answer: what the Explain agent, and each board member, submits. */
+export interface Answer {
+  answer: string;
+  /** Evidence ids of the model view, or W<n> fact ids. */
+  cites: string[];
+  confidence: 'high' | 'medium' | 'low' | string;
+}
+
+/** Shutter.Schema.BoardAnswer: the coordinator's synthesis; the setting and the change name a fact, never a value. */
+export interface BoardAnswer extends Answer {
+  perspectives: { member: string; view: string }[];
+  setting?: { fact: string };
+  under_alternative?: { fact: string };
+  suggested_change?: { fact: string; why: string };
+}
+
+export type QuestionState = 'queued' | 'running' | 'answered' | 'schema_failed' | 'failed';
+
+/** A question's agent run, as the costs page counts it. */
+export interface QuestionRun {
+  member: string;
+  model: string | null;
+  mode: 'live' | 'record' | 'replay' | string;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  costUsd: number | null;
+}
+
+/** GET /cases/{id}/questions/{qid}: one turn of a conversation and its answer. */
+export interface CaseQuestion {
+  questionId: string;
+  caseId: string;
+  conversation: string;
+  turn: number;
+  tier: QuestionTier;
+  /** suggested: a turn of the scenario's file, replayed from its recording when there is one; free: live only. */
+  source: 'suggested' | 'free';
+  question: string;
+  state: QuestionState;
+  answer: Answer | BoardAnswer | null;
+  /** Why the answer was refused (schema_failed) or the run failed. */
+  error?: string;
+  /** For a replayed answer: when it was recorded live, and with which model. */
+  recording?: { recordedAt: string; model: string } | null;
+  runs?: QuestionRun[];
+  askedBy: string;
+  askedAt: string;
+  answeredAt?: string | null;
+}
+
+/** POST /cases/{id}/questions: a fresh question, or a suggested turn, in a conversation (a new one when none is named). */
+export type AskQuestion = { tier: QuestionTier; conversation?: string } & (
+  { question: string; suggested?: never } | { suggested: QuestionRef; question?: never }
+);
+
+/** POST /cases/{id}/questions answers 202 with where the question sits. */
+export interface QuestionAsked {
+  questionId: string;
+  conversation: string;
+  turn: number;
+}

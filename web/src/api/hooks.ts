@@ -33,6 +33,12 @@ import {
   type ReviewTarget,
   type RunStarted,
   type AgentRun,
+  type AskQuestion,
+  type CaseQuestion,
+  type QuestionAsked,
+  type QuestionState,
+  type SuggestedQuestions,
+  type WhatIf,
   type Scenario,
   type ScenarioList,
   type ScenarioRun,
@@ -66,6 +72,10 @@ export const keys = {
   reviewTargets: ['production-reviews', 'targets'] as const,
   reviews: (filters: ReviewFilters) => ['production-reviews', filters] as const,
   review: (id: string) => ['production-review', id] as const,
+  questions: (id: string) => ['case', id, 'questions'] as const,
+  question: (id: string, qid: string) => ['case', id, 'questions', qid] as const,
+  suggested: (id: string) => ['case', id, 'suggested-questions'] as const,
+  whatif: (id: string) => ['case', id, 'whatif'] as const,
 };
 
 // ---- the session (5.1) ----
@@ -639,6 +649,68 @@ export function useRemoveAnnotation() {
     mutationFn: (annotationId: string) =>
       api.del<null>(`/production-reviews/annotations/${seg(annotationId)}`),
     onSettled: () => refreshReviews(client),
+  });
+}
+
+// ---- asking about a case (the case-chat design; read only: no route writes the case, the receiver or the profile) ----
+
+/** A question still waiting for its answer: the list is read again every 2 s until none is. */
+export function isAnswering(state: QuestionState | string | undefined): boolean {
+  return state === 'queued' || state === 'running';
+}
+
+/** The deterministic What-if card (GET /cases/{id}/whatif): no model, so it reads the same with no key. */
+export function useWhatIf(caseId: string, enabled = true) {
+  return useCasePart<WhatIf>(caseId, 'whatif', '/whatif', false, enabled);
+}
+
+/** The recorded conversations of the case's scenario; null when the scenario has none. */
+export function useSuggestedQuestions(caseId: string, enabled = true) {
+  return useQuery({
+    queryKey: keys.suggested(caseId),
+    enabled,
+    staleTime: 60_000,
+    queryFn: async (): Promise<SuggestedQuestions | null> => {
+      try {
+        return await api.get<SuggestedQuestions>(`/cases/${seg(caseId)}/questions/suggested`);
+      } catch (e) {
+        if (isApiError(e) && e.isNotFound) return null;
+        throw e;
+      }
+    },
+  });
+}
+
+/** Every question asked about the case, each conversation's turns with their answers. */
+export function useCaseQuestions(caseId: string, enabled = true) {
+  return useQuery({
+    queryKey: keys.questions(caseId),
+    enabled,
+    queryFn: () => api.get<{ items: CaseQuestion[] }>(`/cases/${seg(caseId)}/questions`),
+    refetchInterval: (q) => (q.state.data?.items.some((x) => isAnswering(x.state)) ? 2_000 : false),
+  });
+}
+
+/** One question, read every 2 s until it is answered or refused. */
+export function useCaseQuestion(caseId: string, questionId: string) {
+  return useQuery({
+    queryKey: keys.question(caseId, questionId),
+    queryFn: () => api.get<CaseQuestion>(`/cases/${seg(caseId)}/questions/${seg(questionId)}`),
+    refetchInterval: (q) => (isAnswering(q.state.data?.state) ? 2_000 : false),
+  });
+}
+
+/** Asks a question: operators; a replayed suggested turn costs nothing, a live one spends model credit. */
+export function useAskQuestion(caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ask, idempotencyKey }: { ask: AskQuestion; idempotencyKey?: string }) =>
+      api.post<QuestionAsked>(`/cases/${seg(caseId)}/questions`, ask, {
+        idempotencyKey: idempotencyKey ?? newIdempotencyKey(),
+      }),
+    onSettled: async () => {
+      await client.invalidateQueries({ queryKey: keys.questions(caseId) });
+    },
   });
 }
 
