@@ -93,73 +93,139 @@ function tokens(p: EvaluationPass): string {
   return parts.join(' · ');
 }
 
+/** One headline figure: what it measures, the figure, what it counts, and what sits beside it. */
+function Stat({
+  title,
+  titleId,
+  figure,
+  caption,
+  children,
+}: {
+  title: string;
+  titleId?: string;
+  figure: string;
+  caption: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <Card padding="md" withBorder>
+      <Stack gap={4}>
+        <Title order={2} fz="xs" c="dimmed" fw={700} tt="uppercase" id={titleId}>
+          {title}
+        </Title>
+        <Text fz={32} fw={700} lh={1.1} className="tabular">
+          {figure}
+        </Text>
+        <Text size="sm">{caption}</Text>
+        {children}
+      </Stack>
+    </Card>
+  );
+}
+
 /**
- * The headline result with its scope and its limits beside it, never further down the page: what the figure counts,
- * which set it was measured on, and what is planned but not yet reported.
+ * The headline result with its scope and its limits beside it, never further down the page: the board against the
+ * expected outcome, rules alone on the same passes, what a pass cost, how far the members agreed, what the figures
+ * count and what is planned but not yet reported. Every figure is computed from the evaluation document.
  */
 function Headline({ data }: { data: Evaluation }) {
   const t = data.totals;
   const rules = played(data, 'rules');
   // The board played end to end on the same passes as rules alone, so the two figures count one set
   const board = played(data, 'board_live', 'rules');
+  const costs = data.passes.filter((p) => p.scored).map((p) => p.cost_usd);
+  const unscored = t.passes - t.scored_passes;
   return (
-    <Card padding="md" component="section" aria-labelledby="headline-title" data-tour="evaluation-headline">
-      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-        <Stack gap={2}>
-          <Title order={2} fz="sm" c="dimmed" fw={600} id="headline-title">
-            The board against the expected outcome
-          </Title>
-          <Text fz={28} fw={650} className="tabular">
-            {t.scored_passes ? `${t.board_matches} of ${t.scored_passes}` : 'None scored'}
+    <Stack gap="md" component="section" aria-labelledby="headline-title" data-tour="evaluation-headline">
+      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+        <Stat
+          title="The board against the expected outcome"
+          titleId="headline-title"
+          figure={t.scored_passes ? `${t.board_matches} of ${t.scored_passes}` : 'None scored'}
+          caption="scored passes proposed the scenario's expected action"
+        >
+          <Text size="xs" c="dimmed">
+            {`${t.passes} passes in ${t.cases} cases; ${unscored} not scored.`}
           </Text>
-          <Text size="sm">scored passes proposed the scenario's expected action</Text>
-        </Stack>
-        <Stack gap={2}>
-          <Text size="sm" c="dimmed" fw={600}>
-            Rules alone, the baseline
-          </Text>
-          <Text fz={28} fw={650} className="tabular">
-            {rules.of ? `${rules.matches} of ${rules.of}` : 'Not played'}
-          </Text>
-          <Text size="sm">
-            {rules.of
+        </Stat>
+        <Stat
+          title="Rules alone, the baseline"
+          figure={rules.of ? `${rules.matches} of ${rules.of}` : 'Not played'}
+          caption={
+            rules.of
               ? `scored passes played end to end with rules alone, no agents, ended as expected${board.of ? `; played the same way, the board ended as expected in ${board.matches} of the same ${board.of}` : ''}`
-              : 'no scored pass was played with rules alone'}
-          </Text>
-        </Stack>
-        <Stack gap={2}>
-          <Text size="sm" fw={600}>
-            Scope
-          </Text>
-          <Text size="sm">
-            {`${t.scenarios} scenarios, ${t.cases} cases and ${t.passes} passes (${t.passes - t.scored_passes} not scored), from the recorded set: one recording per member, on the scenarios the catalogue was written alongside.`}
-          </Text>
-        </Stack>
-        <Stack gap={2}>
-          <Text size="sm" fw={600}>
-            Limits
-          </Text>
-          <Text size="sm">
-            Planned, not yet reported: repeat runs of each scenario, held-out variants, and a comparison with
-            a single investigator. A match shows agreement with each scenario's expected outcome, on scenarios
-            the catalogue was written alongside; it is not evidence of general reliability.{' '}
-            {/* The hash is the router's, so the link scrolls rather than changing it */}
-            <Anchor
-              component="button"
-              type="button"
-              size="sm"
-              onClick={() => {
-                const target = document.getElementById('not-measured-title');
-                target?.scrollIntoView?.({ block: 'start' });
-                target?.focus({ preventScroll: true });
-              }}
-            >
-              What is not yet measured
-            </Anchor>
-          </Text>
-        </Stack>
+              : 'no scored pass was played with rules alone'
+          }
+        />
+        <Stat
+          title="Cost per pass"
+          figure={
+            costs.length
+              ? `${formatUsd(Math.min(...costs))} to ${formatUsd(Math.max(...costs))}`
+              : 'None scored'
+          }
+          caption={`per scored pass at list prices; ${formatInt(t.runs)} runs in all`}
+        >
+          <KeyValueList
+            rows={[
+              ['Total', formatUsd(t.cost_usd)],
+              ['Uncached input', formatInt(t.prompt_tokens)],
+              ['Cache read', formatInt(t.cache_read_tokens)],
+              ['Output', formatInt(t.completion_tokens)],
+            ]}
+          />
+        </Stat>
       </SimpleGrid>
-    </Card>
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+        <Card padding="md" withBorder>
+          <Stack gap="xs">
+            <Title order={3} fz="md">
+              Agreement
+            </Title>
+            <Text size="sm" c="dimmed">
+              How far the three specialists and the coordinator agreed on the plan, in each pass.
+            </Text>
+            <KeyValueList
+              rows={Object.entries(t.agreement).map(([how, n]) => [
+                humanize(how),
+                `${n} ${n === 1 ? 'pass' : 'passes'}`,
+              ])}
+            />
+          </Stack>
+        </Card>
+        <Card padding="md" withBorder>
+          <Stack gap="xs">
+            <Title order={3} fz="md">
+              Scope
+            </Title>
+            <Text size="sm">
+              {`${t.scenarios} scenarios, ${t.cases} cases and ${t.passes} passes (${unscored} not scored), from the recorded set: one recording per member, on the scenarios the catalogue was written alongside.`}
+            </Text>
+            <Title order={3} fz="md">
+              Limits
+            </Title>
+            <Text size="sm">
+              Planned, not yet reported: repeat runs of each scenario, held-out variants, and a comparison
+              with a single investigator. A match shows agreement with each scenario's expected outcome, on
+              scenarios the catalogue was written alongside; it is not evidence of general reliability.{' '}
+              {/* The hash is the router's, so the link scrolls rather than changing it */}
+              <Anchor
+                component="button"
+                type="button"
+                size="sm"
+                onClick={() => {
+                  const target = document.getElementById('not-measured-title');
+                  target?.scrollIntoView?.({ block: 'start' });
+                  target?.focus({ preventScroll: true });
+                }}
+              >
+                What is not yet measured
+              </Anchor>
+            </Text>
+          </Stack>
+        </Card>
+      </SimpleGrid>
+    </Stack>
   );
 }
 

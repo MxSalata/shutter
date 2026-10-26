@@ -52,6 +52,27 @@ describe('EvaluationPage', () => {
     expect(headline).not.toHaveTextContent('same scenarios');
   });
 
+  it('puts the cost per pass, the agreement, the scope and the limits beside the headline, computed from the document', async () => {
+    renderPage();
+    const headline = screen.getByRole('region', { name: 'The board against the expected outcome' });
+    expect(within(headline).getByText('14 passes in 13 cases; 1 not scored.')).toBeInTheDocument();
+    const scored = recorded.passes.filter((p) => p.scored).map((p) => p.cost_usd);
+    const usd = (n: number) => `$${n.toFixed(2)}`;
+    expect(
+      within(headline).getByText(`${usd(Math.min(...scored))} to ${usd(Math.max(...scored))}`),
+    ).toBeInTheDocument();
+    expect(within(headline).getByText('$5.38')).toBeInTheDocument();
+    expect(within(headline).getByRole('heading', { name: 'Agreement', level: 3 })).toBeInTheDocument();
+    for (const [how, n] of Object.entries(recorded.totals.agreement))
+      expect(
+        within(headline)
+          .getByText(new RegExp(`^${how}$`, 'i'))
+          .closest('div')!.parentElement,
+      ).toHaveTextContent(`${n} ${n === 1 ? 'pass' : 'passes'}`);
+    expect(within(headline).getByRole('heading', { name: 'Limits', level: 3 })).toBeInTheDocument();
+    expect(within(headline).getByRole('button', { name: 'What is not yet measured' })).toBeInTheDocument();
+  });
+
   it('says so when no scored pass was played with rules alone', () => {
     renderPage({ ...recorded, passes: recorded.passes.map((p) => ({ ...p, played: {} })) });
     const headline = screen.getByRole('region', { name: 'The board against the expected outcome' });
