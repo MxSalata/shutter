@@ -21,6 +21,10 @@ Property Event As %String(MAXLEN = 32);
 
 Property Ward As %String(MAXLEN = 100);
 
+/// The bed within the ward (PV1-3's second component), for an admission or a transfer; empty for a ward-level placement.
+/// Beside the canonical payload, so it is not in the digest (CONTRACTS 1.24).
+Property Bed As %String(MAXLEN = 64);
+
 /// ISO 8601 UTC.
 Property EventTime As %String(MAXLEN = 30);
 
@@ -58,6 +62,7 @@ ClassMethod FromOperation(op As %DynamicObject) As Shutter.Msg.WardOperation
     Set m.PatientIdAuthority = ##class(Shutter.Util.Json).Str(op, "patient_id_authority")
     Set m.Event = ##class(Shutter.Util.Json).Str(op, "event")
     Set m.Ward = ##class(Shutter.Util.Json).Str(op, "ward")
+    Set m.Bed = ##class(Shutter.Util.Json).Str(op, "bed")
     Set m.EventTime = ##class(Shutter.Util.Json).Str(op, "event_time")
     Set m.SourceSystem = ##class(Shutter.Util.Json).Str(op, "source_system")
     Set m.SourceMessageId = ##class(Shutter.Util.Json).Str(op, "source_message_id")
@@ -93,6 +98,7 @@ Method ToWardJSON() As %DynamicObject
 {
     Set body = ..ToOperation()
     Set body."payload_digest" = ..PayloadDigest
+    If (..Bed '= "") && ((..Event = "admit") || (..Event = "transfer")) Set body."bed" = ..Bed
     If ..ExpectedVersion '= "" Set body."expected_version" = ..ExpectedVersion
     If ..Event = "merge" Set body."prior_patient_id" = ..PriorPatientId, body."prior_patient_id_authority" = ..PriorPatientIdAuthority, body."prior_encounter_id" = ..PriorEncounterId
     Do body.%Set("dry_run", ..DryRun, "boolean")
@@ -156,6 +162,9 @@ Storage Default
 </Value>
 <Value name="18">
 <Value>PriorEncounterId</Value>
+</Value>
+<Value name="19">
+<Value>Bed</Value>
 </Value>
 </Data>
 <DefaultData>WardOperationDefaultData</DefaultData>

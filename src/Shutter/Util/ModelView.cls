@@ -24,25 +24,25 @@ Parameter SUMMARYKEEP = ",case_id,scenario,operation,failure,message,validation,
 /// and the header id there, operational names with no patient data.
 Parameter SOURCEKEEP = ",namespace,production,route,header_id,";
 
-Parameter OPERATIONKEEP = ",operation_key,encounter_id,patient_id,patient_id_authority,event,ward,event_time,source_system,source_message_id,payload_digest,prior_patient_id,prior_patient_id_authority,prior_encounter_id,";
+Parameter OPERATIONKEEP = ",operation_key,encounter_id,patient_id,patient_id_authority,event,ward,bed,event_time,source_system,source_message_id,payload_digest,prior_patient_id,prior_patient_id_authority,prior_encounter_id,";
 
 Parameter MESSAGEKEEP = ",message_control_id,message_type,sending_application,sending_facility,receiving_application,message_time,hl7_version,message_version,event_recorded,event_occurred,patient_identifier,patient_class,assigned_location,visit_number,admit_time,prior_patient_identifier,prior_visit_number,merge_groups,prior_identifiers,notes,segment_count,doc_type,error,";
 
 Parameter VALIDATIONKEEP = ",parsed,doc_type,schema_category,spec,error,note,message_version,route_category,route_standard,version_agrees,version_note,";
 
 /// What a receiver's body keeps.
-Parameter WARDKEEP = ",encounter_id,patient_id,patient_id_authority,state,ward,location,version,epoch,history,error,status,http_status,";
+Parameter WARDKEEP = ",encounter_id,patient_id,patient_id_authority,state,ward,bed,location,version,epoch,history,error,status,http_status,";
 
 /// What a history entry keeps (Downstream.Event.ToJSON: event, ward, event_time, applied_at, version_after, operation_key).
-Parameter HISTORYKEEP = ",event,ward,location,event_time,applied_at,version,version_before,version_after,operation_key,source_system,";
+Parameter HISTORYKEEP = ",event,ward,bed,location,event_time,applied_at,version,version_before,version_after,operation_key,source_system,";
 
 /// What a receipt keeps (Downstream.Receipt.ToJSON): all of it is operational.
-Parameter RECEIPTKEEP = ",operation_key,encounter_id,event,ward,event_time,applied_at,version_before,version_after,payload_digest,source_message_id,status,epoch,error,";
+Parameter RECEIPTKEEP = ",operation_key,encounter_id,event,ward,bed,event_time,applied_at,version_before,version_after,payload_digest,source_message_id,status,epoch,error,";
 
 /// What the failure and the receiver's error keep.
 Parameter FAILUREKEEP = ",kind,outcome,reason_code,http_status,status,text,error,message,ens_session_id,source_header_id,instruction_like,";
 
-Parameter TIMELINEKEEP = ",event,ward,event_time,operation_key,source_message_id,ens_header_id,ens_session_id,sent_at,source,later,this_case,outcome,reason_code,http_status,version_after,route,receiver,message_type,";
+Parameter TIMELINEKEEP = ",event,ward,bed,event_time,operation_key,source_message_id,ens_header_id,ens_session_id,sent_at,source,later,this_case,outcome,reason_code,http_status,version_after,route,receiver,message_type,";
 
 Parameter ROUTEKEEP = ",feed,connector,receiver,tier,category,history_policy,capabilities_source,declared,capabilities_http_status,capabilities,conditional_writes,receipts,dry_run,epoch,note,";
 

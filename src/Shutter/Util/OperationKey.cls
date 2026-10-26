@@ -60,6 +60,7 @@ ClassMethod FromHL7(message As EnsLib.HL7.Message, Output sc As %Status) As %Dyn
         Set patientId = ..PatientIdentifier(message, .authority)
         Set encounterId = ..Value(message, "PV1", "19.1")
         Set ward = ..Value(message, "PV1", "3.1")
+        Set bed = ..Value(message, "PV1", "3.2")
         Set eventTime = message.GetValueAt("EVN:6.1")
         If eventTime = "" Set eventTime = message.GetValueAt("EVN:2.1")
         Set event = ..EventForTrigger(trigger)
@@ -88,6 +89,9 @@ ClassMethod FromHL7(message As EnsLib.HL7.Message, Output sc As %Status) As %Dyn
         } Else {
             Do op.%Set("ward", "", "null")
         }
+        // The bed (PV1-3's second component) travels beside the canonical payload (CONTRACTS 1.24: not in the digest), for an
+        // admission or a transfer only; a placement without one is at ward level.
+        If ((event = "admit") || (event = "transfer")) && (bed '= "") { Set op."bed" = $EXTRACT(bed, 1, 64) } Else { Do op.%Set("bed", "", "null") }
         Set op."event_time" = isoTime
         Set op."source_system" = sourceSystem
         Set op."source_message_id" = controlId
@@ -137,6 +141,8 @@ ClassMethod Unmapped(request As EnsLib.HL7.Message, headerId As %String) As %Dyn
     Set op."event" = $SELECT(trigger = "": "", 1: trigger)
     Set ward = ..Value(request, "PV1", "3.1")
     If ward '= "" { Set op."ward" = ward } Else { Do op.%Set("ward", "", "null") }
+    Set bed = ..Value(request, "PV1", "3.2")
+    If bed '= "" { Set op."bed" = $EXTRACT(bed, 1, 64) } Else { Do op.%Set("bed", "", "null") }
     Set raw = request.GetValueAt("EVN:6.1")
     If raw = "" Set raw = request.GetValueAt("EVN:2.1")
     If raw = "" Set raw = request.GetValueAt("MSH:7.1")
