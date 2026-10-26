@@ -426,7 +426,7 @@ describe('SiteProfilePage, a change a case suggested', () => {
     await waitFor(() => expect(heading).toHaveFocus());
     const card = screen.getByRole('region', { name: 'A suggested change from case C-000008' });
     const table = within(card).getByRole('table', { name: 'The change in this draft' });
-    expect(within(table).getByRole('columnheader', { name: 'Now, version 9' })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Now, version 10' })).toBeInTheDocument();
     const row = within(table)
       .getByRole('rowheader', { name: /Authoritative source/ })
       .closest('tr')!;
@@ -442,10 +442,10 @@ describe('SiteProfilePage, a change a case suggested', () => {
     await userEvent.click(within(card).getByRole('button', { name: 'Review and save…' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/Authoritative source: from .* to BEDMGR/)).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 10' }));
-    expect(await screen.findByText('Version 10 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
+    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
     expect(puts).toHaveLength(1);
-    expect(puts[0].body).toMatchObject({ authoritative_source: 'BEDMGR', expectedVersion: 9 });
+    expect(puts[0].body).toMatchObject({ authoritative_source: 'BEDMGR', expectedVersion: 10 });
     // Saved: the suggestion leaves the page and the address
     await waitFor(() =>
       expect(screen.queryByRole('region', { name: /A suggested change/ })).not.toBeInTheDocument(),
@@ -465,11 +465,11 @@ describe('SiteProfilePage, a change a case suggested', () => {
   it('discards only the suggested change, keeping the other edits in the draft', async () => {
     renderPage(suggestion);
     const card = await screen.findByRole('region', { name: 'A suggested change from case C-000008' });
-    const cancels = screen.getByRole('switch', { name: /accepts cancels/ });
+    const cancels = screen.getByRole('switch', { name: /Downstream Out accepts cancels/ });
     await userEvent.click(cancels);
     await userEvent.click(within(card).getByRole('button', { name: 'Discard the suggestion' }));
     await waitFor(() => expect(screen.queryByRole('region', { name: /A suggested change/ })).toBeNull());
-    expect(screen.getByRole('switch', { name: /accepts cancels/ })).toBeChecked();
+    expect(screen.getByRole('switch', { name: /Downstream Out accepts cancels/ })).toBeChecked();
     await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).queryByText(/Authoritative source: from/)).not.toBeInTheDocument();

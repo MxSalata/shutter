@@ -2,6 +2,8 @@ import type {
   Answer,
   BoardAnswer,
   CaseQuestion,
+  CaseQuestionDetail,
+  QuestionState,
   QuestionTier,
   SuggestedQuestions,
   WhatIf,
@@ -12,17 +14,18 @@ import s8 from '../../../knowledge/questions/S8.json';
 /**
  * MOCK DATA, NOT RECORDINGS. The answers below are sample answers, written for the demo from the recorded findings and
  * plans of C-000008 (S8, board) and C-000002 (S2, board) in fixtures.json, so that the panel can be shown and tested
- * before the server's question routes exist. The live re-record replaces them with real recorded runs (every message a
+ * without a model. The live re-record replaces them with real recorded runs (every message a
  * real run, never hand-written); until then the page labels them "Example (sample data)" (DEMO_ANSWERS_RECORDED in
  * features/cases/ask/recorded.ts). The What-if facts are what Shutter.Util.WhatIf should compute for these two cases from
- * catalogue entries E7 and E2 and the recorded site profile (version 9).
+ * catalogue entries E7 and E2 and the stored site profile (version 10).
  */
 
-/** The suggested questions, as the scenario files in knowledge/questions write them. */
-const SUGGESTED: Record<string, SuggestedQuestions> = {
-  S2: s2 as SuggestedQuestions,
-  S8: s8 as SuggestedQuestions,
+/** The scenario files as knowledge/questions write them: turns with no `asked` yet. */
+type QuestionsFile = {
+  scenario: string;
+  conversations: { id: string; turns: { turn: number; tier: QuestionTier; text: string }[] }[];
 };
+const SUGGESTED: Record<string, QuestionsFile> = { S2: s2 as QuestionsFile, S8: s8 as QuestionsFile };
 
 /** The cases the sample answers were written for, by scenario. */
 export const SAMPLE_CASES: Record<string, string> = { 'C-000008': 'S8', 'C-000002': 'S2' };
@@ -204,44 +207,108 @@ const SAMPLE_ANSWERS: Record<string, Record<string, SampleAnswer>> = {
   },
 };
 
-/** What Shutter.Util.WhatIf should give for the two cases, from the catalogue and the recorded profile (version 9). */
-const SAMPLE_WHATIF: Record<string, WhatIf> = {
-  S8: {
+/** What Shutter.Util.WhatIf should give for the two cases, from the catalogue and the stored profile (version 10). */
+const SAMPLE_WHATIF: Record<string, (caseId: string) => WhatIf> = {
+  S8: (caseId) => ({
+    case_id: caseId,
+    receiver: 'Downstream Out',
+    category: 'current_state',
     entry: 'E7',
     outcome: 'escalate',
+    outcome_ref: 'preferred',
     disposition: 'escalate',
-    profileVersion: 9,
+    profile_version: 10,
+    note: 'Sample data: worked out from the case and the site profile without a model.',
     facts: [
       {
         id: 'W1',
         kind: 'alternative',
+        role: 'alternative',
+        flag: 'authoritative_source',
         field: 'authoritative_source',
+        current: '',
         from: '',
         to: 'BEDMGR',
+        holds_now: false,
+        would:
+          "The bed manager's WARD-C placement would stand, and the board would close this PAS transfer with nothing written.",
         alternative: {
+          n: 1,
           outcome: 'none',
           // An assumption to confirm with the server's author: entry E7 gives the alternative's outcome (none) only;
           // the disposition the board would propose under it is not in the catalogue entry
           disposition: 'superseded',
           when: 'authoritative_source: other_source',
+          why: 'The site names the other source system as authoritative for ward placement, so its movement stands and the failed one closes without a write.',
         },
-        would:
-          "The bed manager's WARD-C placement would stand, and the board would close this PAS transfer with nothing written.",
         affects: ['every case where the PAS and the bed manager move an encounter at the same event time'],
+        suggested_change: {
+          field: 'authoritative_source',
+          from: '',
+          to: 'BEDMGR',
+          why: 'Name the bed manager as the system that wins a same-time tie, if that is how the wards work.',
+          affects: ['every case where the PAS and the bed manager move an encounter at the same event time'],
+          valid: true,
+          stale: false,
+        },
       },
     ],
-  },
-  S2: { entry: 'E2', outcome: 'resend', disposition: 'resend', profileVersion: 9, facts: [] },
+  }),
+  S2: (caseId) => ({
+    case_id: caseId,
+    receiver: 'Downstream Out',
+    category: 'current_state',
+    entry: 'E2',
+    outcome: 'resend',
+    outcome_ref: 'preferred',
+    disposition: 'resend',
+    profile_version: 10,
+    note: 'Sample data: worked out from the case and the site profile without a model.',
+    facts: [],
+  }),
 };
 
-export function suggestedFor(caseId: string): SuggestedQuestions | null {
+/** The scenario's file for the case, or null when it has no scenario or no file. */
+export function suggestedFor(caseId: string): QuestionsFile | null {
   const s = SAMPLE_CASES[caseId];
   return s ? structuredClone(SUGGESTED[s]) : null;
 }
 
-export function whatIfFor(caseId: string): WhatIf | null {
+/** The suggested route's answer: the file's turns, each with the newest question asked for it; empty without a file. */
+export function suggestedWithAsked(
+  caseId: string,
+  asked: Pick<CaseQuestion, 'questionId' | 'conversation' | 'turn' | 'state'>[],
+): SuggestedQuestions {
+  const file = suggestedFor(caseId);
+  if (!file) return { scenario: SAMPLE_CASES[caseId] ?? '', conversations: [] };
+  return {
+    scenario: file.scenario,
+    conversations: file.conversations.map((c) => ({
+      id: c.id,
+      turns: c.turns.map((t) => {
+        const q = asked.filter((x) => x.conversation === c.id && x.turn === t.turn).at(-1);
+        return { ...t, asked: q ? { questionId: q.questionId, state: q.state } : null };
+      }),
+    })),
+  };
+}
+
+/** The deterministic card: a sample for the showcase cases, otherwise a case with no catalogue entry and no facts. */
+export function whatIfFor(caseId: string): WhatIf {
   const s = SAMPLE_CASES[caseId];
-  return s ? structuredClone(SAMPLE_WHATIF[s]) : null;
+  if (s) return structuredClone(SAMPLE_WHATIF[s](caseId));
+  return {
+    case_id: caseId,
+    receiver: '',
+    category: 'current_state',
+    entry: '',
+    outcome: 'none',
+    outcome_ref: '',
+    disposition: '',
+    profile_version: 10,
+    note: 'Sample data: this case matched no catalogue entry that a site profile setting selects.',
+    facts: [],
+  };
 }
 
 /** The sample answer to a turn of a suggested conversation, or null when there is none. */
@@ -268,6 +335,7 @@ export function sampleQuestion(
   if (!found) return null;
   const tier: QuestionTier = found.tier;
   const members = tier === 'board' ? ['conformance', 'encounter', 'impact', 'coordinator'] : ['explain'];
+  const state: QuestionState = 'answered';
   return {
     questionId: `Q-${String(next++).padStart(6, '0')}`,
     caseId,
@@ -276,20 +344,52 @@ export function sampleQuestion(
     tier,
     source: 'suggested',
     question: found.question,
-    state: 'answered',
+    state,
     answer: found.answer,
-    recording: null,
-    runs: members.map((member) => ({
-      member,
-      model: null,
-      mode: 'replay',
-      promptTokens: null,
-      completionTokens: null,
-      costUsd: 0,
-    })),
+    error: null,
+    mode: 'replay',
+    model: null,
+    costUsd: 0,
+    runs: members.length,
+    recordKey: null,
+    ensMessageId: null,
     askedBy,
     askedAt,
     answeredAt: askedAt,
+  };
+}
+
+/** A stored question as GET /cases/{id}/questions/{qid} reads it: the facts, the members' answers, the resolved change. */
+export function questionDetail(q: CaseQuestion): CaseQuestionDetail {
+  const facts = whatIfFor(q.caseId).facts;
+  const a = q.answer;
+  const board = !!a && Array.isArray((a as BoardAnswer).perspectives);
+  const b = board ? (a as BoardAnswer) : undefined;
+  const fact = (id?: string) => facts.find((f) => f.id === id);
+  const members = q.tier === 'board' ? ['conformance', 'encounter', 'impact'] : ['explain'];
+  return {
+    ...q,
+    facts,
+    memberAnswers: members.map((member) => ({ member, status: 'answered' })),
+    resolved: {
+      ...(fact(b?.setting?.fact) ? { setting: fact(b?.setting?.fact) } : {}),
+      ...(fact(b?.under_alternative?.fact) ? { under_alternative: fact(b?.under_alternative?.fact) } : {}),
+      ...(fact(b?.suggested_change?.fact)
+        ? { suggested_change: fact(b?.suggested_change?.fact)!.suggested_change }
+        : {}),
+    },
+    agentRuns: [...members, ...(board ? ['coordinator'] : [])].map((member, i) => ({
+      runId: `${q.questionId}-${i + 1}`,
+      role: member === 'coordinator' ? 'coordinator' : member === 'explain' ? 'explain' : 'member',
+      member,
+      status: 'answered',
+      mode: 'replay',
+      model: null,
+      costUsd: 0,
+      durationMs: null,
+      ensMessageId: null,
+      error: null,
+    })),
   };
 }
 

@@ -19,12 +19,30 @@ const profile = (): SiteProfile => recordedSiteProfile()!.profile;
 const W1: WhatIfFact = {
   id: 'W1',
   kind: 'alternative',
+  role: 'alternative',
+  flag: 'authoritative_source',
   field: 'authoritative_source',
+  current: '',
   from: '',
   to: 'BEDMGR',
-  alternative: { outcome: 'none', disposition: 'superseded', when: 'authoritative_source: other_source' },
+  holds_now: false,
+  alternative: {
+    n: 1,
+    outcome: 'none',
+    disposition: 'superseded',
+    when: 'authoritative_source: other_source',
+  },
   would: 'The bed manager placement would stand.',
   affects: ['same-time movements'],
+  suggested_change: {
+    field: 'authoritative_source',
+    from: '',
+    to: 'BEDMGR',
+    why: 'Name the bed manager as the winner of a same-time tie.',
+    affects: ['same-time movements'],
+    valid: true,
+    stale: false,
+  },
 };
 
 const change = (over: Partial<SuggestedChange>): SuggestedChange => ({
@@ -51,9 +69,24 @@ describe('a suggested profile change', () => {
       field: 'authoritative_source',
       from: '',
       to: 'BEDMGR',
-      why: 'The bed manager placement would stand.',
+      why: 'Name the bed manager as the winner of a same-time tie.',
       affects: ['same-time movements'],
+      valid: true,
+      stale: false,
     });
+  });
+
+  it("takes the server's verdict first: an invalid or stale change is not applied", () => {
+    const base = suggestionFromFact('C-000008', W1);
+    expect(applySuggestion(profile(), { ...base, valid: false, problem: 'no' })).toMatchObject({
+      ok: false,
+      reason: 'invalid',
+    });
+    expect(applySuggestion(profile(), { ...base, stale: true })).toMatchObject({
+      ok: false,
+      reason: 'stale',
+    });
+    expect(applySuggestion(profile(), base)).toMatchObject({ ok: true });
   });
 
   it('refuses an address that does not name a case and a fact', () => {

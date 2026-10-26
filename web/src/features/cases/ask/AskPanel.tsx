@@ -119,7 +119,8 @@ function Turn({ q }: { q: CaseQuestion }) {
             ) : null}
             {isBoard(a) && a.suggested_change ? (
               <Text size="sm">
-                The board suggests a profile change ({a.suggested_change.why}){' '}
+                The board suggests a profile change
+                {a.suggested_change.why ? ` (${a.suggested_change.why})` : ''}{' '}
                 <Button variant="subtle" size="compact-sm" onClick={() => focusSoon(`${WHATIF_ID}-title`)}>
                   See it in What if
                 </Button>
@@ -193,7 +194,7 @@ function FreeText({
         description={`Runs live with ${tierLabel(tier)}, ${cost} a question.${conversation ? ' It continues the conversation shown above.' : ''}`}
         autosize
         minRows={2}
-        maxLength={500}
+        maxLength={2000}
         value={text}
         onChange={(e) => setText(e.currentTarget.value)}
       />
@@ -238,9 +239,18 @@ export function AskPanel({ caseId }: { caseId: string }) {
   const [chosen, setChosen] = useState<string>();
   // The example conversation is shown first: the scenario's first one, else the first asked here
   const shown = chosen ?? conversations[0]?.id ?? asked[0]?.conversation;
-  const thread = asked.filter((q) => q.conversation === shown).sort((a, b) => a.turn - b.turn);
   const askedTurn = (conversation: string, turn: number) =>
-    asked.find((q) => q.conversation === conversation && q.turn === turn);
+    asked.filter((q) => q.conversation === conversation && q.turn === turn).at(-1);
+  // A chip is linked to its stored question by the suggested route's `asked`; a refused or failed one can be asked again
+  const chipAsked = (conversation: string, t: SuggestedTurn) =>
+    t.asked && t.asked.state !== 'failed' && t.asked.state !== 'schema_failed'
+      ? (asked.find((q) => q.questionId === t.asked?.questionId) ?? askedTurn(conversation, t.turn))
+      : undefined;
+
+  // Each turn shows its newest question: asking a refused or failed turn again replaces it
+  const thread = asked
+    .filter((q) => q.conversation === shown && askedTurn(q.conversation, q.turn)?.questionId === q.questionId)
+    .sort((a, b) => a.turn - b.turn);
 
   // After asking, focus moves to the new turn's heading once the list has it and the conversation is shown
   const pending = useRef<string | undefined>(undefined);
@@ -260,18 +270,12 @@ export function AskPanel({ caseId }: { caseId: string }) {
 
   const choose = (conversation: string, t: SuggestedTurn) => {
     setChosen(conversation);
-    if (askedTurn(conversation, t.turn)) {
+    if (chipAsked(conversation, t)) {
       focusSoon(turnId({ conversation, turn: t.turn }));
       return;
     }
     ask.mutate(
-      {
-        ask: {
-          tier: t.tier,
-          suggested: { conversation, turn: t.turn },
-          ...(t.turn > 1 ? { conversation } : {}),
-        },
-      },
+      { ask: { tier: t.tier, suggested: { conversation, turn: t.turn } } },
       { onSuccess: (r) => onAsked(r.conversation, r.turn) },
     );
   };
@@ -280,11 +284,14 @@ export function AskPanel({ caseId }: { caseId: string }) {
   const chips = (forTier: QuestionTier) =>
     conversations.flatMap((c) =>
       c.turns
-        .filter((t) => t.tier === forTier && (t.turn === 1 || !!askedTurn(c.id, t.turn - 1)))
+        .filter(
+          (t) =>
+            t.tier === forTier &&
+            (t.turn === 1 || c.turns.some((p) => p.turn === t.turn - 1 && !!chipAsked(c.id, p))),
+        )
         .map((t) => ({ conversation: c.id, t })),
     );
 
-  const thisTurnAsked = (conversation: string, turn: number) => !!askedTurn(conversation, turn);
   const example = shown === conversations[0]?.id && thread.length > 0;
   const head = thread[0];
   const badge = answersBadge(asked);
@@ -334,7 +341,7 @@ export function AskPanel({ caseId }: { caseId: string }) {
               ) : chips(t.value).length ? (
                 <Group gap="xs" role="group" aria-labelledby={`ask-chips-${t.value}`}>
                   {chips(t.value).map(({ conversation, t: turn }) => {
-                    const done = thisTurnAsked(conversation, turn.turn);
+                    const done = !!chipAsked(conversation, turn);
                     const current = done && conversation === shown;
                     return (
                       <Button

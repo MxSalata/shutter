@@ -18,6 +18,10 @@ export interface SuggestedChange {
   to: string | boolean;
   why?: string;
   affects?: string[];
+  /** The server's verdict on the change (CONTRACTS 14.1): no draft is offered when it is not valid or is stale. */
+  valid?: boolean;
+  problem?: string;
+  stale?: boolean;
 }
 
 /** What the address carries: the case and the fact, nothing else. */
@@ -30,15 +34,19 @@ export const SUGGEST_PARAM = 'suggest';
 export const FACT_PARAM = 'fact';
 
 export function suggestionFromFact(caseId: string, f: WhatIfFact): SuggestedChange {
+  const c = f.suggested_change;
   return {
     caseId,
     fact: f.id,
-    field: f.field,
-    ...(f.receiver ? { receiver: f.receiver } : {}),
-    from: f.from,
-    to: f.to,
-    why: f.would,
-    affects: f.affects,
+    field: c.field,
+    ...(c.receiver ? { receiver: c.receiver } : {}),
+    from: c.from,
+    to: c.to,
+    why: c.why,
+    affects: c.affects,
+    valid: c.valid,
+    ...(c.problem ? { problem: c.problem } : {}),
+    stale: c.stale,
   };
 }
 
@@ -155,7 +163,7 @@ export type Applied =
   | { ok: true; profile: SiteProfile }
   | {
       ok: false;
-      reason: 'unsupported' | 'no_receiver' | 'stale' | 'already' | 'no_fact' | 'unreadable';
+      reason: 'unsupported' | 'no_receiver' | 'stale' | 'already' | 'no_fact' | 'unreadable' | 'invalid';
       current?: unknown;
     };
 
@@ -165,6 +173,9 @@ export type Applied =
  * already holds `to`; both compared as the server reads them.
  */
 export function applySuggestion(profile: SiteProfile, s: SuggestedChange): Applied {
+  // The server validated the change against a copy of the profile and checked its `from`: its verdict comes first
+  if (s.valid === false) return { ok: false, reason: 'invalid' };
+  if (s.stale === true) return { ok: false, reason: 'stale', current: undefined };
   const next = JSON.parse(JSON.stringify(profile)) as SiteProfile;
   const at = locate(next, s);
   if (typeof at === 'string') return { ok: false, reason: at };

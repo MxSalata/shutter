@@ -28,25 +28,32 @@ export const MEMBER_NAMES: Record<string, string> = {
 
 const day = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
+/** Whether the server marks the answer as a recorded one (mode `replay`). */
+const isRecorded = (q: CaseQuestion) => q.mode === 'replay';
+
 /**
- * Where an answer came from, in a sentence: sample data in the demo until the re-record, the recording's date and model
- * when it is one, or a live answer.
+ * Where an answer came from, in a sentence: sample data in the demo until the re-record, a recorded answer with its
+ * date and model, or a live answer. The date is `recordedAt` when the question carries it (the server does not send it
+ * yet), otherwise `answeredAt`.
  */
 export function provenanceText(q: CaseQuestion): string {
   if (DEMO && !DEMO_ANSWERS_RECORDED) return SAMPLE_LABEL;
-  const at = parseTime(q.recording?.recordedAt);
-  if (q.recording && at) return `Recorded live on ${day.format(at)} with ${q.recording.model}`;
+  if (isRecorded(q)) {
+    const at = parseTime(q.recordedAt ?? q.answeredAt);
+    if (at && q.model) return `Recorded live on ${day.format(at)} with ${q.model}`;
+    if (at) return `Recorded live on ${day.format(at)}`;
+    return 'Recorded answer';
+  }
   if (q.source === 'free') return 'Answered live';
   return 'Answered';
 }
 
 /**
  * The badge beside the suggested questions, from the same source as each answer's provenance: sample answers in the
- * demo until the re-record, recorded answers only when an answer shown carries its recording, otherwise none.
+ * demo until the re-record, recorded answers only when an answer shown is a replay, otherwise none.
  */
 export function answersBadge(asked: CaseQuestion[]): string | null {
   if (DEMO && !DEMO_ANSWERS_RECORDED) return 'Sample answers';
-  if (asked.some((q) => q.source === 'suggested' && !!q.recording && !!parseTime(q.recording.recordedAt)))
-    return 'Recorded answers';
+  if (asked.some((q) => q.source === 'suggested' && isRecorded(q))) return 'Recorded answers';
   return null;
 }

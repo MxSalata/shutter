@@ -26,6 +26,7 @@ const outcomeWords = (o: string) => OUTCOME_WORDS[o] ?? humanize(o).toLowerCase(
 
 /** Today: the entry the case matched and what it gave, from the facts, never from an answer's text. */
 function todayText(w: WhatIf): string {
+  if (!w.entry) return 'The case matched no catalogue entry.';
   const disposition = dispositionWords(w.disposition);
   return `The case matched catalogue entry ${w.entry}, whose outcome here is ${outcomeWords(w.outcome)}${disposition ? `; the plan proposed ${disposition}` : ''}.`;
 }
@@ -59,8 +60,10 @@ function Fact({
   named: boolean;
 }) {
   const setting = fieldLabel(f.field, f.receiver);
-  const from = valueLabel(f.field, f.from);
-  const to = valueLabel(f.field, f.to);
+  const c = f.suggested_change;
+  const now = valueLabel(f.field, f.current);
+  const from = valueLabel(c.field, c.from);
+  const to = valueLabel(c.field, c.to);
   const titleId = `${WHATIF_ID}-${f.id}`;
   return (
     <Stack gap="sm" component="section" aria-labelledby={titleId}>
@@ -70,7 +73,7 @@ function Fact({
         </Title>
         <Text size="sm">
           Site profile setting <Code>{f.field}</Code>
-          {f.receiver ? ` of ${f.receiver}` : ''} is now {from}.
+          {f.receiver ? ` of ${f.receiver}` : ''} is now {now}.
         </Text>
       </Stack>
       <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm">
@@ -78,7 +81,7 @@ function Fact({
           <Text fw={600} size="sm">
             Today
           </Text>
-          <Text size="sm">{factToday(w, f, setting, from)}</Text>
+          <Text size="sm">{factToday(w, f, setting, now)}</Text>
         </Card>
         <Card withBorder padding="sm">
           <Text fw={600} size="sm">
@@ -100,18 +103,23 @@ function Fact({
           Suggested change: set {setting.charAt(0).toLowerCase() + setting.slice(1)} from {from} to {to}.
           {named ? ' The board names this change in its answer above.' : ''}
         </Text>
-        {f.affects.length ? (
+        {c.why ? <Text size="sm">{c.why}</Text> : null}
+        {c.affects.length ? (
           <>
             <Text size="sm">It would apply to:</Text>
             <List size="sm" spacing={2}>
-              {f.affects.map((a) => (
+              {c.affects.map((a) => (
                 <List.Item key={a}>{a}</List.Item>
               ))}
             </List>
           </>
         ) : null}
       </Stack>
-      {f.stale ? (
+      {!c.valid ? (
+        <StatusNotice tone="attention" title="This change would not be accepted">
+          {c.problem || 'The site profile would refuse it.'} No draft is offered.
+        </StatusNotice>
+      ) : c.stale ? (
         <StatusNotice tone="attention" title="The profile has changed since">
           The site profile no longer holds {from} for this setting, so this change would not apply as it
           stands. Ask again to read the facts against the current profile.
@@ -169,9 +177,9 @@ export function WhatIfCard({ caseId, named }: { caseId: string; named?: string }
           <Title order={3} fz="md" id={`${WHATIF_ID}-title`} tabIndex={-1}>
             What if: the setting behind this outcome
           </Title>
-          {w.profileVersion !== undefined ? (
+          {w.profile_version !== undefined ? (
             <Text size="xs" c="dimmed">
-              Worked out from the case&apos;s evidence and site profile version {w.profileVersion}, without a
+              Worked out from the case&apos;s evidence and site profile version {w.profile_version}, without a
               model.
             </Text>
           ) : null}
@@ -182,8 +190,10 @@ export function WhatIfCard({ caseId, named }: { caseId: string; named?: string }
           <Stack gap={6}>
             <StatusBadge tone="neutral" label="No setting changes this outcome" w="fit-content" />
             <Text size="sm">
-              {todayText(w)} Catalogue entry {w.entry} has no alternative that a site profile setting selects,
-              so the outcome does not turn on the profile.
+              {todayText(w)}{' '}
+              {w.entry
+                ? `Catalogue entry ${w.entry} has no alternative that a site profile setting selects, so the outcome does not turn on the profile.`
+                : 'So the outcome does not turn on the profile.'}
             </Text>
           </Stack>
         )}

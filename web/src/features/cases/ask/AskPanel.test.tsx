@@ -9,7 +9,7 @@ import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
 import { theme } from '@/theme';
 import CasePage from '../CasePage';
-import type { CaseQuestion } from '@/api/types';
+import type { CaseQuestion, WhatIfFact } from '@/api/types';
 import { SAMPLE_LABEL, answersBadge, provenanceText } from './labels';
 import { WhatIfCard } from './WhatIfCard';
 
@@ -30,6 +30,44 @@ vi.mock('./recorded', () => ({
 }));
 
 const BASE = '/api/shutter';
+
+/** A what-if fact as CONTRACTS 14.1 gives it, with the suggested change made from the same field and values. */
+function fact(
+  f: Pick<WhatIfFact, 'id' | 'kind' | 'field' | 'from' | 'to' | 'would' | 'affects'> & Partial<WhatIfFact>,
+  change: Partial<WhatIfFact['suggested_change']> = {},
+): WhatIfFact {
+  return {
+    role: 'alternative',
+    flag: f.field,
+    current: f.from,
+    holds_now: false,
+    ...f,
+    suggested_change: {
+      field: f.field,
+      ...(f.receiver ? { receiver: f.receiver } : {}),
+      from: f.from,
+      to: f.to,
+      why: `Set ${f.field} so the other case applies.`,
+      affects: f.affects,
+      valid: true,
+      stale: false,
+      ...change,
+    },
+  };
+}
+
+const whatif = (entry: string, outcome: string, disposition: string, facts: WhatIfFact[]) => ({
+  case_id: 'C-000008',
+  receiver: 'Downstream Out',
+  category: 'current_state',
+  entry,
+  outcome,
+  outcome_ref: 'preferred',
+  disposition,
+  profile_version: 9,
+  note: '',
+  facts,
+});
 let posts: { path: string; body: unknown }[] = [];
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
@@ -253,7 +291,7 @@ describe('Ask about this case', () => {
     expect(within(thread).getAllByRole('article')).toHaveLength(3);
   });
 
-  it('shows a scenario with no suggested questions plainly, and no card when there are no facts', async () => {
+  it('shows a scenario with no suggested questions plainly, and a card that says no setting changes the outcome', async () => {
     renderCase('C-000009');
     const p = await panel();
     expect(
@@ -261,7 +299,8 @@ describe('Ask about this case', () => {
         "This case's scenario has no suggested questions yet.",
       ),
     ).toBeInTheDocument();
-    await waitFor(() => expect(within(p).queryByRole('region', { name: /What if/ })).not.toBeInTheDocument());
+    const card = await within(p).findByRole('region', { name: 'What if: the setting behind this outcome' });
+    expect(within(card).getByText('No setting changes this outcome')).toBeInTheDocument();
   });
 });
 
@@ -278,6 +317,14 @@ describe('where the answers came from', () => {
     answer: null,
     askedBy: 'approver',
     askedAt: '2026-10-25T10:00:00Z',
+    answeredAt: '2026-10-25T10:00:00Z',
+    error: null,
+    mode: null,
+    model: null,
+    costUsd: null,
+    runs: 0,
+    recordKey: null,
+    ensMessageId: null,
     ...over,
   });
   const chipsBadge = (p: HTMLElement) =>
@@ -291,23 +338,27 @@ describe('where the answers came from', () => {
     expect(within(thread).getAllByText(/Example \(sample data\)\./).length).toBeGreaterThan(0);
     await userEvent.keyboard('{Escape}');
 
-    // Flipped: the sample answers are no longer called samples, and none is called recorded without a recording
+    // Flipped: the sample answers are replays now, so they are no longer called samples but recorded answers
     recorded.value = true;
     await userEvent.click(screen.getByRole('button', { name: 'Ask about this case' }));
     p = await panel();
     thread = await within(p).findByRole('region', { name: 'Example conversation' });
     expect(within(thread).queryByText(/Example \(sample data\)/)).not.toBeInTheDocument();
-    expect(chipsBadge(p)).not.toBeInTheDocument();
+    expect(chipsBadge(p)).toHaveTextContent('Recorded answers');
   });
 
-  it('calls answers recorded only when one carries its recording', () => {
+  it('calls answers recorded only when the server marks one as a replay', () => {
     demo.value = false;
-    const replayed = question({ recording: null });
-    const live = question({ recording: { recordedAt: '2026-10-25T10:00:00Z', model: 'model-x' } });
-    expect(answersBadge([replayed])).toBeNull();
-    expect(provenanceText(replayed)).toBe('Answered');
-    expect(answersBadge([replayed, live])).toBe('Recorded answers');
+    const stored = question({ mode: 'live', model: 'model-x' });
+    const live = question({ mode: 'replay', model: 'model-x', answeredAt: '2026-10-25T10:00:00Z' });
+    expect(answersBadge([stored])).toBeNull();
+    expect(provenanceText(stored)).toBe('Answered');
+    expect(answersBadge([stored, live])).toBe('Recorded answers');
     expect(provenanceText(live)).toBe('Recorded live on 25 October 2026 with model-x');
+    // The server does not send recordedAt yet; when it does, it is the date
+    expect(provenanceText({ ...live, recordedAt: '2026-10-20T10:00:00Z' })).toBe(
+      'Recorded live on 20 October 2026 with model-x',
+    );
     demo.value = true;
     expect(answersBadge([live])).toBe('Sample answers');
     expect(provenanceText(live)).toBe(SAMPLE_LABEL);
@@ -335,12 +386,9 @@ describe('WhatIfCard', () => {
   it('reads every word of the setting from the API', async () => {
     server.use(
       http.get(`${BASE}/cases/:id/whatif`, () =>
-        HttpResponse.json({
-          entry: 'E1',
-          outcome: 'none',
-          disposition: 'superseded',
-          facts: [
-            {
+        HttpResponse.json(
+          whatif('E1', 'none', 'superseded', [
+            fact({
               id: 'W2',
               kind: 'alternative',
               field: 'receivers[].category',
@@ -348,15 +396,16 @@ describe('WhatIfCard', () => {
               from: 'current_state',
               to: 'history_of_record',
               alternative: {
+                n: 1,
                 outcome: 'correct_history',
                 disposition: 'escalate',
                 when: 'history_policy: correct',
               },
               would: 'The case would have escalated with the correcting steps.',
               affects: ['an overtaken transfer at this receiver'],
-            },
-          ],
-        }),
+            }),
+          ]),
+        ),
       ),
     );
     renderCard();
@@ -372,22 +421,20 @@ describe('WhatIfCard', () => {
   it("states a policy fact's value today and what the other value would do (the handoff's W3)", async () => {
     server.use(
       http.get(`${BASE}/cases/:id/whatif`, () =>
-        HttpResponse.json({
-          entry: 'E3',
-          outcome: 'resend',
-          disposition: 'resend',
-          facts: [
-            {
+        HttpResponse.json(
+          whatif('E3', 'resend', 'resend', [
+            fact({
               id: 'W3',
               kind: 'policy',
+              role: 'policy',
               field: 'policy.2.single',
               from: 'automatic',
               to: 'approval',
               would: 'An approver would have been asked before the resend',
               affects: ['every tier 2 single case'],
-            },
-          ],
-        }),
+            }),
+          ]),
+        ),
       ),
     );
     renderCard();
@@ -412,30 +459,40 @@ describe('WhatIfCard', () => {
     );
   });
 
-  it('offers no draft for a stale fact, and says why', async () => {
+  const authoritative = (change: Partial<WhatIfFact['suggested_change']>) =>
     server.use(
       http.get(`${BASE}/cases/:id/whatif`, () =>
-        HttpResponse.json({
-          entry: 'E7',
-          outcome: 'escalate',
-          disposition: 'escalate',
-          facts: [
-            {
-              id: 'W1',
-              kind: 'alternative',
-              field: 'authoritative_source',
-              from: '',
-              to: 'BEDMGR',
-              would: 'It would close with nothing written.',
-              affects: [],
-              stale: true,
-            },
-          ],
-        }),
+        HttpResponse.json(
+          whatif('E7', 'escalate', 'escalate', [
+            fact(
+              {
+                id: 'W1',
+                kind: 'alternative',
+                field: 'authoritative_source',
+                from: '',
+                to: 'BEDMGR',
+                would: 'It would close with nothing written.',
+                affects: [],
+              },
+              change,
+            ),
+          ]),
+        ),
       ),
     );
+
+  it('offers no draft for a stale change, and says why', async () => {
+    authoritative({ stale: true });
     renderCard();
     expect(await screen.findByText('The profile has changed since')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Open in Site profile' })).not.toBeInTheDocument();
+  });
+
+  it('offers no draft for a change the server finds invalid, and shows its problem', async () => {
+    authoritative({ valid: false, problem: 'authoritative_source must name a source system the site feeds' });
+    renderCard();
+    expect(await screen.findByText('This change would not be accepted')).toBeInTheDocument();
+    expect(screen.getByText(/must name a source system the site feeds/)).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Open in Site profile' })).not.toBeInTheDocument();
   });
 });

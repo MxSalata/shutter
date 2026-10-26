@@ -34,7 +34,8 @@ import {
   type RunStarted,
   type AgentRun,
   type AskQuestion,
-  type CaseQuestion,
+  type CaseQuestionDetail,
+  type CaseQuestions,
   type QuestionAsked,
   type QuestionState,
   type SuggestedQuestions,
@@ -656,7 +657,7 @@ export function useRemoveAnnotation() {
 
 /** A question still waiting for its answer: the list is read again every 2 s until none is. */
 export function isAnswering(state: QuestionState | string | undefined): boolean {
-  return state === 'queued' || state === 'running';
+  return state === 'pending' || state === 'answering';
 }
 
 /** The deterministic What-if card (GET /cases/{id}/whatif): no model, so it reads the same with no key. */
@@ -664,20 +665,18 @@ export function useWhatIf(caseId: string, enabled = true) {
   return useCasePart<WhatIf>(caseId, 'whatif', '/whatif', false, enabled);
 }
 
-/** The recorded conversations of the case's scenario; null when the scenario has none. */
+/** The recorded conversations of the case's scenario; `conversations` is empty when it has none. */
 export function useSuggestedQuestions(caseId: string, enabled = true) {
   return useQuery({
     queryKey: keys.suggested(caseId),
     enabled,
     staleTime: 60_000,
-    queryFn: async (): Promise<SuggestedQuestions | null> => {
-      try {
-        return await api.get<SuggestedQuestions>(`/cases/${seg(caseId)}/questions/suggested`);
-      } catch (e) {
-        if (isApiError(e) && e.isNotFound) return null;
-        throw e;
-      }
-    },
+    queryFn: () => api.get<SuggestedQuestions>(`/cases/${seg(caseId)}/questions/suggested`),
+    // A chip's `asked` follows its question's state, so the list is read again while an answer is awaited
+    refetchInterval: (q) =>
+      q.state.data?.conversations.some((c) => c.turns.some((t) => t.asked && isAnswering(t.asked.state)))
+        ? 2_000
+        : false,
   });
 }
 
@@ -686,7 +685,7 @@ export function useCaseQuestions(caseId: string, enabled = true) {
   return useQuery({
     queryKey: keys.questions(caseId),
     enabled,
-    queryFn: () => api.get<{ items: CaseQuestion[] }>(`/cases/${seg(caseId)}/questions`),
+    queryFn: () => api.get<CaseQuestions>(`/cases/${seg(caseId)}/questions`),
     refetchInterval: (q) => (q.state.data?.items.some((x) => isAnswering(x.state)) ? 2_000 : false),
   });
 }
@@ -695,7 +694,7 @@ export function useCaseQuestions(caseId: string, enabled = true) {
 export function useCaseQuestion(caseId: string, questionId: string) {
   return useQuery({
     queryKey: keys.question(caseId, questionId),
-    queryFn: () => api.get<CaseQuestion>(`/cases/${seg(caseId)}/questions/${seg(questionId)}`),
+    queryFn: () => api.get<CaseQuestionDetail>(`/cases/${seg(caseId)}/questions/${seg(questionId)}`),
     refetchInterval: (q) => (isAnswering(q.state.data?.state) ? 2_000 : false),
   });
 }
@@ -710,6 +709,7 @@ export function useAskQuestion(caseId: string) {
       }),
     onSettled: async () => {
       await client.invalidateQueries({ queryKey: keys.questions(caseId) });
+      await client.invalidateQueries({ queryKey: keys.suggested(caseId) });
     },
   });
 }

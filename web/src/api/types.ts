@@ -1000,7 +1000,7 @@ export type Health = Record<string, unknown> & {
   demo?: boolean;
 };
 
-// ---- asking about a case (the case-chat design of 25 Oct; CONTRACTS 14 once the server has it) ----
+// ---- asking about a case (CONTRACTS 14: the deterministic card, the questions and their routes) ----
 
 /** The two tiers: one agent in plain words, or the three specialists and the coordinator. */
 export type QuestionTier = 'explain' | 'board';
@@ -1011,17 +1011,36 @@ export interface QuestionRef {
   turn: number;
 }
 
-/** One turn of a suggested conversation, as knowledge/questions/<S>.json writes it. */
+export type QuestionState = 'pending' | 'answering' | 'answered' | 'schema_failed' | 'failed';
+
+/** One turn of a suggested conversation, as knowledge/questions/<S>.json writes it, with the question asked for it. */
 export interface SuggestedTurn {
   turn: number;
   tier: QuestionTier;
   text: string;
+  /** The newest question asked for this turn and its state, or null when none has been. */
+  asked: { questionId: string; state: QuestionState } | null;
 }
 
-/** GET /cases/{id}/questions/suggested: the scenario's recorded conversations (knowledge/questions/<S>.json). */
+/** GET /cases/{id}/questions/suggested; `conversations` is empty for a case with no scenario or no file (not a 404). */
 export interface SuggestedQuestions {
   scenario: string;
   conversations: { id: string; turns: SuggestedTurn[] }[];
+}
+
+/** A change to one profile field, validated by the server against a copy of the profile (14.1). */
+export interface SuggestedProfileChange {
+  field: string;
+  receiver?: string;
+  from: string | boolean | null;
+  to: string | boolean;
+  why: string;
+  affects: string[];
+  /** False when the validator refuses the change: no draft is offered, and `problem` says why. */
+  valid: boolean;
+  problem?: string;
+  /** True when `from` no longer matches the profile: no draft is offered. */
+  stale: boolean;
 }
 
 /**
@@ -1033,30 +1052,40 @@ export interface WhatIfFact {
   id: string;
   /** alternative: a catalogue alternative's `when`; policy: the tier's approval policy, or a receiver's cancels or merges. */
   kind: 'alternative' | 'policy' | string;
-  /** The profile field: authoritative_source, history_policy, receivers[].category, policy.2.single... */
+  /** setting: the setting behind the outcome (its change undoes it); alternative: what would make the alternative apply. */
+  role: 'setting' | 'alternative' | 'policy' | string;
+  flag: string;
+  /** The profile field: authoritative_source, receivers[].history_policy, policy.2.single... */
   field: string;
   /** For a receivers[] field: the receiver's name. */
   receiver?: string;
+  current: string | boolean | null;
   from: string | boolean | null;
   to: string | boolean;
-  alternative?: { outcome: string; disposition?: string; when?: string };
+  /** Whether the alternative's condition holds now. */
+  holds_now: boolean;
   /** What the case would have done under the other value, in a sentence. */
   would: string;
+  alternative?: { n: number; outcome: string; disposition?: string; when?: string; why?: string };
   /** The kinds of case the change would reach. */
   affects: string[];
-  /** Set when `from` is no longer the profile's current value: the change would not apply as it stands. */
-  stale?: boolean;
+  suggested_change: SuggestedProfileChange;
 }
 
-/** GET /cases/{id}/whatif: the deterministic card, no model. */
+/** GET /cases/{id}/whatif: the deterministic card, no model; 404 not_found only for an unknown case. */
 export interface WhatIf {
+  case_id: string;
+  receiver: string;
+  category: string;
   /** The matched catalogue entry, and the outcome and disposition the case has now. */
   entry: string;
   outcome: string;
+  outcome_ref: string;
   disposition: string;
-  facts: WhatIfFact[];
   /** The site profile version the facts were computed against. */
-  profileVersion?: number;
+  profile_version: number;
+  note: string;
+  facts: WhatIfFact[];
 }
 
 /** Shutter.Schema.Answer: what the Explain agent, and each board member, submits. */
@@ -1067,46 +1096,79 @@ export interface Answer {
   confidence: 'high' | 'medium' | 'low' | string;
 }
 
-/** Shutter.Schema.BoardAnswer: the coordinator's synthesis; the setting and the change name a fact, never a value. */
+/** Shutter.Schema.BoardAnswer: the coordinator's synthesis; the fact references are W ids, never values. */
 export interface BoardAnswer extends Answer {
   perspectives: { member: string; view: string }[];
-  setting?: { fact: string };
-  under_alternative?: { fact: string };
-  suggested_change?: { fact: string; why: string };
+  setting?: { fact: string; why?: string };
+  under_alternative?: { fact: string; why?: string };
+  suggested_change?: { fact: string; why?: string };
 }
 
-export type QuestionState = 'queued' | 'running' | 'answered' | 'schema_failed' | 'failed';
-
-/** A question's agent run, as the costs page counts it. */
-export interface QuestionRun {
+/** A question's agent run, as GET /cases/{id}/questions/{qid} lists it. */
+export interface QuestionAgentRun {
+  runId: string;
+  role: string;
   member: string;
+  status: string;
+  mode: 'live' | 'record' | 'replay' | string | null;
   model: string | null;
-  mode: 'live' | 'record' | 'replay' | string;
-  promptTokens: number | null;
-  completionTokens: number | null;
   costUsd: number | null;
+  durationMs: number | null;
+  ensMessageId: string | null;
+  error: string | null;
 }
 
-/** GET /cases/{id}/questions/{qid}: one turn of a conversation and its answer. */
+/** GET /cases/{id}/questions: one turn of a conversation and its answer (14.5). */
 export interface CaseQuestion {
   questionId: string;
   caseId: string;
   conversation: string;
   turn: number;
   tier: QuestionTier;
-  /** suggested: a turn of the scenario's file, replayed from its recording when there is one; free: live only. */
+  /** suggested: a turn of the scenario's file, recorded and replayable; free: live only. */
   source: 'suggested' | 'free';
   question: string;
   state: QuestionState;
-  answer: Answer | BoardAnswer | null;
-  /** Why the answer was refused (schema_failed) or the run failed. */
-  error?: string;
-  /** For a replayed answer: when it was recorded live, and with which model. */
-  recording?: { recordedAt: string; model: string } | null;
-  runs?: QuestionRun[];
   askedBy: string;
   askedAt: string;
-  answeredAt?: string | null;
+  /** Null until set. */
+  answeredAt: string | null;
+  /** Why the answer was refused (schema_failed) or the run failed. */
+  error: string | null;
+  /** `replay` marks a recorded answer. */
+  mode: 'live' | 'record' | 'replay' | string | null;
+  model: string | null;
+  costUsd: number | null;
+  runs: number;
+  recordKey: string | null;
+  ensMessageId: string | null;
+  /** The accepted answer, null until answered. */
+  answer: Answer | BoardAnswer | null;
+  /**
+   * When a replayed answer was recorded live. The server does not send this yet: the provenance label reads it if it
+   * is present and otherwise answeredAt.
+   */
+  recordedAt?: string | null;
+}
+
+/** GET /cases/{id}/questions: oldest first. */
+export interface CaseQuestions {
+  items: CaseQuestion[];
+  total: number;
+}
+
+/** GET /cases/{id}/questions/{qid}: the list's fields and what the answer was made from. */
+export interface CaseQuestionDetail extends CaseQuestion {
+  /** The what-if facts as handed to the agents. */
+  facts: WhatIfFact[];
+  memberAnswers: { member: string; status: string; answer?: Answer; error?: string }[];
+  /** What the core resolved from its own facts (14.4), never from the agent's text. */
+  resolved: {
+    setting?: WhatIfFact;
+    under_alternative?: WhatIfFact;
+    suggested_change?: SuggestedProfileChange;
+  };
+  agentRuns: QuestionAgentRun[];
 }
 
 /** POST /cases/{id}/questions: a fresh question, or a suggested turn, in a conversation (a new one when none is named). */
@@ -1119,4 +1181,8 @@ export interface QuestionAsked {
   questionId: string;
   conversation: string;
   turn: number;
+  tier: QuestionTier;
+  source: 'suggested' | 'free';
+  state: QuestionState;
+  askedBy: string;
 }

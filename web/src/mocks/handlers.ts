@@ -31,7 +31,15 @@ import {
 import { digest, draftEscalation, teamFor } from './escalation';
 import { freshHolds, heldView, type CaseFixture, type Hold } from './hold';
 import { recordedSiteProfile, recordedSiteProfileHistory } from './profile';
-import { resetQuestionIds, sampleQuestion, startingQuestions, suggestedFor, whatIfFor } from './questions';
+import {
+  questionDetail,
+  resetQuestionIds,
+  sampleQuestion,
+  startingQuestions,
+  suggestedFor,
+  suggestedWithAsked,
+  whatIfFor,
+} from './questions';
 
 /**
  * An in-browser stand-in for Shutter's REST API (CONTRACTS 5), for the demo build, development
@@ -792,65 +800,84 @@ export const handlers = [
     });
   }),
 
-  // Asking about a case (the case-chat design): reading needs a session, asking the operator role; nothing is written
-  // to the case, the receiver or the profile. A question in the asker's own words runs live only, and the demo has no key.
+  // Asking about a case (CONTRACTS 14): reading needs a session, asking the operator role; nothing is written to the
+  // case, the receiver or the profile. A question in the asker's own words runs live only, and the demo has no key.
   http.get(`${BASE}/cases/:id/whatif`, ({ params }) => {
     if (!session) return signedOut();
     const id = String(params.id);
     if (!caseOf(id)) return error(404, 'not_found', `No case ${id}`);
-    const w = whatIfFor(id);
-    return w ? HttpResponse.json(w) : error(404, 'no_whatif', `No what-if facts for ${id}`);
+    return HttpResponse.json(whatIfFor(id));
   }),
   http.get(`${BASE}/cases/:id/questions/suggested`, ({ params }) => {
     if (!session) return signedOut();
     const id = String(params.id);
     if (!caseOf(id)) return error(404, 'not_found', `No case ${id}`);
-    const s = suggestedFor(id);
-    return s
-      ? HttpResponse.json(s)
-      : error(404, 'no_questions', `No suggested questions for ${id}'s scenario`);
+    return HttpResponse.json(suggestedWithAsked(id, questionsOf(id)));
   }),
   http.get(`${BASE}/cases/:id/questions`, ({ params }) => {
     if (!session) return signedOut();
     const id = String(params.id);
     if (!caseOf(id)) return error(404, 'not_found', `No case ${id}`);
-    return HttpResponse.json({ items: questionsOf(id) });
+    const items = questionsOf(id);
+    return HttpResponse.json({ items, total: items.length });
   }),
   http.get(`${BASE}/cases/:id/questions/:qid`, ({ params }) => {
     if (!session) return signedOut();
     const id = String(params.id);
     const q = caseOf(id) ? questionsOf(id).find((x) => x.questionId === params.qid) : undefined;
-    return q ? HttpResponse.json(q) : error(404, 'not_found', `No question ${String(params.qid)}`);
+    return q
+      ? HttpResponse.json(questionDetail(q))
+      : error(404, 'not_found', `No question ${String(params.qid)}`);
   }),
   http.post(`${BASE}/cases/:id/questions`, async ({ request, params }) => {
     const denied = csrf(request) ?? guard('operator');
     if (denied) return denied;
     const id = String(params.id);
     if (!caseOf(id)) return error(404, 'not_found', `No case ${id}`);
-    const body = (await request.json()) as Partial<AskQuestion>;
-    if (body.tier !== 'explain' && body.tier !== 'board')
-      return error(400, 'invalid_request', 'tier must be explain or board');
+    const body = (await request.json().catch(() => null)) as Partial<AskQuestion> | null;
+    if (!body || (body.tier !== undefined && body.tier !== 'explain' && body.tier !== 'board'))
+      return error(400, 'bad_request', 'tier must be explain or board');
+    if (typeof body.conversation === 'string' && body.conversation.length > 64)
+      return error(400, 'bad_request', 'conversation is over 64 characters');
+    if (typeof body.question === 'string' && (!body.question.trim() || body.question.length > 2000))
+      return error(400, 'bad_request', 'question is 1 to 2000 characters');
+    if (!body.suggested && typeof body.question !== 'string')
+      return error(400, 'bad_request', 'a question or a suggested turn is needed');
+    if (!body.suggested && !body.tier) return error(400, 'bad_request', 'tier must be explain or board');
     if (!body.suggested)
+      // The demo has no model key, so a question in the asker's own words cannot be answered
       return error(
-        409,
-        'live_only',
-        'A question in your own words runs live, and no model key is configured here',
+        503,
+        'no_service',
+        'No model key is configured here, so a free question cannot be answered',
       );
     const { conversation, turn } = body.suggested;
-    // The turn's tier is the file's: a suggested turn asked in another tier has no recording
     const fileTurn = suggestedFor(id)
       ?.conversations.find((c) => c.id === conversation)
       ?.turns.find((t) => t.turn === turn);
-    if (!fileTurn || fileTurn.tier !== body.tier)
-      return error(404, 'no_recording', `No recorded answer for ${conversation} turn ${turn}`);
+    if (!fileTurn)
+      return error(404, 'unknown_suggested', `No suggested turn ${conversation}.${String(turn)}`);
     const list = questionsOf(id);
-    const done = list.find((q) => q.conversation === conversation && q.turn === turn);
-    if (done) return HttpResponse.json({ questionId: done.questionId, conversation, turn }, { status: 202 });
+    const done = list.filter((q) => q.conversation === conversation && q.turn === turn).at(-1);
+    const reply = (q: CaseQuestion) =>
+      HttpResponse.json(
+        {
+          questionId: q.questionId,
+          conversation,
+          turn,
+          tier: q.tier,
+          source: q.source,
+          state: q.state,
+          askedBy: q.askedBy,
+        },
+        { status: 202 },
+      );
+    if (done) return reply(done);
     const q = sampleQuestion(id, conversation, turn, session!.username, stamp());
-    if (!q) return error(404, 'no_recording', `No recorded answer for ${conversation} turn ${turn}`);
+    if (!q) return error(404, 'unknown_suggested', `No suggested turn ${conversation}.${String(turn)}`);
     await delay();
     list.push(q);
-    return HttpResponse.json({ questionId: q.questionId, conversation, turn }, { status: 202 });
+    return reply(q);
   }),
 
   http.get(`${BASE}/incidents`, ({ request }) => {

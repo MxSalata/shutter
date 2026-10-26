@@ -12,7 +12,11 @@ function refusal(caseId: string, s: SuggestedChange | undefined, r: Exclude<Appl
       : `Case ${caseId} has no such What-if fact now, so nothing was pre-filled. Open the case again for its current facts.`;
   const label = fieldLabel(s.field, s.receiver);
   switch (r.reason) {
+    case 'invalid':
+      return `The site profile would refuse this change${s.problem ? `: ${s.problem}` : ''}. Nothing was pre-filled.`;
     case 'stale':
+      if (r.current === undefined)
+        return `The profile has changed since the suggestion was made: ${label.toLowerCase()} no longer holds ${valueLabel(s.field, s.from)}. Nothing was pre-filled; open the case again for facts read against the current profile.`;
       return `The profile has changed since the suggestion was made: ${label.toLowerCase()} is now ${valueLabel(s.field, r.current)}, not ${valueLabel(s.field, s.from)}. Nothing was pre-filled; open the case again for facts read against the current profile.`;
     case 'already':
       return `The profile already sets ${label.toLowerCase()} to ${valueLabel(s.field, s.to)}: there is nothing to change.`;

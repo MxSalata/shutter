@@ -186,8 +186,8 @@ test.describe('Ask about this case', () => {
     await draft.getByRole('button', { name: 'Review and save…' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toContainText(/Authoritative source: from .* to BEDMGR/);
-    await dialog.getByRole('button', { name: 'Save version 10' }).click();
-    await expect(page.getByText('Version 10 saved')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Save version 11' }).click();
+    await expect(page.getByText('Version 11 saved')).toBeVisible();
     await expect(page).toHaveURL(/#\/site-profile$/);
   });
 
