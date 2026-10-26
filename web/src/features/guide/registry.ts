@@ -298,6 +298,13 @@ export const CHAPTERS: GuideChapter[] = [
     title: 'Site profile',
     steps: [
       {
+        id: 'categories',
+        title: 'What kind of system each receiver is',
+        text: "Each receiver has a category. At a current state system, such as the bed manager, only today's placement matters, so an overtaken failure closes with no write. At a history of record system, such as the patient records system, the history must be complete, so the same failure goes to a person with the steps that correct it. Orders and results are not modelled yet: their failures go to a person.",
+        place: { page: '/site-profile' },
+        target: 'site-receivers-cards',
+      },
+      {
         id: 'summary',
         title: 'Who releases each write',
         text: `For each receiver tier: ${RELEASE}. The summary says plainly where the written policy releases a write without a person.`,

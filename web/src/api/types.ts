@@ -49,7 +49,8 @@ export interface ScenarioStep {
 }
 
 export interface ScenarioExpected {
-  disposition: string;
+  /** Absent when the expectations are per receiver (by_receiver). */
+  disposition?: string;
   acceptable?: string[];
   write: boolean;
   final_state: string;
@@ -66,6 +67,14 @@ export interface ScenarioExpected {
   encounters?: { encounter: string; writes: number; final_state: string; final_ward: string | null }[];
   /** A mode's own additions to the expected outcome, which replace the fields they name in that mode (S21's rules). */
   by_mode?: Partial<Record<Mode, Partial<ScenarioExpected>>>;
+  /**
+   * One failure at several receivers (S22, v1.25): what each receiver's case should end in, by the receiver's name.
+   * `outcome` names the catalogue outcome its plan takes, such as correct_history.
+   */
+  by_receiver?: Record<
+    string,
+    { disposition: string; outcome?: string; write: boolean; final_state: string; final_ward: string | null }
+  >;
 }
 
 export interface ScenarioRun {
@@ -124,6 +133,11 @@ export interface CaseSummary {
   workflowSessionId: string;
   /** How the delivery failed (delivery_failed, uncertain, unmappable, withheld for a merge or a cancel never sent). */
   failureKind: string;
+  /**
+   * The receiver (the production item) the failed delivery went to: a case is one failed delivery to one receiver
+   * (v1.25). Absent from cases recorded before the server sent it, which all went to the bed manager.
+   */
+  receiver?: string;
   /** Attempts that reached the receiver and may have landed (applied, already committed, uncertain), when sent. */
   writes?: number;
   /** The latest verification's outcome, or "" when there is none, when sent. */
@@ -315,6 +329,29 @@ export interface Rehearsal {
   reason: string;
   receiverVersion: number | string;
   response: unknown;
+}
+
+/**
+ * The steps that correct a history-of-record receiver's history by hand, on the plan of a case escalated with the
+ * outcome correct_history (CONTRACTS 10, v1.23): built from the case and its snapshot alone.
+ */
+export interface CorrectionSteps {
+  receiver: string;
+  system?: string;
+  category?: string;
+  encounter?: string;
+  missing?: {
+    event?: string;
+    ward?: string;
+    event_time?: string;
+    source_message_id?: string;
+    operation_key?: string;
+    after?: string;
+  };
+  later?: { event?: string; ward?: string; event_time?: string }[];
+  current?: { state?: string; ward?: string; version?: number | string };
+  receipt?: string;
+  steps: string[];
 }
 
 export interface PlanView {
@@ -633,9 +670,18 @@ export type ChainPolicy = 'automatic' | 'approval' | 'per_chain' | 'board';
 export type ChainKind = 'single' | 'ordered' | 'interleaved';
 
 /** A receiver in the site profile: the induction answers, and the receiver description the core reads its paths from. */
+/** What kind of system a receiver is (CONTRACTS 6.4, v1.23); an entry without one is current_state. */
+export type ReceiverCategory = 'current_state' | 'history_of_record' | 'orders_results';
+
 export interface SiteReceiver {
   name: string;
   system?: string;
+  /** The receiver's category, asked at onboarding; it derives the receiver's history policy. */
+  category?: ReceiverCategory | string;
+  /** Overrides the policy the category derives: current (keep what is current) or correct (correct the history). */
+  history_policy?: 'current' | 'correct' | string;
+  /** A demo receiver's namespace, where the scenario runner resets it and sets its faults (v1.25). */
+  demo?: { namespace?: string };
   tier: number;
   applies?: string;
   resend_timestamp?: string;
@@ -651,6 +697,7 @@ export interface SiteReceiver {
 export interface SiteProfile {
   version?: number;
   receivers: SiteReceiver[];
+  /** Deprecated since v1.23: read only for a receiver entry with neither a category nor its own history policy. */
   history_policy?: string;
   authoritative_source?: string;
   unconditional_resend?: string;

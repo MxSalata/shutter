@@ -64,6 +64,8 @@ const SCREENS: [path: string, heading: string, steps?: 'open'][] = [
   ['/cases/C-000009', 'Case C-000009', 'open'],
   ['/cases/C-000053', 'Case C-000053', 'open'],
   ['/cases/C-000020', 'Case C-000020', 'open'],
+  // S22's case at the patient records system: its category beside the outcome and the steps that correct its history
+  ['/cases/C-000055', 'Case C-000055'],
   ['/incidents', 'Incidents'],
   ['/incidents/I-000001', 'Incident I-000001'],
   ['/reviews', 'Production review'],

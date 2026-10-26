@@ -58,6 +58,24 @@ test.describe('the guided path', () => {
     ).toBeVisible();
   });
 
+  test('shows the same overtaken transfer closed at one receiver and sent for correction at the other', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await go(page, '/site-profile');
+    const cards = page.getByRole('list', { name: 'The receivers and what each needs' });
+    await expect(cards.getByRole('listitem', { name: 'Downstream Out' })).toContainText('Current state');
+    await expect(cards.getByRole('listitem', { name: 'Records Out' })).toContainText('History of record');
+    await go(page, '/cases/C-000054');
+    await expect(page.getByTestId('case-receiver')).toContainText('Current state');
+    await expect(page.getByTestId('correction-steps')).toHaveCount(0);
+    await go(page, '/cases/C-000055');
+    await expect(page.getByTestId('case-receiver')).toContainText('History of record');
+    const steps = page.getByTestId('correction-steps');
+    await expect(steps.getByRole('heading', { name: 'Correcting the history at Records Out' })).toBeVisible();
+    await expect(steps.getByRole('listitem')).toHaveCount(8);
+  });
+
   test("keeps the case page's tab in the address", async ({ page }) => {
     await signIn(page);
     await go(page, '/cases/C-000008');

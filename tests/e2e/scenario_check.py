@@ -18,9 +18,10 @@ A scenario whose expected outcome says "incident" (S11) has several cases: the c
 opens, approves its plan and its cases' plans with --approve, and compares each encounter's chain (kind, who decided,
 the catalogue entries), its writes and the downstream system's final state with expected.encounters.
 
-A scenario that names the modes it is defined for (expected.modes: S7, S11, S12, S17, S18, S19, S20, S21) is skipped in
-the others. S7 is not defined for site policy, which resends without asking anyone, so no plan waits for its later
-transfer; S20 is defined for rules only and S21 for rules and site policy until the board's runs for them are recorded.
+A scenario that names the modes it is defined for (expected.modes: S7, S11, S12, S17, S18, S19, S20, S21, S22) is
+skipped in the others. S7 is not defined for site policy, which resends without asking anyone, so no plan waits for its
+later transfer; S20 is defined for rules only, S21 for rules and site policy and S22 for site policy until the board's
+runs for them are recorded.
 expected.by_mode adds to or replaces the expected outcome in one mode (S21: rules alone propose the resend and the gate
 blocks it, where site policy escalates on the catalogue's E13 before any write is planned). S21's rules pass is the
 gate's catch, not a right answer from rules: S13's identical rules run, judged by its own expectation, differs. So
@@ -30,6 +31,11 @@ Besides the outcome, expected.blocked_by is a reason code the case met on the wa
 that led to a re-plan counts), expected.final_reason the code the closed case names for stopping (GET
 /cases/{id}/blocked-reason), and expected.last_operation_key the operation the downstream system's history for the
 encounter ends with (S20: the nurse's own entry still stands).
+
+A scenario whose message goes to several receivers and fails at more than one (S22) gives its expectations per receiver
+under expected.by_receiver: one case per failed delivery and receiver, each judged by its receiver's own disposition,
+outcome (the catalogue outcome the plan took, such as none or correct_history), write, final state and ward. Each receiver's
+state is read through its own API, at the base path its entry in the site profile names (GET /site-profile).
 
 It plays scenarios: each run resets the downstream system. Don't run it on an instance someone else is using.
 """
@@ -87,8 +93,13 @@ class Session:
         return self
 
 
-def downstream_encounter(url, user, password, encounter_id):
-    request = urllib.request.Request(url.rstrip("/") + "/downstream/api/encounters/" + urllib.parse.quote(encounter_id, safe=""))
+DEFAULT_BASE = "/downstream/api"
+
+
+def downstream_encounter(url, user, password, encounter_id, base=DEFAULT_BASE):
+    """The encounter as a receiver holds it, read through that receiver's API at its base path."""
+    request = urllib.request.Request(url.rstrip("/") + base.rstrip("/") + "/encounters/"
+                                     + urllib.parse.quote(encounter_id, safe=""))
     request.add_header("Authorization", "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode())
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
@@ -147,7 +158,33 @@ def play(args, operator, approver, scenario, mode):
         items = [c for c in (body or {}).get("items", []) if c.get("openedAt", "") >= started_at]
         return items[0] if items else None
 
+    by_receiver = expected.get("by_receiver")
+    if by_receiver:
+        def cases_per_receiver():
+            # One case per failed delivery and receiver; the newest of each receiver this run opened
+            _, body = operator.call("GET", f"/cases?scenario={scenario['id']}&limit=20")
+            found = {}
+            for c in (body or {}).get("items", []):
+                if c.get("openedAt", "") >= started_at and c.get("receiver") in by_receiver:
+                    found.setdefault(c["receiver"], c)
+            return found if len(found) == len(by_receiver) else None
+
+        cases = wait(f"{scenario['id']}: a case at each of {', '.join(by_receiver)}", cases_per_receiver, args.timeout)
+        results = []
+        for receiver in by_receiver:
+            final = settle(args, operator, approver, scenario, cases[receiver], run_state)
+            results.append(judge(args, operator, scenario, mode, final, receiver))
+        ok = all(r[0] for r in results)
+        line = "\n".join(r[1] for r in results)
+        return ok, line, "; ".join(f"{receiver}: {r[2]}" for receiver, r in zip(by_receiver, results))
+
     case = wait(f"{scenario['id']}: a case", newest_case, args.timeout)
+    final = settle(args, operator, approver, scenario, case, run_state)
+    return judge(args, operator, scenario, mode, final)
+
+
+def settle(args, operator, approver, scenario, case, run_state):
+    """Waits for a case to close (or to wait for approval without --approve), approving it with --approve."""
     approved = False
 
     def settled():
@@ -174,7 +211,7 @@ def play(args, operator, approver, scenario, mode):
     final = wait(f"{scenario['id']} {case['caseId']}: the outcome", settled, args.timeout)
     if approved:
         approver_of_record(operator, case["caseId"])
-    return judge(args, operator, scenario, mode, final)
+    return final
 
 
 def approver_of_record(operator, case_id):
@@ -300,9 +337,41 @@ def play_incident(args, operator, approver, scenario, mode):
     return True, f"ok      {summary}", outcome
 
 
-def judge(args, operator, scenario, mode, final):
-    """Compares a settled case with the scenario's expected outcome; returns (as_expected, line, outcome)."""
+def receiver_base(operator, receiver):
+    """The base path of a receiver's API as its site profile entry names it; the bed manager's when none is named."""
+    if receiver not in BASES:
+        _, view = operator.call("GET", "/site-profile")
+        for entry in ((view or {}).get("profile") or {}).get("receivers") or []:
+            BASES[entry.get("name")] = (entry.get("api") or {}).get("base") or DEFAULT_BASE
+    return BASES.get(receiver) or DEFAULT_BASE
+
+
+BASES = {}
+
+
+def outcome_taken(plan_view, snapshot):
+    """The catalogue outcome the plan took (none, correct_history, ...): its outcome reference read in the matched entry."""
+    plan = (plan_view or {}).get("plan") or {}
+    ref, entry = plan.get("outcome") or "", plan.get("catalogueEntry") or ""
+    matches = (((snapshot or {}).get("summary") or {}).get("catalogue") or {}).get("matches") or []
+    match = next((m for m in matches if m.get("id") == entry), None)
+    if not match or not ref:
+        return ref or None
+    if ref == "preferred":
+        return (match.get("preferred") or {}).get("outcome")
+    m = re.fullmatch(r"alternative:(\d+)", ref)
+    alternatives = match.get("alternatives") or []
+    if m and 0 < int(m.group(1)) <= len(alternatives):
+        return alternatives[int(m.group(1)) - 1].get("outcome")
+    return ref
+
+
+def judge(args, operator, scenario, mode, final, receiver=None):
+    """Compares a settled case with the scenario's expected outcome, or with its receiver's under expected.by_receiver;
+    returns (as_expected, line, outcome)."""
     expected = {**scenario["expected"], **scenario["expected"].get("by_mode", {}).get(mode, {})}
+    if receiver:
+        expected = {**expected, **expected["by_receiver"][receiver]}
     caseid = urllib.parse.quote(final["caseId"])
     _, attempts = operator.call("GET", f"/cases/{caseid}/attempts")
     wrote = any((a.get("attempt") or {}).get("outcome") in ("applied", "already_committed") for a in attempts or [])
@@ -319,17 +388,29 @@ def judge(args, operator, scenario, mode, final):
     _, events = operator.call("GET", f"/cases/{caseid}/events")
     for event in events or []:
         codes.update(re.findall(r"\b[A-Z][A-Z_]{5,}[A-Z]\b", event.get("text") or ""))
-    held = downstream_encounter(args.url, args.downstream_user, args.downstream_password, final["encounterId"])
+    base = receiver_base(operator, receiver) if receiver else DEFAULT_BASE
+    held = downstream_encounter(args.url, args.downstream_user, args.downstream_password, final["encounterId"], base)
+    system = f"{receiver} ({base})" if receiver else "the downstream system"
 
     differences = []
     allowed = set([expected["disposition"]] + expected.get("acceptable", []))
     if final.get("disposition") not in allowed:
         differences.append(f"disposition {final.get('disposition')}, expected {' or '.join(sorted(allowed))}")
     if wrote != expected["write"]:
-        differences.append("wrote to the downstream system" if wrote else "wrote nothing, expected one conditional write")
+        differences.append(f"wrote to {system}" if wrote else "wrote nothing, expected one conditional write")
     if held.get("state") != expected["final_state"] or held.get("ward") != expected["final_ward"]:
-        differences.append(f"the downstream system holds {held.get('state')} {held.get('ward')}, "
+        differences.append(f"{system} holds {held.get('state')} {held.get('ward')}, "
                            f"expected {expected['final_state']} {expected['final_ward']}")
+    taken = None
+    if expected.get("outcome"):
+        _, snapshot = operator.call("GET", f"/cases/{caseid}/snapshot")
+        taken = outcome_taken(view, snapshot)
+        if taken != expected["outcome"]:
+            differences.append(f"outcome {taken or 'none named'}, expected {expected['outcome']}")
+        # A history correction is escalated with the steps that make it (CONTRACTS 10)
+        steps = (((view or {}).get("plan") or {}).get("plan") or {}).get("correction_steps") or {}
+        if expected["outcome"] == "correct_history" and not steps.get("steps"):
+            differences.append("no correction_steps on the plan")
     if expected.get("blocked_by") and expected["blocked_by"] not in codes:
         differences.append(f"no {expected['blocked_by']} among {sorted(c for c in codes if c) or 'no reason codes'}")
     if expected.get("final_reason") and final_reason != expected["final_reason"]:
@@ -350,12 +431,20 @@ def judge(args, operator, scenario, mode, final):
                 differences.append(f"{key} {case.get(key) or 'empty'}, expected {want}")
         if not case.get("originHeaderId"):
             differences.append("no originHeaderId: the case does not name the source's message")
-    outcome = (f"{final['state']}, {final.get('disposition') or 'no plan'}, {'one write' if wrote else 'no write'}, "
-               f"downstream {held.get('state')} {held.get('ward')}")
-    summary = f"{scenario['id']} {mode}: {final['caseId']} {outcome}"
+    outcome = (f"{final['state']}, {final.get('disposition') or 'no plan'}{f' ({taken})' if taken else ''}, "
+               f"{'one write' if wrote else 'no write'}, {'downstream' if not receiver else 'at the receiver'} "
+               f"{held.get('state')} {held.get('ward')}")
+    summary = f"{scenario['id']} {mode}: {final['caseId']}{f' {receiver}' if receiver else ''} {outcome}"
     if differences:
         return False, f"DIFFERS {summary}: " + "; ".join(differences), outcome + " (" + "; ".join(differences) + ")"
     return True, f"ok      {summary}", outcome
+
+
+def expected_text(x):
+    """One receiver's expected outcome in a few words."""
+    outcome = f" ({x['outcome']})" if x.get("outcome") else ""
+    write = "one write" if x["write"] else "no write"
+    return f"{x['disposition']}{outcome}, {write}, {x['final_state']} {x['final_ward'] or ''}".strip()
 
 
 def write_markdown(path, modes, rows):
@@ -368,6 +457,8 @@ def write_markdown(path, modes, rows):
         s, e = row["scenario"], row["scenario"]["expected"]
         if e.get("incident"):
             expected = "; ".join(f"{x['encounter']} {x['chain']} {x['path']} {x['writes']}w" for x in e["encounters"])
+        elif e.get("by_receiver"):
+            expected = "; ".join(f"{name}: {expected_text(x)}" for name, x in e["by_receiver"].items())
         else:
             expected = f"{e['disposition']}, {'one write' if e['write'] else 'no write'}, downstream {e['final_state']} {e['final_ward'] or ''}".strip()
         cells = []
