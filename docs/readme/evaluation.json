@@ -2363,6 +2363,16 @@
    "scenario": "S22",
    "title": "One overtaken transfer, two systems",
    "why": "played in policy mode only"
+  },
+  {
+   "scenario": "S23a",
+   "title": "The bed is held by a patient who is leaving",
+   "why": "played in policy mode only"
+  },
+  {
+   "scenario": "S23b",
+   "title": "Two patients for one bed",
+   "why": "played in policy mode only"
   }
  ],
  "not_used": [],

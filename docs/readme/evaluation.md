@@ -218,6 +218,8 @@ Per member, over all passes:
 - S20 A nurse moves the patient by hand while the plan awaits approval: played in rules mode only.
 - S21 A transfer in the hour the clocks go back: played in rules and policy modes only.
 - S22 One overtaken transfer, two systems: played in policy mode only.
+- S23a The bed is held by a patient who is leaving: played in policy mode only.
+- S23b Two patients for one bed: played in policy mode only.
 
 ## Not yet measured
 
