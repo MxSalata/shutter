@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.26, 26 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.27, 26 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -312,7 +312,7 @@ caller's process passes; the operator and the approver read the watched hospital
 | --- | --- |
 | none | `POST` and `DELETE /session`; `GET /health` (its summary; the full report needs `Shutter_Operate`) |
 | signed in | `GET /me`, which answers `{username, operator, approver}` from the two resources |
-| `Shutter_Operate` | every other `GET`; `POST /scenarios/{id}/run` and `/scenarios/reset`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send`; `GET /production-reviews`, `GET /production-reviews/targets` and `GET /production-reviews/{id}`; `POST /production-reviews` (section 13: the review reads only, and a live agent run spends model credit as a scenario run does) |
+| `Shutter_Operate` | every other `GET`; `POST /scenarios/{id}/run` and `/scenarios/reset`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send`; `GET /production-reviews`, `GET /production-reviews/targets` and `GET /production-reviews/{id}`; `POST /production-reviews` (section 13: the review reads only, and a live agent run spends model credit as a scenario run does); `GET /cases/{id}/whatif`, `GET /cases/{id}/questions`, `GET /cases/{id}/questions/suggested`, `GET /cases/{id}/questions/{qid}` and `POST /cases/{id}/questions` (section 14: a question reads only, and a live run spends model credit) |
 | `Shutter_Approve` | `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `PUT /site-profile`; `PATCH /library/{code}` (since v1.17; it was `Shutter_Operate`); `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13) |
 | `Shutter_Intake` | `POST /intake` (section 11) |
 
@@ -1090,7 +1090,9 @@ All routes under `Shutter_Operate` unless said (5); `X-Requested-With: Shutter` 
 
 **Matching a recorded ranking (v1.22).** The agent's ranking entries carry the finding's `code`, `item` and `setting` beside the `finding_id` (`Shutter.Schema.ReviewRank`; `Check` requires a non-empty `code` and `item` and `setting` present as strings, `""` allowed); the agent's instructions make it copy them from the finding and write explanations without numbers from the findings (no counts, ids, dates or versions: "the count shown", "the cases of this item in the window"), so a recorded explanation reads right on another instance of the same configuration whose counts differ. When the agent answers, live or replayed, `Shutter.Store.Review.MatchRanking` matches each entry, in rank order, to the first unmatched current finding with the same code, item and setting (an entry without them matches by `finding_id`, as before); the matched entries keep their recorded order, re-ranked 1 to m, and are what the review stores; an entry matching nothing is dropped and a finding with no entry stays unexplained. The whole ranking is refused (`schema_failed`, the baseline order stands) when it is not a ranking, names a finding twice, puts a lower tier above a higher one among the matched entries, or matches nothing at all. So the record key covers the configuration findings and the recording made on one instance explains the configuration findings of every instance that reaches the same configuration, and the volatile findings where the same item has the same error groups; the recording is made on an instance with a provider after the scenario set the demo plays, and the page says how many findings the recorded run explains. The agent's explanations name another finding by its code and item, never by its id, for the same reason. A run whose `SubmitReview` was accepted ends `ok` even when its turns ran out before the closing sentence (the runner notes the stop in `error`); the request gives it 4 turns.
 
-## 14. Ask about this case: the deterministic card (v1.26)
+## 14. Ask about this case (v1.26, v1.27)
+
+### 14.1 The deterministic card (v1.26)
 
 `GET /cases/{id}/whatif` (Shutter_Operate; 404 `not_found`) answers, with no model and from the case's snapshot and the
 site profile alone, what the case's outcome turned on and what it would have done under the catalogue's alternatives
@@ -1110,12 +1112,102 @@ validated by applying it to a copy of the profile and running the validator (`va
 under that page's rules. The case chat's agents (the Explain agent and the board's question mode, `case-chat` hand-off)
 receive these facts and may name no other setting or change.
 
+### 14.2 Questions (v1.27)
+
+A question about a case is a turn of a conversation, stored as `Shutter.Store.CaseQuestion` (`Q-nnnnnn`): `conversation`
+(a suggested conversation's id from the scenario's file, or, for a free question that starts one, the question's own id),
+`turn` (1-based within the conversation), `tier` (`explain`: the Explain agent alone, plain words from the evidence; `board`:
+every enabled default specialist, then the coordinator's synthesis), `source` (`suggested`: a turn of
+`knowledge/questions/<S>.json`, recorded and replayable; `free`: live only), the question's text (1 to 2000 characters),
+`state` (`pending`, `answering`, `answered`, `schema_failed` when the core refused the answer, `failed` when none came: the
+agent's status, a timeout, an error; a question left `pending` or `answering` for 15 minutes is marked `failed` by the next
+list), the what-if facts handed to the agents, the accepted answer with the case's identifiers restored, the members' answers
+of a board question, the resolved change (14.4), the record key of the answering run, its mode and model, the question's
+runs and their cost, and the Visual Trace link (`ensMessageId`). Nothing a question does writes to the case or to a receiver,
+whatever its text says: the agents hold no write tool, and the question's text is data (14.3).
+
+**In a production job.** `POST /cases/{id}/questions` sends `Shutter.Msg.QuestionRequest` (`CaseId`, `Tier`, `Source`,
+`Text`, `Conversation`, `Turn`, `AskedBy`) through the Shutter API service to the item **Case Question**
+(`Shutter.Process.Question`, category Recovery, beside Case Review; in `Setup.INSTALLITEMS`). The item opens the question
+row and answers at once with `Shutter.Msg.QuestionStarted` (`QuestionId`, `Conversation`, `Turn`, `State`, `Error`), then
+builds the context (14.3) and asks the agents through their Agent Board items with `Shutter.Bridge.Msg.AgentRequest`: for
+`explain`, one request (`Role` `explain`, `MemberCode` `explain`, `AgentClass` `Shutter.Agent.Explain`, `TerminalTool`
+`SubmitAnswer`, `ResultClass` `Shutter.Schema.Answer`, 20000 tokens, 3 iterations; `ConfigVersion` the class's
+`CONFIGVERSION` when the aihub module is installed, else `1`); for `board`, one request per enabled default specialist
+(`Role` `member`, the member's code, class, `ConfigVersion` and `ConfigItem`, `SubmitAnswer`, `Shutter.Schema.Answer`, 30000
+tokens, 4 iterations), and when every member has answered or failed, the coordinator's (`Role` `coordinator`,
+`SubmitBoardAnswer`, `Shutter.Schema.BoardAnswer`, 30000 tokens, 3 iterations) with the members' accepted answers added to
+the context as `member_answers`. A member that fails or is refused is noted on the question and the coordinator goes on with
+the rest; with no usable member answer the question fails. One alarm (`AgentTimeoutSeconds`, 600 s) fails the question with
+what is missing. Every run is a `Shutter.Store.AgentRun` row naming its question (`questionId`), so the case's runs and
+`GET /costs` carry it (`byQuestion`: `[{questionId, caseId, runs, replayedRuns, costUsd}]`, `totals.questionRuns`).
+
+**Record keys.** `question:<S>:<encounter>:<event>|<tier>|<member>|<conversation>.<turn>|<cfg>` for a suggested turn of a
+case with a scenario (`member` is `explain`, a specialist's code or `coordinator`; `cfg` that agent's configuration version);
+a free question, or a free follow-up inside a recorded conversation, has no key and runs live only (the mimic does not answer
+questions). Replay follows the same path turn by turn, each turn's context carrying the recorded earlier turns.
+
+### 14.3 What the agents see (v1.27)
+
+The request's `Context` is one JSON object, every text through the model view (section 9): `{tier, question: {text (the
+question with the case's identifiers as tokens), source, instruction_like, note}, case_id, case (the reduced snapshot
+summary), gate: [{stage, outcome, policy_version, summary, checks}], findings (the board's findings of the current snapshot,
+reduced), plan (the plan as stored, reduced), whatif: {entry, outcome, outcome_ref, disposition, category, receiver,
+profile_version, facts (14.1's facts), note}, conversation: {id, turn, earlier: [{turn, tier, question, answer}]},
+member_answers?: [{member, answer}]}`. `earlier` carries the last three answered turns of the same conversation, oldest first,
+their texts and answers through the model view; a first turn has `[]`. `member_answers` is on the coordinator's request
+only. `instruction_like` is true when the question reads like an instruction (`ModelView.InstructionLike`); the `note` says
+the question is data and that no tool writes. The what-if facts are the only settings, alternatives and changes an agent may
+name (14.4).
+
+### 14.4 What the core checks on the way back (v1.27)
+
+The answering run's result (the Explain agent's, or the coordinator's) is restored (section 9) and checked
+(`Shutter.Store.CaseQuestion.CheckAnswer`) before it is stored: `answer` is present and at most 1200 characters;
+`confidence`, when given, is `high`, `medium` or `low`; each entry of `cites` is a fact id (`W<n>`) of the question's facts
+or an evidence id of the model view (a top-level key of the reduced summary, alone or followed by a path: `message`,
+`message.notes`, `history[2]`); and, for the board, `setting`, `under_alternative` and `suggested_change`, when given, each
+name a fact id of the facts (`{fact: "W<n>", why?}`). A refusal ends the question `schema_failed` with the problem in `error`,
+as a refused review ranking does; the members' answers are checked the same way (without the board rule) and a refused one
+is noted, not used. What is stored as `resolved` comes from the core's own facts, never from the agent's text: `setting` and
+`under_alternative` are the named facts whole, `suggested_change` the fact's typed change (14.1) with the agent's `why`.
+
+### 14.5 Routes (v1.27)
+
+- `POST /cases/{id}/questions` (`Shutter_Operate`; `X-Requested-With`; `Idempotency-Key`) `{tier: "explain" | "board",
+  question | suggested: {conversation, turn}, conversation?}` -> 202 `{questionId, conversation, turn, tier, source, state,
+  askedBy}`. A suggested turn takes its text, and its tier when the body gives none, from the scenario's file; a free question
+  starts a conversation, or continues the one named (its turn is the next). 400 `bad_request` for a body that is not what
+  is listed (a tier outside the two, no question and no suggested turn, a question over 2000 characters, a conversation over
+  64); 404 `not_found` for the case, 404 `unknown_suggested` for a turn the file does not have; 409 `no_evidence` while the
+  case's evidence is not collected; 503 `no_service` and `not_queued`, 502 `no_answer`, 500 `question_failed` as the review's
+  route answers them.
+- `GET /cases/{id}/questions` -> `{items: [...], total}`, oldest first, each `{questionId, caseId, conversation, turn, tier,
+  source, question, state, askedBy, askedAt, answeredAt, error, mode, model, costUsd, runs, recordKey, ensMessageId,
+  answer}` (`answer` the accepted `Shutter.Schema.Answer` or `BoardAnswer`, null until answered; `answeredAt`, `mode`,
+  `model`, `recordKey` and `ensMessageId` null until set).
+- `GET /cases/{id}/questions/suggested` -> `{scenario, conversations: [{id, turns: [{turn, tier, text, asked: {questionId,
+  state} | null}]}]}` from `knowledge/questions/<S>.json` under the module root (`{"scenario": "S8", "conversations":
+  [{"id": "c1", "turns": [{"turn": 1, "tier": "explain", "text": "..."}]}]}`), each turn with the newest question asked for it;
+  a case without a scenario, or a scenario without a file, has `conversations: []`.
+- `GET /cases/{id}/questions/{qid}` -> the list's fields and `facts` (14.1's facts as handed over), `memberAnswers:
+  [{member, status, answer?, error?}]`, `resolved: {setting?, under_alternative?, suggested_change?}` (14.4) and `agentRuns:
+  [{runId, role, member, status, mode, model, costUsd, durationMs, ensMessageId, error}]`; 404 `not_found` for a question
+  that is not this case's.
+
 ## Repository layout
 
 The core IPM module is the repository root (`module.xml`, sources under `src/`): it compiles on any 2026.2 Community image and replays recorded runs. The aihub module is `aihub/` (`aihub/module.xml`, sources under `aihub/src/`): the live runner, the agents, tools, schemas, policies and knowledge bases, which need the `%AI` package. Both modules contribute classes to the `Shutter` package; nothing under `src/` may reference `%AI`.
 
 ## Changes
 
+- v1.27, 26 Oct 2026: questions about a case (14.2 to 14.5): `Shutter.Store.CaseQuestion` (a turn of a conversation: tier,
+  source, state, the facts handed over, the answer, the members' answers, the resolved change, the runs), the Case Question
+  item (`Shutter.Process.Question`, in `INSTALLITEMS`) asking the Explain agent or the board's members and coordinator through
+  the Agent Board items with the context of 14.3, the record keys `question:<S>:<encounter>:<event>|<tier>|<member>|<conversation>.<turn>|<cfg>`
+  for suggested turns, the checks of 14.4 (cites, confidence, fact ids; `schema_failed`), the routes under
+  `/cases/{id}/questions` with the scenario's suggested conversations (5, 14.5), `questionId` on agent runs and `byQuestion`
+  and `totals.questionRuns` in `GET /costs`; the question table in the case purge and `PurgeStore` (12).
 - v1.26, 26 Oct 2026: the deterministic card for "Ask about this case" (14): `GET /cases/{id}/whatif`, the facts the case
   chat's agents may name, the typed suggested change validated against the profile schema.
 - v1.25, 26 Oct 2026: two receivers (4, 6.3, 6.4, 12): the demo patient records system (namespace RECORDS, `/records/api`,

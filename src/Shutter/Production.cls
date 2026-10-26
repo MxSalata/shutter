@@ -120,6 +120,8 @@ XData ProductionDefinition
   </Item>
   <Item Name="Case Review" Category="Recovery" ClassName="Shutter.Process.Review" PoolSize="1" Enabled="true" Foreground="false" Comment="One instance per production review: the read-only sweep of a production's settings, errors and failures over a window, stored, then the review agent's ranking of the findings" LogTraceEvents="true" Schedule="">
   </Item>
+  <Item Name="Case Question" Category="Recovery" ClassName="Shutter.Process.Question" PoolSize="1" Enabled="true" Foreground="false" Comment="One instance per question about a case: the Explain agent, or the board's members and then the coordinator, asked through the Agent Board item with the case's model view and the what-if facts; the answer checked against them before it is stored; nothing written" LogTraceEvents="true" Schedule="">
+  </Item>
   <Item Name="Case Intake" Category="Recovery" ClassName="Shutter.Process.Intake" PoolSize="1" Enabled="true" Foreground="false" Comment="A failed delivery another production reported through POST /api/shutter/intake: stores Shutter's own copy of the message, maps it and opens the case through the case workflow" LogTraceEvents="true" Schedule="">
   </Item>
   <Item Name="Case Intake Store" Category="Recovery" ClassName="Shutter.Operation.IntakeStore" PoolSize="1" Enabled="true" Foreground="false" Comment="Receives the intake's copy of the HL7 message, so it has a message header in this namespace for the evidence, the model view and the index" LogTraceEvents="true" Schedule="">

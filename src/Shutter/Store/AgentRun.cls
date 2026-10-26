@@ -62,10 +62,16 @@ Property Error As %String(%JSONFIELDNAME = "error", MAXLEN = 2000);
 /// Estimated cost in US dollars from Shutter.Store.ModelPrice.
 Property CostUSD As %Numeric(%JSONFIELDNAME = "costUsd", SCALE = 6);
 
-/// Record a run from the bridge's response.
-ClassMethod FromResponse(case As Shutter.Store.Case, snapshot As Shutter.Store.Snapshot, role As %String, memberCode As %String, response As Shutter.Bridge.Msg.AgentResponse, ensMessageId As %String, Output run As Shutter.Store.AgentRun) As %Status
+/// The question this run answered (Shutter.Store.CaseQuestion, CONTRACTS 14.2), or empty for an investigation's run.
+Property QuestionId As %String(%JSONFIELDNAME = "questionId", MAXLEN = 32);
+
+Index QuestionIdx On QuestionId;
+
+/// Record a run from the bridge's response. A run that answered a question names it (questionId).
+ClassMethod FromResponse(case As Shutter.Store.Case, snapshot As Shutter.Store.Snapshot, role As %String, memberCode As %String, response As Shutter.Bridge.Msg.AgentResponse, ensMessageId As %String, Output run As Shutter.Store.AgentRun, questionId As %String = "") As %Status
 {
     Set run = ..%New()
+    Set run.QuestionId = questionId
     // By id, not the caller's copy, as Snapshot.Begin does: a save of the run never writes the case whole.
     Do run.CaseSetObjectId(case.%Id())
     Set run.Snapshot = snapshot, run.Role = role, run.MemberCode = memberCode
@@ -163,6 +169,9 @@ Storage Default
 </Value>
 <Value name="25">
 <Value>CostUSD</Value>
+</Value>
+<Value name="26">
+<Value>QuestionId</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.AgentRunD</DataLocation>
