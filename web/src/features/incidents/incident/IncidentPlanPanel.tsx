@@ -3,7 +3,7 @@ import type { IncidentDetail } from '@/api/types';
 import { Digest } from '@/components/Digest';
 import { JsonBlock } from '@/components/JsonBlock';
 import { KeyValueList } from '@/components/KeyValueList';
-import { NotYet, Section } from '../../cases/case/Section';
+import { NotYet, Section } from '@/components/Section';
 
 export function IncidentPlanPanel({ inc }: { inc: IncidentDetail }) {
   return (

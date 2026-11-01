@@ -31,7 +31,7 @@ import { Timestamp } from '@/components/Timestamp';
 import { TRIAL } from '@/env/mode';
 import { describeError, isApiError } from '@/lib/errors';
 import { humanize } from '@/lib/format';
-import { Section } from '../cases/case/Section';
+import { Section } from '@/components/Section';
 import { CATEGORIES, CATEGORY_TEXT, categoryOf, derivedPolicy } from '@/lib/categories';
 import { MoreQuestions } from './MoreQuestions';
 import { PolicySummary } from './PolicySummary';

@@ -22,7 +22,7 @@ import { KeyValueList } from '@/components/KeyValueList';
 import { PageHeader } from '@/components/PageHeader';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { Timestamp } from '@/components/Timestamp';
-import { NotYet, Section } from '@/features/cases/case/Section';
+import { NotYet, Section } from '@/components/Section';
 import { isApiError } from '@/lib/errors';
 import { formatDuration, formatInt, formatUsd, humanize } from '@/lib/format';
 import { useAnnotationDialogs } from './AnnotationDialogs';

@@ -8,7 +8,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
 import { StackTable } from '@/components/StackTable';
 import { APPROVALS } from '@/lib/status';
-import { NotYet, Section } from '../../cases/case/Section';
+import { NotYet, Section } from '@/components/Section';
 import { describePolicy } from '../describe';
 import type { Decision } from './DecideModal';
 

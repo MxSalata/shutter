@@ -14,7 +14,7 @@ import {
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 import { useState } from 'react';
 import type { SiteProfile, SiteTeam } from '@/api/types';
-import { Section } from '../cases/case/Section';
+import { Section } from '@/components/Section';
 import { ZONE_LABELS, newTeam, parseList } from './profile';
 import { Question } from './Question';
 

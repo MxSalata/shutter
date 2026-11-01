@@ -6,7 +6,7 @@ import type { Chain, ChainItem, IncidentDetail, Me } from '@/api/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
 import { humanize } from '@/lib/format';
-import { NotYet, Section } from '../../cases/case/Section';
+import { NotYet, Section } from '@/components/Section';
 import { ChainStateBadge, ItemStateBadge, KindBadge } from '../badges';
 import { CHAIN_STATES, describeChain, describeProgress } from '../describe';
 import type { Decision } from './DecideModal';

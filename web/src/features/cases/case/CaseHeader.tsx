@@ -3,6 +3,7 @@ import { IconChevronDown, IconHandStop, IconSparkles } from '@tabler/icons-react
 import { useState } from 'react';
 import { Link } from 'react-router';
 import type { CaseDetail } from '@/api/types';
+import { Meta } from '@/components/Meta';
 import { PortalLink } from '@/components/PortalLink';
 import { DispositionBadge, StateBadge } from '@/components/StateBadge';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -12,18 +13,6 @@ import { traceScreenshot } from '@/lib/screenshots';
 import type { Status } from '@/lib/tone';
 import { forwardedFrom } from './derive';
 import { headerSentence } from './outcome';
-
-/** A labelled fact in a page header. */
-export function Meta({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <Stack gap={0}>
-      <Text size="xs" c="dimmed">
-        {label}
-      </Text>
-      {typeof children === 'string' ? <Text size="sm">{children}</Text> : children}
-    </Stack>
-  );
-}
 
 /** Where the case sits in its incident: the chain, its place in it and how the chain is released. */
 function incidentPlace(c: CaseDetail): string {

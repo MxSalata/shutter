@@ -4,7 +4,7 @@ import { ErrorAlert } from '@/components/ErrorAlert';
 import { JsonBlock } from '@/components/JsonBlock';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { formatZoned } from '@/lib/format';
-import { NotYet, Section } from '../cases/case/Section';
+import { NotYet, Section } from '@/components/Section';
 import { describeSource, diffProfiles } from './profile';
 
 /** Every stored version, newest first, each with what changed from the one before it. */

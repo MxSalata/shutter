@@ -3,7 +3,7 @@ import type { IncidentDetail } from '@/api/types';
 import { PortalLink } from '@/components/PortalLink';
 import { Timestamp } from '@/components/Timestamp';
 import { displayZone, humanize } from '@/lib/format';
-import { Meta } from '../../cases/case/CaseHeader';
+import { Meta } from '@/components/Meta';
 import { IncidentStateBadge } from '../badges';
 
 export function IncidentHeader({ inc }: { inc: IncidentDetail }) {

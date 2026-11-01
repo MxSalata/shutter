@@ -22,7 +22,7 @@ import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageHeader } from '@/components/PageHeader';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { Timestamp } from '@/components/Timestamp';
-import { Section } from '@/features/cases/case/Section';
+import { Section } from '@/components/Section';
 import { describeError, isApiError } from '@/lib/errors';
 import { AgentStateBadge, ReviewStateBadge, SeverityCounts } from './badges';
 import { READ_ONLY, targetKey, targetLabel } from './review';
