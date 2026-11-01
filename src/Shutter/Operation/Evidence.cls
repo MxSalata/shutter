@@ -93,7 +93,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
         If (occId '= "") && (occId '= case.EncounterId) {
             Set opath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", occId)
             If opath '= "" Set occRead = ..WardGet(opath, .ostatus)
-            Set deliveries = ##class(Shutter.Index.Timeline).Deliveries(occId, receiver)
+            Set deliveries = ##class(Shutter.Index.Timeline).Deliveries(occId, receiver, case.SourceNamespace)
         }
         Set conflict = ##class(Shutter.Util.BedConflict).Build(refusal, case.Ward, case.Bed, occRead, ostatus, deliveries)
         Do snap.AddItem("bed_conflict", "ward_api", now, conflict) Set count = count + 1

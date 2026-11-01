@@ -1336,7 +1336,10 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   receiver (`question:<S>:<encounter>:<event>[:<receiver>]`, 14.2), so S22's two cases record apart. The day's model budget
   (9): `SHUTTER_DAILY_BUDGET_USD` into `^Shutter.Config("dailyBudgetUsd")` (`Shutter.Util.Budget`), a live or record run
   refused with `budget_exhausted` once the day's spend reaches it, the board on the rules path then, `budget` in `GET
-  /settings` and the Doctor.
+  /settings` and the Doctor. A case forwarded from a watched production (11) reads the refusal that named the bed's occupant
+  and the occupant's deliveries in that production's namespace as well as Shutter's (`Timeline.LastRefusal`, `Deliveries` with
+  the case's `SourceNamespace`), so its bed conflict (6.1) is judged as a case of Shutter's own feed is; before, the forwarded
+  refusal read as unknown and E17 escalated it.
 - v1.33, 1 Nov 2026: the demo receiver's fault `delay_response` (1.5): a real operation is held for `seconds`, then applied
   and answered as usual, so a newer message can be on its way to the receiver while a case is about to resend (S24); the
   scenario runner's fault step passes `seconds`.
