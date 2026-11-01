@@ -995,11 +995,11 @@ body {
     [data-tone='attention'],
     [data-tone='blocking']
   )
-  td:first-child {
+  :is(td, th):first-child {
   box-shadow: inset 3px 0 0 var(--row-edge);
 }
 @media (max-width: 35.99em) {
-  :is(.case-row, .tone-row)[data-tone] td:first-child {
+  :is(.case-row, .tone-row)[data-tone] :is(td, th):first-child {
     box-shadow: none;
   }
   .stack-table
@@ -1628,4 +1628,12 @@ body {
   [data-tour-try='rest'] {
     outline-color: Highlight;
   }
+}
+
+/*
+ * Under the case page's sticky tab bar (36 px and its gap): a section, a cited evidence section or the guide's card
+ * scrolled to stops below the bar as well as the header, so the bar never hides what was scrolled to or focused.
+ */
+.case-tab-panel :is([data-tour], section[id], .guide-host) {
+  scroll-margin-top: calc(var(--shutter-header-h) + 3.5rem);
 }
