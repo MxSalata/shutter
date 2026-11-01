@@ -82,6 +82,8 @@ PATIENTS = {
     "S23-P2": ("MRN1232", "ENC-1232", "SYNTH^DEV", "19750128", "M"),
     # S24, a newer message on its way to the receiver as Shutter is about to resend
     "S24": ("MRN1024", "ENC-1024", "SYNTH^ELLA", "19920716", "F"),
+    # S25, a transfer carrying the site's own Z segment, which the namespace's schema doesn't define
+    "S25": ("MRN1025", "ENC-1025", "SYNTH^FINN", "19880304", "M"),
 }
 
 # The prior record an S15 merge folds into its patient (MRG-1, MRG-5, MRG-7)
@@ -115,11 +117,13 @@ def field_list(values, count):
 
 
 def message(scenario, seq, trigger, time, ward=None, prior=None, admit_time="0900", note=None, phone=None,
-            source="PAS", encounter=None, patient=None, version="2.5.1", merged=None, patient_class="I", bed=None):
+            source="PAS", encounter=None, patient=None, version="2.5.1", merged=None, patient_class="I", bed=None,
+            extra=None):
     """One ADT message. ward is PV1-3, the patient's location as the PAS holds it after the event (the new ward of a
     transfer, the ward a patient is discharged from, the current ward on an update); prior is PV1-6, the location a
     transfer moves the patient from. bed replaces PV1-3's bed component, for scenarios with several patients on one
-    ward (each needs a bed of its own, since the receiver keeps one encounter per bed)."""
+    ward (each needs a bed of its own, since the receiver keeps one encounter per bed). extra is a raw segment appended
+    after the others, such as a site's own Z segment."""
     mrn, default_encounter, name, dob, sex = PATIENTS[patient or scenario]
     encounter = encounter or default_encounter
     day = day_of(scenario)
@@ -153,6 +157,8 @@ def message(scenario, seq, trigger, time, ward=None, prior=None, admit_time="090
         segments = [msh, evn, pid, mrg, pv1]
     if note:
         segments.append("OBX|1|TX|NOTE^Transfer note^L||" + note + "||||||F")
+    if extra:
+        segments.append(extra)
     name_ = f"{scenario}-{seq:02d}-{trigger}.hl7"
     key_ward = ward if trigger in ("A01", "A02") else None
     return name_, "\r".join(segments) + "\r", {
@@ -776,6 +782,37 @@ def scenarios():
                      "blocked_by": "NEWER_MESSAGE_PENDING", "last_operation_key": c[2]["operation_key"],
                      "modes": ["policy"]},
     }, [a, b, c]))
+
+    # S25: a sound message IRIS can't read. The PAS adds the site's own segment ZZZ after PV1, as many trusts' feeds do,
+    # and the namespace has no schema that defines it. The transfer's delivery fails; the evidence's validation can't read
+    # it, so the Second Parser (HAPI, a Java PEX operation) is asked: it reads a well-formed transfer with a site segment,
+    # and the gate's words point at the missing site schema (INSTALL.md section 7), not at the source system.
+    a = message("S25", 1, "A01", "0900", ward="WARD-A")
+    b = message("S25", 2, "A02", "0920", ward="WARD-B", prior="WARD-A", extra="ZZZ|1|the site^own")
+    out.append(({
+        "id": "S25",
+        "title": "A message with the site's own segment",
+        "summary": "Admit to Ward A applied. The 09:20 transfer to Ward B fails because the downstream system is down, "
+                   "and it carries the trust's own segment, ZZZ, which this namespace's schema doesn't define, so IRIS can't "
+                   "read it to check it. A second, independent parser (HAPI, in Java, through PEX) reads it as a well-formed "
+                   "transfer with a site segment. Nothing is resent: the case says the message is sound and the site's "
+                   "schema is what's missing, so the fix is to import the schema and read the feed with it, then reinvestigate, "
+                   "not to chase the PAS.",
+        "steps": [
+            {"file": a[0]},
+            {"fault": "fail_before_accept", "operation_key": b[2]["operation_key"]},
+            {"file": b[0], "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+        ],
+        # The feed delivers what it maps, Z segment or not; the receiver is down for this transfer, so a case opens as
+        # in S2. The evidence's validation can't read the message, so the gate blocks the resend (PARSE_FAILED) with the
+        # Second Parser's verdict; nothing is resent until the site's schema is imported and the case reinvestigated.
+        "expected": {"disposition": "escalate", "acceptable": ["more_evidence", "resend"], "write": False,
+                     "final_state": "admitted", "final_ward": "WARD-A", "case_by_key": True,
+                     "final_reason": "PARSE_FAILED",
+                     "failed_operation_key": b[2]["operation_key"], "modes": ["policy"]},
+    }, [a, b]))
 
     return out
 

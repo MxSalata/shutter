@@ -15,9 +15,33 @@ ClassMethod ForCase(case As Shutter.Store.Case) As %DynamicArray
     Set resetAt = $GET(^Shutter.Config("resetAt"))
     Set since = $SELECT(resetAt = "": "2000-01-01 00:00:00", 1: $TRANSLATE($PIECE(resetAt, "Z", 1), "T", " "))
     Set out = ..Typed(case, since)
+    // A case forwarded from a watched production (CONTRACTS 11) names its namespace: the encounter's story there, that
+    // production's own deliveries, joins the timeline, each row marked with the namespace (v1.34). Before, such a case saw
+    // only what had been forwarded, its own failure, and nothing before or after it.
+    If (case.SourceNamespace '= "") && (case.SourceNamespace '= $NAMESPACE) {
+        Set there = ..TypedIn(case.SourceNamespace, case, since)
+        If there.%Size() > 0 Set out = ..Merge(out, there)
+    }
     Set extra = ..FromIndex(case, since, out)
     If extra.%Size() = 0 Quit out
     Quit ..Merge(out, extra)
+}
+
+/// Typed in another namespace, which must hold Shutter's message classes (a watched production's does): its rows, each with
+/// namespace set; [] when it cannot be read.
+ClassMethod TypedIn(namespace As %String, case As Shutter.Store.Case, since As %String) As %DynamicArray
+{
+    Set rows = []
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = namespace
+        Set rows = ..Typed(case, since)
+        Set ri = rows.%GetIterator()
+        While ri.%GetNext(, .ev) { Set ev.namespace = namespace }
+    } Catch ex {
+        Set rows = []
+    }
+    Quit rows
 }
 
 /// The feed's operations for the encounter, oldest event first, with the delivery outcome the connector recorded.

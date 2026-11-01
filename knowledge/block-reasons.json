@@ -43,12 +43,12 @@
     },
     {
       "code": "PARSE_FAILED",
-      "title": "The message couldn't be mapped to an operation",
-      "prerequisite": "A message the inbound profile can map (WIC-6)",
-      "next_action": "Escalate to the integration team with the message.",
+      "title": "The message couldn't be read or mapped to an operation",
+      "prerequisite": "A message the namespace's schema can read and the inbound profile can map (WIC-6)",
+      "next_action": "Read the gate's words. When the second parser reads the message as sound and names a site segment the schema lacks, import the site's schema and set the inbound item's schema category to it (INSTALL.md section 7), then reinvestigate; nothing is resent meanwhile. Otherwise escalate to the integration team with the message.",
       "owner": "Integration team",
-      "reevaluate_when": "A corrected message arrives or the mapping is fixed",
-      "text": "Fields the operation needs, such as the visit number, the event time or the patient identifier, are missing or malformed."
+      "reevaluate_when": "The site's schema is imported and the inbound item reads with it, a corrected message arrives or the mapping is fixed",
+      "text": "IRIS couldn't read the message against this namespace's schema, or fields the operation needs, such as the visit number, the event time or the patient identifier, are missing or malformed. A second, independent parser says which: a sound message whose site segment isn't defined here, or a malformed one."
     },
     {
       "code": "UNMAPPABLE",

@@ -11,6 +11,15 @@ USER ${ISC_PACKAGE_MGRUSER}
 
 COPY --chown=irisowner:irisowner . /home/irisowner/dev
 
+# The Second Parser (docs/CONTRACTS.md, 6.1): HAPI and its dependencies from Maven Central, each checked against the SHA-256
+# pinned in pex/build.sh in the same step (a mismatch fails the build), and shutter.pex compiled with the image's own JDK into
+# the manager directory (mgr/pex, beside the data volume mgr/shutter and not inside it, so an upgraded container runs this
+# image's jar), where the production item's classpath expects it. The step never fails the image: without a JDK, a PEX
+# framework jar, network or a matching checksum it prints why and leaves no jar, and the item stays off. PEX_STRICT=1 (CI's
+# image job, on an image known to carry the framework) makes such a skip fail the build instead.
+ARG PEX_STRICT=0
+RUN PEX_STRICT="${PEX_STRICT}" bash /home/irisowner/dev/pex/build.sh /usr/irissys/mgr/pex
+
 # 1 loads the aihub module (live agents) too: for images with the AI Hub package. 0 for a plain
 # IRIS for Health Community base, which gets the replay edition.
 ARG WITH_AIHUB=1

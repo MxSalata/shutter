@@ -222,6 +222,7 @@ Per member, over all passes:
 - S23b Two patients for one bed: played in policy mode only.
 - S23c The bed's occupant cannot leave: played in policy mode only.
 - S24 A newer message arrives as Shutter resends: played in policy mode only.
+- S25 A message with the site's own segment: played in policy mode only.
 
 ## Not yet measured
 

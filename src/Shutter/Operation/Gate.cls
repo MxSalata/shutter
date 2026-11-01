@@ -51,9 +51,9 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     // A schema this namespace does not hold is not a bad message (v1.32): the block names the category and the fix, and a
     // person imports the schema and reinvestigates.
     If $ISOBJECT(validation) && validation.%IsDefined("schema_known") && '##class(Shutter.Util.Json).Bool(validation, "schema_known", 1) {
-        Do ..Check(checks, "conformance", "block", "SCHEMA_UNKNOWN", "The message's schema category " _ ##class(Shutter.Util.Json).Str(validation, "schema_category", "(none)") _ " is not loaded in this namespace, so it could not be validated; " _ ##class(Shutter.Util.Json).Str(validation, "schema_fix", "import the schema and reinvestigate"))
+        Do ..Check(checks, "conformance", "block", "SCHEMA_UNKNOWN", "The message's schema category " _ ##class(Shutter.Util.Json).Str(validation, "schema_category", "(none)") _ " is not loaded in this namespace, so it could not be validated" _ ##class(Shutter.Util.SecondParser).Verdict(validation) _ "; " _ ##class(Shutter.Util.Json).Str(validation, "schema_fix", "import the schema and reinvestigate"))
     } Else {
-        Do ..Check(checks, "conformance", $SELECT(parsed: "pass", 1: "block"), $SELECT(parsed: "PARSED", 1: "PARSE_FAILED"), $SELECT(parsed: "The message parses against its schema", 1: "The message does not parse: " _ ##class(Shutter.Util.Json).Str(validation, "error")))
+        Do ..Check(checks, "conformance", $SELECT(parsed: "pass", 1: "block"), $SELECT(parsed: "PARSED", 1: "PARSE_FAILED"), $SELECT(parsed: "The message parses against its schema", 1: "The message does not parse: " _ ##class(Shutter.Util.Json).Str(validation, "error") _ ##class(Shutter.Util.SecondParser).Verdict(validation)))
     }
 
     // Intent: the plan is well-formed and, for a write, is exactly the case's operation.
