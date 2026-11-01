@@ -330,7 +330,13 @@ export function AppLayout() {
             <UnstyledButton component={Link} to="/scenarios" aria-label={`${APP_NAME}: home`}>
               <Group gap={8} wrap="nowrap">
                 <BrandMark size={28} />
-                <Text fw={700} fz="lg" style={{ letterSpacing: -0.3 }}>
+                {/* On a phone in the trial the pill stands beside the mark and the name gives way, so the row fits */}
+                <Text
+                  fw={700}
+                  fz="lg"
+                  style={{ letterSpacing: -0.3 }}
+                  visibleFrom={chrome ? 'xs' : undefined}
+                >
                   {APP_NAME}
                 </Text>
               </Group>

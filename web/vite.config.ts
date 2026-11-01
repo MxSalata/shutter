@@ -55,19 +55,20 @@ function markDemoBuild(): Plugin {
 
 /**
  * The build's chunks. Shared libraries in their own (React, Mantine, React Query), and the trial's recordings in
- * `trial-data`, apart from the mock's code (`trial`): the recordings change only when they are recorded again, so the
- * committed `www/` does not gain a new 2 MB file on every change to the mock. A JSON file goes to `trial-data` only
- * when nothing but the mock imports it, so no live page ever loads that chunk.
+ * `trial-data`, apart from the mock's code (which follows src/trial/transport.ts, loaded only by trial pages): the
+ * recordings change only when they are recorded again, so the committed `www/` does not gain a new 2 MB file on every
+ * change to the mock. The mock's code is not a manual chunk: one would also draw in the modules it shares with live
+ * pages, and the entry would then load it. A JSON file goes to `trial-data` only
+ * when nothing but the mock and the trial import it, so no live page ever loads that chunk.
  */
 function chunkOf(id: string, getModuleInfo: (id: string) => { importers: readonly string[] } | null) {
   const path = id.replace(/\\/g, '/');
   if (/\/node_modules\/(react|react-dom|react-router|scheduler)\//.test(path)) return 'react';
   if (/\/node_modules\/@mantine\//.test(path)) return 'mantine';
   if (/\/node_modules\/@tanstack\//.test(path)) return 'query';
-  if (/\/src\/(mocks\/[^/]+\.ts|trial\/transport\.ts)$/.test(path)) return 'trial';
   if (path.endsWith('.json') && !path.includes('/docs/')) {
     const importers = getModuleInfo(id)?.importers ?? [];
-    if (importers.length && importers.every((i) => i.replace(/\\/g, '/').includes('/src/mocks/')))
+    if (importers.length && importers.every((i) => /\/src\/(mocks|trial)\//.test(i.replace(/\\/g, '/'))))
       return 'trial-data';
   }
   return undefined;
