@@ -13,7 +13,8 @@ import {
 } from '@mantine/core';
 import { IconEye } from '@tabler/icons-react';
 import { Link, useParams } from 'react-router';
-import { isReviewRunning, useMe, useReview } from '@/api/hooks';
+import { DEMO_READ_ONLY, readOnlyDemo } from '@/api/can';
+import { isReviewRunning, useCan, useReview } from '@/api/hooks';
 import type { ReviewDetail } from '@/api/types';
 import { Digest } from '@/components/Digest';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -158,7 +159,9 @@ function AgentBlock({ r }: { r: ReviewDetail }) {
 }
 
 function Review({ r }: { r: ReviewDetail }) {
-  const me = useMe().data;
+  // Annotating a finding changes what the site records about its production: the configure resource's
+  const can = useCan();
+  const canAnnotate = can.configure;
   const dialogs = useAnnotationDialogs(r);
   const running = isReviewRunning(r.state);
   const findings = orderedFindings(r);
@@ -238,6 +241,11 @@ function Review({ r }: { r: ReviewDetail }) {
               {hl7Note(r)}
             </Text>
           ) : null}
+          {readOnlyDemo(can) ? (
+            <Text size="sm" c="dimmed" data-testid="demo-read-only">
+              {DEMO_READ_ONLY}, annotations included.
+            </Text>
+          ) : null}
           {/* How many of these the agent explained, stated once, directly above the cards */}
           <Explained r={r} />
           {findings.length ? (
@@ -245,7 +253,7 @@ function Review({ r }: { r: ReviewDetail }) {
               findings={findings}
               recorded={r.agent.mode === 'replay'}
               namespace={r.namespace}
-              approver={!!me?.approver}
+              canAnnotate={canAnnotate}
               onMark={dialogs.mark}
               onUnmark={dialogs.unmark}
             />

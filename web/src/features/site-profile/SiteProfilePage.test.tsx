@@ -527,3 +527,76 @@ describe('SiteProfilePage, a change a case suggested', () => {
     expect(within(card).queryByRole('button', { name: 'Review and save…' })).not.toBeInTheDocument();
   });
 });
+
+describe("SiteProfilePage, as the public demo's role reads it", () => {
+  const suggestion = suggestionHref({ caseId: 'C-000008', fact: 'W1' }).replace('/site-profile', '');
+  const saves = () =>
+    screen.queryByRole('button', { name: /Review and save|Confirm these answers|Save version/ });
+
+  beforeEach(() => resetMock('demo'));
+
+  it('keeps the answers for reading and puts a note where Save would be', async () => {
+    renderPage();
+    expect(await screen.findByTestId('demo-read-only')).toHaveTextContent(
+      "The public demo is read-only: a site's approver saves changes here",
+    );
+    expect((await inReceiver1()).getByRole('radio', { name: /2, operations/ })).toBeDisabled();
+    expect(saves()).not.toBeInTheDocument();
+    expect(screen.queryByText(/Changing the answers needs the approver role/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/a save lasts until the page is reloaded/)).not.toBeInTheDocument();
+    // The shipped answers are listed, as for everyone
+    expect(screen.getByText('Shutter is running on the shipped answers')).toBeInTheDocument();
+  });
+
+  it('keeps the pre-filled draft and its review for reading, with the note instead of Save', async () => {
+    renderPage(suggestion);
+    const card = await screen.findByRole('region', { name: 'A suggested change from case C-000008' });
+    expect(within(card).getByText('BEDMGR')).toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: 'Review and save…' })).not.toBeInTheDocument();
+    expect(within(card).getByText(/The public demo is read-only/)).toBeInTheDocument();
+    await userEvent.click(within(card).getByRole('button', { name: 'Review the change…' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/Authoritative source: from .* to BEDMGR/)).toBeInTheDocument();
+    expect(within(dialog).getByTestId('demo-read-only')).toHaveTextContent('The public demo is read-only');
+    expect(within(dialog).queryByRole('button', { name: /Save version/ })).not.toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    // The page itself offers the review of the draft too, and still no save
+    expect(screen.getByRole('button', { name: 'Review the changes…' })).toBeInTheDocument();
+    expect(saves()).not.toBeInTheDocument();
+    expect(puts).toEqual([]);
+  });
+});
+
+describe('SiteProfilePage, which server it asks', () => {
+  const asServer = (me: object) =>
+    server.use(http.get(`${BASE}/me`, () => HttpResponse.json({ username: 'approver', ...me })));
+
+  it('saves as before for an approver whose server sends no `can`', async () => {
+    asServer({ operator: true, approver: true });
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Confirm these answers…' })).toBeEnabled();
+    expect(screen.queryByTestId('demo-read-only')).not.toBeInTheDocument();
+  });
+
+  it('offers Save to whoever the server says may configure', async () => {
+    asServer({
+      operator: true,
+      approver: true,
+      can: { operate: true, approve: true, configure: true, scenarios: true },
+    });
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Confirm these answers…' })).toBeEnabled();
+  });
+
+  it('withholds Save from an approver the server says may not configure, and says the demo is read-only', async () => {
+    asServer({
+      operator: true,
+      approver: true,
+      can: { operate: true, approve: true, configure: false, scenarios: true },
+    });
+    renderPage();
+    expect(await screen.findByTestId('demo-read-only')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Review and save|Confirm these answers/ })).toBeNull();
+  });
+});

@@ -20,7 +20,8 @@ import { useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
-import { keys, useMe, useSaveSiteProfile, useSiteProfile, useWhatIf } from '@/api/hooks';
+import { DEMO_READ_ONLY, readOnlyDemo } from '@/api/can';
+import { keys, useCan, useMe, useSaveSiteProfile, useSiteProfile, useWhatIf } from '@/api/hooks';
 import type { SiteProfile, SiteProfileView, SiteReceiver, WhatIf } from '@/api/types';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { KeyValueList } from '@/components/KeyValueList';
@@ -659,7 +660,11 @@ function Profile({
   suggestion: Suggested | null;
 }) {
   const me = useMe().data;
-  const editable = !!me?.approver;
+  const can = useCan();
+  // Saving the profile is the configure resource's; the public demo's role approves but cannot configure, so it reads
+  // the draft and the review of a change and finds a note where Save would be
+  const editable = can.configure;
+  const reading = readOnlyDemo(can);
   const client = useQueryClient();
   const save = useSaveSiteProfile();
   // A change a case's What-if card suggested (`?suggest=`): applied to the draft once, when the page opens; the
@@ -823,6 +828,7 @@ function Profile({
           result={suggested.result}
           version={base.version}
           editable={editable}
+          reviewOnly={reading}
           onReview={review}
           onDiscard={() => {
             // Only the suggested field goes back to the stored value: other edits in the draft stay
@@ -863,7 +869,7 @@ function Profile({
               {editable ? '' : ' An approver answers them.'}
             </Alert>
           ) : null}
-          {DEMO ? (
+          {DEMO && !reading ? (
             <Text size="xs" c="dimmed">
               In the online demo a save lasts until the page is reloaded.
             </Text>
@@ -900,6 +906,13 @@ function Profile({
             </Text>
           ) : null}
         </Group>
+      ) : reading ? (
+        <Group gap="sm">
+          {dirty ? <Button onClick={review}>Review the changes…</Button> : null}
+          <Text size="sm" c="dimmed" data-testid="demo-read-only">
+            {DEMO_READ_ONLY}.
+          </Text>
+        </Group>
       ) : (
         <Text size="sm" c="dimmed">
           Changing the answers needs the approver role: sign in as approver.
@@ -915,6 +928,7 @@ function Profile({
           changes={changes}
           body={body}
           saving={save.isPending || checking}
+          readOnly={reading}
           problem={saveProblem}
           onCancel={() => setReviewing(0)}
           onSave={onSave}

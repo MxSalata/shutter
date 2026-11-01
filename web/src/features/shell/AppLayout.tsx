@@ -45,6 +45,7 @@ import { useResolvedContrast } from './useApplyAppearance';
 import { MAIN_ID, SkipLink } from './SkipLink';
 import { DEMO } from '@/demo';
 import { Guide } from '@/features/guide/Guide';
+import { LiveBanner } from './LiveBanner';
 import { HelpMenu } from '@/features/guide/HelpMenu';
 
 /**
@@ -286,6 +287,7 @@ export function AppLayout() {
       <AppShell.Main id={MAIN_ID} tabIndex={-1} style={{ outline: 'none' }}>
         {/* A new page starts at its top; Back returns to where the previous one was left. */}
         <ScrollRestoration />
+        <LiveBanner />
         <Suspense fallback={<PageSkeleton />}>
           <Outlet key={displayZone()} />
         </Suspense>

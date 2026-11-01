@@ -2,6 +2,7 @@ import { Anchor, Button, Group, Modal, Stack, Text, Textarea } from '@mantine/co
 import { notifications } from '@mantine/notifications';
 import { IconPlayerStop } from '@tabler/icons-react';
 import { useState } from 'react';
+import { resolveCan } from '@/api/can';
 import { newIdempotencyKey } from '@/api/client';
 import { useAbandonCase, useMe } from '@/api/hooks';
 import { CLOSED_STATES, type CaseDetail, type CaseEvent } from '@/api/types';
@@ -56,7 +57,7 @@ export function AbandonPanel({ c, events }: { c: CaseDetail; events: CaseEvent[]
   const quiet = newest ? now - Date.parse(newest) : 0;
   if (
     DEMO ||
-    !me?.approver ||
+    !resolveCan(me).approve ||
     CLOSED_STATES.includes(c.state) ||
     WAITING_FOR_A_PERSON.includes(c.state) ||
     !newest ||

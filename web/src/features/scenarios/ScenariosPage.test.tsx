@@ -277,3 +277,62 @@ describe('ScenariosPage', () => {
     expect(screen.queryByText(/^Not defined for/)).not.toBeInTheDocument();
   });
 });
+
+describe('ScenariosPage, as each role has it', () => {
+  const asServer = (me: object) =>
+    server.use(http.get('/api/shutter/me', () => HttpResponse.json({ username: 'x', ...me })));
+
+  it("hides Run and Reset from the public demo's role, and says the demo plays its stories by itself", async () => {
+    resetMock('demo');
+    renderScenarios();
+    expect(await screen.findByRole('region', { name: 'Every scenario' })).toBeInTheDocument();
+    expect(await screen.findByText(/The public demo plays its stories by itself/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Run / })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reset' })).not.toBeInTheDocument();
+    // No Play column, no mode to choose; the modes are described and the cards still open their cases
+    expect(screen.queryByRole('columnheader', { name: 'Play' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'Board' })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Investigation modes' })).toBeInTheDocument();
+    const first = screen.getByRole('region', { name: 'Try these three first' });
+    expect(await within(first).findByRole('link', { name: /the latest S8 case/ })).toBeInTheDocument();
+    // Nobody is asked to answer the induction questions in a read-only demo
+    expect(screen.queryByText('Shutter is running on the shipped site profile')).not.toBeInTheDocument();
+  });
+
+  it('keeps Run and Reset for an approver, and says nothing about a demo that plays itself', async () => {
+    resetMock('approver');
+    renderScenarios();
+    expect(await screen.findByRole('button', { name: 'Run S2' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeEnabled();
+    expect(screen.queryByText(/plays its stories by itself/)).not.toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Play' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Board' })).toBeInTheDocument();
+  });
+
+  it('keeps Run and Reset when the server sends `can.scenarios`', async () => {
+    asServer({
+      operator: true,
+      approver: false,
+      can: { operate: true, approve: false, configure: false, scenarios: true },
+    });
+    renderScenarios();
+    expect(await screen.findByRole('button', { name: 'Run S2' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeEnabled();
+  });
+
+  it('derives the powers from the flags of a server that sends no `can`, as before', async () => {
+    asServer({ operator: true, approver: true });
+    renderScenarios();
+    expect(await screen.findByRole('button', { name: 'Run S2' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeEnabled();
+    expect(screen.queryByText(/plays its stories by itself/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the disabled controls and their reason for someone who cannot operate at all', async () => {
+    asServer({ operator: false, approver: false });
+    renderScenarios();
+    expect(await screen.findByRole('button', { name: 'Run S2' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
+    expect(screen.queryByText(/plays its stories by itself/)).not.toBeInTheDocument();
+  });
+});

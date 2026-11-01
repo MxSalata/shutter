@@ -1,5 +1,5 @@
-import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { audit, choosePastel, MODES } from './axe';
 import { skipWelcome } from './guide';
 
 /**
@@ -33,17 +33,6 @@ async function signIn(page: Page) {
   await go(page, '/login');
   await page.getByRole('button', { name: /Try the demo/ }).click();
   await expect(page.getByRole('heading', { name: 'Scenarios' })).toBeVisible();
-}
-
-async function audit(page: Page) {
-  const results = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-    .analyze();
-  const blocking = results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
-  for (const v of results.violations)
-    for (const n of v.nodes)
-      console.log(`[a11y] ${v.impact ?? 'n/a'} ${v.id}: ${n.target.join(' ')} - ${n.any[0]?.message ?? ''}`);
-  return blocking.map((v) => `${v.id} (${v.impact}) ×${v.nodes.length}: ${v.nodes[0]?.target.join(' ')}`);
 }
 
 /** The Site profile page with a change a case's What-if card suggested, pre-filled: the address names the case and the fact. */
@@ -85,29 +74,13 @@ const SCREENS: [path: string, heading: string, steps?: 'open'][] = [
   ['/health', 'Health'],
 ];
 
-const MODES = [
-  { colorScheme: 'light', contrast: 'no-preference', palette: 'default' },
-  { colorScheme: 'light', contrast: 'no-preference', palette: 'pastel' },
-  { colorScheme: 'dark', contrast: 'no-preference', palette: 'default' },
-  { colorScheme: 'light', contrast: 'more', palette: 'default' },
-  { colorScheme: 'dark', contrast: 'more', palette: 'default' },
-] as const;
-
 for (const { colorScheme, contrast, palette } of MODES) {
   const mode = `${palette === 'pastel' ? 'pastel' : colorScheme}${contrast === 'more' ? ', high contrast' : ''}`;
   test.describe(`accessibility (axe-core, WCAG 2.1 A/AA), ${mode}`, () => {
     // Until the user picks otherwise, the app follows prefers-color-scheme and prefers-contrast.
     test.use({ colorScheme, contrast });
     // Pastel has no OS preference: it is the stored device setting, read before the first paint.
-    if (palette === 'pastel')
-      test.beforeEach(({ page }) =>
-        page.addInitScript(() =>
-          localStorage.setItem(
-            'shutter.appearance',
-            JSON.stringify({ state: { contrast: 'auto', palette: 'pastel' }, version: 0 }),
-          ),
-        ),
-      );
+    if (palette === 'pastel') test.beforeEach(({ page }) => choosePastel(page));
 
     test('sign-in page', async ({ page }) => {
       await go(page, '/login');

@@ -399,6 +399,31 @@ describe('ReviewPage', () => {
     expect(screen.queryByRole('button', { name: /Annotate|Remove the annotation/ })).not.toBeInTheDocument();
   });
 
+  it("hides the annotations from the public demo's role, which reads the review and the notes already made", async () => {
+    resetMock('demo');
+    renderAt('/reviews/PR-000001');
+    await screen.findByRole('heading', { name: 'Review PR-000001' });
+    expect(await screen.findByTestId('demo-read-only')).toHaveTextContent(
+      "The public demo is read-only: a site's approver saves changes here",
+    );
+    expect(within(rows()[0]).getByText('Intended')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Annotate|Remove the annotation/ })).not.toBeInTheDocument();
+  });
+
+  it('derives the right to annotate from the approver flag when the server sends no `can`', async () => {
+    server.use(
+      http.get(`${BASE}/me`, () =>
+        HttpResponse.json({ username: 'approver', operator: true, approver: true }),
+      ),
+    );
+    renderAt('/reviews/PR-000001');
+    await screen.findByRole('heading', { name: 'Review PR-000001' });
+    expect(
+      (await screen.findAllByRole('button', { name: /^(Annotate|Remove the annotation)/ })).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByTestId('demo-read-only')).not.toBeInTheDocument();
+  });
+
   it('says plainly when there is no such review', async () => {
     renderAt('/reviews/PR-999999');
     expect(await screen.findByText('There is no review PR-999999')).toBeInTheDocument();

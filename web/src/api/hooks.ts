@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, newIdempotencyKey, seg } from './client';
+import { resolveCan } from './can';
 import { isApiError } from '@/lib/errors';
 import { useGuide } from '@/features/guide/store';
 import {
@@ -21,6 +22,7 @@ import {
   type IncidentDetail,
   type IncidentEvent,
   type IncidentList,
+  type LiveStatus,
   type LibraryMember,
   type Me,
   type Mode,
@@ -96,6 +98,11 @@ export function useMe() {
     staleTime: 60_000,
     retry: false,
   });
+}
+
+/** What the signed-in user may do: the server's `can`, or what the operator and approver flags give (api/can.ts). */
+export function useCan() {
+  return resolveCan(useMe().data);
 }
 
 export function useSignIn() {
@@ -543,6 +550,24 @@ export function usePatchMember() {
 
 export function useSettings() {
   return useQuery({ queryKey: keys.settings, queryFn: () => api.get<Settings>('/settings') });
+}
+
+/** How often the live hospital's banner reads its status again, in milliseconds. */
+const LIVE_BANNER = 30_000;
+
+/**
+ * The live hospital's status (`GET /settings`, `live`), for the banner on every page: null unless the server says
+ * `live.enabled`. It reads the settings again every half minute only while a live hospital is on, so no other
+ * instance polls for it. A user who may not read the settings (a 403) has no banner.
+ */
+export function useLiveStatus(): LiveStatus | null {
+  const settings = useQuery({
+    queryKey: keys.settings,
+    queryFn: () => api.get<Settings>('/settings'),
+    refetchInterval: (query) => (query.state.data?.live?.enabled ? LIVE_BANNER : false),
+  });
+  const live = settings.data?.live;
+  return live?.enabled === true ? live : null;
 }
 
 export function useCosts() {

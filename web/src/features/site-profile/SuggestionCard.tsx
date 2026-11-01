@@ -1,6 +1,7 @@
 import { Anchor, Button, Card, Code, Group, List, Stack, Table, Text, Title } from '@mantine/core';
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router';
+import { DEMO_READ_ONLY } from '@/api/can';
 import { StatusNotice } from '@/components/StatusBadge';
 import { fieldLabel, valueLabel, type Applied, type SuggestedChange } from './suggestion';
 
@@ -38,6 +39,7 @@ export function SuggestionCard({
   result,
   version,
   editable,
+  reviewOnly = false,
   onReview,
   onDiscard,
 }: {
@@ -47,6 +49,8 @@ export function SuggestionCard({
   result: Applied;
   version: number;
   editable: boolean;
+  /** The public demo: the change may be reviewed for reading, and nothing can be saved. */
+  reviewOnly?: boolean;
   onReview: () => void;
   onDiscard: () => void;
 }) {
@@ -111,6 +115,9 @@ export function SuggestionCard({
         )}
         <Group gap="sm">
           {result.ok && editable ? <Button onClick={onReview}>Review and save…</Button> : null}
+          {result.ok && !editable && reviewOnly ? (
+            <Button onClick={onReview}>Review the change…</Button>
+          ) : null}
           <Button variant="default" onClick={onDiscard}>
             {result.ok ? 'Discard the suggestion' : 'Dismiss'}
           </Button>
@@ -120,7 +127,9 @@ export function SuggestionCard({
         </Group>
         {result.ok && !editable ? (
           <Text size="sm" c="dimmed">
-            Saving it needs the approver role: an approver reviews and saves it.
+            {reviewOnly
+              ? `${DEMO_READ_ONLY}.`
+              : 'Saving it needs the approver role: an approver reviews and saves it.'}
           </Text>
         ) : null}
       </Stack>

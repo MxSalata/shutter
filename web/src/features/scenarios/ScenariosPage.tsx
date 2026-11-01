@@ -23,13 +23,14 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import {
   isPlaying,
+  useCan,
   useHealth,
-  useMe,
   useResetScenarios,
   useRunScenario,
   useScenarios,
   useSiteProfile,
 } from '@/api/hooks';
+import { scenariosHidden } from '@/api/can';
 import type { Mode, Scenario, ScenarioRun } from '@/api/types';
 import { DEMO } from '@/demo';
 import { PageHeader } from '@/components/PageHeader';
@@ -243,6 +244,7 @@ function ScenarioRow({
   busy,
   onRun,
   starting,
+  showPlay,
 }: {
   s: Scenario;
   mode: Mode;
@@ -251,6 +253,8 @@ function ScenarioRow({
   busy: string;
   onRun: () => void;
   starting: boolean;
+  /** False where the user may not run scenarios: the row has no Play cell. */
+  showPlay: boolean;
 }) {
   // With the player switched off there is no mode to play in, so no row is greyed out for one.
   const defined = playerOff || definedFor(s, mode);
@@ -338,22 +342,24 @@ function ScenarioRow({
           </Text>
         )}
       </StackTable.Td>
-      <StackTable.Td data-label="Play" style={{ verticalAlign: 'top' }}>
-        <Tooltip label={why || `Play ${s.id} in ${humanize(mode)} mode`} multiline maw={260}>
-          <span>
-            <Button
-              size="xs"
-              leftSection={<IconPlayerPlay size={14} />}
-              disabled={!!why}
-              loading={starting}
-              onClick={onRun}
-              aria-label={`Run ${s.id}`}
-            >
-              Run
-            </Button>
-          </span>
-        </Tooltip>
-      </StackTable.Td>
+      {showPlay ? (
+        <StackTable.Td data-label="Play" style={{ verticalAlign: 'top' }}>
+          <Tooltip label={why || `Play ${s.id} in ${humanize(mode)} mode`} multiline maw={260}>
+            <span>
+              <Button
+                size="xs"
+                leftSection={<IconPlayerPlay size={14} />}
+                disabled={!!why}
+                loading={starting}
+                onClick={onRun}
+                aria-label={`Run ${s.id}`}
+              >
+                Run
+              </Button>
+            </span>
+          </Tooltip>
+        </StackTable.Td>
+      ) : null}
     </StackTable.Tr>
   );
 }
@@ -443,15 +449,48 @@ function RunModes({
   );
 }
 
+/**
+ * The same modes where nobody may choose one (the public demo plays its stories by itself): described, not offered. The
+ * card keeps the guide's `scenarios-mode` target.
+ */
+function ModesExplained() {
+  return (
+    <Card padding="md" component="section" aria-labelledby="modes-explained-title" data-tour="scenarios-mode">
+      <Stack gap="xs">
+        <Title order={2} fz="md" id="modes-explained-title">
+          Investigation modes
+        </Title>
+        <Text size="sm" c="dimmed">
+          The mode chooses who proposes the plan. The gate, the rehearsal and the release, by a person, or the
+          site&apos;s written policy, are the same in every mode.
+        </Text>
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: MODES.length }} spacing="sm">
+          {MODES.map((m) => (
+            <Stack key={m.value} gap={2}>
+              <Text size="sm" fw={700}>
+                {m.label}
+              </Text>
+              <Text size="sm">{m.hint}.</Text>
+            </Stack>
+          ))}
+        </SimpleGrid>
+      </Stack>
+    </Card>
+  );
+}
+
 /** Every scenario, filtered by what it should end in; the counts are the list's own. */
 function AllScenarios({
   scenarios,
   mode,
   row,
+  showPlay,
 }: {
   scenarios: Scenario[];
   mode: Mode;
   row: (s: Scenario) => React.ReactNode;
+  /** False where the user may not run scenarios: the list has no Play column. */
+  showPlay: boolean;
 }) {
   const [outcome, setOutcome] = useState<string>('all');
   const counts = new Map<Outcome, number>();
@@ -490,7 +529,7 @@ function AllScenarios({
                 <StackTable.Th>Scenario</StackTable.Th>
                 <StackTable.Th>What should happen</StackTable.Th>
                 <StackTable.Th>Latest case</StackTable.Th>
-                <StackTable.Th>Play</StackTable.Th>
+                {showPlay ? <StackTable.Th>Play</StackTable.Th> : null}
               </StackTable.Tr>
             </StackTable.Thead>
             <StackTable.Tbody>{shown.map(row)}</StackTable.Tbody>
@@ -502,12 +541,14 @@ function AllScenarios({
 }
 
 export default function ScenariosPage() {
-  const me = useMe().data;
+  const can = useCan();
   const scenarios = useScenarios();
   const run = useRunScenario();
   const reset = useResetScenarios();
   const [mode, setMode] = useState<Mode>('board');
-  const canRun = !!me?.operator;
+  const canRun = can.scenarios;
+  // The public demo's role operates but may not run or reset: no Run, no Reset, and a line saying why
+  const hidden = scenariosHidden(can);
   // Only a report that says so switches the runs off: an older server, or one not answering yet, keeps them.
   const playerOff = useHealth().data?.demo === false;
   const current = scenarios.data?.run ?? null;
@@ -542,49 +583,60 @@ export default function ScenariosPage() {
 
   // The induction prompt leads the page on an instance, as the owner's questionnaire is designed; the demo, whose
   // profile is a recording nobody answers, keeps it below the fold, under the scenarios, so the guided path comes first.
-  const induction = me?.approver ? <InductionPrompt below={DEMO} /> : null;
+  const induction = can.configure ? <InductionPrompt below={DEMO} /> : null;
   return (
     <>
       {DEMO ? null : induction}
       <PageHeader
         title="Scenarios"
         actions={
-          <Tooltip
-            label={
-              playerOff
-                ? PLAYER_OFF
-                : !canRun
-                  ? 'Resetting needs the operator role'
-                  : busy || 'Clear the downstream system, the folders and the running scenario'
-            }
-          >
-            <span>
-              <Button
-                variant="default"
-                leftSection={<IconRefresh size={16} />}
-                disabled={playerOff || !canRun || !!busy}
-                loading={reset.isPending}
-                onClick={() =>
-                  reset.mutate(undefined, {
-                    onSuccess: () =>
-                      notifications.show({
-                        color: 'blue',
-                        title: 'Reset',
-                        message: 'The downstream system and the folders are clear.',
-                      }),
-                    onError: (e) =>
-                      notifications.show({ color: 'red', title: 'Reset failed', message: describeError(e) }),
-                  })
-                }
-              >
-                Reset
-              </Button>
-            </span>
-          </Tooltip>
+          hidden ? undefined : (
+            <Tooltip
+              label={
+                playerOff
+                  ? PLAYER_OFF
+                  : !canRun
+                    ? 'Resetting needs the operator role'
+                    : busy || 'Clear the downstream system, the folders and the running scenario'
+              }
+            >
+              <span>
+                <Button
+                  variant="default"
+                  leftSection={<IconRefresh size={16} />}
+                  disabled={playerOff || !canRun || !!busy}
+                  loading={reset.isPending}
+                  onClick={() =>
+                    reset.mutate(undefined, {
+                      onSuccess: () =>
+                        notifications.show({
+                          color: 'blue',
+                          title: 'Reset',
+                          message: 'The downstream system and the folders are clear.',
+                        }),
+                      onError: (e) =>
+                        notifications.show({
+                          color: 'red',
+                          title: 'Reset failed',
+                          message: describeError(e),
+                        }),
+                    })
+                  }
+                >
+                  Reset
+                </Button>
+              </span>
+            </Tooltip>
+          )
         }
       />
       <Stack gap="md">
         <ScenariosHero />
+        {hidden ? (
+          <Text size="sm">
+            The public demo plays its stories by itself, so there is nothing to run or reset here.
+          </Text>
+        ) : null}
         {current ? <RunBanner run={current} /> : null}
         {/* Always rendered, loading or not, so the guide's first step has its target */}
         <TryFirst
@@ -593,6 +645,7 @@ export default function ScenariosPage() {
           why={whyNot}
           starting={(s, m) => run.isPending && run.variables?.id === s.id && run.variables?.mode === m}
           onRun={start}
+          runnable={!hidden}
         />
         {/* The demo's guided path through the recorded cases, past the first three */}
         {DEMO ? <StartHere /> : null}
@@ -604,6 +657,8 @@ export default function ScenariosPage() {
               site adds and from the productions that forward their failed deliveries to Shutter.
             </Text>
           </Alert>
+        ) : hidden ? (
+          <ModesExplained />
         ) : (
           <RunModes mode={mode} onChange={setMode} scenarios={scenarios.data?.scenarios} />
         )}
@@ -619,11 +674,13 @@ export default function ScenariosPage() {
           <AllScenarios
             scenarios={scenarios.data.scenarios}
             mode={mode}
+            showPlay={!hidden}
             row={(s) => (
               <ScenarioRow
                 key={s.id}
                 s={s}
                 mode={mode}
+                showPlay={!hidden}
                 canRun={canRun}
                 playerOff={playerOff}
                 busy={busy || pending}

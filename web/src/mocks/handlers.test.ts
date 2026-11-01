@@ -10,6 +10,7 @@ import type {
   Costs,
   Escalation,
   LibraryMember,
+  Me,
   PlanView,
   ReviewDetail,
   ReviewList,
@@ -439,6 +440,71 @@ describe('the roles', () => {
   it('keep abandoning to cases still in a working state', async () => {
     const closed = await refusal(api.post(`/cases/${WITHHELD}/abandon`, { reason: 'stuck' }));
     expect([closed.status, closed.code]).toEqual([409, 'wrong_state']);
+  });
+});
+
+describe("the public demo's role", () => {
+  const code = async (p: Promise<unknown>) => {
+    const e = await refusal(p);
+    return [e.status, (e.body as { error: string }).error];
+  };
+
+  it('answers /me with what each role may do', async () => {
+    const can = async (as: string) => {
+      resetMock(as);
+      return (await api.get<Me>('/me')).can;
+    };
+    expect(await can('approver')).toEqual({ operate: true, approve: true, configure: true, scenarios: true });
+    expect(await can('operator')).toEqual({
+      operate: true,
+      approve: false,
+      configure: false,
+      scenarios: true,
+    });
+    expect(await can('demo')).toEqual({ operate: true, approve: true, configure: false, scenarios: false });
+  });
+
+  it('refuses the scenario controls and every change to the site, and still approves', async () => {
+    resetMock('demo');
+    expect(await code(api.post('/scenarios/S2/run', { mode: 'board' }))).toEqual([403, 'forbidden']);
+    expect(await code(api.post('/scenarios/reset'))).toEqual([403, 'forbidden']);
+    expect(await code(api.patch(`/library/${fixtures.library[0].code}`, { sort: 1 }))).toEqual([
+      403,
+      'forbidden',
+    ]);
+    const view = await api.get<SiteProfileView>('/site-profile');
+    expect(await code(api.put('/site-profile', { ...view.profile, expectedVersion: view.version }))).toEqual([
+      403,
+      'forbidden',
+    ]);
+    const body = { findingId: 'F2', status: 'intended', reason: 'The feed is watched by hand' };
+    expect(await code(api.post('/production-reviews/PR-000001/annotations', body))).toEqual([
+      403,
+      'forbidden',
+    ]);
+    expect(await code(api.del('/production-reviews/annotations/16'))).toEqual([403, 'forbidden']);
+    // It approves, as the approver does
+    expect((await decide('approve')).decision).toBe('approve');
+  });
+
+  it("keeps today's demo, the approver with every power, for whoever signs in the usual way", async () => {
+    resetMock('approver');
+    const started = await api.post<{ scenario: string }>('/scenarios/S2/run', { mode: 'board' });
+    expect(started.scenario).toBe('S2');
+    await api.post('/scenarios/reset');
+  });
+
+  it('reports a live hospital in the settings to the demo role alone', async () => {
+    resetMock('demo');
+    const live = (await api.get<Settings>('/settings')).live;
+    expect(live).toMatchObject({ enabled: true, every_minutes: 7 });
+    expect(live?.scenarios?.split(',')).toHaveLength(8);
+    expect(live?.last_played).toMatchObject({ scenario: 'S2' });
+    expect(Date.parse(live?.last_played?.at ?? '')).toBeLessThan(Date.now());
+    expect(live?.next?.scenario).toBe('S8');
+    expect(Date.parse(live?.next?.at ?? '')).toBeGreaterThan(Date.now());
+    resetMock('approver');
+    expect((await api.get<Settings>('/settings')).live).toBeUndefined();
   });
 });
 

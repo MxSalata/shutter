@@ -1,6 +1,7 @@
 import { Badge, Card, Group, Stack, Switch, Table, Text, Tooltip } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useLibrary, useMe, usePatchMember } from '@/api/hooks';
+import { DEMO_READ_ONLY, readOnlyDemo } from '@/api/can';
+import { useCan, useLibrary, useMe, usePatchMember } from '@/api/hooks';
 import type { LibraryMember } from '@/api/types';
 import { PageHeader } from '@/components/PageHeader';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -12,8 +13,11 @@ export default function LibraryPage() {
   const me = useMe().data;
   const library = useLibrary();
   const patch = usePatchMember();
-  // Which agents sit on the board is an approver's change, as the site profile is (CONTRACTS 5)
-  const canEdit = !!me?.approver;
+  const can = useCan();
+  // Which agents sit on the board is a change of the site, as the site profile is (CONTRACTS 5, Shutter_Configure)
+  const canEdit = can.configure;
+  // The public demo's role reads the library: the switches are not offered, and a note says why
+  const reading = readOnlyDemo(can);
   const change = (m: LibraryMember, field: 'enabled' | 'inDefaultBoard', value: boolean) =>
     patch.mutate(
       { code: m.code, change: { [field]: value } },
@@ -39,8 +43,10 @@ export default function LibraryPage() {
           />
         ) : null}
         {library.data && me && !canEdit ? (
-          <Text size="sm" c="dimmed" mb="sm">
-            Changing which agents sit on the board needs the approver role: sign in as approver.
+          <Text size="sm" c="dimmed" mb="sm" data-testid={reading ? 'demo-read-only' : undefined}>
+            {reading
+              ? `${DEMO_READ_ONLY}.`
+              : 'Changing which agents sit on the board needs the approver role: sign in as approver.'}
           </Text>
         ) : null}
         {library.data ? (
@@ -87,19 +93,25 @@ export default function LibraryPage() {
                       </Text>
                     </Table.Td>
                     <Table.Td>
-                      <Tooltip label="Needs the approver role" disabled={canEdit}>
-                        <Group>
-                          <Switch
-                            checked={m.enabled}
-                            disabled={!canEdit || patch.isPending}
-                            onChange={(e) => change(m, 'enabled', e.currentTarget.checked)}
-                            aria-label={`${m.name} enabled`}
-                          />
-                        </Group>
-                      </Tooltip>
+                      {reading ? (
+                        <Text size="sm">{m.enabled ? 'Yes' : 'No'}</Text>
+                      ) : (
+                        <Tooltip label="Needs the approver role" disabled={canEdit}>
+                          <Group>
+                            <Switch
+                              checked={m.enabled}
+                              disabled={!canEdit || patch.isPending}
+                              onChange={(e) => change(m, 'enabled', e.currentTarget.checked)}
+                              aria-label={`${m.name} enabled`}
+                            />
+                          </Group>
+                        </Tooltip>
+                      )}
                     </Table.Td>
                     <Table.Td>
-                      {m.role === 'specialist' ? (
+                      {m.role === 'specialist' && reading ? (
+                        <Text size="sm">{m.inDefaultBoard ? 'Yes' : 'No'}</Text>
+                      ) : m.role === 'specialist' ? (
                         <Tooltip label="Needs the approver role" disabled={canEdit}>
                           <Group>
                             <Switch
