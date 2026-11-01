@@ -18,10 +18,10 @@ A scenario whose expected outcome says "incident" (S11) has several cases: the c
 opens, approves its plan and its cases' plans with --approve, and compares each encounter's chain (kind, who decided,
 the catalogue entries), its writes and the downstream system's final state with expected.encounters.
 
-A scenario that names the modes it is defined for (expected.modes: S7, S11, S12, S17, S18, S19, S20, S21, S22) is
-skipped in the others. S7 is not defined for site policy, which resends without asking anyone, so no plan waits for its
-later transfer; S20 is defined for rules only, S21 for rules and site policy and S22 for site policy until the board's
-runs for them are recorded.
+A scenario that names the modes it is defined for (expected.modes: S7, S11, S12, S17 to S22, S23a to S23c, S24, S25)
+is skipped in the others. S7 is not defined for site policy, which resends without asking anyone, so no plan waits for
+its later transfer; S20 is defined for rules only; S21 for the board, rules and site policy; S23a, S23c and S25 for the
+board and site policy; S22, S23b and S24 for site policy until the board's runs for them are recorded.
 expected.by_mode adds to or replaces the expected outcome in one mode (S21: rules alone propose the resend and the gate
 blocks it, where site policy escalates on the catalogue's E13 before any write is planned). S21's rules pass is the
 gate's catch, not a right answer from rules: S13's identical rules run, judged by its own expectation, differs. So

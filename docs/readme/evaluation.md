@@ -1,18 +1,18 @@
 # Evaluation: how the board decides, from the recorded runs
 
-Made by `scripts/evaluate.py` from files in the repository, with no model calls: the 56 board members' recordings in `fixtures/records` (live runs of `claude-opus-5-5` in record mode, started between 2026-10-25T13:22:49Z and 2026-10-25T13:34:24Z), the expected outcomes in `fixtures/scenarios.json`, the catalogue in `knowledge/catalogue/catalogue.json`, the model prices seeded by `src/Shutter/Store/ModelPrice.cls` (list prices read on 2026-10-16) and the played outcomes in `docs/readme/comparison.md`. The same figures are in `docs/readme/evaluation.json`. `python3 scripts/evaluate.py --check` says whether both are current.
+Made by `scripts/evaluate.py` from files in the repository, with no model calls: the 80 board members' recordings in `fixtures/records` (live runs of `claude-opus-5-5` in record mode, started between 2026-10-25T13:22:49Z and 2026-11-01T06:23:39Z), the expected outcomes in `fixtures/scenarios.json`, the catalogue in `knowledge/catalogue/catalogue.json`, the model prices seeded by `src/Shutter/Store/ModelPrice.cls` (list prices read on 2026-10-16) and the played outcomes in `docs/readme/comparison.md`. The same figures are in `docs/readme/evaluation.json`. `python3 scripts/evaluate.py --check` says whether both are current.
 
 A *pass* is one board decision on one case: the three specialists in parallel (conformance, encounter, impact), then the coordinator, who writes the plan. A case planned again after a change has a pass per plan.
 
 ## In short
 
-- **The board's disposition matches the expected outcome in 13 of 13 scored passes** (13 cases in 12 scenarios; 14 passes, of which 1 not scored, see below). The 2 incident cases are scored against the catalogue entry the matcher found in each case's own evidence, not the entry the plan cites; the plans cite that entry in 2 of 2.
-- **Each specialist's own view:** a specialist decides from its own view only (conformance: is the message acceptable; encounter: does the movement still hold; impact: can the write be made safely), so its disposition is what that view alone would decide, not a verdict on the case. It is the case's expected outcome for conformance in 7, encounter in 12 and impact in 13 of 13 scored passes. Where it is not (7 findings), the plan's `disagreements` names the specialist and says why another view outweighed it in 7.
-- **Agreement:** all four agreed in 7 of 14 passes; the coordinator sided with the specialists' majority in 7, with a minority of one in 0 and against all three in 0. In 14 of 14 passes the plan's `disagreements` names exactly the specialists whose disposition differs from the plan's.
-- **The catalogue entries cited:** in 13 scored passes the plan cites an entry marked `decides: policy` in 8, `decides: board` in 3, `decides: person` in 2. A policy entry is one the catalogue may settle without the board in site-policy mode; a board entry needs the board's judgement; a person entry only a person may act on.
-- **Confidence:** the 32 specialist findings whose disposition is the case's outcome had confidence 0.70 to 0.95 (mean 0.86); the 7 outweighed by another view had 0.70 to 0.85 (mean 0.79). A confidence is the specialist's confidence in its own view's answer, not in the case's outcome. Shutter stores it and shows it, but no rule in the core or the gate reads it.
-- **Cost:** 56 agent runs, 1,033,046 uncached input, 334,562 cache-read, 0 cache-write and 59,129 output tokens, 5.38 USD at list prices; 753 s of agent time in all.
-- **Per pass:** 0.34 to 0.44 USD and 24 s to 32 s from the first specialist's start to the plan.
+- **The board's disposition matches the expected outcome in 19 of 19 scored passes** (19 cases in 16 scenarios; 20 passes, of which 1 not scored, see below). The 2 incident cases are scored against the catalogue entry the matcher found in each case's own evidence, not the entry the plan cites; the plans cite that entry in 2 of 2.
+- **Each specialist's own view:** a specialist decides from its own view only (conformance: is the message acceptable; encounter: does the movement still hold; impact: can the write be made safely), so its disposition is what that view alone would decide, not a verdict on the case. It is the case's expected outcome for conformance in 12, encounter in 17 and impact in 19 of 19 scored passes. Where it is not (9 findings), the plan's `disagreements` names the specialist and says why another view outweighed it in 9.
+- **Agreement:** all four agreed in 11 of 20 passes; the coordinator sided with the specialists' majority in 8, with a minority of one in 1 and against all three in 0. In 20 of 20 passes the plan's `disagreements` names exactly the specialists whose disposition differs from the plan's.
+- **The catalogue entries cited:** in 19 scored passes the plan cites an entry marked `decides: policy` in 13, `decides: board` in 3, `decides: person` in 3. A policy entry is one the catalogue may settle without the board in site-policy mode; a board entry needs the board's judgement; a person entry only a person may act on.
+- **Confidence:** the 48 specialist findings whose disposition is the case's outcome had confidence 0.70 to 0.95 (mean 0.84); the 9 outweighed by another view had 0.60 to 0.85 (mean 0.76). A confidence is the specialist's confidence in its own view's answer, not in the case's outcome. Shutter stores it and shows it, but no rule in the core or the gate reads it.
+- **Cost:** 80 agent runs, 1,519,500 uncached input, 481,426 cache-read, 7,830 cache-write and 88,100 output tokens, 7.98 USD at list prices; 1,087 s of agent time in all.
+- **Per pass:** 0.34 to 0.57 USD and 24 s to 42 s from the first specialist's start to the plan.
 
 ## Per case: the board against the expected outcome
 
@@ -34,6 +34,12 @@ Each specialist's cell is its disposition and confidence; the plan's is the coor
 | S11 ENC-1103 transfer | superseded (entry E1, matched in the case's evidence) | **resend 0.80** | superseded 0.92 | superseded 0.90 | superseded | E1 (policy) | with the majority | not in the table | not in the table |
 | S11 ENC-1103 discharge | resend (entry E5, matched in the case's evidence, the chain's latest) | resend 0.85 | resend 0.85 | resend 0.80 | resend | E5 (board) | unanimous | not in the table | not in the table |
 | S13 | escalate (or more_evidence) | escalate 0.70 | escalate 0.80 | escalate 0.80 | escalate | E13 (person) | unanimous | as expected | differs |
+| S21 | escalate (or more_evidence) | **resend 0.70** | **resend 0.60** | escalate 0.70 | escalate | E13 (person) | with a minority | - | - |
+| S23a | resend | resend 0.88 | resend 0.90 | resend 0.85 | resend | E2 (policy) | unanimous | - | - |
+| S23a | resend | resend 0.85 | resend 0.85 | resend 0.80 | resend | E16 (policy) | unanimous | - | - |
+| S23c | resend | resend 0.85 | resend 0.90 | resend 0.88 | resend | E2 (policy) | unanimous | - | - |
+| S23c | resend | resend 0.85 | resend 0.82 | resend 0.72 | resend | E16 (policy) | unanimous | - | - |
+| S25 | escalate (or more_evidence, resend) | escalate 0.75 | resend 0.80 | resend 0.75 | resend | E2 (policy) | with the majority | - | - |
 
 How each figure is computed:
 
@@ -57,8 +63,12 @@ Which specialists' dispositions differ from the plan's, and whether the plan's `
 | S8 | escalate | conformance (resend) | conformance | yes |
 | S10 | escalate | encounter (resend) | encounter | yes |
 | S11 ENC-1103 transfer | superseded | conformance (resend) | conformance | yes |
+| S21 | escalate | conformance (resend), encounter (resend) | conformance, encounter | yes |
+| S25 | resend | conformance (escalate) | conformance | yes |
 
-Dissent by specialist: conformance in 6 (S1, S3, S6, S7 pass 2, S8, S11 ENC-1103 transfer); encounter in 1 (S10); impact in none.
+Dissent by specialist: conformance in 8 (S1, S3, S6, S7 pass 2, S8, S11 ENC-1103 transfer, S21, S25); encounter in 2 (S10, S21); impact in none.
+
+- In S21 the plan follows impact alone (escalate) against the specialists' majority (resend), and matches the expected outcome.
 
 ## Confidence
 
@@ -66,8 +76,8 @@ Specialists' confidence (`response.result.confidence`, 0 to 1) in the scored pas
 
 | Specialist findings | Count | Lowest | Mean | Highest |
 | --- | --- | --- | --- | --- |
-| the case's outcome | 32 | 0.70 | 0.86 | 0.95 |
-| outweighed by another view | 7 | 0.70 | 0.79 | 0.85 |
+| the case's outcome | 48 | 0.70 | 0.84 | 0.95 |
+| outweighed by another view | 9 | 0.60 | 0.76 | 0.85 |
 
 Each specialist is told to decide from its own view only, and its confidence is in that view's answer, not in the case's outcome. An outweighed finding is not therefore a wrong one: conformance, for example, is told to resend a message that is valid, and the plan then follows a view that sees why the case should not be resent. So this split is not an error rate, and the figures say nothing about calibration: the sample is small and every finding comes from one model.
 
@@ -75,22 +85,28 @@ Each specialist is told to decide from its own view only, and its confidence is 
 
 The evidence items each member lists in `evidence_refs`: C conformance, E encounter, I impact, P the coordinator's plan. A `catalogue:<entry>` reference is shown under *catalogue* as the entry it names.
 
-| Case | `error` | `message` | `route` | `operation` | `receipt` | `ward_state` | `timeline` | `validation` | `later_event` | `E13` | `MSG00702` | `MSG00703` | `MSG00802` | `MSG00803` | `PAS^HOSP^MRN-T1^ENC-T1^transfer^2026-10-15T08:50:00Z` | `E7` | `RP-2.4` | `WIC-1.2` | `WIC-2.1` | `WIC-2.2` | catalogue |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| S1 | C E I P | C E I P | C E I P | C E I P | E I P | C E I P | C E I P | C P | E I P | - | - | - | - | - | - | - | - | - | - | - | - |
-| S2 | C E I P | C E I P | C E I P | C E I P | E I P | E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| S3 | C E I P | C E I P | E I P | C I P | C E I P | C E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| S4 | C E I P | C E I P | C E I P | C I P | C E I P | C E I P | C E I P | C E I P | - | - | - | - | - | - | - | - | - | - | - | - | P E9@1 |
-| S5 | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | E I P | C I P | E I P | - | - | - | - | - | - | - | - | - | - | - | - |
-| S6 | C E I P | C E I P | C E I P | C E I P | E I P | C E I P | C E I P | C I P | E I P | - | - | - | - | - | - | - | - | - | - | - | - |
-| S7 pass 1 | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| S7 pass 2 | C E I P | C E P | C E I P | C I P | C E I P | C E I P | C E I P | C P | E I P | - | I P | I P | - | - | I P | - | - | - | - | - | - |
-| S8 | C E I P | C E I P | C E I P | C I P | C E I P | C E I P | C E I P | C I P | - | - | - | - | E P | E P | - | P | - | - | - | - | - |
-| S9 | C E I P | C E I P | C E I P | C E I P | E I P | E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| S10 | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| S11 ENC-1103 transfer | C E I P | C E I P | C E I P | C I P | C E I P | E I P | E I P | C P | E I P | - | - | - | - | - | - | - | - | - | - | - | - |
-| S11 ENC-1103 discharge | C E I P | C E I P | C E I P | C E I P | E I P | E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | P E5 |
-| S13 | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | C I P | E I P | C P | - | - | - | - | - | - | P | C | C | C | - |
+| Case | `error` | `message` | `route` | `operation` | `receipt` | `timeline` | `ward_state` | `validation` | `later_event` | `bed_conflict` | `C-000143` | `E13` | `MSG00702` | `MSG00703` | `MSG00802` | `MSG00803` | `PAS^HOSP^MRN-T1^ENC-T1^transfer^2026-10-15T08:50:00Z` | `WIC-2.2` | `E16` | `E7` | `RP-2.4` | `WIC-1.2` | `WIC-2.1` | `WIC-6.2` | catalogue |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| S1 | C E I P | C E I P | C E I P | C E I P | E I P | C E I P | C E I P | C P | E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S2 | C E I P | C E I P | C E I P | C E I P | E I P | E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S3 | C E I P | C E I P | E I P | C I P | C E I P | E I P | C E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S4 | C E I P | C E I P | C E I P | C I P | C E I P | C E I P | C E I P | C E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | P E9@1 |
+| S5 | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | E I P | C I P | E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S6 | C E I P | C E I P | C E I P | C E I P | E I P | C E I P | C E I P | C I P | E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S7 pass 1 | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S7 pass 2 | C E I P | C E P | C E I P | C I P | C E I P | C E I P | C E I P | C P | E I P | - | - | - | I P | I P | - | - | I P | - | - | - | - | - | - | - | - |
+| S8 | C E I P | C E I P | C E I P | C I P | C E I P | C E I P | C E I P | C I P | - | - | - | - | - | - | E P | E P | - | - | - | P | - | - | - | - | - |
+| S9 | C E I P | C E I P | C E I P | C E I P | E I P | E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S10 | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S11 ENC-1103 transfer | C E I P | C E I P | C E I P | C I P | C E I P | E I P | E I P | C P | E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S11 ENC-1103 discharge | C E I P | C E I P | C E I P | C E I P | E I P | E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | P E5 |
+| S13 | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | C I P | E I P | - | - | C P | - | - | - | - | - | C | - | - | P | C | C | - | - |
+| S21 | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | C E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | P E13@4 |
+| S23a | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | C | - | - | - | - | - | C | P E2@4 |
+| S23a | C E I P | C E I P | C E I P | C E I P | E I P | E I P | E I P | C I P | - | E P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | P E16 |
+| S23c | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S23c | C E I P | C E I P | C E I P | C E I P | C E I P | C E I | C E I P | C E I P | P | E P | E P | - | - | - | - | - | - | - | P | - | - | - | - | - | - |
+| S25 | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | C E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
 
 The references name items of the case's evidence snapshot (`Shutter.Operation.Evidence`). The table shows what each member says it used, not whether it used it well.
 
@@ -130,18 +146,28 @@ Per pass. *Input* is uncached input tokens; *cache read* and *cache write* are r
 | S11 ENC-1103 transfer | 4 | 88,606 | 25,396 | 0 | 3,996 | 0.439 | - | 27 s | 51 s |
 | S11 ENC-1103 discharge | 4 | 80,998 | 23,490 | 0 | 4,447 | 0.418 | - | 28 s | 53 s |
 | S13 | 4 | 77,766 | 23,490 | 0 | 5,267 | 0.421 | 0.42 | 30 s | 63 s |
-| **Total** | 56 | 1,033,046 | 334,562 | 0 | 59,129 | 5.382 | | | 753 s |
+| S21 | 4 | 78,560 | 15,660 | 7,830 | 5,700 | 0.471 | - | 34 s | 64 s |
+| S23a | 4 | 74,509 | 25,619 | 0 | 3,998 | 0.383 | - | 27 s | 46 s |
+| S23a | 4 | 76,631 | 23,490 | 0 | 4,749 | 0.406 | - | 28 s | 54 s |
+| S23c | 4 | 73,482 | 25,388 | 0 | 3,937 | 0.378 | - | 26 s | 51 s |
+| S23c | 4 | 73,747 | 23,490 | 0 | 4,552 | 0.391 | - | 27 s | 48 s |
+| S25 | 4 | 109,525 | 33,217 | 0 | 6,035 | 0.565 | - | 42 s | 70 s |
+| **Total** | 80 | 1,519,500 | 481,426 | 7,830 | 88,100 | 7.975 | | | 1,087 s |
 
 S7 over its 2 passes: 8 runs, 0.74 USD, 54 s elapsed in the passes (the wait for approval between them is not counted).
+
+S23a over its 2 passes: 8 runs, 0.79 USD, 55 s elapsed in the passes (the wait for approval between them is not counted).
+
+S23c over its 2 passes: 8 runs, 0.77 USD, 53 s elapsed in the passes (the wait for approval between them is not counted).
 
 Per member, over all passes:
 
 | Member | Runs | Mean input | Mean output | Mean cost, USD | Duration, lowest to highest | Mean tool calls |
 | --- | --- | --- | --- | --- | --- | --- |
-| conformance | 14 | 17,957 | 1,122 | 0.095 | 11 to 18 s | 5.0 |
-| encounter | 14 | 18,131 | 961 | 0.093 | 10 to 17 s | 5.3 |
-| impact | 14 | 17,858 | 1,158 | 0.096 | 12 to 18 s | 6.0 |
-| coordinator | 14 | 19,844 | 982 | 0.100 | 10 to 15 s | 2.0 |
+| conformance | 20 | 18,221 | 1,145 | 0.097 | 11 to 18 s | 5.0 |
+| encounter | 20 | 18,252 | 1,011 | 0.095 | 10 to 21 s | 5.2 |
+| impact | 20 | 18,671 | 1,208 | 0.100 | 11 to 21 s | 6.1 |
+| coordinator | 20 | 20,830 | 1,041 | 0.106 | 10 to 21 s | 2.1 |
 
 <details>
 <summary>Every run</summary>
@@ -204,6 +230,30 @@ Per member, over all passes:
 | `scenario-S13-ENC-1013-transfer-encounter-1.json` | 2026-10-25T13:31:21Z | 16.9 s | 18,747 | 5,694 | 0 | 1,304 | 6 | 0.1022 |
 | `scenario-S13-ENC-1013-transfer-impact-1.json` | 2026-10-25T13:31:21Z | 17.0 s | 18,803 | 5,691 | 0 | 1,481 | 6 | 0.1060 |
 | `scenario-S13-ENC-1013-transfer-coordinator-1.json` | 2026-10-25T13:31:38Z | 13.4 s | 22,019 | 6,387 | 0 | 1,066 | 2 | 0.1107 |
+| `scenario-S21-ENC-1021-transfer-conformance-1.json` | 2026-11-01T06:15:25Z | 15.3 s | 18,458 | 3,812 | 1,906 | 1,417 | 5 | 0.1125 |
+| `scenario-S21-ENC-1021-transfer-encounter-1.json` | 2026-11-01T06:15:25Z | 21.3 s | 19,461 | 3,796 | 1,898 | 1,786 | 7 | 0.1238 |
+| `scenario-S21-ENC-1021-transfer-impact-1.json` | 2026-11-01T06:15:25Z | 14.5 s | 18,980 | 3,794 | 1,897 | 1,342 | 6 | 0.1130 |
+| `scenario-S21-ENC-1021-transfer-coordinator-1.json` | 2026-11-01T06:15:46Z | 13.2 s | 21,661 | 4,258 | 2,129 | 1,155 | 2 | 0.1212 |
+| `scenario-S23a-ENC-1231-transfer-conformance-1.json` | 2026-11-01T06:17:35Z | 12.5 s | 16,443 | 5,718 | 0 | 1,061 | 5 | 0.0881 |
+| `scenario-S23a-ENC-1231-transfer-encounter-1.json` | 2026-11-01T06:17:35Z | 9.5 s | 15,394 | 5,694 | 0 | 881 | 5 | 0.0803 |
+| `scenario-S23a-ENC-1231-transfer-impact-1.json` | 2026-11-01T06:17:35Z | 10.6 s | 16,856 | 5,691 | 0 | 1,068 | 6 | 0.0899 |
+| `scenario-S23a-ENC-1231-transfer-coordinator-1.json` | 2026-11-01T06:17:48Z | 13.6 s | 25,816 | 8,516 | 0 | 988 | 3 | 0.1247 |
+| `scenario-S23a-ENC-1232-transfer-conformance-1.json` | 2026-11-01T06:18:16Z | 12.7 s | 18,537 | 5,718 | 0 | 1,237 | 5 | 0.1000 |
+| `scenario-S23a-ENC-1232-transfer-encounter-1.json` | 2026-11-01T06:18:16Z | 13.5 s | 18,260 | 5,694 | 0 | 1,086 | 6 | 0.0959 |
+| `scenario-S23a-ENC-1232-transfer-impact-1.json` | 2026-11-01T06:18:16Z | 12.4 s | 18,501 | 5,691 | 0 | 1,199 | 6 | 0.0991 |
+| `scenario-S23a-ENC-1232-transfer-coordinator-1.json` | 2026-11-01T06:18:29Z | 15.2 s | 21,333 | 6,387 | 0 | 1,227 | 2 | 0.1111 |
+| `scenario-S23c-ENC-1231-transfer-conformance-1.json` | 2026-11-01T06:20:16Z | 11.1 s | 16,516 | 5,718 | 0 | 993 | 5 | 0.0871 |
+| `scenario-S23c-ENC-1231-transfer-encounter-1.json` | 2026-11-01T06:20:16Z | 13.2 s | 21,324 | 7,592 | 0 | 915 | 5 | 0.1051 |
+| `scenario-S23c-ENC-1231-transfer-impact-1.json` | 2026-11-01T06:20:16Z | 13.3 s | 16,866 | 5,691 | 0 | 1,123 | 6 | 0.0911 |
+| `scenario-S23c-ENC-1231-transfer-coordinator-1.json` | 2026-11-01T06:20:29Z | 13.0 s | 18,776 | 6,387 | 0 | 906 | 2 | 0.0945 |
+| `scenario-S23c-ENC-1232-transfer-conformance-1.json` | 2026-11-01T06:20:58Z | 12.0 s | 18,206 | 5,718 | 0 | 1,184 | 5 | 0.0976 |
+| `scenario-S23c-ENC-1232-transfer-encounter-1.json` | 2026-11-01T06:20:58Z | 9.8 s | 15,438 | 5,694 | 0 | 893 | 3 | 0.0808 |
+| `scenario-S23c-ENC-1232-transfer-impact-1.json` | 2026-11-01T06:20:58Z | 13.4 s | 18,656 | 5,691 | 0 | 1,278 | 6 | 0.1013 |
+| `scenario-S23c-ENC-1232-transfer-coordinator-1.json` | 2026-11-01T06:21:12Z | 13.1 s | 21,447 | 6,387 | 0 | 1,197 | 2 | 0.1110 |
+| `scenario-S25-ENC-1025-transfer-conformance-1.json` | 2026-11-01T06:23:18Z | 14.5 s | 24,873 | 7,624 | 0 | 1,301 | 6 | 0.1270 |
+| `scenario-S25-ENC-1025-transfer-encounter-1.json` | 2026-11-01T06:23:18Z | 14.0 s | 21,327 | 7,592 | 0 | 1,206 | 4 | 0.1109 |
+| `scenario-S25-ENC-1025-transfer-impact-1.json` | 2026-11-01T06:23:18Z | 20.9 s | 33,559 | 9,485 | 0 | 1,928 | 8 | 0.1747 |
+| `scenario-S25-ENC-1025-transfer-coordinator-1.json` | 2026-11-01T06:23:39Z | 20.6 s | 29,766 | 8,516 | 0 | 1,600 | 3 | 0.1528 |
 
 </details>
 
@@ -216,19 +266,15 @@ Per member, over all passes:
 - S18 S2 in HL7 2.3.1: played in policy mode only.
 - S19 Shape A: a failed transfer in the hospital's own production: played in policy mode only.
 - S20 A nurse moves the patient by hand while the plan awaits approval: played in rules mode only.
-- S21 A transfer in the hour the clocks go back: played in rules and policy modes only.
 - S22 One overtaken transfer, two systems: played in policy mode only.
-- S23a The bed is held by a patient who is leaving: played in policy mode only.
 - S23b Two patients for one bed: played in policy mode only.
-- S23c The bed's occupant cannot leave: played in policy mode only.
 - S24 A newer message arrives as Shutter resends: played in policy mode only.
-- S25 A message with the site's own segment: played in policy mode only.
 
 ## Not yet measured
 
 - **Repeat runs.** Each pass above is one recording per member. Nothing here shows how often the same model, on the same version of the product, reaches the same disposition when the case is run again. Earlier recordings made on earlier versions of the product are in the repository's history; they are not a controlled repeat, and this document does not read them.
 - **The single investigator.** Shutter can give a case to one generalist agent instead of the board (`scenario_check.py --modes single`), but no generalist runs are in `fixtures/records`, so the board is not compared with a single agent here.
 - **Adversarial variants.** No adversarial text reached any agent in these recordings: the one injected note stays in IRIS and the agents see only its flags, so what is shown is that they notice the flag, not that they resist an instruction. Earlier recordings in the repository's history were made with the note's text sent; this document does not read them. No note pushes towards a wrong answer, and no variant feeds misleading or contradictory evidence.
-- **Held-out cases.** In 13 of 13 scored passes the plan cites a catalogue entry that names the same scenario in its `scenarios` field: the knowledge the agents read was written alongside these scenarios. No case here was kept back from the authors of the catalogue.
+- **Held-out cases.** In 14 of 19 scored passes the plan cites a catalogue entry that names the same scenario in its `scenarios` field: the knowledge the agents read was written alongside these scenarios. No case here was kept back from the authors of the catalogue.
 - **Other models and calibration.** Every run used claude-opus-5-5; there is too little data for a confidence calibration, and no grading of the summaries' reasoning beyond the disposition, the entry and the evidence keys.
 

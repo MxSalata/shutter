@@ -22,7 +22,7 @@ import sys
 import urllib.request
 
 # scenario:<S>[:<encounter>:<event>]|<member>|<configVersion>[|round<n>], as in scripts/check-records.py
-KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+)(?::(?P<encounter>[^:|]+):(?P<event>[^:|]+))?"
+KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+[a-z]?)(?::(?P<encounter>[^:|]+):(?P<event>[^:|]+))?"
                     r"\|(?P<member>[a-z]+)\|(?P<cfg>\d+)(?:\|round(?P<round>\d+))?$")
 # review:<namespace>:<production>|review|1|<fingerprint>, as in scripts/check-records.py
 REVIEW_KEY_RE = re.compile(r"^review:[A-Za-z0-9_%]+:[A-Za-z0-9_.]+\|review\|1\|(?:[0-9a-f]{64}|)$")

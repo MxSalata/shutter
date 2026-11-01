@@ -907,6 +907,7 @@
       "final_ward": "WARD-A",
       "failed_operation_key": "PAS^HOSP^MRN1021^ENC-1021^transfer^2026-10-25T00:30:00Z",
       "modes": [
+        "board",
         "rules",
         "policy"
       ],
@@ -1017,6 +1018,7 @@
       "failed_operation_key": "PAS^HOSP^MRN1232^ENC-1232^transfer^2026-10-15T08:30:00Z",
       "case_by_key": true,
       "modes": [
+        "board",
         "policy"
       ]
     }
@@ -1081,6 +1083,7 @@
       "case_by_key": true,
       "final_reason": "OCCUPANT_CASE_FAILED",
       "modes": [
+        "board",
         "policy"
       ]
     }
@@ -1163,6 +1166,7 @@
       "final_reason": "PARSE_FAILED",
       "failed_operation_key": "PAS^HOSP^MRN1025^ENC-1025^transfer^2026-10-15T08:20:00Z",
       "modes": [
+        "board",
         "policy"
       ]
     }

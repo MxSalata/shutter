@@ -23,23 +23,25 @@ describe('EvaluationPage', () => {
     renderPage();
     expect(screen.getByRole('heading', { name: 'Evaluation' })).toBeInTheDocument();
     expect(
-      screen.getByText(/^Every figure here comes from the recorded live runs of 25 October 2026: 56 runs/),
+      screen.getByText(
+        /^Every figure here comes from the recorded live runs of 25 October 2026 to 1 November 2026: 80 runs/,
+      ),
     ).toBeInTheDocument();
     expect(screen.getByText(/Nothing on this page was measured on this instance/)).toBeInTheDocument();
   });
 
   it('gives the board against the expected outcome, the agreement, the tokens and the cost', () => {
     renderPage();
-    expect(screen.getByText(/^13 of 13 scored passes/)).toBeInTheDocument();
-    expect(screen.getByText(/^unanimous in 7, with the majority in 7/)).toBeInTheDocument();
-    expect(screen.getByText(/1,033,046 uncached input/)).toBeInTheDocument();
-    expect(screen.getByText(/\$5\.38 at list prices/)).toBeInTheDocument();
+    expect(screen.getByText(/^19 of 19 scored passes/)).toBeInTheDocument();
+    expect(screen.getByText(/^unanimous in 11, with the majority in 8/)).toBeInTheDocument();
+    expect(screen.getByText(/1,519,500 uncached input/)).toBeInTheDocument();
+    expect(screen.getByText(/\$7\.98 at list prices/)).toBeInTheDocument();
   });
 
   it('sets rules alone beside the board played end to end on the same passes, apart from the proposed action', () => {
     renderPage();
     const headline = screen.getByRole('region', { name: 'The board against the expected outcome' });
-    expect(within(headline).getByText('13 of 13')).toBeInTheDocument();
+    expect(within(headline).getByText('19 of 19')).toBeInTheDocument();
     expect(
       within(headline).getByText("scored passes proposed the scenario's expected action"),
     ).toBeInTheDocument();
@@ -55,13 +57,13 @@ describe('EvaluationPage', () => {
   it('puts the cost per pass, the agreement, the scope and the limits beside the headline, computed from the document', async () => {
     renderPage();
     const headline = screen.getByRole('region', { name: 'The board against the expected outcome' });
-    expect(within(headline).getByText('14 passes in 13 cases; 1 not scored.')).toBeInTheDocument();
+    expect(within(headline).getByText('20 passes in 19 cases; 1 not scored.')).toBeInTheDocument();
     const scored = recorded.passes.filter((p) => p.scored).map((p) => p.cost_usd);
     const usd = (n: number) => `$${n.toFixed(2)}`;
     expect(
       within(headline).getByText(`${usd(Math.min(...scored))} to ${usd(Math.max(...scored))}`),
     ).toBeInTheDocument();
-    expect(within(headline).getByText('$5.38')).toBeInTheDocument();
+    expect(within(headline).getByText('$7.98')).toBeInTheDocument();
     expect(within(headline).getByRole('heading', { name: 'Agreement', level: 3 })).toBeInTheDocument();
     for (const [how, n] of Object.entries(recorded.totals.agreement))
       expect(
@@ -96,7 +98,7 @@ describe('EvaluationPage', () => {
     expect(at).toBe(columns.length);
     const [cost, time] = Array.from(total.children).slice(-2);
     expect(columns[starts[starts.length - 2]]).toBe('Cost and tokens');
-    expect(cost).toHaveTextContent('$5.38');
+    expect(cost).toHaveTextContent('$7.98');
     expect(columns[starts[starts.length - 1]]).toBe('Elapsed');
     expect(time).toHaveTextContent('of agent time');
   });
@@ -172,7 +174,7 @@ describe('EvaluationPage', () => {
     };
     const { unmount } = renderPage(allAgreed);
     expect(
-      screen.getByText(/the findings with the expected outcome: 32, from 0\.70 to 0\.95/),
+      screen.getByText(/the findings with the expected outcome: 48, from 0\.70 to 0\.95/),
     ).toHaveTextContent(/and those another view outweighed: none$/);
     unmount();
 
