@@ -14,7 +14,7 @@ const data = evaluation as unknown as Evaluation;
 
 describe('the evaluation', () => {
   it('reads the document as the script wrote it', () => {
-    expect(data.totals.runs).toBe(96);
+    expect(data.totals.runs).toBe(100);
     expect(data.totals.board_matches).toBe(data.totals.scored_passes);
     expect(
       data.passes.every((p) =>
