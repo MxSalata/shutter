@@ -1,0 +1,35 @@
+{
+  "scenario": "S22",
+  "conversations": [
+    {
+      "id": "c1",
+      "turns": [
+        {
+          "turn": 1,
+          "tier": "explain",
+          "text": "Why did one system get no write and the other an escalation?"
+        },
+        {
+          "turn": 2,
+          "tier": "explain",
+          "text": "What are the correction steps for?"
+        },
+        {
+          "turn": 3,
+          "tier": "board",
+          "text": "What if the patient records system only needed the current placement?"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "turns": [
+        {
+          "turn": 1,
+          "tier": "explain",
+          "text": "Which system holds the patient's history of record?"
+        }
+      ]
+    }
+  ]
+}
