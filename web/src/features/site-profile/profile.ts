@@ -290,10 +290,14 @@ export function validateProfile(p: unknown): string {
       if (k !== 'close_needs_approver' && typeof v !== 'string') return `approvers.${k}: must be a string`;
     }
   }
-  // The feed: the time zone of timestamps that carry no offset.
+  // The feed: the time zone of timestamps that carry no offset, and whether a message whose schema is not loaded is held.
   if ('feed' in p) {
     if (!isObject(p.feed)) return 'feed: must be an object';
     for (const [k, v] of members(p.feed)) {
+      if (k === 'prevent_failures') {
+        if (typeof v !== 'boolean') return 'feed.prevent_failures: must be true or false';
+        continue;
+      }
       if (k !== 'time_zone') return `feed.${k}: unknown setting`;
       if (typeof v !== 'string' || !(ZONES.includes(v) || FIXED_OFFSET.test(v)))
         return 'feed.time_zone: must be UTC, Europe/London or a fixed offset such as +01:00 (up to 14:00)';
@@ -430,6 +434,7 @@ export function fieldId(path: string): string {
   if (m) return `site-mail-${m[1]}`;
   if (path === 'merges') return 'site-merges';
   if (path === 'feed.time_zone') return 'site-feed-time_zone';
+  if (path === 'feed.prevent_failures') return 'site-feed-prevent_failures';
   if (path === 'model_content.free_text') return 'site-model_content-free_text';
   return '';
 }
@@ -448,6 +453,7 @@ export function describePath(path: string): string {
   m = /^mail\.(\w+)(?:\[(\d+)\])?$/.exec(path);
   if (m) return `Mail, ${m[1].replace(/_/g, ' ')}${m[2] ? ` ${Number(m[2]) + 1}` : ''}`;
   if (path === 'feed.time_zone') return 'Feed, time zone';
+  if (path === 'feed.prevent_failures') return 'Feed, prevent failures';
   if (path === 'model_content.free_text') return 'Model, note text';
   if (path === 'approvers.close_needs_approver') return 'Approvers, closing a case by hand';
   return path.replace(/_/g, ' ');
@@ -589,6 +595,14 @@ export function diffProfiles(a: SiteProfile | undefined, b: SiteProfile): Change
     out.push({
       path: 'feed.time_zone',
       text: `Feed time zone: from ${before.feed?.time_zone || 'not answered (read as UTC)'} to ${b.feed?.time_zone || 'not answered (read as UTC)'}. Every operation key read from now on uses it`,
+    });
+  if ((before.feed?.prevent_failures === true) !== (b.feed?.prevent_failures === true))
+    out.push({
+      path: 'feed.prevent_failures',
+      text:
+        b.feed?.prevent_failures === true
+          ? "Prevent failures: from now on, a message whose HL7 schema isn't loaded here is held as a case, and nothing is sent until the schema is imported"
+          : "Prevent failures off: a message whose HL7 schema isn't loaded here is delivered as before",
     });
   if ((before.model_content?.free_text === true) !== (b.model_content?.free_text === true))
     out.push({

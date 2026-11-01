@@ -45,6 +45,7 @@ describe('LoginPage, the demo opened as the public demo', () => {
       approve: true,
       configure: false,
       scenarios: false,
+      liveAgents: false,
     });
   });
 });

@@ -254,6 +254,7 @@ const FAILURES: Record<string, string> = {
   uncertain_outcome: 'has an unknown outcome',
   rejected: 'was refused',
   unmappable: 'could not be mapped',
+  unreadable: 'was held: its HL7 schema is not loaded here',
   withheld: 'was withheld, never sent',
 };
 

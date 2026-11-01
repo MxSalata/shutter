@@ -6,7 +6,7 @@ import type { Can, Me } from './types';
  * before, so nothing changes for such a server. Nobody signed in may do nothing.
  */
 export function resolveCan(me: Me | null | undefined): Can {
-  if (!me) return { operate: false, approve: false, configure: false, scenarios: false };
+  if (!me) return { operate: false, approve: false, configure: false, scenarios: false, liveAgents: false };
   return {
     operate: me.can?.operate ?? me.operator,
     approve: me.can?.approve ?? me.approver,
@@ -14,6 +14,8 @@ export function resolveCan(me: Me | null | undefined): Can {
     configure: me.can?.configure ?? me.approver,
     // Running and resetting scenarios needed the operator role
     scenarios: me.can?.scenarios ?? me.operator,
+    // A server older than the judges' live agents has no route to convene the board, so nothing offers it
+    liveAgents: me.can?.liveAgents ?? false,
   };
 }
 

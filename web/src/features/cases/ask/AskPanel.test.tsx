@@ -225,6 +225,62 @@ describe('Ask about this case', () => {
     expect(within(p).queryByRole('textbox')).not.toBeInTheDocument();
   });
 
+  it('keeps free text for a judge on the public demo, and tells its own user so', async () => {
+    demo.value = false;
+    resetMock('demo');
+    server.use(
+      http.get(`${BASE}/settings`, () =>
+        HttpResponse.json({
+          providerConfigured: true,
+          mock: false,
+          mode: 'policy',
+          agentItems: [],
+          prices: [],
+        }),
+      ),
+    );
+    renderCase('C-000008');
+    const p = await panel();
+    expect(
+      await within(p).findByText(/On the public demo, a question of your own is for a judge to ask live/),
+    ).toBeInTheDocument();
+    expect(within(p).getByText('Judges only')).toBeInTheDocument();
+    expect(within(p).queryByRole('textbox')).not.toBeInTheDocument();
+  });
+
+  it('reads a question no recording answers as a note naming who can ask it, not as a fault', async () => {
+    demo.value = false;
+    server.use(
+      http.get(`${BASE}/settings`, () =>
+        HttpResponse.json({
+          providerConfigured: true,
+          mock: false,
+          mode: 'policy',
+          agentItems: [],
+          prices: [],
+        }),
+      ),
+      http.post(`${BASE}/cases/:id/questions`, () =>
+        HttpResponse.json(
+          {
+            error: 'no_recorded_answer',
+            detail: 'This question has no recorded answer; a judge can ask it live',
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderCase('C-000008');
+    const p = await panel();
+    await userEvent.type(await within(p).findByRole('textbox', { name: 'Your own question' }), 'Why?');
+    await userEvent.click(within(p).getByRole('button', { name: 'Ask' }));
+    expect(await within(p).findByText('No recorded answer')).toBeInTheDocument();
+    expect(
+      within(p).getByText('This question has no recorded answer; a judge can ask it live'),
+    ).toBeInTheDocument();
+    expect(within(p).queryByText('The question was not asked')).not.toBeInTheDocument();
+  });
+
   it('locks free text on an instance with no model key, and opens it when one is configured', async () => {
     demo.value = false;
     renderCase('C-000008');

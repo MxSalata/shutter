@@ -1,4 +1,5 @@
 import {
+  Alert,
   Badge,
   Box,
   Button,
@@ -26,6 +27,7 @@ import type { BoardAnswer, CaseQuestion, QuestionTier, SuggestedTurn } from '@/a
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { StatusBadge } from '@/components/StatusBadge';
 import { DEMO } from '@/demo';
+import { isApiError } from '@/lib/errors';
 import { keyLabel } from '@/lib/format';
 import { showEvidence } from '../case/evidenceLinks';
 import { MEMBER_NAMES, TIERS, answersBadge, provenanceText, tierLabel } from './labels';
@@ -143,11 +145,34 @@ function Turn({ q }: { q: CaseQuestion }) {
   );
 }
 
-/** Whether the person may ask in their own words: a model key on a real instance, and the operator role. */
-function useFreeText() {
+/**
+ * Why a question was not asked. A suggested turn with no recording, asked by someone who may not spend the model budget,
+ * is 409 no_recorded_answer: not a fault, so it reads as a note naming who can ask it live.
+ */
+function AskError({ error }: { error: unknown }) {
+  if (isApiError(error) && error.code === 'no_recorded_answer')
+    return (
+      <Alert color="blue" title="No recorded answer">
+        {error.detail || 'This question has no recorded answer; a judge can ask it live.'}
+      </Alert>
+    );
+  return <ErrorAlert error={error} title="The question was not asked" />;
+}
+
+/**
+ * Whether the person may ask in their own words: a model key on a real instance, the operator role, and the right to
+ * spend the day's model budget (the public demo's own user has it not, a judge has).
+ */
+function useFreeText(): { open: boolean; why: string; badge?: string } {
   const me = useMe().data;
   const settings = useSettings();
   if (!me?.operator) return { open: false, why: 'Asking needs the operator role.' };
+  if (me.can?.liveAgents === false)
+    return {
+      open: false,
+      why: 'On the public demo, a question of your own is for a judge to ask live. Pick a suggested question above: its answers were recorded live.',
+      badge: 'Judges only',
+    };
   if (DEMO)
     return {
       open: false,
@@ -170,7 +195,7 @@ function FreeText({
   onAsked,
 }: {
   caseId: string;
-  access: { open: boolean; why: string };
+  access: { open: boolean; why: string; badge?: string };
   tier: QuestionTier;
   conversation?: string;
   onAsked: (conversation: string, turn: number) => void;
@@ -183,7 +208,7 @@ function FreeText({
         <Text size="sm" c="dimmed" id="ask-free-locked" style={{ flex: '1 1 220px' }}>
           {access.why}
         </Text>
-        <StatusBadge tone="neutral" label="Locked: no key" icon={IconLock} />
+        <StatusBadge tone="neutral" label={access.badge ?? 'Locked: no key'} icon={IconLock} />
       </Group>
     );
   const cost = tier === 'board' ? 'about 0.40 USD' : 'about 0.05 to 0.10 USD';
@@ -198,7 +223,7 @@ function FreeText({
         value={text}
         onChange={(e) => setText(e.currentTarget.value)}
       />
-      {ask.isError ? <ErrorAlert error={ask.error} title="The question was not asked" /> : null}
+      {ask.isError ? <AskError error={ask.error} /> : null}
       <Group>
         <Button
           disabled={!text.trim()}
@@ -385,7 +410,7 @@ export function AskPanel({ caseId }: { caseId: string }) {
           </Tabs.Panel>
         ))}
       </Tabs>
-      {ask.isError ? <ErrorAlert error={ask.error} title="The question was not asked" /> : null}
+      {ask.isError ? <AskError error={ask.error} /> : null}
       <div aria-live="polite">
         {questions.isError ? (
           <ErrorAlert

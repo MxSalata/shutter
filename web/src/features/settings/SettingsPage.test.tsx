@@ -74,6 +74,16 @@ describe('SettingsPage', () => {
     expect(screen.getByText('the API mimic')).toBeInTheDocument();
   });
 
+  it("shows the day's model budget, and the signed-in judge's share of it", async () => {
+    renderSettings({
+      ...settings(false),
+      budget: { dailyUsd: 15, spentTodayUsd: 4.2, exhausted: false, perUserUsd: 3, spentByMeUsd: 1.25 },
+    });
+    const budget = await screen.findByTestId('budget');
+    expect(within(budget).getByText("$4.20 of today's $15.00 spent on live runs")).toBeInTheDocument();
+    expect(within(budget).getByText('Your share: $1.25 of $3.00')).toBeInTheDocument();
+  });
+
   it('names the model provider when the mimic is off', async () => {
     renderSettings(settings(false));
     expect(

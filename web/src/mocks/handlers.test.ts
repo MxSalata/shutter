@@ -454,14 +454,35 @@ describe("the public demo's role", () => {
       resetMock(as);
       return (await api.get<Me>('/me')).can;
     };
-    expect(await can('approver')).toEqual({ operate: true, approve: true, configure: true, scenarios: true });
+    expect(await can('approver')).toEqual({
+      operate: true,
+      approve: true,
+      configure: true,
+      scenarios: true,
+      liveAgents: true,
+    });
     expect(await can('operator')).toEqual({
       operate: true,
       approve: false,
       configure: false,
       scenarios: true,
+      liveAgents: true,
     });
-    expect(await can('demo')).toEqual({ operate: true, approve: true, configure: false, scenarios: false });
+    // The public demo's own user replays; a judge spends the day's model budget (v1.34)
+    expect(await can('demo')).toEqual({
+      operate: true,
+      approve: true,
+      configure: false,
+      scenarios: false,
+      liveAgents: false,
+    });
+    expect(await can('judge')).toEqual({
+      operate: true,
+      approve: true,
+      configure: false,
+      scenarios: false,
+      liveAgents: true,
+    });
   });
 
   it('refuses the scenario controls and every change to the site, and still approves', async () => {

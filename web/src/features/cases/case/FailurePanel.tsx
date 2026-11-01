@@ -12,6 +12,7 @@ const kinds = (receiver: string): Record<string, string> => ({
   uncertain_outcome: `Outcome unknown: ${receiver} may or may not have applied it`,
   rejected: `Refused by ${receiver}`,
   unmappable: 'Could not be mapped to a downstream operation',
+  unreadable: `Held: IRIS could not read it, since its HL7 schema is not loaded here, so nothing was sent to ${receiver}`,
   withheld:
     'Withheld: never sent (a merge the site keeps for the PAS team, or a cancellation the receiver cannot reverse)',
 });
