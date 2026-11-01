@@ -93,7 +93,7 @@ XData ProductionDefinition
   </Item>
   <Item Name="HL7 Index" Category="Feed" ClassName="Shutter.Index.Indexer" PoolSize="1" Enabled="true" Foreground="false" Comment="The exact index of the watched HL7 traffic: one row per message with the visit number, patient, event, time, location, operation key and route, filled a few seconds behind the feed" LogTraceEvents="false" Schedule="">
     <Setting Target="Adapter" Name="CallInterval">5</Setting>
-    <Setting Target="Host" Name="Routes">ADT In,Case Intake</Setting>
+    <Setting Target="Adapter" Name="Routes">ADT In,Case Intake</Setting>
   </Item>
   <Item Name="ADT to Downstream" Category="Feed" ClassName="Shutter.Process.ADTToWard" PoolSize="1" Enabled="true" Foreground="false" Comment="Builds the downstream operation, delivers it, opens a case on failure" LogTraceEvents="true" Schedule="">
   </Item>

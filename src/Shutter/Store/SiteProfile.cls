@@ -194,7 +194,9 @@ ClassMethod Validate(p As %DynamicObject) As %String
         Set fi = feed.%GetIterator()
         While fi.%GetNext(.k, .v) {
             If '$LISTFIND($LISTBUILD("time_zone"), k) Return "feed." _ k _ ": unknown setting"
-            If (feed.%GetTypeOf(k) '= "string") || '$LISTFIND($LISTBUILD("UTC", "Europe/London"), v) && '$MATCH(v, "^[+-](0[0-9]|1[0-4]):[0-5][0-9]$") Return "feed.time_zone: must be UTC, Europe/London or a fixed offset such as +01:00 (up to 14:00)"
+            // UTC, Europe/London and a fixed offset by Shutter's own rules; any other IANA zone when Embedded Python's zoneinfo knows it (v1.30).
+            Set zoneOk = (feed.%GetTypeOf(k) = "string") && ($LISTFIND($LISTBUILD("UTC", "Europe/London"), v) || $MATCH(v, "^[+-](0[0-9]|1[0-4]):[0-5][0-9]$") || ##class(Shutter.Util.Time).PythonZoneKnown(v))
+            If 'zoneOk Return "feed.time_zone: must be UTC, Europe/London, a fixed offset such as +01:00 (up to 14:00), or an IANA zone name this IRIS knows (for example Europe/Paris)"
         }
     }
     // What may leave IRIS for a model (T27): free text off unless the site says so.

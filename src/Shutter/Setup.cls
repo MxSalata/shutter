@@ -1029,6 +1029,8 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Set r.mode = $GET(^Shutter.Config("mode"))
     Set r."adt_in" = $GET(^Shutter.Config("adtIn"))
     Do r.%Set("interoperability", ''##class(%EnsembleMgr).IsEnsembleNamespace($NAMESPACE), "boolean")
+    // Whether IANA zones beyond UTC, Europe/London and fixed offsets can be read (Embedded Python's zoneinfo, v1.30).
+    Do r.%Set("python_zoneinfo", ''##class(Shutter.Util.Time).PythonZones(), "boolean")
     // The production Shutter's items live in: its own, or the site's that InstallInto put them in.
     Set prod = ..ProductionName()
     Set r."shutter_production" = prod
@@ -1052,6 +1054,25 @@ ClassMethod Doctor() As %String [ SqlProc ]
     // The cases still in a working state, and the quiet minutes after which an approver may abandon one (CONTRACTS 5, 12).
     &sql(SELECT COUNT(*) INTO :working FROM Shutter_Store."Case" WHERE State NOT IN ('resolved', 'blocked', 'escalated', 'failed'))
     Set r."working_cases" = +working, r."abandon_after_minutes" = ##class(Shutter.Store.Case).AbandonAfterMinutes()
+    // The pieces of the builds since 25 Oct (CONTRACTS 12, v1.31), so a fresh install and an upgrade show the same: every item
+    // of INSTALLITEMS in the production and enabled, the gate's policy version, the catalogue's entries, the records namespace
+    // of a demo install, the index's adapter, the questions.
+    Set missing = [], disabled = []
+    For i = 1:1:$LENGTH(..#INSTALLITEMS, ",") {
+        Set item = $PIECE(..#INSTALLITEMS, ",", i), enabled = ""
+        &sql(SELECT Enabled INTO :enabled FROM Ens_Config.Item WHERE Production = :prod AND Name = :item)
+        If SQLCODE '= 0 { Do missing.%Push(item) } ElseIf 'enabled { Do disabled.%Push(item) }
+    }
+    Set r."missing_items" = missing, r."disabled_items" = disabled
+    Set r."gate_policy_version" = $PARAMETER("Shutter.Operation.Gate", "POLICYVERSION")
+    Set entries = 0, ids = ""
+    Set ers = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT EntryId FROM Shutter_Catalogue.Entry ORDER BY LENGTH(EntryId), EntryId")
+    While ers.%Next() { Set entries = entries + 1, ids = ids _ $SELECT(ids = "": "", 1: ",") _ ers.%Get("EntryId") }
+    Set r."catalogue_entries" = entries, r."catalogue_ids" = ids
+    Do r.%Set("records_namespace", ''##class(%SYS.Namespace).Exists("RECORDS"), "boolean")
+    Set r."index_adapter" = $PARAMETER("Shutter.Index.Indexer", "ADAPTER")
+    &sql(SELECT COUNT(*) INTO :questions FROM Shutter_Store.CaseQuestion)
+    Set r.questions = +questions
     Set r.license = ##class(%DynamicObject).%FromJSON(..LicenseInfo())
     Try {
         New $NAMESPACE
@@ -1059,6 +1080,7 @@ ClassMethod Doctor() As %String [ SqlProc ]
         Do r.%Set("api_webapp", ''##class(Security.Applications).Exists("/api/shutter"), "boolean")
         Do r.%Set("ui_webapp", ''##class(Security.Applications).Exists("/shutter"), "boolean")
         Do r.%Set("wards_webapp", ''##class(Security.Applications).Exists("/downstream/api"), "boolean")
+        Do r.%Set("records_webapp", ''##class(Security.Applications).Exists("/records/api"), "boolean")
         // The message purge task (a demo instance has one; a site only when SHUTTER_MESSAGE_PURGE said so) and the days
         // it keeps, read from the Task Manager so a change made there shows.
         Set taskId = ..TaskId("Shutter message purge")
@@ -1089,6 +1111,7 @@ ClassMethod Doctor() As %String [ SqlProc ]
         Do r.%Set("api_webapp", ''$GET(^Shutter.Config("webapp", "/api/shutter")), "boolean")
         Do r.%Set("ui_webapp", ''$GET(^Shutter.Config("webapp", "/shutter")), "boolean")
         Do r.%Set("wards_webapp", ''$GET(^Shutter.Config("webapp", "/downstream/api")), "boolean")
+        Do r.%Set("records_webapp", ''$GET(^Shutter.Config("webapp", "/records/api")), "boolean")
         Do r.%Set("purge_task", ''$GET(^Shutter.Config("purgeTask")), "boolean")
         If $GET(^Shutter.Config("purgeTask")) && ($GET(^Shutter.Config("messageDays")) '= "") Set r."message_days" = +^Shutter.Config("messageDays")
         If $GET(^Shutter.Config("escalationDays")) '= "" Set r."escalation_days" = +^Shutter.Config("escalationDays")

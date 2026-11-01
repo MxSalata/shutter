@@ -1,5 +1,8 @@
 /// Time helpers. Every timestamp Shutter stores or sends is ISO 8601 in UTC with a trailing Z,
-/// for example 2026-10-15T09:20:00Z, so values compare as strings.
+/// for example 2026-10-15T09:20:00Z, so values compare as strings. A timestamp without an offset is read in the feed's
+/// zone: UTC, Europe/London and fixed offsets by the rules here, and any other IANA zone through Embedded Python's
+/// zoneinfo (v1.30), the IANA database the IRIS image carries; where Embedded Python or the database is missing, the
+/// native rules stand alone and such a zone reads as UTC with a warning, as before.
 Class Shutter.Util.Time Extends %RegisteredObject
 {
 
@@ -78,6 +81,9 @@ ClassMethod ZoneOffset(zone As %String, localIso As %String) As %String
     If (zone = "") || ($ZCONVERT(zone, "U") = "UTC") || ($ZCONVERT(zone, "U") = "Z") || (zone = "+00:00") Quit ""
     If $MATCH(zone, "^[+-][0-9]{2}:?[0-9]{2}$") Quit $EXTRACT(zone, 1) _ $TRANSLATE($EXTRACT(zone, 2, *), ":", "")
     If zone = "Europe/London" Quit $SELECT(..InBritishSummerTime(localIso, 1): "+0100", 1: "")
+    // Any other IANA zone through Embedded Python's zoneinfo (v1.30): the database's own rules, summer time included.
+    Set off = ..PythonZoneOffset(zone, localIso, .known)
+    If known Quit off
     If '$DATA(^||Shutter.UnknownZone(zone)) {
         Set ^||Shutter.UnknownZone(zone) = ""
         Try {
@@ -88,12 +94,80 @@ ClassMethod ZoneOffset(zone As %String, localIso As %String) As %String
     Quit ""
 }
 
-/// Whether ZoneOffset knows a zone: empty (UTC), UTC, Z, Europe/London or a fixed offset.
+/// Whether ZoneOffset knows a zone: empty (UTC), UTC, Z, Europe/London, a fixed offset, or an IANA zone name that
+/// Embedded Python's zoneinfo knows on this IRIS (v1.30).
 ClassMethod KnownZone(zone As %String) As %Boolean
 {
     Set zone = $ZSTRIP(zone, "<>W")
     If (zone = "") || $LISTFIND($LISTBUILD("UTC", "Z"), $ZCONVERT(zone, "U")) || (zone = "Europe/London") Quit 1
-    Quit $MATCH(zone, "^[+-][0-9]{2}:?[0-9]{2}$")
+    If $MATCH(zone, "^[+-][0-9]{2}:?[0-9]{2}$") Quit 1
+    Quit ..PythonZoneKnown(zone)
+}
+
+// ---- IANA zones through Embedded Python (v1.30) ----
+
+/// The offset a zone gives a local time, through Embedded Python's zoneinfo: "+HHMM", "-HHMM", "" for none; "unknown"
+/// when the zone is not in the IANA database; "unavailable" when zoneinfo cannot be used here. A local time that does not
+/// exist (the hour skipped at a clock change) or exists twice reads with the first offset the database gives it.
+ClassMethod PyOffset(zone As %String, y As %Integer, mo As %Integer, d As %Integer, hh As %Integer, mi As %Integer, ss As %Integer) As %String [ Language = python ]
+{
+    try:
+        import datetime, zoneinfo
+    except Exception:
+        return "unavailable"
+    try:
+        tz = zoneinfo.ZoneInfo(str(zone))
+    except Exception:
+        return "unknown"
+    try:
+        local = datetime.datetime(int(y), int(mo), int(d), int(hh), int(mi), int(ss), tzinfo=tz)
+        delta = local.utcoffset()
+    except Exception:
+        return "unavailable"
+    secs = int(delta.total_seconds())
+    if secs == 0:
+        return ""
+    sign = "+" if secs > 0 else "-"
+    secs = abs(secs)
+    return "%s%02d%02d" % (sign, secs // 3600, (secs % 3600) // 60)
+}
+
+/// Whether Embedded Python's zoneinfo answers on this IRIS, probed once per process with a zone whose answer is known.
+/// The IRIS images carry Python 3 and the IANA database; a site's own build may not, and then the native rules stand alone.
+ClassMethod PythonZones() As %Boolean
+{
+    If $DATA(^||Shutter.PythonZones) Quit ^||Shutter.PythonZones
+    Set ok = 0
+    Try { Set ok = (..PyOffset("Europe/London", 2026, 7, 1, 12, 0, 0) = "+0100") } Catch { Set ok = 0 }
+    Set ^||Shutter.PythonZones = ok
+    Quit ok
+}
+
+/// The offset zoneinfo gives a zone at a local ISO time (yyyy-mm-ddThh:mm:ss), "" for none; known says whether the zone
+/// is in the database. A zone name is letters, digits, "/", "_", "+" and "-" only; anything else is unknown without a lookup.
+ClassMethod PythonZoneOffset(zone As %String, localIso As %String, Output known As %Boolean) As %String
+{
+    Set known = 0
+    If '$MATCH(zone, "^[A-Za-z0-9_+/-]{1,64}$") Quit ""
+    If '..PythonZones() Quit ""
+    Set r = "unavailable"
+    Try {
+        Set r = ..PyOffset(zone, +$EXTRACT(localIso, 1, 4), +$EXTRACT(localIso, 6, 7), +$EXTRACT(localIso, 9, 10), +$EXTRACT(localIso, 12, 13), +$EXTRACT(localIso, 15, 16), +$EXTRACT(localIso, 18, 19))
+    } Catch {
+        Set r = "unavailable"
+    }
+    If (r = "unknown") || (r = "unavailable") Quit ""
+    Set known = 1
+    Quit r
+}
+
+/// Whether zoneinfo knows a zone, cached per process and zone.
+ClassMethod PythonZoneKnown(zone As %String) As %Boolean
+{
+    If $DATA(^||Shutter.ZoneKnown(zone)) Quit ^||Shutter.ZoneKnown(zone)
+    Do ..PythonZoneOffset(zone, "2026-01-15T12:00:00", .known)
+    Set ^||Shutter.ZoneKnown(zone) = ''known
+    Quit ''known
 }
 
 /// Whether a time is in British Summer Time. The time is UTC, or local London time when local is 1 (then the hour
@@ -149,6 +223,8 @@ ClassMethod Probe(ts As %String, zone As %String = "") As %String [ SqlProc ]
     Do o.%Set("had_offset", ''had, "boolean")
     Set o.zone = zone
     Do o.%Set("zone_known", ..KnownZone(zone), "boolean")
+    Do o.%Set("python_zones", ..PythonZones(), "boolean")
+    Set o."zone_offset" = ..ZoneOffset(zone, $PIECE(iso, "Z", 1))
     Do o.%Set("bst", ..InBritishSummerTime(iso), "boolean")
     Do o.%Set("near_clock_change", ..NearBritishClockChange(iso), "boolean")
     Set y = +$EXTRACT(iso, 1, 4)

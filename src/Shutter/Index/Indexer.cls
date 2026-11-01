@@ -1,112 +1,48 @@
-/// Shutter's indexer (CONTRACTS 8.1): a service with no adapter that walks Ens.MessageHeader by id, a few seconds
-/// behind the newest header, and gives every HL7 message on the watched routes a row in Shutter.Index.Message. The
-/// site's Search Table Class settings stay as they are. A high-water mark in ^Shutter.Index("hwm") says where the
-/// walk stands; the first start begins at the oldest header within the back-fill window; Rebuild() walks a range
-/// again. The index is a finder, never a second source of truth: every decision still opens the message.
+/// Shutter's indexer (CONTRACTS 8.1): the service behind the production item "HL7 Index". Its adapter, Shutter.Index.Adapter
+/// (v1.31), walks Ens.MessageHeader a few seconds behind the newest header and hands it each batch of HL7 headers on the
+/// watched routes; the service gives every message a row in Shutter.Index.Message. The site's Search Table Class settings
+/// stay as they are. A high-water mark in ^Shutter.Index("hwm") says where the walk stands (the adapter keeps it); Rebuild()
+/// walks a range again. The index is a finder, never a second source of truth: every decision still opens the message.
 Class Shutter.Index.Indexer Extends Ens.BusinessService
 {
 
-Parameter ADAPTER = "Ens.InboundAdapter";
+Parameter ADAPTER = "Shutter.Index.Adapter";
 
-Property Adapter As Ens.InboundAdapter;
+Property Adapter As Shutter.Index.Adapter;
 
-/// The business services whose HL7 messages are indexed (config names, comma-separated). Empty indexes every HL7 message.
-Property Routes As %String(MAXLEN = 1000) [ InitialExpression = "ADT In" ];
-
-/// Headers read per pass.
-Property BatchSize As %Integer [ InitialExpression = 200 ];
-
-/// Headers younger than this wait for the next pass: an id is taken before its row is written, so the newest few can
-/// appear out of order.
-Property LagSeconds As %Integer [ InitialExpression = 5 ];
-
-/// On the first start, how far back the walk begins (hours). 0 starts at the newest header.
-Property BackfillHours As %Integer [ InitialExpression = 168 ];
-
-Parameter SETTINGS = "Routes:Index,BatchSize:Index,LagSeconds:Index,BackfillHours:Index";
-
+/// A batch from the adapter: every header's message is indexed, a failure is recorded against the header for Rebuild and
+/// the walk goes on. The batch is always taken (the adapter then moves the mark), so one bad message never stalls the index.
 Method OnProcessInput(pInput As %RegisteredObject, Output pOutput As %RegisteredObject) As %Status
 {
-    Set pOutput = "", total = 0, passes = 0
-    // Several passes per call while the walk is behind (a back-fill or a burst), bounded so the service stays responsive.
-    For {
-        Set caughtUp = ..Pass(..Routes, ..BatchSize, ..LagSeconds, ..BackfillHours, .indexed, .error)
-        Set total = total + indexed, passes = passes + 1
-        If error '= "" $$$LOGWARNING("Index pass: " _ error)
-        Quit:caughtUp
-        Quit:(passes >= 20)
-        Quit:(error '= "")
+    Set pOutput = ""
+    If '$ISOBJECT(pInput) || 'pInput.%IsA("Shutter.Index.Batch") Quit $$$ERROR($$$GeneralError, "The indexer expects a Shutter.Index.Batch, got " _ $SELECT($ISOBJECT(pInput): $CLASSNAME(pInput), 1: "nothing"))
+    Set indexed = 0, failed = 0, last = ""
+    For i = 1:1:pInput.Count {
+        Set sc = ..IndexHeader($LIST(pInput.Ids, i), $LIST(pInput.BodyIds, i), .added)
+        If $$$ISERR(sc) { Set failed = failed + 1, last = $EXTRACT($SYSTEM.Status.GetErrorText(sc), 1, 200) } ElseIf added { Set indexed = indexed + 1 }
     }
-    If total > 0 $$$TRACE("Indexed " _ total _ " HL7 message(s) in " _ passes _ " pass(es); high-water mark " _ $GET(^Shutter.Index("hwm")))
+    If indexed > 0 Set ^Shutter.Index("last_indexed_at") = ##class(Shutter.Util.Time).NowUTC(), ^Shutter.Index("total") = $GET(^Shutter.Index("total")) + indexed
+    If failed > 0 $$$LOGWARNING(failed _ " header(s) of the batch after " _ pInput.AfterId _ " could not be indexed, the last: " _ last)
+    If indexed > 0 $$$TRACE("Indexed " _ indexed _ " HL7 message(s) of " _ pInput.Count _ " header(s), up to header " _ pInput.LastId)
     Quit $$$OK
 }
 
-/// One pass: the next batch of headers after the high-water mark, on the routes, older than the lag. Returns 1 when
-/// the walk has caught up (fewer headers than the batch).
-ClassMethod Pass(routes As %String = "", batch As %Integer = 200, lag As %Integer = 5, backfillHours As %Integer = 168, Output indexed As %Integer, Output error As %String) As %Boolean
+/// One header's message into the index: added says whether a row was made (none for a message already indexed or a
+/// header without a body). A failure is recorded in ^Shutter.Index("failed", id) for Rebuild, and cleared when it succeeds.
+ClassMethod IndexHeader(id As %Integer, bodyId As %String, Output added As %Boolean) As %Status
 {
-    Set indexed = 0, error = "", caughtUp = 1
-    Try {
-        Set hwm = $GET(^Shutter.Index("hwm"))
-        If hwm = "" {
-            Set hwm = 0
-            If backfillHours > 0 {
-                Set sinceTs = ..Odbc(##class(Shutter.Util.Time).FromNow(-3600 * backfillHours)), first = ""
-                &sql(SELECT MIN(ID) INTO :first FROM Ens.MessageHeader WHERE TimeCreated >= :sinceTs)
-                If (SQLCODE = 0) && (first '= "") Set hwm = first - 1
-            } Else {
-                Set last = ""
-                &sql(SELECT MAX(ID) INTO :last FROM Ens.MessageHeader)
-                If (SQLCODE = 0) && (last '= "") Set hwm = last
-            }
-            Set ^Shutter.Index("hwm") = hwm, ^Shutter.Index("started_at") = ##class(Shutter.Util.Time).NowUTC()
-        }
-        Set ^Shutter.Index("routes") = routes, ^Shutter.Index("lag") = lag
-        Set cutoff = ..Odbc(##class(Shutter.Util.Time).FromNow(-lag))
-        // The walk is bounded by id, not by time: it stops short of the first header younger than the lag, so a header
-        // with a lower id that is still being written is never leapt over.
-        Set boundary = ""
-        &sql(SELECT MIN(ID) INTO :boundary FROM Ens.MessageHeader WHERE ID > :hwm AND TimeCreated > :cutoff)
-        If (SQLCODE '= 0) Set boundary = ""
-        Set sql = "SELECT TOP " _ (+batch) _ " ID, MessageBodyId FROM Ens.MessageHeader WHERE ID > ? AND MessageBodyClassName = 'EnsLib.HL7.Message'"
-        Set args = 1, args(1) = hwm
-        If boundary '= "" Set sql = sql _ " AND ID < ?", args = 2, args(2) = boundary
-        Set in = ""
-        For i = 1:1:$LENGTH(routes, ",") {
-            Set r = $ZSTRIP($PIECE(routes, ",", i), "<>W")
-            Continue:r=""
-            Set in = in _ $SELECT(in = "": "", 1: ", ") _ "?", args = args + 1, args(args) = r
-        }
-        If in '= "" Set sql = sql _ " AND SourceConfigName IN (" _ in _ ")"
-        Set sql = sql _ " ORDER BY ID"
-        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, args...)
-        If rs.%SQLCODE < 0 Set error = "SQLCODE " _ rs.%SQLCODE _ ": " _ rs.%Message Quit
-        Set n = 0
-        While rs.%Next() {
-            Set n = n + 1, id = rs.%Get("ID"), bodyId = rs.%Get("MessageBodyId")
-            If (bodyId '= "") && '##class(Shutter.Index.Message).Indexed(bodyId) {
-                Set body = ##class(EnsLib.HL7.Message).%OpenId(bodyId)
-                If $ISOBJECT(body) {
-                    Set sc = ##class(Shutter.Index.Message).IndexDoc(body)
-                    If $$$ISERR(sc) {
-                        // Recorded for Rebuild; the walk goes on, and the pass reports how many failed.
-                        Set ^Shutter.Index("failed", id) = $EXTRACT($SYSTEM.Status.GetErrorText(sc), 1, 500)
-                        Set failed = $GET(failed) + 1, error = failed _ " header(s) could not be indexed, the last " _ id _ ": " _ $EXTRACT($SYSTEM.Status.GetErrorText(sc), 1, 200)
-                    } Else {
-                        Set indexed = indexed + 1
-                        Kill ^Shutter.Index("failed", id)
-                    }
-                }
-            }
-            Set hwm = id
-        }
-        Set ^Shutter.Index("hwm") = hwm, ^Shutter.Index("last_pass_at") = ##class(Shutter.Util.Time).NowUTC()
-        If indexed > 0 Set ^Shutter.Index("last_indexed_at") = ^Shutter.Index("last_pass_at"), ^Shutter.Index("total") = $GET(^Shutter.Index("total")) + indexed
-        Set caughtUp = (n < batch)
-    } Catch ex {
-        Set error = ex.DisplayString()
+    Set added = 0
+    If (bodyId = "") || ##class(Shutter.Index.Message).Indexed(bodyId) Quit $$$OK
+    Set body = ##class(EnsLib.HL7.Message).%OpenId(bodyId)
+    If '$ISOBJECT(body) Quit $$$OK
+    Set sc = ##class(Shutter.Index.Message).IndexDoc(body)
+    If $$$ISERR(sc) {
+        Set ^Shutter.Index("failed", id) = $EXTRACT($SYSTEM.Status.GetErrorText(sc), 1, 500)
+        Quit sc
     }
-    Quit caughtUp
+    Set added = 1
+    Kill ^Shutter.Index("failed", id)
+    Quit $$$OK
 }
 
 /// Walk a range of header ids again, whatever the high-water mark: the back-fill, or a repair. Returns how many rows
@@ -125,11 +61,7 @@ ClassMethod Rebuild(fromId As %Integer, toId As %Integer, routes As %String = ""
     If in '= "" Set sql = sql _ " AND SourceConfigName IN (" _ in _ ")"
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql _ " ORDER BY ID", args...)
     While rs.%Next() {
-        Set bodyId = rs.%Get("MessageBodyId")
-        Continue:((bodyId = "") || ##class(Shutter.Index.Message).Indexed(bodyId))
-        Set body = ##class(EnsLib.HL7.Message).%OpenId(bodyId)
-        Continue:'$ISOBJECT(body)
-        If $$$ISOK(##class(Shutter.Index.Message).IndexDoc(body)) Set added = added + 1, ^Shutter.Index("total") = $GET(^Shutter.Index("total")) Kill ^Shutter.Index("failed", rs.%Get("ID"))
+        If $$$ISOK(..IndexHeader(rs.%Get("ID"), rs.%Get("MessageBodyId"), .one)) && one Set added = added + 1
     }
     If added > 0 Set ^Shutter.Index("total") = $GET(^Shutter.Index("total")) + added
     Quit added
@@ -165,6 +97,7 @@ ClassMethod Status() As %DynamicObject
     Do o.%Set("caught_up", +behind = 0, "boolean")
     Set o."failed_headers" = 0
     Set k = "" For { Set k = $ORDER(^Shutter.Index("failed", k)) Quit:k=""  Set o."failed_headers" = o."failed_headers" + 1 }
+    Set o.adapter = "Shutter.Index.Adapter"
     Quit o
 }
 
