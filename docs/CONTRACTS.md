@@ -467,7 +467,9 @@ inside Shutter's own pipeline: received after the case's own and not yet deliver
 answer yet, or indexed and not yet routed. The evidence lists them in `pending_messages` (`Shutter.Util.ResendGuard`:
 `[{event, event_time, operation_key, control_id, ens_header_id, sent_at, receiver, where}]`, oldest first, from the feed's
 deliveries without an answer and the exact index's rows without a delivery, both after the case's own message's arrival), and
-the gate's ordering check blocks a write with `NEWER_MESSAGE_PENDING` while one is pending; the case blocks with
+the gate's ordering check blocks a write with `NEWER_MESSAGE_PENDING` while one is pending, and since v1.34 a superseded plan
+too when no delivered later event supports it and a message is pending (the later event the plan rests on is still on its
+way: the case waits and is judged again, instead of `SUPERSESSION_UNSUPPORTED` sending a person); the case blocks with
 `waitsOnMessage` naming the first (its MSH-10 control id), and the connector's answer to that message, whatever it is,
 reopens the case on fresh evidence, where the later event now shows as applied, or as its own case, and the gate decides. The
 connector checks again at the moment of a recovery write (`Shutter.Operation.Ward`) and answers `refused` with reason
@@ -561,7 +563,9 @@ In `policy` mode the matcher's decision is:
   `correction_steps` (section 10) and the case carries a note "Correcting the history: ...".
 - The matches, with every condition's observed value, are stored on the case (`catalogue` in the snapshot summary) and
   shown in the app.
-- Recording keys for replays name the case within its scenario: `scenario:<S>:<encounter>:<event>|<member>|<cfg>[|round<n>]`; The production review's recordings use the form `review:<namespace>:<production>|review|<CONFIGVERSION>|<fingerprint>` (13.6).
+- Recording keys for replays name the case within its scenario: `scenario:<S>:<encounter>:<event>[:<receiver>]|<member>|<cfg>[|round<n>]`
+  (the receiver when it is not the production's default, `Shutter.Production`'s `RECEIVER`, so two receivers' cases of one
+  movement record apart and the earlier recordings keep their keys; v1.34); The production review's recordings use the form `review:<namespace>:<production>|review|<CONFIGVERSION>|<fingerprint>` (13.6).
   the replay runner falls back to the older `scenario:<S>|<member>|<cfg>` form, which the first recordings use.
 
 ### 6.4 The site profile and the policy path
@@ -1372,7 +1376,10 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   refusal read as unknown and E17 escalated it. The case's timeline (8.2, `Timeline.ForCase`) takes that production's
   deliveries for the encounter too, each row with `namespace`, so a forwarded case's evidence, `later_events` and the case
   page's encounter timeline show the admission before the failure and the movements after it, where before they held the
-  forwarded failure alone. The install (12): the installer's data database variable is `SHUTTERDATADIR`, since `DATADIR` is a name
+  forwarded failure alone. From the board's first live runs of S21 to S25: a scenario recording's key names the case's
+  receiver when it is not the default (4), the board's plan at a history-of-record receiver gets the correcting steps as the
+  policy path's does (`CaseWorkflow.AttachCorrectionSteps`), and the gate holds a superseded plan with
+  `NEWER_MESSAGE_PENDING` while the later event it rests on is still on its way (6.5). The install (12): the installer's data database variable is `SHUTTERDATADIR`, since `DATADIR` is a name
   `%Installer` predefines (the install directory) and a Default never replaces an existing variable, so builds before this
   kept SHUTTERDATA at `/usr/irissys/`, inside the image and outside the volume, and lost every case on `docker compose
   down` or a rebuild (found by the upgrade proof of 1 Nov 2026; the hospital's and the records' data databases, under other

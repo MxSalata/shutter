@@ -702,6 +702,10 @@ XData Rows [ MimeType = application/json ]
   {"group": "ordering", "name": "superseded, with nothing later and no catalogue entry",
    "plan": {"disposition": "superseded", "action": null},
    "expect": [["ordering", "block", "SUPERSESSION_UNSUPPORTED"]], "outcome": "block"},
+  {"group": "ordering", "name": "superseded by a message of the encounter still on its way: the case waits, nobody is called",
+   "plan": {"disposition": "superseded", "action": null},
+   "summary": {"pending_messages": [{"event": "transfer", "event_time": "2026-10-19T10:00:00Z", "operation_key": "k-later", "control_id": "MSG-9", "ens_header_id": "77", "sent_at": "2026-10-19 09:01:00.000", "receiver": "Downstream Out", "where": "queued for the receiver, no answer yet"}]},
+   "expect": [["ordering", "block", "NEWER_MESSAGE_PENDING"]], "absent": [["ordering", "SUPERSESSION_UNSUPPORTED"]], "contains": [["ordering", "NEWER_MESSAGE_PENDING", "still on its way"]], "outcome": "block"},
 
   {"group": "state_transition", "name": "a transfer of a discharged encounter",
    "summary": {"ward_state": {"state": "discharged"}},
