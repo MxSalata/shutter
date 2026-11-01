@@ -45,6 +45,8 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/library" Method="GET" Call="Library"/>
   <Route Url="/library/:code" Method="PATCH" Call="LibraryPatch"/>
   <Route Url="/settings" Method="GET" Call="Settings"/>
+  <Route Url="/settings/schemas" Method="GET" Call="SchemasGet"/>
+  <Route Url="/settings/schemas" Method="POST" Call="SchemasImport"/>
   <Route Url="/site-profile" Method="GET" Call="SiteProfileGet"/>
   <Route Url="/site-profile" Method="PUT" Call="SiteProfilePut"/>
   <Route Url="/site-profile/history" Method="GET" Call="SiteProfileHistory"/>
@@ -1508,6 +1510,31 @@ ClassMethod CaseQuestionAsk(caseId As %String) As %Status
     Set %response.Status = "202 Accepted"
     Write replyText
     Quit $$$OK
+}
+
+// ---- HL7 schemas (CONTRACTS 12, v1.32) ----
+
+/// The schema categories this namespace holds, those the production and the recent messages need, and what is missing.
+ClassMethod SchemasGet() As %Status
+{
+    If '..Allow() Quit $$$OK
+    Quit ..Json(##class(Shutter.Util.Schemas).Report())
+}
+
+/// Import a site's schema XML from a path on this server (Shutter_Approve): {path} -> 200 {ok, category, loaded}; 400 for a
+/// body without a path; 422 import_failed with the importer's words (a file that is not there, not .xml, or not a schema).
+ClassMethod SchemasImport() As %Status
+{
+    If '..Allow("Shutter_Approve", 1) Quit $$$OK
+    Set body = ..Body()
+    Set path = $ZSTRIP(##class(Shutter.Util.Json).Str(body, "path"), "<>W")
+    If path = "" Quit ..Fail("400 Bad Request", "bad_request", "The body must be {path}: a schema XML file on this server")
+    Set sc = ##class(Shutter.Util.Schemas).Import(path, .category)
+    If $$$ISERR(sc) Quit ..Fail("422 Unprocessable Entity", "import_failed", $SYSTEM.Status.GetErrorText(sc))
+    Set o = {}
+    Do o.%Set("ok", 1, "boolean")
+    Set o.category = category, o.loaded = ##class(Shutter.Util.Schemas).Categories(), o.importedBy = ..User()
+    Quit ..Json(o)
 }
 
 // ---- production reviews (CONTRACTS 13) ----

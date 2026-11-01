@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.32, 1 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.33, 1 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -139,7 +139,7 @@ For a receiver that takes them (1.1, v1.14): `cancel_admit` and `cancel_transfer
 - `fail_before_accept`: 503 before any validation or write.
 - `commit_drop_response`: the operation is committed, then the response is a 504 with no body.
 - `misleading_duplicate_error`: with an `operation_key`, the downstream system answers 409 `{"error": "duplicate_message"}` for that key whatever the version, and writes nothing; without a key, it answers that way when `expected_version` mismatches, instead of `version_conflict`. (A buggy receiver that reports the wrong reason. Nothing else changes.)
-- `delay_response` (v1.32): each real operation (never a dry run) is held for `seconds` (a whole number from 1 to 60, 12 when not given; 422 otherwise), then applied and answered as usual. A slow receiver: a sender whose timeout is shorter gives up on an operation that is still applied, and the sender's next message for the receiver waits behind it. `GET /faults` reports `seconds` with the mode. A scenario's fault step passes `seconds` through (4.3).
+- `delay_response` (v1.33): each real operation (never a dry run) is held for `seconds` (a whole number from 1 to 60, 12 when not given; 422 otherwise), then applied and answered as usual. A slow receiver: a sender whose timeout is shorter gives up on an operation that is still applied, and the sender's next message for the receiver waits behind it. `GET /faults` reports `seconds` with the mode. A scenario's fault step passes `seconds` through (4.3).
 
 ### 1.6 Canonical payload and digest
 
@@ -314,8 +314,8 @@ caller's process passes; the operator and the approver read the watched hospital
 | --- | --- |
 | none | `POST` and `DELETE /session`; `GET /health` (its summary; the full report needs `Shutter_Operate`) |
 | signed in | `GET /me`, which answers `{username, operator, approver}` from the two resources |
-| `Shutter_Operate` | every other `GET`; `POST /scenarios/{id}/run` and `/scenarios/reset`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send`; `GET /production-reviews`, `GET /production-reviews/targets` and `GET /production-reviews/{id}`; `POST /production-reviews` (section 13: the review reads only, and a live agent run spends model credit as a scenario run does); `GET /cases/{id}/whatif`, `GET /cases/{id}/questions`, `GET /cases/{id}/questions/suggested`, `GET /cases/{id}/questions/{qid}` and `POST /cases/{id}/questions` (section 14: a question reads only, and a live run spends model credit) |
-| `Shutter_Approve` | `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `PUT /site-profile`; `PATCH /library/{code}` (since v1.17; it was `Shutter_Operate`); `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13) |
+| `Shutter_Operate` | every other `GET`; `POST /scenarios/{id}/run` and `/scenarios/reset`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send`; `GET /production-reviews`, `GET /production-reviews/targets` and `GET /production-reviews/{id}`; `POST /production-reviews` (section 13: the review reads only, and a live agent run spends model credit as a scenario run does); `GET /cases/{id}/whatif`, `GET /cases/{id}/questions`, `GET /cases/{id}/questions/suggested`, `GET /cases/{id}/questions/{qid}` and `POST /cases/{id}/questions` (section 14: a question reads only, and a live run spends model credit); `GET /settings/schemas` (section 12) |
+| `Shutter_Approve` | `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `PUT /site-profile`; `PATCH /library/{code}` (since v1.17; it was `Shutter_Operate`); `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13); `POST /settings/schemas` (section 12: a schema import) |
 | `Shutter_Intake` | `POST /intake` (section 11) |
 
 So the person on call (an operator) escalates a case and, once the team that corrects the systems has done so, marks
@@ -410,6 +410,12 @@ the catalogue, the gate and the model view judge the receiver the case went to, 
 profile edit later does not flip a decided case.
 
 **Times the matcher reads** (v1.21). The plausibility rule compares an event's time with the time the feed sent it (`sent_at`), the receiver applied it (`applied_at`) and the evidence was taken (`observed_at`). A time in the ISO 8601 UTC form with a `Z` (a fraction allowed) or in the message store's ODBC form (`2026-10-15 09:20:00.123`, written in UTC) is read; a time with an offset (`2026-10-15T10:20:00+01:00`) or in any other form is never read as UTC: a `sent_at` or `applied_at` of that shape skips its own check, as an empty one does, so one receiver's odd clock form never makes every later event implausible, while an event time the matcher cannot read is implausible and supersedes nothing (and raises `later_event_future` when believing it would change the reading). `Shutter_Catalogue.Matcher_ForCase(caseId, chainKind)` evaluates the stored snapshot again for checks over SQL; since v1.21 it takes the case's stored chain kind (`Shutter.Store.ChainItem.KindFor`, `single` outside a chain) when the caller gives none, so it agrees with the stored match for a chain item.
+
+**A schema this namespace does not hold** (v1.32). The conformance check reads the evidence's `validation.schema_known`: a
+message whose `DocType` category is not loaded here (a forwarded message naming its source's own schema, a site variant not yet
+imported) cannot be validated at all, so the check blocks with `SCHEMA_UNKNOWN` naming the category and the fix, never with
+`PARSE_FAILED`; the evidence's `validation` then says `parsed: false`, `error: "unknown schema: ..."`, `schema_known: false`,
+`schema_category` and `schema_fix`. A person imports the schema (12) and reinvestigates the case.
 
 **The failsafe at the point of the resend** (v1.29; the owner's requirement of 26 Oct 2026). A resend is already a conditional
 write bound to the version the preflight read, so a PAS message applied at the receiver in between is refused as a version
@@ -1050,6 +1056,17 @@ demo items, switched off on a site install with the others.
   name that production (`shutter_production`), and `StartProduction` leaves a shape-B namespace alone. Run again after
   an upgrade, it adds the items that are new.
 
+
+**Custom HL7 schemas** (v1.32). `Shutter.Util.Schemas` knows the categories this namespace holds (the class query
+`EnsLib.HL7.Schema:TypeCategories`), the categories the productions' items name in `MessageSchemaCategory` and the newest
+messages in the store carry in `DocType`, and imports a site's schema XML through IRIS's own importer
+(`EnsLib.HL7.SchemaXML.Import`). The Doctor reports `hl7_schemas: {loaded: [{category, standard, base}], needed: [{category,
+where, known}], missing: [category], fix}`; `SELECT Shutter.Setup_ImportSchema('<path>')` (Shutter_Approve) imports a file
+on the server and answers `{ok, category, loaded, error}`; `GET /settings/schemas` answers the Doctor's object and
+`POST /settings/schemas` `{path}` imports (200 `{ok, category, loaded, importedBy}`; 400 `bad_request` without a path; 422
+`import_failed` with the importer's words: a file that is not there, not `.xml`, or not a schema). The install guide's
+section 7 says how a site loads its schema and what a case says meanwhile (6.5, `SCHEMA_UNKNOWN`).
+
 ## 13. The production review (v1.22)
 
 A **review** is one read-only pass over one production: its items' effective settings, its event log's errors and its messages' failures over a window (7 days by default, 1 to 90), tied to the cases Shutter opened for it. It never changes the production; a person applies any change in the Management Portal. The checks are deterministic (13.2), and the report they make stands on its own. One AI Hub agent then **ranks the findings within their severity tiers and explains each** against the case history (13.6), seeing item and setting names, values, counts, header ids, the checks' own words and per-item case aggregates (counts and case ids), never the error example text, note text, operation-key pieces or failure text. The deterministic report stands whole when the agent fails, replays with no recording or is skipped. A finding keeps **severity** (how bad the hazard is) and **confidence** (how the evidence was read) apart, counts unique cases apart from retries, and says "consistent with" unless a mechanism was traced; "intended" is a Shutter **annotation** bound to the finding's exact value (13.3), never a production edit, and the finding reopens when the value changes or the annotation expires or is revoked.
@@ -1250,9 +1267,14 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
-- v1.32, 1 Nov 2026: the demo receiver's fault `delay_response` (1.5): a real operation is held for `seconds`, then applied
+- v1.33, 1 Nov 2026: the demo receiver's fault `delay_response` (1.5): a real operation is held for `seconds`, then applied
   and answered as usual, so a newer message can be on its way to the receiver while a case is about to resend (S24); the
   scenario runner's fault step passes `seconds`.
+- v1.32, 1 Nov 2026: custom HL7 schemas (2, 5, 6.5, 12): `Shutter.Util.Schemas` (the loaded categories, the needed ones from
+  the productions' `MessageSchemaCategory` settings and the newest messages' `DocType`, the import through
+  `EnsLib.HL7.SchemaXML`); the evidence's `validation.schema_known`, `schema_fix` and the `unknown schema` verdict; the gate's
+  `SCHEMA_UNKNOWN` in place of `PARSE_FAILED` for a category not loaded; the Doctor's `hl7_schemas`;
+  `Shutter.Setup.ImportSchema`; `GET` and `POST /settings/schemas`; INSTALL.md section 7.
 - v1.31, 1 Nov 2026: the index walk is an inbound adapter of Shutter's own (8.1): `Shutter.Index.Adapter` reads the next batches
   of HL7 headers after the high-water mark on each task and hands them to `Shutter.Index.Indexer` as `Shutter.Index.Batch`
   objects, moving the mark once a batch is taken; the walk's settings (`Routes`, `BatchSize`, `LagSeconds`, `BackfillHours`,

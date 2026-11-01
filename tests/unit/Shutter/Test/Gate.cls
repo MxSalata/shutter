@@ -593,6 +593,9 @@ XData Rows [ MimeType = application/json ]
    "plan": {"disposition": "escalate", "action": null},
    "expect": [["intent", "pass", "NO_WRITE"], ["ordering", "pass", "NOT_APPLICABLE"], ["state_transition", "pass", "NOT_APPLICABLE"], ["concurrency", "pass", "NOT_APPLICABLE"], ["capability", "pass", "NOT_APPLICABLE"]], "outcome": "pass"},
 
+  {"group": "conformance", "name": "a message whose schema is not loaded here",
+   "summary": {"validation": {"parsed": false, "schema_known": false, "schema_category": "2.5.1.HOSP", "schema_fix": "Import the schema, then reinvestigate the case", "error": "unknown schema"}},
+   "expect": [["conformance", "block", "SCHEMA_UNKNOWN"]], "absent": [["conformance", "PARSE_FAILED"]], "outcome": "block"},
   {"group": "ordering", "name": "a resend while a newer message of the encounter is pending in Shutter",
    "summary": {"pending_messages": [{"event": "transfer", "event_time": "2026-10-19T10:00:00Z", "operation_key": "k-later", "control_id": "MSG-9", "ens_header_id": "77", "sent_at": "2026-10-19 09:01:00.000", "receiver": "Downstream Out", "where": "queued for the receiver, no answer yet"}]},
    "expect": [["ordering", "block", "NEWER_MESSAGE_PENDING"]], "outcome": "block"},

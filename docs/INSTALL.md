@@ -182,3 +182,24 @@ The case, the evidence, the matcher and the catalogue, the gate, approvals and i
 model view, the REST API and the web application are namespace-local code with settings for the names they need. Only
 the scenario player, the demo receiver, the demo users and the store purge (refused on a non-demo instance) know the
 demo.
+
+## 7. Using your site's custom schema
+
+A site's feed often carries its own HL7 schema: a local variant of 2.5.1 with Z segments, or a category exported from the
+source system's IRIS. Shutter validates each message against the category its route named (the service's
+`MessageSchemaCategory` in your production; the message's `DocType` when the hospital's production forwarded it), so that
+category has to be loaded in Shutter's namespace too.
+
+- **See what is missing.** `SELECT Shutter.Setup_Doctor()` has an `hl7_schemas` section: `loaded` (the categories this
+  namespace holds), `needed` (every `MessageSchemaCategory` your productions' items name, and the categories of the newest
+  messages in the store, each with where it came from and whether it is known) and `missing`. The same answers
+  `GET /api/shutter/settings/schemas`.
+- **Load it.** Export the schema from the source system's Management Portal (Interoperability, Interoperate, HL7 v2.x,
+  HL7 v2.x Schema Structures, Export) or write it, copy the `.xml` onto Shutter's server, and run
+  `SELECT Shutter.Setup_ImportSchema('/path/to/schema.xml')` as an approver, or `POST /api/shutter/settings/schemas`
+  with `{"path": "/path/to/schema.xml"}`. It is IRIS's own importer (`EnsLib.HL7.SchemaXML`): nothing else changes.
+- **What a case says meanwhile.** A message whose category is not loaded is not called invalid: its evidence says
+  `unknown schema` with the category and the fix, and the gate blocks any write with `SCHEMA_UNKNOWN`. Once the schema is
+  loaded, reinvestigate the case from its page; the fresh evidence validates the message and the case goes on.
+- **Shape B.** When Shutter's items live in your own production, the HL7 service is yours and its category is already
+  loaded there; the check still matters for messages forwarded from other namespaces.
