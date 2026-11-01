@@ -36,7 +36,7 @@ MEMBERS = {
 }
 # scenario:<S>:<encounter>:<event>|<member>|<configVersion>[|round<n>], as CaseWorkflow writes it. The pattern still parses
 # the older form without the encounter and event, so that check_file can say why such a recording is refused.
-KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+)(?::(?P<encounter>[^:|]+):(?P<event>[^:|]+))?"
+KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+[a-z]?)(?::(?P<encounter>[^:|]+):(?P<event>[^:|]+))?"
                     r"\|(?P<member>[a-z]+)\|(?P<cfg>\d+)(?:\|round(?P<round>\d+))?$")
 # review:<namespace>:<production>|review|1|<fingerprint>, as Shutter.Process.Review.RecordKeyFor writes it: the
 # fingerprint is the configuration findings' SHA-256 in lower-case hex, empty when the production has none

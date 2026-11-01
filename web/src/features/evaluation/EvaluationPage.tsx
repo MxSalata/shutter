@@ -242,9 +242,13 @@ export default function EvaluationPage({
   const elapsed = scored.map((p) => p.elapsed_ms);
   const costs = scored.map((p) => p.cost_usd);
   const agreement = Object.entries(t.agreement);
-  // An evaluation made with no recordings has no first run to date it by
+  // An evaluation made with no recordings has no first run to date it by; runs recorded on several days name the first
+  // and the last
+  const firstDay = t.recorded_from ? day.format(new Date(t.recorded_from)) : '';
+  const lastDay = t.recorded_to ? day.format(new Date(t.recorded_to)) : firstDay;
+  const days = firstDay === lastDay ? firstDay : `${firstDay} to ${lastDay}`;
   const source = t.recorded_from
-    ? `Every figure here comes from the recorded live runs of ${day.format(new Date(t.recorded_from))}: ${formatInt(t.runs)} runs of ${andList(t.models)}, started between ${formatUtc(t.recorded_from)} and ${formatUtc(t.recorded_to)}, computed from the recordings by scripts/evaluate.py with no model calls.`
+    ? `Every figure here comes from the recorded live runs of ${days}: ${formatInt(t.runs)} runs of ${andList(t.models)}, started between ${formatUtc(t.recorded_from)} and ${formatUtc(t.recorded_to)}, computed from the recordings by scripts/evaluate.py with no model calls.`
     : 'There are no recorded live runs to evaluate yet: scripts/evaluate.py found none.';
   return (
     <>

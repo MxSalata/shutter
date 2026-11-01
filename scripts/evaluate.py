@@ -35,7 +35,7 @@ SPECIALISTS = ["conformance", "encounter", "impact"]
 MEMBERS = SPECIALISTS + ["coordinator"]
 LETTER = {"conformance": "C", "encounter": "E", "impact": "I", "coordinator": "P"}
 # The same key pattern as check-records.py: scenario:<S>:<encounter>:<event>|<member>|<configVersion>[|round<n>]
-KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+):(?P<encounter>[^:|]+):(?P<event>[^:|]+)"
+KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+[a-z]?):(?P<encounter>[^:|]+):(?P<event>[^:|]+)"
                     r"\|(?P<member>[a-z]+)\|(?P<cfg>\d+)(?:\|round(?P<round>\d+))?$")
 # The production review's key, as check-records.py reads it: review:<namespace>:<production>|review|1|<fingerprint>
 REVIEW_KEY_RE = re.compile(r"^review:[A-Za-z0-9_%]+:[A-Za-z0-9_.]+\|review\|1\|(?:[0-9a-f]{64}|)$")
