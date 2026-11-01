@@ -1126,5 +1126,45 @@
         "policy"
       ]
     }
+  },
+  {
+    "id": "S25",
+    "title": "A message with the site's own segment",
+    "summary": "Admit to Ward A applied. The 09:20 transfer to Ward B fails because the downstream system is down, and it carries the trust's own segment, ZZZ, which this namespace's schema doesn't define, so IRIS can't read it to check it. A second, independent parser (HAPI, in Java, through PEX) reads it as a well-formed transfer with a site segment. Nothing is resent: the case says the message is sound and the site's schema is what's missing, so the fix is to import the schema and read the feed with it, then reinvestigate, not to chase the PAS.",
+    "steps": [
+      {
+        "file": "S25-01-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept",
+        "operation_key": "PAS^HOSP^MRN1025^ENC-1025^transfer^2026-10-15T08:20:00Z"
+      },
+      {
+        "file": "S25-02-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      }
+    ],
+    "expected": {
+      "disposition": "escalate",
+      "acceptable": [
+        "more_evidence",
+        "resend"
+      ],
+      "write": false,
+      "final_state": "admitted",
+      "final_ward": "WARD-A",
+      "case_by_key": true,
+      "final_reason": "PARSE_FAILED",
+      "failed_operation_key": "PAS^HOSP^MRN1025^ENC-1025^transfer^2026-10-15T08:20:00Z",
+      "modes": [
+        "policy"
+      ]
+    }
   }
 ]

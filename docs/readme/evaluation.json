@@ -2383,6 +2383,11 @@
    "scenario": "S24",
    "title": "A newer message arrives as Shutter resends",
    "why": "played in policy mode only"
+  },
+  {
+   "scenario": "S25",
+   "title": "A message with the site's own segment",
+   "why": "played in policy mode only"
   }
  ],
  "not_used": [],

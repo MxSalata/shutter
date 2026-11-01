@@ -188,7 +188,7 @@ jobs:
   # runs: S1 to S10, S13, and the withheld merge and cancel (S15, S16) on the board; the two outage scenarios, S11 and
   # S12, and S2 in HL7 2.4 and 2.3.1 (S17, S18) in site-policy mode; S20, a move entered by hand, in rules-only mode;
   # S21, a transfer in the hour the clocks go back, in rules-only and site-policy modes; S22 at two receivers and the
-  # occupied bed (S23a to S23c) and the resend failsafe (S24) in site-policy mode; then the operator's and the
+  # occupied bed (S23a to S23c) the resend failsafe (S24) and a site's own segment (S25) in site-policy mode; then the operator's and the
   # approver's routes, the attempts to break the approval boundary, and the production review.
   iris:
     name: IRIS ${{ matrix.shard }} (the downstream system's contract, scenarios in replay)
@@ -372,6 +372,11 @@ jobs:
       - name: A newer message on its way as Shutter resends (S24) in site-policy mode
         if: matrix.shard == 'policy'
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes policy --approve S24
+      # A transfer whose delivery failed carries the site's own Z segment, which the namespace's schema doesn't define: the
+      # gate blocks the resend (PARSE_FAILED), with the Second Parser's verdict where Java is present (S25)
+      - name: A message with the site's own segment (S25) in site-policy mode
+        if: matrix.shard == 'policy'
+        run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes policy --approve S25
       # The roles over HTTP: the library is the approver's to change, an operator escalates a case and closes it by hand,
       # and under the site profile's two-person rule only an approver closes it. It closes two of the cases the
       # scenarios left escalated or blocked, so it runs after them.
