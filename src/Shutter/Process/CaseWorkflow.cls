@@ -109,6 +109,11 @@ Property MaxRefreshes As %Integer [ InitialExpression = 3 ];
 /// Set on an instance that reopened a closed case: it runs alone, even when an incident once held the case.
 Property Reopened As %Boolean [ InitialExpression = 0 ];
 
+/// The reopening asked for the board whatever the policy says (a judge's "Convene the board", v1.34), and who asked.
+Property ForceBoard As %Boolean [ InitialExpression = 0 ];
+
+Property ConvenedBy As %String(MAXLEN = 100);
+
 Parameter SETTINGS = "EvidenceTarget:Targets,GateTarget:Targets,WardTarget:Targets,ApprovalTarget:Targets,VerifyTarget:Targets,IncidentTarget:Targets,ApprovalValidSeconds:Approval,SettleSeconds:Timing,BoardTimeoutSeconds:Timing,MaxRefreshes:Timing";
 
 Method OnRequest(request As %Library.Persistent, Output response As %Library.Persistent) As %Status
@@ -456,7 +461,10 @@ ClassMethod BuildAgentRequest(case As Shutter.Store.Case, m As Shutter.Store.Boa
 
 Method AgentRequestFor(case As Shutter.Store.Case, m As Shutter.Store.BoardMember, summaryJSON As %String, findingsJSON As %String, Output sc As %Status) As Shutter.Bridge.Msg.AgentRequest
 {
-    Quit ..BuildAgentRequest(case, m, summaryJSON, findingsJSON, ..Replans, .sc)
+    Set req = ..BuildAgentRequest(case, m, summaryJSON, findingsJSON, ..Replans, .sc)
+    // Who asked, for the budget's share (v1.34): a judge who convened the board, else the feed itself.
+    If $ISOBJECT(req) Set req.RequestedBy = $SELECT(..ForceBoard && (..ConvenedBy '= ""): ..ConvenedBy, 1: "system")
+    Quit req
 }
 
 /// The model view of the case could not be built (Shutter.Util.ModelView.Learn): nothing was sent to a model, and a
@@ -692,7 +700,7 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
     Set title = $CLASSMETHOD(json, "Str", m, "title"), why = $CLASSMETHOD(json, "Str", chosen, "why")
     Set profile = ##class(Shutter.Store.SiteProfile).Current()
     Do case.Note("note", "Catalogue " _ entry _ " (" _ title _ ") matched alone: " _ outcome _ ". Site policy for tier " _ tier _ ", " _ kind _ ": " _ ..Policy _ " (profile v" _ $CLASSMETHOD(json, "Str", profile, "version", 0) _ ")", "system")
-    If ..Policy = "board" {
+    If (..Policy = "board") || ..ForceBoard {
         Set members = ##class(Shutter.Store.BoardMember).MembersForMode("board")
         Set pending = []
         Set iter = members.%GetIterator()
@@ -707,7 +715,7 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
         }
         If $DATA(refused) Quit ..ModelViewFailed(case, refused)
         Set ..PendingJSON = pending.%ToJSON()
-        Do case.Note("note", "Board convened by site policy: " _ $REPLACE($REPLACE(pending.%ToJSON(), "[", ""), "]", ""), "system")
+        Do case.Note("note", "Board convened by " _ $SELECT(..ForceBoard: ..ConvenedBy, 1: "site policy") _ ": " _ $REPLACE($REPLACE(pending.%ToJSON(), "[", ""), "]", ""), $SELECT(..ForceBoard: ..ConvenedBy, 1: "system"))
         Quit ..ArmTimeout("board:timeout")
     }
     Set ward = summary.%Get("ward_state")
@@ -1146,6 +1154,7 @@ Method OnReinvestigate(request As Shutter.Msg.Reinvestigate, Output response As 
         Quit $$$OK
     }
     Set ..CaseId = case.CaseId, ..Mode = case.Mode, ..Reopened = 1
+    Set ..ForceBoard = request.ForceBoard, ..ConvenedBy = $SELECT(request.ForceBoard: request.RequestedBy, 1: "")
     Set case.WorkflowSessionId = ..%SessionId, case.ClosedAt = ""
     // A wait on another case ends with the reopening; the fresh gate sets it again if the bed is still held (v1.28).
     Set case.WaitsOnCase = "", case.WaitsOnMessage = ""

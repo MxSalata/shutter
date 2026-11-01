@@ -68,6 +68,8 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     If '$ISOBJECT(case) Set started.State = "failed", started.Error = "No case " _ request.CaseId Quit $$$OK
     If '$ISOBJECT(case.CurrentSnapshot) Set started.State = "failed", started.Error = "The case has no evidence yet; ask once it has been collected" Quit $$$OK
     Set sc = ##class(Shutter.Store.CaseQuestion).Create(case, request.Tier, request.Source, request.Text, request.AskedBy, request.Conversation, request.Turn, .q)
+    // Whether the asker may spend the model budget (v1.34): kept on the question, read when each agent request is built.
+    If $$$ISOK(sc) && $ISOBJECT(q) && 'request.LiveAllowed Set q.LiveAllowed = 0, sc = q.%Save()
     If $$$ISERR(sc) || '$ISOBJECT(q) Set started.State = "failed", started.Error = "The question could not be opened: " _ $SYSTEM.Status.GetErrorText(sc) Quit $$$OK
     Set ..QuestionId = q.QuestionId, ..Tier = q.Tier
     Set started.QuestionId = q.QuestionId, started.Conversation = q.Conversation, started.Turn = q.Turn, started.State = q.State
@@ -234,6 +236,9 @@ ClassMethod BuildRequest(case As Shutter.Store.Case, q As Shutter.Store.CaseQues
     Set req.CorrelationKey = q.QuestionId
     If $ISOBJECT(case.CurrentSnapshot) Set req.SnapshotDigest = case.CurrentSnapshot.Digest
     Set req.RecordKey = recordKey
+    // Who asked, for the budget's share; an asker without the live agents gets recordings only (v1.34).
+    Set req.RequestedBy = q.AskedBy
+    If 'q.LiveAllowed Set req.ModeOverride = "replay"
     Set req.TokenBudget = tokenBudget, req.MaxIterations = maxIterations
     Set req.Goal = goal
     Set req.Context = context.%ToJSON()

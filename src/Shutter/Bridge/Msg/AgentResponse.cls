@@ -52,6 +52,9 @@ Property Error As %String(MAXLEN = 2000);
 /// The recording this response came from, or was stored as.
 Property RecordId As %String(MAXLEN = 20);
 
+/// Who asked for the run, copied from the request (v1.34).
+Property RequestedBy As %String(MAXLEN = 100);
+
 /// The response as a dynamic object, for recordings and the API.
 Method ToObject() As %DynamicObject
 {

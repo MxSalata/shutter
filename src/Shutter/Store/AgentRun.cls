@@ -65,6 +65,9 @@ Property CostUSD As %Numeric(%JSONFIELDNAME = "costUsd", SCALE = 6);
 /// The question this run answered (Shutter.Store.CaseQuestion, CONTRACTS 14.2), or empty for an investigation's run.
 Property QuestionId As %String(%JSONFIELDNAME = "questionId", MAXLEN = 32);
 
+/// Who asked for the run (v1.34): a question's asker, a judge who convened the board; "system" for the feed's own.
+Property RequestedBy As %String(%JSONFIELDNAME = "requestedBy", MAXLEN = 100);
+
 Index QuestionIdx On QuestionId;
 
 /// Record a run from the bridge's response. A run that answered a question names it (questionId).
@@ -82,6 +85,7 @@ ClassMethod FromResponse(case As Shutter.Store.Case, snapshot As Shutter.Store.S
     Set run.CacheReadTokens = response.CacheReadTokens, run.CacheCreationTokens = response.CacheCreationTokens
     Set run.Iterations = response.Iterations, run.ToolCallCount = response.ToolCalls
     Set run.SessionId = response.SessionId, run.EnsMessageId = ensMessageId
+    Set run.RequestedBy = response.RequestedBy
     // The run is read by people inside IRIS: the case's tokens become the identifiers again (T27).
     Set run.ResultJSON = ##class(Shutter.Util.ModelView).Restore(case, response.ResultJSON)
     Set run.Content = ##class(Shutter.Util.ModelView).Restore(case, response.Content)

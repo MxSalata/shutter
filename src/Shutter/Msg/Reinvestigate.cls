@@ -9,6 +9,9 @@ Property RequestedBy As %String(MAXLEN = 100);
 
 Property Reason As %String(MAXLEN = 2000);
 
+/// Convene the board on the fresh evidence whatever the site policy says (a judge's request, v1.34).
+Property ForceBoard As %Boolean [ InitialExpression = 0 ];
+
 Storage Default
 {
 <Data name="ReinvestigateDefaultData">

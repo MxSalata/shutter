@@ -35,6 +35,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/cases/:caseId/preview-blind-resend" Method="POST" Call="CasePreview"/>
   <Route Url="/cases/:caseId/blocked-reason" Method="GET" Call="CaseBlockedReason"/>
   <Route Url="/cases/:caseId/reinvestigate" Method="POST" Call="CaseReinvestigate"/>
+  <Route Url="/cases/:caseId/board" Method="POST" Call="CaseBoard"/>
   <Route Url="/cases/:caseId/close" Method="POST" Call="CaseClose"/>
   <Route Url="/cases/:caseId/abandon" Method="POST" Call="CaseAbandon"/>
   <Route Url="/intake" Method="POST" Call="Intake"/>
@@ -271,6 +272,8 @@ ClassMethod Me() As %Status
     Do can.%Set("approve", $SYSTEM.Security.Check("Shutter_Approve", "USE"), "boolean")
     Do can.%Set("configure", $SYSTEM.Security.Check("Shutter_Configure", "USE"), "boolean")
     Do can.%Set("scenarios", $SYSTEM.Security.Check("Shutter_Scenarios", "USE"), "boolean")
+    // May spend the model budget: live questions and convening the board (operators, approvers and judges; not the demo).
+    Do can.%Set("liveAgents", $SYSTEM.Security.Check("Shutter_LiveAgents", "USE"), "boolean")
     Set o.can = can
     Quit ..Json(o)
 }
@@ -891,6 +894,42 @@ ClassMethod CaseEscalationSend(caseId As %String, seq As %String) As %Status
     Quit $$$OK
 }
 
+/// Convene the board on a case (v1.34, the owner's judges): the case is reopened as a reinvestigation is, and on the fresh
+/// evidence the board convenes live whatever the site policy says; the earlier plan and approval stay as history. For
+/// callers who may spend the model budget (Shutter_LiveAgents), on a blocked, escalated or failed case, within the day's
+/// budget and the caller's share.
+ClassMethod CaseBoard(caseId As %String) As %Status
+{
+    If '..Allow("Shutter_Operate", 1) Quit $$$OK
+    If '$SYSTEM.Security.Check("Shutter_LiveAgents", "USE") Quit ..Fail("403 Forbidden", "forbidden", "Convening the board spends the model budget; it takes the live agents (a judge, an operator or an approver)")
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    // The body is optional here (a bare POST convenes), and %request.Content is a plain property when there is none.
+    Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: "")
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    If 'case.IsClosed() || (case.State = "resolved") Quit ..Fail("409 Conflict", "wrong_state", "The case is " _ case.State _ "; the board convenes on a blocked, escalated or failed case" _ $SELECT(case.State = "awaiting_approval": " (approve or reject the plan first)", 1: ""))
+    If '##class(Shutter.Util.Budget).AllowsFor(..User(), .budget) {
+        Set extra = {}
+        Set extra.budget = budget
+        Quit ..Fail("409 Conflict", "budget_exhausted", ##class(Shutter.Util.Budget).Refusal(budget), extra)
+    }
+    Set msg = ##class(Shutter.Msg.Reinvestigate).%New()
+    Set msg.CaseId = caseId, msg.RequestedBy = ..User(), msg.Reason = "the board convened by " _ ..User(), msg.ForceBoard = 1
+    Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
+    If $$$ISERR(sc) || '$ISOBJECT(service) Quit ..Fail("503 Service Unavailable", "no_service", "The API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
+    Set service.Target = "Case Workflow", service.Async = 1
+    Set sc = service.ProcessInput(msg)
+    If $$$ISERR(sc) Quit ..Fail("503 Service Unavailable", "not_queued", "The board could not be convened: " _ $SYSTEM.Status.GetErrorText(sc))
+    Set reply = {}
+    Set reply.caseId = caseId, reply.state = "evidence", reply.requestedBy = ..User()
+    Set text = reply.%ToJSON()
+    Do ..Remember(bodyText, "202 Accepted", text)
+    Set %response.Status = "202 Accepted"
+    Write text
+    Quit $$$OK
+}
+
 ClassMethod CaseReinvestigate(caseId As %String) As %Status
 {
     If '..Allow("Shutter_Operate", 1) Quit $$$OK
@@ -1332,8 +1371,9 @@ ClassMethod Settings() As %Status
     Do o.%Set("demo", ''$GET(^Shutter.Config("demo")), "boolean")
     // The live hospital's player (v1.34), for the app's banner: {enabled, every_minutes, scenarios, last_played, next}.
     Set o.live = ##class(Shutter.Setup).LiveStatus()
-    // The day's model budget (v1.34): {dailyUsd, spentTodayUsd, exhausted, since, resetsAt}.
-    Set o.budget = ##class(Shutter.Util.Budget).Status()
+    // The day's model budget (v1.34): {dailyUsd, spentTodayUsd, exhausted, since, resetsAt, perUserUsd, spentByMeUsd,
+    // shareExhausted}, the caller's own spend included.
+    Set o.budget = ##class(Shutter.Util.Budget).StatusFor(..User())
     // The API mimic's switch (CONTRACTS 4), read once for every item: while it is set, an item that resolves to live is
     // answered by the mimic, with no model, and the reply says so.
     Set mock = ##class(Shutter.Setup).MockConfig()
@@ -1503,9 +1543,22 @@ ClassMethod CaseQuestionAsk(caseId As %String) As %Status
     If '$ISOBJECT(case.CurrentSnapshot) Quit ..Fail("409 Conflict", "no_evidence", "The case's evidence is not collected yet; ask once it is")
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
+    // Who may spend the model budget (v1.34): without the live agents, only a recorded answer is given, and a question that
+    // has none is refused here, before anything runs.
+    Set liveAllowed = $SYSTEM.Security.Check("Shutter_LiveAgents", "USE")
+    If 'liveAllowed {
+        Set recorded = 0
+        If (source = "suggested") && (case.Scenario '= "") {
+            Set base = ##class(Shutter.Process.Question).RecordKeyBaseFor(case.Scenario, case.EncounterId, case.Event, case.Receiver)
+            Set pattern = base _ "|" _ tier _ "|%|" _ conversation _ "." _ turn _ "|%"
+            &sql(SELECT COUNT(*) INTO :recorded FROM Shutter_Bridge.Record WHERE "Key" LIKE :pattern)
+            If SQLCODE '= 0 Set recorded = 0
+        }
+        If 'recorded Quit ..Fail("409 Conflict", "no_recorded_answer", "This question has no recorded answer; a judge can ask it live")
+    }
     Set msg = ##class(Shutter.Msg.QuestionRequest).%New()
     Set msg.CaseId = case.CaseId, msg.Tier = tier, msg.Source = source, msg.Text = text
-    Set msg.Conversation = conversation, msg.Turn = turn, msg.AskedBy = ..User()
+    Set msg.Conversation = conversation, msg.Turn = turn, msg.AskedBy = ..User(), msg.LiveAllowed = liveAllowed
     Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
     If $$$ISERR(sc) || '$ISOBJECT(service) Quit ..Fail("503 Service Unavailable", "no_service", "The API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
     // Synchronous: the Case Question item answers with the question's id at once and goes on with the agents.

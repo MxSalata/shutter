@@ -26,6 +26,10 @@ Property Turn As %Integer [ InitialExpression = 0 ];
 /// The signed-in user who asked.
 Property AskedBy As %String(MAXLEN = 100);
 
+/// Whether the asker may spend the model budget (Shutter_LiveAgents, v1.34): without it the agents answer from recordings
+/// only.
+Property LiveAllowed As %Boolean [ InitialExpression = 1 ];
+
 Storage Default
 {
 <Data name="QuestionRequestDefaultData">
