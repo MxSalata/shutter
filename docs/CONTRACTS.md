@@ -1200,7 +1200,7 @@ builds the context (14.3) and asks the agents through their Agent Board items wi
 `explain`, one request (`Role` `explain`, `MemberCode` `explain`, `AgentClass` `Shutter.Agent.Explain`, `TerminalTool`
 `SubmitAnswer`, `ResultClass` `Shutter.Schema.Answer`, 20000 tokens, 3 iterations; `ConfigVersion` the class's
 `CONFIGVERSION` when the aihub module is installed, else `1`); for `board`, one request per enabled default specialist
-(`Role` `member`, the member's code, class, `ConfigVersion` and `ConfigItem`, `SubmitAnswer`, `Shutter.Schema.Answer`, 30000
+(`Role` `member`, the member's code, class, `ConfigVersion` and `ConfigItem`, `SubmitAnswer`, `Shutter.Schema.Answer`, 50000
 tokens, 4 iterations), and when every member has answered or failed, the coordinator's (`Role` `coordinator`,
 `SubmitBoardAnswer`, `Shutter.Schema.BoardAnswer`, 50000 tokens, 3 iterations) with the members' accepted answers added to
 the context as `member_answers`. A member that fails or is refused is noted on the question and the coordinator goes on with

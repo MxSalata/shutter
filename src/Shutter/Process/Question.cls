@@ -36,7 +36,9 @@ Property ExplainTokenBudget As %Integer [ InitialExpression = 20000 ];
 
 Property ExplainMaxIterations As %Integer [ InitialExpression = 3 ];
 
-Property MemberTokenBudget As %Integer [ InitialExpression = 30000 ];
+/// A member reads the evidence with its tools and carries the earlier turns, so a third turn needs more than a single
+/// answer (a conformance member's third turn used 39,821 tokens on 1 Nov 2026).
+Property MemberTokenBudget As %Integer [ InitialExpression = 50000 ];
 
 Property MemberMaxIterations As %Integer [ InitialExpression = 4 ];
 
