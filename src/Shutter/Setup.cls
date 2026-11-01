@@ -109,8 +109,10 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         If root '= "" Set root = ##class(%File).NormalizeDirectory(root)
         Set ^Shutter.Config("root") = root
         Set ^Shutter.Config("demo") = demo
-        // The day's model budget (Shutter.Util.Budget, v1.34): the cap from SHUTTER_DAILY_BUDGET_USD, 0 when unset.
+        // The day's model budget (Shutter.Util.Budget, v1.34): the cap from SHUTTER_DAILY_BUDGET_USD, 0 when unset, and each
+        // user's share of it from SHUTTER_JUDGE_BUDGET_USD.
         Do ##class(Shutter.Util.Budget).Configure($SYSTEM.Util.GetEnviron("SHUTTER_DAILY_BUDGET_USD"))
+        Do ##class(Shutter.Util.Budget).ConfigureShare($SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_BUDGET_USD"))
         Set ^Shutter.Config("installedAt") = ##class(Shutter.Util.Time).NowUTC()
         Set ^Shutter.Config("version") = ..#VERSION
         If $GET(^Shutter.Config("mode")) = "" Set ^Shutter.Config("mode") = "board"
@@ -197,9 +199,9 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     Set hospital = $GET(^|ns|Shutter.Config("hospitalNamespace"))
     New $NAMESPACE
     Set $NAMESPACE = "%SYS"
-    For res = "Shutter_Operate", "Shutter_Approve", "Shutter_Intake", "Shutter_Configure", "Shutter_Scenarios" {
+    For res = "Shutter_Operate", "Shutter_Approve", "Shutter_Intake", "Shutter_Configure", "Shutter_Scenarios", "Shutter_LiveAgents" {
         If '##class(Security.Resources).Exists(res) {
-            Set sc = ##class(Security.Resources).Create(res, "Shutter: " _ $CASE(res, "Shutter_Approve": "approve or reject recovery plans", "Shutter_Intake": "open a case from another production", "Shutter_Configure": "change the site: the site profile, the agent library, the schemas, the review annotations", "Shutter_Scenarios": "run and reset the demo's scenarios and purge the store", : "view cases, run scenarios, start investigations"), "")
+            Set sc = ##class(Security.Resources).Create(res, "Shutter: " _ $CASE(res, "Shutter_Approve": "approve or reject recovery plans", "Shutter_Intake": "open a case from another production", "Shutter_LiveAgents": "spend the model budget: live questions and convening the board", "Shutter_Configure": "change the site: the site profile, the agent library, the schemas, the review annotations", "Shutter_Scenarios": "run and reset the demo's scenarios and purge the store", : "view cases, run scenarios, start investigations"), "")
             Quit:$$$ISERR(sc)
         }
     }
@@ -225,14 +227,18 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     // Each role is created, or brought to this definition when it exists, so an upgraded instance is tightened too.
     // The approver monitors (traces, messages, the Workflow inbox) and approves; it never starts, stops or purges:
     // %EnsRole_Monitor with the message trace, header and content viewing resources, not %EnsRole_Operator (E2).
-    Set sc = ..EnsureRole("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U,Shutter_Scenarios:U," _ db _ ":RW" _ codeRead _ watchRead _ ",%Ens_Portal:U", "")
+    Set sc = ..EnsureRole("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U,Shutter_Scenarios:U,Shutter_LiveAgents:U," _ db _ ":RW" _ codeRead _ watchRead _ ",%Ens_Portal:U", "")
     Quit:$$$ISERR(sc) sc
     // What an approver and the public demo's role share (v1.34): reading, approving, the traces; the approver adds the site's
     // writes (Shutter_Configure) and the demo controls (Shutter_Scenarios), which the demo role never holds.
     Set approverRes = "Shutter_Operate:U,Shutter_Approve:U," _ db _ ":RW" _ codeRead _ watchRead _ ",%Ens_MessageTrace:U,%Ens_MessageHeader:U,%Ens_MessageContent:U"
-    Set sc = ..EnsureRole("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals, the site's settings and the Workflow inbox", approverRes _ ",Shutter_Configure:U,Shutter_Scenarios:U", "Shutter_Operator,%EnsRole_Monitor")
+    Set sc = ..EnsureRole("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals, the site's settings and the Workflow inbox", approverRes _ ",Shutter_Configure:U,Shutter_Scenarios:U,Shutter_LiveAgents:U", "Shutter_Operator,%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc
     Set sc = ..EnsureRole("Shutter_Demo", "Shutter public demo: reads everything, reinvestigates, approves and asks; cannot run or reset scenarios, save the site profile or the library, or import a schema", approverRes _ ",%Ens_Portal:U", "%EnsRole_Monitor")
+    Quit:$$$ISERR(sc) sc
+    // A judge (v1.34, the owner's choice of 1 Nov 2026): the public demo's role plus the live agents, under the model budget and
+    // a share of their own; the demo role never spends.
+    Set sc = ..EnsureRole("Shutter_Judge", "Shutter judge: the public demo's role plus the live agents (live questions, convening the board), under the model budget", approverRes _ ",%Ens_Portal:U,Shutter_LiveAgents:U", "%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc
     // The Management Portal user of the public demo sees the Visual Trace and the messages, nothing of Shutter's and nothing it
     // could change.
@@ -274,6 +280,9 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     Quit:$$$ISERR(sc) sc
     Set tracePw = $SYSTEM.Util.GetEnviron("SHUTTER_TRACE_PASSWORD")
     If tracePw '= "" Set sc = ..EnsureUser("demo-trace", "Shutter_Trace", tracePw, "Shutter public demo: the Visual Trace", ns)
+    Quit:$$$ISERR(sc) sc
+    Set judgePw = $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_PASSWORD")
+    If judgePw '= "" Set sc = ..EnsureUser("judge", "Shutter_Judge", judgePw, "Shutter judge: the live agents", ns)
     Quit sc
 }
 
@@ -509,6 +518,11 @@ ClassMethod CreateWorkflowRole(demo As %Boolean) As %Status
         If $$$ISOK(sc) && ($SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD") '= "") {
             If '##class(EnsLib.Workflow.UserDefinition).%ExistsId("demo") Set sc = ##class(EnsLib.Workflow.UserDefinition).CreateUser("demo", "Shutter public demo")
             If $$$ISOK(sc) && '##class(EnsLib.Workflow.RoleMembership).%ExistsId(role _ "||demo") Set sc = ##class(EnsLib.Workflow.RoleDefinition).AddUserToRole(role, "demo", 1, "Demo")
+            // And the judge's (v1.34), who approves as the demo's user does.
+            If $$$ISOK(sc) && ##class(Security.Users).Exists("judge") {
+                If '##class(EnsLib.Workflow.UserDefinition).%ExistsId("judge") Set sc = ##class(EnsLib.Workflow.UserDefinition).CreateUser("judge", "Shutter judge")
+                If $$$ISOK(sc) && '##class(EnsLib.Workflow.RoleMembership).%ExistsId(role _ "||judge") Set sc = ##class(EnsLib.Workflow.RoleDefinition).AddUserToRole(role, "judge", 1, "Judge")
+            }
         }
     } Catch ex {
         Set sc = ex.AsStatus()

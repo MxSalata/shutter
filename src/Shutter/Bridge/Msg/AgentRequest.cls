@@ -37,6 +37,10 @@ Property ConfigVersion As %String(MAXLEN = 32);
 /// live, record or replay; empty uses the operation's Mode setting.
 Property ModeOverride As %String(MAXLEN = 16);
 
+/// Who asked for the run (a question's asker, a judge who convened the board), for the budget's per-user share; "system"
+/// or empty for the feed's own runs (v1.34).
+Property RequestedBy As %String(MAXLEN = 100);
+
 /// The key a recording is stored and replayed under; empty derives it from the agent class, the
 /// configuration version and the snapshot digest.
 Property RecordKey As %String(MAXLEN = 300);

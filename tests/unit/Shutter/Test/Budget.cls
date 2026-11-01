@@ -5,15 +5,19 @@ Class Shutter.Test.Budget Extends %UnitTest.TestCase
 
 Property SavedCap As %String;
 
+Property SavedShare As %String;
+
 Method OnBeforeAllTests() As %Status
 {
     Set ..SavedCap = $GET(^Shutter.Config("dailyBudgetUsd"), "<none>")
+    Set ..SavedShare = $GET(^Shutter.Config("judgeBudgetUsd"), "<none>")
     Quit $$$OK
 }
 
 Method OnAfterAllTests() As %Status
 {
     If ..SavedCap = "<none>" { Kill ^Shutter.Config("dailyBudgetUsd") } Else { Set ^Shutter.Config("dailyBudgetUsd") = ..SavedCap }
+    If ..SavedShare = "<none>" { Kill ^Shutter.Config("judgeBudgetUsd") } Else { Set ^Shutter.Config("judgeBudgetUsd") = ..SavedShare }
     Quit $$$OK
 }
 
@@ -46,6 +50,19 @@ Method TestWindowAndRule()
     Do $$$AssertTrue((words [ "5.00 USD") && (words [ "5.12 USD") && (words [ "2026-11-02T00:00:00Z") && (words [ "not sent"), "the refusal names the cap, the spend and the reset in dollars and cents: " _ words)
     Do $$$AssertEquals(##class(Shutter.Util.Budget).Dollars(.01), "0.01 USD", "a leading zero")
     Do $$$AssertEquals(##class(Shutter.Util.Budget).Dollars(9.005124), "9.01 USD", "two decimals, rounded")
+    // The per-user share (v1.34): read from a text, counted per asker, exhausted on its own.
+    Do $$$AssertEquals(##class(Shutter.Util.Budget).ConfigureShare(""), 0, "no share by default")
+    Do $$$AssertEquals(##class(Shutter.Util.Budget).ConfigureShare("1.25"), 1.25, "a share of 1.25")
+    Do $$$AssertEquals(##class(Shutter.Util.Budget).Share(), 1.25, "read back")
+    Do $$$AssertEquals(##class(Shutter.Util.Budget).SpentBy("judge", "2999-01-01T00:00:00Z"), 0, "nothing spent by a user in the future")
+    Do $$$AssertEquals(##class(Shutter.Util.Budget).SpentBy("", "2026-11-01T00:00:00Z"), 0, "nobody spends nothing")
+    Set f = ##class(Shutter.Util.Budget).StatusFor("judge", "2026-11-01T02:30:00Z")
+    Do $$$AssertTrue(f.%IsDefined("spentByMeUsd") && f.%IsDefined("shareExhausted") && (f.perUserUsd = 1.25), "the user's status carries their spend and share: " _ f.%ToJSON())
+    Do $$$AssertTrue(##class(Shutter.Util.Budget).AllowsFor("system", .st), "the feed's own runs have no share")
+    Set share = {"dailyUsd": 5, "spentTodayUsd": 2, "perUserUsd": 1, "spentByMeUsd": 1.1, "shareExhausted": true, "since": "2026-11-01T00:00:00Z", "resetsAt": "2026-11-02T00:00:00Z"}
+    Set words = ##class(Shutter.Util.Budget).Refusal(share)
+    Do $$$AssertTrue((words [ "Your share") && (words [ "1.00 USD") && (words [ "1.10 USD"), "a spent share is named as the user's: " _ words)
+    Do ##class(Shutter.Util.Budget).ConfigureShare("0")
     Do ##class(Shutter.Util.Budget).Configure("0.000001")
     Set s = ##class(Shutter.Util.Budget).Status()
     Do $$$AssertEquals(s.dailyUsd, .000001, "a tiny cap reads back")

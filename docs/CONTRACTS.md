@@ -357,10 +357,11 @@ caller's process passes; the operator and the approver read the watched hospital
 | Resource | Routes |
 | --- | --- |
 | none | `POST` and `DELETE /session`; `GET /health` (its summary; the full report needs `Shutter_Operate`) |
-| signed in | `GET /me`, which answers `{username, operator, approver, can: {operate, approve, configure, scenarios}}` from the resources the user holds (`can` since v1.34: the app shows only what the user may do) |
+| signed in | `GET /me`, which answers `{username, operator, approver, can: {operate, approve, configure, scenarios, liveAgents}}` from the resources the user holds (`can` since v1.34: the app shows only what the user may do; `liveAgents` is `Shutter_LiveAgents`, below) |
 | `Shutter_Operate` | every other `GET`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send`; `GET /production-reviews`, `GET /production-reviews/targets` and `GET /production-reviews/{id}`; `POST /production-reviews` (section 13: the review reads only, and a live agent run spends model credit as a scenario run does); `GET /cases/{id}/whatif`, `GET /cases/{id}/questions`, `GET /cases/{id}/questions/suggested`, `GET /cases/{id}/questions/{qid}` and `POST /cases/{id}/questions` (section 14: a question reads only, and a live run spends model credit); `GET /settings/schemas` (section 12) |
 | `Shutter_Approve` | `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's) |
 | `Shutter_Scenarios` | `POST /scenarios/{id}/run` and `/scenarios/reset`, and `Shutter.Setup_PurgeStore` (v1.34: the demo controls; the operator and approver roles hold it, the public demo's role does not) |
+| `Shutter_LiveAgents` | Spending the model budget (v1.34, the owner's judges): `POST /cases/{id}/board` (the board convenes live on a blocked, escalated or failed case, 14.5), and `POST /cases/{id}/questions` running live; without it a question is answered from recordings only, and one with no recording is refused `409 no_recorded_answer` at once. Operators, approvers and the role `Shutter_Judge` (the public demo's role plus this) hold it; `Shutter_Demo` does not. Every live run counts against the day's budget and the caller's share (9) |
 | `Shutter_Configure` | `PUT /site-profile`; `PATCH /library/{code}`; `POST /settings/schemas` (section 12); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13) (v1.34: what changes the site; the approver role holds it, the public demo's role does not) |
 | `Shutter_Intake` | `POST /intake` (section 11) |
 
@@ -967,8 +968,12 @@ shows what the model would see of a case.
 reached the cap the run is not sent, and the response's status is `budget_exhausted` with an error naming the cap, the spend
 and when it resets. A board whose members all answered so takes the rules path and the gate judges the plain resend, as it
 does when replay mode has no recording (the case's note says which); a question or a review fails with the status. `GET
-/settings` and the Doctor carry `budget: {dailyUsd, spentTodayUsd, exhausted, since, resetsAt}`. The public demo sets the cap
-with an API key of its own, so a day of visitors spends at most the cap.
+/settings` and the Doctor carry `budget: {dailyUsd, spentTodayUsd, exhausted, since, resetsAt, perUserUsd}`, and `GET /settings`
+adds the caller's own `spentByMeUsd` and `shareExhausted`. The public demo sets the cap with an API key of its own, so a day of
+visitors spends at most the cap. **Each user's share** (`SHUTTER_JUDGE_BUDGET_USD` into `^Shutter.Config("judgeBudgetUsd")`,
+0 or unset means none): every agent request carries who asked (`RequestedBy`: a question's asker, a judge who convened the
+board, `system` for the feed's own runs), the run keeps it, and a run for a user whose live runs today have reached the share is
+refused `budget_exhausted` with "Your share of the day's model budget ... is spent", so one judge cannot spend the day.
 
 ## 10. Escalation by email (v1.11)
 
@@ -1338,6 +1343,18 @@ is noted, not used. What is stored as `resolved` comes from the core's own facts
 
 ### 14.5 Routes (v1.27)
 
+**Who may run live (v1.34, the owner's judges).** `POST /cases/{id}/questions` runs the agents live only for a caller who holds
+`Shutter_LiveAgents` (operators, approvers, judges); for anyone else (the public demo's user) the request carries
+`LiveAllowed` false, the agent requests get `ModeOverride` `replay`, and a question that has no recording is refused before
+anything runs: `409 no_recorded_answer`, "This question has no recorded answer; a judge can ask it live" (a free question
+always; a suggested turn when no `question:` recording matches its conversation and turn). **Convening the board:**
+`POST /cases/{id}/board` (`Shutter_Operate` and `Shutter_LiveAgents`; body optional) reopens a blocked, escalated or failed case
+as a reinvestigation does (`Shutter.Msg.Reinvestigate` with `ForceBoard`), takes fresh evidence and convenes the board whatever
+the site policy says, the plan then going through the gate, rehearsal and approvals as any plan; `202 {caseId, state:
+"evidence", requestedBy}`; `403 forbidden` without the resource; `409 wrong_state` for any other state (a case awaiting approval
+is approved or rejected first); `409 budget_exhausted` with the budget object when the day's cap or the caller's share is spent
+(9). The case notes "Board convened by <user>", and the board's runs carry the user for the share.
+
 - `POST /cases/{id}/questions` (`Shutter_Operate`; `X-Requested-With`; `Idempotency-Key`) `{tier: "explain" | "board",
   question | suggested: {conversation, turn}, conversation?}` -> 202 `{questionId, conversation, turn, tier, source, state,
   askedBy}`. A suggested turn takes its text, and its tier when the body gives none, from the scenario's file; a free question
@@ -1391,7 +1408,12 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   policy path's does (`CaseWorkflow.AttachCorrectionSteps`), and the gate holds a superseded plan with
   `NEWER_MESSAGE_PENDING` while the later event it rests on is still on its way (6.5). The Second Parser item is
   `Shutter.Operation.SecondParser`, which sets its classpath at start (6.7). The live hospital's install sets tier 2 single
-  chains to approval (4.4), and the recording round rule is written down (4). The install (12): the installer's data database variable is `SHUTTERDATADIR`, since `DATADIR` is a name
+  chains to approval (4.4), and the recording round rule is written down (4). The judges (the owner's choice of 1 Nov 2026):
+  the resource `Shutter_LiveAgents` (operators, approvers and the new role `Shutter_Judge`, the public demo's role plus it;
+  `Shutter_Demo` never spends), the user `judge` made only when `SHUTTER_JUDGE_PASSWORD` is set, `GET /me` `can.liveAgents`,
+  questions running live only for those who hold it and refused `no_recorded_answer` otherwise, `POST /cases/{id}/board`
+  convening the board on a case (14.5), each user's share of the day's budget from `SHUTTER_JUDGE_BUDGET_USD` with
+  `RequestedBy` on every agent request and run (9). The install (12): the installer's data database variable is `SHUTTERDATADIR`, since `DATADIR` is a name
   `%Installer` predefines (the install directory) and a Default never replaces an existing variable, so builds before this
   kept SHUTTERDATA at `/usr/irissys/`, inside the image and outside the volume, and lost every case on `docker compose
   down` or a rebuild (found by the upgrade proof of 1 Nov 2026; the hospital's and the records' data databases, under other

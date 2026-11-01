@@ -42,6 +42,9 @@ Index StateIdx On State;
 
 Property AskedBy As %String(%JSONFIELDNAME = "askedBy", MAXLEN = 100);
 
+/// Whether the asker may spend the model budget (v1.34): without it the agents answer from recordings only.
+Property LiveAllowed As %Boolean(%JSONFIELDNAME = "liveAllowed") [ InitialExpression = 1 ];
+
 Property AskedAt As %String(%JSONFIELDNAME = "askedAt", MAXLEN = 30);
 
 Property AnsweredAt As %String(%JSONFIELDNAME = "answeredAt", MAXLEN = 30);

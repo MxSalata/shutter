@@ -27,7 +27,7 @@ ClassMethod ResourceExists(name As %String) As %Boolean
 
 Method TestResourcesAndRoles()
 {
-    For res = "Shutter_Operate", "Shutter_Approve", "Shutter_Intake", "Shutter_Configure", "Shutter_Scenarios" {
+    For res = "Shutter_Operate", "Shutter_Approve", "Shutter_Intake", "Shutter_Configure", "Shutter_Scenarios", "Shutter_LiveAgents" {
         Do $$$AssertTrue(..ResourceExists(res), res _ " exists")
     }
     Set op = ..Resources("Shutter_Operator")
@@ -38,6 +38,11 @@ Method TestResourcesAndRoles()
     Do $$$AssertTrue((demo [ "Shutter_Operate:U") && (demo [ "Shutter_Approve:U"), "the demo role reads and approves: " _ demo)
     Do $$$AssertTrue('(demo [ "Shutter_Configure") && '(demo [ "Shutter_Scenarios"), "and neither configures nor runs scenarios")
     Do $$$AssertTrue(demo [ "%Ens_MessageTrace:U", "it reads traces as the approver does")
+    Do $$$AssertTrue((op [ "Shutter_LiveAgents:U") && (ap [ "Shutter_LiveAgents:U"), "operators and approvers may spend the model budget")
+    Do $$$AssertNotTrue(demo [ "Shutter_LiveAgents", "the public demo's role never spends it")
+    Set judge = ..Resources("Shutter_Judge")
+    Do $$$AssertTrue((judge [ "Shutter_Operate:U") && (judge [ "Shutter_Approve:U") && (judge [ "Shutter_LiveAgents:U"), "a judge reads, approves and spends the budget: " _ judge)
+    Do $$$AssertTrue('(judge [ "Shutter_Configure") && '(judge [ "Shutter_Scenarios"), "and neither configures nor runs scenarios")
     Set trace = ..Resources("Shutter_Trace")
     Do $$$AssertTrue((trace [ "%Ens_MessageTrace:U") && (trace [ "%Ens_Portal:U") && '(trace [ "Shutter_"), "the trace role sees traces and nothing of Shutter's: " _ trace)
 }
