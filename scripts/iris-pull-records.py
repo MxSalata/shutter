@@ -21,8 +21,9 @@ import re
 import sys
 import urllib.request
 
-# scenario:<S>[:<encounter>:<event>]|<member>|<configVersion>[|round<n>], as in scripts/check-records.py
-KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+[a-z]?)(?::(?P<encounter>[^:|]+):(?P<event>[^:|]+))?"
+# scenario:<S>[:<encounter>:<event>[:<receiver>]]|<member>|<configVersion>[|round<n>], as in scripts/check-records.py; the
+# receiver is named only when it is not the production's default (CONTRACTS 4, v1.34)
+KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+[a-z]?)(?::(?P<encounter>[^:|]+):(?P<event>[^:|]+)(?::(?P<receiver>[^|]+))?)?"
                     r"\|(?P<member>[a-z]+)\|(?P<cfg>\d+)(?:\|round(?P<round>\d+))?$")
 # review:<namespace>:<production>|review|1|<fingerprint>, as in scripts/check-records.py
 REVIEW_KEY_RE = re.compile(r"^review:[A-Za-z0-9_%]+:[A-Za-z0-9_.]+\|review\|1\|(?:[0-9a-f]{64}|)$")
@@ -47,7 +48,7 @@ def plain(x):
 
 def file_name(m):
     """The fixture file for a key (the same rule as scripts/check-records.py)."""
-    case = [m["encounter"], m["event"]] if m["encounter"] else []
+    case = ([m["encounter"], m["event"]] + ([m["receiver"]] if m["receiver"] else [])) if m["encounter"] else []
     parts = [re.sub(r"[^A-Za-z0-9._-]", "_", x) for x in ["scenario", m["scenario"], *case, m["member"], m["cfg"]]]
     return "-".join(parts) + (f"-round{m['round']}" if m["round"] else "") + ".json"
 

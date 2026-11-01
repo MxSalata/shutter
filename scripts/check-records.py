@@ -34,9 +34,10 @@ MEMBERS = {
     "generalist": ("Shutter.Agent.Generalist", "plan"),
     "review": ("Shutter.Agent.Review", "review"),
 }
-# scenario:<S>:<encounter>:<event>|<member>|<configVersion>[|round<n>], as CaseWorkflow writes it. The pattern still parses
+# scenario:<S>:<encounter>:<event>[:<receiver>]|<member>|<configVersion>[|round<n>], as CaseWorkflow writes it, the receiver
+# named only when it is not the production's default (CONTRACTS 4, v1.34). The pattern still parses
 # the older form without the encounter and event, so that check_file can say why such a recording is refused.
-KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+[a-z]?)(?::(?P<encounter>[^:|]+):(?P<event>[^:|]+))?"
+KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+[a-z]?)(?::(?P<encounter>[^:|]+):(?P<event>[^:|]+)(?::(?P<receiver>[^|]+))?)?"
                     r"\|(?P<member>[a-z]+)\|(?P<cfg>\d+)(?:\|round(?P<round>\d+))?$")
 # review:<namespace>:<production>|review|1|<fingerprint>, as Shutter.Process.Review.RecordKeyFor writes it: the
 # fingerprint is the configuration findings' SHA-256 in lower-case hex, empty when the production has none
@@ -83,7 +84,7 @@ def check_answer(r, board):
 
 def file_name(m):
     """The fixture file for a key: scenario-S2-coordinator-1.json, scenario-S11-ENC-1101-transfer-coordinator-1.json."""
-    case = [m["encounter"], m["event"]] if m["encounter"] else []
+    case = ([m["encounter"], m["event"]] + ([m["receiver"]] if m["receiver"] else [])) if m["encounter"] else []
     parts = [re.sub(r"[^A-Za-z0-9._-]", "_", x) for x in ["scenario", m["scenario"], *case, m["member"], m["cfg"]]]
     return "-".join(parts) + (f"-round{m['round']}" if m["round"] else "") + ".json"
 
@@ -94,8 +95,8 @@ def review_file_name(key):
 
 
 def case_of(m):
-    """What a full board set is counted over: the case (scenario, encounter, event), or the scenario alone."""
-    return (m["scenario"], m["encounter"], m["event"])
+    """What a full board set is counted over: the case (scenario, encounter, event, receiver), or the scenario alone."""
+    return (m["scenario"], m["encounter"], m["event"], m["receiver"])
 
 
 # The gate's codes for an operation Shutter never sends (CONTRACTS 2, v1.14)
@@ -493,10 +494,10 @@ def main():
                     continue
                 cases = sorted((c for c in present if c[0] == s["id"] and c[1] in encounters),
                                key=lambda c: (c[1] or "", c[2] or ""))
-                cases += [(s["id"], e, None) for e in encounters if not any(c[1] == e for c in cases)]
+                cases += [(s["id"], e, None, None) for e in encounters if not any(c[1] == e for c in cases)]
             else:
                 # every case that has recordings needs a full set; a scenario with none at all is missing the whole board
-                cases = sorted((c for c in present if c[0] == s["id"]), key=lambda c: (c[1] or "", c[2] or "")) or [(s["id"], None, None)]
+                cases = sorted((c for c in present if c[0] == s["id"]), key=lambda c: (c[1] or "", c[2] or "", c[3] or "")) or [(s["id"], None, None, None)]
             for case in cases:
                 have = present.get(case, set())
                 missing = sorted(board - have)

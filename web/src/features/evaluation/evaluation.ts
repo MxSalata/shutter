@@ -25,6 +25,8 @@ export interface EvaluationPass {
   title: string;
   encounter: string;
   event: string;
+  /** The receiver a pass was at, when it is not the production's default; "" otherwise */
+  receiver?: string;
   round: number;
   rounds: number;
   incident: boolean;
@@ -125,10 +127,11 @@ export function notYetMeasured(markdown: string): { title: string; text: string 
   });
 }
 
-/** "S7 pass 2", "S11 ENC-1103 transfer": the pass as the evaluation names it. */
+/** "S7 pass 2", "S11 ENC-1103 transfer", "S22 Records Out": the pass as the evaluation names it. */
 export function passName(p: EvaluationPass): string {
   const parts = [p.scenario];
   if (p.incident) parts.push(p.encounter, p.event);
+  if (p.receiver) parts.push(p.receiver);
   if (p.rounds > 1) parts.push(`pass ${p.round}`);
   return parts.join(' ');
 }

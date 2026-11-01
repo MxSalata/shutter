@@ -34,13 +34,16 @@ OUT_JSON = os.path.join(ROOT, "docs", "readme", "evaluation.json")
 SPECIALISTS = ["conformance", "encounter", "impact"]
 MEMBERS = SPECIALISTS + ["coordinator"]
 LETTER = {"conformance": "C", "encounter": "E", "impact": "I", "coordinator": "P"}
-# The same key pattern as check-records.py: scenario:<S>:<encounter>:<event>|<member>|<configVersion>[|round<n>]
-KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+[a-z]?):(?P<encounter>[^:|]+):(?P<event>[^:|]+)"
+# The same key pattern as check-records.py: scenario:<S>:<encounter>:<event>[:<receiver>]|<member>|<configVersion>[|round<n>],
+# the receiver named only when it is not the production's default (CONTRACTS 4, v1.34)
+KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+[a-z]?):(?P<encounter>[^:|]+):(?P<event>[^:|]+)(?::(?P<receiver>[^|]+))?"
                     r"\|(?P<member>[a-z]+)\|(?P<cfg>\d+)(?:\|round(?P<round>\d+))?$")
 # The production review's key, as check-records.py reads it: review:<namespace>:<production>|review|1|<fingerprint>
 REVIEW_KEY_RE = re.compile(r"^review:[A-Za-z0-9_%]+:[A-Za-z0-9_.]+\|review\|1\|(?:[0-9a-f]{64}|)$")
 # A suggested question's key (CONTRACTS 14.2): its recording answers a question about a case, not the case itself
 QUESTION_KEY_PREFIX = "question:"
+# The receiver a key names when it names none: Shutter.Production's RECEIVER
+DEFAULT_RECEIVER = "Downstream Out"
 # A catalogue entry's preferred outcome as the board's disposition: "none" closes the case with nothing sent
 OUTCOME_DISPOSITION = {"none": "superseded", "reconcile": "reconcile", "escalate": "escalate", "resend": "resend",
                        "resend_chain": "resend", "resend_latest": "resend", "resend_unconditional": "resend"}
@@ -125,6 +128,7 @@ def load_runs(prices):
             result = json.loads(result)
         r = {
             "file": os.path.basename(path), "scenario": m["scenario"], "encounter": m["encounter"], "event": m["event"],
+            "receiver": m["receiver"] or "",
             "member": m["member"], "round": int(m["round"] or 1), "model": resp.get("model") or d.get("model"),
             "mode": resp.get("mode"), "started_at": resp.get("started_at"), "duration_ms": int(resp.get("duration_ms") or 0),
             "prompt": int(resp.get("prompt_tokens") or 0), "completion": int(resp.get("completion_tokens") or 0),
@@ -205,27 +209,27 @@ def build():
     # One pass per case and round: the three specialists, then the coordinator
     passes = {}
     for r in runs:
-        passes.setdefault((r["scenario"], r["encounter"], r["event"], r["round"]), {})[r["member"]] = r
+        passes.setdefault((r["scenario"], r["encounter"], r["event"], r["receiver"], r["round"]), {})[r["member"]] = r
     # In the scenarios' order; a scenario's cases in the order the board took them up
     first = {k: min(r["started_at"] for r in v.values()) for k, v in passes.items()}
     keys = sorted(passes, key=lambda k: (order.index(k[0]) if k[0] in order else 999,
-                                         min(first[j] for j in passes if j[:3] == k[:3]), k[3]))
+                                         min(first[j] for j in passes if j[:4] == k[:4]), k[4]))
     rounds_of = {}
     for k in keys:
-        rounds_of.setdefault(k[:3], []).append(k[3])
+        rounds_of.setdefault(k[:4], []).append(k[4])
 
     out_passes = []
     for k in keys:
-        sid, enc, event, rnd = k
+        sid, enc, event, receiver, rnd = k
         members = passes[k]
         s = scenarios.get(sid, {})
         exp = s.get("expected", {})
         coord = members.get("coordinator")
         plan = coord["result"] if coord else {}
-        last_round = rnd == max(rounds_of[k[:3]])
+        last_round = rnd == max(rounds_of[k[:4]])
         incident = bool(exp.get("incident"))
-        p = {"scenario": sid, "title": s.get("title", ""), "encounter": enc, "event": event, "round": rnd,
-             "rounds": len(rounds_of[k[:3]]), "incident": incident, "complete": all(m in members for m in MEMBERS),
+        p = {"scenario": sid, "title": s.get("title", ""), "encounter": enc, "event": event, "receiver": receiver,
+             "round": rnd, "rounds": len(rounds_of[k[:4]]), "incident": incident, "complete": all(m in members for m in MEMBERS),
              "expected_blocked_by": exp.get("blocked_by", "")}
         # What the pass is scored against
         if incident:
@@ -257,8 +261,11 @@ def build():
             p["plan_cites_matched_entry"] = (len(matched) == 1 and plan.get("catalogue_entry") == matched[0])
             p["scored"] = True
         else:
-            p["expected"] = {"disposition": exp.get("disposition"), "acceptable": exp.get("acceptable", []),
-                             "from": "scenarios.json"}
+            # A scenario played at several receivers (S22) is scored against its receiver's own expectation
+            own = (exp.get("by_receiver") or {}).get(receiver or DEFAULT_RECEIVER) or {}
+            p["expected"] = {"disposition": own.get("disposition", exp.get("disposition")),
+                             "acceptable": own.get("acceptable", exp.get("acceptable", [])),
+                             "from": "scenarios.json" + (f", {receiver or DEFAULT_RECEIVER}" if own else "")}
             p["expected_entries"] = sorted((e for e, c in catalogue.items() if sid in (c.get("scenarios") or [])),
                                            key=lambda e: int(e[1:]))
             # A scenario whose plan is re-made after a change is scored on its last pass only
@@ -357,7 +364,7 @@ def build():
         "files": len(runs) + len(others), "not_used": len(others),
         "generalist_runs": sum(1 for o in others if o["member"] == "generalist"),
         "runs": len(all_runs), "passes": len(out_passes),
-        "cases": len({(p["scenario"], p["encounter"], p["event"]) for p in out_passes}),
+        "cases": len({(p["scenario"], p["encounter"], p["event"], p["receiver"]) for p in out_passes}),
         "scenarios": len(recorded),
         "prompt_tokens": sum(m["prompt_tokens"] for m in all_runs),
         "completion_tokens": sum(m["completion_tokens"] for m in all_runs),
@@ -431,6 +438,7 @@ def two(x):
 
 def case_label(p):
     label = p["scenario"] + (f" {p['encounter']} {p['event']}" if p["incident"] else "")
+    label += f" {p['receiver']}" if p.get("receiver") else ""
     return label + (f" pass {p['round']}" if p["rounds"] > 1 else "")
 
 
