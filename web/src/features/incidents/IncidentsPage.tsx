@@ -23,26 +23,29 @@ function HeldInterfaces({ held }: { held: HeldMessages }) {
       </Title>
       <Text size="sm" c="dimmed" mb="sm">
         The site prevents failures, so Shutter holds every message whose HL7 schema category this namespace
-        lacks and sends nothing. Import the schema and set the inbound item&apos;s category to it (INSTALL.md
-        section 7); the held cases are then checked again and sent under the site&apos;s policy.
+        lacks and sends nothing. Import the schema where it is missing and set the inbound item&apos;s
+        category to it (INSTALL.md section 7); the held cases are then checked again and sent under the
+        site&apos;s policy.
       </Text>
       <Table.ScrollContainer minWidth={420}>
         <Table>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Schema category</Table.Th>
+              <Table.Th>Missing in</Table.Th>
               <Table.Th>Held messages</Table.Th>
               <Table.Th>Oldest</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {held.categories.map((c) => (
-              <Table.Tr key={c.category}>
+              <Table.Tr key={`${c.namespace ?? ''}:${c.category}`}>
                 <Table.Td>
                   <Text size="sm" className="mono-wrap">
                     {c.category}
                   </Text>
                 </Table.Td>
+                <Table.Td>{c.namespace ?? ''}</Table.Td>
                 <Table.Td>{c.count}</Table.Td>
                 <Table.Td>{c.oldest ? <Timestamp iso={c.oldest} /> : null}</Table.Td>
               </Table.Tr>

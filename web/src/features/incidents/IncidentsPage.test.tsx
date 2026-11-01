@@ -38,7 +38,9 @@ describe('IncidentsPage', () => {
           preventFailures: true,
           heldMessages: {
             count: 3,
-            categories: [{ category: 'MYSITE_2.5.1', count: 3, oldest: '2026-11-01T09:20:00Z' }],
+            categories: [
+              { category: 'MYSITE_2.5.1', namespace: 'HOSPITAL', count: 3, oldest: '2026-11-01T09:20:00Z' },
+            ],
           },
         }),
       ),
@@ -47,9 +49,10 @@ describe('IncidentsPage', () => {
     const held = await screen.findByTestId('held-interfaces');
     expect(within(held).getByRole('heading', { name: 'Held: a schema not loaded here' })).toBeInTheDocument();
     expect(within(held).getByText('MYSITE_2.5.1')).toBeInTheDocument();
+    expect(within(held).getByRole('cell', { name: 'HOSPITAL' })).toBeInTheDocument();
     expect(within(held).getByRole('cell', { name: '3' })).toBeInTheDocument();
     expect(
-      within(held).getByText(/Import the schema and set the inbound item's category/),
+      within(held).getByText(/Import the schema where it is missing and set the inbound item's category/),
     ).toBeInTheDocument();
   });
 
