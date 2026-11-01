@@ -9,6 +9,7 @@ import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
 import { theme } from '@/theme';
 import CasePage from '../CasePage';
+import recorded from '@/mocks/recorded-questions.json';
 import type { CaseQuestion, WhatIfFact } from '@/api/types';
 import { SAMPLE_LABEL, answersBadge, provenanceText } from './labels';
 
@@ -110,6 +111,15 @@ function renderCase(caseId: string, query = '?ask=1') {
 /** Below laptop width (jsdom matches no media query) the panel is a drawer: a dialog named by its title. */
 const panel = () => screen.findByRole('dialog', { name: 'Ask about this case' });
 
+// The recorded answers' own words, so a recording made again doesn't break the tests: the first sentence of an answer.
+type Recorded = {
+  scenarios: Record<string, Record<string, { questions: Record<string, { answer: { answer: string } }> }>>;
+};
+function firstSentence(scenario: string, receiver: string, turn: string): string {
+  const text = (recorded as unknown as Recorded).scenarios[scenario][receiver].questions[turn].answer.answer;
+  return text.split(/(?<=\.)\s/)[0];
+}
+
 describe('Ask about this case', () => {
   it('opens from the case header, says it is read only, and shuts with Escape, back to its button', async () => {
     const router = renderCase('C-000008', '');
@@ -146,7 +156,7 @@ describe('Ask about this case', () => {
     // Each turn says its tier; the board's turn gives each member's view and points at the What-if card
     expect(within(turns[0]).getByText(`Explain tier. ${RECORDED_LABEL}.`)).toBeInTheDocument();
     expect(within(thread).queryByText(/sample data/i)).not.toBeInTheDocument();
-    expect(within(turns[0]).getByText(/never got into the bed-management system/)).toBeInTheDocument();
+    expect(turns[0]).toHaveTextContent(firstSentence('S8', 'Downstream Out', 'c1.1'));
     expect(within(turns[2]).getByText('Encounter Integrity:')).toBeInTheDocument();
     expect(within(turns[2]).getByRole('button', { name: 'See it in What if' })).toBeInTheDocument();
     expect(within(turns[2]).getByRole('button', { name: 'What-if W1' })).toBeInTheDocument();
@@ -196,9 +206,7 @@ describe('Ask about this case', () => {
     const thread = await within(p).findByRole('region', { name: 'Conversation' });
     const heading = within(thread).getByRole('heading', { name: 'Which movement is current?' });
     await waitFor(() => expect(heading).toHaveFocus());
-    expect(
-      within(thread).getByText(/the current movement is the bed manager's transfer to WARD-C/),
-    ).toBeInTheDocument();
+    expect(thread).toHaveTextContent(firstSentence('S8', 'Downstream Out', 'c2.1'));
     // Asked once: choosing it again shows it without asking
     await userEvent.click(within(p).getByRole('button', { name: /Which movement is current\? \(answered/ }));
     expect(posts).toHaveLength(1);
@@ -305,8 +313,8 @@ describe('Ask about this case', () => {
   });
 
   it.each([
-    ['C-000054', /the demo bed-management system behind Downstream Out/, 'W1: Category of Downstream Out'],
-    ['C-000055', /the demo patient records system \(Records Out\)/, 'W1: Category of Records Out'],
+    ['C-000054', firstSentence('S22', 'Downstream Out', 'c1.1'), 'W1: Category of Downstream Out'],
+    ['C-000055', firstSentence('S22', 'Records Out', 'c1.1'), 'W1: Category of Records Out'],
   ] as const)(
     "shows S22's case %s with its own receiver's recorded answers and card",
     async (caseId, text, w1) => {
@@ -314,7 +322,7 @@ describe('Ask about this case', () => {
       const p = await panel();
       const thread = await within(p).findByRole('region', { name: 'Example conversation' });
       expect(within(thread).getAllByRole('article')).toHaveLength(3);
-      expect(within(thread).getAllByText(text).length).toBeGreaterThan(0);
+      expect(thread).toHaveTextContent(text);
       expect(thread).toHaveTextContent(RECORDED_LABEL);
       const card = await within(p).findByRole('region', { name: 'What if: the setting behind this outcome' });
       expect(within(card).getByRole('heading', { name: w1 })).toBeInTheDocument();
