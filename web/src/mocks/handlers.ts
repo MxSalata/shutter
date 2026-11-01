@@ -75,19 +75,26 @@ const USERS: Record<string, Me> = {
     username: 'operator',
     operator: true,
     approver: false,
-    can: { operate: true, approve: false, configure: false, scenarios: true },
+    can: { operate: true, approve: false, configure: false, scenarios: true, liveAgents: true },
   },
   approver: {
     username: 'approver',
     operator: true,
     approver: true,
-    can: { operate: true, approve: true, configure: true, scenarios: true },
+    can: { operate: true, approve: true, configure: true, scenarios: true, liveAgents: true },
   },
   demo: {
     username: 'demo',
     operator: true,
     approver: true,
-    can: { operate: true, approve: true, configure: false, scenarios: false },
+    can: { operate: true, approve: true, configure: false, scenarios: false, liveAgents: false },
+  },
+  // A judge on the public demo: the demo's rights, and the day's model budget to spend (CONTRACTS 5, v1.34)
+  judge: {
+    username: 'judge',
+    operator: true,
+    approver: true,
+    can: { operate: true, approve: true, configure: false, scenarios: false, liveAgents: true },
   },
 };
 
@@ -357,10 +364,10 @@ const cancelPending = (id: string) => {
  * What a route needs, as the server decides it: the operator and approver roles, and the two resources that split the
  * site's changes (`configure`) and the demo controls (`scenarios`) from them (CONTRACTS 5, v1.34).
  */
-const guard = (need: 'operator' | 'approver' | 'configure' | 'scenarios') => {
+const guard = (need: 'operator' | 'approver' | 'configure' | 'scenarios' | 'liveAgents') => {
   if (!session) return signedOut();
   const may =
-    need === 'configure' || need === 'scenarios'
+    need === 'configure' || need === 'scenarios' || need === 'liveAgents'
       ? session.can?.[need]
       : session[need as 'operator' | 'approver'];
   return may
@@ -715,6 +722,20 @@ export const handlers = [
       return error(409, 'wrong_state', `The case is ${c.summary.state}`);
     return HttpResponse.json({ caseId: String(params.id), state: 'reopening' }, { status: 202 });
   }),
+  // The board convened live on a case (CONTRACTS 5.3, v1.34): it reopens the case as a reinvestigation does, for those who
+  // may spend the model budget
+  http.post(`${BASE}/cases/:id/board`, ({ request, params }) => {
+    const denied = csrf(request) ?? guard('liveAgents');
+    if (denied) return denied;
+    const c = caseOf(String(params.id));
+    if (!c) return error(404, 'not_found', 'No such case');
+    if (!['blocked', 'escalated', 'failed'].includes(c.summary.state))
+      return error(409, 'wrong_state', `The case is ${c.summary.state}`);
+    return HttpResponse.json(
+      { caseId: String(params.id), state: 'evidence', requestedBy: session!.username },
+      { status: 202 },
+    );
+  }),
   // A case the team corrected by hand, closed with the reason (CONTRACTS 5.3, v1.14); an approver's step where the
   // site keeps the two-person rule (v1.17)
   http.post(`${BASE}/cases/:id/close`, async ({ request, params }) => {
@@ -906,6 +927,13 @@ export const handlers = [
     if (!body.suggested && typeof body.question !== 'string')
       return error(400, 'bad_request', 'a question or a suggested turn is needed');
     if (!body.suggested && !body.tier) return error(400, 'bad_request', 'tier must be explain or board');
+    // A question no recording answers is for those who may spend the model budget (v1.34)
+    if (!body.suggested && session?.can?.liveAgents === false)
+      return error(
+        409,
+        'no_recorded_answer',
+        'This question has no recorded answer; a judge can ask it live',
+      );
     if (!body.suggested)
       // The demo has no model key, so a question in the asker's own words cannot be answered
       return error(

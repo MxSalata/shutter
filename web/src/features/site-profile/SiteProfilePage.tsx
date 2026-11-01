@@ -863,7 +863,7 @@ function Profile({
           />
           {shipped ? (
             <Alert color="blue" variant="light" title="Shutter is running on the shipped answers">
-              They are in force now, but they are defaults, not this site&apos;s choices. Check the twelve
+              They are in force now, but they are defaults, not this site&apos;s choices. Check the thirteen
               questions below, change what differs here and save, or confirm them unchanged: either way they
               are then recorded as this site&apos;s answers.
               {editable ? '' : ' An approver answers them.'}

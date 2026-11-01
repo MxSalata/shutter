@@ -1,5 +1,5 @@
 import { Anchor, Button, Group, Stack, Text, Title } from '@mantine/core';
-import { IconChevronDown, IconSparkles } from '@tabler/icons-react';
+import { IconChevronDown, IconHandStop, IconSparkles } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import type { CaseDetail } from '@/api/types';
@@ -78,6 +78,14 @@ export function CaseHeader({
         {c.state === 'escalated' && c.disposition === 'escalate' ? null : (
           <DispositionBadge disposition={c.disposition} proposed />
         )}
+        {c.failureKind === 'unreadable' ? (
+          <StatusBadge
+            tone="attention"
+            label="Held"
+            hint="The site prevents failures: this message's HL7 schema is not loaded here, so Shutter held it and sent nothing"
+            icon={IconHandStop}
+          />
+        ) : null}
         {c.candidateEntry ? (
           <StatusBadge
             tone="info"

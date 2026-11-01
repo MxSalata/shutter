@@ -378,7 +378,7 @@ function InductionPrompt({ below = false }: { below?: boolean }) {
       mb={below ? 0 : 'md'}
       title="Shutter is running on the shipped site profile"
     >
-      Answer the twelve induction questions so it acts as your site does.{' '}
+      Answer the thirteen induction questions so it acts as your site does.{' '}
       <Anchor component={Link} to="/site-profile" size="sm" underline="always">
         Answer the questions
       </Anchor>

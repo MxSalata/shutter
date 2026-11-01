@@ -39,6 +39,12 @@ export interface Can {
   configure: boolean;
   /** Running and resetting scenarios. */
   scenarios: boolean;
+  /**
+   * Spending the day's model budget (the resource Shutter_LiveAgents, CONTRACTS 5): convening the board on a case, and
+   * asking a question that no recording answers. The public demo's own user has it not; a judge, an operator and an
+   * approver have it.
+   */
+  liveAgents: boolean;
 }
 
 export interface Me {
@@ -146,7 +152,10 @@ export interface CaseSummary {
   closedAt: string;
   ensSessionId: string;
   workflowSessionId: string;
-  /** How the delivery failed (delivery_failed, uncertain, unmappable, withheld for a merge or a cancel never sent). */
+  /**
+   * How the delivery failed (delivery_failed, uncertain, unmappable, withheld for a merge or a cancel never sent, or
+   * unreadable: held because its HL7 schema is not loaded and the site prevents failures).
+   */
   failureKind: string;
   /**
    * The receiver (the production item) the failed delivery went to: a case is one failed delivery to one receiver
@@ -727,8 +736,11 @@ export interface SiteProfile {
   mail?: { from?: string; allowed_domains?: string[] };
   /** What may leave IRIS for a model beyond tokens and flags (CONTRACTS 9). */
   model_content?: { free_text?: boolean };
-  /** The zone of times the feed sends without an offset: an IANA name or a fixed offset (CONTRACTS 6.4). */
-  feed?: { time_zone?: string };
+  /**
+   * The zone of times the feed sends without an offset: an IANA name or a fixed offset (CONTRACTS 6.4); and whether the
+   * feed is held while a message's HL7 schema category is not loaded here ("prevent failures", default false).
+   */
+  feed?: { time_zone?: string; prevent_failures?: boolean };
 }
 
 /** GET /site-profile: the profile in force and its store version, which a PUT sends back as expectedVersion. */
@@ -816,6 +828,34 @@ export interface Settings {
   mockModel?: string;
   /** The live hospital (a public demo that plays a story on a timer): `{enabled: false}` on any other instance, absent from an older server. */
   live?: LiveStatus;
+  /** The day's model budget (CONTRACTS 9, v1.34); absent from an older server. */
+  budget?: Budget;
+  /** Whether the feed is held while a message's schema is not loaded (the profile's `feed.prevent_failures`). */
+  preventFailures?: boolean;
+  /** The messages held because their schema category is not loaded here, by category. */
+  heldMessages?: HeldMessages;
+}
+
+/**
+ * `GET /settings` `budget`: what the live agents may spend between one 00:00 UTC and the next. `dailyUsd` 0 means no
+ * cap. `perUserUsd` is each judge's share of it (0: none), and `spentByMeUsd` the signed-in user's live spend today.
+ */
+export interface Budget {
+  dailyUsd: number;
+  spentTodayUsd: number;
+  exhausted: boolean;
+  since?: string;
+  resetsAt?: string;
+  perUserUsd?: number;
+  spentByMeUsd?: number;
+  /** The signed-in user's share is used up (the day's cap may not be). */
+  shareExhausted?: boolean;
+}
+
+/** `GET /settings` `heldMessages`: held cases (failure kind `unreadable`) by the schema category they name. */
+export interface HeldMessages {
+  count: number;
+  categories: { category: string; count: number; oldest?: string }[];
 }
 
 /**

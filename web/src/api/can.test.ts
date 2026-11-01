@@ -12,7 +12,13 @@ describe('resolveCan', () => {
       approver: true,
       can: { operate: true, approve: true, configure: false, scenarios: false },
     });
-    expect(resolveCan(demo)).toEqual({ operate: true, approve: true, configure: false, scenarios: false });
+    expect(resolveCan(demo)).toEqual({
+      operate: true,
+      approve: true,
+      configure: false,
+      scenarios: false,
+      liveAgents: false,
+    });
   });
 
   it('derives every power from the operator and approver flags when the server sends no `can`', () => {
@@ -21,28 +27,60 @@ describe('resolveCan', () => {
       approve: true,
       configure: true,
       scenarios: true,
+      liveAgents: false,
     });
     expect(resolveCan(me({ operator: true }))).toEqual({
       operate: true,
       approve: false,
       configure: false,
       scenarios: true,
+      liveAgents: false,
     });
-    expect(resolveCan(me())).toEqual({ operate: false, approve: false, configure: false, scenarios: false });
+    expect(resolveCan(me())).toEqual({
+      operate: false,
+      approve: false,
+      configure: false,
+      scenarios: false,
+      liveAgents: false,
+    });
   });
 
   it('derives only what a partial `can` leaves out', () => {
     const partial = me({ operator: true, approver: true, can: { configure: false } });
-    expect(resolveCan(partial)).toEqual({ operate: true, approve: true, configure: false, scenarios: true });
+    expect(resolveCan(partial)).toEqual({
+      operate: true,
+      approve: true,
+      configure: false,
+      scenarios: true,
+      liveAgents: false,
+    });
+  });
+
+  it('takes the right to spend the model budget from the server, and never derives it', () => {
+    const judge = me({
+      operator: true,
+      approver: true,
+      can: { operate: true, approve: true, configure: false, scenarios: false, liveAgents: true },
+    });
+    expect(resolveCan(judge).liveAgents).toBe(true);
+    // A server older than the judges' live agents has no route to convene the board
+    expect(resolveCan(me({ operator: true, approver: true })).liveAgents).toBe(false);
   });
 
   it('lets nobody who is not signed in do anything', () => {
-    expect(resolveCan(null)).toEqual({ operate: false, approve: false, configure: false, scenarios: false });
+    expect(resolveCan(null)).toEqual({
+      operate: false,
+      approve: false,
+      configure: false,
+      scenarios: false,
+      liveAgents: false,
+    });
     expect(resolveCan(undefined)).toEqual({
       operate: false,
       approve: false,
       configure: false,
       scenarios: false,
+      liveAgents: false,
     });
   });
 });

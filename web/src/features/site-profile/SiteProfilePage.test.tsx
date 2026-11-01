@@ -306,6 +306,28 @@ describe('SiteProfilePage', () => {
     expect(puts[0].body.model_content).toEqual({ free_text: true });
   });
 
+  it('asks question 13 and holds the feed while a schema is missing only when the site says so', async () => {
+    renderPage();
+    expect(
+      await screen.findByText(
+        /^13\. Should Shutter hold the feed when a message arrives whose HL7 schema is not loaded here/,
+      ),
+    ).toBeInTheDocument();
+    const sw = screen.getByRole('switch', { name: /^Hold messages whose schema is not loaded/ });
+    expect(sw).not.toBeChecked();
+    await userEvent.click(sw);
+    await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByText(
+        "Prevent failures: from now on, a message whose HL7 schema isn't loaded here is held as a case, and nothing is sent until the schema is imported",
+      ),
+    ).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
+    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
+    expect(puts[0].body.feed).toMatchObject({ prevent_failures: true });
+  });
+
   it('confirms the shipped answers with no change, which records who answered', async () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Confirm these answers…' }));

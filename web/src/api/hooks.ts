@@ -314,6 +314,27 @@ export function useReinvestigate(caseId: string) {
 }
 
 /**
+ * Convene the board on a case, live (CONTRACTS 5.3, v1.34): the case is investigated again on fresh evidence and the
+ * board decides whatever the site's policy says. Needs Shutter_LiveAgents; 409 budget_exhausted when the day's budget, or
+ * the caller's share of it, is spent.
+ */
+export function useConveneBoard(caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ idempotencyKey }: { idempotencyKey: string }) =>
+      api.post<{ caseId: string; state: string; requestedBy?: string }>(
+        `/cases/${seg(caseId)}/board`,
+        {},
+        { idempotencyKey },
+      ),
+    onSettled: async () => {
+      await client.invalidateQueries({ queryKey: keys.case(caseId) });
+      await client.invalidateQueries({ queryKey: keys.settings });
+    },
+  });
+}
+
+/**
  * Close a case the team corrected by hand (a withheld merge or cancel, an escalation acted on): it resolves as
  * handled_by_hand and a draft or queued email is cancelled (CONTRACTS 5.3, v1.14).
  */

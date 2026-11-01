@@ -24,6 +24,7 @@ import { rounds } from './case/derive';
 import { nextAction, provenanceOf } from './case/outcome';
 import { useCaseFacts } from './case/useCaseFacts';
 import { AskButton, AskSurface } from './ask/AskSurface';
+import { ConveneBoard } from './case/ConveneBoard';
 
 /** The portal's base path (/csp/<namespace>/) for links to messages, read from the case's trace link. */
 function portalBase(visualTrace: string | undefined): string {
@@ -143,7 +144,14 @@ function CaseBody({ c }: { c: CaseDetail }) {
         c={c}
         provenance={provenanceOf(c.mode, facts.runs)}
         actions={
-          <AskButton ref={askButton} open={asking} onToggle={() => (asking ? closeAsk() : setAsking(true))} />
+          <>
+            <ConveneBoard c={c} />
+            <AskButton
+              ref={askButton}
+              open={asking}
+              onToggle={() => (asking ? closeAsk() : setAsking(true))}
+            />
+          </>
         }
       />
       <Lifecycle c={c} events={events.data ?? []} />

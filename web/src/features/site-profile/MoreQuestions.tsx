@@ -392,7 +392,47 @@ function Merges({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: Se
   );
 }
 
-/** Questions 9 to 12: escalation teams and mail, the feed's time zone, note text for the model, and merges. */
+function PreventFailures({
+  draft,
+  setDraft,
+  problem,
+}: {
+  draft: SiteProfile;
+  setDraft: SetDraft;
+  problem: Problem;
+}) {
+  return (
+    <Section
+      id="site-prevent-failures"
+      title="Prevent failures"
+      note="Question 13. Without its schema, IRIS still reads a message by segment position and delivers it, so the receiver can get values read from the wrong place. The risk is the interface, not one message."
+    >
+      <Question
+        n={13}
+        text="Should Shutter hold the feed when a message arrives whose HL7 schema is not loaded here, until the schema is imported?"
+        acts
+      />
+      <Switch
+        id="site-feed-prevent_failures"
+        label="Hold messages whose schema is not loaded"
+        description="Off (the default): such a message is delivered as today, and Shutter steps in only when a delivery fails. On: each one is held as a case and nothing is sent; once the schema is imported and the inbound item's category set, the held cases are checked again and sent under the site's policy. A message that fails validation against a schema that is loaded is never held"
+        checked={draft.feed?.prevent_failures === true}
+        onChange={(e) => {
+          const v = e.currentTarget.checked;
+          setDraft((d) => {
+            d.feed = { ...(d.feed ?? {}), prevent_failures: v };
+          });
+        }}
+        error={problem?.path === 'feed.prevent_failures' ? problem.message : undefined}
+      />
+    </Section>
+  );
+}
+
+/**
+ * Questions 9 to 13: escalation teams and mail, the feed's time zone, note text for the model, merges, and whether the
+ * feed is held while a schema is missing.
+ */
 export function MoreQuestions({
   draft,
   setDraft,
@@ -408,6 +448,7 @@ export function MoreQuestions({
       <Feed draft={draft} setDraft={setDraft} problem={problem} />
       <Model draft={draft} setDraft={setDraft} />
       <Merges draft={draft} setDraft={setDraft} problem={problem} />
+      <PreventFailures draft={draft} setDraft={setDraft} problem={problem} />
     </>
   );
 }

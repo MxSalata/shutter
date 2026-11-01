@@ -7,6 +7,7 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { Timestamp } from '@/components/Timestamp';
 import { formatInt, formatUsd, humanize } from '@/lib/format';
 import type { AgentItem, Settings } from '@/api/types';
+import { budgetText } from '@/lib/budget';
 
 function Flag({ children }: { children: React.ReactNode }) {
   return (
@@ -155,6 +156,7 @@ export default function SettingsPage() {
   const settings = useSettings();
   const costs = useCosts();
   const s = settings.data;
+  const budget = budgetText(s?.budget);
   return (
     <>
       <PageHeader
@@ -248,6 +250,12 @@ export default function SettingsPage() {
           <Title order={2} fz="lg" mb="sm">
             Costs
           </Title>
+          {budget ? (
+            <Stack gap={2} mb="sm" data-testid="budget">
+              <Text size="sm">{budget.today}</Text>
+              {budget.share ? <Text size="sm">{budget.share}</Text> : null}
+            </Stack>
+          ) : null}
           {costs.isError ? <ErrorAlert error={costs.error} title="The costs could not be read" /> : null}
           {costs.data?.totals?.spentUsd !== undefined ? (
             <Text size="sm" mb="sm">
