@@ -1,18 +1,18 @@
 # Evaluation: how the board decides, from the recorded runs
 
-Made by `scripts/evaluate.py` from files in the repository, with no model calls: the 80 board members' recordings in `fixtures/records` (live runs of `claude-opus-5-5` in record mode, started between 2026-10-25T13:22:49Z and 2026-11-01T06:23:39Z), the expected outcomes in `fixtures/scenarios.json`, the catalogue in `knowledge/catalogue/catalogue.json`, the model prices seeded by `src/Shutter/Store/ModelPrice.cls` (list prices read on 2026-10-16) and the played outcomes in `docs/readme/comparison.md`. The same figures are in `docs/readme/evaluation.json`. `python3 scripts/evaluate.py --check` says whether both are current.
+Made by `scripts/evaluate.py` from files in the repository, with no model calls: the 96 board members' recordings in `fixtures/records` (live runs of `claude-opus-5-5` in record mode, started between 2026-10-25T13:22:49Z and 2026-11-01T06:47:39Z), the expected outcomes in `fixtures/scenarios.json`, the catalogue in `knowledge/catalogue/catalogue.json`, the model prices seeded by `src/Shutter/Store/ModelPrice.cls` (list prices read on 2026-10-16) and the played outcomes in `docs/readme/comparison.md`. The same figures are in `docs/readme/evaluation.json`. `python3 scripts/evaluate.py --check` says whether both are current.
 
 A *pass* is one board decision on one case: the three specialists in parallel (conformance, encounter, impact), then the coordinator, who writes the plan. A case planned again after a change has a pass per plan.
 
 ## In short
 
-- **The board's disposition matches the expected outcome in 19 of 19 scored passes** (19 cases in 16 scenarios; 20 passes, of which 1 not scored, see below). The 2 incident cases are scored against the catalogue entry the matcher found in each case's own evidence, not the entry the plan cites; the plans cite that entry in 2 of 2.
-- **Each specialist's own view:** a specialist decides from its own view only (conformance: is the message acceptable; encounter: does the movement still hold; impact: can the write be made safely), so its disposition is what that view alone would decide, not a verdict on the case. It is the case's expected outcome for conformance in 12, encounter in 17 and impact in 19 of 19 scored passes. Where it is not (9 findings), the plan's `disagreements` names the specialist and says why another view outweighed it in 9.
-- **Agreement:** all four agreed in 11 of 20 passes; the coordinator sided with the specialists' majority in 8, with a minority of one in 1 and against all three in 0. In 20 of 20 passes the plan's `disagreements` names exactly the specialists whose disposition differs from the plan's.
-- **The catalogue entries cited:** in 19 scored passes the plan cites an entry marked `decides: policy` in 13, `decides: board` in 3, `decides: person` in 3. A policy entry is one the catalogue may settle without the board in site-policy mode; a board entry needs the board's judgement; a person entry only a person may act on.
-- **Confidence:** the 48 specialist findings whose disposition is the case's outcome had confidence 0.70 to 0.95 (mean 0.84); the 9 outweighed by another view had 0.60 to 0.85 (mean 0.76). A confidence is the specialist's confidence in its own view's answer, not in the case's outcome. Shutter stores it and shows it, but no rule in the core or the gate reads it.
-- **Cost:** 80 agent runs, 1,519,500 uncached input, 481,426 cache-read, 7,830 cache-write and 88,100 output tokens, 7.98 USD at list prices; 1,087 s of agent time in all.
-- **Per pass:** 0.34 to 0.57 USD and 24 s to 42 s from the first specialist's start to the plan.
+- **The board's disposition matches the expected outcome in 23 of 23 scored passes** (23 cases in 18 scenarios; 24 passes, of which 1 not scored, see below). The 2 incident cases are scored against the catalogue entry the matcher found in each case's own evidence, not the entry the plan cites; the plans cite that entry in 2 of 2.
+- **Each specialist's own view:** a specialist decides from its own view only (conformance: is the message acceptable; encounter: does the movement still hold; impact: can the write be made safely), so its disposition is what that view alone would decide, not a verdict on the case. It is the case's expected outcome for conformance in 13, encounter in 20 and impact in 22 of 23 scored passes. Where it is not (14 findings), the plan's `disagreements` names the specialist and says why another view outweighed it in 14.
+- **Agreement:** all four agreed in 12 of 24 passes; the coordinator sided with the specialists' majority in 10, with a minority of one in 1 and against all three in 1. In 24 of 24 passes the plan's `disagreements` names exactly the specialists whose disposition differs from the plan's.
+- **The catalogue entries cited:** in 23 scored passes the plan cites an entry marked `decides: policy` in 15, `decides: board` in 3, `decides: person` in 5. A policy entry is one the catalogue may settle without the board in site-policy mode; a board entry needs the board's judgement; a person entry only a person may act on.
+- **Confidence:** the 55 specialist findings whose disposition is the case's outcome had confidence 0.70 to 0.95 (mean 0.84); the 14 outweighed by another view had 0.60 to 0.90 (mean 0.77). A confidence is the specialist's confidence in its own view's answer, not in the case's outcome. Shutter stores it and shows it, but no rule in the core or the gate reads it.
+- **Cost:** 96 agent runs, 1,836,045 uncached input, 573,712 cache-read, 15,660 cache-write and 107,032 output tokens, 9.68 USD at list prices; 1,314 s of agent time in all.
+- **Per pass:** 0.34 to 0.57 USD and 24 s to 47 s from the first specialist's start to the plan.
 
 ## Per case: the board against the expected outcome
 
@@ -35,8 +35,12 @@ Each specialist's cell is its disposition and confidence; the plan's is the coor
 | S11 ENC-1103 discharge | resend (entry E5, matched in the case's evidence, the chain's latest) | resend 0.85 | resend 0.85 | resend 0.80 | resend | E5 (board) | unanimous | not in the table | not in the table |
 | S13 | escalate (or more_evidence) | escalate 0.70 | escalate 0.80 | escalate 0.80 | escalate | E13 (person) | unanimous | as expected | differs |
 | S21 | escalate (or more_evidence) | **resend 0.70** | **resend 0.60** | escalate 0.70 | escalate | E13 (person) | with a minority | - | - |
+| S22 | superseded | **resend 0.80** | superseded 0.93 | superseded 0.90 | superseded | E1 (policy) | with the majority | - | - |
+| S22 Records Out | escalate | **resend 0.80** | **superseded 0.90** | **superseded 0.85** | escalate | E1 (policy) | against all three | - | - |
 | S23a | resend | resend 0.88 | resend 0.90 | resend 0.85 | resend | E2 (policy) | unanimous | - | - |
 | S23a | resend | resend 0.85 | resend 0.85 | resend 0.80 | resend | E16 (policy) | unanimous | - | - |
+| S23b | escalate | escalate 0.75 | escalate 0.80 | escalate 0.85 | escalate | E17 (person) | unanimous | - | - |
+| S23b Records Out | escalate | **resend 0.60** | escalate 0.80 | escalate 0.85 | escalate | E17 (person) | with the majority | - | - |
 | S23c | resend | resend 0.85 | resend 0.90 | resend 0.88 | resend | E2 (policy) | unanimous | - | - |
 | S23c | resend | resend 0.85 | resend 0.82 | resend 0.72 | resend | E16 (policy) | unanimous | - | - |
 | S25 | escalate (or more_evidence, resend) | escalate 0.75 | resend 0.80 | resend 0.75 | resend | E2 (policy) | with the majority | - | - |
@@ -64,9 +68,12 @@ Which specialists' dispositions differ from the plan's, and whether the plan's `
 | S10 | escalate | encounter (resend) | encounter | yes |
 | S11 ENC-1103 transfer | superseded | conformance (resend) | conformance | yes |
 | S21 | escalate | conformance (resend), encounter (resend) | conformance, encounter | yes |
+| S22 | superseded | conformance (resend) | conformance | yes |
+| S22 Records Out | escalate | conformance (resend), encounter (superseded), impact (superseded) | conformance, encounter, impact | yes |
+| S23b Records Out | escalate | conformance (resend) | conformance | yes |
 | S25 | resend | conformance (escalate) | conformance | yes |
 
-Dissent by specialist: conformance in 8 (S1, S3, S6, S7 pass 2, S8, S11 ENC-1103 transfer, S21, S25); encounter in 2 (S10, S21); impact in none.
+Dissent by specialist: conformance in 11 (S1, S3, S6, S7 pass 2, S8, S11 ENC-1103 transfer, S21, S22, S22 Records Out, S23b Records Out, S25); encounter in 3 (S10, S21, S22 Records Out); impact in 1 (S22 Records Out).
 
 - In S21 the plan follows impact alone (escalate) against the specialists' majority (resend), and matches the expected outcome.
 
@@ -76,8 +83,8 @@ Specialists' confidence (`response.result.confidence`, 0 to 1) in the scored pas
 
 | Specialist findings | Count | Lowest | Mean | Highest |
 | --- | --- | --- | --- | --- |
-| the case's outcome | 48 | 0.70 | 0.84 | 0.95 |
-| outweighed by another view | 9 | 0.60 | 0.76 | 0.85 |
+| the case's outcome | 55 | 0.70 | 0.84 | 0.95 |
+| outweighed by another view | 14 | 0.60 | 0.77 | 0.90 |
 
 Each specialist is told to decide from its own view only, and its confidence is in that view's answer, not in the case's outcome. An outweighed finding is not therefore a wrong one: conformance, for example, is told to resend a message that is valid, and the plan then follows a view that sees why the case should not be resent. So this split is not an error rate, and the figures say nothing about calibration: the sample is small and every finding comes from one model.
 
@@ -85,28 +92,32 @@ Each specialist is told to decide from its own view only, and its confidence is 
 
 The evidence items each member lists in `evidence_refs`: C conformance, E encounter, I impact, P the coordinator's plan. A `catalogue:<entry>` reference is shown under *catalogue* as the entry it names.
 
-| Case | `error` | `message` | `route` | `operation` | `receipt` | `timeline` | `ward_state` | `validation` | `later_event` | `bed_conflict` | `C-000143` | `E13` | `MSG00702` | `MSG00703` | `MSG00802` | `MSG00803` | `PAS^HOSP^MRN-T1^ENC-T1^transfer^2026-10-15T08:50:00Z` | `WIC-2.2` | `E16` | `E7` | `RP-2.4` | `WIC-1.2` | `WIC-2.1` | `WIC-6.2` | catalogue |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| S1 | C E I P | C E I P | C E I P | C E I P | E I P | C E I P | C E I P | C P | E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| S2 | C E I P | C E I P | C E I P | C E I P | E I P | E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| S3 | C E I P | C E I P | E I P | C I P | C E I P | E I P | C E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| S4 | C E I P | C E I P | C E I P | C I P | C E I P | C E I P | C E I P | C E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | P E9@1 |
-| S5 | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | E I P | C I P | E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| S6 | C E I P | C E I P | C E I P | C E I P | E I P | C E I P | C E I P | C I P | E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| S7 pass 1 | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| S7 pass 2 | C E I P | C E P | C E I P | C I P | C E I P | C E I P | C E I P | C P | E I P | - | - | - | I P | I P | - | - | I P | - | - | - | - | - | - | - | - |
-| S8 | C E I P | C E I P | C E I P | C I P | C E I P | C E I P | C E I P | C I P | - | - | - | - | - | - | E P | E P | - | - | - | P | - | - | - | - | - |
-| S9 | C E I P | C E I P | C E I P | C E I P | E I P | E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| S10 | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| S11 ENC-1103 transfer | C E I P | C E I P | C E I P | C I P | C E I P | E I P | E I P | C P | E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| S11 ENC-1103 discharge | C E I P | C E I P | C E I P | C E I P | E I P | E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | P E5 |
-| S13 | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | C I P | E I P | - | - | C P | - | - | - | - | - | C | - | - | P | C | C | - | - |
-| S21 | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | C E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | P E13@4 |
-| S23a | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | C | - | - | - | - | - | C | P E2@4 |
-| S23a | C E I P | C E I P | C E I P | C E I P | E I P | E I P | E I P | C I P | - | E P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | P E16 |
-| S23c | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| S23c | C E I P | C E I P | C E I P | C E I P | C E I P | C E I | C E I P | C E I P | P | E P | E P | - | - | - | - | - | - | - | P | - | - | - | - | - | - |
-| S25 | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | C E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| Case | `error` | `route` | `message` | `receipt` | `operation` | `timeline` | `ward_state` | `validation` | `later_event` | `bed_conflict` | `E17` | `C-000143` | `E13` | `ENC-T2` | `MSG00702` | `MSG00703` | `MSG00802` | `MSG00803` | `PAS^HOSP^MRN-T1^ENC-T1^transfer^2026-10-15T08:50:00Z` | `RP-4.3` | `WIC-2.2` | `DEP-2.3` | `E16` | `E7` | `ELS-1.1` | `ELS-2.7` | `ELS-3.1` | `MSG02202` | `MSG02203` | `RP-2.4` | `WIC-1.2` | `WIC-2.1` | `WIC-6.2` | catalogue |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| S1 | C E I P | C E I P | C E I P | E I P | C E I P | C E I P | C E I P | C P | E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S2 | C E I P | C E I P | C E I P | E I P | C E I P | E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S3 | C E I P | E I P | C E I P | C E I P | C I P | E I P | C E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S4 | C E I P | C E I P | C E I P | C E I P | C I P | C E I P | C E I P | C E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | P E9@1 |
+| S5 | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | E I P | C I P | E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S6 | C E I P | C E I P | C E I P | E I P | C E I P | C E I P | C E I P | C I P | E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S7 pass 1 | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S7 pass 2 | C E I P | C E I P | C E P | C E I P | C I P | C E I P | C E I P | C P | E I P | - | - | - | - | - | I P | I P | - | - | I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S8 | C E I P | C E I P | C E I P | C E I P | C I P | C E I P | C E I P | C I P | - | - | - | - | - | - | - | - | E P | E P | - | - | - | - | - | P | - | - | - | - | - | - | - | - | - | - |
+| S9 | C E I P | C E I P | C E I P | E I P | C E I P | E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S10 | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S11 ENC-1103 transfer | C E I P | C E I P | C E I P | C E I P | C I P | E I P | E I P | C P | E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S11 ENC-1103 discharge | C E I P | C E I P | C E I P | E I P | C E I P | E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | P E5 |
+| S13 | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | C I P | E I P | - | - | - | C P | - | - | - | - | - | - | - | C | - | - | - | - | - | - | - | - | P | C | C | - | - |
+| S21 | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | C E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | P E13@4 |
+| S22 | C E I P | C E I P | C E I P | C E I P | C I P | C E I P | C E I P | C P | E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S22 Records Out | C E I P | C E I P | C E P | C E I P | C I P | C E I P | C E I P | C E P | E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | I | I | - | - | - | - | P E1@4 |
+| S23a | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | C | - | - | - | - | - | - | - | - | - | - | - | C | P E2@4 |
+| S23a | C E I P | C E I P | C E I P | E I P | C E I P | E I P | E I P | C I P | - | E P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | P E16 |
+| S23b | C E I P | C E I P | C E P | C E I P | C E I P | C E I P | C E I P | C E P | - | E I P | I P | - | - | I P | - | - | - | - | - | P | - | I | - | - | - | - | - | - | - | - | - | - | - | - |
+| S23b Records Out | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | C E I P | - | E P | E P | - | - | - | - | - | - | - | - | P | - | - | - | - | E | E | E | - | - | - | - | - | - | - |
+| S23c | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | C I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| S23c | C E I P | C E I P | C E I P | C E I P | C E I P | C E I | C E I P | C E I P | P | E P | - | E P | - | - | - | - | - | - | - | - | - | - | P | - | - | - | - | - | - | - | - | - | - | - |
+| S25 | C E I P | C E I P | C E I P | C E I P | C E I P | C E I P | E I P | C E I P | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
 
 The references name items of the case's evidence snapshot (`Shutter.Operation.Evidence`). The table shows what each member says it used, not whether it used it well.
 
@@ -147,12 +158,16 @@ Per pass. *Input* is uncached input tokens; *cache read* and *cache write* are r
 | S11 ENC-1103 discharge | 4 | 80,998 | 23,490 | 0 | 4,447 | 0.418 | - | 28 s | 53 s |
 | S13 | 4 | 77,766 | 23,490 | 0 | 5,267 | 0.421 | 0.42 | 30 s | 63 s |
 | S21 | 4 | 78,560 | 15,660 | 7,830 | 5,700 | 0.471 | - | 34 s | 64 s |
+| S22 | 4 | 72,601 | 15,660 | 7,830 | 3,877 | 0.410 | - | 29 s | 52 s |
+| S22 Records Out | 4 | 93,090 | 27,748 | 0 | 5,685 | 0.492 | - | 47 s | 69 s |
 | S23a | 4 | 74,509 | 25,619 | 0 | 3,998 | 0.383 | - | 27 s | 46 s |
 | S23a | 4 | 76,631 | 23,490 | 0 | 4,749 | 0.406 | - | 28 s | 54 s |
+| S23b | 4 | 71,905 | 23,490 | 0 | 4,668 | 0.386 | - | 27 s | 52 s |
+| S23b Records Out | 4 | 78,949 | 25,388 | 0 | 4,702 | 0.415 | - | 31 s | 55 s |
 | S23c | 4 | 73,482 | 25,388 | 0 | 3,937 | 0.378 | - | 26 s | 51 s |
 | S23c | 4 | 73,747 | 23,490 | 0 | 4,552 | 0.391 | - | 27 s | 48 s |
 | S25 | 4 | 109,525 | 33,217 | 0 | 6,035 | 0.565 | - | 42 s | 70 s |
-| **Total** | 80 | 1,519,500 | 481,426 | 7,830 | 88,100 | 7.975 | | | 1,087 s |
+| **Total** | 96 | 1,836,045 | 573,712 | 15,660 | 107,032 | 9.678 | | | 1,314 s |
 
 S7 over its 2 passes: 8 runs, 0.74 USD, 54 s elapsed in the passes (the wait for approval between them is not counted).
 
@@ -164,10 +179,10 @@ Per member, over all passes:
 
 | Member | Runs | Mean input | Mean output | Mean cost, USD | Duration, lowest to highest | Mean tool calls |
 | --- | --- | --- | --- | --- | --- | --- |
-| conformance | 20 | 18,221 | 1,145 | 0.097 | 11 to 18 s | 5.0 |
-| encounter | 20 | 18,252 | 1,011 | 0.095 | 10 to 21 s | 5.2 |
-| impact | 20 | 18,671 | 1,208 | 0.100 | 11 to 21 s | 6.1 |
-| coordinator | 20 | 20,830 | 1,041 | 0.106 | 10 to 21 s | 2.1 |
+| conformance | 24 | 18,170 | 1,156 | 0.098 | 11 to 18 s | 5.0 |
+| encounter | 24 | 18,346 | 1,038 | 0.096 | 10 to 21 s | 5.2 |
+| impact | 24 | 18,432 | 1,183 | 0.099 | 10 to 21 s | 5.9 |
+| coordinator | 24 | 21,553 | 1,083 | 0.110 | 10 to 29 s | 2.2 |
 
 <details>
 <summary>Every run</summary>
@@ -234,6 +249,14 @@ Per member, over all passes:
 | `scenario-S21-ENC-1021-transfer-encounter-1.json` | 2026-11-01T06:15:25Z | 21.3 s | 19,461 | 3,796 | 1,898 | 1,786 | 7 | 0.1238 |
 | `scenario-S21-ENC-1021-transfer-impact-1.json` | 2026-11-01T06:15:25Z | 14.5 s | 18,980 | 3,794 | 1,897 | 1,342 | 6 | 0.1130 |
 | `scenario-S21-ENC-1021-transfer-coordinator-1.json` | 2026-11-01T06:15:46Z | 13.2 s | 21,661 | 4,258 | 2,129 | 1,155 | 2 | 0.1212 |
+| `scenario-S22-ENC-1022-transfer-conformance-1.json` | 2026-11-01T06:45:49Z | 13.0 s | 18,335 | 3,812 | 1,906 | 1,033 | 5 | 0.1043 |
+| `scenario-S22-ENC-1022-transfer-encounter-1.json` | 2026-11-01T06:45:49Z | 14.0 s | 18,116 | 3,796 | 1,898 | 992 | 5 | 0.1026 |
+| `scenario-S22-ENC-1022-transfer-impact-1.json` | 2026-11-01T06:45:49Z | 10.0 s | 15,689 | 3,794 | 1,897 | 817 | 2 | 0.0893 |
+| `scenario-S22-ENC-1022-transfer-coordinator-1.json` | 2026-11-01T06:46:03Z | 14.6 s | 20,461 | 4,258 | 2,129 | 1,035 | 2 | 0.1140 |
+| `scenario-S22-ENC-1022-transfer-Records_Out-conformance-1.json` | 2026-11-01T06:46:02Z | 12.3 s | 18,174 | 5,718 | 0 | 1,098 | 5 | 0.0958 |
+| `scenario-S22-ENC-1022-transfer-Records_Out-encounter-1.json` | 2026-11-01T06:46:03Z | 11.3 s | 14,950 | 5,694 | 0 | 1,028 | 2 | 0.0815 |
+| `scenario-S22-ENC-1022-transfer-Records_Out-impact-1.json` | 2026-11-01T06:45:59Z | 16.2 s | 18,293 | 5,691 | 0 | 1,274 | 6 | 0.0998 |
+| `scenario-S22-ENC-1022-transfer-Records_Out-coordinator-1.json` | 2026-11-01T06:46:17Z | 29.3 s | 41,673 | 10,645 | 0 | 2,285 | 4 | 0.2145 |
 | `scenario-S23a-ENC-1231-transfer-conformance-1.json` | 2026-11-01T06:17:35Z | 12.5 s | 16,443 | 5,718 | 0 | 1,061 | 5 | 0.0881 |
 | `scenario-S23a-ENC-1231-transfer-encounter-1.json` | 2026-11-01T06:17:35Z | 9.5 s | 15,394 | 5,694 | 0 | 881 | 5 | 0.0803 |
 | `scenario-S23a-ENC-1231-transfer-impact-1.json` | 2026-11-01T06:17:35Z | 10.6 s | 16,856 | 5,691 | 0 | 1,068 | 6 | 0.0899 |
@@ -242,6 +265,14 @@ Per member, over all passes:
 | `scenario-S23a-ENC-1232-transfer-encounter-1.json` | 2026-11-01T06:18:16Z | 13.5 s | 18,260 | 5,694 | 0 | 1,086 | 6 | 0.0959 |
 | `scenario-S23a-ENC-1232-transfer-impact-1.json` | 2026-11-01T06:18:16Z | 12.4 s | 18,501 | 5,691 | 0 | 1,199 | 6 | 0.0991 |
 | `scenario-S23a-ENC-1232-transfer-coordinator-1.json` | 2026-11-01T06:18:29Z | 15.2 s | 21,333 | 6,387 | 0 | 1,227 | 2 | 0.1111 |
+| `scenario-S23b-ENC-1232-transfer-conformance-1.json` | 2026-11-01T06:47:08Z | 14.9 s | 18,001 | 5,718 | 0 | 1,437 | 5 | 0.1019 |
+| `scenario-S23b-ENC-1232-transfer-encounter-1.json` | 2026-11-01T06:47:08Z | 14.4 s | 17,132 | 5,694 | 0 | 1,264 | 6 | 0.0949 |
+| `scenario-S23b-ENC-1232-transfer-impact-1.json` | 2026-11-01T06:47:08Z | 11.2 s | 17,503 | 5,691 | 0 | 1,065 | 6 | 0.0925 |
+| `scenario-S23b-ENC-1232-transfer-coordinator-1.json` | 2026-11-01T06:47:23Z | 11.5 s | 19,269 | 6,387 | 0 | 902 | 2 | 0.0964 |
+| `scenario-S23b-ENC-1232-transfer-Records_Out-conformance-1.json` | 2026-11-01T06:47:23Z | 15.9 s | 17,138 | 5,718 | 0 | 1,277 | 5 | 0.0952 |
+| `scenario-S23b-ENC-1232-transfer-Records_Out-encounter-1.json` | 2026-11-01T06:47:22Z | 16.8 s | 25,071 | 7,592 | 0 | 1,407 | 7 | 0.1299 |
+| `scenario-S23b-ENC-1232-transfer-Records_Out-impact-1.json` | 2026-11-01T06:47:19Z | 11.4 s | 17,469 | 5,691 | 0 | 1,085 | 6 | 0.0927 |
+| `scenario-S23b-ENC-1232-transfer-Records_Out-coordinator-1.json` | 2026-11-01T06:47:39Z | 11.1 s | 19,271 | 6,387 | 0 | 933 | 2 | 0.0970 |
 | `scenario-S23c-ENC-1231-transfer-conformance-1.json` | 2026-11-01T06:20:16Z | 11.1 s | 16,516 | 5,718 | 0 | 993 | 5 | 0.0871 |
 | `scenario-S23c-ENC-1231-transfer-encounter-1.json` | 2026-11-01T06:20:16Z | 13.2 s | 21,324 | 7,592 | 0 | 915 | 5 | 0.1051 |
 | `scenario-S23c-ENC-1231-transfer-impact-1.json` | 2026-11-01T06:20:16Z | 13.3 s | 16,866 | 5,691 | 0 | 1,123 | 6 | 0.0911 |
@@ -266,8 +297,6 @@ Per member, over all passes:
 - S18 S2 in HL7 2.3.1: played in policy mode only.
 - S19 Shape A: a failed transfer in the hospital's own production: played in policy mode only.
 - S20 A nurse moves the patient by hand while the plan awaits approval: played in rules mode only.
-- S22 One overtaken transfer, two systems: played in policy mode only.
-- S23b Two patients for one bed: played in policy mode only.
 - S24 A newer message arrives as Shutter resends: played in policy mode only.
 
 ## Not yet measured
@@ -275,6 +304,6 @@ Per member, over all passes:
 - **Repeat runs.** Each pass above is one recording per member. Nothing here shows how often the same model, on the same version of the product, reaches the same disposition when the case is run again. Earlier recordings made on earlier versions of the product are in the repository's history; they are not a controlled repeat, and this document does not read them.
 - **The single investigator.** Shutter can give a case to one generalist agent instead of the board (`scenario_check.py --modes single`), but no generalist runs are in `fixtures/records`, so the board is not compared with a single agent here.
 - **Adversarial variants.** No adversarial text reached any agent in these recordings: the one injected note stays in IRIS and the agents see only its flags, so what is shown is that they notice the flag, not that they resist an instruction. Earlier recordings in the repository's history were made with the note's text sent; this document does not read them. No note pushes towards a wrong answer, and no variant feeds misleading or contradictory evidence.
-- **Held-out cases.** In 14 of 19 scored passes the plan cites a catalogue entry that names the same scenario in its `scenarios` field: the knowledge the agents read was written alongside these scenarios. No case here was kept back from the authors of the catalogue.
+- **Held-out cases.** In 16 of 23 scored passes the plan cites a catalogue entry that names the same scenario in its `scenarios` field: the knowledge the agents read was written alongside these scenarios. No case here was kept back from the authors of the catalogue.
 - **Other models and calibration.** Every run used claude-opus-5-5; there is too little data for a confidence calibration, and no grading of the summaries' reasoning beyond the disposition, the entry and the evidence keys.
 
