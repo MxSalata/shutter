@@ -10,6 +10,102 @@
      own (Pastel). */
   --shutter-navbar: var(--mantine-color-body);
   --shutter-header: var(--mantine-color-body);
+  /* The header's height, which sticky parts and scrolled-to sections clear: 56 px live; the trial's banner adds to it
+     (below). */
+  --shutter-header-h: 56px;
+  /* Motion: used only to point and to confirm. The reduced-motion rule below collapses all of it. */
+  --motion-fast: 150ms;
+  --motion-base: 220ms;
+  --motion-slow: 1200ms;
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-inout: cubic-bezier(0.45, 0, 0.55, 1);
+}
+
+/*
+ * Identity hues: which thing it is (a navigation section, a board member, a receiver category), never how it stands;
+ * the five status tones keep that. They colour graphics only (icons, avatars, dots, edges, bars), always beside words
+ * in the text colour, so each needs 3:1 against its surface. Mantine's -text steps failed a categorical palette check,
+ * so identity takes its own tokens, per scheme.
+ *
+ * The check, re-run with grape (the trial's accent) as a reserved neighbour: separation is the OKLab distance x 100
+ * for normal vision, then the worst of protanopia and deuteranopia, then tritanopia (Machado 2009, full severity).
+ *   Light (on #f9fafb, white and the Pastel fills): cyan-7 3.1:1 at the lowest, teal-8 3.6:1, indigo-8, pink-8 and
+ *   violet-7 5.0:1 or more. The navigation's neighbours: cyan and indigo 19 / 17 / 11, indigo and pink 30 / 24 / 21,
+ *   pink and violet 27 / 23 / 23, violet and teal 31 / 24 / 11, teal and indigo 26 / 23 / 8, violet and cyan
+ *   24 / 17 / 14. Beside grape: cyan 27 / 11, indigo 17 / 7, pink 16 / 13, violet 12 / 9, teal 32 / 16 (normal / worst).
+ *   Dark (on dark-7, dark-8 and black): every hue 3.9:1 or more. Neighbours: cyan and indigo 16 / 14 / 4, indigo and
+ *   pink 28 / 19 / 19, pink and violet 23 / 19 / 19, violet and teal 29 / 21 / 11, teal and indigo 26 / 23 / 6, violet
+ *   and cyan 20 / 12 / 10. Beside grape: cyan 27 / 12, indigo 22 / 13, pink 20 / 18, violet 16 / 13, teal 34 / 21.
+ *   On the Pastel navbar (#e3edf8) cyan-7 gives only 2.9:1, so cyan takes cyan-8 there (3.7:1).
+ * Three pairs fail and are never neighbours: indigo and violet (8 / 2 light, 8 / 0 dark), pink and teal (31 / 4,
+ * 32 / 7) and cyan and teal (10 / 5). Grape is closest to indigo and violet for protan and deutan vision (7 to 9 in
+ * light), which is why the trial is never told by colour alone: it has a banner with words, a stripe, a frame, a pill
+ * and a tab title, shapes no identity mark takes. Under high contrast every hue is the text colour.
+ */
+:root {
+  --shutter-hue-cyan: #1098ad;
+  --shutter-hue-indigo: #3b5bdb;
+  --shutter-hue-pink: #c2255c;
+  --shutter-hue-violet: #7048e8;
+  --shutter-hue-teal: #099268;
+  --shutter-hue-gray: var(--shutter-muted-soft);
+}
+:root[data-mantine-color-scheme='dark'] {
+  --shutter-hue-indigo: #5c7cfa;
+  --shutter-hue-pink: #e64980;
+  --shutter-hue-violet: #9775fa;
+}
+:root[data-shutter-palette='pastel'][data-mantine-color-scheme='light']:not([data-shutter-contrast='high'])
+  .mantine-AppShell-navbar {
+  --shutter-hue-cyan: #0c8599;
+}
+:root[data-shutter-contrast='high'] {
+  --shutter-hue-cyan: currentColor;
+  --shutter-hue-indigo: currentColor;
+  --shutter-hue-pink: currentColor;
+  --shutter-hue-violet: currentColor;
+  --shutter-hue-teal: currentColor;
+  --shutter-hue-gray: currentColor;
+}
+
+/*
+ * The trial's colour, grape, reserved for the trial and nothing else: the frame, the guide's ring and arrows, the
+ * banner, the Trial pill and the guide's primary button. The banner's text on its surface reads at 6.4:1 in light
+ * (grape-9 on grape-0) and 9.4:1 in dark (grape-2 on #33213d). The tokens are defined everywhere, so the guide reads
+ * them, but only a trial page draws the chrome that uses them.
+ */
+:root {
+  --shutter-trial-accent: var(--mantine-color-grape-text);
+  --shutter-trial-surface: var(--mantine-color-grape-0);
+  --shutter-trial-on-surface: var(--mantine-color-grape-9);
+  --shutter-trial-filled: var(--mantine-color-grape-filled);
+}
+:root[data-mantine-color-scheme='dark'] {
+  --shutter-trial-surface: #33213d;
+  --shutter-trial-on-surface: var(--mantine-color-grape-2);
+}
+:root[data-shutter-palette='pastel'][data-mantine-color-scheme='light']:not([data-shutter-contrast='high']) {
+  --shutter-trial-accent: var(--mantine-color-grape-8);
+  --shutter-trial-surface: #f6eefa;
+}
+:root[data-shutter-contrast='high'] {
+  --shutter-trial-accent: currentColor;
+  --shutter-trial-surface: var(--mantine-color-body);
+  --shutter-trial-on-surface: var(--mantine-color-text);
+}
+/* The header in a trial page holds the banner above its row: 96 px with the full banner, 88 px once it is one line,
+   92 px on a phone, where the banner is always one line. */
+:root[data-shutter-env='trial'] {
+  --shutter-header-h: 96px;
+}
+:root[data-shutter-env='trial'][data-shutter-banner='compact'] {
+  --shutter-header-h: 88px;
+}
+@media (max-width: 47.99em) {
+  :root[data-shutter-env='trial'],
+  :root[data-shutter-env='trial'][data-shutter-banner='compact'] {
+    --shutter-header-h: 92px;
+  }
 }
 
 /* Mantine's light "dimmed" is gray-6 (#868e96, 3.3:1 on white); gray-7 reads at 7:1 and still looks secondary. */
@@ -363,10 +459,27 @@
   outline-offset: 2px;
 }
 
-/* The navigation icons take the text colour of their entry: the entries carry no colour of their own, so
-   colour stays for statuses. */
+/* The navigation icons carry their section's identity hue (--nav-icon, set on each entry from the --shutter-hue-*
+   tokens), never a status colour; the active entry adds a bar in the same hue and a heavier weight. Under high
+   contrast the icon and the bar are the text colour. */
 .nav-icon {
+  color: var(--nav-icon, currentColor);
+}
+.nav-link[data-active] {
+  box-shadow: inset 3px 0 0 var(--nav-icon, currentColor);
+  font-weight: 600;
+}
+:root[data-shutter-contrast='high'] .nav-icon {
   color: currentColor;
+}
+:root[data-shutter-contrast='high'] .nav-link[data-active] {
+  box-shadow: inset 3px 0 0 currentColor;
+}
+.nav-group-label {
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--shutter-muted);
 }
 
 /* The guide. Its controls are at least 44 px high, for touch. A shown section clears the sticky header when it is
@@ -376,12 +489,117 @@
   min-height: 2.75rem;
 }
 [data-tour] {
-  scroll-margin-top: 72px;
+  scroll-margin-top: calc(var(--shutter-header-h) + 16px);
+}
+
+/*
+ * The guide's movements, one at a time and each ending at rest in its pointing state: the card rises in, then the
+ * notch nudges toward its section while the section's ring grows and fades, then the try-it pointer nudges toward its
+ * control while the control's halo pulses. Each stops by itself within 5 seconds; only transform, opacity and the
+ * ring's box-shadow animate.
+ */
+@keyframes guide-nudge-down {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+@keyframes guide-nudge-side {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(6px);
+  }
+}
+@keyframes guide-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--shutter-trial-accent) 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 [data-tour-active='true'] {
-  outline: 2px dashed var(--mantine-primary-color-filled);
+  outline: 3px solid var(--shutter-trial-accent);
   outline-offset: 4px;
   border-radius: var(--mantine-radius-md);
+  animation: guide-ring 1600ms var(--motion-ease) 2;
+}
+/* The control a step invites the reader to try: a 2 px halo, three pulses, then the outline stays. */
+[data-tour-try='true'] {
+  outline: 2px solid var(--shutter-trial-accent);
+  outline-offset: 3px;
+  animation: guide-ring 1600ms var(--motion-ease) 3;
+}
+.guide-card-enter {
+  animation: rise-in var(--motion-base) var(--motion-ease) 1;
+}
+.guide-pointer svg {
+  animation: guide-nudge-down var(--motion-slow) var(--motion-ease-inout) 3;
+}
+.guide-pointer[data-side] svg {
+  animation-name: guide-nudge-side;
+}
+/* A movement that waits (its control not yet in view) shows no animation until it starts. */
+[data-motion='waiting'],
+[data-motion='waiting'] svg {
+  animation: none;
+}
+:root[data-shutter-contrast='high'] [data-tour-active='true'] {
+  outline: 3px dashed currentColor;
+  animation: none;
+}
+:root[data-shutter-contrast='high'] [data-tour-try='true'] {
+  outline: 3px dashed currentColor;
+  animation: none;
+}
+@media (forced-colors: active) {
+  [data-tour-active='true'],
+  [data-tour-try='true'] {
+    outline-color: Highlight;
+  }
+}
+
+/*
+ * The replay after a trial approval: each lifecycle step is revealed by setting data-revealed on it, one at a time
+ * (useStagedReveal in lib/motion.ts), so the motion is a class change, not a timer in the component; then the outcome
+ * band's edge and words cross-fade to their new tone.
+ */
+@keyframes step-fill {
+  from {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.lifecycle-step[data-revealed='false'] {
+  opacity: 0.35;
+}
+.lifecycle-step[data-revealed='true'] {
+  animation: step-fill var(--motion-base) var(--motion-ease) 1;
+}
+.outcome-band[data-tone] {
+  transition:
+    box-shadow var(--motion-base) var(--motion-ease),
+    border-color var(--motion-base) var(--motion-ease);
 }
 
 /* Motion is a preference, not a requirement. Recharts animations are switched off in code. */
@@ -404,6 +622,16 @@
   }
   .clickable-row:focus-visible {
     outline: 2px solid Highlight;
+  }
+  .identity-dot,
+  .tile-icon,
+  .check-strip span,
+  .agreement-dots span,
+  .comparison-bar {
+    forced-color-adjust: none;
+  }
+  :root[data-shutter-env='trial'] body::after {
+    border-color: Highlight;
   }
 }
 
@@ -732,33 +960,65 @@ body {
   background: var(--mantine-color-default-hover);
 }
 
-/* A case that needs a person, or was stopped, carries an edge in its state's tone beside its badge. */
-.case-row[data-tone='attention'] td:first-child {
-  box-shadow: inset 3px 0 0 var(--mantine-color-yellow-filled);
+/*
+ * A row whose outcome is not neutral carries a 3 px edge in its tone beside its badge: information, positive,
+ * attention and blocking (a neutral row has none). `case-row` is the Cases list's, `tone-row` any other table's. On a
+ * phone, where the rows stack, the edge moves from the first cell to the row.
+ */
+:is(.case-row, .tone-row) {
+  --row-edge: transparent;
 }
-.case-row[data-tone='blocking'] td:first-child {
-  box-shadow: inset 3px 0 0 var(--mantine-color-red-filled);
+:is(.case-row, .tone-row)[data-tone='info'] {
+  --row-edge: var(--mantine-color-blue-filled);
+}
+:is(.case-row, .tone-row)[data-tone='positive'] {
+  --row-edge: var(--mantine-color-green-filled);
+}
+:is(.case-row, .tone-row)[data-tone='attention'] {
+  --row-edge: var(--mantine-color-yellow-filled);
+}
+:is(.case-row, .tone-row)[data-tone='blocking'] {
+  --row-edge: var(--mantine-color-red-filled);
+}
+:root[data-shutter-contrast='high']
+  :is(.case-row, .tone-row):is(
+    [data-tone='info'],
+    [data-tone='positive'],
+    [data-tone='attention'],
+    [data-tone='blocking']
+  ) {
+  --row-edge: currentColor;
+}
+:is(.case-row, .tone-row):is(
+    [data-tone='info'],
+    [data-tone='positive'],
+    [data-tone='attention'],
+    [data-tone='blocking']
+  )
+  td:first-child {
+  box-shadow: inset 3px 0 0 var(--row-edge);
 }
 @media (max-width: 35.99em) {
-  .case-row[data-tone='attention'] td:first-child,
-  .case-row[data-tone='blocking'] td:first-child {
+  :is(.case-row, .tone-row)[data-tone] td:first-child {
     box-shadow: none;
   }
-  .stack-table tr.case-row[data-tone='attention'] {
-    box-shadow: inset 3px 0 0 var(--mantine-color-yellow-filled);
-    padding-left: var(--mantine-spacing-xs);
-  }
-  .stack-table tr.case-row[data-tone='blocking'] {
-    box-shadow: inset 3px 0 0 var(--mantine-color-red-filled);
+  .stack-table
+    tr:is(.case-row, .tone-row):is(
+      [data-tone='info'],
+      [data-tone='positive'],
+      [data-tone='attention'],
+      [data-tone='blocking']
+    ) {
+    box-shadow: inset 3px 0 0 var(--row-edge);
     padding-left: var(--mantine-spacing-xs);
   }
 }
 
 /*
- * Ask about this case: beside the case at laptop width, the panel keeps to the right of the page and scrolls on its own
- * under the header; narrower, it opens as a drawer (a full-screen sheet on a phone). Its surfaces reuse the tuned
- * tokens: the hovered surface for the read-only notice, the border colour for the turns, the attention edge for the
- * What-if card, so nothing on them needs a contrast rule of its own.
+ * Ask about this case: beside the case from 90em (1440 px, AskSurface's media query), the panel keeps to the right of
+ * the page and scrolls on its own under the header; narrower, it opens as a drawer (a full-screen sheet on a phone).
+ * Its surfaces reuse the tuned tokens: the hovered surface for the read-only notice, the border colour for the turns,
+ * the attention edge for the What-if card, so nothing on them needs a contrast rule of its own.
  */
 .ask-layout {
   display: grid;
@@ -772,8 +1032,8 @@ body {
 }
 .ask-aside {
   position: sticky;
-  top: calc(56px + var(--mantine-spacing-md));
-  max-height: calc(100dvh - 56px - 2 * var(--mantine-spacing-md));
+  top: calc(var(--shutter-header-h) + var(--mantine-spacing-md));
+  max-height: calc(100dvh - var(--shutter-header-h) - 2 * var(--mantine-spacing-md));
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -808,4 +1068,351 @@ body {
 }
 .ask-whatif {
   border-left: 4px solid var(--mantine-color-yellow-filled);
+}
+
+/*
+ * Badges, a step larger than Mantine's, at every call site: xs 10.5 px, sm 11.5 px, md 12.5 px, lg 14 px. An xs badge
+ * belongs only in the tone legend, never in a table or a card's body.
+ */
+.mantine-Badge-root[data-size='xs'] {
+  --badge-fz: 0.656rem;
+  --badge-height: 1.125rem;
+}
+.mantine-Badge-root[data-size='sm'] {
+  --badge-fz: 0.719rem;
+  --badge-height: 1.25rem;
+}
+.mantine-Badge-root[data-size='md'] {
+  --badge-fz: 0.781rem;
+  --badge-height: 1.375rem;
+}
+.mantine-Badge-root[data-size='lg'] {
+  --badge-fz: 0.875rem;
+  --badge-height: 1.625rem;
+}
+
+/*
+ * Hero bands and stat tiles: the surface is the hovered surface every badge is already tuned against, and the tone
+ * sits in a 4 px edge (on top of a band, on the left of a tile), the tone's icon and its word; the figure stays in the
+ * text colour. They name their own background, so Pastel's card rotation skips them.
+ */
+.hero-band,
+.stat-tile {
+  background: var(--mantine-color-default-hover);
+}
+.hero-band[data-tone] {
+  border-top: 4px solid var(--edge, transparent);
+}
+.stat-tile[data-tone] {
+  border-left: 4px solid var(--edge, transparent);
+}
+:is(.hero-band, .stat-tile)[data-tone='info'] {
+  --edge: var(--mantine-color-blue-filled);
+}
+:is(.hero-band, .stat-tile)[data-tone='positive'] {
+  --edge: var(--mantine-color-green-filled);
+}
+:is(.hero-band, .stat-tile)[data-tone='attention'] {
+  --edge: var(--mantine-color-yellow-filled);
+}
+:is(.hero-band, .stat-tile)[data-tone='blocking'] {
+  --edge: var(--mantine-color-red-filled);
+}
+:is(.hero-band, .stat-tile)[data-tone='neutral'] {
+  --edge: var(--mantine-color-gray-filled);
+}
+:root[data-shutter-contrast='high'] :is(.hero-band, .stat-tile)[data-tone] {
+  --edge: currentColor;
+}
+:root[data-shutter-palette='pastel'][data-mantine-color-scheme='light']:not([data-shutter-contrast='high'])
+  .mantine-Paper-root:is(.hero-band, .stat-tile) {
+  background-color: var(--mantine-color-default-hover);
+}
+/* A tile that is a link or a filter: the whole tile is the control, at least 44 px high; the chosen one is outlined
+   in the text colour, and says so in words. */
+.stat-tile[data-interactive] {
+  display: block;
+  min-height: 2.75rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--motion-fast) var(--motion-ease);
+}
+.stat-tile[data-interactive]:hover {
+  background: var(--mantine-color-body);
+}
+.stat-tile[aria-pressed='true'] {
+  outline: 2px solid var(--mantine-color-text);
+  outline-offset: 1px;
+}
+.stat-figure {
+  font-size: 1.75rem;
+  line-height: 1.1;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.stat-figure[data-size='hero'] {
+  font-size: 2.5rem;
+  line-height: 1.05;
+}
+.hero-statement {
+  font-size: 1.5rem;
+  line-height: 1.25;
+  font-weight: 600;
+}
+@media (max-width: 35.99em) {
+  .hero-statement {
+    font-size: 1.25rem;
+  }
+}
+.overline {
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--shutter-muted);
+}
+
+/* Identity marks: an icon on a round or rounded surface in its hue, or an 8 px dot; always beside words. */
+.identity-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: var(--mark-hue, currentColor);
+  background: var(--mantine-color-default-hover);
+}
+.identity-dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mark-hue, currentColor);
+}
+.identity-dot[data-hollow] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--mantine-color-text);
+}
+/* A board member's card: a 3 px top edge in the member's hue. */
+.member-card {
+  border-top: 3px solid var(--mark-hue, var(--mantine-color-default-border));
+}
+:root[data-shutter-contrast='high'] .member-card {
+  border-top-color: currentColor;
+}
+:root[data-shutter-palette='pastel'][data-mantine-color-scheme='light']:not([data-shutter-contrast='high'])
+  .mantine-Paper-root.member-card {
+  border-top-color: var(--mark-hue);
+}
+
+/* The gate's checks as small squares, and the specialists' agreement as dots: graphics beside their words. */
+.check-strip,
+.agreement-dots {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  align-items: center;
+}
+.check-strip span {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--mantine-color-gray-filled);
+}
+.check-strip span[data-tone='positive'] {
+  background: var(--mantine-color-green-filled);
+}
+.check-strip span[data-tone='blocking'] {
+  background: var(--mantine-color-red-filled);
+}
+.agreement-dots span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--mark-hue, currentColor);
+}
+.agreement-dots span[data-hollow] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--mantine-color-text);
+}
+:root[data-shutter-contrast='high'] :is(.check-strip, .agreement-dots) span {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px currentColor;
+}
+:root[data-shutter-contrast='high'] .check-strip span[data-tone='positive'],
+:root[data-shutter-contrast='high'] .agreement-dots span:not([data-hollow]) {
+  background: currentColor;
+}
+
+/* One bar per actor on one measure and one base: the label left, the value right, a recessive baseline. */
+.comparison-bars {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(80px, 1fr) max-content;
+  gap: 2px var(--mantine-spacing-sm);
+  align-items: center;
+  margin: 0;
+}
+.comparison-track {
+  height: 12px;
+  border-left: 1px solid var(--mantine-color-default-border);
+}
+.comparison-bar {
+  height: 12px;
+  border-radius: 0 4px 4px 0;
+  background: var(--mark-hue, var(--shutter-muted-soft));
+}
+:root[data-shutter-contrast='high'] .comparison-bar {
+  background: currentColor;
+}
+
+/* Disclosures named for what they hold; the content stays in the page, hidden, so text searches still find it. */
+.tech-detail-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 1.75rem;
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-anchor);
+}
+.tech-detail-toggle svg {
+  transition: transform var(--motion-fast) var(--motion-ease);
+}
+.tech-detail-toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+/* A glossary term: a dotted underline in the text colour, reachable by the keyboard. In Technical a product term keeps
+   its definition and loses the underline. */
+.term {
+  text-decoration: underline dotted;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+.term[data-plain] {
+  text-decoration: none;
+}
+/* Its definition: a bubble above the word (below it near the top of the window), placed by hand and kept on screen. */
+.term-bubble {
+  position: fixed;
+  z-index: 300;
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.45;
+  color: var(--mantine-color-text);
+  background: var(--mantine-color-body);
+  border: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  box-shadow: var(--mantine-shadow-md);
+  pointer-events: auto;
+}
+.term-bubble[data-side='top'] {
+  transform: translateY(-100%);
+}
+:root[data-shutter-contrast='high'] .term-bubble {
+  border: 2px solid currentColor;
+  box-shadow: none;
+}
+/* A code, key or reason: mono, wrapping anywhere rather than widening the page. */
+.code-chip {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+/*
+ * The trial's chrome. A 3 px frame around the whole window (above the content, below modals, and taking no layout
+ * width, so a phone never scrolls sideways); the banner in the header with a fine diagonal stripe along its foot,
+ * never behind its text; its one-line form once the welcome has closed; the Trial pill beside the name. In high
+ * contrast the frame is a dashed border in the text colour.
+ */
+:root[data-shutter-env='trial'] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  border: 3px solid var(--shutter-trial-accent);
+  pointer-events: none;
+  z-index: 250;
+  animation: trial-fade var(--motion-base) var(--motion-ease) 1;
+}
+:root[data-shutter-env='trial'][data-shutter-contrast='high'] body::after {
+  border-style: dashed;
+  border-color: var(--mantine-color-text);
+}
+@keyframes trial-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes trial-slide {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.trial-banner {
+  position: relative;
+  min-height: 40px;
+  padding: 4px var(--mantine-spacing-md) 8px;
+  background: var(--shutter-trial-surface);
+  color: var(--shutter-trial-on-surface);
+  animation: trial-slide var(--motion-base) var(--motion-ease) 1;
+}
+.trial-banner::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 4px;
+  background: repeating-linear-gradient(135deg, var(--shutter-trial-accent) 0 2px, transparent 2px 6px);
+}
+.trial-banner[data-compact] {
+  min-height: 32px;
+  padding-block: 2px 6px;
+  transition: min-height var(--motion-base) var(--motion-ease);
+}
+:root[data-shutter-contrast='high'] .trial-banner {
+  border-bottom: 2px dashed var(--mantine-color-text);
+}
+:root[data-shutter-contrast='high'] .trial-banner::after {
+  display: none;
+}
+.trial-pill {
+  --badge-fz: 0.781rem;
+  background: var(--shutter-trial-filled);
+  color: #fff;
+}
+
+/* A tab bar that stays under the header while the page scrolls. */
+.sticky-tabs {
+  position: sticky;
+  top: var(--shutter-header-h);
+  z-index: 3;
+  background: var(--shutter-page);
+}
+
+/*
+ * The compact rows of a list of things on a phone (`stack-cards`): line 1 the id and the outcome badge, line 2 the
+ * plain sentence (`stack-line`), line 3 the meta (`stack-meta`, xs). A cell whose badge names itself hides its visible
+ * column name (`data-label-hidden`); the `data-label` stays for screen readers and tests.
+ */
+@media (max-width: 35.99em) {
+  .stack-cards td.stack-line,
+  .stack-cards td.stack-meta {
+    flex: 1 1 100%;
+  }
+  .stack-cards td.stack-meta {
+    font-size: var(--mantine-font-size-xs);
+    color: var(--mantine-color-dimmed);
+  }
+  .stack-cards td[data-label-hidden]::before {
+    display: none;
+  }
 }
