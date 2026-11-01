@@ -144,7 +144,10 @@ def load_runs(prices):
 
 
 def comparison_rows():
-    """Per scenario, the live board's and rules alone's played outcome from comparison.md's table."""
+    """Per scenario, the live board's and rules alone's played outcome from comparison.md's table. For rules alone also
+    the state the case ended in (the first word after the status: blocked, resolved or escalated) and whether it wrote
+    to the receiving system ("one write" or "N writes"), so a page can tell a resend the gate stopped from one that
+    wrote."""
     rows = {}
     if not os.path.exists(COMPARISON):
         return rows
@@ -168,8 +171,24 @@ def comparison_rows():
                       else "no agents" if cell.startswith("no agents") else "")
             usd = re.search(r"\(([\d.]+) USD\)", cell)
             out[name] = {"status": status, "cost_usd": float(usd.group(1)) if usd else None}
+            if name == "rules":
+                state = re.match(r"(?:\*\*differs\*\*|as expected):\s*(blocked|resolved|escalated)\b", cell)
+                if state:
+                    out[name]["state"] = state.group(1)
+                    out[name]["wrote"] = bool(re.search(r"\b(one|\d+) writes?\b", cell))
         rows[m.group(1)] = out
     return rows
+
+
+def comparison_recorded_on():
+    """The AI Hub build the live board's runs were recorded on, as comparison.md's "Board, live" line names it
+    (`irishealth-community:2026.3.0AI.154.0`); empty when the line names none."""
+    if not os.path.exists(COMPARISON):
+        return ""
+    text = open(COMPARISON, encoding="utf-8").read()
+    line = re.search(r"^- \*\*Board, live\b.*?(?=^- |^\s*$)", text, re.M | re.S)
+    image = re.search(r"\(([a-z][a-z0-9-]*:\d[\w.]*)\)", line.group(0)) if line else None
+    return image.group(1) if image else ""
 
 
 def matches(disposition, expected):
@@ -411,7 +430,8 @@ def build():
                             for k, v in conf.items()}
     return {
         "sources": {"records": rel(RECORDS), "scenarios": rel(SCENARIOS), "catalogue": rel(CATALOGUE),
-                    "prices": rel(PRICES), "prices_as_of": prices_as_of, "comparison": rel(COMPARISON)},
+                    "prices": rel(PRICES), "prices_as_of": prices_as_of, "comparison": rel(COMPARISON),
+                    "recorded_on": comparison_recorded_on()},
         "prices_per_million": {m: dict(zip(("input", "output", "cache_read", "cache_write"), v)) for m, v in prices.items()},
         "passes": out_passes, "without_board": without, "not_used": others, "totals": totals,
     }
