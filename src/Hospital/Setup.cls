@@ -26,6 +26,8 @@ ClassMethod InstallStatus(shutterNs As %String = "SHUTTER") As %Status
         If $NAMESPACE = shutterNs Set sc = $$$ERROR($$$GeneralError, "Hospital.Setup runs in the hospital's namespace, not in Shutter's (" _ shutterNs _ ")") Quit
         Set ^Hospital.Config("shutterNamespace") = shutterNs
         Set ^Hospital.Config("installedAt") = ##class(Shutter.Util.Time).NowUTC()
+        // The live hospital (v1.34): the install is told so (SHUTTER_LIVE=1), and the Live PAS item then runs.
+        Set ^Hospital.Config("live") = ($SYSTEM.Util.GetEnviron("SHUTTER_LIVE") = "1")
         Set sc = ..CreateFolders() Quit:$$$ISERR(sc)
         Set sc = ..CreateCredentials() Quit:$$$ISERR(sc)
         // Shutter.Util.Time reads the zone from the site profile's cache in this namespace; the hospital has no profile
@@ -36,10 +38,22 @@ ClassMethod InstallStatus(shutterNs As %String = "SHUTTER") As %Status
         Do ..RecordInShutter(shutterNs)
         Set sc = ..RefreshShutterSecurity(shutterNs) Quit:$$$ISERR(sc)
         Set sc = ..StartProduction() Quit:$$$ISERR(sc)
+        If $GET(^Hospital.Config("live")) Set sc = ##class(Ens.Director).EnableConfigItem("Live PAS", 1, 1)
     } Catch ex {
         Set sc = ex.AsStatus()
     }
     Quit sc
+}
+
+/// Turns the live hospital on or off without an install (CONTRACTS 4.4, v1.34): the flag the player checks, and the Live
+/// PAS item enabled or disabled in the running production. Returns "ok" or the error text; callable over SQL in the
+/// hospital's namespace (SELECT Hospital.Setup_SetLive(1)). An install sets the flag again from SHUTTER_LIVE.
+ClassMethod SetLive(on As %Boolean = 1) As %String [ SqlProc ]
+{
+    Set on = ''on
+    Set ^Hospital.Config("live") = on
+    Set sc = ##class(Ens.Director).EnableConfigItem("Live PAS", on, 1)
+    Quit $SELECT($$$ISOK(sc): "ok", 1: $SYSTEM.Status.GetErrorText(sc))
 }
 
 /// The inbound, archive and work folders under the manager directory, beside Shutter's own (the same volume).
@@ -188,13 +202,12 @@ ClassMethod StartProduction() As %Status
     Set prod = "Hospital.Production"
     If '##class(%Dictionary.CompiledClass).%ExistsId(prod) Quit $$$ERROR($$$GeneralError, prod _ " is not visible in " _ $NAMESPACE _ ": is the Hospital package mapped from Shutter's namespace?")
     Try {
-        // The class is compiled in Shutter's namespace and mapped here, so this namespace holds no production
-        // definition for it yet: compiling it here runs the projection that registers the definition in this namespace.
-        If '##class(Ens.Config.Production).%ExistsId(prod) {
-            Set sc = $SYSTEM.OBJ.Compile(prod, "ck-d")
-            Quit:$$$ISERR(sc)
-            If '##class(Ens.Config.Production).%ExistsId(prod) Set sc = $$$ERROR($$$GeneralError, prod _ " has no production definition in " _ $NAMESPACE _ " after compiling") Quit
-        }
+        // The class is compiled in Shutter's namespace and mapped here, and this namespace keeps its own copy of the
+        // production definition, written by the class's projection when it is compiled here: so it is compiled here on
+        // every install, and an upgrade's new items (the Live PAS of v1.34) reach the definition before UpdateProduction.
+        Set sc = $SYSTEM.OBJ.Compile(prod, "ck-d")
+        Quit:$$$ISERR(sc)
+        If '##class(Ens.Config.Production).%ExistsId(prod) Set sc = $$$ERROR($$$GeneralError, prod _ " has no production definition in " _ $NAMESPACE _ " after compiling") Quit
         Do ##class(Ens.Director).SetAutoStart(prod)
         If $SYSTEM.Util.GetEnviron("SHUTTER_BUILD") = "1" Quit
         Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)

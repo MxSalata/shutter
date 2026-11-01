@@ -1107,6 +1107,8 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Set r.questions = +questions
     // The HL7 schemas this namespace holds against those the production's services and the recent messages name (v1.32).
     Set r."hl7_schemas" = ##class(Shutter.Util.Schemas).Report()
+    // The live hospital's player, when the watched hospital has one (v1.34).
+    Set r.live = ..LiveStatus()
     Set r.license = ##class(%DynamicObject).%FromJSON(..LicenseInfo())
     Try {
         New $NAMESPACE
@@ -1152,6 +1154,23 @@ ClassMethod Doctor() As %String [ SqlProc ]
         Set r."webapps_checked" = "install record"
     }
     Quit r.%ToJSON()
+}
+
+/// The live hospital's status as its player writes it in the hospital's namespace (CONTRACTS 4.4, v1.34): {enabled,
+/// every_minutes, scenarios, last_played, next, last_ordinary}; {enabled: false} when there is no hospital or no player.
+ClassMethod LiveStatus() As %DynamicObject
+{
+    Set s = {}
+    Do s.%Set("enabled", 0, "boolean")
+    Try {
+        Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
+        Quit:(hospital = "")
+        Set text = $GET(^|hospital|Hospital.Live("status"))
+        If text '= "" Set s = ##class(%DynamicObject).%FromJSON(text)
+        Do s.%Set("enabled", ''$GET(^|hospital|Hospital.Config("live")), "boolean")
+    } Catch ex {
+    }
+    Quit s
 }
 
 /// Import a site's HL7 schema (an .xml export) through IRIS's own importer, for an approver (CONTRACTS 12, v1.32). Returns
