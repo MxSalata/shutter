@@ -77,4 +77,6 @@ javac --release 11 -Xlint:all -Werror -cp "$CP" -d "$DEST/classes" "$HERE"/src/s
 jar cf "$DEST/shutter-pex.jar.part" -C "$DEST/classes" . || skip "jar failed"
 mv "$DEST/shutter-pex.jar.part" "$DEST/shutter-pex.jar"
 echo "$FRAMEWORK" > "$DEST/framework.txt"
+# Readable by all, writable by the owner only, whatever the build's umask (a container's can be 000).
+chmod -R u=rwX,go=rX "$DEST" 2>/dev/null || true
 echo "built $DEST/shutter-pex.jar against $(basename "$FRAMEWORK")"

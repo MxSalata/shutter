@@ -97,14 +97,15 @@ ClassMethod Report(raw As %String, Output error As %String) As %DynamicObject
     Quit report
 }
 
-/// What the Doctor says: {item, available, jar, classpath_jars, probe} (probe: "ok", or the error of a report on a one-line
-/// message, only when the jar is there).
+/// What the Doctor says: {item, available, jar, framework, classpath_jars, probe, parser} (classpath_jars counts what the
+/// item's classpath carries, the framework jar included, as SyncSecondParser reports it; probe: "ok", or the error of a
+/// report on a one-line message, only when the jar is there).
 ClassMethod Status(probe As %Boolean = 1) As %DynamicObject
 {
     Set s = {}
-    Set s.item = ..#ITEM, s.jar = ..Jar()
+    Set s.item = ..#ITEM, s.jar = ..Jar(), s.framework = ..FrameworkJar()
     Do s.%Set("available", ..Available(), "boolean")
-    Set s."classpath_jars" = $LISTLENGTH(..Jars())
+    Set s."classpath_jars" = $SELECT(..Available(): $LENGTH(..Classpath(), "|"), 1: 0)
     If ..Available() && probe {
         Set r = ..Report("MSH|^~\&|PAS|HOSP|SHUTTER|HOSP|20261101000000||ADT^A01^ADT_A01|PROBE|P|2.5.1" _ $CHAR(13) _ "EVN|A01|20261101000000" _ $CHAR(13) _ "PID|1||MRN1^^^HOSP^MR||PROBE^ONE||19800101|F" _ $CHAR(13) _ "PV1|1|I|WARD-A^BAY1^01^HOSP||||||||||||||||ENC-1", .error)
         Set s.probe = $SELECT($ISOBJECT(r) && ##class(Shutter.Util.Json).Bool(r, "parsed"): "ok", $ISOBJECT(r): "the probe message did not parse", 1: error)

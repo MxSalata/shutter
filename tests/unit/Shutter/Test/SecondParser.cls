@@ -31,6 +31,7 @@ Method TestStatusAndReports()
         Quit
     }
     Do $$$AssertEquals(s.probe, "ok", "the gateway answers the probe: " _ s.probe)
+    Do $$$AssertTrue((s.framework '= "") && (s."classpath_jars" = $LENGTH(##class(Shutter.Util.SecondParser).Classpath(), "|")), "the framework jar is named and the count is the classpath's: " _ s.framework _ " " _ s."classpath_jars")
     Do $$$AssertTrue(s.parser [ "HAPI", "and names HAPI: " _ s.parser)
     Set cr = $CHAR(13)
     Set sound = "MSH|^~\&|PAS|HOSP|DOWNSTREAM|HOSP|20261015092000||ADT^A02^ADT_A02|MSG00102|P|2.5.1" _ cr _ "EVN|A02|20261015092000||||20261015092000" _ cr _ "PID|1||MRN1001^^^HOSP^MR~9991001018^^^NHS^NH||SYNTH^ADA||19800101|F" _ cr _ "PV1|1|I|WARD-B^BAY2^04^HOSP|||WARD-A^BAY1^01^HOSP|||||||||||||ENC-1001|||||||||||||||||||||||||20261015090000"
