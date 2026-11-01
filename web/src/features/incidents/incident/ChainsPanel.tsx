@@ -1,6 +1,7 @@
 import { Anchor, Button, Card, Group, Stack, Table, Text, Tooltip } from '@mantine/core';
 import { IconCheck, IconHandStop, IconX } from '@tabler/icons-react';
 import { Link } from 'react-router';
+import { resolveCan } from '@/api/can';
 import type { Chain, ChainItem, IncidentDetail, Me } from '@/api/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
@@ -48,7 +49,7 @@ function ChainCard({
   onDecide: (d: Decision, chain: Chain) => void;
 }) {
   const ownApproval = chain.state === 'awaiting_approval' && chain.policy === 'per_chain';
-  const why = !me?.approver ? 'Deciding needs the approver role: sign in as approver' : '';
+  const why = !resolveCan(me).approve ? 'Deciding needs the approver role: sign in as approver' : '';
   return (
     <Card padding="sm" withBorder component="article" aria-label={`Chain ${chain.seq}, ${chain.encounterId}`}>
       <Stack gap="xs">

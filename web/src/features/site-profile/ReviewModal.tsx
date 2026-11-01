@@ -1,5 +1,6 @@
 import { Accordion, Alert, Button, Checkbox, Group, List, Modal, Stack, Text } from '@mantine/core';
 import { useState } from 'react';
+import { DEMO_READ_ONLY } from '@/api/can';
 import type { SiteProfile, SiteProfileView } from '@/api/types';
 import { JsonBlock } from '@/components/JsonBlock';
 import type { Change } from './profile';
@@ -17,6 +18,7 @@ export function ReviewModal({
   changes,
   body,
   saving,
+  readOnly = false,
   problem,
   onCancel,
   onSave,
@@ -27,6 +29,8 @@ export function ReviewModal({
   changes: Change[];
   body: SiteProfile & { expectedVersion: number };
   saving: boolean;
+  /** The public demo: the changes are shown for reading, and a note stands where Save would be. */
+  readOnly?: boolean;
   problem: SaveProblem;
   onCancel: () => void;
   onSave: () => void;
@@ -42,7 +46,11 @@ export function ReviewModal({
       opened={opened}
       onClose={() => (saving ? undefined : onCancel())}
       title={
-        confirmOnly ? `Confirm the answers as version ${next}` : `Save version ${next} of the site profile`
+        readOnly
+          ? `The changes for version ${next} of the site profile`
+          : confirmOnly
+            ? `Confirm the answers as version ${next}`
+            : `Save version ${next} of the site profile`
       }
       size="lg"
     >
@@ -72,22 +80,24 @@ export function ReviewModal({
             at the first surprise.
           </Alert>
         ) : null}
-        {tier3.length ? (
+        {tier3.length && !readOnly ? (
           <Checkbox
             checked={acknowledged}
             onChange={(e) => setAcknowledged(e.currentTarget.checked)}
             label={`I mean it: some releases at clinical-safety tier 3 (${tier3.map((c) => c.text.replace(/:.*/, '')).join('; ')}) will go with no person's approval`}
           />
         ) : null}
-        <Alert color="blue" variant="light">
-          Shutter decides by the new version from now on, open cases that haven&apos;t reached their approval
-          included. Approvals and incident plans made under version {view.version} are refused at release and
-          come back to a person. Cases and incidents opened from now on use version {next}.
-        </Alert>
+        {readOnly ? null : (
+          <Alert color="blue" variant="light">
+            Shutter decides by the new version from now on, open cases that haven&apos;t reached their
+            approval included. Approvals and incident plans made under version {view.version} are refused at
+            release and come back to a person. Cases and incidents opened from now on use version {next}.
+          </Alert>
+        )}
         <Accordion variant="contained" chevronPosition="left">
           <Accordion.Item value="body">
-            <Accordion.Control aria-label="What is sent">
-              <Text size="xs">What is sent</Text>
+            <Accordion.Control aria-label={readOnly ? 'What would be sent' : 'What is sent'}>
+              <Text size="xs">{readOnly ? 'What would be sent' : 'What is sent'}</Text>
             </Accordion.Control>
             <Accordion.Panel>
               <JsonBlock value={body} label="the profile that is sent" />
@@ -120,16 +130,23 @@ export function ReviewModal({
           </Alert>
         ) : null}
         <Group justify="flex-end" gap="sm">
+          {readOnly ? (
+            <Text size="sm" c="dimmed" data-testid="demo-read-only">
+              {DEMO_READ_ONLY}.
+            </Text>
+          ) : null}
           <Button variant="default" onClick={onCancel} disabled={saving}>
-            Cancel
+            {readOnly ? 'Done' : 'Cancel'}
           </Button>
-          <Button
-            loading={saving}
-            disabled={(tier3.length > 0 && !acknowledged) || problem?.kind === 'stale'}
-            onClick={onSave}
-          >
-            {confirmOnly ? `Confirm as version ${next}` : `Save version ${next}`}
-          </Button>
+          {readOnly ? null : (
+            <Button
+              loading={saving}
+              disabled={(tier3.length > 0 && !acknowledged) || problem?.kind === 'stale'}
+              onClick={onSave}
+            >
+              {confirmOnly ? `Confirm as version ${next}` : `Save version ${next}`}
+            </Button>
+          )}
         </Group>
       </Stack>
     </Modal>

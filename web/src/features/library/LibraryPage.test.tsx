@@ -3,6 +3,7 @@ import { Notifications, notifications } from '@mantine/notifications';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import fixtures from '@/mocks/fixtures.json';
@@ -76,5 +77,29 @@ describe('LibraryPage', () => {
     await userEvent.click(sw);
     await waitFor(() => expect(patches).toHaveLength(2));
     await waitFor(() => expect(coordinator.enabled).toBe(before));
+  });
+
+  it("shows the public demo's role the board for reading, with no switches and a note", async () => {
+    resetMock('demo');
+    renderPage();
+    expect(await screen.findByTestId('demo-read-only')).toHaveTextContent(
+      "The public demo is read-only: a site's approver saves changes here",
+    );
+    expect(screen.getAllByText(coordinator.name).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Yes').length).toBeGreaterThan(0);
+    expect(patches).toEqual([]);
+  });
+
+  it('derives the right to change it from the flags when the server sends no `can`', async () => {
+    resetMock('approver');
+    server.use(
+      http.get('/api/shutter/me', () =>
+        HttpResponse.json({ username: 'approver', operator: true, approver: true }),
+      ),
+    );
+    renderPage();
+    expect(await screen.findByRole('switch', { name: `${coordinator.name} enabled` })).toBeEnabled();
+    expect(screen.queryByTestId('demo-read-only')).not.toBeInTheDocument();
   });
 });

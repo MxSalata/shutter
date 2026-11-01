@@ -116,6 +116,7 @@ export function TryFirst({
   why,
   starting,
   onRun,
+  runnable = true,
 }: {
   /** The scenarios, once read; the section and its heading render before that, as the guide's first target. */
   scenarios: Scenario[] | undefined;
@@ -124,6 +125,8 @@ export function TryFirst({
   why: (s: Scenario, mode: Mode) => string;
   starting: (s: Scenario, mode: Mode) => boolean;
   onRun: (s: Scenario, mode: Mode) => void;
+  /** False where the user may not run scenarios (the public demo): the cards stay, their Run buttons do not. */
+  runnable?: boolean;
 }) {
   const cases = useCases({ limit: 100 }).data?.items ?? [];
   const first = FIRST.map((f) => ({ ...f, s: scenarios?.find((s) => s.id === f.id) })).filter(
@@ -187,20 +190,22 @@ export function TryFirst({
                   </Paper>
                   <div style={{ flex: 1 }} />
                   <Group justify="space-between" gap="xs" wrap="wrap">
-                    <Tooltip label={reason || `Play ${s.id} in ${modeName} mode`} multiline maw={260}>
-                      <span>
-                        <Button
-                          size="xs"
-                          leftSection={<IconPlayerPlay size={14} />}
-                          disabled={!!reason}
-                          loading={starting(s, mode)}
-                          onClick={() => onRun(s, mode)}
-                          aria-label={`Run ${s.id} in ${modeName} mode`}
-                        >
-                          Run {s.id}
-                        </Button>
-                      </span>
-                    </Tooltip>
+                    {runnable ? (
+                      <Tooltip label={reason || `Play ${s.id} in ${modeName} mode`} multiline maw={260}>
+                        <span>
+                          <Button
+                            size="xs"
+                            leftSection={<IconPlayerPlay size={14} />}
+                            disabled={!!reason}
+                            loading={starting(s, mode)}
+                            onClick={() => onRun(s, mode)}
+                            aria-label={`Run ${s.id} in ${modeName} mode`}
+                          >
+                            Run {s.id}
+                          </Button>
+                        </span>
+                      </Tooltip>
+                    ) : null}
                     {latest ? (
                       <Group gap={6} wrap="nowrap">
                         <Anchor

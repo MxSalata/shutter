@@ -26,7 +26,7 @@ function FindingCard({
   f,
   position,
   namespace,
-  approver,
+  canAnnotate,
   recorded,
   onMark,
   onUnmark,
@@ -34,7 +34,8 @@ function FindingCard({
   f: ReviewFinding;
   position: number;
   namespace: string;
-  approver: boolean;
+  /** The signed-in user may annotate (the configure resource): the buttons are not offered otherwise. */
+  canAnnotate: boolean;
   recorded: boolean;
   onMark: (f: ReviewFinding) => void;
   onUnmark: (f: ReviewFinding) => void;
@@ -66,14 +67,14 @@ function FindingCard({
               </Text>
             </Title>
           </Stack>
-          {f.annotationId || approver ? (
+          {f.annotationId || canAnnotate ? (
             <Stack gap={4} align="flex-start">
               {f.annotationId ? (
                 <Text size="xs" c="dimmed">
                   Annotation {f.annotationId}
                 </Text>
               ) : null}
-              {approver ? (
+              {canAnnotate ? (
                 f.annotationId ? (
                   <Button
                     size="compact-xs"
@@ -229,14 +230,15 @@ function FindingCard({
 export function FindingCards({
   findings,
   namespace,
-  approver,
+  canAnnotate,
   recorded = false,
   onMark,
   onUnmark,
 }: {
   findings: ReviewFinding[];
   namespace: string;
-  approver: boolean;
+  /** The signed-in user may annotate (the configure resource): the buttons are not offered otherwise. */
+  canAnnotate: boolean;
   /** The explanations were replayed from a recorded run. */
   recorded?: boolean;
   onMark: (f: ReviewFinding) => void;
@@ -250,7 +252,7 @@ export function FindingCards({
           f={f}
           position={i + 1}
           namespace={namespace}
-          approver={approver}
+          canAnnotate={canAnnotate}
           recorded={recorded}
           onMark={onMark}
           onUnmark={onUnmark}

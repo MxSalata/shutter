@@ -4,6 +4,7 @@ import { IconCheck, IconEye, IconX } from '@tabler/icons-react';
 import { useState } from 'react';
 import { usePreviewBlindResend, useDecideApproval } from '@/api/hooks';
 import { newIdempotencyKey } from '@/api/client';
+import { resolveCan } from '@/api/can';
 import type { ApprovalsView, CaseDetail, Me, PlanView } from '@/api/types';
 import { DEMO } from '@/demo';
 import { Digest } from '@/components/Digest';
@@ -116,7 +117,7 @@ export function ApprovalPanel({
   const plan = view?.plan;
   const awaiting = c.state === 'awaiting_approval';
   const write = plan?.disposition === 'resend';
-  const why = !me.approver
+  const why = !resolveCan(me).approve
     ? 'Deciding needs the approver role: sign in as approver'
     : !awaiting
       ? `The case is ${humanize(c.state).toLowerCase()}, not waiting for approval`

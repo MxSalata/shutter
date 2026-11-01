@@ -28,10 +28,25 @@ export type Mode = 'board' | 'single' | 'rules' | 'policy';
 export type Disposition =
   'resend' | 'reconcile' | 'superseded' | 'more_evidence' | 'escalate' | 'handled_by_hand' | 'abandoned';
 
+/**
+ * What the signed-in user may do (CONTRACTS 5, since v1.34): the resources the user holds, so the app shows only what
+ * the user may use. The public demo's role approves and operates, and neither configures the site nor runs scenarios.
+ */
+export interface Can {
+  operate: boolean;
+  approve: boolean;
+  /** Saving the site profile or the agent library, importing a schema, annotating a production review. */
+  configure: boolean;
+  /** Running and resetting scenarios. */
+  scenarios: boolean;
+}
+
 export interface Me {
   username: string;
   operator: boolean;
   approver: boolean;
+  /** Absent from a server older than v1.34: `resolveCan` (api/can.ts) derives it from `operator` and `approver`. */
+  can?: Partial<Can>;
 }
 
 // ---- scenarios (5.2): the runner's own JSON, so its fields stay as scenarios.json writes them ----
@@ -799,6 +814,39 @@ export interface Settings {
   mock?: boolean;
   mockConfig?: string;
   mockModel?: string;
+  /** The live hospital (a public demo that plays a story on a timer): `{enabled: false}` on any other instance, absent from an older server. */
+  live?: LiveStatus;
+}
+
+/**
+ * `GET /settings` `live` (CONTRACTS 4.4, v1.34), the live hospital's status for the banner: `{enabled: false}` where there
+ * is no hospital or player. Times are ISO 8601 UTC. Everything but `enabled` may be missing, as before the first story.
+ */
+export interface LiveStatus {
+  enabled: boolean;
+  /** Minutes between two stories. */
+  every_minutes?: number;
+  /** The scenarios in the rotation, as one comma-separated list. */
+  scenarios?: string;
+  /** The story played last. */
+  last_played?: LivePlay | null;
+  /** The story due next, and when. */
+  next?: { scenario: string; at: string } | null;
+  /** The last ordinary message: its kind and when ("admission at 2026-11-01T10:04:00Z"). */
+  last_ordinary?: string;
+}
+
+/** One story the live hospital played (`^Hospital.Live("played", n)`). */
+export interface LivePlay {
+  scenario: string;
+  title: string;
+  at: string;
+  n?: number;
+  /** Who it played for: MRN, given name and family name of each synthetic patient. */
+  patients?: string[];
+  messages?: number;
+  /** Set when the story or one of its faults failed. */
+  error?: string;
 }
 
 export interface Costs {

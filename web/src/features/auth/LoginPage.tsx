@@ -81,7 +81,9 @@ export default function LoginPage() {
                     signIn.mutate(DEMO_USER, { onSuccess: () => navigate(from, { replace: true }) })
                   }
                 >
-                  Try the demo (recorded runs)
+                  {DEMO_USER.username === 'demo'
+                    ? 'Try the demo (live hospital, read-only)'
+                    : 'Try the demo (recorded runs)'}
                 </Button>
                 <Divider label="or sign in as a demo user" labelPosition="center" />
               </>

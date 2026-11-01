@@ -65,10 +65,56 @@ interface ReviewFixtures {
 const recordedReviews: ReviewFixtures = (fixtures as unknown as { productionReviews?: ReviewFixtures })
   .productionReviews ?? { targets: [], list: [], reviews: {} };
 
+/**
+ * The mock's users, with `can` as the server answers it (CONTRACTS 5, v1.34): the operator runs scenarios and cannot
+ * configure, the approver can do everything, and `demo` is the public demo's role, which operates and approves but
+ * neither configures the site nor runs scenarios, and sees the live hospital's status in the settings.
+ */
 const USERS: Record<string, Me> = {
-  operator: { username: 'operator', operator: true, approver: false },
-  approver: { username: 'approver', operator: true, approver: true },
+  operator: {
+    username: 'operator',
+    operator: true,
+    approver: false,
+    can: { operate: true, approve: false, configure: false, scenarios: true },
+  },
+  approver: {
+    username: 'approver',
+    operator: true,
+    approver: true,
+    can: { operate: true, approve: true, configure: true, scenarios: true },
+  },
+  demo: {
+    username: 'demo',
+    operator: true,
+    approver: true,
+    can: { operate: true, approve: true, configure: false, scenarios: false },
+  },
 };
+
+/**
+ * What a live hospital reports in GET /settings (CONTRACTS 4.4): the hour's eight stories, one every 7 minutes, the last
+ * one 4 minutes ago and the next in 3.
+ */
+const STORIES = ['S2', 'S8', 'S1', 'S23a', 'S3', 'S24', 'S15', 'S11'];
+function liveStatus() {
+  const title = (id: string) => fixtures.scenarios.find((s) => s.id === id)?.title ?? id;
+  const minutes = (n: number) => new Date(Date.now() + n * 60_000).toISOString().replace(/\.\d+Z$/, 'Z');
+  return {
+    enabled: true,
+    every_minutes: 7,
+    scenarios: STORIES.join(','),
+    last_played: {
+      scenario: STORIES[0],
+      title: title(STORIES[0]),
+      at: minutes(-4),
+      n: 9,
+      patients: ['MRN482913 Amara Okafor'],
+      messages: 3,
+    },
+    next: { scenario: STORIES[1], at: minutes(3) },
+    last_ordinary: `admission at ${minutes(-1)}`,
+  };
+}
 
 let session: Me | null = null;
 let run: ScenarioRun | null = null;
@@ -307,8 +353,24 @@ const cancelPending = (id: string) => {
   for (const x of pending) x.state = 'cancelled';
   return pending.length;
 };
-const guard = (role: 'operator' | 'approver') =>
-  !session ? signedOut() : !session[role] ? error(403, 'forbidden', `Needs the ${role} role`) : null;
+/**
+ * What a route needs, as the server decides it: the operator and approver roles, and the two resources that split the
+ * site's changes (`configure`) and the demo controls (`scenarios`) from them (CONTRACTS 5, v1.34).
+ */
+const guard = (need: 'operator' | 'approver' | 'configure' | 'scenarios') => {
+  if (!session) return signedOut();
+  const may =
+    need === 'configure' || need === 'scenarios'
+      ? session.can?.[need]
+      : session[need as 'operator' | 'approver'];
+  return may
+    ? null
+    : error(
+        403,
+        'forbidden',
+        `Needs the ${need === 'operator' || need === 'approver' ? `${need} role` : `${need} resource`}`,
+      );
+};
 const csrf = (request: Request) =>
   request.headers.get('X-Requested-With') === 'Shutter'
     ? null
@@ -532,7 +594,7 @@ export const handlers = [
     });
   }),
   http.post(`${BASE}/scenarios/:id/run`, async ({ request, params }) => {
-    const denied = csrf(request) ?? guard('operator');
+    const denied = csrf(request) ?? guard('scenarios');
     if (denied) return denied;
     if (run?.state === 'running')
       return error(409, 'wrong_state', `A run of ${run.scenario} is still playing`);
@@ -566,7 +628,7 @@ export const handlers = [
     `${BASE}/scenarios/reset`,
     ({ request }) =>
       csrf(request) ??
-      guard('operator') ??
+      guard('scenarios') ??
       HttpResponse.json({ reset: true, resetAt: new Date().toISOString() }),
   ),
 
@@ -1007,7 +1069,7 @@ export const handlers = [
   }),
   // As the server answers (CONTRACTS 6.4): the whole profile, expectedVersion taken out before the shape check
   http.put(`${BASE}/site-profile`, async ({ request }) => {
-    const denied = csrf(request) ?? guard('approver');
+    const denied = csrf(request) ?? guard('configure');
     if (denied) return denied;
     if (!siteProfile) return error(404, 'not_found', 'No site profile was recorded');
     let body: unknown;
@@ -1048,7 +1110,7 @@ export const handlers = [
   http.get(`${BASE}/library`, () => (session ? HttpResponse.json(fixtures.library) : signedOut())),
   // Which agents sit on the board is an approver's change (CONTRACTS 5, v1.17)
   http.patch(`${BASE}/library/:code`, async ({ request, params }) => {
-    const denied = csrf(request) ?? guard('approver');
+    const denied = csrf(request) ?? guard('configure');
     if (denied) return denied;
     const m = fixtures.library.find((x) => x.code === params.code);
     if (!m) return error(404, 'not_found', 'No such member');
@@ -1058,7 +1120,14 @@ export const handlers = [
   // A recording from before the API mimic was reported has no mock fields: the mimic was off
   http.get(`${BASE}/settings`, () =>
     session
-      ? HttpResponse.json({ mock: false, mockConfig: '', mockModel: '', ...fixtures.settings })
+      ? HttpResponse.json({
+          mock: false,
+          mockConfig: '',
+          mockModel: '',
+          ...fixtures.settings,
+          // The public demo's role is signed in to a live hospital
+          ...(session.username === 'demo' ? { live: liveStatus() } : {}),
+        })
       : signedOut(),
   ),
   http.get(`${BASE}/costs`, () => (session ? HttpResponse.json(costs()) : signedOut())),
@@ -1152,7 +1221,7 @@ export const handlers = [
     );
   }),
   http.post(`${BASE}/production-reviews/:id/annotations`, async ({ request, params }) => {
-    const denied = csrf(request) ?? guard('approver');
+    const denied = csrf(request) ?? guard('configure');
     if (denied) return denied;
     const r = reviewOf(String(params.id));
     if (!r) return error(404, 'not_found', `No review ${String(params.id)}`);
@@ -1172,7 +1241,7 @@ export const handlers = [
     return annotationsRefused();
   }),
   http.delete(`${BASE}/production-reviews/annotations/:annotationId`, ({ request, params }) => {
-    const denied = csrf(request) ?? guard('approver');
+    const denied = csrf(request) ?? guard('configure');
     if (denied) return denied;
     const id = String(params.annotationId);
     if (!allReviews().some((r) => r.findings.some((f) => f.annotationId === id)))

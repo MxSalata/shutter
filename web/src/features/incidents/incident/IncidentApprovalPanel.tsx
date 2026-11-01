@@ -1,5 +1,6 @@
 import { Button, Group, List, Stack, Table, Text, Tooltip } from '@mantine/core';
 import { IconCheck, IconX } from '@tabler/icons-react';
+import { resolveCan } from '@/api/can';
 import type { IncidentDetail, Me } from '@/api/types';
 import { Digest } from '@/components/Digest';
 import { KeyValueList } from '@/components/KeyValueList';
@@ -23,7 +24,7 @@ export function IncidentApprovalPanel({
   const covered = inc.chains.filter((c) => c.decides === 'policy' && c.policy === 'approval');
   const waiting = covered.some((c) => c.state === 'awaiting_approval');
   const decision = inc.approvals.find((a) => a.scope === 'incident');
-  const why = !me.approver
+  const why = !resolveCan(me).approve
     ? 'Deciding needs the approver role: sign in as approver'
     : !inc.planDigest
       ? 'There is no plan to decide on yet'
