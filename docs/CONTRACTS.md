@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.30, 1 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.31, 1 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -778,7 +778,7 @@ separate, later tool.
   `Location` (PV1-3.1), `SourceSystem` (MSH-3), `OperationKey` (Shutter's key when the message maps), and the first
   header's id, source, target and time. Indexed: visit number, patient, operation key, control id, event time,
   message type and source (bitmaps). IRIS removes a row when its message is purged.
-- `Shutter.Index.Indexer` (production item "HL7 Index", a service on the plain `Ens.InboundAdapter`, whose `CallInterval` is 5 s) walks
+- `Shutter.Index.Indexer` (production item "HL7 Index"), a service driven by Shutter's own inbound adapter `Shutter.Index.Adapter` (v1.31: the adapter does the reading, as an adapter should; its `CallInterval` is 5 s, and its settings `Routes`, `BatchSize`, `LagSeconds`, `BackfillHours` and `MaxBatchesPerTask` say what it walks; each task it hands the service the next batches of headers as `Shutter.Index.Batch` objects through `ProcessInput`, and moves the mark once a batch is taken), walks
   `Ens.MessageHeader` by id from a high-water mark (`^Shutter.Index("hwm")`), `BatchSize` headers a pass, only HL7
   bodies on the `Routes` (business service config names; empty means every route), and only headers older than
   `LagSeconds`, because an id is taken before its row is written. The first start begins at the oldest header within
@@ -1249,6 +1249,11 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.31, 1 Nov 2026: the index walk is an inbound adapter of Shutter's own (8.1): `Shutter.Index.Adapter` reads the next batches
+  of HL7 headers after the high-water mark on each task and hands them to `Shutter.Index.Indexer` as `Shutter.Index.Batch`
+  objects, moving the mark once a batch is taken; the walk's settings (`Routes`, `BatchSize`, `LagSeconds`, `BackfillHours`,
+  `MaxBatchesPerTask`) are the adapter's (the production item's `Routes` moves from the host to the adapter); `Rebuild`,
+  `Status` (now naming the adapter) and the index's shape are unchanged.
 - v1.30, 1 Nov 2026: IANA time zones through Embedded Python (6.4, 12): `feed.time_zone` may name any zone the IRIS image's
   database knows, read by `Shutter.Util.Time.PyOffset` (a Python method) beside the native rules for UTC, Europe/London and
   fixed offsets; the validator asks `KnownZone`; the Doctor reports `python_zoneinfo`; `Time_Probe` shows `python_zones` and
