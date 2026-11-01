@@ -30,6 +30,14 @@ services:
       - SHUTTER_AGENT_MODE=${SHUTTER_AGENT_MODE:-}
       # The model for live agents (default claude-opus-5-5).
       - SHUTTER_MODEL=${SHUTTER_MODEL:-}
+      # Applied when Shutter's production starts (Shutter.Setup.ApplyEnvironment), so they need no build argument and a
+      # change takes effect on the next `docker compose up`; empty leaves the instance's setting as it is. See .env.example.
+      - SHUTTER_LIVE=${SHUTTER_LIVE:-}
+      - SHUTTER_DAILY_BUDGET_USD=${SHUTTER_DAILY_BUDGET_USD:-}
+      - SHUTTER_JUDGE_BUDGET_USD=${SHUTTER_JUDGE_BUDGET_USD:-}
+      - SHUTTER_PUBLIC_DEMO_PASSWORD=${SHUTTER_PUBLIC_DEMO_PASSWORD:-}
+      - SHUTTER_TRACE_PASSWORD=${SHUTTER_TRACE_PASSWORD:-}
+      - SHUTTER_JUDGE_PASSWORD=${SHUTTER_JUDGE_PASSWORD:-}
     volumes:
       # The HL7 folders (drop files into in/ to feed Shutter's production by hand, or into hospital/in/ to feed the
       # demo hospital's; the scenarios do it for you) and, under db/, the data databases of both namespaces: cases,

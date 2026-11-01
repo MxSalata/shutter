@@ -54,8 +54,16 @@ ClassMethod SetLive(on As %Boolean = 1) As %String [ SqlProc ]
 {
     Set on = ''on
     Set ^Hospital.Config("live") = on
-    Set sc = ##class(Ens.Director).EnableConfigItem("Live PAS", on, 1)
-    Quit $SELECT($$$ISOK(sc): "ok", 1: $SYSTEM.Status.GetErrorText(sc))
+    // The running production is updated; one that is not running (an install while the image is built, a start still under
+    // way) gets the item's state in its definition, and starts with it.
+    Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)
+    Set running = $$$ISOK(sc) && (state = 1) && (name = "Hospital.Production")
+    // Already as asked: EnableConfigItem would answer "already enabled" as an error.
+    Set enabled = ""
+    &sql(SELECT Enabled INTO :enabled FROM Ens_Config.Item WHERE Production = 'Hospital.Production' AND Name = 'Live PAS')
+    If (SQLCODE = 0) && (''enabled = on) Quit "ok (already " _ $SELECT(on: "on", 1: "off") _ ")"
+    Set sc = ##class(Ens.Director).EnableConfigItem("Live PAS", on, running)
+    Quit $SELECT($$$ISOK(sc): "ok" _ $SELECT(running: "", 1: " (saved in the definition; the production is not running)"), 1: $SYSTEM.Status.GetErrorText(sc))
 }
 
 /// The inbound, archive and work folders under the manager directory, beside Shutter's own (the same volume).
