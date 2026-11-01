@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { skipWelcome } from './guide';
 import { go, signIn } from './helpers';
+import { area } from './areas/case-evidence';
 import recordedAnswers from '../src/mocks/recorded-questions.json' with { type: 'json' };
 
 /**
@@ -28,7 +29,10 @@ async function headerBottom(page: Page) {
 // The guide's welcome would cover the screens these tests are about; guide.spec.ts tests it
 test.beforeEach(({ page }) => skipWelcome(page));
 
-test.describe('Ask about this case, from 1440 px', () => {
+// Each group carries the area's tag, so `--grep @case-evidence` runs these with the area's shared checks
+const tagged = { tag: area.tag };
+
+test.describe('Ask about this case, from 1440 px', tagged, () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
   test('opens beside the case, asks a suggested question, and takes the What-if change to the Site profile as a draft', async ({
@@ -93,7 +97,7 @@ test.describe('Ask about this case, from 1440 px', () => {
   });
 });
 
-test.describe('Ask about this case, below 1440 px', () => {
+test.describe('Ask about this case, below 1440 px', tagged, () => {
   test('opens as a drawer over the case, which keeps its full width', async ({ page }) => {
     await signIn(page);
     await go(page, '/cases/C-000008');
@@ -150,7 +154,7 @@ test.describe('Ask about this case, below 1440 px', () => {
   });
 });
 
-test.describe('the Evidence and Audit trail tabs', () => {
+test.describe('the Evidence and Audit trail tabs', tagged, () => {
   test('say who cited each section, and open what was recorded in Technical', async ({ page }) => {
     await signIn(page, { detail: 'technical' });
     await go(page, '/cases/C-000008?tab=evidence', { detail: 'technical' });
@@ -200,7 +204,7 @@ test.describe('the Evidence and Audit trail tabs', () => {
   });
 });
 
-test.describe('a phone at 390 px', () => {
+test.describe('a phone at 390 px', tagged, () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
   test.beforeEach(({ page }) => signIn(page));
