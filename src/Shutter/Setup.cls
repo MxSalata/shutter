@@ -1029,6 +1029,8 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Set r.mode = $GET(^Shutter.Config("mode"))
     Set r."adt_in" = $GET(^Shutter.Config("adtIn"))
     Do r.%Set("interoperability", ''##class(%EnsembleMgr).IsEnsembleNamespace($NAMESPACE), "boolean")
+    // Whether IANA zones beyond UTC, Europe/London and fixed offsets can be read (Embedded Python's zoneinfo, v1.30).
+    Do r.%Set("python_zoneinfo", ''##class(Shutter.Util.Time).PythonZones(), "boolean")
     // The production Shutter's items live in: its own, or the site's that InstallInto put them in.
     Set prod = ..ProductionName()
     Set r."shutter_production" = prod

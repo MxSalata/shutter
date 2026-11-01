@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.29, 1 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.30, 1 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -588,7 +588,7 @@ reads it through `Shutter.Store.SiteProfile`.
   offset: `UTC`, `Europe/London` or a fixed offset; the built-in default (`SiteProfile.Default()`, in force only while no
   profile row is stored) is `Europe/London`, a stored profile that does not answer keeps `UTC` (the reading before v1.11),
   and the shipped seed profile says `Europe/London` (v1.12), so the fixtures' times read as British Summer Time (09:20 on
-  15 October is 08:20Z). A zone outside these that reaches the reader anyway (the profile's check refuses one, so only a zone
+  15 October is 08:20Z). Since v1.30 the zone may also be any IANA zone name this IRIS knows (`Europe/Paris`, `America/New_York`), read through Embedded Python's `zoneinfo` (`Shutter.Util.Time.PyOffset`, a method in Python; `KnownZone`, `PythonZones`); UTC, Europe/London and fixed offsets keep Shutter's own rules, and on an IRIS without Embedded Python or the IANA database such a zone is refused by the validator and read as UTC with a warning, as before. A zone outside these that reaches the reader anyway (the profile's check refuses one, so only a zone
   set by hand in the namespace's cached `feedZone`, or one passed to the time probe) is read as `UTC` with a warning in the event log, once per job and zone, and the evidence's note says so (v1.16). The questionnaire page asks for `teams` and `mail` (question 9: the mail domains first, since a team mailbox needs
   one; an empty or absent `mail.allowed_domains` allows no address, v1.21), `feed` (10) and `model_content` (11)
   since v1.12, and since v1.14 for `merges` (12), each receiver's `merges` beside its `cancels` (5) and each team's
@@ -1024,7 +1024,7 @@ demo items, switched off on a site install with the others.
   process that runs it (the Dockerfile passes them as build arguments from `.env`; a `zpm load` by hand reads the
   shell's). The task is made once: an existing instance changes it in the Task Manager. The Doctor reports
   `purge_task` and `message_days`.
-- **The start sweep.** `Shutter.Production.OnStart` calls `Shutter.Store.Case.MarkOpenAtStart()`: every case not in a closed state gets one `error`-kind event by `system` (ref `start:<time>`): "The production started at <UTC> while this case was <state>. Work in flight resumes when the production was stopped cleanly; if the case does not move on within N minutes, an approver can abandon it (POST /cases/<id>/abandon, or "Abandon the case" on the case page)". It never closes a case: a clean stop and start keeps queued requests and reloads suspended alarms, so the work resumes and the note is the audit trail of the restart. When the count is above 0 the event log carries an info entry with it. Only `Shutter.Production` runs the sweep: a site's own production filled by `InstallInto` (shape B) gets none, and `POST /cases/{id}/abandon` still works there. The Doctor and `GET /health` (for `Shutter_Operate` callers) carry `working_cases`, the count of cases not in a closed state, and `abandon_after_minutes`, N as read.
+- **The start sweep.** `Shutter.Production.OnStart` calls `Shutter.Store.Case.MarkOpenAtStart()`: every case not in a closed state gets one `error`-kind event by `system` (ref `start:<time>`): "The production started at <UTC> while this case was <state>. Work in flight resumes when the production was stopped cleanly; if the case does not move on within N minutes, an approver can abandon it (POST /cases/<id>/abandon, or "Abandon the case" on the case page)". It never closes a case: a clean stop and start keeps queued requests and reloads suspended alarms, so the work resumes and the note is the audit trail of the restart. When the count is above 0 the event log carries an info entry with it. Only `Shutter.Production` runs the sweep: a site's own production filled by `InstallInto` (shape B) gets none, and `POST /cases/{id}/abandon` still works there. The Doctor and `GET /health` (for `Shutter_Operate` callers) carry `working_cases`, the count of cases not in a closed state, and `abandon_after_minutes`, `python_zoneinfo` (v1.30), N as read.
 - **Escalation retention** (v1.21). The retention task is always made, with `EscalationDays` from
   `SHUTTER_ESCALATION_DAYS` (else the message days, else 90; `0` keeps the texts; the Dockerfile passes it as a build
   argument from `.env`); an existing task keeps its settings and runs the class default, 90, until changed in the Task
@@ -1249,6 +1249,10 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.30, 1 Nov 2026: IANA time zones through Embedded Python (6.4, 12): `feed.time_zone` may name any zone the IRIS image's
+  database knows, read by `Shutter.Util.Time.PyOffset` (a Python method) beside the native rules for UTC, Europe/London and
+  fixed offsets; the validator asks `KnownZone`; the Doctor reports `python_zoneinfo`; `Time_Probe` shows `python_zones` and
+  `zone_offset`. Without Embedded Python or the database the native rules stand alone.
 - v1.29, 1 Nov 2026: the failsafe at the point of the resend (6.5, 5, 9): the evidence's `pending_messages` (`Shutter.Util.ResendGuard`:
   the encounter's messages received after the case's own and not yet delivered to the receiver), the gate's
   `NEWER_MESSAGE_PENDING` (policy version 2026-11-01.1), the case's `waitsOnMessage` released by that message's delivery, and
