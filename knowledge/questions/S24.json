@@ -1,0 +1,30 @@
+{
+  "scenario": "S24",
+  "conversations": [
+    {
+      "id": "c1",
+      "turns": [
+        {
+          "turn": 1,
+          "tier": "explain",
+          "text": "Why wasn't the transfer resent when it was due?"
+        },
+        {
+          "turn": 2,
+          "tier": "explain",
+          "text": "Where is the patient now, and is that right?"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "turns": [
+        {
+          "turn": 1,
+          "tier": "board",
+          "text": "Could a resend here have done harm?"
+        }
+      ]
+    }
+  ]
+}

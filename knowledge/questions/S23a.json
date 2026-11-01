@@ -1,0 +1,30 @@
+{
+  "scenario": "S23a",
+  "conversations": [
+    {
+      "id": "c1",
+      "turns": [
+        {
+          "turn": 1,
+          "tier": "explain",
+          "text": "Why did this case wait?"
+        },
+        {
+          "turn": 2,
+          "tier": "explain",
+          "text": "What would have happened if we had resent at once?"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "turns": [
+        {
+          "turn": 1,
+          "tier": "explain",
+          "text": "Who was in the bed, and where did they go?"
+        }
+      ]
+    }
+  ]
+}

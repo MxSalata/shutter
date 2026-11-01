@@ -1,0 +1,35 @@
+{
+  "scenario": "S20",
+  "conversations": [
+    {
+      "id": "c1",
+      "turns": [
+        {
+          "turn": 1,
+          "tier": "explain",
+          "text": "Why was the approved resend not sent?"
+        },
+        {
+          "turn": 2,
+          "tier": "explain",
+          "text": "What did the nurse's move change?"
+        },
+        {
+          "turn": 3,
+          "tier": "board",
+          "text": "Was the approval wrong at the time it was given?"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "turns": [
+        {
+          "turn": 1,
+          "tier": "explain",
+          "text": "What is an approval bound to?"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "scenario": "S1",
+  "conversations": [
+    {
+      "id": "c1",
+      "turns": [
+        {
+          "turn": 1,
+          "tier": "explain",
+          "text": "Why was nothing sent?"
+        },
+        {
+          "turn": 2,
+          "tier": "explain",
+          "text": "Where is the patient now, and how do we know?"
+        },
+        {
+          "turn": 3,
+          "tier": "board",
+          "text": "What if the bed manager had to keep every movement in its history?"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "turns": [
+        {
+          "turn": 1,
+          "tier": "explain",
+          "text": "What does superseded mean here?"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "turns": [
+        {
+          "turn": 1,
+          "tier": "board",
+          "text": "Did any specialist want to resend?"
+        }
+      ]
+    }
+  ]
+}
