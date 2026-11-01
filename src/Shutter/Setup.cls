@@ -191,9 +191,9 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     Set hospital = $GET(^|ns|Shutter.Config("hospitalNamespace"))
     New $NAMESPACE
     Set $NAMESPACE = "%SYS"
-    For res = "Shutter_Operate", "Shutter_Approve", "Shutter_Intake" {
+    For res = "Shutter_Operate", "Shutter_Approve", "Shutter_Intake", "Shutter_Configure", "Shutter_Scenarios" {
         If '##class(Security.Resources).Exists(res) {
-            Set sc = ##class(Security.Resources).Create(res, "Shutter: " _ $CASE(res, "Shutter_Approve": "approve or reject recovery plans", "Shutter_Intake": "open a case from another production", : "view cases, run scenarios, start investigations"), "")
+            Set sc = ##class(Security.Resources).Create(res, "Shutter: " _ $CASE(res, "Shutter_Approve": "approve or reject recovery plans", "Shutter_Intake": "open a case from another production", "Shutter_Configure": "change the site: the site profile, the agent library, the schemas, the review annotations", "Shutter_Scenarios": "run and reset the demo's scenarios and purge the store", : "view cases, run scenarios, start investigations"), "")
             Quit:$$$ISERR(sc)
         }
     }
@@ -219,9 +219,18 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     // Each role is created, or brought to this definition when it exists, so an upgraded instance is tightened too.
     // The approver monitors (traces, messages, the Workflow inbox) and approves; it never starts, stops or purges:
     // %EnsRole_Monitor with the message trace, header and content viewing resources, not %EnsRole_Operator (E2).
-    Set sc = ..EnsureRole("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U," _ db _ ":RW" _ codeRead _ watchRead _ ",%Ens_Portal:U", "")
+    Set sc = ..EnsureRole("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U,Shutter_Scenarios:U," _ db _ ":RW" _ codeRead _ watchRead _ ",%Ens_Portal:U", "")
     Quit:$$$ISERR(sc) sc
-    Set sc = ..EnsureRole("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals and the Workflow inbox", "Shutter_Operate:U,Shutter_Approve:U," _ db _ ":RW" _ codeRead _ watchRead _ ",%Ens_MessageTrace:U,%Ens_MessageHeader:U,%Ens_MessageContent:U", "Shutter_Operator,%EnsRole_Monitor")
+    // What an approver and the public demo's role share (v1.34): reading, approving, the traces; the approver adds the site's
+    // writes (Shutter_Configure) and the demo controls (Shutter_Scenarios), which the demo role never holds.
+    Set approverRes = "Shutter_Operate:U,Shutter_Approve:U," _ db _ ":RW" _ codeRead _ watchRead _ ",%Ens_MessageTrace:U,%Ens_MessageHeader:U,%Ens_MessageContent:U"
+    Set sc = ..EnsureRole("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals, the site's settings and the Workflow inbox", approverRes _ ",Shutter_Configure:U,Shutter_Scenarios:U", "Shutter_Operator,%EnsRole_Monitor")
+    Quit:$$$ISERR(sc) sc
+    Set sc = ..EnsureRole("Shutter_Demo", "Shutter public demo: reads everything, reinvestigates, approves and asks; cannot run or reset scenarios, save the site profile or the library, or import a schema", approverRes _ ",%Ens_Portal:U", "%EnsRole_Monitor")
+    Quit:$$$ISERR(sc) sc
+    // The Management Portal user of the public demo sees the Visual Trace and the messages, nothing of Shutter's and nothing it
+    // could change.
+    Set sc = ..EnsureRole("Shutter_Trace", "Shutter public demo: the Visual Trace and the messages in the Management Portal, read only", "%Ens_MessageTrace:U,%Ens_MessageHeader:U,%Ens_MessageContent:U,%Ens_Portal:U,%Ens_Dashboard:U,%Ens_ProductionConfig:R,%Service_WebGateway:U," _ db _ ":R" _ codeRead, "")
     Quit:$$$ISERR(sc) sc
     // The production's client of the downstream API needs the database as well as the downstream system's own
     // resource (the Downstream_API role carries only that), or the web application answers 403.
@@ -251,7 +260,25 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
             Quit:$$$ISERR(sc)
         }
     }
+    Quit:$$$ISERR(sc) sc
+    // The public demo's logins (the live hospital, v1.34): made, or brought back to their definition, only when the install is
+    // told their passwords; never a documented one.
+    Set publicPw = $SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD")
+    If publicPw '= "" Set sc = ..EnsureUser("demo", "Shutter_Demo", publicPw, "Shutter public demo", ns)
+    Quit:$$$ISERR(sc) sc
+    Set tracePw = $SYSTEM.Util.GetEnviron("SHUTTER_TRACE_PASSWORD")
+    If tracePw '= "" Set sc = ..EnsureUser("demo-trace", "Shutter_Trace", tracePw, "Shutter public demo: the Visual Trace", ns)
     Quit sc
+}
+
+/// A user with one role and a password, made or brought back to that definition (enabled, the role, the password).
+ClassMethod EnsureUser(user As %String, role As %String, password As %String, fullName As %String, ns As %String) As %Status [ Private ]
+{
+    If ##class(Security.Users).Exists(user) {
+        Do ##class(Security.Users).AddRoles(user, role)
+        Quit ..ResetDemoUser(user, password)
+    }
+    Quit ##class(Security.Users).Create(user, role, password, fullName, ns, "", "", 0, 1, "Shutter public demo user")
 }
 
 /// SQL SELECT on Shutter's schemas for the roles that call the API. The API reads with %ExecDirectNoPriv, which skips the
@@ -471,6 +498,11 @@ ClassMethod CreateWorkflowRole(demo As %Boolean) As %Status
             If '##class(EnsLib.Workflow.RoleMembership).%ExistsId(role _ "||approver") {
                 Set sc = ##class(EnsLib.Workflow.RoleDefinition).AddUserToRole(role, "approver", 1, "Approver")
             }
+        }
+        // The public demo's user approves through the same Workflow role (v1.34), when the install made it.
+        If $$$ISOK(sc) && ($SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD") '= "") {
+            If '##class(EnsLib.Workflow.UserDefinition).%ExistsId("demo") Set sc = ##class(EnsLib.Workflow.UserDefinition).CreateUser("demo", "Shutter public demo")
+            If $$$ISOK(sc) && '##class(EnsLib.Workflow.RoleMembership).%ExistsId(role _ "||demo") Set sc = ##class(EnsLib.Workflow.RoleDefinition).AddUserToRole(role, "demo", 1, "Demo")
         }
     } Catch ex {
         Set sc = ex.AsStatus()
@@ -919,7 +951,7 @@ ClassMethod EnsureTask(name As %String, ns As %String, class As %String, descrip
 /// emptied or the error.
 ClassMethod PurgeStore() As %String [ SqlProc ]
 {
-    If '$SYSTEM.Security.Check("Shutter_Operate", "USE") Quit "Shutter_Operate is required"
+    If '$SYSTEM.Security.Check("Shutter_Scenarios", "USE") Quit "Shutter_Scenarios is required"
     If '$GET(^Shutter.Config("demo")) Quit "ERROR: not a demo instance"
     Set n = 0
     // The .eml files of the escalations about to go, by the paths their rows hold: never the folder, which may hold
@@ -1075,6 +1107,8 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Set r.questions = +questions
     // The HL7 schemas this namespace holds against those the production's services and the recent messages name (v1.32).
     Set r."hl7_schemas" = ##class(Shutter.Util.Schemas).Report()
+    // The live hospital's player, when the watched hospital has one (v1.34).
+    Set r.live = ..LiveStatus()
     Set r.license = ##class(%DynamicObject).%FromJSON(..LicenseInfo())
     Try {
         New $NAMESPACE
@@ -1120,6 +1154,23 @@ ClassMethod Doctor() As %String [ SqlProc ]
         Set r."webapps_checked" = "install record"
     }
     Quit r.%ToJSON()
+}
+
+/// The live hospital's status as its player writes it in the hospital's namespace (CONTRACTS 4.4, v1.34): {enabled,
+/// every_minutes, scenarios, last_played, next, last_ordinary}; {enabled: false} when there is no hospital or no player.
+ClassMethod LiveStatus() As %DynamicObject
+{
+    Set s = {}
+    Do s.%Set("enabled", 0, "boolean")
+    Try {
+        Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
+        Quit:(hospital = "")
+        Set text = $GET(^|hospital|Hospital.Live("status"))
+        If text '= "" Set s = ##class(%DynamicObject).%FromJSON(text)
+        Do s.%Set("enabled", ''$GET(^|hospital|Hospital.Config("live")), "boolean")
+    } Catch ex {
+    }
+    Quit s
 }
 
 /// Import a site's HL7 schema (an .xml export) through IRIS's own importer, for an approver (CONTRACTS 12, v1.32). Returns

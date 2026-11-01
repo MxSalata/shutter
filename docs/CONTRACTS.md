@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.33, 1 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.34, 1 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -299,6 +299,47 @@ When the feed fails, clinicians enter what happened in the downstream system dir
 
 Scenario S20 is written with it: S2's start, a `wait_for_state` for `awaiting_approval`, then the nurse's transfer to Ward C at 09:40, while the PAS's 09:20 transfer to Ward B waits for its resend to be approved. Shutter's write is conditional on the receiver's version and its approval is bound to that version, so it can never write over the nurse's entry: at dispatch the fresh read finds version 2 where the approval bound version 1, the gate blocks the dispatch (`APPROVAL_RECEIVER_CHANGED`, `RECEIVER_CHANGED`), the approval is void and the case is planned once more on fresh evidence, whose receiver history shows the later transfer. The re-plan after a receiver change happens once per investigation (v1.21): a second change before the write, found at the dispatch gate or as a version conflict at the write, blocks the case for a person, so a receiver that keeps changing costs at most one more board run; a reinvestigate starts the count again. Rules alone propose the resend again at version 2, and the gate's ordering check blocks it (`SUPERSEDED_BY_LATER_EVENT`, a later event "(receiver history)"): nothing is written and Ward C stands. Two `expected` fields say so: `final_reason`, the code the closed case names (`GET /cases/{id}/blocked-reason`), and `last_operation_key`, the key the encounter's history ends with, here the nurse's own. The expected disposition is `superseded`, as S7's is, with `resend` in `expected.acceptable`: the resend rules alone propose is stopped before it reaches the receiver. S20 is defined for `rules` until the board's runs for it are recorded.
 
+## 4.4 The live hospital (v1.34)
+
+The public demo runs a hospital that never stops. The HOSPITAL production's item **Live PAS** (`Hospital.LivePlayer`, a
+business service on `Ens.InboundAdapter` with `CallInterval` 60, disabled in `Hospital.Production`) plays one of Shutter's
+scenarios every `EveryMinutes` with fresh synthetic patients at present times and the scenario's faults applied to the
+receivers, so the errors are real, and between stories writes one ordinary message a minute (an admission to a free bed, a
+transfer, a demographic update or a discharge that frees the bed), so the feed looks like a working hospital. It writes HL7
+files into the hospital's own inbound folder (`^Hospital.Config("dir","in")`), where PAS In reads them: the path a real
+hospital has. It never resets anything, and the scenario runner's Run and Reset are not involved.
+
+- **On and off.** The hospital install sets `^Hospital.Config("live")` from `SHUTTER_LIVE=1` and enables the item;
+  `SELECT Hospital.Setup_SetLive(1)` (or `0`) in the hospital's namespace switches it without an install. Off, the item is
+  disabled and a task that still runs does nothing. The install compiles `Hospital.Production` in the hospital's namespace
+  on every run, so an upgrade's new items reach that namespace's production definition before `UpdateProduction`.
+- **Settings** of `Hospital.LivePlayer`: `EveryMinutes` 7; `Scenarios` `S2,S8,S1,S23a,S3,S24,S15,S11`, played round robin
+  (empty means every scenario of `fixtures/scenarios.json` but S13, S20 and S21, which need an operator or the records);
+  `Faults` 1; `OrdinaryFeed` 1; `MaxWait` 30, the longest a `wait` step is given; `ShutterNamespace` `SHUTTER`.
+- **A story** (`Shutter.Util.LiveFeed`: pure functions over the HL7 text, covered by `Shutter.Test.LiveFeed`). The scenario's
+  steps come from `fixtures/scenarios.json` and its files from `fixtures/<S>/` under Shutter's root. Every patient of the
+  scenario (PID-3's MR repetition, MRG-1) and every encounter (PV1-19, MRG-5) is mapped once to a fresh one: hospital numbers
+  `MRN500001` upwards from a counter in the hospital's namespace, encounters `ENC-<the same number>`, NHS numbers in the 999
+  test range with a valid modulus 11 check digit (as `fixtures/generate.py` makes them), a name from two word lists, a date
+  of birth and a sex. The times (MSH-7, EVN-2, EVN-6, PV1-44, PV1-45) are shifted by one delta so that the scenario's last
+  event is at now in the feed's zone and its intervals are kept; the control id is `LIVE<n>-<k>`; the room of every placement
+  (PV1-3.2 and PV1-6.2) is `BAY<100+n>`, a room of the play's own, since the stories' patients are never discharged and a
+  repeated room would find its bed taken. A fault step's `operation_key` is rewritten with the mapped patient and encounter
+  and the time Shutter will read from the shifted message in the live profile's zone (the fixtures' keys were made in
+  Europe/London), so the fault lands on the message meant; `wait` steps are honoured up to `MaxWait`; faults are set through
+  `Shutter.Scenarios.Runner.InReceiver` in Shutter's namespace, and every fault the story set is turned off when it ends,
+  whatever happened. While a story plays, `^Shutter.Config("scenario")` carries its id, so the cases it opens carry the
+  scenario as the runner's do and its suggested conversations apply to them; the ordinary feed clears the stamp.
+- **The ordinary feed** keeps its patients in `^Hospital.Live("adm", mrn)` and their beds in `^Hospital.Live("bed", ward, room,
+  bed)`: rooms `LIVE1` to `LIVE3` of `WARD-A` to `WARD-D`, beds `01` to `08`. An admission while fewer than 4 patients are in
+  (and every third turn while fewer than 24), else by turn a transfer to another ward, an A08 update or a discharge that frees
+  the bed. These messages succeed, so they leave no case; one that does carries no scenario.
+- **The record.** `^Hospital.Live("played", n)` holds `{scenario, title, at, n, patients, messages[, error]}` per story, and
+  `^Hospital.Live("status")` `{enabled, every_minutes, scenarios, last_played, next: {scenario, at}, last_ordinary}`, which
+  Shutter reads across namespaces (`^Shutter.Config("hospitalNamespace")`) as `live` in the Doctor and in `GET /settings`,
+  for the app's banner; `{enabled: false}` when there is no hospital or no player. The item logs one trace line per story
+  ("Live story n: S with k message(s) for p patient(s)") and a warning when a story or a fault fails.
+
 ## 5. The REST API for the app
 
 The API as built is `src/Shutter/API/Dispatch.cls` (its UrlMap lists the routes; sign-in through `POST /session` and the CSP session cookie; every change carries `X-Requested-With: Shutter`, the idempotent ones an `Idempotency-Key`; errors are JSON with `error` and `detail`). The web application's notes on using it are in `web/README.md`. Workflow tasks come back in camelCase with ISO 8601 UTC times (v1.5).
@@ -313,9 +354,11 @@ caller's process passes; the operator and the approver read the watched hospital
 | Resource | Routes |
 | --- | --- |
 | none | `POST` and `DELETE /session`; `GET /health` (its summary; the full report needs `Shutter_Operate`) |
-| signed in | `GET /me`, which answers `{username, operator, approver}` from the two resources |
-| `Shutter_Operate` | every other `GET`; `POST /scenarios/{id}/run` and `/scenarios/reset`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send`; `GET /production-reviews`, `GET /production-reviews/targets` and `GET /production-reviews/{id}`; `POST /production-reviews` (section 13: the review reads only, and a live agent run spends model credit as a scenario run does); `GET /cases/{id}/whatif`, `GET /cases/{id}/questions`, `GET /cases/{id}/questions/suggested`, `GET /cases/{id}/questions/{qid}` and `POST /cases/{id}/questions` (section 14: a question reads only, and a live run spends model credit); `GET /settings/schemas` (section 12) |
-| `Shutter_Approve` | `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `PUT /site-profile`; `PATCH /library/{code}` (since v1.17; it was `Shutter_Operate`); `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13); `POST /settings/schemas` (section 12: a schema import) |
+| signed in | `GET /me`, which answers `{username, operator, approver, can: {operate, approve, configure, scenarios}}` from the resources the user holds (`can` since v1.34: the app shows only what the user may do) |
+| `Shutter_Operate` | every other `GET`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send`; `GET /production-reviews`, `GET /production-reviews/targets` and `GET /production-reviews/{id}`; `POST /production-reviews` (section 13: the review reads only, and a live agent run spends model credit as a scenario run does); `GET /cases/{id}/whatif`, `GET /cases/{id}/questions`, `GET /cases/{id}/questions/suggested`, `GET /cases/{id}/questions/{qid}` and `POST /cases/{id}/questions` (section 14: a question reads only, and a live run spends model credit); `GET /settings/schemas` (section 12) |
+| `Shutter_Approve` | `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's) |
+| `Shutter_Scenarios` | `POST /scenarios/{id}/run` and `/scenarios/reset`, and `Shutter.Setup_PurgeStore` (v1.34: the demo controls; the operator and approver roles hold it, the public demo's role does not) |
+| `Shutter_Configure` | `PUT /site-profile`; `PATCH /library/{code}`; `POST /settings/schemas` (section 12); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13) (v1.34: what changes the site; the approver role holds it, the public demo's role does not) |
 | `Shutter_Intake` | `POST /intake` (section 11) |
 
 So the person on call (an operator) escalates a case and, once the team that corrects the systems has done so, marks
@@ -1268,6 +1311,19 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:
+  run, reset, purge) and `Shutter_Configure` (the site's writes: the profile, the library, a schema import, the review
+  annotations), held by the operator and the approver as before; the role `Shutter_Demo` (reads, reinvestigates, approves and
+  asks, holds neither) and the user `demo` made only when `SHUTTER_PUBLIC_DEMO_PASSWORD` is set, a member of the Workflow role;
+  the role `Shutter_Trace` (the Visual Trace and the messages in the Management Portal, read only, nothing of Shutter's) and
+  the user `demo-trace` made only when `SHUTTER_TRACE_PASSWORD` is set; `GET /me` answers `can: {operate, approve, configure,
+  scenarios}`. The live hospital (4.4): the HOSPITAL production's item Live PAS (`Hospital.LivePlayer`) plays a scenario every
+  7 minutes with fresh patients at present times and real faults, and an ordinary message a minute between stories, through
+  the hospital's own inbound folder; `Shutter.Util.LiveFeed` does the text (`Shutter.Test.LiveFeed`); `SHUTTER_LIVE=1` at
+  the install or `Hospital.Setup_SetLive(1)` turns it on; `^Hospital.Live` records the plays and the status that the Doctor
+  and `GET /settings` carry as `live`; the hospital install compiles the production class in its namespace on every run. The
+  board's coordinator and members have 50000-token budgets, and a suggested question's record key base names the case's
+  receiver (`question:<S>:<encounter>:<event>[:<receiver>]`, 14.2), so S22's two cases record apart.
 - v1.33, 1 Nov 2026: the demo receiver's fault `delay_response` (1.5): a real operation is held for `seconds`, then applied
   and answered as usual, so a newer message can be on its way to the receiver while a case is about to resend (S24); the
   scenario runner's fault step passes `seconds`.
