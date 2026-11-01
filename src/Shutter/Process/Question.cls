@@ -23,7 +23,7 @@ Property CoordinatorPending As %Boolean [ InitialExpression = 0 ];
 /// The context the members received, kept for the coordinator's request (its member_answers are added).
 Property ContextJSON As %String(MAXLEN = "");
 
-/// The key base of this question's recordings ("" for a free question): question:<S>:<encounter>:<event>.
+/// The key base of this question's recordings ("" for a free question): question:<S>:<encounter>:<event>[:<receiver>].
 Property RecordKeyBase As %String(MAXLEN = 200);
 
 /// The agent item the Explain agent's request goes to; a board member's goes to its own ConfigItem.
@@ -40,7 +40,9 @@ Property MemberTokenBudget As %Integer [ InitialExpression = 30000 ];
 
 Property MemberMaxIterations As %Integer [ InitialExpression = 4 ];
 
-Property CoordinatorTokenBudget As %Integer [ InitialExpression = 30000 ];
+/// The coordinator's context carries the case, the facts, every member's answer and the earlier turns, so its budget is
+/// larger than a member's (a 30000 budget was exceeded by a second turn on 1 Nov 2026).
+Property CoordinatorTokenBudget As %Integer [ InitialExpression = 50000 ];
 
 Property CoordinatorMaxIterations As %Integer [ InitialExpression = 3 ];
 
@@ -80,7 +82,7 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
         Quit $$$OK
     }
     Set ..ContextJSON = context.%ToJSON()
-    If (q.Source = "suggested") && (case.Scenario '= "") Set ..RecordKeyBase = "question:" _ case.Scenario _ ":" _ case.EncounterId _ ":" _ case.Event
+    If (q.Source = "suggested") && (case.Scenario '= "") Set ..RecordKeyBase = ..RecordKeyBaseFor(case.Scenario, case.EncounterId, case.Event, case.Receiver)
     If q.Tier = "explain" {
         Set cfg = ..ConfigVersionOf(..#EXPLAINCLASS, ..#EXPLAINCONFIGVERSION)
         Set key = ..RecordKeyFor(..RecordKeyBase, q, "explain", cfg)
@@ -121,7 +123,14 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     Quit ..ArmTimeout()
 }
 
-/// question:<S>:<encounter>:<event>|<tier>|<member>|<conversation>.<turn>|<cfg>, or "" for a free question (live only).
+/// question:<S>:<encounter>:<event>[:<receiver>], the base of a suggested question's record keys. The receiver is named when
+/// the case has one, so two cases of one movement to different receivers (S22) keep recordings of their own.
+ClassMethod RecordKeyBaseFor(scenario As %String, encounter As %String, event As %String, receiver As %String = "") As %String
+{
+    Quit "question:" _ scenario _ ":" _ encounter _ ":" _ event _ $SELECT(receiver '= "": ":" _ receiver, 1: "")
+}
+
+/// question:<S>:<encounter>:<event>[:<receiver>]|<tier>|<member>|<conversation>.<turn>|<cfg>, or "" for a free question (live only).
 ClassMethod RecordKeyFor(base As %String, q As Shutter.Store.CaseQuestion, member As %String, cfg As %String) As %String
 {
     If base = "" Quit ""
