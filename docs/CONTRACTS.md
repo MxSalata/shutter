@@ -1389,9 +1389,11 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   ward operation of the encounter queued or in flight there with no result yet is a pending newer message, so a forwarded
   case blocks with `NEWER_MESSAGE_PENDING` and waits as a case of Shutter's own feed does; before, the failsafe saw only
   Shutter's own queue and resent while the watched production's newer message was in flight. Such a case is released when the
-  watched production has delivered the message: the HL7 Index item's adapter asks `ResendGuard.ReleaseForwardedWaits` every
+  watched production has delivered the message: the HL7 Index item's adapter asks `ResendGuard.ReleaseDeliveredWaits` every
   few seconds, since that production's connector knows nothing of Shutter (the Ward item releases the cases of Shutter's own
-  feed as it delivers). The Second Parser (6.7): a PEX business operation in Java (HAPI) asked when IRIS cannot
+  feed as it delivers). The same check covers every waiting case: one whose plan took time (the board's minute) may begin
+  to wait after the message was delivered, when the gate judged the snapshot's pending messages and the Ward's release found
+  no case waiting yet, and would wait for ever (S24 on the board, 1 Nov 2026); the check releases it within seconds. The Second Parser (6.7): a PEX business operation in Java (HAPI) asked when IRIS cannot
   read a message, its report under `validation.second_parser`, the gate's `SCHEMA_UNKNOWN` and `PARSE_FAILED` words with its
   verdict, the item in `INSTALLITEMS` enabled only where `shutter-pex.jar` is installed (`SyncSecondParser`), the Doctor's
   `second_parser`, `pex/build.sh` in the Dockerfile.
