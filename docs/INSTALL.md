@@ -45,7 +45,14 @@ reads without privilege checks, but a cached query that has to be compiled again
 as the caller. Once the demo hospital is installed, the operator and approver roles also read its databases. With `demo=1` it also creates the demo users, the demo receiver's resource, role, user and
 `/downstream/api`, the `DownstreamAPI` credential and the feed and demo items.
 
-Environment variables read when the installer runs:
+Environment variables read when the installer runs. Six of them, `SHUTTER_LIVE`, `SHUTTER_DAILY_BUDGET_USD`,
+`SHUTTER_JUDGE_BUDGET_USD`, `SHUTTER_PUBLIC_DEMO_PASSWORD`, `SHUTTER_TRACE_PASSWORD` and `SHUTTER_JUDGE_PASSWORD`, are also
+applied every time `Shutter.Production` starts (`Shutter.Setup.ApplyEnvironment`, from the production's `OnStart`), so in the
+image they travel as container environment from `.env` through `docker-compose.yml`, need no build argument (a password in a
+build argument would sit in the image's history), and a change takes effect on the next `docker compose up`; a variable that is
+empty leaves the instance's setting as it is. `SELECT Shutter.Setup_ApplyEnvironment()` applies them by hand, for an instance
+whose production is a site's own (shape B). The other three (`SHUTTER_DEMO_PASSWORD`, the purge and the retention days) are
+build arguments the installer reads once:
 
 | Variable | Meaning |
 | --- | --- |

@@ -25,6 +25,9 @@ RUN PEX_STRICT="${PEX_STRICT}" bash /home/irisowner/dev/pex/build.sh /usr/irissy
 ARG WITH_AIHUB=1
 
 # Read by the installer while the image is built (empty keeps the defaults: the demo password shutter, a purge of 90 days).
+# The rest of .env (the live hospital, the budget, the public demo's logins) is container environment, applied each time the
+# production starts (docker-compose.yml, Shutter.Setup.ApplyEnvironment): never a build argument, which the image's history
+# would keep.
 ARG SHUTTER_DEMO_PASSWORD=
 ARG SHUTTER_MESSAGE_DAYS=
 ARG SHUTTER_MESSAGE_PURGE=

@@ -62,6 +62,12 @@ Method TestWindowAndRule()
     Set share = {"dailyUsd": 5, "spentTodayUsd": 2, "perUserUsd": 1, "spentByMeUsd": 1.1, "shareExhausted": true, "since": "2026-11-01T00:00:00Z", "resetsAt": "2026-11-02T00:00:00Z"}
     Set words = ##class(Shutter.Util.Budget).Refusal(share)
     Do $$$AssertTrue((words [ "Your share") && (words [ "1.00 USD") && (words [ "1.10 USD"), "a spent share is named as the user's: " _ words)
+    // The environment applied at a start (Setup.ApplyRuntime, v1.34): a value sets, an empty one leaves the setting alone.
+    Set applied = ##class(Shutter.Setup).ApplyRuntime("2.5", "0.75", "", "", "", "")
+    Do $$$AssertTrue((+applied.dailyBudgetUsd = 2.5) && (+applied.judgeBudgetUsd = 0.75), "both set from the environment: " _ applied.%ToJSON())
+    Do $$$AssertTrue((+##class(Shutter.Util.Budget).Cap() = 2.5) && (+##class(Shutter.Util.Budget).Share() = 0.75), "and stored")
+    Set applied = ##class(Shutter.Setup).ApplyRuntime("", "", "", "", "", "")
+    Do $$$AssertTrue('applied.%IsDefined("dailyBudgetUsd") && 'applied.%IsDefined("errors") && (##class(Shutter.Util.Budget).Cap() = 2.5), "an empty environment changes nothing: " _ applied.%ToJSON())
     Do ##class(Shutter.Util.Budget).ConfigureShare("0")
     Do ##class(Shutter.Util.Budget).Configure("0.000001")
     Set s = ##class(Shutter.Util.Budget).Status()

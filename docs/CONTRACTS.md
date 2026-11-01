@@ -309,7 +309,9 @@ transfer, a demographic update or a discharge that frees the bed), so the feed l
 files into the hospital's own inbound folder (`^Hospital.Config("dir","in")`), where PAS In reads them: the path a real
 hospital has. It never resets anything, and the scenario runner's Run and Reset are not involved.
 
-- **On and off.** The hospital install sets `^Hospital.Config("live")` from `SHUTTER_LIVE=1` and enables the item; Shutter's
+- **On and off.** The hospital install sets `^Hospital.Config("live")` from `SHUTTER_LIVE=1` and enables the item, and every
+  start of Shutter's production applies the container's `SHUTTER_LIVE` the same way (`Setup.ApplyEnvironment`, 12: through
+  `Hospital.Setup.SetLive` once the hospital's production runs, from a background job while it is still starting); Shutter's
   install, told the same, sets the shipped profile's policy for tier 2, single chains to `approval` (`Setup.LiveProfilePolicy`;
   the owner's choice of 1 Nov 2026), so the live hospital's visitors always have a case to approve; the profile's source then
   reads "(live hospital)" and the seed leaves it alone; a profile a person saved is never touched;
@@ -966,7 +968,8 @@ shows what the model would see of a case.
 
 **The production review's agent** (v1.22; 13.6) is the one other place something leaves for a model, and it does not go through `ModelView.Reduce`: there is nothing to tokenise, by construction. Its context holds the review id, the namespace, the production and its state, the window, the summary, the findings without `evidence.example`, `annotationId`, `rank` and `explanation`, and the case aggregates per item (counts by failure kind, outcome, reason code and state; the newest case ids). The sweep never reads `CaseEvent.Text`, the operation key's patient and encounter pieces, `FailureText` or message content, so none can reach the context; item names, setting values, counts, header ids and case ids are operational identifiers, as the board's evidence carries them, and the error example text stays in the operator's `GET`. Nothing comes back to restore: the agent speaks in finding ids.
 
-**The day's model budget (v1.34).** `SHUTTER_DAILY_BUDGET_USD`, read by the installer into `^Shutter.Config("dailyBudgetUsd")`
+**The day's model budget (v1.34).** `SHUTTER_DAILY_BUDGET_USD`, read by the installer and at every start of the production
+(`Setup.ApplyEnvironment`, 12) into `^Shutter.Config("dailyBudgetUsd")`
 (`Shutter.Util.Budget`; 0, unset or not a number means no cap), caps what the live and record agent runs may spend between one
 00:00 UTC and the next. Before a run that would call a model, the Agent item asks `Budget.Allows()`, which sums the day's
 `AgentRun` rows' `CostUSD` as `GET /costs` does (a replay or a run the API mimic answered spent nothing); once the spend has
@@ -1193,6 +1196,17 @@ on the server and answers `{ok, category, loaded, error}`; `GET /settings/schema
 `POST /settings/schemas` `{path}` imports (200 `{ok, category, loaded, importedBy}`; 400 `bad_request` without a path; 422
 `import_failed` with the importer's words: a file that is not there, not `.xml`, or not a schema). The install guide's
 section 7 says how a site loads its schema and what a case says meanwhile (6.5, `SCHEMA_UNKNOWN`).
+
+**The environment at a start** (v1.34). `Shutter.Production`'s `OnStart` calls `Shutter.Setup.ApplyEnvironment(120)`, which
+reads the container's `SHUTTER_DAILY_BUDGET_USD`, `SHUTTER_JUDGE_BUDGET_USD`, `SHUTTER_PUBLIC_DEMO_PASSWORD`,
+`SHUTTER_TRACE_PASSWORD`, `SHUTTER_JUDGE_PASSWORD` and `SHUTTER_LIVE` and applies each that is not empty: the budget's cap and
+share (9), the three public logins made or brought back to their definition and the demo's and judge's Workflow membership (5),
+the live profile policy (4.4) and the hospital's switch (`Hospital.Setup.SetLive`, at once when its production runs, else from a
+background job that waits up to the seconds given). An empty variable leaves the setting as it is, so an approver's later change
+survives a restart that does not name it. The install reads the same variables (its own semantics: an empty budget means no
+cap), so the image's build arguments stay the three the installer alone reads (INSTALL.md section 3). The call returns JSON
+naming what was applied, with `errors` when a step failed, and the event log carries it; `SELECT Shutter.Setup_ApplyEnvironment()`
+runs it by hand. `ApplyRuntime(...)` is the same on given values, for the tests.
 
 **Prevent failures** (v1.34; the owner, 1 Nov 2026: an interface deployed without its schema would read every field from the
 wrong place, so Shutter "would actually stop an incident waiting to happen until the schema is imported"). With the site
@@ -1473,7 +1487,9 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   `HeldReceiver` and the intake's fifth kind (11), the matcher's `delivery: unreadable` (6.1), the gate's `SCHEMA_UNKNOWN`
   for a watched namespace and `UNMAPPABLE` for an `UNMAPPED^` key, the release by the index's check, the epoch behind the
   known-categories cache, the Doctor's `prevent_failures` and `held_messages`, `GET /settings` `preventFailures` and
-  `heldMessages`, and the demo hospital's `Hospital.Setup.PreventFailures` (12). The install (12): the installer's data database variable is `SHUTTERDATADIR`, since `DATADIR` is a name
+  `heldMessages`, and the demo hospital's `Hospital.Setup.PreventFailures` (12). The container's environment applied at every
+  start of the production (`Setup.ApplyEnvironment`: the budget, the three public logins, the live hospital; 12), so the
+  image's `docker compose up` needs no build argument for them. The install (12): the installer's data database variable is `SHUTTERDATADIR`, since `DATADIR` is a name
   `%Installer` predefines (the install directory) and a Default never replaces an existing variable, so builds before this
   kept SHUTTERDATA at `/usr/irissys/`, inside the image and outside the volume, and lost every case on `docker compose
   down` or a rebuild (found by the upgrade proof of 1 Nov 2026; the hospital's and the records' data databases, under other

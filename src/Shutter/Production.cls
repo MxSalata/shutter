@@ -58,6 +58,18 @@ ClassMethod OnStart(pTimeStarted As %String) As %Status
         $$$LOGWARNING("The model provider setup failed: " _ ex.DisplayString())
     }
     Try {
+        // The container's environment (v1.34): the model budget, the public demo's logins and the live hospital, as .env
+        // says, so `docker compose up` needs no build argument for them; a variable that is empty leaves its setting alone.
+        Set applied = ##class(Shutter.Setup).ApplyEnvironment(120)
+        If applied [ """errors""" {
+            $$$LOGWARNING("The environment was applied in part: " _ applied)
+        } ElseIf applied '= "{}" {
+            $$$LOGINFO("The environment was applied: " _ applied)
+        }
+    } Catch ex {
+        $$$LOGWARNING("Applying the environment failed: " _ ex.DisplayString())
+    }
+    Try {
         Set r = ##class(Shutter.Setup).RefreshKnowledge()
         // A file that failed reads "error: ...", and a search collection that failed to build "unavailable: ..." or
         // "failed: ..." (Shutter.Knowledge.Library's BuildAll).

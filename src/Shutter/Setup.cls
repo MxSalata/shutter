@@ -274,16 +274,143 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     }
     Quit:$$$ISERR(sc) sc
     // The public demo's logins (the live hospital, v1.34): made, or brought back to their definition, only when the install is
-    // told their passwords; never a documented one.
-    Set publicPw = $SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD")
+    // told their passwords; never a documented one. The production's start applies the container's environment the same way
+    // (ApplyEnvironment), so `docker compose up` with the variables in .env makes them without a build argument.
+    Quit ..EnsurePublicUsers(ns, $SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_TRACE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_PASSWORD"))
+}
+
+/// The public demo's three logins, each made (or brought back to its definition) when its password is given, left alone
+/// when it is empty. Runs in %SYS.
+ClassMethod EnsurePublicUsers(ns As %String, publicPw As %String, tracePw As %String, judgePw As %String) As %Status [ Private ]
+{
+    Set sc = $$$OK
+    New $NAMESPACE
+    Set $NAMESPACE = "%SYS"
     If publicPw '= "" Set sc = ..EnsureUser("demo", "Shutter_Demo", publicPw, "Shutter public demo", ns)
     Quit:$$$ISERR(sc) sc
-    Set tracePw = $SYSTEM.Util.GetEnviron("SHUTTER_TRACE_PASSWORD")
     If tracePw '= "" Set sc = ..EnsureUser("demo-trace", "Shutter_Trace", tracePw, "Shutter public demo: the Visual Trace", ns)
     Quit:$$$ISERR(sc) sc
-    Set judgePw = $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_PASSWORD")
     If judgePw '= "" Set sc = ..EnsureUser("judge", "Shutter_Judge", judgePw, "Shutter judge: the live agents", ns)
     Quit sc
+}
+
+/// The container's environment applied to a running instance (v1.34): the model budget (SHUTTER_DAILY_BUDGET_USD,
+/// SHUTTER_JUDGE_BUDGET_USD), the public demo's logins (SHUTTER_PUBLIC_DEMO_PASSWORD, SHUTTER_TRACE_PASSWORD,
+/// SHUTTER_JUDGE_PASSWORD) and the live hospital (SHUTTER_LIVE). Shutter.Production's OnStart calls it, so what .env says
+/// reaches an instance started with `docker compose up` without a build argument (and a changed cap or password takes effect
+/// on the next start); SELECT Shutter.Setup_ApplyEnvironment() applies it by hand. A variable that is empty or unset leaves
+/// its setting as it is (the install's own reading, or what an approver set since). Returns JSON: what was applied, and
+/// an error when one step failed (the others still run).
+ClassMethod ApplyEnvironment(wait As %Integer = 0) As %String [ SqlProc ]
+{
+    Set out = ..ApplyRuntime($SYSTEM.Util.GetEnviron("SHUTTER_DAILY_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_TRACE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_LIVE"), wait)
+    Quit out.%ToJSON()
+}
+
+/// ApplyEnvironment's work on values, so a test can give them: each applied when not empty. live is "1" for on, any other
+/// non-empty value for off; wait is how many seconds the live hospital's item may be left to a background job while the
+/// hospital's production is still starting (the production's own start passes 120; by hand, 0 applies it at once).
+ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %String, tracePw As %String, judgePw As %String, live As %String, wait As %Integer = 0) As %DynamicObject
+{
+    Set out = {}, errors = []
+    Set ns = $NAMESPACE
+    Try {
+        If $ZSTRIP(dailyUsd, "<>W") '= "" Set out.dailyBudgetUsd = ##class(Shutter.Util.Budget).Configure(dailyUsd)
+        If $ZSTRIP(judgeUsd, "<>W") '= "" Set out.judgeBudgetUsd = ##class(Shutter.Util.Budget).ConfigureShare(judgeUsd)
+    } Catch ex {
+        Do errors.%Push("budget: " _ ex.DisplayString())
+    }
+    Try {
+        If (publicPw '= "") || (tracePw '= "") || (judgePw '= "") {
+            Set sc = ..EnsurePublicUsers(ns, publicPw, tracePw, judgePw)
+            If $$$ISERR(sc) Do errors.%Push("users: " _ $SYSTEM.Status.GetErrorText(sc))
+            Set users = []
+            If publicPw '= "" Do users.%Push("demo")
+            If tracePw '= "" Do users.%Push("demo-trace")
+            If judgePw '= "" Do users.%Push("judge")
+            Set out.users = users
+            // The Workflow role takes the demo's and the judge's users once they exist (approvals).
+            If $$$ISOK(sc) Set sc = ..CreateWorkflowRole(''$GET(^Shutter.Config("demo")))
+            If $$$ISERR(sc) Do errors.%Push("workflow role: " _ $SYSTEM.Status.GetErrorText(sc))
+        }
+    } Catch ex {
+        Do errors.%Push("users: " _ ex.DisplayString())
+    }
+    Try {
+        If $ZSTRIP(live, "<>W") '= "" {
+            Set on = ($ZSTRIP(live, "<>W") = "1")
+            Do out.%Set("live", on, "boolean")
+            Set root = $GET(^Shutter.Config("root"))
+            If on && (root '= "") {
+                Set sc = ..LiveProfilePolicy(root _ "knowledge/site/profile.json", 1)
+                If $$$ISERR(sc) Do errors.%Push("live profile: " _ $SYSTEM.Status.GetErrorText(sc))
+            }
+            Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
+            If hospital '= "" Set out.hospital = ..ApplyLive(hospital, on, wait)
+        }
+    } Catch ex {
+        Do errors.%Push("live: " _ ex.DisplayString())
+    }
+    If errors.%Size() > 0 Set out.errors = errors
+    Quit out
+}
+
+/// The live hospital's switch in the hospital's namespace (Hospital.Setup.SetLive): at once when its production is running
+/// or wait is 0; else from a background job that waits up to wait seconds for the production, since Shutter's production
+/// starts beside the hospital's at an instance start and an item cannot be switched in a production that is still starting.
+ClassMethod ApplyLive(hospital As %String, on As %Boolean, wait As %Integer = 0) As %String
+{
+    Set running = 0, problem = ""
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = hospital
+        Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)
+        Set running = $$$ISOK(sc) && (state = 1) && (name = "Hospital.Production")
+    } Catch ex {
+        Set problem = "error: " _ ex.DisplayString()
+    }
+    If problem '= "" Quit problem
+    If running || (wait <= 0) {
+        Set r = ""
+        Try {
+            New $NAMESPACE
+            Set $NAMESPACE = hospital
+            Set r = ##class(Hospital.Setup).SetLive(on)
+        } Catch ex {
+            Set r = "error: " _ ex.DisplayString()
+        }
+        Quit r
+    }
+    Job ..ApplyLiveLater(hospital, on, wait)
+    Quit "queued: the hospital's production is still starting; a background job applies live=" _ on _ " within " _ wait _ " s"
+}
+
+/// The background half of ApplyLive: waits for the hospital's production, then switches the live hospital; logs the result.
+ClassMethod ApplyLiveLater(hospital As %String, on As %Boolean, wait As %Integer)
+{
+    Set deadline = $ZHOROLOG + wait, r = ""
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = hospital
+        For {
+            Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)
+            Quit:($$$ISOK(sc) && (state = 1) && (name = "Hospital.Production"))
+            Quit:($ZHOROLOG > deadline)
+            Hang 2
+        }
+        Set r = ##class(Hospital.Setup).SetLive(on)
+    } Catch ex {
+        Set r = "error: " _ ex.DisplayString()
+    }
+    Try { Do ##class(Ens.Util.Log).LogInfo($CLASSNAME(), "ApplyLiveLater", "SHUTTER_LIVE applied to " _ hospital _ " (live=" _ on _ "): " _ r) } Catch {}
+}
+
+/// Whether a user exists, read in %SYS (Security.Users is not visible from the namespace).
+ClassMethod UserExists(user As %String) As %Boolean [ Private ]
+{
+    New $NAMESPACE
+    Set $NAMESPACE = "%SYS"
+    Quit ''##class(Security.Users).Exists(user)
 }
 
 /// A user with one role and a password, made or brought back to that definition (enabled, the role, the password).
@@ -514,15 +641,16 @@ ClassMethod CreateWorkflowRole(demo As %Boolean) As %Status
                 Set sc = ##class(EnsLib.Workflow.RoleDefinition).AddUserToRole(role, "approver", 1, "Approver")
             }
         }
-        // The public demo's user approves through the same Workflow role (v1.34), when the install made it.
-        If $$$ISOK(sc) && ($SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD") '= "") {
+        // The public demo's user approves through the same Workflow role (v1.34), when the install (or the environment at a
+        // start, ApplyEnvironment) made it.
+        If $$$ISOK(sc) && ..UserExists("demo") {
             If '##class(EnsLib.Workflow.UserDefinition).%ExistsId("demo") Set sc = ##class(EnsLib.Workflow.UserDefinition).CreateUser("demo", "Shutter public demo")
             If $$$ISOK(sc) && '##class(EnsLib.Workflow.RoleMembership).%ExistsId(role _ "||demo") Set sc = ##class(EnsLib.Workflow.RoleDefinition).AddUserToRole(role, "demo", 1, "Demo")
-            // And the judge's (v1.34), who approves as the demo's user does.
-            If $$$ISOK(sc) && ##class(Security.Users).Exists("judge") {
-                If '##class(EnsLib.Workflow.UserDefinition).%ExistsId("judge") Set sc = ##class(EnsLib.Workflow.UserDefinition).CreateUser("judge", "Shutter judge")
-                If $$$ISOK(sc) && '##class(EnsLib.Workflow.RoleMembership).%ExistsId(role _ "||judge") Set sc = ##class(EnsLib.Workflow.RoleDefinition).AddUserToRole(role, "judge", 1, "Judge")
-            }
+        }
+        // And the judge's (v1.34), who approves as the demo's user does.
+        If $$$ISOK(sc) && ..UserExists("judge") {
+            If '##class(EnsLib.Workflow.UserDefinition).%ExistsId("judge") Set sc = ##class(EnsLib.Workflow.UserDefinition).CreateUser("judge", "Shutter judge")
+            If $$$ISOK(sc) && '##class(EnsLib.Workflow.RoleMembership).%ExistsId(role _ "||judge") Set sc = ##class(EnsLib.Workflow.RoleDefinition).AddUserToRole(role, "judge", 1, "Judge")
         }
     } Catch ex {
         Set sc = ex.AsStatus()
