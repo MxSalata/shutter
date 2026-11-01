@@ -718,6 +718,34 @@ def scenarios():
                      "failed_operation_key": b3[2]["operation_key"], "modes": ["policy"]},
     }, [b1, b2, b3]))
 
+    # S23c: as S23a, but the occupant's transfer keeps failing (a fault on that operation alone), so their case cannot
+    # free the bed: the refused transfer's case waits on it, and when it stops, escalates (OCCUPANT_CASE_FAILED) with
+    # nothing written. Once a person recovers the occupant's case, the waiting case is released (core/s23-release).
+    c1 = r(1, "S23c", 21, "A01", "0900", ward="WARD-B", bed="02")
+    c2 = r(2, "S23c", 22, "A01", "0905", ward="WARD-A", bed="03")
+    c3 = r(1, "S23c", 23, "A02", "0920", ward="WARD-C", prior="WARD-B")
+    c4 = r(2, "S23c", 24, "A02", "0930", ward="WARD-B", prior="WARD-A", bed="02")
+    out.append(({
+        "id": "S23c",
+        "title": "The bed's occupant cannot leave",
+        "summary": "As S23a, but the downstream system keeps refusing the first patient's transfer to Ward C, so their "
+                   "case cannot free Ward B bed 02. The second patient's transfer into that bed is refused as occupied; "
+                   "its case waits for the first, and when the first case stops without freeing the bed, it goes to a "
+                   "person with the conflict laid out. Nothing is written, and the second patient stays in Ward A.",
+        "steps": [
+            {"file": c1[0]},
+            {"file": c2[0]},
+            {"fault": "fail_before_accept", "operation_key": c3[2]["operation_key"]},
+            {"file": c3[0], "expect": "delivery_fails"},
+            {"file": c4[0], "expect": "delivery_fails"},
+        ],
+        # The case keeps its plan (resend once the bed is free) and is escalated by the gate: its disposition stays
+        # resend, its state is escalated, and the reason it names is OCCUPANT_CASE_FAILED.
+        "expected": {"disposition": "resend", "write": False, "final_state": "admitted", "final_ward": "WARD-A",
+                     "failed_operation_key": c4[2]["operation_key"], "case_by_key": True,
+                     "final_reason": "OCCUPANT_CASE_FAILED", "modes": ["policy"]},
+    }, [c1, c2, c3, c4]))
+
     return out
 
 

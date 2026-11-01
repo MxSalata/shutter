@@ -1047,5 +1047,42 @@
         "policy"
       ]
     }
+  },
+  {
+    "id": "S23c",
+    "title": "The bed's occupant cannot leave",
+    "summary": "As S23a, but the downstream system keeps refusing the first patient's transfer to Ward C, so their case cannot free Ward B bed 02. The second patient's transfer into that bed is refused as occupied; its case waits for the first, and when the first case stops without freeing the bed, it goes to a person with the conflict laid out. Nothing is written, and the second patient stays in Ward A.",
+    "steps": [
+      {
+        "file": "S23c-21-A01.hl7"
+      },
+      {
+        "file": "S23c-22-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept",
+        "operation_key": "PAS^HOSP^MRN1231^ENC-1231^transfer^2026-10-15T08:20:00Z"
+      },
+      {
+        "file": "S23c-23-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "file": "S23c-24-A02.hl7",
+        "expect": "delivery_fails"
+      }
+    ],
+    "expected": {
+      "disposition": "resend",
+      "write": false,
+      "final_state": "admitted",
+      "final_ward": "WARD-A",
+      "failed_operation_key": "PAS^HOSP^MRN1232^ENC-1232^transfer^2026-10-15T08:30:00Z",
+      "case_by_key": true,
+      "final_reason": "OCCUPANT_CASE_FAILED",
+      "modes": [
+        "policy"
+      ]
+    }
   }
 ]

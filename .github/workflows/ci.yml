@@ -187,7 +187,8 @@ jobs:
   # the downstream system's contract tests in process and over HTTP, and every scenario end to end with its recorded
   # runs: S1 to S10, S13, and the withheld merge and cancel (S15, S16) on the board; the two outage scenarios, S11 and
   # S12, and S2 in HL7 2.4 and 2.3.1 (S17, S18) in site-policy mode; S20, a move entered by hand, in rules-only mode;
-  # S21, a transfer in the hour the clocks go back, in rules-only and site-policy modes; then the operator's and the
+  # S21, a transfer in the hour the clocks go back, in rules-only and site-policy modes; S22 at two receivers and the
+  # occupied bed (S23a to S23c) in site-policy mode; then the operator's and the
   # approver's routes, the attempts to break the approval boundary, and the production review.
   iris:
     name: IRIS ${{ matrix.shard }} (the downstream system's contract, scenarios in replay)
@@ -361,6 +362,11 @@ jobs:
       - name: One overtaken transfer at two receivers (S22) in site-policy mode
         if: matrix.shard == 'policy'
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes policy --approve S22
+      # A transfer into a bed another patient holds: resent once the occupant has left (S23a), escalated when two
+      # patients are allocated to one bed (S23b), and escalated when the occupant's own case cannot free the bed (S23c)
+      - name: The occupied bed (S23a, S23b, S23c) in site-policy mode
+        if: matrix.shard == 'policy'
+        run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes policy --approve S23a S23b S23c
       # The roles over HTTP: the library is the approver's to change, an operator escalates a case and closes it by hand,
       # and under the site profile's two-person rule only an approver closes it. It closes two of the cases the
       # scenarios left escalated or blocked, so it runs after them.
