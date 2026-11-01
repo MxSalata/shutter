@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.28, 26 October 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.29, 1 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -410,6 +410,23 @@ profile edit later does not flip a decided case.
 
 **Times the matcher reads** (v1.21). The plausibility rule compares an event's time with the time the feed sent it (`sent_at`), the receiver applied it (`applied_at`) and the evidence was taken (`observed_at`). A time in the ISO 8601 UTC form with a `Z` (a fraction allowed) or in the message store's ODBC form (`2026-10-15 09:20:00.123`, written in UTC) is read; a time with an offset (`2026-10-15T10:20:00+01:00`) or in any other form is never read as UTC: a `sent_at` or `applied_at` of that shape skips its own check, as an empty one does, so one receiver's odd clock form never makes every later event implausible, while an event time the matcher cannot read is implausible and supersedes nothing (and raises `later_event_future` when believing it would change the reading). `Shutter_Catalogue.Matcher_ForCase(caseId, chainKind)` evaluates the stored snapshot again for checks over SQL; since v1.21 it takes the case's stored chain kind (`Shutter.Store.ChainItem.KindFor`, `single` outside a chain) when the caller gives none, so it agrees with the stored match for a chain item.
 
+**The failsafe at the point of the resend** (v1.29; the owner's requirement of 26 Oct 2026). A resend is already a conditional
+write bound to the version the preflight read, so a PAS message applied at the receiver in between is refused as a version
+conflict, and one that lands after applies in order. What the version cannot see is a newer message of the same encounter
+inside Shutter's own pipeline: received after the case's own and not yet delivered to the receiver, queued for it with no
+answer yet, or indexed and not yet routed. The evidence lists them in `pending_messages` (`Shutter.Util.ResendGuard`:
+`[{event, event_time, operation_key, control_id, ens_header_id, sent_at, receiver, where}]`, oldest first, from the feed's
+deliveries without an answer and the exact index's rows without a delivery, both after the case's own message's arrival), and
+the gate's ordering check blocks a write with `NEWER_MESSAGE_PENDING` while one is pending; the case blocks with
+`waitsOnMessage` naming the first (its MSH-10 control id), and the connector's answer to that message, whatever it is,
+reopens the case on fresh evidence, where the later event now shows as applied, or as its own case, and the gate decides. The
+connector checks again at the moment of a recovery write (`Shutter.Operation.Ward`) and answers `refused` with reason
+`newer_message_pending` without sending when a message became pending after the gate, so the write never goes first. The
+resend itself goes straight to the connector's queue, ahead of feed messages not yet dequeued, so no priority plumbing is
+needed. The residual window is a message received but not yet routed and not yet indexed (the index lags a few seconds);
+the receiver's version protects that case. Gate policy version `2026-11-01.1`, so an approval given under `2026-10-26.2` and
+not yet dispatched is void at dispatch.
+
 **The occupied bed** (v1.28). For a `bed_occupied` refusal (1.1) the evidence reads the occupant's encounter on the case's
 receiver and the feed's deliveries for it (`Shutter.Index.Timeline.Deliveries`) and adds the section `bed_conflict`
 (`Shutter.Util.BedConflict`): `{refused, ward, bed, since, occupant: {encounter_id, version, read_http_status, state?, ward?,
@@ -815,6 +832,8 @@ IRIS (the gate, the matcher, the verifier and the app read it); what a model rec
   free_text_present, instruction_like, note}`, where `note` says the text stays in IRIS (or that a binary or reference
   value is never sent); the text stays in IRIS. `instruction_like` is a word-list flag (ignore, override, you must, resend, approve and the like),
   not a verdict. The site profile's `model_content.free_text: true` sends the text; the default is off.
+- **Pending messages are operational rows** (v1.29). The `pending_messages` section keeps each row's event, time,
+  operation key, control id, header id, arrival, receiver and where it waits; no content of the message.
 - **The bed's occupant is a token** (v1.28). The `bed_conflict` section names the occupant by their encounter id only,
   which the collector learns as one of the case's tokens (`ENC-T2`); the occupant's state read keeps `state`, `ward`, `bed`
   and `version`, and nothing of their patient record is read or kept.
@@ -936,9 +955,10 @@ copy of the message.
   stored copy's header as `SourceHeaderId`, and the receiver and source fields. The case workflow answers as soon as the
   case row is saved (`Reply`), so the route carries the case id within seconds. The HL7 Index's `Routes` names
   `Case Intake` beside `ADT In`, so the stored copies are indexed.
-- The case carries `bed` (PV1-3's room and bed components for an admission or a transfer, else null; v1.28) and `waitsOn` (the case it
-  waits on while the gate holds its write with `WAITING_FOR_OCCUPANT_CASE`, 6.5; null otherwise; cleared by a reopening), on
-  `GET /cases` items and `GET /cases/{id}` alike.
+- The case carries `bed` (PV1-3's room and bed components for an admission or a transfer, else null; v1.28), `waitsOn` (the case it
+  waits on while the gate holds its write with `WAITING_FOR_OCCUPANT_CASE`, 6.5; null otherwise; cleared by a reopening) and
+  `waitsOnMessage` (the control id of the newer message it waits for under `NEWER_MESSAGE_PENDING`, 6.5, v1.29; null otherwise;
+  cleared by a reopening), on `GET /cases` items and `GET /cases/{id}` alike.
 - The case carries `receiver` (the intake's, else the connector item), `sourceNamespace`, `sourceProduction`,
   `sourceRoute` and `originHeaderId`; the evidence snapshot has an item of kind `source` and the summary a `source`
   object `{namespace, production, route, header_id}` (kept for the model view, since it carries no patient data). The
@@ -1225,6 +1245,11 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.29, 1 Nov 2026: the failsafe at the point of the resend (6.5, 5, 9): the evidence's `pending_messages` (`Shutter.Util.ResendGuard`:
+  the encounter's messages received after the case's own and not yet delivered to the receiver), the gate's
+  `NEWER_MESSAGE_PENDING` (policy version 2026-11-01.1), the case's `waitsOnMessage` released by that message's delivery, and
+  the connector's own check at the moment of a recovery write (`refused`, `newer_message_pending`); the resend goes straight
+  to the connector's queue, so no priority plumbing. The scenario S24 is the knowledge side of the same change.
 - v1.28, 26 Oct 2026: the occupied bed, Shutter's side (2, 5, 6.1, 6.3, 6.5, 9): PV1-3's bed component becomes the
   operation's `bed` beside the canonical payload (digests unchanged), carried by the ward message, the case, the evidence, the
   rehearsal and the recovery write, kept by the model view; for a `bed_occupied` refusal the evidence reads the occupant's

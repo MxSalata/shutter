@@ -125,6 +125,15 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
         }
     }
 
+    // 6b. The messages of the encounter pending ahead of a resend (v1.29, the owner's failsafe): received after the case's own
+    // and not yet delivered to the receiver, from the feed's deliveries and the exact index (Shutter.Util.ResendGuard). The
+    // gate blocks a write while one is pending, and the connector checks again at the moment of the write.
+    Set pending = $SELECT(noEncounter: [], 1: ##class(Shutter.Util.ResendGuard).Pending(case))
+    Set pendingItem = {}
+    Set pendingItem.items = pending
+    Do pendingItem.%Set("count", pending.%Size(), "number")
+    Do snap.AddItem("pending_messages", "message_store", now, pendingItem) Set count = count + 1
+
     // 7. The route, with the receiver's own capability profile (its capabilities endpoint): the gate's capability
     // check reads this, never an assumption. A receiver without such an endpoint is described by the site profile's
     // declared features, and the route says so.
@@ -173,6 +182,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     If $ISOBJECT(conflict) Set summary."bed_conflict" = conflict
     Set summary.timeline = timeline
     Set summary."later_events" = laterCount
+    Set summary."pending_messages" = pending
     Set summary.route = route
     If $ISOBJECT(source) Set summary.source = source
     Set summary.epoch = ##class(Shutter.Util.Json).Str(wardState, "epoch", ##class(Shutter.Util.Json).Str(route, "epoch"))

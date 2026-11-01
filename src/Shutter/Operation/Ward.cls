@@ -30,6 +30,19 @@ Method OnWardOperation(request As Shutter.Msg.WardOperation, Output response As 
         $$$TRACE("Rehearsal " _ request.OperationKey _ " refused: the receiver's entry declares no dry run")
         Quit $$$OK
     }
+    // The failsafe at the point of the resend (v1.29): a recovery write goes only when no newer message of the encounter is
+    // pending in Shutter (received after the case's own, not yet delivered here). The gate blocks it earlier on the
+    // evidence; this is the last line, read at the moment of the write.
+    If (request.Purpose = "recovery") && 'request.DryRun && (request.CaseId '= "") {
+        Set guardCase = ##class(Shutter.Store.Case).ByCaseId(request.CaseId)
+        Set pending = $SELECT($ISOBJECT(guardCase): ##class(Shutter.Util.ResendGuard).Pending(guardCase), 1: [])
+        If pending.%Size() > 0 {
+            Set response.Outcome = "refused", response.ReasonCode = "newer_message_pending"
+            Set response.Error = "Not sent: " _ ##class(Shutter.Util.ResendGuard).Describe(pending)
+            $$$TRACE("Resend " _ request.OperationKey _ " refused at the connector: " _ response.Error)
+            Quit $$$OK
+        }
+    }
     Set body = request.ToWardJSON()
     $$$TRACE($SELECT(request.DryRun: "Rehearsal", 1: "Operation") _ " " _ request.OperationKey _ $SELECT(request.ExpectedVersion '= "": ", expected version " _ request.ExpectedVersion, 1: ""))
     Set http = ##class(%Net.HttpRequest).%New()
@@ -52,6 +65,8 @@ Method OnWardOperation(request As Shutter.Msg.WardOperation, Output response As 
     Set parsed = ##class(Shutter.Util.Json).Parse(text, .psc)
     If '$ISOBJECT(parsed) || $$$ISERR(psc) Set parsed = {}
     Do ..Classify(request, response, sc, parsed)
+    // A feed message delivered (answered, whatever the answer) releases the cases that waited for it (v1.29).
+    If (request.Purpose = "normal") && (request.SourceMessageId '= "") Do ##class(Shutter.Store.Case).ReleaseWaitingOnMessage(request.SourceMessageId, response.Outcome)
     $$$TRACE("Outcome " _ response.Outcome _ $SELECT(response.ReasonCode '= "": " (" _ response.ReasonCode _ ")", 1: "") _ ", HTTP " _ response.HttpStatus _ ", " _ response.DurationMs _ " ms")
     Quit $$$OK
 }

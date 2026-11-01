@@ -725,7 +725,7 @@ Method BedWaitOutcome(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
         While ci.%GetNext(, .c) {
             Continue:'$ISOBJECT(c)
             Set rc = ##class(Shutter.Util.Json).Str(c, "reason_code")
-            If (rc = "WAITING_FOR_OCCUPANT_CASE") || (rc = "OCCUPANT_CASE_FAILED") Set code = rc Quit
+            If (rc = "WAITING_FOR_OCCUPANT_CASE") || (rc = "OCCUPANT_CASE_FAILED") || (rc = "NEWER_MESSAGE_PENDING") Set code = rc Quit
         }
     }
     If code = "" Quit $$$OK
@@ -739,6 +739,14 @@ Method BedWaitOutcome(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
             If $ISOBJECT(mv) Set other = ##class(Shutter.Util.Json).Str(mv, "case_id")
             Set where = ##class(Shutter.Util.Json).Str(bc, "ward") _ $SELECT(##class(Shutter.Util.Json).Str(bc, "bed") '= "": " bed " _ ##class(Shutter.Util.Json).Str(bc, "bed"), 1: "")
         }
+    }
+    If code = "NEWER_MESSAGE_PENDING" {
+        // The resend waits for a newer message of the encounter that is pending in Shutter (v1.29); its delivery reopens the case.
+        Set pendingMsgs = $SELECT($ISOBJECT(snap): snap.SummaryObject().%Get("pending_messages"), 1: "")
+        Set control = $SELECT($ISOBJECT(pendingMsgs) && (pendingMsgs.%Size() > 0): ##class(Shutter.Util.Json).Str(pendingMsgs.%Get(0), "control_id"), 1: "")
+        Set case.WaitsOnMessage = control
+        Set case.Headline = "Waiting for a newer message of the encounter to be delivered" _ $SELECT(control '= "": " (" _ control _ ")", 1: "")
+        Quit case.Transition("blocked", "A newer message of this encounter is pending in Shutter" _ $SELECT($ISOBJECT(pendingMsgs) && (pendingMsgs.%Size() > 0): ": " _ ##class(Shutter.Util.ResendGuard).Describe(pendingMsgs), 1: "") _ ". Nothing was dispatched; the case is checked again on fresh evidence once it has been delivered", "gate", "gate:" _ result.DecisionId)
     }
     If code = "WAITING_FOR_OCCUPANT_CASE" {
         Set case.WaitsOnCase = other
@@ -1092,7 +1100,7 @@ Method OnReinvestigate(request As Shutter.Msg.Reinvestigate, Output response As 
     Set ..CaseId = case.CaseId, ..Mode = case.Mode, ..Reopened = 1
     Set case.WorkflowSessionId = ..%SessionId, case.ClosedAt = ""
     // A wait on another case ends with the reopening; the fresh gate sets it again if the bed is still held (v1.28).
-    Set case.WaitsOnCase = ""
+    Set case.WaitsOnCase = "", case.WaitsOnMessage = ""
     If $ISOBJECT(case.CurrentApproval) && 'case.CurrentApproval.Revoked Do case.CurrentApproval.Revoke(request.RequestedBy _ ": the case was reopened")
     Do case.%Save()
     Set who = $SELECT(request.RequestedBy = "": "a person", 1: request.RequestedBy)
@@ -1350,6 +1358,14 @@ Method OnExecute(case As Shutter.Store.Case, result As Shutter.Msg.WardResult) A
         Quit ..StartEvidence(case)
     }
     Set case.Headline = "Dispatch refused: " _ outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "")
+    If result.ReasonCode = "newer_message_pending" {
+        // The connector's last-line check (v1.29): the resend waits for the pending message's delivery.
+        Set pending = ##class(Shutter.Util.ResendGuard).Pending(case)
+        Set control = $SELECT($ISOBJECT(pending) && (pending.%Size() > 0): ##class(Shutter.Util.Json).Str(pending.%Get(0), "control_id"), 1: "")
+        Set case.WaitsOnMessage = control
+        Set case.Headline = "Waiting for a newer message of the encounter to be delivered" _ $SELECT(control '= "": " (" _ control _ ")", 1: "")
+        Quit case.Transition("blocked", "The connector held the resend: " _ $SELECT(result.Error '= "": result.Error, 1: "a newer message of this encounter is pending in Shutter") _ ". Nothing was sent; the case is checked again on fresh evidence once that message has been delivered", "system", "attempt:" _ attempt.%Id())
+    }
     Quit case.Transition("blocked", "The conditional write was refused: " _ outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "") _ ". The plan is void; a person must decide", "system", "attempt:" _ attempt.%Id())
 }
 

@@ -593,6 +593,9 @@ XData Rows [ MimeType = application/json ]
    "plan": {"disposition": "escalate", "action": null},
    "expect": [["intent", "pass", "NO_WRITE"], ["ordering", "pass", "NOT_APPLICABLE"], ["state_transition", "pass", "NOT_APPLICABLE"], ["concurrency", "pass", "NOT_APPLICABLE"], ["capability", "pass", "NOT_APPLICABLE"]], "outcome": "pass"},
 
+  {"group": "ordering", "name": "a resend while a newer message of the encounter is pending in Shutter",
+   "summary": {"pending_messages": [{"event": "transfer", "event_time": "2026-10-19T10:00:00Z", "operation_key": "k-later", "control_id": "MSG-9", "ens_header_id": "77", "sent_at": "2026-10-19 09:01:00.000", "receiver": "Downstream Out", "where": "queued for the receiver, no answer yet"}]},
+   "expect": [["ordering", "block", "NEWER_MESSAGE_PENDING"]], "outcome": "block"},
   {"group": "ordering", "name": "a resend into a bed whose occupant has left",
    "summary": {"catalogue": {"conditions": {"bed_conflict": "occupant_left"}}, "bed_conflict": {"refused": true, "ward": "WARD-B", "bed": "B2", "since": "2026-10-18T08:10:00Z", "status": "occupant_left", "note": "The occupant's encounter is discharged now, so the bed is free of them", "occupant": {"encounter_id": "ENC-OCC"}, "occupant_movement": {"event": "discharge", "delivery": "applied"}}},
    "expect": [["ordering", "pass", "OCCUPANT_MOVED_OUT"], ["ordering", "pass", "NO_LATER_EVENT"]]},
