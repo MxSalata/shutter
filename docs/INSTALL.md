@@ -182,7 +182,12 @@ Shape A:
    nothing until an approver saves the list), the feed's time zone, `merges: forbidden`.
 5. Set the `Escalation Mail` operation's SMTP server.
 6. In each watched production, add `Shutter.Intake.Forwarder` with Shutter's address and credential, and call it from
-   the process that delivers to each receiver on a failed delivery.
+   the process that delivers to each receiver on a failed delivery. With the site profile's "prevent failures" on (section
+   7): where a routing engine routes the feed, set its `Validation` (`dm`) and its `BadMessageHandler` to the forwarder
+   item, and the forwarder's `HeldReceiver` to the receiver it feeds, so a message the engine cannot read against its
+   schema reaches Shutter as a held case instead of sitting in a bad-message queue; where your own process delivers, have
+   it check `Shutter.Util.Schemas.Known` on each message's category and send an unknown one to the forwarder as
+   `Shutter.Intake.Forwarder.ForwardFor` builds it, as the demo hospital's `Hospital.Process.PASToDownstream` does.
 7. Replay a known failure in a test environment: a case opens in SHUTTER, the evidence shows the message and the
    receiver's state, and the escalation draft names the right team.
 8. Switch the investigation mode to `policy` for the easy chains once the catalogue's entries are reviewed; watch the
@@ -215,6 +220,16 @@ category has to be loaded in Shutter's namespace too.
 - **What a case says meanwhile.** A message whose category is not loaded is not called invalid: its evidence says
   `unknown schema` with the category and the fix, and the gate blocks any write with `SCHEMA_UNKNOWN`. Once the schema is
   loaded, reinvestigate the case from its page; the fresh evidence validates the message and the case goes on.
+- **Prevent failures.** An interface deployed without its schema does not fail loudly: IRIS still reads the message by
+  position, so every field can come from the wrong place and the receiver gets a silent stream of wrong data. Answer yes to
+  the site profile's last induction question ("Should Shutter hold the feed when a message arrives whose HL7 schema is not
+  loaded here, until the schema is imported?", `feed.prevent_failures`) and Shutter holds such a message instead: a case of
+  kind `unreadable` opens with the headline "Held: the schema X is not loaded here ...", nothing is delivered, the gate
+  blocks it `SCHEMA_UNKNOWN`, and the Doctor's `held_messages` (and the app's Settings page) list the held categories. Import
+  the schema as above and set the inbound item's category: within seconds the index's check releases the case, the fresh
+  evidence reads the message under its schema, and the resend goes out under your policy and approvals. The setting is off
+  by default and in the shipped profile. In the demo, the hospital's `PAS to Downstream` follows it (it checks each message's category
+  and hands a held one to the forwarder); in your own productions, step 6 of section 5 says what to set up.
 - **Shape B.** When Shutter's items live in your own production, the HL7 service is yours and its category is already
   loaded there; the check still matters for messages forwarded from other namespaces.
 

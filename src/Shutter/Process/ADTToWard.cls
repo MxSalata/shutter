@@ -23,6 +23,21 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
 {
     Set response = ""
     If 'request.%IsA("EnsLib.HL7.Message") Quit $$$ERROR($$$GeneralError, "ADT to Downstream expects an HL7 message, got " _ $CLASSNAME(request))
+    // The hold (v1.34, "prevent failures"; CONTRACTS 12): with the site's setting on, a message whose schema category is not
+    // loaded here is held as a case of kind unreadable and nothing is delivered, since fields read by position from a schema
+    // this namespace lacks could be the wrong fields. The case names the category and the fix, and the index's check
+    // releases it once the schema is imported. The message is handled, not failed, so the feed goes on.
+    If ##class(Shutter.Store.SiteProfile).PreventFailures() {
+        Set category = ##class(Shutter.Util.Schemas).CategoryOf(request, ..%PrimaryRequestHeader.SourceConfigName)
+        If '##class(Shutter.Util.Schemas).Known(category) {
+            Set shown = $SELECT(category = "": "(none)", 1: category)
+            Set op = ##class(Shutter.Util.OperationKey).FromCanonical(request, ..%PrimaryRequestHeader.%Id(), .csc)
+            Set text = "Held: the schema " _ shown _ " is not loaded here; import it and set the inbound item's category, and the case is released"
+            $$$TRACE(text _ $SELECT($$$ISERR(csc): " (the message could not be read as 2.5.1 either: " _ $SYSTEM.Status.GetErrorText(csc) _ ")", 1: ""))
+            Do ..OpenCase(op, "unreadable", text, "", "schema_unknown", category)
+            Quit $$$OK
+        }
+    }
     Set op = ##class(Shutter.Util.OperationKey).FromHL7(request, .sc)
     If $$$ISERR(sc) {
         // A message Shutter cannot map (an unsupported trigger, a missing identifier or time) is a case too: the
@@ -79,13 +94,14 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
 /// Send the intake to the case workflow asynchronously; returns the case id when the workflow
 /// answered within a short wait, else "". reasonCode is the feed's own reason for a case with no connector answer
 /// (merge, cancel_unsupported); the connector's reason code travels in the result.
-Method OpenCase(op As %DynamicObject, kind As %String, text As %String, result As Shutter.Msg.WardResult, reasonCode As %String = "") As %String
+Method OpenCase(op As %DynamicObject, kind As %String, text As %String, result As Shutter.Msg.WardResult, reasonCode As %String = "", heldSchema As %String = "") As %String
 {
     Set intake = ##class(Shutter.Msg.CaseIntake).%New()
     Set intake.OperationJSON = op.%ToJSON()
     Set intake.FailureKind = kind
     Set intake.FailureText = text
     Set intake.FailureReasonCode = reasonCode
+    Set intake.HeldSchema = heldSchema
     Set intake.SourceHeaderId = ..%PrimaryRequestHeader.%Id()
     Set intake.EnsSessionId = ..%SessionId
     Set intake.Mode = $GET(^Shutter.Config("mode"), "board")

@@ -164,6 +164,18 @@ ClassMethod Unmapped(request As EnsLib.HL7.Message, headerId As %String) As %Dyn
     Quit op
 }
 
+/// The operation of a message whose schema category is not loaded here (v1.34, the hold): read as standard 2.5.1 for the
+/// case's identity (Shutter.Util.Schemas.Canonical), else unmapped. sc says whether the canonical reading mapped.
+ClassMethod FromCanonical(request As EnsLib.HL7.Message, headerId As %String, Output sc As %Status) As %DynamicObject
+{
+    Set sc = $$$OK
+    Set copy = ##class(Shutter.Util.Schemas).Canonical(request)
+    If '$ISOBJECT(copy) Set sc = $$$ERROR($$$GeneralError, "The message has no 2.5.1 structure to read it by") Quit ..Unmapped(request, headerId)
+    Set op = ..FromHL7(copy, .sc)
+    If $$$ISERR(sc) || '$ISOBJECT($GET(op)) Quit ..Unmapped(copy, headerId)
+    Quit op
+}
+
 /// The trigger table (CONTRACTS 2): the event word for an ADT trigger, "" for anything else.
 /// A01 admit, A02 transfer, A03 discharge, A04 register, A05 preadmit, A06 and A07 update (a change of patient
 /// class), A08 update, A11 cancel_admit, A12 cancel_transfer, A13 cancel_discharge, A28 person_add, A31

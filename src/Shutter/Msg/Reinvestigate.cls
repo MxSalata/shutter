@@ -25,6 +25,9 @@ Storage Default
 <Value name="3">
 <Value>Reason</Value>
 </Value>
+<Value name="4">
+<Value>ForceBoard</Value>
+</Value>
 </Data>
 <DefaultData>ReinvestigateDefaultData</DefaultData>
 <Type>%Storage.Persistent</Type>

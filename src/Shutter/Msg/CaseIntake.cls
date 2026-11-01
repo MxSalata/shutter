@@ -43,6 +43,9 @@ Property SourceRoute As %String(MAXLEN = 128);
 
 Property OriginHeaderId As %String(MAXLEN = 40);
 
+/// The schema category whose absence held the message (v1.34, kind unreadable), "" otherwise.
+Property HeldSchema As %String(MAXLEN = 128);
+
 Storage Default
 {
 <Data name="CaseIntakeDefaultData">
@@ -85,6 +88,9 @@ Storage Default
 </Value>
 <Value name="13">
 <Value>OriginHeaderId</Value>
+</Value>
+<Value name="14">
+<Value>HeldSchema</Value>
 </Value>
 </Data>
 <DefaultData>CaseIntakeDefaultData</DefaultData>

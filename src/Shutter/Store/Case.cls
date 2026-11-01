@@ -33,7 +33,7 @@ Property Mode As %String(%JSONFIELDNAME = "mode", MAXLEN = 16, VALUELIST = ",boa
 /// delivery_failed, uncertain_outcome and rejected are the connector's answers; unmappable, a message that maps to no
 /// operation; withheld, an operation the feed never sent (a merge the site's policy keeps for the PAS team, a cancel
 /// the receiver cannot reverse), with the reason in FailureReasonCode (merge, cancel_unsupported).
-Property FailureKind As %String(%JSONFIELDNAME = "failureKind", MAXLEN = 32, VALUELIST = ",delivery_failed,uncertain_outcome,rejected,unmappable,withheld");
+Property FailureKind As %String(%JSONFIELDNAME = "failureKind", MAXLEN = 32, VALUELIST = ",delivery_failed,uncertain_outcome,rejected,unmappable,withheld,unreadable");
 
 Property FailureText As %String(%JSONFIELDNAME = "failureText", MAXLEN = 2000);
 
@@ -41,6 +41,10 @@ Property FailureText As %String(%JSONFIELDNAME = "failureText", MAXLEN = 2000);
 Property FailureOutcome As %String(%JSONFIELDNAME = "failureOutcome", MAXLEN = 32);
 
 Property FailureReasonCode As %String(%JSONFIELDNAME = "failureReasonCode", MAXLEN = 100);
+
+/// The schema category whose absence holds the message (v1.34, kind unreadable, "prevent failures"): the index's check
+/// releases the case once it is loaded where the message was read (SourceNamespace, else here). "" for every other case.
+Property HeldSchema As %String(%JSONFIELDNAME = "heldSchema", MAXLEN = 128);
 
 Property FailureHttpStatus As %Integer(%JSONFIELDNAME = "failureHttpStatus");
 
@@ -155,7 +159,7 @@ Property CurrentApproval As Shutter.Store.Approval(%JSONFIELDNAME = "currentAppr
 
 /// Open a case for an operation, or return the open one for the same key. The operation is the
 /// downstream operation as built by Shutter.Util.OperationKey.FromHL7.
-ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %String, ensSessionId As %String, sourceHeaderId As %String, mode As %String, Output case As Shutter.Store.Case, Output opened As %Boolean, receiver As %String = "") As %Status
+ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %String, ensSessionId As %String, sourceHeaderId As %String, mode As %String, Output case As Shutter.Store.Case, Output opened As %Boolean, receiver As %String = "", heldSchema As %String = "") As %Status
 {
     Set sc = $$$OK, opened = 0
     Set key = op."operation_key"
@@ -185,6 +189,7 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
     If receiver '= "" Set case.Receiver = receiver
     Set case.FailureKind = failureKind
     Set case.FailureText = $EXTRACT(failureText, 1, 2000)
+    Set case.HeldSchema = $EXTRACT(heldSchema, 1, 128)
     Set case.EncounterId = op."encounter_id"
     Set case.PatientId = op."patient_id"
     Set case.PatientIdAuthority = op."patient_id_authority"
@@ -205,7 +210,8 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
     Set case.Scenario = $GET(^Shutter.Config("scenario"))
     Set now = ##class(Shutter.Util.Time).NowUTC()
     Set case.OpenedAt = now, case.UpdatedAt = now
-    Set case.Headline = ..DescribeFailure(case)
+    // A held message's headline is the hold itself ("Held: the schema X is not loaded here ..."), as the feed wrote it.
+    Set case.Headline = $SELECT((failureKind = "unreadable") && ($EXTRACT(failureText, 1, 5) = "Held:"): $EXTRACT(failureText, 1, 500), 1: ..DescribeFailure(case))
     TSTART
     Set sc = case.%Save()
     If $$$ISOK(sc) Set sc = ##class(Shutter.Store.CaseEvent).Append(case, "state", "", "detected", "Case opened: " _ case.Headline, "system", "ens:" _ sourceHeaderId)
@@ -371,6 +377,19 @@ ClassMethod ReleaseWaitingOnMessage(controlId As %String, outcome As %String = "
 {
     If controlId = "" Quit 0
     Quit ..Reopen("WaitsOnMessage", controlId, "message " _ controlId _ " of this encounter was delivered" _ $SELECT(outcome '= "": " (" _ outcome _ ")", 1: "") _ "; the resend is checked again")
+}
+
+/// Release a case held for a schema that is loaded now (v1.34): reopened as a case waiting on a message is, with the reason,
+/// and its HeldSchema cleared, so the check releases it once (the gate may block the re-plan for another reason, and the case
+/// is then a blocked case like any other, not a held one).
+ClassMethod ReleaseHeld(caseId As %String, category As %String, where As %String) As %Integer
+{
+    If caseId = "" Quit 0
+    Set n = ..Reopen("CaseId", caseId, "the schema " _ category _ " is loaded in " _ where _ " now, found by the index's check; the message is read again")
+    If n > 0 {
+        &sql(UPDATE Shutter_Store."Case" SET HeldSchema = '' WHERE CaseId = :caseId)
+    }
+    Quit n
 }
 
 /// Reopen every blocked or escalated case whose field names the value, through the API service to the Case Workflow.
@@ -703,7 +722,7 @@ ClassMethod DescribeFailure(case As Shutter.Store.Case) As %String [ Private ]
 {
     Set what = $CASE(case.Event, "admit": "admission", "transfer": "transfer to " _ case.Ward _ $SELECT(case.Bed '= "": " bed " _ case.Bed, 1: ""), "discharge": "discharge", "update": "update", "merge": $SELECT(case.PriorPatientId '= "": "merge of " _ case.PriorPatientId _ " into " _ case.PatientId, 1: "merge into " _ case.PatientId), "cancel_admit": "cancellation of the admission", "cancel_transfer": "cancellation of the transfer" _ $SELECT(case.Ward '= "": " to " _ case.Ward, 1: ""), "cancel_discharge": "cancellation of the discharge", "register": "registration", "preadmit": "pre-admission", "person_add": "person record", "person_update": "person update", "": "message", : case.Event _ " message")
     Set when = $REPLACE($PIECE(case.EventTime, "Z", 1), "T", " ")
-    Set how = $CASE(case.FailureKind, "delivery_failed": "was not delivered", "uncertain_outcome": "has an uncertain outcome", "rejected": "was rejected", "unmappable": "could not be mapped to an operation for the downstream system", "withheld": $SELECT(case.Event = "merge": "was withheld by the site's policy", 1: "was withheld: the receiver cannot reverse it"), : "failed")
+    Set how = $CASE(case.FailureKind, "delivery_failed": "was not delivered", "uncertain_outcome": "has an uncertain outcome", "rejected": "was rejected", "unmappable": "could not be mapped to an operation for the downstream system", "withheld": $SELECT(case.Event = "merge": "was withheld by the site's policy", 1: "was withheld: the receiver cannot reverse it"), "unreadable": "could not be read against an HL7 schema where it arrived", : "failed")
     // A cancel or a merge happens at its time; the movements keep "of".
     Set joiner = $SELECT((case.Event = "merge") || ($EXTRACT(case.Event, 1, 7) = "cancel_"): " at ", 1: " of ")
     Set where = $SELECT(case.EncounterId = "-": "", 1: " for encounter " _ case.EncounterId)
@@ -865,6 +884,9 @@ Storage Default
 </Value>
 <Value name="46">
 <Value>WaitsOnMessage</Value>
+</Value>
+<Value name="47">
+<Value>HeldSchema</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>

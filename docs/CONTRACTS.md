@@ -433,7 +433,7 @@ conditions that matter; an unlisted condition is a wildcard. A listed condition 
 
 | Condition | Values | Computed from |
 | --- | --- | --- |
-| `delivery` | `failed`, `rejected`, `uncertain`, `unmappable`, `withheld` | the case's failure kind (1.1: 503 and connection failures are `failed`; 409 and 422 are `rejected`; 504 is `uncertain`; a message Shutter could not map to an operation is `unmappable`, v1.9); a merge or a cancel the feed withheld under the site profile or the receiver's entry is `withheld` (v1.14, section 2) |
+| `delivery` | `failed`, `rejected`, `uncertain`, `unmappable`, `withheld`, `unreadable` | the case's failure kind (1.1: 503 and connection failures are `failed`; 409 and 422 are `rejected`; 504 is `uncertain`; a message Shutter could not map to an operation is `unmappable`, v1.9); a merge or a cancel the feed withheld under the site profile or the receiver's entry is `withheld` (v1.14, section 2); a message held because its schema category was not loaded where it was read is `unreadable` (never sent, `receiver_answer: none`), before and after the schema is loaded: the catalogue's entry for a held message proposes the resend, which the gate blocks `SCHEMA_UNKNOWN` until the schema is there (v1.34, section 12) |
 | `receiver_answer` | `unavailable`, `timeout`, `duplicate`, `version_conflict`, `refused`, `none` | the error item's reason code, else its HTTP status (504 `timeout`, 409 and 422 `refused`, 503 `unavailable`); an uncertain delivery with no code reads `timeout` |
 | `event` | `admit`, `transfer`, `discharge`, `update`, `merge`, `cancel`, `other` | the case's event word (v1.14): the three cancel words fold to `cancel`; an unmapped trigger is `other` (no case carries `register`: a registration is indexed only, or is an `admit`). A withheld case reads `delivery: withheld` and `receiver_answer: none` (no receiver was asked) |
 | `receipt` | `present`, `absent`, `unreadable`, `none` | the receipt lookup: 200, 404, anything else (1.9); `none` when the receiver has no receipt endpoint (6.4), which is a fact about the receiver, not a failed lookup |
@@ -603,7 +603,7 @@ reads it through `Shutter.Store.SiteProfile`.
                 "close_needs_approver": false},
   "incident": {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60},
   "model_content": {"free_text": false},
-  "feed": {"time_zone": "Europe/London"}
+  "feed": {"time_zone": "Europe/London", "prevent_failures": false}
 }
 ```
 
@@ -643,6 +643,11 @@ reads it through `Shutter.Store.SiteProfile`.
   a dry run to it (v1.21). Declare all four flags: for a receiver with no capabilities endpoint the route takes the
   declared features, and a flag left out reads as false there (the connector alone reads an absent flag as true, so the
   gate is the stricter of the two).
+- `feed.prevent_failures` (v1.34; the owner's "prevent failures" of 1 Nov 2026, section 12): `true` or `false`, `false` when
+  absent and in the shipped profile. On, the feed holds a message whose HL7 schema category is not loaded here as a case of
+  kind `unreadable` instead of delivering what it read by position, and the demo hospital's `PAS In` validates and hands a
+  refused message to the forwarder (`Hospital.Setup.PreventFailures`, called by every store of the profile; a real site sets
+  its services itself, INSTALL.md section 5). The induction question for it is the last of the first setup's.
 - `PUT /site-profile` refuses a profile that has not this shape, naming the field (unknown top-level fields and
   unknown keys under `receivers[].api`, `receivers[].features`, `approvers`, `feed`, `model_content`, `mail`, `teams[]`
   and `incident` are refused too, each named in the 400 `bad_request` detail, v1.21); every stored version is kept with who stored it and from where,
@@ -1050,7 +1055,7 @@ copy of the message.
   rule as for the others). The caller signs in with HTTP Basic authentication and sends `X-Requested-With: Shutter`; an
   `Idempotency-Key` is honoured as on the other POSTs. The body: `{"source": {"namespace", "production", "route",
   "header_id"}, "receiver": "<the item that delivered; the receiver's name in the site profile>", "failure": {"kind":
-  "delivery_failed" | "rejected" | "uncertain_outcome" | "unmappable", "text", "outcome": "unavailable" | "error" |
+  "delivery_failed" | "rejected" | "uncertain_outcome" | "unmappable" | "unreadable", "text", "outcome": "unavailable" | "error" |
   "uncertain" | "rejected" | "", "http_status", "reason_code"}, "message": "<the HL7 text, segments separated by
   carriage returns>", "schema_category": "2.5.1", "mode": "board"}` (the last two optional). Answers 202 `{"caseId",
   "state", "opened"}` (`opened` false when a case for the same operation key is already open, as the feed's own
@@ -1089,6 +1094,26 @@ copy of the message.
   the adapter's server, port, credentials (HTTP Basic as the forwarder's user) and SSL configuration are the site's.
   The sending production's process calls it on a failed delivery with the failure as its connector reported it; the
   package `Shutter.Intake` (with `Shutter.Util` and `Shutter.Msg`) is mapped into that namespace.
+- **A refused message, held** (v1.34, "prevent failures"; section 12). The forwarder is also an HL7 service's
+  `BadMessageHandler`: a message the service refused before routing it (its `Validation`, say `dm`) arrives as an
+  `EnsLib.HL7.Message` and is forwarded (`Shutter.Intake.Forwarder.ForwardFor`) with kind `unreadable`, reason
+  `schema_unknown` and a text beginning "Held:" when the message's schema category (its document type's, else the receiving item's
+  `MessageSchemaCategory`, else MSH-12) is
+  not loaded in that namespace, or reason `invalid_message` when it does not validate against a schema that is loaded (a
+  single bad message, not a wrong interface: no `heldSchema`, and the case reads as any refused message); the
+  route is the service, the receiver the forwarder's `HeldReceiver` setting (empty: Shutter's connector item), and
+  `schema_category` the category it was held for. Nothing was delivered: the engine held the message. The intake keeps the
+  kind, parses Shutter's copy under 2.5.1 when the category does not resolve here, and the case carries `heldSchema` and
+  `sourceNamespace`: the gate blocks it `SCHEMA_UNKNOWN` naming that namespace while the schema is missing there, the
+  matcher says `delivery: unreadable`, no incident counts it, and the index's check releases it (a reinvestigation with the
+  reason on the case) once the category is loaded in that namespace, after which it is a failed delivery to the catalogue
+  and goes out through Shutter's connector under the site's policy. A production whose delivering process is its own code
+  (the demo hospital's `PAS to Downstream`) does the check itself: while `^Hospital.Config("preventFailures")` is set
+  (`Hospital.Setup.PreventFailures(1|0)`, called by every store of Shutter's profile and by the install from the profile's
+  value), it reads each message's category before mapping it and hands one that is not loaded in its namespace to the
+  forwarder as the held message above (`Forwarder.ForwardFor`), delivering nothing. The HL7 service's `Validation` is not a
+  setting on this build and only a routing engine has a `BadMessageHandler`, so a site with a routing engine points that at
+  the forwarder, and one with its own process adds the check.
 - **The demo hospital** (shape A as a judge sees it): the image also creates the namespace `HOSPITAL` (`Installer.cls`;
   `SELECT Shutter.Installer_RunHospital('SHUTTER')` on an instance that has Shutter) with the packages `Shutter.Intake`,
   `Shutter.Util`, `Shutter.Msg`, `Shutter.Store` and `Hospital` mapped from Shutter's code database, and
@@ -1168,6 +1193,35 @@ on the server and answers `{ok, category, loaded, error}`; `GET /settings/schema
 `POST /settings/schemas` `{path}` imports (200 `{ok, category, loaded, importedBy}`; 400 `bad_request` without a path; 422
 `import_failed` with the importer's words: a file that is not there, not `.xml`, or not a schema). The install guide's
 section 7 says how a site loads its schema and what a case says meanwhile (6.5, `SCHEMA_UNKNOWN`).
+
+**Prevent failures** (v1.34; the owner, 1 Nov 2026: an interface deployed without its schema would read every field from the
+wrong place, so Shutter "would actually stop an incident waiting to happen until the schema is imported"). With the site
+profile's `feed.prevent_failures` true (6.4; off by default and in the shipped profile, so every scenario plays as before),
+`ADT In`'s process checks each message's schema category before mapping it (`Shutter.Util.Schemas.CategoryOf`: the document
+type's category the route set; else the receiving item's own `MessageSchemaCategory`, since an item whose category is not
+loaded leaves the message untyped; else MSH-12) and, when the category is not loaded here (`Known`), opens a case of kind
+`unreadable`, reason `schema_unknown`, with `heldSchema` the category and the headline "Held: the schema X is not loaded here;
+import it and set the inbound item's category, and the case is released", and delivers nothing; the message is handled, not
+failed, so the feed goes on. The case's identity (patient, encounter, event, key) comes from a reading of the message as
+standard 2.5.1 (`Schemas.Canonical`, `OperationKey.FromCanonical`; a message with no 2.5.1 structure gets an `UNMAPPED^` key,
+which the gate blocks `UNMAPPABLE`), never saved and never delivered from. The evidence's validation says `schema_known`
+false and the Second Parser gives its reading (6.7); the gate blocks with `SCHEMA_UNKNOWN`; the matcher's `delivery` is
+`unreadable` (6.1), so no catalogue entry matches and the case escalates with the fix on it; the incident detector does not
+count the kind. Release: the index's task (every few seconds, beside the delivered waits of 6.5) runs `Schemas.ReleaseHeld`,
+which reinvestigates every blocked or escalated `unreadable` case whose `heldSchema` is loaded now where the message was read
+(`sourceNamespace`, else here), with the reason "the schema X is loaded in NS now, found by the index's check" on the case
+and its `heldSchema` cleared, so a case is released once (a re-plan the gate blocks for another reason leaves a blocked case,
+not a held one, and `held_messages` counts only cases still waiting);
+the fresh evidence types the message under its schema (in memory; the stored copy stays as it arrived, untyped by a route
+that lacked the schema) and validates it, the matcher still says `delivery: unreadable`, the catalogue's entry for a held
+message proposes the resend (until the catalogue has one, the gate's `NEW_PATTERN` sends the case to a person), and the resend
+goes through the gate, rehearsal and the site's policy and approvals as any recovered case. `Known` is cached per
+process behind `^Shutter.Config("schemaEpoch")`, which an import (`Schemas.Changed`) moves, so the production's jobs see a
+schema imported by another process; a schema imported outside Shutter is seen by the release check, which moves the epoch
+too. The Doctor reports `prevent_failures` and `held_messages: {count, categories: [{category, namespace, count, oldest}]}`
+(the open `unreadable` cases by category), `GET /settings` the same as `preventFailures` and `heldMessages`. A watched
+production's refused messages reach the same hold through the forwarder (11). Scenario S25 (a message with a site Z segment,
+PARSE_FAILED) is unchanged: it plays with the setting off.
 
 ## 13. The production review (v1.22)
 
@@ -1413,7 +1467,13 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   `Shutter_Demo` never spends), the user `judge` made only when `SHUTTER_JUDGE_PASSWORD` is set, `GET /me` `can.liveAgents`,
   questions running live only for those who hold it and refused `no_recorded_answer` otherwise, `POST /cases/{id}/board`
   convening the board on a case (14.5), each user's share of the day's budget from `SHUTTER_JUDGE_BUDGET_USD` with
-  `RequestedBy` on every agent request and run (9). The install (12): the installer's data database variable is `SHUTTERDATADIR`, since `DATADIR` is a name
+  `RequestedBy` on every agent request and run (9). "Prevent failures" (the owner's choice of 1 Nov 2026, option c of the
+  morning bundle): `feed.prevent_failures` in the site profile (6.4, off by default), the case kind `unreadable` with
+  `heldSchema`, the hold in `ADT In`'s process on a canonical 2.5.1 reading, the forwarder as a bad-message handler with
+  `HeldReceiver` and the intake's fifth kind (11), the matcher's `delivery: unreadable` (6.1), the gate's `SCHEMA_UNKNOWN`
+  for a watched namespace and `UNMAPPABLE` for an `UNMAPPED^` key, the release by the index's check, the epoch behind the
+  known-categories cache, the Doctor's `prevent_failures` and `held_messages`, `GET /settings` `preventFailures` and
+  `heldMessages`, and the demo hospital's `Hospital.Setup.PreventFailures` (12). The install (12): the installer's data database variable is `SHUTTERDATADIR`, since `DATADIR` is a name
   `%Installer` predefines (the install directory) and a Default never replaces an existing variable, so builds before this
   kept SHUTTERDATA at `/usr/irissys/`, inside the image and outside the volume, and lost every case on `docker compose
   down` or a rebuild (found by the upgrade proof of 1 Nov 2026; the hospital's and the records' data databases, under other

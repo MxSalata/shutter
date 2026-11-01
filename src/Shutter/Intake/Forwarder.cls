@@ -9,6 +9,11 @@
 /// status and reason code. Hospital.Process.PASToDownstream is the worked example. The item's adapter settings name
 /// Shutter's instance: HTTPServer, HTTPPort, SSLConfig and Credentials (a user holding the Shutter_Forwarder role);
 /// Shutter.Util is the one other package the namespace needs.
+/// Since v1.34 ("prevent failures") the item is also an HL7 service's BadMessageHandler: a message the service refused
+/// before routing it arrives as itself and is forwarded as a failure of kind unreadable, reason schema_unknown when its
+/// schema category is not loaded in this namespace (Shutter holds the case and releases it once the schema is imported
+/// here) or invalid_message when it does not validate against a schema that is loaded. Nothing was delivered: the engine
+/// held the message. HeldReceiver names the receiver such a message was bound for; empty, Shutter's connector item.
 /// It never retries and never fails the message: a refusal is in the response's Error and in the event log as a
 /// warning; the sending process decides what to do with it.
 Class Shutter.Intake.Forwarder Extends Ens.BusinessOperation
@@ -32,7 +37,11 @@ Property SourceNamespace As %String(MAXLEN = 64);
 /// The HL7 schema category Shutter parses the message under. Empty: the message's own category, else 2.5.1.
 Property SchemaCategory As %String(MAXLEN = 64);
 
-Parameter SETTINGS = "IntakePath:Shutter,SourceProduction:Shutter,SourceNamespace:Shutter,SchemaCategory:Shutter";
+/// The receiver a message refused by the service was bound for (v1.34), as the site profile names it. Empty: Shutter's
+/// connector item.
+Property HeldReceiver As %String(MAXLEN = 128);
+
+Parameter SETTINGS = "IntakePath:Shutter,SourceProduction:Shutter,SourceNamespace:Shutter,SchemaCategory:Shutter,HeldReceiver:Shutter";
 
 Method OnForward(request As Shutter.Intake.Forward, Output response As Shutter.Intake.Forwarded) As %Status
 {
@@ -40,6 +49,45 @@ Method OnForward(request As Shutter.Intake.Forward, Output response As Shutter.I
     Set ..Retry = 0
     Set msg = ..OpenMessage(request.HeaderId, .header, .problem)
     If '$ISOBJECT(msg) Quit ..Refused(response, problem)
+    Quit ..Send(request, msg, header, response)
+}
+
+/// A message the receiving service refused before routing it (v1.34): the service's BadMessageHandler names this item and
+/// the message arrives as itself, under the header of that send.
+Method OnBadMessage(request As EnsLib.HL7.Message, Output response As Shutter.Intake.Forwarded) As %Status
+{
+    Set response = ##class(Shutter.Intake.Forwarded).%New()
+    Set ..Retry = 0
+    Set header = ..%RequestHeader
+    If '$ISOBJECT(header) Quit ..Refused(response, "The refused message came with no header")
+    Quit ..Send(..ForwardFor(request, header, ..HeldReceiver), request, header, response)
+}
+
+/// The forward a refused message gets (a class method, so a test can read it): kind unreadable; reason schema_unknown and
+/// a "Held:" text when the message's schema category (Shutter.Util.Schemas.CategoryOf) is not loaded in this namespace,
+/// else invalid_message; the route is the service that refused it, the receiver the one given.
+ClassMethod ForwardFor(msg As EnsLib.HL7.Message, header As Ens.MessageHeader, receiver As %String = "") As Shutter.Intake.Forward
+{
+    Set f = ##class(Shutter.Intake.Forward).%New()
+    Set f.HeaderId = header.%Id()
+    Set f.Route = header.SourceConfigName
+    Set f.Receiver = receiver
+    Set f.FailureKind = "unreadable", f.FailureOutcome = ""
+    Set category = ##class(Shutter.Util.Schemas).CategoryOf(msg, header.SourceConfigName)
+    Set shown = $SELECT(category = "": "(none)", 1: category)
+    If '##class(Shutter.Util.Schemas).Known(category) {
+        Set f.FailureReasonCode = "schema_unknown"
+        Set f.FailureText = "Held: the schema " _ shown _ " is not loaded in " _ $NAMESPACE _ "; import it there and set the inbound item's category, and the case is released"
+    } Else {
+        Set f.FailureReasonCode = "invalid_message"
+        Set f.FailureText = "Refused by the receiving service: the message does not validate against the " _ shown _ " schema, so nothing was delivered"
+    }
+    Quit f
+}
+
+/// The forward itself: the message's text and where it lives, posted to Shutter's intake; the answer into the response.
+Method Send(request As Shutter.Intake.Forward, msg As EnsLib.HL7.Message, header As Ens.MessageHeader, response As Shutter.Intake.Forwarded) As %Status [ Private ]
+{
     Set osc = $$$OK
     Set text = msg.OutputToString(, , .osc)
     If $$$ISERR(osc) Quit ..Refused(response, "The HL7 message " _ header.MessageBodyId _ " could not be written out: " _ $SYSTEM.Status.GetErrorText(osc))
@@ -47,6 +95,8 @@ Method OnForward(request As Shutter.Intake.Forward, Output response As Shutter.I
     If route = "" Set route = header.SourceConfigName
     Set category = ..SchemaCategory
     If category = "" Set category = msg.DocTypeCategory
+    // A refused message (v1.34) names the category it was held for, which its route may never have set.
+    If (category = "") && (request.FailureKind = "unreadable") Set category = ##class(Shutter.Util.Schemas).CategoryOf(msg, header.SourceConfigName)
     If category = "" Set category = "2.5.1"
     Set body = ..IntakeBody(request, ..ReportedNamespace(), ..ReportedProduction(), route, text, category)
     $$$TRACE("Forwarding header " _ request.HeaderId _ " (" _ request.FailureKind _ " at " _ request.Receiver _ ") to " _ ..IntakePath)
@@ -150,6 +200,9 @@ XData MessageMap
 <MapItems>
   <MapItem MessageType="Shutter.Intake.Forward">
     <Method>OnForward</Method>
+  </MapItem>
+  <MapItem MessageType="EnsLib.HL7.Message">
+    <Method>OnBadMessage</Method>
   </MapItem>
 </MapItems>
 }
