@@ -1254,6 +1254,9 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   objects, moving the mark once a batch is taken; the walk's settings (`Routes`, `BatchSize`, `LagSeconds`, `BackfillHours`,
   `MaxBatchesPerTask`) are the adapter's (the production item's `Routes` moves from the host to the adapter); `Rebuild`,
   `Status` (now naming the adapter) and the index's shape are unchanged.
+  The Doctor (12) gains `missing_items` and `disabled_items` (INSTALLITEMS against the production), `gate_policy_version`,
+  `catalogue_entries` and `catalogue_ids`, `records_namespace` and `records_webapp`, `index_adapter` and `questions`, so a
+  fresh install and an upgrade from the 25 Oct build show the same.
 - v1.30, 1 Nov 2026: IANA time zones through Embedded Python (6.4, 12): `feed.time_zone` may name any zone the IRIS image's
   database knows, read by `Shutter.Util.Time.PyOffset` (a Python method) beside the native rules for UTC, Europe/London and
   fixed offsets; the validator asks `KnownZone`; the Doctor reports `python_zoneinfo`; `Time_Probe` shows `python_zones` and
