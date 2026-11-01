@@ -1,5 +1,5 @@
 import { Text, Tooltip, type TextProps } from '@mantine/core';
-import { DEMO } from '@/demo';
+import { TRIAL } from '@/env/mode';
 import { formatAge, formatLocal, formatUtc, formatZoned } from '@/lib/format';
 
 /**
@@ -13,11 +13,13 @@ export function Timestamp({
   ...props
 }: { iso: string | undefined | null; age?: boolean } & TextProps) {
   if (!iso) return null;
-  const label = [formatUtc(iso), `yours: ${formatLocal(iso)}`, ...(DEMO ? [] : [formatAge(iso)])].join(' · ');
+  const label = [formatUtc(iso), `yours: ${formatLocal(iso)}`, ...(TRIAL ? [] : [formatAge(iso)])].join(
+    ' · ',
+  );
   return (
     <Tooltip label={label}>
       <Text component="time" dateTime={iso} size="sm" tabIndex={0} {...props}>
-        {age && !DEMO ? formatAge(iso) : formatZoned(iso)}
+        {age && !TRIAL ? formatAge(iso) : formatZoned(iso)}
       </Text>
     </Tooltip>
   );

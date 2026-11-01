@@ -17,7 +17,7 @@ import { Link, useNavigate } from 'react-router';
 import { newIdempotencyKey } from '@/api/client';
 import { useMe, useReviews, useReviewTargets, useStartReview } from '@/api/hooks';
 import type { ReviewListItem, ReviewTarget } from '@/api/types';
-import { DEMO } from '@/demo';
+import { TRIAL } from '@/env/mode';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageHeader } from '@/components/PageHeader';
 import { PageSkeleton } from '@/components/PageSkeleton';
@@ -164,7 +164,7 @@ export default function ReviewsPage() {
           title="Start a review"
           note="Shutter's own production, or a watched one its cases came from. The checks are deterministic; the agent only ranks and explains."
         >
-          {DEMO ? (
+          {TRIAL ? (
             <Text size="sm">
               The online demo shows the recorded reviews of both productions below. On an instance an operator
               starts a review here.

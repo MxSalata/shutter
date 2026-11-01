@@ -32,7 +32,7 @@ import {
 } from '@/api/hooks';
 import { scenariosHidden } from '@/api/can';
 import type { Mode, Scenario, ScenarioRun } from '@/api/types';
-import { DEMO } from '@/demo';
+import { TRIAL } from '@/env/mode';
 import { PageHeader } from '@/components/PageHeader';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
@@ -69,7 +69,7 @@ const ALL_MODES: { value: Mode; label: string; hint: string }[] = [
 ];
 
 /** The demo leaves out the single investigator: its runs were never recorded, so it has nothing to replay. */
-const MODES = DEMO ? ALL_MODES.filter((m) => m.value !== 'single') : ALL_MODES;
+const MODES = TRIAL ? ALL_MODES.filter((m) => m.value !== 'single') : ALL_MODES;
 
 const modeLabel = (mode: Mode) => ALL_MODES.find((m) => m.value === mode)?.label ?? humanize(mode);
 
@@ -583,10 +583,10 @@ export default function ScenariosPage() {
 
   // The induction prompt leads the page on an instance, as the owner's questionnaire is designed; the demo, whose
   // profile is a recording nobody answers, keeps it below the fold, under the scenarios, so the guided path comes first.
-  const induction = can.configure ? <InductionPrompt below={DEMO} /> : null;
+  const induction = can.configure ? <InductionPrompt below={TRIAL} /> : null;
   return (
     <>
-      {DEMO ? null : induction}
+      {TRIAL ? null : induction}
       <PageHeader
         title="Scenarios"
         actions={
@@ -648,7 +648,7 @@ export default function ScenariosPage() {
           runnable={!hidden}
         />
         {/* The demo's guided path through the recorded cases, past the first three */}
-        {DEMO ? <StartHere /> : null}
+        {TRIAL ? <StartHere /> : null}
         {playerOff ? (
           <Alert color="gray" variant="light" title="The Scenario Player is switched off">
             <Text size="sm">
@@ -690,7 +690,7 @@ export default function ScenariosPage() {
             )}
           />
         ) : null}
-        {DEMO ? induction : null}
+        {TRIAL ? induction : null}
       </Stack>
     </>
   );

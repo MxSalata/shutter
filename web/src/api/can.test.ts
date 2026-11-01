@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { demoUserFor } from '@/demo';
+import { envFrom, trialUser } from '@/env/mode';
 import { readOnlyDemo, resolveCan, scenariosHidden } from './can';
 import type { Me } from './types';
 
@@ -112,9 +112,10 @@ describe('what the public demo hides', () => {
 
 describe('the mock switch', () => {
   it('signs "Try the demo" in as the demo role with ?as=demo, and as the approver otherwise', () => {
-    expect(demoUserFor('?as=demo').username).toBe('demo');
-    expect(demoUserFor('').username).toBe('approver');
-    expect(demoUserFor('?as=other').username).toBe('approver');
-    expect(demoUserFor('?x=1&as=demo').username).toBe('demo');
+    const user = (search: string) => trialUser(envFrom(search, true).role);
+    expect(user('?as=demo').username).toBe('demo');
+    expect(user('').username).toBe('approver');
+    expect(user('?as=other').username).toBe('approver');
+    expect(user('?x=1&as=demo').username).toBe('demo');
   });
 });

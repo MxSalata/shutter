@@ -1,5 +1,5 @@
 import type { CaseQuestion, QuestionTier } from '@/api/types';
-import { DEMO } from '@/demo';
+import { TRIAL } from '@/env/mode';
 import { parseTime } from '@/lib/format';
 import { DEMO_ANSWERS_RECORDED } from './recorded';
 
@@ -43,7 +43,7 @@ const isRecorded = (q: CaseQuestion) => q.mode === 'replay';
  * (the demo's mock does; the server does not send it yet), otherwise `answeredAt`.
  */
 export function provenanceText(q: CaseQuestion): string {
-  if (DEMO && !DEMO_ANSWERS_RECORDED) return SAMPLE_LABEL;
+  if (TRIAL && !DEMO_ANSWERS_RECORDED) return SAMPLE_LABEL;
   if (isRecorded(q)) {
     const at = parseTime(q.recordedAt ?? q.answeredAt);
     if (at && q.model) return `Recorded live on ${day.format(at)} with ${q.model}`;
@@ -59,7 +59,7 @@ export function provenanceText(q: CaseQuestion): string {
  * demo whose answers are not recordings, recorded answers only when an answer shown is a replay, otherwise none.
  */
 export function answersBadge(asked: CaseQuestion[]): string | null {
-  if (DEMO && !DEMO_ANSWERS_RECORDED) return 'Sample answers';
+  if (TRIAL && !DEMO_ANSWERS_RECORDED) return 'Sample answers';
   if (asked.some((q) => q.source === 'suggested' && isRecorded(q))) return 'Recorded answers';
   return null;
 }

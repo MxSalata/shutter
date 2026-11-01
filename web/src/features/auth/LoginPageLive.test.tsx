@@ -11,8 +11,11 @@ import { resetMock } from '@/mocks/handlers';
 import { theme } from '@/theme';
 import LoginPage from './LoginPage';
 
-/** The demo build opened with `?as=demo`: "Try the demo" signs in as the public demo's role (src/demo.ts). */
-vi.mock('@/demo', () => ({ DEMO: true, DEMO_USER: { username: 'demo', password: 'shutter' } }));
+/** The demo build opened with `?as=demo`: "Try the demo" signs in as the public demo's role (src/env/mode.ts). */
+vi.mock('@/env/mode', async (importOriginal) => {
+  const mode = await importOriginal<typeof import('@/env/mode')>();
+  return { ...mode, TRIAL: true, ENV: mode.envFrom('?as=demo', true) };
+});
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());

@@ -16,7 +16,10 @@ import ScenariosPage from '@/features/scenarios/ScenariosPage';
 import SettingsPage from '@/features/settings/SettingsPage';
 
 /** The screens as the demo build shows them: recorded data on the in-browser mock, with no IRIS behind it. */
-vi.mock('@/demo', () => ({ DEMO: true, DEMO_USER: { username: 'approver', password: 'shutter' } }));
+vi.mock('@/env/mode', async (importOriginal) => {
+  const mode = await importOriginal<typeof import('@/env/mode')>();
+  return { ...mode, TRIAL: true, ENV: mode.envFrom('', true) };
+});
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());

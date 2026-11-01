@@ -8,7 +8,7 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { JsonBlock } from '@/components/JsonBlock';
 import { Timestamp } from '@/components/Timestamp';
 import { StackTable } from '@/components/StackTable';
-import { DEMO } from '@/demo';
+import { TRIAL } from '@/env/mode';
 import { humanize, keyLabel } from '@/lib/format';
 
 /** The report's keys in words; any other key is humanized. */
@@ -66,7 +66,7 @@ function Mark({ color, icon, word }: { color: string; icon: ReactNode; word: str
 function Value({ k, value }: { k: string; value: unknown }) {
   if (value === true) return <Mark color="green" icon={<IconCheck size={14} />} word="Yes" />;
   if (value === false) {
-    const absent = DEMO ? DEMO_ABSENT[k] : undefined;
+    const absent = TRIAL ? DEMO_ABSENT[k] : undefined;
     return (
       <Stack gap={2}>
         <Mark color="gray" icon={absent ? <IconMinus size={14} /> : <IconX size={14} />} word="No" />
@@ -160,7 +160,7 @@ export default function HealthPage() {
         ) : null}
         {report ? (
           <Stack gap="sm">
-            {DEMO ? (
+            {TRIAL ? (
               <Text size="sm" maw="80ch">
                 The report of the instance the demo was recorded on. A No that carries a note saying
                 &ldquo;Not in the demo&rdquo; is a piece that instance did not have: expected, not a fault.

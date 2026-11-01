@@ -6,7 +6,7 @@ import { usePreviewBlindResend, useDecideApproval } from '@/api/hooks';
 import { newIdempotencyKey } from '@/api/client';
 import { resolveCan } from '@/api/can';
 import type { ApprovalsView, CaseDetail, Me, PlanView } from '@/api/types';
-import { DEMO } from '@/demo';
+import { TRIAL } from '@/env/mode';
 import { Digest } from '@/components/Digest';
 import { KeyValueList } from '@/components/KeyValueList';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -156,7 +156,7 @@ export function ApprovalPanel({
             message:
               decision !== 'approve'
                 ? 'Nothing will be sent.'
-                : DEMO
+                : TRIAL
                   ? 'The demo now replays what the recorded case did after its approval: the dispatch and its verification.'
                   : 'The receiver is read again and the gate checks the dispatch.',
           });
@@ -203,7 +203,7 @@ export function ApprovalPanel({
       ) : null}
       {write || awaiting ? (
         <Stack gap="sm">
-          {DEMO && awaiting ? (
+          {TRIAL && awaiting ? (
             <Alert color="blue" variant="light" title="Demo replay">
               This recorded case is held at its approval so that you can decide it here. Approving it replays
               what the recorded case did next, the dispatch and its verification at the receiver; rejecting it

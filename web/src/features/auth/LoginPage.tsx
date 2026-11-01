@@ -16,7 +16,7 @@ import { useHealth, useMe, useSignIn } from '@/api/hooks';
 import { describeError, isApiError } from '@/lib/errors';
 import { APP_NAME, APP_TAGLINE } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
-import { DEMO, DEMO_USER } from '@/demo';
+import { ENV, TRIAL, trialUser } from '@/env/mode';
 
 export default function LoginPage() {
   const me = useMe();
@@ -71,17 +71,17 @@ export default function LoginPage() {
               </Alert>
             ) : null}
             {/* The demo leads with its own sign-in: a judge opening it needs no password, and the form is second. */}
-            {DEMO ? (
+            {TRIAL ? (
               <>
                 <Button
                   variant="filled"
                   fullWidth
                   loading={signIn.isPending}
                   onClick={() =>
-                    signIn.mutate(DEMO_USER, { onSuccess: () => navigate(from, { replace: true }) })
+                    signIn.mutate(trialUser(ENV.role), { onSuccess: () => navigate(from, { replace: true }) })
                   }
                 >
-                  {DEMO_USER.username === 'demo'
+                  {ENV.role === 'demo'
                     ? 'Try the demo (live hospital, read-only)'
                     : 'Try the demo (recorded runs)'}
                 </Button>
@@ -103,11 +103,11 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.currentTarget.value)}
               required
             />
-            <Button type="submit" variant={DEMO ? 'default' : 'filled'} loading={signIn.isPending} fullWidth>
+            <Button type="submit" variant={TRIAL ? 'default' : 'filled'} loading={signIn.isPending} fullWidth>
               Sign in
             </Button>
             {/* The demo users and their password only on a demo instance (the server's flag) or the recorded demo. */}
-            {DEMO || health.data?.demo === true ? (
+            {TRIAL || health.data?.demo === true ? (
               <Text size="xs" c="dimmed">
                 The demo installs two users: <b>operator</b> runs scenarios, reads cases, escalates them and
                 marks them handled; <b>approver</b> can also approve or reject plans and change the site

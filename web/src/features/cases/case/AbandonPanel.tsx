@@ -6,7 +6,7 @@ import { resolveCan } from '@/api/can';
 import { newIdempotencyKey } from '@/api/client';
 import { useAbandonCase, useMe } from '@/api/hooks';
 import { CLOSED_STATES, type CaseDetail, type CaseEvent } from '@/api/types';
-import { DEMO } from '@/demo';
+import { TRIAL } from '@/env/mode';
 import { describeError, isApiError } from '@/lib/errors';
 import { formatZoned, humanize } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
@@ -56,7 +56,7 @@ export function AbandonPanel({ c, events }: { c: CaseDetail; events: CaseEvent[]
   const newest = newestAt(events ?? []);
   const quiet = newest ? now - Date.parse(newest) : 0;
   if (
-    DEMO ||
+    TRIAL ||
     !resolveCan(me).approve ||
     CLOSED_STATES.includes(c.state) ||
     WAITING_FOR_A_PERSON.includes(c.state) ||

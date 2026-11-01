@@ -26,7 +26,7 @@ import {
 import type { BoardAnswer, CaseQuestion, QuestionTier, SuggestedTurn } from '@/api/types';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { StatusBadge } from '@/components/StatusBadge';
-import { DEMO } from '@/demo';
+import { TRIAL } from '@/env/mode';
 import { isApiError } from '@/lib/errors';
 import { keyLabel } from '@/lib/format';
 import { showEvidence } from '../case/evidenceLinks';
@@ -173,7 +173,7 @@ function useFreeText(): { open: boolean; why: string; badge?: string } {
       why: 'On the public demo, a question of your own is for a judge to ask live. Pick a suggested question above: its answers were recorded live.',
       badge: 'Judges only',
     };
-  if (DEMO)
+  if (TRIAL)
     return {
       open: false,
       why: 'Free text needs a model key. In this demo, pick a suggested question above.',

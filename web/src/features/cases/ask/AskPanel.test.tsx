@@ -17,13 +17,13 @@ import { SAMPLE_LABEL, answersBadge, provenanceText } from './labels';
 const RECORDED_LABEL = 'Recorded live on 1 November 2026 with claude-opus-5-5';
 import { WhatIfCard } from './WhatIfCard';
 
-// The demo's answers are labelled by the build's DEMO flag, switched here per test
+// The demo's answers are labelled by the page's TRIAL flag, switched here per test
 const demo = vi.hoisted(() => ({ value: true }));
-vi.mock('@/demo', () => ({
-  get DEMO() {
+vi.mock('@/env/mode', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/env/mode')>()),
+  get TRIAL() {
     return demo.value;
   },
-  DEMO_USER: { username: 'approver', password: 'shutter' },
 }));
 // The constant that says the demo's answers are recordings (true since the live re-record), switched here per test
 const recorded = vi.hoisted(() => ({ value: true }));

@@ -43,7 +43,7 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { useAppearance, type ContrastSetting, type PaletteSetting } from '@/stores/appearance';
 import { useResolvedContrast } from './useApplyAppearance';
 import { MAIN_ID, SkipLink } from './SkipLink';
-import { DEMO } from '@/demo';
+import { TRIAL } from '@/env/mode';
 import { Guide } from '@/features/guide/Guide';
 import { LiveBanner } from './LiveBanner';
 import { HelpMenu } from '@/features/guide/HelpMenu';
@@ -241,7 +241,7 @@ export function AppLayout() {
             </UnstyledButton>
           </Group>
           <Group gap="xs" wrap="nowrap">
-            {DEMO ? (
+            {TRIAL ? (
               <Tooltip
                 label="Recorded runs: this page replays a real run's data and reaches no IRIS instance"
                 multiline

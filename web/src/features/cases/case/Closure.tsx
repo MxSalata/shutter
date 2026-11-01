@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { newIdempotencyKey } from '@/api/client';
 import { useClosure, useMe, useReinvestigate } from '@/api/hooks';
 import type { CaseDetail } from '@/api/types';
-import { DEMO } from '@/demo';
+import { TRIAL } from '@/env/mode';
 import { describeError } from '@/lib/errors';
 import { KeyValueList } from '@/components/KeyValueList';
 import { Timestamp } from '@/components/Timestamp';
@@ -25,7 +25,7 @@ export function Reinvestigate({ c }: { c: CaseDetail }) {
   const [opened, setOpened] = useState(false);
   const [reason, setReason] = useState('');
   const [key, setKey] = useState('');
-  if (DEMO || !me?.operator) return null;
+  if (TRIAL || !me?.operator) return null;
   const open = () => {
     setReason('');
     setKey(newIdempotencyKey());

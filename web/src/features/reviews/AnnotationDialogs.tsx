@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { newIdempotencyKey } from '@/api/client';
 import { useAnnotateFinding, useRemoveAnnotation } from '@/api/hooks';
 import type { ReviewAnnotation, ReviewDetail, ReviewFinding } from '@/api/types';
-import { DEMO } from '@/demo';
+import { TRIAL } from '@/env/mode';
 import { describeError } from '@/lib/errors';
 import { expiryForApi, expiryProblem, STATUS_LABELS, subjectOf } from './review';
 
@@ -82,7 +82,7 @@ export function useAnnotationDialogs(review: ReviewDetail) {
     });
   };
 
-  const demoNote = DEMO ? (
+  const demoNote = TRIAL ? (
     <Alert color="blue" variant="light" title="Demo replay" role="note">
       The online demo keeps no annotations: it answers as an instance would refuse a change it cannot make.
     </Alert>

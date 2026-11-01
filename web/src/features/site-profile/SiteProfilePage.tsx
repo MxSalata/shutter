@@ -28,7 +28,7 @@ import { KeyValueList } from '@/components/KeyValueList';
 import { PageHeader } from '@/components/PageHeader';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { Timestamp } from '@/components/Timestamp';
-import { DEMO } from '@/demo';
+import { TRIAL } from '@/env/mode';
 import { describeError, isApiError } from '@/lib/errors';
 import { humanize } from '@/lib/format';
 import { Section } from '../cases/case/Section';
@@ -869,7 +869,7 @@ function Profile({
               {editable ? '' : ' An approver answers them.'}
             </Alert>
           ) : null}
-          {DEMO && !reading ? (
+          {TRIAL && !reading ? (
             <Text size="xs" c="dimmed">
               In the online demo a save lasts until the page is reloaded.
             </Text>

@@ -9,13 +9,13 @@ import { resetMock } from '@/mocks/handlers';
 import { theme } from '@/theme';
 import HealthPage from './HealthPage';
 
-// The page reads DEMO when it renders, so each test can say whether it is the demo
+// The page reads TRIAL when it renders, so each test can say whether it is the demo
 const demo = vi.hoisted(() => ({ on: false }));
-vi.mock('@/demo', () => ({
-  get DEMO() {
+vi.mock('@/env/mode', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/env/mode')>()),
+  get TRIAL() {
     return demo.on;
   },
-  DEMO_USER: { username: 'approver', password: 'shutter' },
 }));
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));

@@ -1,7 +1,7 @@
 import { Anchor, Image, Modal, Stack, Text, Tooltip } from '@mantine/core';
 import { IconExternalLink, IconExternalLinkOff } from '@tabler/icons-react';
 import { useState } from 'react';
-import { DEMO } from '@/demo';
+import { TRIAL } from '@/env/mode';
 import type { Screenshot } from '@/lib/screenshots';
 
 /**
@@ -25,7 +25,7 @@ export function PortalLink({
   screenshot?: Screenshot;
 }) {
   const [shown, setShown] = useState(false);
-  if (DEMO && screenshot)
+  if (TRIAL && screenshot)
     return (
       <>
         <Anchor component="button" type="button" size={size} onClick={() => setShown(true)}>
@@ -41,7 +41,7 @@ export function PortalLink({
         </Modal>
       </>
     );
-  if (DEMO)
+  if (TRIAL)
     return (
       <Tooltip
         label={`On an IRIS instance this opens ${what} in the Management Portal. The demo runs in the browser, with no instance behind it.`}
