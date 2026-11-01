@@ -373,7 +373,7 @@ ClassMethod EarlierTurns(case As Shutter.Store.Case, conversation As %String, be
 /// tier, text}]}]}), or "" when the scenario has none or the file does not parse.
 ClassMethod SuggestedFile(scenario As %String) As %DynamicObject
 {
-    If (scenario = "") || (scenario '? 1"S"1.3N) Quit ""
+    If (scenario = "") || (scenario '? 1"S"1.3N.1L) Quit ""
     Set root = $GET(^Shutter.Config("root"))
     If root = "" Quit ""
     Set path = ##class(%File).NormalizeDirectory(root) _ "knowledge/questions/" _ scenario _ ".json"
