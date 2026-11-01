@@ -433,6 +433,11 @@ ClassMethod CaseGet(caseId As %String) As %Status
     If $ISOBJECT(case.CurrentPlan) Set o.planCreatedBy = case.CurrentPlan.CreatedBy
     // The case's place in its incident (CONTRACTS 7.5), when one holds it.
     If $ISOBJECT(case.Incident) Set o.incidentId = case.Incident.IncidentId, o.incident = ##class(Shutter.Store.ChainItem).IncidentContext(case)
+    // The cases that wait on this one (v1.29): the other side of waitsOn, so the page links both ways.
+    Set waitedOnBy = []
+    Set wrs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT CaseId FROM Shutter_Store.""Case"" WHERE WaitsOnCase = ? ORDER BY ID", case.CaseId)
+    While wrs.%Next() { Do waitedOnBy.%Push(wrs.%Get("CaseId")) }
+    Set o.waitedOnBy = waitedOnBy
     Set id = case.%Id()
     Set counts = {}
     &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.CaseEvent WHERE "Case" = :id)

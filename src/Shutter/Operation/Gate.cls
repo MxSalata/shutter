@@ -9,7 +9,7 @@ Class Shutter.Operation.Gate Extends Ens.BusinessOperation
 Parameter INVOCATION = "Queue";
 
 /// Bumped whenever a check changes; recorded on every decision and bound by approvals.
-Parameter POLICYVERSION = "2026-10-26.2";
+Parameter POLICYVERSION = "2026-11-01.1";
 
 Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shutter.Msg.GateResult) As %Status
 {
@@ -92,6 +92,10 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         // The occupied bed (v1.28): a write into a bed another encounter holds waits for them to leave, or never goes.
         Set bedConflict = $SELECT($ISOBJECT(conds): ##class(Shutter.Util.Json).Str(conds, "bed_conflict", "none"), 1: "none")
         If bedConflict '= "none" Do ..BedConflictCheck(checks, case, summary, bedConflict)
+        // The failsafe at the point of the resend (v1.29): a message of the encounter that reached Shutter after the case's
+        // own and is not yet delivered may supersede the write, so the write waits for its delivery.
+        Set pendingMsgs = summary.%Get("pending_messages")
+        If $ISOBJECT(pendingMsgs) && (pendingMsgs.%Size() > 0) Do ..Check(checks, "ordering", "block", "NEWER_MESSAGE_PENDING", "A newer message of this encounter is pending in Shutter: " _ ##class(Shutter.Util.ResendGuard).Describe(pendingMsgs) _ ". The resend waits for its delivery and the case is planned again on fresh evidence")
         Set superseding = ..Superseding(summary, case, chainKind, .delivered, 1)
         If timeDoubt {
             Do ..Check(checks, "ordering", "block", "EVENT_TIME_IMPLAUSIBLE", whose _ " is not plausible (" _ eventTime _ "): " _ $CASE(eventTime, "before_admission": "it precedes the admission", "future": "it lies in the future", "far_from_recorded": "it is more than a day from when the event was recorded", "clock_change": "it lies within an hour of a clock change and came without an offset", "later_event_future": "it lies in the future, so it cannot settle the order", : eventTime) _ "; a person decides")

@@ -73,6 +73,13 @@ Property WaitsOnCase As %String(%JSONFIELDNAME = "waitsOn", MAXLEN = 32);
 
 Index WaitsIdx On WaitsOnCase;
 
+/// The message this case waits for (v1.29): the MSH-10 control id of a newer message of the encounter that was pending in
+/// Shutter when the gate or the connector held the resend (NEWER_MESSAGE_PENDING); cleared by a reopening. Its delivery
+/// reopens the case (ReleaseWaitingOnMessage).
+Property WaitsOnMessage As %String(%JSONFIELDNAME = "waitsOnMessage", MAXLEN = 200);
+
+Index WaitsMsgIdx On WaitsOnMessage;
+
 /// A merge's prior record (A40, CONTRACTS 2): the patient identifier the merge discards (MRG-1) with its assigning
 /// authority, the prior visit (MRG-5), and how many MRG segments the message carried (one per PATIENT group); the
 /// identifiers are the first group's.
@@ -354,15 +361,27 @@ Method Transition(toState As %String, text As %String = "", actor As %String = "
 /// caller (a production that is not running leaves them blocked, with the wait on the case for a person to see).
 Method ReleaseWaiting(toState As %String) As %Integer
 {
+    Quit ..Reopen("WaitsOnCase", ..CaseId, "case " _ ..CaseId _ " about the bed's occupant closed as " _ toState _ "; the bed is checked again")
+}
+
+/// The blocked or escalated cases waiting for a message (WaitsOnMessage, v1.29) are reopened once it has been delivered,
+/// whatever the receiver answered: the fresh evidence then shows the later event applied, or its own case, and the gate
+/// decides. Returns how many were released.
+ClassMethod ReleaseWaitingOnMessage(controlId As %String, outcome As %String = "") As %Integer
+{
+    If controlId = "" Quit 0
+    Quit ..Reopen("WaitsOnMessage", controlId, "message " _ controlId _ " of this encounter was delivered" _ $SELECT(outcome '= "": " (" _ outcome _ ")", 1: "") _ "; the resend is checked again")
+}
+
+/// Reopen every blocked or escalated case whose field names the value, through the API service to the Case Workflow.
+ClassMethod Reopen(field As %String, value As %String, reason As %String) As %Integer [ Private ]
+{
     Set n = 0
     Try {
-        Set me = ..CaseId
-        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT CaseId FROM Shutter_Store.""Case"" WHERE WaitsOnCase = ? AND State IN ('blocked', 'escalated') ORDER BY ID", me)
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT CaseId FROM Shutter_Store.""Case"" WHERE " _ field _ " = ? AND State IN ('blocked', 'escalated') ORDER BY ID", value)
         While rs.%Next() {
-            Set waiting = rs.%Get("CaseId")
             Set msg = ##class(Shutter.Msg.Reinvestigate).%New()
-            Set msg.CaseId = waiting, msg.RequestedBy = "system"
-            Set msg.Reason = "case " _ me _ " about the bed's occupant closed as " _ toState _ "; the bed is checked again"
+            Set msg.CaseId = rs.%Get("CaseId"), msg.RequestedBy = "system", msg.Reason = reason
             Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
             If $$$ISERR(sc) || '$ISOBJECT(service) Quit
             Set service.Target = "Case Workflow", service.Async = 1
@@ -843,6 +862,9 @@ Storage Default
 </Value>
 <Value name="45">
 <Value>WaitsOnCase</Value>
+</Value>
+<Value name="46">
+<Value>WaitsOnMessage</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>

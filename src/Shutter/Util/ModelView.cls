@@ -18,7 +18,7 @@ Class Shutter.Util.ModelView Extends %RegisteredObject
 /// Keys that never leave IRIS, wherever they occur.
 Parameter DENYLIST = ",patient_name,name,given_name,family_name,date_of_birth,dob,birth_date,birth_time,sex,gender,address,phone,telephone,email,next_of_kin,mother_maiden_name,maiden_name,religion,ethnicity,ethnic_group,marital_status,nationality,ssn,national_id,language,headline,";
 
-Parameter SUMMARYKEEP = ",case_id,scenario,operation,failure,message,validation,ward_state,ward_state_http_status,receipt,receipt_http_status,bed_conflict,timeline,later_events,route,source,epoch,observed_at,incident,catalogue,fresh_until,snapshot_id,snapshot_digest,taken_at,";
+Parameter SUMMARYKEEP = ",case_id,scenario,operation,failure,message,validation,ward_state,ward_state_http_status,receipt,receipt_http_status,bed_conflict,pending_messages,timeline,later_events,route,source,epoch,observed_at,incident,catalogue,fresh_until,snapshot_id,snapshot_digest,taken_at,";
 
 /// What the source of a case from another production keeps (CONTRACTS 11): the namespace, the production, the route
 /// and the header id there, operational names with no patient data.
@@ -38,6 +38,9 @@ Parameter BEDCONFLICTKEEP = ",refused,ward,bed,since,occupant,occupant_movement,
 
 /// What the occupant's movement keeps: operational fields and the case about it.
 Parameter MOVEMENTKEEP = ",event,ward,bed,event_time,operation_key,delivery,outcome,case_id,";
+
+/// What a message pending ahead of a resend keeps (v1.29): operational fields, no content.
+Parameter PENDINGKEEP = ",event,event_time,operation_key,control_id,ens_header_id,sent_at,receiver,where,";
 
 /// What a history entry keeps (Downstream.Event.ToJSON: event, ward, event_time, applied_at, version_after, operation_key).
 Parameter HISTORYKEEP = ",event,ward,bed,location,event_time,applied_at,version,version_before,version_after,operation_key,source_system,";
@@ -158,6 +161,7 @@ ClassMethod KeepFor(node As %DynamicObject, parentKey As %String) As %String [ P
     If node.%IsDefined("operation_key") && node.%IsDefined("payload_digest") Quit ..#OPERATIONKEEP
     If node.%IsDefined("operation_key") && (node.%IsDefined("sent_at") || node.%IsDefined("this_case")) Quit ..#TIMELINEKEEP
     If node.%IsDefined("refused") && node.%IsDefined("occupant_movement") Quit ..#BEDCONFLICTKEEP
+    If node.%IsDefined("where") && node.%IsDefined("control_id") Quit ..#PENDINGKEEP
     If node.%IsDefined("delivery") && node.%IsDefined("event_time") && 'node.%IsDefined("sent_at") Quit ..#MOVEMENTKEEP
     If node.%IsDefined("state") || node.%IsDefined("history") Quit ..#WARDKEEP
     If node.%IsDefined("kind") && (node.%IsDefined("text") || node.%IsDefined("outcome")) && 'node.%IsDefined("data") && 'node.%IsDefined("item") && 'node.%IsDefined("items") Quit ..#FAILUREKEEP
