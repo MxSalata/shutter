@@ -267,6 +267,13 @@ Method SecondOpinion(headerId As %String) As %DynamicObject
 }
 
 /// Named fields of the HL7 message behind a message header, and its parse status.
+/// The item that received the message behind a header (its SourceConfigName), "" when the header is not there.
+Method SourceItemOf(headerId As %String) As %String [ Private ]
+{
+    Set h = $SELECT(headerId = "": "", 1: ##class(Ens.MessageHeader).%OpenId(headerId))
+    Quit $SELECT($ISOBJECT(h): h.SourceConfigName, 1: "")
+}
+
 Method MessageFields(headerId As %String, Output validation As %DynamicObject) As %DynamicObject [ Private ]
 {
     Set info = {}, validation = {}
@@ -349,20 +356,27 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
         Set info.notes = notes
         Set info."segment_count" = msg.SegCount
         Set info."doc_type" = msg.DocType
+        // A message its route could not type (its category was not loaded when it arrived; v1.34, the hold) is typed here
+        // for the check once the category is known, in memory only: the stored copy stays as it arrived.
+        Set heldCategory = ##class(Shutter.Util.Schemas).CategoryOf(msg, ..SourceItemOf(headerId))
+        If (msg.DocType = "") && ##class(Shutter.Util.Schemas).Known(heldCategory) {
+            Set heldType = ##class(EnsLib.HL7.Schema).ResolveSchemaTypeToDocType(heldCategory, msg.Name, .hsc)
+            If $$$ISOK(hsc) && (heldType '= "") Do msg.PokeDocType(heldType)
+        }
         // "dm": the document type must be known and the segment structure must match the schema.
         Set sc = msg.Validate("dm")
         Do validation.%Set("parsed", $$$ISOK(sc), "boolean")
         Set validation."doc_type" = msg.DocType
-        Set validation."schema_category" = msg.DocTypeCategory
+        Set validation."schema_category" = $SELECT(msg.DocTypeCategory '= "": msg.DocTypeCategory, 1: heldCategory)
         Set validation.spec = "dm"
         If $$$ISERR(sc) Set validation.error = $SYSTEM.Status.GetErrorText(sc)
         // A category this namespace does not hold (v1.32: a forwarded message named its source's own schema) cannot be
         // validated at all: the verdict is "unknown schema" with the fix, never "invalid message".
-        Set schemaKnown = ##class(Shutter.Util.Schemas).Known(msg.DocTypeCategory)
+        Set schemaKnown = ##class(Shutter.Util.Schemas).Known(validation."schema_category")
         Do validation.%Set("schema_known", schemaKnown, "boolean")
         If 'schemaKnown {
             Do validation.%Set("parsed", 0, "boolean")
-            Set validation.error = "unknown schema: the category " _ $SELECT(msg.DocTypeCategory = "": "(none)", 1: msg.DocTypeCategory) _ " is not loaded in this namespace, so the message could not be validated"
+            Set validation.error = "unknown schema: the category " _ $SELECT(validation."schema_category" = "": "(none)", 1: validation."schema_category") _ " is not loaded in this namespace, so the message could not be validated"
             Set validation."schema_fix" = "Import the schema with SELECT Shutter.Setup_ImportSchema('<path>') or POST /settings/schemas, then reinvestigate the case"
         }
         Set validation.note = "Structural validation against the " _ msg.DocTypeCategory _ " schema (document type and segment structure); profile rules are the conformance review's job"

@@ -14,7 +14,7 @@ ClassMethod Vocabulary() As %DynamicObject
 {
     Quit {
         "event": ["admit", "transfer", "discharge", "update", "merge", "cancel", "other"],
-        "delivery": ["failed", "rejected", "uncertain", "unmappable", "withheld"],
+        "delivery": ["failed", "rejected", "uncertain", "unmappable", "withheld", "unreadable"],
         "receiver_answer": ["unavailable", "timeout", "duplicate", "version_conflict", "refused", "none"],
         "receipt": ["present", "absent", "unreadable", "none"],
         "later_applied": ["none", "transfer", "discharge", "update", "admit", "cancelled", "merge"],
@@ -361,6 +361,7 @@ XData Rows [ MimeType = application/json ]
    "expect": {"delivery": "failed", "receiver_answer": "unavailable", "event": "transfer", "receipt": "absent", "later_applied": "none", "later_delivery": "none", "event_time": "plausible", "encounter_state": "admitted", "transition": "allowed", "patient_match": "yes", "simultaneous_sources": "no", "conditional_writes": "yes", "free_text": "no", "chain": "single", "receiver_category": "current_state"}},
   {"group": "delivery", "name": "a refusal", "case": {"failure_kind": "rejected"}, "expect": {"delivery": "rejected"}},
   {"group": "delivery", "name": "an uncertain outcome", "case": {"failure_kind": "uncertain_outcome"}, "expect": {"delivery": "uncertain"}},
+  {"group": "delivery", "name": "a message held unread", "case": {"failure_kind": "unreadable"}, "expect": {"delivery": "unreadable"}},
   {"group": "delivery", "name": "an unmappable message", "case": {"failure_kind": "unmappable"}, "expect": {"delivery": "unmappable"}},
   {"group": "delivery", "name": "a withheld operation", "case": {"failure_kind": "withheld", "event": "merge"}, "expect": {"delivery": "withheld", "receiver_answer": "none", "event": "merge"}},
   {"group": "delivery", "name": "a case with no failure kind reads as failed", "case": {"failure_kind": ""}, "expect": {"delivery": "failed"}},

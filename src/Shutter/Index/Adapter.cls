@@ -32,6 +32,9 @@ Method OnTask() As %Status
     // connector cannot tell Shutter, and a case that began to wait after the delivery (a slow plan) would wait for ever
     // (Shutter.Util.ResendGuard).
     Do ##class(Shutter.Util.ResendGuard).ReleaseDeliveredWaits()
+    // The cases held for a schema not loaded (v1.34, "prevent failures"): released once the schema is imported where the
+    // message was read (Shutter.Util.Schemas).
+    Do ##class(Shutter.Util.Schemas).ReleaseHeld()
     Set total = 0, batches = 0
     Do ..EnsureMark()
     Set ^Shutter.Index("routes") = ..Routes, ^Shutter.Index("lag") = ..LagSeconds

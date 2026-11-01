@@ -34,6 +34,8 @@ ClassMethod InstallStatus(shutterNs As %String = "SHUTTER") As %Status
         // of its own, so Shutter's zone is copied in. A zone changed in Shutter's profile later needs this install again.
         Set zone = ..ShutterFeedTimeZone(shutterNs)
         Set ^Shutter.Config("feedZone") = $SELECT(zone '= "": zone, 1: "UTC")
+        // "Prevent failures" (v1.34): PAS In validates and hands a refused message to the forwarder when Shutter's profile says so.
+        Do ..PreventFailures(..ShutterPreventFailures(shutterNs))
         Set sc = ..ApplyDefaultSettings() Quit:$$$ISERR(sc)
         Do ..RecordInShutter(shutterNs)
         Set sc = ..RefreshShutterSecurity(shutterNs) Quit:$$$ISERR(sc)
@@ -110,6 +112,32 @@ ClassMethod EnsureForwarderUser(user As %String, password As %String) As %Status
 }
 
 /// The feed's time zone as Shutter's namespace reads it; "" when that namespace or its profile cannot be read.
+/// The demo hospital's side of "prevent failures" (CONTRACTS 11, v1.34): the flag ^Hospital.Config("preventFailures"), which
+/// PAS to Downstream reads for every message. On, a message whose schema category is not loaded in this namespace is not
+/// mapped or delivered: it goes to the Shutter Forwarder as a held message, and Shutter releases the case once the schema is
+/// imported here. Shutter's profile store calls this when the setting changes, and the install applies the profile's value;
+/// by hand: SELECT Hospital.Setup_PreventFailures(1) in the hospital's namespace. (The HL7 service's own Validation is not a
+/// setting on this build, and only a routing engine has a BadMessageHandler: a site with one points it at the forwarder.)
+ClassMethod PreventFailures(on As %Boolean = 1) As %String [ SqlProc ]
+{
+    Set ^Hospital.Config("preventFailures") = ''on
+    Quit "ok"
+}
+
+/// Shutter's "prevent failures" setting, read in its namespace; off when it cannot be read.
+ClassMethod ShutterPreventFailures(shutterNs As %String) As %Boolean [ Private ]
+{
+    Set on = 0
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = shutterNs
+        Set on = ##class(Shutter.Store.SiteProfile).PreventFailures()
+    } Catch ex {
+        Set on = 0
+    }
+    Quit ''on
+}
+
 ClassMethod ShutterFeedTimeZone(shutterNs As %String) As %String [ Private ]
 {
     Set zone = ""

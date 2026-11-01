@@ -126,7 +126,7 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     If 'request.%IsA("Shutter.Msg.CaseIntake") Quit $$$ERROR($$$GeneralError, "Case Workflow expects a case intake, a case release, a reinvestigation, a close or an abandon, got " _ $CLASSNAME(request))
     Set op = ##class(Shutter.Util.Json).Parse(request.OperationJSON, .sc)
     If $$$ISERR(sc) Quit sc
-    Set sc = ##class(Shutter.Store.Case).Open(op, request.FailureKind, request.FailureText, request.EnsSessionId, request.SourceHeaderId, request.Mode, .case, .opened, $SELECT(request.Receiver '= "": request.Receiver, 1: ..WardTarget))
+    Set sc = ##class(Shutter.Store.Case).Open(op, request.FailureKind, request.FailureText, request.EnsSessionId, request.SourceHeaderId, request.Mode, .case, .opened, $SELECT(request.Receiver '= "": request.Receiver, 1: ..WardTarget), request.HeldSchema)
     If $$$ISERR(sc) Quit sc
     Set started = ##class(Shutter.Msg.CaseStarted).%New()
     Set started.CaseId = case.CaseId, started.Opened = opened, started.State = case.State

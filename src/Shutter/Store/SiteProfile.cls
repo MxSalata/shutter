@@ -33,7 +33,7 @@ ClassMethod Default() As %DynamicObject
     Set p.approvers = {"role": "Shutter Approvers", "escalation": "the integration team's on-call", "close_needs_approver": false}
     Set p.incident = {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60}
     Set p."model_content" = {"free_text": false}
-    Set p.feed = {"time_zone": "Europe/London"}
+    Set p.feed = {"time_zone": "Europe/London", "prevent_failures": false}
     Quit p
 }
 
@@ -87,7 +87,7 @@ ClassMethod Store(json As %String, source As %String = "", user As %String = "",
             Set v.Version = row.Version, v.Json = row.Json, v.Source = source, v.UpdatedAt = row.UpdatedAt, v.UpdatedBy = row.UpdatedBy
             Set sc = v.%Save()
         }
-        If $$$ISOK(sc) { TCOMMIT  Kill ^Shutter.Config("feedZone") } Else { TROLLBACK }
+        If $$$ISOK(sc) { TCOMMIT  Kill ^Shutter.Config("feedZone"), ^Shutter.Config("preventFailures")  Do ..SyncWatchedFeed() } Else { TROLLBACK }
         Set currentVersion = +row.Version
     } Catch ex {
         Set sc = ex.AsStatus()
@@ -193,7 +193,12 @@ ClassMethod Validate(p As %DynamicObject) As %String
         If '$ISOBJECT(feed) Quit "feed: must be an object"
         Set fi = feed.%GetIterator()
         While fi.%GetNext(.k, .v) {
-            If '$LISTFIND($LISTBUILD("time_zone"), k) Return "feed." _ k _ ": unknown setting"
+            If '$LISTFIND($LISTBUILD("time_zone", "prevent_failures"), k) Return "feed." _ k _ ": unknown setting"
+            // Hold a message whose schema is not loaded here (v1.34, "prevent failures"): true or false.
+            If k = "prevent_failures" {
+                If feed.%GetTypeOf(k) '= "boolean" Return "feed.prevent_failures: must be true or false"
+                Continue
+            }
             // UTC, Europe/London and a fixed offset by Shutter's own rules; any other IANA zone when Embedded Python's zoneinfo knows it (v1.30).
             Set zoneOk = (feed.%GetTypeOf(k) = "string") && ($LISTFIND($LISTBUILD("UTC", "Europe/London"), v) || $MATCH(v, "^[+-](0[0-9]|1[0-4]):[0-5][0-9]$") || ##class(Shutter.Util.Time).PythonZoneKnown(v))
             If 'zoneOk Return "feed.time_zone: must be UTC, Europe/London, a fixed offset such as +01:00 (up to 14:00), or an IANA zone name this IRIS knows (for example Europe/Paris)"
@@ -334,6 +339,35 @@ ClassMethod FeedTimeZone() As %String
     If zone = "" Set zone = "UTC"
     Set ^Shutter.Config("feedZone") = zone
     Quit zone
+}
+
+/// Whether the site holds a message whose HL7 schema category is not loaded here instead of delivering what was read by
+/// position (v1.34, "prevent failures"; CONTRACTS 6.4 and 12): off unless the profile says feed.prevent_failures: true.
+/// Read on the feed's hot path for every message, so cached as the zone is; every store of the profile clears the cache.
+ClassMethod PreventFailures() As %Boolean
+{
+    Set cached = $GET(^Shutter.Config("preventFailures"))
+    If cached '= "" Quit +cached
+    Set feed = ..Current().%Get("feed")
+    Set on = $ISOBJECT(feed) && (feed.%GetTypeOf("prevent_failures") = "boolean") && feed.%Get("prevent_failures")
+    Set ^Shutter.Config("preventFailures") = ''on
+    Quit ''on
+}
+
+/// The demo hospital follows the setting (CONTRACTS 11): when a hospital namespace is recorded here, its PAS In takes
+/// structural validation and the bad-message handler, or loses them, as the profile says (Hospital.Setup.PreventFailures).
+/// A real site's integration team does that step itself (INSTALL.md, section 5). Never fails the store.
+ClassMethod SyncWatchedFeed()
+{
+    Try {
+        Set ns = $GET(^Shutter.Config("hospitalNamespace"))
+        Quit:ns=""
+        Set on = ..PreventFailures()
+        New $NAMESPACE
+        Set $NAMESPACE = ns
+        If ##class(%Dictionary.CompiledClass).%ExistsId("Hospital.Setup") Do $CLASSMETHOD("Hospital.Setup", "PreventFailures", on)
+    } Catch ex {
+    }
 }
 
 /// Whether the site allows OBX and NTE free text to go to a model (T27): off unless the profile says so.

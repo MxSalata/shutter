@@ -25,6 +25,21 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
 {
     Set response = ""
     If 'request.%IsA("EnsLib.HL7.Message") Quit $$$ERROR($$$GeneralError, "PAS to Downstream expects an HL7 message, got " _ $CLASSNAME(request))
+    // "Prevent failures" (v1.34; CONTRACTS 11): while the hospital's flag is set (Hospital.Setup.PreventFailures, from Shutter's
+    // site profile), a message whose schema category is not loaded in this namespace is neither mapped nor delivered, since
+    // its fields would be read from the wrong places: it goes to Shutter as a held message, and Shutter releases the case
+    // once the schema is imported here. The message is handled, not failed, so the feed goes on.
+    If $GET(^Hospital.Config("preventFailures")) {
+        Set category = ##class(Shutter.Util.Schemas).CategoryOf(request, ..%PrimaryRequestHeader.SourceConfigName)
+        If '##class(Shutter.Util.Schemas).Known(category) {
+            Set forward = ##class(Shutter.Intake.Forwarder).ForwardFor(request, ..%PrimaryRequestHeader, ..WardTarget)
+            If ..RouteName '= "" Set forward.Route = ..RouteName
+            $$$TRACE(forward.FailureText)
+            Set sc = ..SendRequestAsync(..ForwarderTarget, forward, 1, "forward")
+            If $$$ISERR(sc) $$$LOGWARNING("Could not hand the held message to Shutter: " _ $SYSTEM.Status.GetErrorText(sc))
+            Quit $$$OK
+        }
+    }
     Set op = ##class(Shutter.Util.OperationKey).FromHL7(request, .sc)
     If $$$ISERR(sc) {
         Set text = "The message could not be mapped to a ward operation: " _ $SYSTEM.Status.GetErrorText(sc)

@@ -17,6 +17,9 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     Set c.delivery = $CASE(case.FailureKind, "delivery_failed": "failed", "rejected": "rejected", "uncertain_outcome": "uncertain", : "failed")
     If case.FailureKind = "unmappable" Set c.delivery = "unmappable"
     If case.FailureKind = "withheld" Set c.delivery = "withheld"
+    // A message held unread (v1.34): never sent, no answer. The word stays after the schema is loaded and the case released;
+    // the catalogue's entry for a held message proposes the resend then, and the gate, which blocked SCHEMA_UNKNOWN, passes it.
+    If case.FailureKind = "unreadable" Set c.delivery = "unreadable"
     // receiver_answer, from the error item's reason code and status
     Set error = ..Item(summary, "error")
     Set reason = $ZCONVERT($SELECT($ISOBJECT(error): $CLASSMETHOD(json, "Str", error, "reason_code"), 1: ""), "L")

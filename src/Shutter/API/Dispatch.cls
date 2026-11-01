@@ -1063,7 +1063,7 @@ ClassMethod CaseAbandon(caseId As %String) As %Status
 /// intake goes through the API service to the Case Intake item synchronously, so the answer carries the case id.
 /// Shutter_Intake, the X-Requested-With header and an optional Idempotency-Key; 202 {caseId, state, opened}; 400
 /// bad_request naming the field when the body is not a JSON object, message is missing or is not an HL7 message, or
-/// failure.kind is not one of the four kinds.
+/// failure.kind is not one of the five kinds.
 ClassMethod Intake() As %Status
 {
     If '..Allow("Shutter_Intake", 1) Quit $$$OK
@@ -1078,7 +1078,7 @@ ClassMethod Intake() As %Status
     If body.%GetTypeOf("failure") '= "object" Quit ..Fail("400 Bad Request", "bad_request", "failure is required: an object with kind")
     Set failure = body.failure
     Set kind = ##class(Shutter.Util.Json).Str(failure, "kind")
-    If '$LISTFIND($LISTBUILD("delivery_failed", "rejected", "uncertain_outcome", "unmappable"), kind) Quit ..Fail("400 Bad Request", "bad_request", "failure.kind must be delivery_failed, rejected, uncertain_outcome or unmappable")
+    If '$LISTFIND($LISTBUILD("delivery_failed", "rejected", "uncertain_outcome", "unmappable", "unreadable"), kind) Quit ..Fail("400 Bad Request", "bad_request", "failure.kind must be delivery_failed, rejected, uncertain_outcome, unmappable or unreadable")
     Set mode = ##class(Shutter.Util.Json).Str(body, "mode")
     If (mode '= "") && '$LISTFIND($LISTBUILD("board", "single", "rules", "policy"), mode) Quit ..Fail("400 Bad Request", "bad_request", "mode must be board, single, rules or policy")
     Set source = $SELECT(body.%GetTypeOf("source") = "object": body.source, 1: {})
@@ -1374,6 +1374,9 @@ ClassMethod Settings() As %Status
     // The day's model budget (v1.34): {dailyUsd, spentTodayUsd, exhausted, since, resetsAt, perUserUsd, spentByMeUsd,
     // shareExhausted}, the caller's own spend included.
     Set o.budget = ##class(Shutter.Util.Budget).StatusFor(..User())
+    // The hold for a schema not loaded (v1.34, "prevent failures"): the site's setting, and the held cases by category.
+    Do o.%Set("preventFailures", ##class(Shutter.Store.SiteProfile).PreventFailures(), "boolean")
+    Set o.heldMessages = ##class(Shutter.Util.Schemas).Held()
     // The API mimic's switch (CONTRACTS 4), read once for every item: while it is set, an item that resolves to live is
     // answered by the mimic, with no model, and the reply says so.
     Set mock = ##class(Shutter.Setup).MockConfig()

@@ -38,11 +38,16 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     // 2. The operation, as the feed builds it. A message that does not map is a case too (the feed's rule): the kind
     // becomes unmappable and the text says why, with what the source reported after it.
     Set kind = request.FailureKind, text = request.FailureText
+    // A message the source held for a schema it lacks (v1.34, "prevent failures") keeps its kind and the category it waits
+    // for, so the index's check releases the case once that namespace has the schema.
+    Set heldSchema = $SELECT((kind = "unreadable") && (request.FailureReasonCode = "schema_unknown"): request.SchemaCategory, 1: "")
     Set op = ##class(Shutter.Util.OperationKey).FromHL7(msg, .osc)
     If $$$ISERR(osc) || '$ISOBJECT(op) {
         Set op = ##class(Shutter.Util.OperationKey).Unmapped(msg, headerId)
-        Set kind = "unmappable"
-        Set text = "The message could not be mapped to an operation for the downstream system: " _ $SYSTEM.Status.GetErrorText(osc) _ $SELECT(text '= "": ". The source reported: " _ text, 1: "")
+        If kind '= "unreadable" {
+            Set kind = "unmappable"
+            Set text = "The message could not be mapped to an operation for the downstream system: " _ $SYSTEM.Status.GetErrorText(osc) _ $SELECT(text '= "": ". The source reported: " _ text, 1: "")
+        }
     }
     // 3. The case, through the case workflow, synchronously: its CaseStarted is this process's answer.
     Set intake = ##class(Shutter.Msg.CaseIntake).%New()
@@ -50,6 +55,7 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     Set intake.FailureKind = kind
     Set intake.FailureText = $EXTRACT(text, 1, 2000)
     Set intake.FailureReasonCode = request.FailureReasonCode
+    Set intake.HeldSchema = heldSchema
     Set intake.SourceHeaderId = headerId
     Set intake.EnsSessionId = ..%SessionId
     Set intake.Mode = $SELECT(request.Mode '= "": request.Mode, 1: $GET(^Shutter.Config("mode"), "board"))

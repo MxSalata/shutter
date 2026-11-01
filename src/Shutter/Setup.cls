@@ -1190,6 +1190,9 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Set r.questions = +questions
     // The HL7 schemas this namespace holds against those the production's services and the recent messages name (v1.32).
     Set r."hl7_schemas" = ##class(Shutter.Util.Schemas).Report()
+    // The hold for a schema not loaded (v1.34, "prevent failures"): the profile's setting and the held cases by category.
+    Do r.%Set("prevent_failures", ##class(Shutter.Store.SiteProfile).PreventFailures(), "boolean")
+    Set r."held_messages" = ##class(Shutter.Util.Schemas).Held()
     // The live hospital's player, when the watched hospital has one (v1.34).
     Set r.live = ..LiveStatus()
     // The day's model budget and what the live runs spent today (v1.34).
