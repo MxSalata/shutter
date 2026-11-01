@@ -33,8 +33,8 @@ import { freshHolds, heldView, type CaseFixture, type Hold } from './hold';
 import { recordedSiteProfile, recordedSiteProfileHistory } from './profile';
 import {
   questionDetail,
+  recordedQuestion,
   resetQuestionIds,
-  sampleQuestion,
   startingQuestions,
   suggestedFor,
   suggestedWithAsked,
@@ -156,7 +156,7 @@ export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
 
 /**
  * The questions asked about each case here, read on first use: a showcase case starts with its example conversation.
- * The answers are sample data until the re-record (questions.ts).
+ * The answers are the recorded ones (questions.ts).
  */
 let asked: Record<string, CaseQuestion[]> = {};
 const questionsOf = (id: string) => (asked[id] ??= startingQuestions(id, stamp()));
@@ -935,7 +935,7 @@ export const handlers = [
         { status: 202 },
       );
     if (done) return reply(done);
-    const q = sampleQuestion(id, conversation, turn, session!.username, stamp());
+    const q = recordedQuestion(id, conversation, turn, session!.username, stamp());
     if (!q) return error(404, 'unknown_suggested', `No suggested turn ${conversation}.${String(turn)}`);
     await delay();
     list.push(q);

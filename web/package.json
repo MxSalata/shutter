@@ -11,6 +11,7 @@
     "build:demo": "npm run typecheck && vite build --mode demo --outDir dist-demo --emptyOutDir",
     "preview:demo": "vite preview --outDir dist-demo --port 4174 --strictPort",
     "record:demo": "node scripts/record-demo.mjs",
+    "export:answers": "node scripts/export-recorded-answers.mjs",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",

@@ -432,7 +432,9 @@ describe('SiteProfilePage, a change a case suggested', () => {
       .closest('tr')!;
     expect(row).toHaveTextContent('none named');
     expect(row).toHaveTextContent('BEDMGR');
-    expect(within(card).getByText(/every case where the PAS and the bed manager/)).toBeInTheDocument();
+    expect(
+      within(card).getByText(/every failure where another source system applied a movement/),
+    ).toBeInTheDocument();
     expect(within(card).getByRole('link', { name: 'Back to case C-000008' })).toHaveAttribute(
       'href',
       '/cases/C-000008?ask=1',
@@ -488,7 +490,9 @@ describe('SiteProfilePage, a change a case suggested', () => {
       .closest('tr')!;
     expect(row).toHaveTextContent('BEDMGR');
     expect(row).not.toHaveTextContent('PAS');
-    expect(within(card).getByText(/every case where the PAS and the bed manager/)).toBeInTheDocument();
+    expect(
+      within(card).getByText(/every failure where another source system applied a movement/),
+    ).toBeInTheDocument();
   });
 
   it('pre-fills nothing for a fact the case does not have, or facts that cannot be read', async () => {
