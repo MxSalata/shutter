@@ -32,7 +32,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Open http://localhost:52773/shutter/index.html and sign in as `approver` / `shutter`. The first build takes about 10 to 15 minutes. No Early Access file? See [Run it](https://github.com/MxSalata/shutter#run-it) for the replay edition on the public IRIS for Health Community image.
+Open http://localhost:52773/shutter/index.html and sign in as `approver` / `shutter`. The first build takes 2 to 15 minutes, depending on the machine; it's ready when `docker compose ps` says `healthy`. No Early Access file? See [Run it](https://github.com/MxSalata/shutter#run-it) for the replay edition on the public IRIS for Health Community image.
 
 ## What the judges should look at
 
@@ -161,7 +161,7 @@ docker compose ps
 curl http://localhost:52773/api/shutter/health
 ```
 
-If `docker images` shows the image much smaller than 11 GB, run the load again. The health report says `"ok":true` once the production is running. For live agents, set `ANTHROPIC_API_KEY` in `.env` before `docker compose up`; the model is `claude-opus-5-5` (`SHUTTER_MODEL`). A full live pass of every scenario costs about 5 USD on your own key.
+If `docker images` shows the image much smaller than 11 GB on disk (Docker 29 lists about 11 GB of disk usage and 5.4 GB of content), run the load again. On the first start, `docker compose logs` shows two lines from the IRIS image itself, an `ERROR #5002 ... Sharding` line and "Error trading CSP licenses": both are harmless. The health report says `"ok":true` once the production is running. For live agents, set `ANTHROPIC_API_KEY` in `.env` before `docker compose up`; the model is `claude-opus-5-5` (`SHUTTER_MODEL`). A full live pass of every scenario costs about 5 USD on your own key.
 
 ### The replay edition (no AI Hub image, no key)
 
