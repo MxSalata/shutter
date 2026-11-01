@@ -1202,14 +1202,15 @@ builds the context (14.3) and asks the agents through their Agent Board items wi
 `CONFIGVERSION` when the aihub module is installed, else `1`); for `board`, one request per enabled default specialist
 (`Role` `member`, the member's code, class, `ConfigVersion` and `ConfigItem`, `SubmitAnswer`, `Shutter.Schema.Answer`, 30000
 tokens, 4 iterations), and when every member has answered or failed, the coordinator's (`Role` `coordinator`,
-`SubmitBoardAnswer`, `Shutter.Schema.BoardAnswer`, 30000 tokens, 3 iterations) with the members' accepted answers added to
+`SubmitBoardAnswer`, `Shutter.Schema.BoardAnswer`, 50000 tokens, 3 iterations) with the members' accepted answers added to
 the context as `member_answers`. A member that fails or is refused is noted on the question and the coordinator goes on with
 the rest; with no usable member answer the question fails. One alarm (`AgentTimeoutSeconds`, 600 s) fails the question with
 what is missing. Every run is a `Shutter.Store.AgentRun` row naming its question (`questionId`), so the case's runs and
 `GET /costs` carry it (`byQuestion`: `[{questionId, caseId, runs, replayedRuns, costUsd}]`, `totals.questionRuns`).
 
-**Record keys.** `question:<S>:<encounter>:<event>|<tier>|<member>|<conversation>.<turn>|<cfg>` for a suggested turn of a
-case with a scenario (`member` is `explain`, a specialist's code or `coordinator`; `cfg` that agent's configuration version);
+**Record keys.** `question:<S>:<encounter>:<event>[:<receiver>]|<tier>|<member>|<conversation>.<turn>|<cfg>` for a suggested turn of a
+case with a scenario (`receiver` when the case names one, so the two cases of one movement to different receivers in S22
+record apart; `member` is `explain`, a specialist's code or `coordinator`; `cfg` that agent's configuration version);
 a free question, or a free follow-up inside a recorded conversation, has no key and runs live only (the mimic does not answer
 questions). Replay follows the same path turn by turn, each turn's context carrying the recorded earlier turns.
 
@@ -1306,7 +1307,7 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 - v1.27, 26 Oct 2026: questions about a case (14.2 to 14.5): `Shutter.Store.CaseQuestion` (a turn of a conversation: tier,
   source, state, the facts handed over, the answer, the members' answers, the resolved change, the runs), the Case Question
   item (`Shutter.Process.Question`, in `INSTALLITEMS`) asking the Explain agent or the board's members and coordinator through
-  the Agent Board items with the context of 14.3, the record keys `question:<S>:<encounter>:<event>|<tier>|<member>|<conversation>.<turn>|<cfg>`
+  the Agent Board items with the context of 14.3, the record keys `question:<S>:<encounter>:<event>[:<receiver>]|<tier>|<member>|<conversation>.<turn>|<cfg>`
   for suggested turns, the checks of 14.4 (cites, confidence, fact ids; `schema_failed`), the routes under
   `/cases/{id}/questions` with the scenario's suggested conversations (5, 14.5), `questionId` on agent runs and `byQuestion`
   and `totals.questionRuns` in `GET /costs`; the question table in the case purge and `PurgeStore` (12).
