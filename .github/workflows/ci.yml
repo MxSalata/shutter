@@ -644,6 +644,69 @@ jobs:
       # The image installs the demo hospital at build time (iris.script) and starts its production with the instance
       - name: Scenario S19 through the built image's demo hospital
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes policy --approve S19
+      # The six settings a public demo sets in .env reach a running container as its environment, never as build args,
+      # and the production's start applies them (CONTRACTS 4.4, 9 and 12): the same image started again with them must
+      # have the judge and demo users, the day's cap and the judge's share, and the live hospital on. A separate start,
+      # after S2 and S19, since the live hospital's player begins its stories within a minute. Fixed test passwords.
+      - name: The runtime settings reach the instance (live hospital, budget, demo and judge users)
+        env:
+          SHUTTER_LIVE: '1'
+          SHUTTER_DAILY_BUDGET_USD: '5'
+          SHUTTER_JUDGE_BUDGET_USD: '1'
+          SHUTTER_PUBLIC_DEMO_PASSWORD: ci-demo-pw-71
+          SHUTTER_TRACE_PASSWORD: ci-trace-pw-72
+          SHUTTER_JUDGE_PASSWORD: ci-judge-pw-73
+        run: |
+          # docker-compose.yml passes each of the six to the container
+          docker compose config --format json | python3 -c '
+          import json, os, sys
+          env = json.load(sys.stdin)["services"]["shutter"].get("environment") or {}
+          names = ["SHUTTER_LIVE", "SHUTTER_DAILY_BUDGET_USD", "SHUTTER_JUDGE_BUDGET_USD",
+                   "SHUTTER_PUBLIC_DEMO_PASSWORD", "SHUTTER_TRACE_PASSWORD", "SHUTTER_JUDGE_PASSWORD"]
+          missing = [n for n in names if env.get(n) != os.environ[n]]
+          sys.exit("docker-compose.yml does not pass " + ", ".join(missing) if missing else 0)'
+          docker rm -f "$CTR" > /dev/null 2>&1 || true
+          docker run -d --name "$CTR" -p 127.0.0.1::52773 \
+            -e SHUTTER_LIVE -e SHUTTER_DAILY_BUDGET_USD -e SHUTTER_JUDGE_BUDGET_USD \
+            -e SHUTTER_PUBLIC_DEMO_PASSWORD -e SHUTTER_TRACE_PASSWORD -e SHUTTER_JUDGE_PASSWORD \
+            "shutter:ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --check-caps false --ISCAgent false
+          port=$(docker port "$CTR" 52773/tcp | head -1 | sed 's/.*://')
+          url="http://127.0.0.1:$port/api/shutter"
+          # The production applies them at its start, the hospital's switch from a job once that production runs too
+          check() {
+            JUDGE=$(curl -s -u "judge:$SHUTTER_JUDGE_PASSWORD" "$url/me" || true) \
+            DEMO=$(curl -s -u "demo:$SHUTTER_PUBLIC_DEMO_PASSWORD" "$url/me" || true) \
+            SETTINGS=$(curl -s -u operator:shutter "$url/settings" || true) \
+            python3 -c '
+          import json, os, sys
+          def read(name):
+              try:
+                  return json.loads(os.environ[name])
+              except ValueError:
+                  return {}
+          judge, demo, s = read("JUDGE"), read("DEMO"), read("SETTINGS")
+          budget, live = s.get("budget") or {}, s.get("live") or {}
+          wrong = [what for what, good in [
+              ("judge /me can.liveAgents", (judge.get("can") or {}).get("liveAgents") is True),
+              ("demo /me can.liveAgents", (demo.get("can") or {}).get("liveAgents") is False),
+              ("budget.dailyUsd 5", budget.get("dailyUsd") == 5),
+              ("budget.perUserUsd 1", budget.get("perUserUsd") == 1),
+              ("live.enabled", live.get("enabled") is True)] if not good]
+          if wrong and len(sys.argv) > 1:
+              print("not yet: " + ", ".join(wrong))
+              print("budget:", json.dumps(budget), "live:", json.dumps(live))
+          sys.exit(1 if wrong else 0)' "$@"
+          }
+          ok=
+          for i in $(seq 1 60); do
+            if check; then ok=1; echo "Applied after $((i*5)) s"; break; fi
+            sleep 5
+          done
+          [ -n "$ok" ] || { check verbose; exit 1; }
+          # The production's own log says what it applied
+          python3 scripts/iris-sql.py --url "http://127.0.0.1:$port" --ns SHUTTER \
+            "SELECT TOP 1 Text FROM Ens_Util.Log WHERE Text %STARTSWITH 'The environment was applied' ORDER BY ID DESC" \
+            | tee /dev/stderr | grep -q 'The environment was applied'
       - name: IRIS log
         if: always()
         run: docker logs "$CTR" 2>&1 | tail -100 || true
