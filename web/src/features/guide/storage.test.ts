@@ -9,20 +9,21 @@ afterEach(() => {
 });
 
 describe('the guide storage', () => {
-  it('keeps the progress under its namespaced key, and nothing else', () => {
-    const p = { ...INITIAL, chapter: 's8', step: 1, completed: ['scenarios'] };
+  it('keeps the progress under its v2 key, and nothing else', () => {
+    expect(GUIDE_KEY).toBe('shutter:guide:v2');
+    const p = { ...INITIAL, scope: 'engineer' as const, at: 's8/trace', completed: ['s2'] };
     saveProgress(p);
     expect(JSON.parse(localStorage.getItem(GUIDE_KEY)!)).toEqual(p);
     expect(Object.keys(JSON.parse(localStorage.getItem(GUIDE_KEY)!)).sort()).toEqual(
-      ['chapter', 'completed', 'dismissed', 'scope', 'step', 'version'].sort(),
+      ['at', 'completed', 'dismissed', 'scope', 'version'].sort(),
     );
     expect(loadProgress()).toEqual(p);
   });
 
-  it('starts afresh from a damaged or older value', () => {
+  it('starts afresh from a damaged or older value, the first guide included', () => {
     localStorage.setItem(GUIDE_KEY, '{not json');
     expect(loadProgress()).toEqual(INITIAL);
-    localStorage.setItem(GUIDE_KEY, JSON.stringify({ ...INITIAL, version: 0 }));
+    localStorage.setItem(GUIDE_KEY, JSON.stringify({ ...INITIAL, version: 1, chapter: 's2', step: 0 }));
     expect(loadProgress()).toEqual(INITIAL);
   });
 
