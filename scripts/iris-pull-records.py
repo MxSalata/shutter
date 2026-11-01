@@ -5,7 +5,9 @@ scenario-<S>-<encounter>-<event>-<member>-<cfg>[-roundN].json for the keys that 
 
     python3 scripts/iris-pull-records.py --url http://host:52773 --ns SHUTTER [--like 'scenario:S2:%'] [--dir fixtures/records]
 
-Only recordings whose key starts with "scenario:" are written (the demo scenarios), and with --like 'review:%' the
+Only recordings whose key starts with "scenario:" are written (the demo scenarios); with --like 'question:%' the
+suggested questions' (question:<S>:<encounter>:<event>[:<receiver>]|<tier>|<member>|<conversation>.<turn>|<cfg>, named
+with each of ":|/\\ " as "-"), and with --like 'review:%' the
 production review's (review:<namespace>:<production>|review|1|<fingerprint>, named as Shutter.Bridge.Record.ExportDir
 names it: review-SHUTTER-Shutter.Production-review-1-<fingerprint>.json); others are listed. The repository
 has no em dashes, and models write them: in every text of a recording, a spaced em dash becomes a semicolon and any
@@ -24,6 +26,10 @@ KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+)(?::(?P<encounter>[^:|]+):(?P<
                     r"\|(?P<member>[a-z]+)\|(?P<cfg>\d+)(?:\|round(?P<round>\d+))?$")
 # review:<namespace>:<production>|review|1|<fingerprint>, as in scripts/check-records.py
 REVIEW_KEY_RE = re.compile(r"^review:[A-Za-z0-9_%]+:[A-Za-z0-9_.]+\|review\|1\|(?:[0-9a-f]{64}|)$")
+# question:<S>:<encounter>:<event>[:<receiver>]|<tier>|<member>|<conversation>.<turn>|<cfg>, as Shutter.Process.Question
+# writes it for a suggested turn (CONTRACTS 14.2); its file is named as a review's: each of ":|/\\ " becomes "-"
+QUESTION_KEY_RE = re.compile(r"^question:(?P<scenario>S\d+[a-z]?):(?P<encounter>[^:|]+):(?P<event>[^:|]+)(?::(?P<receiver>[^|]+))?"
+                             r"\|(?P<tier>explain|board)\|(?P<member>[a-z]+)\|(?P<conversation>[A-Za-z0-9_-]+)\.(?P<turn>\d+)\|(?P<cfg>\d+)$")
 
 
 def plain(x):
@@ -73,7 +79,7 @@ def main():
     os.makedirs(args.dir, exist_ok=True)
     written, skipped = [], []
     for row in rows:
-        m = KEY_RE.match(row["Key"]) or REVIEW_KEY_RE.match(row["Key"])
+        m = KEY_RE.match(row["Key"]) or REVIEW_KEY_RE.match(row["Key"]) or QUESTION_KEY_RE.match(row["Key"])
         if not m:
             skipped.append(row["Key"])
             continue

@@ -12,6 +12,8 @@ members whose round-1 recording is missing, per case (scenario:S11:ENC-1101:tran
 form without the encounter and event (scenario:S2|member|cfg) is a problem: Shutter.Bridge.Record looks up the long key
 only, so such a recording never replays. A scenario that opens an incident needs recordings only for the encounters
 whose chain the board decides; a withheld merge or cancel, and a scenario played only in site-policy mode, need none.
+A suggested question's recording (question:<S>:<encounter>:<event>[:<receiver>]|<tier>|<member>|<conversation>.<turn>|<cfg>)
+is checked for its member, agent class, file name and answer shape (Shutter.Schema.Answer or BoardAnswer).
 A production review's recording (review:SHUTTER:Shutter.Production|review|1|<fingerprint>) is checked the same way, is
 named as Shutter.Bridge.Record.ExportDir names it, and is not counted towards any scenario's board set.
 """
@@ -42,6 +44,41 @@ REVIEW_KEY_RE = re.compile(r"^review:(?P<namespace>[A-Za-z0-9_%]+):(?P<productio
                            r"\|(?P<member>review)\|(?P<cfg>1)\|(?P<fingerprint>[0-9a-f]{64}|)$")
 # The review's agent has no evidence tools: its knowledge search and its terminal are all it can call
 REVIEW_TOOLS = {"search_review", "SubmitReview"}
+# question:<S>:<encounter>:<event>[:<receiver>]|<tier>|<member>|<conversation>.<turn>|<cfg>, as Shutter.Process.Question
+# writes it for a suggested turn (CONTRACTS 14.2); its file is named as a review's: each of ":|/\\ " becomes "-"
+QUESTION_KEY_RE = re.compile(r"^question:(?P<scenario>S\d+[a-z]?):(?P<encounter>[^:|]+):(?P<event>[^:|]+)(?::(?P<receiver>[^|]+))?"
+                             r"\|(?P<tier>explain|board)\|(?P<member>[a-z]+)\|(?P<conversation>[A-Za-z0-9_-]+)\.(?P<turn>\d+)\|(?P<cfg>\d+)$")
+# A question's answering agents: the Explain agent, or a board member answering from its perspective, or the coordinator
+QUESTION_MEMBERS = {
+    "explain": "Shutter.Agent.Explain",
+    "conformance": "Shutter.Agent.Conformance",
+    "encounter": "Shutter.Agent.Encounter",
+    "impact": "Shutter.Agent.Impact",
+    "coordinator": "Shutter.Agent.Coordinator",
+}
+
+
+def check_answer(r, board):
+    """A question's answer: Shutter.Schema.Answer, or Shutter.Schema.BoardAnswer for the coordinator (CONTRACTS 14.2, 14.4)."""
+    if not isinstance(r, dict):
+        return ["the answer must be a JSON object"]
+    p = []
+    a = r.get("answer")
+    if not isinstance(a, str) or not a.strip():
+        p.append("answer needs the answer in plain words")
+    elif len(a) > 1200:
+        p.append("answer is longer than 1200 characters")
+    cites = r.get("cites")
+    if cites is not None and (not isinstance(cites, list) or any(not isinstance(c, str) or not c for c in cites)):
+        p.append("cites must be a list of evidence ids and fact ids")
+    if r.get("confidence") not in (None, "", "high", "medium", "low"):
+        p.append("confidence must be high, medium or low")
+    if board:
+        for f in ("setting", "under_alternative", "suggested_change"):
+            v = r.get(f)
+            if v is not None and not (isinstance(v, dict) and re.fullmatch(r"W\d+", str(v.get("fact") or ""))):
+                p.append(f"{f} must name a fact id W<n>")
+    return p
 
 
 def file_name(m):
@@ -254,6 +291,39 @@ def mock_problems(d):
     return []
 
 
+def check_question(path, d, q, problems):
+    """A suggested question's recording: the key's member and agent class, the configuration version, the file name, a
+    usable response and an answer of the right shape."""
+    member = q["member"]
+    if member not in QUESTION_MEMBERS:
+        return problems + [f"unknown member {member!r} for a question"]
+    if q["tier"] == "explain" and member != "explain":
+        problems.append("an explain question is answered by the explain agent only")
+    if q["tier"] == "board" and member == "explain":
+        problems.append("a board question is answered by the board's members and the coordinator")
+    if d.get("memberCode") != member:
+        problems.append(f"memberCode {d.get('memberCode')!r} differs from the key's member {member!r}")
+    if d.get("agentClass") != QUESTION_MEMBERS[member]:
+        problems.append(f"agentClass should be {QUESTION_MEMBERS[member]}")
+    if str(d.get("configVersion")) != q["cfg"]:
+        problems.append(f"configVersion {d.get('configVersion')!r} differs from the key's {q['cfg']!r}")
+    expected_name = review_file_name(d.get("key", ""))
+    if os.path.basename(path) != expected_name:
+        problems.append(f"file name should be {expected_name}")
+    resp = d.get("response")
+    if not isinstance(resp, dict):
+        return problems + ["response must be an object"]
+    if resp.get("status") != "ok":
+        problems.append("response.status should be ok for a usable recording")
+    result = resp.get("result")
+    if isinstance(result, str):
+        try:
+            result = json.loads(result)
+        except ValueError:
+            return problems + ["response.result is not JSON"]
+    return problems + check_answer(result, member == "coordinator")
+
+
 def check_file(path):
     problems = []
     try:
@@ -265,6 +335,9 @@ def check_file(path):
         return ["a recording must be a JSON object"], None
     problems += mock_problems(d)
     key = d.get("key", "")
+    q = QUESTION_KEY_RE.match(key)
+    if q:
+        return check_question(path, d, q, problems), q
     m = KEY_RE.match(key) or REVIEW_KEY_RE.match(key)
     if not m:
         problems.append(f"key {key!r} is not scenario:S<n>[:<encounter>:<event>]|<member>|<configVersion>[|round<n>]"
