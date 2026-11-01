@@ -16,7 +16,11 @@ Property FreshSeconds As %Integer [ InitialExpression = 300 ];
 /// The receiver whose paths are read when the case names none (the production item that delivers to it).
 Property Receiver As %String(MAXLEN = 128) [ InitialExpression = {$PARAMETER("Shutter.Production", "RECEIVER")} ];
 
-Parameter SETTINGS = "FreshSeconds:Evidence,Receiver:Evidence";
+/// The item asked for an independent parser's report on a message IRIS could not read (the Second Parser, a PEX business
+/// operation running HAPI in Java); empty never asks.
+Property SecondParserTarget As %String(MAXLEN = 128) [ InitialExpression = "Second Parser" ];
+
+Parameter SETTINGS = "FreshSeconds:Evidence,Receiver:Evidence,SecondParserTarget:Evidence";
 
 Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response As Shutter.Msg.EvidenceResult) As %Status
 {
@@ -60,6 +64,9 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
         Do case.Note("note", "The message's times carry no offset; they are read as " _ read _ $SELECT(+##class(Shutter.Util.Json).Str(msgInfo, "times_with_offset") > 0: ", while others in the same message carry one", 1: ""), "system")
     }
     Do snap.AddItem("message", "message_store", now, msgInfo) Set count = count + 1
+    // A message IRIS could not read (no parse, or a schema this namespace lacks) gets a second opinion from an independent
+    // parser, the Second Parser item (CONTRACTS 6.7, v1.34), when the production has one; without it the evidence says so.
+    If (..SecondParserTarget '= "") && '##class(Shutter.Util.Json).Bool(validation, "parsed") Set validation."second_parser" = ..SecondOpinion(case.SourceHeaderId)
     Do snap.AddItem("validation", "validator", now, validation) Set count = count + 1
 
     // 4. The downstream system's state and history for the encounter.
@@ -226,6 +233,37 @@ Method OperationOf(case As Shutter.Store.Case) As %DynamicObject [ Private ]
     If case.PriorPatientId '= "" Set op."prior_patient_id" = case.PriorPatientId, op."prior_patient_id_authority" = case.PriorPatientIdAuthority
     If case.PriorEncounterId '= "" Set op."prior_encounter_id" = case.PriorEncounterId
     Quit op
+}
+
+/// The Second Parser's report on the HL7 message behind a header (CONTRACTS 6.1): the item's report object with the item's
+/// name added, or {available: false, item, reason} when the item is off, missing, slow or failing; nothing here throws.
+Method SecondOpinion(headerId As %String) As %DynamicObject
+{
+    Set out = {}
+    Do out.%Set("available", 0, "boolean")
+    Set out.item = ..SecondParserTarget
+    Try {
+        Set header = ##class(Ens.MessageHeader).%OpenId(headerId)
+        Set msg = $SELECT($ISOBJECT(header): ##class(EnsLib.HL7.Message).%OpenId(header.MessageBodyId), 1: "")
+        If '$ISOBJECT(msg) Set out.reason = "no HL7 message behind header " _ headerId Quit
+        Set raw = msg.OutputToString(, , .osc)
+        If $$$ISERR(osc) || (raw = "") Set raw = msg.RawContent
+        If raw = "" Set out.reason = "the message has no text to parse" Quit
+        If '##class(Shutter.Util.SecondParser).Available() Set out.reason = "the parser's jar is not installed (pex/build.sh), so the item is off" Quit
+        Set req = ##class(Shutter.Msg.ParseRequest).%New()
+        Set req.Raw = raw, req.HeaderId = headerId
+        Set sc = ..SendRequestSync(..SecondParserTarget, req, .resp, 20)
+        If $$$ISERR(sc) Set out.reason = $EXTRACT($SYSTEM.Status.GetErrorText(sc), 1, 300) Quit
+        If '$ISOBJECT(resp) Set out.reason = "no answer within 20 s" Quit
+        Set out = resp.Report()
+        Do out.%Set("available", 1, "boolean")
+        Set out.item = ..SecondParserTarget
+    } Catch ex {
+        Set out = {}
+        Do out.%Set("available", 0, "boolean")
+        Set out.item = ..SecondParserTarget, out.reason = $EXTRACT(ex.DisplayString(), 1, 300)
+    }
+    Quit out
 }
 
 /// Named fields of the HL7 message behind a message header, and its parse status.

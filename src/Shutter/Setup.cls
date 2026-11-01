@@ -150,6 +150,8 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         // Replayed runs spend nothing; rows written before this rule held a recording's price.
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "UPDATE Shutter_Store.AgentRun SET CostUSD = 0 WHERE Mode = 'replay' AND CostUSD <> 0")
         Set sc = ..StartProduction() Quit:$$$ISERR(sc)
+        Set synced = ..SyncSecondParser("Shutter.Production")
+        If $EXTRACT(synced, 1, 5) = "ERROR" Set sc = $$$ERROR($$$GeneralError, synced) Quit
         // A site runs the production with no feed of its own: the demo's items are switched off.
         If 'demo Set sc = ..DisableDemoItems() Quit:$$$ISERR(sc)
     } Catch ex {
@@ -636,6 +638,54 @@ ClassMethod ApplyDefaultSettings(production As %String = "Shutter.Production") A
 /// Make Shutter.Production the namespace's production and start it, when the class is compiled. When InstallInto
 /// put Shutter's items in the site's own production, there is nothing of Shutter's to start, and that production is
 /// never stopped here.
+/// The Second Parser item follows its jar (CONTRACTS 6.7, v1.34): enabled in the production's definition when
+/// shutter-pex.jar is installed (pex/build.sh), disabled when it is not, so a site without Java, or the replay edition, logs
+/// no gateway errors and the evidence simply carries no second opinion; and its %gatewayExtraClasspaths setting is written
+/// for this install (IRIS's own intersystems-utils jar, the parser's jar, lib/*.jar), since the jar versions differ between
+/// IRIS builds. A running production is updated in place. Safe to run again; a production without the item is left alone.
+/// Returns "ok: <enabled|disabled>, <n> jars" or "ERROR: ..."; from SQL, SELECT Shutter.Setup_SyncSecondParser().
+ClassMethod SyncSecondParser(production As %String = "Shutter.Production") As %String [ SqlProc ]
+{
+    Set out = "ok: no item"
+    Try {
+        If (production = "") || (production = $CHAR(0)) Set production = "Shutter.Production"
+        Set prod = ##class(Ens.Config.Production).%OpenId(production)
+        If '$ISOBJECT(prod) Quit
+        Set want = ##class(Shutter.Util.SecondParser).Available(), changed = 0
+        Set classpath = $SELECT(want: ##class(Shutter.Util.SecondParser).Classpath(), 1: "")
+        For i = 1:1:prod.Items.Count() {
+            Set item = prod.Items.GetAt(i)
+            Continue:(item.Name '= ##class(Shutter.Util.SecondParser).#ITEM)
+            If item.Enabled '= want Set item.Enabled = want, changed = 1
+            If want {
+                Set found = 0
+                For j = 1:1:item.Settings.Count() {
+                    Set setting = item.Settings.GetAt(j)
+                    Continue:(setting.Name '= "%gatewayExtraClasspaths")
+                    Set found = 1
+                    If setting.Value '= classpath Set setting.Value = classpath, changed = 1
+                }
+                If 'found {
+                    Set setting = ##class(Ens.Config.Setting).%New()
+                    Set setting.Target = "Host", setting.Name = "%gatewayExtraClasspaths", setting.Value = classpath
+                    Do item.Settings.Insert(setting)
+                    Set changed = 1
+                }
+            }
+            Set out = "ok: " _ $SELECT(want: "enabled", 1: "disabled") _ ", " _ $LENGTH(classpath, "|") _ " jars"
+        }
+        Quit:'changed
+        Set sc = prod.%Save()
+        If $$$ISERR(sc) Set out = "ERROR: " _ $SYSTEM.Status.GetErrorText(sc) Quit
+        Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)
+        If $$$ISOK(sc) && (state = 1) && (name = production) Set sc = ##class(Ens.Director).UpdateProduction()
+        If $$$ISERR(sc) Set out = "ERROR: " _ $SYSTEM.Status.GetErrorText(sc)
+    } Catch ex {
+        Set out = "ERROR: " _ ex.DisplayString()
+    }
+    Quit out
+}
+
 ClassMethod StartProduction() As %Status
 {
     Set sc = $$$OK
@@ -774,7 +824,7 @@ ClassMethod SeedAll(root As %String) As %Status [ Private ]
 /// The items InstallInto adds to a site's production, in Shutter.Production's order: the recovery side, the index and
 /// the board, never the feed or the demo (ADT In, ADT to Downstream, Downstream Out, Scenario Player). Case Intake and
 /// Case Intake Store are added once Shutter.Production defines them. A new recovery item is listed here too.
-Parameter INSTALLITEMS = "HL7 Index,Escalation Mail,Case Workflow,Case Review,Case Question,Incident Workflow,Evidence Collector,Agent Conformance,Agent Encounter,Agent Impact,Agent Coordinator,Agent Board,Gate,Shutter Approvers,Shutter API,Verifier,Case Intake,Case Intake Store";
+Parameter INSTALLITEMS = "HL7 Index,Escalation Mail,Case Workflow,Case Review,Case Question,Incident Workflow,Evidence Collector,Agent Conformance,Agent Encounter,Agent Impact,Agent Coordinator,Agent Board,Gate,Shutter Approvers,Shutter API,Verifier,Case Intake,Case Intake Store,Second Parser";
 
 /// Adds Shutter's items (INSTALLITEMS) to the named production, each as Shutter.Production's compiled definition has
 /// it (class, pool size, enabled, foreground, comment, category, trace flag, schedule and settings), when the
@@ -1095,7 +1145,8 @@ ClassMethod Doctor() As %String [ SqlProc ]
     For i = 1:1:$LENGTH(..#INSTALLITEMS, ",") {
         Set item = $PIECE(..#INSTALLITEMS, ",", i), enabled = ""
         &sql(SELECT Enabled INTO :enabled FROM Ens_Config.Item WHERE Production = :prod AND Name = :item)
-        If SQLCODE '= 0 { Do missing.%Push(item) } ElseIf 'enabled { Do disabled.%Push(item) }
+        // The Second Parser is off by design where its jar is not installed (v1.34): not a disabled item then.
+        If SQLCODE '= 0 { Do missing.%Push(item) } ElseIf 'enabled { If (item '= "Second Parser") || ##class(Shutter.Util.SecondParser).Available() Do disabled.%Push(item) }
     }
     Set r."missing_items" = missing, r."disabled_items" = disabled
     Set r."gate_policy_version" = $PARAMETER("Shutter.Operation.Gate", "POLICYVERSION")
@@ -1113,6 +1164,8 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Set r.live = ..LiveStatus()
     // The day's model budget and what the live runs spent today (v1.34).
     Set r.budget = ##class(Shutter.Util.Budget).Status()
+    // The Second Parser (v1.34): the jar, and whether the Java gateway answers a probe.
+    Set r."second_parser" = ##class(Shutter.Util.SecondParser).Status()
     Set r.license = ##class(%DynamicObject).%FromJSON(..LicenseInfo())
     Try {
         New $NAMESPACE

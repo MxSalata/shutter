@@ -162,6 +162,11 @@ XData ProductionDefinition
   </Item>
   <Item Name="Scenario Player" Category="Demo" ClassName="Shutter.Operation.ScenarioPlayer" PoolSize="1" Enabled="true" Foreground="false" Comment="Plays a demo scenario's steps in its own job, so a run never needs a new process and shows in the trace" LogTraceEvents="true" Schedule="">
   </Item>
+  <Item Name="Second Parser" Category="Recovery" ClassName="EnsLib.PEX.BusinessOperation" PoolSize="1" Enabled="true" Foreground="false" Comment="An independent HL7 parser (HAPI, Java, through PEX) asked by the Evidence Collector when IRIS cannot read a message: well-formed and of a schema this namespace lacks, or malformed and where (CONTRACTS 6.7). Off when shutter-pex.jar is not installed (pex/build.sh)" LogTraceEvents="false" Schedule="">
+    <Setting Target="Host" Name="%remoteClassname">shutter.pex.SecondParser</Setting>
+    <Setting Target="Host" Name="%gatewayName">%Java Server</Setting>
+    <Setting Target="Host" Name="%gatewayExtraClasspaths">/usr/irissys/mgr/shutter/pex/shutter-pex.jar|/usr/irissys/mgr/shutter/pex/lib/hapi-base-2.6.0.jar|/usr/irissys/mgr/shutter/pex/lib/hapi-structures-v251-2.6.0.jar|/usr/irissys/mgr/shutter/pex/lib/slf4j-api-1.7.36.jar|/usr/irissys/mgr/shutter/pex/lib/commons-lang3-3.12.0.jar|/usr/irissys/mgr/shutter/pex/lib/joda-time-2.1.jar</Setting>
+  </Item>
   <Item Name="Verifier" Category="Recovery" ClassName="Shutter.Operation.Verify" PoolSize="1" Enabled="true" Foreground="false" Comment="Reads the receiver's committed history and receipts after an attempt" LogTraceEvents="true" Schedule="">
     <Setting Target="Adapter" Name="Credentials">DownstreamAPI</Setting>
     <Setting Target="Adapter" Name="ResponseTimeout">15</Setting>
