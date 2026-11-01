@@ -121,7 +121,13 @@ Method Play(id As %String, n As %Integer) As %Status
             If step.%IsDefined("file") {
                 Set k = k + 1, t = t + 1
                 Set text = ##class(Shutter.Util.LiveFeed).Rewrite(texts.%Get(t - 1), map, delta, room, "LIVE" _ n _ "-" _ $TRANSLATE($JUSTIFY(k, 2), " ", "0"))
-                Do ..WriteFile(folder _ "live-" _ $TRANSLATE($JUSTIFY(n, 5), " ", "0") _ "-" _ $TRANSLATE($JUSTIFY(k, 2), " ", "0") _ ".hl7", text)
+                Set path = folder _ "live-" _ $TRANSLATE($JUSTIFY(n, 5), " ", "0") _ "-" _ $TRANSLATE($JUSTIFY(k, 2), " ", "0") _ ".hl7"
+                Do ..WriteFile(path, text)
+                // The next step (a fault, above all) must not land before this message has been delivered: wait until PAS
+                // In has taken the file (it moves it to the archive), then a moment for the delivery, as the scenario runner
+                // does; a file still there after 15 s is left to the production and the story goes on.
+                Set deadline = $ZHOROLOG + 15
+                While ##class(%File).Exists(path) && ($ZHOROLOG < deadline) { Hang 0.2 }
                 Hang 1.5
             } ElseIf step.%IsDefined("wait") {
                 Hang $SELECT(+step.%Get("wait") > ..MaxWait: ..MaxWait, 1: +step.%Get("wait"))
