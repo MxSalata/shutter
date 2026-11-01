@@ -415,8 +415,10 @@ ClassMethod BuildAgentRequest(case As Shutter.Store.Case, m As Shutter.Store.Boa
     Set req.ResultClass = $SELECT($ZCONVERT(m.TerminalTool, "L") [ "plan": "Shutter.Schema.Plan", 1: "Shutter.Schema.Findings")
     Set req.ConfigVersion = m.ConfigVersion
     // The key names the case within its scenario (several cases can share one); the replay runner also looks up
-    // the older form without the encounter and event.
-    If case.Scenario '= "" Set req.RecordKey = "scenario:" _ case.Scenario _ ":" _ case.EncounterId _ ":" _ case.Event _ "|" _ m.Code _ "|" _ m.ConfigVersion _ $SELECT(replans > 0: "|round" _ (replans + 1), 1: "")
+    // the older form without the encounter and event. A case at a receiver other than the production's default names it
+    // too (v1.34): two receivers' cases of one movement (S22) record and replay apart, and the earlier recordings, all at
+    // the default receiver, keep their keys.
+    If case.Scenario '= "" Set req.RecordKey = "scenario:" _ case.Scenario _ ":" _ case.EncounterId _ ":" _ case.Event _ $SELECT((case.Receiver '= "") && (case.Receiver '= $PARAMETER("Shutter.Production", "RECEIVER")): ":" _ case.Receiver, 1: "") _ "|" _ m.Code _ "|" _ m.ConfigVersion _ $SELECT(replans > 0: "|round" _ (replans + 1), 1: "")
     // Only what is needed leaves IRIS (T27): the evidence and the findings pass through the model view, which drops
     // the demographics and the free text and replaces the case's identifiers by its tokens.
     Set context = {}
@@ -616,7 +618,43 @@ Method OnCoordinator(case As Shutter.Store.Case, result As Shutter.Bridge.Msg.Ag
     If left '= "" Do case.Note("error", "The coordinator names tokens the case has no value for (" _ left _ "); they stay as written", "system", "run:" _ run.%Id())
     Set plan = ##class(Shutter.Util.Json).Parse(restored, .psc)
     If '$ISOBJECT(plan) || $$$ISERR(psc) Quit case.Transition("escalated", "The coordinator's plan is not valid JSON", "system", "run:" _ run.%Id())
+    Do ..AttachCorrectionSteps(case, plan)
     Quit ..AdoptPlan(case, plan, "run:" _ run.%Id())
+}
+
+/// The board's plan at a receiver that keeps the history of record (CONTRACTS 6.4, v1.23; here since v1.34): when the
+/// catalogue outcome the coordinator chose is correct_history, the correcting steps join the plan as the site-policy path
+/// puts them, so the escalation draft has its correcting section whichever path planned. The outcome is read from the
+/// snapshot's catalogue match the plan names (preferred, or the alternative the plan's outcome points at); a plan that
+/// already carries steps, or names no entry, is left alone. Deterministic, so a replay carries the same steps.
+Method AttachCorrectionSteps(case As Shutter.Store.Case, plan As %DynamicObject)
+{
+    Try {
+        Quit:(##class(Shutter.Util.Json).Str(plan, "disposition") '= "escalate")
+        Quit:plan.%IsDefined("correction_steps")
+        Set entry = ##class(Shutter.Util.Json).Str(plan, "catalogue_entry"), ref = ##class(Shutter.Util.Json).Str(plan, "outcome", "preferred")
+        Quit:(entry = "")
+        Set summary = $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.SummaryObject(), 1: "")
+        Quit:'$ISOBJECT(summary)
+        Set cat = summary.%Get("catalogue"), matches = $SELECT($ISOBJECT(cat): cat.%Get("matches"), 1: "")
+        Quit:'$ISOBJECT(matches)
+        Set chosen = "", mi = matches.%GetIterator()
+        While mi.%GetNext(, .m) {
+            Continue:(##class(Shutter.Util.Json).Str(m, "id") '= entry)
+            Set chosen = m.%Get("preferred")
+            If $EXTRACT(ref, 1, 12) = "alternative:" {
+                Set alts = m.%Get("alternatives"), n = +$PIECE(ref, ":", 2)
+                If $ISOBJECT(alts) && (n >= 1) && (n <= alts.%Size()) Set chosen = alts.%Get(n - 1)
+            }
+        }
+        Quit:'$ISOBJECT(chosen)
+        Quit:(##class(Shutter.Util.Json).Str(chosen, "outcome") '= "correct_history")
+        Set steps = ##class(Shutter.Util.HistoryCorrection).Steps(case, summary)
+        Set plan."correction_steps" = steps
+        Do case.Note("artifact", "Correcting the history: " _ ##class(Shutter.Util.HistoryCorrection).Headline(steps), "system")
+    } Catch ex {
+        Do case.Note("error", "The correcting steps could not be attached to the board's plan: " _ ex.DisplayString(), "system")
+    }
 }
 
 /// Rules-only mode: the plan is a resend of the case's own operation at the observed version,
