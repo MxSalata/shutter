@@ -144,12 +144,55 @@ ClassMethod Merge(a As %DynamicArray, b As %DynamicArray) As %DynamicArray
 /// and the case opened for each key, when one was: what the evidence reads about a bed's occupant. Rows:
 /// {event, ward, bed, event_time, operation_key, source_message_id, ens_header_id, sent_at, receiver, outcome (unknown
 /// when no answer is recorded), reason_code?, http_status?, version_after?, case_id?}. An empty receiver sees every delivery.
-ClassMethod Deliveries(encounterId As %String, receiver As %String = "") As %DynamicArray
+ClassMethod Deliveries(encounterId As %String, receiver As %String = "", sourceNamespace As %String = "") As %DynamicArray
 {
     Set out = []
     If ..NoEncounter(encounterId) Quit out
     Set resetAt = $GET(^Shutter.Config("resetAt"))
     Set since = $SELECT(resetAt = "": "2000-01-01 00:00:00", 1: $TRANSLATE($PIECE(resetAt, "Z", 1), "T", " "))
+    Set rows = ..DeliveryRows(encounterId, receiver, since)
+    // A watched production's deliveries live in its own namespace (CONTRACTS 11): a case forwarded from it names the
+    // namespace, and the occupant's movements there count too (v1.34).
+    If (sourceNamespace '= "") && (sourceNamespace '= $NAMESPACE) {
+        Set more = ..DeliveryRowsIn(sourceNamespace, encounterId, receiver, since)
+        Set mi = more.%GetIterator()
+        While mi.%GetNext(, .ev) { Set ev.namespace = sourceNamespace Do rows.%Push(ev) }
+    }
+    // In event order, then by when they were sent; the case each opened here, by its operation key.
+    Set ri = rows.%GetIterator(), n = 0
+    While ri.%GetNext(, .ev) {
+        Set n = n + 1, sorted(ev."event_time", ev."sent_at", n) = ev
+    }
+    Set t = "" For { Set t = $ORDER(sorted(t)) Quit:t=""  Set a = "" For { Set a = $ORDER(sorted(t, a)) Quit:a=""  Set i = "" For { Set i = $ORDER(sorted(t, a, i), 1, ev) Quit:i=""
+        Set caseId = "", key = ev."operation_key"
+        &sql(SELECT TOP 1 CaseId INTO :caseId FROM Shutter_Store."Case" WHERE OperationKey = :key AND (Receiver = :receiver OR :receiver = '') ORDER BY ID DESC)
+        If (SQLCODE = 0) && (caseId '= "") Set ev."case_id" = caseId
+        Do out.%Push(ev)
+    } } }
+    Quit out
+}
+
+/// DeliveryRows in another namespace, which must hold Shutter's message classes (a watched production's does); [] when it
+/// cannot be read.
+ClassMethod DeliveryRowsIn(namespace As %String, encounterId As %String, receiver As %String, since As %String) As %DynamicArray
+{
+    Set rows = []
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = namespace
+        Set rows = ..DeliveryRows(encounterId, receiver, since)
+    } Catch ex {
+        Set rows = []
+    }
+    Quit rows
+}
+
+/// The normal ward operations sent for an encounter in this namespace since a time, with each one's result: {event, ward,
+/// bed, event_time, operation_key, source_message_id, ens_header_id, sent_at, receiver, outcome, reason_code?, http_status?,
+/// version_after?}, in event order.
+ClassMethod DeliveryRows(encounterId As %String, receiver As %String, since As %String) As %DynamicArray
+{
+    Set out = []
     Set sql = "SELECT w.ID AS WID, w.Event, w.Ward, w.Bed, w.EventTime, w.OperationKey, w.SourceMessageId, h.ID AS HeaderId, h.TimeCreated, h.TargetConfigName AS Receiver "
         _ "FROM Shutter_Msg.WardOperation w JOIN Ens.MessageHeader h ON h.MessageBodyId = CAST(w.ID AS VARCHAR(20)) AND h.MessageBodyClassName = 'Shutter.Msg.WardOperation' "
         _ "WHERE w.EncounterId = ? AND w.Purpose = 'normal' AND h.TimeCreated >= ? AND (? = '' OR h.TargetConfigName = ?) ORDER BY w.EventTime, w.ID"
@@ -165,9 +208,6 @@ ClassMethod Deliveries(encounterId As %String, receiver As %String = "") As %Dyn
             Set ev.outcome = r.Outcome, ev."reason_code" = r.ReasonCode, ev."http_status" = r.HttpStatus
             If r.EncounterVersion '= "" Set ev."version_after" = r.EncounterVersion
         }
-        Set caseId = "", key = rs.%Get("OperationKey")
-        &sql(SELECT TOP 1 CaseId INTO :caseId FROM Shutter_Store."Case" WHERE OperationKey = :key AND (Receiver = :receiver OR :receiver = '') ORDER BY ID DESC)
-        If (SQLCODE = 0) && (caseId '= "") Set ev."case_id" = caseId
         Do out.%Push(ev)
     }
     Quit out
@@ -186,9 +226,33 @@ ClassMethod ResultFor(headerId As %String) As Shutter.Msg.WardResult
 /// bed_occupied refusal with its occupant), as the connector recorded it; "" when none is recorded or it is not JSON.
 ClassMethod LastRefusal(case As Shutter.Store.Case) As %DynamicObject
 {
+    Set body = ..LastRefusalHere(case.OperationKey, case.Receiver)
+    // A case forwarded from another production (CONTRACTS 11): the connector that met the refusal ran in that production's
+    // namespace, so its recorded response is there (v1.34).
+    If '$ISOBJECT(body) && (case.SourceNamespace '= "") && (case.SourceNamespace '= $NAMESPACE) Set body = ..LastRefusalIn(case.SourceNamespace, case.OperationKey, case.Receiver)
+    Quit body
+}
+
+/// LastRefusalHere in another namespace, which must hold Shutter's message classes (a watched production's does).
+ClassMethod LastRefusalIn(namespace As %String, key As %String, receiver As %String) As %DynamicObject
+{
+    Set body = ""
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = namespace
+        Set body = ..LastRefusalHere(key, receiver)
+    } Catch ex {
+        Set body = ""
+    }
+    Quit body
+}
+
+/// The refusal recorded in this namespace for an operation key, as LastRefusal reads it.
+ClassMethod LastRefusalHere(key As %String, receiver As %String) As %DynamicObject
+{
     Set sql = "SELECT TOP 1 h.ID AS HeaderId FROM Shutter_Msg.WardOperation w JOIN Ens.MessageHeader h ON h.MessageBodyId = CAST(w.ID AS VARCHAR(20)) AND h.MessageBodyClassName = 'Shutter.Msg.WardOperation' "
         _ "WHERE w.OperationKey = ? AND w.Purpose = 'normal' AND (? = '' OR h.TargetConfigName = ?) ORDER BY w.ID DESC"
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, case.OperationKey, case.Receiver, case.Receiver)
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, key, receiver, receiver)
     If 'rs.%Next() Quit ""
     Set r = ..ResultFor(rs.%Get("HeaderId"))
     If '$ISOBJECT(r) || (r.ResponseJSON = "") Quit ""
