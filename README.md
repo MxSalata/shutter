@@ -15,7 +15,7 @@ Real interoperability testing only happens in production: that is where the hole
 **In three lines:**
 
 - **S8, the case a gate cannot catch.** Two systems move one patient in the same minute. Rules alone pass every check and write WARD-B over the bed manager's WARD-C. The board sees that the evidence cannot say which movement is current, and escalates to a person.
-- **The board gets 11 of the 11 single cases it is convened for, live and in replay. Rules alone get 4 of those 11.** The table is in [docs/readme/comparison.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md); it was played on 19 October 2026 (5.31 USD for that recording) and is played again when the demo is re-recorded. The evaluation below uses the recordings of 25 October 2026.
+- **The board gets 11 of the 11 single cases it is convened for, live and in replay. Rules alone get 4 of those 11.** The table is in [docs/readme/comparison.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md): the board live on 25 October 2026, the same runs replayed, and rules alone; [docs/readme/evaluation.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md) takes those runs apart.
 - **0.34 to 0.44 USD and 24 to 32 seconds a board pass** with `claude-opus-5-5`, the three specialists running in parallel. Without an API key the board replays its own recorded live runs, so trying it costs nothing.
 
 ## Try it

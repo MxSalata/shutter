@@ -183,7 +183,7 @@
    "played": {
     "board_live": {
      "status": "as expected",
-     "cost_usd": 0.4
+     "cost_usd": 0.43
     },
     "board_replay": {
      "status": "as expected",
@@ -493,7 +493,7 @@
    "played": {
     "board_live": {
      "status": "as expected",
-     "cost_usd": 0.37
+     "cost_usd": 0.36
     },
     "board_replay": {
      "status": "as expected",
@@ -650,7 +650,7 @@
    "played": {
     "board_live": {
      "status": "as expected",
-     "cost_usd": 0.41
+     "cost_usd": 0.4
     },
     "board_replay": {
      "status": "as expected",
@@ -876,7 +876,7 @@
    "played": {
     "board_live": {
      "status": "as expected",
-     "cost_usd": 0.4
+     "cost_usd": 0.37
     },
     "board_replay": {
      "status": "as expected",
@@ -1038,7 +1038,7 @@
    "played": {
     "board_live": {
      "status": "as expected",
-     "cost_usd": 0.36
+     "cost_usd": 0.38
     },
     "board_replay": {
      "status": "as expected",
@@ -1678,7 +1678,7 @@
    "played": {
     "board_live": {
      "status": "as expected",
-     "cost_usd": 0.34
+     "cost_usd": 0.35
     },
     "board_replay": {
      "status": "as expected",
@@ -1841,7 +1841,7 @@
    "played": {
     "board_live": {
      "status": "as expected",
-     "cost_usd": 0.36
+     "cost_usd": 0.37
     },
     "board_replay": {
      "status": "as expected",
@@ -2305,7 +2305,7 @@
    "played": {
     "board_live": {
      "status": "as expected",
-     "cost_usd": 0.39
+     "cost_usd": 0.42
     },
     "board_replay": {
      "status": "as expected",
