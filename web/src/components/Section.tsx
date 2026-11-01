@@ -13,7 +13,10 @@ export function NestedSections({ children }: { children: ReactNode }) {
   return <Nested.Provider value>{children}</Nested.Provider>;
 }
 
-/** One step of the case's story: a card with a heading, an optional note under it and a badge on the right. */
+/**
+ * A section card: its h2 (20 px; h3 inside a story step), an optional one-sentence intro under it (md, dimmed), badges
+ * on the right, then the content. No uppercase kickers on section titles.
+ */
 export function Section({
   id,
   title,
@@ -36,11 +39,11 @@ export function Section({
       <Group justify="space-between" align="flex-start" wrap="wrap" gap="xs">
         <Stack gap={2} style={{ minWidth: 0, flex: '1 1 260px' }}>
           {/* Focusable from script only: a link to a section (Review the plan and decide) moves focus to its heading */}
-          <Title order={nested ? 3 : 2} fz={nested ? 'md' : 'lg'} id={`${id}-title`} tabIndex={-1}>
+          <Title order={nested ? 3 : 2} id={`${id}-title`} tabIndex={-1}>
             {title}
           </Title>
           {note ? (
-            <Text size="sm" c="dimmed">
+            <Text size={nested ? 'sm' : 'md'} c="dimmed" maw="68ch">
               {note}
             </Text>
           ) : null}
