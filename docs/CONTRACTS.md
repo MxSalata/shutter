@@ -1369,7 +1369,13 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   /settings` and the Doctor. A case forwarded from a watched production (11) reads the refusal that named the bed's occupant
   and the occupant's deliveries in that production's namespace as well as Shutter's (`Timeline.LastRefusal`, `Deliveries` with
   the case's `SourceNamespace`), so its bed conflict (6.1) is judged as a case of Shutter's own feed is; before, the forwarded
-  refusal read as unknown and E17 escalated it. The Second Parser (6.7): a PEX business operation in Java (HAPI) asked when IRIS cannot
+  refusal read as unknown and E17 escalated it. The resend failsafe (6.5) reads that namespace's deliveries as well: a
+  ward operation of the encounter queued or in flight there with no result yet is a pending newer message, so a forwarded
+  case blocks with `NEWER_MESSAGE_PENDING` and waits as a case of Shutter's own feed does; before, the failsafe saw only
+  Shutter's own queue and resent while the watched production's newer message was in flight. Such a case is released when the
+  watched production has delivered the message: the HL7 Index item's adapter asks `ResendGuard.ReleaseForwardedWaits` every
+  few seconds, since that production's connector knows nothing of Shutter (the Ward item releases the cases of Shutter's own
+  feed as it delivers). The Second Parser (6.7): a PEX business operation in Java (HAPI) asked when IRIS cannot
   read a message, its report under `validation.second_parser`, the gate's `SCHEMA_UNKNOWN` and `PARSE_FAILED` words with its
   verdict, the item in `INSTALLITEMS` enabled only where `shutter-pex.jar` is installed (`SyncSecondParser`), the Doctor's
   `second_parser`, `pex/build.sh` in the Dockerfile.
