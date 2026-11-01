@@ -1241,7 +1241,7 @@ whatever its text says: the agents hold no write tool, and the question's text i
 row and answers at once with `Shutter.Msg.QuestionStarted` (`QuestionId`, `Conversation`, `Turn`, `State`, `Error`), then
 builds the context (14.3) and asks the agents through their Agent Board items with `Shutter.Bridge.Msg.AgentRequest`: for
 `explain`, one request (`Role` `explain`, `MemberCode` `explain`, `AgentClass` `Shutter.Agent.Explain`, `TerminalTool`
-`SubmitAnswer`, `ResultClass` `Shutter.Schema.Answer`, 20000 tokens, 3 iterations; `ConfigVersion` the class's
+`SubmitAnswer`, `ResultClass` `Shutter.Schema.Answer`, 30000 tokens, 3 iterations; `ConfigVersion` the class's
 `CONFIGVERSION` when the aihub module is installed, else `1`); for `board`, one request per enabled default specialist
 (`Role` `member`, the member's code, class, `ConfigVersion` and `ConfigItem`, `SubmitAnswer`, `Shutter.Schema.Answer`, 50000
 tokens, 4 iterations), and when every member has answered or failed, the coordinator's (`Role` `coordinator`,

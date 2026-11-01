@@ -32,7 +32,9 @@ Property AgentTarget As %String(MAXLEN = 128) [ InitialExpression = "Agent Board
 /// Seconds the whole question may take before it fails with what is missing.
 Property AgentTimeoutSeconds As %Integer [ InitialExpression = 600 ];
 
-Property ExplainTokenBudget As %Integer [ InitialExpression = 20000 ];
+/// The Explain agent reads the case's evidence with its tools, so a question that sends it to several of them needs more than
+/// a short answer (an S20 question used 22,167 tokens on 1 Nov 2026).
+Property ExplainTokenBudget As %Integer [ InitialExpression = 30000 ];
 
 Property ExplainMaxIterations As %Integer [ InitialExpression = 3 ];
 
