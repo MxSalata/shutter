@@ -161,7 +161,7 @@ test.describe('Ask about this case', () => {
     await expect(panel).toContainText('Read-only.');
     const example = panel.getByRole('region', { name: 'Example conversation' });
     await expect(example).toContainText(
-      'Example (sample data). With an API key you can ask your own questions.',
+      'Recorded live on 1 November 2026 with claude-opus-5-5. With an API key you can ask your own questions.',
     );
     await expect(example.getByRole('article')).toHaveCount(3);
     await expect(panel).toContainText(
@@ -174,7 +174,8 @@ test.describe('Ask about this case', () => {
     await expect(
       thread.getByRole('heading', { name: 'What did the dissenting specialist say?' }),
     ).toBeFocused();
-    await expect(thread).toContainText('Conformance proposed a resend with confidence 0.8');
+    await expect(thread).toContainText('The only specialist who disagreed was Conformance');
+    await expect(thread).not.toContainText('sample data');
 
     const card = panel.getByRole('region', { name: 'What if: the setting behind this outcome' });
     await expect(card).toContainText('If it were BEDMGR');

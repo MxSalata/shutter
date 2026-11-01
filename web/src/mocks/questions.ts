@@ -8,16 +8,17 @@ import type {
   SuggestedQuestions,
   WhatIf,
 } from '@/api/types';
-import s2 from '../../../knowledge/questions/S2.json';
-import s8 from '../../../knowledge/questions/S8.json';
+import recordedFile from './recorded-questions.json';
 
 /**
- * MOCK DATA, NOT RECORDINGS. The answers below are sample answers, written for the demo from the recorded findings and
- * plans of C-000008 (S8, board) and C-000002 (S2, board) in fixtures.json, so that the panel can be shown and tested
- * without a model. The live re-record replaces them with real recorded runs (every message a
- * real run, never hand-written); until then the page labels them "Example (sample data)" (DEMO_ANSWERS_RECORDED in
- * features/cases/ask/recorded.ts). The What-if facts are what Shutter.Util.WhatIf should compute for these two cases from
- * catalogue entries E7 and E2 and the stored site profile (version 10).
+ * RECORDED ANSWERS. The answers the demo serves to "Ask about this case" are real recorded runs, not written by hand:
+ * every suggested turn of the scenarios S1, S2, S8, S20 and S22 was asked live and recorded (mode record), and
+ * scripts/export-recorded-answers.mjs copies those answers, the members' answers behind each board answer, what the
+ * core resolved, the case's What-if card and the time of each recording into recorded-questions.json. The demo replays
+ * them at no cost, so the page labels each "Recorded live on <date> with <model>" (DEMO_ANSWERS_RECORDED in
+ * features/cases/ask/recorded.ts). The ids in them are the demo case's own (the export rewrites the recording
+ * instance's), and the What-if facts are what that instance's Shutter.Util.WhatIf returned for the same story, so
+ * the W ids an answer cites exist on the case's card.
  */
 
 /** The scenario files as knowledge/questions write them: turns with no `asked` yet. */
@@ -25,253 +26,56 @@ type QuestionsFile = {
   scenario: string;
   conversations: { id: string; turns: { turn: number; tier: QuestionTier; text: string }[] }[];
 };
-const SUGGESTED: Record<string, QuestionsFile> = { S2: s2 as QuestionsFile, S8: s8 as QuestionsFile };
+const SUGGESTED: Record<string, QuestionsFile> = Object.fromEntries(
+  Object.values(
+    import.meta.glob<QuestionsFile>('../../../knowledge/questions/S*.json', {
+      eager: true,
+      import: 'default',
+    }),
+  ).map((file) => [file.scenario, file]),
+);
 
-/** The cases the sample answers were written for, by scenario. */
-export const SAMPLE_CASES: Record<string, string> = { 'C-000008': 'S8', 'C-000002': 'S2' };
+/** One recorded turn, as the export writes it. */
+export interface RecordedQuestion {
+  question: string;
+  tier: QuestionTier;
+  answer: Answer | BoardAnswer;
+  memberAnswers: CaseQuestionDetail['memberAnswers'];
+  resolved: CaseQuestionDetail['resolved'];
+  model: string;
+  recordedAt: string;
+}
 
-type SampleAnswer = Answer | BoardAnswer;
+/** A demo case's recordings: its What-if card and its turns, by "conversation.turn". */
+export interface RecordedCase {
+  caseId: string;
+  whatif: WhatIf;
+  questions: Record<string, RecordedQuestion>;
+}
 
-const SAMPLE_ANSWERS: Record<string, Record<string, SampleAnswer>> = {
-  S8: {
-    'c1.1': {
-      answer:
-        "The PAS transfer of ENC-1008 to WARD-B failed with HTTP 503 ward_unavailable, and the receiver holds no receipt for it (404), so it never arrived. The receiver shows the encounter in WARD-C at version 2, set by the bed manager's transfer MSG00803, which carries the same event time, 08:20:00Z. Neither movement is later, so Shutter cannot tell which one is current, and a resend would overwrite the bed manager's placement. The board escalated to a person, and the plan writes nothing. The gate passed it because a plan that writes nothing breaks none of its checks.",
-      cites: ['error', 'receipt', 'ward_state', 'timeline', 'catalogue:E7'],
-      confidence: 'high',
-    },
-    'c1.2': {
-      answer:
-        'Nothing in the evidence decides which system wins: the receiver still has WARD-C from the bed manager, and the site profile names no authoritative source. Until a person decides that the PAS movement to WARD-B should stand, a resend conditional on version 2 would apply and move the patient away from the bed manager’s placement. The person the case went to can check the ward first, then correct the receiver by hand or close the case as handled.',
-      cites: ['ward_state', 'timeline', 'operation'],
-      confidence: 'medium',
-    },
-    'c1.3': {
-      answer:
-        "If the site named the bed manager (BEDMGR) as the authoritative source for ward placement, catalogue entry E7's alternative would apply: the bed manager's WARD-C placement stands, and the board would close this PAS transfer with nothing written. Today the profile names no authoritative source, so the case escalated. It is a decision for the site: it applies to every case where the PAS and the bed manager move an encounter at the same event time, not only to this one.",
-      perspectives: [
-        {
-          member: 'conformance',
-          view: 'The message stays valid either way. The setting does not change what the PAS sent, only which movement the site keeps when two carry the same time.',
-        },
-        {
-          member: 'encounter',
-          view: "With the bed manager authoritative, the receiver's version 2 in WARD-C is the current state, and the unknown supersession of ELS-2.5 is settled by the site's rule instead of by the times.",
-        },
-        {
-          member: 'impact',
-          view: 'Nothing is written, so the bed board, pharmacy and the porters keep WARD-C. That is right only if the bed manager really is the system of record for beds.',
-        },
-      ],
-      setting: { fact: 'W1' },
-      under_alternative: { fact: 'W1' },
-      suggested_change: {
-        fact: 'W1',
-        why: 'Name the bed manager as the system that wins a same-time tie, if that is how the wards work.',
-      },
-      cites: ['W1', 'ward_state', 'timeline', 'catalogue:E7'],
-      confidence: 'medium',
-    },
-    'c2.1': {
-      answer:
-        "Shutter cannot tell, and that is why the case was escalated. The receiver shows WARD-C at version 2, set by the bed manager's transfer MSG00803. The PAS transfer to WARD-B, MSG00802, never arrived. Both carry the event time 2026-10-15T08:20:00Z, so neither is later (ELS-2.5).",
-      cites: ['timeline', 'ward_state'],
-      confidence: 'high',
-    },
-    'c3.1': {
-      answer:
-        'Ask the ward where the patient of encounter ENC-1008 is: in WARD-B, as the PAS says, or in WARD-C, as the bed manager and the receiver say. Then check on the Evidence tab that the receiver is still at version 2 in WARD-C. If the patient is in WARD-B, the receiver needs correcting by hand; if in WARD-C, nothing needs sending and the case can be closed as handled.',
-      cites: ['ward_state', 'timeline'],
-      confidence: 'medium',
-    },
-    'c4.1': {
-      answer:
-        'Conformance proposed a resend with confidence 0.8: the message is structurally valid, the WIC-2.1 fields are present and the WIC-2.2 key matches. The coordinator kept that dissent in the plan but chose to escalate: the message is acceptable as a message, and Conformance itself left the same-time bed manager transfer to the other specialists. A resend conditional on version 2 would overwrite the bed manager’s WARD-C placement while supersession is unknown.',
-      perspectives: [
-        {
-          member: 'conformance',
-          view: 'Seen as a message, MSG00802 is valid and would be accepted; whether it should be sent is not a conformance question.',
-        },
-        {
-          member: 'encounter',
-          view: 'Equal event times leave supersession unknown (ELS-2.5), so the movement must not be applied.',
-        },
-        {
-          member: 'impact',
-          view: 'A resend would move the patient from WARD-C to WARD-B, free and occupy beds, redirect pharmacy and create a porter task.',
-        },
-      ],
-      cites: ['message', 'validation', 'timeline'],
-      confidence: 'high',
-    },
-    'c5.1': {
-      answer:
-        'A resend conditional on version 2 would have applied: the receiver would have moved the patient from WARD-C to WARD-B. Under the dependency contracts that frees a bed on WARD-C, occupies one on WARD-B, sends pharmacy to a different ward and creates a porter task, all on the strength of a movement that may not be current. Doing nothing leaves WARD-C in place, which is right only if the bed manager’s placement is.',
-      perspectives: [
-        {
-          member: 'impact',
-          view: 'The route supports conditional writes, receipts and dry runs, but the version guard protects nothing here: version 2 is the state the resend would overwrite.',
-        },
-        {
-          member: 'encounter',
-          view: 'The transition from admitted is allowed, so the receiver would accept it; the question is which movement is current.',
-        },
-        {
-          member: 'conformance',
-          view: 'The receiver would read the message without trouble; nothing in it would stop the write.',
-        },
-      ],
-      cites: ['route', 'ward_state', 'timeline'],
-      confidence: 'medium',
-    },
-  },
-  S2: {
-    'c1.1': {
-      answer:
-        'The transfer MSG00202 of ENC-1002 to WARD-B failed with HTTP 503 ward_unavailable, and the receipt lookup returned 404, so the receiver never committed it. The receiver still showed the encounter admitted on WARD-A at version 1, and no later event had changed it. That is catalogue entry E2, not delivered and still current, whose preferred outcome is a resend. All three specialists agreed: the plan resends the transfer unchanged, conditional on version 1, once the gate has passed it and it is released.',
-      cites: ['error', 'receipt', 'ward_state', 'timeline'],
-      confidence: 'high',
-    },
-    'c1.2': {
-      answer:
-        'From two separate checks after the resend. The receiver acknowledges the write with a receipt naming the operation, the version it moved from and the version it moved to. Then verification reads the encounter back and looks for the transfer in its history (RP-4.1). Only the second says the effect is in place at the receiver, and the case page shows them apart.',
-      cites: ['receipt', 'ward_state'],
-      confidence: 'high',
-    },
-    'c1.3': {
-      answer:
-        'No. Catalogue entry E2 has no alternative outcome, so no site profile setting changes what this case should do: the transfer was due and still current. The profile decides who releases such a resend, a person or the site\u2019s written policy, not whether it is the right action.',
-      perspectives: [
-        {
-          member: 'conformance',
-          view: 'The message was valid and resent unchanged; no setting alters that.',
-        },
-        {
-          member: 'encounter',
-          view: 'Nothing later changed the encounter, so there was no history or source rule to weigh.',
-        },
-        {
-          member: 'impact',
-          view: 'One bounded movement, conditional on version 1, checked afterwards through the receipt and the history.',
-        },
-      ],
-      cites: ['ward_state', 'timeline', 'route'],
-      confidence: 'high',
-    },
-    'c2.1': {
-      answer:
-        "The gate checks the plan when it is proposed and again before dispatch. At the proposal every check passed: the patient's identity, the message's schema, that the plan does exactly the failed operation, ordering, the state transition, the effect, the version guard, fresh evidence, the receiver's capabilities and the catalogue entry; the approver's authority is checked at approval and dispatch.",
-      cites: ['validation', 'route'],
-      confidence: 'high',
-    },
-    'c3.1': {
-      answer:
-        'No. Conformance, Encounter Integrity and Impact Analysis each proposed a resend, with confidence 0.9, 0.9 and 0.88. Their open questions were about what the evidence cannot show, such as whether systems downstream acted on the stale WARD-A location; the condition on version 1 guards the one that matters to the write.',
-      perspectives: [
-        {
-          member: 'conformance',
-          view: 'Resend: the message parses, its required fields are present and its key matches the operation.',
-        },
-        {
-          member: 'encounter',
-          view: 'Resend: the receipt lookup returned 404 and no later event supersedes the transfer (ELS-2.1).',
-        },
-        {
-          member: 'impact',
-          view: 'Resend: one bounded movement; doing nothing leaves the bed board, pharmacy and the record on WARD-A.',
-        },
-      ],
-      cites: ['receipt', 'timeline', 'route'],
-      confidence: 'high',
-    },
-    'c4.1': {
-      answer:
-        'The resend was conditional on version 1. Had another movement reached the receiver first, its version would have moved on, the receiver would have refused the write and nothing would have changed; the case would have been investigated again on fresh evidence. Before dispatch, the gate checks the same version and the snapshot’s freshness.',
-      perspectives: [
-        {
-          member: 'impact',
-          view: 'The condition makes the write fail safe: a refusal changes nothing downstream.',
-        },
-        {
-          member: 'encounter',
-          view: 'A later movement would make this transfer superseded, which is catalogue entry E1, not a resend.',
-        },
-        {
-          member: 'conformance',
-          view: 'The message itself would not change; only whether it is still due.',
-        },
-      ],
-      cites: ['ward_state', 'route'],
-      confidence: 'medium',
-    },
-  },
-};
+/** The recordings by scenario, then by the receiver the case is about (S22 has a case for each of its two). */
+export const RECORDED: Record<string, Record<string, RecordedCase>> = (
+  recordedFile as unknown as { scenarios: Record<string, Record<string, RecordedCase>> }
+).scenarios;
 
-/** What Shutter.Util.WhatIf should give for the two cases, from the catalogue and the stored profile (version 10). */
-const SAMPLE_WHATIF: Record<string, (caseId: string) => WhatIf> = {
-  S8: (caseId) => ({
-    case_id: caseId,
-    receiver: 'Downstream Out',
-    category: 'current_state',
-    entry: 'E7',
-    outcome: 'escalate',
-    outcome_ref: 'preferred',
-    disposition: 'escalate',
-    profile_version: 10,
-    note: 'Sample data: worked out from the case and the site profile without a model.',
-    facts: [
-      {
-        id: 'W1',
-        kind: 'alternative',
-        role: 'alternative',
-        flag: 'authoritative_source',
-        field: 'authoritative_source',
-        current: '',
-        from: '',
-        to: 'BEDMGR',
-        holds_now: false,
-        would:
-          "The bed manager's WARD-C placement would stand, and the board would close this PAS transfer with nothing written.",
-        alternative: {
-          n: 1,
-          outcome: 'none',
-          // An assumption to confirm with the server's author: entry E7 gives the alternative's outcome (none) only;
-          // the disposition the board would propose under it is not in the catalogue entry
-          disposition: 'superseded',
-          when: 'authoritative_source: other_source',
-          why: 'The site names the other source system as authoritative for ward placement, so its movement stands and the failed one closes without a write.',
-        },
-        affects: ['every case where the PAS and the bed manager move an encounter at the same event time'],
-        suggested_change: {
-          field: 'authoritative_source',
-          from: '',
-          to: 'BEDMGR',
-          why: 'Name the bed manager as the system that wins a same-time tie, if that is how the wards work.',
-          affects: ['every case where the PAS and the bed manager move an encounter at the same event time'],
-          valid: true,
-          stale: false,
-        },
-      },
-    ],
-  }),
-  S2: (caseId) => ({
-    case_id: caseId,
-    receiver: 'Downstream Out',
-    category: 'current_state',
-    entry: 'E2',
-    outcome: 'resend',
-    outcome_ref: 'preferred',
-    disposition: 'resend',
-    profile_version: 10,
-    note: 'Sample data: worked out from the case and the site profile without a model.',
-    facts: [],
-  }),
-};
+/** The demo cases the recordings belong to: each one's scenario and receiver. */
+export const DEMO_CASES: Record<string, { scenario: string; receiver: string }> = Object.fromEntries(
+  Object.entries(RECORDED).flatMap(([scenario, byReceiver]) =>
+    Object.entries(byReceiver).map(([receiver, c]) => [c.caseId, { scenario, receiver }]),
+  ),
+);
+
+/** The recordings of a demo case, or undefined for any other case. */
+function recordedCase(caseId: string): RecordedCase | undefined {
+  const demo = DEMO_CASES[caseId];
+  return demo ? RECORDED[demo.scenario]?.[demo.receiver] : undefined;
+}
 
 /** The scenario's file for the case, or null when it has no scenario or no file. */
 export function suggestedFor(caseId: string): QuestionsFile | null {
-  const s = SAMPLE_CASES[caseId];
-  return s ? structuredClone(SUGGESTED[s]) : null;
+  const s = DEMO_CASES[caseId]?.scenario;
+  const file = s ? SUGGESTED[s] : undefined;
+  return file ? structuredClone(file) : null;
 }
 
 /** The suggested route's answer: the file's turns, each with the newest question asked for it; empty without a file. */
@@ -280,7 +84,7 @@ export function suggestedWithAsked(
   asked: Pick<CaseQuestion, 'questionId' | 'conversation' | 'turn' | 'state'>[],
 ): SuggestedQuestions {
   const file = suggestedFor(caseId);
-  if (!file) return { scenario: SAMPLE_CASES[caseId] ?? '', conversations: [] };
+  if (!file) return { scenario: DEMO_CASES[caseId]?.scenario ?? '', conversations: [] };
   return {
     scenario: file.scenario,
     conversations: file.conversations.map((c) => ({
@@ -293,10 +97,10 @@ export function suggestedWithAsked(
   };
 }
 
-/** The deterministic card: a sample for the showcase cases, otherwise a case with no catalogue entry and no facts. */
+/** The deterministic card: the recorded one for a demo case, otherwise a case with no catalogue entry and no facts. */
 export function whatIfFor(caseId: string): WhatIf {
-  const s = SAMPLE_CASES[caseId];
-  if (s) return structuredClone(SAMPLE_WHATIF[s](caseId));
+  const recorded = recordedCase(caseId);
+  if (recorded) return structuredClone(recorded.whatif);
   return {
     case_id: caseId,
     receiver: '',
@@ -305,86 +109,70 @@ export function whatIfFor(caseId: string): WhatIf {
     outcome: 'none',
     outcome_ref: '',
     disposition: '',
-    profile_version: 10,
+    profile_version: 9,
     note: 'Sample data: this case matched no catalogue entry that a site profile setting selects.',
     facts: [],
   };
 }
 
-/** The sample answer to a turn of a suggested conversation, or null when there is none. */
-export function sampleAnswer(caseId: string, conversation: string, turn: number) {
-  const s = SAMPLE_CASES[caseId];
-  const answer = s ? SAMPLE_ANSWERS[s]?.[`${conversation}.${turn}`] : undefined;
-  const text = s
-    ? SUGGESTED[s].conversations.find((c) => c.id === conversation)?.turns.find((t) => t.turn === turn)
-    : undefined;
-  return answer && text ? { answer: structuredClone(answer), tier: text.tier, question: text.text } : null;
-}
+/** The recorded turn of a demo case's suggested conversation, or undefined when there is none. */
+const recordedTurn = (caseId: string, conversation: string, turn: number) =>
+  recordedCase(caseId)?.questions[`${conversation}.${turn}`];
 
 let next = 1;
 
-/** A sample answer as the question routes would store it: replayed, at no cost, with no recording behind it. */
-export function sampleQuestion(
+/** A recorded answer as the question routes store a replay: no cost, the recording's model and time. */
+export function recordedQuestion(
   caseId: string,
   conversation: string,
   turn: number,
   askedBy: string,
   askedAt: string,
 ): CaseQuestion | null {
-  const found = sampleAnswer(caseId, conversation, turn);
+  const found = recordedTurn(caseId, conversation, turn);
   if (!found) return null;
-  const tier: QuestionTier = found.tier;
-  const members = tier === 'board' ? ['conformance', 'encounter', 'impact', 'coordinator'] : ['explain'];
   const state: QuestionState = 'answered';
   return {
     questionId: `Q-${String(next++).padStart(6, '0')}`,
     caseId,
     conversation,
     turn,
-    tier,
+    tier: found.tier,
     source: 'suggested',
     question: found.question,
     state,
-    answer: found.answer,
+    answer: structuredClone(found.answer),
     error: null,
     mode: 'replay',
-    model: null,
+    model: found.model,
     costUsd: 0,
-    runs: members.length,
+    runs: found.tier === 'board' ? found.memberAnswers.length + 1 : 1,
     recordKey: null,
     ensMessageId: null,
     askedBy,
     askedAt,
     answeredAt: askedAt,
+    recordedAt: found.recordedAt,
   };
 }
 
 /** A stored question as GET /cases/{id}/questions/{qid} reads it: the facts, the members' answers, the resolved change. */
 export function questionDetail(q: CaseQuestion): CaseQuestionDetail {
-  const facts = whatIfFor(q.caseId).facts;
-  const a = q.answer;
-  const board = !!a && Array.isArray((a as BoardAnswer).perspectives);
-  const b = board ? (a as BoardAnswer) : undefined;
-  const fact = (id?: string) => facts.find((f) => f.id === id);
-  const members = q.tier === 'board' ? ['conformance', 'encounter', 'impact'] : ['explain'];
+  const found = recordedTurn(q.caseId, q.conversation, q.turn);
+  const memberAnswers = structuredClone(found?.memberAnswers ?? []);
+  const members = q.tier === 'board' ? [...memberAnswers.map((m) => m.member), 'coordinator'] : ['explain'];
   return {
     ...q,
-    facts,
-    memberAnswers: members.map((member) => ({ member, status: 'answered' })),
-    resolved: {
-      ...(fact(b?.setting?.fact) ? { setting: fact(b?.setting?.fact) } : {}),
-      ...(fact(b?.under_alternative?.fact) ? { under_alternative: fact(b?.under_alternative?.fact) } : {}),
-      ...(fact(b?.suggested_change?.fact)
-        ? { suggested_change: fact(b?.suggested_change?.fact)!.suggested_change }
-        : {}),
-    },
-    agentRuns: [...members, ...(board ? ['coordinator'] : [])].map((member, i) => ({
+    facts: whatIfFor(q.caseId).facts,
+    memberAnswers,
+    resolved: structuredClone(found?.resolved ?? {}),
+    agentRuns: members.map((member, i) => ({
       runId: `${q.questionId}-${i + 1}`,
       role: member === 'coordinator' ? 'coordinator' : member === 'explain' ? 'explain' : 'member',
       member,
-      status: 'answered',
+      status: 'ok',
       mode: 'replay',
-      model: null,
+      model: q.model,
       costUsd: 0,
       durationMs: null,
       ensMessageId: null,
@@ -394,14 +182,14 @@ export function questionDetail(q: CaseQuestion): CaseQuestionDetail {
 }
 
 /**
- * The questions a showcase case starts with: its scenario's first conversation, as the re-record stores it on the case,
- * so the panel opens on an example.
+ * The questions a demo case starts with: its scenario's first conversation, as the recording stores it on the case, so
+ * the panel opens on an example.
  */
 export function startingQuestions(caseId: string, at: string): CaseQuestion[] {
   const s = suggestedFor(caseId);
   const first = s?.conversations[0];
   if (!first) return [];
-  return first.turns.flatMap((t) => sampleQuestion(caseId, first.id, t.turn, 'setup', at) ?? []);
+  return first.turns.flatMap((t) => recordedQuestion(caseId, first.id, t.turn, 'setup', at) ?? []);
 }
 
 /** For tests: number the questions afresh. */

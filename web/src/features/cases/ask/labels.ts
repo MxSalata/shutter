@@ -26,15 +26,21 @@ export const MEMBER_NAMES: Record<string, string> = {
   coordinator: 'Coordinator',
 };
 
-const day = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+// In UTC, the zone the API carries times in, so a recording reads as made on the same day wherever it is read
+const day = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
 
 /** Whether the server marks the answer as a recorded one (mode `replay`). */
 const isRecorded = (q: CaseQuestion) => q.mode === 'replay';
 
 /**
- * Where an answer came from, in a sentence: sample data in the demo until the re-record, a recorded answer with its
- * date and model, or a live answer. The date is `recordedAt` when the question carries it (the server does not send it
- * yet), otherwise `answeredAt`.
+ * Where an answer came from, in a sentence: sample data in a demo whose answers are not recordings (see recorded.ts),
+ * a recorded answer with its date and model, or a live answer. The date is `recordedAt` when the question carries it
+ * (the demo's mock does; the server does not send it yet), otherwise `answeredAt`.
  */
 export function provenanceText(q: CaseQuestion): string {
   if (DEMO && !DEMO_ANSWERS_RECORDED) return SAMPLE_LABEL;
@@ -49,8 +55,8 @@ export function provenanceText(q: CaseQuestion): string {
 }
 
 /**
- * The badge beside the suggested questions, from the same source as each answer's provenance: sample answers in the
- * demo until the re-record, recorded answers only when an answer shown is a replay, otherwise none.
+ * The badge beside the suggested questions, from the same source as each answer's provenance: sample answers in a
+ * demo whose answers are not recordings, recorded answers only when an answer shown is a replay, otherwise none.
  */
 export function answersBadge(asked: CaseQuestion[]): string | null {
   if (DEMO && !DEMO_ANSWERS_RECORDED) return 'Sample answers';

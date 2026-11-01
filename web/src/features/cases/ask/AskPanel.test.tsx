@@ -11,9 +11,12 @@ import { theme } from '@/theme';
 import CasePage from '../CasePage';
 import type { CaseQuestion, WhatIfFact } from '@/api/types';
 import { SAMPLE_LABEL, answersBadge, provenanceText } from './labels';
+
+/** What the recorded answers say about themselves: the day of the live recording and its model. */
+const RECORDED_LABEL = 'Recorded live on 1 November 2026 with claude-opus-5-5';
 import { WhatIfCard } from './WhatIfCard';
 
-// The demo's answers are labelled as sample data: the page reads the build's DEMO flag, switched here per test
+// The demo's answers are labelled by the build's DEMO flag, switched here per test
 const demo = vi.hoisted(() => ({ value: true }));
 vi.mock('@/demo', () => ({
   get DEMO() {
@@ -21,8 +24,8 @@ vi.mock('@/demo', () => ({
   },
   DEMO_USER: { username: 'approver', password: 'shutter' },
 }));
-// The constant the re-record flips once real recordings replace the sample answers
-const recorded = vi.hoisted(() => ({ value: false }));
+// The constant that says the demo's answers are recordings (true since the live re-record), switched here per test
+const recorded = vi.hoisted(() => ({ value: true }));
 vi.mock('./recorded', () => ({
   get DEMO_ANSWERS_RECORDED() {
     return recorded.value;
@@ -76,7 +79,7 @@ afterAll(() => server.close());
 beforeEach(() => {
   resetMock('approver');
   demo.value = true;
-  recorded.value = false;
+  recorded.value = true;
   posts = [];
   server.events.removeAllListeners();
   server.events.on('request:start', async ({ request }) => {
@@ -127,7 +130,7 @@ describe('Ask about this case', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Ask about this case' })).toHaveFocus());
   });
 
-  it('opens on the recorded example conversation, labelled as sample data in the demo', async () => {
+  it('opens on the recorded example conversation, labelled with its recording in the demo', async () => {
     renderCase('C-000008');
     const p = await panel();
     const thread = await within(p).findByRole('region', { name: 'Example conversation' });
@@ -138,10 +141,12 @@ describe('Ask about this case', () => {
       "What if we trusted the bed manager's times?",
     ]);
     expect(
-      within(thread).getByText(`${SAMPLE_LABEL}. With an API key you can ask your own questions.`),
+      within(thread).getByText(`${RECORDED_LABEL}. With an API key you can ask your own questions.`),
     ).toBeInTheDocument();
     // Each turn says its tier; the board's turn gives each member's view and points at the What-if card
-    expect(within(turns[0]).getByText(/Explain tier\. Example \(sample data\)\./)).toBeInTheDocument();
+    expect(within(turns[0]).getByText(`Explain tier. ${RECORDED_LABEL}.`)).toBeInTheDocument();
+    expect(within(thread).queryByText(/sample data/i)).not.toBeInTheDocument();
+    expect(within(turns[0]).getByText(/never got into the bed-management system/)).toBeInTheDocument();
     expect(within(turns[2]).getByText('Encounter Integrity:')).toBeInTheDocument();
     expect(within(turns[2]).getByRole('button', { name: 'See it in What if' })).toBeInTheDocument();
     expect(within(turns[2]).getByRole('button', { name: 'What-if W1' })).toBeInTheDocument();
@@ -192,7 +197,7 @@ describe('Ask about this case', () => {
     const heading = within(thread).getByRole('heading', { name: 'Which movement is current?' });
     await waitFor(() => expect(heading).toHaveFocus());
     expect(
-      within(thread).getByText(/Shutter cannot tell, and that is why the case was escalated/),
+      within(thread).getByText(/the current movement is the bed manager's transfer to WARD-C/),
     ).toBeInTheDocument();
     // Asked once: choosing it again shows it without asking
     await userEvent.click(within(p).getByRole('button', { name: /Which movement is current\? \(answered/ }));
@@ -218,8 +223,9 @@ describe('Ask about this case', () => {
     expect(
       await within(p).findByText(/Free text needs a model key, and none is configured here/),
     ).toBeInTheDocument();
-    // Outside the demo the example says where it came from: here, a replayed answer with no recording behind it
+    // Outside the demo the example says where it came from all the same: a replayed recording, with its day and model
     expect(within(p).queryByText(new RegExp(SAMPLE_LABEL.replace(/[()]/g, '\\$&')))).not.toBeInTheDocument();
+    expect(within(p).getAllByText(new RegExp(RECORDED_LABEL)).length).toBeGreaterThan(0);
     await userEvent.keyboard('{Escape}');
 
     server.use(
@@ -261,7 +267,7 @@ describe('Ask about this case', () => {
     expect(within(card).getByText('If it were BEDMGR')).toBeInTheDocument();
     expect(
       within(card).getByText(
-        /Entry E7's alternative applies: nothing to send, proposed as superseded\. The bed manager's WARD-C placement would stand/,
+        /Entry E7's alternative applies: nothing to send, proposed as superseded\. The case would have closed as superseded with no write instead of escalated to a person/,
       ),
     ).toBeInTheDocument();
     expect(within(card).getByText('Your decision')).toBeInTheDocument();
@@ -281,15 +287,39 @@ describe('Ask about this case', () => {
     );
   });
 
-  it('says when no setting changes the outcome (S2, entry E2 has no alternative)', async () => {
+  it("shows S2's policy fact on the card the board's answers cite, with the example conversation", async () => {
     renderCase('C-000002');
     const p = await panel();
     const card = await within(p).findByRole('region', { name: 'What if: the setting behind this outcome' });
-    expect(within(card).getByText('No setting changes this outcome')).toBeInTheDocument();
-    expect(within(card).queryByRole('link', { name: 'Open in Site profile' })).not.toBeInTheDocument();
+    expect(
+      within(card).getByRole('heading', { name: 'W1: Approval of tier 2 single failures' }),
+    ).toBeInTheDocument();
+    expect(within(card).getByText('If it were approval')).toBeInTheDocument();
+    expect(within(card).getByRole('link', { name: 'Open in Site profile' })).toHaveAttribute(
+      'href',
+      '/site-profile?suggest=C-000002&fact=W1',
+    );
     const thread = await within(p).findByRole('region', { name: 'Example conversation' });
     expect(within(thread).getAllByRole('article')).toHaveLength(3);
+    expect(within(thread).getByRole('button', { name: 'What-if W1' })).toBeInTheDocument();
   });
+
+  it.each([
+    ['C-000054', /the demo bed-management system behind Downstream Out/, 'W1: Category of Downstream Out'],
+    ['C-000055', /the demo patient records system \(Records Out\)/, 'W1: Category of Records Out'],
+  ] as const)(
+    "shows S22's case %s with its own receiver's recorded answers and card",
+    async (caseId, text, w1) => {
+      renderCase(caseId);
+      const p = await panel();
+      const thread = await within(p).findByRole('region', { name: 'Example conversation' });
+      expect(within(thread).getAllByRole('article')).toHaveLength(3);
+      expect(within(thread).getAllByText(text).length).toBeGreaterThan(0);
+      expect(thread).toHaveTextContent(RECORDED_LABEL);
+      const card = await within(p).findByRole('region', { name: 'What if: the setting behind this outcome' });
+      expect(within(card).getByRole('heading', { name: w1 })).toBeInTheDocument();
+    },
+  );
 
   it('shows a scenario with no suggested questions plainly, and a card that says no setting changes the outcome', async () => {
     renderCase('C-000009');
@@ -330,21 +360,22 @@ describe('where the answers came from', () => {
   const chipsBadge = (p: HTMLElement) =>
     within(within(p).getByRole('tabpanel')).queryByText(/^(Sample|Recorded) answers$/);
 
-  it('reads sample data on the badge and on every turn in the demo, until the re-record flips the constant', async () => {
+  it('reads the recording on the badge and on every turn in the demo, and sample data when the constant is off', async () => {
     renderCase('C-000008');
     let p = await panel();
     let thread = await within(p).findByRole('region', { name: 'Example conversation' });
-    expect(chipsBadge(p)).toHaveTextContent('Sample answers');
-    expect(within(thread).getAllByText(/Example \(sample data\)\./).length).toBeGreaterThan(0);
+    expect(chipsBadge(p)).toHaveTextContent('Recorded answers');
+    expect(within(thread).getAllByText(new RegExp(RECORDED_LABEL)).length).toBe(4);
+    expect(within(thread).queryByText(/Example \(sample data\)/)).not.toBeInTheDocument();
     await userEvent.keyboard('{Escape}');
 
-    // Flipped: the sample answers are replays now, so they are no longer called samples but recorded answers
-    recorded.value = true;
+    // Switched off: the same replays read as sample data again
+    recorded.value = false;
     await userEvent.click(screen.getByRole('button', { name: 'Ask about this case' }));
     p = await panel();
     thread = await within(p).findByRole('region', { name: 'Example conversation' });
-    expect(within(thread).queryByText(/Example \(sample data\)/)).not.toBeInTheDocument();
-    expect(chipsBadge(p)).toHaveTextContent('Recorded answers');
+    expect(within(thread).getAllByText(/Example \(sample data\)\./).length).toBeGreaterThan(0);
+    expect(chipsBadge(p)).toHaveTextContent('Sample answers');
   });
 
   it('calls answers recorded only when the server marks one as a replay', () => {
@@ -360,11 +391,11 @@ describe('where the answers came from', () => {
       'Recorded live on 20 October 2026 with model-x',
     );
     demo.value = true;
-    expect(answersBadge([live])).toBe('Sample answers');
-    expect(provenanceText(live)).toBe(SAMPLE_LABEL);
-    recorded.value = true;
     expect(answersBadge([live])).toBe('Recorded answers');
     expect(provenanceText(live)).toBe('Recorded live on 25 October 2026 with model-x');
+    recorded.value = false;
+    expect(answersBadge([live])).toBe('Sample answers');
+    expect(provenanceText(live)).toBe(SAMPLE_LABEL);
   });
 });
 
