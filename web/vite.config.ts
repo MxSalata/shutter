@@ -57,6 +57,47 @@ function withoutMockWorker(): Plugin {
   };
 }
 
+/**
+ * `docs/readme/evaluation.json?proof`: the slice of the board's evaluation that lib/proof.ts reads (the totals, the
+ * sources and each pass's scenario, scoring, entry, cost and played outcome), so a page that shows the proof's figures
+ * (sign-in, Scenarios, Settings, the guide) carries a few kilobytes, not the whole document. Vite's own JSON plugin then
+ * turns the slice into a module, as it does the whole file for the Evaluation page.
+ */
+const PROOF_PASS_FIELDS = [
+  'scenario',
+  'incident',
+  'scored',
+  'complete',
+  'round',
+  'rounds',
+  'entry_decides',
+  'board_disposition',
+  'agreement',
+  'cost_usd',
+  'played',
+] as const;
+function evaluationProof(): Plugin {
+  const suffix = /evaluation\.json\?proof$/;
+  return {
+    name: 'shutter-evaluation-proof',
+    enforce: 'pre',
+    load(id) {
+      if (!suffix.test(id)) return null;
+      const file = id.replace(/\?proof$/, '');
+      this.addWatchFile(file);
+      const doc = JSON.parse(readFileSync(file, 'utf8')) as {
+        sources?: Record<string, unknown>;
+        totals?: Record<string, unknown>;
+        passes?: Record<string, unknown>[];
+      };
+      const passes = (doc.passes ?? []).map((p) =>
+        Object.fromEntries(PROOF_PASS_FIELDS.filter((k) => k in p).map((k) => [k, p[k]])),
+      );
+      return JSON.stringify({ sources: doc.sources ?? {}, totals: doc.totals ?? {}, passes });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const irisUrl = env.VITE_IRIS_URL || 'http://192.168.0.10:52775';
@@ -68,6 +109,7 @@ export default defineConfig(({ mode }) => {
     // IRIS serves the build at /shutter/; the demo is relative unless VITE_BASE says otherwise.
     base: mode === 'iris' ? '/shutter/' : mode === 'demo' ? env.VITE_BASE || './' : '/',
     plugins: [
+      evaluationProof(),
       react(),
       ...(mode === 'iris' ? [contentSecurityPolicy(), withoutMockWorker()] : []),
       ...(mode === 'demo' ? [contentSecurityPolicy()] : []),

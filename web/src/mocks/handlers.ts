@@ -483,7 +483,7 @@ function planOrigin(c: CaseFixture): { planCreatedBy?: string } {
 }
 
 /** The list's writes and latest verification, from the recorded attempts, as the API's summary counts them. */
-function writesOf(c: CaseFixture): { writes: number; verification: string } {
+export function writesOf(c: CaseFixture): { writes: number; verification: string } {
   const rows = (c.attempts ?? []) as {
     attempt?: { outcome?: string } | null;
     verification?: { outcome?: string } | null;

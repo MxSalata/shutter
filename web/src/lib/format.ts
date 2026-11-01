@@ -92,6 +92,31 @@ export function formatZoned(iso: string | undefined | null): string {
   return d ? `${dateTime.format(d)} ${zoneLabel(iso)}` : '';
 }
 
+/** "09:20:00 BST": the time alone in the feed's zone, named, for a moment of today. */
+export function formatZonedTime(iso: string | undefined | null): string {
+  const d = parseTime(iso);
+  return d ? `${timeOnly.format(d)} ${zoneLabel(iso)}` : '';
+}
+
+/** "08:20:00Z": the same moment's UTC time, short, to sit beside the local one in Technical. */
+export function formatUtcTime(iso: string | undefined | null): string {
+  const d = parseTime(iso);
+  return d ? `${d.toISOString().slice(11, 19)}Z` : '';
+}
+
+/** Whether a moment falls on today's date in the feed's zone. */
+export function isToday(iso: string | undefined | null, now: number = Date.now()): boolean {
+  const d = parseTime(iso);
+  if (!d) return false;
+  const day = new Intl.DateTimeFormat('en-GB', {
+    timeZone: zone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  return day.format(d) === day.format(new Date(now));
+}
+
 /** The same moment in UTC, as the API carries it. */
 export function formatUtc(iso: string | undefined | null): string {
   const d = parseTime(iso);
@@ -134,6 +159,14 @@ const integer = new Intl.NumberFormat('en-GB');
 export function formatInt(n: number | string | undefined | null): string {
   if (n === undefined || n === null || n === '') return '';
   return integer.format(Number(n));
+}
+
+/**
+ * "1 chain", "6 chains", "1,896,147 tokens": a count with its noun in the right number, never "chain(s)". `many` is
+ * the plural when adding an s is wrong ("1 pass", "3 passes"; "1 entry", "2 entries").
+ */
+export function plural(n: number, word: string, many?: string): string {
+  return `${integer.format(n)} ${n === 1 ? word : (many ?? (/(s|x|ch|sh)$/.test(word) ? `${word}es` : `${word}s`))}`;
 }
 
 /** US dollars, as the providers price tokens: four decimals below a cent, two above. */

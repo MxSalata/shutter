@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { budgetSpent, budgetText } from './budget';
+import { budgetSpent, budgetText, resetsHourly } from './budget';
 
 describe("the day's model budget in words", () => {
   it('says nothing when the server sends no budget', () => {
@@ -26,5 +26,28 @@ describe("the day's model budget in words", () => {
     expect(budgetSpent({ ...b, spentByMeUsd: 3 })).toBe(true);
     expect(budgetText({ ...b, perUserUsd: 0 })?.share).toBeUndefined();
     expect(budgetSpent({ ...b, exhausted: true })).toBe(true);
+  });
+
+  it('says "per reset" and "since the demo last reset" on the public demo, which resets every hour, never "today"', () => {
+    const hourly = { resetsHourly: true };
+    expect(budgetText({ dailyUsd: 15, spentTodayUsd: 4.2, exhausted: false }, hourly)?.today).toBe(
+      '$4.20 of the $15.00 per reset spent on live runs since the demo last reset (every hour)',
+    );
+    expect(budgetText({ dailyUsd: 15, spentTodayUsd: 15.1, exhausted: true }, hourly)?.today).toBe(
+      "The $15.00 per reset is spent: live runs wait for the demo's next reset (every hour)",
+    );
+    expect(budgetText({ dailyUsd: 0, spentTodayUsd: 1.5, exhausted: false }, hourly)?.today).toBe(
+      'No cap: $1.50 spent on live runs since the demo last reset (every hour)',
+    );
+    const shared = budgetText(
+      { dailyUsd: 15, spentTodayUsd: 4, exhausted: false, perUserUsd: 3, spentByMeUsd: 1.25 },
+      hourly,
+    );
+    expect(shared?.share).toBe('Your share: $1.25 of $3.00 per reset');
+    for (const words of Object.values(shared ?? {})) expect(words).not.toMatch(/today/i);
+    // The public demo is the instance whose settings report the live hospital on
+    expect(resetsHourly({ live: { enabled: true } })).toBe(true);
+    expect(resetsHourly({ live: { enabled: false } })).toBe(false);
+    expect(resetsHourly(undefined)).toBe(false);
   });
 });

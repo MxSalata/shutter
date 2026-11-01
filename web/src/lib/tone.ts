@@ -8,11 +8,13 @@ import {
 } from '@tabler/icons-react';
 
 /**
- * The five tones every status in the app is drawn in, and nothing else: neutral for what is simply so (closed, a
- * disposition, a recorded replay), information while something runs or for a fact worth seeing, positive only for a
- * passed check or an effect verified at the receiver, attention when a person is needed (an escalation, an approval
- * waiting), blocking when a write was refused or something failed. A tone never stands alone: every badge carries an
- * icon and its words, so the meaning survives without colour.
+ * The five tones every status in the app is drawn in, and nothing else: neutral for what is simply so (closed, or a
+ * decision; nothing waiting: a disposition, a recorded replay), information while something runs or for a fact worth
+ * seeing, positive only for an effect verified at the receiver, a passed check, or a scored result as expected (a
+ * scored comparison is a check), attention when a person is needed (an escalation, an approval waiting), blocking when
+ * something was refused, failed or contradicted at the receiver, or a result is not what its scenario expected. A tone
+ * never stands alone: every badge carries an icon and its words, so the meaning survives without colour. Identity
+ * hues (styles.css --shutter-hue-*) say which thing something is and never stand for a tone, and grape is the trial's.
  */
 export type Tone = 'neutral' | 'info' | 'positive' | 'attention' | 'blocking';
 
