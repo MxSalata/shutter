@@ -522,6 +522,9 @@ Storage Default
 <Value name="23">
 <Value>EnsMessageId</Value>
 </Value>
+<Value name="24">
+<Value>LiveAllowed</Value>
+</Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseQuestionD</DataLocation>
 <DefaultData>CaseQuestionDefaultData</DefaultData>

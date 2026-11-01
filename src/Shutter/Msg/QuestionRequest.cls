@@ -55,6 +55,9 @@ Storage Default
 <Value name="7">
 <Value>AskedBy</Value>
 </Value>
+<Value name="8">
+<Value>LiveAllowed</Value>
+</Value>
 </Data>
 <DefaultData>QuestionRequestDefaultData</DefaultData>
 <Type>%Storage.Persistent</Type>

@@ -1621,6 +1621,12 @@ Storage Default
 <Value name="41">
 <Value>IncidentOutcome</Value>
 </Value>
+<Value name="42">
+<Value>ForceBoard</Value>
+</Value>
+<Value name="43">
+<Value>ConvenedBy</Value>
+</Value>
 </Data>
 <DefaultData>CaseWorkflowDefaultData</DefaultData>
 <Type>%Storage.Persistent</Type>
