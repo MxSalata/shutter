@@ -28,9 +28,10 @@ Parameter SETTINGS = "Routes:Index,BatchSize:Index,LagSeconds:Index,BackfillHour
 /// Each task: the next batches after the mark, each handed to the service; the mark moves when the service has taken one.
 Method OnTask() As %Status
 {
-    // The cases forwarded from a watched production that wait for a message it has since delivered (v1.34): released here,
-    // since that production's connector cannot tell Shutter (Shutter.Util.ResendGuard).
-    Do ##class(Shutter.Util.ResendGuard).ReleaseForwardedWaits()
+    // The cases waiting for a message that has since been delivered (v1.34): released here, since a watched production's
+    // connector cannot tell Shutter, and a case that began to wait after the delivery (a slow plan) would wait for ever
+    // (Shutter.Util.ResendGuard).
+    Do ##class(Shutter.Util.ResendGuard).ReleaseDeliveredWaits()
     Set total = 0, batches = 0
     Do ..EnsureMark()
     Set ^Shutter.Index("routes") = ..Routes, ^Shutter.Index("lag") = ..LagSeconds
