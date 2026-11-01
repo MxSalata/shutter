@@ -1,7 +1,9 @@
+import type { PlayedResult } from '@/lib/proof';
+
 /**
  * The evaluation of the board (docs/readme/evaluation.json and evaluation.md, both written by scripts/evaluate.py
- * from the recorded live runs, with no model calls), read at build time through Vite: the shapes the page uses, and
- * the document's "Not yet measured" list, which the JSON does not carry.
+ * from the recorded live runs, with no model calls), read at build time through Vite: the shapes the page uses, the
+ * document's "Not yet measured" list, which the JSON does not carry, and the per-scenario table's filters.
  */
 export interface EvaluationMember {
   disposition: string;
@@ -50,8 +52,11 @@ export interface EvaluationPass {
   /** From the first specialist's start to the coordinator's plan; agent_ms adds the four runs' own durations. */
   elapsed_ms: number;
   agent_ms: number;
-  /** The case's outcome when the scenario was played end to end (comparison.md), by mode. */
-  played: Record<string, { status: string; cost_usd: number | null }>;
+  /**
+   * The case's outcome when the scenario was played end to end (comparison.md), by mode; rules alone's also says the
+   * state it ended in and whether it wrote, when the document records them.
+   */
+  played: Record<string, { status: string; cost_usd: number | null; state?: string; wrote?: boolean }>;
 }
 
 /** One group of the specialists' confidence; an empty group has its count alone. */
@@ -136,6 +141,10 @@ export function passName(p: EvaluationPass): string {
   return parts.join(' ');
 }
 
+/** One key per pass, unique where two passes share a name (S23a's two encounters). */
+export const passKey = (p: EvaluationPass) =>
+  [p.scenario, p.encounter, p.event, p.receiver ?? '', p.round].join('|');
+
 /** A played outcome that was compared with the expected one: as expected or not. */
 const compared = (status: string | undefined) => status === 'as expected' || status === 'differs';
 
@@ -163,3 +172,198 @@ export function playedLine(p: EvaluationPass): string {
     .filter(Boolean)
     .join('; ');
 }
+
+/**
+ * How a scored pass's scenario ended when it was played end to end: the board as expected or not, and rules alone as
+ * expected, stopped by the gate with nothing written, written wrongly, or (an older document that does not say which)
+ * not as expected; null for a pass that is not scored, whose case belongs to the next pass. lib/proof.ts reads the
+ * same fields per scenario for the proof's figures.
+ */
+export function passPlayed(p: EvaluationPass): { board: PlayedResult; rules: PlayedResult } | null {
+  if (!p.scored) return null;
+  const board = p.played?.board_live?.status;
+  const rules = p.played?.rules;
+  return {
+    board: board === 'as expected' ? 'as-expected' : board === 'differs' ? 'differs' : 'not-played',
+    rules:
+      rules?.status === 'as expected'
+        ? 'as-expected'
+        : rules?.status !== 'differs'
+          ? 'not-played'
+          : rules.wrote === true
+            ? 'wrote-wrongly'
+            : rules.state === 'blocked' && rules.wrote === false
+              ? 'stopped'
+              : 'differs',
+  };
+}
+
+/** Whether rules alone ended otherwise than expected, whatever stopped it. */
+export const rulesMissed = (r: PlayedResult) => r === 'differs' || r === 'stopped' || r === 'wrote-wrongly';
+
+/** The specialists whose proposal the plan set aside, in a scored pass (a pass that is not scored marks none). */
+export function outweighedIn(p: EvaluationPass): Specialist[] {
+  if (!p.scored) return [];
+  return SPECIALISTS.filter((s) => p.members[s] && p.members[s].disposition !== p.board_disposition);
+}
+
+/** Which specialists proposed the plan's action: the agreement's dots. */
+export function proposedPlan(p: EvaluationPass): Record<Specialist, boolean> {
+  return Object.fromEntries(
+    SPECIALISTS.map((s) => [s, p.members[s]?.disposition === p.board_disposition]),
+  ) as Record<Specialist, boolean>;
+}
+
+/** Whether the plan was not the scenario's expected action, in a scored pass. */
+export const planDiffers = (p: EvaluationPass) =>
+  p.scored && p.members.coordinator?.matches_expected === false;
+
+export type Specialist = (typeof SPECIALISTS)[number];
+
+/** The agreement levels in the evaluation's order, and each one's address form ("with-the-majority"). */
+export const AGREEMENT_LEVELS = ['unanimous', 'with the majority', 'with a minority', 'against all three'];
+export const agreementSlug = (level: string) => level.replace(/ /g, '-');
+
+/**
+ * The dots that stand for an agreement level in the Agreement card: the pattern most of that level's passes show (so
+ * the usual dissenter shows), or, when no pass has it, the specialists in order filled up to the level's count.
+ */
+export function levelPattern(passes: EvaluationPass[], level: string): Record<Specialist, boolean> {
+  const counts = new Map<string, number>();
+  for (const p of passes.filter((q) => q.agreement === level)) {
+    const key = SPECIALISTS.map((s) => (proposedPlan(p)[s] ? '1' : '0')).join('');
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const filled = 3 - Math.max(0, AGREEMENT_LEVELS.indexOf(level));
+  const key = top ?? SPECIALISTS.map((_, i) => (i < filled ? '1' : '0')).join('');
+  return Object.fromEntries(SPECIALISTS.map((s, i) => [s, key[i] === '1'])) as Record<Specialist, boolean>;
+}
+
+/** What the per-scenario table shows: one of the Show filters, who the cited entry says decides, who was outweighed. */
+export interface PassFilters {
+  show: string;
+  decides: '' | 'policy' | 'board' | 'person';
+  outweighed: '' | Specialist;
+  sort: 'scenario' | 'cost' | 'elapsed';
+}
+
+/** The Show filters by their address form, each with its chip's words. */
+export const SHOW_LABELS: Record<string, string> = {
+  all: 'All',
+  'rules-differs': 'Rules alone not as expected',
+  'not-unanimous': 'Not unanimous',
+  'rules-stopped': 'Rules alone stopped by the gate',
+  'rules-wrote': 'Rules alone wrote, not as expected',
+  unanimous: 'Unanimous',
+  'with-the-majority': 'With the majority',
+  'with-a-minority': 'With a minority',
+  'against-all-three': 'Against all three',
+};
+const DECIDES = ['policy', 'board', 'person'] as const;
+const SORTS = ['scenario', 'cost', 'elapsed'] as const;
+
+/** The table's filters from the address (`?show=rules-differs`, `?decides=board`, `?outweighed=conformance`). */
+export function readFilters(params: URLSearchParams): PassFilters {
+  const show = params.get('show') ?? '';
+  const decides = params.get('decides') ?? '';
+  const outweighed = params.get('outweighed') ?? '';
+  const sort = params.get('sort') ?? '';
+  return {
+    show: show in SHOW_LABELS ? show : 'all',
+    decides: (DECIDES as readonly string[]).includes(decides) ? (decides as PassFilters['decides']) : '',
+    outweighed: (SPECIALISTS as readonly string[]).includes(outweighed) ? (outweighed as Specialist) : '',
+    sort: (SORTS as readonly string[]).includes(sort) ? (sort as PassFilters['sort']) : 'scenario',
+  };
+}
+
+/** Whether a pass passes the Show filter. */
+function shows(p: EvaluationPass, show: string): boolean {
+  const rules = passPlayed(p)?.rules;
+  switch (show) {
+    case 'all':
+      return true;
+    case 'rules-differs':
+      return !!rules && rulesMissed(rules);
+    case 'rules-stopped':
+      return rules === 'stopped';
+    case 'rules-wrote':
+      return rules === 'wrote-wrongly';
+    case 'not-unanimous':
+      return p.agreement !== 'unanimous';
+    default:
+      return agreementSlug(p.agreement) === show;
+  }
+}
+
+/** The passes the table shows, in the order it shows them: the document's (by scenario), or dearest or slowest first. */
+export function filterPasses(passes: EvaluationPass[], f: PassFilters): EvaluationPass[] {
+  const shown = passes.filter(
+    (p) =>
+      shows(p, f.show) &&
+      (!f.decides || p.entry_decides === f.decides) &&
+      (!f.outweighed || outweighedIn(p).includes(f.outweighed)),
+  );
+  if (f.sort === 'cost') return [...shown].sort((a, b) => b.cost_usd - a.cost_usd);
+  if (f.sort === 'elapsed') return [...shown].sort((a, b) => b.elapsed_ms - a.elapsed_ms);
+  return shown;
+}
+
+/**
+ * A text's first sentence and the rest: the first stop that a space and a capital letter follow, so a file name
+ * ("scenario_check.py") or a list inside the sentence does not end it.
+ */
+export function firstSentence(text: string): { first: string; rest: string } {
+  const m = /^(.+?[.!?])\s+(?=[A-Z])(.*)$/s.exec(text.trim());
+  return m ? { first: m[1], rest: m[2] } : { first: text.trim(), rest: '' };
+}
+
+/**
+ * The comparison's cells (docs/readme/comparison.md), by scenario: what the board's run with the real agents and rules
+ * alone each ended with, in the document's words, for the played marks' tooltips.
+ */
+export function comparisonCells(markdown: string): Record<string, { board: string; rules: string }> {
+  const lines = markdown.split('\n').filter((l) => l.startsWith('|'));
+  const head = lines[0]?.split('|').map((c) => c.trim()) ?? [];
+  const boardAt = head.indexOf('Board, live');
+  const rulesAt = head.indexOf('Rules only');
+  const cells: Record<string, { board: string; rules: string }> = {};
+  if (boardAt < 0 || rulesAt < 0) return cells;
+  for (const line of lines.slice(1)) {
+    const c = line.split('|').map((x) => x.trim().replace(/\*\*/g, ''));
+    const id = /^(S\d+[a-z]?)\b/.exec(c[1] ?? '')?.[1];
+    if (id && !cells[id]) cells[id] = { board: c[boardAt] ?? '', rules: c[rulesAt] ?? '' };
+  }
+  return cells;
+}
+
+const dayMonth = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const year = (d: Date) => d.getUTCFullYear();
+
+/** "25 Oct to 1 Nov 2026" for the recordings' first and last days (UTC), "25 Oct 2026" for one day, "" for none. */
+export function dayRange(from: string | null | undefined, to: string | null | undefined): string {
+  if (!from) return '';
+  const a = new Date(from);
+  const b = new Date(to || from);
+  const end = `${dayMonth.format(b)} ${year(b)}`;
+  if (dayMonth.format(a) === dayMonth.format(b) && year(a) === year(b)) return end;
+  return `${dayMonth.format(a)}${year(a) === year(b) ? '' : ` ${year(a)}`} to ${end}`;
+}
+
+const ORDINALS = [
+  'first',
+  'second',
+  'third',
+  'fourth',
+  'fifth',
+  'sixth',
+  'seventh',
+  'eighth',
+  'ninth',
+  'tenth',
+];
+/** "seventh"; a figure with "th" past ten. */
+export const ordinal = (n: number) => ORDINALS[n - 1] ?? `${n}th`;
+
+/** The list's "a, b and c" from a few parts. */
+export const andList = (parts: string[]) => parts.join(', ').replace(/, ([^,]*)$/, ' and $1');
