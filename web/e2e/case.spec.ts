@@ -29,7 +29,8 @@ test.describe('the guided path', () => {
     await card.getByRole('link', { name: 'Case C-000002', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Case C-000002', exact: true })).toBeVisible();
     const outcome = page.getByRole('region', { name: 'Outcome' });
-    await expect(outcome).toContainText('Waiting for approval · 0 writes');
+    await expect(outcome.getByTestId('outcome-line')).toHaveText('Waiting for approval');
+    await expect(outcome).toContainText('Tested the fix at the receiver; sent nothing yet');
     await expect(outcome.getByRole('heading', { name: 'What needs you now' })).toBeVisible();
     await expect(outcome).toContainText('Approve or reject plan v1');
     await expect(page.getByRole('region', { name: 'Approval', exact: true })).toContainText(
@@ -45,7 +46,9 @@ test.describe('the guided path', () => {
       .first()
       .click();
     await expect(page.getByRole('heading', { name: 'Case C-000008', exact: true })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Outcome' })).toContainText('Escalated · 0 writes');
+    await expect(page.getByRole('region', { name: 'Outcome' }).getByTestId('outcome-line')).toHaveText(
+      'Escalated: a person decides',
+    );
     await expect(page.getByRole('button', { name: /^Why the board matters/ })).toHaveAttribute(
       'aria-expanded',
       'true',
@@ -86,6 +89,60 @@ test.describe('the guided path', () => {
     await page.getByRole('tab', { name: 'Audit trail' }).click();
     await expect(page.getByRole('region', { name: 'Timeline' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'In the Management Portal' })).toBeVisible();
+  });
+});
+
+test.describe('the S2 approval in the trial', () => {
+  test('plays out what the recording did after the approval, and ends delivered and verified', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await go(page, '/cases/C-000002');
+    const outcome = page.getByRole('region', { name: 'Outcome' });
+    await expect(outcome.getByTestId('outcome-line')).toHaveText('Waiting for approval');
+    // The guide waits for the page's event once the replay has played
+    const replayed = page.evaluate(
+      () =>
+        new Promise<boolean>((resolve) =>
+          window.addEventListener('shutter:replay-done', () => resolve(true), { once: true }),
+        ),
+    );
+    await page.getByRole('button', { name: 'Approve plan' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Approve plan v1' });
+    await expect(dialog).toContainText('Nothing leaves this browser.');
+    await expect(dialog.getByText('Trial only')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Approve this plan' }).click();
+    await expect(outcome.getByTestId('outcome-line')).toHaveText('Delivered: verified at the receiver');
+    expect(await replayed).toBe(true);
+    await expect(outcome).toHaveAttribute('data-tone', 'positive');
+    await expect(page.getByTestId('replay-note')).toHaveText(
+      'Replayed from the recording: approved 20 Oct, 17:24 UTC. Your approval is noted at the end of the audit trail.',
+    );
+    const stages = page.locator('.lifecycle-step');
+    await expect(stages).toHaveCount(7);
+    for (const i of [4, 5, 6]) await expect(stages.nth(i)).toHaveAttribute('data-revealed', 'true');
+    // The lifecycle and the band both in view at the end
+    await expect(page.locator('#case-lifecycle')).toBeInViewport();
+    await expect(outcome.getByTestId('outcome-line')).toBeInViewport();
+  });
+
+  test('shows Convene the board and Reinvestigate disabled with their reason', async ({ page }) => {
+    await signIn(page);
+    await go(page, '/cases/C-000008');
+    for (const name of ['Convene the board', 'Reinvestigate']) {
+      const button = page.getByRole('button', { name, exact: true });
+      await expect(button).toBeDisabled();
+      await expect(button).toHaveAccessibleDescription('Needs a real model: not in the trial');
+    }
+  });
+
+  test('keeps the tabs under the header while the page scrolls', async ({ page }) => {
+    await signIn(page);
+    await go(page, '/cases/C-000008');
+    const tabs = page.getByRole('tablist', { name: 'The case in detail' });
+    await page.getByRole('button', { name: /^6\. What was verified/ }).scrollIntoViewIfNeeded();
+    await page.mouse.wheel(0, 1200);
+    await expect(tabs).toBeInViewport();
   });
 });
 

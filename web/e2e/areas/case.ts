@@ -1,6 +1,9 @@
 import type { Area } from '../helpers';
 
-/** A case's page: its header, the Summary tab's story, the board, the receipt and the approval. */
+/**
+ * A case's page: its header with the IRIS row, the outcome band, the receipt, the Summary tab's board and story, and
+ * the approval. Each state the restyle drew is checked in Plain and in Technical.
+ */
 export const area: Area = {
   tag: '@case',
   screens: [
@@ -23,7 +26,15 @@ export const area: Area = {
     // step open
     { path: '/cases/C-000058', heading: 'Case C-000058', steps: 'open', checks: ['a11y'] },
     { path: '/cases/C-000064', heading: 'Case C-000064', steps: 'open', checks: ['a11y'] },
+    // The outcome band in each tone: delivered and verified (S23a), not as expected (rules alone's S8 write), waiting
+    { path: '/cases/C-000058', heading: 'Case C-000058', name: 'Case C-000058, delivered and verified' },
+    { path: '/cases/C-000021', heading: 'Case C-000021', name: 'Case C-000021, not as expected' },
+    // Technical: the receipt's versions, the board's citations, the coordinator's reasoning and the API's JSON open
+    { path: '/cases/C-000008', heading: 'Case C-000008', detail: 'technical' },
+    { path: '/cases/C-000058', heading: 'Case C-000058', detail: 'technical' },
+    { path: '/cases/C-000021', heading: 'Case C-000021', detail: 'technical' },
+    { path: '/cases/C-000002', heading: 'Case C-000002', detail: 'technical' },
   ],
   liveScreens: [{ path: '/cases/C-000002', heading: 'Case C-000002' }],
-  liveWordChecked: false,
+  liveWordChecked: true,
 };
