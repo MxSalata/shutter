@@ -5,10 +5,11 @@ import { banner, go, READ_ONLY, screenName, signIn } from './helpers';
 import { areas, siteProfile } from './areas';
 
 /**
- * The demo opened as the live hospital's public role (`?as=demo`): the mock signs "Try the demo" in as `demo`, who
- * approves but cannot run or reset scenarios or save the site, and whose settings carry a live hospital. The address
- * keeps `?as=demo` in every step: a navigation that drops it reloads the page, and the mock forgets who is signed in.
- * The screens that change in live mode are each area's `liveScreens`; the flows are in each area's own spec.
+ * The demo opened as the live hospital's public role (`?as=demo`): the trial opens signed in as `demo`, who approves
+ * but cannot run or reset scenarios or save the site, and whose settings carry the hospital feed (replayed in the
+ * trial). The address keeps `?as=demo` in every step: a navigation that drops it reloads the page, and the trial
+ * starts afresh as the approver. The screens that change for this role are each area's `liveScreens`; the flows are in
+ * each area's own spec.
  */
 const AS_DEMO = { as: 'demo' } as const;
 

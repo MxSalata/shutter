@@ -8,7 +8,7 @@ export interface Opened {
 
 /**
  * Opens a page of the app. The address keeps the same query in every step of a test: a navigation that changes it
- * reloads the page, and the demo's mock forgets who is signed in.
+ * reloads the page, and the trial starts afresh from the recording (signed in again as the role the address names).
  */
 export function go(page: Page, path: string, opened: Opened = {}) {
   const query = [
@@ -19,15 +19,22 @@ export function go(page: Page, path: string, opened: Opened = {}) {
 }
 
 /**
- * Signs in with the demo's own sign-in: as the approver of the recorded runs, or (`as: 'demo'`) as the live
- * hospital's public role, who approves but cannot run or reset scenarios or save the site.
+ * The demo build is always the trial and opens signed in: as the approver of the recorded runs, or (`as: 'demo'`)
+ * as the live hospital's public role, who approves but cannot run or reset scenarios or save the site. This opens
+ * Scenarios and waits until it is there.
  */
 export async function signIn(page: Page, opened: Opened = {}) {
-  await go(page, '/login', opened);
-  await page
-    .getByRole('button', { name: opened.as === 'demo' ? /^Try the demo \(live hospital/ : /Try the demo/ })
-    .click();
+  await go(page, '/scenarios', opened);
   await expect(page.getByRole('heading', { name: 'Scenarios', exact: true })).toBeVisible();
+}
+
+/** Signs the trial's user out, to the trial's own sign-in page (its roles, no password). */
+export async function signOutOfTrial(page: Page) {
+  await page.getByRole('button', { name: /^Signed in as / }).click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Choose who you are in the trial', level: 1 }),
+  ).toBeVisible();
 }
 
 /**
@@ -47,8 +54,12 @@ export async function openSteps(page: Page) {
   );
 }
 
-/** The live hospital's banner, which the public demo's role sees on every page. */
-export const banner = (page: Page) => page.getByRole('region', { name: 'Live hospital' });
+/**
+ * The hospital feed's banner, which the public demo's role sees on every page: "Live hospital" on a live page, and
+ * "Hospital feed (replayed)" in the trial, which the demo build always is.
+ */
+export const banner = (page: Page) =>
+  page.getByRole('region', { name: /^(Live hospital|Hospital feed \(replayed\))$/ });
 
 /** The note that stands where Save would be for the public demo's role. */
 export const READ_ONLY = /The public demo is read-only: a site's approver saves changes here/;

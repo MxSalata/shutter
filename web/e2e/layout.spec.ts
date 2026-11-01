@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { skipWelcome } from './guide';
-import { checkedBy, go, openSteps, screenName, signIn } from './helpers';
+import { checkedBy, go, openSteps, screenName, signIn, signOutOfTrial } from './helpers';
 import { areas, signIn as signInArea } from './areas';
 
 /**
@@ -18,8 +18,8 @@ for (const width of [360, 1024]) {
     test.use({ viewport: { width, height: 800 } });
 
     test(`sign-in page ${signInArea.tag}`, async ({ page }) => {
-      await go(page, '/login');
-      await expect(page.getByRole('button', { name: /^Sign in$/ })).toBeVisible();
+      await signIn(page);
+      await signOutOfTrial(page);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     });
 
