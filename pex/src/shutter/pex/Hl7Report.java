@@ -1,6 +1,7 @@
 package shutter.pex;
 
 import ca.uhn.hl7v2.DefaultHapiContext;
+import ca.uhn.hl7v2.ErrorCode;
 import ca.uhn.hl7v2.HL7Exception;
 import ca.uhn.hl7v2.HapiContext;
 import ca.uhn.hl7v2.Location;
@@ -12,6 +13,7 @@ import ca.uhn.hl7v2.model.Structure;
 import ca.uhn.hl7v2.model.Type;
 import ca.uhn.hl7v2.parser.CanonicalModelClassFactory;
 import ca.uhn.hl7v2.parser.PipeParser;
+import ca.uhn.hl7v2.parser.UnexpectedSegmentBehaviourEnum;
 import ca.uhn.hl7v2.validation.impl.ValidationContextFactory;
 
 import java.util.ArrayList;
@@ -21,7 +23,7 @@ import java.util.regex.Pattern;
 
 /**
  * A second opinion on an HL7 v2 message from an independent parser (HAPI), for Shutter's evidence when IRIS cannot read a
- * message (docs/CONTRACTS.md, section 6.1): is the message well-formed and merely of a schema the site has not loaded, or
+ * message (docs/CONTRACTS.md, section 6.7): is the message well-formed and merely of a schema the site has not loaded, or
  * malformed, and where. Pure: a string in, a JSON report out, no IRIS calls, so it runs from the PEX operation and from
  * the Java gateway alike. Every message is read with the 2.5.1 structures (HAPI's canonical model), whatever version it
  * declares, so a 2.3.1 or 2.4 message and a site category such as MYSITE_2.5.1 are read too; the report says both.
@@ -49,8 +51,16 @@ public final class Hl7Report {
         }
         String[] lines = text.split("\r");
         List<String> declared = new ArrayList<>();
+        List<String> custom = new ArrayList<>();
         for (String line : lines) {
-            if (line.length() >= 3) declared.add(line.substring(0, 3));
+            if (line.length() >= 3) {
+                String name = line.substring(0, 3);
+                declared.add(name);
+                if (name.startsWith("Z") && !custom.contains(name)) custom.add(name);
+            }
+        }
+        if (!custom.isEmpty()) {
+            notes.add("Site-defined segment(s) " + String.join(", ", custom) + " kept: a Z segment is the site's own by the standard, not an error");
         }
         String declaredVersion = mshField(lines[0], 12);
         String messageType = mshField(lines[0], 9);
@@ -82,10 +92,35 @@ public final class Hl7Report {
         Message strict = null;
         boolean valid = false;
         try {
+            // Strict: the default rules on the values, and a segment the structure does not expect there is an error, as
+            // IRIS's own structural validation treats it; a site's Z segments are kept in place, since the standard gives
+            // them to the site. A required segment with nothing in it is an error too (HAPI alone would let it pass).
             ctx.setValidationContext(ValidationContextFactory.defaultValidation());
+            ctx.getParserConfiguration().setUnexpectedSegmentBehaviour(custom.isEmpty() ? UnexpectedSegmentBehaviourEnum.THROW_HL7_EXCEPTION : UnexpectedSegmentBehaviourEnum.ADD_INLINE);
             PipeParser strictParser = ctx.getPipeParser();
             strict = strictParser.parse(toParse);
-            valid = true;
+            List<String> missing = new ArrayList<>();
+            requiredMissing(strict, missing);
+            for (String name : missing) {
+                errors.add("{\"code\":\"REQUIRED_SEGMENT_MISSING\",\"message\":" + q("Missing required segment " + name) + ",\"segment\":" + q(name) + "}");
+            }
+            if (!custom.isEmpty()) {
+                // With the Z segments taken out, a strict pass still tells a stray standard segment from a known one.
+                StringBuilder withoutZ = new StringBuilder();
+                for (String line : toParse.split("\r")) {
+                    if (!line.startsWith("Z")) {
+                        if (withoutZ.length() > 0) withoutZ.append('\r');
+                        withoutZ.append(line);
+                    }
+                }
+                try {
+                    ctx.getParserConfiguration().setUnexpectedSegmentBehaviour(UnexpectedSegmentBehaviourEnum.THROW_HL7_EXCEPTION);
+                    ctx.getPipeParser().parse(withoutZ.toString());
+                } catch (HL7Exception e) {
+                    errors.add(error(e));
+                }
+            }
+            valid = errors.isEmpty();
         } catch (HL7Exception e) {
             errors.add(error(e));
         } catch (RuntimeException e) {
@@ -94,7 +129,9 @@ public final class Hl7Report {
         Message lenient = strict;
         if (lenient == null) {
             try {
+                // Lenient: no rules, unexpected segments kept in place, to describe what is there.
                 ctx.setValidationContext(ValidationContextFactory.noValidation());
+                ctx.getParserConfiguration().setUnexpectedSegmentBehaviour(UnexpectedSegmentBehaviourEnum.ADD_INLINE);
                 lenient = ctx.getPipeParser().parse(toParse);
                 notes.add("Read without validation to describe the structure");
             } catch (HL7Exception e) {
@@ -112,6 +149,12 @@ public final class Hl7Report {
             List<String> segs = new ArrayList<>();
             walk(lenient, segs);
             out.append(String.join(",", segs));
+        }
+        out.append("]");
+        out.append(",\"custom_segments\":[");
+        for (int i = 0; i < custom.size(); i++) {
+            if (i > 0) out.append(',');
+            out.append(q(custom.get(i)));
         }
         out.append("]");
         out.append(",\"segments_declared\":[");
@@ -132,6 +175,31 @@ public final class Hl7Report {
             // nothing to release that matters
         }
         return out.toString();
+    }
+
+    /** The required segments and groups of the structure that carry nothing, by name, in order. */
+    private static void requiredMissing(Group group, List<String> missing) {
+        String[] names;
+        try {
+            names = group.getNames();
+        } catch (RuntimeException e) {
+            return;
+        }
+        for (String name : names) {
+            try {
+                Structure[] reps = group.getAll(name);
+                boolean any = false;
+                for (Structure s : reps) {
+                    if (!s.isEmpty()) {
+                        any = true;
+                        if (s instanceof Group) requiredMissing((Group) s, missing);
+                    }
+                }
+                if (!any && group.isRequired(name)) missing.add(name);
+            } catch (HL7Exception ignored) {
+                // a structure that cannot be read is not reported as missing
+            }
+        }
     }
 
     /** Each segment of the parsed message in order: its name, how many fields it has and how many carry a value. */
@@ -167,7 +235,15 @@ public final class Hl7Report {
                             // a field that cannot be read counts as empty
                         }
                     }
-                    if (populated > 0 || !seg.isEmptyOrDefault()) {
+                    boolean present = populated > 0;
+                    if (!present) {
+                        try {
+                            present = !seg.isEmpty();
+                        } catch (HL7Exception ignored) {
+                            present = false;
+                        }
+                    }
+                    if (present) {
                         segs.add("{\"name\":" + q(seg.getName()) + ",\"fields\":" + fields + ",\"populated\":" + populated + "}");
                     }
                 } else if (s instanceof Group) {
@@ -179,7 +255,8 @@ public final class Hl7Report {
 
     private static String error(HL7Exception e) {
         StringBuilder b = new StringBuilder();
-        b.append("{\"code\":").append(q(e.getErrorCode() == null ? "HL7" : e.getErrorCode().name()));
+        ErrorCode code = e.getError();
+        b.append("{\"code\":").append(q(code == null ? "HL7" : code.name()));
         b.append(",\"message\":").append(q(e.getMessage() == null ? String.valueOf(e) : e.getMessage()));
         Location loc = e.getLocation();
         if (loc != null) {

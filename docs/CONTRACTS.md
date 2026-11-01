@@ -696,6 +696,31 @@ four collections under `knowledge/` (`search_contracts`, `search_lifecycle`, `se
 fifth collection, `review`, is the production review agent's (13.6) and reaches a board member only through a row whose
 `KnowledgeCollection` is `all` (the single investigator's).
 
+### 6.7 The Second Parser (v1.34)
+
+When IRIS cannot read a message (the validation's `parsed` is false: no parse, or a schema category this namespace has not
+loaded, 12), the Evidence Collector asks an independent parser before the gate speaks: the item **Second Parser**, an
+`EnsLib.PEX.BusinessOperation` running `shutter.pex.SecondParser` in Java through PEX (`pex/src`), which reads the message with
+the HAPI HL7 library (2.6.0) and answers a `Shutter.Msg.ParseRequest` (`Raw`, `HeaderId`) with a `Shutter.Msg.ParseReport`
+(`ReportJSON`, `Parser`). The report, under `validation.second_parser` in the snapshot, is `{parser, declared_version,
+version_known, read_as, message_type, control_id, parsed, valid, structure, errors: [{code, message, segment, field,
+component}], segments: [{name, fields, populated}], segments_declared, notes, available: true, item}`. Every message is read with
+the 2.5.1 structures (HAPI's canonical model) whatever version it declares, so a 2.3.1 or 2.4 message and a site category
+such as `MYSITE_2.5.1` are read too, and the report says both versions. The gate's `SCHEMA_UNKNOWN` and `PARSE_FAILED` words
+gain the verdict (`Shutter.Util.SecondParser.Verdict`): "reads it as a well-formed ADT^A02^ADT_A02 with the 2.5.1
+structures (it declares MYSITE_2.5.1): the message is sound, and the schema is what this namespace lacks", or "also finds it
+invalid at PID-7 (Primitive value '1980-01-X1' requires to be empty or a HL7 datetime string): the message is malformed, not
+merely of an unknown schema". The agents and the app see the same report. Without the jar (a site without Java, the replay
+edition, a build with no network) nothing fails: `Shutter.Setup.SyncSecondParser` leaves the item disabled, the evidence
+carries `second_parser: {available: false, item, reason}`, the verdict is empty and the Doctor's `second_parser` says why
+(`{item, available, jar, classpath_jars, probe, parser}`; `probe` is `ok` when the Java gateway answers a one-line message).
+The Evidence Collector's setting `SecondParserTarget` names the item (empty never asks); a slow or failing item leaves
+`available: false` after 20 s and the gate judges without it. `pex/build.sh` downloads HAPI and its dependencies from Maven
+Central, checks each against its pinned SHA-256 in the same step, compiles the two classes with the IRIS image's own JDK
+(Temurin 11) and writes `shutter-pex.jar` under the manager directory as `pex/`, beside `shutter/` and outside the image's data volume, so
+an upgraded container runs its own image's jar; `SyncSecondParser` writes the item's `%gatewayExtraClasspaths` for the
+install; the Dockerfile runs the build, and a site with Java runs it once by hand.
+
 ## 7. Incidents: many failures to one receiver (v1.6, as built in v1.7)
 
 ### 7.1 Detection and grouping
@@ -1339,7 +1364,10 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   /settings` and the Doctor. A case forwarded from a watched production (11) reads the refusal that named the bed's occupant
   and the occupant's deliveries in that production's namespace as well as Shutter's (`Timeline.LastRefusal`, `Deliveries` with
   the case's `SourceNamespace`), so its bed conflict (6.1) is judged as a case of Shutter's own feed is; before, the forwarded
-  refusal read as unknown and E17 escalated it.
+  refusal read as unknown and E17 escalated it. The Second Parser (6.7): a PEX business operation in Java (HAPI) asked when IRIS cannot
+  read a message, its report under `validation.second_parser`, the gate's `SCHEMA_UNKNOWN` and `PARSE_FAILED` words with its
+  verdict, the item in `INSTALLITEMS` enabled only where `shutter-pex.jar` is installed (`SyncSecondParser`), the Doctor's
+  `second_parser`, `pex/build.sh` in the Dockerfile.
 - v1.33, 1 Nov 2026: the demo receiver's fault `delay_response` (1.5): a real operation is held for `seconds`, then applied
   and answered as usual, so a newer message can be on its way to the receiver while a case is about to resend (S24); the
   scenario runner's fault step passes `seconds`.
