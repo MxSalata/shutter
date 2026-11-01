@@ -57,7 +57,7 @@ describe('ScenariosPage', () => {
     expect(list).toContainElement(run);
     const row = run.closest('tr')!;
     expect(within(row).getByRole('rowheader')).toHaveTextContent(/^S2Never-accepted transfer/);
-    expect(within(list).getAllByRole('button', { name: /^Run S\d+$/ })).toHaveLength(listed.length);
+    expect(within(list).getAllByRole('button', { name: /^Run S\d+[a-z]?$/ })).toHaveLength(listed.length);
     expect(within(list).getByText(`${listed.length} in all.`, { exact: false })).toBeInTheDocument();
   });
 
@@ -152,7 +152,7 @@ describe('ScenariosPage', () => {
     const resends = listed.filter((d) => !d.expected?.incident && d.expected?.disposition === 'resend');
     const chip = within(list).getByRole('radio', { name: `Resend ${resends.length}` });
     await userEvent.click(chip);
-    const runs = within(list).getAllByRole('button', { name: /^Run S\d+$/ });
+    const runs = within(list).getAllByRole('button', { name: /^Run S\d+[a-z]?$/ });
     expect(runs.map((b) => b.getAttribute('aria-label'))).toEqual(resends.map((d) => `Run ${d.id}`));
     const incidents = listed.filter((d) => d.expected?.incident).length;
     expect(within(list).getByRole('radio', { name: `Incident chains ${incidents}` })).toBeInTheDocument();
@@ -268,7 +268,7 @@ describe('ScenariosPage', () => {
     renderScenarios();
     expect(await screen.findByText('The Scenario Player is switched off')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Run S2' })).toBeDisabled();
-    const runs = screen.getAllByRole('button', { name: /^Run S\d+$/ });
+    const runs = screen.getAllByRole('button', { name: /^Run S\d+[a-z]?$/ });
     expect(runs.length).toBeGreaterThan(1);
     for (const run of runs) expect(run).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();

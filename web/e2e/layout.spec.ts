@@ -153,8 +153,8 @@ test.describe('a phone at 390 px', () => {
   test("each scenario's description toggle is named after its scenario", async ({ page }) => {
     await go(page, '/scenarios');
     const list = page.getByRole('region', { name: 'Every scenario' });
-    await expect(list.getByRole('button', { name: /^Run S\d+$/ }).first()).toBeVisible();
-    await expect(list.getByRole('button', { name: /^More about S\d+$/ }).first()).toBeVisible();
+    await expect(list.getByRole('button', { name: /^Run S\d+[a-z]?$/ }).first()).toBeVisible();
+    await expect(list.getByRole('button', { name: /^More about S\d+[a-z]?$/ }).first()).toBeVisible();
     await expect(list.getByRole('button', { name: 'More', exact: true })).toHaveCount(0);
   });
 });
