@@ -4,6 +4,8 @@
 
 When an HL7 delivery fails in a hospital, the usual fix is a resend from the Message Viewer. If the patient has moved since, that resend moves them back. Shutter turns each failed delivery into a case instead. A board of IRIS AI Hub agents reads sealed evidence and proposes what to do. A deterministic gate checks the plan. A person, or the site's own written policy, releases it. Shutter then makes one conditional write and checks the receiving system's own history to prove it landed. The AI board proposes; the gate disposes.
 
+Real interoperability testing only happens in production: that is where the holes in an integration show, the ones nobody could test for. No integration is perfect, and no one can predict every behaviour of every receiving system. Shutter is the failsafe, so that an integration does not have to predict every possible failure.
+
 [screenshot: the Scenarios start page with the three scenarios to try first]
 
 [screenshot: the S8 case page, rules alone beside the board, with what each did at the receiver]
@@ -40,12 +42,39 @@ Open **Scenarios**. Each card is a real kind of failure, with what should happen
 - **S8, the case a gate cannot catch.** Run it in Rules only mode and approve: the resend overwrites the bed manager's newer placement. Run it in board mode: the board escalates. The case page sets the two side by side.
 - **S20, a nurse moves the patient by hand.** While the resend waits for approval, a nurse moves the patient to Ward C in the downstream system itself. The approval is bound to the receiver's version, so nothing is sent (`APPROVAL_RECEIVER_CHANGED`), the case is planned again, and the nurse's entry stands. Plays in Rules only mode until the board's runs for it are recorded.
 - **S22, one failure, two kinds of system.** The same overtaken transfer fails at the bed manager and at a patient records system. The bed manager only needs the current state, so its case closes with no write. The records system needs an accurate history, so its case escalates with the steps to correct it. S22 plays in Site policy mode; it has no board recordings.
-- **S23, bed already occupied (planned, not built yet).** The demo receiver already refuses with `409 bed_occupied`; the evidence, the matcher, the catalogue entry and the board's part are still to come. The receiver refuses a transfer because the bed is taken. Either the occupant's move out failed in another case (recover that first, then resend) or two patients really are allocated one bed (escalate to the bed manager). Telling them apart is the board's job.
-- **Ask about this case (in progress).** Built on main: the server routes for questions, the deterministic What-if card (`GET /cases/{id}/whatif`) and the two agent tiers, Explain and the board's question mode ([docs/CONTRACTS.md](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md), section 14). The chat panel on the case page is on a branch and not merged yet, and its example answers are sample data until the live re-record. The design: **Explain** gives a confused user the plain-words answer: what happened, what Shutter did and why. **Ask the board** sends the question to the four agents. When the outcome turns on a site profile setting, the answer ends with a **What-if card**: what this case would have done under the alternative, and a suggested profile change that opens as a draft on the Site profile page for an approver to review. Without a key, each showcase case will open with a recorded example conversation, labelled with its model and date.
+- **S23, bed already occupied.** The receiver refuses a transfer because the bed is taken (`409 bed_occupied`). Shutter reads who holds the bed, as a token, never their identifiers, and tells three cases apart. If the occupant is leaving in another case, this case waits for that one and resends once the bed is free (S23a). If two patients really are allocated one bed, it escalates to the bed manager (S23b). If the occupant's own case cannot free the bed, it escalates with the conflict laid out (S23c). Plays in Site policy mode.
+- **Ask about this case.** A read-only panel beside the case page. **Explain** gives a confused user the plain-words answer: what happened, what Shutter did and why. **Ask the board** sends the question to the four agents. When the outcome turns on a site profile setting, the answer ends with a **What-if card**, computed with no model: what this case would have done under the alternative, and a suggested profile change that opens as a draft on the Site profile page for an approver to review. No agent can write, approve or save anything, and an agent may name a setting only from the case's own facts ([docs/CONTRACTS.md](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md), section 14). Until the live re-record, the example conversations in the demo are sample data and say so; free questions need a key.
 - **Production review.** One read-only pass over a production's effective settings, its message purge task and the window's errors, tied to the cases Shutter opened. Each finding names the setting, where its value came from and the safer value. With a key, an agent ranks the findings within their severity tiers and explains each against the case history. Nothing in the production is changed.
 - **Evaluation.** How the board decides, from the recorded runs: each member's disposition and confidence per case, where they disagreed and why the plan overruled them, and what each pass cost. It also says plainly what has not been measured.
 
-The catalogue has 21 scenarios: S1 to S13 and S15 to S22 (there is no S14), with S23 planned. Every scenario, step by step, with a checklist of where each part of the contest's task shows: [docs/readme/scenarios.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/scenarios.md).
+The catalogue has 24 scenarios: S1 to S13, S15 to S22, and S23a to S23c (there is no S14). Every scenario, step by step, with a checklist of where each part of the contest's task shows: [docs/readme/scenarios.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/scenarios.md).
+
+## Technology bonuses
+
+| Bonus | Where to see it |
+| --- | --- |
+| Workflow Engine | Every approval is an `EnsLib.Workflow` task for the role "Shutter Approvers", bound to the plan's digest: run S2 and approve it, then open the Workflow inbox ([CaseWorkflow.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Process/CaseWorkflow.cls), [IncidentWorkflow.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Process/IncidentWorkflow.cls)) |
+| IRIS Vector Search | The agents' knowledge collections are AI Hub knowledge bases on `%AI.RAG.VectorStore.IRIS` with FastEmbed, 384 dimensions, one table per collection ([Library.cls](https://github.com/MxSalata/shutter/blob/main/aihub/src/Shutter/Knowledge/Library.cls)) |
+| Embedded Python | The feed's time zone may be any IANA zone: a `Language = python` method asks Python's `zoneinfo` for the offset a zone gives a local time ([Time.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Util/Time.cls), `PyOffset`). Check it in the SHUTTER namespace: `SELECT Shutter_Util.Time_Probe('20261015092000', 'Europe/Paris')` |
+| Custom Adapter | The HL7 index walk is Shutter's own inbound adapter, which hands batches of message headers to the HL7 Index item ([Index/Adapter.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Index/Adapter.cls)) |
+| Docker | `docker compose up` ([docker-compose.yml](https://github.com/MxSalata/shutter/blob/main/docker-compose.yml), [Dockerfile](https://github.com/MxSalata/shutter/blob/main/Dockerfile)) |
+| IPM | Two modules: `iris-shutter`, the core that runs on any IRIS for Health 2026.2, and the AI Hub module ([module.xml](https://github.com/MxSalata/shutter/blob/main/module.xml), [aihub/module.xml](https://github.com/MxSalata/shutter/blob/main/aihub/module.xml)) |
+| Community Opportunity idea [DPI-I-689](https://ideas.intersystems.com/ideas/DPI-I-689) | Interoperability as the traceability tool for an AI pipeline: see the section below |
+
+The online demo, the articles and the video are linked here when they are published.
+
+### Interoperability as the traceability tool for AI agents (DPI-I-689)
+
+The idea asks whether InterSystems Interoperability could do the traceability job of a tool such as Langfuse. In Shutter every agent run is a message in the production, so the trace is the production's own:
+
+| What an AI tracing tool records | Where it is in Shutter |
+| --- | --- |
+| A trace (one end-to-end run) | The case's session in the Visual Trace: the failed delivery, the case workflow, each agent and the gate, one lane each |
+| A generation (one model call) | One `AgentRequest` and `AgentResponse` message pair per agent run, with its model, tokens, cost and duration, kept as an `AgentRun` record |
+| Tool calls and retrieval | Each tool call, the knowledge searches included, written to the trace's log by `%AI.Policy.Audit` |
+| Cost | The Costs page and `GET /costs`, by case, by review and by question |
+| The prompt's version | The agent class's configuration version, carried in the request and in each recording's key |
+| Replay | The recordings, keyed by the scenario's encounter and event, the member and the configuration version: CI replays them on every push |
 
 ## How it works
 
@@ -68,6 +97,7 @@ Each agent on the board is a business operation in the production. Its reasoning
 | --- | --- |
 | `%AI.Agent`: three specialists, a coordinator and a single investigator | [aihub/src/Shutter/Agent](https://github.com/MxSalata/shutter/tree/main/aihub/src/Shutter/Agent) |
 | `%AI.Agent` for the production review, with the review rules as its RAG collection and one typed terminal tool, `SubmitReview` | [aihub/src/Shutter/Agent/Review.cls](https://github.com/MxSalata/shutter/blob/main/aihub/src/Shutter/Agent/Review.cls) |
+| `%AI.Agent` for questions: the Explain agent, and the board in question mode, answering through `SubmitAnswer` and `SubmitBoardAnswer`, which refuse a setting that is not among the case's facts | [aihub/src/Shutter/Agent/Explain.cls](https://github.com/MxSalata/shutter/blob/main/aihub/src/Shutter/Agent/Explain.cls), [aihub/src/Shutter/Agent/Base.cls](https://github.com/MxSalata/shutter/blob/main/aihub/src/Shutter/Agent/Base.cls) |
 | `%AI.Tool` with typed arguments: the evidence drill-downs, `SubmitFindings`, `SubmitPlan`, `SubmitReview` | [aihub/src/Shutter/Tools](https://github.com/MxSalata/shutter/tree/main/aihub/src/Shutter/Tools), [aihub/src/Shutter/Schema](https://github.com/MxSalata/shutter/tree/main/aihub/src/Shutter/Schema) |
 | `%AI.Policy.Authorization` holds every run to its own case; `%AI.Policy.Audit` writes each tool call to the Visual Trace's log | [aihub/src/Shutter/Bridge/Policy](https://github.com/MxSalata/shutter/tree/main/aihub/src/Shutter/Bridge/Policy) |
 | RAG on `%AI.RAG.VectorStore.IRIS` with FastEmbed (384 dimensions): the interface contract, the encounter lifecycle, each operation's effects and a recovery playbook per board member | [aihub/src/Shutter/Knowledge/Library.cls](https://github.com/MxSalata/shutter/blob/main/aihub/src/Shutter/Knowledge/Library.cls) |
@@ -75,14 +105,29 @@ Each agent on the board is a business operation in the production. Its reasoning
 | Agent sessions with prompt caching; tokens and cost recorded per run | [aihub/src/Shutter/Bridge/Runner/AIHub.cls](https://github.com/MxSalata/shutter/blob/main/aihub/src/Shutter/Bridge/Runner/AIHub.cls) |
 | `Model`, `ProviderConfig`, `TokenBudget` and `MaxIterations` as settings of each board item | [src/Shutter/Bridge/Operation/Agent.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Bridge/Operation/Agent.cls) |
 
-Not used, on purpose: nested agents (the case workflow gives the board its parallelism and its Visual Trace lanes), a generic SQL tool (the agents see tokens, never rows), and skills or planning (the catalogue and the playbooks carry that knowledge).
+Not used, on purpose: nested agents (the case workflow gives the board its parallelism and its Visual Trace lanes), a generic SQL tool (the agents see tokens, never rows), skills or planning (the catalogue and the playbooks carry that knowledge), and MCP (the agents run in process, as business operations). IRIS Agentic Dev's `iris-ai-hub` skill and its research notes on build 154 were our reference for the AI Hub API, read as documentation (the Config Store fix below came from them); its MCP server and command-line tool were not used: our own scripts load, compile and query IRIS over the Atelier REST API.
+
+### Building on AI Hub build 154
+
+What worked well, what was hard, and how we got round it, measured on build `2026.3.0AI.154.0`:
+
+- **Worked well:** typed tools. A tool parameter typed as a `%JSON.Adaptor` class gives the model a full JSON Schema, and the framework decodes the model's argument into an instance of that class, so each terminal tool checks a typed result and refuses it with reasons the model can act on. `AddTool` registers an instance, so the caller reads the accepted result straight from it.
+- **Worked well:** the policies. `%AI.Policy.Authorization` holds each run to its own case in a few lines, and `%AI.Policy.Audit` puts every tool call into the production's trace.
+- **Worked well:** knowledge bases. The FastEmbed collections were built from Markdown in about 11 seconds, and `ReindexDocument` replaces one file's chunks.
+- **Worked well:** prompt caching through the session's configuration.
+- **Hard:** `agent.Run()` takes three arguments on 154, where the guide shows four, and the iteration callbacks are never called: only `OnRunStart` and `OnRunComplete` arrive. So a token budget can only be judged after the run, and `MaxIterations` and the provider's timeout bound the loop.
+- **Hard:** a declarative agent names its provider as `@{config:<Name>}`; a bare name fails `%Init()`. A fresh instance's Config Store has no descriptor for `AI.LLM` until `%ConfigStore.DescriptorManager.RebuildRegistry()` has run in that namespace.
+- **Hard:** `%AI.Policy.Audit.%LogExecution` must be declared `As %Status`, which the guide doesn't show.
+- **Hard:** the image doesn't ship IPM, so the build installs it first.
+- **Hard:** when two properties of a tool's argument share one schema class, only the first is described in full in the JSON Schema the model sees; the others arrive as a bare `object`, so the tool's description has to spell out their fields.
+- **Hard:** the Community licence's 8 units run out under a burst of cookie-less HTTP calls, so scripts keep one session cookie.
 
 ## How it is tested
 
-- **On a real IRIS, on every push to `main` that changes code:** the full install on IRIS for Health Community 2026.2, the receiving system's 35 contract tests, Shutter's 155 unit tests (counted as test methods in `tests/unit`), and 21 scenarios end to end through the REST API, one of them through the demo hospital's own production.
+- **On a real IRIS, on every push to `main` that changes code:** the full install on IRIS for Health Community 2026.2, the receiving system's 35 contract tests, Shutter's 163 unit tests (counted as test methods in `tests/unit`), and 24 scenarios end to end through the REST API, one of them through the demo hospital's own production.
 - **The approval boundary, attacked over HTTP:** an approval naming another plan or a stale version (409), an operator's approval (403), one approval sent twice (one write), the receiver changed after approval (S20, no write), and a resend of a delivery the receiver already holds (S3, no write).
 - **Privacy:** CI fails when a recording carries a name, date of birth, address, phone number, note text or raw identifier.
-- **The web app:** 458 component tests and 200 browser tests, with axe-core on 14 screens in 5 appearances.
+- **The web app:** 495 component tests and 229 browser tests, with axe-core on 14 screens in 5 appearances.
 - **The live agents** run on the AI Hub build, which CI cannot download. The board was recorded live on 25 October 2026 (56 agent runs, 5.38 USD at list prices), and CI replays those recordings on every push.
 
 ## Limits, plainly
@@ -143,7 +188,7 @@ To switch between the two editions, run `docker compose down -v` first: it remov
 
 ## Why I built this
 
-[placeholder: the owner's own words go here, to be written by the owner]
+Real testing of an integration only happens in production. However well an interface is built and tested, interoperability is unpredictable: a receiving system behaves in a way nobody foresaw, a message arrives in an order nobody planned for, someone fixes something by hand. It is impossible to build a perfect integration. What we can build is a safety net for the unpredictable cases, one that works in a live production and in a clinical setting, where a wrong write has a patient on the other end of it. Shutter is that safety net: it lets the agents work out what happened, and it never lets anything be written that cannot be proven, approved and verified.
 
 ## About the contest
 
