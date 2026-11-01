@@ -1073,6 +1073,8 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Set r."index_adapter" = $PARAMETER("Shutter.Index.Indexer", "ADAPTER")
     &sql(SELECT COUNT(*) INTO :questions FROM Shutter_Store.CaseQuestion)
     Set r.questions = +questions
+    // The HL7 schemas this namespace holds against those the production's services and the recent messages name (v1.32).
+    Set r."hl7_schemas" = ##class(Shutter.Util.Schemas).Report()
     Set r.license = ##class(%DynamicObject).%FromJSON(..LicenseInfo())
     Try {
         New $NAMESPACE
@@ -1118,6 +1120,23 @@ ClassMethod Doctor() As %String [ SqlProc ]
         Set r."webapps_checked" = "install record"
     }
     Quit r.%ToJSON()
+}
+
+/// Import a site's HL7 schema (an .xml export) through IRIS's own importer, for an approver (CONTRACTS 12, v1.32). Returns
+/// JSON: {ok, category, loaded: [...], error}.
+ClassMethod ImportSchema(path As %String) As %String [ SqlProc ]
+{
+    Set out = {}
+    If '$SYSTEM.Security.Check("Shutter_Approve", "USE") {
+        Do out.%Set("ok", 0, "boolean") Set out.error = "Shutter_Approve is required"
+        Quit out.%ToJSON()
+    }
+    Set sc = ##class(Shutter.Util.Schemas).Import(path, .category)
+    Do out.%Set("ok", $$$ISOK(sc), "boolean")
+    Set out.category = category
+    If $$$ISERR(sc) Set out.error = $SYSTEM.Status.GetErrorText(sc)
+    Set out.loaded = ##class(Shutter.Util.Schemas).Categories()
+    Quit out.%ToJSON()
 }
 
 // ---- the aihub module ----

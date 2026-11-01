@@ -28,7 +28,7 @@ Parameter OPERATIONKEEP = ",operation_key,encounter_id,patient_id,patient_id_aut
 
 Parameter MESSAGEKEEP = ",message_control_id,message_type,sending_application,sending_facility,receiving_application,message_time,hl7_version,message_version,event_recorded,event_occurred,patient_identifier,patient_class,assigned_location,visit_number,admit_time,prior_patient_identifier,prior_visit_number,merge_groups,prior_identifiers,notes,segment_count,doc_type,error,";
 
-Parameter VALIDATIONKEEP = ",parsed,doc_type,schema_category,spec,error,note,message_version,route_category,route_standard,version_agrees,version_note,";
+Parameter VALIDATIONKEEP = ",parsed,doc_type,schema_category,schema_known,schema_fix,spec,error,note,message_version,route_category,route_standard,version_agrees,version_note,";
 
 /// What a receiver's body keeps.
 Parameter WARDKEEP = ",encounter_id,patient_id,patient_id_authority,state,ward,bed,location,version,epoch,history,error,status,http_status,read_http_status,";

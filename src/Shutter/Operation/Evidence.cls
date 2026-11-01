@@ -318,6 +318,15 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
         Set validation."schema_category" = msg.DocTypeCategory
         Set validation.spec = "dm"
         If $$$ISERR(sc) Set validation.error = $SYSTEM.Status.GetErrorText(sc)
+        // A category this namespace does not hold (v1.32: a forwarded message named its source's own schema) cannot be
+        // validated at all: the verdict is "unknown schema" with the fix, never "invalid message".
+        Set schemaKnown = ##class(Shutter.Util.Schemas).Known(msg.DocTypeCategory)
+        Do validation.%Set("schema_known", schemaKnown, "boolean")
+        If 'schemaKnown {
+            Do validation.%Set("parsed", 0, "boolean")
+            Set validation.error = "unknown schema: the category " _ $SELECT(msg.DocTypeCategory = "": "(none)", 1: msg.DocTypeCategory) _ " is not loaded in this namespace, so the message could not be validated"
+            Set validation."schema_fix" = "Import the schema with SELECT Shutter.Setup_ImportSchema('<path>') or POST /settings/schemas, then reinvestigate the case"
+        }
         Set validation.note = "Structural validation against the " _ msg.DocTypeCategory _ " schema (document type and segment structure); profile rules are the conformance review's job"
         // The version note: the route's category is the site's choice, and IRIS never picks it from MSH-12, so a
         // message whose own version is not the category's standard is noted, never failed.
