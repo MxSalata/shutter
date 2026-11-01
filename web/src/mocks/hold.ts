@@ -20,8 +20,18 @@ export type Hold =
   | { state: 'approved'; by: string; at: string; comment: string }
   | { state: 'rejected'; by: string; at: string; comment: string };
 
+/** The held case's note while it waits, in the trial's words. */
+export const HELD_NOTE =
+  'Held in the trial before its approval, so you can approve it here. Approving replays what the recorded case did next; rejecting closes it as blocked.';
+
+/** The note after a trial approval, last on the timeline, at the time of the approval (guide-and-trial.md 4). */
+export const REPLAYED_NOTE =
+  'Replayed from the recording in the trial: the approval, the dispatch and the verification, at their recorded times.';
+
 interface Event {
   seq: number;
+  /** An event of the recording replayed after a trial approval (CaseEvent.replayed). */
+  replayed?: boolean;
   at: string;
   kind: string;
   fromState?: string;
@@ -66,7 +76,7 @@ export function awaiting(c: CaseFixture): CaseFixture {
     seq: (last?.seq ?? 0) + 1,
     at: last?.at ?? at,
     kind: 'note',
-    text: 'Demo replay: this recorded case is held here, before its approval, so that it can be approved in the browser. Approving it replays what the recorded case did next; rejecting it closes it as blocked.',
+    text: HELD_NOTE,
     actor: 'system',
   };
   const open = {
@@ -109,20 +119,23 @@ export function awaiting(c: CaseFixture): CaseFixture {
   } as unknown as CaseFixture;
 }
 
-/** The case after a decision in the demo: approved, the recorded outcome; rejected, blocked. */
+/** The case after a decision in the trial: approved, the recorded outcome replayed; rejected, blocked. */
 export function decided(c: CaseFixture, hold: Exclude<Hold, { state: 'awaiting' }>): CaseFixture {
   if (hold.state === 'approved') {
-    const events = c.events as Event[];
+    const recorded = c.events as Event[];
+    const kept = eventsBeforeDecision(c).length;
+    // What the recorded case did after its approval is replayed, and each such event says so
+    const events = recorded.map((e, i) => (i < kept ? e : { ...e, replayed: true }));
     const note: Event = {
-      seq: (events.at(-1)?.seq ?? 0) + 1,
+      seq: (recorded.at(-1)?.seq ?? 0) + 1,
       at: hold.at,
       kind: 'note',
-      text: `Demo replay: approved in the browser by ${hold.by}. The approval, dispatch and verification shown are the recorded case's, including its approver and comment.`,
+      text: `${REPLAYED_NOTE} Approved in the trial by ${hold.by}.`,
       actor: 'system',
     };
     return {
       ...c,
-      detail: { ...c.detail, counts: { ...c.detail.counts, events: events.length + 1 } },
+      detail: { ...c.detail, counts: { ...c.detail.counts, events: recorded.length + 1 } },
       events: [...events, note],
     } as unknown as CaseFixture;
   }
@@ -219,7 +232,7 @@ function catalogueEntry(code: string) {
     : null;
 }
 
-/** The case as the demo shows it now. */
+/** The case as the trial shows it now. */
 export function heldView(c: CaseFixture, hold: Hold | undefined): CaseFixture {
   if (!hold) return c;
   return hold.state === 'awaiting' ? awaiting(c) : decided(c, hold);

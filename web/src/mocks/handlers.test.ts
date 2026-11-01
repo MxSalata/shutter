@@ -23,6 +23,7 @@ import { isApiError } from '@/lib/errors';
 import fixtures from './fixtures.json';
 import definitions from '../../../fixtures/scenarios.json';
 import { resetMock } from './handlers';
+import { HELD_NOTE, REPLAYED_NOTE } from './hold';
 import { server } from './node';
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
@@ -66,7 +67,7 @@ describe('the held case', () => {
     const events = await api.get<CaseEvent[]>(`/cases/${HELD}/events`);
     expect(events.some((e) => e.toState === 'approved')).toBe(false);
     expect(events.some((e) => e.toState === 'awaiting_approval')).toBe(true);
-    expect(events.at(-1)?.text).toMatch(/^Demo replay: /);
+    expect(events.at(-1)?.text).toBe(HELD_NOTE);
     // One version per state change, as the store counts them
     expect(c.version).toBe(events.filter((e) => e.kind === 'state').length);
     const approvals = await api.get<ApprovalsView>(`/cases/${HELD}/approvals`);
@@ -114,7 +115,13 @@ describe('the held case', () => {
     expect(c.outcome).toBe(recorded.summary.outcome);
     const events = await api.get<CaseEvent[]>(`/cases/${HELD}/events`);
     expect(events).toHaveLength(recorded.events.length + 1);
-    expect(events.at(-1)?.text).toMatch(/^Demo replay: approved in the browser by approver/);
+    expect(events.at(-1)?.text).toBe(`${REPLAYED_NOTE} Approved in the trial by approver.`);
+    // The recorded events after the approval request are marked as replayed; the ones before it and the note are not
+    const asked = events.findIndex((e) => e.kind === 'state' && e.fromState === 'awaiting_approval');
+    expect(asked).toBeGreaterThan(0);
+    expect(events.slice(0, asked).some((e) => e.replayed)).toBe(false);
+    expect(events.slice(asked, -1).every((e) => e.replayed === true)).toBe(true);
+    expect(events.at(-1)?.replayed).toBeUndefined();
     expect(await api.get<unknown[]>(`/cases/${HELD}/attempts`)).toHaveLength(recorded.attempts.length);
     expect((await refusal(decide('approve'))).status).toBe(409);
   });
@@ -342,6 +349,16 @@ describe('the roles', () => {
     resetMock('approver');
     const changed = await api.patch<LibraryMember>(`/library/${member.code}`, { sort: member.sort });
     expect(changed.code).toBe(member.code);
+  });
+
+  it('puts the recorded library back on a reset, after a change made here', async () => {
+    const member = fixtures.library[0];
+    const before = structuredClone(await api.get<LibraryMember[]>('/library'));
+    await api.patch<LibraryMember>(`/library/${member.code}`, { enabled: !member.enabled, sort: 99 });
+    const changed = (await api.get<LibraryMember[]>('/library')).find((m) => m.code === member.code);
+    expect(changed).toMatchObject({ enabled: !before[0].enabled, sort: 99 });
+    resetMock('approver');
+    expect(await api.get<LibraryMember[]>('/library')).toEqual(before);
   });
 
   it('let an operator close a case by hand by default, on the record with the reason', async () => {

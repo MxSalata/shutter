@@ -145,9 +145,16 @@ function resetSiteProfile() {
 }
 resetSiteProfile();
 
-/** For tests: start signed in (or not), with no run playing. */
+/** The recorded agent library as it was loaded: a PATCH changes the fixture's objects, and a reset puts them back. */
+const recordedLibrary = structuredClone(fixtures.library);
+
+/**
+ * A fresh mock: signed in as the role (or nobody), with no run playing and nothing done here yet. The trial starts
+ * with it (src/trial/transport.ts), and so does each test.
+ */
 export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
   session = signedInAs ? USERS[signedInAs] : null;
+  fixtures.library.splice(0, fixtures.library.length, ...structuredClone(recordedLibrary));
   run = null;
   played = {};
   holds = freshHolds(cases);
@@ -303,6 +310,10 @@ function sweeping(r: ReviewDetail): ReviewDetail {
     agent,
   };
 }
+/** A question in the asker's own words, which only a live system can put to the board (DESIGN.md 7.2). */
+export const NO_RECORDED_ANSWER =
+  'The trial has recorded answers only. Pick a suggested question; on a live system, any question goes to the board.';
+
 /** The online demo keeps no annotations: it says so, as the server words a refusal. */
 const annotationsRefused = () =>
   error(
@@ -927,20 +938,13 @@ export const handlers = [
     if (!body.suggested && typeof body.question !== 'string')
       return error(400, 'bad_request', 'a question or a suggested turn is needed');
     if (!body.suggested && !body.tier) return error(400, 'bad_request', 'tier must be explain or board');
-    // A question no recording answers is for those who may spend the model budget (v1.34)
+    // A question no recording answers is for those who may spend the model budget (v1.34); the trial has none to
+    // spend, so it says so in its own words
     if (!body.suggested && session?.can?.liveAgents === false)
-      return error(
-        409,
-        'no_recorded_answer',
-        'This question has no recorded answer; a judge can ask it live',
-      );
+      return error(409, 'no_recorded_answer', NO_RECORDED_ANSWER);
     if (!body.suggested)
-      // The demo has no model key, so a question in the asker's own words cannot be answered
-      return error(
-        503,
-        'no_service',
-        'No model key is configured here, so a free question cannot be answered',
-      );
+      // The trial has no model key, so a question in the asker's own words cannot be answered
+      return error(503, 'no_service', NO_RECORDED_ANSWER);
     const { conversation, turn } = body.suggested;
     const fileTurn = suggestedFor(id)
       ?.conversations.find((c) => c.id === conversation)
