@@ -1128,6 +1128,7 @@
       "blocked_by": "NEWER_MESSAGE_PENDING",
       "last_operation_key": "PAS^HOSP^MRN1024^ENC-1024^transfer^2026-10-15T08:45:00Z",
       "modes": [
+        "board",
         "policy"
       ]
     }
