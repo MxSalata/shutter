@@ -1,0 +1,2210 @@
+{
+  "recordedFrom": "The suggested questions' answers recorded live with claude-opus-5-5 on a running Shutter, exported with scripts/export-recorded-answers.mjs. Each answer's recordedAt is the time its recording was made.",
+  "exportedAt": "2026-11-01T03:06:39Z",
+  "scenarios": {
+    "S1": {
+      "Downstream Out": {
+        "caseId": "C-000001",
+        "whatif": {
+          "case_id": "C-000001",
+          "receiver": "Downstream Out",
+          "category": "current_state",
+          "profile_version": 9,
+          "entry": "E1",
+          "disposition": "superseded",
+          "outcome_ref": "preferred",
+          "outcome": "none",
+          "facts": [
+            {
+              "kind": "alternative",
+              "flag": "history_policy",
+              "alternative": {
+                "n": 1,
+                "outcome": "correct_history",
+                "disposition": "escalate",
+                "when": "history_policy: correct",
+                "why": "A site that keeps a complete movement history wants the failed transfer recorded in its place, which means cancelling the later transfer and replaying both in order."
+              },
+              "receiver": "Downstream Out",
+              "field": "receivers[].category",
+              "from": "current_state",
+              "to": "history_of_record",
+              "current": "current_state",
+              "affects": [
+                "every overtaken failure at Downstream Out (a later movement applied before the failed one could be resent)"
+              ],
+              "holds_now": false,
+              "would": "The case would have escalated to a person instead of closed as superseded with no write",
+              "role": "alternative",
+              "suggested_change": {
+                "field": "receivers[].category",
+                "from": "current_state",
+                "to": "history_of_record",
+                "receiver": "Downstream Out",
+                "why": "A site that keeps a complete movement history wants the failed transfer recorded in its place, which means cancelling the later transfer and replaying both in order.",
+                "affects": [
+                  "every overtaken failure at Downstream Out (a later movement applied before the failed one could be resent)"
+                ],
+                "valid": true,
+                "stale": false
+              },
+              "id": "W1"
+            }
+          ],
+          "note": "1 setting bears on this case; a change is a draft for the Site profile page, which an approver saves"
+        },
+        "questions": {
+          "c1.1": {
+            "question": "Why was nothing sent?",
+            "tier": "explain",
+            "answer": {
+              "answer": "Nothing was sent because a later move had already overtaken this one. The transfer to WARD-B (event time 08:20 UTC on 15 Oct 2026) failed because the demo bed-management system was unavailable at that moment (HTTP 503). It never looked at the message itself. Seconds later the PAS's next transfer, to WARD-C bed BAY1-07 (event time 08:45 UTC), arrived and was applied. The bed-management system now shows the patient admitted on WARD-C. It has no receipt for the WARD-B transfer, so that transfer never took effect. Resending it now would move the patient back to a ward they have already left. So Shutter closed the case with nothing to send, and every gate check passed. If this receiver were set to keep a full movement history instead of only the current location, the case would have gone to a person instead of closing (W1). As things stand, nobody needs to do anything.",
+              "cites": [
+                "operation",
+                "failure",
+                "ward_state",
+                "receipt",
+                "timeline",
+                "W1"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:16:54Z"
+          },
+          "c1.2": {
+            "question": "Where is the patient now, and how do we know?",
+            "tier": "explain",
+            "answer": {
+              "answer": "The patient is on WARD-C, bed BAY1-07, and is still admitted. We know this from two places. First, the demo bed-management system's own record of the encounter says so. It was read at 02:16:41 UTC on 1 Nov 2026. Its history shows the admission to WARD-A, then a transfer to WARD-C with an event time of 08:45 UTC on 15 Oct 2026. Second, the PAS feed agrees. The last move it sent for this encounter was that WARD-C transfer, and it was applied. The failed transfer to WARD-B (08:20 UTC) never took effect, because the bed-management system has no receipt for it. So the record never showed the patient on WARD-B, and they had moved on to WARD-C by then. One caution: this is what the systems recorded, not a check of where the patient physically is. The reading is also only considered current until 03:16:41 UTC on 1 Nov 2026. If you need to be sure now, check the ward or the bed board.",
+              "cites": [
+                "ward_state",
+                "history[0]",
+                "history[1]",
+                "timeline",
+                "receipt",
+                "operation"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:17:03Z"
+          },
+          "c1.3": {
+            "question": "What if the bed manager had to keep every movement in its history?",
+            "tier": "board",
+            "answer": {
+              "answer": "Today the demo bed-management system is set to keep only the patient's current location. Under that setting, Shutter closed the case with nothing sent. The WARD-B move (08:20 UTC, 15 Oct 2026) was overtaken by the WARD-C move (08:45 UTC), which was applied. If the system had to keep every movement, the case would have gone to a person instead of closing (W1). That person would cancel the WARD-C transfer, then replay both moves in order. That setting is not in force now. Changing it is a draft for a person to review on the Site profile page. It would affect every overtaken failure on this route. All three members agree on this outcome. They differ on emphasis. Conformance says the message itself was fine and the failure came from the receiver being unavailable. The Encounter review points out that the plan quotes epoch 79 and a freshness time on 25 Oct. The record that was actually read shows epoch 94, current until 03:16:41 UTC on 1 Nov. Impact warns that a cancel and replay could set off extra pharmacy or porter actions for a patient already on WARD-C. That is an inference, and Shutter cannot see those systems. I cannot change the setting or act on the case.",
+              "perspectives": [
+                {
+                  "member": "conformance",
+                  "view": "The message is a valid transfer and the failure was the receiver being unavailable, not the content. Keeping a full history would send the case to a person (W1). Whether the move should be recorded is for the other reviews."
+                },
+                {
+                  "member": "encounter",
+                  "view": "The WARD-B move has been overtaken by the applied WARD-C move. Under a full-history setting it would still matter as a past event and would go to a person (W1). The plan's epoch 79 and 25 Oct freshness do not match the values read (epoch 94, 1 Nov), though the outcome stays the same."
+                },
+                {
+                  "member": "impact",
+                  "view": "Under W1 the case goes to a person, and that is all Shutter can state. A cancel and replay might, by inference, trigger needless pharmacy redirections and porter tasks. Today, doing nothing leaves the record correct on WARD-C."
+                }
+              ],
+              "setting": {
+                "fact": "W1",
+                "why": "The receiver's category, current_state (keep only the current location), is why the case closed as superseded."
+              },
+              "under_alternative": {
+                "fact": "W1",
+                "why": "As history_of_record, the case would have gone to a person instead of closing with no write."
+              },
+              "suggested_change": {
+                "fact": "W1",
+                "why": "It matches keeping every movement: change Downstream Out to history_of_record. This is a draft for review on the Site profile page."
+              },
+              "cites": [
+                "operation",
+                "failure",
+                "message",
+                "ward_state",
+                "history[1]",
+                "receipt",
+                "timeline",
+                "route",
+                "W1"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [
+              {
+                "member": "conformance",
+                "status": "ok",
+                "answer": {
+                  "answer": "From the conformance side: yes, the message itself looks fine for the demo bed-management system. It is a standard transfer message (ADT^A02, version 2.5.1). It parses cleanly, and its version matches the route. It has every field a transfer needs: the patient's record number from HOSP, the encounter ENC-1001, the new ward WARD-B and an event time of 08:20 UTC on 15 Oct 2026. The key built from it matches the failed operation. The failure was the receiver being unavailable (HTTP 503). It never looked at the content, so nothing in the message explains the failure. On your what-if: keeping every movement in the history would not change any of this. Under W1, if the receiver were set to keep a full movement history, the case would go to a person instead of closing. That person would cancel the later WARD-C transfer and replay both moves in order. That setting is not in force now. Whether the move should still be recorded is a question for the other reviews, not for conformance. Unknown: any profile detail beyond the parsed fields.",
+                  "cites": [
+                    "message",
+                    "validation",
+                    "operation",
+                    "failure",
+                    "route",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "encounter",
+                "status": "ok",
+                "answer": {
+                  "answer": "No. The message no longer means what it meant. It said the patient moved to WARD-B at 08:20 UTC on 15 Oct 2026. The demo bed-management system has since applied a later transfer, to WARD-C bed BAY1-07 at 08:45 UTC. It shows the patient admitted there. It has no receipt for the WARD-B move, so that move never took effect. Sending it again now would put the patient back on a ward they have already left. As a statement of where the patient is, it has been overtaken.\n\nOn keeping every movement: this receiver is set to keep only the current location. If it were set to keep a full movement history, the case would have gone to a person instead of closing with nothing sent (W1). In that setup the WARD-B stay would still matter as a past event. Recording it would mean cancelling the WARD-C transfer and replaying both moves in order. That setting is not in place now.\n\nOne point I disagree with: the plan's checks quote epoch 79 and a freshness time of 25 Oct UTC. The record read shows epoch 94, current until 03:16:41 UTC on 1 Nov 2026. The outcome stays the same, but those checks should use the values that were actually read.",
+                  "cites": [
+                    "operation",
+                    "message",
+                    "ward_state",
+                    "history[1]",
+                    "receipt",
+                    "timeline",
+                    "route",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "impact",
+                "status": "ok",
+                "answer": {
+                  "answer": "Today the demo bed-management system is set to keep only where the patient is now. If it had to keep every movement in its history, this case would have gone to a person instead of closing with nothing sent (W1). That is the only outcome Shutter can state. Fixing the history would mean cancelling the applied move to WARD-C (08:45 UTC) and replaying the WARD-B move (08:20 UTC), then the WARD-C move, in order. Shutter does not say what the bed board, pharmacy, porters or patient record would do during that replay. They are not visible from the integration engine. The dependency notes say pharmacy is told about every location change and porters get a task for every applied transfer. So a cancel and replay could, by inference, trigger extra redirections and porter tasks for a patient who is already on WARD-C. Under the current setting, doing nothing leaves the record correct at WARD-C, bed BAY1-07, and the systems that read it follow that. A plain resend of the WARD-B move would be worse. It would move the patient back to a ward they have left. I cannot change this setting or act on the case.",
+                  "cites": [
+                    "W1",
+                    "ward_state",
+                    "history[1]",
+                    "timeline",
+                    "receipt",
+                    "operation",
+                    "route"
+                  ],
+                  "confidence": "medium"
+                }
+              }
+            ],
+            "resolved": {
+              "setting": {
+                "kind": "alternative",
+                "flag": "history_policy",
+                "alternative": {
+                  "n": 1,
+                  "outcome": "correct_history",
+                  "disposition": "escalate",
+                  "when": "history_policy: correct",
+                  "why": "A site that keeps a complete movement history wants the failed transfer recorded in its place, which means cancelling the later transfer and replaying both in order."
+                },
+                "receiver": "Downstream Out",
+                "field": "receivers[].category",
+                "from": "current_state",
+                "to": "history_of_record",
+                "current": "current_state",
+                "affects": [
+                  "every overtaken failure at Downstream Out (a later movement applied before the failed one could be resent)"
+                ],
+                "holds_now": false,
+                "would": "The case would have escalated to a person instead of closed as superseded with no write",
+                "role": "alternative",
+                "suggested_change": {
+                  "field": "receivers[].category",
+                  "from": "current_state",
+                  "to": "history_of_record",
+                  "receiver": "Downstream Out",
+                  "why": "A site that keeps a complete movement history wants the failed transfer recorded in its place, which means cancelling the later transfer and replaying both in order.",
+                  "affects": [
+                    "every overtaken failure at Downstream Out (a later movement applied before the failed one could be resent)"
+                  ],
+                  "valid": true,
+                  "stale": false
+                },
+                "id": "W1"
+              },
+              "under_alternative": {
+                "kind": "alternative",
+                "flag": "history_policy",
+                "alternative": {
+                  "n": 1,
+                  "outcome": "correct_history",
+                  "disposition": "escalate",
+                  "when": "history_policy: correct",
+                  "why": "A site that keeps a complete movement history wants the failed transfer recorded in its place, which means cancelling the later transfer and replaying both in order."
+                },
+                "receiver": "Downstream Out",
+                "field": "receivers[].category",
+                "from": "current_state",
+                "to": "history_of_record",
+                "current": "current_state",
+                "affects": [
+                  "every overtaken failure at Downstream Out (a later movement applied before the failed one could be resent)"
+                ],
+                "holds_now": false,
+                "would": "The case would have escalated to a person instead of closed as superseded with no write",
+                "role": "alternative",
+                "suggested_change": {
+                  "field": "receivers[].category",
+                  "from": "current_state",
+                  "to": "history_of_record",
+                  "receiver": "Downstream Out",
+                  "why": "A site that keeps a complete movement history wants the failed transfer recorded in its place, which means cancelling the later transfer and replaying both in order.",
+                  "affects": [
+                    "every overtaken failure at Downstream Out (a later movement applied before the failed one could be resent)"
+                  ],
+                  "valid": true,
+                  "stale": false
+                },
+                "id": "W1"
+              },
+              "suggested_change": {
+                "field": "receivers[].category",
+                "from": "current_state",
+                "to": "history_of_record",
+                "receiver": "Downstream Out",
+                "why": "It matches keeping every movement: change Downstream Out to history_of_record. This is a draft for review on the Site profile page.",
+                "affects": [
+                  "every overtaken failure at Downstream Out (a later movement applied before the failed one could be resent)"
+                ],
+                "valid": true,
+                "stale": false,
+                "fact": "W1"
+              }
+            },
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:17:32Z"
+          },
+          "c2.1": {
+            "question": "What does superseded mean here?",
+            "tier": "explain",
+            "answer": {
+              "answer": "Here, \"superseded\" means a later move overtook this one. The PAS sent a transfer to WARD-B, bed BAY2-04, timed 08:20 UTC. The bed-management system was down at that moment (HTTP 503), so it never arrived. The receipt check confirms it never took effect. Soon after, the PAS's next transfer arrived. It moved the patient to WARD-C, bed BAY1-07, timed 08:45 UTC, and was applied. So the receiving system already shows the patient on WARD-C, which is where the PAS says they are now. The failed message describes WARD-B, a ward they have already left. Shutter compares when each move happened, not when the message arrived, and 08:45 is later than 08:20. Resending the WARD-B transfer now would wrongly move the patient back. So Shutter closed the case and sent nothing, and the gate agreed. One setting would change this (W1). If this receiving system were set up to keep a full movement history, the case would have gone to a person to decide, instead of closing. It is not set up that way now. Nobody needs to do anything unless your site needs the short WARD-B stay on record.",
+              "cites": [
+                "operation",
+                "failure",
+                "receipt",
+                "ward_state",
+                "timeline",
+                "W1"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:17:46Z"
+          },
+          "c3.1": {
+            "question": "Did any specialist want to resend?",
+            "tier": "board",
+            "answer": {
+              "answer": "Yes, one did. The conformance review leaned toward a resend, but only because the message was well formed. The transfer to WARD-B (08:20 UTC, 15 Oct) failed because the bed-management system was unavailable, not because of anything in the message. Conformance left the question of whether the move still made sense to the other two reviews. In its answer here it now agrees with sending nothing. The encounter and impact reviews both found nothing to send. A later transfer to WARD-C, bed BAY1-07 (08:45 UTC), is already applied. There is no receipt for the failed transfer. A resend would move the patient back to a ward they have left. The members differ on the wording. Encounter answers 'no' (nobody should resend). Impact and conformance answer 'yes' (conformance did suggest it). Impact's points about the bed board, pharmacy and porters are inferred, not seen. The plan quotes epoch 79, but the current evidence shows 94. The members say this does not change the conclusion. Only a site set to keep a full movement history (W1) would send the case to a person instead of closing it. That setting is not on now. The board cannot approve or send anything.",
+              "perspectives": [
+                {
+                  "member": "conformance",
+                  "view": "Leaned toward resend, on form only: the message parses and the failure was the system being unavailable. Defers to the others on whether the move still makes sense, and now agrees to send nothing."
+                },
+                {
+                  "member": "encounter",
+                  "view": "Answers 'no': the transfer's purpose no longer holds because a later transfer to WARD-C is applied. Notes that conformance suggested a resend only on form."
+                },
+                {
+                  "member": "impact",
+                  "view": "Answers 'yes, conformance did', but a resend would show the wrong bed and ward to systems that rely on the record. These effects are inferred, not observed."
+                }
+              ],
+              "cites": [
+                "operation",
+                "failure",
+                "message",
+                "validation",
+                "ward_state",
+                "history[1]",
+                "receipt",
+                "timeline",
+                "W1"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [
+              {
+                "member": "conformance",
+                "status": "ok",
+                "answer": {
+                  "answer": "Yes, as far as the message's form goes. The transfer message MSG00102 (version 2.5.1) passed the schema check, and its version matches the route. It has everything the bed-management system needs for a transfer: the patient number MRN1001 from HOSP, the visit ENC-1001, the ward WARD-B and the event time 2026-10-15 08:20 UTC. The key built from it matches the failed operation. The failure was a 503: the bed-management system was unavailable, so it never looked at the content. Nothing in the message explains the failure. On your question: yes. The Conformance review was the only one to lean toward a resend. But it judged only the message's form and left the question of whether the move still made sense to the other reviews. A message that is acceptable is not a reason to send it. The system's history shows a later transfer to WARD-C (08:45 UTC) was already applied. So sending the message again would move the patient back to a ward they have left. I agree with the plan to send nothing. Shutter only sees the message as a summary of 4 segments, so finer site rules weren't checked here.",
+                  "cites": [
+                    "message",
+                    "validation",
+                    "operation",
+                    "failure",
+                    "ward_state",
+                    "history[1]",
+                    "timeline"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "encounter",
+                "status": "ok",
+                "answer": {
+                  "answer": "No. The message's purpose no longer holds. It said the patient moved to WARD-B at 08:20 UTC on 15 Oct. The bed-management system was unavailable, so that transfer never arrived, and it has no receipt for it. Its record then took a later transfer, to WARD-C bed BAY1-07, with an event time of 08:45 UTC. That transfer is applied as version 2, and the patient now shows as admitted on WARD-C. The PAS has already said where the patient went after WARD-B. Resending the failed message would move them back to a ward they have left. On the question as written: the conformance reviewer did suggest a resend, but it only checked that the message was well formed. It said the business intent was for this review and the impact review to judge, and both found nothing to send. One thing to check: the plan and findings quote epoch 79, but the current evidence shows epoch 94, fresh until 03:16:41 UTC on 1 Nov. The conclusion is the same either way. It would change only if the receiving system were set up to keep a full movement history (W1). That setting does not apply now. If it did, the case would go to a person instead of closing. I cannot approve or send anything.",
+                  "cites": [
+                    "operation",
+                    "message",
+                    "ward_state",
+                    "history[1]",
+                    "receipt",
+                    "timeline",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "impact",
+                "status": "ok",
+                "answer": {
+                  "answer": "Yes. One specialist, the conformance review, said resend. It checked only that the message was well formed, and it left the question of whether the move still made sense to the other reviews. The encounter review and my impact review both said there was nothing to send.\n\nHere is why. The bed-management system's history shows that a later transfer, to WARD-C (event 08:45 UTC), has already been applied. The failed transfer to WARD-B (08:20 UTC) never took effect, because there is no receipt for it. If it were resent now, the patient's recorded location would move back to WARD-B, a ward they have already left. The bed board would then show the wrong bed, pharmacy would send medicines to the wrong ward, and the porters would get a pointless move task. Doing nothing leaves the record correct at WARD-C, and the systems that rely on it follow that record. Shutter cannot see those systems directly, so these effects are inferred, not observed.\n\nOnly if the site kept a full movement history (W1) would the case go to a person to decide, rather than close. That setting is not on now.\n\nOne note: the plan quotes epoch 79, but the snapshot shows epoch 94.",
+                  "cites": [
+                    "ward_state",
+                    "history[1]",
+                    "receipt",
+                    "timeline",
+                    "operation",
+                    "failure",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              }
+            ],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:18:11Z"
+          }
+        }
+      }
+    },
+    "S2": {
+      "Downstream Out": {
+        "caseId": "C-000002",
+        "whatif": {
+          "case_id": "C-000002",
+          "receiver": "Downstream Out",
+          "category": "current_state",
+          "profile_version": 9,
+          "entry": "E2",
+          "disposition": "resend",
+          "outcome_ref": "preferred",
+          "outcome": "resend",
+          "facts": [
+            {
+              "kind": "policy",
+              "flag": "policy",
+              "field": "policy.2.single",
+              "current": "automatic",
+              "from": "automatic",
+              "to": "approval",
+              "would": "An approver would have been asked before the write",
+              "holds_now": false,
+              "role": "policy",
+              "affects": [
+                "every tier 2 case of a single chain"
+              ],
+              "suggested_change": {
+                "field": "policy.2.single",
+                "from": "automatic",
+                "to": "approval",
+                "why": "A stricter policy for tier 2, single chains",
+                "affects": [
+                  "every tier 2 case of a single chain"
+                ],
+                "valid": true,
+                "stale": false
+              },
+              "id": "W1"
+            }
+          ],
+          "note": "1 setting bears on this case; a change is a draft for the Site profile page, which an approver saves"
+        },
+        "questions": {
+          "c1.1": {
+            "question": "Why was the transfer resent?",
+            "tier": "explain",
+            "answer": {
+              "answer": "The patient's transfer from WARD-A to WARD-B (event time 08:20 UTC, 15 Oct 2026) never reached the demo bed-management system. The system answered that it was unavailable (HTTP 503), so it never looked at the message itself. It has no receipt for the transfer. Its record still shows the patient admitted on WARD-A at version 1, with only the admission in its history. Nothing later was sent for this encounter, so the transfer was still the patient's latest move and still needed to be delivered. The message was valid, the patient matched the encounter, and a transfer is allowed for a patient who is admitted. The receiving system only accepts the write if its record is still at version 1, so a resend could not overwrite anything newer. Before sending, the system's own test run (a dry run that saves nothing) showed the transfer would apply. If nothing had been done, the bed board and other systems would have kept showing WARD-A.",
+              "cites": [
+                "operation",
+                "failure",
+                "receipt",
+                "ward_state",
+                "history[0]",
+                "timeline",
+                "message",
+                "validation",
+                "route"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:18:47Z"
+          },
+          "c1.2": {
+            "question": "How will we know it reached the receiver?",
+            "tier": "explain",
+            "answer": {
+              "answer": "Two things in the demo bed-management system will show it. First, the receipt. This receiver keeps a receipt for every write it commits. Right now the lookup for this transfer returns 404 (no receipt). Once the resend is committed, the same lookup should return a receipt. Second, the patient's record. It shows the patient admitted on WARD-A at version 1, and its history holds only the admission. After a successful resend, the history should show the transfer to WARD-B, bed BAY2-04, and the version should go from 1 to 2. If someone else changed the record first, the write is refused rather than applied. In that case there is still no receipt and the case needs another look. This case's evidence was read at 02:18:32 UTC on 1 Nov 2026, before the resend, so it cannot show the result yet. Shutter can only check the receipt and the record's history. It cannot see whether the bed board, pharmacy, porters or the patient record picked up the new ward. The ward should confirm that directly.",
+              "cites": [
+                "receipt",
+                "ward_state",
+                "history[0]",
+                "route",
+                "operation",
+                "timeline"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:19:00Z"
+          },
+          "c1.3": {
+            "question": "Would any site profile setting have changed this?",
+            "tier": "board",
+            "answer": {
+              "answer": "Probably not the outcome. Shutter names only one setting for this case, W1. It decides whether this kind of case needs an approver before the write, and it is set to automatic. If it had been set to approval, an approver would have been asked before the transfer was resent. That adds a step. It does not change the decision. The transfer to WARD-B, bed BAY2-04, never reached the demo bed-management system: there is no receipt, the record still shows WARD-A at version 1, and nothing later was sent for this patient's stay. So the resend would still be the answer. The members agree on this but stress different things. Encounter Integrity says the transfer is still due under any setting. Impact Analysis adds that an approval step could keep the bed board, pharmacy and other systems showing WARD-A for longer, though Shutter cannot say how long. Conformance says the setting has nothing to do with whether the message is acceptable, and it is. Two members point out that the earlier findings quote epoch 80, but the evidence shows epoch 95. Shutter cannot tell whether any setting outside W1 would matter.",
+              "perspectives": [
+                {
+                  "member": "encounter",
+                  "view": "The transfer is still the patient's latest move and is still due. W1 would only add an approver, not change whether the transfer is wanted. Any check before sending should use epoch 95, not 80."
+                },
+                {
+                  "member": "impact",
+                  "view": "Either way it is one transfer from WARD-A (version 1) to WARD-B (version 2). An approval step under W1 could only delay it and keep the old picture longer. The effects on other systems come from contracts, not from checks."
+                },
+                {
+                  "member": "conformance",
+                  "view": "The message parses and has every field it needs. W1 controls who approves, not whether the message is acceptable. Whether the receiver is back up is not known."
+                }
+              ],
+              "setting": {
+                "fact": "W1",
+                "why": "The only site profile setting in this case. It is set to automatic, so no approver was needed before the write."
+              },
+              "under_alternative": {
+                "fact": "W1",
+                "why": "Under approval, an approver would have been asked before the write. The resend itself would be the same."
+              },
+              "cites": [
+                "W1",
+                "operation",
+                "message",
+                "validation",
+                "failure",
+                "receipt",
+                "ward_state",
+                "history[0]",
+                "timeline",
+                "route"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [
+              {
+                "member": "conformance",
+                "status": "ok",
+                "answer": {
+                  "answer": "Yes. From the conformance view, the message itself is acceptable to the demo bed-management system. The transfer message MSG00202 (ADT^A02, version 2.5.1) parses cleanly against its 2.5.1 schema. Its version matches the route's version. The patient (MRN1002, HOSP), the encounter (ENC-1002), the new ward (WARD-B, bed BAY2-04) and the event time (08:20 UTC, 15 Oct 2026) are all there. These are all the fields the receiver's contract requires for a transfer. The operation key built from them matches the case's operation. The failure was a 503 'unavailable' answer, so the system never looked at the content. Nothing in the message explains the failure. The receiver's own dry run of this exact payload, which saves nothing, showed it would apply. That supports the message being acceptable. The only site setting in the evidence (W1, an approval step for this kind of case) controls who must approve a resend. It has nothing to do with whether the message is acceptable. One limit: the schema check covers structure only. Beyond the contract's required fields, Shutter has no separate check of the site's profile rules. Whether the receiver is up again now is also not known from this case.",
+                  "cites": [
+                    "message",
+                    "validation",
+                    "operation",
+                    "failure",
+                    "route",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "encounter",
+                "status": "ok",
+                "answer": {
+                  "answer": "Yes, as far as the evidence shows. The message moves the patient from WARD-A to WARD-B, bed BAY2-04, at 08:20 UTC on 15 Oct 2026. The demo bed-management system has no receipt for it (404). Its record still shows the patient admitted on WARD-A at version 1, and its history holds only the admission. Nothing later was sent for this encounter, so nothing replaces the transfer. A transfer is allowed for an admitted patient, and the patient matches the encounter. The transfer is still the patient's latest move and is still due.\n\nOne correction to the board's findings and the plan: they say epoch 80 and \"fresh until 25 Oct\". The evidence says epoch 95, read at 02:18:32 UTC on 1 Nov, fresh until 03:18:32 UTC. This does not change whether the transfer is still wanted. But any check before sending should use 95.\n\nWhat this case cannot tell: whether the patient is still on WARD-B in real life. The event is more than two weeks older than the evidence. Shutter only sees the messages that were sent. The one setting named here, W1, would only have added an approver before the write. It would not change whether the transfer is still wanted.",
+                  "cites": [
+                    "operation",
+                    "message",
+                    "receipt",
+                    "ward_state",
+                    "history[0]",
+                    "timeline",
+                    "route",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "impact",
+                "status": "ok",
+                "answer": {
+                  "answer": "Shutter names only one setting for this case. It is W1, the approval policy for this kind of case (tier 2, a single chain of events). It is set to automatic now. If it were set to approval, an approver would have been asked before the write. That adds a step before sending. It does not change what the resend does to the systems that depend on this data. Either way, it is one transfer, moving the patient's record in the demo bed-management system from WARD-A, version 1, to WARD-B bed BAY2-04, version 2. After that, the bed board would show the WARD-A bed free and the WARD-B bed taken, pharmacy would send medicines to WARD-B, and porters would get one move task. Not acting under any setting leaves all of them showing WARD-A. Delay under an approval step would keep that stale picture for longer. Shutter cannot say how long. Shutter also cannot see the bed board, pharmacy, porters or the patient record directly. These effects come from the effect contracts, not from checks. One thing to note: the earlier findings and plan quote epoch 80, but the receiver reads epoch 95. No other setting in this case is shown to change the outcome.",
+                  "cites": [
+                    "W1",
+                    "ward_state",
+                    "history[0]",
+                    "operation",
+                    "receipt",
+                    "timeline",
+                    "route"
+                  ],
+                  "confidence": "medium"
+                }
+              }
+            ],
+            "resolved": {
+              "setting": {
+                "kind": "policy",
+                "flag": "policy",
+                "field": "policy.2.single",
+                "current": "automatic",
+                "from": "automatic",
+                "to": "approval",
+                "would": "An approver would have been asked before the write",
+                "holds_now": false,
+                "role": "policy",
+                "affects": [
+                  "every tier 2 case of a single chain"
+                ],
+                "suggested_change": {
+                  "field": "policy.2.single",
+                  "from": "automatic",
+                  "to": "approval",
+                  "why": "A stricter policy for tier 2, single chains",
+                  "affects": [
+                    "every tier 2 case of a single chain"
+                  ],
+                  "valid": true,
+                  "stale": false
+                },
+                "id": "W1"
+              },
+              "under_alternative": {
+                "kind": "policy",
+                "flag": "policy",
+                "field": "policy.2.single",
+                "current": "automatic",
+                "from": "automatic",
+                "to": "approval",
+                "would": "An approver would have been asked before the write",
+                "holds_now": false,
+                "role": "policy",
+                "affects": [
+                  "every tier 2 case of a single chain"
+                ],
+                "suggested_change": {
+                  "field": "policy.2.single",
+                  "from": "automatic",
+                  "to": "approval",
+                  "why": "A stricter policy for tier 2, single chains",
+                  "affects": [
+                    "every tier 2 case of a single chain"
+                  ],
+                  "valid": true,
+                  "stale": false
+                },
+                "id": "W1"
+              }
+            },
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:19:32Z"
+          },
+          "c2.1": {
+            "question": "What did the gate check before the write?",
+            "tier": "explain",
+            "answer": {
+              "answer": "The transfer of this patient to WARD-B failed because the demo bed-management system was unavailable (it answered 503). Shutter then planned to resend it. Just before the write, the gate ran every check again, and all of them passed:\n- The encounter on the receiver belongs to this patient.\n- The message reads correctly against its schema.\n- The plan resends the same transfer, unchanged.\n- No later transfer, discharge or other event had happened for this encounter.\n- A transfer is allowed from the receiver's current state (admitted, on WARD-A).\n- The receiver had no receipt for this transfer, so it had not already been applied.\n- An approval was recorded for this exact plan.\n- The receiver's dry run of the exact write said it would apply, and it was rolled back.\n- The receiver's record was still at version 1, as expected.\n- The evidence was fresh. It was read at 02:18 UTC and was good until 03:18 UTC.\n- The receiver supports writes that only apply if the version is unchanged, receipts and dry runs.\n- The case matched the catalogue entry \"Not delivered, still current\", where the preferred outcome is a resend.",
+              "cites": [
+                "operation",
+                "failure",
+                "message",
+                "validation",
+                "ward_state",
+                "receipt",
+                "timeline",
+                "route"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:19:45Z"
+          },
+          "c3.1": {
+            "question": "Did the specialists disagree on anything?",
+            "tier": "board",
+            "answer": {
+              "answer": "No, not on what to do. All three recommend resending the transfer to WARD-B once, unchanged, only if the bed-management system's record is still at version 1. The system answered 503 (unavailable), so it never read the message. It has no receipt, still shows the patient admitted on WARD-A at version 1, and nothing came later for this encounter. Two answers start \"Yes\" and one \"No\", but the \"Yes\" means the message is acceptable and the transfer still wanted, not a disagreement. They differ only in focus. Conformance checked the message. Encounter checked the transfer is still right. Impact described the knock-on effects (beds, pharmacy, porters), which are inferred and Shutter cannot check. All three flagged that the plan and earlier findings say epoch 80, while the evidence says epoch 95, read at 02:18:32 UTC and fresh until 03:18:32 UTC on 1 Nov. None thought it changes the answer. Shutter cannot tell if the system is back up, or if the patient has moved since.",
+              "perspectives": [
+                {
+                  "member": "conformance",
+                  "view": "The message reads correctly against its 2.5.1 schema and gives the same operation key. The 503 means the system was unavailable, so nothing in the message explains the failure. Noted the epoch mismatch."
+                },
+                {
+                  "member": "encounter",
+                  "view": "The transfer is still wanted: there is no receipt, the record is still at WARD-A version 1, and nothing came later. A resend should be tied to version 1 in epoch 95. The event is over two weeks old, so later physical moves cannot be seen."
+                },
+                {
+                  "member": "impact",
+                  "view": "Agrees on a resend conditional on version 1. Listed the inferred effects of resending, and the stale ward that doing nothing would leave in place. Noted the epoch mismatch."
+                }
+              ],
+              "cites": [
+                "message",
+                "validation",
+                "failure",
+                "operation",
+                "receipt",
+                "ward_state",
+                "timeline",
+                "route",
+                "epoch",
+                "observed_at",
+                "fresh_until"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [
+              {
+                "member": "conformance",
+                "status": "ok",
+                "answer": {
+                  "answer": "Yes. From the conformance view, the message looks acceptable to the demo bed-management system. Transfer MSG00202 (ADT^A02, version 2.5.1) reads correctly against its 2.5.1 schema. Its version matches what the route expects. It carries the patient (MRN1002, HOSP), the visit (ENC-1002), the new ward (WARD-B, bed BAY2-04) and the event time (2026-10-15T08:20:00Z UTC). These give the same operation key as the failed operation. The delivery failed with HTTP 503 'ward_unavailable', which means the system was unavailable. That error does not suggest the system read the message and rejected it, so nothing in the message explains the failure. Two limits: the schema check covers structure only, not every site profile rule, and Shutter cannot tell from this case whether the system is available again now. One thing to note: the plan and two other findings say epoch 80, but the snapshot reads epoch 95. This does not affect whether the message is acceptable.",
+                  "cites": [
+                    "message",
+                    "validation",
+                    "failure",
+                    "operation",
+                    "route",
+                    "ward_state"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "encounter",
+                "status": "ok",
+                "answer": {
+                  "answer": "Yes. As far as this case's evidence shows, the transfer's intent still holds. The message moves the patient from WARD-A to WARD-B, bay 2 bed 04, at 08:20 UTC on 15 Oct. The bed-management system has no receipt for it, so the transfer never arrived. It still shows the patient admitted on WARD-A at version 1, and its only history entry is the 08:00 UTC admission. The feed sent nothing later for this encounter, so nothing replaces the transfer. A transfer is allowed from 'admitted', and the patient matches the encounter.\n\nOne thing doesn't line up. My earlier finding and the plan quote epoch 80 and a freshness limit of 25 Oct. The case evidence shows epoch 95, read at 02:18:32 UTC on 1 Nov and fresh until 03:18:32 UTC. The gate checked version 1 against the current evidence. Any resend should be tied to version 1 in epoch 95.\n\nUnknowns: the event is over two weeks older than the snapshot. Shutter can't tell from here whether the patient has physically moved again, whether staff updated the ward some other way, or whether the system is available again now.",
+                  "cites": [
+                    "message",
+                    "operation",
+                    "receipt",
+                    "ward_state",
+                    "history[0]",
+                    "timeline",
+                    "route",
+                    "failure"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "impact",
+                "status": "ok",
+                "answer": {
+                  "answer": "No. On impact, all three specialists agreed: resend the transfer to WARD-B once, only if the bed-management system's record is still at version 1. The receipt lookup found nothing (404), the record still shows the patient admitted on WARD-A at version 1, and nothing happened to this encounter after the transfer.\n\nIf the resend is applied: the WARD-A bed is freed, a bed on WARD-B is taken, pharmacy sends medicines to WARD-B instead, and porters get one move task. If nothing is done, the bed board, pharmacy and the patient record all keep showing WARD-A, which no longer matches the source. These knock-on effects come from the effect contracts. Shutter cannot check them from here. It can only check the receipt and the record's history.\n\nOne thing to know: the specialists' notes and the plan say epoch 80 and \"fresh until 2026-10-25\". The case evidence says epoch 95, read at 02:18:32 UTC, fresh until 03:18:32 UTC on 2026-11-01. This doesn't change the impact. The version check still guards the write.\n\nW1: this kind of case is currently set to proceed automatically. Under the stricter setting, an approver would be asked before the write.",
+                  "cites": [
+                    "ward_state",
+                    "receipt",
+                    "timeline",
+                    "route",
+                    "epoch",
+                    "observed_at",
+                    "fresh_until",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              }
+            ],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:20:20Z"
+          },
+          "c4.1": {
+            "question": "What if the receiver had moved on before the resend?",
+            "tier": "board",
+            "answer": {
+              "answer": "Shutter cannot tell from this case what the bed-management system might have changed to. As of 2026-11-01 02:18:32 UTC it showed ENC-1002 admitted on WARD-A at version 1. It had no receipt for the transfer to WARD-B, and nothing later was sent for this encounter. The resend only goes through if the record is still at version 1, and this system supports that check. So if the record had changed first, for example through a later transfer or a discharge, the resend should be refused. It would not overwrite the newer data, and the other systems would keep the newer state. All three specialists agree on this. They differ in emphasis. Encounter Integrity says the transfer may no longer be what is wanted in that situation. Conformance says the message would still be well-formed, but whether it is accepted is a question about state, not format. Impact Analysis says the danger is a resend without the version check, which could move the patient back to WARD-B by mistake. All three point out that the plan says epoch 80. The evidence says epoch 95, fresh until 03:18:32 UTC. No setting in this case covers your question. I can only answer questions; I cannot approve or resend anything.",
+              "perspectives": [
+                {
+                  "member": "encounter",
+                  "view": "The transfer is still what should happen as of the snapshot. If the record had moved on, it might not be, and the version-1 check would make the resend fail. What that later change would be cannot be told."
+                },
+                {
+                  "member": "conformance",
+                  "view": "The message parses and is complete. It would still be well-formed after a change, but whether it is accepted is about ordering and state. The version check should make the write fail safely."
+                },
+                {
+                  "member": "impact",
+                  "view": "What the system would have changed to cannot be told. With the version check, a refused resend changes nothing downstream. Without it, the bed board, pharmacy and porters could act on the wrong ward. None of these effects can be seen from here."
+                }
+              ],
+              "cites": [
+                "ward_state",
+                "ward_state.history[0]",
+                "receipt",
+                "timeline",
+                "later_events",
+                "route",
+                "message",
+                "validation",
+                "failure",
+                "operation",
+                "epoch",
+                "fresh_until"
+              ],
+              "confidence": "medium"
+            },
+            "memberAnswers": [
+              {
+                "member": "conformance",
+                "status": "ok",
+                "answer": {
+                  "answer": "From the conformance side, yes, the message is acceptable. Transfer MSG00202 (an ADT^A02, version 2.5.1) parses against the route's 2.5.1 schema, and the versions match. The patient (MRN1002, HOSP), the visit (ENC-1002), the new ward (WARD-B) and the event time (2026-10-15T08:20:00Z UTC) are all present. The bed-management system answered 503 'ward_unavailable', which means it was down. It never read the message, so nothing in the message explains the failure. The receiver's dry run at version 1 would have applied this exact message.\n\nYou also asked what would happen if the receiver had changed before the resend. The message would still be well-formed, but conformance does not decide whether it would still be accepted. The resend is conditional on version 1, so a changed record should make the write fail safely rather than overwrite it. That is a question about ordering and state. W1 is about approval only and does not cover this.\n\nOne thing in the plan is wrong. It expects epoch 80 and freshness until 2026-10-25. The evidence shows epoch 95, with the snapshot fresh until 2026-11-01T03:18:32Z UTC.",
+                  "cites": [
+                    "message",
+                    "validation",
+                    "failure",
+                    "operation",
+                    "route",
+                    "ward_state",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "encounter",
+                "status": "ok",
+                "answer": {
+                  "answer": "Yes. As of the snapshot at 2026-11-01 02:18:32 UTC, the intent still holds. The transfer of ENC-1002 to WARD-B never reached the bed-management system. It refused the delivery as unavailable, and it holds no receipt for the transfer. It still shows the patient admitted on WARD-A at version 1, and its only history entry is the admission. Nothing was sent for this encounter after the transfer, so nothing has replaced it. A transfer from 'admitted' is allowed, and the patient matches the encounter.\n\nAbout your question: if the receiving system had moved on before the resend, the intent might no longer hold. For example, a later transfer or a discharge might have been applied. The resend is only allowed if the record is still at version 1, so a changed record would make it fail instead of overwriting newer data. This case can't tell us what such a later change would have been.\n\nOne correction to the plan and the other findings: they say epoch 80 and 'fresh until 2026-10-25'. The evidence shows epoch 95, fresh until 2026-11-01 03:18:32 UTC. Setting W1, which would require approval before the write, would not change whether the intent holds.",
+                  "cites": [
+                    "operation",
+                    "failure",
+                    "receipt",
+                    "ward_state",
+                    "ward_state.history[0]",
+                    "timeline",
+                    "later_events",
+                    "epoch",
+                    "fresh_until",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "impact",
+                "status": "ok",
+                "answer": {
+                  "answer": "Shutter cannot tell from this case what the receiver might have moved on to. At 02:18:32 UTC the demo bed-management system showed ENC-1002 admitted on WARD-A at version 1. It had no receipt for the transfer and no later events. The resend only applies if the record is still at version 1, and the receiver supports that check. If the record had changed first, the resend would be refused and nothing would change downstream. The bed board, pharmacy, porters and the patient record would keep the receiver's newer state. That is the safe outcome. A resend without that check is the risk: it could move the patient back to WARD-B after they had left it. Then the bed board would show the wrong bed, pharmacy would send medicines to the wrong ward, and porters would get a needless task. Not acting leaves every system showing WARD-A, which is out of date. None of these effects can be seen from the integration engine. Note that the plan says epoch 80, but the evidence says 95.",
+                  "cites": [
+                    "ward_state",
+                    "receipt",
+                    "timeline",
+                    "route",
+                    "operation"
+                  ],
+                  "confidence": "medium"
+                }
+              }
+            ],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:20:54Z"
+          }
+        }
+      }
+    },
+    "S20": {
+      "Downstream Out": {
+        "caseId": "C-000053",
+        "whatif": {
+          "case_id": "C-000053",
+          "receiver": "Downstream Out",
+          "category": "current_state",
+          "profile_version": 9,
+          "entry": "E1",
+          "disposition": "resend",
+          "outcome_ref": "preferred",
+          "outcome": "none",
+          "facts": [
+            {
+              "kind": "alternative",
+              "flag": "history_policy",
+              "alternative": {
+                "n": 1,
+                "outcome": "correct_history",
+                "disposition": "escalate",
+                "when": "history_policy: correct",
+                "why": "A site that keeps a complete movement history wants the failed transfer recorded in its place, which means cancelling the later transfer and replaying both in order."
+              },
+              "receiver": "Downstream Out",
+              "field": "receivers[].category",
+              "from": "current_state",
+              "to": "history_of_record",
+              "current": "current_state",
+              "affects": [
+                "every overtaken failure at Downstream Out (a later movement applied before the failed one could be resent)"
+              ],
+              "holds_now": false,
+              "would": "The case would have escalated to a person instead of resent the message",
+              "role": "alternative",
+              "suggested_change": {
+                "field": "receivers[].category",
+                "from": "current_state",
+                "to": "history_of_record",
+                "receiver": "Downstream Out",
+                "why": "A site that keeps a complete movement history wants the failed transfer recorded in its place, which means cancelling the later transfer and replaying both in order.",
+                "affects": [
+                  "every overtaken failure at Downstream Out (a later movement applied before the failed one could be resent)"
+                ],
+                "valid": true,
+                "stale": false
+              },
+              "id": "W1"
+            },
+            {
+              "kind": "policy",
+              "flag": "policy",
+              "field": "policy.2.single",
+              "current": "automatic",
+              "from": "automatic",
+              "to": "approval",
+              "would": "An approver would have been asked before the write",
+              "holds_now": false,
+              "role": "policy",
+              "affects": [
+                "every tier 2 case of a single chain"
+              ],
+              "suggested_change": {
+                "field": "policy.2.single",
+                "from": "automatic",
+                "to": "approval",
+                "why": "A stricter policy for tier 2, single chains",
+                "affects": [
+                  "every tier 2 case of a single chain"
+                ],
+                "valid": true,
+                "stale": false
+              },
+              "id": "W2"
+            }
+          ],
+          "note": "2 settings bear on this case; a change is a draft for the Site profile page, which an approver saves"
+        },
+        "questions": {
+          "c1.1": {
+            "question": "Why was the approved resend not sent?",
+            "tier": "explain",
+            "answer": {
+              "answer": "The transfer to WARD-B (bed BAY2-04, event time 08:20 UTC on 15 Oct) failed because the demo bed-management system was unavailable. It answered with a 503 error. When the resend was first checked, the record was at version 1, with the patient still on WARD-A, so the resend passed. Just before it was due to go out, the record changed to version 2. A transfer to WARD-C with a later event time (08:40 UTC) had been applied at 02:23:44 UTC on 1 Nov. Because of that change, the approval no longer covered the send, and Shutter blocked it at the last check. Shutter then checked again and found that the failed transfer had been overtaken by the later one. Resending it now would move the patient back to WARD-B, a ward they have already left. So Shutter closed the case with nothing to send. The bed-management system now shows the patient on WARD-C, and nobody needs to resend. A site that keeps a complete movement history would have sent this case to a person instead, to record the WARD-B stay in its place (W1). That setting is not in use here.",
+              "cites": [
+                "failure",
+                "ward_state",
+                "history[1]",
+                "timeline",
+                "receipt",
+                "W1"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:24:00Z"
+          },
+          "c1.2": {
+            "question": "What did the nurse's move change?",
+            "tier": "explain",
+            "answer": {
+              "answer": "The move you mean is the transfer to WARD-C. It was recorded on the ward side, not sent by the PAS. Its event time was 08:40 UTC on 15 Oct, and the demo bed-management system applied it at 02:23:44 UTC on 1 Nov. The evidence does not say who entered it, so Shutter cannot confirm it was a nurse. It changed three things. First, the record went from version 1 to version 2. It now shows the patient on WARD-C with no bed. Second, the approved resend of the failed WARD-B transfer (08:20 UTC) had been checked against version 1. Because the record changed, that approval no longer covered the send, and Shutter blocked it at the last check. Third, when Shutter checked again, the failed transfer had been overtaken by this later move. Resending it would put the patient back on WARD-B, a ward they had already left. So the case closed with nothing to send. One side effect: the short WARD-B stay is not in the bed-management system's history. Under this site's current setting that is expected. A site that keeps a full movement history would have passed this case to a person instead (W1). Nobody needs to resend anything.",
+              "cites": [
+                "ward_state",
+                "history[1]",
+                "failure",
+                "timeline",
+                "W1"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:24:15Z"
+          },
+          "c1.3": {
+            "question": "Was the approval wrong at the time it was given?",
+            "tier": "board",
+            "answer": {
+              "answer": "No. From what Shutter could see, the approval was right when it was given. The demo bed-management system was read at 02:23:43 UTC on 1 Nov. It showed the patient on WARD-A (version 1). It had no receipt for the WARD-B transfer (08:20 UTC on 15 Oct) and no later move. Resending then would have put the patient where the PAS said. One second later, at 02:23:44 UTC, a later transfer to WARD-C (08:40 UTC) was applied. The approval no longer covered the send, so Shutter blocked it at the last check and closed the case with nothing to send. All three specialists agree on this. They differ in focus and certainty. The conformance view opens with \"yes\", but it means the message itself was sound. It also says the approval was not wrong. The impact view is less certain. Its effects on beds, pharmacy and porters come from rules, not from records those systems kept. Under a full-history setting (W1, not in use here), a person would have decided instead. You can't approve or resend anything through this answer.",
+              "perspectives": [
+                {
+                  "member": "encounter",
+                  "view": "The approval was not wrong. At 02:23:43 UTC the record was at version 1 with no later move and no receipt. The WARD-C transfer arrived one second later, so the intent stopped holding."
+                },
+                {
+                  "member": "conformance",
+                  "view": "The message was sound: it parsed against 2.5.1 and the receiver's dry run said it would apply. The receiver's record changed, not the message. The schema check covers structure only."
+                },
+                {
+                  "member": "impact",
+                  "view": "Sending at approval time would have updated beds, pharmacy and porters correctly. Sending now would cause wrong-ward effects. These effects are inferred from rules, not observed, so this view has medium confidence."
+                }
+              ],
+              "cites": [
+                "ward_state",
+                "history[1]",
+                "receipt",
+                "timeline",
+                "message",
+                "validation",
+                "failure",
+                "W1"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [
+              {
+                "member": "conformance",
+                "status": "ok",
+                "answer": {
+                  "answer": "Yes. As far as the evidence shows, the message itself was fine. It is a version 2.5.1 transfer message from the PAS. It parsed cleanly against its schema, and its version matches the route. It carries what the receiver needs: the patient number (MRN1020, HOSP), the visit (ENC-1020), the new ward (WARD-B, bed BAY2-04) and an event time of 08:20 UTC on 15 Oct. The demo bed-management system's own dry run of this exact send said it would apply. So the message's content did not cause the failure. The delivery failed because the receiver was unavailable (a 503 error), not because it rejected the message. It also does not decide what happens now. A later transfer to WARD-C (08:40 UTC) has already been applied. Sending this message now would move the patient back to a ward they have left, so the case rightly closed with nothing to send. On your earlier question: from a message point of view, the approval was not wrong when it was given. What changed afterwards was the receiver's record, not the message. One limit: the schema check covers structure only. Shutter cannot tell from this case whether the message meets every site profile rule.",
+                  "cites": [
+                    "message",
+                    "validation",
+                    "failure",
+                    "operation",
+                    "ward_state",
+                    "history[1]"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "encounter",
+                "status": "ok",
+                "answer": {
+                  "answer": "No. The intent no longer holds as a current placement. The message from the PAS moved the patient to WARD-B, bed BAY2-04, at 08:20 UTC on 15 Oct. The demo bed-management system has since applied a later transfer to WARD-C, with an event time of 08:40 UTC. It was applied at 02:23:44 UTC on 1 Nov. The record now shows the patient on WARD-C at version 2. Resending the WARD-B transfer would move the patient back to a ward they have already left.\n\nOn your question about the approval: from what Shutter could see, it was not wrong when it was given. The approval check read the record at 02:23:43 UTC. At that point the record was at version 1, there was no later move, and no receipt for this transfer, so the intent still held. The later transfer arrived one second afterwards. That is why the send was blocked at the last check.\n\nThe WARD-B stay itself probably still happened, but the bed-management system's history does not record it. This site keeps only the current placement, so that gap is expected. A site that keeps a full movement history would have passed the case to a person instead (W1). The later transfer was recorded on the ward side. The evidence does not say who entered it.",
+                  "cites": [
+                    "message",
+                    "ward_state",
+                    "history[1]",
+                    "timeline",
+                    "receipt",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "impact",
+                "status": "ok",
+                "answer": {
+                  "answer": "For the systems that use this data, the approval was not wrong when it was given. The demo bed-management system still showed the patient on WARD-A (version 1). It had no receipt and no later move. Sending the WARD-B transfer (08:20 UTC) then would have done what a transfer should: free the WARD-A bed, take the WARD-B bed, point pharmacy to WARD-B and give the porters one move task. Not sending it would have left the patient wrongly shown on WARD-A. Then the record changed. At 02:23:44 UTC on 1 Nov a later transfer to WARD-C (08:40 UTC) was applied. A resend now would move the patient back to a ward they have left. The bed board would show the wrong bed, pharmacy would send medicines to the wrong ward, and porters would be asked to move a patient who has already moved. Sending nothing avoids that. The only cost is that the WARD-B stay is missing from the history. Under a full-history setting (W1), a person would decide that. Shutter cannot see the bed board, pharmacy or porters. These effects come from the effect rules, not from what those systems recorded.",
+                  "cites": [
+                    "ward_state",
+                    "history[1]",
+                    "receipt",
+                    "timeline",
+                    "failure",
+                    "W1"
+                  ],
+                  "confidence": "medium"
+                }
+              }
+            ],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:24:49Z"
+          },
+          "c2.1": {
+            "question": "What is an approval bound to?",
+            "tier": "explain",
+            "answer": {
+              "answer": "An approval covers one exact action on one exact picture of the receiving system. Here that meant resending this transfer to WARD-B, unchanged (same message, same content), while the demo bed-management system held the encounter at version 1 (epoch 97), on the evidence the approver saw. If any of that changes, the approval stops covering the send. That is what happened. At 02:23:44 UTC the bed-management system applied another transfer, to WARD-C, with an event time of 08:40 UTC. That is later than this transfer's 08:20 UTC. The record moved to version 2. So when Shutter came to send, it stopped: the approval no longer matched the receiver's state, and the version was not the one expected. When Shutter looked again, it found the WARD-C transfer had overtaken this one. Resending the WARD-B transfer would move the patient back to a ward they have already left. So nothing should be sent, and no new approval is needed. Separately, W2 says this site sends cases like this one automatically. Changing that setting to 'approval' would mean an approver is asked before every such send.",
+              "cites": [
+                "operation",
+                "ward_state",
+                "history[1]",
+                "timeline",
+                "W2"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:29:28Z"
+          }
+        }
+      }
+    },
+    "S22": {
+      "Records Out": {
+        "caseId": "C-000055",
+        "whatif": {
+          "case_id": "C-000055",
+          "receiver": "Records Out",
+          "category": "history_of_record",
+          "profile_version": 9,
+          "entry": "E1",
+          "disposition": "escalate",
+          "outcome_ref": "alternative:1",
+          "outcome": "correct_history",
+          "facts": [
+            {
+              "kind": "alternative",
+              "flag": "history_policy",
+              "alternative": {
+                "n": 1,
+                "outcome": "correct_history",
+                "disposition": "escalate",
+                "when": "history_policy: correct",
+                "why": "A site that keeps a complete movement history wants the failed transfer recorded in its place, which means cancelling the later transfer and replaying both in order."
+              },
+              "receiver": "Records Out",
+              "field": "receivers[].category",
+              "from": "history_of_record",
+              "to": "history_of_record",
+              "current": "history_of_record",
+              "affects": [
+                "every overtaken failure at Records Out (a later movement applied before the failed one could be resent)"
+              ],
+              "holds_now": true,
+              "would": "This setting is behind the outcome: the case followed the alternative (escalate)",
+              "role": "setting",
+              "suggested_change": {
+                "field": "receivers[].category",
+                "from": "history_of_record",
+                "to": "current_state",
+                "receiver": "Records Out",
+                "why": "Undo: the case would then follow the entry's preferred outcome",
+                "affects": [
+                  "every overtaken failure at Records Out (a later movement applied before the failed one could be resent)"
+                ],
+                "valid": true,
+                "stale": false
+              },
+              "id": "W1"
+            }
+          ],
+          "note": "1 setting bears on this case; a change is a draft for the Site profile page, which an approver saves"
+        },
+        "questions": {
+          "c1.1": {
+            "question": "Why did one system get no write and the other an escalation?",
+            "tier": "explain",
+            "answer": {
+              "answer": "This case involves only one receiving system: the demo patient records system (Records Out). The \"no write\" and the escalation are two parts of the same decision for that system. The transfer to WARD-B (09:20 UTC) failed because the system was unavailable. Then a later transfer to WARD-C (09:45 UTC) was applied, so the patient is already recorded in WARD-C. Resending the old transfer could move the patient back to WARD-B. That is why Shutter sent nothing and never will for this message. But Records Out is set up to keep a complete movement history, so the missing WARD-B stay still needs to go into that history. Shutter does not make that kind of correction itself. It escalates to a person, who adds the WARD-B movement at its own time, with approval and a second person checking. If Records Out were set to keep only the current placement, this case would have closed with nothing to send and no escalation (W1). Shutter cannot tell about any other system from this case. Next step: the person the site names for Records Out follows the correction steps on the plan.",
+              "cites": [
+                "operation",
+                "failure",
+                "ward_state",
+                "timeline",
+                "receipt",
+                "route",
+                "W1"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:25:32Z"
+          },
+          "c1.2": {
+            "question": "What are the correction steps for?",
+            "tier": "explain",
+            "answer": {
+              "answer": "The correction steps are a checklist for a person. Shutter will not do this part itself. The transfer to WARD-B at 09:20 UTC never reached the demo patient records system (Records Out), because that system was unavailable at the time. A later transfer to WARD-C at 09:45 UTC did go through. So the patient's current place, WARD-C, is right, but the movement history has a gap: it goes from WARD-A straight to WARD-C. Records Out is set up to keep a complete movement history (W1), so the site wants that gap filled. Shutter will not resend the old message, because that could move the patient back to WARD-B. It also does not change history itself. The steps tell the person the site names for Records Out how to fill the gap safely: check the record without changing anything, get approval, add the WARD-B transfer as a past movement at its own time (citing message MSG02202), keep WARD-C as the current place, have a second person check the order, then record what was done and close the case by hand. Shutter cannot check this correction afterwards.",
+              "cites": [
+                "operation",
+                "failure",
+                "ward_state",
+                "timeline",
+                "route",
+                "W1"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:25:45Z"
+          },
+          "c1.3": {
+            "question": "What if the patient records system only needed the current placement?",
+            "tier": "board",
+            "answer": {
+              "answer": "If the demo patient records system (Records Out) only needed the current placement, this case would close with nothing to send and no escalation (W1). The patient is already shown in WARD-C from the later 09:45 UTC transfer, so the current place is right. Only the WARD-B stay (09:20 to 09:45 UTC) would never appear in the history. Today Records Out keeps a full history, so a person is asked to add that stay as a past movement. All members agree the old transfer must never be resent, because it could move the patient back to WARD-B. The message was well formed and failed only because Records Out was unavailable (HTTP 503). Where they differ: Encounter notes that W1 describes cancelling and replaying the later transfer, while the plan adds WARD-B as a past movement and leaves WARD-C alone. Encounter finds the plan's way safer. Impact thinks a replay might show extra moves to systems that read Records Out, but says this is a guess Shutter cannot check. Changing the setting is only a draft for a person to review on the Site profile page. I cannot change it.",
+              "perspectives": [
+                {
+                  "member": "conformance",
+                  "view": "The message parses against its schema, and the failure was the receiver being unavailable, not bad content. Under current-placement-only, the case closes with nothing sent."
+                },
+                {
+                  "member": "encounter",
+                  "view": "WARD-B no longer holds as the current place but is still true as a past stay. W1's cancel-and-replay wording differs from the plan's insert-in-place, which is safer."
+                },
+                {
+                  "member": "impact",
+                  "view": "Under current-placement-only, readers see the right ward and only the history gap remains. A cancel-and-replay might show extra moves downstream (inference)."
+                }
+              ],
+              "setting": {
+                "fact": "W1"
+              },
+              "under_alternative": {
+                "fact": "W1"
+              },
+              "suggested_change": {
+                "fact": "W1",
+                "why": "Setting Records Out to current state matches needing only the current placement. It is a draft for review on the Site profile page."
+              },
+              "cites": [
+                "operation",
+                "failure",
+                "message",
+                "validation",
+                "ward_state",
+                "timeline",
+                "route",
+                "W1"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [
+              {
+                "member": "conformance",
+                "status": "ok",
+                "answer": {
+                  "answer": "From a conformance view, nothing in the message stops it. The transfer message (ADT^A02, MSG02202) parses against the HL7 2.5.1 schema. Its version matches what the route expects, and it carries the patient, visit ENC-1022 and the new place WARD-B. The delivery did not fail because the message was bad. The demo patient records system (Records Out) was unavailable (HTTP 503) and never judged the content. Two limits: the check here covers only structure, not the site's own profile rules, and the receiver never answered on the content. So Shutter cannot say for certain that Records Out would accept it. Your question: if Records Out kept only the current placement, the setting in W1 says this case would follow the preferred outcome. It would close with nothing to send and no correction. The patient is already in WARD-C from the later 09:45 UTC transfer. Either way, a well-formed message is not a reason to resend it. Sending the 09:20 UTC transfer now could move the patient back to WARD-B. I can't approve or send anything.",
+                  "cites": [
+                    "message",
+                    "validation",
+                    "failure",
+                    "timeline",
+                    "ward_state",
+                    "route",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "encounter",
+                "status": "ok",
+                "answer": {
+                  "answer": "Only partly. The message meant to move the patient to WARD-B at 09:20 UTC. As a current placement, that no longer holds. The demo patient records system (Records Out) already applied a later transfer to WARD-C at 09:45 UTC, and the record belongs to the right patient. Sending the WARD-B move now would put the patient back where they no longer are. As a fact about the past, it still holds: the patient was in WARD-B from 09:20 to 09:45 UTC, and the history is missing that stay. If Records Out only needed the current placement, W1 says the case would follow the main rule: close with nothing to send and no correction. Nothing that system needs would be lost, because WARD-C is already right. Under today's full-history setting, only the history gap is open. One point to check: W1 describes cancelling the later transfer and replaying both. The plan instead adds WARD-B as a past movement and leaves WARD-C alone. For the encounter, the plan's way is safer.",
+                  "cites": [
+                    "operation",
+                    "message",
+                    "ward_state",
+                    "timeline",
+                    "route",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "impact",
+                "status": "ok",
+                "answer": {
+                  "answer": "If Records Out only needed the current placement (W1: its category set to current state instead of history of record), this case would close with nothing sent and no escalation. The patient records system already shows the patient in WARD-C at version 2, from the 09:45 UTC transfer. Systems that read only the current location would see the right ward. The WARD-B stay at 09:20 UTC would just never appear in the history. The real danger either way is resending the old transfer, which would move the patient back to WARD-B. The site's effect contracts say that puts the wrong bed on the bed board, sends medicines to the wrong ward and sends porters for a patient who has already moved. Under today's setting, the correction should add WARD-B only as a past movement and keep WARD-C current. If the correction cancelled and replayed the later transfer, systems told about every move might see extra moves. That is my inference. Shutter can check only the records system itself, not the systems that read it.",
+                  "cites": [
+                    "ward_state",
+                    "timeline",
+                    "operation",
+                    "route",
+                    "W1"
+                  ],
+                  "confidence": "medium"
+                }
+              }
+            ],
+            "resolved": {
+              "setting": {
+                "kind": "alternative",
+                "flag": "history_policy",
+                "alternative": {
+                  "n": 1,
+                  "outcome": "correct_history",
+                  "disposition": "escalate",
+                  "when": "history_policy: correct",
+                  "why": "A site that keeps a complete movement history wants the failed transfer recorded in its place, which means cancelling the later transfer and replaying both in order."
+                },
+                "receiver": "Records Out",
+                "field": "receivers[].category",
+                "from": "history_of_record",
+                "to": "history_of_record",
+                "current": "history_of_record",
+                "affects": [
+                  "every overtaken failure at Records Out (a later movement applied before the failed one could be resent)"
+                ],
+                "holds_now": true,
+                "would": "This setting is behind the outcome: the case followed the alternative (escalate)",
+                "role": "setting",
+                "suggested_change": {
+                  "field": "receivers[].category",
+                  "from": "history_of_record",
+                  "to": "current_state",
+                  "receiver": "Records Out",
+                  "why": "Undo: the case would then follow the entry's preferred outcome",
+                  "affects": [
+                    "every overtaken failure at Records Out (a later movement applied before the failed one could be resent)"
+                  ],
+                  "valid": true,
+                  "stale": false
+                },
+                "id": "W1"
+              },
+              "under_alternative": {
+                "kind": "alternative",
+                "flag": "history_policy",
+                "alternative": {
+                  "n": 1,
+                  "outcome": "correct_history",
+                  "disposition": "escalate",
+                  "when": "history_policy: correct",
+                  "why": "A site that keeps a complete movement history wants the failed transfer recorded in its place, which means cancelling the later transfer and replaying both in order."
+                },
+                "receiver": "Records Out",
+                "field": "receivers[].category",
+                "from": "history_of_record",
+                "to": "history_of_record",
+                "current": "history_of_record",
+                "affects": [
+                  "every overtaken failure at Records Out (a later movement applied before the failed one could be resent)"
+                ],
+                "holds_now": true,
+                "would": "This setting is behind the outcome: the case followed the alternative (escalate)",
+                "role": "setting",
+                "suggested_change": {
+                  "field": "receivers[].category",
+                  "from": "history_of_record",
+                  "to": "current_state",
+                  "receiver": "Records Out",
+                  "why": "Undo: the case would then follow the entry's preferred outcome",
+                  "affects": [
+                    "every overtaken failure at Records Out (a later movement applied before the failed one could be resent)"
+                  ],
+                  "valid": true,
+                  "stale": false
+                },
+                "id": "W1"
+              },
+              "suggested_change": {
+                "field": "receivers[].category",
+                "from": "history_of_record",
+                "to": "current_state",
+                "receiver": "Records Out",
+                "why": "Setting Records Out to current state matches needing only the current placement. It is a draft for review on the Site profile page.",
+                "affects": [
+                  "every overtaken failure at Records Out (a later movement applied before the failed one could be resent)"
+                ],
+                "valid": true,
+                "stale": false,
+                "fact": "W1"
+              }
+            },
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:26:27Z"
+          },
+          "c2.1": {
+            "question": "Which system holds the patient's history of record?",
+            "tier": "explain",
+            "answer": {
+              "answer": "The history of record for this patient is kept by the demo patient records system (/records/api). Shutter sends to it through the Records Out connection. The site's settings mark that system as the one that keeps the history of record. Its own capability check also says it keeps movement history. Right now its history for encounter ENC-1022 shows the admission to WARD-A at 09:00 UTC, then a transfer to WARD-C at 09:45 UTC. The failed transfer to WARD-B at 09:20 UTC is missing from it. Because this system keeps the full record, Shutter did not simply drop the failed message. It also did not resend it, because a resend could move the patient back to WARD-B. Instead it passed the case to a person: the records team should add the missing WARD-B move at its own time, with approval, and leave the patient in WARD-C. If the site had set this system as a 'current state only' receiver, the case would have closed with nothing to send (W1).",
+              "cites": [
+                "route",
+                "ward_state",
+                "history[0]",
+                "history[1]",
+                "timeline",
+                "W1"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:26:40Z"
+          }
+        }
+      },
+      "Downstream Out": {
+        "caseId": "C-000054",
+        "whatif": {
+          "case_id": "C-000054",
+          "receiver": "Downstream Out",
+          "category": "current_state",
+          "profile_version": 9,
+          "entry": "E1",
+          "disposition": "superseded",
+          "outcome_ref": "preferred",
+          "outcome": "none",
+          "facts": [
+            {
+              "kind": "alternative",
+              "flag": "history_policy",
+              "alternative": {
+                "n": 1,
+                "outcome": "correct_history",
+                "disposition": "escalate",
+                "when": "history_policy: correct",
+                "why": "A site that keeps a complete movement history wants the failed transfer recorded in its place, which means cancelling the later transfer and replaying both in order."
+              },
+              "receiver": "Downstream Out",
+              "field": "receivers[].category",
+              "from": "current_state",
+              "to": "history_of_record",
+              "current": "current_state",
+              "affects": [
+                "every overtaken failure at Downstream Out (a later movement applied before the failed one could be resent)"
+              ],
+              "holds_now": false,
+              "would": "The case would have escalated to a person instead of closed as superseded with no write",
+              "role": "alternative",
+              "suggested_change": {
+                "field": "receivers[].category",
+                "from": "current_state",
+                "to": "history_of_record",
+                "receiver": "Downstream Out",
+                "why": "A site that keeps a complete movement history wants the failed transfer recorded in its place, which means cancelling the later transfer and replaying both in order.",
+                "affects": [
+                  "every overtaken failure at Downstream Out (a later movement applied before the failed one could be resent)"
+                ],
+                "valid": true,
+                "stale": false
+              },
+              "id": "W1"
+            }
+          ],
+          "note": "1 setting bears on this case; a change is a draft for the Site profile page, which an approver saves"
+        },
+        "questions": {
+          "c1.1": {
+            "question": "Why did one system get no write and the other an escalation?",
+            "tier": "explain",
+            "answer": {
+              "answer": "This case covers only one receiving system: the demo bed-management system behind Downstream Out. The \"escalation\" is not a second system. It is what would happen if that same system were set up differently. Here is what happened. The transfer to WARD-B (event time 09:20 UTC) failed because the bed-management system was unavailable. It then accepted a later transfer to WARD-C, bay BAY1-07, with event time 09:45 UTC. That system is set up to keep only the patient's current location. Resending the failed transfer would move the patient back to a ward they have already left. So Shutter closed the case as superseded and sent nothing. The receiver has no record that it ever got the failed transfer. If the site set this receiver to keep a full movement history instead, the missed transfer would need to be recorded in its place. That means cancelling the WARD-C transfer and resending both in order. Shutter would have passed that to a person instead of closing the case (W1). Nobody needs to do anything now. Only change that setting if the site needs a complete history of where the patient has been.",
+              "cites": [
+                "failure",
+                "ward_state",
+                "timeline",
+                "receipt",
+                "route",
+                "W1"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:26:52Z"
+          },
+          "c1.2": {
+            "question": "What are the correction steps for?",
+            "tier": "explain",
+            "answer": {
+              "answer": "The correction steps are only for a site whose receiving system keeps a full history of where the patient has been. They are not part of what Shutter planned here. The steps would record the missed transfer to WARD-B (event time 09:20 UTC) in its right place. To do that, the later transfer to WARD-C (09:45 UTC) would be cancelled, and then both transfers resent in order: first WARD-B, then WARD-C. The patient would still end up in WARD-C, bay BAY1-07, but the history would show the stop in WARD-B. Under that setting, Shutter would not do this by itself. It would pass the case to a person (W1). This site has the bed-management system behind Downstream Out set to keep only the patient's current location. So Shutter closed the case as overtaken by a later transfer and sent nothing. Resending the old transfer would move the patient back to a ward they have already left. Nobody needs to take any correction steps now.",
+              "cites": [
+                "timeline",
+                "ward_state",
+                "route",
+                "W1"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:27:02Z"
+          },
+          "c1.3": {
+            "question": "What if the patient records system only needed the current placement?",
+            "tier": "board",
+            "answer": {
+              "answer": "That is already how this site is set up. The bed-management system behind Downstream Out keeps only the patient's current placement. It shows the patient on WARD-C, bay BAY1-07, from a later transfer (event time 09:45 UTC). It has no receipt for the failed transfer to WARD-B (09:20 UTC), which failed because the system was unavailable. With only the current placement needed, the WARD-B transfer adds nothing. Resending it would move the patient back to a ward they have already left. So Shutter closed the case and sent nothing, and nothing needs to change. The only thing lost is the record of the WARD-B stop. Under the full-history alternative, the case would have gone to a person instead (W1). The members agree on the outcome but stress different things. The encounter member says Shutter cannot tell whether anyone downstream needs the WARD-B stay. The impact member says the bed board, pharmacy and porters are already correct, and a resend would mislead them. The conformance member says the message itself was fine, but only its structure was checked. No site-rule review is on record.",
+              "perspectives": [
+                {
+                  "member": "encounter",
+                  "view": "The WARD-B placement was overtaken by the applied WARD-C transfer, so it adds nothing when only the current placement matters. Shutter cannot tell whether anyone needs the WARD-B stay."
+                },
+                {
+                  "member": "impact",
+                  "view": "The systems that read the bed-management system already see WARD-C. Resending would show the wrong bed and could misdirect pharmacy and porters. What the full-history correction would trigger downstream is unknown."
+                },
+                {
+                  "member": "conformance",
+                  "view": "The message parsed cleanly as version 2.5.1 and was not the cause of the failure (HTTP 503). Only its structure was checked, so a site-rule problem cannot be ruled out. Either way, it is not worth resending."
+                }
+              ],
+              "setting": {
+                "fact": "W1",
+                "why": "This receiver keeps only the current state, which is why the overtaken transfer was closed with nothing sent."
+              },
+              "cites": [
+                "ward_state",
+                "timeline",
+                "receipt",
+                "failure",
+                "message",
+                "validation",
+                "route",
+                "W1"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [
+              {
+                "member": "conformance",
+                "status": "ok",
+                "answer": {
+                  "answer": "Yes, as far as the evidence shows. The transfer message to WARD-B (bay BAY2-04, event time 09:20 UTC) read cleanly as a version 2.5.1 transfer message, and the route expects 2.5.1, so the versions match. It has everything the bed-management system needs for a transfer: patient MRN1022 (HOSP), encounter ENC-1022, the event, the ward, the event time and the sending system. Its fields agree with the operation that was sent. The delivery did not fail because of the message. It failed because the bed-management system was unavailable (HTTP 503), and the system never said it rejected the content. Two caveats. The check covered the message's structure only. No separate site-rule review is on record, so Shutter cannot rule out a site-specific rule problem. Also, an acceptable message is still not worth resending: the system has since applied a later transfer to WARD-C (09:45 UTC). It keeps only the current placement, so resending would move the patient back. Whether the site wants a full history instead is a setting question (W1), not a message problem.",
+                  "cites": [
+                    "message",
+                    "validation",
+                    "failure",
+                    "operation",
+                    "ward_state",
+                    "route",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "encounter",
+                "status": "ok",
+                "answer": {
+                  "answer": "No. The message's intent was to place the patient in WARD-B, bay BAY2-04, as of 09:20 UTC. That placement has since been overtaken. The PAS later sent a transfer to WARD-C, bay BAY1-07, with event time 09:45 UTC. The bed-management system behind Downstream Out applied it, and its record now shows the patient in WARD-C. That system has no receipt for the WARD-B transfer, so it never got it. If the receiving system only needs the current placement, then the WARD-B transfer adds nothing. Resending it would move the patient back to a ward they have already left. Your 'what if' is in fact how this receiver is set up today: it keeps the current state only. That is why Shutter closed the case with nothing sent. I agree with that plan. The one thing lost is the record of the stop in WARD-B. That only matters if the site wants a full movement history. In that case the alternative applies: cancel the WARD-C transfer, resend both in order, and hand the case to a person (W1). That setting is not in place now. From this case alone, Shutter cannot tell whether anyone downstream needs the WARD-B stay.",
+                  "cites": [
+                    "message",
+                    "ward_state",
+                    "history[1]",
+                    "timeline",
+                    "receipt",
+                    "route",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "impact",
+                "status": "ok",
+                "answer": {
+                  "answer": "That is already how this site is set up. The bed-management system behind Downstream Out keeps only the patient's current location. It already shows the patient on WARD-C, bay BAY1-07, from the later transfer (event time 09:45 UTC). It has no record of the failed transfer to WARD-B (09:20 UTC).\n\nNot acting, which is the plan: the systems that read the bed-management system are already correct. These are the bed board, pharmacy, porters and the electronic patient record. They see WARD-C, and nothing more is needed.\n\nActing by resending the failed transfer would move the recorded location back to WARD-B, where the patient no longer is. The bed board would then show the wrong bed. Pharmacy could send medicines to WARD-B. Porters could be asked to move a patient who has already moved.\n\nOnly a site that needs a full movement history would want the correction (W1). That means cancelling the WARD-C transfer and resending both transfers in order. The patient would end up on WARD-C again. Under that setting, a person would handle the case. Shutter cannot tell from this case what each of those extra steps would trigger in the other systems.",
+                  "cites": [
+                    "ward_state",
+                    "timeline",
+                    "receipt",
+                    "route",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              }
+            ],
+            "resolved": {
+              "setting": {
+                "kind": "alternative",
+                "flag": "history_policy",
+                "alternative": {
+                  "n": 1,
+                  "outcome": "correct_history",
+                  "disposition": "escalate",
+                  "when": "history_policy: correct",
+                  "why": "A site that keeps a complete movement history wants the failed transfer recorded in its place, which means cancelling the later transfer and replaying both in order."
+                },
+                "receiver": "Downstream Out",
+                "field": "receivers[].category",
+                "from": "current_state",
+                "to": "history_of_record",
+                "current": "current_state",
+                "affects": [
+                  "every overtaken failure at Downstream Out (a later movement applied before the failed one could be resent)"
+                ],
+                "holds_now": false,
+                "would": "The case would have escalated to a person instead of closed as superseded with no write",
+                "role": "alternative",
+                "suggested_change": {
+                  "field": "receivers[].category",
+                  "from": "current_state",
+                  "to": "history_of_record",
+                  "receiver": "Downstream Out",
+                  "why": "A site that keeps a complete movement history wants the failed transfer recorded in its place, which means cancelling the later transfer and replaying both in order.",
+                  "affects": [
+                    "every overtaken failure at Downstream Out (a later movement applied before the failed one could be resent)"
+                  ],
+                  "valid": true,
+                  "stale": false
+                },
+                "id": "W1"
+              }
+            },
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:27:28Z"
+          },
+          "c2.1": {
+            "question": "Which system holds the patient's history of record?",
+            "tier": "explain",
+            "answer": {
+              "answer": "This case doesn't name a system that holds the patient's history of record. Here is what it does show. The site has set up the receiving system, the demo bed-management system (Downstream Out), as a \"current state\" system. That means it only needs to know where the patient is now, not every move they made. Its record shows the admission to WARD-A and then the transfer to WARD-C at 09:45 UTC. The failed transfer to WARD-B at 09:20 UTC is missing. The PAS, which sent the messages, recorded the WARD-B move. Shutter can't tell from this case whether any other system keeps the full movement history. Because the patient is already shown on WARD-C, Shutter closed the case as overtaken and sent nothing. If the site marked this receiver as a history-of-record system instead, a case like this would go to a person. Fixing it would mean undoing the later transfer and replaying both in order. That setting isn't in place now (W1).",
+              "cites": [
+                "route",
+                "ward_state",
+                "timeline",
+                "message",
+                "W1"
+              ],
+              "confidence": "medium"
+            },
+            "memberAnswers": [],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:27:40Z"
+          }
+        }
+      }
+    },
+    "S8": {
+      "Downstream Out": {
+        "caseId": "C-000008",
+        "whatif": {
+          "case_id": "C-000008",
+          "receiver": "Downstream Out",
+          "category": "current_state",
+          "profile_version": 9,
+          "entry": "E7",
+          "disposition": "escalate",
+          "outcome_ref": "preferred",
+          "outcome": "escalate",
+          "facts": [
+            {
+              "kind": "alternative",
+              "flag": "authoritative_source",
+              "alternative": {
+                "n": 1,
+                "outcome": "none",
+                "disposition": "superseded",
+                "when": "authoritative_source: other_source",
+                "why": "The site names the other source system as authoritative for ward placement, so its movement stands and the failed one closes without a write."
+              },
+              "field": "authoritative_source",
+              "current": "",
+              "from": "",
+              "to": "BEDMGR",
+              "affects": [
+                "every failure where another source system applied a movement for the encounter at the same time"
+              ],
+              "holds_now": false,
+              "would": "The case would have closed as superseded with no write instead of escalated to a person",
+              "role": "alternative",
+              "suggested_change": {
+                "field": "authoritative_source",
+                "from": "",
+                "to": "BEDMGR",
+                "why": "The site names the other source system as authoritative for ward placement, so its movement stands and the failed one closes without a write.",
+                "affects": [
+                  "every failure where another source system applied a movement for the encounter at the same time"
+                ],
+                "valid": true,
+                "stale": false
+              },
+              "id": "W1"
+            }
+          ],
+          "note": "1 setting bears on this case; a change is a draft for the Site profile page, which an approver saves"
+        },
+        "questions": {
+          "c1.1": {
+            "question": "Why was nothing written?",
+            "tier": "explain",
+            "answer": {
+              "answer": "The PAS message moving this patient to WARD-B (MSG00802) never got into the bed-management system. That system replied \"unavailable\" (HTTP 503) and has no receipt for it, so it was never applied. Seconds later, at 02:21:05 UTC on 1 Nov, the bed manager (BEDMGR) sent its own transfer for the same patient stay, to WARD-C bed BAY1-07. It had exactly the same event time (08:20 UTC on 15 Oct), and it was applied. The bed-management system now shows the patient on WARD-C. Neither move came later than the other, so Shutter cannot tell which one is right. Resending the PAS message would overwrite the bed manager's WARD-C placement. The site has not said which system decides ward placement, so Shutter wrote nothing and passed the case to a person. Next step: someone should check whether the patient is really on WARD-B or WARD-C and decide what to do. If the site named BEDMGR as the system that decides ward placement, this case would have closed with no write instead of going to a person (W1).",
+              "cites": [
+                "operation",
+                "failure",
+                "receipt",
+                "ward_state",
+                "history[1]",
+                "timeline",
+                "W1"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:21:24Z"
+          },
+          "c1.2": {
+            "question": "What would make this safe to resend?",
+            "tier": "explain",
+            "answer": {
+              "answer": "I can't approve or send anything. I can only explain. The message itself is fine. The problem is that the bed manager (BEDMGR) placed this patient on WARD-C, bed BAY1-07, with exactly the same event time as the PAS move to WARD-B (08:20 UTC on 15 Oct). The bed-management system now shows WARD-C. If the PAS message were resent, it would be accepted and would overwrite that WARD-C placement. So a resend is only right if a person confirms the patient really went to WARD-B and decides PAS's move should stand. Before any resend, the bed-management system should still show WARD-C (version 2), there should still be no receipt for the PAS message, and no newer move should have arrived. Shutter can check the bed-management system after a resend. It cannot see the bed board, pharmacy or porters. The only setting Shutter names here goes the other way: if the site named BEDMGR as the system that decides ward placement, this case would close with no write, not a resend (W1). Shutter can't tell from this case what naming PAS would do. \"Ask the board\" can look deeper.",
+              "cites": [
+                "message",
+                "validation",
+                "ward_state",
+                "history[1]",
+                "receipt",
+                "timeline",
+                "W1"
+              ],
+              "confidence": "medium"
+            },
+            "memberAnswers": [],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:21:35Z"
+          },
+          "c1.3": {
+            "question": "What if we trusted the bed manager's times?",
+            "tier": "board",
+            "answer": {
+              "answer": "Trusting the bed manager's times would not settle this case. Its move to WARD-C, bed BAY1-07, has exactly the same event time as the PAS move to WARD-B: 08:20 UTC on 15 Oct. Trusting its times would not make either move later. What would decide it is trusting the bed manager's placement. If the site named BEDMGR as the system that decides ward placement, this case would have closed as superseded with no write, instead of going to a person (W1). That setting is not in place now. Shutter can't tell from this case what a setting about trusting times would do. All three specialists agree on this. They differ on emphasis. Conformance says the PAS message is valid, but that doesn't make a resend safe. Impact warns that closing with no write leaves the bed board, pharmacy and patient record following WARD-C. If PAS was right, they all stay wrong and nobody is told. Encounter and Impact both correct the board's findings: the bed-management system's epoch is 96, not 86. Changing W1 is only a draft. A person would review it on the Site profile page, and it would apply to every case like this one.",
+              "perspectives": [
+                {
+                  "member": "conformance",
+                  "view": "MSG00802 is a valid 2.5.1 transfer. The 503 points to the system being down, not to the message. The times don't separate the two moves, so the open question is which system decides ward placement (W1)."
+                },
+                {
+                  "member": "encounter",
+                  "view": "Equal event times mean neither move can be shown to replace the other, so nothing should be applied. Trusting BEDMGR's placement, not its times, would close the case (W1). The epoch is 96, not 86."
+                },
+                {
+                  "member": "impact",
+                  "view": "Under W1 nothing changes downstream, which is correct only if the bed manager is right. A resend would free the WARD-C bed, redirect medicines and create a porter task. If BEDMGR is right, that is a move backwards. Shutter can't see the bed board, pharmacy, porters or patient record."
+                }
+              ],
+              "setting": {
+                "fact": "W1",
+                "why": "No source is named as authoritative for ward placement, so the same-time conflict went to a person."
+              },
+              "under_alternative": {
+                "fact": "W1",
+                "why": "With BEDMGR named authoritative, the case would have closed as superseded with no write."
+              },
+              "suggested_change": {
+                "fact": "W1",
+                "why": "Naming BEDMGR as authoritative for ward placement is the closest thing to trusting the bed manager. It is a draft for a person to review on the Site profile page."
+              },
+              "cites": [
+                "operation",
+                "failure",
+                "message",
+                "validation",
+                "ward_state",
+                "history[1]",
+                "timeline",
+                "receipt",
+                "W1"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [
+              {
+                "member": "conformance",
+                "status": "ok",
+                "answer": {
+                  "answer": "From the conformance side, yes: the message is acceptable. The PAS transfer MSG00802 is a valid HL7 2.5.1 transfer message. It parses, and its version matches the route. The patient (MRN1008, HOSP), the visit (ENC-1008), the ward (WARD-B) and the event time (08:20 UTC on 15 Oct) are all present. They build the same key as the failed operation. The bed-management system replied \"unavailable\" (HTTP 503). That error is consistent with the system being down, not with a problem in the message. It has no receipt, so the message was never applied.\n\nOn trusting the bed manager's times: the times don't separate the two moves. The bed manager's transfer to WARD-C has exactly the same event time as the PAS move, 08:20 UTC. Trusting its times would not make either move later. The open question is which system decides ward placement, and the message's content can't answer that. The only setting Shutter can name is that one: if the site named BEDMGR as the system that decides ward placement, this case would have closed with no write instead of going to a person (W1). Shutter can't tell from this case what a setting about trusting times would do. A valid message doesn't make a resend safe here.",
+                  "cites": [
+                    "message",
+                    "validation",
+                    "operation",
+                    "failure",
+                    "receipt",
+                    "timeline",
+                    "ward_state",
+                    "history[1]",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "encounter",
+                "status": "ok",
+                "answer": {
+                  "answer": "Trusting the bed manager's times would not settle this. BEDMGR's time is exactly the same as PAS's: both moves have an event time of 08:20 UTC on 15 Oct. PAS sent the patient to WARD-B. BEDMGR sent the patient to WARD-C, bed BAY1-07, and only BEDMGR's move was applied. Neither move is later, so the times cannot show which one replaced the other. The lifecycle rule says that when event times are equal, we cannot tell which move replaced the other. In that case nothing should be applied, and a person must decide. So I cannot say whether PAS's move to WARD-B still holds. The case does not show where the patient really is. What would decide it is trusting BEDMGR's placement, not its times. If the site named BEDMGR as the system that decides ward placement, its WARD-C move would stand. This case would then close with no write instead of going to a person (W1). That setting is not in place now. One small correction to the board: its findings say the bed-management system's epoch is 86, but its record shows 96 (version 2).",
+                  "cites": [
+                    "operation",
+                    "message",
+                    "ward_state",
+                    "history[1]",
+                    "timeline",
+                    "receipt",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "impact",
+                "status": "ok",
+                "answer": {
+                  "answer": "The bed manager's time and the PAS time are the same: 08:20 UTC on 15 Oct. So trusting the bed manager's times does not settle which move is right. What Shutter can name is trusting the bed manager as the system that decides ward placement (W1). With that setting, this case would close as superseded and nothing would be written. In effect, that is what happens now while the case waits for a person. The bed-management system keeps the patient on WARD-C, bed BAY1-07, so nothing changes for the systems that read it. The bed board, pharmacy and the patient record keep following WARD-C, and the porters get no move task. If the bed manager is right, that is correct. If PAS's move to WARD-B is the true one, all of them stay wrong, and nobody is told unless a person looks. Resending the PAS message would move the patient to WARD-B. That frees the WARD-C bed, sends medicines to WARD-B and creates a porter task. If the bed manager is right, that would be a move backwards. Shutter can check the bed-management system, but not the bed board, pharmacy, porters or patient record. One note: the board's findings say epoch 86, but the snapshot says 96.",
+                  "cites": [
+                    "ward_state",
+                    "history[1]",
+                    "timeline",
+                    "receipt",
+                    "operation",
+                    "route",
+                    "W1"
+                  ],
+                  "confidence": "medium"
+                }
+              }
+            ],
+            "resolved": {
+              "setting": {
+                "kind": "alternative",
+                "flag": "authoritative_source",
+                "alternative": {
+                  "n": 1,
+                  "outcome": "none",
+                  "disposition": "superseded",
+                  "when": "authoritative_source: other_source",
+                  "why": "The site names the other source system as authoritative for ward placement, so its movement stands and the failed one closes without a write."
+                },
+                "field": "authoritative_source",
+                "current": "",
+                "from": "",
+                "to": "BEDMGR",
+                "affects": [
+                  "every failure where another source system applied a movement for the encounter at the same time"
+                ],
+                "holds_now": false,
+                "would": "The case would have closed as superseded with no write instead of escalated to a person",
+                "role": "alternative",
+                "suggested_change": {
+                  "field": "authoritative_source",
+                  "from": "",
+                  "to": "BEDMGR",
+                  "why": "The site names the other source system as authoritative for ward placement, so its movement stands and the failed one closes without a write.",
+                  "affects": [
+                    "every failure where another source system applied a movement for the encounter at the same time"
+                  ],
+                  "valid": true,
+                  "stale": false
+                },
+                "id": "W1"
+              },
+              "under_alternative": {
+                "kind": "alternative",
+                "flag": "authoritative_source",
+                "alternative": {
+                  "n": 1,
+                  "outcome": "none",
+                  "disposition": "superseded",
+                  "when": "authoritative_source: other_source",
+                  "why": "The site names the other source system as authoritative for ward placement, so its movement stands and the failed one closes without a write."
+                },
+                "field": "authoritative_source",
+                "current": "",
+                "from": "",
+                "to": "BEDMGR",
+                "affects": [
+                  "every failure where another source system applied a movement for the encounter at the same time"
+                ],
+                "holds_now": false,
+                "would": "The case would have closed as superseded with no write instead of escalated to a person",
+                "role": "alternative",
+                "suggested_change": {
+                  "field": "authoritative_source",
+                  "from": "",
+                  "to": "BEDMGR",
+                  "why": "The site names the other source system as authoritative for ward placement, so its movement stands and the failed one closes without a write.",
+                  "affects": [
+                    "every failure where another source system applied a movement for the encounter at the same time"
+                  ],
+                  "valid": true,
+                  "stale": false
+                },
+                "id": "W1"
+              },
+              "suggested_change": {
+                "field": "authoritative_source",
+                "from": "",
+                "to": "BEDMGR",
+                "why": "Naming BEDMGR as authoritative for ward placement is the closest thing to trusting the bed manager. It is a draft for a person to review on the Site profile page.",
+                "affects": [
+                  "every failure where another source system applied a movement for the encounter at the same time"
+                ],
+                "valid": true,
+                "stale": false,
+                "fact": "W1"
+              }
+            },
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:22:04Z"
+          },
+          "c2.1": {
+            "question": "Which movement is current?",
+            "tier": "explain",
+            "answer": {
+              "answer": "In the demo bed-management system, the current movement is the bed manager's transfer to WARD-C, bed BAY1-07. It was sent by BEDMGR and applied as version 2 of the encounter. The patient administration system (PAS) also sent a transfer, to WARD-B, bed BAY2-04. That one never arrived. The receiver was unavailable (HTTP 503), and there is no receipt for it. Both transfers have exactly the same event time, 2026-10-15 08:20 UTC, so neither one is later than the other. Shutter cannot tell which transfer reflects where the patient really is. Resending the PAS transfer would overwrite the bed manager's WARD-C placement. So Shutter wrote nothing and sent the case to a person to decide. Next step: someone should check whether the patient is actually on WARD-B or WARD-C. For reference: if the site named BEDMGR as the system in charge of ward placement, a case like this would close as superseded, with no write (W1). This site has not set that.",
+              "cites": [
+                "ward_state",
+                "ward_state.history[1]",
+                "timeline",
+                "failure",
+                "receipt",
+                "message",
+                "W1"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:22:14Z"
+          },
+          "c3.1": {
+            "question": "What should I check first?",
+            "tier": "explain",
+            "answer": {
+              "answer": "First, check where the patient on ENC-1008 actually is: WARD-B or WARD-C. The patient administration system (PAS) sent a transfer to WARD-B, bed BAY2-04. The bed-management system was unavailable (HTTP 503) and never recorded it, so there is no receipt. A few seconds later, at 02:21:05 UTC on 1 Nov, the bed manager (BEDMGR) moved the same patient to WARD-C, bed BAY1-07. Its move has exactly the same event time (08:20 UTC on 15 Oct), and WARD-C is what the receiving system shows now. Neither move came later, so Shutter cannot tell which one is right. Resending would overwrite the WARD-C placement. That is why Shutter wrote nothing and passed the case to a person. Next, find out which system owns bed placement at your site. The site has not named one. If it named the bed manager as the authority, cases like this would close with no write instead of coming to a person (W1). If the patient really is on WARD-B, the integration team needs to decide how to correct it.",
+              "cites": [
+                "operation",
+                "failure",
+                "receipt",
+                "ward_state",
+                "history[1]",
+                "timeline[1]",
+                "timeline[2]",
+                "W1"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [],
+            "resolved": {},
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:22:25Z"
+          },
+          "c4.1": {
+            "question": "What did the dissenting specialist say?",
+            "tier": "board",
+            "answer": {
+              "answer": "The only specialist who disagreed was Conformance. Its first finding favoured resending. Its reason was that the patient administration system's transfer (MSG00802, to WARD-B, bed BAY2-04, 08:20:00 UTC) is a valid message. The bed-management system turned it down only because it was unavailable (HTTP 503). It has no receipt, so the move was never applied. Conformance also said a valid message does not settle which source wins. It left that question to the other members. In its answer here, it now agrees with escalating. The other two still disagree with resending. The bed manager (BEDMGR) moved the patient to WARD-C, bed BAY1-07, at the same event time. That move was applied at 02:21:05 UTC. A resend would undo that placement, and the bed board, pharmacy and porters would follow the wrong ward if the bed manager was right. Shutter cannot tell which ward is correct. Under W1, if the site named BEDMGR as the system in charge of ward placement, this case would have closed with nothing sent. That setting is not in place now. Two specialists corrected the board's notes: the record's epoch is 96, not 86.",
+              "perspectives": [
+                {
+                  "member": "conformance",
+                  "view": "Its finding favoured resending because the message is valid and the 503 had nothing to do with its content. It now agrees with escalating, because being valid does not decide between the two sources."
+                },
+                {
+                  "member": "impact",
+                  "view": "Conformance's dissent does not change the risk. A resend would move the patient back to WARD-B and set off wrong actions downstream if the bed manager is right, so escalating is safer."
+                },
+                {
+                  "member": "encounter",
+                  "view": "The two moves have the same time, so neither replaces the other, and the integration team must decide. Conformance is right that the message is valid, but that does not settle this."
+                }
+              ],
+              "setting": {
+                "fact": "W1",
+                "why": "No source is named as the authority for ward placement, so the case was escalated."
+              },
+              "under_alternative": {
+                "fact": "W1",
+                "why": "With BEDMGR named as the authority, the case would have closed as superseded with no write."
+              },
+              "cites": [
+                "message",
+                "validation",
+                "failure",
+                "receipt",
+                "ward_state",
+                "timeline[1]",
+                "timeline[2]",
+                "W1"
+              ],
+              "confidence": "high"
+            },
+            "memberAnswers": [
+              {
+                "member": "conformance",
+                "status": "ok",
+                "answer": {
+                  "answer": "From the conformance side: yes. Nothing in the message itself looks unacceptable. MSG00802 is an HL7 2.5.1 ADT^A02 (transfer) from PAS. It parses against the 2.5.1 schema, and its version matches what the route expects. The patient (MRN1008, HOSP), the visit (ENC-1008), the ward (WARD-B, bed BAY2-04) and the event time (2026-10-15 08:20:00 UTC) are all present. They match the failed operation's key. The structural check does not check site profile rules.\n\nThe failure doesn't point to the content either. The bed-management system answered HTTP 503 'ward_unavailable', which is consistent with it being unavailable rather than rejecting the message. It holds no receipt, so it never committed the transfer.\n\nWhat this does not settle is whether the message should still be sent. The bed manager (BEDMGR, MSG00803) applied a transfer to WARD-C at exactly the same time, and that is the current record. Being valid doesn't decide which source wins. So I agree with escalating, even though the conformance finding leaned toward resending. Also, the findings say epoch 86, but the receiver's record shows epoch 96.",
+                  "cites": [
+                    "message",
+                    "validation",
+                    "operation",
+                    "failure",
+                    "receipt",
+                    "ward_state",
+                    "timeline"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "encounter",
+                "status": "ok",
+                "answer": {
+                  "answer": "From the encounter side, Shutter cannot tell whether the intent still holds. The patient administration system (PAS) meant to move the patient to WARD-B, bed BAY2-04, at 08:20:00 UTC. That move was never applied: delivery failed with a 503 and there is no receipt. The bed-management system's record now shows WARD-C, bed BAY1-07, version 2. The bed manager (BEDMGR) set that with its own transfer at exactly the same time, 08:20:00 UTC. Neither move is later, so the lifecycle policy says we cannot tell which one replaces the other. It should not be applied, and the integration team decides. Nothing more recent exists for this encounter, and the patient matches. Neither system is named as the authority for ward placement. If BEDMGR were named the authority (W1, not set now), the PAS move would close as replaced, with no write. I agree with escalating. The dissenting conformance specialist said resend because the message is valid. That is true, but it does not decide this. Two small corrections to the board's notes: the record's epoch is 96, not 86, and BEDMGR's move was applied at 02:21:05 UTC.",
+                  "cites": [
+                    "message",
+                    "operation",
+                    "ward_state",
+                    "history[1]",
+                    "timeline",
+                    "receipt",
+                    "failure",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "impact",
+                "status": "ok",
+                "answer": {
+                  "answer": "The only dissent came from the Conformance specialist, who favoured resending. Their reason was that the patient administration system's transfer message to WARD-B is valid and was refused only because the receiver was unavailable (HTTP 503). From the impact side, a resend has a real cost. The bed-management system now shows the patient on WARD-C, bed BAY1-07. The bed manager set that at 02:21:05 UTC using the same event time, 08:20 UTC. A resend would move the patient back to WARD-B. Then the bed board would free the WARD-C bed, pharmacy would send medicines to WARD-B, and porters would get a move task. If the bed manager's placement is correct, all of that is wrong. Not acting leaves everything following WARD-C. That is only wrong if the WARD-B transfer still stands. The evidence can't tell which ward is right. Shutter can't see the bed board, pharmacy, porters or patient record. Conformance itself left this question to others, so the dissent doesn't change the impact view, and escalating stays the safer choice. Per W1, if the site named the bed manager as the source in charge of ward placement, this case would have closed with nothing sent. That setting isn't in place now.",
+                  "cites": [
+                    "timeline[1]",
+                    "timeline[2]",
+                    "ward_state",
+                    "history[1]",
+                    "receipt",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              }
+            ],
+            "resolved": {
+              "setting": {
+                "kind": "alternative",
+                "flag": "authoritative_source",
+                "alternative": {
+                  "n": 1,
+                  "outcome": "none",
+                  "disposition": "superseded",
+                  "when": "authoritative_source: other_source",
+                  "why": "The site names the other source system as authoritative for ward placement, so its movement stands and the failed one closes without a write."
+                },
+                "field": "authoritative_source",
+                "current": "",
+                "from": "",
+                "to": "BEDMGR",
+                "affects": [
+                  "every failure where another source system applied a movement for the encounter at the same time"
+                ],
+                "holds_now": false,
+                "would": "The case would have closed as superseded with no write instead of escalated to a person",
+                "role": "alternative",
+                "suggested_change": {
+                  "field": "authoritative_source",
+                  "from": "",
+                  "to": "BEDMGR",
+                  "why": "The site names the other source system as authoritative for ward placement, so its movement stands and the failed one closes without a write.",
+                  "affects": [
+                    "every failure where another source system applied a movement for the encounter at the same time"
+                  ],
+                  "valid": true,
+                  "stale": false
+                },
+                "id": "W1"
+              },
+              "under_alternative": {
+                "kind": "alternative",
+                "flag": "authoritative_source",
+                "alternative": {
+                  "n": 1,
+                  "outcome": "none",
+                  "disposition": "superseded",
+                  "when": "authoritative_source: other_source",
+                  "why": "The site names the other source system as authoritative for ward placement, so its movement stands and the failed one closes without a write."
+                },
+                "field": "authoritative_source",
+                "current": "",
+                "from": "",
+                "to": "BEDMGR",
+                "affects": [
+                  "every failure where another source system applied a movement for the encounter at the same time"
+                ],
+                "holds_now": false,
+                "would": "The case would have closed as superseded with no write instead of escalated to a person",
+                "role": "alternative",
+                "suggested_change": {
+                  "field": "authoritative_source",
+                  "from": "",
+                  "to": "BEDMGR",
+                  "why": "The site names the other source system as authoritative for ward placement, so its movement stands and the failed one closes without a write.",
+                  "affects": [
+                    "every failure where another source system applied a movement for the encounter at the same time"
+                  ],
+                  "valid": true,
+                  "stale": false
+                },
+                "id": "W1"
+              }
+            },
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:22:49Z"
+          },
+          "c5.1": {
+            "question": "What would a resend have changed downstream?",
+            "tier": "board",
+            "answer": {
+              "answer": "A resend would most likely have been accepted. The bed-management system would move the patient from WARD-C bed BAY1-07 to WARD-B bed BAY2-04 (version 2 to 3). That replaces the bed manager's (BEDMGR) WARD-C placement, which has the same event time, 08:20 UTC on 2026-10-15. The bed board, pharmacy, porters and patient record would likely follow. If the bed manager is right, that is a wrong move backwards. Doing nothing keeps WARD-C, which is wrong only if the PAS move to WARD-B was the real one. Shutter cannot tell which is right. Neither event is later, no system is named as in charge of ward placement, and Shutter cannot see those other systems. Where the members differ: Conformance finds the message valid and on its own would resend. Encounter and Impact say that does not settle it and support escalating. If the site named BEDMGR as in charge (W1), this case would have closed with nothing written. That is not set now. The record shows epoch 96, not the 86 in the plan. Check this before acting. The board cannot resend or change anything.",
+              "perspectives": [
+                {
+                  "member": "conformance",
+                  "view": "The message is a valid 2.5.1 transfer, and the 503 answer means its content was never read. On the message alone a resend is fine, but the BEDMGR question is outside conformance."
+                },
+                {
+                  "member": "encounter",
+                  "view": "The bed manager's same-time transfer to WARD-C is the current record, and no source is named as in charge. A resend would overwrite it, so escalating fits."
+                },
+                {
+                  "member": "impact",
+                  "view": "A resend would move the patient to WARD-B, and the systems that read from it would follow. That is a backwards move if BEDMGR is right, and Shutter cannot see those systems."
+                }
+              ],
+              "setting": {
+                "fact": "W1",
+                "why": "Because no source is named as in charge of ward placement, this case was escalated instead of closing with no write."
+              },
+              "cites": [
+                "operation",
+                "failure",
+                "message",
+                "validation",
+                "ward_state",
+                "ward_state.history[1]",
+                "receipt",
+                "timeline",
+                "route",
+                "W1"
+              ],
+              "confidence": "medium"
+            },
+            "memberAnswers": [
+              {
+                "member": "conformance",
+                "status": "ok",
+                "answer": {
+                  "answer": "From the conformance side, yes: the message itself looks acceptable to the bed-management system. MSG00802 is a version 2.5.1 transfer (ADT^A02). It parses against its schema, and its version matches the route. The patient (MRN1008, HOSP), the encounter (ENC-1008), the ward (WARD-B) and the event time (08:20:00 UTC) are all there. Every field the interface contract requires for a transfer can be filled in. The key built from those fields matches the case's operation. The delivery failed with a 503 'unavailable' answer, which means the receiver never got as far as reading the content. Nothing in the message explains the failure. The receipt lookup found nothing, so this transfer was never stored.\n\nA valid message does not decide whether to resend it. The bed manager (BEDMGR) has since moved the same patient to WARD-C with exactly the same event time, and that is the bed-management system's current record. Sending this transfer again would replace that placement. Whether that would be right is not a conformance question. One small note: the receiver's record shows epoch 96, not the 86 that the findings and plan quote.",
+                  "cites": [
+                    "message",
+                    "validation",
+                    "failure",
+                    "operation",
+                    "receipt",
+                    "ward_state",
+                    "timeline",
+                    "route"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "encounter",
+                "status": "ok",
+                "answer": {
+                  "answer": "From the encounter's point of view, we cannot tell whether the message's purpose still holds. The failed message from PAS was meant to move the patient to WARD-B, bed BAY2-04, at 08:20:00 UTC on 2026-10-15. It never arrived: there is no receipt for it. The bed manager (BEDMGR) then sent its own transfer for the same patient with exactly the same event time, 08:20:00 UTC. That one moved the patient to WARD-C, bed BAY1-07. The bed-management system applied it at 02:21:05 UTC on 2026-11-01, and it now shows the patient on WARD-C (version 2). Because the two events have the same time, neither one replaces the other. Nothing in this case says which system is in charge of ward placement, so we also don't know whether the patient is really on WARD-B or WARD-C. A resend would overwrite the bed manager's placement. That is why escalating to a person fits. One setting would change this: if the site named BEDMGR as the system in charge of ward placement, this case would have closed as superseded, with nothing written (W1). That setting is not in place now. Two small corrections to the board's findings: the evidence shows epoch 96, not 86, and an apply time of 02:21:05 UTC, not 13:28:43Z.",
+                  "cites": [
+                    "operation",
+                    "message",
+                    "ward_state",
+                    "ward_state.history[1]",
+                    "receipt",
+                    "timeline[1]",
+                    "timeline[2]",
+                    "W1"
+                  ],
+                  "confidence": "high"
+                }
+              },
+              {
+                "member": "impact",
+                "status": "ok",
+                "answer": {
+                  "answer": "A resend would most likely have gone through. It would have moved the patient in the bed-management system from WARD-C bay BAY1-07 to WARD-B bay BAY2-04 (version 2 to 3). That would undo the bed manager's WARD-C placement, which has the same event time, 08:20 UTC. Every system that reads the bed-management system would then follow. The bed board would free the WARD-C bed. Pharmacy would send medicines to WARD-B. Porters would get a move task. The patient record would show WARD-B. If the bed manager's placement is the right one, all of that is wrong: a backwards move. Doing nothing leaves everyone showing WARD-C. That is wrong only if the PAS move to WARD-B was the real one. Shutter cannot tell which is right, because neither event is later and no source is named as being in charge of ward placement. Shutter cannot see the bed board, pharmacy, porters or patient record. If the site named the bed manager as in charge (W1), this case would have closed with nothing written. One more thing: the plan's precondition says epoch 86, but the receiving system shows epoch 96. Someone should check that before acting. I can't resend or change anything.",
+                  "cites": [
+                    "operation",
+                    "ward_state",
+                    "ward_state.history[1]",
+                    "timeline",
+                    "receipt",
+                    "route",
+                    "W1"
+                  ],
+                  "confidence": "medium"
+                }
+              }
+            ],
+            "resolved": {
+              "setting": {
+                "kind": "alternative",
+                "flag": "authoritative_source",
+                "alternative": {
+                  "n": 1,
+                  "outcome": "none",
+                  "disposition": "superseded",
+                  "when": "authoritative_source: other_source",
+                  "why": "The site names the other source system as authoritative for ward placement, so its movement stands and the failed one closes without a write."
+                },
+                "field": "authoritative_source",
+                "current": "",
+                "from": "",
+                "to": "BEDMGR",
+                "affects": [
+                  "every failure where another source system applied a movement for the encounter at the same time"
+                ],
+                "holds_now": false,
+                "would": "The case would have closed as superseded with no write instead of escalated to a person",
+                "role": "alternative",
+                "suggested_change": {
+                  "field": "authoritative_source",
+                  "from": "",
+                  "to": "BEDMGR",
+                  "why": "The site names the other source system as authoritative for ward placement, so its movement stands and the failed one closes without a write.",
+                  "affects": [
+                    "every failure where another source system applied a movement for the encounter at the same time"
+                  ],
+                  "valid": true,
+                  "stale": false
+                },
+                "id": "W1"
+              }
+            },
+            "model": "claude-opus-5-5",
+            "recordedAt": "2026-11-01T02:23:24Z"
+          }
+        }
+      }
+    }
+  }
+}

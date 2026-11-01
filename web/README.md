@@ -15,6 +15,7 @@ React, Mantine and TanStack Query, built with Vite. IRIS serves the build from `
 | `npm run build:www` | Builds into `../www/`, the folder IRIS serves (committed, so an install needs no Node) |
 | `npm run build:demo`, `npm run preview:demo` | The demo: recorded runs on the in-browser mock, with a "Try the demo" sign-in (`dist-demo/`, `VITE_BASE` for GitHub Pages) |
 | `npm run record:demo -- --url http://host:52773` | Records the demo's data from a running Shutter's API into `src/mocks/fixtures.json` (reads only; `SHUTTER_PASSWORD` for the operator's password) |
+| `npm run export:answers -- --url http://host:52774` | Exports the recorded answers to "Ask about this case" from a running Shutter's API into `src/mocks/recorded-questions.json` (reads only; `SHUTTER_PASSWORD` for the approver's password; the demo cases come from `fixtures.json`) |
 | `npm run test:e2e` | axe-core (WCAG 2.1 A and AA) on every screen of the demo, and on the guide open, in all five appearances; the layout at a phone's and a laptop's width; the demo's paths and the guide (Playwright, Chromium) |
 
 ## Notes
