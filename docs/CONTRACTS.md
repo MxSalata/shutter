@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.33, 1 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.34, 1 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -313,9 +313,11 @@ caller's process passes; the operator and the approver read the watched hospital
 | Resource | Routes |
 | --- | --- |
 | none | `POST` and `DELETE /session`; `GET /health` (its summary; the full report needs `Shutter_Operate`) |
-| signed in | `GET /me`, which answers `{username, operator, approver}` from the two resources |
-| `Shutter_Operate` | every other `GET`; `POST /scenarios/{id}/run` and `/scenarios/reset`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send`; `GET /production-reviews`, `GET /production-reviews/targets` and `GET /production-reviews/{id}`; `POST /production-reviews` (section 13: the review reads only, and a live agent run spends model credit as a scenario run does); `GET /cases/{id}/whatif`, `GET /cases/{id}/questions`, `GET /cases/{id}/questions/suggested`, `GET /cases/{id}/questions/{qid}` and `POST /cases/{id}/questions` (section 14: a question reads only, and a live run spends model credit); `GET /settings/schemas` (section 12) |
-| `Shutter_Approve` | `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `PUT /site-profile`; `PATCH /library/{code}` (since v1.17; it was `Shutter_Operate`); `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13); `POST /settings/schemas` (section 12: a schema import) |
+| signed in | `GET /me`, which answers `{username, operator, approver, can: {operate, approve, configure, scenarios}}` from the resources the user holds (`can` since v1.34: the app shows only what the user may do) |
+| `Shutter_Operate` | every other `GET`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send`; `GET /production-reviews`, `GET /production-reviews/targets` and `GET /production-reviews/{id}`; `POST /production-reviews` (section 13: the review reads only, and a live agent run spends model credit as a scenario run does); `GET /cases/{id}/whatif`, `GET /cases/{id}/questions`, `GET /cases/{id}/questions/suggested`, `GET /cases/{id}/questions/{qid}` and `POST /cases/{id}/questions` (section 14: a question reads only, and a live run spends model credit); `GET /settings/schemas` (section 12) |
+| `Shutter_Approve` | `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's) |
+| `Shutter_Scenarios` | `POST /scenarios/{id}/run` and `/scenarios/reset`, and `Shutter.Setup_PurgeStore` (v1.34: the demo controls; the operator and approver roles hold it, the public demo's role does not) |
+| `Shutter_Configure` | `PUT /site-profile`; `PATCH /library/{code}`; `POST /settings/schemas` (section 12); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13) (v1.34: what changes the site; the approver role holds it, the public demo's role does not) |
 | `Shutter_Intake` | `POST /intake` (section 11) |
 
 So the person on call (an operator) escalates a case and, once the team that corrects the systems has done so, marks
@@ -1268,6 +1270,13 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:
+  run, reset, purge) and `Shutter_Configure` (the site's writes: the profile, the library, a schema import, the review
+  annotations), held by the operator and the approver as before; the role `Shutter_Demo` (reads, reinvestigates, approves and
+  asks, holds neither) and the user `demo` made only when `SHUTTER_PUBLIC_DEMO_PASSWORD` is set, a member of the Workflow role;
+  the role `Shutter_Trace` (the Visual Trace and the messages in the Management Portal, read only, nothing of Shutter's) and
+  the user `demo-trace` made only when `SHUTTER_TRACE_PASSWORD` is set; `GET /me` answers `can: {operate, approve, configure,
+  scenarios}`.
 - v1.33, 1 Nov 2026: the demo receiver's fault `delay_response` (1.5): a real operation is held for `seconds`, then applied
   and answered as usual, so a newer message can be on its way to the receiver while a case is about to resend (S24); the
   scenario runner's fault step passes `seconds`.

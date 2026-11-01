@@ -50,6 +50,8 @@ Environment variables read when the installer runs:
 | Variable | Meaning |
 | --- | --- |
 | `SHUTTER_DEMO_PASSWORD` | The demo users' password (default `shutter`); demo only. |
+| `SHUTTER_PUBLIC_DEMO_PASSWORD` | When set, the user `demo` exists with the role `Shutter_Demo`: reads, reinvestigates, approves and asks, and can neither run or reset scenarios nor save the site profile, the library or a schema. For a public demo; no default. |
+| `SHUTTER_TRACE_PASSWORD` | When set, the user `demo-trace` exists with the role `Shutter_Trace`: the Visual Trace and the messages in the Management Portal, read only. No default. |
 | `SHUTTER_MESSAGE_PURGE` | `1` creates the daily task "Shutter message purge" (`Ens.Util.Tasks.Purge`, every message type in the namespace). On by default in the demo, off otherwise: only a namespace that holds nothing but Shutter should purge this way. |
 | `SHUTTER_MESSAGE_DAYS` | Days the purge keeps (default 90). |
 | `SHUTTER_ESCALATION_DAYS` | Days after a case closes before the daily task "Shutter retention" removes the text of its escalation emails (the hospital number, the NHS number and the date of birth) and their `.eml` files; the rows stay with their digest, recipients and who sent them. Default: `SHUTTER_MESSAGE_DAYS` (90); `0` keeps them. An instance upgraded in place runs the default, 90, until the task's `EscalationDays` is changed in the Task Manager. |

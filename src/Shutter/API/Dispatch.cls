@@ -264,6 +264,14 @@ ClassMethod Me() As %Status
     Set o.username = ..User()
     Do o.%Set("operator", $SYSTEM.Security.Check("Shutter_Operate", "USE"), "boolean")
     Do o.%Set("approver", $SYSTEM.Security.Check("Shutter_Approve", "USE"), "boolean")
+    // What the signed-in user may do (v1.34), so the app shows only that: the demo role approves but neither configures the
+    // site nor runs the scenarios.
+    Set can = {}
+    Do can.%Set("operate", $SYSTEM.Security.Check("Shutter_Operate", "USE"), "boolean")
+    Do can.%Set("approve", $SYSTEM.Security.Check("Shutter_Approve", "USE"), "boolean")
+    Do can.%Set("configure", $SYSTEM.Security.Check("Shutter_Configure", "USE"), "boolean")
+    Do can.%Set("scenarios", $SYSTEM.Security.Check("Shutter_Scenarios", "USE"), "boolean")
+    Set o.can = can
     Quit ..Json(o)
 }
 
@@ -326,7 +334,7 @@ ClassMethod PlayerEnabled() As %Boolean
 
 ClassMethod ScenarioRun(id As %String) As %Status
 {
-    If '..Allow("Shutter_Operate", 1) Quit $$$OK
+    If '..Allow("Shutter_Scenarios", 1) Quit $$$OK
     If '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Scenarios.Runner") Quit ..Fail("503 Service Unavailable", "no_runner", "The scenario runner is not installed")
     Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
     Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
@@ -374,7 +382,7 @@ ClassMethod ScenarioRun(id As %String) As %Status
 
 ClassMethod ScenarioReset() As %Status
 {
-    If '..Allow("Shutter_Operate", 1) Quit $$$OK
+    If '..Allow("Shutter_Scenarios", 1) Quit $$$OK
     If '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Scenarios.Runner") Quit ..Fail("503 Service Unavailable", "no_runner", "The scenario runner is not installed")
     Set result = $CLASSMETHOD("Shutter.Scenarios.Runner", "Reset")
     Set out = ##class(Shutter.Util.Json).Parse(result, .sc)
@@ -1077,7 +1085,7 @@ ClassMethod Library() As %Status
 /// Change which agents sit on the board: by an approver, as the site profile is saved.
 ClassMethod LibraryPatch(code As %String) As %Status
 {
-    If '..Allow("Shutter_Approve", 1) Quit $$$OK
+    If '..Allow("Shutter_Configure", 1) Quit $$$OK
     Set m = ##class(Shutter.Store.BoardMember).ByCode(code)
     If '$ISOBJECT(m) Quit ..Fail("404 Not Found", "not_found", "No library member " _ code)
     Set body = ..Body()
@@ -1111,7 +1119,7 @@ ClassMethod SiteProfileGet() As %Status
 /// Replace the site profile: the questionnaire's answers, by an approver.
 ClassMethod SiteProfilePut() As %Status
 {
-    If '..Allow("Shutter_Approve", 1) Quit $$$OK
+    If '..Allow("Shutter_Configure", 1) Quit $$$OK
     Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
     Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
     If '$ISOBJECT(body) || $$$ISERR(psc) Quit ..Fail("400 Bad Request", "bad_request", "The body must be the profile as a JSON object")
@@ -1525,7 +1533,7 @@ ClassMethod SchemasGet() As %Status
 /// body without a path; 422 import_failed with the importer's words (a file that is not there, not .xml, or not a schema).
 ClassMethod SchemasImport() As %Status
 {
-    If '..Allow("Shutter_Approve", 1) Quit $$$OK
+    If '..Allow("Shutter_Configure", 1) Quit $$$OK
     Set body = ..Body()
     Set path = $ZSTRIP(##class(Shutter.Util.Json).Str(body, "path"), "<>W")
     If path = "" Quit ..Fail("400 Bad Request", "bad_request", "The body must be {path}: a schema XML file on this server")
@@ -1656,7 +1664,7 @@ ClassMethod ProductionReviewGet(id As %String) As %Status
 /// not_found for an unknown review or finding id; 400 bad_request for a status outside the three or a missing reason.
 ClassMethod ProductionReviewAnnotate(id As %String) As %Status
 {
-    If '..Allow("Shutter_Approve", 1) Quit $$$OK
+    If '..Allow("Shutter_Configure", 1) Quit $$$OK
     Set review = ##class(Shutter.Store.Review).ByReviewId(id)
     If '$ISOBJECT(review) Quit ..Fail("404 Not Found", "not_found", "No review " _ id)
     Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
@@ -1689,7 +1697,7 @@ ClassMethod ProductionReviewAnnotate(id As %String) As %Status
 /// 204; 404 not_found for an unknown id. Revoking twice is a 204 too.
 ClassMethod ProductionReviewAnnotationDelete(annotationId As %String) As %Status
 {
-    If '..Allow("Shutter_Approve", 1) Quit $$$OK
+    If '..Allow("Shutter_Configure", 1) Quit $$$OK
     Set a = ##class(Shutter.Store.ReviewAnnotation).ById(annotationId)
     If '$ISOBJECT(a) Quit ..Fail("404 Not Found", "not_found", "No annotation " _ annotationId)
     If 'a.Revoked {
