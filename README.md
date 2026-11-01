@@ -6,9 +6,9 @@ When an HL7 delivery fails in a hospital, the usual fix is a resend from the Mes
 
 Real interoperability testing only happens in production: that is where the holes in an integration show, the ones nobody could test for. No integration is perfect, and no one can predict every behaviour of every receiving system. Shutter is the failsafe, so that an integration does not have to predict every possible failure.
 
-[screenshot: the Scenarios start page with the three scenarios to try first]
+![S8 played twice: rules alone resend and write WARD-B over the bed manager's WARD-C; the board escalates, keeping the conformance specialist's dissent, and writes nothing](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-rules-and-board.png)
 
-[screenshot: the S8 case page, rules alone beside the board, with what each did at the receiver]
+![The Scenarios page: what Shutter does in six steps, and the three scenarios to try first](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/scenarios-start.png)
 
 ![The Visual Trace of S8 in board mode: the failed delivery, the case workflow, the evidence collector, the three specialists, the coordinator and the gate, each in its own lane](https://raw.githubusercontent.com/MxSalata/shutter/main/web/public/s8-visual-trace.png)
 
@@ -79,7 +79,7 @@ The idea asks whether InterSystems Interoperability could do the traceability jo
 
 ## How it works
 
-[diagram: failed delivery, case, evidence snapshot, the board (three specialists in parallel, then the coordinator), the gate, release by a person or the site's policy, a dry run, a fresh read and a second gate, one conditional write, verification in the receiver's history]
+![A case's life: the failed operation, one sealed evidence snapshot, a plan from the catalogue and site policy, the board or rules, the gate at the proposal, a dry run, an approval bound to the plan's digest, a fresh read and the gate again at dispatch, one conditional write, then verification; a block, an escalation or a hand closure where the evidence calls for one](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/case-lifecycle.png "width=60%")
 
 1. **A failed delivery becomes a case.** The feed fails forward (`FailureTimeout` 0), so the next patient's message is not stuck behind the failure. A hospital's own production can hand its failures to Shutter through the intake, and the case names where it came from.
 2. **Evidence, sealed.** The Evidence Collector builds one immutable snapshot: the message, the receiver's state, history and receipt, every other operation for the encounter, the receiver's capabilities and the catalogue match. It is sealed with a digest. Before anything reaches a model, every patient and encounter identifier becomes a per-case token (`MRN-T1`, `ENC-T1`), demographics are dropped and note text becomes a flag.
