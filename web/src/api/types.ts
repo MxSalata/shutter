@@ -233,6 +233,8 @@ export interface CaseEvent {
   text: string;
   actor: string;
   ref: string;
+  /** Set by the trial's mock on the events it replays from the recording after a trial approval; never by IRIS. */
+  replayed?: boolean;
 }
 
 export interface SnapshotItem {
