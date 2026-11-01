@@ -9,7 +9,7 @@ import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
 import { theme } from '@/theme';
 import CasePage from '../CasePage';
-import recorded from '@/mocks/recorded-questions.json';
+import recordedAnswers from '@/mocks/recorded-questions.json';
 import type { CaseQuestion, WhatIfFact } from '@/api/types';
 import { SAMPLE_LABEL, answersBadge, provenanceText } from './labels';
 
@@ -116,7 +116,7 @@ type Recorded = {
   scenarios: Record<string, Record<string, { questions: Record<string, { answer: { answer: string } }> }>>;
 };
 function firstSentence(scenario: string, receiver: string, turn: string): string {
-  const text = (recorded as unknown as Recorded).scenarios[scenario][receiver].questions[turn].answer.answer;
+  const text = (recordedAnswers as unknown as Recorded).scenarios[scenario][receiver].questions[turn].answer.answer;
   return text.split(/(?<=\.)\s/)[0];
 }
 
