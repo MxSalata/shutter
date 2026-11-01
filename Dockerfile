@@ -13,8 +13,9 @@ COPY --chown=irisowner:irisowner . /home/irisowner/dev
 
 # The Second Parser (docs/CONTRACTS.md, 6.1): HAPI and its dependencies from Maven Central, each checked against the SHA-256
 # pinned in pex/build.sh in the same step (a mismatch fails the build), and shutter.pex compiled with the image's own JDK into
-# the manager directory, where the production item's classpath expects it. No network, no jar: the item then stays off.
-RUN bash /home/irisowner/dev/pex/build.sh /usr/irissys/mgr/shutter/pex
+# the manager directory (mgr/pex, beside the data volume mgr/shutter and not inside it, so an upgraded container runs this
+# image's jar), where the production item's classpath expects it. No network, no jar: the item then stays off.
+RUN bash /home/irisowner/dev/pex/build.sh /usr/irissys/mgr/pex
 
 # 1 loads the aihub module (live agents) too: for images with the AI Hub package. 0 for a plain
 # IRIS for Health Community base, which gets the replay edition.

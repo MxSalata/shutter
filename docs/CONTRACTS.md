@@ -717,8 +717,9 @@ carries `second_parser: {available: false, item, reason}`, the verdict is empty 
 The Evidence Collector's setting `SecondParserTarget` names the item (empty never asks); a slow or failing item leaves
 `available: false` after 20 s and the gate judges without it. `pex/build.sh` downloads HAPI and its dependencies from Maven
 Central, checks each against its pinned SHA-256 in the same step, compiles the two classes with the IRIS image's own JDK
-(Temurin 11) and writes `shutter-pex.jar` under the manager directory (`shutter/pex/`), where the item's
-`%gatewayExtraClasspaths` expects them; the Dockerfile runs it, and a site with Java runs it once by hand.
+(Temurin 11) and writes `shutter-pex.jar` under the manager directory as `pex/`, beside `shutter/` and outside the image's data volume, so
+an upgraded container runs its own image's jar; `SyncSecondParser` writes the item's `%gatewayExtraClasspaths` for the
+install; the Dockerfile runs the build, and a site with Java runs it once by hand.
 
 ## 7. Incidents: many failures to one receiver (v1.6, as built in v1.7)
 

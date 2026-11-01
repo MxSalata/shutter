@@ -23,7 +23,7 @@ Method TestStatusAndReports()
 {
     Set s = ##class(Shutter.Util.SecondParser).Status()
     Do $$$AssertEquals(s.item, "Second Parser", "the item's name")
-    Do $$$AssertTrue(s.jar [ "shutter/pex/shutter-pex.jar", "the jar under the manager directory: " _ s.jar)
+    Do $$$AssertTrue(s.jar [ "mgr/pex/shutter-pex.jar", "the jar under the manager directory: " _ s.jar)
     If 's.available {
         Do $$$AssertTrue(s.probe [ "no jar", "without the jar the status says what is missing: " _ s.probe)
         Do $$$AssertEquals(##class(Shutter.Util.SecondParser).Report("MSH|^~\&|A|B|C|D|20261101000000||ADT^A01|X|P|2.5.1", .err), "", "and a report is refused")

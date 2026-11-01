@@ -2,10 +2,11 @@
 # Builds the Second Parser (pex/) with the IRIS image's own JDK: downloads the HAPI jars and checks each against its
 # pinned SHA-256 in the same step (a mismatch stops the build and leaves no jar behind), compiles the Java sources against
 # the PEX classes in IRIS's intersystems-utils and writes shutter-pex.jar. Usage: pex/build.sh [DEST]; DEST is the folder
-# that holds lib/ (the jars) and shutter-pex.jar, /usr/irissys/mgr/shutter/pex by default (the production item's classpath).
+# that holds lib/ (the jars) and shutter-pex.jar, /usr/irissys/mgr/pex by default (the production item's classpath;
+# beside the data volume mgr/shutter, not inside it, so a rebuilt image brings its own jar to an old volume).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-DEST="${1:-/usr/irissys/mgr/shutter/pex}"
+DEST="${1:-/usr/irissys/mgr/pex}"
 IRIS_LIB="${IRIS_JAVA_LIB:-/usr/irissys/dev/java/lib/1.8}"
 mkdir -p "$DEST/lib" "$DEST/classes"
 # name  url  sha256

@@ -14,10 +14,12 @@ Parameter CLASSNAME = "shutter.pex.SecondParser";
 
 Parameter REPORTCLASS = "shutter.pex.Hl7Report";
 
-/// The folder pex/build.sh fills: the jar and lib/ with HAPI and its dependencies, under the manager directory.
+/// The folder pex/build.sh fills: the jar and lib/ with HAPI and its dependencies, under the manager directory as pex/, beside
+/// shutter/ and not inside it: the image's data volume covers shutter/, and a jar in there would outlive the image it came
+/// with (an upgraded container would run the old one), while pex/ is the image's own and changes with it.
 ClassMethod Dir() As %String
 {
-    Quit ##class(%File).NormalizeDirectory(##class(%File).ManagerDirectory() _ "shutter/pex")
+    Quit ##class(%File).NormalizeDirectory(##class(%File).ManagerDirectory() _ "pex")
 }
 
 ClassMethod Jar() As %String

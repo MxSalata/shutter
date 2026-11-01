@@ -64,7 +64,7 @@ read it.
 
 **The Second Parser** (CONTRACTS 6.7) is a Java component: the production item "Second Parser" runs HAPI through PEX to give a
 second opinion on a message IRIS cannot read. The Docker image builds it (`pex/build.sh`: the jars from Maven Central with
-pinned SHA-256 checks, compiled with the image's own JDK into the manager directory's `shutter/pex/`). On an instance you
+pinned SHA-256 checks, compiled with the image's own JDK into the manager directory's `pex/`, outside the data volume). On an instance you
 install by hand, run `pex/build.sh` once with Java 11 or later on the machine, then run the install again or enable the item;
 without the jar the install leaves the item disabled, the evidence carries no second opinion and the Doctor's `second_parser`
 says so. Nothing else depends on it.
