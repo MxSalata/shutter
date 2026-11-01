@@ -26,8 +26,9 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     Set status = $SELECT($ISOBJECT(error): $CLASSMETHOD(json, "Str", error, "http_status"), 1: "")
     Set c."receiver_answer" = $SELECT(reason [ "unavailable": "unavailable", (reason [ "timeout") || (status = 504): "timeout", reason [ "duplicate": "duplicate", reason [ "version": "version_conflict", (reason '= "") || (status = 422) || (status = 409): "refused", status = 503: "unavailable", 1: "none")
     If (c."receiver_answer" = "none") && (c.delivery = "uncertain") Set c."receiver_answer" = "timeout"
-    // A withheld operation was never sent, so no receiver answered (T31).
-    If c.delivery = "withheld" Set c."receiver_answer" = "none"
+    // A withheld operation was never sent, so no receiver answered (T31); nor was a held message (v1.34), whose reason code
+    // (schema_unknown) is the feed's, not a receiver's.
+    If (c.delivery = "withheld") || (c.delivery = "unreadable") Set c."receiver_answer" = "none"
     // event (T31): the failed operation's event word; cancel_admit, cancel_transfer and cancel_discharge fold to cancel
     Set c.event = $SELECT($EXTRACT(case.Event, 1, 7) = "cancel_": "cancel", $LISTFIND($LISTBUILD("admit", "transfer", "discharge", "update", "merge"), case.Event): case.Event, 1: "other")
     // receipt

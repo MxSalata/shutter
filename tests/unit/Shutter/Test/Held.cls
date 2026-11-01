@@ -123,9 +123,9 @@ Method TestHeldCaseAndMatcher()
     While hi.%GetNext(, .c) { If (c.category = "MYSITE_2.5.1") && (c.namespace = $NAMESPACE) && (c.count >= 1) Set found = 1 }
     Do $$$AssertTrue((held.count >= 1) && found, "the held report counts it under its category: " _ held.%ToJSON())
     // The matcher: unreadable, with no answer from a receiver, before and after the schema is loaded (the catalogue decides).
-    Set summary = {"failure": {"kind": "unreadable"}, "validation": {"schema_known": false}}
+    Set summary = {"failure": {"kind": "unreadable", "reason_code": "schema_unknown"}, "validation": {"schema_known": false}}
     Set c = ##class(Shutter.Catalogue.Matcher).Conditions(case, summary)
-    Do $$$AssertEquals(c.delivery _ "|" _ c."receiver_answer", "unreadable|none", "unreadable, with no answer from a receiver")
+    Do $$$AssertEquals(c.delivery _ "|" _ c."receiver_answer", "unreadable|none", "unreadable, with no answer from a receiver: the reason code is the feed's, not a refusal")
     Set case.HeldSchema = "2.5.1"
     Set c = ##class(Shutter.Catalogue.Matcher).Conditions(case, {"failure": {"kind": "unreadable"}, "validation": {"schema_known": true}})
     Do $$$AssertEquals(c.delivery, "unreadable", "the word stays once the schema is loaded; the entry for a held message proposes the resend")
