@@ -116,7 +116,8 @@ type Recorded = {
   scenarios: Record<string, Record<string, { questions: Record<string, { answer: { answer: string } }> }>>;
 };
 function firstSentence(scenario: string, receiver: string, turn: string): string {
-  const text = (recordedAnswers as unknown as Recorded).scenarios[scenario][receiver].questions[turn].answer.answer;
+  const text = (recordedAnswers as unknown as Recorded).scenarios[scenario][receiver].questions[turn].answer
+    .answer;
   return text.split(/(?<=\.)\s/)[0];
 }
 

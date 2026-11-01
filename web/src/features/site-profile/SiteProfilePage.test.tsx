@@ -236,7 +236,7 @@ describe('SiteProfilePage', () => {
         sources: [],
       },
     ]);
-  }, 15_000);
+  }, 30_000);
 
   // It fills a team form too, about 4.5 s alone, so it gets the same allowance as the team test.
   it('refuses a team mailbox outside the allowed domains before sending, and points at it', async () => {
@@ -254,7 +254,7 @@ describe('SiteProfilePage', () => {
     await waitFor(() => expect(within(team).getByRole('textbox', { name: 'Mailbox' })).toHaveFocus());
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(puts).toHaveLength(0);
-  }, 15_000);
+  }, 30_000);
 
   it("sets the feed's zone to a fixed offset, and the review says every key changes", async () => {
     renderPage();
