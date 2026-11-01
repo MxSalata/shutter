@@ -14,6 +14,10 @@ Property CaseId As %String(MAXLEN = 32);
 /// The ids of the question's whatif.facts, comma separated; the runner sets them from the request's context.
 Property FactIds As %String(MAXLEN = 2000);
 
+/// What may be cited: the case section's evidence ids and the question's fact ids, comma separated; the runner sets them
+/// from the request's context. Empty means any (the core checks again).
+Property CiteIds As %String(MAXLEN = "");
+
 /// The accepted answer as JSON, or "".
 Property Result As %String(MAXLEN = "");
 
@@ -29,7 +33,7 @@ Method SubmitBoardAnswer(caseId As %String, answer As Shutter.Schema.BoardAnswer
     Set json = ##class(Shutter.Schema.Argument).AsJSON(.answer, .err)
     If err '= "" Set ..LastError = err Return {"accepted": false, "error": (err)}
     If (..CaseId '= "") && (caseId '= ..CaseId) Set ..LastError = "wrong case" Return {"accepted": false, "error": ("This run is for case " _ ..CaseId)}
-    Set problems = ##class(Shutter.Schema.BoardAnswer).Check(json, ..FactIds)
+    Set problems = ##class(Shutter.Schema.BoardAnswer).Check(json, ..FactIds, ..CiteIds)
     If problems.%Size() > 0 Set ..LastError = problems.%ToJSON() Return {"accepted": false, "problems": (problems), "hint": "Correct the fields named and call SubmitBoardAnswer again"}
     Set ..Result = json, ..Submissions = ..Submissions + 1, ..LastError = ""
     Return {"accepted": true, "next": "Submitted. Reply with one short sentence and stop; call no other tool."}

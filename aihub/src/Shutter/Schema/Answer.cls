@@ -13,19 +13,20 @@ Property Cites As list Of %String(%JSONFIELDNAME = "cites", MAXLEN = 64);
 /// high, medium or low.
 Property Confidence As %String(%JSONFIELDNAME = "confidence", MAXLEN = 8, VALUELIST = ",high,medium,low");
 
-/// Problems with an answer object as JSON text, as an array of messages; empty when its shape is right. Whether each
-/// cite is an evidence id or a fact id of this question is the core's check: it has the model view and the facts.
-ClassMethod Check(json As %String) As %DynamicArray
+/// Problems with an answer object as JSON text, as an array of messages; empty when its shape is right and, when
+/// <var>citeIds</var> is given (the case's evidence ids and the fact ids, comma separated), every cite's head is one of
+/// them, as the core checks it again (Shutter.Store.CaseQuestion.CiteKnown).
+ClassMethod Check(json As %String, citeIds As %String = "") As %DynamicArray
 {
     Set problems = []
     Set o = ##class(Shutter.Util.Json).Parse(json, .sc)
     If '$ISOBJECT(o) || $$$ISERR(sc) Do problems.%Push("answer must be a JSON object") Quit problems
-    Do ..CheckCommon(o, problems)
+    Do ..CheckCommon(o, problems, citeIds)
     Quit problems
 }
 
 /// The fields an Explain answer and a board answer share: answer, cites and confidence.
-ClassMethod CheckCommon(o As %DynamicObject, problems As %DynamicArray)
+ClassMethod CheckCommon(o As %DynamicObject, problems As %DynamicArray, citeIds As %String = "")
 {
     Set answer = ##class(Shutter.Util.Json).Str(o, "answer")
     If $ISOBJECT(answer) Set answer = ""
@@ -40,13 +41,29 @@ ClassMethod CheckCommon(o As %DynamicObject, problems As %DynamicArray)
             Do problems.%Push("cites must be an array of evidence ids and fact ids")
         } Else {
             Set cites = o.%Get("cites")
+            Set ids = $LISTFROMSTRING(citeIds, ",")
             For i = 0:1:cites.%Size() - 1 {
-                If (cites.%GetTypeOf(i) '= "string") || (cites.%Get(i) = "") Do problems.%Push("cites[" _ i _ "] must be an evidence id or a fact id (W1, W2, ...)")
+                If (cites.%GetTypeOf(i) '= "string") || (cites.%Get(i) = "") Do problems.%Push("cites[" _ i _ "] must be an evidence id or a fact id (W1, W2, ...)") Continue
+                Set c = $ZSTRIP(cites.%Get(i), "<>W"), head = $PIECE($PIECE($PIECE(c, ".", 1), "[", 1), ":", 1)
+                If (citeIds '= "") && '$LISTFIND(ids, c) && '$LISTFIND(ids, head) Do problems.%Push("cites[" _ i _ "] """ _ c _ """ is not citable: cite an evidence id of the case section (" _ ..Sample(citeIds) _ ", alone or with a path such as history[2]) or a fact id W<n>; the plan, the gate's checks and the findings are not cited")
             }
         }
     }
     Set c = ##class(Shutter.Util.Json).Str(o, "confidence")
     If $ISOBJECT(c) || ((c '= "") && '$LISTFIND($LISTBUILD("high", "medium", "low"), c)) Do problems.%Push("confidence must be high, medium or low")
+}
+
+/// A few of the citable ids, for a refusal's message.
+ClassMethod Sample(citeIds As %String) As %String [ Private ]
+{
+    Set out = "", n = 0
+    For i = 1:1:$LENGTH(citeIds, ",") {
+        Set id = $PIECE(citeIds, ",", i)
+        Continue:(id = "")||(id ? 1"W"1.N)
+        Set out = out _ $SELECT(out = "": "", 1: ", ") _ id, n = n + 1
+        Quit:n=6
+    }
+    Quit out
 }
 
 }

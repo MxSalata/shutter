@@ -73,6 +73,7 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
                 Set submit = $CLASSMETHOD("Shutter.Tools." _ terminal, "%New")
                 Set submit.CaseId = caseKey
                 If terminal = "SubmitBoardAnswer" Set submit.FactIds = ..FactIdsOf(spec.Context)
+                If (terminal = "SubmitAnswer") || (terminal = "SubmitBoardAnswer") Set submit.CiteIds = ..CiteIdsOf(spec.Context)
                 Do agent.ToolManager.AddTool(submit)
                 // The member's knowledge collection as search tools, when the library is built.
                 Do ..AttachKnowledge(agent, spec)
@@ -152,6 +153,24 @@ ClassMethod CaseKeyOf(spec As Shutter.Bridge.RunSpec, Output question As %Regist
     Set question = $CLASSMETHOD("Shutter.Store.CaseQuestion", "ByQuestionId", key)
     If '$ISOBJECT(question) || '$ISOBJECT(question.Case) Set question = "" Quit key
     Quit question.Case.CaseId
+}
+
+/// What a question's answer may cite, comma separated: the keys of the context's case section and the keys one level
+/// down in it (where the evidence may sit), and the fact ids, as Shutter.Store.CaseQuestion.CiteKnown accepts them.
+ClassMethod CiteIdsOf(context As %String) As %String
+{
+    Set ids = ..FactIdsOf(context)
+    Set o = ##class(Shutter.Util.Json).Parse(context, .sc)
+    If '$ISOBJECT(o) || (o.%GetTypeOf("case") '= "object") Quit ids
+    Set it = o.case.%GetIterator()
+    While it.%GetNext(.k, .v) {
+        Set ids = ids _ $SELECT(ids = "": "", 1: ",") _ k
+        If $ISOBJECT(v) && v.%IsA("%Library.DynamicObject") {
+            Set it2 = v.%GetIterator()
+            While it2.%GetNext(.k2) { Set ids = ids _ "," _ k2 }
+        }
+    }
+    Quit ids
 }
 
 /// The ids of a question context's whatif.facts, comma separated: the only facts a board answer may name.

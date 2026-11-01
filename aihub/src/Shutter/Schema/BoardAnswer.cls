@@ -25,14 +25,15 @@ Property Cites As list Of %String(%JSONFIELDNAME = "cites", MAXLEN = 64);
 /// high, medium or low.
 Property Confidence As %String(%JSONFIELDNAME = "confidence", MAXLEN = 8, VALUELIST = ",high,medium,low");
 
-/// Problems with a board answer as JSON text, as an array of messages; empty when its shape is right and every fact it
-/// names is one of factIds (the ids of the question's whatif.facts, comma separated).
-ClassMethod Check(json As %String, factIds As %String = "") As %DynamicArray
+/// Problems with a board answer as JSON text, as an array of messages; empty when its shape is right, every fact it
+/// names is one of factIds (the ids of the question's whatif.facts, comma separated) and, when citeIds is given, every
+/// cite is one of them (Shutter.Schema.Answer).
+ClassMethod Check(json As %String, factIds As %String = "", citeIds As %String = "") As %DynamicArray
 {
     Set problems = []
     Set o = ##class(Shutter.Util.Json).Parse(json, .sc)
     If '$ISOBJECT(o) || $$$ISERR(sc) Do problems.%Push("answer must be a JSON object") Quit problems
-    Do ##class(Shutter.Schema.Answer).CheckCommon(o, problems)
+    Do ##class(Shutter.Schema.Answer).CheckCommon(o, problems, citeIds)
     Set t = o.%GetTypeOf("perspectives")
     If (t '= "unassigned") && (t '= "null") {
         If t '= "array" {
