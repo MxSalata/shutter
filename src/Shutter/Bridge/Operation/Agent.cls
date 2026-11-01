@@ -70,7 +70,12 @@ Method OnAgentRequest(request As Shutter.Bridge.Msg.AgentRequest, Output respons
     Set runnerClass = $SELECT(spec.Mode = "replay": "Shutter.Bridge.Runner.Replay", 1: spec.RunnerClass)
     $$$TRACE("Agent run: " _ spec.AgentClass _ " (" _ spec.MemberCode _ ") in " _ spec.Mode _ " mode for " _ spec.CorrelationKey _ " via " _ runnerClass)
     Set start = $ZHOROLOG
-    If (runnerClass = "") || '##class(%Dictionary.CompiledClass).%ExistsId(runnerClass) {
+    // The day's model budget (Shutter.Util.Budget, v1.34): a run that would call a model is refused once the day's spend
+    // has reached the cap; a replay calls no model and is never refused.
+    If (spec.Mode '= "replay") && '##class(Shutter.Util.Budget).Allows(.budget) {
+        Set response.Status = "budget_exhausted"
+        Set response.Error = ##class(Shutter.Util.Budget).Refusal(budget)
+    } ElseIf (runnerClass = "") || '##class(%Dictionary.CompiledClass).%ExistsId(runnerClass) {
         Set response.Status = "error"
         Set response.Error = "Runner class not available: " _ runnerClass _ ". Install the aihub module for live runs, or set the Mode to replay."
     } Else {

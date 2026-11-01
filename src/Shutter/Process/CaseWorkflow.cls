@@ -525,7 +525,7 @@ Method AfterBoard(case As Shutter.Store.Case) As %Status
         // In replay mode a case outside the fixtures has no recording for anyone: the rules path plans the plain
         // resend and the gate judges it, instead of an escalation that says only "no findings" (B10).
         If ..AllNoRecord(case) {
-            Do case.Note("note", "No board member has a recording for this case (replay mode answers the fixtures only); the rules path proposes the plain resend and the gate judges it", "system")
+            Do case.Note("note", ..UnansweredNote(case), "system")
             Quit ..RulesOnly(case)
         }
         Quit case.Transition("escalated", "No board member produced usable findings; a person must look", "system")
@@ -546,8 +546,18 @@ Method AllNoRecord(case As Shutter.Store.Case) As %Boolean
 {
     Set cid = case.%Id(), sid = $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.%Id(), 1: ""), n = 0, other = 0
     &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.AgentRun WHERE "Case" = :cid AND Snapshot = :sid)
-    &sql(SELECT COUNT(*) INTO :other FROM Shutter_Store.AgentRun WHERE "Case" = :cid AND Snapshot = :sid AND Status <> 'no_record')
+    &sql(SELECT COUNT(*) INTO :other FROM Shutter_Store.AgentRun WHERE "Case" = :cid AND Snapshot = :sid AND Status <> 'no_record' AND Status <> 'budget_exhausted')
     Quit (+n > 0) && (+other = 0)
+}
+
+/// Why nobody on the board answered this snapshot: the day's model budget is spent (Shutter.Util.Budget, v1.34), or replay
+/// mode has no recording for the case (it answers the fixtures only). Either way the rules path proposes the plain resend.
+Method UnansweredNote(case As Shutter.Store.Case) As %String
+{
+    Set cid = case.%Id(), sid = $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.%Id(), 1: ""), n = 0
+    &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.AgentRun WHERE "Case" = :cid AND Snapshot = :sid AND Status = 'budget_exhausted')
+    If +n > 0 Quit "No board member could run: the day's model budget is spent (budget_exhausted); the rules path proposes the plain resend and the gate judges it"
+    Quit "No board member has a recording for this case (replay mode answers the fixtures only); the rules path proposes the plain resend and the gate judges it"
 }
 
 /// Whether the call being answered was made about a snapshot other than the case's current one.

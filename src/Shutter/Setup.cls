@@ -109,6 +109,8 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         If root '= "" Set root = ##class(%File).NormalizeDirectory(root)
         Set ^Shutter.Config("root") = root
         Set ^Shutter.Config("demo") = demo
+        // The day's model budget (Shutter.Util.Budget, v1.34): the cap from SHUTTER_DAILY_BUDGET_USD, 0 when unset.
+        Do ##class(Shutter.Util.Budget).Configure($SYSTEM.Util.GetEnviron("SHUTTER_DAILY_BUDGET_USD"))
         Set ^Shutter.Config("installedAt") = ##class(Shutter.Util.Time).NowUTC()
         Set ^Shutter.Config("version") = ..#VERSION
         If $GET(^Shutter.Config("mode")) = "" Set ^Shutter.Config("mode") = "board"
@@ -1109,6 +1111,8 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Set r."hl7_schemas" = ##class(Shutter.Util.Schemas).Report()
     // The live hospital's player, when the watched hospital has one (v1.34).
     Set r.live = ..LiveStatus()
+    // The day's model budget and what the live runs spent today (v1.34).
+    Set r.budget = ##class(Shutter.Util.Budget).Status()
     Set r.license = ##class(%DynamicObject).%FromJSON(..LicenseInfo())
     Try {
         New $NAMESPACE

@@ -916,6 +916,16 @@ shows what the model would see of a case.
 
 **The production review's agent** (v1.22; 13.6) is the one other place something leaves for a model, and it does not go through `ModelView.Reduce`: there is nothing to tokenise, by construction. Its context holds the review id, the namespace, the production and its state, the window, the summary, the findings without `evidence.example`, `annotationId`, `rank` and `explanation`, and the case aggregates per item (counts by failure kind, outcome, reason code and state; the newest case ids). The sweep never reads `CaseEvent.Text`, the operation key's patient and encounter pieces, `FailureText` or message content, so none can reach the context; item names, setting values, counts, header ids and case ids are operational identifiers, as the board's evidence carries them, and the error example text stays in the operator's `GET`. Nothing comes back to restore: the agent speaks in finding ids.
 
+**The day's model budget (v1.34).** `SHUTTER_DAILY_BUDGET_USD`, read by the installer into `^Shutter.Config("dailyBudgetUsd")`
+(`Shutter.Util.Budget`; 0, unset or not a number means no cap), caps what the live and record agent runs may spend between one
+00:00 UTC and the next. Before a run that would call a model, the Agent item asks `Budget.Allows()`, which sums the day's
+`AgentRun` rows' `CostUSD` as `GET /costs` does (a replay or a run the API mimic answered spent nothing); once the spend has
+reached the cap the run is not sent, and the response's status is `budget_exhausted` with an error naming the cap, the spend
+and when it resets. A board whose members all answered so takes the rules path and the gate judges the plain resend, as it
+does when replay mode has no recording (the case's note says which); a question or a review fails with the status. `GET
+/settings` and the Doctor carry `budget: {dailyUsd, spentTodayUsd, exhausted, since, resetsAt}`. The public demo sets the cap
+with an API key of its own, so a day of visitors spends at most the cap.
+
 ## 10. Escalation by email (v1.11)
 
 **Correcting the history** (v1.23). When a `history_of_record` receiver's case escalates with the outcome
@@ -1323,7 +1333,10 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   the install or `Hospital.Setup_SetLive(1)` turns it on; `^Hospital.Live` records the plays and the status that the Doctor
   and `GET /settings` carry as `live`; the hospital install compiles the production class in its namespace on every run. The
   board's coordinator and members have 50000-token budgets, and a suggested question's record key base names the case's
-  receiver (`question:<S>:<encounter>:<event>[:<receiver>]`, 14.2), so S22's two cases record apart.
+  receiver (`question:<S>:<encounter>:<event>[:<receiver>]`, 14.2), so S22's two cases record apart. The day's model budget
+  (9): `SHUTTER_DAILY_BUDGET_USD` into `^Shutter.Config("dailyBudgetUsd")` (`Shutter.Util.Budget`), a live or record run
+  refused with `budget_exhausted` once the day's spend reaches it, the board on the rules path then, `budget` in `GET
+  /settings` and the Doctor.
 - v1.33, 1 Nov 2026: the demo receiver's fault `delay_response` (1.5): a real operation is held for `seconds`, then applied
   and answered as usual, so a newer message can be on its way to the receiver while a case is about to resend (S24); the
   scenario runner's fault step passes `seconds`.
