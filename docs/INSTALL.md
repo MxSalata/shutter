@@ -215,3 +215,30 @@ category has to be loaded in Shutter's namespace too.
   loaded, reinvestigate the case from its page; the fresh evidence validates the message and the case goes on.
 - **Shape B.** When Shutter's items live in your own production, the HL7 service is yours and its category is already
   loaded there; the check still matters for messages forwarded from other namespaces.
+
+## 8. Upgrading in place
+
+The image keeps Shutter's code; the `shutter-mgr` volume keeps the data: the data databases of the SHUTTER, HOSPITAL and
+RECORDS namespaces under `db/`, and the HL7 folders. So `docker compose down` and `up` keep every case, approval, review,
+profile change and recording, and a rebuilt image (a newer Shutter) starts against the same data. Proven on 1 November 2026:
+a 26 October build played two scenarios and a review, the container was removed and started again (the cases stayed), then
+the image was rebuilt at that day's main over the same volume (the cases, their plans, approvals and the review stayed, the
+new catalogue entries, recordings, gate policy and the Second Parser were there, and new scenarios played).
+
+After a rebuild, run the install once inside the new container, which re-reads the production's definition and the seeds
+into the kept data and is safe to repeat:
+
+```sh
+docker compose exec shutter iris session IRIS -U SHUTTER "##class(Shutter.Setup).Install(\"/home/irisowner/dev/\", 1)"
+docker compose exec shutter iris session IRIS -U HOSPITAL "##class(Hospital.Setup).Install(\"SHUTTER\")"
+```
+
+(or `SELECT Shutter.Setup_Install('/home/irisowner/dev/', 1)` in SHUTTER and `SELECT Hospital.Setup_Install('SHUTTER')` in
+HOSPITAL from any SQL tool; the second is for the demo hospital, a demo install only; a site install uses `demo` 0 and its
+own root). The install recompiles each production's class in its namespace, so items that are new in the image reach the
+kept production definition, then updates the running production, seeds what is new and leaves what is there. Then
+`SELECT Shutter.Setup_Doctor()`: `missing_items` and `disabled_items` must be empty, and the rest says what the instance
+has. Images built before 1 November 2026 kept the SHUTTER data database at the install directory, outside the volume (the
+installer's `DATADIR` was a name `%Installer` reserves); on such an instance the cases live in the container and go with it,
+so take what you need from it before replacing it, or copy `/usr/irissys/IRIS.DAT` out, create the database under
+`mgr/shutter/db/SHUTTERDATA` and mount it there.

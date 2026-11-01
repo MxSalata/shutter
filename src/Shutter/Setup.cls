@@ -692,6 +692,11 @@ ClassMethod StartProduction() As %Status
     Set prod = "Shutter.Production"
     If '##class(%Dictionary.CompiledClass).%ExistsId(prod) Quit sc
     If ..ProductionName() '= prod Quit sc
+    // The production definition (Ens.Config.Production) lives in the data database, which an upgraded container keeps from
+    // before, while the class came with the image: compiling the class here runs its projection and brings the definition
+    // up to the class, so items new in this image (the Second Parser of v1.34, say) exist before the production is updated.
+    Set sc = $SYSTEM.OBJ.Compile(prod, "ck-d")
+    Quit:$$$ISERR(sc) sc
     Set sc = ..ApplyDefaultSettings()
     Quit:$$$ISERR(sc) sc
     Try {

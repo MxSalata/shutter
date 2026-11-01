@@ -34,7 +34,8 @@ services:
       # The HL7 folders (drop files into in/ to feed Shutter's production by hand, or into hospital/in/ to feed the
       # demo hospital's; the scenarios do it for you) and, under db/, the data databases of both namespaces: cases,
       # approvals, incidents, the site profile and the provider configuration survive `docker compose down` and `up`,
-      # and a rebuilt image brings new code to the same data. `down -v` wipes them.
+      # and a rebuilt image brings new code to the same data; after a rebuild, run the install once more inside the new
+      # container (docs/INSTALL.md, section 8), so the kept data learns the new items and seeds. `down -v` wipes them.
       - shutter-mgr:/usr/irissys/mgr/shutter
 volumes:
   shutter-mgr:
