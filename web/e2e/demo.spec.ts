@@ -1,11 +1,21 @@
 import { expect, test, type Page } from '@playwright/test';
 import { skipWelcome } from './guide';
+import recordedAnswers from '../src/mocks/recorded-questions.json' with { type: 'json' };
 
 /**
  * What the demo build shows a judge first: the sign-in page's "Try the demo", then the Scenarios page's guided path
  * through the recorded cases, whose links open the cases they name.
  */
 const go = (page: Page, path: string) => page.goto(`./#${path}`);
+
+// The recorded answers' own words, so a recording made again doesn't break the test: the first sentence of an answer.
+type Recorded = {
+  scenarios: Record<string, Record<string, { questions: Record<string, { answer: { answer: string } }> }>>;
+};
+const firstSentence = (scenario: string, receiver: string, turn: string) =>
+  (recordedAnswers as unknown as Recorded).scenarios[scenario][receiver].questions[turn].answer.answer.split(
+    /(?<=\.)\s/,
+  )[0];
 
 // The guide's welcome would cover the screens these tests are about; guide.spec.ts tests it
 test.beforeEach(({ page }) => skipWelcome(page));
@@ -174,7 +184,7 @@ test.describe('Ask about this case', () => {
     await expect(
       thread.getByRole('heading', { name: 'What did the dissenting specialist say?' }),
     ).toBeFocused();
-    await expect(thread).toContainText('The only specialist who disagreed was Conformance');
+    await expect(thread).toContainText(firstSentence('S8', 'Downstream Out', 'c4.1'));
     await expect(thread).not.toContainText('sample data');
 
     const card = panel.getByRole('region', { name: 'What if: the setting behind this outcome' });
