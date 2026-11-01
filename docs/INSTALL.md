@@ -52,6 +52,7 @@ Environment variables read when the installer runs:
 | `SHUTTER_DEMO_PASSWORD` | The demo users' password (default `shutter`); demo only. |
 | `SHUTTER_PUBLIC_DEMO_PASSWORD` | When set, the user `demo` exists with the role `Shutter_Demo`: reads, reinvestigates, approves and asks, and can neither run or reset scenarios nor save the site profile, the library or a schema. For a public demo; no default. |
 | `SHUTTER_TRACE_PASSWORD` | When set, the user `demo-trace` exists with the role `Shutter_Trace`: the Visual Trace and the messages in the Management Portal, read only. No default. |
+| `SHUTTER_DAILY_BUDGET_USD` | A cap in US dollars on what the agents' live runs may spend per day (00:00 to 00:00 UTC; CONTRACTS 9). At the cap, runs are refused with `budget_exhausted`, the board falls back to the rules path and the gate still judges the resend. Empty or 0: no cap. |
 | `SHUTTER_LIVE` | `1` turns on the live hospital (CONTRACTS 4.4): the demo hospital plays one of Shutter's scenarios every 7 minutes with fresh patients at present times and real faults, and sends an ordinary message a minute between stories. Demo only; off by default. `SELECT Hospital.Setup_SetLive(1)` in the HOSPITAL namespace switches it later. |
 | `SHUTTER_MESSAGE_PURGE` | `1` creates the daily task "Shutter message purge" (`Ens.Util.Tasks.Purge`, every message type in the namespace). On by default in the demo, off otherwise: only a namespace that holds nothing but Shutter should purge this way. |
 | `SHUTTER_MESSAGE_DAYS` | Days the purge keeps (default 90). |

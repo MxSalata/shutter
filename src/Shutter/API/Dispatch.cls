@@ -1332,6 +1332,8 @@ ClassMethod Settings() As %Status
     Do o.%Set("demo", ''$GET(^Shutter.Config("demo")), "boolean")
     // The live hospital's player (v1.34), for the app's banner: {enabled, every_minutes, scenarios, last_played, next}.
     Set o.live = ##class(Shutter.Setup).LiveStatus()
+    // The day's model budget (v1.34): {dailyUsd, spentTodayUsd, exhausted, since, resetsAt}.
+    Set o.budget = ##class(Shutter.Util.Budget).Status()
     // The API mimic's switch (CONTRACTS 4), read once for every item: while it is set, an item that resolves to live is
     // answered by the mimic, with no model, and the reply says so.
     Set mock = ##class(Shutter.Setup).MockConfig()
