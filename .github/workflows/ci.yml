@@ -603,12 +603,14 @@ jobs:
       # A plain build: the Dockerfile copies the whole repository before installing, so every commit changes every layer
       # after the base, and a layer cache (buildx with the GitHub Actions cache, tried on 20 Oct) saved nothing and ran
       # the runner out of disk keeping a second copy of the image. The public base has no AI Hub package, so the image
-      # gets the core (replay) edition: WITH_AIHUB=0.
+      # gets the core (replay) edition: WITH_AIHUB=0. PEX_STRICT=1 fails the build if the Second Parser can't be built
+      # here, so the 2026.2 path stays checked; a judge's build skips it with the reason instead.
       - name: Build the image from the public base
         run: >-
           docker build --progress plain
           --build-arg IRIS_IMAGE="$IRIS_IMAGE"
           --build-arg WITH_AIHUB=0
+          --build-arg PEX_STRICT=1
           -t "shutter:ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" .
       - name: Start it
         # The startup alerts are cleared by the production's own start; no after-start script is needed. The container and
