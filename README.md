@@ -25,7 +25,7 @@ The three specialists (conformance, encounter and impact) and the coordinator ar
 
 ## Try it
 
-**Online demo:** [link at submission], in replay mode. Sign in with **Try the demo**, or as `approver` / `shutter`.
+**Online demo:** [link at submission]: a live hospital where a story fails every 7 minutes and Shutter recovers it, the board running live on the cases handed to it. Sign in as `demo` / `shutter`. The Management Portal's Visual Trace, read only: `demo-trace` / [password at submission].
 
 **On your machine:** Docker and the IRIS for Health AI Hub image from InterSystems' [Early Access portal](https://evaluation.intersystems.com/Eval/early-access/AIHub). The tested build is 154.
 
