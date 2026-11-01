@@ -11,11 +11,17 @@ import { theme } from '@/theme';
 import CasePage from '../CasePage';
 import recordedAnswers from '@/mocks/recorded-questions.json';
 import type { CaseQuestion, WhatIfFact } from '@/api/types';
-import { SAMPLE_LABEL, answersBadge, provenanceText } from './labels';
-
-/** What the recorded answers say about themselves: the day of the live recording and its model. */
-const RECORDED_LABEL = 'Recorded live on 1 November 2026 with claude-opus-5-5';
+import { SAMPLE_LABEL, TRIAL_NO_ANSWER, answerParts, answersBadge, provenanceText } from './labels';
 import { WhatIfCard } from './WhatIfCard';
+import { layer1Words } from '@/test/words';
+import { useAppearance } from '@/stores/appearance';
+
+/**
+ * What the recorded answers say about themselves: the day of the recording and its model. The trial keeps the word
+ * "live" for the live system, so there a recording is one made from a real run.
+ */
+const RECORDED_LABEL = 'Recorded from a real run on 1 November 2026 with claude-opus-5-5';
+const LIVE_RECORDED_LABEL = 'Recorded live on 1 November 2026 with claude-opus-5-5';
 
 // The demo's answers are labelled by the page's TRIAL flag, switched here per test
 const demo = vi.hoisted(() => ({ value: true }));
@@ -79,6 +85,7 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 beforeEach(() => {
   resetMock('approver');
+  useAppearance.setState({ detail: 'plain' });
   demo.value = true;
   recorded.value = true;
   posts = [];
@@ -108,7 +115,22 @@ function renderCase(caseId: string, query = '?ask=1') {
   return router;
 }
 
-/** Below laptop width (jsdom matches no media query) the panel is a drawer: a dialog named by its title. */
+/** The same, for a test that renders more than one case in turn. */
+function renderCaseUnmountable(caseId: string, query = '?ask=1') {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const router = createMemoryRouter([{ path: '/cases/:caseId', element: <CasePage /> }], {
+    initialEntries: [`/cases/${caseId}${query}`],
+  });
+  return render(
+    <MantineProvider theme={theme}>
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </MantineProvider>,
+  );
+}
+
+/** Below 1440 px (jsdom matches no media query) the panel is a drawer: a dialog named by its title. */
 const panel = () => screen.findByRole('dialog', { name: 'Ask about this case' });
 
 // The recorded answers' own words, so a recording made again doesn't break the tests: the first sentence of an answer.
@@ -151,9 +173,8 @@ describe('Ask about this case', () => {
       'What would make this safe to resend?',
       "What if we trusted the bed manager's times?",
     ]);
-    expect(
-      within(thread).getByText(`${RECORDED_LABEL}. With an API key you can ask your own questions.`),
-    ).toBeInTheDocument();
+    // In the trial the box below says what a question of one's own needs, so the head names the recording only
+    expect(within(thread).getByText(`${RECORDED_LABEL}.`)).toBeInTheDocument();
     // Each turn says its tier; the board's turn gives each member's view and points at the What-if card
     expect(within(turns[0]).getByText(`Explain tier. ${RECORDED_LABEL}.`)).toBeInTheDocument();
     expect(within(thread).queryByText(/sample data/i)).not.toBeInTheDocument();
@@ -185,7 +206,7 @@ describe('Ask about this case', () => {
     );
     await userEvent.click(within(p).getByRole('tab', { name: /Ask the board/ }));
     expect(within(p).getByRole('tab', { name: /Ask the board/ })).toHaveTextContent(
-      'Three specialists and the coordinator. Deeper, slower.',
+      'Three specialist agents and the coordinator agent. Deeper, slower.',
     );
     expect(chips()).toEqual([
       "What if we trusted the bed manager's times? (answered, shown below)",
@@ -213,16 +234,36 @@ describe('Ask about this case', () => {
     expect(posts).toHaveLength(1);
   });
 
-  it('locks free text without a key and says so, in the demo', async () => {
+  it('shows the box for a question of your own disabled in the trial, with its reason, steering to the suggested ones', async () => {
     renderCase('C-000008');
     const p = await panel();
-    expect(
-      await within(p).findByText(
-        'Free text needs a model key. In this demo, pick a suggested question above.',
+    const box = await within(p).findByRole('textbox', { name: 'Your own question' });
+    expect(box).toBeDisabled();
+    expect(box).toHaveAttribute('placeholder', 'In the trial, pick a suggested question');
+    expect(box).toHaveAccessibleDescription('Needs a real model: not in the trial.');
+    expect(within(p).getByRole('button', { name: 'Ask' })).toBeDisabled();
+    expect(within(p).queryByText('Locked: no key')).not.toBeInTheDocument();
+    expect(within(p).queryByText(/model key/)).not.toBeInTheDocument();
+  });
+
+  it('answers a suggested question the trial has no recording for with its own words, not the server text', async () => {
+    server.use(
+      http.post(`${BASE}/cases/:id/questions`, () =>
+        HttpResponse.json(
+          {
+            error: 'no_recorded_answer',
+            detail: 'This question has no recorded answer; a judge can ask it live',
+          },
+          { status: 409 },
+        ),
       ),
-    ).toBeInTheDocument();
-    expect(within(p).getByText('Locked: no key')).toBeInTheDocument();
-    expect(within(p).queryByRole('textbox')).not.toBeInTheDocument();
+    );
+    renderCase('C-000008');
+    const p = await panel();
+    await userEvent.click(await within(p).findByRole('button', { name: 'Which movement is current?' }));
+    expect(await within(p).findByText('No recorded answer')).toBeInTheDocument();
+    expect(within(p).getByText(TRIAL_NO_ANSWER)).toBeInTheDocument();
+    expect(within(p).queryByText(/a judge can ask it live/)).not.toBeInTheDocument();
   });
 
   it('keeps free text for a judge on the public demo, and tells its own user so', async () => {
@@ -290,7 +331,10 @@ describe('Ask about this case', () => {
     ).toBeInTheDocument();
     // Outside the demo the example says where it came from all the same: a replayed recording, with its day and model
     expect(within(p).queryByText(new RegExp(SAMPLE_LABEL.replace(/[()]/g, '\\$&')))).not.toBeInTheDocument();
-    expect(within(p).getAllByText(new RegExp(RECORDED_LABEL)).length).toBeGreaterThan(0);
+    expect(within(p).getAllByText(new RegExp(LIVE_RECORDED_LABEL)).length).toBeGreaterThan(0);
+    expect(
+      within(p).getByText(`${LIVE_RECORDED_LABEL}. With an API key you can ask your own questions.`),
+    ).toBeInTheDocument();
     await userEvent.keyboard('{Escape}');
 
     server.use(
@@ -399,6 +443,104 @@ describe('Ask about this case', () => {
   });
 });
 
+describe("an answer's opening, and the rest one click away", () => {
+  /** A recorded answer's whole text. */
+  const answerOf = (scenario: string, receiver: string, turn: string) =>
+    (recordedAnswers as unknown as Recorded).scenarios[scenario][receiver].questions[turn].answer.answer;
+
+  it('opens on the first sentences up to about 40 words, never cutting one, and keeps the whole answer', () => {
+    const text = answerOf('S8', 'Downstream Out', 'c1.1');
+    const { lead, rest } = answerParts(text);
+    expect(lead.startsWith(firstSentence('S8', 'Downstream Out', 'c1.1'))).toBe(true);
+    expect(lead.split(/\s+/).length).toBeLessThanOrEqual(40);
+    expect(lead).toMatch(/[.!?]$/);
+    expect(`${lead} ${rest}`.replace(/\s+/g, ' ')).toBe(text.replace(/\s+/g, ' '));
+    // A short first paragraph is the opening as it stands
+    expect(answerParts('Short and plain.\nThe second paragraph.')).toEqual({
+      lead: 'Short and plain.',
+      rest: 'The second paragraph.',
+    });
+    expect(answerParts('One sentence only.')).toEqual({ lead: 'One sentence only.', rest: '' });
+  });
+
+  it("opens every recorded answer within a card body's 40 words", () => {
+    const all = Object.values((recordedAnswers as unknown as Recorded).scenarios).flatMap((byReceiver) =>
+      Object.values(byReceiver).flatMap((r) => Object.values(r.questions).map((q) => q.answer.answer)),
+    );
+    expect(all.length).toBeGreaterThan(20);
+    for (const text of all) {
+      const { lead, rest } = answerParts(text);
+      expect(lead.split(/\s+/).length).toBeLessThanOrEqual(40);
+      expect(`${lead} ${rest}`.replace(/\s+/g, ' ')).toBe(text.replace(/\s+/g, ' ').trim());
+    }
+  });
+
+  it('closes the drawer for a citation, and lands on the cited evidence with its heading focused', async () => {
+    if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
+    const router = renderCase('C-000008');
+    const p = await panel();
+    const thread = await within(p).findByRole('region', { name: 'Example conversation' });
+    const first = within(thread).getAllByRole('article')[0];
+    await userEvent.click(within(first).getByRole('button', { name: 'Downstream state' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(router.state.location.search).toBe('?tab=evidence');
+    const heading = await screen.findByRole('heading', { name: "Downstream Out's encounter" });
+    await waitFor(() => expect(heading).toHaveFocus());
+  });
+
+  it('shows each turn its opening, with "Show the whole answer" for the rest', async () => {
+    renderCase('C-000008');
+    const p = await panel();
+    const thread = await within(p).findByRole('region', { name: 'Example conversation' });
+    const first = within(thread).getAllByRole('article')[0];
+    const more = within(first).getByRole('button', { name: 'Show the whole answer' });
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+    // The whole answer stays on the page, out of the first layer until opened
+    const text = answerOf('S8', 'Downstream Out', 'c1.1');
+    const last = text.split(/(?<=[.!?])\s+/).at(-1)!;
+    expect(first).toHaveTextContent(last);
+    expect(layer1Words(first).join(' ')).not.toContain(last.split(' ').slice(0, 6).join(' '));
+    await userEvent.click(more);
+    expect(more).toHaveAttribute('aria-expanded', 'true');
+    // The board's turn keeps each agent's view with the rest of its answer
+    const board = within(thread).getAllByRole('article')[2];
+    const views = board.querySelector('[aria-label="Each agent\'s view"]')!;
+    expect(views.closest('[data-tech-detail]')).toHaveAttribute('data-tech-detail', 'closed');
+    expect(views).toHaveTextContent('Encounter Integrity:');
+  });
+
+  // The spec gives Ask no budget of its own: each opening keeps to a card body's 40 words (DESIGN 1.4), and the
+  // panel, the What-if card's 184 words included, to 550 in Plain and 1.5 times that in Technical
+  it('keeps the panel to its word budget: 550 words in Plain, 1.5 times that in Technical', async () => {
+    renderCase('C-000008');
+    let p = await panel();
+    await within(p).findByRole('region', { name: 'Example conversation' });
+    await within(p).findByRole('region', { name: 'What if: the setting behind this outcome' });
+    expect(layer1Words(p).length).toBeLessThanOrEqual(550);
+    await userEvent.keyboard('{Escape}');
+    useAppearance.setState({ detail: 'technical' });
+    await userEvent.click(screen.getByRole('button', { name: 'Ask about this case' }));
+    p = await panel();
+    await within(p).findByRole('region', { name: 'Example conversation' });
+    await within(p).findByRole('region', { name: 'What if: the setting behind this outcome' });
+    expect(layer1Words(p).length).toBeLessThanOrEqual(825);
+  });
+
+  it('says "live" nowhere in its first layer in the trial, but for "live system"', async () => {
+    for (const caseId of ['C-000008', 'C-000002']) {
+      const { unmount } = renderCaseUnmountable(caseId);
+      const p = await panel();
+      await within(p).findByRole('region', { name: 'Example conversation' });
+      await within(p).findByRole('region', { name: 'What if: the setting behind this outcome' });
+      const words = layer1Words(p)
+        .join(' ')
+        .replace(/live system/gi, '');
+      expect(words).not.toMatch(/\blive\b/i);
+      unmount();
+    }
+  });
+});
+
 describe('where the answers came from', () => {
   const question = (over: Partial<CaseQuestion>): CaseQuestion => ({
     questionId: 'Q-1',
@@ -457,7 +599,7 @@ describe('where the answers came from', () => {
     );
     demo.value = true;
     expect(answersBadge([live])).toBe('Recorded answers');
-    expect(provenanceText(live)).toBe('Recorded live on 25 October 2026 with model-x');
+    expect(provenanceText(live)).toBe('Recorded from a real run on 25 October 2026 with model-x');
     recorded.value = false;
     expect(answersBadge([live])).toBe('Sample answers');
     expect(provenanceText(live)).toBe(SAMPLE_LABEL);
