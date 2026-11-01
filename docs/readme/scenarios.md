@@ -1,6 +1,6 @@
 # Scenarios, step by step, and what to look for
 
-The README's "What the judges should look at" picks out a few of these. This page has every scenario and a checklist of where each part of the task shows. Sign in as `approver` (password `shutter`) on your own instance, or with "Try the demo" in the online demo. The online demo shows each scenario's recorded outcome and holds S2's case at its approval, so the approval in step 3 works there too (it replays the recorded outcome); the approvals in steps 6, 8 and 10 work on your own instance only.
+The README's "What to look at" picks out a few of these. This page has every scenario and a checklist of where each part of the task shows. Sign in as `approver` (password `shutter`) on your own instance, or with "Try the demo" in the online demo. The online demo shows each scenario's recorded outcome and holds S2's case at its approval, so the approval in step 3 works there too (it replays the recorded outcome); the approvals in steps 6, 8 and 10 work on your own instance only.
 
 ## Every scenario
 

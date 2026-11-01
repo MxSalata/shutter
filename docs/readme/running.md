@@ -1,6 +1,6 @@
 # Running Shutter: more detail
 
-The README's Run it section has the commands. This page keeps the detail that does not fit there.
+The README's Try it and Run details sections have the commands. This page keeps the detail that does not fit there.
 
 ### Notes on the install
 
