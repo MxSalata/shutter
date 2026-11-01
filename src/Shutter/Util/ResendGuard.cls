@@ -1,7 +1,8 @@
 /// The failsafe at the point of the resend (CONTRACTS 6.5, v1.29; the owner's requirement of 26 Oct 2026): before Shutter
 /// writes a case's operation again, the messages of the same encounter that reached Shutter after the case's own and are not
 /// yet delivered to the case's receiver are listed, from the feed's deliveries (a ward message queued for the receiver with
-/// no answer yet) and the exact index (a message received and not yet routed, or on a route Shutter does not watch). A
+/// no answer yet; for a case forwarded from a watched production, that production's deliveries too, v1.34) and the exact
+/// index (a message received and not yet routed, or on a route Shutter does not watch). A
 /// resend with one pending is refused by the connector and blocked by the gate (NEWER_MESSAGE_PENDING), and the case waits
 /// for that message's delivery, after which it is planned again on fresh evidence: the later message may supersede the
 /// resend, and nothing is written out of order. Classify is pure, so a test runs it without a message store.
@@ -14,10 +15,38 @@ ClassMethod Pending(case As Shutter.Store.Case) As %DynamicArray
 {
     If (case.EncounterId = "") || (case.EncounterId = "-") Quit []
     Set receiver = case.Receiver
-    Set deliveries = ##class(Shutter.Index.Timeline).Deliveries(case.EncounterId, receiver)
+    // A case forwarded from a watched production (CONTRACTS 11) names its namespace: the newer message of the encounter may
+    // be queued or in flight there, so that production's deliveries count too (v1.34).
+    Set deliveries = ##class(Shutter.Index.Timeline).Deliveries(case.EncounterId, receiver, case.SourceNamespace)
     Set indexed = []
     Try { Set indexed = ##class(Shutter.Index.Message).ForVisit(case.EncounterId) } Catch { Set indexed = [] }
     Quit ..Classify(deliveries, indexed, case.OperationKey, ..SinceOf(case), receiver)
+}
+
+/// The forwarded cases waiting for a message (WaitsOnMessage, CONTRACTS 11 and 6.5, v1.34) whose message the watched
+/// production has since delivered, released: Shutter's own Ward item releases the cases of Shutter's feed as it delivers,
+/// but a watched production's connector knows nothing of Shutter, so the HL7 Index item asks here every few seconds. A case
+/// is released when no pending message of its encounter carries the awaited control id any more; the note says the
+/// delivery's outcome. Returns how many were released; nothing here throws.
+ClassMethod ReleaseForwardedWaits() As %Integer
+{
+    Set n = 0, json = "Shutter.Util.Json"
+    Try {
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE WaitsOnMessage <> '' AND State IN ('blocked', 'escalated') AND SourceNamespace <> '' AND SourceNamespace <> ?", $NAMESPACE)
+        While rs.%Next() {
+            Set case = ##class(Shutter.Store.Case).%OpenId(rs.%Get("ID"))
+            Continue:'$ISOBJECT(case)
+            Set control = case.WaitsOnMessage, still = 0, outcome = ""
+            Set pending = ..Pending(case), pi = pending.%GetIterator()
+            While pi.%GetNext(, .p) { If $CLASSMETHOD(json, "Str", p, "control_id") = control Set still = 1 }
+            Continue:still
+            Set rows = ##class(Shutter.Index.Timeline).DeliveryRowsIn(case.SourceNamespace, case.EncounterId, case.Receiver, "2000-01-01 00:00:00"), ri = rows.%GetIterator()
+            While ri.%GetNext(, .r) { If $CLASSMETHOD(json, "Str", r, "source_message_id") = control Set outcome = $CLASSMETHOD(json, "Str", r, "outcome") }
+            Set n = n + ##class(Shutter.Store.Case).ReleaseWaitingOnMessage(control, $SELECT(outcome '= "": outcome _ " ", 1: "") _ "in " _ case.SourceNamespace)
+        }
+    } Catch ex {
+    }
+    Quit n
 }
 
 /// When the case's own message reached Shutter: its source header's TimeCreated, else the case's opening time in the
