@@ -293,8 +293,8 @@ def main():
     note = {"findingId": finding["id"], "status": "intended",
             "reason": f"Review check {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}: intended for the check, then deleted"}
     status, body = operator.call("POST", path, note, key=str(uuid.uuid4()))
-    check("operator: POST /production-reviews/{id}/annotations is 403 forbidden, naming Shutter_Approve",
-          status == 403 and (body or {}).get("error") == "forbidden" and "Shutter_Approve" in (body or {}).get("detail", ""),
+    check("operator: POST /production-reviews/{id}/annotations is 403 forbidden, naming Shutter_Configure",
+          status == 403 and (body or {}).get("error") == "forbidden" and "Shutter_Configure" in (body or {}).get("detail", ""),
           f"{status} {body}")
     status, body = approver.call("POST", path, {"findingId": "F999", "status": "intended", "reason": "x"},
                                  key=str(uuid.uuid4()))

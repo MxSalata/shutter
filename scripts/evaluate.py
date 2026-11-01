@@ -7,7 +7,7 @@ cited, and what the runs cost in tokens, money and time. No model calls and no I
 
 Inputs: the recordings (fixtures/records/*.json, one per board member and case, as check-records.py reads them, with
 the evidence snapshot each run received in its transcript; files that are not a board member's are listed apart, and
-the production review's recordings, which no board decided, are left out of both), the expected outcomes
+the production review's recordings, which no board decided, and the suggested questions' are left out of both), the expected outcomes
 (fixtures/scenarios.json), the catalogue (knowledge/catalogue/catalogue.json), the seeded model prices
 (Shutter.Store.ModelPrice's Seed, read from its source) and the played outcomes in docs/readme/comparison.md.
 --check builds both files in memory and compares them with the committed ones (exit 1 on a difference), like
@@ -39,6 +39,8 @@ KEY_RE = re.compile(r"^scenario:(?P<scenario>S\d+):(?P<encounter>[^:|]+):(?P<eve
                     r"\|(?P<member>[a-z]+)\|(?P<cfg>\d+)(?:\|round(?P<round>\d+))?$")
 # The production review's key, as check-records.py reads it: review:<namespace>:<production>|review|1|<fingerprint>
 REVIEW_KEY_RE = re.compile(r"^review:[A-Za-z0-9_%]+:[A-Za-z0-9_.]+\|review\|1\|(?:[0-9a-f]{64}|)$")
+# A suggested question's key (CONTRACTS 14.2): its recording answers a question about a case, not the case itself
+QUESTION_KEY_PREFIX = "question:"
 # A catalogue entry's preferred outcome as the board's disposition: "none" closes the case with nothing sent
 OUTCOME_DISPOSITION = {"none": "superseded", "reconcile": "reconcile", "escalate": "escalate", "resend": "resend",
                        "resend_chain": "resend", "resend_latest": "resend", "resend_unconditional": "resend"}
@@ -97,13 +99,14 @@ def evidence_of(d):
 
 def load_runs(prices):
     """The board members' recordings, and the files not used here with the reason for each. A production review's
-    recording is neither: it explains a review, not a case, and check-records.py checks it."""
+    recording is neither: it explains a review, not a case, and check-records.py checks it; nor is a suggested
+    question's, which answers a question about a case after the board decided it."""
     runs, others = [], []
     for path in sorted(glob.glob(os.path.join(RECORDS, "*.json"))):
         text = open(path, encoding="utf-8").read()
         d = json.loads(text)
         key = d.get("key", "")
-        if REVIEW_KEY_RE.match(key):
+        if REVIEW_KEY_RE.match(key) or key.startswith(QUESTION_KEY_PREFIX):
             continue
         m = KEY_RE.match(key)
         if not m:

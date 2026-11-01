@@ -153,11 +153,12 @@ def main():
     annotations = f"/production-reviews/{review_id}/annotations"
     note = {"findingId": "F1", "status": "intended", "reason": "roles check"}
     status, body = operator.call("POST", annotations, note, idempotent=True)
-    check(f"operator: POST {annotations} is 403 forbidden, naming Shutter_Approve",
-          status == 403 and error_of(body) == "forbidden" and "Shutter_Approve" in (body or {}).get("detail", ""), f"{status} {body}")
+    # Annotating a review changes how the site reads it, so it needs Shutter_Configure (v1.34), which the approver holds
+    check(f"operator: POST {annotations} is 403 forbidden, naming Shutter_Configure",
+          status == 403 and error_of(body) == "forbidden" and "Shutter_Configure" in (body or {}).get("detail", ""), f"{status} {body}")
     status, body = operator.call("DELETE", "/production-reviews/annotations/0")
     check("operator: DELETE /production-reviews/annotations/{id} is 403 forbidden",
-          status == 403 and error_of(body) == "forbidden" and "Shutter_Approve" in (body or {}).get("detail", ""), f"{status} {body}")
+          status == 403 and error_of(body) == "forbidden" and "Shutter_Configure" in (body or {}).get("detail", ""), f"{status} {body}")
     status, body = approver.call("POST", annotations, note, idempotent=True, csrf=False)
     check(f"approver: POST {annotations} without X-Requested-With is 403 csrf", status == 403 and error_of(body) == "csrf", f"{status} {body}")
     status, body = approver.call("DELETE", "/production-reviews/annotations/0", csrf=False)
