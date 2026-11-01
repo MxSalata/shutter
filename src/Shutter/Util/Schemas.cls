@@ -45,12 +45,23 @@ ClassMethod Known(category As %String) As %Boolean
 ClassMethod Needed(recent As %Integer = 500) As %DynamicArray
 {
     Set json = "Shutter.Util.Json", seen = "", out = []
+    // The productions' items whose definition sets MessageSchemaCategory. Item settings are a list inside Ens.Config.Item
+    // (no table of their own), so they are read through the objects, as the production review does.
     Try {
-        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT i.Name AS Item, i.Production AS Production, s.SettingValue AS Category FROM Ens_Config.Item i JOIN Ens_Config.Setting s ON s.Item = i.ID WHERE s.Name = 'MessageSchemaCategory' AND s.SettingValue IS NOT NULL AND s.SettingValue <> ''")
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Name FROM Ens_Config.Production")
         While rs.%Next() {
-            Set cat = $ZSTRIP(rs.%Get("Category"), "<>W")
-            Continue:(cat = "")
-            Do ..Note(.out, .seen, cat, "item " _ rs.%Get("Item") _ " of " _ rs.%Get("Production"))
+            Set prod = ##class(Ens.Config.Production).%OpenId(rs.%Get("Name"), 0)
+            Continue:'$ISOBJECT(prod)
+            For i = 1:1:prod.Items.Count() {
+                Set item = prod.Items.GetAt(i)
+                For j = 1:1:item.Settings.Count() {
+                    Set setting = item.Settings.GetAt(j)
+                    Continue:(setting.Name '= "MessageSchemaCategory")
+                    Set cat = $ZSTRIP(setting.Value, "<>W")
+                    Continue:(cat = "")
+                    Do ..Note(.out, .seen, cat, "item " _ item.Name _ " of " _ prod.Name)
+                }
+            }
         }
     } Catch ex {
     }
