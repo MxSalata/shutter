@@ -43,23 +43,39 @@ ClassMethod Jars() As %List
     Quit jars
 }
 
-/// The jars as the PEX item's %gatewayExtraClasspaths setting wants them, separated by "|": IRIS's own intersystems-utils
-/// (the PEX framework's Java side, which the gateway does not load by itself), the parser's jar and lib/*.jar.
+/// The jars as the PEX item's %gatewayExtraClasspaths setting wants them, separated by "|": IRIS's own PEX framework jar
+/// (the Java side of PEX, which the gateway does not load by itself), the parser's jar and lib/*.jar.
 ClassMethod Classpath() As %String
 {
-    Set utils = ..UtilsJar()
-    Quit $SELECT(utils '= "": utils _ "|", 1: "") _ $LISTTOSTRING(..Jars(), "|")
+    Set framework = ..FrameworkJar()
+    Quit $SELECT(framework '= "": framework _ "|", 1: "") _ $LISTTOSTRING(..Jars(), "|")
 }
 
-/// IRIS's intersystems-utils jar (dev/java/lib/1.8/intersystems-utils-<version>.jar), which holds com.intersystems.enslib.pex;
-/// "" when this install has none.
-ClassMethod UtilsJar() As %String
+/// IRIS's PEX framework jar, the one holding com.intersystems.enslib.pex: the path pex/build.sh recorded in framework.txt
+/// when it compiled against it (intersystems-utils-<v>.jar on IRIS 2026.2, intersystems-pex-<v>-shaded.jar on the AI Hub
+/// images), else the first such name under dev/java/lib; "" when this install has none.
+ClassMethod FrameworkJar() As %String
 {
-    Set dir = ##class(%File).NormalizeDirectory($SYSTEM.Util.InstallDirectory() _ "dev/java/lib/1.8"), found = ""
-    Set rs = ##class(%ResultSet).%New("%File:FileSet")
-    Do rs.Execute(dir, "intersystems-utils-*.jar", "Name", 0)
-    While rs.Next() { Set found = rs.Get("Name") }
-    Quit found
+    Set recorded = ..Dir() _ "framework.txt"
+    If ##class(%File).Exists(recorded) {
+        Set f = ##class(%Stream.FileCharacter).%New()
+        Do f.LinkToFile(recorded)
+        Set path = $ZSTRIP(f.ReadLine(), "<>WC")
+        If (path '= "") && ##class(%File).Exists(path) Quit path
+    }
+    Set lib = ##class(%File).NormalizeDirectory($SYSTEM.Util.InstallDirectory() _ "dev/java/lib")
+    For pattern = "intersystems-pex-*.jar", "intersystems-utils-*.jar" {
+        For sub = "1.8", "11", "" {
+            Set dir = $SELECT(sub = "": lib, 1: ##class(%File).NormalizeDirectory(lib _ sub)), found = ""
+            Continue:'##class(%File).DirectoryExists(dir)
+            Set rs = ##class(%ResultSet).%New("%File:FileSet")
+            Do rs.Execute(dir, pattern, "Name", 0)
+            While rs.Next() { Set found = rs.Get("Name") }
+            If found '= "" Quit
+        }
+        If $GET(found) '= "" Quit
+    }
+    Quit $GET(found)
 }
 
 /// The report on a raw HL7 text through the Java gateway directly, for the Doctor's probe and the tests (the production asks

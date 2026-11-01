@@ -716,10 +716,15 @@ carries `second_parser: {available: false, item, reason}`, the verdict is empty 
 (`{item, available, jar, classpath_jars, probe, parser}`; `probe` is `ok` when the Java gateway answers a one-line message).
 The Evidence Collector's setting `SecondParserTarget` names the item (empty never asks); a slow or failing item leaves
 `available: false` after 20 s and the gate judges without it. `pex/build.sh` downloads HAPI and its dependencies from Maven
-Central, checks each against its pinned SHA-256 in the same step, compiles the two classes with the IRIS image's own JDK
-(Temurin 11) and writes `shutter-pex.jar` under the manager directory as `pex/`, beside `shutter/` and outside the image's data volume, so
-an upgraded container runs its own image's jar; `SyncSecondParser` writes the item's `%gatewayExtraClasspaths` for the
-install; the Dockerfile runs the build, and a site with Java runs it once by hand.
+Central, checks each against its pinned SHA-256 in the same step, finds IRIS's PEX framework jar by what it holds (the one
+jar under `dev/java` with `com.intersystems.enslib.pex`: `intersystems-utils-<v>.jar` on IRIS 2026.2,
+`intersystems-pex-<v>-shaded.jar` on the AI Hub images; names and versions differ between builds), compiles the two classes
+against it with the image's own JDK (Temurin 11) and writes `shutter-pex.jar` and `framework.txt` (the framework jar's path)
+under the manager directory as `pex/`, beside `shutter/` and outside the image's data volume, so an upgraded container runs
+its own image's jar. `SyncSecondParser` writes the item's `%gatewayExtraClasspaths` for the install from `framework.txt` and
+the jars. The build never fails the image: without a JDK, a framework, network or a matching checksum it prints why, leaves
+no jar and the item stays off (`PEX_STRICT=1`, CI's image job, turns such a skip into a failure on an image known to carry
+the framework). The Dockerfile runs it, and a site with Java runs it once by hand.
 
 ## 7. Incidents: many failures to one receiver (v1.6, as built in v1.7)
 
