@@ -20,6 +20,7 @@ export function PortalLinks({
   return (
     <Section
       id="portal"
+      tour="case-iris"
       title="In the Management Portal"
       note="The production's own record of this case: the messages, the workflow and each agent's request and answer."
     >
@@ -31,6 +32,7 @@ export function PortalLinks({
               href={c.links.visualTrace}
               what={`the Visual Trace of session ${c.ensSessionId}`}
               screenshot={traceScreenshot(c)}
+              tourAction="open-trace"
             >
               Message trace
             </PortalLink>

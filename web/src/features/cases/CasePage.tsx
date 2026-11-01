@@ -195,7 +195,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
                 boardOnTop={boardOnTop}
               />
             </Tabs.Panel>
-            <Tabs.Panel value="evidence" pt="md">
+            <Tabs.Panel value="evidence" pt="md" data-tour="case-evidence-tab">
               <EvidencePanel
                 caseId={c.caseId}
                 receiver={c.receiver}

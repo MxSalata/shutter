@@ -284,7 +284,14 @@ export function DecisionCard({
           {stopped && c.failureKind !== 'withheld' ? <Reinvestigate c={c} /> : null}
         </StoryCard>
       </SimpleGrid>
-      <Paper className="receipt-band" p="md" radius="md" component="section" aria-labelledby="receipt-title">
+      <Paper
+        className="receipt-band"
+        p="md"
+        radius="md"
+        component="section"
+        aria-labelledby="receipt-title"
+        data-tour="case-receipt"
+      >
         <Stack gap="sm">
           <Group justify="space-between" align="center" wrap="wrap" gap="xs">
             <Title order={3} fz="md" id="receipt-title">
@@ -297,6 +304,7 @@ export function DecisionCard({
                   variant="default"
                   leftSection={copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
                   onClick={copy}
+                  data-tour-action="copy-receipt"
                 >
                   {copied ? 'Copied' : 'Copy receipt as JSON'}
                 </Button>

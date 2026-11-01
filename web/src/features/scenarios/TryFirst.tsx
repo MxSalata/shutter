@@ -200,6 +200,7 @@ export function TryFirst({
                             loading={starting(s, mode)}
                             onClick={() => onRun(s, mode)}
                             aria-label={`Run ${s.id} in ${modeName} mode`}
+                            data-tour-action={`run-${s.id}`}
                           >
                             Run {s.id}
                           </Button>

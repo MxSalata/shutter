@@ -106,6 +106,7 @@ function StartReview({ targets }: { targets: ReviewTarget[] }) {
           onClick={submit}
           loading={start.isPending}
           disabled={!chosen || !windowOk}
+          data-tour-action="start-review"
         >
           Start the review
         </Button>

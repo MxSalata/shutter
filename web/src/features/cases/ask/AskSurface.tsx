@@ -19,6 +19,7 @@ export const AskButton = forwardRef<HTMLButtonElement, { open: boolean; onToggle
           aria-expanded={open}
           aria-controls={open ? ASK_PANEL_ID : undefined}
           onClick={onToggle}
+          data-tour-action="ask-open"
         >
           {TITLE}
         </Button>

@@ -257,6 +257,7 @@ export function ApprovalPanel({
                     leftSection={<IconCheck size={16} />}
                     disabled={!!why}
                     onClick={() => openDialog('approve')}
+                    data-tour-action="approve-plan"
                   >
                     Approve plan
                   </Button>

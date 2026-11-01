@@ -309,7 +309,7 @@ export default function EvaluationPage({
           </Stack>
         </Card>
 
-        <Card padding="md" component="section" aria-labelledby="passes-title">
+        <Card padding="md" component="section" aria-labelledby="passes-title" data-tour="evaluation-table">
           <Title order={2} fz="lg" id="passes-title" mb={4}>
             Per scenario
           </Title>
