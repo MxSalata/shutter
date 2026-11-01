@@ -80,6 +80,8 @@ PATIENTS = {
     # S23a and S23b, a transfer into a bed another patient holds: P1 holds WARD-B bed 02, P2 is moved into it
     "S23-P1": ("MRN1231", "ENC-1231", "SYNTH^CORA", "19810919", "F"),
     "S23-P2": ("MRN1232", "ENC-1232", "SYNTH^DEV", "19750128", "M"),
+    # S24, a newer message on its way to the receiver as Shutter is about to resend
+    "S24": ("MRN1024", "ENC-1024", "SYNTH^ELLA", "19920716", "F"),
 }
 
 # The prior record an S15 merge folds into its patient (MRG-1, MRG-5, MRG-7)
@@ -745,6 +747,35 @@ def scenarios():
                      "failed_operation_key": c4[2]["operation_key"], "case_by_key": True,
                      "final_reason": "OCCUPANT_CASE_FAILED", "modes": ["policy"]},
     }, [c1, c2, c3, c4]))
+
+    # S24: S2's transfer fails while the downstream system is down; then a newer transfer for the same patient arrives
+    # and the receiver is slow to take it (delay_response). Shutter must not resend the old transfer ahead of the newer
+    # message still on its way: the gate holds the case (NEWER_MESSAGE_PENDING), the newer transfer lands, and the case
+    # is checked again on fresh evidence and closes superseded with nothing written.
+    a = message("S24", 1, "A01", "0900", ward="WARD-A")
+    b = message("S24", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
+    c = message("S24", 3, "A02", "0945", ward="WARD-C", prior="WARD-B")
+    out.append(({
+        "id": "S24",
+        "title": "A newer message arrives as Shutter resends",
+        "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails because the downstream system is down. "
+                   "Then the 09:45 transfer to Ward C arrives, and the downstream system is slow to take it. Resending "
+                   "the 09:20 transfer now would go ahead of a newer movement still on its way, so Shutter waits for "
+                   "it. The 09:45 transfer lands, the case is checked again, and it closes superseded with nothing "
+                   "written: the patient is in Ward C.",
+        "steps": [
+            {"file": a[0]},
+            {"fault": "fail_before_accept", "operation_key": b[2]["operation_key"]},
+            {"file": b[0], "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "delay_response", "operation_key": c[2]["operation_key"], "seconds": 12},
+            {"file": c[0]},
+        ],
+        "expected": {"disposition": "superseded", "write": False, "final_state": "admitted", "final_ward": "WARD-C",
+                     "failed_operation_key": b[2]["operation_key"], "case_by_key": True,
+                     "blocked_by": "NEWER_MESSAGE_PENDING", "last_operation_key": c[2]["operation_key"],
+                     "modes": ["policy"]},
+    }, [a, b, c]))
 
     return out
 

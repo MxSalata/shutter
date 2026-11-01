@@ -31,7 +31,7 @@ Besides the outcome, expected.blocked_by is a reason code the case met on the wa
 that led to a re-plan counts), expected.final_reason the code the closed case names for stopping (GET
 /cases/{id}/blocked-reason), and expected.last_operation_key the operation the downstream system's history for the
 encounter ends with (S20: the nurse's own entry still stands). A case blocked only until another case closes
-(WAITING_FOR_OCCUPANT_CASE, S23a) is waited for, not judged, and with --approve the other case is approved when its tier
+(WAITING_FOR_OCCUPANT_CASE, S23a) or a newer message's delivery (NEWER_MESSAGE_PENDING, S24) is waited for, not judged, and with --approve the other case is approved when its tier
 asks; expected.waits_on_key is the operation key of the case it waited on (waitsOn), and expected.case_by_key judges the
 case of expected.failed_operation_key rather than the run's newest.
 
@@ -228,10 +228,14 @@ def settle(args, operator, approver, scenario, case, run_state):
     return final
 
 
+WAITS = {"WAITING_FOR_OCCUPANT_CASE", "NEWER_MESSAGE_PENDING"}
+
+
 def waiting_on_another(operator, case_id):
-    """Whether a blocked case is held only until another case closes (WAITING_FOR_OCCUPANT_CASE)."""
+    """Whether a blocked case is held only until another case closes (WAITING_FOR_OCCUPANT_CASE) or a newer message
+    is delivered (NEWER_MESSAGE_PENDING): it is released by itself, so it is waited for, not judged."""
     status, reason = operator.call("GET", f"/cases/{urllib.parse.quote(case_id)}/blocked-reason")
-    return status == 200 and (reason or {}).get("code") == "WAITING_FOR_OCCUPANT_CASE"
+    return status == 200 and (reason or {}).get("code") in WAITS
 
 
 def approve_others(operator, approver, scenario, case_id, done):

@@ -1084,5 +1084,47 @@
         "policy"
       ]
     }
+  },
+  {
+    "id": "S24",
+    "title": "A newer message arrives as Shutter resends",
+    "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails because the downstream system is down. Then the 09:45 transfer to Ward C arrives, and the downstream system is slow to take it. Resending the 09:20 transfer now would go ahead of a newer movement still on its way, so Shutter waits for it. The 09:45 transfer lands, the case is checked again, and it closes superseded with nothing written: the patient is in Ward C.",
+    "steps": [
+      {
+        "file": "S24-01-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept",
+        "operation_key": "PAS^HOSP^MRN1024^ENC-1024^transfer^2026-10-15T08:20:00Z"
+      },
+      {
+        "file": "S24-02-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "delay_response",
+        "operation_key": "PAS^HOSP^MRN1024^ENC-1024^transfer^2026-10-15T08:45:00Z",
+        "seconds": 12
+      },
+      {
+        "file": "S24-03-A02.hl7"
+      }
+    ],
+    "expected": {
+      "disposition": "superseded",
+      "write": false,
+      "final_state": "admitted",
+      "final_ward": "WARD-C",
+      "failed_operation_key": "PAS^HOSP^MRN1024^ENC-1024^transfer^2026-10-15T08:20:00Z",
+      "case_by_key": true,
+      "blocked_by": "NEWER_MESSAGE_PENDING",
+      "last_operation_key": "PAS^HOSP^MRN1024^ENC-1024^transfer^2026-10-15T08:45:00Z",
+      "modes": [
+        "policy"
+      ]
+    }
   }
 ]

@@ -2378,6 +2378,11 @@
    "scenario": "S23c",
    "title": "The bed's occupant cannot leave",
    "why": "played in policy mode only"
+  },
+  {
+   "scenario": "S24",
+   "title": "A newer message arrives as Shutter resends",
+   "why": "played in policy mode only"
   }
  ],
  "not_used": [],
