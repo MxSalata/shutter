@@ -135,6 +135,8 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         }
         If root '= "" {
             Set sc = ##class(Shutter.Store.SiteProfile).SeedFromFile(root _ "knowledge/site/profile.json") Quit:$$$ISERR(sc)
+            // The live hospital (CONTRACTS 4.4, v1.34; the owner, 1 Nov 2026): its single cases at tier 2 wait for a person.
+            Set sc = ..LiveProfilePolicy(root _ "knowledge/site/profile.json") Quit:$$$ISERR(sc)
             Set sc = ##class(Shutter.Catalogue.Entry).SeedFromFile(root _ "knowledge/catalogue/catalogue.json", .entries) Quit:$$$ISERR(sc)
             Set ^Shutter.Config("catalogue", "entries") = $GET(entries, 0)
         }
@@ -638,6 +640,31 @@ ClassMethod ApplyDefaultSettings(production As %String = "Shutter.Production") A
 /// Make Shutter.Production the namespace's production and start it, when the class is compiled. When InstallInto
 /// put Shutter's items in the site's own production, there is nothing of Shutter's to start, and that production is
 /// never stopped here.
+/// The live hospital's policy (CONTRACTS 4.4, v1.34; the owner's choice of 1 Nov 2026, "single cases at tier 2 wait for an
+/// approval in the live hospital"): when the install is told SHUTTER_LIVE=1 (or on is 1), the shipped profile's policy for
+/// tier 2, single chains becomes approval, so the demo's visitors always have a case to approve, and the profile is stored
+/// with the seed's path and " (live hospital)" as its source, which the seed then leaves alone on a reinstall. A profile a
+/// person saved (another source) is never touched. Returns a status; nothing changes when the setting already reads so.
+ClassMethod LiveProfilePolicy(seedPath As %String, on As %Integer = -1) As %Status
+{
+    // -1: as the environment says (SHUTTER_LIVE=1); a test passes 0 or 1.
+    If on = -1 Set on = ($SYSTEM.Util.GetEnviron("SHUTTER_LIVE") = "1")
+    Quit:'on $$$OK
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    Quit:'$ISOBJECT(row) $$$OK
+    Set liveSource = seedPath _ " (live hospital)"
+    Quit:((row.Source '= seedPath) && (row.Source '= liveSource)) $$$OK
+    Set p = ##class(Shutter.Util.Json).Parse(row.Json, .sc)
+    Quit:('$ISOBJECT(p) || $$$ISERR(sc)) $$$OK
+    Set policy = p.%Get("policy")
+    Quit:'$ISOBJECT(policy) $$$OK
+    Set tier2 = policy.%Get("2")
+    If '$ISOBJECT(tier2) Set tier2 = {} Do policy.%Set("2", tier2)
+    Quit:(##class(Shutter.Util.Json).Str(tier2, "single") = "approval") $$$OK
+    Set tier2.single = "approval"
+    Quit ##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), liveSource, "install", "", .version)
+}
+
 /// The Second Parser item follows its jar (CONTRACTS 6.7, v1.34): enabled in the production's definition when
 /// shutter-pex.jar is installed (pex/build.sh), disabled when it is not, so a site without Java, or the replay edition, logs
 /// no gateway errors and the evidence simply carries no second opinion. The item's classpath is its own business
