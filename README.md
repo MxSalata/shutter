@@ -79,7 +79,7 @@ The idea asks whether InterSystems Interoperability could do the traceability jo
 
 ## How it works
 
-![A case's life: the failed operation, one sealed evidence snapshot, a plan from the catalogue and site policy, the board or rules, the gate at the proposal, a dry run, an approval bound to the plan's digest, a fresh read and the gate again at dispatch, one conditional write, then verification; a block, an escalation or a hand closure where the evidence calls for one](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/case-lifecycle.png "width=60%")
+![A case's life: the failed operation, one sealed evidence snapshot, a plan from the catalogue and site policy, the board or rules, the gate at the proposal, a dry run, an approval bound to the plan's digest, a fresh read and the gate again at dispatch, one conditional write, then verification; a block, an escalation or a hand closure where the evidence calls for one](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/case-lifecycle.png)
 
 1. **A failed delivery becomes a case.** The feed fails forward (`FailureTimeout` 0), so the next patient's message is not stuck behind the failure. A hospital's own production can hand its failures to Shutter through the intake, and the case names where it came from.
 2. **Evidence, sealed.** The Evidence Collector builds one immutable snapshot: the message, the receiver's state, history and receipt, every other operation for the encounter, the receiver's capabilities and the catalogue match. It is sealed with a digest. Before anything reaches a model, every patient and encounter identifier becomes a per-case token (`MRN-T1`, `ENC-T1`), demographics are dropped and note text becomes a flag.
