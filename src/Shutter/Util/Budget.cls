@@ -59,10 +59,16 @@ ClassMethod Allows(Output status As %DynamicObject) As %Boolean
     Quit 'status.exhausted
 }
 
-/// The refusal's words, for the run's error and the case's note.
+/// The refusal's words, for the run's error and the case's note; the figures in dollars and cents.
 ClassMethod Refusal(status As %DynamicObject) As %String
 {
-    Quit "The day's model budget of " _ status.dailyUsd _ " USD is spent (" _ status.spentTodayUsd _ " USD since " _ status.since _ "); the run was not sent. It resets at " _ status.resetsAt _ "."
+    Quit "The day's model budget of " _ ..Dollars(status.dailyUsd) _ " is spent (" _ ..Dollars(status.spentTodayUsd) _ " since " _ status.since _ "); the run was not sent. It resets at " _ status.resetsAt _ "."
+}
+
+/// An amount as "0.01 USD": a leading zero and two decimals.
+ClassMethod Dollars(amount As %Numeric) As %String
+{
+    Quit $FNUMBER(+amount, "", 2) _ " USD"
 }
 
 }
