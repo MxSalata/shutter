@@ -15,6 +15,9 @@ ClassMethod Apply(request As %DynamicObject, Output status As %Integer) As %Dyna
         Set status = 503
         Quit {"error": "ward_unavailable"}
     }
+    // A slow receiver (v1.32): the request is held, then applied and answered as usual, so a sender whose timeout is
+    // shorter gives up on an operation the receiver still applies, and the next message waits behind it
+    If 'dryRun, ..FaultFor(key) = "delay_response" Hang +$GET(^Downstream.Config("fault", "seconds"), 12)
     Set problem = ..Validate(request)
     If problem '= "" {
         Quit ..Refuse(dryRun, 422, {"error": "invalid_request", "detail": (problem)}, .status, encounterId)
@@ -409,12 +412,19 @@ ClassMethod FaultFor(key As %String) As %String
 ClassMethod SetFault(request As %DynamicObject, Output status As %Integer) As %DynamicObject
 {
     Set mode = request.%Get("mode")
-    If '$LISTFIND($LISTBUILD("off", "fail_before_accept", "commit_drop_response", "misleading_duplicate_error", "receipt_lookup_unavailable"), mode) {
+    If '$LISTFIND($LISTBUILD("off", "fail_before_accept", "commit_drop_response", "misleading_duplicate_error", "receipt_lookup_unavailable", "delay_response"), mode) {
         Set status = 422
-        Quit {"error": "invalid_request", "detail": "mode must be off, fail_before_accept, commit_drop_response, misleading_duplicate_error or receipt_lookup_unavailable"}
+        Quit {"error": "invalid_request", "detail": "mode must be off, fail_before_accept, commit_drop_response, misleading_duplicate_error, receipt_lookup_unavailable or delay_response"}
+    }
+    // delay_response holds each real operation for seconds (1 to 60, 12 when not given)
+    Set seconds = request.%Get("seconds")
+    If mode = "delay_response", seconds '= "", (seconds '= +seconds) || (seconds \ 1 '= seconds) || (seconds < 1) || (seconds > 60) {
+        Set status = 422
+        Quit {"error": "invalid_request", "detail": "seconds must be a whole number from 1 to 60"}
     }
     Set ^Downstream.Config("fault", "mode") = mode
     Set ^Downstream.Config("fault", "key") = $SELECT(mode = "off": "", 1: request.%Get("operation_key"))
+    If mode = "delay_response" { Set ^Downstream.Config("fault", "seconds") = $SELECT(seconds = "": 12, 1: +seconds) } Else { Kill ^Downstream.Config("fault", "seconds") }
     Set status = 200
     Quit ..FaultJSON()
 }
@@ -428,6 +438,7 @@ ClassMethod GetFault(Output status As %Integer) As %DynamicObject
 ClassMethod FaultJSON() As %DynamicObject [ Private ]
 {
     Set out = {"mode": ($GET(^Downstream.Config("fault", "mode"), "off"))}
+    If $DATA(^Downstream.Config("fault", "seconds")) Set out.seconds = +^Downstream.Config("fault", "seconds")
     Set key = $GET(^Downstream.Config("fault", "key"))
     If key = "" {
         Do out.%Set("operation_key", "", "null")

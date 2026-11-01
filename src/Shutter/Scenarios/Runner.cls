@@ -214,6 +214,7 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
         If step.%IsDefined("fault") {
             Set request = {"mode": (step.fault)}
             Do:step.%IsDefined("operation_key") request.%Set("operation_key", step."operation_key")
+            Do:step.%IsDefined("seconds") request.%Set("seconds", step.seconds)
             // The receivers the fault applies to (v1.25): the step's list, else the bed manager alone, so the scenarios
             // written before keep their meaning. Each demo receiver is reached in its own namespace.
             Set targets = $SELECT(step.%IsDefined("receivers") && $ISOBJECT(step.receivers): step.receivers, 1: [($PARAMETER("Shutter.Production", "RECEIVER"))])

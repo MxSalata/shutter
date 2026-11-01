@@ -202,6 +202,26 @@ Method TestCommitDropResponseCommits()
     Do $$$AssertEquals(again.reason, "already_committed", "and a retry finds the receipt")
 }
 
+Method TestDelayResponseHoldsThenApplies()
+{
+    Set encounter = ..Encounter(91)
+    Do ..Admit(encounter)
+    Set transfer = ..Request(encounter, "transfer", "WARD-B", "2026-10-15T09:20:00Z")
+    Set saved = ##class(Downstream.Service).GetFault(.ignore)
+    Set fault = ##class(Downstream.Service).SetFault({"mode": "delay_response", "operation_key": (transfer."operation_key"), "seconds": 61}, .status)
+    Do $$$AssertEquals(status, 422, "a delay over 60 seconds is refused")
+    Set fault = ##class(Downstream.Service).SetFault({"mode": "delay_response", "operation_key": (transfer."operation_key"), "seconds": 1}, .ignore)
+    Do $$$AssertEquals(fault.seconds, 1, "the delay is reported with the fault")
+    Set start = $ZHOROLOG
+    Set body = ##class(Downstream.Service).Apply(transfer, .status)
+    Set held = $ZHOROLOG - start
+    Do ##class(Downstream.Service).SetFault(saved, .ignore)
+    Do $$$AssertTrue(held >= 1, "the request is held for the delay")
+    Do $$$AssertEquals(status, 201, "then applied and answered as usual")
+    Do ##class(Downstream.Service).GetReceipt(transfer."operation_key", .status)
+    Do $$$AssertEquals(status, 200, "with a receipt")
+}
+
 Method TestMisleadingDuplicateError()
 {
     Set encounter = ..Encounter(12)

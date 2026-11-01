@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.31, 1 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.32, 1 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -134,11 +134,12 @@ For a receiver that takes them (1.1, v1.14): `cancel_admit` and `cancel_transfer
 
 ### 1.5 Faults, for the demos
 
-`POST /downstream/api/faults` `{"mode": "off" | "fail_before_accept" | "commit_drop_response" | "misleading_duplicate_error", "operation_key": "…"}`. With `operation_key` the fault applies to that key only; without it, to every operation until `off`. Returns 200 `{"mode": …, "operation_key": …}`. `GET /downstream/api/faults` returns the current setting.
+`POST /downstream/api/faults` `{"mode": "off" | "fail_before_accept" | "commit_drop_response" | "misleading_duplicate_error" | "receipt_lookup_unavailable" | "delay_response", "operation_key": "…", "seconds": n}`. With `operation_key` the fault applies to that key only; without it, to every operation until `off`. Returns 200 `{"mode": …, "operation_key": …}`. `GET /downstream/api/faults` returns the current setting.
 
 - `fail_before_accept`: 503 before any validation or write.
 - `commit_drop_response`: the operation is committed, then the response is a 504 with no body.
 - `misleading_duplicate_error`: with an `operation_key`, the downstream system answers 409 `{"error": "duplicate_message"}` for that key whatever the version, and writes nothing; without a key, it answers that way when `expected_version` mismatches, instead of `version_conflict`. (A buggy receiver that reports the wrong reason. Nothing else changes.)
+- `delay_response` (v1.32): each real operation (never a dry run) is held for `seconds` (a whole number from 1 to 60, 12 when not given; 422 otherwise), then applied and answered as usual. A slow receiver: a sender whose timeout is shorter gives up on an operation that is still applied, and the sender's next message for the receiver waits behind it. `GET /faults` reports `seconds` with the mode. A scenario's fault step passes `seconds` through (4.3).
 
 ### 1.6 Canonical payload and digest
 
@@ -1249,6 +1250,9 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.32, 1 Nov 2026: the demo receiver's fault `delay_response` (1.5): a real operation is held for `seconds`, then applied
+  and answered as usual, so a newer message can be on its way to the receiver while a case is about to resend (S24); the
+  scenario runner's fault step passes `seconds`.
 - v1.31, 1 Nov 2026: the index walk is an inbound adapter of Shutter's own (8.1): `Shutter.Index.Adapter` reads the next batches
   of HL7 headers after the high-water mark on each task and hands them to `Shutter.Index.Indexer` as `Shutter.Index.Batch`
   objects, moving the mark once a batch is taken; the walk's settings (`Routes`, `BatchSize`, `LagSeconds`, `BackfillHours`,
