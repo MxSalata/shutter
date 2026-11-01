@@ -11,15 +11,18 @@ import type {
   Snapshot,
 } from '@/api/types';
 import fixtures from '@/mocks/fixtures.json';
+import { caseOutcome } from '@/lib/status';
 import {
+  actionHeadline,
   decisionSummary,
   evidenceSummary,
   failedSummary,
   nextAction,
-  outcomeHeadline,
+  outcomeCaseOf,
   outcomeReason,
   proposedSummary,
   provenanceOf,
+  recordedApprovalTime,
   releaseStatus,
   verifiedSummary,
   writtenSummary,
@@ -70,10 +73,13 @@ function factsOf(id: Id, change: Partial<CaseFacts> = {}): CaseFacts {
   };
 }
 
+const outcomeOf = (f: CaseFacts) => caseOutcome(outcomeCaseOf(f));
+
 describe('the outcome sentence', () => {
-  it('reads S2 as resolved with one write verified at the receiver', () => {
+  it('reads S2 as delivered and verified, and says what Shutter did, leading with the action', () => {
     const f = factsOf('C-000002');
-    expect(outcomeHeadline(f)).toBe('Resolved · 1 write · Effect verified at the receiver');
+    expect(outcomeOf(f)).toMatchObject({ key: 'delivered', label: 'Delivered: verified at the receiver' });
+    expect(actionHeadline(f)).toBe('Sent the transfer again, once, after a test run');
     expect(outcomeReason(f)).toBe(
       'Transfer to WARD-B applied at the receiver, version 1 to 2; the verifier found the effect there.',
     );
@@ -82,7 +88,8 @@ describe('the outcome sentence', () => {
 
   it('reads S8 on the board as escalated with no write, and names the two systems at the same time', () => {
     const f = factsOf('C-000008');
-    expect(outcomeHeadline(f)).toBe('Escalated · 0 writes');
+    expect(outcomeOf(f).label).toBe('Escalated: a person decides');
+    expect(actionHeadline(f)).toBe('Asked a person to decide; sent nothing');
     expect(outcomeReason(f)).toBe(
       "Handed to a person; PAS and BEDMGR moved the encounter at the same event time, so which movement is current can't be told from the times.",
     );
@@ -102,13 +109,17 @@ describe('the outcome sentence', () => {
 
   it('says in words that the gate blocked a rules case, leaving its reason code to the details', () => {
     const f = factsOf('C-000053');
-    expect(outcomeHeadline(f)).toBe('Blocked · 0 writes');
+    expect(outcomeOf(f).label).toBe('Blocked: nothing sent');
+    expect(actionHeadline(f)).toBe('Sent nothing: the gate stopped the plan');
     expect(outcomeReason(f)).toBe('Blocked by the gate: a later event made this movement obsolete.');
   });
 
   it('says writes are unknown, never 0, while the attempts are not read', () => {
     const f = factsOf('C-000002', { attempts: undefined });
-    expect(outcomeHeadline(f)).toMatch(/^Resolved · Writes unknown/);
+    // Nothing guessed: the outcome stays "Resolved" and the action says the writes are not read
+    expect(outcomeCaseOf(f).writes).toBeUndefined();
+    expect(outcomeOf(f).key).toBe('resolved');
+    expect(actionHeadline(f)).toBe('Closed the case; what it sent is not read yet');
     expect(writtenSummary(f)).toBe('Unknown: the attempts are not read yet.');
   });
 
@@ -127,7 +138,8 @@ describe('the outcome sentence', () => {
         tasks: [],
       },
     });
-    expect(outcomeHeadline(f)).toBe('Closed · Handled by hand · 0 Shutter writes · Not verified by Shutter');
+    expect(outcomeOf(f).label).toBe('Handled by hand');
+    expect(actionHeadline(f)).toBe('Handed it to the team, who corrected it by hand');
     expect(outcomeReason(f)).toBe(
       'The team corrected the systems by hand and a person closed the case; an earlier approval was revoked by system; the latest plan was blocked by the gate at proposal; Shutter did not verify the correction.',
     );
@@ -181,13 +193,44 @@ describe('the outcome sentence', () => {
       approvals: { approvals: [], tasks: [] },
       attempts: [],
     });
-    expect(outcomeHeadline(f)).toBe('Waiting for approval · 0 writes');
+    expect(outcomeOf(f).label).toBe('Waiting for approval');
+    expect(actionHeadline(f)).toBe('Tested the fix at the receiver; sent nothing yet');
     expect(nextAction(f)).toMatchObject({
       kind: 'person',
       role: 'Approver',
       action: 'Approve or reject plan v1',
     });
     expect(releaseStatus(f)?.label).toBe('Waiting for approval');
+  });
+});
+
+describe('what Shutter did, by outcome', () => {
+  it('says a superseded case sent nothing because a later event moved the patient on', () => {
+    const f = factsOf('C-000007');
+    expect(actionHeadline(f)).toBe('Sent nothing: a later event already moved the patient on');
+    expect(outcomeOf(f).label).toBe('Nothing to send: verified at the receiver');
+  });
+
+  it("reads rules alone's S8 write as not as expected with S8's expectation, and delivered without it", () => {
+    const f = factsOf('C-000021');
+    const s8 = fixtures.scenarios.find((s) => s.id === 'S8') as unknown as Parameters<typeof caseOutcome>[1];
+    expect(caseOutcome(outcomeCaseOf(f), s8)).toMatchObject({
+      key: 'not-as-expected',
+      tone: 'blocking',
+      label: 'Not the expected outcome: S8 expects escalate',
+    });
+    expect(outcomeOf(f).key).toBe('delivered');
+  });
+
+  it('counts only a verifier outcome as a verification', () => {
+    expect(outcomeCaseOf(factsOf('C-000008'))).toMatchObject({ writes: 0, verification: '' });
+    expect(outcomeCaseOf(factsOf('C-000002'))).toMatchObject({ writes: 1, verification: 'verified' });
+  });
+
+  it('names when the recorded case was approved, for the note after a replay in the trial', () => {
+    expect(recordedApprovalTime(fixtures.cases['C-000002'].events as never)).toBe('20 Oct, 17:24 UTC');
+    expect(recordedApprovalTime(fixtures.cases['C-000008'].events as never)).toBe('');
+    expect(recordedApprovalTime(undefined)).toBe('');
   });
 });
 

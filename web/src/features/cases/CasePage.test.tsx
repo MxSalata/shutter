@@ -4,12 +4,30 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/mocks/node';
 import fixtures from '@/mocks/fixtures.json';
 import { resetMock } from '@/mocks/handlers';
+import { useAppearance } from '@/stores/appearance';
+import { layer1Words } from '@/test/words';
 import { theme } from '@/theme';
-import CasePage from './CasePage';
+import CasePage, { REPLAY_DONE } from './CasePage';
+
+/** Whether the page is the trial, and whether the reader asked for reduced motion: set per test. */
+const env = vi.hoisted(() => ({ trial: false, reduced: false }));
+vi.mock('@/env/mode', async (importOriginal) => {
+  const mode = await importOriginal<typeof import('@/env/mode')>();
+  return {
+    ...mode,
+    get TRIAL() {
+      return env.trial;
+    },
+  };
+});
+vi.mock('@mantine/hooks', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@mantine/hooks')>()),
+  useReducedMotion: () => env.reduced,
+}));
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());
@@ -44,14 +62,24 @@ async function openTab(name: string) {
 /** The outcome at the top of the page: the sentence, the receipt's facts and the next action. */
 const outcome = () => screen.findByRole('region', { name: 'Outcome' });
 
+/** The outcome band's sentence, once it reads as expected. */
+const outcomeLine = async (text: string) =>
+  waitFor(() => expect(screen.getByTestId('outcome-line')).toHaveTextContent(text));
+
 describe('CasePage', () => {
-  beforeEach(() => resetMock('approver'));
+  beforeEach(() => {
+    resetMock('approver');
+    env.trial = false;
+    env.reduced = false;
+    useAppearance.setState({ detail: 'plain' });
+  });
 
   it('tells the story of a resolved case, with the verification apart from the acknowledgement', async () => {
     renderCase('C-000009');
     expect(await screen.findByRole('heading', { name: 'Case C-000009' })).toBeInTheDocument();
+    await outcomeLine('Delivered: verified at the receiver');
     expect(
-      await within(await outcome()).findByText('Resolved · 1 write · Effect verified at the receiver'),
+      await within(await outcome()).findByText('Sent the transfer again, once, after a test run'),
     ).toBeInTheDocument();
     // A board case shows its board under the outcome, with no step to open
     const board = await screen.findByRole('region', { name: 'The board' });
@@ -138,13 +166,16 @@ describe('CasePage', () => {
     const board = await screen.findByRole('region', { name: 'The board' });
     // Under the outcome, before the story's steps
     expect((await outcome()).compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const cards = await within(board).findAllByRole('article');
-    expect(
-      cards.map((c) => c.getAttribute('aria-labelledby') && within(c).getByRole('heading').textContent),
-    ).toEqual(['Conformance', 'Encounter Integrity', 'Impact Analysis', 'Coordinator']);
+    const cards = await within(board).findAllByRole('region');
+    expect(cards.map((c) => within(c).getByRole('heading').textContent)).toEqual([
+      'Conformance',
+      'Encounter Integrity',
+      'Impact Analysis',
+      'Coordinator',
+    ]);
     // The dissenting specialist says so in words, with what it proposed and the dissent as the coordinator kept it,
     // without a confidence figure in that line
-    const dissent = within(board).getByRole('article', { name: 'Conformance' });
+    const dissent = within(board).getByRole('region', { name: 'Conformance' });
     expect(within(dissent).getByText('Dissent')).toBeInTheDocument();
     expect(within(dissent).getByText('Proposed: Resend')).toBeInTheDocument();
     expect(
@@ -152,18 +183,24 @@ describe('CasePage', () => {
         'Proposed resend: the message is structurally valid, the WIC-2.1 fields are present and the WIC-2.2 key matches',
       ),
     ).toBeInTheDocument();
-    // Its confidence is its own, marked as self-reported; the board says once that the gate does not use it
-    expect(within(dissent).getByText('Confidence 80%, self-reported')).toBeVisible();
+    // Its confidence is its own report, with the definition on its first use; the board says how it works once
+    expect(within(dissent).getByTestId('own-confidence')).toHaveTextContent(/^Its own confidence.*: 80%$/);
+    expect(within(dissent).getByText('own confidence')).toHaveAccessibleDescription(
+      "The agent's own report. The gate does not use it.",
+    );
     expect(
       within(board).getByText(/A confidence is the agent's own report and is not used by the gate/),
     ).toBeInTheDocument();
+    // Two of the three specialists proposed the plan's escalation: with the majority, one dissent kept
+    expect(within(board).getByText('With the majority')).toBeInTheDocument();
+    expect(within(board).getByText('1 dissent kept')).toBeInTheDocument();
     // The specialists who agreed with the plan carry no dissent
-    const agreed = within(board).getByRole('article', { name: 'Encounter Integrity' });
+    const agreed = within(board).getByRole('region', { name: 'Encounter Integrity' });
     expect(within(agreed).getByText('Proposed: Escalate')).toBeInTheDocument();
     expect(within(agreed).queryByText('Dissent')).not.toBeInTheDocument();
-    expect(within(agreed).getByText('Confidence 85%, self-reported')).toBeInTheDocument();
+    expect(within(agreed).getByTestId('own-confidence')).toHaveTextContent('Its own confidence: 85%');
     // The coordinator's card: the plan it proposed and the dissent it kept, with its recorded reason
-    const coordinator = within(board).getByRole('article', { name: 'Coordinator' });
+    const coordinator = within(board).getByRole('region', { name: 'Coordinator' });
     expect(within(coordinator).getByText('Proposed: Escalate')).toBeInTheDocument();
     expect(within(coordinator).getByText('Dissent kept: Conformance')).toBeInTheDocument();
     expect(
@@ -186,7 +223,7 @@ describe('CasePage', () => {
   it('leaves the confidence out of a dissent recorded as "resend (0.8): why"', async () => {
     renderCase('C-000039');
     const board = await screen.findByRole('region', { name: 'The board' });
-    const dissent = await within(board).findByRole('article', { name: 'Conformance' });
+    const dissent = await within(board).findByRole('region', { name: 'Conformance' });
     expect(
       within(dissent).getByText(
         'Proposed resend: MSG01109 conforms as a message and the 503 does not come from its content',
@@ -199,7 +236,7 @@ describe('CasePage', () => {
   it('reads a dissent recorded as "resend (why)" with its reason after a colon', async () => {
     renderCase('C-000010');
     const board = await screen.findByRole('region', { name: 'The board' });
-    const dissent = await within(board).findByRole('article', { name: 'Conformance' });
+    const dissent = await within(board).findByRole('region', { name: 'Conformance' });
     expect(
       within(dissent).getByText(
         'Proposed resend: the message conforms and the 503 was not caused by content',
@@ -210,7 +247,8 @@ describe('CasePage', () => {
   it('leads with an outcome that says an escalated case wrote nothing, and copies the receipt as JSON', async () => {
     renderCase('C-000008');
     const top = await outcome();
-    expect(await within(top).findByText('Escalated · 0 writes')).toBeInTheDocument();
+    await outcomeLine('Escalated: a person decides');
+    expect(await within(top).findByText('Asked a person to decide; sent nothing')).toBeInTheDocument();
     expect(
       await within(top).findByText(
         /^Handed to a person; PAS and BEDMGR moved the encounter at the same event time/,
@@ -220,6 +258,13 @@ describe('CasePage', () => {
     expect(within(top).getByText('No approval needed: the plan writes nothing')).toBeInTheDocument();
     expect(within(top).getByText('0 writes')).toBeInTheDocument();
     expect(within(top).getByRole('button', { name: 'Copy receipt as JSON' })).toBeInTheDocument();
+    // The outcome's tone is the band's, its words a sentence, not a heading
+    expect(top).toHaveAttribute('data-tone', 'attention');
+    expect(
+      within(top).queryByRole('heading', { name: /Escalated: a person decides/ }),
+    ).not.toBeInTheDocument();
+    // The gate passed a plan that writes nothing, and says so beside the green check
+    expect(within(top).getByText('Passed: the plan writes nothing')).toBeInTheDocument();
     // Three cards first, each under its heading: what happened, what Shutter did and what needs you now, the last in
     // the attention tone since a person has to act; then the receipt as its own band
     const headings = within(top)
@@ -251,11 +296,19 @@ describe('CasePage', () => {
     renderCase('C-000021');
     const top = await outcome();
     expect(await within(top).findByText('Approved by approver')).toBeInTheDocument();
+    // One plain caption per fact; the versions, epochs and the verifier's words wait in their detail
+    expect(await within(top).findByText('1 update, accepted')).toBeInTheDocument();
+    expect(within(top).getByText('Send it again, unchanged')).toBeInTheDocument();
+    const keys = within(top).getByRole('button', { name: 'Versions, keys and times' });
+    expect(keys).toHaveAttribute('aria-expanded', 'false');
     expect(
       await within(top).findByText('1 acknowledged; conditional on version 2, epoch 227'),
     ).toBeInTheDocument();
     expect(within(top).getByText(/^Verified: Committed and current/)).toBeInTheDocument();
     expect(within(top).getByText('No pending action')).toBeInTheDocument();
+    // Rules alone's S8 write, verified and still not what S8 expects
+    await outcomeLine('Not the expected outcome: S8 expects escalate');
+    expect(top).toHaveAttribute('data-tone', 'blocking');
     // Nothing waits for a person: the card is not drawn in a tone that asks for one
     expect(
       within(top).getByRole('heading', { name: 'What needs you now' }).closest('[data-tone]'),
@@ -402,7 +455,7 @@ describe('CasePage', () => {
     renderCase('C-000033');
     const top = await outcome();
     const board = await screen.findByRole('region', { name: 'The board' });
-    expect(await within(board).findByRole('article', { name: 'Coordinator' })).toBeInTheDocument();
+    expect(await within(board).findByRole('region', { name: 'Coordinator' })).toBeInTheDocument();
     expect(top.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await openStep('What was proposed');
     expect(
@@ -525,7 +578,9 @@ describe('CasePage', () => {
 
   it('marks the steps a superseded case did not need', async () => {
     renderCase('C-000007');
-    expect(await within(await outcome()).findByText('Resolved · 0 writes')).toBeInTheDocument();
+    expect(
+      await within(await outcome()).findByText('Sent nothing: a later event already moved the patient on'),
+    ).toBeInTheDocument();
     expect((await screen.findAllByText('not needed')).length).toBe(3);
   });
 
@@ -541,9 +596,11 @@ describe('CasePage', () => {
   it('opens cited evidence on its tab instead of following a link', async () => {
     renderCase('C-000009');
     const board = await screen.findByRole('region', { name: 'The board' });
-    const card = await within(board).findByRole('article', { name: 'Encounter Integrity' });
-    await userEvent.click(within(card).getByRole('button', { name: 'Show the finding' }));
-    const cites = await within(board).findAllByRole('button', { name: 'Downstream state' });
+    const card = await within(board).findByRole('region', { name: 'Encounter Integrity' });
+    // Its citations are counted on the card, and listed one click away, each a chip to its section
+    expect(within(card).getByText(/^Cited \d+ evidence sections$/)).toBeInTheDocument();
+    await userEvent.click(within(card).getByRole('button', { name: /^Which ones\s?, Encounter Integrity$/ }));
+    const cites = await within(card).findAllByRole('button', { name: 'Encounter' });
     expect(cites[0]).not.toHaveAttribute('href');
     await userEvent.click(cites[0]);
     expect(await screen.findByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
@@ -631,7 +688,7 @@ describe('CasePage', () => {
 
   it('does not offer to reinvestigate a verified case', async () => {
     renderCase('C-000009');
-    expect(await within(await outcome()).findByText(/^Resolved · 1 write/)).toBeInTheDocument();
+    await outcomeLine('Delivered: verified at the receiver');
     expect(screen.queryByRole('button', { name: 'Reinvestigate' })).not.toBeInTheDocument();
   });
 
@@ -653,14 +710,16 @@ describe('CasePage', () => {
     );
     await userEvent.click(within(approval).getByRole('button', { name: 'Approve plan' }));
     const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
+    // A live system's confirm says first that the write is real, with the chip beside the title
+    expect(within(dialog).getByTestId('confirm-consequence')).toHaveTextContent(
+      'This sends the fix to Downstream Out, for real. The receiver is read again and the gate checks the dispatch.',
+    );
+    expect(within(dialog).getByText('Live system')).toBeInTheDocument();
+    expect(within(dialog).queryByText('Trial only')).not.toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve this plan' }));
-    expect(
-      await within(top).findByText(
-        'Resolved · 1 write · Effect verified at the receiver',
-        {},
-        { timeout: 5_000 },
-      ),
-    ).toBeInTheDocument();
+    await outcomeLine('Delivered: verified at the receiver');
+    // A live page shows the states as they come: no replay, no note
+    expect(screen.queryByTestId('replay-note')).not.toBeInTheDocument();
     await openStep('What was verified');
     const verification = await screen.findByRole('region', { name: 'Verification' });
     expect(await within(verification).findByText('Effect verified at the receiver')).toBeInTheDocument();
@@ -692,9 +751,7 @@ describe('CasePage', () => {
     await userEvent.click(await within(approval).findByRole('button', { name: 'Reject plan' }));
     const dialog = await screen.findByRole('dialog', { name: 'Reject plan v1' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Reject this plan' }));
-    expect(
-      await within(await outcome()).findByText('Blocked · 0 writes', {}, { timeout: 5_000 }),
-    ).toBeInTheDocument();
+    await outcomeLine('Blocked: nothing sent');
     expect(await within(approval).findByText('Rejected by approver')).toBeInTheDocument();
   });
 
@@ -705,7 +762,10 @@ describe('CasePage', () => {
         'The PAS (patient administration system) transfer to WARD-B was not delivered: HTTP 503, ward_unavailable.',
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/SUPERSEDED_BY_LATER_EVENT \(policy/)).not.toBeInTheDocument();
+    // Its reason code is the API's (in the case as the API sends it), not the page's words
+    expect(
+      screen.queryByText(/SUPERSEDED_BY_LATER_EVENT \(policy/, { ignore: '.json-block, script, style' }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the case's provenance, times and version behind Details, after the outcome", async () => {
@@ -728,12 +788,12 @@ describe('CasePage', () => {
     const board = await screen.findByRole('region', { name: 'The board' });
     for (const name of ['Conformance', 'Encounter Integrity', 'Impact Analysis'])
       await userEvent.click(
-        within(await within(board).findByRole('article', { name })).getByRole('button', {
+        within(await within(board).findByRole('region', { name })).getByRole('button', {
           name: 'Show the finding',
         }),
       );
     await userEvent.click(
-      within(within(board).getByRole('article', { name: 'Coordinator' })).getByRole('button', {
+      within(within(board).getByRole('region', { name: 'Coordinator' })).getByRole('button', {
         name: 'Show the run',
       }),
     );
@@ -833,5 +893,177 @@ describe('CasePage', () => {
   it('says so when there is no such case', async () => {
     renderCase('C-999999');
     expect(await screen.findByText('There is no case C-999999')).toBeInTheDocument();
+  });
+});
+
+describe('the case page for both audiences', () => {
+  beforeEach(() => {
+    resetMock('approver');
+    env.trial = false;
+    env.reduced = false;
+    useAppearance.setState({ detail: 'plain' });
+  });
+
+  it("names the case's IRIS links in the header, always, and leaves the audit trail's without the guide's marks", async () => {
+    renderCase('C-000008');
+    const recorded = fixtures.cases['C-000008'].detail;
+    await screen.findByRole('heading', { name: 'Case C-000008' });
+    const row = document.querySelector('[data-tour="case-iris"]') as HTMLElement;
+    expect(row).toHaveTextContent(
+      new RegExp(`^In IRIS:\\s*Message trace \\(session ${recorded.ensSessionId}\\)`),
+    );
+    expect(within(row).getByRole('link', { name: /^Message trace/ })).toHaveAttribute(
+      'href',
+      recorded.links.visualTrace,
+    );
+    expect(within(row).getByRole('link', { name: /^Source message/ })).toBeInTheDocument();
+    expect(document.querySelectorAll('[data-tour="case-iris"]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-tour-action="open-trace"]')).toHaveLength(1);
+    await openTab('Audit trail');
+    const portal = await screen.findByRole('region', { name: 'In the Management Portal' });
+    expect(portal.closest('[data-tour]')).toBeNull();
+  });
+
+  it("puts each agent's run facts and citations on its card, the plan's catalogue entry too", async () => {
+    renderCase('C-000008');
+    const board = await screen.findByRole('region', { name: 'The board' });
+    const conformance = await within(board).findByRole('region', { name: 'Conformance' });
+    expect(conformance).toHaveTextContent(
+      'Replay · claude-opus-5-5 · 14.6 s · 3 steps · 5 tool calls · message 16615',
+    );
+    expect(within(conformance).getByText('Cited 8 evidence sections')).toBeInTheDocument();
+    // Encounter Integrity did not cite the schema validation
+    const encounter = within(board).getByRole('region', { name: 'Encounter Integrity' });
+    expect(within(encounter).getByText('Cited 7 evidence sections')).toBeInTheDocument();
+    expect(within(encounter).queryByRole('button', { name: 'Schema validation' })).toBeNull();
+    const coordinator = within(board).getByRole('region', { name: 'Coordinator' });
+    expect(coordinator).toHaveTextContent(
+      'Replay · claude-opus-5-5 · 16.3 s · 3 steps · 2 tool calls · message 16622',
+    );
+    expect(coordinator).toHaveTextContent(/Cited 8 evidence sections and catalogue entry.*E7/);
+    // What must still hold waits one click away, its operation keys as codes
+    const holds = within(coordinator).getByRole('button', { name: 'What must still hold before a write' });
+    expect(holds).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      within(coordinator).getByText('BEDMGR^HOSP^MRN1008^ENC-1008^transfer^2026-10-15T08:20:00Z', {
+        selector: 'code',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('names the iterations in Technical, and opens the data details there', async () => {
+    useAppearance.setState({ detail: 'technical' });
+    renderCase('C-000008');
+    const board = await screen.findByRole('region', { name: 'The board' });
+    const conformance = await within(board).findByRole('region', { name: 'Conformance' });
+    expect(conformance).toHaveTextContent('Replay · claude-opus-5-5 · 14.6 s · 3 iterations · 5 tool calls');
+    expect(within(conformance).getByRole('button', { name: /^Which ones\s?, Conformance$/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    const top = await outcome();
+    expect(within(top).getByRole('button', { name: 'Versions, keys and times' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    // The explanation stays closed in both modes
+    expect(within(board).getByRole('button', { name: 'How the board works' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  });
+
+  it('ends with the case as the API sends it', async () => {
+    renderCase('C-000008');
+    await screen.findByRole('heading', { name: 'Case C-000008' });
+    const api = screen.getByRole('button', { name: 'As the API sends it' });
+    expect(api).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('GET /api/shutter/cases/C-000008')).toBeInTheDocument();
+  });
+
+  /** The first layer's words on C-000008's Summary tab, steps closed, once every part of it is read. */
+  async function summaryWords(detail: 'plain' | 'technical') {
+    useAppearance.setState({ detail });
+    renderCase('C-000008');
+    const board = await screen.findByRole('region', { name: 'The board' });
+    await within(board).findByRole('region', { name: 'Coordinator' });
+    await screen.findByRole('region', { name: 'Escalations' });
+    await screen.findByRole('region', { name: 'Same failure, two runs' });
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: /^\d\. / })[2]).not.toHaveTextContent('Not read yet'),
+    );
+    await within(await outcome()).findByText('Operator');
+    // The case's JSON is the machine's view, not reading: it is left out of the count
+    const json = [...document.querySelectorAll<HTMLElement>('.json-block')]
+      .filter((el) => !el.closest('[data-tech-detail="closed"]'))
+      .reduce((n, el) => n + layer1Words(el).length, 0);
+    // A drop-down's options are not read until it opens: only the chosen one counts
+    const options = [...document.querySelectorAll<HTMLOptionElement>('option')]
+      .filter((o) => !o.selected)
+      .reduce((n, el) => n + layer1Words(el).length, 0);
+    return layer1Words(document.body).length - json - options;
+  }
+
+  // The spec's budget (cases-list-and-case-page.md 3): at most 600 words, today 1,130; Technical at most 1.5 times
+  it('keeps the Summary tab, steps closed, within 600 words in Plain', async () => {
+    const plain = await summaryWords('plain');
+    expect(plain).toBeLessThanOrEqual(600);
+  });
+
+  it('keeps it within 900 words in Technical, every data detail open', async () => {
+    const technical = await summaryWords('technical');
+    expect(technical).toBeLessThanOrEqual(900);
+  });
+});
+
+describe('the case page in the trial', () => {
+  beforeEach(() => {
+    resetMock('approver');
+    env.trial = true;
+    env.reduced = true;
+    useAppearance.setState({ detail: 'plain' });
+  });
+  afterEach(() => {
+    env.trial = false;
+    env.reduced = false;
+  });
+
+  it('plays out what came of an approval: the steps, then the band, the note, one announcement and the event', async () => {
+    const done = vi.fn();
+    window.addEventListener(REPLAY_DONE, done);
+    renderCase('C-000002');
+    await outcomeLine('Waiting for approval');
+    const approval = await screen.findByRole('region', { name: 'Approval' });
+    await userEvent.click(await within(approval).findByRole('button', { name: 'Approve plan' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
+    expect(within(dialog).getByTestId('confirm-consequence')).toHaveTextContent(
+      'Go ahead. You will see what happened next in the recording: the fix goes out and the receiving system confirms it. Nothing leaves this browser.',
+    );
+    expect(within(dialog).getByText('Trial only')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve this plan' }));
+    // Under reduced motion, the final state at once
+    await outcomeLine('Delivered: verified at the receiver');
+    expect(await screen.findByTestId('replay-note')).toHaveTextContent(
+      'Replayed from the recording: approved 20 Oct, 17:24 UTC. Your approval is noted at the end of the audit trail.',
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Approved in the trial. The recording shows it delivered and verified.',
+    );
+    await waitFor(() => expect(done).toHaveBeenCalledTimes(1));
+    const steps = [...document.querySelectorAll('.lifecycle-step')];
+    expect(steps.slice(-3).map((s) => s.getAttribute('data-revealed'))).toEqual(['true', 'true', 'true']);
+    expect(await screen.findByRole('region', { name: 'Outcome' })).toHaveAttribute('data-tone', 'positive');
+    window.removeEventListener(REPLAY_DONE, done);
+  });
+
+  it('shows Convene the board and Reinvestigate disabled, with the reason, never hidden', async () => {
+    renderCase('C-000008');
+    const convene = await screen.findByRole('button', { name: 'Convene the board' });
+    expect(convene).toBeDisabled();
+    expect(convene).toHaveAccessibleDescription('Needs a real model: not in the trial');
+    const top = await outcome();
+    const again = await within(top).findByRole('button', { name: 'Reinvestigate' });
+    expect(again).toBeDisabled();
+    expect(again).toHaveAccessibleDescription('Needs a real model: not in the trial');
   });
 });

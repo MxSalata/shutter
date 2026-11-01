@@ -13,16 +13,18 @@ import {
 import { IconArrowsLeftRight, IconEqual } from '@tabler/icons-react';
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router';
-import { useAttempts, useCase, useCases, useClosure, usePlan, useSnapshot } from '@/api/hooks';
+import { useAttempts, useCase, useCases, useClosure, usePlan, useScenarios, useSnapshot } from '@/api/hooks';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { OutcomeBadge } from '@/components/OutcomeBadge';
 import { PortalLink } from '@/components/PortalLink';
 import { DispositionBadge, StateBadge } from '@/components/StateBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { humanize } from '@/lib/format';
+import { playedFor } from '@/lib/proof';
 import { writes } from '@/lib/status';
 import { traceScreenshot } from '@/lib/screenshots';
 import type { CaseDetail } from '@/api/types';
-import { compareSide, evidenceRows, s8Pair, type CompareSide } from './compare';
+import { compareSide, evidenceRows, playedMark, s8Pair, type CompareSide } from './compare';
 import { NotYet, Section } from './Section';
 
 /** One case of the pair, read the way its own page reads it. */
@@ -196,39 +198,59 @@ export function S8Compare({ caseId, focus }: { caseId: string; focus: boolean })
 
 /**
  * A compact strip near the top of an S8 case played by rules alone or by the board: the same failure's other run,
- * linked, and a button to the side by side. Shown only when both runs exist.
+ * linked, with its outcome against S8's expectation (rules alone's write reads "Not as expected"), how the evaluation
+ * scored each mode's play of S8 ("Board: as expected", "Rules alone: differs, wrote WARD-B"), and a button to the side
+ * by side. Shown only when both runs exist.
  */
 export function CounterpartStrip({ c, onCompare }: { c: CaseDetail; onCompare: () => void }) {
   const mine = c.scenario === 'S8' && (c.mode === 'rules' || c.mode === 'board');
   const cases = useCases({ scenario: 'S8', limit: 50 }, mine);
+  const scenario = useScenarios().data?.scenarios.find((s) => s.id === 'S8');
   const { rules, board } = s8Pair(cases.data?.items ?? []);
   if (!mine || !rules || !board) return null;
   const other = c.mode === 'board' ? rules : board;
   if (other.caseId === c.caseId) return null;
   const thisRun = c.mode === 'board' ? "the board's run" : 'the run by rules alone';
   const otherRun = c.mode === 'board' ? 'Rules alone' : 'The board';
+  const played = playedFor('S8');
+  const marks = [playedMark('board', played?.board), playedMark('rules', played?.rules, rules.ward)].filter(
+    (m) => m !== null,
+  );
   return (
     <Paper withBorder p="xs" mb="md" component="section" aria-label="Same failure, two runs">
-      <Group gap="sm" wrap="wrap" justify="space-between">
-        <Group gap={6} wrap="wrap">
-          <Text size="sm" fw={600}>
-            Same failure, two runs:
-          </Text>
-          <Text size="sm">{`this is ${thisRun}. ${otherRun} played it as`}</Text>
-          <Anchor component={Link} to={`/cases/${encodeURIComponent(other.caseId)}`} size="sm" fw={600}>
-            {other.caseId}
-          </Anchor>
-          <StateBadge state={other.state} />
+      <Stack gap={6}>
+        <Group gap="sm" wrap="wrap" justify="space-between">
+          <Group gap={6} wrap="wrap">
+            <Text size="sm" fw={600}>
+              Same failure, two runs:
+            </Text>
+            <Text size="sm">{`this is ${thisRun}. ${otherRun} played it as`}</Text>
+            <Anchor component={Link} to={`/cases/${encodeURIComponent(other.caseId)}`} size="sm" fw={600}>
+              {other.caseId}
+            </Anchor>
+            <OutcomeBadge c={other} scenario={scenario} />
+          </Group>
+          <Button
+            size="xs"
+            variant="default"
+            leftSection={<IconArrowsLeftRight size={14} aria-hidden />}
+            onClick={onCompare}
+          >
+            Compare the two runs
+          </Button>
         </Group>
-        <Button
-          size="xs"
-          variant="default"
-          leftSection={<IconArrowsLeftRight size={14} />}
-          onClick={onCompare}
-        >
-          Compare the two runs
-        </Button>
-      </Group>
+        {/* The evaluation's marks for S8 in each mode, from its recorded passes */}
+        {marks.length ? (
+          <Group gap={6} wrap="wrap" data-testid="played-marks">
+            <Text size="xs" c="dimmed">
+              In the evaluation:
+            </Text>
+            {marks.map((m) => (
+              <StatusBadge key={m.label} tone={m.tone} label={m.label} variant="outline" />
+            ))}
+          </Group>
+        ) : null}
+      </Stack>
     </Paper>
   );
 }

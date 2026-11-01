@@ -4,7 +4,6 @@ import {
   Button,
   Code,
   Group,
-  Modal,
   NativeSelect,
   Stack,
   Text,
@@ -34,6 +33,7 @@ import {
   useSiteProfile,
 } from '@/api/hooks';
 import type { CaseDetail, Escalation } from '@/api/types';
+import { byEnv } from '@/env/copy';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
@@ -41,6 +41,7 @@ import type { Tone } from '@/lib/tone';
 import { describeError, isApiError } from '@/lib/errors';
 import { addressesProblem, closeNeedsApprover, controlProblem } from '../../site-profile/profile';
 import { formatZoned, humanize } from '@/lib/format';
+import { ConfirmModal } from './ApprovalPanel';
 import { receiverNoun, receiverTeam } from './receiver';
 import { Section } from './Section';
 
@@ -103,20 +104,30 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
     await send.mutateAsync({ seq: draft.seq, bodyDigest: stored.bodyDigest, idempotencyKey: key });
     notifications.show({
       color: 'blue',
-      title: `Escalation ${draft.seq} sent`,
-      message: `To ${to}. Once they have corrected the systems, mark the case as handled${c.failureKind === 'withheld' ? '' : ', or reinvestigate it'}.`,
+      title: byEnv({ live: `Escalation ${draft.seq} sent`, trial: 'Marked as sent in the trial' }),
+      message: byEnv({
+        live: `To ${to}. Once they have corrected the systems, mark the case as handled${c.failureKind === 'withheld' ? '' : ', or reinvestigate it'}.`,
+        trial: 'No email leaves this browser.',
+      }),
     });
     onClose();
   };
 
   return (
-    <Modal
+    <ConfirmModal
       opened
       onClose={() => (busy ? undefined : onClose())}
       title={`Escalate to ${draft.teamName || recipient}`}
       size="xl"
     >
       <Stack gap="sm">
+        {/* What sending does, first: a real email from a live system; nothing at all from the trial */}
+        <Text size="sm" fw={600} data-testid="confirm-consequence">
+          {byEnv({
+            live: `This emails ${draft.teamName ? `the ${draft.teamName}` : recipient}.`,
+            trial: 'Sending marks it as sent in the trial. No email leaves this browser.',
+          })}
+        </Text>
         <Text size="sm">
           Shutter drafted this from its record of the case: the patient&apos;s identifiers and date of birth,
           the event, why it stopped, what {receiverNoun(c.receiver)} holds and the encounter&apos;s messages.
@@ -174,7 +185,7 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
           </Button>
         </Group>
       </Stack>
-    </Modal>
+    </ConfirmModal>
   );
 }
 
@@ -218,7 +229,7 @@ function MarkHandled({ c }: { c: CaseDetail }) {
           When the team has corrected the systems by hand. Nothing is sent.
         </Text>
       </Group>
-      <Modal opened={opened} onClose={() => setOpened(false)} title={`Mark ${c.caseId} as handled`}>
+      <ConfirmModal opened={opened} onClose={() => setOpened(false)} title={`Mark ${c.caseId} as handled`}>
         <Stack gap="sm">
           <Textarea
             label="What the team did"
@@ -243,7 +254,7 @@ function MarkHandled({ c }: { c: CaseDetail }) {
             </Button>
           </Group>
         </Stack>
-      </Modal>
+      </ConfirmModal>
     </>
   );
 }
@@ -296,7 +307,7 @@ export function EscalationPanel({
       title="Escalations"
       note={
         stopped
-          ? `When Shutter can't safely recover a message, don't guess: send the case to ${recipient}, so they compare the systems and correct them by hand. Shutter drafts the email from its record; a person checks it and sends it.`
+          ? "Shutter can't recover this safely. Send it to the team that corrects the systems by hand."
           : 'The emails sent before the team corrected the systems by hand and the case was closed.'
       }
     >

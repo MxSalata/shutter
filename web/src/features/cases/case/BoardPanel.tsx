@@ -2,28 +2,35 @@ import {
   Accordion,
   Badge,
   Button,
-  Card,
   Group,
   List,
-  Progress,
   SimpleGrid,
   Stack,
   Text,
-  Title,
+  Tooltip,
+  VisuallyHidden,
 } from '@mantine/core';
 import { IconChevronDown, IconMessageExclamation, IconUsers } from '@tabler/icons-react';
-import { useState, type ReactNode } from 'react';
+import { Fragment, useState } from 'react';
 import { useRuns, useSettings } from '@/api/hooks';
 import type { AgentRun, Mode } from '@/api/types';
+import { AgreementDots } from '@/components/AgreementDots';
+import { CodeChip } from '@/components/CodeChip';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { MemberCard } from '@/components/MemberCard';
 import { PortalLink } from '@/components/PortalLink';
 import { DispositionBadge } from '@/components/StateBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { JsonBlock } from '@/components/JsonBlock';
+import { TechDetail } from '@/components/TechDetail';
+import { Term } from '@/components/Term';
 import { costAtPrice } from '@/lib/cost';
+import { catalogueEntriesOf, EVIDENCE_REFS, evidenceSection } from '@/lib/evidenceRefs';
 import { asArray, asObject } from '@/lib/json';
-import { formatDuration, formatInt, formatUsd, humanize, keyLabel } from '@/lib/format';
+import { formatDuration, formatInt, formatUsd, humanize, plural } from '@/lib/format';
+import { SPECIALISTS } from '@/lib/hues';
 import { PROVENANCE } from '@/lib/status';
+import { useTechnical } from '@/stores/appearance';
 import { describeEntry } from './derive';
 import { showEvidence } from './evidenceLinks';
 import { NotYet, Section } from './Section';
@@ -31,6 +38,7 @@ import { NotYet, Section } from './Section';
 /** Small counts in words, as the board's note says them. */
 const NUMBERS: Record<number, string> = { 1: 'One', 2: 'Two', 3: 'Three', 4: 'Four', 5: 'Five' };
 
+/** A finding's lists, in the order the cards show them. */
 const LISTS: [string, string][] = [
   ['violations', 'Violations'],
   ['superseding_evidence', 'Superseding evidence'],
@@ -40,7 +48,8 @@ const LISTS: [string, string][] = [
   ['disagreements', 'Disagreements kept'],
 ];
 
-function RunStats({ run, portalBase }: { run: AgentRun; portalBase: string }) {
+/** A run's cost and tokens, and its provenance in full: inside the finding or the run, one click from the card. */
+function RunStats({ run }: { run: AgentRun }) {
   const replay = run.mode === 'replay';
   const prices = useSettings().data?.prices;
   // A replay costs nothing now; its tokens are the recorded run's, so they give what that run cost.
@@ -85,18 +94,6 @@ function RunStats({ run, portalBase }: { run: AgentRun; portalBase: string }) {
           {run.toolCallCount ? ` · ${run.toolCallCount} tool calls` : ''}
         </Text>
       )}
-      {run.ensMessageId ? (
-        <PortalLink
-          href={
-            run.messageLink ||
-            `${portalBase}EnsPortal.MessageContents.zen?HeaderId=${encodeURIComponent(run.ensMessageId)}`
-          }
-          what={`message ${run.ensMessageId}, the agent's request and answer`}
-          size="xs"
-        >
-          The run's message in the production
-        </PortalLink>
-      ) : null}
       {run.error ? (
         <Text size="xs" c="red">
           {run.error}
@@ -126,32 +123,6 @@ function ResultLists({ result, omit = [] }: { result: Record<string, unknown>; o
         );
       })}
     </>
-  );
-}
-
-function EvidenceRefs({ refs }: { refs: unknown }) {
-  const list = asArray(refs).map(describeEntry);
-  if (!list.length) return null;
-  return (
-    <Group gap={4} wrap="wrap">
-      <Text size="xs" c="dimmed">
-        Cites
-      </Text>
-      {list.map((r, i) => (
-        <Badge
-          key={`${i}:${r}`}
-          size="xs"
-          variant="outline"
-          color="gray"
-          component="button"
-          type="button"
-          onClick={() => showEvidence(r)}
-          style={{ textTransform: 'none', cursor: 'pointer' }}
-        >
-          {keyLabel(r)}
-        </Badge>
-      ))}
-    </Group>
   );
 }
 
@@ -185,28 +156,139 @@ function ToolCalls({ run }: { run: AgentRun }) {
   );
 }
 
-/** A specialist's own confidence in its finding: shown second, and never read by the gate. */
-function confidenceText(confidence: number): string {
-  return Number.isFinite(confidence) && confidence > 0
-    ? `Confidence ${Math.round(confidence * 100)}%, self-reported; not used by the gate`
-    : '';
+/** A run's facts in one line, always on its card: "Replay · claude-opus-5-5 · 14.6 s · 3 steps · 5 tool calls · message 16615". */
+function RunLine({ run, portalBase }: { run: AgentRun; portalBase: string }) {
+  const technical = useTechnical();
+  const parts = [
+    run.mode === 'replay' ? 'Replay' : run.mode === 'live' ? 'Live' : humanize(run.mode),
+    run.model,
+    formatDuration(run.durationMs),
+    // "steps" is the plain word for the agent's iterations; Technical names them
+    run.iterations ? plural(Number(run.iterations), technical ? 'iteration' : 'step') : '',
+    run.toolCallCount ? plural(Number(run.toolCallCount), 'tool call') : '',
+  ].filter(Boolean);
+  return (
+    <span className="run-line">
+      {parts.join(' · ')}
+      {run.ensMessageId ? (
+        <>
+          {' · '}
+          <PortalLink
+            href={
+              run.messageLink ||
+              `${portalBase}EnsPortal.MessageContents.zen?HeaderId=${encodeURIComponent(run.ensMessageId)}`
+            }
+            what={`message ${run.ensMessageId}, the agent's request and answer`}
+            size="xs"
+          >
+            {`message ${run.ensMessageId}`}
+          </PortalLink>
+        </>
+      ) : null}
+      {run.status && run.status !== 'ok' ? ` · ${humanize(run.status)}` : ''}
+    </span>
+  );
 }
 
-/** The details of a member's finding: its reasoning, what it cites, its run and its tool calls. */
-function FindingDetail({
-  run,
-  portalBase,
-  withConfidence = true,
-}: {
-  run: AgentRun;
-  portalBase: string;
-  /** False where the card already shows the confidence. */
-  withConfidence?: boolean;
-}) {
-  const result = asObject(run.finding?.findings) ?? asObject(run.result) ?? {};
-  const confidence = withConfidence
-    ? confidenceText(Number(result.confidence ?? run.finding?.confidence))
-    : '';
+/** A finding's structured result, from the run or the stored finding. */
+const resultOf = (run: AgentRun) => asObject(run.finding?.findings) ?? asObject(run.result) ?? {};
+
+/** A cited section's chip, in a word or two; the section's own title is on the Evidence tab it opens. */
+const CHIPS: Record<string, string> = {
+  message: 'HL7 message',
+  validation: 'Schema validation',
+  error: 'Connector error',
+  operation: 'Failed operation',
+  route: 'Route',
+  ward_state: 'Encounter',
+  receipt: 'Receipt',
+  timeline: 'Timeline',
+  later_event: 'Later events',
+};
+
+/** The evidence sections a run cites, in the Evidence tab's order, and the catalogue entries it names. */
+function citedBy(run: AgentRun): { refs: string[]; entries: string[] } {
+  const refs = asArray(resultOf(run).evidence_refs).filter((r): r is string => typeof r === 'string');
+  return {
+    refs: EVIDENCE_REFS.filter((r) => refs.includes(r)),
+    entries: catalogueEntriesOf(refs),
+  };
+}
+
+/**
+ * What a member cited, counted on its card ("Cited 8 evidence sections", "and catalogue entry E7"), with a chip per
+ * section in "Which ones" (a data detail, open in Technical): each opens that section on the Evidence tab.
+ */
+function Citations({ run, name, receiver }: { run: AgentRun; name: string; receiver?: string }) {
+  const { refs, entries } = citedBy(run);
+  if (!refs.length && !entries.length) return null;
+  return (
+    <Stack gap={4}>
+      <Text size="sm">
+        {refs.length ? `Cited ${plural(refs.length, 'evidence section')}` : 'Cited'}
+        {entries.length ? (
+          <>
+            {refs.length ? ' and ' : ' '}
+            <Term term="catalogue-entry">
+              {entries.length === 1 ? 'catalogue entry' : 'catalogue entries'}
+            </Term>{' '}
+            {entries.map((e, i) => (
+              <Fragment key={e}>
+                {i ? ', ' : ''}
+                <CodeChip>{e}</CodeChip>
+              </Fragment>
+            ))}
+          </>
+        ) : null}
+      </Text>
+      {refs.length ? (
+        <TechDetail
+          kind="data"
+          label={
+            <>
+              Which ones<VisuallyHidden component="span">{`, ${name}`}</VisuallyHidden>
+            </>
+          }
+        >
+          <Group gap={6} wrap="wrap">
+            {refs.map((ref) => {
+              const section = evidenceSection(ref, receiver);
+              return section ? (
+                <Tooltip key={ref} label={`Open ${section.title} on the Evidence tab`}>
+                  <Badge
+                    size="sm"
+                    variant="outline"
+                    color="gray"
+                    component="button"
+                    type="button"
+                    onClick={() => showEvidence(ref)}
+                    style={{ textTransform: 'none', cursor: 'pointer', height: 'auto', whiteSpace: 'normal' }}
+                  >
+                    {CHIPS[ref] ?? section.title}
+                  </Badge>
+                </Tooltip>
+              ) : null;
+            })}
+          </Group>
+        </TechDetail>
+      ) : null}
+    </Stack>
+  );
+}
+
+/** An operation key (`BEDMGR^HOSP^MRN1008^ENC-1008^transfer^2026-10-15T08:20:00Z`) in a sentence, as a wrapping code. */
+const KEY = /([A-Z][A-Z0-9]*(?:\^[^\s^]+){3,})/;
+
+function WithKeys({ text }: { text: string }) {
+  const parts = text.split(KEY);
+  return (
+    <>{parts.map((p, i) => (i % 2 ? <CodeChip key={i}>{p}</CodeChip> : <Fragment key={i}>{p}</Fragment>))}</>
+  );
+}
+
+/** The details of a member's finding: its question, its reasoning in full, its lists, its cost and its tool calls. */
+function FindingDetail({ run }: { run: AgentRun }) {
+  const result = resultOf(run);
   return (
     <Stack gap="xs">
       {run.member?.perspective ? (
@@ -215,14 +297,8 @@ function FindingDetail({
         </Text>
       ) : null}
       <Text size="sm">{String(result.summary ?? run.finding?.summary ?? run.content ?? '')}</Text>
-      {confidence ? (
-        <Text size="xs" c="dimmed">
-          {confidence}
-        </Text>
-      ) : null}
       <ResultLists result={result} />
-      <EvidenceRefs refs={result.evidence_refs} />
-      <RunStats run={run} portalBase={portalBase} />
+      <RunStats run={run} />
       <ToolCalls run={run} />
     </Stack>
   );
@@ -230,17 +306,8 @@ function FindingDetail({
 
 /** A finding's disposition, from its structured result or the stored finding. */
 function dispositionOf(run: AgentRun): string {
-  const result = asObject(run.finding?.findings) ?? asObject(run.result) ?? {};
+  const result = resultOf(run);
   return String(result.disposition ?? run.finding?.disposition ?? '');
-}
-
-/** A card's small label over its name: what the agent is on the board. */
-function Eyebrow({ children }: { children: ReactNode }) {
-  return (
-    <Text size="xs" fw={700} tt="uppercase" c="dimmed" style={{ letterSpacing: '0.04em' }}>
-      {children}
-    </Text>
-  );
 }
 
 /** A toggle for the rest of a card, the finding in full or the run, named for the card it sits in. */
@@ -281,175 +348,247 @@ function MoreToggle({
 }
 
 /** The border of a card that dissented: two pixels in the attention tone, beside the badge that says it in words. */
-const DISSENT_BORDER = { borderColor: 'var(--mantine-color-yellow-outline)', borderWidth: 2 };
+const DISSENT_BORDER = {
+  borderLeftColor: 'var(--mantine-color-yellow-outline)',
+  borderRightColor: 'var(--mantine-color-yellow-outline)',
+  borderBottomColor: 'var(--mantine-color-yellow-outline)',
+  borderWidth: 2,
+  borderTopWidth: 3,
+};
+
+/** The card's name, as its heading's words, with the id its region and toggles are named by. */
+const nameOf = (run: AgentRun) => run.member?.name ?? humanize(run.memberCode);
 
 /**
- * A specialist as a card: its name, what it proposed, its own confidence (marked as its own, never the gate's) and its
- * reason in a few lines, with the whole finding on demand. A specialist that disagreed with the plan carries the
- * Dissent badge and the dissent as the coordinator kept it, so dissent is read, not hidden.
+ * A specialist agent as a card, in its member's hue: its name, what it proposed, its own confidence (its own report,
+ * never the gate's), the run's facts in one line, what it cited, and the finding in full on demand. A specialist that
+ * disagreed with the plan carries the Dissent badge and the dissent as the coordinator kept it, so dissent is read,
+ * not hidden.
  */
 function SpecialistCard({
   run,
   portalBase,
   dissent,
   kept,
+  receiver,
+  defineConfidence,
 }: {
   run: AgentRun;
   portalBase: string;
   dissent: boolean;
   /** The dissent as the coordinator kept it, in a line: what the specialist proposed and why. */
   kept?: string;
+  receiver?: string;
+  /** The page's first confidence: its words carry their definition. */
+  defineConfidence: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const result = asObject(run.finding?.findings) ?? asObject(run.result) ?? {};
+  const result = resultOf(run);
   const key = String(run.id ?? run.memberCode);
-  const name = run.member?.name ?? humanize(run.memberCode);
+  const name = nameOf(run);
   const confidence = Number(result.confidence ?? run.finding?.confidence);
   const shown = Number.isFinite(confidence) && confidence > 0;
+  const own = 'own confidence';
   return (
-    <Card
-      component="article"
+    <MemberCard
+      member={run.memberCode}
+      name={<span id={`agent-${key}`}>{name}</span>}
       aria-labelledby={`agent-${key}`}
-      withBorder
-      padding="sm"
+      badge={
+        dissent ? <StatusBadge tone="attention" label="Dissent" icon={IconMessageExclamation} /> : undefined
+      }
+      meta={<RunLine run={run} portalBase={portalBase} />}
       style={{ minWidth: 0, ...(dissent ? DISSENT_BORDER : {}) }}
     >
-      <Stack gap={6}>
-        <Group justify="space-between" gap={6} wrap="wrap">
-          <Eyebrow>Specialist</Eyebrow>
-          {dissent ? (
-            <StatusBadge tone="attention" size="xs" label="Dissent" icon={IconMessageExclamation} />
-          ) : null}
-        </Group>
-        <Title order={3} fz="sm" id={`agent-${key}`}>
-          {name}
-        </Title>
+      <Group gap="xs" wrap="wrap">
         <DispositionBadge disposition={dispositionOf(run)} proposed />
-        {shown ? (
-          <Stack gap={2}>
-            <Text size="xs" c="dimmed">
-              {`Confidence ${Math.round(confidence * 100)}%, self-reported`}
-            </Text>
-            {/* The bar only repeats the figure, in grey: no tone, since the gate does not read it */}
-            <Progress value={Math.round(confidence * 100)} color="gray" size="xs" aria-hidden />
-          </Stack>
-        ) : null}
-        {kept ? <Text size="sm">{kept}</Text> : null}
-        {/* The reason in a few lines; opened, the finding gives it whole */}
-        {open ? null : (
-          <Text size="sm" c="dimmed" lineClamp={4}>
-            {String(result.summary ?? run.finding?.summary ?? run.content ?? '')}
-          </Text>
-        )}
-        <MoreToggle
-          open={open}
-          onToggle={() => setOpen((o) => !o)}
-          controls={`agent-${key}-finding`}
-          describedBy={`agent-${key}`}
-          label="the finding"
-        />
-        {open ? (
-          <div id={`agent-${key}-finding`}>
-            <FindingDetail run={run} portalBase={portalBase} withConfidence={false} />
-          </div>
-        ) : (
-          <div id={`agent-${key}-finding`} hidden />
-        )}
-      </Stack>
-    </Card>
+      </Group>
+      {shown ? (
+        <Text size="sm" data-testid="own-confidence">
+          {'Its '}
+          {defineConfidence ? (
+            <Term definition="The agent's own report. The gate does not use it.">{own}</Term>
+          ) : (
+            own
+          )}
+          {`: ${Math.round(confidence * 100)}%`}
+        </Text>
+      ) : null}
+      {kept ? <Text size="sm">{kept}</Text> : null}
+      <Citations run={run} name={name} receiver={receiver} />
+      <MoreToggle
+        open={open}
+        onToggle={() => setOpen((o) => !o)}
+        controls={`agent-${key}-finding`}
+        describedBy={`agent-${key}`}
+        label="the finding"
+      />
+      {open ? (
+        <div id={`agent-${key}-finding`}>
+          <FindingDetail run={run} />
+        </div>
+      ) : (
+        <div id={`agent-${key}-finding`} hidden />
+      )}
+    </MemberCard>
   );
 }
 
 /**
- * The coordinator as the board's last card: the plan it proposed, its reason in full, every dissent it kept with why,
- * or that there was none, and its lists (violations, superseding evidence and the rest), always shown; its run on
- * demand.
+ * The coordinator agent as the board's last card, full width under the specialists: the plan it proposed, its reason
+ * in full, every dissent it kept with why, or that there was none, its lists, the run's facts in one line and what it
+ * cited; what must still hold before a write (with the operation keys as codes) in a data detail; its run on demand.
  */
 function CoordinatorCard({
   run,
   result,
   kept,
   portalBase,
+  receiver,
 }: {
   run: AgentRun;
   result: Record<string, unknown>;
   /** Each dissent kept: the specialist's name and the coordinator's reason for keeping it. */
   kept: { name: string; why: string }[];
   portalBase: string;
+  receiver?: string;
 }) {
   const [open, setOpen] = useState(false);
   const key = String(run.id ?? 'coordinator');
+  const preconditions = asArray(result.preconditions).map(describeEntry);
   return (
-    <Card
-      component="article"
+    <MemberCard
+      member="coordinator"
+      name={<span id={`agent-${key}`}>Coordinator</span>}
       aria-labelledby={`agent-${key}`}
-      withBorder
-      padding="sm"
-      bg="var(--mantine-color-default-hover)"
+      badge={
+        <Text component="span" className="overline">
+          Proposes the plan
+        </Text>
+      }
+      meta={<RunLine run={run} portalBase={portalBase} />}
       style={{ minWidth: 0 }}
     >
-      <Stack gap={6}>
-        <Eyebrow>Proposes the plan</Eyebrow>
-        <Title order={3} fz="sm" id={`agent-${key}`}>
-          Coordinator
-        </Title>
+      <Group gap="xs" wrap="wrap">
         <DispositionBadge disposition={String(result.disposition ?? '')} proposed />
-        <Text size="sm">{String(result.summary ?? run.content ?? '')}</Text>
-        {kept.length ? (
-          kept.map((d) => (
-            <Stack
-              key={d.name}
-              gap={2}
-              p="xs"
-              style={{
-                borderLeft: '3px solid var(--mantine-color-yellow-outline)',
-                background: 'var(--mantine-color-body)',
-                borderRadius: 'var(--mantine-radius-sm)',
-              }}
-            >
-              <Text size="sm" fw={600}>
-                {`Dissent kept: ${d.name}`}
-              </Text>
-              {d.why ? <Text size="sm">{d.why}</Text> : null}
-            </Stack>
-          ))
-        ) : (
-          <Text size="xs" c="dimmed">
-            No disagreements to keep: the specialists agreed.
+      </Group>
+      {/* Its reasoning in its own words, full of the evidence's ids: one click away in Plain (What Shutter did says
+          it in plain words), open in Technical */}
+      {String(result.summary ?? run.content ?? '') ? (
+        <TechDetail kind="data" label="The coordinator's reasoning">
+          <Text size="sm" maw="68ch">
+            {String(result.summary ?? run.content ?? '')}
           </Text>
-        )}
-        {/* The disagreements are the dissents kept above */}
-        <ResultLists result={result} omit={['disagreements']} />
-        <MoreToggle
-          open={open}
-          onToggle={() => setOpen((o) => !o)}
-          controls={`agent-${key}-run`}
-          describedBy={`agent-${key}`}
-          label="the run"
-        />
-        {open ? (
-          <div id={`agent-${key}-run`}>
-            <RunStats run={run} portalBase={portalBase} />
-          </div>
-        ) : (
-          <div id={`agent-${key}-run`} hidden />
-        )}
-      </Stack>
-    </Card>
+        </TechDetail>
+      ) : null}
+      {kept.length ? (
+        kept.map((d) => (
+          <Stack
+            key={d.name}
+            gap={2}
+            p="xs"
+            maw="68ch"
+            style={{
+              borderLeft: '3px solid var(--mantine-color-yellow-outline)',
+              background: 'var(--mantine-color-body)',
+              borderRadius: 'var(--mantine-radius-sm)',
+            }}
+          >
+            <Text size="sm" fw={600}>
+              {`Dissent kept: ${d.name}`}
+            </Text>
+            {/* What the specialist said is on its own card; the coordinator's reason for keeping it, a click away */}
+            {d.why ? (
+              <TechDetail
+                kind="data"
+                label={
+                  <>
+                    Why it was kept<VisuallyHidden component="span">{`, ${d.name}`}</VisuallyHidden>
+                  </>
+                }
+              >
+                <Text size="sm">{d.why}</Text>
+              </TechDetail>
+            ) : null}
+          </Stack>
+        ))
+      ) : (
+        <Text size="sm" c="dimmed">
+          No disagreements to keep: the specialists agreed.
+        </Text>
+      )}
+      {/* The disagreements are the dissents kept above; the preconditions are in their own detail below */}
+      <ResultLists result={result} omit={['disagreements', 'preconditions']} />
+      {preconditions.length ? (
+        <TechDetail kind="data" label="What must still hold before a write">
+          <List size="sm" spacing={4}>
+            {preconditions.map((x, i) => (
+              <List.Item key={i}>
+                <WithKeys text={x} />
+              </List.Item>
+            ))}
+          </List>
+        </TechDetail>
+      ) : null}
+      <Citations run={run} name="Coordinator" receiver={receiver} />
+      <MoreToggle
+        open={open}
+        onToggle={() => setOpen((o) => !o)}
+        controls={`agent-${key}-run`}
+        describedBy={`agent-${key}`}
+        label="the run"
+      />
+      {open ? (
+        <div id={`agent-${key}-run`}>
+          <Stack gap="xs">
+            {/* Why the catalogue entry it cites fits, in its own words */}
+            {typeof result.why === 'string' && result.why ? (
+              <Text size="sm" maw="68ch">
+                {result.why}
+              </Text>
+            ) : null}
+            <RunStats run={run} />
+            <ToolCalls run={run} />
+          </Stack>
+        </div>
+      ) : (
+        <div id={`agent-${key}-run`} hidden />
+      )}
+    </MemberCard>
   );
 }
 
 /** The single investigator's finding, as a card: there is no board to set it beside. */
-function FindingCard({ run, portalBase }: { run: AgentRun; portalBase: string }) {
+function FindingCard({
+  run,
+  portalBase,
+  receiver,
+}: {
+  run: AgentRun;
+  portalBase: string;
+  receiver?: string;
+}) {
+  const key = String(run.id ?? 'generalist');
   return (
-    <Card padding="sm" withBorder>
-      <Stack gap="xs">
+    <MemberCard
+      member="generalist"
+      name={<span id={`agent-${key}`}>{nameOf(run)}</span>}
+      aria-labelledby={`agent-${key}`}
+      meta={<RunLine run={run} portalBase={portalBase} />}
+    >
+      <Group gap="xs" wrap="wrap">
         <DispositionBadge disposition={dispositionOf(run)} />
-        <Text fw={600}>{run.member?.name ?? humanize(run.memberCode)}</Text>
-        <FindingDetail run={run} portalBase={portalBase} />
-      </Stack>
-    </Card>
+      </Group>
+      <FindingDetail run={run} />
+      <Citations run={run} name={nameOf(run)} receiver={receiver} />
+    </MemberCard>
   );
+}
+
+/** How far the specialists agreed with the plan, in the evaluation's words. */
+function agreementOf(agreed: number, of: number): string {
+  if (of !== 3) return '';
+  return ['against all three', 'with a minority', 'with the majority', 'unanimous'][agreed];
 }
 
 export function BoardPanel({
@@ -458,6 +597,7 @@ export function BoardPanel({
   mode,
   withheld = false,
   portalBase,
+  receiver,
 }: {
   caseId: string;
   open: boolean;
@@ -465,6 +605,8 @@ export function BoardPanel({
   /** A merge or a cancel Shutter never sends: the board is not convened, whatever the mode. */
   withheld?: boolean;
   portalBase: string;
+  /** The case's receiver, for the names of the evidence sections it cites. */
+  receiver?: string;
 }) {
   const runs = useRuns(caseId, open);
   const list = runs.data ?? [];
@@ -484,6 +626,8 @@ export function BoardPanel({
         : settledByPolicy
           ? 'Investigation: site policy'
           : 'The board';
+  const board = !notConvened && !settledByPolicy && mode !== 'rules' && mode !== 'single';
+  const count = specialists.length || 3;
   const note = notConvened
     ? 'Not convened: a withheld merge or cancel goes to the team that corrects it by hand, whatever the mode.'
     : mode === 'rules'
@@ -492,16 +636,15 @@ export function BoardPanel({
         ? 'One generalist agent reads the whole snapshot and proposes the plan itself.'
         : settledByPolicy
           ? "The scenario catalogue matched the case and the site's profile says who decides it. A case it leaves to the board shows the board's findings here."
-          : `${specialists.length ? `${NUMBERS[specialists.length] ?? specialists.length} specialists` : 'The specialists'} read the same evidence in parallel, each from one perspective, and cite what they used. The coordinator keeps their disagreements and proposes one plan. A confidence is the agent's own report and is not used by the gate; agreement is not a safety check either.`;
+          : `${NUMBERS[count] ?? count} specialist agents read the same evidence in parallel; a coordinator agent proposes one plan.`;
   const coordinatorResult = asObject(coordinator?.result) ?? {};
   const disagreements = asArray(coordinatorResult.disagreements);
   const dissent = disagreements.length;
+  const planned = String(coordinatorResult.disposition ?? '');
   // A specialist dissents when the coordinator kept its disagreement, or when it proposed another disposition
   const dissenters = new Set(disagreements.map((d) => String(asObject(d)?.member ?? '')));
   const dissents = (r: AgentRun) =>
-    !!coordinator &&
-    (dissenters.has(r.memberCode) ||
-      (!!dispositionOf(r) && dispositionOf(r) !== String(coordinatorResult.disposition ?? '')));
+    !!coordinator && (dissenters.has(r.memberCode) || (!!dispositionOf(r) && dispositionOf(r) !== planned));
   // The dissent's reason as the coordinator recorded it, without the specialist's self-reported confidence
   const keptDissent = (r: AgentRun) => {
     const d = disagreements
@@ -527,6 +670,14 @@ export function BoardPanel({
         why: String(d.why_kept ?? '') || (run ? (keptDissent(run) ?? '') : ''),
       };
     });
+  // The specialists' agreement with the plan, a dot each in member order; three specialists have the evaluation's words
+  const proposed = Object.fromEntries(
+    SPECIALISTS.map((m) => [m, specialists.some((r) => r.memberCode === m && dispositionOf(r) === planned)]),
+  );
+  const agreed = specialists.filter((r) => dispositionOf(r) === planned).length;
+  const agreement = agreementOf(agreed, specialists.length);
+  // The page's first confidence carries its definition
+  const firstConfident = specialists.find((r) => Number(resultOf(r).confidence ?? r.finding?.confidence) > 0);
   return (
     <Section
       id="board"
@@ -535,24 +686,36 @@ export function BoardPanel({
       note={note}
       aside={
         coordinator ? (
-          dissent ? (
-            <StatusBadge
-              tone="attention"
-              label={`${dissent} dissent${dissent === 1 ? '' : 's'} kept`}
-              hint="A specialist disagreed with the plan; the coordinator kept the disagreement in it. Dissent is not an error."
-              icon={IconMessageExclamation}
-            />
-          ) : (
-            <StatusBadge
-              tone="neutral"
-              label="Unanimous"
-              hint="The specialists agreed; agreement is not a safety check, the gate is"
-              icon={IconUsers}
-            />
-          )
+          <Group gap="sm" wrap="wrap">
+            {agreement ? <AgreementDots proposed={proposed} agreement={agreement} /> : null}
+            {dissent ? (
+              <StatusBadge
+                tone="attention"
+                label={`${dissent} dissent${dissent === 1 ? '' : 's'} kept`}
+                hint="A specialist disagreed with the plan; the coordinator kept the disagreement in it. Dissent is not an error."
+                icon={IconMessageExclamation}
+              />
+            ) : agreement ? null : (
+              <StatusBadge
+                tone="neutral"
+                label="Unanimous"
+                hint="The specialists agreed; agreement is not a safety check, the gate is"
+                icon={IconUsers}
+              />
+            )}
+          </Group>
         ) : null
       }
     >
+      {board ? (
+        <TechDetail kind="explain" label="How the board works">
+          <Text size="sm" maw="68ch">
+            Each member is an IRIS AI Hub agent (<CodeChip>%AI.Agent</CodeChip>), a business operation in the
+            production. A confidence is the agent&apos;s own report and is not used by the gate; agreement is
+            not a safety check either.
+          </Text>
+        </TechDetail>
+      ) : null}
       {runs.isError ? <ErrorAlert error={runs.error} title="The agent runs could not be read" /> : null}
       {mode === 'rules' && !notConvened ? <NotYet>No agent runs in this mode.</NotYet> : null}
       {notConvened ? null : settledByPolicy ? (
@@ -563,9 +726,15 @@ export function BoardPanel({
       ) : mode !== 'rules' && runs.isSuccess && list.length === 0 ? (
         <NotYet>No agent has answered yet.</NotYet>
       ) : null}
-      {/* The specialists, then the coordinator that weighed them: on a laptop four cards side by side */}
-      {specialists.length || coordinator ? (
-        <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm">
+      {/* The specialists side by side, by the width the board has (beside Ask it is narrower, and no card falls
+          under 240 px), then the coordinator that weighed them, full width */}
+      {specialists.length ? (
+        <SimpleGrid
+          type="container"
+          cols={{ base: 1, '540px': 2, '760px': 3 }}
+          spacing="sm"
+          style={{ alignItems: 'start' }}
+        >
           {specialists.map((r) => (
             <SpecialistCard
               key={String(r.id ?? r.memberCode)}
@@ -573,19 +742,22 @@ export function BoardPanel({
               portalBase={portalBase}
               dissent={dissents(r)}
               kept={keptDissent(r)}
+              receiver={receiver}
+              defineConfidence={r === firstConfident}
             />
           ))}
-          {coordinator ? (
-            <CoordinatorCard
-              run={coordinator}
-              result={coordinatorResult}
-              kept={keptReasons}
-              portalBase={portalBase}
-            />
-          ) : null}
         </SimpleGrid>
       ) : null}
-      {generalist ? <FindingCard run={generalist} portalBase={portalBase} /> : null}
+      {coordinator ? (
+        <CoordinatorCard
+          run={coordinator}
+          result={coordinatorResult}
+          kept={keptReasons}
+          portalBase={portalBase}
+          receiver={receiver}
+        />
+      ) : null}
+      {generalist ? <FindingCard run={generalist} portalBase={portalBase} receiver={receiver} /> : null}
     </Section>
   );
 }

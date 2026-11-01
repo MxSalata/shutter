@@ -1,4 +1,4 @@
-import { Anchor, Button, Group, Modal, Stack, Text, Textarea } from '@mantine/core';
+import { Anchor, Button, Group, Stack, Text, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconPlayerStop } from '@tabler/icons-react';
 import { useState } from 'react';
@@ -7,9 +7,11 @@ import { newIdempotencyKey } from '@/api/client';
 import { useAbandonCase, useMe } from '@/api/hooks';
 import { CLOSED_STATES, type CaseDetail, type CaseEvent } from '@/api/types';
 import { TRIAL } from '@/env/mode';
+import { NOT_IN_TRIAL } from '@/env/copy';
 import { describeError, isApiError } from '@/lib/errors';
 import { formatZoned, humanize } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
+import { ConfirmModal } from './ApprovalPanel';
 import { Section } from './Section';
 
 /** How long nothing of a case may move before an approver can abandon it: the server's abandonAfterMinutes default. */
@@ -43,8 +45,8 @@ interface Busy {
 /**
  * Gives up a case its workflow left in a working state (a restart in the middle of its work, an answer that never
  * came): for approvers, once nothing of the case has moved for the quiet minutes. The case fails with disposition
- * abandoned and can be reinvestigated; a case that is merely waiting is refused with 409 busy. The recorded demo has
- * no workflow to stop, so it doesn't offer it.
+ * abandoned and can be reinvestigated; a case that is merely waiting is refused with 409 busy. The trial has no
+ * workflow to stop: it shows the control disabled, with its reason, so the capability stays visible.
  */
 export function AbandonPanel({ c, events }: { c: CaseDetail; events: CaseEvent[] | null | undefined }) {
   const me = useMe().data;
@@ -56,8 +58,7 @@ export function AbandonPanel({ c, events }: { c: CaseDetail; events: CaseEvent[]
   const newest = newestAt(events ?? []);
   const quiet = newest ? now - Date.parse(newest) : 0;
   if (
-    TRIAL ||
-    !resolveCan(me).approve ||
+    (!TRIAL && !resolveCan(me).approve) ||
     CLOSED_STATES.includes(c.state) ||
     WAITING_FOR_A_PERSON.includes(c.state) ||
     !newest ||
@@ -102,12 +103,24 @@ export function AbandonPanel({ c, events }: { c: CaseDetail; events: CaseEvent[]
         Work in flight resumes after a clean restart of the production. If this case's workflow has stopped
         for good, abandoning it fails the case: nothing more is sent, and it can be reinvestigated.
       </Text>
-      <Group>
-        <Button variant="light" color="gray" leftSection={<IconPlayerStop size={16} />} onClick={open}>
+      <Group gap="sm" wrap="wrap">
+        <Button
+          variant="light"
+          color="gray"
+          leftSection={<IconPlayerStop size={16} aria-hidden />}
+          onClick={open}
+          disabled={TRIAL}
+          aria-describedby={TRIAL ? 'abandon-reason' : undefined}
+        >
           Abandon the case…
         </Button>
+        {TRIAL ? (
+          <Text size="xs" c="dimmed" id="abandon-reason">
+            {NOT_IN_TRIAL.recording}
+          </Text>
+        ) : null}
       </Group>
-      <Modal opened={opened} onClose={() => setOpened(false)} title={`Abandon ${c.caseId}`}>
+      <ConfirmModal opened={opened} onClose={() => setOpened(false)} title={`Abandon ${c.caseId}`}>
         <Stack gap="sm">
           <Textarea
             label="Why give it up"
@@ -150,7 +163,7 @@ export function AbandonPanel({ c, events }: { c: CaseDetail; events: CaseEvent[]
             </Button>
           </Group>
         </Stack>
-      </Modal>
+      </ConfirmModal>
     </Section>
   );
 }

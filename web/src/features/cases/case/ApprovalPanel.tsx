@@ -1,4 +1,15 @@
-import { Alert, Button, Group, Modal, Stack, Table, Text, Textarea, Tooltip } from '@mantine/core';
+import {
+  Alert,
+  Button,
+  Group,
+  Modal,
+  Stack,
+  Table,
+  Text,
+  Textarea,
+  Tooltip,
+  type ModalRootProps,
+} from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconCheck, IconEye, IconX } from '@tabler/icons-react';
 import { useState } from 'react';
@@ -7,7 +18,10 @@ import { newIdempotencyKey } from '@/api/client';
 import { resolveCan } from '@/api/can';
 import type { ApprovalsView, CaseDetail, Me, PlanView } from '@/api/types';
 import { TRIAL } from '@/env/mode';
+import { byEnv } from '@/env/copy';
 import { Digest } from '@/components/Digest';
+import { EnvChip } from '@/components/EnvChip';
+import { TechDetail } from '@/components/TechDetail';
 import { KeyValueList } from '@/components/KeyValueList';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
@@ -19,6 +33,33 @@ import { humanize } from '@/lib/format';
 import { approvalsByPlan, earlierApprovalText } from './receipt';
 import { NotYet, Section } from './Section';
 import { capitalReceiverNoun, receiverNoun } from './receiver';
+
+/**
+ * A confirm dialog for an action with an effect outside the browser: its title, with the environment's chip beside it
+ * ("Live system", or "Trial only"), so nobody approves a real write believing it is the trial. The title alone names
+ * the dialog.
+ */
+export function ConfirmModal({
+  title,
+  children,
+  ...props
+}: { title: string; children: React.ReactNode } & Omit<ModalRootProps, 'title' | 'children'>) {
+  return (
+    <Modal.Root {...props}>
+      <Modal.Overlay />
+      <Modal.Content>
+        <Modal.Header>
+          <Group gap="sm" wrap="wrap" style={{ minWidth: 0 }}>
+            <Modal.Title>{title}</Modal.Title>
+            <EnvChip />
+          </Group>
+          <Modal.CloseButton />
+        </Modal.Header>
+        <Modal.Body>{children}</Modal.Body>
+      </Modal.Content>
+    </Modal.Root>
+  );
+}
 
 function BlindResendPreview({ c, me }: { c: CaseDetail; me: Me }) {
   const preview = usePreviewBlindResend(c.caseId);
@@ -149,16 +190,19 @@ export function ApprovalPanel({
       {
         onSuccess: (reply) => {
           setDecision(null);
+          // In the trial the page itself plays out what came next, and announces it once
+          if (TRIAL && decision === 'approve') return;
           const by = reply?.approver ? ` by ${reply.approver}` : '';
           notifications.show({
             color: decision === 'approve' ? 'blue' : 'gray',
-            title: decision === 'approve' ? `Approved${by}` : `Rejected${by}`,
+            title:
+              decision === 'approve'
+                ? `Approved${by}`
+                : byEnv({ live: `Rejected${by}`, trial: 'Rejected in the trial' }),
             message:
               decision !== 'approve'
                 ? 'Nothing will be sent.'
-                : TRIAL
-                  ? 'The demo now replays what the recorded case did after its approval: the dispatch and its verification.'
-                  : 'The receiver is read again and the gate checks the dispatch.',
+                : 'The receiver is read again and the gate checks the dispatch.',
           });
         },
       },
@@ -172,7 +216,7 @@ export function ApprovalPanel({
     <Section
       id="approval"
       title="Approval"
-      note="Every write passes the gate first; then a person, or the site's written policy, releases exactly this plan. The release binds the plan digest, the evidence snapshot, the gate's policy and the receiver version; if any of them changes before dispatch, it no longer authorises the write, and the gate checks again at dispatch."
+      note="Every write passes the gate first; then a person, or the site's written policy, releases exactly this plan."
       aside={
         latest ? (
           latest.decision !== 'approved' ? (
@@ -194,6 +238,13 @@ export function ApprovalPanel({
         ) : null
       }
     >
+      <TechDetail kind="explain" label="What an approval binds">
+        <Text size="sm" maw="68ch">
+          The release binds the plan digest, the evidence snapshot, the gate&apos;s policy and the receiver
+          version; if any of them changes before dispatch, it no longer authorises the write, and the gate
+          checks again at dispatch.
+        </Text>
+      </TechDetail>
       {!write && plan ? <NotYet>No approval needed: the plan writes nothing.</NotYet> : null}
       {history ? (
         <Group gap="xs" wrap="wrap">
@@ -204,10 +255,9 @@ export function ApprovalPanel({
       {write || awaiting ? (
         <Stack gap="sm">
           {TRIAL && awaiting ? (
-            <Alert color="blue" variant="light" title="Demo replay">
-              This recorded case is held at its approval so that you can decide it here. Approving it replays
-              what the recorded case did next, the dispatch and its verification at the receiver; rejecting it
-              closes it as blocked. The plan digest you approve is the recorded plan's.
+            <Alert color="blue" variant="light" title="Held for you to decide">
+              This recorded case waits here for you. Approve it and the recording plays on: the fix goes out
+              and the receiving system confirms it. Reject it and it closes as blocked.
             </Alert>
           ) : null}
           <KeyValueList
@@ -313,7 +363,7 @@ export function ApprovalPanel({
           ) : null}
         </Stack>
       ) : null}
-      <Modal
+      <ConfirmModal
         opened={decision !== null}
         onClose={() => setDecision(null)}
         title={
@@ -325,11 +375,24 @@ export function ApprovalPanel({
       >
         {plan ? (
           <Stack gap="sm">
-            <Text size="sm">
+            {/* What the action does, first: for real on a live system, in this browser only in the trial */}
+            <Text size="sm" fw={600} data-testid="confirm-consequence">
               {decision === 'approve'
-                ? `You approve exactly this: ${humanize(plan.actionType || 'resend').toLowerCase()} the ${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''} for ${c.encounterId}, conditional on receiver version ${String(plan.expectedVersion)}.`
-                : `You reject the plan: nothing is sent to ${receiverNoun(c.receiver)}, and the case closes as blocked for a person to take further.`}
+                ? byEnv({
+                    live: `This sends the fix to ${receiverNoun(c.receiver)}, for real. The receiver is read again and the gate checks the dispatch.`,
+                    trial:
+                      'Go ahead. You will see what happened next in the recording: the fix goes out and the receiving system confirms it. Nothing leaves this browser.',
+                  })
+                : byEnv({
+                    live: `Nothing is sent to ${receiverNoun(c.receiver)}: the case closes as blocked for a person to take further.`,
+                    trial: 'Nothing is sent. The case closes as blocked, in this browser only.',
+                  })}
             </Text>
+            {decision === 'approve' ? (
+              <Text size="sm">
+                {`You approve exactly this: ${humanize(plan.actionType || 'resend').toLowerCase()} the ${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''} for ${c.encounterId}, conditional on receiver version ${String(plan.expectedVersion)}.`}
+              </Text>
+            ) : null}
             <KeyValueList
               rows={[
                 ['Plan digest', <Digest key="p" value={plan.digest} label="plan digest" />],
@@ -366,7 +429,7 @@ export function ApprovalPanel({
             </Group>
           </Stack>
         ) : null}
-      </Modal>
+      </ConfirmModal>
     </Section>
   );
 }

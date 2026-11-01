@@ -12,8 +12,8 @@ import { DispatchPanel, VerificationPanel } from './DispatchPanel';
 import { FailurePanel } from './FailurePanel';
 import {
   decisionSummary,
-  evidenceSummary,
   failedSummary,
+  observationsSummary,
   proposedSummary,
   verifiedSummary,
   writtenSummary,
@@ -22,6 +22,12 @@ import {
 import { GatePanel, PlanPanel, RehearsalPanel } from './PlanPanel';
 import { S8Compare } from './S8Compare';
 import { NestedSections } from './Section';
+
+/**
+ * How far a section on a tab of the case page must stop below the top when it is scrolled to: under the header and
+ * the sticky tab bar, so a focused heading is never hidden behind them.
+ */
+export const UNDER_TABS = 'calc(var(--shutter-header-h) + 3.5rem)';
 
 /** The summary's steps in story order, and the S8 comparison after them. */
 export type StoryStep = 'failed' | 'evidence' | 'proposed' | 'decision' | 'written' | 'verified' | 'compare';
@@ -43,7 +49,12 @@ function Step({
   children: ReactNode;
 }) {
   return (
-    <Accordion.Item value={value} id={`story-${value}`} data-tour={`case-${value}`}>
+    <Accordion.Item
+      value={value}
+      id={`story-${value}`}
+      data-tour={`case-${value}`}
+      style={{ scrollMarginTop: UNDER_TABS }}
+    >
       <Accordion.Control>
         <Text span display="block" fw={600}>
           {n ? `${n}. ${title}` : title}
@@ -122,7 +133,12 @@ export function CaseStory({
       <Step value="failed" n={1} title="What failed" summary={failedSummary(c)}>
         <FailurePanel c={c} />
       </Step>
-      <Step value="evidence" n={2} title="What the evidence says" summary={evidenceSummary(facts.snapshot)}>
+      <Step
+        value="evidence"
+        n={2}
+        title="What the evidence says"
+        summary={observationsSummary(facts.snapshot, c.receiver)}
+      >
         <Stack gap="sm">
           {key.length ? (
             <KeyValueList
@@ -180,7 +196,7 @@ export function CaseStory({
         <Step
           value="compare"
           title="Why the board matters"
-          summary="The same failure played by rules alone and by the board: what each did at the receiver, and the evidence both read."
+          summary="Rules alone and the board on the same failure, side by side."
         >
           <S8Compare caseId={c.caseId} focus={compareFocus} />
         </Step>
