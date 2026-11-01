@@ -1,5 +1,0 @@
-<<<<<<<< HEAD:www/assets/Timestamp-DyIgAqUh.js
-import{j as t,l as o,T as s}from"./mantine-DDRA6tWb.js";import{ay as l,aA as f,q as e,D as c,J as i}from"./index-CvPOOlFB.js";function u({iso:a,age:r=!1,...m}){if(!a)return null;const n=[l(a),`yours: ${f(a)}`,e(a)].join(" · ");return t.jsx(o,{label:n,children:t.jsx(s,{component:"time",dateTime:a,size:"sm",tabIndex:0,...m,children:r&&!c?e(a):i(a)})})}export{u as T};
-========
-import{j as t,l as o,T as s}from"./mantine-DDRA6tWb.js";import{ay as l,aA as f,q as e,D as c,J as i}from"./index-C3nC7lrq.js";function u({iso:a,age:r=!1,...m}){if(!a)return null;const n=[l(a),`yours: ${f(a)}`,e(a)].join(" · ");return t.jsx(o,{label:n,children:t.jsx(s,{component:"time",dateTime:a,size:"sm",tabIndex:0,...m,children:r&&!c?e(a):i(a)})})}export{u as T};
->>>>>>>> main:www/assets/Timestamp-DqMZSUZS.js
