@@ -309,7 +309,10 @@ transfer, a demographic update or a discharge that frees the bed), so the feed l
 files into the hospital's own inbound folder (`^Hospital.Config("dir","in")`), where PAS In reads them: the path a real
 hospital has. It never resets anything, and the scenario runner's Run and Reset are not involved.
 
-- **On and off.** The hospital install sets `^Hospital.Config("live")` from `SHUTTER_LIVE=1` and enables the item;
+- **On and off.** The hospital install sets `^Hospital.Config("live")` from `SHUTTER_LIVE=1` and enables the item; Shutter's
+  install, told the same, sets the shipped profile's policy for tier 2, single chains to `approval` (`Setup.LiveProfilePolicy`;
+  the owner's choice of 1 Nov 2026), so the live hospital's visitors always have a case to approve; the profile's source then
+  reads "(live hospital)" and the seed leaves it alone; a profile a person saved is never touched;
   `SELECT Hospital.Setup_SetLive(1)` (or `0`) in the hospital's namespace switches it without an install. Off, the item is
   disabled and a task that still runs does nothing. The install compiles `Hospital.Production` in the hospital's namespace
   on every run, so an upgrade's new items reach that namespace's production definition before `UpdateProduction`.
@@ -565,7 +568,11 @@ In `policy` mode the matcher's decision is:
   shown in the app.
 - Recording keys for replays name the case within its scenario: `scenario:<S>:<encounter>:<event>[:<receiver>]|<member>|<cfg>[|round<n>]`
   (the receiver when it is not the production's default, `Shutter.Production`'s `RECEIVER`, so two receivers' cases of one
-  movement record apart and the earlier recordings keep their keys; v1.34); The production review's recordings use the form `review:<namespace>:<production>|review|<CONFIGVERSION>|<fingerprint>` (13.6).
+  movement record apart and the earlier recordings keep their keys; v1.34). The round suffix counts the re-plans of one
+  investigation (a changed receiver at dispatch, a version conflict on the write); a convening after a release, which is a
+  reinvestigation, reuses the keys of the first, so a recording holds the latest convening's answers (a known limit, 1 Nov
+  2026: S23a's and S24's board recordings keep their second convening's; replays converge because those answers suit the
+  first convening too; the snapshot's sequence would make a sound round number at the price of recording them again); The production review's recordings use the form `review:<namespace>:<production>|review|<CONFIGVERSION>|<fingerprint>` (13.6).
   the replay runner falls back to the older `scenario:<S>|<member>|<cfg>` form, which the first recordings use.
 
 ### 6.4 The site profile and the policy path
@@ -1383,7 +1390,8 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   receiver when it is not the default (4), the board's plan at a history-of-record receiver gets the correcting steps as the
   policy path's does (`CaseWorkflow.AttachCorrectionSteps`), and the gate holds a superseded plan with
   `NEWER_MESSAGE_PENDING` while the later event it rests on is still on its way (6.5). The Second Parser item is
-  `Shutter.Operation.SecondParser`, which sets its classpath at start (6.7). The install (12): the installer's data database variable is `SHUTTERDATADIR`, since `DATADIR` is a name
+  `Shutter.Operation.SecondParser`, which sets its classpath at start (6.7). The live hospital's install sets tier 2 single
+  chains to approval (4.4), and the recording round rule is written down (4). The install (12): the installer's data database variable is `SHUTTERDATADIR`, since `DATADIR` is a name
   `%Installer` predefines (the install directory) and a Default never replaces an existing variable, so builds before this
   kept SHUTTERDATA at `/usr/irissys/`, inside the image and outside the volume, and lost every case on `docker compose
   down` or a rebuild (found by the upgrade proof of 1 Nov 2026; the hospital's and the records' data databases, under other
