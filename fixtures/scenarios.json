@@ -957,6 +957,7 @@
     ],
     "expected": {
       "modes": [
+        "board",
         "policy"
       ],
       "write": false,
@@ -1046,6 +1047,7 @@
       "final_ward": "WARD-A",
       "failed_operation_key": "PAS^HOSP^MRN1232^ENC-1232^transfer^2026-10-15T08:30:00Z",
       "modes": [
+        "board",
         "policy"
       ]
     }

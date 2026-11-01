@@ -306,12 +306,13 @@ jobs:
       - name: Scenarios S1 to S10, S13, S15 and S16 end to end on the board, in replay
         if: matrix.shard == 'board'
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --approve S1 S2 S3 S4 S5 S6 S7 S8 S9 S10 S13 S15 S16
-      # The board's runs of four newer scenarios, recorded live on 1 November 2026: the transfer in the hour the clocks go
-      # back (S21), the occupied bed resent once its occupant has left (S23a) and escalated when the occupant cannot leave
-      # (S23c), and the message with the site's own segment (S25)
-      - name: S21, S23a, S23c and S25 end to end on the board, in replay
+      # The board's runs of six newer scenarios, recorded live on 1 November 2026: the transfer in the hour the clocks go
+      # back (S21), one overtaken transfer at two receivers, each with its own recording (S22), the occupied bed resent once
+      # its occupant has left (S23a), two patients for one bed (S23b) and the occupant who cannot leave (S23c), and the
+      # message with the site's own segment (S25)
+      - name: S21, S22, S23a to S23c and S25 end to end on the board, in replay
         if: matrix.shard == 'board'
-        run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes board --approve S21 S23a S23c S25
+        run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes board --approve S21 S22 S23a S23b S23c S25
       # What the model would see of a case: tokens for the hospital number and the visit number, never the values, and
       # never the NHS number PID-3 carries beside the hospital number.
       - name: The model's view of a case carries tokens, not identifiers
