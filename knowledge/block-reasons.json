@@ -571,6 +571,15 @@
       "owner": "Operator",
       "reevaluate_when": "The newer message is delivered to the receiver, or its delivery fails and opens a case of its own",
       "text": "While Shutter was about to resend this movement, a newer message for the same patient arrived from the source system and has not yet reached the receiver. Resending first would be pointless at best, and wrong behind a cancellation or a merge, so the resend waits for the newer message."
+    },
+    {
+      "code": "SCHEMA_UNKNOWN",
+      "title": "The message's schema is not loaded here",
+      "prerequisite": "The message's schema category (its DocType category) is loaded in Shutter's namespace, so the message can be validated",
+      "next_action": "Import the site's schema into Shutter's namespace (the Doctor's hl7_schemas check names the category and the command), then reinvestigate the case. Nothing is sent meanwhile.",
+      "owner": "Integration team",
+      "reevaluate_when": "The schema category is imported",
+      "text": "The message names a schema category that Shutter's namespace does not have, such as a site's own variant of HL7 2.5.1 with extra segments. That is missing evidence, not an invalid message: Shutter cannot validate the message until the schema is imported."
     }
   ]
 }
