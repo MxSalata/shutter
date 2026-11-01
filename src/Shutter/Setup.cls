@@ -640,10 +640,10 @@ ClassMethod ApplyDefaultSettings(production As %String = "Shutter.Production") A
 /// never stopped here.
 /// The Second Parser item follows its jar (CONTRACTS 6.7, v1.34): enabled in the production's definition when
 /// shutter-pex.jar is installed (pex/build.sh), disabled when it is not, so a site without Java, or the replay edition, logs
-/// no gateway errors and the evidence simply carries no second opinion; and its %gatewayExtraClasspaths setting is written
-/// for this install (IRIS's own intersystems-utils jar, the parser's jar, lib/*.jar), since the jar versions differ between
-/// IRIS builds. A running production is updated in place. Safe to run again; a production without the item is left alone.
-/// Returns "ok: <enabled|disabled>, <n> jars" or "ERROR: ..."; from SQL, SELECT Shutter.Setup_SyncSecondParser().
+/// no gateway errors and the evidence simply carries no second opinion. The item's classpath is its own business
+/// (Shutter.Operation.SecondParser sets it at start), so nothing is written into the definition that a recompile would drop.
+/// A running production is updated in place. Safe to run again; a production without the item is left alone. Returns
+/// "ok: <enabled|disabled>" or "ERROR: ..."; from SQL, SELECT Shutter.Setup_SyncSecondParser().
 ClassMethod SyncSecondParser(production As %String = "Shutter.Production") As %String [ SqlProc ]
 {
     Set out = "ok: no item"
@@ -652,27 +652,11 @@ ClassMethod SyncSecondParser(production As %String = "Shutter.Production") As %S
         Set prod = ##class(Ens.Config.Production).%OpenId(production)
         If '$ISOBJECT(prod) Quit
         Set want = ##class(Shutter.Util.SecondParser).Available(), changed = 0
-        Set classpath = $SELECT(want: ##class(Shutter.Util.SecondParser).Classpath(), 1: "")
         For i = 1:1:prod.Items.Count() {
             Set item = prod.Items.GetAt(i)
             Continue:(item.Name '= ##class(Shutter.Util.SecondParser).#ITEM)
             If item.Enabled '= want Set item.Enabled = want, changed = 1
-            If want {
-                Set found = 0
-                For j = 1:1:item.Settings.Count() {
-                    Set setting = item.Settings.GetAt(j)
-                    Continue:(setting.Name '= "%gatewayExtraClasspaths")
-                    Set found = 1
-                    If setting.Value '= classpath Set setting.Value = classpath, changed = 1
-                }
-                If 'found {
-                    Set setting = ##class(Ens.Config.Setting).%New()
-                    Set setting.Target = "Host", setting.Name = "%gatewayExtraClasspaths", setting.Value = classpath
-                    Do item.Settings.Insert(setting)
-                    Set changed = 1
-                }
-            }
-            Set out = "ok: " _ $SELECT(want: "enabled", 1: "disabled") _ ", " _ $LENGTH(classpath, "|") _ " jars"
+            Set out = "ok: " _ $SELECT(want: "enabled", 1: "disabled")
         }
         Quit:'changed
         Set sc = prod.%Save()

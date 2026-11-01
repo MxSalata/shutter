@@ -725,8 +725,11 @@ jar under `dev/java` with `com.intersystems.enslib.pex`: `intersystems-utils-<v>
 `intersystems-pex-<v>-shaded.jar` on the AI Hub images; names and versions differ between builds), compiles the two classes
 against it with the image's own JDK (Temurin 11) and writes `shutter-pex.jar` and `framework.txt` (the framework jar's path)
 under the manager directory as `pex/`, beside `shutter/` and outside the image's data volume, so an upgraded container runs
-its own image's jar. `SyncSecondParser` writes the item's `%gatewayExtraClasspaths` for the install from `framework.txt` and
-the jars. The build never fails the image: without a JDK, a framework, network or a matching checksum it prints why, leaves
+its own image's jar. The item, `Shutter.Operation.SecondParser` (an `EnsLib.PEX.BusinessOperation` of Shutter's), sets its own
+`%gatewayExtraClasspaths` at start from `framework.txt` and the jars when the setting is empty, so nothing written into the
+production's definition is needed, and a recompile of `Shutter.Production`, which writes the definition again from the XData,
+cannot drop it (an item whose classpath the install had written died at its next start, core, 1 Nov 2026);
+`SyncSecondParser` only enables or disables the item as the jar is there or not. The build never fails the image: without a JDK, a framework, network or a matching checksum it prints why, leaves
 no jar and the item stays off (`PEX_STRICT=1`, CI's image job, turns such a skip into a failure on an image known to carry
 the framework). The Dockerfile runs it, and a site with Java runs it once by hand.
 
@@ -1379,7 +1382,8 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   forwarded failure alone. From the board's first live runs of S21 to S25: a scenario recording's key names the case's
   receiver when it is not the default (4), the board's plan at a history-of-record receiver gets the correcting steps as the
   policy path's does (`CaseWorkflow.AttachCorrectionSteps`), and the gate holds a superseded plan with
-  `NEWER_MESSAGE_PENDING` while the later event it rests on is still on its way (6.5). The install (12): the installer's data database variable is `SHUTTERDATADIR`, since `DATADIR` is a name
+  `NEWER_MESSAGE_PENDING` while the later event it rests on is still on its way (6.5). The Second Parser item is
+  `Shutter.Operation.SecondParser`, which sets its classpath at start (6.7). The install (12): the installer's data database variable is `SHUTTERDATADIR`, since `DATADIR` is a name
   `%Installer` predefines (the install directory) and a Default never replaces an existing variable, so builds before this
   kept SHUTTERDATA at `/usr/irissys/`, inside the image and outside the volume, and lost every case on `docker compose
   down` or a rebuild (found by the upgrade proof of 1 Nov 2026; the hospital's and the records' data databases, under other
