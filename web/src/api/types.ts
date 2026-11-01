@@ -855,7 +855,8 @@ export interface Budget {
 /** `GET /settings` `heldMessages`: held cases (failure kind `unreadable`) by the schema category they name. */
 export interface HeldMessages {
   count: number;
-  categories: { category: string; count: number; oldest?: string }[];
+  /** By category and the namespace that lacked it: SHUTTER for Shutter's own feed, HOSPITAL for a watched engine's. */
+  categories: { category: string; namespace?: string; count: number; oldest?: string }[];
 }
 
 /**
