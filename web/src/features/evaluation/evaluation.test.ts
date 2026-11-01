@@ -53,6 +53,8 @@ describe('the evaluation', () => {
     expect(
       passName({ ...base, scenario: 'S11', incident: true, encounter: 'ENC-1103', event: 'transfer' }),
     ).toBe('S11 ENC-1103 transfer');
+    expect(passName({ ...base, scenario: 'S22', receiver: 'Records Out' })).toBe('S22 Records Out');
+    expect(passName({ ...base, scenario: 'S22', receiver: '' })).toBe('S22');
   });
 });
 
