@@ -1372,7 +1372,13 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   refusal read as unknown and E17 escalated it. The case's timeline (8.2, `Timeline.ForCase`) takes that production's
   deliveries for the encounter too, each row with `namespace`, so a forwarded case's evidence, `later_events` and the case
   page's encounter timeline show the admission before the failure and the movements after it, where before they held the
-  forwarded failure alone. The resend failsafe (6.5) reads that namespace's deliveries as well: a
+  forwarded failure alone. The install (12): the installer's data database variable is `SHUTTERDATADIR`, since `DATADIR` is a name
+  `%Installer` predefines (the install directory) and a Default never replaces an existing variable, so builds before this
+  kept SHUTTERDATA at `/usr/irissys/`, inside the image and outside the volume, and lost every case on `docker compose
+  down` or a rebuild (found by the upgrade proof of 1 Nov 2026; the hospital's and the records' data databases, under other
+  names, were in the volume all along); `Setup.StartProduction` compiles `Shutter.Production` in its namespace before
+  updating or starting it, so an upgrade's new items reach a kept production definition, as the hospital's install does;
+  upgrading in place is INSTALL.md section 8. The resend failsafe (6.5) reads that namespace's deliveries as well: a
   ward operation of the encounter queued or in flight there with no result yet is a pending newer message, so a forwarded
   case blocks with `NEWER_MESSAGE_PENDING` and waits as a case of Shutter's own feed does; before, the failsafe saw only
   Shutter's own queue and resent while the watched production's newer message was in flight. Such a case is released when the

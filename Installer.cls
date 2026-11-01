@@ -17,7 +17,10 @@ XData Manifest [ XMLNamespace = INSTALLER ]
   <Default Name="NAMESPACE" Value="SHUTTER"/>
   <Default Name="MGRDIR" Value="#{##class(%File).ManagerDirectory()}"/>
   <Default Name="DBDIR" Value="${MGRDIR}${NAMESPACE}"/>
-  <Default Name="DATADIR" Value="${MGRDIR}shutter/db/${NAMESPACE}DATA"/>
+  <!-- Not DATADIR: %Installer predefines that name as the instance's install directory, and a Default never replaces a
+       variable that exists, so the data database landed at /usr/irissys/, inside the image and outside the volume
+       (found 1 Nov 2026 on the upgrade proof: every case was lost on a rebuild, and would be on docker compose down). -->
+  <Default Name="SHUTTERDATADIR" Value="${MGRDIR}shutter/db/${NAMESPACE}DATA"/>
   <Default Name="HOSPITAL" Value="HOSPITAL"/>
   <Default Name="HOSPITALDBDIR" Value="${MGRDIR}${HOSPITAL}"/>
   <Default Name="HOSPITALDATADIR" Value="${MGRDIR}shutter/db/${HOSPITAL}DATA"/>
@@ -27,7 +30,7 @@ XData Manifest [ XMLNamespace = INSTALLER ]
   <Namespace Name="${NAMESPACE}" Create="yes" Code="${NAMESPACE}" Data="${NAMESPACE}DATA" Ensemble="1">
     <Configuration>
       <Database Name="${NAMESPACE}" Dir="${DBDIR}" Create="yes" Resource="%DB_${NAMESPACE}"/>
-      <Database Name="${NAMESPACE}DATA" Dir="${DATADIR}" Create="yes" Resource="%DB_${NAMESPACE}DATA"/>
+      <Database Name="${NAMESPACE}DATA" Dir="${SHUTTERDATADIR}" Create="yes" Resource="%DB_${NAMESPACE}DATA"/>
     </Configuration>
   </Namespace>
   <!-- The demo hospital: a production that is not Shutter's, in a namespace of its own, with the packages it needs
