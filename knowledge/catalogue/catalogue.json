@@ -540,5 +540,46 @@
   ],
   "prose": "# E17 Two patients are allocated to one bed\n\n## Meaning\n\nThe source system has put two patients in one bed: the receiver holds one there, and the failed movement puts another in\nthe same bed, with nothing to say the first is leaving. That is a real clash on the ward, not a delivery fault. No write is\nsafe: a resend is refused again, and a receiver without the check would double-book the bed.\n\n## Telling it apart\n\nThe failure's answer is `bed_occupied`, and the evidence's `bed_conflict` section finds no movement out of the bed for the\noccupant (`occupant_staying`), or could not read the occupant (`unknown`). A known movement out is E16.\n\n## What happens\n\nThe case escalates to the bed manager with the conflict laid out: the ward and bed, since when it has been held and by\nwhich encounter (as the receiver names it), and the refused movement. The gate blocks any resend (`BED_OCCUPIED`). Once a\nperson frees or reallocates the bed, the case can be reinvestigated.\n\n## Cite\n\nThe refusal (ward, bed, since), the occupant's encounter and its current placement, and that no movement out was found.",
   "source": "E17.md"
+ },
+ {
+  "id": "E18",
+  "version": 1,
+  "title": "Held until its schema was imported",
+  "scenarios": [],
+  "pattern": {
+   "event_time": "plausible",
+   "delivery": "unreadable",
+   "receiver_answer": "none",
+   "receipt": "absent",
+   "later_applied": "none",
+   "encounter_state": [
+    "admitted",
+    "not_found"
+   ],
+   "transition": "allowed",
+   "patient_match": [
+    "yes",
+    "unknown"
+   ],
+   "simultaneous_sources": "no",
+   "conditional_writes": "yes",
+   "chain": "single"
+  },
+  "decides": "policy",
+  "preferred": {
+   "outcome": "resend",
+   "why": "The site prevents failures, so the movement was held and never sent while its HL7 schema was not loaded here; the schema has since been imported and the message reads, nothing later changed the encounter, and the receiver can take a write conditional on its version, so the movement is still due (RP-2.1)."
+  },
+  "alternatives": [],
+  "checks": [
+   "identity",
+   "ordering",
+   "state_transition",
+   "effect",
+   "capability",
+   "concurrency"
+  ],
+  "prose": "# E18 Held until its schema was imported\n\n## Meaning\n\nThe site answered yes to \"prevent failures\" (question 13): a message whose HL7 schema category is not loaded in the\nnamespace that read it is held as a case, and nothing is sent, because IRIS would read its fields by position and the\nreceiver could get values from the wrong place. Once the schema is imported and the inbound item's category set, the\nindex's check releases the case: fresh evidence reads the message against the schema, and the movement, never sent, is\nstill the patient's latest. It goes out as any movement that never arrived does.\n\n## Telling it apart\n\nThe failure is `unreadable` (reason `schema_unknown`), not a refusal or an unavailable receiver: the receiver never saw\nthe message. Until the schema is imported the gate blocks the case with `SCHEMA_UNKNOWN`, and this entry is not reached.\nA later movement of the encounter applied meanwhile (from another source) is not nothing later: the case is E1. Several\nheld movements of one encounter form a chain, which this entry does not cover, so a person decides their order.\n\n## Cite\n\nThe hold (the category and the namespace that lacked it), the import that released it, the receipt lookup (404), the\ndownstream system's current version and state, and the timeline with no later event.",
+  "source": "E18.md"
  }
 ]
