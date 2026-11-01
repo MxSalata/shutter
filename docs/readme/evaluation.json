@@ -2373,6 +2373,11 @@
    "scenario": "S23b",
    "title": "Two patients for one bed",
    "why": "played in policy mode only"
+  },
+  {
+   "scenario": "S23c",
+   "title": "The bed's occupant cannot leave",
+   "why": "played in policy mode only"
   }
  ],
  "not_used": [],

@@ -562,6 +562,15 @@
       "owner": "Operator",
       "reevaluate_when": "Not applicable",
       "text": "The patient who held the destination bed has moved out of it at the receiver, so the refused movement can be sent again. The receiver refuses it again if the bed is held after all."
+    },
+    {
+      "code": "NEWER_MESSAGE_PENDING",
+      "title": "A newer message for this patient is on its way",
+      "prerequisite": "No message for the encounter reached Shutter after the case's own and is still waiting to be delivered to this receiver",
+      "next_action": "Nothing to do yet. The case waits for that message; when it is delivered, the case is checked again on fresh evidence, and a newer movement usually means nothing needs resending.",
+      "owner": "Operator",
+      "reevaluate_when": "The newer message is delivered to the receiver, or its delivery fails and opens a case of its own",
+      "text": "While Shutter was about to resend this movement, a newer message for the same patient arrived from the source system and has not yet reached the receiver. Resending first would be pointless at best, and wrong behind a cancellation or a merge, so the resend waits for the newer message."
     }
   ]
 }

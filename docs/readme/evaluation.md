@@ -220,6 +220,7 @@ Per member, over all passes:
 - S22 One overtaken transfer, two systems: played in policy mode only.
 - S23a The bed is held by a patient who is leaving: played in policy mode only.
 - S23b Two patients for one bed: played in policy mode only.
+- S23c The bed's occupant cannot leave: played in policy mode only.
 
 ## Not yet measured
 
