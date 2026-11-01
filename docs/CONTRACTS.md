@@ -711,6 +711,9 @@ fifth collection, `review`, is the production review agent's (13.6) and reaches 
 - The dispatch gate's concurrency check compares the receiver's version with the expected one; any other write in
   between stops the chain: the remaining items go to a person with the reason, and the incident's record says which
   item stopped and why.
+- A released item whose case is blocked while it waits on another case (`waitsOn`, the occupied bed) or on a newer message
+  of its encounter (`waitsOnMessage`) is still working for the chain (v1.29): the chain waits with it, the incident is told once,
+  and the item is judged when the case closes after its release. An escalated item stops the chain as before.
 - Every item keeps its own trace, approval record and closure; the incident's record lists each chain's outcome:
   `resolved`, `stopped` (with the item), `escalated` (a board chain or a no-match).
 - Chain states: `pending`, `awaiting_approval`, `approved`, `rejected`, `releasing`, `resolved`, `stopped`, `escalated`;
@@ -958,7 +961,8 @@ copy of the message.
 - The case carries `bed` (PV1-3's room and bed components for an admission or a transfer, else null; v1.28), `waitsOn` (the case it
   waits on while the gate holds its write with `WAITING_FOR_OCCUPANT_CASE`, 6.5; null otherwise; cleared by a reopening) and
   `waitsOnMessage` (the control id of the newer message it waits for under `NEWER_MESSAGE_PENDING`, 6.5, v1.29; null otherwise;
-  cleared by a reopening), on `GET /cases` items and `GET /cases/{id}` alike.
+  cleared by a reopening), on `GET /cases` items and `GET /cases/{id}` alike; `GET /cases/{id}` adds `waitedOnBy`, the ids of the
+  cases whose `waitsOn` names it (v1.29).
 - The case carries `receiver` (the intake's, else the connector item), `sourceNamespace`, `sourceProduction`,
   `sourceRoute` and `originHeaderId`; the evidence snapshot has an item of kind `source` and the summary a `source`
   object `{namespace, production, route, header_id}` (kept for the model view, since it carries no patient data). The
@@ -1249,7 +1253,9 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   the encounter's messages received after the case's own and not yet delivered to the receiver), the gate's
   `NEWER_MESSAGE_PENDING` (policy version 2026-11-01.1), the case's `waitsOnMessage` released by that message's delivery, and
   the connector's own check at the moment of a recovery write (`refused`, `newer_message_pending`); the resend goes straight
-  to the connector's queue, so no priority plumbing. The scenario S24 is the knowledge side of the same change.
+  to the connector's queue, so no priority plumbing. The scenario S24 is the knowledge side of the same change. Also (7.4, 5):
+  an incident's released item whose case is blocked while it waits on another case or a message is still working for the chain,
+  which waits with it and is told once, instead of stopping; `GET /cases/{id}` lists `waitedOnBy`, the cases that wait on this one.
 - v1.28, 26 Oct 2026: the occupied bed, Shutter's side (2, 5, 6.1, 6.3, 6.5, 9): PV1-3's bed component becomes the
   operation's `bed` beside the canonical payload (digests unchanged), carried by the ward message, the case, the evidence, the
   rehearsal and the recovery write, kept by the model view; for a `bed_occupied` refusal the evidence reads the occupant's

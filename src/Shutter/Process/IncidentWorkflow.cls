@@ -18,6 +18,9 @@ Property CurrentCaseId As %String(MAXLEN = 32);
 
 Property Polls As %Integer [ InitialExpression = 0 ];
 
+/// Whether the incident was told that the released case waits on another case or a message (v1.29), once per item.
+Property WaitNoted As %Boolean [ InitialExpression = 0 ];
+
 Property ReadyPolls As %Integer [ InitialExpression = 0 ];
 
 /// Workflow tasks still open.
@@ -349,7 +352,7 @@ Method Advance(incident As Shutter.Store.Incident) As %Status
     Set rel.ReleasePolicy = $CASE(chain.Policy, "automatic": "automatic", "approval": "incident", "per_chain": "incident", : "path")
     If chain.Policy = "approval" Set rel.Approver = incident.ApprovedBy, rel.ApprovalRef = incident.ApprovalTaskId
     If chain.Policy = "per_chain" Set rel.Approver = chain.ApprovedBy, rel.ApprovalRef = chain.ApprovalTaskId
-    Set ..CurrentItemId = item.%Id(), ..CurrentCaseId = rel.CaseId, ..Polls = 0
+    Set ..CurrentItemId = item.%Id(), ..CurrentCaseId = rel.CaseId, ..Polls = 0, ..WaitNoted = 0
     Do incident.Note("release", "Chain " _ chain.Seq _ " item " _ item.Position _ ": case " _ rel.CaseId _ " released (" _ item.Case.Event _ " for " _ chain.EncounterId _ $SELECT(expected '= "": ", at expected version " _ expected, 1: ", fresh evidence decides") _ ", " _ rel.ReleasePolicy _ ")", "system")
     Set sc = ..SendRequestAsync(..CaseTarget, rel, 0)
     Quit:$$$ISERR(sc) sc
@@ -362,6 +365,17 @@ Method OnPoll(incident As Shutter.Store.Incident) As %Status
     Set case = ##class(Shutter.Store.Case).ByCaseId(..CurrentCaseId)
     If '$ISOBJECT(case) Quit $$$ERROR($$$GeneralError, "Released case " _ ..CurrentCaseId _ " not found")
     If 'case.IsClosed() {
+        Set ..Polls = ..Polls + 1
+        Quit ..Alarm(..PollInterval(), "poll")
+    }
+    // A released case blocked while it waits on another case or on a message (v1.29) is still working for the chain's
+    // purposes: it is reopened when what it waits for closes, so the chain waits with it instead of stopping. An escalated
+    // one is a person's, and the chain stops as before.
+    If (case.State = "blocked") && ((case.WaitsOnCase '= "") || (case.WaitsOnMessage '= "")) {
+        If '..WaitNoted {
+            Set ..WaitNoted = 1
+            Do incident.Note("release", "Case " _ case.CaseId _ " waits on " _ $SELECT(case.WaitsOnCase '= "": "case " _ case.WaitsOnCase, 1: "message " _ case.WaitsOnMessage) _ "; the chain waits with it", "system")
+        }
         Set ..Polls = ..Polls + 1
         Quit ..Alarm(..PollInterval(), "poll")
     }
@@ -483,6 +497,9 @@ Storage Default
 </Value>
 <Value name="12">
 <Value>ReadyTimeoutSeconds</Value>
+</Value>
+<Value name="13">
+<Value>WaitNoted</Value>
 </Value>
 </Data>
 <DefaultData>IncidentWorkflowDefaultData</DefaultData>
