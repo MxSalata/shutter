@@ -1048,7 +1048,7 @@ describe('the case page in the trial', () => {
     expect(await screen.findByTestId('replay-note')).toHaveTextContent(
       'Replayed from the recording: approved 20 Oct, 17:24 UTC. Your approval is noted at the end of the audit trail.',
     );
-    expect(screen.getByRole('status')).toHaveTextContent(
+    expect(screen.getByTestId('replay-announcement')).toHaveTextContent(
       'Approved in the trial. The recording shows it delivered and verified.',
     );
     await waitFor(() => expect(done).toHaveBeenCalledTimes(1));

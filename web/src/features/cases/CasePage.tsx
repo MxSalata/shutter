@@ -239,7 +239,8 @@ function CaseBody({ c }: { c: CaseDetail }) {
           </span>
         </Text>
       ) : null}
-      <VisuallyHidden role="status" aria-live="polite">
+      {/* A live region, not a status role: the page has no status region once its data is in */}
+      <VisuallyHidden aria-live="polite" aria-atomic="true" data-testid="replay-announcement">
         {announced}
       </VisuallyHidden>
       <DecisionCard
