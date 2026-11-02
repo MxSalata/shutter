@@ -384,7 +384,7 @@ describe('Break the feed: the strip', () => {
         statuses: ['done', 'done', 'done', 'current', 'pending'],
       },
       done: {
-        line: 'Step 5 of 5: Done: 8 cases, 8 resolved, nothing written twice',
+        line: 'Step 5 of 5: Done: 8 cases, 8 resolved',
         current: 4,
         statuses: ['done', 'done', 'done', 'done', 'finished'],
       },

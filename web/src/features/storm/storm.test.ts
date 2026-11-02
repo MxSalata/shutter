@@ -151,7 +151,7 @@ describe('the five steps', () => {
       storm({ state: 'done', sent: 8, cases: 8, resolved: 8, incidentId: 'I-000016', endedAt: at(-10) }),
     );
     expect(v.current).toBe(4);
-    expect(v.line).toBe('Step 5 of 5: Done: 8 cases, 8 resolved, nothing written twice');
+    expect(v.line).toBe('Step 5 of 5: Done: 8 cases, 8 resolved');
     expect(v.status).toEqual({ tone: 'positive', label: 'Done' });
     expect(statuses(storm({ state: 'done', incidentId: 'I-000016' }))).toEqual([
       'done',

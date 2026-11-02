@@ -155,7 +155,7 @@ export function stormView(storm: LiveStorm): StormView {
           status,
           words: failed
             ? `Stopped: ${storm.error || 'the storm did not finish'}`
-            : `Done: ${plural(cases, 'case')}, ${resolved} resolved, nothing written twice`,
+            : `Done: ${plural(cases, 'case')}, ${resolved} resolved`,
         };
     }
   });
