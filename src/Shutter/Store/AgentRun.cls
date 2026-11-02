@@ -68,6 +68,16 @@ Property QuestionId As %String(%JSONFIELDNAME = "questionId", MAXLEN = 32);
 /// Who asked for the run (v1.34): a question's asker, a judge who convened the board; "system" for the feed's own.
 Property RequestedBy As %String(%JSONFIELDNAME = "requestedBy", MAXLEN = 100);
 
+/// When the run started, to the millisecond (v1.35), so the case page can draw the run's timeline against its tool calls.
+Property StartedAtMs As %String(%JSONFIELDNAME = "startedAtMs", MAXLEN = 30);
+
+/// AI Hub's own counters (v1.35): milliseconds inside the model's calls, milliseconds inside the tools, reasoning tokens.
+Property LlmMs As %Integer(%JSONFIELDNAME = "llmMs");
+
+Property ToolMs As %Integer(%JSONFIELDNAME = "toolMs");
+
+Property ReasoningTokens As %Integer(%JSONFIELDNAME = "reasoningTokens");
+
 Index QuestionIdx On QuestionId;
 
 /// Record a run from the bridge's response. A run that answered a question names it (questionId).
@@ -86,6 +96,7 @@ ClassMethod FromResponse(case As Shutter.Store.Case, snapshot As Shutter.Store.S
     Set run.Iterations = response.Iterations, run.ToolCallCount = response.ToolCalls
     Set run.SessionId = response.SessionId, run.EnsMessageId = ensMessageId
     Set run.RequestedBy = response.RequestedBy
+    Set run.StartedAtMs = response.StartedAtMs, run.LlmMs = response.LlmMs, run.ToolMs = response.ToolMs, run.ReasoningTokens = response.ReasoningTokens
     // The run is read by people inside IRIS: the case's tokens become the identifiers again (T27).
     Set run.ResultJSON = ##class(Shutter.Util.ModelView).Restore(case, response.ResultJSON)
     Set run.Content = ##class(Shutter.Util.ModelView).Restore(case, response.Content)
@@ -179,6 +190,18 @@ Storage Default
 </Value>
 <Value name="27">
 <Value>RequestedBy</Value>
+</Value>
+<Value name="28">
+<Value>StartedAtMs</Value>
+</Value>
+<Value name="29">
+<Value>LlmMs</Value>
+</Value>
+<Value name="30">
+<Value>ToolMs</Value>
+</Value>
+<Value name="31">
+<Value>ReasoningTokens</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.AgentRunD</DataLocation>

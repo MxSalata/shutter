@@ -95,6 +95,7 @@ Method OnAgentRequest(request As Shutter.Bridge.Msg.AgentRequest, Output respons
     Do ##class(Shutter.Bridge.Runner).Stamp(spec, response)
     If response.Mode = "" Set response.Mode = spec.Mode
     If response.StartedAt = "" Set response.StartedAt = ##class(Shutter.Util.Time).NowUTC()
+    If response.StartedAtMs = "" Set response.StartedAtMs = ##class(Shutter.Util.Time).NowUTCms()
     If response.DurationMs = "" Set response.DurationMs = (($ZHOROLOG - start) * 1000) \ 1
     If response.Status = "" Set response.Status = "ok"
     $$$TRACE("Agent run done: " _ response.Status _ ", model " _ response.Model _ ", tokens " _ (+response.PromptTokens) _ " in / " _ (+response.CompletionTokens) _ " out (cache read " _ (+response.CacheReadTokens) _ "), " _ (+response.Iterations) _ " turns, " _ (+response.ToolCalls) _ " tool calls, " _ (+response.DurationMs) _ " ms")
