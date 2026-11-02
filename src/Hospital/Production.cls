@@ -27,6 +27,10 @@ XData ProductionDefinition
     <Setting Target="Adapter" Name="ResponseTimeout">15</Setting>
     <Setting Target="Adapter" Name="ConnectTimeout">5</Setting>
     <Setting Target="Host" Name="FailureTimeout">0</Setting>
+    <Setting Target="Host" Name="AlertOnError">1</Setting>
+  </Item>
+  <Item Name="Ens.Alert" Category="Shutter" ClassName="Shutter.Intake.AlertProcess" PoolSize="1" Enabled="true" Foreground="false" Comment="The alerts the hospital's items raise: a delivery failure's message goes to Shutter through the forwarder, once per session; every alert is passed on to the site's own consumer when PassTo names one" LogTraceEvents="true" Schedule="">
+    <Setting Target="Host" Name="Receivers">Downstream Out</Setting>
   </Item>
   <Item Name="Live PAS" Category="Feed" ClassName="Hospital.LivePlayer" PoolSize="1" Enabled="false" Foreground="false" Comment="The live hospital's PAS: one of Shutter's scenarios every few minutes with fresh patients at present times and real faults, and an ordinary message a minute between them; on only when the install was told live" LogTraceEvents="true" Schedule="">
     <Setting Target="Adapter" Name="CallInterval">60</Setting>
