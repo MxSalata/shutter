@@ -1463,7 +1463,9 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 ## Changes
 
 - v1.35, 2 Nov 2026 (the items of a review of competing entries' code): denied tool calls
-  recorded as rows with `denied` true and a trace line (9); each item of the review that lands adds its line here.
+  recorded as rows with `denied` true and a trace line (9); the run's millisecond start and AI Hub's own counters
+  (`startedAtMs`, `llmMs`, `toolMs`, `reasoningTokens`) on the response and the run row (9); each item of the review that
+  lands adds its line here.
 - v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:
   run, reset, purge) and `Shutter_Configure` (the site's writes: the profile, the library, a schema import, the review
   annotations), held by the operator and the approver as before; the role `Shutter_Demo` (reads, reinvestigates, approves and
