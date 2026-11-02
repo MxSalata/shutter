@@ -10,7 +10,8 @@ Class Shutter.Util.BedConflict
 /// status: occupant_left (the occupant's encounter is discharged or placed elsewhere now; the movement is the history's),
 /// occupant_leaving (a transfer or discharge of the occupant after since was sent and not applied: failed, uncertain or still
 /// pending, in another case when one was opened for it), occupant_staying (the occupant still holds the bed and no movement
-/// out is known), unknown (the refusal named no occupant, or the occupant could not be read).
+/// out is known), unknown (the refusal named no occupant, the occupant could not be read, or the refusal named no ward or bed to
+/// compare the read with).
 ClassMethod Build(refusal As %DynamicObject, caseWard As %String, caseBed As %String, occupantRead As %DynamicObject, readStatus As %Integer, deliveries As %DynamicArray) As %DynamicObject
 {
     Set json = "Shutter.Util.Json"
@@ -41,8 +42,10 @@ ClassMethod Build(refusal As %DynamicObject, caseWard As %String, caseBed As %St
     Set o.state = $CLASSMETHOD(json, "Str", occupantRead, "state"), o.ward = $CLASSMETHOD(json, "Str", occupantRead, "ward"), o.bed = $CLASSMETHOD(json, "Str", occupantRead, "bed")
     Set rv = $CLASSMETHOD(json, "Str", occupantRead, "version")
     If rv '= "" Do o.%Set("version", +rv, "number")
-    // Left: discharged, or no longer in the refused bed (another ward, another bed, or a ward-level placement now).
-    Set gone = (o.state = "discharged") || ((out.ward '= "") && (o.ward '= out.ward)) || ((out.bed '= "") && (o.bed '= out.bed))
+    // Left: discharged, or no longer in the refused bed (another ward, another bed, or a ward-level placement now). Only the
+    // refusal's own ward and bed are compared with the read: the case's placement fields are the feed's words, and a
+    // different spelling of the same bed must never read as a departure (v1.35).
+    Set gone = (o.state = "discharged") || ((ward '= "") && (o.ward '= ward)) || ((bed '= "") && (o.bed '= bed))
     If gone {
         Set mv = ..LastApplied(occupantRead, out.since)
         If $ISOBJECT(mv) Set out."occupant_movement" = mv
@@ -56,6 +59,13 @@ ClassMethod Build(refusal As %DynamicObject, caseWard As %String, caseBed As %St
         Set out."occupant_movement" = mv
         Set out.status = "occupant_leaving"
         Set out.note = "The occupant's " _ mv.event _ $SELECT(mv.ward '= "": " to " _ mv.ward, 1: "") _ " was sent and " _ $CASE(mv.delivery, "pending": "has no answer yet", "uncertain": "its outcome is uncertain", : "was not applied (" _ $CLASSMETHOD(json, "Str", mv, "outcome", mv.delivery) _ ")") _ $SELECT(mv.%IsDefined("case_id"): "; case " _ mv."case_id" _ " is about it", 1: "")
+        Quit out
+    }
+    // A refusal that named neither ward nor bed leaves nothing to compare the read with: whether the occupant has left
+    // cannot be told, and an unknown blocks a write as surely as a failed check (v1.35).
+    If (ward = "") && (bed = "") {
+        Set out.status = "unknown"
+        Set out.note = "The refusal named no ward or bed, so whether the occupant has left it cannot be told"
         Quit out
     }
     Set out.status = "occupant_staying"
