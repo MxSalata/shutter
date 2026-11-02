@@ -3,6 +3,13 @@
 // (the module's Invoke checks InstallAIHubStatus's %Status) ends the session with exit code 1, which fails the build
 // (as in iris.script).
 zn "SHUTTER"
+// WITH_AIHUB (SHUTTER_WITH_AIHUB here): auto loads the module when the image has the %AI package and skips it otherwise; 1
+// requires it and fails the build on an image without it; 0 skips it. One statement per line, as in iris.script.
+Set want = $ZCONVERT($SYSTEM.Util.GetEnviron("SHUTTER_WITH_AIHUB"), "L"), present = ##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent")
+If want = "0" Write !, "AI Hub skipped (WITH_AIHUB=0): the replay edition", ! Halt
+If 'present, want = "1" Write !, "BUILD FAILED: WITH_AIHUB=1, but this image has no %AI package (not an AI Hub build); use the replay edition or the AI Hub image", ! Do $SYSTEM.Process.Terminate($JOB, 1)
+If 'present Write !, "AI Hub is not in this image: the aihub module is skipped (the replay edition)", ! Halt
+Write !, "AI Hub is in this image: loading the aihub module", !
 Set sc = $SYSTEM.Status.Error(5001, "the aihub module did not load")
 Set sc = ##class(%IPM.Main).Shell("load /home/irisowner/dev/aihub -v")
 If 'sc Write !, "BUILD FAILED: ", $SYSTEM.Status.GetErrorText(sc), ! Do $SYSTEM.Process.Terminate($JOB, 1)
