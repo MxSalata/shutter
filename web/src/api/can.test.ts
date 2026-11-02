@@ -111,7 +111,7 @@ describe('what the public demo hides', () => {
 });
 
 describe('the mock switch', () => {
-  it('signs "Try the demo" in as the demo role with ?as=demo, and as the approver otherwise', () => {
+  it('signs the trial in as the demo role with ?as=demo, and as the approver otherwise', () => {
     const user = (search: string) => trialUser(envFrom(search, true).role);
     expect(user('?as=demo').username).toBe('demo');
     expect(user('').username).toBe('approver');

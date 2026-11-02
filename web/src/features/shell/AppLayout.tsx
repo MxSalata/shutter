@@ -12,7 +12,7 @@ import {
   useComputedColorScheme,
   useMantineColorScheme,
 } from '@mantine/core';
-import type { ReactNode } from 'react';
+import { useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 import { useDisclosure } from '@mantine/hooks';
 import {
   IconBooks,
@@ -25,59 +25,104 @@ import {
   IconHeartbeat,
   IconListDetails,
   IconLogout,
+  IconCode,
   IconMoon,
   IconPalette,
-  IconPlayerPlay,
   IconSettings,
   IconStack2,
   IconSun,
   IconUserCircle,
 } from '@tabler/icons-react';
 import { Suspense } from 'react';
-import { Link, NavLink as RouterNavLink, Outlet, ScrollRestoration, useNavigate } from 'react-router';
-import { useMe, useSignOut, useSiteProfile } from '@/api/hooks';
+import {
+  Link,
+  NavLink as RouterNavLink,
+  Outlet,
+  ScrollRestoration,
+  useLocation,
+  useNavigate,
+} from 'react-router';
+import { useCases, useMe, useSignOut, useSiteProfile } from '@/api/hooks';
 import { displayZone, setDisplayZone } from '@/lib/format';
 import { APP_NAME } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
 import { PageSkeleton } from '@/components/PageSkeleton';
-import { useAppearance, type ContrastSetting, type PaletteSetting } from '@/stores/appearance';
+import { DetailSwitch } from '@/components/DetailSwitch';
+import { useAppearance, useDetail, type ContrastSetting, type PaletteSetting } from '@/stores/appearance';
+import { hueVar, type Hue } from '@/lib/hues';
 import { useResolvedContrast } from './useApplyAppearance';
 import { MAIN_ID, SkipLink } from './SkipLink';
-import { TRIAL } from '@/env/mode';
-import { Guide } from '@/features/guide/Guide';
+import { ENV } from '@/env/mode';
+import { LiveHelpMenu } from '@/features/guide/LiveHelpMenu';
+import { LiveWelcome } from '@/trial/LiveWelcome';
+import { trialChrome } from '@/trial/slot';
+import { bannerForm } from '@/trial/visit';
 import { LiveBanner } from './LiveBanner';
-import { HelpMenu } from '@/features/guide/HelpMenu';
+
+/** The navigation's hues: each section's identity (DESIGN.md 2.5), never a status colour. */
+export type NavHue = Exclude<Hue, 'gray'>;
 
 /**
- * The navigation in three groups, by what a visit is for: running and following the recovery, configuring it, and
- * the evidence about the installation and the board. Short labels only; each page's introduction says what it is.
+ * The navigation in three groups, by what a visit is for: running and following the recovery, the results that show
+ * whether it works, and configuring it. Short labels only; each page's introduction says what it is. Each entry's icon
+ * carries its section's hue, the same on its page's header.
  */
-const NAV = [
+const NAV: {
+  group: 'Operate' | 'Results' | 'Configure';
+  items: { to: string; label: string; icon: typeof IconFlask2; hue: NavHue; count?: true }[];
+}[] = [
   {
     group: 'Operate',
     items: [
-      { to: '/scenarios', label: 'Scenarios', icon: IconFlask2 },
-      { to: '/cases', label: 'Cases', icon: IconListDetails },
-      { to: '/incidents', label: 'Incidents', icon: IconStack2 },
-      { to: '/reviews', label: 'Production review', icon: IconClipboardSearch },
+      { to: '/scenarios', label: 'Scenarios', icon: IconFlask2, hue: 'cyan' },
+      { to: '/cases', label: 'Cases', icon: IconListDetails, hue: 'indigo', count: true },
+      { to: '/incidents', label: 'Incidents', icon: IconStack2, hue: 'pink' },
+      { to: '/reviews', label: 'Production review', icon: IconClipboardSearch, hue: 'violet' },
+    ],
+  },
+  {
+    group: 'Results',
+    items: [
+      { to: '/evaluation', label: 'Evaluation', icon: IconChartBar, hue: 'teal' },
+      { to: '/health', label: 'Health', icon: IconHeartbeat, hue: 'indigo' },
     ],
   },
   {
     group: 'Configure',
     items: [
-      { to: '/site-profile', label: 'Site profile', icon: IconBuildingHospital },
-      { to: '/library', label: 'Agent library', icon: IconBooks },
-      { to: '/settings', label: 'Settings and costs', icon: IconSettings },
-    ],
-  },
-  {
-    group: 'Evidence',
-    items: [
-      { to: '/evaluation', label: 'Evaluation', icon: IconChartBar },
-      { to: '/health', label: 'Health', icon: IconHeartbeat },
+      { to: '/site-profile', label: 'Site profile', icon: IconBuildingHospital, hue: 'teal' },
+      { to: '/library', label: 'Agent library', icon: IconBooks, hue: 'violet' },
+      { to: '/settings', label: 'Settings and costs', icon: IconSettings, hue: 'cyan' },
     ],
   },
 ];
+
+/** The cases that need a person: waiting for an approval, escalated or blocked, as the Cases page's tiles count them. */
+const NEED_A_PERSON = ['awaiting_approval', 'escalated', 'blocked'] as const;
+
+/**
+ * The count beside Cases: how many cases need a person, from the same queries as the Cases page's tiles. Nothing at
+ * 0 or while any of them is still loading, so it never shows a partial sum.
+ */
+export function NavCount() {
+  const a = useCases({ state: NEED_A_PERSON[0], limit: 1 });
+  const b = useCases({ state: NEED_A_PERSON[1], limit: 1 });
+  const c = useCases({ state: NEED_A_PERSON[2], limit: 1 });
+  if (!a.data || !b.data || !c.data) return null;
+  const n = a.data.total + b.data.total + c.data.total;
+  if (n <= 0) return null;
+  return (
+    <Badge
+      size="sm"
+      color="yellow"
+      variant="light"
+      className="nav-count"
+      aria-label={`${n} ${n === 1 ? 'case needs' : 'cases need'} a person`}
+    >
+      {n}
+    </Badge>
+  );
+}
 
 type ThemeChoice = 'light' | 'pastel' | 'dark' | 'auto';
 
@@ -106,6 +151,8 @@ function AppearanceMenu() {
     const next: PaletteSetting = value === 'pastel' ? 'pastel' : 'default';
     if (next !== palette) setPalette(next);
   };
+  const detail = useDetail();
+  const setDetail = useAppearance((s) => s.setDetail);
   const contrasts: { value: ContrastSetting; label: string }[] = [
     { value: 'auto', label: 'System' },
     { value: 'normal', label: 'Normal' },
@@ -154,33 +201,55 @@ function AppearanceMenu() {
             {c.label}
           </Menu.Item>
         ))}
+        <Menu.Divider />
+        <Menu.Label>Detail</Menu.Label>
+        {(['plain', 'technical'] as const).map((d) => {
+          const label = d === 'plain' ? 'Plain words' : 'Technical';
+          return (
+            <Menu.Item
+              key={d}
+              leftSection={<IconCode size={16} />}
+              onClick={() => setDetail(d)}
+              aria-label={`${label}${detail === d ? ' (current detail)' : ''}`}
+              rightSection={detail === d ? '●' : undefined}
+            >
+              {label}
+            </Menu.Item>
+          );
+        })}
       </Menu.Dropdown>
     </Menu>
   );
 }
 
+/**
+ * The user menu. In a trial page the user is the trial's own ("approver (trial user)"), with Switch trial role and
+ * Leave trial beside Sign out.
+ */
 function UserMenu() {
   const me = useMe().data;
   const signOut = useSignOut();
   const navigate = useNavigate();
+  const chrome = trialChrome();
   if (!me) return null;
   const roles = [me.operator ? 'operator' : null, me.approver ? 'approver' : null].filter(
     Boolean,
   ) as string[];
+  const name = chrome ? `${me.username} (trial user)` : me.username;
   return (
-    <Menu position="bottom-end" width={240}>
+    <Menu position="bottom-end" width={260}>
       <Menu.Target>
-        <UnstyledButton aria-label={`Signed in as ${me.username}`}>
+        <UnstyledButton aria-label={`Signed in as ${name}`}>
           <Group gap={6} wrap="nowrap">
             <IconUserCircle size={20} stroke={1.6} />
             <Text size="sm" fw={500} visibleFrom="xs">
-              {me.username}
+              {name}
             </Text>
           </Group>
         </UnstyledButton>
       </Menu.Target>
       <Menu.Dropdown>
-        <Menu.Label>Signed in as {me.username}</Menu.Label>
+        <Menu.Label>Signed in as {name}</Menu.Label>
         <Group gap={4} px="sm" pb="xs">
           {roles.length ? (
             roles.map((r) => (
@@ -194,6 +263,18 @@ function UserMenu() {
             </Text>
           )}
         </Group>
+        {chrome ? (
+          <>
+            <Menu.Divider />
+            <chrome.TrialRoleItems />
+            {ENV.canLeave ? (
+              <>
+                <Menu.Divider />
+                <chrome.LeaveTrialItem />
+              </>
+            ) : null}
+          </>
+        ) : null}
         <Menu.Divider />
         <Menu.Item
           leftSection={<IconLogout size={16} />}
@@ -208,16 +289,30 @@ function UserMenu() {
   );
 }
 
+/** Whether a navigation entry is the current page's section: its page, or a page under it (a case under Cases). */
+const isActive = (pathname: string, to: string) => pathname === to || pathname.startsWith(`${to}/`);
+
+/**
+ * The frame of every signed-in page: the header (in a trial page, the trial's banner above its row), the navigation
+ * and the page. A trial page adds its chrome from the chunk only trial pages load (src/trial/chrome.tsx), and the
+ * guide, which runs only there; a live page offers the trial instead, once, in LiveWelcome.
+ */
 export function AppLayout() {
   const [opened, { toggle, close }] = useDisclosure();
+  const { pathname } = useLocation();
+  const chrome = trialChrome();
+  const banner = useSyncExternalStore(bannerForm.subscribe, bannerForm.get);
   // Times show in the feed's zone (the site profile's feed.time_zone); the page renders again if it changes
   // As the server reads the feed (SiteProfile.FeedTimeZone): a stored profile that doesn't answer the question keeps
   // UTC; until the profile has loaded, the questionnaire's default.
   const profile = useSiteProfile().data?.profile;
   setDisplayZone(profile ? profile.feed?.time_zone || 'UTC' : undefined);
+  // 56 px live; a trial page's banner adds 40 px, 32 px once it is one line, and 36 px on a phone (styles.css keeps
+  // --shutter-header-h, which sticky parts and scrolled-to sections clear, the same)
+  const header = chrome ? { base: 92, sm: banner === 'compact' ? 88 : 96 } : 56;
   return (
     <AppShell
-      header={{ height: 56 }}
+      header={{ height: header }}
       navbar={{ width: 230, breakpoint: 'sm', collapsed: { mobile: !opened } }}
       padding="md"
       styles={{
@@ -228,37 +323,29 @@ export function AppLayout() {
     >
       <SkipLink />
       <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+        {chrome ? <chrome.TrialBanner /> : null}
+        <Group h={56} px="md" justify="space-between" wrap="nowrap">
           <Group gap="sm" wrap="nowrap">
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" aria-label="Menu" />
             <UnstyledButton component={Link} to="/scenarios" aria-label={`${APP_NAME}: home`}>
               <Group gap={8} wrap="nowrap">
                 <BrandMark size={28} />
-                <Text fw={700} fz="lg" style={{ letterSpacing: -0.3 }}>
+                {/* On a phone in the trial the pill stands beside the mark and the name gives way, so the row fits */}
+                <Text
+                  fw={700}
+                  fz="lg"
+                  style={{ letterSpacing: -0.3 }}
+                  visibleFrom={chrome ? 'xs' : undefined}
+                >
                   {APP_NAME}
                 </Text>
               </Group>
             </UnstyledButton>
+            {chrome ? <chrome.TrialPill /> : null}
           </Group>
           <Group gap="xs" wrap="nowrap">
-            {TRIAL ? (
-              <Tooltip
-                label="Recorded runs: this page replays a real run's data and reaches no IRIS instance"
-                multiline
-                maw={280}
-              >
-                <Badge
-                  size="sm"
-                  variant="filled"
-                  color="gray"
-                  leftSection={<IconPlayerPlay size={12} aria-hidden />}
-                  tabIndex={0}
-                >
-                  DEMO
-                </Badge>
-              </Tooltip>
-            ) : null}
-            <HelpMenu />
+            {chrome ? <chrome.TrialHelpMenu /> : <LiveHelpMenu />}
+            <DetailSwitch />
             <AppearanceMenu />
             <UserMenu />
           </Group>
@@ -267,7 +354,7 @@ export function AppLayout() {
       <AppShell.Navbar p="xs" aria-label="Main">
         {NAV.map(({ group, items }) => (
           <div key={group} role="group" aria-labelledby={`nav-${group}`} className="nav-group">
-            <Text id={`nav-${group}`} size="xs" fw={600} c="dimmed" tt="uppercase" px="sm" pt="sm" pb={4}>
+            <Text id={`nav-${group}`} className="nav-group-label" tt="uppercase" px="sm" pt="sm" pb={4}>
               {group}
             </Text>
             {items.map((item) => (
@@ -276,7 +363,11 @@ export function AppLayout() {
                 component={RouterNavLink}
                 to={item.to}
                 label={item.label}
-                leftSection={<item.icon size={18} stroke={1.6} className="nav-icon" />}
+                active={isActive(pathname, item.to)}
+                className="nav-link"
+                style={{ '--nav-icon': hueVar(item.hue) } as CSSProperties}
+                leftSection={<item.icon size={18} stroke={1.6} className="nav-icon" aria-hidden />}
+                rightSection={item.count ? <NavCount /> : undefined}
                 onClick={close}
               />
             ))}
@@ -292,7 +383,14 @@ export function AppLayout() {
           <Outlet key={displayZone()} />
         </Suspense>
       </AppShell.Main>
-      <Guide />
+      {chrome ? (
+        <>
+          <chrome.Guide />
+          <chrome.LeaveTrialConfirm />
+        </>
+      ) : (
+        <LiveWelcome />
+      )}
     </AppShell>
   );
 }
