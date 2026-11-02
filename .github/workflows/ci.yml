@@ -42,7 +42,7 @@ jobs:
     name: Web application
     runs-on: [self-hosted, house]
     if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
-    timeout-minutes: 20
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: web
