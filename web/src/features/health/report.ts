@@ -1,0 +1,535 @@
+import type { Budget, LiveStatus } from '@/api/types';
+import { budgetText } from '@/lib/budget';
+import { humanize, keyLabel, plural } from '@/lib/format';
+import type { Proof } from '@/lib/proof';
+import type { Tone } from '@/lib/tone';
+
+/**
+ * The readiness report (Shutter.Setup.Doctor) in the order a reader asks: is it ready, what is not there and does it
+ * matter, where is the detail. Everything here is pure: the verdict from the core checks, the groups, each row's mark
+ * and tone, the licence sentence, the agents badge and the provenance list, so the page only draws them and a test
+ * reads them without drawing anything.
+ */
+export type Report = Record<string, unknown>;
+
+/** A value the report really sent: not missing, null or empty. */
+export const sent = (v: unknown): boolean => v !== undefined && v !== null && v !== '';
+
+// ---- the groups ----
+
+export interface GroupDef {
+  id: string;
+  title: string;
+  /** The report's keys in the order the group shows them. */
+  keys: readonly string[];
+}
+
+/** The report's keys by group, in order; a key listed nowhere goes to the last group, "Other", so nothing is hidden. */
+export const GROUPS: readonly GroupDef[] = [
+  {
+    id: 'production',
+    title: 'Production',
+    keys: [
+      'interoperability',
+      'production_class',
+      'production_state',
+      'ward_classes',
+      'shutter_production',
+      'production',
+      'adt_in',
+      'mode',
+    ],
+  },
+  {
+    id: 'web-applications',
+    title: 'Web applications',
+    keys: ['api_webapp', 'ui_webapp', 'wards_webapp', 'webapps_checked'],
+  },
+  {
+    id: 'agents',
+    title: 'Agents and AI Hub',
+    keys: ['ai_hub_present', 'aihub_runner', 'board_members', 'recordings', 'mock_config'],
+  },
+  {
+    id: 'cases',
+    title: 'Cases and housekeeping',
+    keys: ['cases', 'working_cases', 'abandon_after_minutes', 'purge_task'],
+  },
+  {
+    id: 'installation',
+    title: 'Installation and licence',
+    keys: ['namespace', 'version', 'installed_at', 'demo', 'license'],
+  },
+];
+
+const OTHER: GroupDef = { id: 'other', title: 'Other', keys: [] };
+
+/** The key that holds the report's provenance: never a row, it is the "Where this report comes from" list. */
+const PROVENANCE_KEY = 'recorded';
+
+/** The report's keys in words; any other key is humanized by `keyLabel`. */
+const LABELS: Record<string, string> = {
+  installed_at: 'Installed',
+  demo: 'Demo installation',
+  adt_in: 'ADT inbound folder',
+  interoperability: 'Interoperability enabled in the namespace',
+  production_class: 'Production class compiled',
+  production_state: 'Production state',
+  aihub_runner: 'AI Hub runner compiled',
+  ai_hub_present: 'AI Hub installed',
+  mock_config: 'API mimic setting',
+  recordings: 'Recorded agent runs',
+  working_cases: 'Cases still in progress',
+  abandon_after_minutes: 'Abandon allowed after (minutes)',
+  license: 'Licence',
+  api_webapp: 'REST API web application',
+  ui_webapp: 'Web app (this page)',
+  wards_webapp: 'Downstream system web application',
+  webapps_checked: 'Web applications checked from',
+  budget: 'Model budget',
+};
+
+// ---- the core checks and the verdict ----
+
+interface CoreDef {
+  key: string;
+  /** The short label under the verdict. */
+  label: string;
+  /** A downstream-system check: core only on a demo installation. */
+  demoOnly?: boolean;
+  passes?: (v: unknown) => boolean;
+  /** What to do when it fails. */
+  todo: (v: unknown) => string;
+}
+
+/** The core checks, in the order the verdict lists them. */
+const CORE: readonly CoreDef[] = [
+  {
+    key: 'interoperability',
+    label: 'Interoperability on',
+    todo: () => 'Enable Interoperability in the namespace, then reload.',
+  },
+  {
+    key: 'production_class',
+    label: 'Production compiled',
+    todo: () => 'Compile the production class, then reload.',
+  },
+  {
+    key: 'production_state',
+    label: 'Running',
+    passes: (v) => v === 'running',
+    todo: (v) => `Start the production, then reload. It is ${String(v)}.`,
+  },
+  {
+    key: 'api_webapp',
+    label: 'API web app',
+    todo: () => 'Create the REST API web application, then reload.',
+  },
+  {
+    key: 'ui_webapp',
+    label: 'UI web app',
+    todo: () => 'Create the web application for this page, then reload.',
+  },
+  {
+    key: 'ward_classes',
+    label: 'Downstream classes',
+    demoOnly: true,
+    todo: () => "Load the downstream system's classes, then reload.",
+  },
+  {
+    key: 'wards_webapp',
+    label: 'Downstream web app',
+    demoOnly: true,
+    todo: () => "Create the downstream system's web application, then reload.",
+  },
+];
+
+/** One core check the report sent, and how it stands. */
+export interface CoreResult {
+  key: string;
+  label: string;
+  passed: boolean;
+  /** What to do, when it failed. */
+  todo?: string;
+  /** The group it belongs to. */
+  group: string;
+}
+
+export type VerdictKind = 'ready' | 'not-ready' | 'not-reported';
+
+export interface Verdict {
+  kind: VerdictKind;
+  tone: Tone;
+  /** The verdict in a word, the hero's region name. */
+  word: string;
+  /** Every core check the report sent, in order. */
+  results: CoreResult[];
+  passed: number;
+  failing: CoreResult[];
+  /** Core checks the report did not send, which the count leaves out. */
+  notSent: number;
+  /** Whether the report says the production is running. */
+  running: boolean;
+}
+
+const groupOf = (key: string) => GROUPS.find((g) => g.keys.includes(key))?.id ?? OTHER.id;
+
+/** The core checks that count on this report: five, and the downstream system's two on a demo installation. */
+const coreFor = (report: Report) => CORE.filter((c) => !c.demoOnly || report.demo === true);
+
+/**
+ * Whether it is ready: every core check the report sent passes (Ready), any fails (Not ready), or it sent none of
+ * them (Checks not reported). A key the report leaves out is left out of the count.
+ */
+export function verdictOf(report: Report): Verdict {
+  const defs = coreFor(report);
+  const results: CoreResult[] = defs
+    .filter((c) => sent(report[c.key]))
+    .map((c) => {
+      const passed = c.passes ? c.passes(report[c.key]) : report[c.key] === true;
+      return {
+        key: c.key,
+        label: c.label,
+        passed,
+        todo: passed ? undefined : c.todo(report[c.key]),
+        group: groupOf(c.key),
+      };
+    });
+  const failing = results.filter((r) => !r.passed);
+  const kind: VerdictKind = results.length === 0 ? 'not-reported' : failing.length ? 'not-ready' : 'ready';
+  return {
+    kind,
+    tone: kind === 'ready' ? 'positive' : kind === 'not-ready' ? 'blocking' : 'attention',
+    word: kind === 'ready' ? 'Ready' : kind === 'not-ready' ? 'Not ready' : 'Checks not reported',
+    results,
+    passed: results.length - failing.length,
+    failing,
+    notSent: defs.length - results.length,
+    running: results.some((r) => r.key === 'production_state' && r.passed),
+  };
+}
+
+/**
+ * The hero's statement. Live it speaks of this installation; in the trial it is a recording of another one, so it is
+ * in the past tense and says which ("The recorded instance was ready").
+ */
+export function verdictStatement(v: Verdict, trial: boolean): string {
+  const of = `${v.passed} of ${v.results.length}`;
+  if (v.kind === 'ready') {
+    const engine = v.running
+      ? trial
+        ? 'its message engine was running and every core check passed'
+        : 'the message engine is running and every core check passes'
+      : trial
+        ? 'every core check passed'
+        : 'every core check passes';
+    return trial ? `The recorded instance was ready: ${engine} (${of}).` : `Ready: ${engine} (${of}).`;
+  }
+  if (v.kind === 'not-ready') {
+    const n = v.failing.length;
+    return trial
+      ? `The recorded instance was not ready: ${plural(n, 'core check')} failed.`
+      : `Not ready: ${plural(n, 'core check')} ${n === 1 ? 'fails' : 'fail'}.`;
+  }
+  return 'Checks not reported: this report has none of the core checks.';
+}
+
+// ---- the rows ----
+
+/** A row's mark: a check, a cross, a dash or nothing (a name, a path or a number). */
+export type Mark = 'check' | 'x' | 'dash' | 'none';
+
+export interface Reason {
+  /** The chip, 3 to 5 words. */
+  chip: string;
+  /** The full note, in the chip's tooltip and in the group's detail. */
+  note: string;
+  tone: Tone;
+}
+
+export interface RowInfo {
+  mark: Mark;
+  /** The tone of the mark; null when the row has no mark. */
+  tone: Tone | null;
+  /** The report did not send it. */
+  missing: boolean;
+  /** What to do, on a core check that failed. */
+  todo?: string;
+  reason?: Reason;
+}
+
+/** What a No means in the trial, for the pieces the instance the trial was recorded on did not have. */
+const ABSENT_IN_TRIAL: Record<string, string> = {
+  ai_hub_present:
+    "This report is from the instance that served the cases, which had no AI Hub. The board's runs were recorded with the real agents on the AI Hub build and replay here.",
+  aihub_runner:
+    "This report is from the instance that served the cases, which had not compiled the class that runs agents through AI Hub. The board's runs were recorded with the real agents on the AI Hub build and replay here.",
+  purge_task:
+    'The recorded instance had no message purge task. An installation makes one when SHUTTER_MESSAGE_PURGE asks for it.',
+};
+
+const NOT_ON_RECORDED = 'Not on the recorded instance';
+
+const NO_PURGE_NOTE =
+  'Nothing deletes old messages. An installation makes the task when SHUTTER_MESSAGE_PURGE asks for it.';
+
+/**
+ * A row's mark, tone and reason, by the row rule: a core check that passes is positive and one that fails is blocking
+ * with what to do; another yes is positive; another no is neutral, with the reason chip where the trial's recording
+ * lacked the piece, and attention for a missing message purge task on a live installation; a value the report did not
+ * send is attention ("Not reported"); a name, a path or a number has no mark.
+ */
+export function rowInfo(key: string, value: unknown, report: Report, trial: boolean): RowInfo {
+  // The API mimic's switch is "" when it is off: a setting, not a missing value
+  if (key === 'mock_config' && value === '') return { mark: 'none', tone: null, missing: false };
+  if (!sent(value)) return { mark: 'dash', tone: 'attention', missing: true };
+  const core = coreFor(report).find((c) => c.key === key);
+  if (core) {
+    const passed = core.passes ? core.passes(value) : value === true;
+    return passed
+      ? { mark: 'check', tone: 'positive', missing: false }
+      : { mark: 'x', tone: 'blocking', missing: false, todo: core.todo(value) };
+  }
+  if (typeof value === 'boolean') {
+    if (value) return { mark: 'check', tone: 'positive', missing: false };
+    const note = trial ? ABSENT_IN_TRIAL[key] : undefined;
+    if (note)
+      return {
+        mark: 'dash',
+        tone: 'neutral',
+        missing: false,
+        reason: { chip: NOT_ON_RECORDED, note, tone: 'neutral' },
+      };
+    if (key === 'purge_task')
+      return {
+        mark: 'dash',
+        tone: 'attention',
+        missing: false,
+        reason: { chip: 'No message purge task', note: NO_PURGE_NOTE, tone: 'attention' },
+      };
+    return { mark: 'dash', tone: 'neutral', missing: false };
+  }
+  return { mark: 'none', tone: null, missing: false };
+}
+
+export interface Row {
+  key: string;
+  label: string;
+  value: unknown;
+  info: RowInfo;
+  /** A row that is not a report key: the default board, drawn from the agent library. */
+  virtual?: 'default-board';
+}
+
+export interface GroupStatus {
+  tone: Tone;
+  label: string;
+}
+
+export interface Group {
+  def: GroupDef;
+  rows: Row[];
+  /** The group's count: its core checks passing, else the pieces missing from the recording, else rows to look at. */
+  status: GroupStatus | null;
+  /** The tone of a group that needs a look (a core check failed, or a row is attention); null otherwise. */
+  edge: Tone | null;
+  /** Core checks in the group, as the group links count them. */
+  checks: CoreResult[];
+}
+
+/** A row's label in words. */
+function labelFor(key: string, report: Report): string {
+  if (key === 'production')
+    return sent(report.shutter_production) && report.shutter_production !== report.production
+      ? 'Production running now'
+      : 'Production';
+  return LABELS[key] ?? keyLabel(key);
+}
+
+/** The report in groups: each key where the table puts it, the rest in Other, the provenance nowhere. */
+export function groupReport(report: Report, trial: boolean): { verdict: Verdict; groups: Group[] } {
+  const verdict = verdictOf(report);
+  const keys = Object.keys(report).filter((k) => k !== PROVENANCE_KEY);
+  const placed = new Set(GROUPS.flatMap((g) => g.keys));
+  const defs = [...GROUPS, { ...OTHER, keys: keys.filter((k) => !placed.has(k)) }];
+  const groups: Group[] = [];
+  for (const def of defs) {
+    const rows: Row[] = [];
+    for (const key of def.keys) {
+      if (!(key in report)) continue;
+      // The same name twice says nothing more: the running production is Shutter's own
+      if (
+        key === 'production' &&
+        sent(report.shutter_production) &&
+        report.shutter_production === report.production
+      )
+        continue;
+      rows.push({
+        key,
+        label: labelFor(key, report),
+        value: report[key],
+        info: rowInfo(key, report[key], report, trial),
+      });
+      if (key === 'board_members')
+        rows.push({
+          key: 'default_board',
+          label: 'Default board',
+          value: null,
+          info: { mark: 'none', tone: null, missing: false },
+          virtual: 'default-board',
+        });
+    }
+    if (!rows.length) continue;
+    const checks = verdict.results.filter((r) => def.keys.includes(r.key));
+    const absent = rows.filter((r) => r.info.reason?.chip === NOT_ON_RECORDED).length;
+    const look = rows.filter((r) => r.info.tone === 'attention').length;
+    let status: GroupStatus | null = null;
+    if (checks.length) {
+      const ok = checks.filter((c) => c.passed).length;
+      status = {
+        tone: ok === checks.length ? 'positive' : 'blocking',
+        label: `${ok} of ${checks.length} pass`,
+      };
+    } else if (absent) {
+      status = { tone: 'neutral', label: `${absent} not on the recorded instance` };
+    } else if (look) {
+      status = { tone: 'attention', label: `${look} to check` };
+    }
+    groups.push({
+      def,
+      rows,
+      status,
+      edge: checks.some((c) => !c.passed) ? 'blocking' : look ? 'attention' : null,
+      checks,
+    });
+  }
+  return { verdict, groups };
+}
+
+// ---- values ----
+
+/** The sentence a licence object makes: its fields as the report names them, with no sum worked out. */
+export function licenceSentence(license: unknown): string | null {
+  if (!license || typeof license !== 'object' || Array.isArray(license)) return null;
+  const l = license as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const consumed = num(l.units_consumed);
+  const available = num(l.units_available);
+  const max = num(l.max_connections);
+  const clauses = [
+    consumed !== null ? `${plural(consumed, 'unit')} consumed` : '',
+    available !== null ? `${available} available` : '',
+    max !== null ? `up to ${plural(max, 'connection')}` : '',
+  ].filter(Boolean);
+  const type = typeof l.license_type === 'string' && l.license_type ? `${l.license_type} licence` : '';
+  if (type && clauses.length) return `${type}: ${clauses.join(', ')}`;
+  if (clauses.length) return `Licence: ${clauses.join(', ')}`;
+  if (typeof l.error === 'string' && l.error) return 'The licence could not be read.';
+  return type || null;
+}
+
+/** An object's fields as lines of words ("Enabled: true"), for the keys the page has no sentence for. */
+export function objectLines(value: Record<string, unknown>): string[] {
+  return Object.entries(value).map(
+    ([field, v]) =>
+      `${humanize(field)}: ${typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v)}`,
+  );
+}
+
+/** The model budget in words, as the Settings page says it (on the public demo it is per reset, never "today"). */
+export function budgetLine(budget: unknown, report: Report): string | null {
+  if (!budget || typeof budget !== 'object' || Array.isArray(budget)) return null;
+  const live = report.live as LiveStatus | undefined;
+  const words = budgetText(budget as Budget, { resetsHourly: live?.enabled === true });
+  return words ? [words.today, words.share].filter(Boolean).join('. ') : null;
+}
+
+/** Whether a value is too long to sit beside its label on a phone. */
+export function isLong(value: unknown): boolean {
+  if (value && typeof value === 'object') return true;
+  return typeof value === 'string' && value.length > 24;
+}
+
+// ---- the agents badge ----
+
+export interface AgentsBadge {
+  kind: 'on-hub' | 'recorded' | 'replays';
+  tone: Tone;
+  label: string;
+  hint?: string;
+}
+
+/**
+ * What the report says of the agents' home, never as part of the verdict: they run on IRIS AI Hub; or, where the
+ * instance has no AI Hub, the board's runs were recorded on it and replay here (the trial and the demo build), or the
+ * installation replays recordings and needs AI Hub to run them. Never "AI Hub not needed".
+ */
+export function agentsBadge(
+  report: Report,
+  trial: boolean,
+  recordedOn: Proof['recordedOn'],
+): AgentsBadge | null {
+  const hub = report.ai_hub_present;
+  const runner = report.aihub_runner;
+  if (hub === true && runner === true)
+    return { kind: 'on-hub', tone: 'info', label: 'Agents run on IRIS AI Hub' };
+  if (hub !== false && runner !== false) return null;
+  if (trial)
+    return {
+      kind: 'recorded',
+      tone: 'neutral',
+      label: recordedOn?.number
+        ? `Board runs recorded on IRIS AI Hub (build ${recordedOn.number}); replayed here`
+        : 'Board runs recorded on IRIS AI Hub; replayed here',
+      hint: recordedOn ? `Recorded on ${recordedOn.image}` : undefined,
+    };
+  return {
+    kind: 'replays',
+    tone: 'info',
+    label: 'Agents replay recordings; running them needs IRIS AI Hub',
+  };
+}
+
+// ---- the provenance ----
+
+const ISO = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/g;
+
+const MINUTE = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+  timeZone: 'UTC',
+});
+
+/** "20 Oct 2026, 17:55 UTC": a moment to the minute, in UTC, as the hero and the provenance say it. */
+export function utcMinute(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : `${MINUTE.format(d)} UTC`;
+}
+
+/** When the recording was read: the first time the `recorded` text names. */
+export function recordedAt(recorded: unknown): string | null {
+  return typeof recorded === 'string' ? (recorded.match(ISO)?.[0] ?? null) : null;
+}
+
+const upper = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * The `recorded` text as a list, one fact per line: when it was read and from where, what it holds, what was recorded
+ * later and from where. Its times are written the way the hero writes them.
+ */
+export function provenanceFacts(recorded: unknown): string[] {
+  if (typeof recorded !== 'string' || !recorded.trim()) return [];
+  const text = recorded.replace(ISO, (t) => utcMinute(t));
+  const sentences = text.split(/(?<=\.)\s+(?=[A-Z])/).map((s) => s.trim());
+  const [first, ...rest] = sentences;
+  // The first sentence runs "Recorded from ... at TIME: WHAT; AND WHAT": its colon and semicolon are fact breaks
+  const head = first
+    .replace(/\.$/, '')
+    .split(/:\s+|;\s+/)
+    .map(upper);
+  return [...head, ...rest].filter(Boolean);
+}
