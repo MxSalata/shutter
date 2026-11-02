@@ -53,7 +53,7 @@ export function IncidentApprovalPanel({
         <Stack gap="sm">
           <KeyValueList
             rows={[
-              ['Decided', decision?.at ? <Timestamp key="t" iso={decision.at} /> : ''],
+              ['Decided', decision?.at ? <Timestamp key="t" iso={decision.at} zone={false} /> : ''],
               ['Comment', decision?.comment ?? ''],
             ]}
           />
@@ -131,7 +131,7 @@ export function IncidentApprovalPanel({
                       <Text size="sm">{t.userName || t.assignedTo || 'unassigned'}</Text>
                     </StackTable.Td>
                     <StackTable.Td data-label="Completed">
-                      <Timestamp iso={t.timeCompleted} />
+                      <Timestamp iso={t.timeCompleted} zone={false} />
                     </StackTable.Td>
                   </StackTable.Tr>
                 ))}

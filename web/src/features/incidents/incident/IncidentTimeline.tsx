@@ -18,7 +18,7 @@ function Line({ line }: { line: TimelineLine }) {
   return (
     <Stack gap={0}>
       <Text size="xs" c="dimmed" component="div">
-        <Timestamp iso={line.at} size="xs" c="dimmed" />
+        <Timestamp iso={line.at} size="xs" c="dimmed" zone={false} />
         {line.actor ? ` · ${line.actor}` : ''}
       </Text>
       {line.opens ? (

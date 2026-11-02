@@ -10,12 +10,10 @@ import { TechDetail } from '@/components/TechDetail';
 import { Timestamp } from '@/components/Timestamp';
 import { humanize } from '@/lib/format';
 import { useTechnical } from '@/stores/appearance';
+import { HINT_EVENTS } from '@/theme';
 import { ChainStateBadge, KindBadge, OperationBadge } from '../badges';
 import { CHAIN_STATES, chainLine, describeChain, versions } from '../describe';
 import type { Decision } from './DecideModal';
-
-/** A tooltip that opens for the keyboard and a touch as well as the pointer. */
-const REACHABLE = { hover: true, focus: true, touch: true };
 
 /** What the version step means, said once for every operation's "v1 → v2". */
 const VERSION_HINT =
@@ -72,10 +70,10 @@ function Operation({ chain, item }: { chain: Chain; item: ChainItem }) {
           <Text size="sm" span>
             {humanize(item.event)}
           </Text>
-          <Timestamp iso={item.eventTime} size="xs" c="dimmed" />
+          <Timestamp iso={item.eventTime} size="xs" c="dimmed" zone={false} />
         </Group>
         <Group gap="xs" wrap="wrap">
-          <Tooltip label={VERSION_HINT} multiline maw={320} events={REACHABLE}>
+          <Tooltip label={VERSION_HINT} multiline maw={320} events={HINT_EVENTS}>
             <Text size="sm" span tabIndex={0}>
               {versions(item)}
             </Text>
@@ -115,7 +113,7 @@ function ChainCard({
               </Text>
               <KindBadge kind={chain.kind} />
             </Group>
-            <Tooltip label={describeChain(chain)} events={REACHABLE}>
+            <Tooltip label={describeChain(chain)} events={HINT_EVENTS}>
               <Text size="sm" tabIndex={0} w="fit-content">
                 {chainLine(chain)}
               </Text>
@@ -208,7 +206,7 @@ function OperationTables({ chains }: { chains: Chain[] }) {
                     <Table.Th>Event time</Table.Th>
                     <Table.Th>Catalogue</Table.Th>
                     <Table.Th>
-                      <Tooltip label={VERSION_HINT} multiline maw={320} events={REACHABLE}>
+                      <Tooltip label={VERSION_HINT} multiline maw={320} events={HINT_EVENTS}>
                         <span tabIndex={0}>Receiver version</span>
                       </Tooltip>
                     </Table.Th>
@@ -228,7 +226,7 @@ function OperationTables({ chains }: { chains: Chain[] }) {
                         </Text>
                       </Table.Td>
                       <Table.Td>
-                        <Timestamp iso={item.eventTime} style={{ whiteSpace: 'nowrap' }} />
+                        <Timestamp iso={item.eventTime} zone={false} style={{ whiteSpace: 'nowrap' }} />
                       </Table.Td>
                       <Table.Td>
                         <Text size="sm">

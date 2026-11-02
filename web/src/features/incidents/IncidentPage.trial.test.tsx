@@ -75,7 +75,8 @@ describe('IncidentPage in the trial', () => {
     renderTrial();
     const approval = await screen.findByRole('region', { name: 'Approval' });
     await userEvent.click(await within(approval).findByRole('button', { name: /Approve/ }));
-    const dialog = await screen.findByRole('dialog');
+    // The dialog's name is its title alone: the chip beside it is not part of it
+    const dialog = await screen.findByRole('dialog', { name: /^Approve the release of \d+ chains?$/ });
     expect(
       within(dialog).getByText(
         'Go ahead. You will see the recorded chain go out in order. Nothing leaves this browser.',

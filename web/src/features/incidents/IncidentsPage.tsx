@@ -20,6 +20,7 @@ import { Timestamp } from '@/components/Timestamp';
 import { humanize, plural } from '@/lib/format';
 import { MODE_IDENTITY } from '@/lib/hues';
 import { incidentOutcome } from '@/lib/status';
+import { HINT_EVENTS } from '@/theme';
 import { ChainBar } from './ChainBar';
 import { describeHeld, describeKinds, describePolicy, INCIDENT_STATES, statesFromCounts } from './describe';
 import './incidents.css';
@@ -133,7 +134,7 @@ function ModeMark({ mode, policy }: { mode: string; policy: string | undefined }
   const tip = describePolicy(policy);
   if (!tip) return mark;
   return (
-    <Tooltip label={tip} multiline maw={320} events={{ hover: true, focus: true, touch: true }}>
+    <Tooltip label={tip} multiline maw={320} events={HINT_EVENTS}>
       <span tabIndex={0}>{mark}</span>
     </Tooltip>
   );

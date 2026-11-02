@@ -1,11 +1,11 @@
-import { Alert, Button, Group, Modal, Stack, Text, Textarea } from '@mantine/core';
+import { Alert, Button, Group, Stack, Text, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { newIdempotencyKey } from '@/api/client';
 import { useDecideIncident } from '@/api/hooks';
 import type { Chain, IncidentDetail } from '@/api/types';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { Digest } from '@/components/Digest';
-import { EnvChip } from '@/components/EnvChip';
 import { KeyValueList } from '@/components/KeyValueList';
 import { TechDetail } from '@/components/TechDetail';
 import { byEnv } from '@/env/copy';
@@ -66,17 +66,10 @@ export function useDecideDialog(inc: IncidentDetail) {
   const changed = decide.error && isApiError(decide.error) && decide.error.code === 'plan_changed';
   const what = chain ? `chain ${chain.seq} (${chain.encounterId})` : `${plural(covered.length, 'chain')}`;
   const modal = (
-    <Modal
+    <ConfirmModal
       opened={decision !== null}
       onClose={close}
-      title={
-        <span style={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-          <span>
-            {decision === 'approve' ? `Approve the release of ${what}` : `Reject the release of ${what}`}
-          </span>
-          <EnvChip />
-        </span>
-      }
+      title={decision === 'approve' ? `Approve the release of ${what}` : `Reject the release of ${what}`}
       size="lg"
     >
       <Stack gap="sm">
@@ -127,7 +120,7 @@ export function useDecideDialog(inc: IncidentDetail) {
           </Button>
         </Group>
       </Stack>
-    </Modal>
+    </ConfirmModal>
   );
   return { open, modal };
 }

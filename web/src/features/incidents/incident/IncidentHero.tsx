@@ -6,6 +6,7 @@ import { SummaryBand } from '@/components/SummaryBand';
 import { Term } from '@/components/Term';
 import { formatDuration, formatTime, plural } from '@/lib/format';
 import { incidentOutcome } from '@/lib/status';
+import { HINT_EVENTS } from '@/theme';
 import { decidedBy, describeKinds, heroSentence, openToClosed } from '../describe';
 
 /** "Site policy: chains 1, 3, 4. The board: chain 2.": which chain each count is. */
@@ -48,12 +49,7 @@ export function IncidentHero({ inc }: { inc: IncidentDetail }) {
             figure={`${top.seqs.length} of ${inc.chains.length}`}
             caption={`by ${top.label.toLowerCase()}`}
           >
-            <Tooltip
-              label={whichChains(deciders)}
-              multiline
-              maw={320}
-              events={{ hover: true, focus: true, touch: true }}
-            >
+            <Tooltip label={whichChains(deciders)} multiline maw={320} events={HINT_EVENTS}>
               <Stack gap={0} tabIndex={0}>
                 {rest.map((d) => (
                   <Text size="sm" key={d.key}>

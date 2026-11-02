@@ -1,7 +1,7 @@
 import { MantineProvider } from '@mantine/core';
 import { Notifications, notifications } from '@mantine/notifications';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -136,15 +136,9 @@ function renderAt(path: string, detail: DetailLevel = 'plain') {
   );
 }
 
-/**
- * The words a reader sees, without the endpoint's own JSON, which "As the API sends it" opens in Technical: it is the
- * API's data, shown as it came, not the page's copy.
- */
+/** The words a reader sees; the shared count leaves out the endpoint's own JSON, which Technical opens. */
 function words(container: HTMLElement = document.body): string[] {
-  const copy = container.cloneNode(true) as HTMLElement;
-  for (const b of copy.querySelectorAll('button'))
-    if (b.textContent?.trim() === 'As the API sends it') b.parentElement?.remove();
-  return layer1Words(copy);
+  return layer1Words(container);
 }
 
 /** Waits for the parts of the page that load after the incident: its header, and the timeline's lines. */
@@ -176,10 +170,12 @@ describe('IncidentsPage', () => {
   it('says how the policy chains are released once, on the run mode, not in a sentence on every row', async () => {
     renderAt('/incidents');
     await screen.findByRole('link', { name: 'I-000001' });
-    // The sentence is a tooltip's (opened by the pointer, the keyboard or a touch; Mantine's takes tens of seconds to
-    // open under jsdom, so describePolicy's own test covers what it says): the row carries only the mode, reachable
+    // The sentence is a tooltip's: the row carries only the mode, and the keyboard reaches it
     expect(screen.queryByText(/The policy chains are released/)).not.toBeInTheDocument();
-    expect(screen.getByText('Site policy').closest('[tabindex="0"]')).not.toBeNull();
+    const mode = screen.getByText('Site policy').closest('[tabindex="0"]') as HTMLElement;
+    expect(mode).not.toBeNull();
+    act(() => mode.focus());
+    expect(await screen.findByText(/The policy chains are released/)).toBeInTheDocument();
   });
 
   it('puts the three figures that matter above the list', async () => {
@@ -428,9 +424,9 @@ describe('IncidentPage', () => {
     await loaded();
     const timeline = screen.getByRole('region', { name: 'Timeline' });
     // Every line carries its date and time
-    const stamps = within(timeline).getAllByText(/^\d{1,2} \w{3}, \d\d:\d\d:\d\d \w+$/);
+    const stamps = within(timeline).getAllByText(/^\d{1,2} \w{3}, \d\d:\d\d:\d\d$/);
     expect(stamps.length).toBeGreaterThanOrEqual(10);
-    expect(stamps[0]).toHaveTextContent('18 Oct, 12:04:27 BST');
+    expect(stamps[0]).toHaveTextContent('18 Oct, 12:04:27');
     expect(within(timeline).getByText('Opened: 5 failures within 10 minutes')).toBeInTheDocument();
     expect(within(timeline).getByRole('button', { name: '3 cases joined' })).toBeInTheDocument();
     expect(within(timeline).getByRole('button', { name: '20 release steps' })).toBeInTheDocument();
@@ -478,8 +474,8 @@ describe('IncidentPage', () => {
       within(approval).getByText('One approval releases the ordered chain: C-000004 then C-000009.'),
     ).toBeInTheDocument();
     await userEvent.click(within(approval).getByRole('button', { name: /Approve/ }));
-    const dialog = await screen.findByRole('dialog');
-    // The consequence first, in plain words, with where it takes effect beside the title
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the release of 1 chain' });
+    // The consequence first, in plain words, with where it takes effect beside the title (not in the dialog's name)
     expect(
       within(dialog).getByText('This sends 2 fixes to Downstream Out, in this order, for real.'),
     ).toBeInTheDocument();

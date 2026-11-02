@@ -90,21 +90,20 @@ export function IncidentHeader({ inc }: { inc: IncidentDetail }) {
         <Group gap="xl" wrap="wrap" align="flex-start">
           {threshold ? <Meta label="Opened at the threshold">{threshold}</Meta> : null}
           <Meta label="Opened">
-            <Timestamp iso={inc.openedAt} />
+            <Timestamp iso={inc.openedAt} zone={false} />
           </Meta>
           {inc.intakeClosedAt ? (
             <Meta label="Intake closed">
-              <Timestamp iso={inc.intakeClosedAt} />
+              <Timestamp iso={inc.intakeClosedAt} zone={false} />
             </Meta>
           ) : inc.quietSeconds ? (
             <Meta label="Intake">{`Closes after ${inc.quietSeconds} s with no new failure`}</Meta>
           ) : null}
           {inc.closedAt ? (
             <Meta label="Closed">
-              <Timestamp iso={inc.closedAt} />
+              <Timestamp iso={inc.closedAt} zone={false} />
             </Meta>
           ) : null}
-          <Meta label="Times">{`In ${displayZone()}, as the PAS sends them; UTC in the tooltips`}</Meta>
         </Group>
       }
     />
