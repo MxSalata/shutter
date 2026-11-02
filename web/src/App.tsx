@@ -8,6 +8,8 @@ import { router } from './routes';
 import { queryClient } from './query';
 import { themeFor } from './theme';
 import { useApplyAppearance } from './features/shell/useApplyAppearance';
+import { TRIAL } from './env/mode';
+import { BackFromTrial } from './trial/BackFromTrial';
 
 export default function App() {
   const contrast = useApplyAppearance();
@@ -15,6 +17,8 @@ export default function App() {
   return (
     <MantineProvider theme={theme} defaultColorScheme="auto">
       <Notifications position="top-right" limit={5} />
+      {/* A live page tells a tab that has just been in the trial that it is back in the live system */}
+      {TRIAL ? null : <BackFromTrial />}
       <ModalsProvider>
         <QueryClientProvider client={queryClient}>
           <RouterProvider router={router} />

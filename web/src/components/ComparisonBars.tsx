@@ -1,6 +1,7 @@
 import { Table, Text, Tooltip, UnstyledButton } from '@mantine/core';
 import { useId, useState } from 'react';
 import { hueVar, type Hue } from '@/lib/hues';
+import { HINT_EVENTS } from '@/theme';
 
 export interface ComparisonBar {
   /** Who, in words: "The board", "Simple rules". */
@@ -85,7 +86,7 @@ function ComparisonRow({ bar, of, words }: { bar: ComparisonBar; of: number; wor
       <Text size="sm" span>
         {bar.label}
       </Text>
-      <Tooltip label={bar.hint ?? `${bar.label}: ${words}`}>
+      <Tooltip label={bar.hint ?? `${bar.label}: ${words}`} events={HINT_EVENTS}>
         <span
           className="comparison-track"
           role="img"

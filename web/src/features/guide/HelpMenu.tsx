@@ -1,10 +1,12 @@
 import { ActionIcon, Menu, Tooltip } from '@mantine/core';
 import { IconHelp, IconList, IconPlayerPlay, IconRotate } from '@tabler/icons-react';
+import { ENV } from '@/env/mode';
+import { LeaveTrialItem } from '@/trial/LeaveTrial';
 import { positionOf } from './controller';
 import { useGuide } from './store';
 
-/** Help in the header: resume the guide where it was left, start it again, or open one chapter. */
-export function HelpMenu() {
+/** Help in a trial page's header: resume the tour where it was left, start it again, open one chapter, or leave. */
+export function TrialHelpMenu() {
   const progress = useGuide((s) => s.progress);
   const resume = useGuide((s) => s.resume);
   const openWelcome = useGuide((s) => s.openWelcome);
@@ -21,23 +23,29 @@ export function HelpMenu() {
         </Tooltip>
       </Menu.Target>
       <Menu.Dropdown>
-        <Menu.Label>Guide</Menu.Label>
+        <Menu.Label>The tour</Menu.Label>
         {pos ? (
           <Menu.Item className="guide-control" leftSection={<IconPlayerPlay size={16} />} onClick={resume}>
-            Resume guide
+            Resume the tour
           </Menu.Item>
         ) : null}
         <Menu.Item
           className="guide-control"
           leftSection={started ? <IconRotate size={16} /> : <IconPlayerPlay size={16} />}
-          // The welcome again, with its choice of scope; Start guide there begins from the first chapter
+          // The welcome again, with its choice of tours; Start the tour there begins from the first step
           onClick={openWelcome}
         >
-          {started ? 'Restart guide' : 'Start guide'}
+          {started ? 'Restart the tour' : 'Start the tour'}
         </Menu.Item>
         <Menu.Item className="guide-control" leftSection={<IconList size={16} />} onClick={openChapters}>
           Choose a chapter
         </Menu.Item>
+        {ENV.canLeave ? (
+          <>
+            <Menu.Divider />
+            <LeaveTrialItem />
+          </>
+        ) : null}
       </Menu.Dropdown>
     </Menu>
   );
