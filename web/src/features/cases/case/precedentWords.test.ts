@@ -88,4 +88,16 @@ describe('who retired a precedent', () => {
     });
     expect(retiredBy('Conflict')).toBeNull();
   });
+
+  it("prefers the 409's own retiredBy and retiredAt fields", () => {
+    expect(
+      retiredBy('Precedent 7 was retired on 2026-11-02T10:00:00Z by approver', {
+        error: 'already_retired',
+        retiredBy: 'mx',
+        retiredAt: '2026-11-02T11:30:00Z',
+        retiredReason: 'a wrong approval',
+      }),
+    ).toEqual({ at: '2026-11-02T11:30:00Z', by: 'mx' });
+    expect(retiredBy('Conflict', { error: 'already_retired', retiredBy: '' })).toBeNull();
+  });
 });

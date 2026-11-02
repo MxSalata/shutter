@@ -72,10 +72,15 @@ export function precedentSentence(p: PrecedentSummary): string {
 }
 
 /**
- * Who retired a precedent and when, from a 409 already_retired: the server names them only in its detail ("Precedent 7
- * was retired on 2026-11-02T10:00:00Z by approver").
+ * Who retired a precedent and when, from a 409 already_retired: its `retiredBy` and `retiredAt` (CONTRACTS 6.4), or,
+ * from a server before those fields, its detail ("Precedent 7 was retired on 2026-11-02T10:00:00Z by approver").
  */
-export function retiredBy(detail: string): { by: string; at: string } | null {
+export function retiredBy(detail: string, body?: unknown): { by: string; at: string } | null {
+  if (body && typeof body === 'object') {
+    const o = body as Record<string, unknown>;
+    if (typeof o.retiredBy === 'string' && o.retiredBy && typeof o.retiredAt === 'string' && o.retiredAt)
+      return { by: o.retiredBy, at: o.retiredAt };
+  }
   const m = /retired on (\S+) by (.+?)\.?$/.exec(detail);
   return m ? { at: m[1], by: m[2] } : null;
 }

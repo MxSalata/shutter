@@ -122,7 +122,8 @@ function RetireDialog({
   const [shown] = useState(precedent);
   const error = retire.error;
   const code = isApiError(error) ? error.code : '';
-  const already = code === 'already_retired' && isApiError(error) ? retiredBy(error.detail) : null;
+  const already =
+    code === 'already_retired' && isApiError(error) ? retiredBy(error.detail, error.body) : null;
   const submit = () => {
     if (!shown) return;
     retire.mutate(
