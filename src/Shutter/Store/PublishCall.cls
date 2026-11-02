@@ -41,17 +41,7 @@ ClassMethod CountSince(sinceIso As %String) As %Integer
 /// The newest calls, newest first.
 ClassMethod Recent(n As %Integer = 50) As %DynamicArray
 {
-    Set out = []
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP ? ID FROM Shutter_Store.PublishCall ORDER BY ID DESC", +n)
-    While rs.%Next() {
-        Set c = ..%OpenId(rs.%Get("ID"))
-        Continue:'$ISOBJECT(c)
-        Set sc = c.%JSONExportToString(.json)
-        Set o = ##class(%DynamicObject).%FromJSON($SELECT($$$ISOK(sc): json, 1: "{}"))
-        Set o.id = c.%Id()
-        Do out.%Push(o)
-    }
-    Quit out
+    Quit ##class(Shutter.Util.Json).Rows("Shutter.Store.PublishCall", "SELECT TOP ? ID FROM Shutter_Store.PublishCall ORDER BY ID DESC", +n)
 }
 
 Storage Default

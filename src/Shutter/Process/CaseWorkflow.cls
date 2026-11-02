@@ -49,7 +49,8 @@ Property ApprovalValidSeconds As %Integer [ InitialExpression = 3600 ];
 Property BoardsPerMinute As %Integer [ InitialExpression = 6 ];
 
 /// Whether this case is waiting for a board slot, and who asked for the board (OnBoardDefer convenes it then).
-Property BoardDeferred As %Boolean [ InitialExpression = 0 ];
+/// The board mode a deferred case convenes with when its slot comes (v1.35; the policy path asks for the full board).
+Property DeferredMode As %String(MAXLEN = 16);
 
 Property DeferredBy As %String(MAXLEN = 100);
 
@@ -397,7 +398,7 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
         If decision = "person" Quit ..PersonByCatalogue(case, cat)
         Do case.Note("note", "Catalogue: " _ $SELECT(decision = "": "no result", 1: decision) _ "; the board decides", "system")
     }
-    Set sc = ..ConveneBoard(case, result.SummaryJSON, "", .convened)
+    Set sc = ..ConveneBoard(case, result.SummaryJSON, "", "", .convened)
     Quit:($$$ISERR(sc) || 'convened) sc
     Quit ..AfterConvene(case, result.SummaryJSON)
 }
@@ -405,33 +406,43 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
 /// The board convened on the evidence (6.6): a request to every member of the mode's board, the pending list kept for the
 /// answers, one slot of the minute taken. Under the per-minute cap (v1.35, BoardsPerMinute; 0 for none) a case that finds
 /// the minute full waits for a slot instead: a note says so, an alarm keyed by the round brings it back (OnBoardDefer), and
-/// convened is 0. With no member to convene the rules path takes over (RulesOnly), convened 0 too.
-Method ConveneBoard(case As Shutter.Store.Case, summaryJSON As %String, byWhom As %String = "", Output convened As %Boolean) As %Status
+/// convened is 0 (DeferredBy and DeferredMode say who asked and with which members). With no member to convene the rules
+/// path takes over (RulesOnly), convened 0 too. The slot is taken only once every member's request is built.
+Method ConveneBoard(case As Shutter.Store.Case, summaryJSON As %String, byWhom As %String = "", mode As %String = "", Output convened As %Boolean) As %Status
 {
-    Set convened = 0, ..BoardDeferred = 0, sc = $$$OK
-    If ##class(Shutter.Util.BoardSlots).Full(..BoardsPerMinute) {
-        Set wait = 60 + $RANDOM(30)
-        Set ..BoardDeferred = 1, ..DeferredBy = byWhom
-        Do case.Note("note", "The board is busy: " _ ##class(Shutter.Util.BoardSlots).Count() _ " convened this minute, the cap is " _ ..BoardsPerMinute _ " a minute; this case waits " _ wait _ " s for a slot", "system")
-        Set alarm = ##class(Ens.AlarmRequest).%New()
-        Set alarm.Timeout = wait
-        Quit ..SendRequestAsync("Ens.Alarm", alarm, 1, "board:defer:" _ ..Round, "Waiting for a board slot")
-    }
-    Set members = ##class(Shutter.Store.BoardMember).MembersForMode($SELECT(..Mode = "policy": "board", 1: ..Mode))
+    Set convened = 0, sc = $$$OK
+    // The members: the case's mode by default (policy convenes the full board); the policy path asks for "board" whatever
+    // the case's mode, as it did before the cap.
+    If mode = "" Set mode = $SELECT(..Mode = "policy": "board", 1: ..Mode)
+    Set members = ##class(Shutter.Store.BoardMember).MembersForMode(mode)
     If members.%Size() = 0 Quit ..RulesOnly(case)
-    Do ##class(Shutter.Util.BoardSlots).Take()
-    Set pending = []
+    // Every request first: the model view may refuse, and no slot is spent on a board that never convenes.
+    Set n = 0
     Set iter = members.%GetIterator()
     While iter.%GetNext(.i, .code) {
         Set m = ##class(Shutter.Store.BoardMember).ByCode(code)
         Continue:'$ISOBJECT(m)
         Set req = ..AgentRequestFor(case, m, summaryJSON, "", .sc)
         If '$ISOBJECT(req) Set refused = sc Quit
-        Set sc = ..SendRequestAsync(m.ConfigItem, req, 1, "member:" _ code)
-        Quit:$$$ISERR(sc)
-        Do pending.%Push(code)
+        Set n = n + 1, reqs(n) = req, items(n) = m.ConfigItem, codes(n) = code
     }
     If $DATA(refused) Quit ..ModelViewFailed(case, refused)
+    If n = 0 Quit ..RulesOnly(case)
+    // The minute's slot, taken atomically (TryTake): a case that finds the minute full waits for the next one instead.
+    If '##class(Shutter.Util.BoardSlots).TryTake(..BoardsPerMinute, .count) {
+        Set wait = 60 + $RANDOM(30)
+        Set ..DeferredBy = byWhom, ..DeferredMode = mode
+        Do case.Note("note", "The board is busy: " _ count _ " convened this minute, the cap is " _ ..BoardsPerMinute _ " a minute; this case waits " _ wait _ " s for a slot", "system")
+        Set alarm = ##class(Ens.AlarmRequest).%New()
+        Set alarm.Timeout = wait
+        Quit ..SendRequestAsync("Ens.Alarm", alarm, 1, "board:defer:" _ ..Round, "Waiting for a board slot")
+    }
+    Set pending = []
+    For k = 1:1:n {
+        Set sc = ..SendRequestAsync(items(k), reqs(k), 1, "member:" _ codes(k))
+        Quit:$$$ISERR(sc)
+        Do pending.%Push(codes(k))
+    }
     Quit:$$$ISERR(sc) sc
     Set ..PendingJSON = pending.%ToJSON(), convened = 1
     Do case.Note("note", "Board convened" _ $SELECT(byWhom '= "": " by " _ byWhom, 1: "") _ ": " _ $REPLACE($REPLACE(pending.%ToJSON(), "[", ""), "]", ""), $SELECT(..ForceBoard && (..ConvenedBy '= ""): ..ConvenedBy, 1: "system"))
@@ -458,7 +469,7 @@ Method OnBoardDefer(case As Shutter.Store.Case, round As %Integer) As %Status
     If case.State '= "investigating" { $$$TRACE("A board slot came; the case is " _ case.State _ ", so nothing is due") Quit $$$OK }
     Set summaryJSON = $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.Summary, 1: "")
     If summaryJSON = "" Quit case.Transition("escalated", "A board slot came, but the case has no evidence summary to convene the board on; a person must look", "system")
-    Set sc = ..ConveneBoard(case, summaryJSON, ..DeferredBy, .convened)
+    Set sc = ..ConveneBoard(case, summaryJSON, ..DeferredBy, ..DeferredMode, .convened)
     Quit:($$$ISERR(sc) || 'convened) sc
     Quit ..AfterConvene(case, summaryJSON)
 }
@@ -760,7 +771,7 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
     Set profile = ##class(Shutter.Store.SiteProfile).Current()
     Do case.Note("note", "Catalogue " _ entry _ " (" _ title _ ") matched alone: " _ outcome _ ". Site policy for tier " _ tier _ ", " _ kind _ ": " _ ..Policy _ " (profile v" _ $CLASSMETHOD(json, "Str", profile, "version", 0) _ ")", "system")
     If (..Policy = "board") || ..ForceBoard {
-        Set sc = ..ConveneBoard(case, summary.%ToJSON(), $SELECT(..ForceBoard: ..ConvenedBy, 1: "site policy"), .convened)
+        Set sc = ..ConveneBoard(case, summary.%ToJSON(), $SELECT(..ForceBoard: ..ConvenedBy, 1: "site policy"), "board", .convened)
         Quit:($$$ISERR(sc) || 'convened) sc
         Quit ..AfterConvene(case, summary.%ToJSON())
     }
@@ -1411,6 +1422,15 @@ Method OnApproval(case As Shutter.Store.Case, result As EnsLib.Workflow.TaskResp
     Quit ..SendPreflight(case)
 }
 
+/// The wait before a preflight read is tried again: the backoff, or the receiver's Retry-After when it asked for longer, at
+/// most MAXRETRYAFTER.
+ClassMethod RetryAfterWait(retryAfter As %String, backoff As %Integer) As %Integer
+{
+    If (retryAfter = "") || (+retryAfter <= 0) Quit backoff
+    Set asked = $SELECT(+retryAfter > ..#MAXRETRYAFTER: ..#MAXRETRYAFTER, 1: +retryAfter)
+    Quit $SELECT(asked > backoff: asked, 1: backoff)
+}
+
 /// Seconds the preflight read waits for the receiver's Retry-After: what is left of it, at most MAXRETRYAFTER; 0 when the
 /// case carries none or it has passed. now is an ISO UTC time, the clock when empty.
 ClassMethod PreflightWaitSeconds(case As Shutter.Store.Case, now As %String = "") As %Integer
@@ -1431,14 +1451,17 @@ Method SendPreflight(case As Shutter.Store.Case) As %Status
     // The receiver's Retry-After (v1.35; CONTRACTS 6.5): the first read after an unavailable answer waits as the receiver
     // asked, 300 s at most; the wait is spent once.
     Set wait = ..PreflightWaitSeconds(case)
-    If wait > 0 {
+    If case.RetryAfterUntil '= "" {
+        // Spent once, whether or not anything is left of it.
         Set until = case.RetryAfterUntil
         Set case.RetryAfterUntil = ""
-        Do case.Note("note", "The receiver asked for a pause before a retry (Retry-After, until " _ until _ "); the preflight read waits " _ wait _ " s", "system")
+        If wait > 0 Do case.Note("note", "The receiver asked for a pause before a retry (Retry-After, until " _ until _ "); the preflight read waits " _ wait _ " s", "system")
         Set sc = case.%Save()
-        Set alarm = ##class(Ens.AlarmRequest).%New()
-        Set alarm.Timeout = wait
-        Quit ..SendRequestAsync("Ens.Alarm", alarm, 1, "preflight:retry")
+        If wait > 0 {
+            Set alarm = ##class(Ens.AlarmRequest).%New()
+            Set alarm.Timeout = wait
+            Quit ..SendRequestAsync("Ens.Alarm", alarm, 1, "preflight:retry")
+        }
     }
     Set read = ##class(Shutter.Msg.WardOperation).%New()
     Set read.Purpose = "read", read.EncounterId = case.EncounterId, read.OperationKey = case.OperationKey, read.CaseId = case.CaseId
@@ -1463,8 +1486,10 @@ Method OnPreflight(case As Shutter.Store.Case, result As Shutter.Msg.WardResult)
         // A receiver that cannot be read right now is asked again, with a growing wait (A1); then the case blocks.
         If ..Refreshes < ..MaxRefreshes {
             Set ..Refreshes = ..Refreshes + 1
-            Set wait = 10 * (2 ** (..Refreshes - 1))
-            Do case.Note("note", "The preflight read failed (" _ result.Outcome _ $SELECT(result.Error '= "": ", " _ result.Error, 1: "") _ "); reading again in " _ wait _ " s (" _ ..Refreshes _ " of " _ ..MaxRefreshes _ ")", "system")
+            Set backoff = 10 * (2 ** (..Refreshes - 1))
+            // The receiver's Retry-After on the read, when it sent one (v1.35): the longer of it and the backoff.
+            Set wait = ..RetryAfterWait(result.RetryAfterSeconds, backoff)
+            Do case.Note("note", "The preflight read failed (" _ result.Outcome _ $SELECT(result.Error '= "": ", " _ result.Error, 1: "") _ "); reading again in " _ wait _ " s" _ $SELECT(wait > backoff: " as the receiver asked (Retry-After)", 1: "") _ " (" _ ..Refreshes _ " of " _ ..MaxRefreshes _ ")", "system")
             Set alarm = ##class(Ens.AlarmRequest).%New()
             Set alarm.Timeout = wait
             Quit ..SendRequestAsync("Ens.Alarm", alarm, 1, "preflight:retry")
@@ -1757,7 +1782,7 @@ Storage Default
 <Value>BoardsPerMinute</Value>
 </Value>
 <Value name="45">
-<Value>BoardDeferred</Value>
+<Value>DeferredMode</Value>
 </Value>
 <Value name="46">
 <Value>DeferredBy</Value>

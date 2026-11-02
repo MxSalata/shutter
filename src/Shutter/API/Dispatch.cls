@@ -147,32 +147,10 @@ ClassMethod Body() As %DynamicObject
     Quit o
 }
 
-/// A persistent object's JSON projection as a dynamic object.
+/// A persistent object's JSON projection as a dynamic object (Shutter.Util.Json.Project, shared with the store classes).
 ClassMethod Project(obj As %JSON.Adaptor) As %DynamicObject
 {
-    If '$ISOBJECT(obj) Quit ""
-    Set sc = obj.%JSONExportToString(.json)
-    If $$$ISERR(sc) || ($GET(json) = "") {
-        Set o = {}
-        Set o.id = obj.%Id()
-        Set o.error = "projection failed: " _ $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "empty")
-        Quit o
-    }
-    Set o = ""
-    Try {
-        Set o = ##class(%DynamicObject).%FromJSON(json)
-    } Catch {
-        // A numeric property with no value (added after the row was saved) exports as an empty value,
-        // which is not JSON: null takes its place, outside string literals only.
-        Try {
-            Set o = ##class(%DynamicObject).%FromJSON(##class(Shutter.Util.Json).NullEmptyValues(json))
-        } Catch ex {
-            Set o = {}
-            Set o.error = "projection failed: " _ ex.DisplayString()
-        }
-    }
-    Set o.id = obj.%Id()
-    Quit o
+    Quit ##class(Shutter.Util.Json).Project(obj)
 }
 
 /// The case for a public id, or "" after writing a 404.
@@ -217,17 +195,10 @@ ClassMethod IdempotencyKey(key As %String) As %String
     Quit ..User() _ "|" _ %request.Method _ "|" _ %request.URL _ "|" _ key
 }
 
-/// Rows of a SQL query as projected objects of a class.
+/// Rows of a SQL query as projected objects of a class (Shutter.Util.Json.Rows).
 ClassMethod Rows(class As %String, sql As %String, args...) As %DynamicArray
 {
-    Set out = []
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, args...)
-    While rs.%Next() {
-        Set obj = $CLASSMETHOD(class, "%OpenId", rs.%Get("ID"))
-        Continue:'$ISOBJECT(obj)
-        Do out.%Push(..Project(obj))
-    }
-    Quit out
+    Quit ##class(Shutter.Util.Json).Rows(class, sql, args...)
 }
 
 ClassMethod PortalPath() As %String

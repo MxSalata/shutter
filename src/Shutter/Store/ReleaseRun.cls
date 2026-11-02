@@ -96,14 +96,7 @@ ClassMethod Last() As %DynamicObject
 /// The newest runs, newest first.
 ClassMethod Recent(n As %Integer = 20) As %DynamicArray
 {
-    Set out = []
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP ? ID FROM Shutter_Store.ReleaseRun ORDER BY ID DESC", +n)
-    While rs.%Next() {
-        Set run = ..%OpenId(rs.%Get("ID"))
-        Continue:'$ISOBJECT(run)
-        Do out.%Push(run.Projection())
-    }
-    Quit out
+    Quit ##class(Shutter.Util.Json).Rows("Shutter.Store.ReleaseRun", "SELECT TOP ? ID FROM Shutter_Store.ReleaseRun ORDER BY ID DESC", +n)
 }
 
 /// How many runs there are, and how many ended interrupted.
@@ -117,10 +110,7 @@ ClassMethod Counts(Output interrupted As %Integer) As %Integer
 /// The row as JSON with its id.
 Method Projection() As %DynamicObject
 {
-    Set sc = ..%JSONExportToString(.json)
-    Set o = ##class(%DynamicObject).%FromJSON($SELECT($$$ISOK(sc): json, 1: "{}"))
-    Set o.id = ..%Id()
-    Quit o
+    Quit ##class(Shutter.Util.Json).Project($THIS)
 }
 
 Storage Default

@@ -32,13 +32,35 @@ ClassMethod Take(minute As %String = "") As %Integer
 {
     If minute = "" Set minute = ..MinuteKey()
     Set n = $INCREMENT(^Shutter.Board("convened", minute))
+    Do ..Drop(minute)
+    Quit n
+}
+
+/// Take a slot of the minute if the cap allows, atomically: the count goes up first and comes back down when it went past
+/// the cap, so two cases cannot both pass a last slot. cap 0 means no cap. count gets the minute's count after the call.
+ClassMethod TryTake(cap As %Integer, Output count As %Integer, minute As %String = "") As %Boolean
+{
+    If minute = "" Set minute = ..MinuteKey()
+    If +cap <= 0 Set count = ..Take(minute) Quit 1
+    Set n = $INCREMENT(^Shutter.Board("convened", minute))
+    If n > +cap {
+        Set count = $INCREMENT(^Shutter.Board("convened", minute), -1)
+        Quit 0
+    }
+    Do ..Drop(minute)
+    Set count = n
+    Quit 1
+}
+
+/// The nodes of the minutes before this one are dropped: only the current minute counts.
+ClassMethod Drop(minute As %String) [ Private ]
+{
     Set k = ""
     For {
         Set k = $ORDER(^Shutter.Board("convened", k))
         Quit:((k = "") || (k >= minute))
         Kill ^Shutter.Board("convened", k)
     }
-    Quit n
 }
 
 }
