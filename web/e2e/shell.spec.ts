@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { skipWelcome } from './guide';
+import { GUIDE_KEY, skipWelcome } from './guide';
 import { banner, go, signIn } from './helpers';
 
 /**
@@ -76,6 +76,66 @@ test.describe('the shell', () => {
     await expect(
       page.getByRole('radiogroup', { name: 'Detail' }).getByRole('radio', { name: 'Technical' }),
     ).toBeChecked();
+  });
+
+  test('names the help button for the tour: its word beside the icon on a laptop, its name alone on a phone', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await signIn(page);
+    const header = page.locator('header');
+    const tour = header.getByRole('button', { name: 'Tour' });
+    await expect(tour).toBeVisible();
+    await expect(tour).toHaveText('Tour');
+    // A tour left part way: the button says it can be resumed, and its menu's first item does it
+    await page.evaluate(
+      (key) =>
+        localStorage.setItem(
+          key,
+          JSON.stringify({ version: 2, scope: 'quick', at: 's2/receipt', completed: [], dismissed: true }),
+        ),
+      GUIDE_KEY,
+    );
+    await page.reload();
+    const resume = header.getByRole('button', { name: 'Resume tour' });
+    await expect(resume).toHaveText('Resume tour');
+    await resume.click();
+    await expect(page.getByRole('menuitem').first()).toHaveText('Resume the tour');
+    await page.keyboard.press('Escape');
+    // On a phone the icon alone, a square like the header's other icon buttons, named the same; the row still fits
+    for (const width of [390, 360]) {
+      await page.setViewportSize({ width, height: 760 });
+      await expect(resume).toBeVisible();
+      await expect(resume.locator('.header-help-label')).toBeHidden();
+      const box = (await resume.boundingBox())!;
+      expect(box.width).toBeLessThanOrEqual(40);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+      const row = await header.evaluate((h) => {
+        const r = h.querySelector(':scope > div:last-child')!;
+        return { scroll: r.scrollWidth, client: r.clientWidth };
+      });
+      expect(row.scroll).toBeLessThanOrEqual(row.client);
+      await expect(page.locator('.trial-pill')).toHaveText('Trial');
+    }
+  });
+
+  test('says where Leave trial would be: the demo build is the trial only', async ({ page }) => {
+    await signIn(page);
+    const words =
+      'This copy is the trial only. The live system runs on an IRIS instance: your own install or the online demo.';
+    await page.getByRole('button', { name: /^Signed in as / }).click();
+    const user = page.getByRole('menu', { name: /^Signed in as / });
+    await expect(user.getByTestId('trial-only-note')).toHaveText(words);
+    await expect(user.getByRole('menuitem', { name: 'Leave trial' })).toHaveCount(0);
+    await expect(user).toHaveAccessibleDescription(words);
+    // Closed from its button: with its first item (the current role) disabled, focus stays on the button
+    await page.getByRole('button', { name: /^Signed in as / }).click();
+    await expect(user).toBeHidden();
+    await page.getByRole('button', { name: 'Tour' }).click();
+    const help = page.getByRole('menu', { name: 'Tour' });
+    await expect(help.getByTestId('trial-only-note')).toHaveText(words);
+    await expect(help.getByRole('menuitem', { name: 'Leave trial' })).toHaveCount(0);
+    await expect(help).toHaveAccessibleDescription(words);
   });
 
   test('marks every page of the demo build as the trial: banner, frame, pill and title', async ({ page }) => {

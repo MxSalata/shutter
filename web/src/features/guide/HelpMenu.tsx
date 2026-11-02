@@ -1,28 +1,35 @@
-import { ActionIcon, Menu, Tooltip } from '@mantine/core';
-import { IconHelp, IconList, IconPlayerPlay, IconRotate } from '@tabler/icons-react';
+import { Menu } from '@mantine/core';
+import { IconList, IconPlayerPlay, IconRotate } from '@tabler/icons-react';
+import { HeaderHelpButton } from '@/components/HeaderHelpButton';
 import { ENV } from '@/env/mode';
-import { LeaveTrialItem } from '@/trial/LeaveTrial';
+import { LeaveTrialItem, TRIAL_ONLY_ID, TrialOnlyNote } from '@/trial/LeaveTrial';
 import { positionOf } from './controller';
 import { useGuide } from './store';
 
-/** Help in a trial page's header: resume the tour where it was left, start it again, open one chapter, or leave. */
+/** The button's word in the trial: "Resume tour" while a tour left part way waits on this device, else "Tour". */
+function tourLabel(phase: string, resumable: boolean): string {
+  return phase === 'closed' && resumable ? 'Resume tour' : 'Tour';
+}
+
+/**
+ * Help in a trial page's header, named for the tour it runs: resume the tour where it was left, start it again, open
+ * one chapter, or leave. In the demo build there is no live system to leave for, and the menu says so.
+ */
 export function TrialHelpMenu() {
   const progress = useGuide((s) => s.progress);
+  const phase = useGuide((s) => s.phase);
   const resume = useGuide((s) => s.resume);
   const openWelcome = useGuide((s) => s.openWelcome);
   const openChapters = useGuide((s) => s.openChapters);
   const pos = positionOf(progress);
   const started = !!pos || progress.completed.length > 0 || progress.dismissed;
+  const noteId = `${TRIAL_ONLY_ID}-help`;
   return (
-    <Menu shadow="md" width={220} position="bottom-end" withinPortal>
+    <Menu shadow="md" width={260} position="bottom-end" withinPortal>
       <Menu.Target>
-        <Tooltip label="Help">
-          <ActionIcon variant="subtle" color="gray" size="lg" aria-label="Help">
-            <IconHelp size={18} />
-          </ActionIcon>
-        </Tooltip>
+        <HeaderHelpButton label={tourLabel(phase, !!pos)} />
       </Menu.Target>
-      <Menu.Dropdown>
+      <Menu.Dropdown aria-describedby={ENV.canLeave ? undefined : noteId}>
         <Menu.Label>The tour</Menu.Label>
         {pos ? (
           <Menu.Item className="guide-control" leftSection={<IconPlayerPlay size={16} />} onClick={resume}>
@@ -40,12 +47,8 @@ export function TrialHelpMenu() {
         <Menu.Item className="guide-control" leftSection={<IconList size={16} />} onClick={openChapters}>
           Choose a chapter
         </Menu.Item>
-        {ENV.canLeave ? (
-          <>
-            <Menu.Divider />
-            <LeaveTrialItem />
-          </>
-        ) : null}
+        <Menu.Divider />
+        {ENV.canLeave ? <LeaveTrialItem /> : <TrialOnlyNote id={noteId} />}
       </Menu.Dropdown>
     </Menu>
   );

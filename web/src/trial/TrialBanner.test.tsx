@@ -1,6 +1,7 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/mocks/node';
@@ -8,10 +9,11 @@ import { resetMock } from '@/mocks/handlers';
 import { theme } from '@/theme';
 import { AppLayout } from '@/features/shell/AppLayout';
 import { INITIAL } from '@/features/guide/controller';
+import { useGuide } from '@/features/guide/store';
 import { GUIDE_KEY } from '@/features/guide/storage';
 import { LIVE_WELCOME_KEY } from './LiveWelcome';
 import { journal } from './journal';
-import { journalLine, TRIAL_WORDS } from './words';
+import { journalLine, TRIAL_ONLY_WORDS, TRIAL_WORDS } from './words';
 import { provideTrialChrome } from './slot';
 import { bannerForm, compactBanner, enterTrialPage } from './visit';
 
@@ -125,5 +127,72 @@ describe('the trial banner', () => {
     expect(journalLine(journal.counts())).toBe(
       'Answered in this browser: 2 reads, 1 action. Sent to IRIS: none. Refused by the browser: 0.',
     );
+  });
+});
+
+describe("the header's help and user menus", () => {
+  beforeEach(() => {
+    resetMock('approver');
+    sessionStorage.clear();
+    localStorage.setItem(GUIDE_KEY, JSON.stringify({ ...INITIAL, dismissed: true }));
+    localStorage.setItem(LIVE_WELCOME_KEY, 'seen');
+    useGuide.setState({ progress: { ...INITIAL, dismissed: true }, phase: 'closed' });
+  });
+
+  const header = () => document.querySelector('header')!;
+
+  it('names the button for the tour in the trial, in words beside its icon', async () => {
+    await renderShell(true);
+    const tour = within(header()).getByRole('button', { name: 'Tour' });
+    expect(tour).toHaveTextContent('Tour');
+    expect(tour).toHaveClass('header-help');
+    // A tour left part way on this device: Resume tour
+    act(() => useGuide.setState({ progress: { ...INITIAL, at: 's8/ask', dismissed: true } }));
+    expect(within(header()).getByRole('button', { name: 'Resume tour' })).toHaveTextContent('Resume tour');
+    // While the tour runs, the button is the tour's again
+    act(() => useGuide.setState({ phase: 'step' }));
+    expect(within(header()).getByRole('button', { name: 'Tour' })).toBeInTheDocument();
+  });
+
+  it('names it Help on a live page', async () => {
+    await renderShell(false);
+    const help = within(header()).getByRole('button', { name: 'Help' });
+    expect(help).toHaveTextContent('Help');
+    expect(help).toHaveClass('header-help');
+  });
+
+  it('offers Leave trial in both menus where a live system waits, with no trial-only line', async () => {
+    await renderShell(true);
+    await userEvent.click(within(header()).getByRole('button', { name: 'Tour' }));
+    let menu = await screen.findByRole('menu');
+    expect(within(menu).getByRole('menuitem', { name: 'Leave trial' })).toBeInTheDocument();
+    expect(screen.queryByText(TRIAL_ONLY_WORDS)).not.toBeInTheDocument();
+    expect(menu).not.toHaveAttribute('aria-describedby');
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(within(header()).getByRole('button', { name: /^Signed in as / }));
+    menu = await screen.findByRole('menu');
+    expect(within(menu).getByRole('menuitem', { name: 'Leave trial' })).toBeInTheDocument();
+    expect(screen.queryByText(TRIAL_ONLY_WORDS)).not.toBeInTheDocument();
+  });
+
+  it('says the demo build is the trial only where Leave trial would be, in both menus', async () => {
+    await renderShell(true, true);
+    await userEvent.click(within(header()).getByRole('button', { name: 'Tour' }));
+    let menu = await screen.findByRole('menu');
+    expect(within(menu).queryByRole('menuitem', { name: 'Leave trial' })).not.toBeInTheDocument();
+    expect(within(menu).getByText(TRIAL_ONLY_WORDS)).toBeInTheDocument();
+    expect(menu).toHaveAccessibleDescription(TRIAL_ONLY_WORDS);
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(within(header()).getByRole('button', { name: /^Signed in as / }));
+    menu = await screen.findByRole('menu');
+    expect(within(menu).queryByRole('menuitem', { name: 'Leave trial' })).not.toBeInTheDocument();
+    expect(within(menu).getByText(TRIAL_ONLY_WORDS)).toBeInTheDocument();
+    expect(menu).toHaveAccessibleDescription(TRIAL_ONLY_WORDS);
+    // The trial's words: "live" only in "live system", no dashes
+    expect(TRIAL_ONLY_WORDS).toBe(
+      'This copy is the trial only. The live system runs on an IRIS instance: your own install or the online demo.',
+    );
+    expect(TRIAL_ONLY_WORDS.replace(/\blive system\b/g, '')).not.toMatch(/\blive\b/i);
+    expect(TRIAL_ONLY_WORDS).not.toMatch(/[\u2013\u2014]/);
   });
 });

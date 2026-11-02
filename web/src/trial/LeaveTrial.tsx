@@ -1,6 +1,10 @@
 import { Button, Group, Menu, Modal, Stack, Text } from '@mantine/core';
 import { IconDoorExit } from '@tabler/icons-react';
 import { leaveTrial, useLeaveTrial } from './leave';
+import { TRIAL_ONLY_WORDS } from './words';
+
+/** The id of the trial-only line, which the menu holding it names as its description. */
+export const TRIAL_ONLY_ID = 'trial-only-note';
 
 /**
  * "Leave the trial?", then the live app at the same address: it asks who is signed in with the person's own session,
@@ -43,5 +47,18 @@ export function LeaveTrialItem() {
     <Menu.Item leftSection={<IconDoorExit size={16} aria-hidden />} onClick={ask}>
       Leave trial
     </Menu.Item>
+  );
+}
+
+/**
+ * In place of Leave trial where there is no live system to leave for (the demo build): one plain line, in the menu
+ * where a person looks for Leave trial. It is the menu's description (`aria-describedby` on its dropdown), since a
+ * menu's arrow keys move between its items only. `id` tells two menus' lines apart.
+ */
+export function TrialOnlyNote({ id = TRIAL_ONLY_ID }: { id?: string }) {
+  return (
+    <Text id={id} size="xs" c="dimmed" px="sm" py={6} maw={260} data-testid="trial-only-note">
+      {TRIAL_ONLY_WORDS}
+    </Text>
   );
 }

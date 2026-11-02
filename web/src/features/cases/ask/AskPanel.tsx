@@ -13,7 +13,7 @@ import {
   Title,
   VisuallyHidden,
 } from '@mantine/core';
-import { IconCheck, IconLock, IconMessageQuestion } from '@tabler/icons-react';
+import { IconCheck, IconEye, IconLock, IconMessageQuestion } from '@tabler/icons-react';
 import { useEffect, useRef, useState } from 'react';
 import {
   isAnswering,
@@ -98,18 +98,19 @@ function AnswerText({ text, views }: { text: string; views?: BoardAnswer['perspe
 function Cites({ cites }: { cites: string[] }) {
   if (!cites.length) return null;
   return (
-    <Group gap={4} wrap="wrap">
+    <Group gap={8} wrap="wrap" align="center" className="ask-cites">
       <Text size="xs" c="dimmed">
         Cites
       </Text>
       {cites.map((c) => (
         <Badge
           key={c}
-          size="xs"
+          size="sm"
           variant="outline"
           color="gray"
           component="button"
           type="button"
+          className="ask-cite"
           onClick={() => (/^W\d+$/.test(c) ? focusSoon(`${WHATIF_ID}-title`) : showEvidence(c))}
           style={{ textTransform: 'none', cursor: 'pointer' }}
         >
@@ -128,7 +129,7 @@ function Turn({ q }: { q: CaseQuestion }) {
   const a = q.answer;
   return (
     <Box component="article" aria-labelledby={turnId(q)} className="ask-turn">
-      <Stack gap={6}>
+      <Stack gap="xs">
         <Group gap="xs" wrap="nowrap" align="flex-start" justify="space-between">
           <Title order={4} id={turnId(q)} tabIndex={-1}>
             {q.question}
@@ -150,7 +151,7 @@ function Turn({ q }: { q: CaseQuestion }) {
             </Text>
           </Group>
         ) : q.state === 'answered' && a ? (
-          <Stack gap={6}>
+          <Stack gap="xs">
             <AnswerText text={a.answer} views={isBoard(a) ? a.perspectives : undefined} />
             {isBoard(a) && a.suggested_change ? (
               <Text size="sm">
@@ -380,15 +381,22 @@ export function AskPanel({ caseId }: { caseId: string }) {
   const badge = answersBadge(asked);
 
   return (
-    <Stack gap="md">
-      <Text size="sm" className="ask-readonly" p="sm">
-        <Text span fw={700}>
-          Read-only.
-        </Text>{' '}
-        Answers explain this case. They never write to the receiver, change the case or save a setting.
-      </Text>
+    <Stack gap="lg">
+      {/* The read-only note, quietly: a line under the heading, not a box */}
+      <Group gap="xs" wrap="nowrap" align="flex-start" className="ask-note">
+        <IconEye size={16} aria-hidden className="ask-note-icon" />
+        <Text size="sm" c="dimmed">
+          <Text span fw={600} inherit>
+            Read-only.
+          </Text>{' '}
+          Answers explain this case. They never write to the receiver, change the case or save a setting.
+        </Text>
+      </Group>
       <Tabs value={tier} onChange={(v) => v && setTier(v as QuestionTier)}>
-        <Tabs.List grow aria-label="How deep to ask" style={{ gap: 'var(--mantine-spacing-xs)' }}>
+        <Text size="sm" fw={600} id="ask-tiers-label" mb="xs">
+          How deep to ask
+        </Text>
+        <Tabs.List grow aria-labelledby="ask-tiers-label" style={{ gap: 'var(--mantine-spacing-sm)' }}>
           {TIERS.map((t) => (
             <Tabs.Tab key={t.value} value={t.value} className="ask-tier">
               <Stack gap={0} align="flex-start">
@@ -401,10 +409,10 @@ export function AskPanel({ caseId }: { caseId: string }) {
           ))}
         </Tabs.List>
         {TIERS.map((t) => (
-          <Tabs.Panel key={t.value} value={t.value} pt="sm">
-            <Stack gap="xs">
+          <Tabs.Panel key={t.value} value={t.value} pt="lg">
+            <Stack gap="sm">
               <Group gap="xs">
-                <Text size="xs" c="dimmed" id={`ask-chips-${t.value}`}>
+                <Text size="sm" fw={600} id={`ask-chips-${t.value}`}>
                   Suggested questions
                 </Text>
                 {conversations.length && badge ? (
@@ -422,14 +430,14 @@ export function AskPanel({ caseId }: { caseId: string }) {
               ) : suggested.isPending ? (
                 <Loader size="xs" aria-label="Loading the suggested questions" />
               ) : chips(t.value).length ? (
-                <Group gap="xs" role="group" aria-labelledby={`ask-chips-${t.value}`}>
+                <Group gap="sm" role="group" aria-labelledby={`ask-chips-${t.value}`}>
                   {chips(t.value).map(({ conversation, t: turn }) => {
                     const done = !!chipAsked(conversation, turn);
                     const current = done && conversation === shown;
                     return (
                       <Button
                         key={`${conversation}.${turn.turn}`}
-                        size="xs"
+                        size="sm"
                         radius="xl"
                         variant={current ? 'filled' : 'default'}
                         disabled={!canAsk && !done}
@@ -440,7 +448,7 @@ export function AskPanel({ caseId }: { caseId: string }) {
                         }
                         leftSection={done ? <IconCheck size={14} aria-hidden /> : undefined}
                         onClick={() => choose(conversation, turn)}
-                        className="wrap-button"
+                        className="wrap-button ask-chip"
                       >
                         {turn.text}
                         {done ? (
@@ -478,13 +486,13 @@ export function AskPanel({ caseId }: { caseId: string }) {
           />
         ) : thread.length ? (
           <Stack
-            gap="sm"
+            gap="md"
             component="section"
             aria-labelledby="ask-thread-title"
             className="ask-thread"
-            p="sm"
+            p="md"
           >
-            <Stack gap={2}>
+            <Stack gap={4}>
               <Group gap="xs">
                 <IconMessageQuestion size={16} aria-hidden />
                 <Title order={3} id="ask-thread-title">

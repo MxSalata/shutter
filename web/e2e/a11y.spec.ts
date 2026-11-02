@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { audit, choosePastel, MODES } from './axe';
-import { skipWelcome } from './guide';
+import { GUIDE_KEY, skipWelcome } from './guide';
 import { atWidth, checkedBy, go, openSteps, screenName, signIn, signOutOfTrial } from './helpers';
 import { areas, caseEvidence, shell, signIn as signInArea } from './areas';
 
@@ -48,7 +48,7 @@ for (const { colorScheme, contrast, palette } of MODES) {
     test('the guide', async ({ page }) => {
       await signIn(page);
       await page.emulateMedia({ reducedMotion: 'reduce' });
-      await page.getByRole('button', { name: 'Help' }).click();
+      await page.getByRole('button', { name: 'Tour' }).click();
       await expect(page.getByRole('menuitem', { name: 'Restart the tour' })).toBeVisible();
       expect(await audit(page)).toEqual([]);
       await page.getByRole('menuitem', { name: 'Restart the tour' }).click();
@@ -64,7 +64,7 @@ for (const { colorScheme, contrast, palette } of MODES) {
       await expect(guide.getByRole('button', { name: 'Try it: press Approve plan' })).toBeVisible();
       await expect(page.getByRole('status')).toHaveCount(0);
       expect(await audit(page)).toEqual([]);
-      await page.getByRole('button', { name: 'Help' }).click();
+      await page.getByRole('button', { name: 'Tour' }).click();
       await page.getByRole('menuitem', { name: 'Choose a chapter' }).click();
       await expect(page.getByRole('dialog', { name: 'Choose a chapter' })).toBeVisible();
       expect(await audit(page)).toEqual([]);
@@ -91,6 +91,62 @@ for (const { colorScheme, contrast, palette } of MODES) {
       await expect(page.getByRole('status')).toHaveCount(0);
       expect(await audit(page)).toEqual([]);
       await sheet.getByRole('tab', { name: /Ask the board/ }).click();
+      expect(await audit(page)).toEqual([]);
+    });
+
+    // Ask beside the tour on a laptop: the sheet with no overlay, and the guide's card in its dock
+    test(`Ask about this case beside the tour ${caseEvidence.tag}`, async ({ page }) => {
+      await page.addInitScript((key) => {
+        localStorage.setItem(
+          key,
+          JSON.stringify({ version: 2, scope: 'quick', at: 's8/ask', completed: [], dismissed: true }),
+        );
+      }, GUIDE_KEY);
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await signIn(page);
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await page.getByRole('button', { name: 'Resume tour' }).click();
+      await page.getByRole('menuitem', { name: 'Resume the tour' }).click();
+      const guide = page.getByRole('region', { name: 'Guide' });
+      await expect(guide).toContainText('Step 7 of 9');
+      await page.locator('[data-tour-action="ask-open"]').click();
+      const panel = page.getByRole('region', { name: 'Ask about this case' });
+      await expect(
+        panel.getByRole('region', { name: 'What if: the setting behind this outcome' }),
+      ).toBeVisible();
+      await expect(page.locator('[data-guide-dock] [data-guide-card]')).toBeVisible();
+      await expect(page.getByRole('status')).toHaveCount(0);
+      expect(await audit(page)).toEqual([]);
+    });
+
+    // Ask on a laptop without the tour: the drawer over the case
+    test(`Ask about this case on a laptop ${caseEvidence.tag}`, async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await signIn(page);
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await go(page, '/cases/C-000008?ask=1');
+      const drawer = page.getByRole('dialog', { name: 'Ask about this case' });
+      await expect(
+        drawer.getByRole('region', { name: 'What if: the setting behind this outcome' }),
+      ).toBeVisible();
+      await expect(page.getByRole('status')).toHaveCount(0);
+      expect(await audit(page)).toEqual([]);
+    });
+
+    // The header's menus in the demo build: Tour's and the user's, each with the line that the copy is the trial only
+    test(`the header's Tour and user menus ${shell.tag}`, async ({ page }) => {
+      await signIn(page);
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await page.getByRole('button', { name: 'Tour' }).click();
+      const tour = page.getByRole('menu', { name: 'Tour' });
+      await expect(tour.getByTestId('trial-only-note')).toBeVisible();
+      expect(await audit(page)).toEqual([]);
+      await page.keyboard.press('Escape');
+      await expect(tour).toBeHidden();
+      await page.getByRole('button', { name: /^Signed in as / }).click();
+      await expect(
+        page.getByRole('menu', { name: /^Signed in as / }).getByTestId('trial-only-note'),
+      ).toBeVisible();
       expect(await audit(page)).toEqual([]);
     });
 

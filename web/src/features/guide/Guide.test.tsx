@@ -215,20 +215,57 @@ describe('the guide', () => {
     expect(control).toHaveFocus();
   });
 
-  it('exits on Escape without finishing, and resumes from Help where it stopped', async () => {
+  it('exits on Escape without finishing, and resumes from the header where it stopped', async () => {
     at('s2/receipt');
     renderApp();
     const guide = await card();
+    expect(screen.getByRole('button', { name: 'Tour' })).toHaveTextContent('Tour');
     await waitFor(() => expect(within(guide).getByRole('heading', { level: 2 })).toHaveFocus());
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Guide' })).not.toBeInTheDocument());
     expect(useGuide.getState().phase).toBe('closed');
     await waitFor(() =>
-      expect(announced()).toHaveTextContent('The tour is closed. Help in the header resumes it.'),
+      expect(announced()).toHaveTextContent(
+        'The tour is closed. Resume tour, in the header, takes you back to it.',
+      ),
     );
-    expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument();
+    // Left part way: the header's button says it can be resumed
+    expect(screen.getByRole('button', { name: 'Resume tour' })).toHaveTextContent('Resume tour');
     act(() => useGuide.getState().resume());
     expect(await card()).toHaveTextContent('Step 2 of 9');
+  });
+
+  it('keeps its card when Ask opens on the Ask step: docked beside Ask, and Next goes on', async () => {
+    preferReducedMotion();
+    at('s8/ask');
+    const router = renderApp();
+    const guide = await card();
+    expect(guide).toHaveTextContent('Step 7 of 9');
+    expect(
+      await within(guide).findByRole('button', { name: 'Try it: open Ask, pick a question' }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Ask about this case' }));
+    const sheet = await screen.findByRole('region', { name: 'Ask about this case' });
+    expect(router.state.location.search).toBe('?ask=1');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    // The same step's card, now in the dock just before the sheet, with no notch pointing down
+    await waitFor(() => expect(document.querySelector('[data-guide-dock] [data-guide-card]')).not.toBeNull());
+    const docked = screen.getByRole('region', { name: 'Guide' });
+    expect(docked).toHaveTextContent('Step 7 of 9');
+    expect(docked).toHaveAttribute('data-docked', 'true');
+    expect(docked.querySelector('.guide-notch')).toBeNull();
+    expect(docked.closest('[data-guide-dock]')!.nextElementSibling).toBe(sheet);
+    // Ask is open: the try-it and its pointer have done their work
+    await waitFor(() =>
+      expect(within(docked).queryByRole('button', { name: /^Try it/ })).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId('guide-try-pointer')).not.toBeInTheDocument();
+    await userEvent.click(within(docked).getByRole('button', { name: 'Next' }));
+    await waitFor(
+      () => expect(screen.getByRole('region', { name: 'Guide' })).toHaveTextContent('Step 8 of 9'),
+      { timeout: 15_000 },
+    );
+    expect(screen.queryByRole('region', { name: 'Ask about this case' })).not.toBeInTheDocument();
   });
 
   it('lists the chapters by the navigation groups, the current one marked, and opens one', async () => {

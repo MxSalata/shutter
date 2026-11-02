@@ -6,6 +6,13 @@ export const TRIAL_WORDS =
 /** The one-line form's words, once the welcome has closed. */
 export const TRIAL_WORDS_SHORT = 'Made-up patients; nothing leaves this browser';
 
+/**
+ * Where Leave trial would be, in a copy that is the trial alone (the demo build: GitHub Pages, the preview), with no
+ * live system to go back to: the user menu and the help menu say so, so nobody hunts for it.
+ */
+export const TRIAL_ONLY_WORDS =
+  'This copy is the trial only. The live system runs on an IRIS instance: your own install or the online demo.';
+
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /** "Answered in this browser: 48 reads, 3 actions. Sent to IRIS: none. Refused by the browser: 0." */

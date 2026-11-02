@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { GUIDE_KEY } from './guide';
 import { go, signIn } from './helpers';
 
@@ -18,6 +18,13 @@ const writes = (page: Page) =>
       .filter((e) => e.method !== 'GET' && e.method !== 'HEAD')
       .map((e) => `${e.method} ${e.path}`),
   );
+
+/** Whether the element's centre is its own on the screen: nothing covers it there. */
+const uncovered = (locator: Locator) =>
+  locator.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+  });
 
 /** Progress stored before the app starts, so a test can begin at a step. */
 const startAt = (page: Page, at: string, scope = 'quick') =>
@@ -120,7 +127,7 @@ test.describe('the guide', () => {
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Scenarios', exact: true })).toBeVisible();
     await expect(welcome).toBeHidden();
-    await page.getByRole('button', { name: 'Help' }).click();
+    await page.getByRole('button', { name: 'Tour' }).click();
     await page.getByRole('menuitem', { name: 'Choose a chapter' }).click();
     const chapters = page.getByRole('dialog', { name: 'Choose a chapter' });
     await expect(chapters.getByRole('group')).toHaveCount(3);
@@ -135,7 +142,7 @@ test.describe('the guide', () => {
     await page.setViewportSize({ width: 1280, height: 600 });
     await startAt(page, 's8/ask');
     await signIn(page);
-    await page.getByRole('button', { name: 'Help' }).click();
+    await page.getByRole('button', { name: 'Resume tour' }).click();
     await page.getByRole('menuitem', { name: 'Resume the tour' }).click();
     const guide = page.getByRole('region', { name: 'Guide' });
     await expect(guide).toContainText('Step 7 of 9');
@@ -171,5 +178,187 @@ test.describe('the guide', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
     await go(page, '/scenarios');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  });
+});
+
+/**
+ * Ask about this case opened from the tour's Ask step (s8/ask, step 7 of 9). Below 1440 px Ask opens as a sheet with no
+ * overlay and no focus trap while the tour runs, and the card moves into a dock beside it: left of the sheet on a
+ * laptop, at the foot of the screen on a phone, just before the sheet in the tab order. Next then goes on, by mouse
+ * and by keyboard.
+ */
+test.describe('the tour with Ask open', () => {
+  /** Resumes the quick tour at its Ask step, from the header's button. */
+  async function atAskStep(page: Page) {
+    await startAt(page, 's8/ask');
+    await signIn(page);
+    await page.getByRole('button', { name: 'Resume tour' }).click();
+    await page.getByRole('menuitem', { name: 'Resume the tour' }).click();
+    const guide = page.getByRole('region', { name: 'Guide' });
+    await expect(guide).toContainText('Step 7 of 9');
+    await expect(guide.getByRole('heading', { name: 'Ask about this case', level: 2 })).toBeFocused();
+    return guide;
+  }
+
+  /** The card stands in the dock, in sight and uncovered, beside the open panel and not over it on a laptop. */
+  async function besideAsk(page: Page, guide: Locator, width: number) {
+    const panel = page.getByRole('region', { name: 'Ask about this case' });
+    await expect(panel).toBeVisible();
+    // No dialog and no overlay: the page around the panel stays usable
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.locator('.mantine-Drawer-overlay')).toHaveCount(0);
+    await expect(guide).toBeVisible();
+    await expect(guide).toContainText('Step 7 of 9');
+    await expect(page.locator('[data-guide-dock] [data-guide-card]')).toHaveCount(1);
+    // The try-it has done its work once Ask is open
+    await expect(guide.getByRole('button', { name: /^Try it/ })).toHaveCount(0);
+    expect(await uncovered(guide.getByRole('button', { name: 'Next' }))).toBe(true);
+    const card = (await guide.boundingBox())!;
+    const sheet = (await panel.boundingBox())!;
+    if (width >= 992) expect(card.x + card.width).toBeLessThanOrEqual(sheet.x);
+    else expect(card.y + card.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    return panel;
+  }
+
+  for (const viewport of [
+    { width: 1280, height: 800 },
+    { width: 390, height: 844 },
+  ]) {
+    test(`goes on with Ask open, by mouse, at ${viewport.width} px`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      const guide = await atAskStep(page);
+      await page.locator('[data-tour-action="ask-open"]').click();
+      const panel = await besideAsk(page, guide, viewport.width);
+      await expect(panel.getByRole('heading', { name: 'Ask about this case' })).toBeFocused();
+      // Pick a suggested question, as the step says: its recorded answer is shown
+      await panel.getByRole('button', { name: /^Which movement is current\?/ }).click();
+      await expect(
+        panel.getByRole('heading', { name: 'Which movement is current?', level: 4 }),
+      ).toBeVisible();
+      expect(await uncovered(guide.getByRole('button', { name: 'Next' }))).toBe(true);
+      await guide.getByRole('button', { name: 'Next' }).click();
+      await expect(guide).toContainText('Step 8 of 9');
+      // The tour moved on to another case, and Ask closed with the page it was on
+      await expect(panel).toHaveCount(0);
+      await expect(page.locator('[data-guide-dock]')).toHaveCount(0);
+    });
+
+    test(`goes on with Ask open, by keyboard, at ${viewport.width} px`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      const guide = await atAskStep(page);
+      // The card's try-it moves focus to Ask's button; Enter opens Ask, on its heading
+      await page.keyboard.press('Tab');
+      await expect(guide.getByRole('button', { name: 'Try it: open Ask, pick a question' })).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(page.locator('[data-tour-action="ask-open"]')).toBeFocused();
+      await page.keyboard.press('Enter');
+      const panel = await besideAsk(page, guide, viewport.width);
+      await expect(panel.getByRole('heading', { name: 'Ask about this case' })).toBeFocused();
+      // The card stands just before the panel: Shift+Tab from its heading reaches Next, and Tab goes back in
+      await page.keyboard.press('Shift+Tab');
+      await expect(guide.getByRole('button', { name: 'Next' })).toBeFocused();
+      await page.keyboard.press('Tab');
+      await expect(panel.getByRole('button', { name: 'Close Ask about this case' })).toBeFocused();
+      // On to a suggested question, and ask it
+      const question = panel.getByRole('button', { name: /^Which movement is current\?/ });
+      for (let i = 0; i < 12 && !(await question.evaluate((el) => el === document.activeElement)); i++)
+        await page.keyboard.press('Tab');
+      await expect(question).toBeFocused();
+      await page.keyboard.press('Enter');
+      const answer = panel.getByRole('heading', { name: 'Which movement is current?', level: 4 });
+      await expect(answer).toBeFocused();
+      // Back to the card's Next, still open beside Ask
+      const next = guide.getByRole('button', { name: 'Next' });
+      for (let i = 0; i < 40 && !(await next.evaluate((el) => el === document.activeElement)); i++)
+        await page.keyboard.press('Shift+Tab');
+      await expect(next).toBeFocused();
+      await expect(panel).toBeVisible();
+      await page.keyboard.press('Enter');
+      await expect(guide).toContainText('Step 8 of 9');
+      await expect(guide.getByRole('heading', { level: 2 })).toBeFocused();
+    });
+  }
+
+  test('keeps the card before its section from 1440 px, with Ask beside the case', async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    const guide = await atAskStep(page);
+    await page.locator('[data-tour-action="ask-open"]').click();
+    const panel = page.getByRole('region', { name: 'Ask about this case' });
+    await expect(panel).toBeVisible();
+    // Opening Ask adds ?ask=1 to the address, which keeps the step's page: the card stays where it was
+    await expect(page).toHaveURL(/\?ask=1$/);
+    await expect(guide).toContainText('Step 7 of 9');
+    await expect(page.locator('[data-guide-dock]')).toHaveCount(0);
+    expect(await uncovered(guide.getByRole('button', { name: 'Next' }))).toBe(true);
+    await guide.getByRole('button', { name: 'Next' }).click();
+    await expect(guide).toContainText('Step 8 of 9');
+  });
+
+  test('keeps Ask a sheet when the tour is closed from its card, and Escape in Ask leaves the tour where it was', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const guide = await atAskStep(page);
+    await page.locator('[data-tour-action="ask-open"]').click();
+    const panel = await besideAsk(page, guide, 1280);
+    // Escape in Ask closes Ask, back to its button; the card returns before it
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+    await expect(page.locator('[data-tour-action="ask-open"]')).toBeFocused();
+    await expect(guide).toContainText('Step 7 of 9');
+    await expect(guide.getByRole('button', { name: 'Try it: open Ask, pick a question' })).toBeVisible();
+    // Open again, then exit the tour from its card: Ask stays open as it was, with no overlay dropping over the page
+    await page.locator('[data-tour-action="ask-open"]').click();
+    await expect(panel).toBeVisible();
+    await guide.getByRole('button', { name: 'Exit guide' }).click();
+    await expect(guide).toHaveCount(0);
+    await expect(panel).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+});
+
+/**
+ * The other routes' dialogs: a step whose try-it opens a dialog (the message trace's screenshot on the engineers' tour,
+ * Start a review on every screen) shows it over the card while it is open, and closes back to the card, whose Next
+ * then goes on.
+ */
+test.describe("the tour through a step's dialog", () => {
+  test.use({ viewport: { width: 1280, height: 800 } });
+
+  test("the engineers' message trace", async ({ page }) => {
+    await startAt(page, 's8/trace', 'engineer');
+    await signIn(page);
+    await page.getByRole('button', { name: 'Resume tour' }).click();
+    await page.getByRole('menuitem', { name: 'Resume the tour' }).click();
+    const guide = page.getByRole('region', { name: 'Guide' });
+    await expect(guide).toContainText(/Step \d of 6/);
+    await guide.getByRole('button', { name: 'Try it: open the message trace' }).click();
+    await page.keyboard.press('Enter');
+    const shot = page.getByRole('dialog');
+    await expect(shot).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(shot).toHaveCount(0);
+    await expect(guide).toBeVisible();
+    expect(await uncovered(guide.getByRole('button', { name: /^(Next|Finish)$/ }))).toBe(true);
+    await guide.getByRole('button', { name: /^(Next|Finish)$/ }).click();
+    await expect(guide).not.toContainText('The message trace in IRIS');
+  });
+
+  test('Start a review, on every screen', async ({ page }) => {
+    await startAt(page, 'reviews/start', 'all');
+    await signIn(page);
+    await page.getByRole('button', { name: 'Resume tour' }).click();
+    await page.getByRole('menuitem', { name: 'Resume the tour' }).click();
+    const guide = page.getByRole('region', { name: 'Guide' });
+    await expect(guide).toContainText('A review reads, it repairs nothing');
+    await page.locator('[data-tour-action="start-review"]').click();
+    const dialog = page.getByRole('dialog', { name: /Start a review/ });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(await uncovered(guide.getByRole('button', { name: 'Next' }))).toBe(true);
+    await guide.getByRole('button', { name: 'Next' }).click();
+    await expect(guide).toContainText('Past reviews');
   });
 });
