@@ -14,6 +14,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { humanize } from '@/lib/format';
 import { SEVERITY_STATUS } from '@/lib/status';
 import type { Status } from '@/lib/tone';
+import { HINT_EVENTS } from '@/theme';
 import { CONFIDENCE_HINTS, SEVERITIES, STATUS_LABELS } from './review';
 
 const REVIEW_STATE: Record<string, Status> = {
@@ -85,7 +86,7 @@ export function SeverityBadge({ severity }: { severity: Severity }) {
 
 export function ConfidenceText({ confidence }: { confidence: string }) {
   return (
-    <Tooltip label={CONFIDENCE_HINTS[confidence] ?? confidence}>
+    <Tooltip label={CONFIDENCE_HINTS[confidence] ?? confidence} events={HINT_EVENTS}>
       <Text span size="xs" c="dimmed" tabIndex={0} style={{ textDecoration: 'underline dotted' }}>
         {humanize(confidence)}
       </Text>

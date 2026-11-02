@@ -1,12 +1,12 @@
-import { Alert, Button, Group, Modal, Radio, Stack, Text, Textarea, TextInput } from '@mantine/core';
+import { Alert, Button, Group, Radio, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { newIdempotencyKey } from '@/api/client';
 import { useAnnotateFinding, useRemoveAnnotation } from '@/api/hooks';
 import type { ReviewAnnotation, ReviewDetail, ReviewFinding } from '@/api/types';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { TRIAL } from '@/env/mode';
 import { describeError } from '@/lib/errors';
-import { DialogTitle } from './DialogTitle';
 import { expiryForApi, expiryProblem, findingTitle, STATUS_LABELS, subjectOf } from './review';
 
 type Status = ReviewAnnotation['status'];
@@ -91,10 +91,10 @@ export function useAnnotationDialogs(review: ReviewDetail) {
 
   const modals = (
     <>
-      <Modal
+      <ConfirmModal
         opened={marking !== null}
         onClose={() => setMarking(null)}
-        title={marking ? <DialogTitle>{`Annotate ${marking.id}: ${findingTitle(marking)}`}</DialogTitle> : ''}
+        title={marking ? `Annotate ${marking.id}: ${findingTitle(marking)}` : ''}
       >
         {marking ? (
           <Stack gap="sm">
@@ -149,11 +149,11 @@ export function useAnnotationDialogs(review: ReviewDetail) {
             </Group>
           </Stack>
         ) : null}
-      </Modal>
-      <Modal
+      </ConfirmModal>
+      <ConfirmModal
         opened={removing !== null}
         onClose={() => setRemoving(null)}
-        title={removing ? <DialogTitle>{`Remove the annotation of ${removing.id}`}</DialogTitle> : ''}
+        title={removing ? `Remove the annotation of ${removing.id}` : ''}
       >
         {removing ? (
           <Stack gap="sm">
@@ -178,7 +178,7 @@ export function useAnnotationDialogs(review: ReviewDetail) {
             </Group>
           </Stack>
         ) : null}
-      </Modal>
+      </ConfirmModal>
     </>
   );
   return { mark, unmark, modals };

@@ -183,7 +183,8 @@ describe('ReviewsPage', () => {
     });
     renderAt('/reviews');
     await userEvent.click(await screen.findByRole('button', { name: 'Start a review' }));
-    const dialog = await screen.findByRole('dialog');
+    // The chip stands beside the title, so the dialog is named by the title alone
+    const dialog = await screen.findByRole('dialog', { name: 'Start a review' });
     expect(within(dialog).getByText('Live system')).toBeInTheDocument();
     const select = await within(dialog).findByRole('combobox', { name: 'Production' });
     await userEvent.selectOptions(select, 'HOSPITAL|Hospital.Production');
@@ -438,8 +439,6 @@ describe('ReviewPage', () => {
     cleanup();
     renderAt('/reviews/PR-000001', 'technical');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
-    // The API source's JSON is the machine's own text, not a layer of prose, so it is not counted
-    document.querySelectorAll('.json-block').forEach((el) => el.remove());
     const technical = layer1Words(document.body).length;
     expect(technical).toBeLessThanOrEqual(plain * 1.5);
   });
@@ -575,7 +574,7 @@ describe('ReviewPage', () => {
     await userEvent.click(
       await within(row('F2')).findByRole('button', { name: 'Annotate F2, ALERTING_OFF' }),
     );
-    const dialog = await screen.findByRole('dialog');
+    const dialog = await screen.findByRole('dialog', { name: /^Annotate F2: / });
     expect(within(dialog).getByText(/never a change to the production/)).toBeInTheDocument();
     expect(within(dialog).getByText('Live system')).toBeInTheDocument();
     const mark = within(dialog).getByRole('button', { name: 'Mark as intended' });
@@ -613,7 +612,7 @@ describe('ReviewPage', () => {
     await userEvent.click(
       await within(row('F1')).findByRole('button', { name: 'Remove the annotation of F1' }),
     );
-    const dialog = await screen.findByRole('dialog');
+    const dialog = await screen.findByRole('dialog', { name: 'Remove the annotation of F1' });
     expect(
       within(dialog).getByText(/The finding "Repeated errors of one kind" on the production/),
     ).toBeInTheDocument();

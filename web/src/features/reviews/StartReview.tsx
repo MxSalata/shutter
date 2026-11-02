@@ -1,26 +1,15 @@
-import {
-  Alert,
-  Anchor,
-  Button,
-  Group,
-  Modal,
-  NativeSelect,
-  NumberInput,
-  Stack,
-  Switch,
-  Text,
-} from '@mantine/core';
+import { Alert, Anchor, Button, Group, NativeSelect, NumberInput, Stack, Switch, Text } from '@mantine/core';
 import { IconClipboardSearch } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { newIdempotencyKey } from '@/api/client';
 import { useReviewTargets, useStartReview } from '@/api/hooks';
 import type { ReviewTarget } from '@/api/types';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { byEnv } from '@/env/copy';
 import { describeError, isApiError } from '@/lib/errors';
-import { DialogTitle } from './DialogTitle';
 import { targetKey, targetLabel } from './review';
 
 /** What a 409 wrong_state carries besides its detail: the review of that production still running. */
@@ -160,13 +149,9 @@ export function StartReview() {
       >
         Start a review
       </Button>
-      <Modal
-        opened={opened}
-        onClose={() => setOpened(false)}
-        title={<DialogTitle>Start a review</DialogTitle>}
-      >
+      <ConfirmModal opened={opened} onClose={() => setOpened(false)} title="Start a review">
         {opened ? <StartBody onClose={() => setOpened(false)} /> : null}
-      </Modal>
+      </ConfirmModal>
     </>
   );
 }
