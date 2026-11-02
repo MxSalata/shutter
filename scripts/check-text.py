@@ -20,7 +20,19 @@ SKIP = ("www/", "vendor/")
 DASHES = {"\u2014": "em dash", "\u2013": "en dash"}
 # The names the rules keep out, encoded so that this file does not name them itself.
 NAMES = [base64.b64decode(n).decode() for n in ("Y2xhdWRl",)]
-MODEL_ID = re.compile(r"-(opus|sonnet|haiku|fable)-\d", re.IGNORECASE)
+# The model families, encoded for the same reason: a model id (`-<family>-5-5`) or a versioned name ("<Family> 5.5")
+# is the product's configuration and allowed; a bare family name, or a workflow tool's name, says who worked on it.
+FAMILIES = [base64.b64decode(n).decode() for n in ("b3B1cw==", "c29ubmV0", "aGFpa3U=", "ZmFibGU=")]
+TOOLS = [base64.b64decode(n).decode() for n in ("dWx0cmFjb2Rl",)]
+MODEL_ID = re.compile(r"-(" + "|".join(FAMILIES) + r")-\d", re.IGNORECASE)
+BARE_NAME = re.compile(r"\b(" + "|".join(FAMILIES + TOOLS) + r")\b(?![ -]\d)", re.IGNORECASE)
+# A note that credits a decision to the repository's owner (dated words say it instead), the noun built in two parts so
+# that this file does not match itself.
+OWN = "own" + "er"
+OWNER_NOTE = re.compile(
+    rf"\bthe {OWN}'s\b|\(the {OWN}\b|\bthe {OWN} (?:said|says|decided|chose|asked|wants)\b|\b{OWN}'s (?:choice|decision|rule|request)\b",
+    re.IGNORECASE,
+)
 TRAILER = re.compile(r"^\s*co-authored-by:", re.IGNORECASE | re.MULTILINE)
 
 
@@ -38,6 +50,11 @@ def findings(text):
                 start = i + len(name)
                 if not MODEL_ID.match(low, start):
                     out.append((n, "a tool's name"))
+        for m in BARE_NAME.finditer(line):
+            if not (m.start() > 0 and line[m.start() - 1] == "-"):
+                out.append((n, "a model or tool name without its version"))
+        if OWNER_NOTE.search(line):
+            out.append((n, "a note crediting the owner"))
     for m in TRAILER.finditer(text):
         out.append((text.count("\n", 0, m.start()) + 1, "a Co-Authored-By trailer"))
     return out
