@@ -973,32 +973,6 @@ body {
 }
 
 /*
- * The cases list's attention tiles: a bordered button each, its edge in the tone of its state; the chosen one is
- * outlined in the text colour, and says so in words.
- */
-.attention-tile {
-  display: block;
-  padding: var(--mantine-spacing-sm);
-  border: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
-  border-left-width: 4px;
-  border-radius: var(--mantine-radius-md);
-  background: var(--mantine-color-body);
-}
-.attention-tile[data-tone='attention'] {
-  border-left-color: var(--mantine-color-yellow-filled);
-}
-.attention-tile[data-tone='blocking'] {
-  border-left-color: var(--mantine-color-red-filled);
-}
-.attention-tile[data-chosen] {
-  outline: 2px solid var(--mantine-color-text);
-  outline-offset: 1px;
-}
-.attention-tile:hover {
-  background: var(--mantine-color-default-hover);
-}
-
-/*
  * A row whose outcome is not neutral carries a 3 px edge in its tone beside its badge: information, positive,
  * attention and blocking (a neutral row has none). `case-row` is the Cases list's, `tone-row` any other table's. On a
  * phone, where the rows stack, the edge moves from the first cell to the row.
