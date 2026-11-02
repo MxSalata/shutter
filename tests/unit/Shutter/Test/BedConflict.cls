@@ -58,6 +58,28 @@ Method TestOccupantLeft()
     Do $$$AssertEquals(out.status, "occupant_left", "a ward-level placement now: not in the bed")
 }
 
+/// A refusal without the ward and bed: the case's own placement words are not compared with the read, so a different
+/// spelling of the same bed is no departure; with no movement out known the status is unknown, which blocks.
+Method TestRefusalWithoutBed()
+{
+    Set bare = {"error": "bed_occupied", "occupant": {"encounter_id": "ENC-OCC", "since": "2026-10-15T08:00:00Z"}}
+    Set read = {"state": "admitted", "ward": "WARD-B", "bed": "BAY2-02", "version": 3}
+    Set out = ##class(Shutter.Util.BedConflict).Build(bare, "WARD-B", "02", read, 200, [])
+    Do $$$AssertEquals(out.status, "unknown", "no ward or bed in the refusal: unknown, not occupant_left (" _ out.note _ ")")
+    Do $$$AssertEquals(out.ward _ "|" _ out.bed, "WARD-B|02", "the case's placement is still shown")
+    Set moving = [{"event": "transfer", "ward": "WARD-C", "bed": "", "event_time": "2026-10-15T08:20:00Z", "operation_key": "k", "delivery": "failed", "outcome": "unavailable", "case_id": "C-1"}]
+    Set out = ##class(Shutter.Util.BedConflict).Build(bare, "WARD-B", "02", read, 200, moving)
+    Do $$$AssertEquals(out.status, "occupant_leaving", "a movement out sent and not applied still reads as leaving")
+    Set gone = {"state": "admitted", "ward": "WARD-C", "bed": "C1", "version": 4}
+    Set out = ##class(Shutter.Util.BedConflict).Build(bare, "WARD-B", "02", gone, 200, [])
+    Do $$$AssertEquals(out.status, "unknown", "elsewhere by the case's words only: still unknown, since the refusal named no bed")
+    Set out = ##class(Shutter.Util.BedConflict).Build({"error": "bed_occupied", "ward": "WARD-B", "bed": "BAY2-02", "occupant": {"encounter_id": "ENC-OCC"}}, "WARD-B", "02", gone, 200, [])
+    Do $$$AssertEquals(out.status, "occupant_left", "with the refusal's own bed named, elsewhere is a departure")
+    Set discharged = {"state": "discharged", "ward": "", "bed": "", "version": 5}
+    Set out = ##class(Shutter.Util.BedConflict).Build(bare, "WARD-B", "02", discharged, 200, [])
+    Do $$$AssertEquals(out.status, "occupant_left", "a discharge is a departure whatever the refusal named")
+}
+
 Method TestOccupantLeavingOrStaying()
 {
     Set out = ##class(Shutter.Util.BedConflict).Build(..Refusal(), "WARD-B", "B2", ..InBed(), 200, [])
