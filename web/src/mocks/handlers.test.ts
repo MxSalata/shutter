@@ -12,12 +12,14 @@ import type {
   LibraryMember,
   Me,
   PlanView,
+  PrecedentsView,
   ReviewDetail,
   ReviewList,
   ReviewTarget,
   ScenarioList,
   Settings,
   SiteProfileView,
+  Snapshot,
 } from '@/api/types';
 import { isApiError } from '@/lib/errors';
 import fixtures from './fixtures.json';
@@ -583,5 +585,48 @@ describe('the cases list', () => {
     const resolved = await api.get<CaseList>('/cases?state=resolved&limit=1');
     expect(resolved.items).toHaveLength(1);
     expect(resolved.total).toBe(all.items.filter((c) => c.state === 'resolved').length);
+  });
+});
+
+describe('the precedents', () => {
+  beforeEach(() => resetMock('approver'));
+
+  it('are none in the trial: every snapshot summary says so, in the default window, and the recording is unchanged', async () => {
+    const snap = await api.get<Snapshot>(`/cases/${HELD}/snapshot`);
+    expect((snap.summary as { precedents: unknown }).precedents).toEqual({
+      approved: 0,
+      rejected: 0,
+      lastDecision: '',
+      lastApprover: '',
+      lastAt: '',
+      lastCaseId: '',
+      samePolicy: false,
+      windowDays: 180,
+      signature: '',
+    });
+    expect('precedents' in (recorded.snapshot.summary as object)).toBe(false);
+  });
+
+  it('list none for the case, with its receiver and the conditions they would be matched on', async () => {
+    const view = await api.get<PrecedentsView>(`/cases/${HELD}/precedents`);
+    expect(view.receiver).toBe('Downstream Out');
+    expect(view.conditions).toMatchObject({ delivery: 'failed', receiver_answer: 'unavailable' });
+    expect(view.summary.approved + view.summary.rejected).toBe(0);
+    expect(view.precedents).toEqual([]);
+    expect((await refusal(api.get('/cases/C-999999/precedents'))).status).toBe(404);
+  });
+
+  it('have nothing to retire, for an approver only, and the guard against forged requests', async () => {
+    const none = await refusal(api.post('/precedents/1/retire', { reason: 'tried' }));
+    expect([none.status, none.code]).toEqual([404, 'not_found']);
+    resetMock('operator');
+    const operator = await refusal(api.post('/precedents/1/retire', { reason: 'tried' }));
+    expect(operator.status).toBe(403);
+    resetMock('approver');
+    const forged = await fetch(new URL('/api/shutter/precedents/1/retire', window.location.origin), {
+      method: 'POST',
+      body: '{}',
+    });
+    expect(forged.status).toBe(400);
   });
 });
