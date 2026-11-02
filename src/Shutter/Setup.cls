@@ -113,6 +113,7 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         // user's share of it from SHUTTER_JUDGE_BUDGET_USD.
         Do ##class(Shutter.Util.Budget).Configure($SYSTEM.Util.GetEnviron("SHUTTER_DAILY_BUDGET_USD"))
         Do ##class(Shutter.Util.Budget).ConfigureShare($SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_BUDGET_USD"))
+        Do ##class(Shutter.Util.Budget).ConfigureDemoBudget($SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_PERIOD"))
         Set ^Shutter.Config("installedAt") = ##class(Shutter.Util.Time).NowUTC()
         Set ^Shutter.Config("version") = ..#VERSION
         If $GET(^Shutter.Config("mode")) = "" Set ^Shutter.Config("mode") = "board"
@@ -323,14 +324,14 @@ ClassMethod ConfigureProviderTimeout(seconds As %String) As %Integer
 /// an error when one step failed (the others still run).
 ClassMethod ApplyEnvironment(wait As %Integer = 0) As %String [ SqlProc ]
 {
-    Set out = ..ApplyRuntime($SYSTEM.Util.GetEnviron("SHUTTER_DAILY_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_TRACE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_LIVE"), wait, $SYSTEM.Util.GetEnviron("SHUTTER_PROVIDER_TIMEOUT_SECONDS"))
+    Set out = ..ApplyRuntime($SYSTEM.Util.GetEnviron("SHUTTER_DAILY_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_TRACE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_LIVE"), wait, $SYSTEM.Util.GetEnviron("SHUTTER_PROVIDER_TIMEOUT_SECONDS"), $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_PERIOD"))
     Quit out.%ToJSON()
 }
 
 /// ApplyEnvironment's work on values, so a test can give them: each applied when not empty. live is "1" for on, any other
 /// non-empty value for off; wait is how many seconds the live hospital's item may be left to a background job while the
 /// hospital's production is still starting (the production's own start passes 120; by hand, 0 applies it at once).
-ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %String, tracePw As %String, judgePw As %String, live As %String, wait As %Integer = 0, providerTimeout As %String = "") As %DynamicObject
+ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %String, tracePw As %String, judgePw As %String, live As %String, wait As %Integer = 0, providerTimeout As %String = "", demoUsd As %String = "", demoPeriod As %String = "") As %DynamicObject
 {
     Set out = {}, errors = []
     Set ns = $NAMESPACE
@@ -339,6 +340,8 @@ ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %
         If $ZSTRIP(judgeUsd, "<>W") '= "" Set out.judgeBudgetUsd = ##class(Shutter.Util.Budget).ConfigureShare(judgeUsd)
         // The bound on one model call (v1.35).
         If $ZSTRIP(providerTimeout, "<>W") '= "" Set out.providerTimeoutSeconds = ..ConfigureProviderTimeout(providerTimeout)
+        // The demo's budget note for the live banner (v1.37).
+        If $ZSTRIP(demoUsd, "<>W") '= "" Set out.demoBudget = ##class(Shutter.Util.Budget).ConfigureDemoBudget(demoUsd, demoPeriod)
     } Catch ex {
         Do errors.%Push("budget: " _ ex.DisplayString())
     }

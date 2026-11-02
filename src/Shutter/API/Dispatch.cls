@@ -1431,6 +1431,9 @@ ClassMethod Settings() As %Status
     Set o.budget = ##class(Shutter.Util.Budget).StatusFor(..User())
     // Whether the live agents can run now (v1.37): the budget and the provider's answer to the key, for the web's notice.
     Do o.live.%Set("agents", ##class(Shutter.Util.LiveAgents).Availability(..User()))
+    // The demo's budget note for the live banner (v1.37), when the build set one.
+    Set note = ##class(Shutter.Util.Budget).DemoBudgetNote()
+    If $ISOBJECT(note) Do o.live.%Set("budgetNote", note)
     // The hold for a schema not loaded (v1.34, "prevent failures"): the site's setting, and the held cases by category.
     Do o.%Set("preventFailures", ##class(Shutter.Store.SiteProfile).PreventFailures(), "boolean")
     Set o.heldMessages = ##class(Shutter.Util.Schemas).Held()
