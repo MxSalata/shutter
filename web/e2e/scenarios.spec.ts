@@ -14,7 +14,7 @@ const AS_DEMO = { as: 'demo' } as const;
 // The guide's welcome would cover the screens these tests are about; guide.spec.ts tests it
 test.beforeEach(({ page }) => skipWelcome(page));
 
-test.describe('the live hospital, as the public role sees it', () => {
+test.describe('the live hospital, as the public role sees it @scenarios', () => {
   test('offers no Run and no Reset, and says the demo plays its stories by itself', async ({ page }) => {
     await signIn(page, AS_DEMO);
     await expect(page.getByText(/The public demo plays its stories by itself/)).toBeVisible();
@@ -29,7 +29,7 @@ test.describe('the live hospital, as the public role sees it', () => {
   });
 });
 
-test.describe('the page at 1280 px', () => {
+test.describe('the page at 1280 px @scenarios', () => {
   test.use({ viewport: { width: 1280, height: 900 } });
 
   test.beforeEach(({ page }) => signIn(page));
@@ -95,7 +95,7 @@ test.describe('the page at 1280 px', () => {
   });
 });
 
-test.describe('a phone at 390 px', () => {
+test.describe('a phone at 390 px @scenarios', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
   test.beforeEach(({ page }) => signIn(page));
