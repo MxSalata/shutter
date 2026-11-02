@@ -234,6 +234,21 @@ describe('Break the feed: who sees it', () => {
     // A trial page says "live" only in "live system"
     expect(feed.textContent).not.toMatch(/\blive\b/i);
   });
+
+  it("carries neither the live budget's line nor its notice in the trial, which spends nothing", async () => {
+    mode.trial = true;
+    settingsWith({
+      ...LIVE,
+      budgetNote: { amountUsd: 15, period: 'day' },
+      agents: { available: false, reason: 'provider_auth', until: null },
+    });
+    renderFrame();
+    const feed = await screen.findByRole('region', { name: 'Hospital feed (replayed)' });
+    expect(await within(feed).findByText(STORM_IN_TRIAL)).toBeVisible();
+    expect(within(feed).queryByTestId('live-budget-line')).not.toBeInTheDocument();
+    expect(within(feed).queryByTestId('live-unavailable')).not.toBeInTheDocument();
+    expect(feed.textContent).not.toMatch(/\blive\b/i);
+  });
 });
 
 describe('Break the feed: the press', () => {

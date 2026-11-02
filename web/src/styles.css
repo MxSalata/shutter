@@ -1643,6 +1643,17 @@ body {
   text-underline-offset: 3px;
   cursor: help;
 }
+/* The line on what the author pays, under the feed's line: on a phone it starts at the band's edge, under the mark and
+   the dot (the feed's line above is taller than they are), so it keeps to one line at 360 px */
+@media (max-width: 47.99em) {
+  .live-budget-line {
+    margin-inline-start: calc(-26px - 2 * var(--mantine-spacing-xs));
+  }
+}
+/* The notice under the banner's line while the live agents cannot run: calm, in the band */
+.live-unavailable {
+  margin-top: var(--mantine-spacing-xs);
+}
 
 /* The count beside Cases: an attention badge, its accessible name the full sentence. Its tint is laid over the page's
    own surface rather than the active entry's (Pastel's lavender, a high contrast's hover), so its words keep 4.5:1. */
