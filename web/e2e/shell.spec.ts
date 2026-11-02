@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { skipWelcome } from './guide';
+import { GUIDE_KEY, skipWelcome } from './guide';
 import { banner, go, signIn } from './helpers';
 
 /**
@@ -76,6 +76,47 @@ test.describe('the shell', () => {
     await expect(
       page.getByRole('radiogroup', { name: 'Detail' }).getByRole('radio', { name: 'Technical' }),
     ).toBeChecked();
+  });
+
+  test('names the help button for the tour: its word beside the icon on a laptop, its name alone on a phone', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await signIn(page);
+    const header = page.locator('header');
+    const tour = header.getByRole('button', { name: 'Tour' });
+    await expect(tour).toBeVisible();
+    await expect(tour).toHaveText('Tour');
+    // A tour left part way: the button says it can be resumed, and its menu's first item does it
+    await page.evaluate(
+      (key) =>
+        localStorage.setItem(
+          key,
+          JSON.stringify({ version: 2, scope: 'quick', at: 's2/receipt', completed: [], dismissed: true }),
+        ),
+      GUIDE_KEY,
+    );
+    await page.reload();
+    const resume = header.getByRole('button', { name: 'Resume tour' });
+    await expect(resume).toHaveText('Resume tour');
+    await resume.click();
+    await expect(page.getByRole('menuitem').first()).toHaveText('Resume the tour');
+    await page.keyboard.press('Escape');
+    // On a phone the icon alone, a square like the header's other icon buttons, named the same; the row still fits
+    for (const width of [390, 360]) {
+      await page.setViewportSize({ width, height: 760 });
+      await expect(resume).toBeVisible();
+      await expect(resume.locator('.header-help-label')).toBeHidden();
+      const box = (await resume.boundingBox())!;
+      expect(box.width).toBeLessThanOrEqual(40);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+      const row = await header.evaluate((h) => {
+        const r = h.querySelector(':scope > div:last-child')!;
+        return { scroll: r.scrollWidth, client: r.clientWidth };
+      });
+      expect(row.scroll).toBeLessThanOrEqual(row.client);
+      await expect(page.locator('.trial-pill')).toHaveText('Trial');
+    }
   });
 
   test('marks every page of the demo build as the trial: banner, frame, pill and title', async ({ page }) => {

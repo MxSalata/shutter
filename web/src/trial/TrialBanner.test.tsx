@@ -8,6 +8,7 @@ import { resetMock } from '@/mocks/handlers';
 import { theme } from '@/theme';
 import { AppLayout } from '@/features/shell/AppLayout';
 import { INITIAL } from '@/features/guide/controller';
+import { useGuide } from '@/features/guide/store';
 import { GUIDE_KEY } from '@/features/guide/storage';
 import { LIVE_WELCOME_KEY } from './LiveWelcome';
 import { journal } from './journal';
@@ -125,5 +126,37 @@ describe('the trial banner', () => {
     expect(journalLine(journal.counts())).toBe(
       'Answered in this browser: 2 reads, 1 action. Sent to IRIS: none. Refused by the browser: 0.',
     );
+  });
+});
+
+describe("the header's help and user menus", () => {
+  beforeEach(() => {
+    resetMock('approver');
+    sessionStorage.clear();
+    localStorage.setItem(GUIDE_KEY, JSON.stringify({ ...INITIAL, dismissed: true }));
+    localStorage.setItem(LIVE_WELCOME_KEY, 'seen');
+    useGuide.setState({ progress: { ...INITIAL, dismissed: true }, phase: 'closed' });
+  });
+
+  const header = () => document.querySelector('header')!;
+
+  it('names the button for the tour in the trial, in words beside its icon', async () => {
+    await renderShell(true);
+    const tour = within(header()).getByRole('button', { name: 'Tour' });
+    expect(tour).toHaveTextContent('Tour');
+    expect(tour).toHaveClass('header-help');
+    // A tour left part way on this device: Resume tour
+    act(() => useGuide.setState({ progress: { ...INITIAL, at: 's8/ask', dismissed: true } }));
+    expect(within(header()).getByRole('button', { name: 'Resume tour' })).toHaveTextContent('Resume tour');
+    // While the tour runs, the button is the tour's again
+    act(() => useGuide.setState({ phase: 'step' }));
+    expect(within(header()).getByRole('button', { name: 'Tour' })).toBeInTheDocument();
+  });
+
+  it('names it Help on a live page', async () => {
+    await renderShell(false);
+    const help = within(header()).getByRole('button', { name: 'Help' });
+    expect(help).toHaveTextContent('Help');
+    expect(help).toHaveClass('header-help');
   });
 });

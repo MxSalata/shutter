@@ -215,18 +215,22 @@ describe('the guide', () => {
     expect(control).toHaveFocus();
   });
 
-  it('exits on Escape without finishing, and resumes from Help where it stopped', async () => {
+  it('exits on Escape without finishing, and resumes from the header where it stopped', async () => {
     at('s2/receipt');
     renderApp();
     const guide = await card();
+    expect(screen.getByRole('button', { name: 'Tour' })).toHaveTextContent('Tour');
     await waitFor(() => expect(within(guide).getByRole('heading', { level: 2 })).toHaveFocus());
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Guide' })).not.toBeInTheDocument());
     expect(useGuide.getState().phase).toBe('closed');
     await waitFor(() =>
-      expect(announced()).toHaveTextContent('The tour is closed. Help in the header resumes it.'),
+      expect(announced()).toHaveTextContent(
+        'The tour is closed. Resume tour, in the header, takes you back to it.',
+      ),
     );
-    expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument();
+    // Left part way: the header's button says it can be resumed
+    expect(screen.getByRole('button', { name: 'Resume tour' })).toHaveTextContent('Resume tour');
     act(() => useGuide.getState().resume());
     expect(await card()).toHaveTextContent('Step 2 of 9');
   });

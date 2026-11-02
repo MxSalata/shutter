@@ -48,7 +48,7 @@ for (const { colorScheme, contrast, palette } of MODES) {
     test('the guide', async ({ page }) => {
       await signIn(page);
       await page.emulateMedia({ reducedMotion: 'reduce' });
-      await page.getByRole('button', { name: 'Help' }).click();
+      await page.getByRole('button', { name: 'Tour' }).click();
       await expect(page.getByRole('menuitem', { name: 'Restart the tour' })).toBeVisible();
       expect(await audit(page)).toEqual([]);
       await page.getByRole('menuitem', { name: 'Restart the tour' }).click();
@@ -64,7 +64,7 @@ for (const { colorScheme, contrast, palette } of MODES) {
       await expect(guide.getByRole('button', { name: 'Try it: press Approve plan' })).toBeVisible();
       await expect(page.getByRole('status')).toHaveCount(0);
       expect(await audit(page)).toEqual([]);
-      await page.getByRole('button', { name: 'Help' }).click();
+      await page.getByRole('button', { name: 'Tour' }).click();
       await page.getByRole('menuitem', { name: 'Choose a chapter' }).click();
       await expect(page.getByRole('dialog', { name: 'Choose a chapter' })).toBeVisible();
       expect(await audit(page)).toEqual([]);

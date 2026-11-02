@@ -120,7 +120,7 @@ test.describe('the guide', () => {
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Scenarios', exact: true })).toBeVisible();
     await expect(welcome).toBeHidden();
-    await page.getByRole('button', { name: 'Help' }).click();
+    await page.getByRole('button', { name: 'Tour' }).click();
     await page.getByRole('menuitem', { name: 'Choose a chapter' }).click();
     const chapters = page.getByRole('dialog', { name: 'Choose a chapter' });
     await expect(chapters.getByRole('group')).toHaveCount(3);
@@ -135,7 +135,7 @@ test.describe('the guide', () => {
     await page.setViewportSize({ width: 1280, height: 600 });
     await startAt(page, 's8/ask');
     await signIn(page);
-    await page.getByRole('button', { name: 'Help' }).click();
+    await page.getByRole('button', { name: 'Resume tour' }).click();
     await page.getByRole('menuitem', { name: 'Resume the tour' }).click();
     const guide = page.getByRole('region', { name: 'Guide' });
     await expect(guide).toContainText('Step 7 of 9');

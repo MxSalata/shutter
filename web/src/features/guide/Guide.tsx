@@ -856,7 +856,7 @@ function useAnnouncement(phase: GuidePhase, pos: GuidePosition | undefined, appr
       );
     else if (phase === 'finished') setMessage('That is the tour.');
     else if (phase === 'closed' && before.phase === 'step')
-      setMessage('The tour is closed. Help in the header resumes it.');
+      setMessage('The tour is closed. Resume tour, in the header, takes you back to it.');
   }
   return message;
 }

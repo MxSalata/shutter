@@ -1,5 +1,6 @@
-import { ActionIcon, Menu, Tooltip } from '@mantine/core';
-import { IconHelp, IconPlayerPlay, IconTestPipe } from '@tabler/icons-react';
+import { Menu } from '@mantine/core';
+import { IconPlayerPlay, IconTestPipe } from '@tabler/icons-react';
+import { HeaderHelpButton } from '@/components/HeaderHelpButton';
 import { trialHref } from '@/env/mode';
 
 /**
@@ -10,11 +11,7 @@ export function LiveHelpMenu() {
   return (
     <Menu shadow="md" width={260} position="bottom-end" withinPortal>
       <Menu.Target>
-        <Tooltip label="Help">
-          <ActionIcon variant="subtle" color="gray" size="lg" aria-label="Help">
-            <IconHelp size={18} />
-          </ActionIcon>
-        </Tooltip>
+        <HeaderHelpButton label="Help" />
       </Menu.Target>
       <Menu.Dropdown>
         <Menu.Label>The trial environment</Menu.Label>

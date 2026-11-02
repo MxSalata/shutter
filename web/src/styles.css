@@ -482,6 +482,25 @@
   color: var(--shutter-muted);
 }
 
+/*
+ * The header's help button (HeaderHelpButton): its icon and word from a tablet up; on a phone the icon alone, the size
+ * of the header's other icon buttons, so the row still fits at 360 px.
+ */
+.header-help.header-help {
+  padding-inline: 8px 12px;
+}
+@media (max-width: 47.99em) {
+  .header-help.header-help {
+    padding-inline: 8px;
+  }
+  .header-help .header-help-label {
+    display: none;
+  }
+  .header-help .mantine-Button-section[data-position='left'] {
+    margin-inline-end: 0;
+  }
+}
+
 /* The guide. Its controls are at least 44 px high, for touch. A shown section clears the sticky header when it is
    scrolled to, and carries a dashed outline that only marks it: the step's text says everything. */
 .guide-control {
