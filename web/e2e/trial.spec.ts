@@ -178,6 +178,8 @@ test.describe('the trial on the build IRIS serves', () => {
   }) => {
     const stub = await stubInstance(page);
     stub.enter();
+    // The welcome of a first entry would cover the case page
+    await skipWelcome(page);
     await approveHeldCase(page);
     await page
       .getByRole('region', { name: 'Trial environment' })

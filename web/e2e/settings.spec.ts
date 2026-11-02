@@ -127,7 +127,9 @@ test.describe('Settings and costs on a phone @settings', () => {
     expect(Math.abs(name - badge)).toBeLessThanOrEqual(2);
     const prices = page.getByRole('table', { name: 'Prices per million tokens' });
     await expect(prices.getByRole('cell').first()).toBeVisible();
+    // The body's rows: the header row is there for screen readers only
     const widths = await prices
+      .locator('tbody')
       .getByRole('row')
       .evaluateAll((rows) => rows.map((r) => r.scrollWidth - r.clientWidth));
     expect(Math.max(...widths)).toBeLessThanOrEqual(0);

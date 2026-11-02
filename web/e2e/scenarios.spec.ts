@@ -78,7 +78,7 @@ test.describe('the page at 1280 px @scenarios', () => {
     const list = page.getByRole('region', { name: 'Every scenario' });
     const s5 = list.locator('tr[data-scenario="S5"]');
     await expect(s5.getByText('Delivered, verified')).toBeVisible();
-    await expect(s5.getByText('As expected')).toBeVisible();
+    await expect(s5.getByText('As expected', { exact: true })).toBeVisible();
     await expect(s5).toHaveAttribute('data-tone', 'positive');
     await expect(list.locator('tr[data-scenario="S1"]')).toContainText(
       'Recorded: board as expected; simple rules stopped by the gate',

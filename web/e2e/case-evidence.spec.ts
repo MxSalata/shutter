@@ -182,8 +182,10 @@ test.describe('the Evidence and Audit trail tabs', tagged, () => {
     await signIn(page);
     await go(page, '/cases/C-000008?tab=evidence');
     const message = page.getByRole('region', { name: 'The HL7 message' });
+    // As read: a term's definition is in the page for its description, but hidden
     await expect(message).toContainText(
       'ADT^A02 transfer of ENC-1008 to WARD-B, sent by PAS at 15 Oct, 09:20:00 BST.',
+      { useInnerText: true },
     );
     await expect(message.getByRole('button', { name: 'The message, one segment per line' })).toHaveAttribute(
       'aria-expanded',

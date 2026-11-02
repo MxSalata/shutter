@@ -57,10 +57,15 @@ test.describe('the outcome of each case', () => {
   test('counts the closed cases by outcome, and a tile filters the list to them', async ({ page }) => {
     await signIn(page);
     await go(page, '/cases');
-    const delivered = page.getByRole('button', { name: /^\d+ Delivered, verified Show these$/ });
+    // The tile's name says what a press does next, so it changes once pressed
+    const delivered = page.getByRole('button', {
+      name: /^\d+ Delivered, verified (Show these|Showing these)/,
+    });
+    await expect(delivered).toHaveAccessibleName(/Show these$/);
     await expect(delivered).toHaveAttribute('aria-pressed', 'false');
     await delivered.click();
     await expect(delivered).toHaveAttribute('aria-pressed', 'true');
+    await expect(delivered).toHaveAccessibleName(/Showing these; press to clear$/);
     await expect(caseRows(page).first()).toBeVisible();
     expect(await caseRows(page).count()).toBeLessThanOrEqual(25);
     await expect(caseRows(page).filter({ hasNotText: 'Delivered, verified' })).toHaveCount(0);

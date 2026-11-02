@@ -87,7 +87,7 @@ test.describe('the incident', () => {
     await signIn(page, { detail: 'technical' });
     await go(page, '/incidents/I-000001', { detail: 'technical' });
     const ordered = page.getByRole('article', { name: 'Chain 2, ENC-1102' });
-    await expect(ordered.getByText('MRN1102')).toBeVisible();
+    await expect(ordered.getByText('MRN1102', { exact: true })).toBeVisible();
     await expect(ordered.getByText('resend_chain').first()).toBeVisible();
     await expect(page.getByRole('region', { name: 'The plan' }).getByText('Plan digest')).toBeVisible();
   });
