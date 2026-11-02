@@ -1380,9 +1380,10 @@ on the server and answers `{ok, category, loaded, error}`; `GET /settings/schema
 `import_failed` with the importer's words: a file that is not there, not `.xml`, or not a schema). The install guide's
 section 7 says how a site loads its schema and what a case says meanwhile (6.5, `SCHEMA_UNKNOWN`).
 
-**The edition decides itself** (v1.35). The image build's `WITH_AIHUB` argument defaults to `auto`: `aihub.script` loads the
-aihub module when the base image has the `%AI` package and skips it, saying so, when it does not (the replay edition); `1`
-requires AI Hub and fails the build on an image without it, `0` skips it. The Doctor reports `edition`: `aihub`, `core`, or
+**The edition decides itself** (v1.35). The image build's `WITH_AIHUB` argument defaults to `auto`: `iris.script` loads the
+full package (the root module, the core and the live agents) when the base image has the `%AI` package and the core module
+alone (`core/module.xml`) when it does not (the replay edition), saying which; `1` requires AI Hub and fails the build on an
+image without it, `0` loads the core alone. The Doctor reports `edition`: `aihub`, `core`, or
 `broken: ...` when the package and the module disagree, which an install should never leave.
 
 **What was last observed** (v1.35). The Doctor and `GET /health` (its anonymous answer too) carry `last_live_run`: the newest run
@@ -1640,14 +1641,14 @@ is approved or rejected first); `409 budget_exhausted` with the budget object wh
 
 ## Repository layout
 
-The core IPM module is the repository root (`module.xml`, sources under `src/`): it compiles on any 2026.2 Community image and replays recorded runs. The aihub module is `aihub/` (`aihub/module.xml`, sources under `aihub/src/`): the live runner, the agents, tools, schemas, policies and knowledge bases, which need the `%AI` package. Both modules contribute classes to the `Shutter` package; nothing under `src/` may reference `%AI`.
+The published IPM package is the repository root (`module.xml`, name `iris-shutter`, sources under `src/`): the whole of Shutter for an AI Hub build, 2026.3 or later with Interoperability (`SystemRequirements`, the organisers' line of 2 Nov 2026), the live runner, the agents, tools, the publisher, schemas, policies and knowledge bases included, since they need the `%AI` package. The core alone is `core/module.xml` (name `iris-shutter-core`, `SourcesRoot ../src`, the same resources without the agents' classes), loaded by path on a 2026.2 Community image and in CI, never published; it compiles there and replays recorded runs. Both modules contribute classes to the `Shutter` package; nothing under `src/` may reference `%AI`.
 
 ## 15. The publisher (v1.35)
 
 Shutter publishes what an operator may read, for an MCP client, through IRIS's own MCP gateway; it publishes no write.
 The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor's `publish.available` says which.
 
-- **The tools**, `Shutter.Publish.Tools` (`aihub/src/Shutter/Publish/`, a `%AI.Tool`: every public ClassMethod is a
+- **The tools**, `Shutter.Publish.Tools` (`src/Shutter/Publish/`, a `%AI.Tool`: every public ClassMethod is a
   stateless tool, its description from the method's comment): `ListCases(state, receiver, limit)`, `GetCase(caseId)`
   (the public fields, the current plan's digest, disposition and summary, the approval of record, the place in the
   incident, the precedents summary, `version`), `GetEvidence(caseId)`, `GetFailure(caseId)` and `GetTimeline(caseId)`
@@ -1703,7 +1704,8 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   `live.storm` (4.4); the budget reserves an estimate for each run in flight and settles it when the run ends (9); a receiver's
   `Retry-After` on a 503 or 429 is a minimum wait before the resend's preflight read, and the demo receiver sends one (1);
   one board per failure signature, the first case leading and the rest taking its decision through their own evidence,
-  gate, rehearsal and approval (6.6);
+  gate, rehearsal and approval (6.6); the published IPM package is the whole of Shutter for an AI Hub build (2026.3 or
+  later, the organisers' requirement) and the core alone moved to `core/module.xml`, loaded by path (12);
   the publisher, Shutter's read-only tools for an MCP client through IRIS's own gateway, with an audit row per call, on
   the AI Hub build (15); each item of the review that lands adds its line here.
 - v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:

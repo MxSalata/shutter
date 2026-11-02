@@ -34,11 +34,18 @@ If 'hasIPM,sc Set sc = $SYSTEM.OBJ.LoadStream(ipm, "ck")
 If 'sc Xecute fail
 Set sc = $SELECT(##class(%Dictionary.CompiledClass).%ExistsId("%IPM.Main"): 1, 1: $SYSTEM.Status.Error(5001, "IPM is not installed (no %IPM.Main)"))
 If 'sc Xecute fail
-// The core module: the production, the store, the gate, the downstream system, the web app and the recorded runs. A
-// failed install fails the load (the module's Invoke checks InstallStatus's %Status), and so does a load that leaves
-// no /shutter web application: that image would answer 404.
+// The edition (WITH_AIHUB, SHUTTER_WITH_AIHUB here): auto loads the full package (the root module: the core and the live
+// agents) when the image has the %AI package and the core module alone (core/) when it has not; 1 requires AI Hub and
+// fails the build on an image without it; 0 loads the core alone. The root module itself refuses an image below 2026.3
+// (its SystemRequirements), as the organisers asked. One statement per line, as everywhere in this script.
+Set want = $ZCONVERT($SYSTEM.Util.GetEnviron("SHUTTER_WITH_AIHUB"), "L"), present = ##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent")
+If 'present, want = "1" Set sc = $SYSTEM.Status.Error(5001, "WITH_AIHUB=1, but this image has no %AI package (not an AI Hub build); use the replay edition or the AI Hub image") Xecute fail
+Set full = present && (want '= "0")
+Write !, $SELECT(full: "AI Hub is in this image: loading the full package (the core and the live agents)", present: "AI Hub is in this image, but WITH_AIHUB=0: loading the core alone (the replay edition)", 1: "AI Hub is not in this image: loading the core alone (the replay edition)"), !
+// A failed install fails the load (the module's Invoke checks InstallStatus's %Status, and the full package's its
+// InstallAIHubStatus too), and so does a load that leaves no /shutter web application: that image would answer 404.
 Set sc = $SYSTEM.Status.Error(5001, "the module did not load")
-Set sc = ##class(%IPM.Main).Shell("load /home/irisowner/dev -v")
+Set sc = ##class(%IPM.Main).Shell("load " _ $SELECT(full: "/home/irisowner/dev", 1: "/home/irisowner/dev/core") _ " -v")
 If sc,'$DATA(^Shutter.Config("webapp", "/shutter")) Set sc = $SYSTEM.Status.Error(5001, "the web application /shutter was not created")
 If 'sc Xecute fail
 // The demo hospital: a production of its own in the HOSPITAL namespace, created above with Shutter's packages mapped

@@ -3,7 +3,7 @@
 keeps only the low byte of each character, so a character outside ASCII breaks the publish to the package manager (an
 en dash, U+2013, becomes 0x13, which XML does not allow: "invalid character 0x13").
 
-    python3 scripts/check-ascii.py module.xml aihub/module.xml
+    python3 scripts/check-ascii.py module.xml core/module.xml
 
 Prints each character outside ASCII with its line and code point, and exits 1 when there is one. Standard library only.
 """
