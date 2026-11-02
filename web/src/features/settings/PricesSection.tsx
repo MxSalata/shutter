@@ -7,15 +7,16 @@ import { StackTable } from '@/components/StackTable';
 import { TechDetail } from '@/components/TechDetail';
 import { Term } from '@/components/Term';
 import { formatUsd } from '@/lib/format';
+import { HINT_EVENTS } from '@/theme';
 import { fullSource, shortSource, sourcesOf } from './settingsText';
 
-/** "List price, read 16 Oct 2026", with the stored source in full one hover, focus or reading away. */
+/** "List price, read 16 Oct 2026", with the stored source in full on hover, keyboard focus or a tap. */
 function Source({ p }: { p: ModelPrice }) {
   const full = fullSource(p);
   return (
     <Group gap={4} wrap="nowrap" align="center">
       <Text size="sm">{shortSource(p)}</Text>
-      <Tooltip label={full} multiline maw={320}>
+      <Tooltip label={full} multiline maw={320} events={HINT_EVENTS}>
         <ActionIcon
           variant="subtle"
           color="gray"

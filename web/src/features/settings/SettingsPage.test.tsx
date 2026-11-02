@@ -1,6 +1,6 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -382,6 +382,16 @@ describe('Costs and prices', () => {
     expect(within(table).queryByText(stored)).not.toBeInTheDocument();
   });
 
+  it('opens the stored source of a price on keyboard focus', async () => {
+    renderSettings();
+    const table = await screen.findByRole('table', { name: 'Prices per million tokens' });
+    const [first] = within(table).getAllByRole('button', { name: /^Source of / });
+    act(() => first.focus());
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Anthropic list prices per million tokens, from the pricing page read on 2026-10-16 (seed 3)',
+    );
+  });
+
   it('explains "cache read" in the table head and "replay" in the Agents intro, once each', async () => {
     renderSettings();
     const table = await screen.findByRole('table', { name: 'Prices per million tokens' });
@@ -415,26 +425,20 @@ describe('the words on the page', () => {
    * The spec's budget is 140 words on the first layer. The layout it draws carries more than that on its own: the
    * four tiles are 37 words, the Agents intro 26, the sentence and the reviews' sentence 23, and the price table's
    * sources 24 before a single heading, so the page as built reads about 300 for the recorded instance. The budget
-   * here is that figure with a little room (the page was 478 before), and the Technical page, with the API's JSON
-   * left out (a data dump, not prose), may read half as many again.
+   * here is that figure with a little room (the page was 478 before), and the Technical page (`layer1Words` leaves
+   * out the API's JSON, a data dump, not prose) may read half as many again.
    */
   const PLAIN_BUDGET = 300;
-
-  const proseWords = (container: HTMLElement) => {
-    const copy = container.cloneNode(true) as HTMLElement;
-    copy.querySelectorAll('.json-block').forEach((e) => e.remove());
-    return layer1Words(copy).length;
-  };
 
   it('keeps the first layer within its budget in Plain, and Technical within half as much again', async () => {
     const plain = renderSettings();
     await screen.findByRole('button', { name: /^Every case/ });
-    const plainWords = proseWords(plain.container);
+    const plainWords = layer1Words(plain.container).length;
     plain.unmount();
     useAppearance.setState({ detail: 'technical' });
     const technical = renderSettings();
     await screen.findByRole('table', { name: 'Settings of the agent items' });
-    const technicalWords = proseWords(technical.container);
+    const technicalWords = layer1Words(technical.container).length;
     expect(plainWords).toBeLessThanOrEqual(PLAIN_BUDGET);
     expect(plainWords).toBeLessThan(478);
     expect(technicalWords).toBeGreaterThan(plainWords);
