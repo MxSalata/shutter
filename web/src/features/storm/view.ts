@@ -164,7 +164,9 @@ export function stormView(storm: LiveStorm): StormView {
           status,
           words: failed
             ? `Stopped: ${storm.error || 'the storm did not finish'}`
-            : `Done: ${plural(cases, 'case')}, ${resolved} resolved`,
+            : storm.incidentState === 'awaiting_approval'
+              ? `Done: ${plural(cases, 'case')}; the release waits for an approval on incident ${storm.incidentId ?? ''}`.trim()
+              : `Done: ${plural(cases, 'case')}, ${resolved} resolved`,
         };
     }
   });
