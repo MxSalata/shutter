@@ -2,3 +2,4 @@
 dist-demo/
 playwright-report/
 test-results/
+dist-iris-e2e/

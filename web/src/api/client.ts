@@ -1,4 +1,5 @@
 import { ApiError } from '@/lib/errors';
+import { transport } from './transport';
 
 /** The REST API's base path (CONTRACTS 5). The app is served from the same origin, by IRIS or the Vite proxy. */
 export const API_BASE = '/api/shutter';
@@ -33,15 +34,19 @@ export async function request<T>(method: Method, path: string, options: RequestO
   if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
   let response: Response;
   try {
-    response = await fetch(API_BASE + path, {
+    // The page's transport sends it: fetch in a live page, the recorded mock in the browser in a trial page
+    // (api/transport.ts). Everything else about the request is the same in both.
+    const req = new Request(new URL(API_BASE + path, window.location.origin), {
       method,
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
       credentials: 'same-origin',
       signal: options.signal,
     });
+    response = await transport()(req);
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') throw e;
+    if (e instanceof Error && e.name === 'AbortError') throw e;
     throw new ApiError({ status: 0, method, path, body: e instanceof Error ? e.message : String(e) });
   }
   const text = await response.text();

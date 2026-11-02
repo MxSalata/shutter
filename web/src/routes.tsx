@@ -3,8 +3,12 @@ import { createHashRouter, Navigate } from 'react-router';
 import { AppLayout } from './features/shell/AppLayout';
 import { RequireAuth } from './features/shell/RequireAuth';
 import { RouteError } from './features/shell/RouteError';
+import { TRIAL } from './env/mode';
 
-const LoginPage = lazy(() => import('./features/auth/LoginPage'));
+// A trial page signs in with the trial's own roles and no password; a live page with the instance's sign-in
+const LoginPage = TRIAL
+  ? lazy(() => import('./trial/TrialSignIn'))
+  : lazy(() => import('./features/auth/LoginPage'));
 const ScenariosPage = lazy(() => import('./features/scenarios/ScenariosPage'));
 const CasesPage = lazy(() => import('./features/cases/CasesPage'));
 const CasePage = lazy(() => import('./features/cases/CasePage'));
