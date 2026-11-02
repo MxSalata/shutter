@@ -62,6 +62,7 @@ function StoryCard({
   icon: I,
   tone,
   style,
+  className,
   children,
 }: {
   label: string;
@@ -69,10 +70,18 @@ function StoryCard({
   icon?: Icon;
   tone?: Tone;
   style?: CSSProperties;
+  className?: string;
   children?: ReactNode;
 }) {
   return (
-    <Paper withBorder p="sm" radius="md" style={{ minWidth: 0, ...style }} data-tone={tone}>
+    <Paper
+      withBorder
+      p="sm"
+      radius="md"
+      style={{ minWidth: 0, ...style }}
+      className={className}
+      data-tone={tone}
+    >
       <Stack gap={6}>
         <Group gap={6} wrap="nowrap" align="center">
           {I && tone ? <I size={16} aria-hidden style={{ color: toneText(tone), flexShrink: 0 }} /> : null}
@@ -254,6 +263,7 @@ export function DecisionCard({
             title={next.action}
             icon={NextIcon}
             tone={tone}
+            className={marked ? 'tone-tint' : undefined}
             style={
               marked
                 ? {

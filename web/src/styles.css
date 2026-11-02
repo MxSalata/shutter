@@ -1468,9 +1468,19 @@ body {
   cursor: help;
 }
 
-/* The count beside Cases: an attention badge, its accessible name the full sentence. */
+/* The count beside Cases: an attention badge, its accessible name the full sentence. Its tint is laid over the page's
+   own surface rather than the active entry's (Pastel's lavender, a high contrast's hover), so its words keep 4.5:1. */
 .nav-count {
   font-variant-numeric: tabular-nums;
+  background-color: var(--mantine-color-body);
+  background-image: linear-gradient(var(--badge-bg), var(--badge-bg));
+}
+
+/* A card tinted in its tone (the light variant, as the case page's "What needs you now"): in dark the tint lifts the
+   surface, so its dimmed words take dark-0 (5.0:1 on the attention and blocking tints) instead of dark-1 (3.8:1). */
+:root[data-mantine-color-scheme='dark'] .tone-tint {
+  --mantine-color-dimmed: var(--mantine-color-dark-0);
+  --shutter-muted: var(--mantine-color-dark-0);
 }
 
 /*
