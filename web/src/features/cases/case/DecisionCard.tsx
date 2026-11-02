@@ -102,7 +102,6 @@ function StoryCard({
       withBorder
       p="sm"
       radius="md"
-      h="100%"
       id={id}
       style={{ minWidth: 0, ...style }}
       className={['story-card', className].filter(Boolean).join(' ')}
@@ -321,8 +320,14 @@ export function DecisionCard({
         <Box id="outcome-body" pt="sm" inert={!open || undefined}>
           <Stack gap="sm">
             {/* By the width the band has, not the window's: beside Ask about this case the page's column is narrower.
-                The three cards are one size: in a row, each as tall as the tallest. */}
-            <SimpleGrid type="container" cols={{ base: 1, '700px': 3 }} spacing="sm">
+                The three cards are one size: in a row, each as tall as the tallest; once the reader opens the third's
+                details, each keeps its own height, so the other two do not stretch to the long text. */}
+            <SimpleGrid
+              type="container"
+              cols={{ base: 1, '700px': 3 }}
+              spacing="sm"
+              style={{ alignItems: why ? 'start' : 'stretch' }}
+            >
               <StoryCard label="What happened" title={failedTitle(c)}>
                 <Text size="sm">{evidenceSummary(facts.snapshot)}</Text>
               </StoryCard>

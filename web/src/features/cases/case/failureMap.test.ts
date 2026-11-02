@@ -104,6 +104,7 @@ describe('the map of where a case failed', () => {
       broken: false,
     });
     expect(m.sentence).not.toContain('answered');
+    expect(m.shutter.picked).toBe('Shutter withheld it and opened a case');
   });
 
   it("draws a forwarded case through the hospital's production and its route, not Shutter's own feed", () => {
@@ -140,6 +141,7 @@ describe('the map of where a case failed', () => {
       code: 'schema_unknown',
       broken: false,
     });
+    expect(m.shutter.picked).toBe('Shutter picked up the held message');
   });
 
   it('shows what is known when the evidence is not read: no sender recorded, no route, the receiver by its item', () => {

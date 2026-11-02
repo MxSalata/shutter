@@ -173,7 +173,14 @@ export function failureMapOf(
   const hop = hopOf(c);
   const via = forwarded ? " from the hospital's production" : '';
   const incident = c.incidentId ? `, in incident ${c.incidentId}` : '';
-  const shutter = { picked: `Shutter picked up the failure${via}${incident}`, outcome, code };
+  // A withheld merge or cancel is Shutter's own doing; a held message one the hospital's production stopped
+  const picked =
+    c.failureKind === 'withheld'
+      ? 'Shutter withheld it and opened a case'
+      : c.failureKind === 'unreadable'
+        ? 'Shutter picked up the held message'
+        : 'Shutter picked up the failure';
+  const shutter = { picked: `${picked}${via}${incident}`, outcome, code };
 
   // The sentence: who sent what, through IRIS, to whom, what happened there, and where Shutter stands
   const what = lowerFirst(message.plain);
