@@ -4,7 +4,7 @@
     <Module>
       <Name>iris-shutter</Name>
       <Version>0.1.0</Version>
-      <Description>Shutter: supervised recovery for InterSystems IRIS Interoperability. A failed message is a case, not a retry: a board of AI Hub agents investigates it, a deterministic gate and a person decide, IRIS carries out the exact approved action and verifies it. This core module runs on any IRIS or IRIS for Health Community 2026.2 or later and replays recorded agent runs; the companion module iris-shutter-aihub adds live agents on an AI Hub build.</Description>
+      <Description>Shutter: supervised recovery for InterSystems IRIS Interoperability. A failed message is a case, not a retry: a board of AI Hub agents investigates it, a deterministic gate and a person decide, IRIS carries out the exact approved action and verifies it. This package is the whole of Shutter for an InterSystems IRIS AI Hub build (2026.3 or later, build 154 of the early access): the production, the store, the gate, the web application, the demo and the live agents (declarative %AI.Agent classes with typed tools, policies, schemas and knowledge bases). The core alone, for a plain IRIS for Health Community 2026.2 that replays recorded agent runs, is the module in the repository's core/ folder, loaded by path.</Description>
       <Keywords>interoperability,hl7,recovery,ai agents,ai hub,workflow,contest</Keywords>
       <Author>
         <Person>MxSalata</Person>
@@ -13,16 +13,17 @@
       </Author>
       <Packaging>module</Packaging>
       <SourcesRoot>src</SourcesRoot>
-      <SystemRequirements Version=">=2026.2" Interoperability="enabled"/>
+      <!-- The AI Hub build: the agents need the %AI package, which 2026.3 (build 154 of the early access) has and 2026.2 has not.
+           The organisers asked for this line, so that the package refuses an earlier version (announcement thread, 2 Nov 2026). -->
+      <SystemRequirements Version=">=2026.3" Interoperability="enabled"/>
       <!-- demo = 1 installs the demo: the demo users, the demo receiver's web application and client, the recorded
            runs, the feed and scenario items enabled, the message purge task. A site install passes 0:
            zpm "load <dir> -Ddemo=0" (the IPM parameter overrides this default). -->
       <Default Name="demo" Value="1"/>
       <!-- Empty: Shutter.Production in this namespace (shape A). A production's name: Shutter's items go into that production (shape B). -->
       <Default Name="production" Value=""/>
-      <!-- The core's classes, listed so that the aihub module can add its own under the same package
-           (Shutter.Agent, Shutter.Tools, Shutter.Schema, Shutter.Knowledge, Shutter.Bridge.Policy,
-           Shutter.Bridge.Monitor, Shutter.Bridge.Runner.AIHub) without the two modules claiming one resource. -->
+      <!-- The core's classes, listed one by one so that core/module.xml (the core alone, for 2026.2) can name the same
+           list and leave the agents' classes below out. -->
       <Resource Name="Shutter.API.PKG"/>
       <Resource Name="Shutter.Bridge.Msg.PKG"/>
       <Resource Name="Shutter.Bridge.Operation.PKG"/>
@@ -45,6 +46,16 @@
       <Resource Name="Shutter.Setup.CLS"/>
       <Resource Name="Shutter.Store.PKG"/>
       <Resource Name="Shutter.Util.PKG"/>
+      <!-- The live agents (AI Hub): the agent runner for the bridge, the board members (declarative %AI.Agent classes),
+           their tools, the publisher's tools and gateway, the policies, the schemas and the knowledge bases. -->
+      <Resource Name="Shutter.Agent.PKG"/>
+      <Resource Name="Shutter.Tools.PKG"/>
+      <Resource Name="Shutter.Publish.PKG"/>
+      <Resource Name="Shutter.Schema.PKG"/>
+      <Resource Name="Shutter.Knowledge.PKG"/>
+      <Resource Name="Shutter.Bridge.Policy.PKG"/>
+      <Resource Name="Shutter.Bridge.Monitor.CLS"/>
+      <Resource Name="Shutter.Bridge.Runner.AIHub.CLS"/>
       <!-- The downstream system (the demo bed-management system) the production delivers to. -->
       <Resource Name="Downstream.PKG"/>
       <!-- The demo hospital's production (shape A): runs in the HOSPITAL namespace through a package mapping, so a judge
@@ -66,6 +77,12 @@
         <Arg>${root}</Arg>
         <Arg>${demo}</Arg>
         <Arg>${production}</Arg>
+      </Invoke>
+      <!-- The agents' install: the provider configuration (ANTHROPIC_API_KEY in the environment, else the agents replay
+           recordings), the knowledge bases, the agent mode and the publisher's web application. InstallAIHubStatus
+           returns a %Status and the Invoke checks it, so an install that stops at an error stops the load. -->
+      <Invoke Class="Shutter.Setup" Method="InstallAIHubStatus" CheckStatus="true">
+        <Arg>${root}</Arg>
       </Invoke>
       <!-- No UnitTest element: the unit tests under tests/unit run in CI and by hand, not in IPM's test phase. The feed's
            tests call a development helper that stays out of the image (.dockerignore), and the downstream system's

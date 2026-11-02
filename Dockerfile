@@ -20,8 +20,9 @@ COPY --chown=irisowner:irisowner . /home/irisowner/dev
 ARG PEX_STRICT=0
 RUN PEX_STRICT="${PEX_STRICT}" bash /home/irisowner/dev/pex/build.sh /usr/irissys/mgr/pex
 
-# auto (the default) loads the aihub module (live agents) when the image has the AI Hub package and skips it on a plain
-# IRIS for Health Community base, which gets the replay edition; 1 requires it and fails the build without it; 0 skips it.
+# auto (the default) loads the full package (the root module: core and live agents) when the image has the AI Hub package,
+# and the core module alone (core/module.xml, the replay edition) on a plain IRIS for Health Community base; 1 requires
+# AI Hub and fails the build without it; 0 loads the core alone whatever the image has.
 ARG WITH_AIHUB=auto
 
 # Read by the installer while the image is built (empty keeps the defaults: the demo password shutter, a purge of 90 days).
@@ -39,6 +40,5 @@ ARG SHUTTER_ESCALATION_DAYS=
 # would answer 404. The production is set to start with the instance; SHUTTER_BUILD tells the install
 # not to start it here.
 RUN iris start IRIS \
- && SHUTTER_BUILD=1 SHUTTER_DEMO_PASSWORD="${SHUTTER_DEMO_PASSWORD}" SHUTTER_MESSAGE_DAYS="${SHUTTER_MESSAGE_DAYS}" SHUTTER_MESSAGE_PURGE="${SHUTTER_MESSAGE_PURGE}" SHUTTER_ESCALATION_DAYS="${SHUTTER_ESCALATION_DAYS}" iris session IRIS < /home/irisowner/dev/iris.script \
- && SHUTTER_BUILD=1 SHUTTER_WITH_AIHUB="${WITH_AIHUB}" iris session IRIS < /home/irisowner/dev/aihub.script \
+ && SHUTTER_BUILD=1 SHUTTER_WITH_AIHUB="${WITH_AIHUB}" SHUTTER_DEMO_PASSWORD="${SHUTTER_DEMO_PASSWORD}" SHUTTER_MESSAGE_DAYS="${SHUTTER_MESSAGE_DAYS}" SHUTTER_MESSAGE_PURGE="${SHUTTER_MESSAGE_PURGE}" SHUTTER_ESCALATION_DAYS="${SHUTTER_ESCALATION_DAYS}" iris session IRIS < /home/irisowner/dev/iris.script \
  && iris stop IRIS quietly

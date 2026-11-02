@@ -23,8 +23,16 @@ the productions a hospital already runs; the README's `docker compose up` is the
 
 ## 2. What an install creates
 
-The module `iris-shutter` (the repository root) carries the core, the demo receiver's classes included. Its manifest
-runs `Shutter.Setup.InstallStatus(root, demo, production)`; the IPM parameter `demo` defaults to 1, and
+The package `iris-shutter` (the repository root, published on IPM) is the whole of Shutter for an InterSystems IRIS AI
+Hub build: the core, the demo receiver's classes, and the live agents with their tools, policies, schemas and knowledge
+bases. Its manifest requires IRIS 2026.3 or later with Interoperability (the organisers' line: the agents need the `%AI`
+package, which build 154 of the early access has and 2026.2 has not), so `zpm "install iris-shutter"` on build 154 installs
+everything and an earlier version refuses it. The core alone, for a plain IRIS for Health Community 2026.2 that replays
+recorded agent runs, is the module `iris-shutter-core` in the repository's `core/` folder: loaded by path
+(`zpm "load <repository>/core"`), never published; the image build loads one or the other by what the base image has
+(`WITH_AIHUB`). Both manifests run `Shutter.Setup.InstallStatus(root, demo, production)`, and the full package then
+`Shutter.Setup.InstallAIHubStatus(root)` (the provider configuration, the knowledge bases, the agent mode, the publisher's
+web application); the IPM parameter `demo` defaults to 1, and
 `zpm "load /path/to/module -Ddemo=0"` installs without the demo; the parameter `production` (empty by default) names a
 production of the site's own to install Shutter's items into instead (section 4), as in
 `zpm "load /path/to/module -Ddemo=0 -Dproduction=Your.Production"`. A failed install stops the load. A packaged install (an
@@ -32,8 +40,8 @@ archive made by `zpm "package"`, the form the registry serves) carries the `know
 the install reads; IPM keeps the extracted module in its module root (its ModuleRoot setting, by default
 `<data directory>/ipm/iris-shutter/<version>/`), and `/shutter` serves `www/` from there. A packaged install needs IPM
 0.10.4 or later: 0.10.0 to 0.10.3 delete the extracted module when the install ends, so the install refuses them and
-says so; a load from a folder works on any IPM. The companion module `iris-shutter-aihub` adds the live agents on an AI
-Hub build; without it the gate, the catalogue and the policy path work, and the board replays recordings.
+says so; a load from a folder works on any IPM. Without the agents (the core module) the gate, the catalogue and the policy
+path work, and the board replays recordings.
 
 `Install` creates, in the current namespace, the folders under `<mgr>/shutter/`, the resources `Shutter_Operate`,
 `Shutter_Approve` and `Shutter_Intake`, the roles `Shutter_Operator`, `Shutter_Approver`, `Shutter_WebApp` and
@@ -168,8 +176,8 @@ trust's HL7 services.
 Shape A:
 
 1. On the integration server, create the SHUTTER namespace with its data database on backed-up storage.
-2. Load `iris-shutter` with `-Ddemo=0` (and `iris-shutter-aihub` on an AI Hub build, the provider key in the
-   environment). Check `/api/shutter/health`.
+2. On an AI Hub build, `zpm "install iris-shutter"` with `-Ddemo=0` (the provider key in the environment); on a plain
+   2026.2, `zpm "load <repository>/core -Ddemo=0"`. Check `/api/shutter/health`.
 3. Map the trust's users to `Shutter_Operator` and `Shutter_Approver`; add the approvers to the Workflow role; create
    the forwarder's user with `Shutter_Forwarder`. An operator escalates a case (the escalation is the sign-off),
    marks it handled once the team has corrected the systems and starts a production review (3.6); an approver also

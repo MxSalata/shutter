@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Export generator="Cache" version="25">
+  <Document name="iris-shutter-core.ZPM">
+    <Module>
+      <Name>iris-shutter-core</Name>
+      <Version>0.1.0</Version>
+      <Description>Shutter's core alone, for a plain IRIS or IRIS for Health Community 2026.2 or later without the AI Hub package: the production, the store, the gate, the web application and the demo, with the board replaying recorded agent runs. Loaded by path from the repository's core/ folder for the replay edition and for continuous integration; not published. The published package, iris-shutter at the repository root, is the whole of Shutter for an AI Hub build.</Description>
+      <Keywords>interoperability,hl7,recovery,ai agents,ai hub,workflow,contest</Keywords>
+      <Author>
+        <Person>MxSalata</Person>
+        <CopyrightDate>2026</CopyrightDate>
+        <License>MIT</License>
+      </Author>
+      <Packaging>module</Packaging>
+      <!-- The sources are the repository's, one level up: this folder holds the manifest alone. -->
+      <SourcesRoot>../src</SourcesRoot>
+      <SystemRequirements Version=">=2026.2" Interoperability="enabled"/>
+      <!-- demo = 1 installs the demo: the demo users, the demo receiver's web application and client, the recorded
+           runs, the feed and scenario items enabled, the message purge task. A site install passes 0:
+           zpm "load <dir> -Ddemo=0" (the IPM parameter overrides this default). -->
+      <Default Name="demo" Value="1"/>
+      <!-- Empty: Shutter.Production in this namespace (shape A). A production's name: Shutter's items go into that production (shape B). -->
+      <Default Name="production" Value=""/>
+      <!-- The core's classes, the same list as the root module's without the agents' classes (Shutter.Agent, Shutter.Tools,
+           Shutter.Publish, Shutter.Schema, Shutter.Knowledge but Text, Shutter.Bridge.Policy, Shutter.Bridge.Monitor,
+           Shutter.Bridge.Runner.AIHub), which need the %AI package. -->
+      <Resource Name="Shutter.API.PKG"/>
+      <Resource Name="Shutter.Bridge.Msg.PKG"/>
+      <Resource Name="Shutter.Bridge.Operation.PKG"/>
+      <Resource Name="Shutter.Bridge.Record.CLS"/>
+      <Resource Name="Shutter.Bridge.RunSpec.CLS"/>
+      <Resource Name="Shutter.Bridge.Runner.Replay.CLS"/>
+      <Resource Name="Shutter.Bridge.Runner.CLS"/>
+      <Resource Name="Shutter.Bridge.ToolCall.CLS"/>
+      <Resource Name="Shutter.Catalogue.PKG"/>
+      <Resource Name="Shutter.Index.PKG"/>
+      <Resource Name="Shutter.Intake.PKG"/>
+      <Resource Name="Shutter.Knowledge.Text.CLS"/>
+      <Resource Name="Shutter.Msg.PKG"/>
+      <Resource Name="Shutter.Operation.PKG"/>
+      <Resource Name="Shutter.Process.PKG"/>
+      <Resource Name="Shutter.Production.CLS"/>
+      <Resource Name="Shutter.Review.PKG"/>
+      <Resource Name="Shutter.Scenarios.PKG"/>
+      <Resource Name="Shutter.Service.PKG"/>
+      <Resource Name="Shutter.Setup.CLS"/>
+      <Resource Name="Shutter.Store.PKG"/>
+      <Resource Name="Shutter.Util.PKG"/>
+      <!-- The downstream system (the demo bed-management system) the production delivers to. -->
+      <Resource Name="Downstream.PKG"/>
+      <!-- The demo hospital's production (shape A): runs in the HOSPITAL namespace through a package mapping, so a judge
+           sees Shutter watching a production it does not own. Compiled here; installed there by Hospital.Setup. -->
+      <Resource Name="Hospital.PKG"/>
+      <!-- No folder resources: this module is loaded from the repository, never packaged, and the install reads the
+           knowledge, the fixtures and the web application's built files from the repository root, passed below. -->
+      <!-- Folders, security, the library, prices, recorded runs, the web applications and the production.
+           InstallStatus returns a %Status and the Invoke checks it, so a failed install stops the load. -->
+      <Invoke Class="Shutter.Setup" Method="InstallStatus" CheckStatus="true">
+        <Arg>${root}../</Arg>
+        <Arg>${demo}</Arg>
+        <Arg>${production}</Arg>
+      </Invoke>
+      <!-- No UnitTest element: the unit tests under tests/unit run in CI and by hand, not in IPM's test phase. The feed's
+           tests call a development helper that stays out of the image (.dockerignore), and the downstream system's
+           contract tests set its fault setting. -->
+    </Module>
+  </Document>
+</Export>
