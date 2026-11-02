@@ -1,0 +1,38 @@
+/*
+ * The Agent library's member cards. The shared MemberCard draws the avatar, the name and the 3 px edge in the
+ * member's hue; these rules only fit it into the library's grid (requests/library.md asks for the same two things in
+ * the component: an article element, and a muted state).
+ */
+
+/* The article is the grid cell, and the card fills it, so a row of members is one height. */
+.library-member {
+  display: flex;
+  min-width: 0;
+}
+.library-member > .member-card {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+}
+.library-member > .member-card > .mantine-Stack-root {
+  flex: 1 1 auto;
+}
+
+/* The question, set as a quote. It is the card's lead line, in the text colour. */
+.library-question {
+  margin: 0;
+  line-height: 1.35;
+}
+
+/* The settings and the technical detail sit at the foot of the card, whatever the length of the description. */
+.library-settings {
+  margin-top: auto;
+}
+
+/* A member that is not enabled: its edge and avatar turn gray, with no fade (a fade would lower the text's contrast).
+   The shared card sets its hue inline, so this has to be important. */
+.library-member[data-not-enabled] .member-card,
+.library-member[data-not-enabled] .identity-mark {
+  --mark-hue: var(--shutter-hue-gray) !important;
+}
