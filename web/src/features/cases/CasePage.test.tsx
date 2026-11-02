@@ -327,7 +327,8 @@ describe('CasePage', () => {
     // One plain caption per fact; the versions, epochs and the verifier's words wait in their detail
     expect(await within(top).findByText('1 update, accepted')).toBeInTheDocument();
     expect(within(top).getByText('Send it again, unchanged')).toBeInTheDocument();
-    const keys = within(top).getByRole('button', { name: 'Versions, keys and times' });
+    // Shown once the band has opened
+    const keys = await within(top).findByRole('button', { name: 'Versions, keys and times' });
     expect(keys).toHaveAttribute('aria-expanded', 'false');
     expect(
       await within(top).findByText('1 acknowledged; conditional on version 2, epoch 132'),
