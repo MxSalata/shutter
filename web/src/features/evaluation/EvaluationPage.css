@@ -1,38 +1,7 @@
 /*
- * The Evaluation page's own rules, a stand-in until styles.css carries shared ones (requests/evaluation.md).
- *
- * The per-scenario table: the pass column stays in view when a narrow window scrolls the table sideways. The sticky
- * cells take the card's own surface, whichever appearance sets it, by inheriting it down the table's parts (each of
- * them is transparent over the card, so nothing else changes).
+ * The Evaluation page's own rules. The sticky Pass column and the marks that wrap are the shared `sticky-first-col` and
+ * `wrap-badges` in styles.css.
  */
-.eval-passes-card > .eval-passes-scroll,
-.eval-passes-scroll > div,
-.eval-passes,
-.eval-passes > thead,
-.eval-passes > tbody,
-.eval-passes tr {
-  background-color: inherit;
-}
-.eval-passes :is(td, th):first-child {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  background-color: inherit;
-}
-
-/* A played mark or a filter's mark keeps its whole label: in a narrow cell it wraps rather than ending in an ellipsis. */
-.eval-marks .mantine-Badge-root {
-  height: auto;
-  min-height: var(--badge-height);
-  max-width: 100%;
-  padding-block: 2px;
-}
-.eval-marks .mantine-Badge-label {
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
-  line-height: 1.3;
-}
 
 /* A mark or an agreement row that filters the table: the chosen one is outlined in the text colour. */
 .eval-toggle {
@@ -57,9 +26,6 @@
  * after its column's name on the same line, the expected outcome's name shown too.
  */
 @media (max-width: 35.99em) {
-  .eval-passes :is(td, th):first-child {
-    position: static;
-  }
   .eval-passes.stack-cards tr > td {
     flex: 1 1 100%;
     display: flex;

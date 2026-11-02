@@ -1,4 +1,4 @@
-import type { PlayedResult } from '@/lib/proof';
+import { playedResult, type PlayedResult } from '@/lib/proof';
 
 /**
  * The evaluation of the board (docs/readme/evaluation.json and evaluation.md, both written by scripts/evaluate.py
@@ -176,26 +176,11 @@ export function playedLine(p: EvaluationPass): string {
 /**
  * How a scored pass's scenario ended when it was played end to end: the board as expected or not, and rules alone as
  * expected, stopped by the gate with nothing written, written wrongly, or (an older document that does not say which)
- * not as expected; null for a pass that is not scored, whose case belongs to the next pass. lib/proof.ts reads the
- * same fields per scenario for the proof's figures.
+ * not as expected; null for a pass that is not scored, whose case belongs to the next pass. The split is lib/proof.ts's,
+ * the one the proof's figures use per scenario.
  */
 export function passPlayed(p: EvaluationPass): { board: PlayedResult; rules: PlayedResult } | null {
-  if (!p.scored) return null;
-  const board = p.played?.board_live?.status;
-  const rules = p.played?.rules;
-  return {
-    board: board === 'as expected' ? 'as-expected' : board === 'differs' ? 'differs' : 'not-played',
-    rules:
-      rules?.status === 'as expected'
-        ? 'as-expected'
-        : rules?.status !== 'differs'
-          ? 'not-played'
-          : rules.wrote === true
-            ? 'wrote-wrongly'
-            : rules.state === 'blocked' && rules.wrote === false
-              ? 'stopped'
-              : 'differs',
-  };
+  return p.scored ? playedResult(p.played) : null;
 }
 
 /** Whether rules alone ended otherwise than expected, whatever stopped it. */

@@ -69,10 +69,7 @@ function wordsAbove(container: HTMLElement): { all: number; copy: number } {
     while (node.nextElementSibling) node.nextElementSibling.remove();
   passes.remove();
   const all = layer1Words(above).length;
-  for (const el of above.querySelectorAll(
-    'h1, h2, h3, [role="heading"], button, .stat-figure, .comparison-bars',
-  ))
-    el.remove();
+  for (const el of above.querySelectorAll('h1, h2, h3, button, .stat-figure, .comparison-bars')) el.remove();
   return { all, copy: layer1Words(above).length };
 }
 
@@ -144,9 +141,8 @@ describe('EvaluationPage', () => {
     expect(
       within(hero).getByText("scored passes proposed the scenario's expected action"),
     ).toBeInTheDocument();
-    expect(
-      within(hero).getByRole('heading', { name: 'Played end to end, same 11', level: 3 }),
-    ).toBeInTheDocument();
+    // The tile's heading, which holds its info button
+    const played = within(hero).getByRole('heading', { name: 'Played end to end, same 11', level: 3 });
     expect(
       within(hero).getByRole('img', { name: 'The board: 11 of 11 failures ended as expected' }),
     ).toBeInTheDocument();
@@ -155,7 +151,7 @@ describe('EvaluationPage', () => {
     ).toBeInTheDocument();
     expect(within(hero).getByText('Ended as expected, of the same 11 failures')).toBeInTheDocument();
     // The comparison's long form, as the info button's description
-    const info = within(hero).getByRole('button', { name: 'How the comparison was played' });
+    const info = within(played).getByRole('button', { name: 'How the comparison was played' });
     expect(info).toHaveAccessibleDescription(
       '4 of 11 scored passes played end to end with rules alone, no agents, ended as expected; played the same way, the board ended as expected in 11 of the same 11',
     );

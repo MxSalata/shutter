@@ -46,6 +46,7 @@ import { usePrefersReducedMotion } from '@/lib/motion';
 import { proofFrom, type PlayedResult, type Proof, type ProofSource } from '@/lib/proof';
 import type { Tone } from '@/lib/tone';
 import { useTechnical } from '@/stores/appearance';
+import { HINT_EVENTS } from '@/theme';
 import {
   AGREEMENT_LEVELS,
   agreementSlug,
@@ -120,19 +121,12 @@ function tokens(p: EvaluationPass): string {
   return parts.join(' · ');
 }
 
-/** A tile's title: a heading inside the tile's overline, so the hero's parts are reached by heading. */
-const TileTitle = ({ children }: { children: ReactNode }) => (
-  <span role="heading" aria-level={3}>
-    {children}
-  </span>
-);
-
 /** A longer note behind an info button, one hover, focus or tap away; it is the button's description too. */
 function InfoTip({ label, text }: { label: string; text: string }) {
   const id = useId();
   return (
     <>
-      <Tooltip label={text} multiline maw={320} events={{ hover: true, focus: true, touch: true }}>
+      <Tooltip label={text} multiline maw={320} events={HINT_EVENTS}>
         <ActionIcon variant="subtle" color="gray" size="sm" aria-label={label} aria-describedby={id} ml={4}>
           <IconInfoCircle size={14} aria-hidden />
         </ActionIcon>
@@ -361,11 +355,8 @@ function Headline({
     <HeroBand
       tone={allMatched ? 'positive' : 'info'}
       label="The board against the expected outcome"
-      overline={
-        <span role="heading" aria-level={2}>
-          The board against the expected outcome
-        </span>
-      }
+      overline="The board against the expected outcome"
+      overlineOrder={2}
       statement={heroStatement(proof)}
       tour="evaluation-headline"
     >
@@ -383,7 +374,8 @@ function Headline({
       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md" style={{ alignItems: 'start' }}>
         <StatTile
           size="hero"
-          label={<TileTitle>The board&apos;s proposals</TileTitle>}
+          label="The board's proposals"
+          labelOrder={3}
           figure={b?.scored ? `${b.matched} of ${b.scored}` : 'None scored'}
           caption="recorded failures where the board chose the expected action"
           tone={allMatched ? 'positive' : b?.scored ? 'blocking' : undefined}
@@ -413,11 +405,12 @@ function Headline({
           size="hero"
           label={
             <>
-              <TileTitle>{pl ? `Played end to end, same ${pl.of}` : 'Played end to end'}</TileTitle>
+              {pl ? `Played end to end, same ${pl.of}` : 'Played end to end'}
               {pl ? <InfoTip label="How the comparison was played" text={rulesCaption} /> : null}
             </>
           }
-          figure={pl ? null : 'Not played'}
+          labelOrder={3}
+          figure={pl ? undefined : 'Not played'}
           caption={pl ? undefined : 'no scored pass was played with rules alone'}
         >
           {pl ? (
@@ -441,7 +434,7 @@ function Headline({
                 caption={`Ended as expected, of the same ${pl.of} failures`}
               />
               {misses && misses.total ? (
-                <Group gap={6} wrap="wrap" className="eval-marks">
+                <Group gap={6} wrap="wrap" className="wrap-badges">
                   {misses.stopped.length ? (
                     <MarkToggle
                       tone="neutral"
@@ -466,7 +459,8 @@ function Headline({
 
         <StatTile
           size="hero"
-          label={<TileTitle>Cost per pass</TileTitle>}
+          label="Cost per pass"
+          labelOrder={3}
           figure={cost ? `${formatUsd(cost.min)} to ${formatUsd(cost.max)}` : 'None scored'}
           caption="at list prices"
         >
@@ -815,7 +809,7 @@ function PassesTable({
       component="section"
       aria-labelledby="passes-title"
       id="passes"
-      className="eval-passes-card"
+      className="eval-passes-card sticky-first-col"
       data-tour="evaluation-table"
     >
       <Box mb="sm">
@@ -896,7 +890,7 @@ function PassesTable({
                   <StackTable.Td data-label="Plan">
                     <PlanCell p={p} />
                   </StackTable.Td>
-                  <StackTable.Td data-label="Played" className="eval-marks">
+                  <StackTable.Td data-label="Played" className="wrap-badges">
                     <PlayedCell p={p} />
                   </StackTable.Td>
                   <StackTable.Td data-label="Cost · time">
