@@ -1567,9 +1567,15 @@ ClassMethod EnsurePublishApp(ns As %String = "") As %String
         Set props("NameSpace") = ns
         Set props("Description") = "Shutter publisher: read-only MCP tools"
         Set props("Enabled") = 1
+        // Password authentication: iris-mcp-server passes the MCP client's HTTP Basic credentials through, and the engine signs
+        // the caller in; the resource on the application and the service's own check both require Shutter_Publish.
         Set props("AutheEnabled") = 32
         Set props("DispatchClass") = "Shutter.Publish.Service"
         Set props("Resource") = "Shutter_Publish"
+        Set props("MatchRoles") = ""
+        // An MCP Server application (Type bit 4, with the CSP/REST bit): what the portal's "Edit MCP Server" page makes, and
+        // what iris-mcp-server trusts; a plain web application at the same path fails its identity check.
+        Set props("Type") = 18
         If ##class(Security.Applications).Exists("/mcp/shutter") {
             Set sc = ##class(Security.Applications).Modify("/mcp/shutter", .props)
             Set out = "updated"

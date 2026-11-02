@@ -1631,19 +1631,28 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   authenticated), `tool`, `target` (the case or incident id, or the list's filter), `version` (the case's version when it
   was read) and `durationMs`; never the answer. The Doctor's `publish.calls_today` counts them; `Health()` reports the
   same.
-- **The gateway**, `Shutter.Publish.Service` (a `%AI.MCP.Service`): `SPECIFICATION` `Shutter.Publish.Tools`, `RESOURCE`
-  `Shutter_Publish`, so every request, REST or WebSocket, needs that resource on top of the application's own
-  authentication. It answers `GET /mcp/shutter/v1/health`, `GET /v1/services`, `POST /v1/tool_call` (a stateless tool
-  call) and `WS /v1/ws` (the stateful protocol `iris-mcp-server` speaks).
+- **The gateway**, `Shutter.Publish.Service` (a `%AI.MCP.Service`): `SPECIFICATION` `Shutter.Publish.Tools`; its
+  `OnAuthenticate` requires `Shutter_Publish` of the caller the application signed in (and can sign an anonymous caller
+  in from an HTTP Basic header, should a site run the application unauthenticated). It answers `GET
+  /mcp/shutter/v1/health`, `GET /v1/services`, `POST /v1/tool_call` and `WS /v1/ws` to `iris-mcp-server` only: a direct
+  call gets 502 `GATEWAY_REQUIRED`, and the gateway checks the service's identity header before trusting its tools.
 - **The resource and the application.** `Shutter_Publish` (12) is held by `Shutter_Operator` and, through it,
   `Shutter_Approver`; the forwarder and the public demo's visitors have no such access. `Setup.InstallAIHub` makes the
-  web application `/mcp/shutter` (password authentication, `DispatchClass` `Shutter.Publish.Service`, the resource on the
-  application too; `Setup.EnsurePublishApp`) where `%AI.MCP.Service` and the publisher's classes are compiled, and
-  records it in `^Shutter.Config("webapp","/mcp/shutter")`; the Doctor carries `publish {available, webapp, calls_today}`.
-- **The sidecar.** `iris-mcp-server`, shipped in the image at `/usr/irissys/bin/iris-mcp-server`, bridges an MCP client
-  (stdio, SSE or HTTP) to the gateway: `iris-mcp-server run --iris-host 127.0.0.1 --iris-port 1972 --iris-endpoint
-  /mcp/shutter --transport stdio`, signed in as a user who holds `Shutter_Publish`. The install does not start it: a
-  site's MCP client configuration does, with the user it chooses (`docs/INSTALL.md`).
+  web application `/mcp/shutter` (`Setup.EnsurePublishApp`: an MCP Server application, `Type` 18 as the portal's "Edit MCP
+  Server" page makes them; password authentication; `DispatchClass` `Shutter.Publish.Service`; the resource
+  `Shutter_Publish` on the application too) where `%AI.MCP.Service` and the publisher's classes are compiled, and records
+  it in `^Shutter.Config("webapp","/mcp/shutter")`; the Doctor carries `publish {available, webapp, calls_today}`.
+- **The sidecar.** `iris-mcp-server`, shipped in the image at `/usr/irissys/bin/iris-mcp-server`, bridges an MCP client to
+  the gateway and passes the client's own credentials through: a client that sends HTTP Basic (or a bearer) to the
+  sidecar is signed in to `/mcp/shutter` as that user, so each person reads as themselves and the audit names them. Run it
+  with an HTTP or SSE transport, `iris-mcp-server -c shutter-mcp.toml --transport http://127.0.0.1:8765 run --iris-host
+  127.0.0.1 --iris-port 1972 --iris-endpoint /mcp/shutter`, the TOML naming the instance (`[[iris]] name`, `[iris.server]
+  host, port, username, password` for the sidecar's own connection to the superserver) and the endpoint (`[[iris.endpoints]]
+  path = "/mcp/shutter"`); the client's MCP address is then `http://127.0.0.1:8765/mcp`. A stdio transport carries no client
+  credentials, so its calls reach the application anonymous and are refused: use HTTP or SSE. A user without
+  `Shutter_Publish`, or with a wrong password, sees only the sidecar's own `iris_status` tool. Proven on the AI Hub build
+  (2 Nov 2026): eleven tools listed, `ListCases`, `GetCase` and `Health` answered, the forwarder refused. The install does
+  not start the sidecar: a site's MCP client configuration does (`docs/INSTALL.md`).
 
 ## Changes
 

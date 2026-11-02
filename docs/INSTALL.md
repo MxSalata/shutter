@@ -277,15 +277,32 @@ has no gateway; the Doctor's `publish.available` says which build this is.
 
 - **Who may read:** a user who holds the resource `Shutter_Publish`: operators and approvers do (`Shutter_Operator`
   carries it), the forwarder and the public demo's visitors do not. The application asks for a password.
-- **From an MCP client** (a desktop assistant, an IDE, your own agent): run the sidecar the image ships, signed in as
-  such a user, and point the client at it. Inside the container:
+- **From an MCP client** (a desktop assistant, an IDE, your own agent): run the sidecar the image ships with an HTTP or
+  SSE transport and point the client at it; the client sends its own HTTP Basic credentials (or a bearer), which the
+  sidecar passes through to Shutter, so each person reads as themselves. Inside the container, with a small TOML:
 
   ```
-  iris-mcp-server run --iris-host 127.0.0.1 --iris-port 1972 --iris-endpoint /mcp/shutter --transport stdio
+  cat > /tmp/shutter-mcp.toml <<'EOT'
+  [[iris]]
+  name = "default"
+
+  [iris.server]
+  host = "127.0.0.1"
+  port = 1972
+  username = "operator"
+  password = "shutter"
+
+  [[iris.endpoints]]
+  path = "/mcp/shutter"
+  EOT
+  iris-mcp-server -c /tmp/shutter-mcp.toml --transport http://127.0.0.1:8765 run --iris-host 127.0.0.1 --iris-port 1972 --iris-endpoint /mcp/shutter
   ```
 
-  The server's own `--help` lists the HTTP and SSE transports and the TOML configuration for credentials.
-- **From a script:** the gateway answers REST too, with HTTP Basic: `GET /mcp/shutter/v1/health`, `GET /mcp/shutter/v1/services`
-  (the tools and their schemas) and `POST /mcp/shutter/v1/tool_call`.
+  The client's MCP address is then `http://127.0.0.1:8765/mcp`; the tools appear as `mcp_shutter_ListCases`,
+  `mcp_shutter_GetCase` and so on. The `[iris.server]` user is the sidecar's own connection to the superserver; the
+  reader's identity comes from the client. A stdio transport carries no client credentials and is refused by the
+  publisher; the server's `--help` lists the transports and the TOML keys.
+- **From a script:** the gateway answers only the sidecar (a direct call gets 502 `GATEWAY_REQUIRED`), so a script talks to
+  the sidecar's HTTP transport with the MCP protocol and HTTP Basic.
 - **Nothing here writes.** Approvals, reinvestigations and closures stay in the app and its API, under their own
   resources and the `X-Requested-With` header.
