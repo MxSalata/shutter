@@ -275,7 +275,7 @@ function useScenarioCases(): (scenario: string, mode: string) => CaseSummary | u
 function CaseId({ id, c }: { id: string; c: CaseSummary | undefined }) {
   if (!c) return <>{id}</>;
   return (
-    <Anchor component={Link} to={`/cases/${encodeURIComponent(c.caseId)}`} inherit>
+    <Anchor component={Link} to={`/cases/${encodeURIComponent(c.caseId)}`} inherit underline="always">
       {id}
     </Anchor>
   );
@@ -364,7 +364,11 @@ function Headline({
         <Text size="md">
           {second}{' '}
           {compare ? (
-            <Anchor component={Link} to={`/cases/${encodeURIComponent(compare.caseId)}?show=compare`}>
+            <Anchor
+              component={Link}
+              to={`/cases/${encodeURIComponent(compare.caseId)}?show=compare`}
+              underline="always"
+            >
               Compare the two cases
             </Anchor>
           ) : null}
