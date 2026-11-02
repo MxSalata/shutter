@@ -61,6 +61,7 @@ Method OnWardOperation(request As Shutter.Msg.WardOperation, Output response As 
             While 'httpResponse.Data.AtEnd { Set text = text _ httpResponse.Data.Read(32000) }
         }
         Set response.ResponseJSON = text
+        Do ..TakeRetryAfter(httpResponse, response)
     }
     Set parsed = ##class(Shutter.Util.Json).Parse(text, .psc)
     If '$ISOBJECT(parsed) || $$$ISERR(psc) Set parsed = {}
@@ -90,6 +91,7 @@ Method Read(request As Shutter.Msg.WardOperation, response As Shutter.Msg.WardRe
             While 'httpResponse.Data.AtEnd { Set text = text _ httpResponse.Data.Read(32000) }
         }
         Set response.ResponseJSON = text
+        Do ..TakeRetryAfter(httpResponse, response)
     }
     Set parsed = ##class(Shutter.Util.Json).Parse(text, .psc)
     If '$ISOBJECT(parsed) || $$$ISERR(psc) Set parsed = {}
@@ -114,6 +116,28 @@ Method Read(request As Shutter.Msg.WardOperation, response As Shutter.Msg.WardRe
     }
     $$$TRACE("Preflight: " _ response.Outcome _ ", version " _ response.EncounterVersion _ ", HTTP " _ response.HttpStatus)
     Quit $$$OK
+}
+
+/// The receiver's Retry-After (v1.35) on a 503 or 429: kept on the result in seconds, for the case to honour before its
+/// preflight read (CONTRACTS 6.5).
+ClassMethod TakeRetryAfter(httpResponse As %Net.HttpResponse, response As Shutter.Msg.WardResult) [ Private ]
+{
+    Try {
+        If (response.HttpStatus '= 503) && (response.HttpStatus '= 429) Quit
+        Set seconds = ..RetryAfterOf(httpResponse.GetHeader("Retry-After"))
+        If seconds '= "" Set response.RetryAfterSeconds = seconds
+    } Catch ex {
+    }
+}
+
+/// A Retry-After header's value as seconds: the delta-seconds form, 1 to 3600 (longer is clamped; 0 or less means no
+/// wait); the HTTP-date form and anything else are ignored ("").
+ClassMethod RetryAfterOf(value As %String) As %String
+{
+    Set v = $ZSTRIP($GET(value), "<>W")
+    If (v = "") || (v '? 1.N) Quit ""
+    If +v <= 0 Quit ""
+    Quit $SELECT(+v > 3600: 3600, 1: +v)
 }
 
 /// This item's path of a kind, from its receiver description in the site profile (the item's own name is the

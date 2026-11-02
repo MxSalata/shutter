@@ -108,8 +108,12 @@ ClassMethod Decode(value As %String) As %String [ Private ]
     Quit $ZCONVERT(value, "I", "URL")
 }
 
+/// What a 503 tells a sender about retrying, in seconds (RFC 7231 Retry-After, the delta-seconds form; v1.35).
+Parameter RETRYAFTERSECONDS = 20;
+
 ClassMethod Reply(code As %Integer, body) As %Status [ Private ]
 {
+    If code = 503 Do %response.SetHeader("Retry-After", ..#RETRYAFTERSECONDS)
     Set %response.Status = code _ " " _ $CASE(code, 200: "OK", 201: "Created", 403: "Forbidden", 404: "Not Found", 409: "Conflict", 422: "Unprocessable Entity", 500: "Internal Server Error", 503: "Service Unavailable", 504: "Gateway Timeout", : "Error")
     Write:$ISOBJECT(body) body.%ToJSON()
     Quit $$$OK

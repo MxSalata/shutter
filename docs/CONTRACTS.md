@@ -52,8 +52,17 @@ Responses:
 | 422 | `{"error": "patient_mismatch", "encounter_id": "…"}` | The encounter exists for another patient (identity never silently changes) |
 | 422 | `{"error": "payload_digest_mismatch"}` | The sender's `payload_digest` differs from the downstream system's own computation |
 | 422 | `{"error": "invalid_request", "detail": "…"}` | Missing or malformed fields |
-| 503 | `{"error": "ward_unavailable"}` | Fault `fail_before_accept` is on (section 1.5); nothing was validated or written |
+| 503 | `{"error": "ward_unavailable"}` | Fault `fail_before_accept` is on (section 1.5); nothing was validated or written. Since v1.35 every 503 carries `Retry-After: 20` (delta seconds), as a real receiver may |
 | 504 | empty body | Fault `commit_drop_response` is on: the operation **was committed** and the receipt stored, then the response was lost |
+
+**Retry-After as a minimum wait (v1.35).** When a receiver answers a delivery 503 or 429 with `Retry-After` in the
+delta-seconds form, Shutter's connector keeps it on the result (`retryAfterSeconds`, 1 to 3600; the HTTP-date form and
+anything else are ignored), the feed's intake carries it (`retry_after_seconds` in the connector's answer) and the case keeps
+until when the receiver asked not to retry (`retryAfterUntil`). The resend's first read of the receiver, the preflight after
+the approval or the automatic release, waits for what is left of it, 300 s at most, with a note on the case ("The receiver
+asked for a pause before a retry (Retry-After, until ...); the preflight read waits N s"), and the wait is spent once: the
+field is cleared when the wait is armed. A case whose approval comes later than the receiver asked waits nothing. A case
+from another production (11) carries none: the forward has no header field.
 
 Decided with the downstream system (15 Oct): faults apply to real operations only, never to a dry run; a dry run reports a refusal as 200 with `would_apply` false, except `bed_occupied`, which it answers as the 409 itself (v1.24); a discharge sets `ward` to null; for an `admit`, `expected_version` 0 means "not yet seen"; the per-encounter lock waits 10 s and then answers 503 `ward_unavailable`; a reset answers 200 `{"reset": true}`; the dry run relies on a transaction rollback, so the database must be journaled (the default).
 
@@ -1621,8 +1630,9 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   `Shutter.Intake.AlertProcess` as a watched production's `Ens.Alert` item, which hands a delivery failure's message to
   Shutter from the alert alone and passes every alert on to the site's consumer (11, 13); the storm, `POST /live/storm`,
   eight failed movements for four fresh patients in the live hospital with the receiver down for a minute, followed on
-  `live.storm` (4.4); the budget reserves an estimate for each run in flight and settles it when the run ends (9); each item of
-  the review that lands adds its line here.
+  `live.storm` (4.4); the budget reserves an estimate for each run in flight and settles it when the run ends (9); a receiver's
+  `Retry-After` on a 503 or 429 is a minimum wait before the resend's preflight read, and the demo receiver sends one (1);
+  each item of the review that lands adds its line here.
 - v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:
   run, reset, purge) and `Shutter_Configure` (the site's writes: the profile, the library, a schema import, the review
   annotations), held by the operator and the approver as before; the role `Shutter_Demo` (reads, reinvestigates, approves and
