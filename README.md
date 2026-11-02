@@ -71,6 +71,8 @@ Beside the cases:
 - **Ask about this case.** Plain-words answers from the Explain agent or the board, neither of which can write, and a What-if card computed without a model. The example conversations are recordings of live runs of 1 November 2026 ([CONTRACTS.md](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#14-ask-about-this-case-v126-v127)).
 - **Production review.** One read-only pass over a production's effective settings, purge task and errors, tied to Shutter's cases, each finding naming the safer value ([running.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md)).
 - **Precedents.** What approvers decided before on the same evidence at the same receiver, and whether it held, counted in the approval task (the last 180 days); an approver can retire one.
+- **Break the feed.** On the live hospital (the online demo, or `SHUTTER_LIVE=1`), one button takes the bed manager down for a minute while eight movements for four new patients fail; Shutter groups them into one incident and, once the bed manager is back, releases them in order, each one rehearsed and verified. A strip on the page follows it step by step.
+- **When each agent worked.** On a board case, the pass's runs on one time axis, each tool call marked on its run, from the stored rows alone.
 - **Evaluation.** Each member's disposition and confidence per case, where they disagreed and why, each pass's cost, and what is not yet measured ([evaluation.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)).
 
 All 26 scenarios (S1 to S13, S15 to S22, S23a to S23c, S24 and S25), step by step, and where each part of the task shows: [docs/readme/scenarios.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/scenarios.md).
@@ -126,6 +128,7 @@ The idea asks whether Interoperability could do the job of a tracing tool such a
 | Cost | The Costs page and `GET /costs`, by case, review and question |
 | The prompt's version | The agent class's configuration version, in the request and each recording's key |
 | Replay | Recordings keyed by encounter, event, member and configuration version, replayed by CI on every push |
+| Spans and timing | Each run's start to the millisecond, its model and tool time, and each tool call's time and duration: the case page draws them as a timeline |
 
 To try it, paste these into the Management Portal's SQL page in the namespace `SHUTTER`:
 
