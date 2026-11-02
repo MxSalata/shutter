@@ -1136,7 +1136,11 @@ live runs can go; `detail` is the sentence to show. While the provider refuses t
 call a model with the status `provider_auth` and makes no call (a board whose members were all refused so takes the rules
 path, with a note saying why, as for `budget_exhausted`), `POST /cases/{id}/board` answers `409 live_unavailable` with `live`
 (the availability object) before the budget is looked at, and a question from a caller with the live agents is answered from
-its recording when it has one and refused `409 live_unavailable` when it has none.
+its recording when it has one and refused `409 live_unavailable` when it has none. **The demo's budget note** (v1.37):
+`SHUTTER_DEMO_BUDGET_USD` and `SHUTTER_DEMO_BUDGET_PERIOD` (`day` or `hour`, day by default), read at the install and at every
+production start like the cap, set `live.budgetNote = {amountUsd, period}` in `GET /settings` for the live banner: the figure
+the demo's owner spends on live runs, which a site may enforce outside Shutter (a key deactivated at the figure) while the
+cap here guards a burst; absent when unset (an empty, zero or non-numeric value clears it), and the web shows the cap then.
 
 **Reserve, then settle (v1.35).** A run in flight has no `AgentRun` row yet, so three members running at once were not
 counted against the cap until they finished. The Agent item now reserves an estimate for each live run it starts
@@ -1703,7 +1707,8 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
 
 - v1.37, 2 Nov 2026: whether the live agents can run, `live.agents` in `GET /settings` with reasons `budget` and `provider_auth`,
   the Agent item's `provider_auth` refusal while the provider refuses the key, and `409 live_unavailable` on the board and a
-  live question (12), for the demo's notice to visitors.
+  live question (12), for the demo's notice to visitors; `live.budgetNote` from `SHUTTER_DEMO_BUDGET_USD` and
+  `SHUTTER_DEMO_BUDGET_PERIOD` for the banner (12).
 - v1.36, 2 Nov 2026: a decision that lands while the Workflow engine is still distributing the task waits for the engine's
   worklist row and assigns again when its own row meets the engine's (5; a CI run's 409 "ID key not unique" of 2 Nov).
 - v1.35, 2 Nov 2026 (the items of the competitor code review of 1 Nov 2026): denied tool calls

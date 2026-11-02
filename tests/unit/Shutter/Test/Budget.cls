@@ -52,6 +52,28 @@ Method OnAfterAllTests() As %Status
     Quit $$$OK
 }
 
+/// The demo's budget note for the live banner (v1.37): a figure and its period, day unless hour; cleared by nothing,
+/// zero or words; absent from the settings when cleared. The global is put back as it was.
+Method TestDemoBudgetNote()
+{
+    Set b = "Shutter.Util.Budget"
+    Merge keep = ^Shutter.Config("demoBudget")
+    Set n = $CLASSMETHOD(b, "ConfigureDemoBudget", "15", "day")
+    Do $$$AssertEquals(n.amountUsd _ "|" _ n.period, "15|day", "15 a day")
+    Set n = $CLASSMETHOD(b, "ConfigureDemoBudget", " 2.5 ", "HOUR")
+    Do $$$AssertEquals(n.amountUsd _ "|" _ n.period, "2.5|hour", "2.50 an hour, the period in any case")
+    Set n = $CLASSMETHOD(b, "ConfigureDemoBudget", "5", "week")
+    Do $$$AssertEquals(n.amountUsd _ "|" _ n.period, "5|day", "an unknown period reads as a day")
+    Do $$$AssertEquals($CLASSMETHOD(b, "DemoBudgetNote").amountUsd, 5, "and the note reads it back")
+    Do $$$AssertEquals($CLASSMETHOD(b, "ConfigureDemoBudget", "0", "day"), "", "zero clears it")
+    Do $$$AssertEquals($CLASSMETHOD(b, "DemoBudgetNote"), "", "no note")
+    Do $CLASSMETHOD(b, "ConfigureDemoBudget", "15", "day")
+    Do $$$AssertEquals($CLASSMETHOD(b, "ConfigureDemoBudget", "fifteen", ""), "", "words clear it too")
+    Do $$$AssertEquals($DATA(^Shutter.Config("demoBudget")), 0, "and the global is gone")
+    Kill ^Shutter.Config("demoBudget")
+    Merge ^Shutter.Config("demoBudget") = keep
+}
+
 Method TestConfigure()
 {
     Do $$$AssertEquals(##class(Shutter.Util.Budget).Configure(""), 0, "empty: no cap")
