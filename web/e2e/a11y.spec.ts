@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { audit, choosePastel, MODES } from './axe';
 import { skipWelcome } from './guide';
-import { checkedBy, go, openSteps, screenName, signIn, signOutOfTrial } from './helpers';
+import { atWidth, checkedBy, go, openSteps, screenName, signIn, signOutOfTrial } from './helpers';
 import { areas, caseEvidence, shell, signIn as signInArea } from './areas';
 
 /**
@@ -33,6 +33,7 @@ for (const { colorScheme, contrast, palette } of MODES) {
     for (const area of areas)
       for (const screen of area.screens.filter((sc) => checkedBy(sc, 'a11y')))
         test(`${screenName(screen)} ${area.tag}`, async ({ page }) => {
+          await atWidth(page, screen);
           await signIn(page, { detail: screen.detail });
           await go(page, screen.path, { detail: screen.detail });
           await expect(page.getByRole('heading', { name: screen.heading, exact: true })).toBeVisible();

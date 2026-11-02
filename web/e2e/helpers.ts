@@ -78,6 +78,11 @@ export interface Screen {
   checks?: ('a11y' | 'layout')[];
   /** Opened with the Detail switch on Technical. */
   detail?: 'technical';
+  /**
+   * A window width of its own, for a state that exists only there (Ask open as a drawer at 1280, beside the case at
+   * 1440): axe audits it at that width, and the layout run checks it at that width instead of 360 and 1024 px.
+   */
+  width?: number;
 }
 
 /** One area of the app, as one page package owns it: its tag for `--grep`, and the screens the shared runs check. */
@@ -98,10 +103,17 @@ export interface Area {
 export const checkedBy = (screen: Screen, run: 'a11y' | 'layout') =>
   !screen.checks || screen.checks.includes(run);
 
-/** A screen's test name: its heading, the state its address names, whether every step is open, and its Detail. */
+/** A screen's test name: its heading, the state its address names, whether every step is open, its Detail and width. */
 export function screenName(screen: Screen): string {
   const base =
     screen.name ??
     (screen.path.includes('?') ? `${screen.heading} (${screen.path.split('?')[1]})` : screen.heading);
-  return `${base}${screen.steps ? ', every step open' : ''}${screen.detail ? ', Technical' : ''}`;
+  return `${base}${screen.steps ? ', every step open' : ''}${screen.detail ? ', Technical' : ''}${
+    screen.width ? `, at ${screen.width} px` : ''
+  }`;
+}
+
+/** Sets the window to a screen's own width, when it has one (800 px high, as the layout run's windows are). */
+export async function atWidth(page: Page, screen: Screen) {
+  if (screen.width) await page.setViewportSize({ width: screen.width, height: 800 });
 }

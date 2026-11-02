@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { audit, choosePastel, MODES } from './axe';
 import { skipWelcome } from './guide';
-import { banner, go, READ_ONLY, screenName, signIn } from './helpers';
+import { atWidth, banner, go, READ_ONLY, screenName, signIn } from './helpers';
 import { areas, siteProfile } from './areas';
 
 /**
@@ -26,6 +26,7 @@ for (const { colorScheme, contrast, palette } of MODES) {
     for (const area of areas)
       for (const screen of area.liveScreens ?? [])
         test(`${screenName(screen)} ${area.tag}`, async ({ page }) => {
+          await atWidth(page, screen);
           await signIn(page, AS_DEMO);
           await go(page, screen.path, AS_DEMO);
           await expect(page.getByRole('heading', { name: screen.heading, exact: true })).toBeVisible();

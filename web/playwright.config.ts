@@ -8,7 +8,7 @@ import { defineConfig, devices } from '@playwright/test';
  * - `iris-trial`: the build IRIS serves (`vite build --mode iris`), previewed at /shutter/ with no proxy and an
  *   instance address nothing listens on, so a call that escaped the trial could reach nothing; each test also stubs
  *   `/api/shutter` in the browser and records every hit. It proves the trial reaches no live system
- *   (e2e/trial.spec.ts), and audits the live sign-in page.
+ *   (e2e/trial.spec.ts), and audits the live sign-in page (there and in e2e/sign-in-trial.spec.ts).
  */
 /** The demo preview's port: 4174, or E2E_PORT when runners that share one host each need their own. */
 const port = Number(process.env.E2E_PORT || 4174);
@@ -28,6 +28,9 @@ export default defineConfig({
     ...(process.env.CHROMIUM_PATH ? { launchOptions: { executablePath: process.env.CHROMIUM_PATH } } : {}),
   },
   projects: [
+    // Every file whose name ends in trial.spec.ts runs in iris-trial, never here: trial.spec.ts, and
+    // sign-in-trial.spec.ts, the live sign-in page of a demo install, which only the build IRIS serves has. Keep the
+    // two patterns unanchored at the start if they are ever tightened.
     {
       name: 'chromium',
       testIgnore: /trial\.spec\.ts$/,
