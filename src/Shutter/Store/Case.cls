@@ -88,6 +88,14 @@ Property WaitsOnMessage As %String(%JSONFIELDNAME = "waitsOnMessage", MAXLEN = 2
 
 Index WaitsMsgIdx On WaitsOnMessage;
 
+/// The case whose board this one follows (v1.35, one board per failure signature) while that board runs; "" otherwise.
+Property FollowsCase As %String(%JSONFIELDNAME = "followsCase", MAXLEN = 32);
+
+Index FollowsIdx On FollowsCase;
+
+/// The failure signature this case led or followed a board for (v1.35), for the record.
+Property LeadSignature As %String(%JSONFIELDNAME = "leadSignature", MAXLEN = 80);
+
 /// A merge's prior record (A40, CONTRACTS 2): the patient identifier the merge discards (MRG-1) with its assigning
 /// authority, the prior visit (MRG-5), and how many MRG segments the message carried (one per PATIENT group); the
 /// identifiers are the first group's.
@@ -901,6 +909,12 @@ Storage Default
 </Value>
 <Value name="48">
 <Value>RetryAfterUntil</Value>
+</Value>
+<Value name="49">
+<Value>FollowsCase</Value>
+</Value>
+<Value name="50">
+<Value>LeadSignature</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>
