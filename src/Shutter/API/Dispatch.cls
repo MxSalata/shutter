@@ -254,7 +254,9 @@ ClassMethod Me() As %Status
 
 ClassMethod Health() As %Status
 {
-    Set full = ##class(%DynamicObject).%FromJSON(##class(Shutter.Setup).Doctor())
+    // The credential checks are cached ten minutes (v1.38); an operator's ?refresh=1 recomputes them now.
+    Set refresh = (%request.Get("refresh") = "1") && $SYSTEM.Security.Check("Shutter_Operate", "USE")
+    Set full = ##class(%DynamicObject).%FromJSON(##class(Shutter.Setup).Doctor(refresh))
     If $SYSTEM.Security.Check("Shutter_Operate", "USE") Quit ..Json(full)
     // Anyone may ask whether the instance is up and whether it is the demo; the rest is for signed-in users.
     Set o = {}
