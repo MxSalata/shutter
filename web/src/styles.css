@@ -841,14 +841,17 @@ body {
   border: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
   border-left: 4px solid var(--mantine-primary-color-filled);
 }
-/* A receipt's badge keeps its whole label: in a narrow column it wraps rather than ending in an ellipsis. */
-.receipt-band .mantine-Badge-root {
+/*
+ * A badge that keeps its whole label: in a narrow column or cell it wraps rather than ending in an ellipsis (no
+ * ellipsis on a fact, DESIGN.md 5.5). A receipt's badges always do; elsewhere put `wrap-badges` on the cell or group.
+ */
+:is(.receipt-band, .wrap-badges) .mantine-Badge-root {
   height: auto;
   min-height: var(--badge-height);
   max-width: 100%;
   padding-block: 2px;
 }
-.receipt-band .mantine-Badge-label {
+:is(.receipt-band, .wrap-badges) .mantine-Badge-label {
   white-space: normal;
   overflow: visible;
   text-overflow: clip;
@@ -903,6 +906,38 @@ body {
 }
 
 /*
+ * A long table that scrolls sideways inside its card keeps its first column (the row's name) in view: put
+ * `sticky-first-col` on the card that holds the `Table.ScrollContainer`. The sticky cells take the card's own surface
+ * in every appearance (white, dark, Pastel's card fill, high contrast's body), by inheriting it down the table's
+ * parts, each of which is transparent over the card. On a phone, where the rows are compact cards, nothing sticks.
+ */
+.sticky-first-col
+  :is(
+    .mantine-Table-scrollContainer,
+    .mantine-Table-scrollContainerInner,
+    .mantine-ScrollArea-root,
+    .mantine-ScrollArea-viewport,
+    .mantine-ScrollArea-viewport > div,
+    table,
+    thead,
+    tbody,
+    tr
+  ) {
+  background-color: inherit;
+}
+.sticky-first-col table :is(td, th):first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background-color: inherit;
+}
+@media (max-width: 35.99em) {
+  .sticky-first-col table :is(td, th):first-child {
+    position: static;
+  }
+}
+
+/*
  * The Scenarios page's six steps: a numbered strip that wraps on a phone. The gate's step carries a shield and a
  * heavier border, so it stands out without a colour of its own.
  */
@@ -927,11 +962,14 @@ body {
   border-color: var(--mantine-color-text);
 }
 
-/* The tone legend is a plain list. */
+/* The tone legend is a plain list. A badge keeps its width when its meaning wraps on a narrow screen. */
 .tone-legend {
   list-style: none;
   margin: 0;
   padding: 0;
+}
+.tone-legend > li > :first-child {
+  flex-shrink: 0;
 }
 
 /*
