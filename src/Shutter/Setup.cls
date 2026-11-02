@@ -382,6 +382,101 @@ ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %
     Quit out
 }
 
+/// The production's stored credentials against the users they name (v1.38; the v0.2.1 demo rehearsal: a rebuild that
+/// kept the data volume while the users got a new password left ShutterIntake and DownstreamAPI with the old one, so every
+/// forward and delivery answered 401 and no case opened). Each credential the install makes, DownstreamAPI here on a demo
+/// install and the demo hospital's DownstreamAPI and ShutterIntake, is tried by a login as the user and password it stores,
+/// in a short background job of this instance (no web request, no CSP session, no licence held: a check every 15 s from the
+/// compose healthcheck would otherwise sign in three times each): {namespace, name, user, status, ok, detail}, ok false when
+/// the login is refused or the credential is missing. The result is kept in ^Shutter.Health("credentials") for ten
+/// minutes (CACHESECONDS); refresh recomputes it now. The Doctor carries the list as credentials, with credentials_ok and
+/// credentials_checked_at; GET /health?refresh=1 recomputes for an operator.
+ClassMethod CredentialChecks(refresh As %Boolean = 0) As %DynamicArray
+{
+    Set at = $GET(^Shutter.Health("credentials", "at")), now = ##class(Shutter.Util.Time).EpochSeconds()
+    If 'refresh && (at '= "") && ((now - at) < ..#CACHESECONDS) {
+        Try { Return ##class(%DynamicArray).%FromJSON($GET(^Shutter.Health("credentials", "json"), "[]")) } Catch ex {}
+    }
+    Set out = []
+    If $GET(^Shutter.Config("demo")) Do out.%Push(..CredentialCheck($NAMESPACE, "DownstreamAPI"))
+    Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
+    If hospital '= "" {
+        Do out.%Push(..CredentialCheck(hospital, "DownstreamAPI"))
+        Do out.%Push(..CredentialCheck(hospital, "ShutterIntake"))
+    }
+    Set ^Shutter.Health("credentials", "json") = out.%ToJSON(), ^Shutter.Health("credentials", "at") = ##class(Shutter.Util.Time).EpochSeconds()
+    Set ^Shutter.Health("credentials", "iso") = ##class(Shutter.Util.Time).NowUTC()
+    Quit out
+}
+
+/// How long the credential checks' result is kept, in seconds.
+Parameter CACHESECONDS = 600;
+
+/// One stored credential tried: a login as its user and password, in a background job.
+ClassMethod CredentialCheck(ns As %String, name As %String) As %DynamicObject
+{
+    Set c = {}
+    Set c.namespace = ns, c.name = name, c.user = "", c.status = "", c.detail = ""
+    Do c.%Set("ok", 0, "boolean")
+    Try {
+        If '..StoredCredential(ns, name, .user, .password) {
+            Set c.status = "missing", c.detail = "no credential " _ name _ " in " _ ns
+        } Else {
+            Set c.user = user
+            If ..TryLogin(user, password, .reason) {
+                Set c.status = "ok", c.detail = user _ " signs in with the stored password"
+                Do c.%Set("ok", 1, "boolean")
+            } Else {
+                Set c.status = $SELECT(reason [ "did not answer": "error", 1: "refused")
+                Set c.detail = $SELECT(c.status = "refused": user _ " does not sign in with the stored password (" _ reason _ "): the credential and the user disagree, as after a rebuild that kept the data volume while the users got a new password", 1: reason)
+            }
+        }
+    } Catch ex {
+        Set c.status = "error", c.detail = ex.DisplayString()
+    }
+    Quit c
+}
+
+/// The user and password a namespace's credential stores; 0 when there is none.
+ClassMethod StoredCredential(ns As %String, name As %String, Output user As %String, Output password As %String) As %Boolean
+{
+    Set user = "", password = ""
+    New $NAMESPACE
+    Set $NAMESPACE = ns
+    Set cred = ##class(Ens.Config.Credentials).%OpenId(name)
+    If '$ISOBJECT(cred) Quit 0
+    Set user = cred.Username, password = cred.Password
+    Quit 1
+}
+
+/// Whether a user and password sign in to this instance: a background job logs in as them and reports through
+/// ^Shutter.Health("login", key), so this process keeps its own identity and no web session is made. Up to five seconds.
+ClassMethod TryLogin(user As %String, password As %String, Output reason As %String) As %Boolean
+{
+    Set reason = "", key = $JOB _ "." _ $ZHOROLOG
+    Kill ^Shutter.Health("login", key)
+    Job ##class(Shutter.Setup).LoginJob(user, password, key)
+    For i = 1:1:100 { Quit:$DATA(^Shutter.Health("login", key))  Hang 0.05 }
+    Set r = $GET(^Shutter.Health("login", key))
+    Kill ^Shutter.Health("login", key)
+    If r = "" Set reason = "the check did not answer within 5 s" Quit 0
+    Set reason = $PIECE(r, "|", 2, *)
+    Quit +$PIECE(r, "|", 1)
+}
+
+/// The background job of TryLogin: logs in as the user and writes 1 or 0 with the reason.
+ClassMethod LoginJob(user As %String, password As %String, key As %String)
+{
+    Set ok = 0, why = ""
+    Try {
+        Set ok = ''$SYSTEM.Security.Login(user, password)
+        If 'ok Set why = "the password is not the user's, or the user is disabled"
+    } Catch ex {
+        Set why = ex.DisplayString()
+    }
+    Set ^Shutter.Health("login", key) = ok _ "|" _ why
+}
+
 /// The live hospital's rotation from the build (SHUTTER_LIVE_SCENARIOS, v1.38): the scenario ids, comma-separated, each
 /// an S and a number with an optional letter (S23a), in the order to play; "default" or no valid id clears the override, and
 /// the player's own Scenarios setting applies again. Written as ^Hospital.Config("liveScenarios") in the hospital's
@@ -1308,7 +1403,7 @@ ClassMethod TailLog(lines As %Integer = 40) As %String [ SqlProc ]
 }
 
 /// A readiness report as JSON: what is installed, what runs, what is missing.
-ClassMethod Doctor() As %String [ SqlProc ]
+ClassMethod Doctor(refresh As %Boolean = 0) As %String [ SqlProc ]
 {
     Set r = {}
     Set r.namespace = $NAMESPACE
@@ -1346,6 +1441,13 @@ ClassMethod Doctor() As %String [ SqlProc ]
     // The cases still in a working state, and the quiet minutes after which an approver may abandon one (CONTRACTS 5, 12).
     &sql(SELECT COUNT(*) INTO :working FROM Shutter_Store."Case" WHERE State NOT IN ('resolved', 'blocked', 'escalated', 'failed'))
     Set r."working_cases" = +working, r."abandon_after_minutes" = ##class(Shutter.Store.Case).AbandonAfterMinutes()
+    // The stored credentials against the users they name (v1.38): a login each, cached ten minutes; refresh recomputes.
+    Set checks = ..CredentialChecks(refresh), allOk = 1
+    Set r.credentials = checks
+    Set cit = checks.%GetIterator()
+    While cit.%GetNext(, .check) { If 'check.ok Set allOk = 0 }
+    Do r.%Set("credentials_ok", allOk, "boolean")
+    Set r."credentials_checked_at" = $GET(^Shutter.Health("credentials", "iso"))
     // The pieces of the builds since 25 Oct (CONTRACTS 12, v1.31), so a fresh install and an upgrade show the same: every item
     // of INSTALLITEMS in the production and enabled, the gate's policy version, the catalogue's entries, the records namespace
     // of a demo install, the index's adapter, the questions.
