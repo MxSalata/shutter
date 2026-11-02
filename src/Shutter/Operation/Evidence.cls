@@ -203,6 +203,14 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     } Catch ex {
         Set summary.catalogue = {"decision": "error", "error": (ex.DisplayString())}
     }
+    // Precedents (6.4, v1.35): what approvers decided before on these conditions at this receiver, and whether it held.
+    // For the person and the app: the model view's allowlist leaves it out, and the material digest never includes it.
+    Try {
+        Set pcat = summary.%Get("catalogue")
+        Set summary.precedents = ##class(Shutter.Store.Precedent).Summary(case.Receiver, $SELECT($ISOBJECT(pcat): pcat.%Get("conditions"), 1: ""))
+    } Catch ex {
+        Set summary.precedents = {"error": (ex.DisplayString())}
+    }
     Set summary."fresh_until" = snap.FreshUntil
     Set sc = snap.Seal(summary)
     If $$$ISERR(sc) Set response.Error = $SYSTEM.Status.GetErrorText(sc) Quit $$$OK

@@ -1358,6 +1358,8 @@ ClassMethod Doctor() As %String [ SqlProc ]
     // The Second Parser (v1.34): the jar, and whether the Java gateway answers a probe.
     Set r."second_parser" = ##class(Shutter.Util.SecondParser).Status()
     Set r.license = ##class(%DynamicObject).%FromJSON(..LicenseInfo())
+    // Before the switch to %SYS below: New $NAMESPACE inside a Try lasts to the end of the method.
+    Set r."precedent_days" = ##class(Shutter.Store.Precedent).Days()
     Try {
         New $NAMESPACE
         Set $NAMESPACE = "%SYS"
