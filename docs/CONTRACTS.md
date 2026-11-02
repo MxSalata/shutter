@@ -723,6 +723,15 @@ within N hours; a person must decide"; the task's text says so in advance. A dec
 leaves the alarm with nothing to do. An incident's approval task (7.4) is not bounded this way: its chains wait on the
 incident.
 
+**Boards per minute are capped (v1.35; the review's B1 stopgap).** The Case Workflow's `BoardsPerMinute` (6 by default; 0 for
+no cap) counts the boards convened in the current UTC minute (`Shutter.Util.BoardSlots`, a global node per minute); a case
+whose turn finds the minute full does not convene at once: it notes "The board is busy: N convened this minute, the cap is M a
+minute; this case waits S s for a slot" (60 to 90 s), an `Ens.Alarm` keyed by the round brings it back (`board:defer`), and
+it convenes then, on its snapshot's summary, if it still waits and the round is the same. Both convening paths (the board on
+fresh evidence and the policy's `board`) go through one method. A storm of failures therefore costs at most the cap a minute,
+each case waits its turn and none is lost; the fuller answer, one board per failure signature with followers taking the
+leader's diagnosis, is the next step and is not in this build.
+
 **One model call is bounded (v1.35).** The runner gives the provider an HTTP request timeout, `Shutter.Setup.ProviderTimeoutSeconds`
 (`^Shutter.Config("providerTimeoutSeconds")`, `SHUTTER_PROVIDER_TIMEOUT_SECONDS` at a start, 120 s unless set, held to 10
 to 600), and a connect timeout of 10 s, as `http_config` on the provider's configuration unless the site's own configuration
