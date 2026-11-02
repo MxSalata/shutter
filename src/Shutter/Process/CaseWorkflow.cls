@@ -162,6 +162,9 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
         Set case.FailureOutcome = ##class(Shutter.Util.Json).Str(wr, "outcome"), case.FailureReasonCode = ##class(Shutter.Util.Json).Str(wr, "reason_code")
         Set status = ##class(Shutter.Util.Json).Str(wr, "http_status")
         If +status > 0 Set case.FailureHttpStatus = +status
+        // The receiver's Retry-After (v1.35): the resend's preflight read waits for it.
+        Set retryAfter = ##class(Shutter.Util.Json).Str(wr, "retry_after_seconds")
+        If +retryAfter > 0 Set case.RetryAfterUntil = ##class(Shutter.Util.Time).FromNow(+retryAfter)
     }
     // A withheld operation was never sent: its reason code (merge, cancel_unsupported) is the feed's, not the connector's.
     If (request.FailureReasonCode '= "") && ($ZSTRIP(request.WardResultJSON, "<>W") = "") Set case.FailureReasonCode = request.FailureReasonCode
@@ -1408,9 +1411,35 @@ Method OnApproval(case As Shutter.Store.Case, result As EnsLib.Workflow.TaskResp
     Quit ..SendPreflight(case)
 }
 
+/// Seconds the preflight read waits for the receiver's Retry-After: what is left of it, at most MAXRETRYAFTER; 0 when the
+/// case carries none or it has passed. now is an ISO UTC time, the clock when empty.
+ClassMethod PreflightWaitSeconds(case As Shutter.Store.Case, now As %String = "") As %Integer
+{
+    If '$ISOBJECT(case) || (case.RetryAfterUntil = "") Quit 0
+    If now = "" Set now = ##class(Shutter.Util.Time).NowUTC()
+    Set left = ##class(Shutter.Util.Time).SecondsBetween(now, case.RetryAfterUntil)
+    If left <= 0 Quit 0
+    Quit $SELECT(left > ..#MAXRETRYAFTER: ..#MAXRETRYAFTER, 1: left)
+}
+
+/// The longest the preflight read waits for a receiver's Retry-After, in seconds.
+Parameter MAXRETRYAFTER = 300;
+
 /// The preflight read of the receiver before the dispatch gate.
 Method SendPreflight(case As Shutter.Store.Case) As %Status
 {
+    // The receiver's Retry-After (v1.35; CONTRACTS 6.5): the first read after an unavailable answer waits as the receiver
+    // asked, 300 s at most; the wait is spent once.
+    Set wait = ..PreflightWaitSeconds(case)
+    If wait > 0 {
+        Set until = case.RetryAfterUntil
+        Set case.RetryAfterUntil = ""
+        Do case.Note("note", "The receiver asked for a pause before a retry (Retry-After, until " _ until _ "); the preflight read waits " _ wait _ " s", "system")
+        Set sc = case.%Save()
+        Set alarm = ##class(Ens.AlarmRequest).%New()
+        Set alarm.Timeout = wait
+        Quit ..SendRequestAsync("Ens.Alarm", alarm, 1, "preflight:retry")
+    }
     Set read = ##class(Shutter.Msg.WardOperation).%New()
     Set read.Purpose = "read", read.EncounterId = case.EncounterId, read.OperationKey = case.OperationKey, read.CaseId = case.CaseId
     Quit ..SendRequestAsync(..WardTargetFor(case), read, 1, "preflight")

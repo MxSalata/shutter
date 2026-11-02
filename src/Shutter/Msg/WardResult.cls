@@ -30,6 +30,9 @@ Property Error As %String(MAXLEN = 2000);
 
 Property DurationMs As %Integer;
 
+/// The receiver's Retry-After on a 503 or 429, in seconds (v1.35; the delta-seconds form only); empty when it sent none.
+Property RetryAfterSeconds As %Integer;
+
 /// True for the outcomes that mean the business operation is in effect at the receiver.
 Method IsInEffect() As %Boolean
 {
@@ -77,6 +80,9 @@ Storage Default
 </Value>
 <Value name="10">
 <Value>DurationMs</Value>
+</Value>
+<Value name="11">
+<Value>RetryAfterSeconds</Value>
 </Value>
 </Data>
 <DefaultData>WardResultDefaultData</DefaultData>
