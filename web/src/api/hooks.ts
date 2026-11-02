@@ -26,6 +26,8 @@ import {
   type Me,
   type Mode,
   type PlanView,
+  type Precedent,
+  type PrecedentsView,
   type ReviewAnnotation,
   type ReviewDetail,
   type ReviewList,
@@ -244,6 +246,27 @@ export const useAttempts = (id: string, open: boolean) =>
   useCasePart<AttemptView[]>(id, 'attempts', '/attempts', open);
 export const useClosure = (id: string, closed: boolean) =>
   useCasePart<Closure>(id, 'closure', '/closure', false, closed);
+/**
+ * The precedents the case's conditions match at its receiver (CONTRACTS 6.4, v1.35), read when asked for: the summary
+ * as it stands now, and every row, retired ones included. A server older than the route answers 404, read as null.
+ */
+export const usePrecedents = (id: string, enabled: boolean) =>
+  useCasePart<PrecedentsView>(id, 'precedents', '/precedents', false, enabled);
+
+/**
+ * Retire a precedent (approver only): it stays on record and counts for nothing. 409 already_retired names who
+ * retired it and when, in its detail. The list and the summary are read again either way.
+ */
+export function useRetirePrecedent(caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string | number; reason: string }) =>
+      api.post<Precedent>(`/precedents/${seg(String(id))}/retire`, { reason }),
+    onSettled: async () => {
+      await client.invalidateQueries({ queryKey: keys.part(caseId, 'precedents') });
+    },
+  });
+}
 /**
  * The blocked reason: the catalogue entry and the gate's failing checks. The API nests the entry
  * (`{code, catalogue, failingChecks}`); the flat shape of CONTRACTS 5.3 is read too.

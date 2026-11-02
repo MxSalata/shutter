@@ -262,12 +262,19 @@ export interface Snapshot {
 
 export interface ToolCall {
   seq: number;
+  /**
+   * When the call was logged, to the millisecond: the bridge's audit policy writes the row once the tool has answered,
+   * so the call ran from `at` minus `durationMs` to `at`.
+   */
   at: string;
   name: string;
   arguments: unknown;
   durationMs: number;
   ok: boolean;
   resultPreview: string;
+  error?: string;
+  /** Refused by the authorisation policy before it ran (v1.35): `ok` is false and `durationMs` 0, nothing ran. */
+  denied?: boolean;
 }
 
 export interface Finding {
@@ -307,6 +314,72 @@ export interface AgentRun {
   toolCalls: ToolCall[];
   /** The run's message in the Management Portal, when the API gives it. */
   messageLink?: string;
+  /** The snapshot the run read: one board pass's runs share it. */
+  snapshotId?: string | number;
+  /** The question the run answered (Ask about this case), empty for an investigation's run. */
+  questionId?: string | null;
+  /**
+   * The run's own clock (CONTRACTS 9, v1.35): the start to the millisecond, beside `startedAt` (to the second), and
+   * AI Hub's counters when the build gives them (time inside the model's calls, time inside the tools, reasoning
+   * tokens). A replay, or a build that gives none, leaves the counters empty, never zero.
+   */
+  startedAtMs?: string | null;
+  llmMs?: number | null;
+  toolMs?: number | null;
+  reasoningTokens?: number | null;
+}
+
+// ---- precedents (CONTRACTS 6.4, v1.35) ----
+
+/**
+ * What approvers decided before on the same conditions at the same receiver, as every snapshot summary carries it
+ * (`precedents`) and GET /cases/{id}/precedents gives it now: the active rows of the last `windowDays` days.
+ * `samePolicy` says whether the last decision was taken under the policy and site profile versions in force now.
+ */
+export interface PrecedentSummary {
+  approved: number;
+  rejected: number;
+  lastDecision: '' | 'approved' | 'rejected';
+  lastApprover: string;
+  lastAt: string;
+  lastCaseId: string;
+  samePolicy: boolean;
+  windowDays: number;
+  signature: string;
+  /** The collector could not read them. */
+  error?: string;
+}
+
+/** One person's decision on these conditions at this receiver; a retired one stays, with `active` false. */
+export interface Precedent {
+  id: string | number;
+  caseId: string;
+  receiver: string;
+  signature?: string;
+  conditions?: unknown;
+  catalogueEntry?: string;
+  catalogueOutcome?: string;
+  disposition?: string;
+  planDigest?: string;
+  approver: string;
+  /** approved: the person approved and the write was verified at the receiver; rejected: the person rejected the plan. */
+  decision: 'approved' | 'rejected';
+  policyVersion?: string;
+  siteProfileVersion?: string | number;
+  catalogueVersion?: string;
+  createdAt: string;
+  active: boolean;
+  retiredAt?: string;
+  retiredBy?: string;
+  retiredReason?: string;
+}
+
+/** GET /cases/{id}/precedents: the case's receiver and conditions, the summary now, and every row, newest first. */
+export interface PrecedentsView {
+  receiver: string;
+  conditions: unknown;
+  summary: PrecedentSummary;
+  precedents: Precedent[];
 }
 
 export interface Plan {
