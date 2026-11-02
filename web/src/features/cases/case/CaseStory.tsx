@@ -12,8 +12,8 @@ import { DispatchPanel, VerificationPanel } from './DispatchPanel';
 import { FailurePanel } from './FailurePanel';
 import {
   decisionSummary,
-  evidenceSummary,
   failedSummary,
+  observationsSummary,
   proposedSummary,
   verifiedSummary,
   writtenSummary,
@@ -43,6 +43,7 @@ function Step({
   children: ReactNode;
 }) {
   return (
+    // Scrolled to, it stops under the sticky tab bar: the tab panel's class (`.case-tab-panel`) sets its margin
     <Accordion.Item value={value} id={`story-${value}`} data-tour={`case-${value}`}>
       <Accordion.Control>
         <Text span display="block" fw={600}>
@@ -122,7 +123,12 @@ export function CaseStory({
       <Step value="failed" n={1} title="What failed" summary={failedSummary(c)}>
         <FailurePanel c={c} />
       </Step>
-      <Step value="evidence" n={2} title="What the evidence says" summary={evidenceSummary(facts.snapshot)}>
+      <Step
+        value="evidence"
+        n={2}
+        title="What the evidence says"
+        summary={observationsSummary(facts.snapshot, c.receiver)}
+      >
         <Stack gap="sm">
           {key.length ? (
             <KeyValueList
@@ -180,7 +186,7 @@ export function CaseStory({
         <Step
           value="compare"
           title="Why the board matters"
-          summary="The same failure played by rules alone and by the board: what each did at the receiver, and the evidence both read."
+          summary="Rules alone and the board on the same failure, side by side."
         >
           <S8Compare caseId={c.caseId} focus={compareFocus} />
         </Step>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ApprovalsView, AttemptView, CaseDetail, Closure, PlanView, Snapshot } from '@/api/types';
 import fixtures from '@/mocks/fixtures.json';
-import { safetyReceipt } from './receipt';
+import { proposalCaption, safetyReceipt, writesCaption, writesDetail } from './receipt';
 
 type Recorded = (typeof fixtures.cases)[keyof typeof fixtures.cases];
 
@@ -125,5 +125,26 @@ describe('safetyReceipt', () => {
     expect(r.disposition).toBe('resend');
     expect(r.writes).toBe(0);
     expect(r.verification).toBe('Not applicable: blocked with nothing written');
+  });
+});
+
+describe("the receipt's plain captions", () => {
+  it('says a resend in plain words, and keeps its condition for the details', () => {
+    const r = receiptOf('C-000021');
+    expect(proposalCaption(r)).toBe('Send it again, unchanged');
+    expect(writesCaption(r)).toBe('1 update, accepted');
+    expect(writesDetail(r)).toBe('1 acknowledged; conditional on version 2, epoch 227');
+  });
+
+  it('keeps the proposal of a plan that writes nothing as it is, and says nothing beside 0 writes', () => {
+    const r = receiptOf('C-000008');
+    expect(proposalCaption(r)).toBe('Escalate: no write to the receiver');
+    expect(writesCaption(r)).toBe('');
+    expect(writesDetail(r)).toBe('');
+  });
+
+  it('says a write the receiver did not confirm, and the attempts it did not take', () => {
+    const r = { ...receiptOf('C-000021'), acknowledged: 0, notWritten: 1 };
+    expect(writesCaption(r)).toBe('1 update, not confirmed; 1 attempt the receiver did not take');
   });
 });

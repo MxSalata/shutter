@@ -4,13 +4,14 @@ import type {
   AttemptView,
   BlockedReason,
   CaseDetail,
+  CaseEvent,
   Escalation,
   PlanView,
   Snapshot,
 } from '@/api/types';
 import { displayZone, humanize } from '@/lib/format';
 import { asArray, asObject } from '@/lib/json';
-import { APPROVALS, caseState, gateOutcome, PROVENANCE, verification } from '@/lib/status';
+import { APPROVALS, caseState, gateOutcome, PROVENANCE, type OutcomeCase } from '@/lib/status';
 import type { Status } from '@/lib/tone';
 import { checksOf } from './derive';
 import { approvalsByPlan, type SafetyReceipt } from './receipt';
@@ -54,13 +55,6 @@ function sentence(parts: string[]): string {
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
-/** The writes Shutter made, or Unknown while the attempts are not read. */
-export function writesText(f: CaseFacts): string {
-  if (f.attempts === undefined) return 'Writes unknown';
-  const shutter = f.c.disposition === 'handled_by_hand' ? 'Shutter write' : 'write';
-  return plural(f.receipt.writes, shutter);
-}
-
 /** The systems that sent an operation for the encounter at the same event time as another: S8's two movers. */
 export function sameTimeSystems(snapshot: Snapshot | null | undefined): string[] {
   if (!snapshot) return [];
@@ -99,21 +93,98 @@ function appliedVersions(attempts: AttemptView[] | null | undefined): string {
   return '';
 }
 
-/** The headline: the state, the writes and, where there is a write or a hand correction, the verification. */
-export function outcomeHeadline(f: CaseFacts): string {
+/**
+ * What came of the case, as the case list and the outcome band colour it (lib/status.ts caseOutcome): its state and
+ * disposition, and what it wrote and what the verifier found once the attempts are read. Only a verifier's own outcome
+ * counts as a verification, as the case list's summary counts it; until the attempts are read both stay unknown, so the
+ * outcome reads "Resolved" rather than guessing.
+ */
+export function outcomeCaseOf(f: CaseFacts): OutcomeCase {
   const { c, receipt } = f;
-  const byHand = c.disposition === 'handled_by_hand';
-  const parts = [
-    byHand ? 'Closed' : c.disposition === 'abandoned' ? 'Abandoned' : caseState(c.state).label,
-    byHand ? 'Handled by hand' : '',
-    writesText(f),
-  ];
-  if (receipt.verificationState && (receipt.writes > 0 || byHand))
-    parts.push(verification(receipt.verificationState).label);
-  return parts.filter(Boolean).join(' · ');
+  const base: OutcomeCase = {
+    state: c.state,
+    disposition: c.disposition,
+    receiver: c.receiver,
+    mode: c.mode,
+  };
+  if (f.attempts === undefined) return base;
+  return {
+    ...base,
+    writes: receipt.writes,
+    verification: VERIFIER_OUTCOMES.includes(receipt.verificationState) ? receipt.verificationState : '',
+  };
 }
 
-/** The short reason under the headline. */
+/** The verifier's own outcomes; the receipt's other verification states say why there was none. */
+const VERIFIER_OUTCOMES = ['verified', 'unresolved', 'not_committed', 'failed'];
+
+/** Whether the receiver's dry run of the plan's exact write passed. */
+const rehearsed = (f: CaseFacts) => f.plan?.rehearsal?.wouldApply === true;
+
+/** "once", "twice", "3 times". */
+const times = (n: number) => (n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`);
+
+/**
+ * What Shutter did, leading with the action, since the outcome band above it says what came of it: "Sent the transfer
+ * again, once, after a test run", "Asked a person to decide; sent nothing", "Sent nothing: a later event already moved
+ * the patient on". Built from the disposition, the writes and whether the rehearsal passed; a write count not read yet
+ * is never guessed.
+ */
+export function actionHeadline(f: CaseFacts): string {
+  const { c, receipt } = f;
+  const event = humanize(c.event).toLowerCase() || 'message';
+  const disposition = f.plan?.plan?.disposition || c.disposition;
+  const unknown = f.attempts === undefined;
+  const sent = receipt.writes;
+  const sentAgain = `Sent the ${event} again, ${times(sent)}${rehearsed(f) ? ', after a test run' : ''}`;
+  if (c.disposition === 'handled_by_hand') return 'Handed it to the team, who corrected it by hand';
+  if (c.disposition === 'abandoned') return 'Gave the case up when its workflow stopped moving';
+  switch (c.state) {
+    case 'resolved':
+      if (unknown) return 'Closed the case; what it sent is not read yet';
+      if (sent > 0) return sentAgain;
+      if (disposition === 'superseded') return 'Sent nothing: a later event already moved the patient on';
+      if (disposition === 'reconcile') return 'Sent nothing: the receiver already has it';
+      return 'Closed the case; sent nothing';
+    case 'escalated':
+      return 'Asked a person to decide; sent nothing';
+    case 'blocked': {
+      const rejected = (f.approvals?.approvals ?? []).some((a) => a.decision === 'rejected' && !a.revoked);
+      return rejected
+        ? 'Sent nothing: a person rejected the plan'
+        : gateStopped(f)
+          ? 'Sent nothing: the gate stopped the plan'
+          : 'Sent nothing: the case was stopped';
+    }
+    case 'failed':
+      return unknown || sent === 0
+        ? 'Stopped when the workflow failed; sent nothing'
+        : `${sentAgain}; then the workflow failed`;
+    case 'awaiting_approval':
+      return rehearsed(f)
+        ? 'Tested the fix at the receiver; sent nothing yet'
+        : 'Prepared the fix; sent nothing yet';
+    default:
+      return `Working on it: ${caseState(c.state).label.toLowerCase()}`;
+  }
+}
+
+/**
+ * When the recorded case was approved: the time its events record the move out of awaiting approval, "20 Oct, 17:24
+ * UTC", for the note the trial shows once it has replayed what the case did after a reader's approval. Empty when the
+ * events record no approval.
+ */
+export function recordedApprovalTime(events: CaseEvent[] | null | undefined): string {
+  const e = (events ?? []).find(
+    (x) => x.kind === 'state' && x.fromState === 'awaiting_approval' && x.toState === 'approved',
+  );
+  const d = e?.at ? new Date(e.at) : null;
+  if (!d || Number.isNaN(d.getTime())) return '';
+  const day = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(d);
+  return `${day}, ${d.toISOString().slice(11, 16)} UTC`;
+}
+
+/** The short reason under What Shutter did. */
 export function outcomeReason(f: CaseFacts): string {
   const { c } = f;
   const target = `${humanize(c.event)}${c.ward ? ` to ${c.ward}` : ''}`;
@@ -333,6 +404,23 @@ export function evidenceSummary(snapshot: Snapshot | null | undefined): string {
   const systems = sameTimeSystems(snapshot);
   if (systems.length > 1) parts.push(`${systems.join(' and ')} have the same event time`);
   return sentence(parts.length ? parts : [`${plural(snapshot.items.length, 'observation')} recorded`]);
+}
+
+/**
+ * The evidence step's line: what was observed and from where, since the outcome's first card already says what the
+ * evidence found. "7 observations: the message, the connector, Downstream Out and the encounter's timeline."
+ */
+export function observationsSummary(snapshot: Snapshot | null | undefined, receiver?: string): string {
+  if (!snapshot) return 'No evidence yet.';
+  const kinds = new Set(snapshot.items.map((x) => x.kind));
+  const from = [
+    kinds.has('message') ? 'the message' : '',
+    kinds.has('error') || kinds.has('route') ? 'the connector' : '',
+    kinds.has('ward_state') || kinds.has('receipt') ? receiver || 'the receiver' : '',
+    "the encounter's timeline",
+  ].filter(Boolean);
+  const list = from.length > 1 ? `${from.slice(0, -1).join(', ')} and ${from.at(-1)}` : from[0];
+  return `${plural(snapshot.items.length, 'observation')}: ${list}.`;
 }
 
 /** Who proposed what: the coordinator, one agent, the rules or the site's policy, with any dissent kept. */

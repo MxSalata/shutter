@@ -53,6 +53,11 @@ describe('EscalationPanel', () => {
     const panel = await screen.findByRole('region', { name: 'Escalations' });
     await userEvent.click(await within(panel).findByRole('button', { name: /^Escalate to /i }));
     const dialog = await screen.findByRole('dialog', { name: /^Escalate to / });
+    // The confirm says first that sending is real, with the live chip beside its title
+    expect(within(dialog).getByTestId('confirm-consequence')).toHaveTextContent(
+      /^This emails the .+ team\.$/,
+    );
+    expect(within(dialog).getByText('Live system')).toBeInTheDocument();
     const message = within(dialog).getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement;
     expect(message.value).toContain('Hospital number: MRN1008 (HOSP)');
     expect(message.value).toContain('Transfer to WARD-B at 2026-10-15 08:20 UTC');
@@ -159,9 +164,9 @@ describe('EscalationPanel', () => {
     // The case reads as handled by the team, and the email it followed stays as its record in the audit trail,
     // with no actions
     const top = await screen.findByRole('region', { name: 'Outcome' });
-    expect(
-      await within(top).findByText('Closed · Handled by hand · 0 Shutter writes · Not verified by Shutter'),
-    ).toBeInTheDocument();
+    await waitFor(() => expect(within(top).getByTestId('outcome-line')).toHaveTextContent('Handled by hand'));
+    expect(within(top).getByText('Handed it to the team, who corrected it by hand')).toBeInTheDocument();
+    expect(within(top).getByText('Not verified by Shutter')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Escalations' })).toBeNull());
     await userEvent.click(screen.getByRole('tab', { name: 'Audit trail' }));
     const record = await screen.findByRole('region', { name: 'Escalations' });
@@ -323,7 +328,9 @@ describe('EscalationPanel', () => {
 
   it('is not offered on a case Shutter resolved', async () => {
     renderCase('C-000009');
-    expect(await screen.findByText(/^Resolved · 1 write/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId('outcome-line')).toHaveTextContent('Delivered: verified at the receiver'),
+    );
     expect(screen.queryByRole('region', { name: 'Escalations' })).not.toBeInTheDocument();
   });
 });

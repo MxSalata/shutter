@@ -1,6 +1,8 @@
 import type { AttemptView, CaseDetail, CaseSummary, Closure, PlanView, Snapshot } from '@/api/types';
 import { asArray, asObject } from '@/lib/json';
 import { displayZone, formatZoned, humanize } from '@/lib/format';
+import type { PlayedResult } from '@/lib/proof';
+import type { Tone } from '@/lib/tone';
 import { WRITE_OUTCOMES } from './receipt';
 import { encounterTimeline, type TimelineRow } from './timeline';
 
@@ -153,4 +155,30 @@ export function evidenceRows(rules: EvidenceFacts | null, board: EvidenceFacts |
     board: k === 'takenAt' ? formatZoned(board[k]) : board[k],
     same: rules[k] === board[k],
   }));
+}
+
+/**
+ * How the evaluation scored one mode's play of a scenario (lib/proof.ts playedFor), as the compare strip marks it:
+ * "Board: as expected", "Rules alone: differs, wrote WARD-B", "Rules alone: stopped by the gate, nothing written".
+ * The tone is the evaluation result's: as expected positive, a wrong write or another outcome blocking, a stop by
+ * the gate neutral. Null for a scenario the mode did not play.
+ */
+export function playedMark(
+  who: 'board' | 'rules',
+  result: PlayedResult | null | undefined,
+  ward?: string,
+): { label: string; tone: Tone } | null {
+  const name = who === 'board' ? 'Board' : 'Rules alone';
+  switch (result) {
+    case 'as-expected':
+      return { label: `${name}: as expected`, tone: 'positive' };
+    case 'wrote-wrongly':
+      return { label: `${name}: differs, wrote ${ward || 'the receiver'}`, tone: 'blocking' };
+    case 'stopped':
+      return { label: `${name}: stopped by the gate, nothing written`, tone: 'neutral' };
+    case 'differs':
+      return { label: `${name}: differs`, tone: 'blocking' };
+    default:
+      return null;
+  }
 }

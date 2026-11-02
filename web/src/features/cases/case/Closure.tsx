@@ -1,23 +1,25 @@
-import { Button, Group, List, Modal, Stack, Text, Textarea } from '@mantine/core';
+import { Button, Group, List, Stack, Text, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { newIdempotencyKey } from '@/api/client';
 import { useClosure, useMe, useReinvestigate } from '@/api/hooks';
 import type { CaseDetail } from '@/api/types';
 import { TRIAL } from '@/env/mode';
+import { NOT_IN_TRIAL } from '@/env/copy';
 import { describeError } from '@/lib/errors';
 import { KeyValueList } from '@/components/KeyValueList';
 import { Timestamp } from '@/components/Timestamp';
 import { asArray } from '@/lib/json';
 import { humanize } from '@/lib/format';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { Section } from './Section';
 
 const text = (x: unknown) => (typeof x === 'string' ? x : JSON.stringify(x));
 
 /**
  * Reopens a case that stopped (blocked, escalated or failed) once its cause may have changed: the case collects fresh
- * evidence and gets a new plan version, and the earlier plan and approval stay as history. For operators; the
- * recorded demo can't start new work, so it doesn't offer it.
+ * evidence and gets a new plan version, and the earlier plan and approval stay as history. For operators. The trial
+ * shows it disabled with its reason: a new investigation needs a real model, which the trial never calls.
  */
 export function Reinvestigate({ c }: { c: CaseDetail }) {
   const me = useMe().data;
@@ -25,7 +27,18 @@ export function Reinvestigate({ c }: { c: CaseDetail }) {
   const [opened, setOpened] = useState(false);
   const [reason, setReason] = useState('');
   const [key, setKey] = useState('');
-  if (TRIAL || !me?.operator) return null;
+  if (TRIAL)
+    return (
+      <Group gap="sm" wrap="wrap">
+        <Button variant="default" disabled aria-describedby="reinvestigate-reason">
+          Reinvestigate
+        </Button>
+        <Text size="xs" c="dimmed" id="reinvestigate-reason">
+          {NOT_IN_TRIAL.model}
+        </Text>
+      </Group>
+    );
+  if (!me?.operator) return null;
   const open = () => {
     setReason('');
     setKey(newIdempotencyKey());
@@ -48,17 +61,18 @@ export function Reinvestigate({ c }: { c: CaseDetail }) {
     );
   return (
     <>
+      {/* What it does is said in its confirm, with the history it keeps */}
       <Group gap="sm" wrap="wrap">
         <Button variant="default" onClick={open}>
           Reinvestigate
         </Button>
-        <Text size="xs" c="dimmed">
-          Reopens the case with fresh evidence and a new plan version; the earlier plan and approval stay as
-          history.
-        </Text>
       </Group>
-      <Modal opened={opened} onClose={() => setOpened(false)} title={`Reinvestigate ${c.caseId}`}>
+      <ConfirmModal opened={opened} onClose={() => setOpened(false)} title={`Reinvestigate ${c.caseId}`}>
         <Stack gap="sm">
+          <Text size="sm">
+            The case collects fresh evidence and is investigated again, with a new plan version; the earlier
+            plan and approval stay as history.
+          </Text>
           <Textarea
             label="Why look again"
             description="Recorded on the case with your name"
@@ -82,7 +96,7 @@ export function Reinvestigate({ c }: { c: CaseDetail }) {
             </Button>
           </Group>
         </Stack>
-      </Modal>
+      </ConfirmModal>
     </>
   );
 }

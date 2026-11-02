@@ -5,13 +5,25 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CaseDetail, CaseEvent } from '@/api/types';
 import fixtures from '@/mocks/fixtures.json';
 import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
 import { theme } from '@/theme';
 import CasePage from '../CasePage';
+
+/** Whether the page is the trial: set per test. */
+const env = vi.hoisted(() => ({ trial: false }));
+vi.mock('@/env/mode', async (importOriginal) => {
+  const mode = await importOriginal<typeof import('@/env/mode')>();
+  return {
+    ...mode,
+    get TRIAL() {
+      return env.trial;
+    },
+  };
+});
 
 const ID = 'C-000008';
 const recorded = (fixtures.cases as unknown as Record<string, { detail: CaseDetail; events: CaseEvent[] }>)[
@@ -35,6 +47,7 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 beforeEach(() => {
   resetMock('approver');
+  env.trial = false;
   notifications.clean();
   bodies = [];
   server.events.removeAllListeners();
@@ -104,8 +117,12 @@ describe('AbandonPanel', () => {
       { reason: 'The production restarted mid-run', expectedVersion: expect.any(Number) },
     ]);
     const top = await screen.findByRole('region', { name: 'Outcome' });
-    expect(await within(top).findByText('Abandoned · 0 writes')).toBeInTheDocument();
-    expect(screen.getByText('Abandoned')).toBeInTheDocument();
+    await waitFor(() => expect(within(top).getByTestId('outcome-line')).toHaveTextContent('Abandoned'));
+    expect(within(top).getByText('Gave the case up when its workflow stopped moving')).toBeInTheDocument();
+    // The header says it once: the outcome, then the state it left the case in
+    const status = screen.getByRole('heading', { name: `Case ${ID}` }).parentElement!;
+    expect(within(status).getAllByText('Abandoned')).toHaveLength(1);
+    expect(within(status).getByText('Failed')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Still working' })).not.toBeInTheDocument();
   });
 
@@ -178,5 +195,27 @@ describe('AbandonPanel', () => {
     renderCase();
     await eventsRead();
     expect(screen.queryByRole('region', { name: 'Still working' })).not.toBeInTheDocument();
+  });
+
+  it('shows in the trial disabled, with its reason, and opens no dialog', async () => {
+    env.trial = true;
+    leftCollecting(recorded.events);
+    renderCase();
+    const panel = await screen.findByRole('region', { name: 'Still working' });
+    const button = within(panel).getByRole('button', { name: 'Abandon the case…' });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAccessibleDescription("Not in the trial's recording");
+    await userEvent.click(button).catch(() => undefined);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(bodies).toEqual([]);
+  });
+
+  it('carries the live chip beside its confirm on a live system', async () => {
+    leftCollecting(recorded.events);
+    renderCase();
+    const panel = await screen.findByRole('region', { name: 'Still working' });
+    await userEvent.click(within(panel).getByRole('button', { name: 'Abandon the case…' }));
+    const dialog = await screen.findByRole('dialog', { name: `Abandon ${ID}` });
+    expect(within(dialog).getByText('Live system')).toBeInTheDocument();
   });
 });

@@ -5,7 +5,10 @@ import { humanize } from '@/lib/format';
 import { traceScreenshot } from '@/lib/screenshots';
 import { NotYet, Section } from './Section';
 
-/** The case in the Management Portal, in one place: its message trace, its workflow and each agent run's message. */
+/**
+ * The case in the Management Portal, in one place, on the audit trail: its message trace, its workflow and each agent
+ * run's message. The header's IRIS row carries the guide's marks (`case-iris`, `open-trace`).
+ */
 export function PortalLinks({
   c,
   runs,
@@ -20,7 +23,6 @@ export function PortalLinks({
   return (
     <Section
       id="portal"
-      tour="case-iris"
       title="In the Management Portal"
       note="The production's own record of this case: the messages, the workflow and each agent's request and answer."
     >
@@ -32,7 +34,6 @@ export function PortalLinks({
               href={c.links.visualTrace}
               what={`the Visual Trace of session ${c.ensSessionId}`}
               screenshot={traceScreenshot(c)}
-              tourAction="open-trace"
             >
               Message trace
             </PortalLink>

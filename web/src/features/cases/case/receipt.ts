@@ -239,3 +239,41 @@ export function safetyReceipt({
     status: statusOf(c, sent.length, closure, last?.outcome === 'verified' ? 'verified at the receiver' : ''),
   };
 }
+
+/**
+ * The receipt's facts in plain words, one caption each (the newcomer's layer): what was proposed, what was written
+ * and whether the receiver took it. The versions, epochs, policy ids and times stay in the copied receipt and in the
+ * receipt's "Versions, keys and times".
+ */
+export function proposalCaption(r: SafetyReceipt): string {
+  return r.disposition === 'resend' && r.planVersion !== null ? 'Send it again, unchanged' : r.action;
+}
+
+/** "1 update, accepted"; "1 update, not confirmed"; nothing for no write, which the badge says. */
+export function writesCaption(r: SafetyReceipt): string {
+  const updates = r.writes ? `${r.writes} update${r.writes === 1 ? '' : 's'}` : '';
+  const how = !r.writes
+    ? ''
+    : r.acknowledged === r.writes
+      ? 'accepted'
+      : r.acknowledged
+        ? `${r.acknowledged} accepted`
+        : 'not confirmed';
+  const refused = r.notWritten
+    ? `${r.notWritten} attempt${r.notWritten === 1 ? '' : 's'} the receiver did not take`
+    : '';
+  return [updates ? `${updates}, ${how}` : '', refused].filter(Boolean).join('; ');
+}
+
+/** The writes' versions and epoch, as the copied receipt names them: "1 acknowledged; conditional on version 2, epoch 227". */
+export function writesDetail(r: SafetyReceipt): string {
+  return [
+    r.writes ? `${r.acknowledged} acknowledged` : '',
+    r.notWritten ? `${r.notWritten} attempt${r.notWritten === 1 ? '' : 's'} the receiver did not take` : '',
+    r.writes && r.expectedVersion
+      ? `conditional on version ${r.expectedVersion}${r.receiverEpoch ? `, epoch ${r.receiverEpoch}` : ''}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('; ');
+}
