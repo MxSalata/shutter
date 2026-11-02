@@ -37,3 +37,12 @@ export const guideDock = cell<HTMLElement | null>(null);
 export const useGuideCardShown = () => useSyncExternalStore(guideCard.subscribe, guideCard.get, () => false);
 
 export const useGuideDock = () => useSyncExternalStore(guideDock.subscribe, guideDock.get, () => null);
+
+/**
+ * The section the guide's open step points at (its `data-tour` name), from the step's start until it ends: a page that
+ * folds a section away (the case's Outcome band, closed on a resolved case or by the reader) opens it while the guide
+ * shows it or something inside it.
+ */
+export const guideTarget = cell<string | null>(null);
+
+export const useGuideTarget = () => useSyncExternalStore(guideTarget.subscribe, guideTarget.get, () => null);

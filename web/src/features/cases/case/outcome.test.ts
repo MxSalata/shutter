@@ -13,6 +13,7 @@ import type {
 import fixtures from '@/mocks/fixtures.json';
 import { caseOutcome } from '@/lib/status';
 import {
+  actionHead,
   actionHeadline,
   decisionSummary,
   evidenceSummary,
@@ -296,5 +297,28 @@ describe('provenance', () => {
     expect(provenanceOf('board', [{ mode: 'live' } as AgentRun]).label).toBe('Live model');
     expect(provenanceOf('board', undefined).label).toBe('Unknown');
     expect(provenanceOf('policy', []).label).toBe("No model: the site's policy");
+  });
+});
+
+describe("the next action's head and rest", () => {
+  it('keeps an action of up to 16 words whole', () => {
+    const text = "Read the findings and the gate's notes, then decide how to recover the message by hand.";
+    expect(actionHead(text)).toEqual({ head: text, rest: '' });
+  });
+
+  it("cuts a longer one after its first sentence, as S25's parse failure", () => {
+    const text = fixtures.cases['C-000064'].blockedReason!.catalogue.nextAction;
+    const { head, rest } = actionHead(text);
+    expect(head).toBe("Read the gate's words.");
+    expect(`${head} ${rest}`).toBe(text);
+  });
+
+  it('cuts a long first sentence at its first semicolon or colon, dropping no word', () => {
+    const text =
+      'Hand the merge to the PAS team named for the sending application; mark the case handled when it confirms what it did.';
+    expect(actionHead(text)).toEqual({
+      head: 'Hand the merge to the PAS team named for the sending application',
+      rest: 'Mark the case handled when it confirms what it did.',
+    });
   });
 });

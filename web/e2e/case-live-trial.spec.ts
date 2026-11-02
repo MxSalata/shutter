@@ -248,6 +248,30 @@ test.beforeEach(({ page }) =>
 );
 
 test.describe(`the live case page against a v1.35 server ${area.tag}`, () => {
+  test('draws where it failed, names the patient and the message type, and offers the approver the decision', async ({
+    page,
+  }) => {
+    const { unknown } = await stubServer(page);
+    await openCase(page);
+    const picture = page.getByRole('img', { name: /^Where it failed: PAS sent the transfer to WARD-B/ });
+    await expect(picture).toContainText('Not delivered');
+    await expect(picture).toContainText('Bed-management system');
+    await expect(page.getByTestId('case-message-type')).toHaveText('2.5.1:ADT_A02');
+    await expect(page.getByText('MRN1002', { exact: true })).toBeVisible();
+    const action = page.getByTestId('case-action');
+    await expect(action).toHaveAccessibleName('Needs you: decide on the resend');
+    await page
+      .getByRole('region', { name: 'Outcome' })
+      .getByRole('button', { name: 'Outcome', exact: true })
+      .click();
+    await action.click();
+    await expect(page.getByRole('heading', { name: 'What needs you now' })).toBeFocused();
+    // The strip's Evidence stage opens the Evidence tab
+    await page.getByRole('button', { name: 'Evidence: done, show the evidence' }).click();
+    await expect(page.getByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
+    expect(unknown).toEqual([]);
+  });
+
   test('draws when each agent worked under the specialists: closed in Plain, the picture, its sentence and a table', async ({
     page,
   }) => {

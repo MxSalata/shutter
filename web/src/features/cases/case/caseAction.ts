@@ -1,0 +1,93 @@
+import { resolveCan } from '@/api/can';
+import type { Me } from '@/api/types';
+import { caseState } from '@/lib/status';
+import { nextAction, type CaseFacts } from './outcome';
+
+/**
+ * What the case needs from the person reading it, for the action button at the top of the case page (and its copy in
+ * the sticky tab bar): the same logic that fills "What needs you now" (`nextAction`), narrowed to what this user may
+ * do. `needsYou` draws it in the attention tone; otherwise it is a quiet outline that still takes the reader to the card.
+ */
+export interface CaseAction {
+  needsYou: boolean;
+  /** The words on the button: "Decide on the resend", "Escalate to a team", "No action needed". */
+  label: string;
+  /** The compact copy's word: "Needs you" or "No action". */
+  short: string;
+  /** The accessible name, the state in a sentence, the label inside it: "Needs you: decide on the resend". */
+  name: string;
+}
+
+const lowerFirst = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
+
+const yours = (label: string): CaseAction => ({
+  needsYou: true,
+  label,
+  short: 'Needs you',
+  name: `Needs you: ${lowerFirst(label)}`,
+});
+
+const nothing = (why = ''): CaseAction => ({
+  needsYou: false,
+  label: 'No action needed',
+  short: 'No action',
+  name: `No action needed on this case${why ? `: ${why}` : ''}`,
+});
+
+const notYours = (label: string, why = ''): CaseAction => ({
+  needsYou: false,
+  label,
+  short: 'No action',
+  name: `No action for you: ${why || lowerFirst(label)}`,
+});
+
+export interface ActionContext {
+  /** The signed-in user, once read; undefined while not read. */
+  me: Me | null | undefined;
+  /**
+   * Whether the site keeps the two-person rule for closing a case by hand (the site profile's `close_needs_approver`);
+   * undefined while the profile is not read, when only an approver is known to be able to close.
+   */
+  closeNeedsApprover?: boolean;
+  /** The trial: a reinvestigation needs a real model and is not offered. */
+  trial?: boolean;
+}
+
+/**
+ * The case's action for this user:
+ * - waiting for approval: an approver decides on the plan ("Decide on the resend"); anyone else waits for one;
+ * - stopped (blocked, escalated, failed): an operator marks it handled once the escalation went out, escalates it
+ *   when that is the next step, reinvestigates a failed one (not in the trial), and otherwise decides the next step
+ *   "What needs you now" names; a user who cannot operate waits for an operator, and a site with the two-person rule
+ *   leaves closing to an approver;
+ * - running, or closed: nothing is needed.
+ */
+export function caseActionOf(f: CaseFacts, ctx: ActionContext): CaseAction {
+  const { c } = f;
+  const next = nextAction(f);
+  if (c.disposition === 'abandoned' || c.disposition === 'handled_by_hand' || next.kind === 'none')
+    return nothing();
+  if (next.kind === 'shutter') return nothing(`Shutter is ${caseState(c.state).label.toLowerCase()}`);
+  const can = resolveCan(ctx.me);
+  if (c.state === 'awaiting_approval') {
+    if (!can.approve) return notYours('Waiting for an approver');
+    return yours(
+      f.plan?.plan && f.plan.plan.disposition !== 'resend' ? 'Decide on the plan' : 'Decide on the resend',
+    );
+  }
+  if (!can.operate) return notYours('Waiting for an operator');
+  // Once the email to the team went out, the team corrects the systems and the case is marked handled, as the
+  // escalations' panel offers it; a site with the two-person rule leaves that to an approver
+  if ((f.escalations ?? []).some((e) => e.state === 'sent')) {
+    const mayClose = !!ctx.me?.approver || ctx.closeNeedsApprover === false;
+    return mayClose
+      ? yours('Mark as handled')
+      : notYours('Waiting for an approver', 'waiting for an approver to mark it handled');
+  }
+  if (next.escalate) return yours('Escalate to a team');
+  if (c.state === 'failed')
+    return ctx.trial
+      ? notYours('Reinvestigate', 'reinvestigate needs a real model, not in the trial')
+      : yours('Reinvestigate');
+  return yours('Decide the next step');
+}

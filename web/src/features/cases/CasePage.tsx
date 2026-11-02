@@ -3,7 +3,7 @@ import { IconFileSearch, IconHistory, IconListDetails, IconPlayerPlay } from '@t
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router';
-import { isOpen, keys, useCase, useCaseEvents, useMe, useScenarios } from '@/api/hooks';
+import { isOpen, keys, useCase, useCaseEvents, useMe, useScenarios, useSiteProfile } from '@/api/hooks';
 import type { CaseDetail } from '@/api/types';
 import { TRIAL } from '@/env/mode';
 import { ApiSource } from '@/components/ApiSource';
@@ -14,7 +14,12 @@ import { REPLAY_DONE } from '@/lib/events';
 import { usePrefersReducedMotion, useStagedReveal } from '@/lib/motion';
 import { caseOutcome } from '@/lib/status';
 import { CaseHeader } from './case/CaseHeader';
-import { Lifecycle, REPLAYED_STAGES } from './case/Lifecycle';
+import { Lifecycle, REPLAYED_STAGES, type StageKey } from './case/Lifecycle';
+import { FailureMap } from './case/FailureMap';
+import { failureMapOf } from './case/failureMap';
+import { CaseActionButton } from './case/CaseActionButton';
+import { caseActionOf } from './case/caseAction';
+import { closeNeedsApprover } from '../site-profile/profile';
 import { EvidencePanel } from './case/EvidencePanel';
 import { EscalationPanel } from './case/EscalationPanel';
 import { AbandonPanel } from './case/AbandonPanel';
@@ -44,6 +49,19 @@ type Tab = (typeof TABS)[number];
 
 /** The story steps a link may open (`?open=decision`), as the guide does to show one. */
 const STEPS: StoryStep[] = ['failed', 'evidence', 'proposed', 'decision', 'written', 'verified', 'compare'];
+
+/**
+ * Where each stage of the progress strip is told on the page, besides the Evidence tab and the board: the story step
+ * it opens and the section it scrolls to, then the sections to try when that one is not there.
+ */
+const STAGE_PLACES: Record<Exclude<StageKey, 'evidence'>, [StoryStep, string, ...string[]]> = {
+  investigation: ['proposed', 'board', 'plan'],
+  gate: ['decision', 'gate'],
+  rehearsal: ['written', 'rehearsal'],
+  approval: ['decision', 'approval', 'gate'],
+  dispatch: ['written', 'dispatch'],
+  verification: ['verified', 'verification'],
+};
 
 /** What the trial says, once, when the replay after an approval has played. */
 const REPLAYED = 'Approved in the trial. The recording shows it delivered and verified.';
@@ -100,7 +118,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
     setAnnounced(REPLAYED);
     window.dispatchEvent(new CustomEvent(REPLAY_DONE, { detail: c.caseId }));
   }, [c.caseId]);
-  const reveal = useStagedReveal(REPLAYED_STAGES, { start: ready, onDone: onReplayed });
+  const staged = useStagedReveal(REPLAYED_STAGES, { start: ready, onDone: onReplayed });
   const reduced = usePrefersReducedMotion();
   // The lifecycle and the band are both in view while it plays
   useEffect(() => {
@@ -109,7 +127,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
         .getElementById('case-lifecycle')
         ?.scrollIntoView?.({ block: 'start', behavior: reduced ? 'auto' : 'smooth' });
   }, [ready, reduced]);
-  const played = replay && reveal.done;
+  const played = replay && staged.done;
   // Until it has played, the band still reads as the case did when it waited
   const shown =
     replay && !played ? caseOutcome({ state: 'awaiting_approval', disposition: c.disposition }) : verdict;
@@ -181,14 +199,31 @@ function CaseBody({ c }: { c: CaseDetail }) {
         document.getElementById('precedents-title')?.focus({ preventScroll: true });
     }, 250);
   };
-  const openStep = (step: StoryStep, target: string) => {
+  // Scrolls the first of these sections that is on the page under the tab bar and moves focus to its heading
+  const reveal = (...targets: string[]) =>
+    window.setTimeout(() => {
+      const found = targets.map((t) => document.getElementById(t)).find(Boolean);
+      found?.scrollIntoView?.({ block: 'start' });
+      // Focus follows the scroll, so a keyboard or screen reader user lands on the section, not back at the button
+      document.getElementById(`${found?.id}-title`)?.focus({ preventScroll: true });
+    }, 250);
+  const openStep = (step: StoryStep, target: string, ...fallbacks: string[]) => {
     setSteps((s) => (s.includes(step) ? s : [...s, step]));
     setTab('summary');
-    window.setTimeout(() => {
-      document.getElementById(target)?.scrollIntoView?.({ block: 'start' });
-      // Focus follows the scroll, so a keyboard or screen reader user lands on the section, not back at the button
-      document.getElementById(`${target}-title`)?.focus({ preventScroll: true });
-    }, 250);
+    reveal(target, ...fallbacks);
+  };
+  // A reached stage of the progress strip: the Evidence tab, the board above the story, or the story step that tells it
+  const showStage = (stage: StageKey) => {
+    if (stage === 'evidence') {
+      setTab('evidence');
+      reveal('evidence');
+    } else if (stage === 'investigation' && boardOnTop) {
+      setTab('summary');
+      reveal('board');
+    } else {
+      const [step, ...targets] = STAGE_PLACES[stage];
+      openStep(step, ...(targets as [string, ...string[]]));
+    }
   };
   // A finding's citation chip: the Evidence tab, opened on the cited section
   const [focus, setFocus] = useState<{ kind: string; at: number }>();
@@ -213,6 +248,18 @@ function CaseBody({ c }: { c: CaseDetail }) {
   const placing = c.mode === 'policy' && c.failureKind !== 'withheld' && !facts.runsSettled;
   const stopped = ['blocked', 'escalated', 'failed'].includes(c.state);
   const base = portalBase(c.links?.visualTrace);
+  // Where it failed, as the band says it: during the trial's replay, the outcome as it was until the replay has played
+  const map = failureMapOf(c, facts.snapshot, shown, {
+    delivered: shown.key === 'delivered',
+    code: stopped ? (facts.blocked?.code ?? '') : '',
+  });
+  // What the case needs from this reader, for the button at the top and its copy in the tab bar
+  const site = useSiteProfile();
+  const action = caseActionOf(facts, {
+    me,
+    trial: TRIAL,
+    closeNeedsApprover: site.isError ? false : site.data ? closeNeedsApprover(site.data.profile) : undefined,
+  });
   return (
     <AskSurface caseId={c.caseId} open={asking} onClose={closeAsk}>
       <CaseHeader
@@ -221,9 +268,11 @@ function CaseBody({ c }: { c: CaseDetail }) {
         outcome={outcomeCase}
         scenario={scenario}
         portalBase={base}
+        snapshot={facts.snapshot}
         actions={
           <>
             <ConveneBoard c={c} />
+            <CaseActionButton action={action} />
             <AskButton
               ref={askButton}
               open={asking}
@@ -232,11 +281,14 @@ function CaseBody({ c }: { c: CaseDetail }) {
           </>
         }
       />
+      <FailureMap map={map} />
       <Lifecycle
         c={c}
         events={events.data ?? []}
         verified={facts.receipt.verificationState === 'verified'}
-        reveal={replay ? reveal.stepProps : undefined}
+        reveal={replay ? staged.stepProps : undefined}
+        onStage={showStage}
+        investigation={boardOnTop ? 'the board' : undefined}
       />
       <CounterpartStrip c={c} onCompare={() => openStep('compare', 's8-compare')} />
       {/* Said once the replay has played: the approval the receipt shows is the recording's, and yours is noted */}
@@ -268,18 +320,22 @@ function CaseBody({ c }: { c: CaseDetail }) {
       {placing ? <PageSkeleton label="Loading the investigation…" /> : null}
       {placing ? null : (
         <Tabs value={tab} onChange={setTab} keepMounted={false}>
-          {/* The tabs stay under the header while the page scrolls, so Evidence is a click away from anywhere */}
-          <Tabs.List aria-label="The case in detail" className="sticky-tabs">
-            <Tabs.Tab value="summary" leftSection={<IconListDetails size={16} aria-hidden />}>
-              Summary
-            </Tabs.Tab>
-            <Tabs.Tab value="evidence" leftSection={<IconFileSearch size={16} aria-hidden />}>
-              Evidence
-            </Tabs.Tab>
-            <Tabs.Tab value="audit" leftSection={<IconHistory size={16} aria-hidden />}>
-              Audit trail
-            </Tabs.Tab>
-          </Tabs.List>
+          {/* The tabs stay under the header while the page scrolls, so Evidence is a click away from anywhere, and the
+              case's action with them, compact */}
+          <div className="sticky-tabs case-tab-bar">
+            <Tabs.List aria-label="The case in detail">
+              <Tabs.Tab value="summary" leftSection={<IconListDetails size={16} aria-hidden />}>
+                Summary
+              </Tabs.Tab>
+              <Tabs.Tab value="evidence" leftSection={<IconFileSearch size={16} aria-hidden />}>
+                Evidence
+              </Tabs.Tab>
+              <Tabs.Tab value="audit" leftSection={<IconHistory size={16} aria-hidden />}>
+                Audit trail
+              </Tabs.Tab>
+            </Tabs.List>
+            <CaseActionButton action={action} compact />
+          </div>
           <Tabs.Panel value="summary" pt="md" {...PANEL}>
             <Stack gap="md">
               {boardOnTop ? (
