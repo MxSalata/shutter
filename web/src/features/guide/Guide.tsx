@@ -46,6 +46,7 @@ import type { CaseDetail, PlanView } from '@/api/types';
 import { TechDetail } from '@/components/TechDetail';
 import { ENV } from '@/env/mode';
 import { REPLAY_DONE } from '@/lib/events';
+import { guideCard, useGuideDock } from '@/lib/guideDock';
 import { useLeaveTrial } from '@/trial/leave';
 import { onRoute, positionOf, stepsIn, welcomeDue, type GuidePosition } from './controller';
 import { usePlace } from './places';
@@ -91,6 +92,23 @@ function GuideButton({
 const tryControl = (action: string) => document.querySelector<HTMLElement>(`[data-tour-action="${action}"]`);
 const visible = (el: HTMLElement | null): el is HTMLElement =>
   !!el && el.isConnected && (typeof el.checkVisibility !== 'function' || el.checkVisibility());
+/** A control that is there to try: on the page, and not already open (Ask about this case, once pressed). */
+const toTry = (action: string) => {
+  const el = tryControl(action);
+  return visible(el) && el.getAttribute('aria-expanded') !== 'true';
+};
+
+/**
+ * The address's query without Ask's own `ask=1`: opening Ask about this case keeps the reader on the step's page, so
+ * the card stays (in the dock beside Ask below 1440 px, lib/guideDock.ts).
+ */
+function withoutAsk(search: string): string {
+  if (!search.includes('ask=')) return search;
+  const q = new URLSearchParams(search);
+  q.delete('ask');
+  const rest = q.toString();
+  return rest ? `?${rest}` : '';
+}
 
 /** Scrolls a control to the middle of the screen and focuses it. */
 function bringToHand(el: HTMLElement, reduced: boolean) {
@@ -366,12 +384,15 @@ function StepCard({
   path,
   ring,
   notFound,
+  docked,
   titleRef,
 }: {
   pos: GuidePosition;
   path: string | undefined;
   ring: Motion;
   notFound: boolean;
+  /** In the dock beside Ask, not before its section: no notch pointing down at it. */
+  docked: boolean;
   titleRef: RefObject<HTMLHeadingElement | null>;
 }) {
   const scope = useGuide((s) => s.progress.scope);
@@ -385,12 +406,12 @@ function StepCard({
   const { step } = pos;
   const [present, setPresent] = useState<{ tryIt: boolean; chip: boolean }>({ tryIt: false, chip: false });
 
-  // The chips show only while their control is on the page: the try-it never leads nowhere
+  // The chips show only while their control is on the page and not already open: the try-it never leads nowhere
   useEffect(() => {
     const look = () =>
       setPresent({
-        tryIt: !!step.tryIt && visible(tryControl(step.tryIt.action)),
-        chip: !!step.chip && visible(tryControl(step.chip.action)),
+        tryIt: !!step.tryIt && toTry(step.tryIt.action),
+        chip: !!step.chip && toTry(step.chip.action),
       });
     look();
     const timer = window.setInterval(look, 500);
@@ -423,10 +444,11 @@ function StepCard({
       role="region"
       aria-label="Guide"
       withBorder
-      shadow="sm"
+      shadow={docked ? 'lg' : 'sm'}
       p="md"
       maw={720}
       data-guide-card
+      data-docked={docked || undefined}
       onKeyDown={(e) => {
         if (e.key === 'Escape') exit();
       }}
@@ -520,7 +542,7 @@ function StepCard({
           </Group>
         </Group>
       </Stack>
-      {notFound ? null : (
+      {notFound || docked ? null : (
         <div className="guide-pointer guide-notch" data-motion={ring} aria-hidden>
           <IconArrowDown size={20} />
         </div>
@@ -534,7 +556,7 @@ function StepHost({ pos }: { pos: GuidePosition }) {
   const place = usePlace(pos.step);
   const navigate = useNavigate();
   const location = useLocation();
-  const here = location.pathname + location.search;
+  const here = location.pathname + withoutAsk(location.search);
   // The same address again still counts: the case page reopens its story step on every visit
   const go = useEffectEvent((to: string) => navigate(to, { replace: here === to }));
   const reduced = useReducedMotion() ?? false;
@@ -597,6 +619,15 @@ function StepHost({ pos }: { pos: GuidePosition }) {
     };
   }, [arrived, pos.step.target]);
 
+  // While the card is on the page, Ask about this case opens as a sheet beside it, offering the dock it moves into
+  const dock = useGuideDock();
+  const docked = !!host && !!dock;
+  useEffect(() => {
+    if (!host) return;
+    guideCard.set(true);
+    return () => guideCard.set(false);
+  }, [host]);
+
   // Focus moves to the card's title on every step
   useEffect(() => {
     if (!host && !notFound) return;
@@ -606,16 +637,19 @@ function StepHost({ pos }: { pos: GuidePosition }) {
     return () => window.clearTimeout(timer);
   }, [host, notFound]);
 
-  const card = <StepCard pos={pos} path={path} ring={ring} notFound={notFound} titleRef={titleRef} />;
+  const card = (
+    <StepCard pos={pos} path={path} ring={ring} notFound={notFound} docked={docked} titleRef={titleRef} />
+  );
   return (
     <>
-      {host?.isConnected ? createPortal(card, host) : null}
+      {docked && dock ? createPortal(card, dock) : host?.isConnected ? createPortal(card, host) : null}
       {!host && notFound ? (
         <Affix position={{ bottom: 16, right: 16, left: 16 }} zIndex={150}>
           {card}
         </Affix>
       ) : null}
-      {trying ? <TryItPointer control={trying.control} motion={trying.motion} /> : null}
+      {/* Once Ask is open its pointer has done its work; the halo's outline stays on the button */}
+      {trying && !docked ? <TryItPointer control={trying.control} motion={trying.motion} /> : null}
     </>
   );
 }

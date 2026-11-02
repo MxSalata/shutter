@@ -1,6 +1,6 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -18,6 +18,7 @@ import { SAMPLE_LABEL, TRIAL_NO_ANSWER, answerParts, answersBadge, provenanceTex
 import { WhatIfCard } from './WhatIfCard';
 import { layer1Words } from '@/test/words';
 import { useAppearance } from '@/stores/appearance';
+import { guideCard, guideDock } from '@/lib/guideDock';
 
 /**
  * What the recorded answers say about themselves: the day of the recording and its model. The trial keeps the word
@@ -164,6 +165,40 @@ describe('Ask about this case', () => {
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(router.state.location.search).toBe(''));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Ask about this case' })).toHaveFocus());
+  });
+
+  it("opens as a sheet beside the tour's card, with no overlay and a dock just before it, until it closes", async () => {
+    guideCard.set(true);
+    try {
+      const router = renderCase('C-000008', '');
+      await userEvent.click(await screen.findByRole('button', { name: 'Ask about this case' }));
+      const sheet = await screen.findByRole('region', { name: 'Ask about this case' });
+      expect(sheet).toHaveClass('ask-sheet');
+      // Not a dialog: no overlay, no focus trap, so the tour's card stays in reach
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      await waitFor(() =>
+        expect(within(sheet).getByRole('heading', { name: 'Ask about this case' })).toHaveFocus(),
+      );
+      // The dock the card moves into, just before the sheet in the reading and tab order
+      const dock = document.querySelector('[data-guide-dock]');
+      expect(dock).not.toBeNull();
+      expect(guideDock.get()).toBe(dock);
+      expect(dock!.nextElementSibling).toBe(sheet);
+      // The tour ends meanwhile: the sheet stays as it is until Ask closes, with no overlay dropping over the page
+      act(() => guideCard.set(false));
+      expect(screen.getByRole('region', { name: 'Ask about this case' })).toBe(sheet);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      await userEvent.keyboard('{Escape}');
+      await waitFor(() => expect(router.state.location.search).toBe(''));
+      expect(guideDock.get()).toBeNull();
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Ask about this case' })).toHaveFocus());
+      // With no tour, Ask opens as the drawer
+      await userEvent.click(screen.getByRole('button', { name: 'Ask about this case' }));
+      expect(await panel()).toBeInTheDocument();
+      expect(document.querySelector('[data-guide-dock]')).toBeNull();
+    } finally {
+      guideCard.set(false);
+    }
   });
 
   it('opens on the recorded example conversation, labelled with its recording in the demo', async () => {

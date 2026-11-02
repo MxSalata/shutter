@@ -1068,6 +1068,66 @@ body {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+/*
+ * Ask as a sheet, while the guide's card is on the page below 90em (AskSurface): the drawer's side and width, under the
+ * header so the trial's banner stays in sight, with no overlay; it scrolls on its own. The guide's card docks beside
+ * it (lib/guideDock.ts): left of the sheet from 62em, at the foot of the screen below that, where the sheet keeps room
+ * at its end to scroll its last part above the card.
+ */
+.ask-sheet {
+  position: fixed;
+  top: var(--shutter-header-h);
+  right: 0;
+  bottom: 0;
+  width: 480px;
+  max-width: 100%;
+  z-index: 180;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-left: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
+  animation: sheet-in var(--motion-base) var(--motion-ease) 1;
+}
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.guide-dock {
+  position: fixed;
+  z-index: 185;
+  top: calc(var(--shutter-header-h) + 16px);
+  right: calc(480px + 16px);
+  width: min(720px, calc(100vw - 480px - 32px));
+}
+.ask-sheet-spacer {
+  display: none;
+}
+@media (max-width: 61.99em) {
+  .guide-dock {
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: auto;
+    max-height: 60dvh;
+    overflow-y: auto;
+  }
+  .ask-sheet-spacer {
+    display: block;
+    height: calc(var(--guide-dock-h, 0px) + 8px);
+  }
+}
+@media (max-width: 48em) {
+  .ask-sheet {
+    width: 100%;
+    border-left: 0;
+  }
+}
 .ask-readonly {
   background: var(--mantine-color-default-hover);
   border-radius: var(--mantine-radius-md);

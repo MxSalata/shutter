@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { audit, choosePastel, MODES } from './axe';
-import { skipWelcome } from './guide';
+import { GUIDE_KEY, skipWelcome } from './guide';
 import { atWidth, checkedBy, go, openSteps, screenName, signIn, signOutOfTrial } from './helpers';
 import { areas, caseEvidence, shell, signIn as signInArea } from './areas';
 
@@ -91,6 +91,31 @@ for (const { colorScheme, contrast, palette } of MODES) {
       await expect(page.getByRole('status')).toHaveCount(0);
       expect(await audit(page)).toEqual([]);
       await sheet.getByRole('tab', { name: /Ask the board/ }).click();
+      expect(await audit(page)).toEqual([]);
+    });
+
+    // Ask beside the tour on a laptop: the sheet with no overlay, and the guide's card in its dock
+    test(`Ask about this case beside the tour ${caseEvidence.tag}`, async ({ page }) => {
+      await page.addInitScript((key) => {
+        localStorage.setItem(
+          key,
+          JSON.stringify({ version: 2, scope: 'quick', at: 's8/ask', completed: [], dismissed: true }),
+        );
+      }, GUIDE_KEY);
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await signIn(page);
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await page.getByRole('button', { name: 'Resume tour' }).click();
+      await page.getByRole('menuitem', { name: 'Resume the tour' }).click();
+      const guide = page.getByRole('region', { name: 'Guide' });
+      await expect(guide).toContainText('Step 7 of 9');
+      await page.locator('[data-tour-action="ask-open"]').click();
+      const panel = page.getByRole('region', { name: 'Ask about this case' });
+      await expect(
+        panel.getByRole('region', { name: 'What if: the setting behind this outcome' }),
+      ).toBeVisible();
+      await expect(page.locator('[data-guide-dock] [data-guide-card]')).toBeVisible();
+      await expect(page.getByRole('status')).toHaveCount(0);
       expect(await audit(page)).toEqual([]);
     });
 
