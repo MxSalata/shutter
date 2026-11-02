@@ -86,13 +86,6 @@ const visibleText = (el: HTMLElement) => {
   return copy.textContent;
 };
 
-/** The words a reader sees, leaving out the JSON blocks: the machine's text, which no one reads as prose. */
-const proseWords = (el: HTMLElement) => {
-  const copy = el.cloneNode(true) as HTMLElement;
-  copy.querySelectorAll('.json-block').forEach((b) => b.remove());
-  return layer1Words(copy);
-};
-
 describe('the Evidence tab', () => {
   it('names its sections in the order the citations use, each with who cited it (C-000008)', async () => {
     evidence('C-000008');
@@ -213,7 +206,8 @@ describe('the Evidence tab', () => {
   });
 
   // The spec gives the tab no budget of its own: it holds to 400 words in Plain and 1.5 times that in Technical
-  // (DESIGN 1.4), counting the words a reader reads; the JSON blocks open in Technical are the machine's text
+  // (DESIGN 1.4), counting the words a reader reads; the shared count leaves out the JSON blocks open in Technical,
+  // the machine's own text
   it.each(['C-000008', 'C-000058'])(
     'keeps %s to its word budget: 400 in Plain, 600 in Technical',
     async (caseId) => {
@@ -223,7 +217,7 @@ describe('the Evidence tab', () => {
       unmount();
       evidence(caseId, 'Downstream Out', 'technical');
       panel = await loaded();
-      expect(proseWords(panel).length).toBeLessThanOrEqual(600);
+      expect(layer1Words(panel).length).toBeLessThanOrEqual(600);
     },
   );
 

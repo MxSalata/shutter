@@ -36,9 +36,10 @@ const str = (v: unknown) => (v === undefined || v === null ? '' : String(v));
 
 /**
  * A section of the tab lands under the header and the sticky tab bar when a citation scrolls to it, and when focus
- * moves to its heading: the header's height, the tab bar's and a little room.
+ * moves to its heading: the shared rule's margin (`.case-tab-panel` in styles.css, the bar's 36 px and its gap). It is
+ * set here as well because that rule reaches only a panel the case page marks, and not a heading or the catalogue line.
  */
-const SCROLL_MARGIN = 'calc(var(--shutter-header-h) + 64px)';
+const SCROLL_MARGIN = 'calc(var(--shutter-header-h) + 3.5rem)';
 
 /**
  * The receiver's guarantees as the evidence recorded them from its capability profile: what the gate's capability
