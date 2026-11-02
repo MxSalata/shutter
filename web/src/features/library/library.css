@@ -36,3 +36,16 @@
 .library-member[data-not-enabled] .identity-mark {
   --mark-hue: var(--shutter-hue-gray) !important;
 }
+
+/* A member's code: each fact's label over its code. The facts take as many columns as the card is wide enough for, so
+   a narrow card of three reads one column and the full-width coordinator one row. */
+.library-detail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+}
+.library-fact {
+  margin: 0;
+  min-width: 0;
+}

@@ -2,7 +2,6 @@ import { Badge, Group, Stack, Switch, Text, Tooltip } from '@mantine/core';
 import type { LibraryMember } from '@/api/types';
 import { CodeChip } from '@/components/CodeChip';
 import { IdentityBadge } from '@/components/IdentityBadge';
-import { KeyValueList } from '@/components/KeyValueList';
 import { MemberCard } from '@/components/MemberCard';
 import { TechDetail } from '@/components/TechDetail';
 import { Term } from '@/components/Term';
@@ -99,18 +98,12 @@ export function MemberLibraryCard({
           </Group>
           {changedInTrial ? <Text size="sm">Changed in the trial only.</Text> : null}
           <TechDetail label="Technical detail" kind="data">
-            <KeyValueList
-              labelWidth={150}
-              rows={[
-                ['Class', <CodeChip key="class">{`${m.agentClass} · v${m.configVersion}`}</CodeChip>],
-                ['Production item', m.configItem ? <CodeChip key="item">{m.configItem}</CodeChip> : ''],
-                [
-                  'Knowledge collection',
-                  m.knowledgeCollection ? <CodeChip key="collection">{m.knowledgeCollection}</CodeChip> : '',
-                ],
-                ['Terminal tool', m.terminalTool ? <CodeChip key="tool">{m.terminalTool}</CodeChip> : ''],
-              ]}
-            />
+            <dl className="library-detail">
+              <Fact label="Class">{`${m.agentClass} · v${m.configVersion}`}</Fact>
+              <Fact label="Production item">{m.configItem}</Fact>
+              <Fact label="Knowledge collection">{m.knowledgeCollection}</Fact>
+              <Fact label="Terminal tool">{m.terminalTool}</Fact>
+            </dl>
           </TechDetail>
         </Stack>
       </MemberCard>
@@ -158,5 +151,20 @@ function SettingSwitch({
         />
       </Group>
     </Tooltip>
+  );
+}
+
+/** One fact of a member's code, its label over the code. A fact the member does not have is left out. */
+function Fact({ label, children }: { label: string; children: string }) {
+  if (!children) return null;
+  return (
+    <div>
+      <Text component="dt" size="sm" c="dimmed">
+        {label}
+      </Text>
+      <dd className="library-fact">
+        <CodeChip>{children}</CodeChip>
+      </dd>
+    </div>
   );
 }
