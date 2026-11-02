@@ -1,16 +1,20 @@
-import { Badge, Group, Text, Tooltip } from '@mantine/core';
+import { Group, Text, Tooltip } from '@mantine/core';
 import {
   IconAlertCircle,
   IconCircleCheck,
+  IconCircleOff,
   IconClock,
   IconListDetails,
+  IconNote,
   IconProgress,
+  type Icon,
 } from '@tabler/icons-react';
 import type { FindingStatus, ReviewSummary, Severity } from '@/api/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { humanize } from '@/lib/format';
 import { SEVERITY_STATUS } from '@/lib/status';
 import type { Status } from '@/lib/tone';
+import { HINT_EVENTS } from '@/theme';
 import { CONFIDENCE_HINTS, SEVERITIES, STATUS_LABELS } from './review';
 
 const REVIEW_STATE: Record<string, Status> = {
@@ -38,7 +42,7 @@ const REVIEW_STATE: Record<string, Status> = {
 const AGENT_STATE: Record<string, Status> = {
   pending: { tone: 'info', label: 'Agent pending', hint: 'The agent has not answered yet', icon: IconClock },
   ok: {
-    tone: 'info',
+    tone: 'neutral',
     label: 'Ranked',
     hint: 'The agent ranked and explained the findings',
     icon: IconListDetails,
@@ -82,7 +86,7 @@ export function SeverityBadge({ severity }: { severity: Severity }) {
 
 export function ConfidenceText({ confidence }: { confidence: string }) {
   return (
-    <Tooltip label={CONFIDENCE_HINTS[confidence] ?? confidence}>
+    <Tooltip label={CONFIDENCE_HINTS[confidence] ?? confidence} events={HINT_EVENTS}>
       <Text span size="xs" c="dimmed" tabIndex={0} style={{ textDecoration: 'underline dotted' }}>
         {humanize(confidence)}
       </Text>
@@ -90,16 +94,21 @@ export function ConfidenceText({ confidence }: { confidence: string }) {
   );
 }
 
+/** The annotation states are all neutral: a new finding is an outline, a marked one is a light badge with its own icon. */
+const STATUS_ICONS: Partial<Record<FindingStatus, Icon>> = {
+  intended: IconNote,
+  accepted_risk: IconNote,
+  false_positive: IconCircleOff,
+};
+
 export function FindingStatusBadge({ status }: { status: FindingStatus }) {
   return (
-    <Badge
-      color="gray"
-      variant={status === 'new' ? 'outline' : 'filled'}
-      size="sm"
-      style={{ textTransform: 'none' }}
-    >
-      {STATUS_LABELS[status] ?? humanize(status)}
-    </Badge>
+    <StatusBadge
+      tone="neutral"
+      label={STATUS_LABELS[status] ?? humanize(status)}
+      icon={STATUS_ICONS[status] ?? null}
+      variant={status === 'new' ? 'outline' : 'light'}
+    />
   );
 }
 

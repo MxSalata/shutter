@@ -1,12 +1,13 @@
-import { Alert, Button, Group, Modal, Radio, Stack, Text, Textarea, TextInput } from '@mantine/core';
+import { Alert, Button, Group, Radio, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { newIdempotencyKey } from '@/api/client';
 import { useAnnotateFinding, useRemoveAnnotation } from '@/api/hooks';
 import type { ReviewAnnotation, ReviewDetail, ReviewFinding } from '@/api/types';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { TRIAL } from '@/env/mode';
 import { describeError } from '@/lib/errors';
-import { expiryForApi, expiryProblem, STATUS_LABELS, subjectOf } from './review';
+import { expiryForApi, expiryProblem, findingTitle, STATUS_LABELS, subjectOf } from './review';
 
 type Status = ReviewAnnotation['status'];
 
@@ -90,10 +91,10 @@ export function useAnnotationDialogs(review: ReviewDetail) {
 
   const modals = (
     <>
-      <Modal
+      <ConfirmModal
         opened={marking !== null}
         onClose={() => setMarking(null)}
-        title={marking ? `Annotate ${marking.id}: ${marking.code}` : ''}
+        title={marking ? `Annotate ${marking.id}: ${findingTitle(marking)}` : ''}
       >
         {marking ? (
           <Stack gap="sm">
@@ -148,8 +149,8 @@ export function useAnnotationDialogs(review: ReviewDetail) {
             </Group>
           </Stack>
         ) : null}
-      </Modal>
-      <Modal
+      </ConfirmModal>
+      <ConfirmModal
         opened={removing !== null}
         onClose={() => setRemoving(null)}
         title={removing ? `Remove the annotation of ${removing.id}` : ''}
@@ -157,7 +158,7 @@ export function useAnnotationDialogs(review: ReviewDetail) {
         {removing ? (
           <Stack gap="sm">
             <Text size="sm">
-              The finding {removing.code} on {subjectOf(removing)} is marked{' '}
+              The finding &quot;{findingTitle(removing)}&quot; on {subjectOf(removing)} is marked{' '}
               {STATUS_LABELS[removing.status].toLowerCase()}. Removed, it is new again in every review of{' '}
               {review.production}; the annotation is kept for the record.
             </Text>
@@ -177,7 +178,7 @@ export function useAnnotationDialogs(review: ReviewDetail) {
             </Group>
           </Stack>
         ) : null}
-      </Modal>
+      </ConfirmModal>
     </>
   );
   return { mark, unmark, modals };

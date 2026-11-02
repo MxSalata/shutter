@@ -1,160 +1,86 @@
-import {
-  Alert,
-  Anchor,
-  Badge,
-  Container,
-  List,
-  Loader,
-  Paper,
-  Progress,
-  SimpleGrid,
-  Stack,
-  Text,
-} from '@mantine/core';
-import { IconEye } from '@tabler/icons-react';
-import { Link, useParams } from 'react-router';
+import { Alert, Anchor, Container, Loader, Stack, Text } from '@mantine/core';
+import { IconClipboardSearch, IconEye } from '@tabler/icons-react';
+import type { ReactNode } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { DEMO_READ_ONLY, readOnlyDemo } from '@/api/can';
 import { isReviewRunning, useCan, useReview } from '@/api/hooks';
-import type { ReviewDetail } from '@/api/types';
+import type { ReviewDetail, Severity } from '@/api/types';
+import { ApiSource } from '@/components/ApiSource';
 import { Digest } from '@/components/Digest';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { KeyValueList } from '@/components/KeyValueList';
 import { PageHeader } from '@/components/PageHeader';
 import { PageSkeleton } from '@/components/PageSkeleton';
-import { Timestamp } from '@/components/Timestamp';
 import { NotYet, Section } from '@/components/Section';
+import { StatTile } from '@/components/StatTile';
+import { StatusNotice } from '@/components/StatusBadge';
+import { SummaryBand } from '@/components/SummaryBand';
+import { TechDetail } from '@/components/TechDetail';
+import { Timestamp } from '@/components/Timestamp';
 import { isApiError } from '@/lib/errors';
-import { formatDuration, formatInt, formatUsd, humanize } from '@/lib/format';
-import { useAnnotationDialogs } from './AnnotationDialogs';
-import { AgentStateBadge, ReviewStateBadge } from './badges';
-import { FindingCards } from './FindingCards';
-import { StatusBadge, StatusNotice } from '@/components/StatusBadge';
+import { formatInt, humanize } from '@/lib/format';
 import { SEVERITY_STATUS } from '@/lib/status';
-import {
-  describeAgent,
-  explainedCount,
-  explainedNotes,
-  hl7Note,
-  orderedFindings,
-  rankedByAgent,
-  READ_ONLY,
-  SEVERITIES,
-} from './review';
+import { AgentBlock } from './AgentBlock';
+import { useAnnotationDialogs } from './AnnotationDialogs';
+import { ReviewStateBadge, SeverityBadge } from './badges';
+import { FindingCards } from './FindingCards';
+import { agentLeads, hl7Note, orderedFindings, rankedByAgent, READ_ONLY, SEVERITIES } from './review';
+
+/** "0 high · 1 marked": the tiers with no findings, which get no tile of their own (F19), and the findings marked. */
+function findingsCaption(r: ReviewDetail): string {
+  const s = r.summary;
+  if (!s.findings) return 'No findings';
+  const zero = (['high', 'medium', 'low'] as Severity[])
+    .filter((sev) => (s.bySeverity?.[sev] ?? 0) === 0)
+    .map((sev) => `0 ${sev}`);
+  return [...zero, ...(s.intended ? [`${formatInt(s.intended)} marked`] : [])].join(' · ');
+}
 
 /**
- * "2 of 9 findings explained", with a bar: the server's own counts when the agent answered, else the findings that
- * carry an explanation, so a review with no recorded explanation says 0 of 9 rather than nothing.
+ * The review's counts as a row of tiles: one for each severity that has findings, the findings (with the tiers that
+ * have none and the marks in its caption), the errors logged and the messages in error. Never a tile for a zero.
  */
-function Explained({ r }: { r: ReviewDetail }) {
-  if (r.state !== 'done' || !r.findings.length) return null;
-  const { explained, total } = explainedCount(r);
-  return (
-    <Stack gap={4}>
-      <Text size="sm" fw={600}>
-        {`${explained} of ${total} ${total === 1 ? 'finding' : 'findings'} explained by the agent`}
-      </Text>
-      <Progress
-        value={total ? (explained / total) * 100 : 0}
-        size="sm"
-        maw={420}
-        aria-label={`${explained} of ${total} findings explained by the agent`}
-      />
-      {explainedNotes(r.agent) || explained < total ? (
-        <Text size="xs" c="dimmed">
-          {[
-            explainedNotes(r.agent),
-            explained < total ? 'A finding with no explanation shows the deterministic text only.' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-        </Text>
-      ) : null}
-    </Stack>
-  );
-}
-
-/** The review's counts as a row of tiles: the findings, each severity with findings, the errors in the window. */
 function Counts({ r }: { r: ReviewDetail }) {
   const s = r.summary;
-  if (!s.bySeverity) return null;
-  const tiles: { key: string; figure: string; label: React.ReactNode }[] = [
-    { key: 'findings', figure: formatInt(s.findings), label: s.findings === 1 ? 'finding' : 'findings' },
-    ...SEVERITIES.filter((sev) => (s.bySeverity?.[sev] ?? 0) > 0).map((sev) => ({
-      key: sev,
-      figure: formatInt(s.bySeverity![sev]),
-      label: <StatusBadge {...SEVERITY_STATUS[sev]} size="sm" />,
-    })),
-    { key: 'errors', figure: formatInt(s.errorsInWindow), label: 'event log errors in the window' },
-    {
-      key: 'messages',
-      figure: formatInt(s.messageErrorsInWindow),
-      label: 'messages in error in the window',
-    },
-    ...(s.intended ? [{ key: 'marked', figure: formatInt(s.intended), label: 'marked by an approver' }] : []),
+  if (!s.bySeverity)
+    return (
+      <section aria-label="Summary">
+        {r.state === 'failed' ? (
+          <Text size="sm">There is no result because the review failed{r.error ? `: ${r.error}` : '.'}</Text>
+        ) : (
+          <NotYet>Not yet: the sweep is still reading.</NotYet>
+        )}
+      </section>
+    );
+  const tiers = SEVERITIES.filter((sev) => (s.bySeverity?.[sev] ?? 0) > 0);
+  const tiles: ReactNode[] = [
+    ...tiers.map((sev) => (
+      <StatTile
+        key={sev}
+        label="Severity"
+        figure={formatInt(s.bySeverity![sev])}
+        tone={SEVERITY_STATUS[sev].tone}
+        status={<SeverityBadge severity={sev} />}
+      />
+    )),
+    <StatTile key="findings" label="Findings" figure={formatInt(s.findings)} caption={findingsCaption(r)} />,
+    <StatTile
+      key="errors"
+      label="Errors logged"
+      figure={formatInt(s.errorsInWindow)}
+      caption="in the window"
+    />,
+    <StatTile
+      key="messages"
+      label="Messages in error"
+      figure={formatInt(s.messageErrorsInWindow)}
+      caption="in the window"
+    />,
   ];
   return (
-    <SimpleGrid cols={{ base: 2, sm: 3, lg: tiles.length }} spacing="xs">
-      {tiles.map((t) => (
-        <Paper key={t.key} withBorder p="sm" radius="md">
-          <Text fz={24} fw={700} lh={1.1} className="tabular">
-            {t.figure}
-          </Text>
-          {typeof t.label === 'string' ? <Text size="xs">{t.label}</Text> : t.label}
-        </Paper>
-      ))}
-    </SimpleGrid>
-  );
-}
-
-function AgentBlock({ r }: { r: ReviewDetail }) {
-  const a = r.agent;
-  const view = describeAgent(a, r.state);
-  const ran = a.mode !== null;
-  return (
-    <Section
-      id="agent"
-      tour="review-agent"
-      title="The agent's ranking"
-      note="One AI Hub agent ranks the findings within their severity tiers and explains each against the case history. It sees names, values, counts and case ids, never an error's text, and it never changes a severity or a count."
-      aside={<AgentStateBadge state={a.state} />}
-    >
-      <Alert color={view.colour} variant="light" title={view.title} role="note">
-        <Text size="sm">{view.text}</Text>
-      </Alert>
-      {a.summary ? <Text size="sm">{a.summary}</Text> : null}
-      {a.unknowns.length ? (
-        <Stack gap={2}>
-          <Text size="sm" fw={600}>
-            What the findings do not decide
-          </Text>
-          <List size="sm" spacing={2}>
-            {a.unknowns.map((u) => (
-              <List.Item key={u}>{u}</List.Item>
-            ))}
-          </List>
-        </Stack>
-      ) : null}
-      {ran ? (
-        <KeyValueList
-          rows={[
-            ['Mode', a.mode ? humanize(a.mode) : ''],
-            ['Model', a.model ?? ''],
-            [
-              'Tokens',
-              a.promptTokens || a.completionTokens
-                ? `${formatInt(a.promptTokens)} in · ${formatInt(a.completionTokens)} out`
-                : '',
-            ],
-            [
-              'Cost',
-              a.mode === 'replay' ? `${formatUsd(0)} (a replay spends nothing)` : formatUsd(a.costUsd),
-            ],
-            ['Duration', a.durationMs ? formatDuration(a.durationMs) : ''],
-            ['Record key', <Digest key="k" value={a.recordKey} label="record key" length={40} />],
-          ]}
-        />
-      ) : null}
-    </Section>
+    <SummaryBand title="Summary" cols={{ base: 2, sm: 3, lg: Math.min(tiles.length, 5) }}>
+      {tiles}
+    </SummaryBand>
   );
 }
 
@@ -163,21 +89,24 @@ function Review({ r }: { r: ReviewDetail }) {
   const can = useCan();
   const canAnnotate = can.configure;
   const dialogs = useAnnotationDialogs(r);
+  const [params] = useSearchParams();
   const running = isReviewRunning(r.state);
   const findings = orderedFindings(r);
-  const s = r.summary;
+  const opened = params.get('finding');
+  const agentFirst = agentLeads(r);
+  const agent = <AgentBlock r={r} />;
   return (
     <>
       <PageHeader
         title={`Review ${r.reviewId}`}
-        subtitle={`${r.production} in ${r.namespace}${r.window ? `, ${r.window.days} ${r.window.days === 1 ? 'day' : 'days'} of history` : ''}.`}
+        icon={IconClipboardSearch}
+        hue="violet"
+        status={<ReviewStateBadge state={r.state} />}
+        lead={`${r.production} in ${r.namespace}${r.window ? `, ${r.window.days} ${r.window.days === 1 ? 'day' : 'days'} of history` : ''}.`}
         actions={
-          <>
-            <ReviewStateBadge state={r.state} />
-            <Anchor component={Link} to="/reviews" size="sm">
-              All reviews
-            </Anchor>
-          </>
+          <Anchor component={Link} to="/reviews" size="sm">
+            All reviews
+          </Anchor>
         }
       />
       <Stack gap="md">
@@ -205,22 +134,8 @@ function Review({ r }: { r: ReviewDetail }) {
             <Text size="sm">{r.error || 'The sweep failed.'}</Text>
           </Alert>
         ) : null}
-        <Section
-          id="summary"
-          title="Summary"
-          note="Severity is how bad the hazard is; confidence, kept apart, is how the finding was read."
-        >
-          {s.bySeverity ? (
-            <Counts r={r} />
-          ) : r.state === 'failed' ? (
-            <Text size="sm">
-              There is no result because the review failed{r.error ? `: ${r.error}` : '.'}
-            </Text>
-          ) : (
-            <NotYet>Not yet: the sweep is still reading.</NotYet>
-          )}
-        </Section>
-        <AgentBlock r={r} />
+        <Counts r={r} />
+        {agentFirst ? agent : null}
         <Section
           id="findings"
           tour="review-findings"
@@ -228,12 +143,7 @@ function Review({ r }: { r: ReviewDetail }) {
           note={
             rankedByAgent(r)
               ? "In the agent's order: within each severity tier, as it ranked them."
-              : 'In the deterministic order: severity tier, then unique cases, then the most recent evidence.'
-          }
-          aside={
-            <Badge variant="light" color="gray" style={{ textTransform: 'none' }}>
-              {findings.length}
-            </Badge>
+              : 'In order: severity, then unique cases, then the newest evidence.'
           }
         >
           {hl7Note(r) ? (
@@ -246,8 +156,6 @@ function Review({ r }: { r: ReviewDetail }) {
               {DEMO_READ_ONLY}, annotations included.
             </Text>
           ) : null}
-          {/* How many of these the agent explained, stated once, directly above the cards */}
-          <Explained r={r} />
           {findings.length ? (
             <FindingCards
               findings={findings}
@@ -256,6 +164,7 @@ function Review({ r }: { r: ReviewDetail }) {
               canAnnotate={canAnnotate}
               onMark={dialogs.mark}
               onUnmark={dialogs.unmark}
+              initialOpen={opened && findings.some((f) => f.id === opened) ? [opened] : []}
             />
           ) : (
             <NotYet>
@@ -267,42 +176,45 @@ function Review({ r }: { r: ReviewDetail }) {
             </NotYet>
           )}
         </Section>
+        {agentFirst ? null : agent}
         <Section
           id="review"
           title="About this review"
-          aside={<ReviewStateBadge state={r.state} />}
           note={r.unreadable ? 'The namespace could not be read: the one finding says why.' : undefined}
         >
-          <KeyValueList
-            rows={[
-              ['Production', `${r.production} (${r.namespace})`],
-              ['Production state', humanize(r.productionState)],
-              [
-                'Window',
-                r.window ? (
-                  <Text size="sm" key="w">
-                    {r.window.days} {r.window.days === 1 ? 'day' : 'days'}, from{' '}
-                    <Timestamp iso={r.window.from} /> to <Timestamp iso={r.window.to} />
-                  </Text>
-                ) : (
-                  ''
-                ),
-              ],
-              ['Started', <Timestamp key="s" iso={r.startedAt} />],
-              ['Finished', r.finishedAt ? <Timestamp key="f" iso={r.finishedAt} /> : ''],
-              ['Requested by', r.requestedBy],
-              ['Items read', s.items !== undefined ? formatInt(s.items) : ''],
-              [
-                'Configuration fingerprint',
-                r.fingerprint ? (
-                  <Digest key="d" value={r.fingerprint} label="configuration fingerprint" />
-                ) : (
-                  ''
-                ),
-              ],
-            ]}
-          />
+          <TechDetail label="Production, window and fingerprint" kind="data">
+            <KeyValueList
+              rows={[
+                ['Production', `${r.production} (${r.namespace})`],
+                ['Production state', humanize(r.productionState)],
+                [
+                  'Window',
+                  r.window ? (
+                    <Text size="sm" key="w">
+                      {r.window.days} {r.window.days === 1 ? 'day' : 'days'}, from{' '}
+                      <Timestamp iso={r.window.from} /> to <Timestamp iso={r.window.to} />
+                    </Text>
+                  ) : (
+                    ''
+                  ),
+                ],
+                ['Started', <Timestamp key="s" iso={r.startedAt} />],
+                ['Finished', r.finishedAt ? <Timestamp key="f" iso={r.finishedAt} /> : ''],
+                ['Requested by', r.requestedBy],
+                ['Items read', r.summary.items !== undefined ? formatInt(r.summary.items) : ''],
+                [
+                  'Configuration fingerprint',
+                  r.fingerprint ? (
+                    <Digest key="d" value={r.fingerprint} label="configuration fingerprint" />
+                  ) : (
+                    ''
+                  ),
+                ],
+              ]}
+            />
+          </TechDetail>
         </Section>
+        <ApiSource endpoint={`GET /api/shutter/production-reviews/${r.reviewId}`} data={r} />
       </Stack>
       {dialogs.modals}
     </>
@@ -313,7 +225,7 @@ export default function ReviewPage() {
   const { reviewId = '' } = useParams();
   const review = useReview(reviewId);
 
-  if (review.isPending) return <PageSkeleton label={`Loading review ${reviewId}…`} />;
+  if (review.isPending) return <PageSkeleton label={`Loading review ${reviewId}…`} shape="detail" />;
   if (review.isError)
     return (
       <Container size="sm" py="xl">
