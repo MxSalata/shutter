@@ -54,7 +54,14 @@ function Line({
       ) : null}
       {lead}
       {w.caseId ? (
-        <Anchor component={Link} to={`/cases/${encodeURIComponent(w.caseId)}`} inherit underline="always">
+        // In the text's own colour and underlined: on the tinted card the link colour falls short of 4.5:1 in dark
+        <Anchor
+          component={Link}
+          to={`/cases/${encodeURIComponent(w.caseId)}`}
+          inherit
+          c="inherit"
+          underline="always"
+        >
           {w.caseId}
         </Anchor>
       ) : null}
@@ -85,7 +92,8 @@ export function NextActionPrecedents({
       <Line summary={summary} labelled define />
       {!none && onSee ? (
         <Group>
-          <Button size="compact-xs" variant="subtle" onClick={onSee}>
+          {/* The default surface keeps its words at 4.5:1 on the tinted card, as Review the plan and decide does */}
+          <Button size="compact-xs" variant="default" onClick={onSee}>
             See them<VisuallyHidden component="span"> in the audit trail</VisuallyHidden>
           </Button>
         </Group>
@@ -219,7 +227,7 @@ function PrecedentsTable({ caseId, rows }: { caseId: string; rows: Precedent[] }
               const decision = PRECEDENT_DECISIONS[p.decision];
               return (
                 <StackTable.Tr key={String(p.id)} data-retired={retired || undefined}>
-                  <StackTable.Td data-label="Date" style={struck}>
+                  <StackTable.Td data-label="Date" className="precedent-fact" style={struck}>
                     <Timestamp iso={p.createdAt} />
                   </StackTable.Td>
                   <StackTable.Td data-label="Decision">
@@ -232,7 +240,7 @@ function PrecedentsTable({ caseId, rows }: { caseId: string; rows: Precedent[] }
                   <StackTable.Td data-label="Approver" style={struck}>
                     {p.approver}
                   </StackTable.Td>
-                  <StackTable.Td data-label="Case" style={struck}>
+                  <StackTable.Td data-label="Case" className="precedent-fact" style={struck}>
                     {p.caseId === caseId ? (
                       `${p.caseId} (this case)`
                     ) : (
@@ -241,7 +249,7 @@ function PrecedentsTable({ caseId, rows }: { caseId: string; rows: Precedent[] }
                       </Anchor>
                     )}
                   </StackTable.Td>
-                  <StackTable.Td data-label="Policy version" style={struck}>
+                  <StackTable.Td data-label="Policy version" className="precedent-fact" style={struck}>
                     {p.policyVersion ? <CodeChip>{p.policyVersion}</CodeChip> : 'not recorded'}
                     {p.siteProfileVersion !== undefined && p.siteProfileVersion !== '' ? (
                       <Text size="xs" c="dimmed">{`site profile version ${p.siteProfileVersion}`}</Text>

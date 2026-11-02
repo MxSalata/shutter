@@ -67,7 +67,7 @@ describe('When each agent worked', () => {
     expect(impact.width / conformance.width).toBeCloseTo(15_976 / 14_735, 2);
     // The coordinator after the last of them, to the axis's end
     expect(coordinator.x).toBeGreaterThanOrEqual(impact.x + impact.width - 0.5);
-    expect(coordinator.x + coordinator.width).toBeCloseTo(640 - 16, 0);
+    expect(coordinator.x + coordinator.width).toBeCloseTo(640 - 20, 0);
     // Each bar in its member's hue, by the validated tokens
     expect((bars[3] as SVGElement).style.getPropertyValue('--mark-hue')).toBe('var(--shutter-hue-violet)');
     // The axis in seconds from the first start, and the moment it started

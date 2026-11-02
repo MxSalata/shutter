@@ -55,9 +55,9 @@ function ClockChart({ clock }: { clock: PassClock }) {
   const stacked = width < STACK_BELOW;
   const longest = Math.max(...clock.rows.map((r) => r.name.length));
   const gutter = stacked ? 0 : Math.min(Math.round(width * 0.4), Math.max(80, Math.ceil(longest * 6.8) + 12));
-  const left = gutter + 2;
-  // Room for the last tick's label
-  const right = width - 16;
+  // Room for half the first tick's label and half the last one's, so no word leaves the picture
+  const left = gutter + 16;
+  const right = width - 20;
   const rowH = stacked ? 44 : 30;
   const height = TOP + clock.rows.length * rowH + AXIS;
   const base = height - AXIS;
@@ -85,7 +85,7 @@ function ClockChart({ clock }: { clock: PassClock }) {
             <g key={row.key} data-row={row.member}>
               <text
                 className="run-clock-label"
-                x={stacked ? left : 0}
+                x={0}
                 y={stacked ? y0 + 12 : barY + BAR / 2}
                 dominantBaseline="central"
               >

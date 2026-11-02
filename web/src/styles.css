@@ -1324,6 +1324,13 @@ body {
   stroke: currentColor;
   stroke-width: 2px;
 }
+/* The precedents' table: a date, a case id and a policy version each keep to one line; the retirement's words wrap. */
+.precedents-table .precedent-fact,
+.precedents-table .precedent-fact .code-chip {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
 /* Windows High Contrast: the picture takes the system's colours itself, bars as outlines as under high contrast. */
 @media (forced-colors: active) {
   .run-clock svg {
