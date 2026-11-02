@@ -18,6 +18,11 @@ export const area: Area = {
     { path: '/cases/C-000008?ask=1', heading: 'Case C-000008' },
     { path: '/cases/C-000008?ask=1', heading: 'Case C-000008', detail: 'technical' },
     { path: '/cases/C-000002?ask=1', heading: 'Case C-000002' },
+    // Ask beside the case from 1440 px, the case and its board in a narrower column: axe audits that state, and the
+    // layout run checks it at 1440 alone. At 1280 the drawer is axe's default window already, so only the layout
+    // run needs it there (the case's width under the drawer, and the board's cards in it)
+    { path: '/cases/C-000008?ask=1', heading: 'Case C-000008', width: 1440 },
+    { path: '/cases/C-000008?ask=1', heading: 'Case C-000008', width: 1280, checks: ['layout'] },
   ],
   liveWordChecked: true,
 };
