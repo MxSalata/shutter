@@ -1,0 +1,162 @@
+/*
+ * The Health page's own drawing (no shared rule is edited): the core checks under the verdict, the facts line, the one
+ * line of group links, a group that needs a look (an edge in its tone) and the rows, whose label and value share a
+ * line on a phone when the value is short and stack when it is long.
+ */
+.health-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.health-checks li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 6px;
+  font-size: var(--mantine-font-size-sm);
+}
+.health-checks li[data-passed='false'] {
+  flex-basis: 100%;
+  font-weight: 600;
+}
+
+/* Production, namespace, version and when it was read, with a dot between */
+.health-facts {
+  color: var(--mantine-color-text);
+}
+.health-fact + .health-fact::before {
+  content: '\00b7';
+  content: '\00b7' / '';
+  margin-right: 8px;
+}
+
+/* One line of links to the groups, wrapping on a phone */
+.health-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.health-links li + li::before {
+  content: '\00b7';
+  content: '\00b7' / '';
+  margin: 0 8px;
+  color: var(--shutter-muted);
+}
+.health-links button {
+  min-height: 1.75rem;
+}
+
+/* A group with a failed core check, or a row to look at, carries a 4 px edge in its tone */
+.health-group[data-tone='blocking'] {
+  --edge: var(--mantine-color-red-filled);
+}
+.health-group[data-tone='attention'] {
+  --edge: var(--mantine-color-yellow-filled);
+}
+:root[data-shutter-contrast='high'] .health-group[data-tone] {
+  --edge: currentColor;
+}
+.health-group[data-tone] > .mantine-Card-root {
+  box-shadow: inset 4px 0 0 var(--edge);
+}
+@media (forced-colors: active) {
+  .health-group[data-tone] > .mantine-Card-root {
+    box-shadow: none;
+    border-left: 4px solid CanvasText;
+  }
+}
+.health-group h2 {
+  scroll-margin-top: calc(var(--shutter-header-h) + 16px);
+}
+
+/* The rows: the label column on a laptop, one edge on a row that needs a look */
+.health-rows {
+  width: 100%;
+}
+.health-rows th {
+  width: 20rem;
+  max-width: 45%;
+  font-weight: 500;
+  text-align: left;
+  vertical-align: top;
+}
+.health-rows td {
+  vertical-align: top;
+  min-width: 0;
+}
+.health-row[data-tone='blocking'] {
+  --row-edge: var(--mantine-color-red-filled);
+}
+.health-row[data-tone='attention'] {
+  --row-edge: var(--mantine-color-yellow-filled);
+}
+:root[data-shutter-contrast='high'] .health-row[data-tone] {
+  --row-edge: currentColor;
+}
+.health-row[data-tone] > th {
+  box-shadow: inset 3px 0 0 var(--row-edge);
+}
+
+/* A phone: a short value sits beside its label, a long one under it, and nothing scrolls sideways */
+@media (max-width: 35.99em) {
+  .health-rows,
+  .health-rows tbody {
+    display: block;
+    width: 100%;
+  }
+  .health-rows tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    column-gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--mantine-color-default-border);
+  }
+  .health-rows tr:last-of-type {
+    border-bottom: 0;
+  }
+  .health-rows tr[data-long] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .health-rows th,
+  .health-rows td {
+    display: block;
+    width: auto;
+    max-width: none;
+    padding: 0;
+    min-width: 0;
+  }
+  .health-rows td {
+    text-align: right;
+  }
+  .health-rows tr[data-long] td {
+    text-align: left;
+    padding-top: 2px;
+    padding-left: 24px;
+  }
+  .health-rows td > div {
+    align-items: flex-end;
+  }
+  .health-rows tr[data-long] td > div {
+    align-items: flex-start;
+  }
+  .health-rows td .mantine-Group-root {
+    justify-content: flex-end;
+  }
+  .health-rows tr[data-long] td .mantine-Group-root {
+    justify-content: flex-start;
+  }
+  .health-row[data-tone] > th {
+    box-shadow: none;
+  }
+  .health-row[data-tone] {
+    box-shadow: inset 3px 0 0 var(--row-edge);
+    padding-left: var(--mantine-spacing-xs);
+  }
+}
