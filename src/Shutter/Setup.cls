@@ -1004,7 +1004,7 @@ ClassMethod SeedAll(root As %String) As %Status [ Private ]
 /// The items InstallInto adds to a site's production, in Shutter.Production's order: the recovery side, the index and
 /// the board, never the feed or the demo (ADT In, ADT to Downstream, Downstream Out, Scenario Player). Case Intake and
 /// Case Intake Store are added once Shutter.Production defines them. A new recovery item is listed here too.
-Parameter INSTALLITEMS = "HL7 Index,Escalation Mail,Case Workflow,Case Review,Case Question,Incident Workflow,Evidence Collector,Agent Conformance,Agent Encounter,Agent Impact,Agent Coordinator,Agent Board,Gate,Shutter Approvers,Shutter API,Verifier,Case Intake,Case Intake Store,Second Parser";
+Parameter INSTALLITEMS = "HL7 Index,Case Releaser,Escalation Mail,Case Workflow,Case Review,Case Question,Incident Workflow,Evidence Collector,Agent Conformance,Agent Encounter,Agent Impact,Agent Coordinator,Agent Board,Gate,Shutter Approvers,Shutter API,Verifier,Case Intake,Case Intake Store,Second Parser";
 
 /// Adds Shutter's items (INSTALLITEMS) to the named production, each as Shutter.Production's compiled definition has
 /// it (class, pool size, enabled, foreground, comment, category, trace flag, schedule and settings), when the
@@ -1355,6 +1355,8 @@ ClassMethod Doctor() As %String [ SqlProc ]
     // The newest run that reached a model (v1.35), beside the configured mode: what was last observed.
     Set last = ##class(Shutter.Store.AgentRun).LastLive()
     If $ISOBJECT(last) { Set r."last_live_run" = last } Else { Do r.%Set("last_live_run", "", "null") }
+    // The Case Releaser's sweep (8.1, v1.35): when it last ran, and its last run with candidates.
+    Try { Set r."release_sweep" = ##class(Shutter.Operation.Releaser).Status() } Catch ex { Set r."release_sweep" = {"error": (ex.DisplayString())} }
     // The Second Parser (v1.34): the jar, and whether the Java gateway answers a probe.
     Set r."second_parser" = ##class(Shutter.Util.SecondParser).Status()
     Set r.license = ##class(%DynamicObject).%FromJSON(..LicenseInfo())
