@@ -201,6 +201,26 @@ describe('Ask about this case', () => {
     }
   });
 
+  it('lays its parts out as labelled sections: a quiet read-only line, how deep to ask, the questions', async () => {
+    renderCase('C-000008');
+    const p = await panel();
+    // The read-only note is a line with its words, not a boxed notice
+    const note = within(p).getByText('Read-only.').closest('.ask-note');
+    expect(note).not.toBeNull();
+    expect(p.querySelector('.ask-readonly')).toBeNull();
+    // The choice of tier carries its visible label, which names the tab list
+    expect(within(p).getByText('How deep to ask')).toBeVisible();
+    expect(within(p).getByRole('tablist', { name: 'How deep to ask' })).toBeInTheDocument();
+    // The suggested questions and the cited sections, at sizes that leave room around them
+    const group = await within(p).findByRole('group', { name: 'Suggested questions' });
+    const chips = within(group).getAllByRole('button');
+    for (const chip of chips) expect(chip).toHaveClass('ask-chip');
+    const thread = await within(p).findByRole('region', { name: 'Example conversation' });
+    const cite = within(thread).getAllByRole('button', { name: 'Operation' })[0];
+    expect(cite).toHaveClass('ask-cite');
+    expect(cite).toHaveAttribute('data-size', 'sm');
+  });
+
   it('opens on the recorded example conversation, labelled with its recording in the demo', async () => {
     renderCase('C-000008');
     const p = await panel();

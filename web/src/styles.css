@@ -1132,6 +1132,25 @@ body {
   background: var(--mantine-color-default-hover);
   border-radius: var(--mantine-radius-md);
 }
+/* Ask's read-only note: a quiet line with an eye, not a box (the Evidence tab's catalogue note keeps the box). */
+.ask-note-icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--mantine-color-dimmed);
+}
+/* The cited sections under an answer: chips a step larger than a legend's, with room between them. */
+.ask-cite {
+  min-height: 24px;
+}
+/* On a phone the suggested questions are 44 px touch targets, and the cited sections at least 32 px. */
+@media (max-width: 47.99em) {
+  .ask-chip.ask-chip {
+    min-height: 2.75rem;
+  }
+  .ask-cite {
+    min-height: 32px;
+  }
+}
 .ask-tier {
   border: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
   border-radius: var(--mantine-radius-md);
@@ -1151,7 +1170,7 @@ body {
 }
 .ask-turn + .ask-turn {
   border-top: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
-  padding-top: var(--mantine-spacing-sm);
+  padding-top: var(--mantine-spacing-md);
 }
 .ask-locked {
   border: calc(0.0625rem * var(--mantine-scale)) dashed var(--mantine-color-default-border);

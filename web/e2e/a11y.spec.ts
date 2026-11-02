@@ -119,6 +119,20 @@ for (const { colorScheme, contrast, palette } of MODES) {
       expect(await audit(page)).toEqual([]);
     });
 
+    // Ask on a laptop without the tour: the drawer over the case
+    test(`Ask about this case on a laptop ${caseEvidence.tag}`, async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await signIn(page);
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await go(page, '/cases/C-000008?ask=1');
+      const drawer = page.getByRole('dialog', { name: 'Ask about this case' });
+      await expect(
+        drawer.getByRole('region', { name: 'What if: the setting behind this outcome' }),
+      ).toBeVisible();
+      await expect(page.getByRole('status')).toHaveCount(0);
+      expect(await audit(page)).toEqual([]);
+    });
+
     // The appearance menu, open: its items and their current-state labels are audited too.
     test(`appearance menu ${shell.tag}`, async ({ page }) => {
       await signIn(page);
