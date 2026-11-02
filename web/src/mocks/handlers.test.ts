@@ -570,4 +570,18 @@ describe('the cases list', () => {
     // A withheld merge is the policy's in board mode too
     expect(by['C-000012']).toBe('policy:E14');
   });
+
+  it('serves a page at a time, newest first, with the total of every match', async () => {
+    const all = await api.get<CaseList>('/cases');
+    expect(all.items).toHaveLength(all.total);
+    expect(all.total).toBeGreaterThan(25);
+    const first = await api.get<CaseList>('/cases?limit=25');
+    expect(first.total).toBe(all.total);
+    expect(first.items.map((c) => c.caseId)).toEqual(all.items.slice(0, 25).map((c) => c.caseId));
+    const second = await api.get<CaseList>('/cases?limit=25&offset=25');
+    expect(second.items.map((c) => c.caseId)).toEqual(all.items.slice(25, 50).map((c) => c.caseId));
+    const resolved = await api.get<CaseList>('/cases?state=resolved&limit=1');
+    expect(resolved.items).toHaveLength(1);
+    expect(resolved.total).toBe(all.items.filter((c) => c.state === 'resolved').length);
+  });
 });

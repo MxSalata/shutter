@@ -655,12 +655,23 @@ export const handlers = [
     const url = new URL(request.url);
     const state = url.searchParams.get('state');
     const scenario = url.searchParams.get('scenario');
+    // A page of the list, as the API serves it: `total` counts every match, the items are the page's
+    const count = (name: string) => {
+      if (!url.searchParams.has(name)) return undefined;
+      const n = Number(url.searchParams.get(name));
+      return Number.isInteger(n) && n >= 0 ? n : undefined;
+    };
+    const offset = count('offset') ?? 0;
+    const limit = count('limit');
     // The list names who made each case's current plan, from the recorded plan, as the API's summary does
     const items = allCases()
       .map((c) => ({ ...c.summary, ...planOrigin(c), ...writesOf(c) }))
       .filter((c) => (!state || c.state === state) && (!scenario || c.scenario === scenario))
       .sort((a, b) => b.openedAt.localeCompare(a.openedAt));
-    return HttpResponse.json({ items, total: items.length });
+    return HttpResponse.json({
+      items: items.slice(offset, limit === undefined ? undefined : offset + limit),
+      total: items.length,
+    });
   }),
   http.get(`${BASE}/cases/:id`, ({ params }) => part(String(params.id), (c) => c.detail, 'not_found')),
   http.get(`${BASE}/cases/:id/events`, ({ params }) => part(String(params.id), (c) => c.events, 'not_found')),
