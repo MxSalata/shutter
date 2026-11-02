@@ -43,6 +43,10 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
                 Set provider = ..MockProvider(mock, spec, terminal, .model)
             } ElseIf spec.ProviderConfig '= "" {
                 Set provider = ..ProviderFrom(spec.ProviderConfig, .model)
+            } ElseIf ##class(Shutter.Setup).ProviderConfigured() {
+                // Shutter's own configuration (ConfigureProvider, v1.35): built here rather than by the agent class from its
+                // PROVIDERCONFIG parameter, so the bound on one call (BoundCall) applies to the default path too.
+                Set provider = ..ProviderFrom($GET(^Shutter.Config("aihub", "provider")), .model)
             }
             Set agent = $CLASSMETHOD(spec.AgentClass, "%New")
             If agent.%IsA("Shutter.Agent.Base") {

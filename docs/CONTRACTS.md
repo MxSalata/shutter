@@ -719,7 +719,9 @@ fifth collection, `review`, is the production review agent's (13.6) and reaches 
 **One model call is bounded (v1.35).** The runner gives the provider an HTTP request timeout, `Shutter.Setup.ProviderTimeoutSeconds`
 (`^Shutter.Config("providerTimeoutSeconds")`, `SHUTTER_PROVIDER_TIMEOUT_SECONDS` at a start, 120 s unless set, held to 10
 to 600), and a connect timeout of 10 s, as `http_config` on the provider's configuration unless the site's own configuration
-sets one. Without it a hung provider held a board member until the board's 600 s timeout, since the run's deadline is checked
+sets one. The runner builds the provider itself for the item's `ProviderConfig`, for the mimic, and for Shutter's own
+configuration (`^Shutter.Config("aihub", "provider")`, written by `ConfigureProvider`), so the bound holds on the default live
+path too; only an agent class run with none of these falls back to its own `PROVIDERCONFIG` parameter. Without it a hung provider held a board member until the board's 600 s timeout, since the run's deadline is checked
 only between the model's turns; with it the call fails, the run ends in error and the board goes on without that member. The
 Doctor reports `provider_timeout_seconds`.
 
