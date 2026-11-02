@@ -1,4 +1,5 @@
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { Scenario } from '@/api/types';
 import fixtures from '@/mocks/fixtures.json';
@@ -125,6 +126,15 @@ describe('the small marks', () => {
     expect(card).toHaveClass('member-card', 'dissent');
     expect(card.style.getPropertyValue('--mark-hue')).toBe('var(--shutter-hue-cyan)');
     expect(card.style.minWidth).toBe('0');
+  });
+
+  it("opens a badge's hint on keyboard focus, so the keyboard reaches it", async () => {
+    renderUi(
+      <StatusBadge tone="attention" label="Held" hint="Waits for an approver before anything is sent." />,
+    );
+    await userEvent.tab();
+    expect(screen.getByText('Held').closest('.mantine-Badge-root')).toHaveFocus();
+    expect(await screen.findByText('Waits for an approver before anything is sent.')).toBeInTheDocument();
   });
 
   it('says beside a confirm whether it acts in the trial or on the live system', () => {

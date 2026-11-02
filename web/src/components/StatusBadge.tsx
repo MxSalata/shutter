@@ -1,12 +1,13 @@
 import { Alert, Badge, Tooltip, type BadgeProps } from '@mantine/core';
 import type { Icon } from '@tabler/icons-react';
 import { TONE_COLOURS, TONE_ICONS, type Status, type Tone } from '@/lib/tone';
+import { HINT_EVENTS } from '@/theme';
 
 const ICON_SIZES = { xs: 10, sm: 12, md: 14, lg: 16, xl: 18 } as const;
 
 /**
  * A status in one of the five tones, with its icon and its words; the hint, when there is one, is a tooltip the
- * keyboard reaches too. The icon is decorative: the label says everything.
+ * keyboard and a tap reach too. The icon is decorative: the label says everything.
  */
 export function StatusBadge({
   tone,
@@ -39,7 +40,7 @@ export function StatusBadge({
   );
   if (!hint) return badge;
   return (
-    <Tooltip label={hint} multiline maw={320}>
+    <Tooltip label={hint} multiline maw={320} events={HINT_EVENTS}>
       {badge}
     </Tooltip>
   );

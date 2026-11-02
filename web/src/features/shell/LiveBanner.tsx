@@ -6,6 +6,7 @@ import type { LiveStatus } from '@/api/types';
 import { TRIAL } from '@/env/mode';
 import { formatAge, formatTime, parseTime, zoneLabel } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
+import { HINT_EVENTS } from '@/theme';
 
 /** "a new failure every 7 minutes", "every minute", or the unnumbered form when the server gave no interval. */
 function cadence(every: number | undefined): string {
@@ -65,7 +66,7 @@ export function LiveBanner() {
               {' '}
               Last:{' '}
               {last.title ? (
-                <Tooltip label={last.title} withArrow>
+                <Tooltip label={last.title} withArrow events={HINT_EVENTS}>
                   <span className="live-story" tabIndex={0}>
                     {last.scenario}
                   </span>
