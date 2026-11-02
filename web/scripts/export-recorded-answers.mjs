@@ -54,7 +54,8 @@ const questionsDir = args.questions ?? '../knowledge/questions';
 let cookie = '';
 
 async function call(method, path, body) {
-  const headers = { Accept: 'application/json' };
+  // In English: Node's fetch asks for any language, and IRIS then words its own texts in the first it has, Arabic
+  const headers = { Accept: 'application/json', 'Accept-Language': 'en' };
   if (cookie) headers.Cookie = cookie;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (method !== 'GET') headers['X-Requested-With'] = 'Shutter';

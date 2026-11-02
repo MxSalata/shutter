@@ -3,18 +3,34 @@
  * Records the demo's data from a running Shutter: signs in to the REST API (docs/CONTRACTS.md, section 5), reads
  * every read route for the scenarios, every case, every incident, every production review, the library, the settings, the
  * costs and the health report, and writes them to src/mocks/fixtures.json, which the in-browser mock serves in the demo build and the tests.
+ * The precedents (CONTRACTS 6.4) are kept once each, from every kept case's GET /cases/{id}/precedents, as one list
+ * newest first: the mock answers a case's route from it as the store stood when the case's evidence was collected.
  *
  *   node scripts/record-demo.mjs [--url http://localhost:52773] [--user operator] [--out src/mocks/fixtures.json]
  *                                [--cases C-000002,C-000008,...] [--incidents I-000001,...] [--reviews PR-000001,...]
+ *                                [--ids ids.json] [--allow-unmapped]
  *
  * --cases keeps only the cases named (one per scenario and mode reads better than every rehearsal of the same run),
  * and the costs are then those of the kept cases' runs. --incidents keeps only the incidents named; the cases a kept
  * incident holds are kept with it, so its chains link to them. --reviews keeps only the production reviews named, and
  * their agent runs are then the costs' byReview.
+ * --ids names a JSON file that maps the instance's case, incident and review ids to the demo's ({"C-000155":
+ * "C-000002", "I-000009": "I-000001", "PR-000018": "PR-000001", ...}), so a re-recording keeps the ids the tests and the
+ * guide name. --cases, --incidents and --reviews still name the instance's ids. The map is applied to every id
+ * written, wherever it stands: keys, fields, lists and texts (events, plans, approvals, headlines, chains, links,
+ * costs). A replayed agent run keeps the ids of the case it was recorded on (its tool calls' arguments, its answer, the
+ * plan the coordinator's answer wrote): where the instance's case of such an id tells the same story as the kept case
+ * (the same operation key and receiver), it is rewritten in that case's runs and plan to the case's own id, and the
+ * recording's incident to the case's own incident, as export-recorded-answers.mjs does for the recorded answers. Two
+ * lists are trimmed first: a review's latest cases (its case aggregates, overall and per finding) keep only the cases
+ * the map names, their counts staying the instance's, and with --cases the scenarios carry no latestCase, which the
+ * mock works out from the kept cases. Any other id of those kinds that the map does not name stops the export, since
+ * it would point at a case the demo does not have, or at a different one; --allow-unmapped lists them and writes the
+ * file anyway.
  * The password comes from SHUTTER_PASSWORD (default: the demo installer's "shutter"). Only reads: nothing is
  * changed on the instance. Node 22 or later (fetch).
  */
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 const args = Object.fromEntries(
   process.argv
@@ -31,11 +47,16 @@ const out = args.out ?? 'src/mocks/fixtures.json';
 const only = args.cases ? new Set(args.cases.split(',').map((c) => c.trim())) : null;
 const onlyIncidents = args.incidents ? new Set(args.incidents.split(',').map((i) => i.trim())) : null;
 const onlyReviews = args.reviews ? new Set(args.reviews.split(',').map((r) => r.trim())) : null;
+const idMap = args.ids ? JSON.parse(readFileSync(args.ids, 'utf8')) : null;
+// A boolean flag takes no value: the reduce above pairs it with the next argument, so it is looked for on its own
+const allowUnmapped = process.argv.includes('--allow-unmapped');
 
 let cookie = '';
 
 async function call(method, path, body) {
-  const headers = { Accept: 'application/json' };
+  // In English: Node's fetch asks for any language, and IRIS then words its own error texts (a health probe's) in the
+  // first it has, Arabic
+  const headers = { Accept: 'application/json', 'Accept-Language': 'en' };
   if (cookie) headers.Cookie = cookie;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (method !== 'GET') headers['X-Requested-With'] = 'Shutter';
@@ -95,6 +116,14 @@ for (const summary of kept) {
       : null,
   };
 }
+// Every precedent the kept cases' conditions match, once each, newest first. An instance before v1.35 answers 404.
+const precedentRows = new Map();
+for (const summary of kept)
+  for (const p of (await read(`/cases/${encodeURIComponent(summary.caseId)}/precedents`))?.precedents ?? [])
+    precedentRows.set(String(p.id), p);
+const precedents = [...precedentRows.values()].sort(
+  (a, b) => b.createdAt.localeCompare(a.createdAt) || Number(b.id) - Number(a.id),
+);
 // The production reviews (CONTRACTS 13): the targets, the list and each review as GET answers it. An instance without
 // the routes answers 404, and the demo then has no reviews.
 const reviewTargets = await read('/production-reviews/targets');
@@ -208,11 +237,24 @@ function costsOfKept() {
   };
 }
 
+const health = await read('/health');
+// Where it was recorded, and what the agent did with the reviews, in the source's words
+const onHub = health?.ai_hub_present === true ? ' on an instance with IRIS AI Hub' : '';
+const ranked = Object.values(reviews).filter((r) => r?.agent?.state === 'ok');
+const rankedWords = ranked.length
+  ? `, ${ranked.length} ranked by the agent${ranked.every((r) => r.agent.mode === 'replay') ? ' in replays of recorded runs' : ''}`
+  : '';
+const reviewWords = keptReviews.length
+  ? `; ${keptReviews.length} production review${keptReviews.length === 1 ? '' : 's'}${rankedWords}`
+  : '';
+
 const fixtures = {
-  source: `Recorded from Shutter's REST API at ${recordedAt}: ${kept.length} cases (${byMode})${incidentCount ? ` and ${incidentCount} incident${incidentCount === 1 ? '' : 's'}` : ''}; ${agents}. The demo serves these answers in the browser; nothing in it reaches an IRIS instance.`,
+  source: `Recorded from Shutter's REST API${onHub} at ${recordedAt}: ${kept.length} cases (${byMode})${incidentCount ? ` and ${incidentCount} incident${incidentCount === 1 ? '' : 's'}` : ''}; ${agents}${reviewWords}. The demo serves these answers in the browser; nothing in it reaches an IRIS instance.`,
   recordedAt,
-  scenarios: (Array.isArray(scenarios) ? scenarios : scenarios.scenarios).map((s) => ({
+  // With --cases a scenario's latest case may be one the demo does not keep: the mock works it out from the kept cases
+  scenarios: (Array.isArray(scenarios) ? scenarios : scenarios.scenarios).map(({ latestCase, ...s }) => ({
     ...s,
+    ...(only ? {} : { latestCase }),
     steps: s.steps.map(({ path: _path, ...step }) => step),
   })),
   cases,
@@ -220,13 +262,88 @@ const fixtures = {
   library: await read('/library'),
   settings: await read('/settings'),
   costs: only || onlyReviews ? costsOfKept() : await read('/costs'),
-  health: await read('/health'),
+  health,
   siteProfile: await read('/site-profile'),
   siteProfileHistory: await read('/site-profile/history'),
   productionReviews: { targets: reviewTargets?.items ?? [], list: keptReviews, reviews },
+  precedents,
 };
 await call('DELETE', '/session');
-writeFileSync(out, `${JSON.stringify(fixtures, null, 1)}\n`);
+
+/** A case, incident or review id as the API writes it, as a whole word. */
+const ID = /\b(?:C|I|PR)-\d{6}\b/g;
+
+/**
+ * The ids of the cases and incidents the kept cases' replayed runs were recorded on, rewritten in those runs and the
+ * case's plan to the case's own (and its incident's), once the instance confirms the recorded case is the same story.
+ * Returns what it rewrote, for the console.
+ */
+async function ownRecordings(data) {
+  const rewritten = [];
+  const stories = new Map();
+  const storyOf = async (id) => {
+    if (!stories.has(id)) stories.set(id, await read(`/cases/${encodeURIComponent(id)}`));
+    return stories.get(id);
+  };
+  for (const [caseId, c] of Object.entries(data.cases)) {
+    if (!c.runs?.length) continue;
+    // The runs, and the plan the coordinator's recorded answer wrote
+    const text = JSON.stringify([c.runs, c.plan]);
+    const own = c.summary;
+    const incident = own.incidentId || c.detail?.incidentId;
+    const swap = {};
+    for (const id of new Set(text.match(ID) ?? [])) {
+      if (id === caseId || id in idMap) continue;
+      if (id.startsWith('C-')) {
+        const other = await storyOf(id);
+        if (other && other.operationKey === own.operationKey && other.receiver === own.receiver)
+          swap[id] = caseId;
+      } else if (id.startsWith('I-') && incident) {
+        const other = await read(`/incidents/${encodeURIComponent(id)}`);
+        if (other && other.receiver === own.receiver) swap[id] = incident;
+      }
+    }
+    if (!Object.keys(swap).length) continue;
+    [c.runs, c.plan] = JSON.parse(text.replace(ID, (id) => swap[id] ?? id));
+    rewritten.push(`${caseId}: ${Object.keys(swap).join(', ')}`);
+  }
+  return rewritten;
+}
+
+/**
+ * The fixtures with the instance's ids rewritten to the demo's by --ids, everywhere they stand, the reviews' lists of
+ * latest cases trimmed to the cases the map names first. The costs' byCase is sorted again on the demo's ids, newest
+ * first, as the route sorts it.
+ */
+function mapped(data) {
+  const known = (id) => id in idMap;
+  const trim = (aggregate) => {
+    if (Array.isArray(aggregate?.latest)) aggregate.latest = aggregate.latest.filter(known);
+  };
+  for (const review of Object.values(data.productionReviews?.reviews ?? {})) {
+    for (const aggregate of Object.values(review?.caseAggregates ?? {})) trim(aggregate);
+    for (const finding of review?.findings ?? []) trim(finding.cases);
+  }
+  const text = JSON.stringify(data);
+  const unmapped = [...new Set(text.match(ID) ?? [])].filter((id) => !(id in idMap)).sort();
+  if (unmapped.length) {
+    const what = `${unmapped.length} id(s) the map does not name: ${unmapped.join(', ')}`;
+    if (!allowUnmapped) throw new Error(`${what}. Add them to ${args.ids}, or pass --allow-unmapped.`);
+    console.warn(`left as they are: ${what}`);
+  }
+  const result = JSON.parse(text.replace(ID, (id) => idMap[id] ?? id));
+  result.costs?.byCase?.sort((a, b) => b.caseId.localeCompare(a.caseId));
+  return result;
+}
+
+if (idMap) {
+  await call('POST', '/session', { username: user, password });
+  const rewritten = await ownRecordings(fixtures);
+  await call('DELETE', '/session');
+  if (rewritten.length)
+    console.log(`the recordings' own ids, rewritten to the case's: ${rewritten.join('; ')}`);
+}
+writeFileSync(out, `${JSON.stringify(idMap ? mapped(fixtures) : fixtures, null, 1)}\n`);
 console.log(
   `wrote ${out}: ${kept.length} cases, ${incidentCount} incidents, ${keptReviews.length} reviews, ${fixtures.scenarios.length} scenarios`,
 );
