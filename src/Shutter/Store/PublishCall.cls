@@ -3,9 +3,10 @@
 Class Shutter.Store.PublishCall Extends (%Persistent, %JSON.Adaptor)
 {
 
-Property At As %String(%JSONFIELDNAME = "at", MAXLEN = 30);
+/// When the call was made (the column is CalledAt, since At is a word SQL keeps).
+Property CalledAt As %String(%JSONFIELDNAME = "at", MAXLEN = 30);
 
-Index AtIdx On At;
+Index CalledIdx On CalledAt;
 
 /// The IRIS user the gateway authenticated.
 Property User As %String(%JSONFIELDNAME = "user", MAXLEN = 100);
@@ -23,7 +24,7 @@ Property DurationMs As %Integer(%JSONFIELDNAME = "durationMs");
 ClassMethod Record(tool As %String, target As %String = "", version As %String = "", durationMs As %Integer = "") As %Status
 {
     Set c = ..%New()
-    Set c.At = ##class(Shutter.Util.Time).NowUTC(), c.User = $SELECT($USERNAME = "UnknownUser": "", 1: $USERNAME)
+    Set c.CalledAt = ##class(Shutter.Util.Time).NowUTC(), c.User = $SELECT($USERNAME = "UnknownUser": "", 1: $USERNAME)
     Set c.Tool = $EXTRACT(tool, 1, 64), c.Target = $EXTRACT(target, 1, 200), c.Version = version
     If durationMs '= "" Set c.DurationMs = +durationMs
     Quit c.%Save()
@@ -33,7 +34,7 @@ ClassMethod Record(tool As %String, target As %String = "", version As %String =
 ClassMethod CountSince(sinceIso As %String) As %Integer
 {
     Set n = 0
-    &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.PublishCall WHERE At >= :sinceIso)
+    &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.PublishCall WHERE CalledAt >= :sinceIso)
     Quit +n
 }
 
@@ -60,7 +61,7 @@ Storage Default
 <Value>%%CLASSNAME</Value>
 </Value>
 <Value name="2">
-<Value>At</Value>
+<Value>CalledAt</Value>
 </Value>
 <Value name="3">
 <Value>User</Value>

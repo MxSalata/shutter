@@ -42,7 +42,7 @@ Method TestPublisher()
         Do $$$AssertTrue(pre.%IsDefined("summary") && pre.%IsDefined("precedents"), "GetPrecedents answers the summary and the rows")
     }
     Set after = $CLASSMETHOD(audit, "CountSince", "2000-01-01T00:00:00Z")
-    Do $$$AssertTrue(after >= before + 5, "every call wrote an audit row (" _ (after - before) _ " new)")
+    Do $$$AssertTrue(after >= (before + 5), "every call wrote an audit row (" _ (after - before) _ " new)")
     Set recent = $CLASSMETHOD(audit, "Recent", 1)
     Do $$$AssertTrue((recent.%Size() = 1) && (recent.%Get(0).tool '= ""), "the newest row names its tool: " _ recent.%ToJSON())
 }
