@@ -207,7 +207,7 @@ describe('SiteProfilePage', () => {
     expect(screen.queryByText('Shutter is running on the shipped answers')).not.toBeInTheDocument();
   });
 
-  // It fills a whole team form, about 3 s alone, so it gets more than the 5 s default when the suite runs in parallel.
+  // It fills a whole team form: about 3 s alone, 10 s on a busy machine, and 30 s when the suites run side by side.
   it('adds a team that corrects a receiver by hand, and sends it with the profile', async () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Add a team' }));
@@ -242,7 +242,7 @@ describe('SiteProfilePage', () => {
         sources: [],
       },
     ]);
-  }, 30_000);
+  }, 60_000);
 
   // It fills a team form too, about 4.5 s alone, so it gets the same allowance as the team test.
   it('refuses a team mailbox outside the allowed domains before sending, and points at it', async () => {
@@ -260,7 +260,7 @@ describe('SiteProfilePage', () => {
     await waitFor(() => expect(within(team).getByRole('textbox', { name: 'Mailbox' })).toHaveFocus());
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(puts).toHaveLength(0);
-  }, 30_000);
+  }, 60_000);
 
   it("sets the feed's zone to a fixed offset, and the review says every key changes", async () => {
     renderPage();

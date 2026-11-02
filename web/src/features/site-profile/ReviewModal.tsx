@@ -1,8 +1,8 @@
-import { Accordion, Alert, Button, Checkbox, Group, List, Modal, Stack, Text } from '@mantine/core';
+import { Accordion, Alert, Button, Checkbox, Group, List, Stack, Text } from '@mantine/core';
 import { useState } from 'react';
 import { DEMO_READ_ONLY } from '@/api/can';
 import type { SiteProfile, SiteProfileView } from '@/api/types';
-import { EnvChip } from '@/components/EnvChip';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { JsonBlock } from '@/components/JsonBlock';
 import { byEnv } from '@/env/copy';
 import type { Change } from './profile';
@@ -44,19 +44,17 @@ export function ReviewModal({
   const [acknowledged, setAcknowledged] = useState(false);
   const confirmOnly = changes.length === 0;
   return (
-    <Modal
+    <ConfirmModal
       opened={opened}
       onClose={() => (saving ? undefined : onCancel())}
       title={
-        <span style={{ display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-          {readOnly
-            ? `The changes for version ${next} of the site profile`
-            : confirmOnly
-              ? `Confirm the answers as version ${next}`
-              : `Save version ${next} of the site profile`}
-          {readOnly ? null : <EnvChip />}
-        </span>
+        readOnly
+          ? `The changes for version ${next} of the site profile`
+          : confirmOnly
+            ? `Confirm the answers as version ${next}`
+            : `Save version ${next} of the site profile`
       }
+      chip={!readOnly}
       size="lg"
     >
       <Stack gap="sm">
@@ -162,6 +160,6 @@ export function ReviewModal({
           )}
         </Group>
       </Stack>
-    </Modal>
+    </ConfirmModal>
   );
 }

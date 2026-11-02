@@ -362,11 +362,9 @@ describe('the second layer at the foot', () => {
   });
 });
 
-/** The words of the first layer, leaving out JSON (code, not prose) and what a closed disclosure holds. */
+/** The words of the first layer: `layer1Words` leaves out the API's JSON and what a closed disclosure holds. */
 function words(container: HTMLElement): number {
-  const clone = container.cloneNode(true) as HTMLElement;
-  clone.querySelectorAll('.json-block').forEach((e) => e.remove());
-  return layer1Words(clone).length;
+  return layer1Words(container).length;
 }
 
 describe('the word budget', () => {

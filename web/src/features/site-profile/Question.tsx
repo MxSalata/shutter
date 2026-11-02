@@ -3,6 +3,7 @@ import { IconArchive, IconSettingsBolt } from '@tabler/icons-react';
 import type { ReactNode } from 'react';
 import { CodeChip } from '@/components/CodeChip';
 import { TechDetail } from '@/components/TechDetail';
+import { HINT_EVENTS } from '@/theme';
 import { EFFECT_WORDS } from './profile';
 
 /**
@@ -28,7 +29,13 @@ export function Effect({ acts, decorative = false }: { acts: boolean; decorative
       <I size={14} stroke={1.8} aria-hidden />
     </span>
   );
-  return decorative ? mark : <Tooltip label={words}>{mark}</Tooltip>;
+  return decorative ? (
+    mark
+  ) : (
+    <Tooltip label={words} events={HINT_EVENTS}>
+      {mark}
+    </Tooltip>
+  );
 }
 
 /**
