@@ -338,7 +338,8 @@ hospital has. It never resets anything, and the scenario runner's Run and Reset 
   ten minutes after the press), or `failed` with `error`. `GET /settings` and the Doctor carry `live.storm`: the player's
   record (`stormId`, `state`, `startedAt`, `receiverDownUntil`, `receiverUpAt`, `sent`, `movements`, `patients` as
   `[{mrn, encounterId, ward, toWard, movements}]`, `endsAt`, `endedAt`) with Shutter's own view added (`Setup.StormCounts`:
-  `incidentId` and `incidentState`, null before the detector opens one; `cases` and `resolved` for the storm's cases;
+  `incidentId` and `incidentState`, the incident the storm's cases joined, one the detector opened for them or one already
+  open for the receiver, null before any; `cases` and `resolved` for the storm's cases;
   `cooldownUntil`). The rotation and the ordinary feed pause from the press until `done`, and the next story is then due
   `EveryMinutes` later. No model is needed for the story: the chains follow the policy, and a board convenes only where it
   says `board`. Fresh patients and beds mean the storm never collides with a story already playing.

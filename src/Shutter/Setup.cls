@@ -1421,8 +1421,11 @@ ClassMethod LiveStatus() As %DynamicObject
         Set text = $GET(^|hospital|Hospital.Live("status"))
         If text '= "" Set s = ##class(%DynamicObject).%FromJSON(text)
         Do s.%Set("enabled", ''$GET(^|hospital|Hospital.Config("live")), "boolean")
-        // The storm (4.4, v1.35): a press the player has not picked up yet, else the player's record, with Shutter's own
-        // view of it: the incident and the case counts.
+        // The storm (4.4, v1.35): the player's record as it stands (the status above is rewritten only after each call,
+        // and a storm is played within one), a press the player has not picked up yet before it, with Shutter's own view
+        // of it: the incident and the case counts.
+        Set record = $GET(^|hospital|Hospital.Live("storm"))
+        If record '= "" Set s.storm = ##class(%DynamicObject).%FromJSON(record)
         Set pending = $GET(^Shutter.Live("storm", "request"))
         If pending '= "" Set s.storm = ##class(%DynamicObject).%FromJSON(pending)
         Set storm = s.%Get("storm")
@@ -1442,7 +1445,8 @@ ClassMethod StormCounts(storm As %DynamicObject)
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT COUNT(*) AS N, SUM(CASE WHEN State = 'resolved' THEN 1 ELSE 0 END) AS R FROM Shutter_Store.""Case"" WHERE Scenario = 'storm' AND OpenedAt >= ?", since)
         If rs.%Next() Set cases = +rs.%Get("N"), resolved = +rs.%Get("R")
         Set storm.cases = cases, storm.resolved = resolved
-        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 IncidentId, State FROM Shutter_Store.Incident WHERE Receiver = 'Downstream Out' AND OpenedAt >= ? ORDER BY ID DESC", since)
+        // The incident the storm's cases joined: one the detector opened for them, or one already open for the receiver.
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 i.IncidentId, i.State FROM Shutter_Store.""Case"" c JOIN Shutter_Store.Incident i ON c.Incident = i.ID WHERE c.Scenario = 'storm' AND c.OpenedAt >= ? ORDER BY c.ID DESC", since)
         If rs.%Next() {
             Set storm.incidentId = rs.%Get("IncidentId"), storm.incidentState = rs.%Get("State")
         } Else {

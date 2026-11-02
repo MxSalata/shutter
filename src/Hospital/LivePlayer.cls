@@ -220,15 +220,15 @@ Method StormWatch() As %Status
     Quit $$$OK
 }
 
-/// The incident Shutter opened for the storm's failures: the newest for Downstream Out since the press, read in Shutter's
-/// namespace; "" when none yet.
+/// The incident the storm's cases joined in Shutter (one the detector opened for them, or one already open for the
+/// receiver), read in Shutter's namespace; "" when none yet.
 Method StormIncident(startedAt As %String) As %DynamicObject
 {
     Set out = ""
     Try {
         New $NAMESPACE
         Set $NAMESPACE = ..ShutterNamespace
-        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 IncidentId, State FROM Shutter_Store.Incident WHERE Receiver = 'Downstream Out' AND OpenedAt >= ? ORDER BY ID DESC", startedAt)
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 i.IncidentId, i.State FROM Shutter_Store.""Case"" c JOIN Shutter_Store.Incident i ON c.Incident = i.ID WHERE c.Scenario = 'storm' AND c.OpenedAt >= ? ORDER BY c.ID DESC", startedAt)
         If rs.%Next() Set out = {"incidentId": (rs.%Get("IncidentId")), "state": (rs.%Get("State"))}
     } Catch ex {
     }
