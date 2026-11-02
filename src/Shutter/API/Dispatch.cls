@@ -30,6 +30,8 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/cases/:caseId/plan" Method="GET" Call="CasePlan"/>
   <Route Url="/cases/:caseId/approvals" Method="GET" Call="CaseApprovals"/>
   <Route Url="/cases/:caseId/approvals" Method="POST" Call="CaseApprove"/>
+  <Route Url="/cases/:caseId/precedents" Method="GET" Call="CasePrecedents"/>
+  <Route Url="/precedents/:id/retire" Method="POST" Call="PrecedentRetire"/>
   <Route Url="/cases/:caseId/attempts" Method="GET" Call="CaseAttempts"/>
   <Route Url="/cases/:caseId/closure" Method="GET" Call="CaseClosure"/>
   <Route Url="/cases/:caseId/preview-blind-resend" Method="POST" Call="CasePreview"/>
@@ -543,6 +545,35 @@ ClassMethod CasePlan(caseId As %String) As %Status
         Set o.rehearsal = r
     } Else { Do o.%Set("rehearsal", "", "null") }
     Quit ..Json(o)
+}
+
+/// The precedents a case's conditions match at its receiver (CONTRACTS 6.4, v1.35): the summary the approval task
+/// quotes, the signature, the conditions, and the rows newest first, retired ones included with active false.
+ClassMethod CasePrecedents(caseId As %String) As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set o = {}
+    Set conditions = ##class(Shutter.Store.Precedent).ConditionsOf(case)
+    Set o.receiver = case.Receiver
+    If $ISOBJECT(conditions) { Set o.conditions = conditions } Else { Do o.%Set("conditions", "", "null") }
+    Set o.summary = ##class(Shutter.Store.Precedent).Summary(case.Receiver, conditions)
+    Set o.precedents = ##class(Shutter.Store.Precedent).RowsFor(case)
+    Quit ..Json(o)
+}
+
+/// Retire a precedent (Shutter_Approve, X-Requested-With; body {reason}): it stays on record and counts for nothing.
+/// 404 not_found; 409 already_retired, naming who retired it and when.
+ClassMethod PrecedentRetire(id As %String) As %Status
+{
+    If '..Allow("Shutter_Approve", 1) Quit $$$OK
+    Set body = ..Body()
+    Set why = ##class(Shutter.Store.Precedent).Retire(id, ..User(), ##class(Shutter.Util.Json).Str(body, "reason"), .p)
+    If why = "not_found" Quit ..Fail("404 Not Found", "not_found", "No precedent " _ id)
+    If why = "already_retired" Quit ..Fail("409 Conflict", "already_retired", "Precedent " _ id _ " was retired on " _ p.RetiredAt _ " by " _ p.RetiredBy)
+    If why '= "" Quit ..Fail("500 Internal Server Error", "save_failed", why)
+    Quit ..Json(p.Projection())
 }
 
 ClassMethod CaseApprovals(caseId As %String) As %Status

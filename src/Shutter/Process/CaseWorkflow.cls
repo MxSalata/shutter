@@ -1143,10 +1143,32 @@ ClassMethod ApprovalTask(case As Shutter.Store.Case, plan As Shutter.Store.Plan,
     Set task.%Subject = "Shutter " _ case.CaseId _ ": approve plan v" _ plan.Version _ " (" _ plan.Disposition _ ")"
     Set task.%Message = case.Headline _ $CHAR(10) _ "Exact action: " _ plan.ActionType _ " " _ plan.OperationKey _ " at receiver version " _ plan.ExpectedVersion _ $CHAR(10) _ "Plan digest: " _ plan.Digest _ $CHAR(10) _ "Snapshot digest: " _ $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.Digest, 1: "") _ $CHAR(10) _ "Rehearsal: would apply (rolled back)."
     Set task.%Message = task.%Message _ $CHAR(10) _ "To approve from the Workflow inbox, paste the plan digest above into the PlanDigest field: an approval with no digest, or another one, binds nothing and blocks the case."
+    // What approvers decided before on these conditions at this receiver (6.4, v1.35); a lookup that fails leaves the line out.
+    Try {
+        Set words = ##class(Shutter.Store.Precedent).Words(##class(Shutter.Store.Precedent).SummaryFor(case))
+        If words '= "" Set task.%Message = task.%Message _ $CHAR(10) _ words
+    } Catch ex {}
     If waitSeconds > 0 Set task.%Message = task.%Message _ $CHAR(10) _ "Unanswered after " _ ..WaitWords(waitSeconds) _ ", the task is cancelled and the case escalates to a person."
     Set task.%Priority = 2
     Set task.%FormFields = "PlanDigest,Comment"
     Quit task
+}
+
+/// A person's decision as a precedent (CONTRACTS 6.4, v1.35): an approval once its resend is verified at the receiver, a
+/// rejection at once; an automatic release writes none. Never an error for the case: a precedent that fails to write is
+/// a warning in the event log, and the case goes on.
+Method RecordPrecedent(case As Shutter.Store.Case, plan As Shutter.Store.Plan, approval As Shutter.Store.Approval, decision As %String)
+{
+    Try {
+        Set sc = ##class(Shutter.Store.Precedent).Record(case, plan, approval, decision, .p)
+        If $$$ISERR(sc) {
+            $$$LOGWARNING("The precedent of " _ case.CaseId _ " was not recorded: " _ $SYSTEM.Status.GetErrorText(sc))
+        } ElseIf $ISOBJECT(p) {
+            Do case.Note("note", "Precedent recorded: " _ decision _ " by " _ approval.Approver _ " on these conditions at " _ case.Receiver, "system", "precedent:" _ p.%Id())
+        }
+    } Catch ex {
+        $$$LOGWARNING("The precedent of " _ case.CaseId _ " was not recorded: " _ ex.DisplayString())
+    }
 }
 
 /// The automatic release (CONTRACTS 6.4): no Workflow task; an approval by "policy" binds the same things a
@@ -1366,6 +1388,7 @@ Method OnApproval(case As Shutter.Store.Case, result As EnsLib.Workflow.TaskResp
     If action '= "approve" {
         Set sc = ##class(Shutter.Store.Approval).Create(case, plan, case.CurrentSnapshot, ##class(Shutter.Operation.Gate).#POLICYVERSION, rehearsal, plan.ExpectedVersion, user, "rejected", comment, taskId, ..ApprovalValidSeconds, .a)
         Quit:$$$ISERR(sc) sc
+        Do ..RecordPrecedent(case, plan, a, "rejected")
         Set case.Headline = "Rejected by " _ user _ ": " _ case.Headline
         Quit case.Transition("blocked", "Rejected by " _ user _ $SELECT(comment '= "": ": " _ comment, 1: ""), user, "approval:" _ a.%Id())
     }
@@ -1514,6 +1537,8 @@ Method OnVerify(case As Shutter.Store.Case, result As Shutter.Msg.VerifyResult) 
         // A closure on a later transfer the feed sent whose delivery failed or is uncertain is written on that transfer's
         // case too (CONTRACTS 6.1): the person handling it sees what was dropped on its account.
         If $ISOBJECT(detail) Do ..NoteSupersededBy(case, detail.%Get("superseded_by"))
+        // An approval that held: a precedent for the next approver of these conditions (6.4).
+        Do ..RecordPrecedent(case, ##class(Shutter.Store.Plan).%OpenId(..PlanId), ##class(Shutter.Store.Approval).%OpenId(..ApprovalId), "approved")
         Quit case.Transition("resolved", "Verified: " _ result.Summary, "system", "verification:" _ result.VerificationId)
     }
     // A verification that established nothing yet is asked again with a growing wait, up to the limit (reads at about 0,
