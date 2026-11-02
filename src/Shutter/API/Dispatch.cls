@@ -576,7 +576,12 @@ ClassMethod CaseApprove(caseId As %String) As %Status
     If '$LISTFIND($LISTBUILD("approve", "reject"), decision) Quit ..Fail("400 Bad Request", "bad_request", "decision must be approve or reject")
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
-    If case.State '= "awaiting_approval" Quit ..Fail("409 Conflict", "wrong_state", "The case is " _ case.State _ ", not awaiting approval")
+    If case.State '= "awaiting_approval" {
+        // A second decision meets the first (v1.35): who decided, what and when, so two approvers see the same answer.
+        Set extra = {}, a = case.CurrentApproval
+        If $ISOBJECT(a) { Set extra.approval = {} Set extra.approval.decision = a.Decision, extra.approval.approver = a.Approver, extra.approval.decidedAt = a.DecidedAt, extra.approval.planDigest = a.PlanDigest }
+        Quit ..Fail("409 Conflict", "wrong_state", "The case is " _ case.State _ ", not awaiting approval" _ $SELECT($ISOBJECT(a) && (a.Decision '= ""): "; " _ a.Decision _ " by " _ a.Approver _ " at " _ a.DecidedAt, 1: ""), extra)
+    }
     Set plan = case.CurrentPlan
     Set digest = ##class(Shutter.Util.Json).Str(body, "planDigest")
     If '$ISOBJECT(plan) || (digest '= plan.Digest) {
@@ -1068,6 +1073,8 @@ ClassMethod Intake() As %Status
 {
     If '..Allow("Shutter_Intake", 1) Quit $$$OK
     Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    // A bound on the raw body (v1.35): an HL7 message with its envelope is far under 2 MB, and a forwarder gone wrong should not fill the store.
+    If $LENGTH(bodyText) > 2097152 Quit ..Fail("413 Payload Too Large", "too_large", "The intake body is over 2 MB; an HL7 message and its envelope are far smaller")
     Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
     If '$ISOBJECT(body) || $$$ISERR(psc) Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with message, failure, source and receiver")
     If $CLASSNAME(body) '= "%Library.DynamicObject" Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with message, failure, source and receiver")
