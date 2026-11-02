@@ -1349,6 +1349,9 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Set r.budget = ##class(Shutter.Util.Budget).Status()
     // The bound on one model call (v1.35): the provider's request timeout the runner sets.
     Set r."provider_timeout_seconds" = ..ProviderTimeoutSeconds()
+    // The newest run that reached a model (v1.35), beside the configured mode: what was last observed.
+    Set last = ##class(Shutter.Store.AgentRun).LastLive()
+    If $ISOBJECT(last) { Set r."last_live_run" = last } Else { Do r.%Set("last_live_run", "", "null") }
     // The Second Parser (v1.34): the jar, and whether the Java gateway answers a probe.
     Set r."second_parser" = ##class(Shutter.Util.SecondParser).Status()
     Set r.license = ##class(%DynamicObject).%FromJSON(..LicenseInfo())
