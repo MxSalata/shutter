@@ -13,7 +13,9 @@ import {
   clockSentence,
   offsetSeconds,
   partSeconds,
+  NO_FIGURES,
   passClock,
+  REPLAYED_WORDS,
   rowFigures,
   type ClockRow,
   type PassClock,
@@ -167,7 +169,9 @@ function ClockTable({ clock }: { clock: PassClock }) {
     <Table.ScrollContainer minWidth={560} className="stack-scroll">
       <StackTable verticalSpacing="xs" fz="sm" className="stack-table">
         <Table.Caption>
-          Starts in seconds from the pass&apos;s first start; model and tool time as IRIS AI Hub counted them.
+          {clock.replayed
+            ? 'Replayed: times as recorded. Starts in seconds as the workflow runs a pass, from the recorded durations; model and tool time as IRIS AI Hub counted them.'
+            : "Starts in seconds from the pass's first start; model and tool time as IRIS AI Hub counted them."}
         </Table.Caption>
         <StackTable.Thead>
           <StackTable.Tr>
@@ -218,7 +222,8 @@ function ClockTable({ clock }: { clock: PassClock }) {
  * "When each agent worked": the board pass's runs on one time axis, under the specialists' cards and above the
  * coordinator's, as a disclosure open in Technical and closed in Plain. The picture says it in one sentence for a
  * screen reader, the Plain sentence under it says it for everyone, Technical adds each run's split between the model
- * and the tools, and "As a table" gives the same facts. A pass whose rows cannot draw it honestly shows nothing
+ * and the tools, and "As a table" gives the same facts. A replayed pass says so under the picture ("Replayed: times as
+ * recorded"), and Technical says how it is drawn. A pass whose rows cannot draw it honestly shows nothing
  * (`passClock`).
  */
 export function RunTimeline({ runs }: { runs: AgentRun[] | null | undefined }) {
@@ -229,20 +234,35 @@ export function RunTimeline({ runs }: { runs: AgentRun[] | null | undefined }) {
     <TechDetail kind="data" label="When each agent worked" tour="case-run-timeline">
       <Stack gap="xs" data-testid="run-timeline">
         <ClockChart clock={clock} />
-        <Text size="xs" c="dimmed">
-          {"Seconds from the pass's first start, "}
-          <Timestamp iso={clock.startedAt} size="xs" c="dimmed" />
-          {clock.precision === 's' ? ', to the second' : ''}.
-        </Text>
+        {clock.replayed ? (
+          <Text size="xs" c="dimmed" data-testid="run-timeline-replayed">
+            Replayed: times as recorded, in seconds from the recorded pass&apos;s start.
+          </Text>
+        ) : (
+          <Text size="xs" c="dimmed">
+            {"Seconds from the pass's first start, "}
+            <Timestamp iso={clock.startedAt} size="xs" c="dimmed" />
+            {clock.precision === 's' ? ', to the second' : ''}.
+          </Text>
+        )}
         <Text size="sm" maw="68ch" data-testid="run-timeline-sentence">
           {clockSentence(clock)}
         </Text>
-        {technical ? (
+        {/* Each run's split from AI Hub's counters, when any run has one: a list of "timings as recorded" says nothing */}
+        {technical && clock.rows.some((r) => rowFigures(r) !== NO_FIGURES) ? (
           <List size="sm" spacing={2} data-testid="run-timeline-figures">
             {clock.rows.map((r) => (
               <List.Item key={r.key}>{`${r.name}: ${rowFigures(r)}`}</List.Item>
             ))}
           </List>
+        ) : null}
+        {clock.replayed ? (
+          // How a replay is drawn is prose about reading the picture: closed in both modes
+          <TechDetail kind="explain" label="How a replay is drawn">
+            <Text size="sm" maw="68ch" data-testid="run-timeline-replay-rule">
+              {REPLAYED_WORDS}
+            </Text>
+          </TechDetail>
         ) : null}
         <Text size="sm" c="dimmed" maw="68ch">
           {legendOf(clock)}

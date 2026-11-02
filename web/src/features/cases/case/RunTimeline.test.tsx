@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -8,9 +8,10 @@ import fixtures from '@/mocks/fixtures.json';
 import { resetMock } from '@/mocks/handlers';
 import { server } from '@/mocks/node';
 import { renderUi } from '@/test/render';
-import { call, livePass, withLiveClock } from '@/test/runs';
+import { call, livePass, replayedPass, withLiveClock } from '@/test/runs';
 import { BoardPanel } from './BoardPanel';
 import { RunTimeline } from './RunTimeline';
+import { REPLAYED_WORDS } from './runClock';
 
 const toggle = () => screen.getByRole('button', { name: 'When each agent worked' });
 const picture = () => screen.findByRole('img', { name: /^When each agent worked: / });
@@ -145,15 +146,64 @@ describe('When each agent worked', () => {
     expect(screen.getByText(/No tool-call times are recorded, so the bars carry no marks\./)).toBeVisible();
   });
 
-  it('shows nothing for a pass its rows cannot draw honestly: the recording the trial replays, or no coordinator yet', () => {
-    const recorded = (fixtures.cases as unknown as Record<string, { runs: AgentRun[] }>)['C-000008'].runs;
+  it('draws a replayed pass as the recording ran it, says so under the picture, and says how one click away', async () => {
+    const { container } = renderUi(<RunTimeline runs={replayedPass()} />, { detail: 'technical' });
+    expect(
+      await screen.findByRole('img', { name: /^When each agent worked, replayed/ }),
+    ).toHaveAccessibleName(
+      'When each agent worked, replayed with the times as recorded: the three specialists at the same time, then the coordinator; the recorded pass took 31 s.',
+    );
+    expect(screen.getByTestId('run-timeline-replayed')).toHaveTextContent(
+      "Replayed: times as recorded, in seconds from the recorded pass's start.",
+    );
+    expect(screen.getByTestId('run-timeline-sentence')).toHaveTextContent(
+      'The three specialists worked at the same time, then the coordinator wrote the plan. The recorded pass took 31 s.',
+    );
+    // No run of the recording has AI Hub's counters, so Technical lists no split
+    expect(screen.queryByTestId('run-timeline-figures')).not.toBeInTheDocument();
+    // How a replay is drawn is prose: closed in both modes, the words one click away
+    const how = screen.getByRole('button', { name: 'How a replay is drawn' });
+    expect(how).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(how);
+    await waitFor(() => expect(screen.getByTestId('run-timeline-replay-rule')).toBeVisible());
+    expect(screen.getByTestId('run-timeline-replay-rule')).toHaveTextContent(REPLAYED_WORDS);
+    // The specialists side by side from 0, the coordinator from the slowest one's end, to the axis's end
+    const [conformance, encounter, impact, coordinator] = [
+      ...container.querySelectorAll('.run-clock-bar'),
+    ].map(box);
+    expect(Math.abs(conformance.x - encounter.x)).toBeLessThan(1);
+    expect(Math.abs(conformance.x - impact.x)).toBeLessThan(1);
+    expect(coordinator.x).toBeCloseTo(impact.x + impact.width, 0);
+    expect(coordinator.x + coordinator.width).toBeCloseTo(640 - 20, 0);
+    expect(container.querySelectorAll('.run-clock-mark')).toHaveLength(7);
+    await userEvent.click(screen.getByRole('button', { name: 'As a table' }));
+    const table = await screen.findByRole('table');
+    expect(table).toHaveTextContent(/^Replayed: times as recorded\./);
+    expect(within(table).getByRole('rowheader', { name: 'Coordinator' }).parentElement).toHaveTextContent(
+      /^Coordinator16\.0 s14\.9 s/,
+    );
+  });
+
+  it('keeps how a replay is drawn closed in Plain too, and off a live pass', () => {
+    const { unmount } = renderUi(<RunTimeline runs={replayedPass()} />);
+    expect(screen.getByRole('button', { name: 'How a replay is drawn', hidden: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    unmount();
+    renderUi(<RunTimeline runs={livePass()} />, { detail: 'technical' });
+    expect(screen.queryByRole('button', { name: 'How a replay is drawn' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('run-timeline-replayed')).not.toBeInTheDocument();
+  });
+
+  it('shows nothing for a pass its rows cannot draw honestly: a stray call, or no coordinator yet', () => {
     const stray = livePass();
     stray[3] = {
       ...stray[3],
       toolCalls: [call(1, '2026-10-25T13:28:52.000Z', 1)],
       startedAtMs: '2026-10-25T13:28:52.000Z',
     };
-    for (const runs of [recorded, livePass().slice(0, 3), stray]) {
+    for (const runs of [livePass().slice(0, 3), stray]) {
       const { container, unmount } = renderUi(<RunTimeline runs={runs} />, { detail: 'technical' });
       expect(container.querySelector('[data-testid="run-timeline"], .tech-detail-toggle')).toBeNull();
       unmount();
@@ -188,10 +238,18 @@ describe('When each agent worked, on the board', () => {
     expect(timeline.compareDocumentPosition(coordinator) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('is not on the recorded board the trial replays', async () => {
+  it('is on the recorded board the trial replays, as a replay with the times as recorded', async () => {
     board('C-000008');
     const section = await screen.findByRole('region', { name: 'The board' });
     await within(section).findByRole('region', { name: 'Coordinator' });
-    expect(within(section).queryByRole('button', { name: 'When each agent worked' })).not.toBeInTheDocument();
+    await userEvent.click(await within(section).findByRole('button', { name: 'When each agent worked' }));
+    expect(
+      await within(section).findByRole('img', {
+        name: /^When each agent worked, replayed with the times as recorded: the three specialists at the same time/,
+      }),
+    ).toBeInTheDocument();
+    expect(within(section).getByTestId('run-timeline-replayed')).toHaveTextContent(
+      /^Replayed: times as recorded, in seconds from the recorded pass's start\.$/,
+    );
   });
 });

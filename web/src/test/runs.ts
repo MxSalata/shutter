@@ -138,3 +138,28 @@ export function withLiveClock(runs: AgentRun[]): AgentRun[] {
     };
   });
 }
+
+/**
+ * The live pass replayed as a v1.35 server replays it: every run a replay that starts within the same tenth of a second
+ * (a replay answers at once), each with the recording's duration and its tool calls moved by the time from the
+ * recorded start to the replay's.
+ */
+export function replayedPass(): AgentRun[] {
+  const at = Date.parse('2026-11-02T14:15:08.656Z');
+  return livePass().map((r, i) => {
+    const start = at + [0, 4, 13, 67][i];
+    const shift = start - Date.parse(r.startedAtMs as string);
+    const moved = (iso: string) => new Date(Date.parse(iso) + shift).toISOString();
+    return {
+      ...r,
+      mode: 'replay',
+      costUsd: 0,
+      startedAt: new Date(start).toISOString().replace(/\.\d+Z$/, 'Z'),
+      startedAtMs: new Date(start).toISOString(),
+      toolCalls: r.toolCalls.map((c) => ({ ...c, at: moved(c.at) })),
+      llmMs: undefined,
+      toolMs: undefined,
+      reasoningTokens: undefined,
+    };
+  });
+}

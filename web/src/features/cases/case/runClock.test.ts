@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentRun } from '@/api/types';
 import fixtures from '@/mocks/fixtures.json';
-import { call, livePass, run } from '@/test/runs';
+import { call, livePass, replayedPass, run } from '@/test/runs';
 import {
   clockLabel,
   clockSentence,
@@ -10,6 +10,7 @@ import {
   passClock,
   passRuns,
   passSeconds,
+  REPLAYED_WORDS,
   rowFigures,
 } from './runClock';
 
@@ -72,10 +73,93 @@ describe("the run's own clock", () => {
     );
   });
 
-  it('draws nothing for the recording the trial replays: its starts were stamped when it was replayed', () => {
+  it('draws a replayed pass as the recording ran it: the specialists from 0, the coordinator after the slowest', () => {
+    const clock = passClock(replayedPass())!;
+    expect(clock.replayed).toBe(true);
+    // The replay's own starts, all within the same tenth of a second, are left out; the durations are the recording's
+    expect(clock.rows.map((r) => [r.member, r.start, r.durationMs])).toEqual([
+      ['conformance', 0, 14_735],
+      ['encounter', 0, 11_644],
+      ['impact', 0, 15_976],
+      ['coordinator', 15_976, 14_921],
+    ]);
+    expect(clock.totalMs).toBe(15_976 + 14_921);
+    expect(clock.overlap).toBe('together');
+    // When the replay ran, not when the recording was made
+    expect(clock.startedAt).toBe('2026-11-02T14:15:08.656Z');
+    expect(clockSentence(clock)).toBe(
+      'The three specialists worked at the same time, then the coordinator wrote the plan. The recorded pass took 31 s.',
+    );
+    expect(clockLabel(clock)).toBe(
+      'When each agent worked, replayed with the times as recorded: the three specialists at the same time, then the coordinator; the recorded pass took 31 s.',
+    );
+    expect(REPLAYED_WORDS).toMatch(
+      /^A replay calls no model and answers at once, so its own starts are left out\./,
+    );
+  });
+
+  it("puts a replayed run's tool calls at their times in that run, its bar moved with them", () => {
+    const [conformance, encounter, , coordinator] = passClock(replayedPass())!.rows;
+    expect(conformance.marks.map((m) => [m.from, m.to])).toEqual([
+      [4_191, 4_192],
+      [4_197, 4_201],
+      [12_337, 12_337],
+    ]);
+    expect(encounter.marks.map((m) => [m.from, m.refused])).toEqual([
+      [3_982, false],
+      [4_898, true],
+    ]);
+    // The coordinator's call 12.0 s into its run, from where its bar starts
+    expect(coordinator.marks.map((m) => [m.from, m.to])).toEqual([[15_976 + 12_032, 15_976 + 12_032]]);
+  });
+
+  it('keeps a replayed call that sits up to a second past its bar, and drops every mark beyond that', () => {
+    // The recording kept its start to the second, so a call can sit up to a second late in its run
+    const late = replayedPass();
+    const end = Date.parse(late[2].startedAtMs as string) + late[2].durationMs;
+    late[2] = { ...late[2], toolCalls: [call(1, new Date(end + 900).toISOString(), 1)] };
+    const kept = passClock(late)!.rows[2];
+    expect(kept.marks.map((m) => [m.from, m.to])).toEqual([[15_976, 15_976]]);
+    late[2] = { ...late[2], toolCalls: [call(1, new Date(end + 1_100).toISOString(), 1)] };
+    expect(passClock(late)!.rows.every((r) => r.marks.length === 0)).toBe(true);
+  });
+
+  it('draws a replayed pass with bars and no marks when a run has no start to the millisecond', () => {
+    const pass = replayedPass();
+    pass[1] = { ...pass[1], startedAtMs: null };
+    const clock = passClock(pass)!;
+    expect(clock.replayed).toBe(true);
+    expect(clock.rows.map((r) => r.start)).toEqual([0, 0, 0, 15_976]);
+    expect(clock.rows.every((r) => r.marks.length === 0)).toBe(true);
+  });
+
+  it('draws no replayed pass with a run of no duration, and no such picture for a pass partly live', () => {
+    const noDuration = replayedPass();
+    noDuration[3] = { ...noDuration[3], durationMs: 0 };
+    expect(passClock(noDuration)).toBeNull();
+    // One live run among replays: the live rule judges it, and the replay's starts contradict the durations
+    const mixed = replayedPass();
+    mixed[0] = { ...mixed[0], mode: 'live' };
+    expect(passClock(mixed)).toBeNull();
+  });
+
+  it("draws the trial's recorded board passes as replays, every call on its run's bar", () => {
     for (const id of ['C-000002', 'C-000008', 'C-000009', 'C-000033']) {
-      expect(passRuns(recorded(id)).length, id).toBe(4);
-      expect(passClock(recorded(id)), id).toBeNull();
+      const runs = recorded(id);
+      expect(passRuns(runs).length, id).toBe(4);
+      const clock = passClock(runs)!;
+      expect(clock, id).not.toBeNull();
+      expect(clock.replayed, id).toBe(true);
+      const [conformance, encounter, impact, coordinator] = clock.rows;
+      expect([conformance.start, encounter.start, impact.start], id).toEqual([0, 0, 0]);
+      expect(coordinator.start, id).toBe(Math.max(conformance.end, encounter.end, impact.end));
+      for (const r of clock.rows) {
+        expect(r.marks.length, `${id} ${r.member}`).toBe(r.calls);
+        for (const m of r.marks) {
+          expect(m.from).toBeGreaterThanOrEqual(r.start);
+          expect(m.to).toBeLessThanOrEqual(r.end);
+        }
+      }
     }
   });
 
