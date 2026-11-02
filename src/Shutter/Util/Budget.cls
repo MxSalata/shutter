@@ -73,7 +73,7 @@ ClassMethod Cap() As %Numeric
     Quit +$GET(^Shutter.Config("dailyBudgetUsd"))
 }
 
-/// Each user's share of the day, in USD (SHUTTER_JUDGE_BUDGET_USD; the owner's judges, v1.34): what one signed-in user's
+/// Each user's share of the day, in USD (SHUTTER_JUDGE_BUDGET_USD; the judges, v1.34): what one signed-in user's
 /// live runs may cost between one 00:00 UTC and the next; 0 means no share, only the day's cap.
 ClassMethod Share() As %Numeric
 {
@@ -107,6 +107,30 @@ ClassMethod Configure(value As %String) As %Numeric
     If (value = "") || '(value ? 1.N.1(1"."1.N)) Set value = 0
     Set ^Shutter.Config("dailyBudgetUsd") = +value
     Quit +value
+}
+
+/// The public demo's budget note (v1.37), for the live banner: what the demo's owner spends on live runs, as a figure a
+/// visitor can read (SHUTTER_DEMO_BUDGET_USD and SHUTTER_DEMO_BUDGET_PERIOD, at the install and at every production
+/// start), which a site may enforce outside Shutter (a key deactivated at the figure) while the cap here guards a burst.
+/// usd empty, 0 or not a number clears the note; period is day or hour, day when not given. Returns the note or "".
+ClassMethod ConfigureDemoBudget(usd As %String, period As %String = "") As %DynamicObject
+{
+    Set usd = $ZSTRIP($GET(usd), "<>W"), period = $ZCONVERT($ZSTRIP($GET(period), "<>W"), "L")
+    If (usd = "") || '(usd ? 1.N.1(1"."1.N)) || (+usd <= 0) Kill ^Shutter.Config("demoBudget") Quit ""
+    If '$LISTFIND($LISTBUILD("day", "hour"), period) Set period = "day"
+    Set ^Shutter.Config("demoBudget", "usd") = +usd, ^Shutter.Config("demoBudget", "period") = period
+    Quit ..DemoBudgetNote()
+}
+
+/// {amountUsd, period} when the demo's budget note is set, else "".
+ClassMethod DemoBudgetNote() As %DynamicObject
+{
+    Set usd = $GET(^Shutter.Config("demoBudget", "usd"))
+    If (usd = "") || (+usd <= 0) Quit ""
+    Set n = {}
+    Do n.%Set("amountUsd", +usd, "number")
+    Set n.period = $GET(^Shutter.Config("demoBudget", "period"), "day")
+    Quit n
 }
 
 /// What the live and record runs spent since an ISO UTC time, in USD (a replay or a run the API mimic answered spent

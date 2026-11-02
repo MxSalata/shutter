@@ -14,8 +14,13 @@ Property Adapter As Ens.InboundAdapter;
 /// Minutes between stories.
 Property EveryMinutes As %Integer [ InitialExpression = 7 ];
 
-/// The scenarios, in order, round robin; empty means every scenario of fixtures/scenarios.json but S13, S20 and S21.
-Property Scenarios As %String(MAXLEN = 500) [ InitialExpression = "S2,S8,S1,S23a,S3,S24,S15,S11" ];
+/// The rotation as shipped (v1.38): S11, the incident, is out of it, since its board chain would convene a board every
+/// round; the storm shows an incident on demand, and S11 can still be run as a scenario.
+Parameter DEFAULTSCENARIOS = "S2,S8,S1,S23a,S3,S24,S15";
+
+/// The scenarios, in order, round robin; empty means every scenario of fixtures/scenarios.json but S13, S20 and S21. The
+/// build's SHUTTER_LIVE_SCENARIOS (Shutter.Setup.ApplyEnvironment into ^Hospital.Config("liveScenarios")) overrides it.
+Property Scenarios As %String(MAXLEN = 500) [ InitialExpression = {..#DEFAULTSCENARIOS} ];
 
 /// Whether the scenarios' fault steps are applied to the receivers (the errors are then real).
 Property Faults As %Boolean [ InitialExpression = 1 ];
@@ -235,11 +240,12 @@ Method StormIncident(startedAt As %String) As %DynamicObject
     Quit out
 }
 
-/// The scenario list as the setting says, or every playable scenario of the file.
+/// The scenario list as the build's SHUTTER_LIVE_SCENARIOS says (^Hospital.Config("liveScenarios"), v1.38), else as the
+/// setting says, or every playable scenario of the file.
 Method ScenarioList() As %List
 {
-    Set list = ""
-    For i = 1:1:$LENGTH(..Scenarios, ",") { Set s = $ZSTRIP($PIECE(..Scenarios, ",", i), "<>W") If s '= "" Set list = list _ $LISTBUILD(s) }
+    Set list = "", names = $GET(^Hospital.Config("liveScenarios"), ..Scenarios)
+    For i = 1:1:$LENGTH(names, ",") { Set s = $ZSTRIP($PIECE(names, ",", i), "<>W") If s '= "" Set list = list _ $LISTBUILD(s) }
     If list '= "" Quit list
     Set all = ..ScenariosFile()
     If '$ISOBJECT(all) Quit ""

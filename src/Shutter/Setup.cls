@@ -113,6 +113,7 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         // user's share of it from SHUTTER_JUDGE_BUDGET_USD.
         Do ##class(Shutter.Util.Budget).Configure($SYSTEM.Util.GetEnviron("SHUTTER_DAILY_BUDGET_USD"))
         Do ##class(Shutter.Util.Budget).ConfigureShare($SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_BUDGET_USD"))
+        Do ##class(Shutter.Util.Budget).ConfigureDemoBudget($SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_PERIOD"))
         Set ^Shutter.Config("installedAt") = ##class(Shutter.Util.Time).NowUTC()
         Set ^Shutter.Config("version") = ..#VERSION
         If $GET(^Shutter.Config("mode")) = "" Set ^Shutter.Config("mode") = "board"
@@ -137,7 +138,7 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         }
         If root '= "" {
             Set sc = ##class(Shutter.Store.SiteProfile).SeedFromFile(root _ "knowledge/site/profile.json") Quit:$$$ISERR(sc)
-            // The live hospital (CONTRACTS 4.4, v1.34; the owner, 1 Nov 2026): its single cases at tier 2 wait for a person.
+            // The live hospital (CONTRACTS 4.4, v1.34; decided on 1 Nov 2026): its single cases at tier 2 wait for a person.
             Set sc = ..LiveProfilePolicy(root _ "knowledge/site/profile.json") Quit:$$$ISERR(sc)
             Set sc = ##class(Shutter.Catalogue.Entry).SeedFromFile(root _ "knowledge/catalogue/catalogue.json", .entries) Quit:$$$ISERR(sc)
             Set ^Shutter.Config("catalogue", "entries") = $GET(entries, 0)
@@ -236,7 +237,7 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     Quit:$$$ISERR(sc) sc
     Set sc = ..EnsureRole("Shutter_Demo", "Shutter public demo: reads everything, reinvestigates, approves and asks; cannot run or reset scenarios, save the site profile or the library, or import a schema", approverRes _ ",%Ens_Portal:U", "%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc
-    // A judge (v1.34, the owner's choice of 1 Nov 2026): the public demo's role plus the live agents, under the model budget and
+    // A judge (v1.34, decided on 1 Nov 2026): the public demo's role plus the live agents, under the model budget and
     // a share of their own; the demo role never spends.
     Set sc = ..EnsureRole("Shutter_Judge", "Shutter judge: the public demo's role plus the live agents (live questions, convening the board), under the model budget", approverRes _ ",%Ens_Portal:U,Shutter_LiveAgents:U", "%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc
@@ -323,14 +324,14 @@ ClassMethod ConfigureProviderTimeout(seconds As %String) As %Integer
 /// an error when one step failed (the others still run).
 ClassMethod ApplyEnvironment(wait As %Integer = 0) As %String [ SqlProc ]
 {
-    Set out = ..ApplyRuntime($SYSTEM.Util.GetEnviron("SHUTTER_DAILY_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_TRACE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_LIVE"), wait, $SYSTEM.Util.GetEnviron("SHUTTER_PROVIDER_TIMEOUT_SECONDS"))
+    Set out = ..ApplyRuntime($SYSTEM.Util.GetEnviron("SHUTTER_DAILY_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_TRACE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_LIVE"), wait, $SYSTEM.Util.GetEnviron("SHUTTER_PROVIDER_TIMEOUT_SECONDS"), $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_PERIOD"), $SYSTEM.Util.GetEnviron("SHUTTER_LIVE_SCENARIOS"))
     Quit out.%ToJSON()
 }
 
 /// ApplyEnvironment's work on values, so a test can give them: each applied when not empty. live is "1" for on, any other
 /// non-empty value for off; wait is how many seconds the live hospital's item may be left to a background job while the
 /// hospital's production is still starting (the production's own start passes 120; by hand, 0 applies it at once).
-ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %String, tracePw As %String, judgePw As %String, live As %String, wait As %Integer = 0, providerTimeout As %String = "") As %DynamicObject
+ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %String, tracePw As %String, judgePw As %String, live As %String, wait As %Integer = 0, providerTimeout As %String = "", demoUsd As %String = "", demoPeriod As %String = "", liveScenarios As %String = "") As %DynamicObject
 {
     Set out = {}, errors = []
     Set ns = $NAMESPACE
@@ -339,6 +340,10 @@ ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %
         If $ZSTRIP(judgeUsd, "<>W") '= "" Set out.judgeBudgetUsd = ##class(Shutter.Util.Budget).ConfigureShare(judgeUsd)
         // The bound on one model call (v1.35).
         If $ZSTRIP(providerTimeout, "<>W") '= "" Set out.providerTimeoutSeconds = ..ConfigureProviderTimeout(providerTimeout)
+        // The demo's budget note for the live banner (v1.37).
+        If $ZSTRIP(demoUsd, "<>W") '= "" Set out.demoBudget = ##class(Shutter.Util.Budget).ConfigureDemoBudget(demoUsd, demoPeriod)
+        // The live hospital's rotation (v1.38).
+        If $ZSTRIP(liveScenarios, "<>W") '= "" Set out.liveScenarios = ..ConfigureLiveScenarios(liveScenarios)
     } Catch ex {
         Do errors.%Push("budget: " _ ex.DisplayString())
     }
@@ -375,6 +380,26 @@ ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %
     }
     If errors.%Size() > 0 Set out.errors = errors
     Quit out
+}
+
+/// The live hospital's rotation from the build (SHUTTER_LIVE_SCENARIOS, v1.38): the scenario ids, comma-separated, each
+/// an S and a number with an optional letter (S23a), in the order to play; "default" or no valid id clears the override, and
+/// the player's own Scenarios setting applies again. Written as ^Hospital.Config("liveScenarios") in the hospital's
+/// namespace, which Hospital.LivePlayer.ScenarioList reads first. Returns the list set, "default", or "no hospital".
+ClassMethod ConfigureLiveScenarios(value As %String) As %String
+{
+    Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
+    If hospital = "" Quit "no hospital"
+    Set list = ""
+    For i = 1:1:$LENGTH($GET(value), ",") {
+        Set s = $ZSTRIP($PIECE(value, ",", i), "<>W")
+        If s = "" Continue
+        Set s = $ZCONVERT($EXTRACT(s, 1), "U") _ $EXTRACT(s, 2, *)
+        If s ? 1"S"1.N.1L Set list = list _ $SELECT(list = "": "", 1: ",") _ s
+    }
+    If list = "" Kill ^|hospital|Hospital.Config("liveScenarios") Quit "default"
+    Set ^|hospital|Hospital.Config("liveScenarios") = list
+    Quit list
 }
 
 /// The live hospital's switch in the hospital's namespace (Hospital.Setup.SetLive): at once when its production is running
@@ -804,7 +829,7 @@ ClassMethod ApplyDefaultSettings(production As %String = "Shutter.Production") A
 /// Make Shutter.Production the namespace's production and start it, when the class is compiled. When InstallInto
 /// put Shutter's items in the site's own production, there is nothing of Shutter's to start, and that production is
 /// never stopped here.
-/// The live hospital's policy (CONTRACTS 4.4, v1.34; the owner's choice of 1 Nov 2026, "single cases at tier 2 wait for an
+/// The live hospital's policy (CONTRACTS 4.4, v1.34; decided on 1 Nov 2026, "single cases at tier 2 wait for an
 /// approval in the live hospital"): when the install is told SHUTTER_LIVE=1 (or on is 1), the shipped profile's policy for
 /// tier 2, single chains becomes approval, so the demo's visitors always have a case to approve, and the profile is stored
 /// with the seed's path and " (live hospital)" as its source, which the seed then leaves alone on a reinstall. A profile a

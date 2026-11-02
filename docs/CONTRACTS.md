@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.36, 2 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.38, 2 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -323,7 +323,7 @@ hospital has. It never resets anything, and the scenario runner's Run and Reset 
   start of Shutter's production applies the container's `SHUTTER_LIVE` the same way (`Setup.ApplyEnvironment`, 12: through
   `Hospital.Setup.SetLive` once the hospital's production runs, from a background job while it is still starting); Shutter's
   install, told the same, sets the shipped profile's policy for tier 2, single chains to `approval` (`Setup.LiveProfilePolicy`;
-  the owner's choice of 1 Nov 2026), so the live hospital's visitors always have a case to approve; the profile's source then
+  decided on 1 Nov 2026), so the live hospital's visitors always have a case to approve; the profile's source then
   reads "(live hospital)" and the seed leaves it alone; a profile a person saved is never touched;
   `SELECT Hospital.Setup_SetLive(1)` (or `0`) in the hospital's namespace switches it without an install. Off, the item is
   disabled and a task that still runs does nothing. The install compiles `Hospital.Production` in the hospital's namespace
@@ -353,8 +353,11 @@ hospital has. It never resets anything, and the scenario runner's Run and Reset 
   `cooldownUntil`). The rotation and the ordinary feed pause from the press until `done`, and the next story is then due
   `EveryMinutes` later. No model is needed for the story: the chains follow the policy, and a board convenes only where it
   says `board`. Fresh patients and beds mean the storm never collides with a story already playing.
-- **Settings** of `Hospital.LivePlayer`: `EveryMinutes` 7; `Scenarios` `S2,S8,S1,S23a,S3,S24,S15,S11`, played round robin
-  (empty means every scenario of `fixtures/scenarios.json` but S13, S20 and S21, which need an operator or the records);
+- **Settings** of `Hospital.LivePlayer`: `EveryMinutes` 7; `Scenarios` `S2,S8,S1,S23a,S3,S24,S15`, played round robin
+  (empty means every scenario of `fixtures/scenarios.json` but S13, S20 and S21, which need an operator or the records; S11
+  is out of the rotation since v1.38, its board chain would convene a board every round, and the storm shows an incident on
+  demand); the build's `SHUTTER_LIVE_SCENARIOS` (read at every production start into `^Hospital.Config("liveScenarios")`;
+  `default` or no valid id clears it) overrides the setting;
   `Faults` 1; `OrdinaryFeed` 1; `MaxWait` 30, the longest a `wait` step is given; `ShutterNamespace` `SHUTTER`.
 - **A story** (`Shutter.Util.LiveFeed`: pure functions over the HL7 text, covered by `Shutter.Test.LiveFeed`). The scenario's
   steps come from `fixtures/scenarios.json` and its files from `fixtures/<S>/` under Shutter's root. Every patient of the
@@ -398,7 +401,7 @@ caller's process passes; the operator and the approver read the watched hospital
 | `Shutter_Operate` | every other `GET`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send`; `GET /production-reviews`, `GET /production-reviews/targets` and `GET /production-reviews/{id}`; `POST /production-reviews` (section 13: the review reads only, and a live agent run spends model credit as a scenario run does); `GET /cases/{id}/whatif`, `GET /cases/{id}/questions`, `GET /cases/{id}/questions/suggested`, `GET /cases/{id}/questions/{qid}` and `POST /cases/{id}/questions` (section 14: a question reads only, and a live run spends model credit); `GET /settings/schemas` (section 12) |
 | `Shutter_Approve` | `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's) |
 | `Shutter_Scenarios` | `POST /scenarios/{id}/run` and `/scenarios/reset`, and `Shutter.Setup_PurgeStore` (v1.34: the demo controls; the operator and approver roles hold it, the public demo's role does not) |
-| `Shutter_LiveAgents` | Spending the model budget (v1.34, the owner's judges): `POST /cases/{id}/board` (the board convenes live on a blocked, escalated or failed case, 14.5), and `POST /cases/{id}/questions` running live; without it a question is answered from recordings only, and one with no recording is refused `409 no_recorded_answer` at once. Operators, approvers and the role `Shutter_Judge` (the public demo's role plus this) hold it; `Shutter_Demo` does not. Every live run counts against the day's budget and the caller's share (9) |
+| `Shutter_LiveAgents` | Spending the model budget (v1.34, the judges): `POST /cases/{id}/board` (the board convenes live on a blocked, escalated or failed case, 14.5), and `POST /cases/{id}/questions` running live; without it a question is answered from recordings only, and one with no recording is refused `409 no_recorded_answer` at once. Operators, approvers and the role `Shutter_Judge` (the public demo's role plus this) hold it; `Shutter_Demo` does not. Every live run counts against the day's budget and the caller's share (9) |
 | `Shutter_Configure` | `PUT /site-profile`; `PATCH /library/{code}`; `POST /settings/schemas` (section 12); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13) (v1.34: what changes the site; the approver role holds it, the public demo's role does not) |
 | `Shutter_Intake` | `POST /intake` (section 11) |
 
@@ -506,7 +509,7 @@ imported) cannot be validated at all, so the check blocks with `SCHEMA_UNKNOWN` 
 `PARSE_FAILED`; the evidence's `validation` then says `parsed: false`, `error: "unknown schema: ..."`, `schema_known: false`,
 `schema_category` and `schema_fix`. A person imports the schema (12) and reinvestigates the case.
 
-**The failsafe at the point of the resend** (v1.29; the owner's requirement of 26 Oct 2026). A resend is already a conditional
+**The failsafe at the point of the resend** (v1.29; the requirement of 26 Oct 2026). A resend is already a conditional
 write bound to the version the preflight read, so a PAS message applied at the receiver in between is refused as a version
 conflict, and one that lands after applies in order. What the version cannot see is a newer message of the same encounter
 inside Shutter's own pipeline: received after the case's own and not yet delivered to the receiver, queued for it with no
@@ -584,7 +587,11 @@ checks: [ordering, effect, state_transition, identity, capability]
 The matcher runs after the evidence is collected, before any agent, in every mode: its result (the conditions, the
 facts, the matches) is part of the snapshot summary, so the board reads it and the gate checks the plan against it.
 The investigation mode decides who settles the case:
-- `policy`: the rules below (chosen per run; the installed default, and the mode after every scenario reset, is `board`);
+- `policy`: the rules below (chosen per run; the installed default, and the mode after every scenario reset, is `board`;
+  a failure from a watched production (11) runs in the site's watched mode, `^Shutter.Config("watchedMode")`, `policy`
+  unless the site set another, whatever mode the scenarios run in, since v1.38: on the demo the live hospital's cases and
+  a storm's are settled by the catalogue and the site profile, and a scenario run or reset cannot flip them to the board;
+  `GET /settings` carries `watchedMode`);
 - `board`: the board always runs, the match in its evidence; the comparison's board column keeps its meaning;
 - `single`: the single investigator always runs;
 - `rules`: no agents and no catalogue path: a plain resend for the gate to judge.
@@ -685,7 +692,7 @@ reads it through `Shutter.Store.SiteProfile`.
   a dry run to it (v1.21). Declare all four flags: for a receiver with no capabilities endpoint the route takes the
   declared features, and a flag left out reads as false there (the connector alone reads an absent flag as true, so the
   gate is the stricter of the two).
-- `feed.prevent_failures` (v1.34; the owner's "prevent failures" of 1 Nov 2026, section 12): `true` or `false`, `false` when
+- `feed.prevent_failures` (v1.34; "prevent failures", decided on 1 Nov 2026, section 12): `true` or `false`, `false` when
   absent and in the shipped profile. On, the feed holds a message whose HL7 schema category is not loaded here as a case of
   kind `unreadable` instead of delivering what it read by position, and the demo hospital's `PAS In` validates and hands a
   refused message to the forwarder (`Hospital.Setup.PreventFailures`, called by every store of the profile; a real site sets
@@ -764,7 +771,7 @@ The plan's `catalogue_entry` and `outcome` are bound by the approval's digest li
 
 Two `intent` checks for withheld cases (v1.14, policy version 2026-10-19.3), appended for every plan on a case of kind `withheld` as `UNMAPPABLE` is, and as guards on any write of a merge or a cancel: `MERGE_WITHHELD` (the case's event is `merge` and the site profile does not allow merges, or the receiver does not take them) and `CANCEL_UNSUPPORTED` (a `cancel_*` event to a receiver whose entry says `cancels: false`). The identity check answers `NO_ENCOUNTER` (pass) for a case whose encounter piece is `-`, and the state-transition and concurrency checks answer `PATIENT_LEVEL_WRITE` (block) for a write on such a case: there is no encounter state or version to check, so a person decides, and nothing is retried.
 
-**The rehearsal check** (v1.21, policy version 2026-10-25.1), between authorization and concurrency: `NOT_APPLICABLE` (pass) for a plan that writes nothing, `NOT_YET_REQUIRED` (pass) at the proposal, and at approval and dispatch `REHEARSED` (pass: the approval's bound rehearsal is of this plan, reported `would_apply`, and was checked against the plan's expected version, the receiver's epoch and the evidence's payload digest), `DRY_RUN_MISSING` (block: no rehearsal bound, or one of another plan), `DRY_RUN_FAILED` (block: the bound rehearsal reported it would not apply) and `DRY_RUN_STALE` (block: checked against another version, a rehearsal with no version from the receiver included, against another epoch than the preflight's, against another payload digest than the evidence's, or sent with an expected version other than the plan's). The capability check adds `DRY_RUN_UNSUPPORTED` (block: the capability profile reports no dry run). The approval binds the latest rehearsal of its plan, not the case's latest. The rehearsal record carries `expectedVersion` and `payloadDigest`, what was sent; the execution attempt carries `rehearsalId`, the approval's bound rehearsal, or the rehearsal itself when the receiver applied it. An approval given under 2026-10-20.1 and not yet dispatched is void at dispatch (`APPROVAL_POLICY_CHANGED`).
+**The rehearsal check** (v1.21, policy version 2026-10-25.1), between authorization and concurrency: `NOT_APPLICABLE` (pass) for a plan that writes nothing, `NOT_YET_REQUIRED` (pass) at the proposal, and at dispatch `REHEARSED` (pass: the approval's bound rehearsal is of this plan, reported `would_apply`, and was checked against the plan's expected version, the receiver's epoch and the evidence's payload digest), `DRY_RUN_MISSING` (block: no rehearsal bound, or one of another plan), `DRY_RUN_FAILED` (block: the bound rehearsal reported it would not apply) and `DRY_RUN_STALE` (block: checked against another version, a rehearsal with no version from the receiver included, against another epoch than the preflight's, against another payload digest than the evidence's, or sent with an expected version other than the plan's). The capability check adds `DRY_RUN_UNSUPPORTED` (block: the capability profile reports no dry run). The approval binds the latest rehearsal of its plan, not the case's latest. The rehearsal record carries `expectedVersion` and `payloadDigest`, what was sent; the execution attempt carries `rehearsalId`, the approval's bound rehearsal, or the rehearsal itself when the receiver applied it. An approval given under 2026-10-20.1 and not yet dispatched is void at dispatch (`APPROVAL_POLICY_CHANGED`).
 
 ### 6.6 The board and the catalogue
 
@@ -786,7 +793,7 @@ incident.
 **Boards per minute are capped (v1.35; the review's B1 stopgap).** The Case Workflow's `BoardsPerMinute` (6 by default; 0 for
 no cap) counts the boards convened in the current UTC minute (`Shutter.Util.BoardSlots`, a global node per minute); a case
 whose turn finds the minute full does not convene at once: it notes "The board is busy: N convened this minute, the cap is M a
-minute; this case waits S s for a slot" (60 to 90 s), an `Ens.Alarm` keyed by the round brings it back (`board:defer`), and
+minute; this case waits S s for a slot" (60 to 89 s), an `Ens.Alarm` keyed by the round brings it back (`board:defer`), and
 it convenes then, on its snapshot's summary, if it still waits and the round is the same. Both convening paths (the board on
 fresh evidence and the policy's `board`, which asks for the full board whatever the case's mode) go through one method,
 which builds every member's request first (a case the model view refuses, or one with no member to convene, spends no slot)
@@ -1053,7 +1060,7 @@ separate, later tool.
 
 ## 9. What leaves IRIS for a model (v1.11)
 
-The owner's rule (19 Oct 2026): only what is needed goes to the model. The stored snapshot is complete and stays inside
+The rule (19 Oct 2026): only what is needed goes to the model. The stored snapshot is complete and stays inside
 IRIS (the gate, the matcher, the verifier and the app read it); what a model receives is a reduced copy made by
 `Shutter.Util.ModelView.Reduce` at the two places anything of a case leaves: the agent request's context
 (`CaseWorkflow.BuildAgentRequest`: the evidence and the specialists' findings) and every answer of the evidence tools
@@ -1127,6 +1134,21 @@ visitors spends at most the cap. **Each user's share** (`SHUTTER_JUDGE_BUDGET_US
 0 or unset means none): every agent request carries who asked (`RequestedBy`: a question's asker, a judge who convened the
 board, `system` for the feed's own runs), the run keeps it, and a run for a user whose live runs today have reached the share is
 refused `budget_exhausted` with "Your share of the day's model budget ... is spent", so one judge cannot spend the day.
+**Whether the live agents can run (v1.37).** `GET /settings` carries `live.agents = {available, reason, until, detail}`
+(`Shutter.Util.LiveAgents`), one signal for the web's notice: `reason` is `budget` when the day's cap or the caller's share
+is spent (`until` = `budget.resetsAt`), `provider_auth` when a live run failed with an authentication error (a 401, a bad or
+deactivated key) within the last 15 minutes (`until` = the next 00:00 UTC, when a key a site deactivates for the day comes
+back; the flag clears on the next live run the provider accepts, and after 15 minutes one run tries again), and null when
+live runs can go; `detail` is the sentence to show. While the provider refuses the key the Agent item refuses runs that would
+call a model with the status `provider_auth` and makes no call (a board whose members were all refused so takes the rules
+path, with a note saying why, as for `budget_exhausted`), `POST /cases/{id}/board` answers `409 live_unavailable` with `live`
+(the availability object) before the budget is looked at, and a question from a caller with the live agents is answered from
+its recording when it has one and refused `409 live_unavailable` when it has none. **The demo's budget note** (v1.37):
+`SHUTTER_DEMO_BUDGET_USD` and `SHUTTER_DEMO_BUDGET_PERIOD` (`day` or `hour`, day by default), read at the install and at every
+production start like the cap, set `live.budgetNote = {amountUsd, period}` in `GET /settings` for the live banner: the figure
+the demo's owner spends on live runs, which a site may enforce outside Shutter (a key deactivated at the figure) while the
+cap here guards a burst; absent when unset (an empty, zero or non-numeric value clears it), and the web shows the cap then.
+
 **Reserve, then settle (v1.35).** A run in flight has no `AgentRun` row yet, so three members running at once were not
 counted against the cap until they finished. The Agent item now reserves an estimate for each live run it starts
 (`Budget.Reserve`, keyed by the run) and settles it when the run ends whatever its outcome (`Budget.Settle`); the day's state
@@ -1407,7 +1429,7 @@ cap), so the image's build arguments stay the three the installer alone reads (I
 naming what was applied, with `errors` when a step failed, and the event log carries it; `SELECT Shutter.Setup_ApplyEnvironment()`
 runs it by hand. `ApplyRuntime(...)` is the same on given values, for the tests.
 
-**Prevent failures** (v1.34; the owner, 1 Nov 2026: an interface deployed without its schema would read every field from the
+**Prevent failures** (v1.34; decided on 1 Nov 2026: an interface deployed without its schema would read every field from the
 wrong place, so Shutter "would actually stop an incident waiting to happen until the schema is imported"). With the site
 profile's `feed.prevent_failures` true (6.4; off by default and in the shipped profile, so every scenario plays as before),
 `ADT In`'s process checks each message's schema category before mapping it (`Shutter.Util.Schemas.CategoryOf`: the document
@@ -1610,7 +1632,7 @@ is noted, not used. What is stored as `resolved` comes from the core's own facts
 
 ### 14.5 Routes (v1.27)
 
-**Who may run live (v1.34, the owner's judges).** `POST /cases/{id}/questions` runs the agents live only for a caller who holds
+**Who may run live (v1.34, the judges).** `POST /cases/{id}/questions` runs the agents live only for a caller who holds
 `Shutter_LiveAgents` (operators, approvers, judges); for anyone else (the public demo's user) the request carries
 `LiveAllowed` false, the agent requests get `ModeOverride` `replay`, and a question that has no recording is refused before
 anything runs: `409 no_recorded_answer`, "This question has no recorded answer; a judge can ask it live" (a free question
@@ -1619,7 +1641,7 @@ always; a suggested turn when no `question:` recording matches its conversation 
 as a reinvestigation does (`Shutter.Msg.Reinvestigate` with `ForceBoard`), takes fresh evidence and convenes the board whatever
 the site policy says, the plan then going through the gate, rehearsal and approvals as any plan; `202 {caseId, state:
 "evidence", requestedBy}`; `403 forbidden` without the resource; `409 wrong_state` for any other state (a case awaiting approval
-is approved or rejected first); `409 budget_exhausted` with the budget object when the day's cap or the caller's share is spent
+is approved or rejected first); `409 budget_exhausted` with the budget object when the day's cap or the caller's share is spent; `409 live_unavailable` with `live` (the availability object) while the model provider refuses the key (v1.37)
 (9). The case notes "Board convened by <user>", and the board's runs carry the user for the share.
 
 - `POST /cases/{id}/questions` (`Shutter_Operate`; `X-Requested-With`; `Idempotency-Key`) `{tier: "explain" | "board",
@@ -1690,6 +1712,16 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
 
 ## Changes
 
+- v1.38, 2 Nov 2026 (the demo rehearsal's storm, whose cases all convened boards): a watched production's failures run in the
+  site's watched mode, policy by default, whatever mode the scenarios run in (6.3, 11); a case the alert intake opened
+  takes the production's own report of the failure when it arrives before the evidence is collected, so the catalogue
+  reads the connector's answer (11); the alert's time in the failure text is read as the engine's UTC timestamp (11);
+  two words put right: the rehearsal check blocks at dispatch, the only stage that sends it (6.5), and a deferred board waits
+  60 to 89 s (6.6); the live hospital's rotation drops S11 and takes `SHUTTER_LIVE_SCENARIOS` (4.4).
+- v1.37, 2 Nov 2026: whether the live agents can run, `live.agents` in `GET /settings` with reasons `budget` and `provider_auth`,
+  the Agent item's `provider_auth` refusal while the provider refuses the key, and `409 live_unavailable` on the board and a
+  live question (12), for the demo's notice to visitors; `live.budgetNote` from `SHUTTER_DEMO_BUDGET_USD` and
+  `SHUTTER_DEMO_BUDGET_PERIOD` for the banner (12).
 - v1.36, 2 Nov 2026: a decision that lands while the Workflow engine is still distributing the task waits for the engine's
   worklist row and assigns again when its own row meets the engine's (5; a CI run's 409 "ID key not unique" of 2 Nov).
 - v1.35, 2 Nov 2026 (the items of a review of competing entries' code): denied tool calls
@@ -1740,12 +1772,12 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   policy path's does (`CaseWorkflow.AttachCorrectionSteps`), and the gate holds a superseded plan with
   `NEWER_MESSAGE_PENDING` while the later event it rests on is still on its way (6.5). The Second Parser item is
   `Shutter.Operation.SecondParser`, which sets its classpath at start (6.7). The live hospital's install sets tier 2 single
-  chains to approval (4.4), and the recording round rule is written down (4). The judges (the owner's choice of 1 Nov 2026):
+  chains to approval (4.4), and the recording round rule is written down (4). The judges (decided on 1 Nov 2026):
   the resource `Shutter_LiveAgents` (operators, approvers and the new role `Shutter_Judge`, the public demo's role plus it;
   `Shutter_Demo` never spends), the user `judge` made only when `SHUTTER_JUDGE_PASSWORD` is set, `GET /me` `can.liveAgents`,
   questions running live only for those who hold it and refused `no_recorded_answer` otherwise, `POST /cases/{id}/board`
   convening the board on a case (14.5), each user's share of the day's budget from `SHUTTER_JUDGE_BUDGET_USD` with
-  `RequestedBy` on every agent request and run (9). "Prevent failures" (the owner's choice of 1 Nov 2026, option c of the
+  `RequestedBy` on every agent request and run (9). "Prevent failures" (decided on 1 Nov 2026, option c of the
   morning bundle): `feed.prevent_failures` in the site profile (6.4, off by default), the case kind `unreadable` with
   `heldSchema`, the hold in `ADT In`'s process on a canonical 2.5.1 reading, the forwarder as a bad-message handler with
   `HeldReceiver` and the intake's fifth kind (11), the matcher's `delivery: unreadable` (6.1), the gate's `SCHEMA_UNKNOWN`
@@ -1918,9 +1950,9 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   and item states, the expected-version rule, the approvals route and the case's `incident` fields; the gate's
   `APPROVAL_PLAN_ORIGIN` check (an approval by policy needs a plan from the policy path for its entry; policy version
   2026-10-17.2) and the chain kind in its policy check (6.4); `encounter_state: not_found` when the receiver answers 404 (6.1); a chain item's `releaseEntry` and `releaseOutcome` (7.5).
-- v1.6, 17 Oct 2026: the scenario catalogue and the deterministic matcher, the condition vocabulary, the site profile and the policy path (automatic, approval, per chain), the gate's catalogue checks, the board's `search_catalogue` tool (6); incidents: detection, chains and their kinds, the plan and its approval binding the sequence rule, the ordered release through each case's own dispatch, the API, scenario S11 (7). From the owner's decisions of 17 Oct and the T19 points (a) to (f), all taken.
+- v1.6, 17 Oct 2026: the scenario catalogue and the deterministic matcher, the condition vocabulary, the site profile and the policy path (automatic, approval, per chain), the gate's catalogue checks, the board's `search_catalogue` tool (6); incidents: detection, chains and their kinds, the plan and its approval binding the sequence rule, the ordered release through each case's own dispatch, the API, scenario S11 (7). From the decisions of 17 Oct and the T19 points (a) to (f), all taken.
 - v1.5, 16 Oct 2026: rehearsal responses carry `encounter_before` and `epoch` (1.1); `POST /capabilities` takes `last_contract_check` (1.8); S8's second source system `BEDMGR` (2, 3); S9's second encounter `ENC-2009` (3); the `capabilities` step kind (3); the scenario player and the run states (4.2); section 5 points at the API as built. Points (a) to (e) were accepted on 15 Oct.
-- v1.4, 15 Oct 2026: the capabilities read and the demo switch, the epoch, the receipt-lookup fault (1.8, 1.9); scenario steps that wait for a case state (4.1). From the triage of the owner's feature documents (T9, T10, A1, A2, A5).
+- v1.4, 15 Oct 2026: the capabilities read and the demo switch, the epoch, the receipt-lookup fault (1.8, 1.9); scenario steps that wait for a case state (4.1). From the triage of the feature documents (T9, T10, A1, A2, A5).
 - v1.3, 15 Oct 2026: `misleading_duplicate_error` with an `operation_key` (1.5); `resetAt`, the runner's settings and the mode semantics (section 4), from the scenario work.
 - v1.2, 15 Oct 2026: the ward decisions of 15 Oct recorded (section 1.1), with `patient_mismatch` and `payload_digest_mismatch` as their own codes.
 - v1.1, 15 Oct 2026: the runner sets `^Shutter.Config("scenario")` (section 4); the repository layout.

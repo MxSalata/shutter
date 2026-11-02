@@ -1,4 +1,4 @@
-/// The failsafe at the point of the resend (CONTRACTS 6.5, v1.29; the owner's requirement of 26 Oct 2026): before Shutter
+/// The failsafe at the point of the resend (CONTRACTS 6.5, v1.29; the requirement of 26 Oct 2026): before Shutter
 /// writes a case's operation again, the messages of the same encounter that reached Shutter after the case's own and are not
 /// yet delivered to the case's receiver are listed, from the feed's deliveries (a ward message queued for the receiver with
 /// no answer yet; for a case forwarded from a watched production, that production's deliveries too, v1.34) and the exact

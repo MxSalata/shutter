@@ -2,7 +2,8 @@
 /// confidence, the setting it reads and the words every finding of that code carries (why it matters, the safer value,
 /// the action a person takes), so that a check's words live in one place. Shutter.Review.Sweep decides when a check
 /// fires and what it found; this class says what the finding means. The texts may use {item}, {setting}, {found} and
-/// {count}, filled per finding. Severity (how bad the hazard is) and confidence (how sure the evidence is) are kept
+/// {count}, filled per finding: a "(s)" follows the count (one error, two errors), and an item left empty reads "the
+/// production itself". Severity (how bad the hazard is) and confidence (how sure the evidence is) are kept
 /// apart: a configuration read from the production is "confirmed", a pattern the configuration is consistent with is
 /// "consistent", and a count of errors or failed messages is "indicative" until a person has read them.
 Class Shutter.Review.Checks Extends %RegisteredObject
@@ -96,14 +97,18 @@ ClassMethod Finding(code As %String, item As %String = "", itemClass As %String 
     Quit f
 }
 
-/// A text with its placeholders filled: {item}, {setting}, {found} and {count}.
+/// A text with its placeholders filled: {item}, {setting}, {found} and {count}. An empty item (an error the production
+/// itself logged, a message with no item) reads "the production itself", and a "(s)" plural follows the count: "1 error",
+/// "445 errors".
 ClassMethod Fill(text As %String, values As %DynamicObject) As %String
 {
     If text = "" Quit ""
     Set iter = values.%GetIterator()
     While iter.%GetNext(.key, .value) {
+        If (key = "item") && (value = "") Set value = "the production itself"
         Set text = $REPLACE(text, "{" _ key _ "}", value)
     }
+    If values.%IsDefined("count") Set text = $REPLACE(text, "(s)", $SELECT(+values.count = 1: "", 1: "s"))
     Quit text
 }
 
@@ -181,11 +186,11 @@ XData Rules [ MimeType = application/json ]
    "suggested": "BodiesToo 1, so that bodies go with their headers.",
    "action": "Set BodiesToo on the purge task."},
  "SUSPENDED_MESSAGES": {"severity": "high", "confidence": "confirmed", "setting": "", "subject": "an item",
-   "why": "{count} message(s) to {item} are suspended in the window: each is a delivery that stopped and waits for a person to resend or discard it, and until then the receiver does not have it.",
+   "why": "{count} message(s) to {item}, suspended in the window: each is a delivery that stopped and waits for a person to resend or discard it, and until then the receiver does not have it.",
    "suggested": "Suspended messages reviewed daily; each resent or discarded with the receiver's current state in view, since a resend of a stale event can overwrite a later one.",
    "action": "Open the suspended messages for {item}, decide each one, and find what suspended them (ReplyCodeActions, a permanent error)."},
  "QUEUE_BACKLOG": {"severity": "medium", "confidence": "confirmed", "setting": "QueueCountAlert", "subject": "an item",
-   "why": "{count} message(s) wait in the queue of {item}, above the threshold ({found}): the item or its receiver is behind or stopped, and patients' current location lags by the age of the queue.",
+   "why": "{count} message(s) in the queue of {item}, above the threshold ({found}): the item or its receiver is behind or stopped, and patients' current location lags by the age of the queue.",
    "suggested": "A queue near zero between bursts, and the alert threshold set so that this depth would have alerted.",
    "action": "Check the status of {item} and of its receiver, then the age of the oldest message; set QueueCountAlert and QueueWaitAlert so that a backlog alerts."},
  "ERRORS_GROUPED": {"severity": "medium", "confidence": "indicative", "setting": "", "subject": "an item and an error signature",

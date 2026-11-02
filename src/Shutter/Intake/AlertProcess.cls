@@ -157,7 +157,8 @@ ClassMethod ForwardFromAlert(alert As Ens.AlertRequest, header As Ens.MessageHea
     If status '= "" Set f.FailureHttpStatus = +status
     Set f.FailureReasonCode = "alert"
     Set when = ""
-    Try { Set when = $SELECT(alert.AlertTime '= "": $ZDATETIME(alert.AlertTime, 3, 1), 1: "") } Catch ex { Set when = "" }
+    // The engine's AlertTime is a UTC timestamp ("2026-11-02 19:39:34.123"); a $HOROLOG value is read as one too.
+    Try { Set when = $SELECT(alert.AlertTime = "": "", alert.AlertTime [ "-": $EXTRACT(alert.AlertTime, 1, 19), 1: $ZDATETIME(alert.AlertTime, 3, 1)) } Catch ex { Set when = "" }
     Set f.FailureText = $EXTRACT("Alert from " _ alert.SourceConfigName _ $SELECT(when '= "": " at " _ when _ " UTC", 1: "") _ ": " _ alert.AlertText, 1, 2000)
     Quit f
 }
