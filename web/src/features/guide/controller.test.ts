@@ -8,89 +8,71 @@ import {
   positionOf,
   skipChapter,
   start,
+  stepsIn,
   welcomeDue,
   type GuideProgress,
 } from './controller';
-import { chapterById, SCOPES } from './registry';
+import { SCOPES } from './registry';
 
-const at = (chapter: string, step = 0, more: Partial<GuideProgress> = {}): GuideProgress => ({
+const at = (path: string, more: Partial<GuideProgress> = {}): GuideProgress => ({
   ...INITIAL,
-  chapter,
-  step,
+  at: path,
   ...more,
 });
 
 describe('the guide controller', () => {
-  it('opens the welcome only before the guide was started, finished or dismissed', () => {
+  it('opens the welcome only before the tour was started, finished or dismissed', () => {
     expect(welcomeDue(INITIAL)).toBe(true);
     expect(welcomeDue({ ...INITIAL, dismissed: true })).toBe(false);
-    expect(welcomeDue(at('s2'))).toBe(false);
+    expect(welcomeDue(at('s2/receipt'))).toBe(false);
     expect(welcomeDue({ ...INITIAL, completed: ['scenarios'] })).toBe(false);
   });
 
-  it('starts a scope at its first chapter and step', () => {
-    const p = start(INITIAL, 'all');
-    expect(p).toMatchObject({ scope: 'all', chapter: 'scenarios', step: 0 });
-    expect(positionOf(p)).toMatchObject({
-      n: 1,
-      m: 3,
-      chapterN: 1,
-      chapterM: SCOPES.all.length,
-      first: true,
-    });
+  it('counts the route, not the chapter: step 3 of 9 on the quick tour', () => {
+    const p = start(INITIAL, 'quick');
+    expect(positionOf(p)).toMatchObject({ path: 'scenarios/start', n: 1, m: 9, first: true, last: false });
+    expect(positionOf(at('s2/decision'))).toMatchObject({ n: 3, m: 9 });
+    expect(positionOf(at('evaluation/headline'))).toMatchObject({ n: 9, last: true });
+    expect(positionOf(start(INITIAL, 'engineer'))).toMatchObject({ path: 's2/receipt-json', m: 6 });
+    expect(positionOf(at('s2/evidence'))).toBeUndefined();
   });
 
-  it('moves through a chapter, then finishes it and opens the next one in the scope', () => {
-    let p = start(INITIAL, 'quick');
-    p = next(next(p));
-    expect(positionOf(p)).toMatchObject({ n: 3, m: 3 });
+  it('steps on with Next, finishing a chapter as the route leaves it, and ends after the last', () => {
+    let p = at('scenarios/start');
     p = next(p);
-    // The quick scope goes from Scenarios straight to the S2 case
-    expect(p).toMatchObject({ chapter: 's2', step: 0, completed: ['scenarios'] });
+    expect(p).toMatchObject({ at: 's2/receipt', completed: ['scenarios'] });
+    p = next(p);
+    expect(p).toMatchObject({ at: 's2/decision', completed: ['scenarios'] });
+    const end = next(at('evaluation/headline', { completed: ['scenarios'] }));
+    expect(end).toMatchObject({ at: null, dismissed: true, completed: ['scenarios', 'evaluation'] });
   });
 
-  it('goes back across chapters, and nowhere before the first step', () => {
-    expect(back(start(INITIAL, 'quick'))).toEqual(start(INITIAL, 'quick'));
-    const p = back(at('s2', 0));
-    expect(p).toMatchObject({ chapter: 'scenarios', step: chapterById('scenarios')!.steps.length - 1 });
+  it('steps back across chapters, and not before the first', () => {
+    expect(back(at('s2/receipt')).at).toBe('scenarios/start');
+    expect(back(at('scenarios/start')).at).toBe('scenarios/start');
   });
 
-  it('skips a chapter without finishing it', () => {
-    const p = skipChapter(at('s2', 1));
-    expect(p).toMatchObject({ chapter: 's8', step: 0, completed: [] });
+  it('skips to the next chapter on the route, leaving this one unfinished', () => {
+    expect(skipChapter(at('s2/receipt'))).toMatchObject({ at: 's8/receipt', completed: [] });
+    expect(skipChapter(at('evaluation/headline'))).toMatchObject({ at: null, dismissed: true });
   });
 
-  it('ends after the last step of the scope, every chapter finished and the welcome no longer due', () => {
-    const last = chapterById('evaluation')!;
-    const p = next(at('evaluation', last.steps.length - 1, { completed: ['scenarios', 's2', 's8', 's20'] }));
-    expect(p).toMatchObject({ chapter: null, step: 0, dismissed: true });
-    expect(p.completed).toEqual(['scenarios', 's2', 's8', 's20', 'evaluation']);
-    expect(positionOf(p)).toBeUndefined();
-    // Skipping the last chapter ends the guide too, leaving it unfinished
-    expect(skipChapter(at('evaluation'))).toMatchObject({ chapter: null, completed: [] });
+  it('opens a chapter on the route that has it, else on every screen', () => {
+    expect(goToChapter(at('s2/receipt'), 's8')).toMatchObject({ scope: 'quick', at: 's8/receipt' });
+    expect(goToChapter(at('s2/receipt'), 'library')).toMatchObject({ scope: 'all', at: 'library/agents' });
+    expect(goToChapter(at('s2/receipt'), 'nowhere').at).toBe('s2/receipt');
+    expect(stepsIn('s2', 'quick')).toBe(3);
+    expect(stepsIn('s2', 'all')).toBe(4);
+    expect(stepsIn('library', 'quick')).toBe(1);
   });
 
-  it('opens a picked chapter in the current scope when it has it, among all sections otherwise', () => {
-    expect(goToChapter(at('scenarios'), 's8')).toMatchObject({ scope: 'quick', chapter: 's8', step: 0 });
-    expect(goToChapter(at('scenarios'), 'health')).toMatchObject({ scope: 'all', chapter: 'health' });
-    expect(goToChapter(at('scenarios'), 'nowhere')).toEqual(at('scenarios'));
-  });
-
-  it('keeps a stored step inside its chapter', () => {
-    expect(positionOf(at('s20', 9))).toMatchObject({ n: 2, m: 2 });
-    // A chapter outside the scope is no position
-    expect(positionOf(at('health'))).toBeUndefined();
-  });
-
-  it('reads only progress of its own version and shape', () => {
+  it('reads back only the progress of this version, on a route that has the step', () => {
     expect(isProgress(INITIAL)).toBe(true);
-    expect(isProgress(at('s8', 2))).toBe(true);
-    expect(isProgress({ ...INITIAL, version: 2 })).toBe(false);
-    expect(isProgress({ ...INITIAL, scope: 'everything' })).toBe(false);
-    expect(isProgress({ ...INITIAL, chapter: 'health' })).toBe(false);
-    expect(isProgress({ ...INITIAL, step: -1 })).toBe(false);
-    expect(isProgress({ ...INITIAL, completed: [1] })).toBe(false);
-    expect(isProgress('{}')).toBe(false);
+    expect(isProgress(at('s2/decision'))).toBe(true);
+    expect(isProgress({ ...INITIAL, version: 1 })).toBe(false);
+    expect(isProgress(at('s2/evidence'))).toBe(false);
+    expect(isProgress({ ...INITIAL, scope: 'engineer', at: SCOPES.engineer[0] })).toBe(true);
+    expect(isProgress({ ...INITIAL, completed: ['no-such-chapter'] })).toBe(false);
     expect(isProgress(null)).toBe(false);
   });
 });

@@ -11,6 +11,9 @@ import { TONE_COLOURS, TONE_ICONS, type Tone } from '@/lib/tone';
  * word (the tone never stands alone). A hue instead draws an identity icon and no edge. With `to` the whole tile is the
  * link; with `onClick` it is a button, and with `pressed` a toggle (`aria-pressed`) that filters, as the Cases list's
  * tiles do. Tiles earn their place: never one that repeats the next block's header, never a zero-count severity tile.
+ * A tile whose figure is a graphic (the comparison's bars, as `children`) leaves `figure` out. `labelOrder` makes the
+ * overline a heading of that level, for tiles reached by heading inside a hero; a tile that is a button keeps a plain
+ * label, since a button may not hold a heading.
  */
 export function StatTile({
   label,
@@ -24,12 +27,14 @@ export function StatTile({
   onClick,
   pressed,
   size = 'default',
+  labelOrder,
   children,
   'aria-label': ariaLabel,
   tour,
 }: {
   label: ReactNode;
-  figure: ReactNode;
+  /** The figure; none for a tile whose figure is a graphic in `children`. */
+  figure?: ReactNode;
   caption?: ReactNode;
   /** The tile's status tone: an edge, the tone's icon, and `status`'s words. */
   tone?: Tone;
@@ -43,6 +48,8 @@ export function StatTile({
   /** A tile that filters: whether its filter is on. */
   pressed?: boolean;
   size?: 'default' | 'hero';
+  /** The overline as a heading of this level (not on a tile that is a button). */
+  labelOrder?: 2 | 3 | 4;
   /** A small key-value list or a bar under the caption. */
   children?: ReactNode;
   'aria-label'?: string;
@@ -76,17 +83,20 @@ export function StatTile({
       </span>
     )
   ) : null;
+  const heading = labelOrder && !onClick ? (`h${labelOrder}` as const) : null;
   const body = (
     <Stack gap={4}>
       <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xs">
-        <Text component="span" className="overline">
+        <Text component={heading ?? 'span'} className="overline" m={heading ? 0 : undefined}>
           {label}
         </Text>
         {mark}
       </Group>
-      <Text component="span" className="stat-figure" data-size={size === 'hero' ? 'hero' : undefined}>
-        {figure}
-      </Text>
+      {figure === undefined || figure === null || figure === false ? null : (
+        <Text component="span" className="stat-figure" data-size={size === 'hero' ? 'hero' : undefined}>
+          {figure}
+        </Text>
+      )}
       {caption ? (
         <Text component="span" size="sm" c="dimmed">
           {caption}

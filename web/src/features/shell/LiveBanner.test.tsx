@@ -1,6 +1,6 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -9,6 +9,7 @@ import fixtures from '@/mocks/fixtures.json';
 import { resetMock } from '@/mocks/handlers';
 import { server } from '@/mocks/node';
 import { theme } from '@/theme';
+import { LIVE_WELCOME_KEY } from '@/trial/LiveWelcome';
 import { AppLayout } from './AppLayout';
 
 const BASE = '/api/shutter';
@@ -72,7 +73,11 @@ const noBanner = async () => {
 };
 
 describe('the live hospital banner', () => {
-  beforeEach(() => resetMock('approver'));
+  beforeEach(() => {
+    resetMock('approver');
+    // The live first-run prompt would open over every page here; it has tests of its own
+    localStorage.setItem(LIVE_WELCOME_KEY, 'seen');
+  });
 
   it('tells how often a failure arrives and what played last, on every page', async () => {
     settingsWith({
@@ -82,7 +87,7 @@ describe('the live hospital banner', () => {
     });
     const { router } = renderFrame('/cases');
     expect(await banner()).toHaveTextContent(
-      'Live hospital: a new failure every 7 minutes. Last: S23a, the bed is occupied, 4 min ago.',
+      'Live hospital: a new failure every 7 minutes. Last: S23a, 4 min ago.',
     );
     await router.navigate('/library');
     expect(await screen.findByRole('heading', { name: 'Library page' })).toBeInTheDocument();
@@ -93,8 +98,20 @@ describe('the live hospital banner', () => {
     resetMock('demo');
     renderFrame();
     expect(await banner()).toHaveTextContent(
-      /^Live hospital: a new failure every 7 minutes\. Last: S2, Never-accepted transfer, still current, 4 min ago\. Next: S8 at \d\d:\d\d:\d\d (GMT|BST|UTC)\.$/,
+      /^Live hospital: a new failure every 7 minutes\. Last: S2, 4 min ago\. Next: S8 at \d\d:\d\d (GMT|BST|UTC)\.$/,
     );
+  });
+
+  it("keeps the story's title for a tooltip on its code, so the line stays short", async () => {
+    settingsWith({
+      enabled: true,
+      every_minutes: 7,
+      last_played: { scenario: 'S23a', title: 'the bed is occupied', at: minutesAgo(4) },
+    });
+    renderFrame();
+    const b = await banner();
+    expect(b).not.toHaveTextContent('the bed is occupied');
+    expect(within(b).getByText('S23a')).toHaveAttribute('tabindex', '0');
   });
 
   it('names the story due next and when, only while that time is still ahead', async () => {
@@ -105,7 +122,7 @@ describe('the live hospital banner', () => {
       next: { scenario: 'S8', at: inMinutes(3) },
     });
     const first = renderFrame();
-    expect(await banner()).toHaveTextContent(/ Next: S8 at \d\d:\d\d:\d\d (GMT|BST|UTC)\.$/);
+    expect(await banner()).toHaveTextContent(/ Next: S8 at \d\d:\d\d (GMT|BST|UTC)\.$/);
     first.unmount();
     // A story that was due and has not played: the player is behind or stopped, so no time is promised
     settingsWith({
