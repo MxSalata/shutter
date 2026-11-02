@@ -353,8 +353,11 @@ hospital has. It never resets anything, and the scenario runner's Run and Reset 
   `cooldownUntil`). The rotation and the ordinary feed pause from the press until `done`, and the next story is then due
   `EveryMinutes` later. No model is needed for the story: the chains follow the policy, and a board convenes only where it
   says `board`. Fresh patients and beds mean the storm never collides with a story already playing.
-- **Settings** of `Hospital.LivePlayer`: `EveryMinutes` 7; `Scenarios` `S2,S8,S1,S23a,S3,S24,S15,S11`, played round robin
-  (empty means every scenario of `fixtures/scenarios.json` but S13, S20 and S21, which need an operator or the records);
+- **Settings** of `Hospital.LivePlayer`: `EveryMinutes` 7; `Scenarios` `S2,S8,S1,S23a,S3,S24,S15`, played round robin
+  (empty means every scenario of `fixtures/scenarios.json` but S13, S20 and S21, which need an operator or the records; S11
+  is out of the rotation since v1.38, its board chain would convene a board every round, and the storm shows an incident on
+  demand); the build's `SHUTTER_LIVE_SCENARIOS` (read at every production start into `^Hospital.Config("liveScenarios")`;
+  `default` or no valid id clears it) overrides the setting;
   `Faults` 1; `OrdinaryFeed` 1; `MaxWait` 30, the longest a `wait` step is given; `ShutterNamespace` `SHUTTER`.
 - **A story** (`Shutter.Util.LiveFeed`: pure functions over the HL7 text, covered by `Shutter.Test.LiveFeed`). The scenario's
   steps come from `fixtures/scenarios.json` and its files from `fixtures/<S>/` under Shutter's root. Every patient of the
@@ -1714,7 +1717,7 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   takes the production's own report of the failure when it arrives before the evidence is collected, so the catalogue
   reads the connector's answer (11); the alert's time in the failure text is read as the engine's UTC timestamp (11);
   two words put right: the rehearsal check blocks at dispatch, the only stage that sends it (6.5), and a deferred board waits
-  60 to 89 s (6.6).
+  60 to 89 s (6.6); the live hospital's rotation drops S11 and takes `SHUTTER_LIVE_SCENARIOS` (4.4).
 - v1.37, 2 Nov 2026: whether the live agents can run, `live.agents` in `GET /settings` with reasons `budget` and `provider_auth`,
   the Agent item's `provider_auth` refusal while the provider refuses the key, and `409 live_unavailable` on the board and a
   live question (12), for the demo's notice to visitors; `live.budgetNote` from `SHUTTER_DEMO_BUDGET_USD` and
