@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { envFrom, liveHref, trialHref, trialUser } from './mode';
+import { envFrom, liveHref, pageEnv, rememberTrialRole, TRIAL_ROLE_KEY, trialHref, trialUser } from './mode';
 
 describe('envFrom', () => {
   it('is the live system with nothing in the address', () => {
@@ -62,5 +62,25 @@ describe('the addresses of the trial and of the live system', () => {
   it("sign the trial's roles in as the mock's users of the same name", () => {
     expect(trialUser('demo')).toEqual({ username: 'demo', password: 'shutter' });
     expect(trialUser(envFrom('?as=other', true).role).username).toBe('approver');
+  });
+});
+
+describe("the page's environment", () => {
+  afterEach(() => sessionStorage.clear());
+
+  it('signs a reloaded trial in as the role the tab chose, unless the address names one', () => {
+    expect(pageEnv('?trial', false).role).toBe('approver');
+    rememberTrialRole('operator');
+    expect(sessionStorage.getItem(TRIAL_ROLE_KEY)).toBe('operator');
+    expect(pageEnv('?trial', false).role).toBe('operator');
+    expect(pageEnv('', true).role).toBe('operator');
+    expect(pageEnv('?trial&as=judge', false).role).toBe('judge');
+    // A live page has no trial role to keep
+    expect(pageEnv('', false).role).toBe('approver');
+  });
+
+  it('is the trial on a build IRIS serves when the address says ?trial', () => {
+    expect(pageEnv('?trial', false)).toMatchObject({ trial: true, canLeave: true, demoBuild: false });
+    expect(pageEnv('', false)).toMatchObject({ trial: false, canLeave: false });
   });
 });

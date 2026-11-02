@@ -1,7 +1,24 @@
 // Runs before the bundle so the first paint already has the right colour scheme, contrast and
 // palette (no white flash for dark-mode users, no white page before Pastel). Mirrors what Mantine
 // and the appearance store decide once React is up; both keys are theirs, this only reads them.
+// It also marks a trial page (`?trial` before the `#`, or the demo build, which says so on <html>)
+// before the first paint, so the boot screen, the frame and the favicon are the trial's at once.
 (function () {
+  try {
+    var root = document.documentElement;
+    var trial =
+      root.getAttribute('data-shutter-build') === 'demo' ||
+      /(^|[?&])trial(=|&|$)/.test(window.location.search.slice(1));
+    if (trial) {
+      root.setAttribute('data-shutter-env', 'trial');
+      var icon = document.querySelector('link[rel="icon"]');
+      if (icon)
+        icon.setAttribute('href', icon.getAttribute('href').replace('favicon.svg', 'favicon-trial.svg'));
+      document.title = 'Shutter (trial)';
+    }
+  } catch (e) {
+    /* the app marks the page itself once it starts */
+  }
   try {
     var stored = localStorage.getItem('mantine-color-scheme-value');
     var scheme =

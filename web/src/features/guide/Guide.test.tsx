@@ -2,28 +2,34 @@ import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, Outlet, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { api } from '@/api/client';
+import type { CaseDetail } from '@/api/types';
 import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
+import { useAppearance } from '@/stores/appearance';
 import { theme } from '@/theme';
+import { bannerForm } from '@/trial/visit';
 import CasePage from '@/features/cases/CasePage';
 import EvaluationPage from '@/features/evaluation/EvaluationPage';
 import ScenariosPage from '@/features/scenarios/ScenariosPage';
-import { INITIAL } from './controller';
-import { Guide } from './Guide';
-import { HelpMenu } from './HelpMenu';
+import { INITIAL, type GuideProgress } from './controller';
+import { APPROVED_FOR_YOU, Guide } from './Guide';
+import { TrialHelpMenu } from './HelpMenu';
 import { forgetProgress, GUIDE_KEY, saveProgress } from './storage';
 import { useGuide } from './store';
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => {
+  server.listen({ onUnhandledRequest: 'error' });
+  window.scrollTo = () => {};
+});
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
 /**
- * The app's frame as far as the guide needs it: Help in a header, the guide, and the pages it visits. Tests that do
- * not show a section start on a small page: role queries over a whole screen are slow in jsdom.
+ * The trial's frame as far as the guide needs it: Help in a header, the guide, and the pages it visits. Tests that do
+ * not place a card start on a small page: role queries over a whole screen are slow in jsdom.
  */
 function renderApp(path = '/start') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -33,7 +39,7 @@ function renderApp(path = '/start') {
         element: (
           <>
             <header>
-              <HelpMenu />
+              <TrialHelpMenu />
             </header>
             <main>
               <Outlet />
@@ -62,24 +68,27 @@ function renderApp(path = '/start') {
 }
 
 const stored = () => JSON.parse(localStorage.getItem(GUIDE_KEY) ?? 'null');
-const dialog = () => screen.findByRole('dialog');
+const welcome = () => screen.findByRole('dialog', { name: 'Welcome to the Shutter trial' });
 const noDialog = () => waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+const card = () => screen.findByRole('region', { name: 'Guide' }, { timeout: 15_000 });
+const at = (path: string, more: Partial<GuideProgress> = {}) =>
+  useGuide.setState({ progress: { ...INITIAL, at: path, ...more }, phase: 'step', openedAt: Date.now() });
+const announced = () => document.querySelector('[data-guide-announcer]');
 
-async function startQuick(path?: string) {
-  renderApp(path);
-  await userEvent.click(await within(await dialog()).findByRole('button', { name: 'Start guide' }));
-  expect(await within(await dialog()).findByText('Step 1 of 3 · Scenarios')).toBeInTheDocument();
-}
-
-/**
- * Help's items, as the menu calls them. Mantine's menu takes tens of seconds to position itself in jsdom, so the
- * menu itself is opened in the end-to-end tests; here the header only has to offer it.
- */
-async function help(item: 'Resume guide' | 'Restart guide' | 'Choose a chapter') {
-  expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument();
-  const s = useGuide.getState();
-  act(() =>
-    item === 'Resume guide' ? s.resume() : item === 'Restart guide' ? s.openWelcome() : s.openChapters(),
+/** Under reduced motion every movement stands at rest from the start. */
+function preferReducedMotion() {
+  vi.spyOn(window, 'matchMedia').mockImplementation(
+    (query: string) =>
+      ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      }) as MediaQueryList,
   );
 }
 
@@ -88,172 +97,192 @@ describe('the guide', () => {
     resetMock('approver');
     localStorage.clear();
     forgetProgress();
-    useGuide.setState({ progress: INITIAL, phase: 'closed', snoozed: false, shownAt: 0 });
+    useGuide.setState({
+      progress: INITIAL,
+      phase: 'closed',
+      snoozed: false,
+      approvedForYou: null,
+      pointAt: null,
+      openedAt: 0,
+    });
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it('welcomes a first visit, read only, with the release wording and a choice of scope', async () => {
+  it('welcomes a first visit with what Shutter does, what the trial is, and three tours', async () => {
     renderApp();
-    const d = await dialog();
-    expect(within(d).getByRole('heading', { name: 'Welcome to Shutter' })).toBeInTheDocument();
+    const d = await welcome();
     expect(d).toHaveTextContent(
-      'it never plays a scenario, approves, dispatches, saves configuration or sends mail',
+      'When a patient movement fails to reach another system, Shutter finds out why and writes a fix only when it is safe to.',
     );
-    expect(d).toHaveTextContent(
-      "Every write passes the gate, then a person, or the site's written policy, releases it",
+    expect(d).toHaveTextContent('A demo hospital with made-up patients, recorded.');
+    expect(d).not.toHaveTextContent(/try anything|every action works|it never plays/i);
+    const quick = within(d).getByRole('radio', { name: /Quick tour/ });
+    expect(quick).toBeChecked();
+    expect(quick).toHaveTextContent('9 steps, about 4 min');
+    expect(within(d).getByRole('radio', { name: /Every screen/ })).toHaveTextContent(
+      '31 steps in 15 chapters',
     );
-    expect(within(d).getByRole('radio', { name: /Quick demonstration/ })).toBeChecked();
-    expect(within(d).getByRole('radio', { name: /All sections/ })).not.toBeChecked();
-    expect(within(d).getByRole('button', { name: 'Not now' })).toBeInTheDocument();
+    expect(within(d).getByRole('radio', { name: /For integration engineers/ })).toHaveTextContent('6 steps');
+    expect(within(d).getByRole('button', { name: 'Start the tour' })).toBeInTheDocument();
+    expect(within(d).getByRole('button', { name: 'Explore on my own' })).toBeInTheDocument();
     expect(within(d).getByRole('button', { name: "Don't show again" })).toBeInTheDocument();
   });
 
-  it("closes for the visit on Not now, and for good on Don't show again", async () => {
+  it("closes for the visit on Explore on my own, for good on Don't show again, and compacts the banner", async () => {
     renderApp();
-    await userEvent.click(await within(await dialog()).findByRole('button', { name: 'Not now' }));
+    await userEvent.click(within(await welcome()).getByRole('button', { name: 'Explore on my own' }));
     await noDialog();
-    // Nothing is stored: the next visit welcomes again
     expect(stored()).toBeNull();
     expect(useGuide.getState().snoozed).toBe(true);
+    expect(bannerForm.get()).toBe('compact');
 
-    useGuide.setState({ snoozed: false, phase: 'welcome' });
-    await userEvent.click(await within(await dialog()).findByRole('button', { name: "Don't show again" }));
+    act(() => useGuide.setState({ snoozed: false, phase: 'welcome' }));
+    await userEvent.click(within(await welcome()).getByRole('button', { name: "Don't show again" }));
     await noDialog();
-    expect(stored()).toMatchObject({ version: 1, dismissed: true, chapter: null });
+    expect(stored()).toMatchObject({ version: 2, dismissed: true, at: null });
   });
 
-  it('does not welcome a visit after the guide was dismissed', async () => {
-    localStorage.setItem(GUIDE_KEY, JSON.stringify({ ...INITIAL, dismissed: true }));
+  it('does not welcome a visit after the tour was dismissed', async () => {
+    saveProgress({ ...INITIAL, dismissed: true });
     useGuide.setState({ progress: { ...INITIAL, dismissed: true } });
     renderApp();
     expect(await screen.findByRole('heading', { name: 'Start', level: 1 })).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('steps with Next and Back, and keeps the place on the device', async () => {
-    await startQuick();
-    const d = await dialog();
-    expect(within(d).getByRole('button', { name: 'Back' })).toBeDisabled();
-    await userEvent.click(within(d).getByRole('button', { name: 'Next' }));
-    expect(await within(d).findByText('Step 2 of 3 · Scenarios')).toBeInTheDocument();
-    expect(within(d).getByRole('heading', { name: 'Who makes the proposal' })).toBeInTheDocument();
-    expect(stored()).toMatchObject({ scope: 'quick', chapter: 'scenarios', step: 1 });
-    await userEvent.click(within(d).getByRole('button', { name: 'Back' }));
-    expect(await within(d).findByText('Step 1 of 3 · Scenarios')).toBeInTheDocument();
-    // The announcement is short: the step, never the page
-    await waitFor(() =>
-      expect(document.querySelector('[data-guide-announcer]')).toHaveTextContent(
-        'Step 1 of 3 · Scenarios: Start with S2, S8 and S20',
-      ),
-    );
-  });
-
-  it('shows a section: the dialog closes, focus goes to its heading and Continue guide follows it', async () => {
-    await startQuick('/scenarios');
-    await userEvent.click(within(await dialog()).getByRole('button', { name: 'Show this section' }));
-    await noDialog();
-    // The step shows the three scenarios to try first
-    const heading = await screen.findByRole('heading', { name: 'Try these three first', level: 2 });
-    await waitFor(() => expect(heading).toHaveFocus());
-    expect(heading).toHaveAttribute('tabindex', '-1');
-    expect(heading.closest('[data-tour]')).toHaveAttribute('data-tour-active', 'true');
-    const guide = screen.getByRole('region', { name: 'Guide' });
-    expect(guide).toHaveTextContent('Step 1 of 3 · Scenarios');
-    // Continue guide is the next stop after the heading
-    expect(heading.compareDocumentPosition(guide) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    await userEvent.click(within(guide).getByRole('button', { name: 'Continue guide' }));
-    expect(await within(await dialog()).findByText('Step 1 of 3 · Scenarios')).toBeInTheDocument();
-    await waitFor(() => expect(heading.closest('[data-tour]')).not.toHaveAttribute('data-tour-active'));
-  });
-
-  it("finds the case through the API and shows the section the step names: S8's kept dissent", async () => {
-    useGuide.setState({ progress: { ...INITIAL, chapter: 's8', step: 1 }, phase: 'step' });
+  it('places the first step as a card just before its section, focuses its title and announces it', async () => {
     const router = renderApp();
-    const d = await dialog();
-    expect(within(d).getByText('Step 2 of 4 · S8: a write withheld')).toBeInTheDocument();
-    await userEvent.click(await within(d).findByRole('button', { name: 'Show this section' }));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/cases/C-000008'));
-    // The board sits under the outcome, so no story step needs opening
-    expect(router.state.location.search).toBe('');
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'The board' })).toHaveFocus());
-  });
-
-  it('explains a missing case and offers to skip it, never running the scenario', async () => {
-    const posts: string[] = [];
-    server.events.on('request:start', ({ request }) => {
-      if (request.method !== 'GET') posts.push(`${request.method} ${new URL(request.url).pathname}`);
-    });
-    server.use(http.get('/api/shutter/cases', () => HttpResponse.json({ items: [], total: 0 })));
-    useGuide.setState({ progress: { ...INITIAL, chapter: 's20', step: 0 }, phase: 'step' });
-    renderApp();
-    const d = await dialog();
-    expect(
-      await within(d).findByText(
-        /There is no S20 case in Rules only mode here yet\. The guide never plays a scenario/,
-      ),
-    ).toBeInTheDocument();
-    expect(within(d).queryByRole('button', { name: 'Show this section' })).not.toBeInTheDocument();
-    await userEvent.click(within(d).getByRole('button', { name: 'Skip this step' }));
-    expect(
-      await within(d).findByText('Step 2 of 2 · S20 in Rules only mode: an approval no longer valid'),
-    ).toBeInTheDocument();
-    server.events.removeAllListeners();
-    expect(posts).toEqual([]);
-  });
-
-  it('skips a chapter, exits on Escape without finishing, and resumes from Help where it stopped', async () => {
-    await startQuick();
-    await userEvent.click(within(await dialog()).getByRole('button', { name: 'Skip chapter' }));
-    expect(
-      await within(await dialog()).findByText('Step 1 of 4 · S2: a transfer recovered'),
-    ).toBeInTheDocument();
-    expect(stored()).toMatchObject({ chapter: 's2', step: 0, completed: [] });
-    await userEvent.keyboard('{Escape}');
+    await userEvent.click(within(await welcome()).getByRole('button', { name: 'Start the tour' }));
     await noDialog();
-    expect(stored()).toMatchObject({ chapter: 's2', completed: [], dismissed: false });
-    await help('Resume guide');
-    expect(
-      await within(await dialog()).findByText('Step 1 of 4 · S2: a transfer recovered'),
-    ).toBeInTheDocument();
-  });
-
-  it('restarts from the welcome and opens a chapter from the picker', async () => {
-    useGuide.setState({ progress: { ...INITIAL, chapter: 's8', step: 2, completed: ['scenarios'] } });
-    renderApp();
-    await help('Restart guide');
-    expect(
-      await within(await dialog()).findByRole('heading', { name: 'Welcome to Shutter' }),
-    ).toBeInTheDocument();
-    await userEvent.click(within(await dialog()).getByRole('radio', { name: /All sections/ }));
-    await userEvent.click(within(await dialog()).getByRole('button', { name: 'Start guide' }));
-    expect(stored()).toMatchObject({ scope: 'all', chapter: 'scenarios', step: 0, completed: ['scenarios'] });
-    await userEvent.keyboard('{Escape}');
-    await noDialog();
-
-    await help('Choose a chapter');
-    const d = await dialog();
-    expect(within(d).getByRole('button', { name: 'Scenarios (finished) (current)' })).toBeInTheDocument();
-    await userEvent.click(within(d).getByRole('button', { name: 'Evaluation' }));
-    expect(await within(await dialog()).findByText('Step 1 of 2 · Evaluation')).toBeInTheDocument();
-  });
-
-  it('finishes after the last step and stays closed on the next visit', async () => {
-    useGuide.setState({ progress: { ...INITIAL, chapter: 'evaluation', step: 1 }, phase: 'step' });
-    renderApp();
-    await userEvent.click(await within(await dialog()).findByRole('button', { name: 'Finish' }));
-    await noDialog();
-    expect(stored()).toMatchObject({ chapter: null, dismissed: true, completed: ['evaluation'] });
+    await waitFor(() => expect(router.state.location.pathname).toBe('/scenarios'));
+    const guide = await card();
+    expect(guide).toHaveTextContent('Trial tour · Scenarios');
+    expect(guide).toHaveTextContent('Step 1 of 9');
+    const title = within(guide).getByRole('heading', { name: 'Three stories to start with', level: 2 });
+    await waitFor(() => expect(title).toHaveFocus());
+    // The card comes first in the page's order, then the section it is about
+    const section = document.querySelector('[data-tour="scenarios"]')!;
+    expect(guide.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await waitFor(() => expect(section).toHaveAttribute('data-tour-active', 'true'));
+    expect(stored()).toMatchObject({ scope: 'quick', at: 'scenarios/start' });
     await waitFor(() =>
-      expect(document.querySelector('[data-guide-announcer]')).toHaveTextContent('The guide is finished'),
+      expect(announced()).toHaveTextContent('Step 1 of 9, scenarios. Three stories to start with.'),
     );
+  });
+
+  it('approves the held S2 case for the reader on Next, and says so on the next card', async () => {
+    at('s2/decision');
+    const router = renderApp();
+    await waitFor(() => expect(router.state.location.pathname).toBe('/cases/C-000002'));
+    const guide = await card();
+    expect(guide).toHaveTextContent('Step 3 of 9');
+    expect(within(guide).getByRole('heading', { name: 'Your turn: approve the fix' })).toBeInTheDocument();
+    const sent: unknown[] = [];
+    server.events.on('request:start', async ({ request }) => {
+      if (request.method === 'POST' && new URL(request.url).pathname.endsWith('/approvals'))
+        sent.push(await request.clone().json());
+    });
+    await userEvent.click(within(guide).getByRole('button', { name: 'Next' }));
+    // Through the same call Approve plan makes, with its own comment
+    await waitFor(async () => expect((await api.get<CaseDetail>('/cases/C-000002')).state).toBe('resolved'));
+    expect(sent).toEqual([expect.objectContaining({ decision: 'approve', comment: APPROVED_FOR_YOU })]);
+    server.events.removeAllListeners();
+    const nextCard = await screen.findByText('Approved for you, in the trial.', undefined, {
+      timeout: 15_000,
+    });
+    expect(nextCard.closest('[role="region"]')).toHaveTextContent('Step 4 of 9');
+    await waitFor(() =>
+      expect(announced()).toHaveTextContent(/^Approved for you, in the trial\. Step 4 of 9/),
+    );
+  });
+
+  it('points at the control a step invites the reader to try, at rest under reduced motion', async () => {
+    preferReducedMotion();
+    at('s2/decision');
+    renderApp();
+    const guide = await card();
+    const chip = await within(guide).findByRole('button', { name: 'Try it: press Approve plan' });
+    const control = document.querySelector<HTMLElement>('[data-tour-action="approve-plan"]')!;
+    expect(control).toBeTruthy();
+    // jsdom has no IntersectionObserver, so the control counts as in view: the pointer and halo stand at rest
+    const pointer = await screen.findByTestId('guide-try-pointer');
+    expect(pointer).toHaveAttribute('data-motion', 'rest');
+    expect(pointer).toHaveAttribute('aria-hidden', 'true');
+    expect(control).toHaveAttribute('data-tour-try', 'rest');
+    expect(guide.querySelector('.guide-notch')).toHaveAttribute('data-motion', 'rest');
+    // The chip moves focus to the control
+    await userEvent.click(chip);
+    expect(control).toHaveFocus();
+  });
+
+  it('exits on Escape without finishing, and resumes from Help where it stopped', async () => {
+    at('s2/receipt');
+    renderApp();
+    const guide = await card();
+    await waitFor(() => expect(within(guide).getByRole('heading', { level: 2 })).toHaveFocus());
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Guide' })).not.toBeInTheDocument());
+    expect(useGuide.getState().phase).toBe('closed');
+    await waitFor(() =>
+      expect(announced()).toHaveTextContent('The tour is closed. Help in the header resumes it.'),
+    );
+    expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument();
+    act(() => useGuide.getState().resume());
+    expect(await card()).toHaveTextContent('Step 2 of 9');
+  });
+
+  it('lists the chapters by the navigation groups, the current one marked, and opens one', async () => {
+    useGuide.setState({ progress: { ...INITIAL, at: 's8/receipt', completed: ['scenarios'] } });
+    renderApp();
+    act(() => useGuide.getState().openChapters());
+    const d = await screen.findByRole('dialog', { name: 'Choose a chapter' });
+    expect(
+      within(d)
+        .getAllByRole('group')
+        .map((g) => g.getAttribute('aria-labelledby')),
+    ).toEqual(['guide-group-Operate', 'guide-group-Results', 'guide-group-Configure']);
+    expect(within(d).getByRole('button', { name: /^Scenarios 1 step \(finished\)/ })).toBeInTheDocument();
+    expect(
+      within(d).getByRole('button', { name: /^A fix held back \(S8\) 3 steps Current$/ }),
+    ).toBeInTheDocument();
+    await userEvent.click(within(d).getByRole('button', { name: /^Evaluation/ }));
+    await noDialog();
+    expect(useGuide.getState().progress).toMatchObject({ scope: 'quick', at: 'evaluation/headline' });
+  });
+
+  it('finishes on the last step with the finish card, and stays closed on the next visit', async () => {
+    at('evaluation/headline');
+    renderApp();
+    const guide = await card();
+    expect(guide).toHaveTextContent('Step 9 of 9');
+    await userEvent.click(within(guide).getByRole('button', { name: 'Finish' }));
+    const finish = await screen.findByRole('heading', { name: 'That is the tour.' });
+    const region = finish.closest('[role="region"]') as HTMLElement;
+    expect(region).toHaveTextContent(
+      'You saw a transfer delivered and verified, a fix held back for a person, and the gate stopping one.',
+    );
+    expect(within(region).getByRole('button', { name: 'Run S20 yourself' })).toBeInTheDocument();
+    expect(within(region).getByRole('button', { name: 'Explore on my own' })).toBeInTheDocument();
+    expect(stored()).toMatchObject({ at: null, dismissed: true, completed: ['evaluation'] });
+    await waitFor(() => expect(announced()).toHaveTextContent('That is the tour.'));
+  });
+
+  it("starts the engineers' tour with Technical on", async () => {
+    useAppearance.setState({ detail: 'plain' });
+    act(() => useGuide.getState().begin('engineer'));
+    expect(useAppearance.getState().detail).toBe('technical');
+    expect(useGuide.getState().progress).toMatchObject({ scope: 'engineer', at: 's2/receipt-json' });
+    act(() => useGuide.getState().begin('quick'));
+    expect(useAppearance.getState().detail).toBe('technical');
+    useAppearance.setState({ detail: 'plain' });
   });
 
   it('drops its place in memory on sign-out and keeps the one stored on the device', () => {
-    const stored = { ...INITIAL, chapter: 's8', step: 1 };
-    saveProgress(stored);
-    useGuide.setState({ progress: { ...INITIAL, chapter: 's2' }, phase: 'step' });
+    const kept = { ...INITIAL, at: 's8/receipt' };
+    saveProgress(kept);
+    useGuide.setState({ progress: { ...INITIAL, at: 's2/receipt' }, phase: 'step' });
     useGuide.getState().reset();
-    expect(useGuide.getState()).toMatchObject({ phase: 'closed', progress: stored });
+    expect(useGuide.getState()).toMatchObject({ phase: 'closed', progress: kept });
   });
 
   it('drops its place on sign-out when the device refuses storage, kept only in memory', () => {
@@ -263,7 +292,7 @@ describe('the guide', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('refused');
     });
-    const kept = { ...INITIAL, chapter: 's2', step: 1 };
+    const kept = { ...INITIAL, at: 's2/decision' };
     saveProgress(kept);
     useGuide.setState({ progress: kept, phase: 'step' });
     useGuide.getState().reset();

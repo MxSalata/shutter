@@ -80,6 +80,15 @@ export const themeBase: MantineThemeOverride = {
 export const theme = createTheme(themeBase);
 
 /**
+ * The events of a tooltip that carries a hint on an element made focusable for it (a status badge's hint, a time, a
+ * digest, a comparison bar, a trace that is not a link in the trial): it opens on hover, on keyboard focus and on a
+ * tap, so the keyboard and a touch screen reach the hint too (WCAG 2.1.1 and 1.4.13). Pass it as `events` to such a
+ * tooltip. It is not the theme's default for every tooltip: in jsdom every focus counts as a visible one, so a page
+ * test that clicks any control inside a tooltip would open it, and a control's own name already says what it does.
+ */
+export const HINT_EVENTS = { hover: true, focus: true, touch: true };
+
+/**
  * Under high contrast the low-opacity `light` variant of badges and alerts is replaced by
  * solid/outlined ones at the theme level, so no call site needs a change; explicit
  * `variant` props still win.
