@@ -92,7 +92,12 @@ Method OnAgentRequest(request As Shutter.Bridge.Msg.AgentRequest, Output respons
     // The day's model budget (Shutter.Util.Budget, v1.34): a run that would call a model is refused once the day's spend
     // has reached the cap; a replay calls no model and is never refused.
     Set response.RequestedBy = request.RequestedBy
-    If (spec.Mode '= "replay") && '##class(Shutter.Util.Budget).AllowsFor(request.RequestedBy, .budget) {
+    // The provider refusing the key (Shutter.Util.LiveAgents, v1.37): while a live run failed with an authentication error
+    // in the last fifteen minutes, a run that would call a model is refused here with no call, as the budget refuses one.
+    If (spec.Mode '= "replay") && ##class(Shutter.Util.LiveAgents).ProviderDown(.downUntil, .downText) {
+        Set response.Status = "provider_auth"
+        Set response.Error = downText
+    } ElseIf (spec.Mode '= "replay") && '##class(Shutter.Util.Budget).AllowsFor(request.RequestedBy, .budget) {
         Set response.Status = "budget_exhausted"
         Set response.Error = ##class(Shutter.Util.Budget).Refusal(budget)
     } ElseIf (runnerClass = "") || '##class(%Dictionary.CompiledClass).%ExistsId(runnerClass) {
@@ -119,6 +124,7 @@ Method OnAgentRequest(request As Shutter.Bridge.Msg.AgentRequest, Output respons
         }
         If reserveKey '= "" Do ##class(Shutter.Util.Budget).Settle(reserveKey)
     }
+    Do ##class(Shutter.Util.LiveAgents).NoteRun(spec.Mode, response.Status, response.Error)
     Do ##class(Shutter.Bridge.Runner).Stamp(spec, response)
     If response.Mode = "" Set response.Mode = spec.Mode
     If response.StartedAt = "" Set response.StartedAt = ##class(Shutter.Util.Time).NowUTC()
