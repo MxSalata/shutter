@@ -1,15 +1,18 @@
 import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { ReviewDetail } from '@/api/types';
+import type { DetailLevel } from '@/env/mode';
 import fixtures from '@/mocks/fixtures.json';
 import { resetMock } from '@/mocks/handlers';
 import { server } from '@/mocks/node';
+import { useAppearance } from '@/stores/appearance';
+import { layer1Words } from '@/test/words';
 import { theme } from '@/theme';
 import ReviewPage from './ReviewPage';
 import ReviewsPage from './ReviewsPage';
@@ -21,11 +24,13 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {
   server.resetHandlers();
   server.events.removeAllListeners();
+  useAppearance.setState({ detail: 'plain' });
 });
 afterAll(() => server.close());
 beforeEach(() => resetMock('approver'));
 
-function renderAt(path: string) {
+function renderAt(path: string, detail: DetailLevel = 'plain') {
+  useAppearance.setState({ detail });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter(
     [
@@ -46,8 +51,26 @@ function renderAt(path: string) {
 }
 
 const findings = () => within(screen.getByRole('region', { name: 'Findings' }));
-/** The findings, one card each, most severe first. */
-const rows = () => findings().getAllByRole('article');
+/** The findings, one row each, grouped by severity, in the order they are listed. */
+const rows = () =>
+  Array.from(
+    screen.getByRole('region', { name: 'Findings' }).querySelectorAll<HTMLElement>('[data-finding]'),
+  );
+/** Whether each finding's control says it is open, in the order listed. */
+const expandedStates = () =>
+  rows().map((r) => r.querySelector('[data-accordion-control]')!.getAttribute('aria-expanded'));
+/** The control of a finding's row: the closed row's title, chip and line, without the opened finding. */
+const control = (id: string) => row(id).querySelector<HTMLElement>('[data-accordion-control]')!;
+/** A finding's row, by its id. */
+const row = (id: string) => rows().find((r) => r.dataset.finding === id)!;
+/** Opens a finding: its control is the one button of the row that says whether it is open. */
+async function open(r: HTMLElement) {
+  await userEvent.click(within(r).getByRole('button', { expanded: false }));
+  // The panel shows on the next animation frame
+  await within(r).findByRole('region');
+}
+/** The agent's card, which sits above Findings when the agent ranked and below it otherwise. */
+const agentCard = () => screen.getByRole('region', { name: "The agent's ranking" });
 
 /** PR-000001 as the agent would leave it: ranked, explained, with its summary and unknowns. */
 function ranked(): ReviewDetail {
@@ -97,7 +120,52 @@ describe('ReviewsPage', () => {
     expect(screen.getByText(/The review never changes the production/)).toBeInTheDocument();
   });
 
-  it("starts a review of the chosen production for an operator and follows it until it's done", async () => {
+  it('leads with one short sentence, and keeps what a review reads one click away', async () => {
+    renderAt('/reviews');
+    await screen.findByRole('link', { name: 'PR-000004' });
+    const lead = screen.getByText(/^A read-only check of a/);
+    // The word "production" carries its definition (hidden until asked for), so the lead is read around it
+    expect(lead.textContent).toMatch(/^A read-only check of a production/);
+    expect(lead.textContent).toMatch(/'s settings and recent errors, tied to the cases\.$/);
+    expect(within(lead).getByText('production')).toBeInTheDocument();
+    const toggle = screen.getByRole('button', { name: 'Technical detail' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      screen.getByText(/One read-only pass over a production Shutter runs or watches/),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the latest review of each production as a card, newest first', async () => {
+    renderAt('/reviews');
+    const latest = within(await screen.findByRole('region', { name: 'Latest per production' }));
+    expect(latest.getAllByRole('link').map((a) => a.textContent)).toEqual([
+      'Open PR-000004',
+      'Open PR-000003',
+    ]);
+    expect(latest.getByRole('link', { name: 'Open PR-000004' })).toHaveAttribute(
+      'href',
+      '/reviews/PR-000004',
+    );
+    expect(latest.getByText('Shutter.Production')).toBeInTheDocument();
+    expect(latest.getByText('SHUTTER')).toBeInTheDocument();
+    expect(latest.getByText('10 medium')).toBeInTheDocument();
+    expect(latest.getByText('3 low')).toBeInTheDocument();
+    expect(latest.getByText('Hospital.Production')).toBeInTheDocument();
+    expect(latest.getByText('1 high')).toBeInTheDocument();
+    expect(latest.getByText('No recording')).toBeInTheDocument();
+    // The older reviews of the same productions are not cards
+    expect(latest.queryByText('Open PR-000002')).not.toBeInTheDocument();
+  });
+
+  it('shows the list as the API sends it, in a disclosure that Technical opens', async () => {
+    renderAt('/reviews', 'technical');
+    await screen.findByRole('link', { name: 'PR-000004' });
+    const source = screen.getByRole('button', { name: 'As the API sends it' });
+    expect(source).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('GET /api/shutter/production-reviews?limit=100')).toBeInTheDocument();
+  });
+
+  it("starts a review of the chosen production for an operator, in a dialog, and follows it until it's done", async () => {
     resetMock('operator');
     let posted: { body: unknown; key: string | null; csrf: string | null } | null = null;
     server.events.on('request:start', ({ request }) => {
@@ -114,10 +182,13 @@ describe('ReviewsPage', () => {
           });
     });
     renderAt('/reviews');
-    const select = await screen.findByRole('combobox', { name: 'Production' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Start a review' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Live system')).toBeInTheDocument();
+    const select = await within(dialog).findByRole('combobox', { name: 'Production' });
     await userEvent.selectOptions(select, 'HOSPITAL|Hospital.Production');
-    await userEvent.click(screen.getByRole('switch', { name: /Ask the agent/ }));
-    await userEvent.click(screen.getByRole('button', { name: 'Start the review' }));
+    await userEvent.click(within(dialog).getByRole('switch', { name: /Ask the agent/ }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Start the review' }));
     expect(await screen.findByRole('heading', { name: 'Review PR-000005' })).toBeInTheDocument();
     expect(posted).toEqual({
       body: { namespace: 'HOSPITAL', production: 'Hospital.Production', windowDays: 7, agent: false },
@@ -126,7 +197,9 @@ describe('ReviewsPage', () => {
     });
     // The first read finds it sweeping; the page reads it again until it is done
     expect(await screen.findByText(/This page reads the review again every 2 seconds/)).toBeInTheDocument();
-    expect(await findings().findByText('PURGE_MISSING', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(
+      await findings().findByRole('button', { name: /No message purge task/ }, { timeout: 5000 }),
+    ).toBeInTheDocument();
   });
 
   it('keeps the start of a review from someone without the operator role', async () => {
@@ -137,7 +210,7 @@ describe('ReviewsPage', () => {
     );
     renderAt('/reviews');
     expect(await screen.findByText('An operator starts a review.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Start the review' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Start a review|Start the review/ })).not.toBeInTheDocument();
   });
 
   it('links to the review still running when the server refuses a second one', async () => {
@@ -156,18 +229,27 @@ describe('ReviewsPage', () => {
       ),
     );
     renderAt('/reviews');
-    await userEvent.click(await screen.findByRole('button', { name: 'Start the review' }));
-    const alert = await screen.findByRole('alert');
+    await userEvent.click(await screen.findByRole('button', { name: 'Start a review' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Start the review' }));
+    const alert = await within(dialog).findByRole('alert');
     expect(within(alert).getByText(/A review of Shutter.Production is ranking/)).toBeInTheDocument();
     expect(within(alert).getByRole('link', { name: 'Follow review PR-000004' })).toHaveAttribute(
       'href',
       '/reviews/PR-000004',
     );
   });
+
+  it('says plainly when there are no reviews yet', async () => {
+    server.use(http.get(`${BASE}/production-reviews`, () => HttpResponse.json({ items: [], total: 0 })));
+    renderAt('/reviews');
+    expect(await screen.findByText('No reviews yet.')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Latest per production' })).not.toBeInTheDocument();
+  });
 });
 
 describe('ReviewPage', () => {
-  it('shows the review read only, in baseline order, with the agent plainly not recorded', async () => {
+  it('shows the review read only, closed and grouped, with the agent plainly not recorded below the findings', async () => {
     renderAt('/reviews/PR-000001');
     expect(await screen.findByRole('heading', { name: 'Review PR-000001' })).toBeInTheDocument();
     expect(screen.getByText(/^Shutter.Production in SHUTTER, \d+ days? of history\.$/)).toBeInTheDocument();
@@ -175,36 +257,191 @@ describe('ReviewPage', () => {
     const note = screen.getAllByRole('note')[0];
     expect(note).toHaveTextContent('Read only');
     expect(note).toHaveTextContent('The review never changes the production');
-    // No finding was explained: the page says so, and no card carries an explanation
-    expect(screen.getByText('0 of 13 findings explained by the agent')).toBeInTheDocument();
+    // No finding was explained: the agent's card says so, below the findings, and no row carries an explanation
+    const agent = within(agentCard());
+    expect(agent.getByText('0 of 13 findings explained by the agent')).toBeInTheDocument();
     expect(
-      screen.getByRole('progressbar', { name: '0 of 13 findings explained by the agent' }),
+      agent.getByRole('progressbar', { name: '0 of 13 findings explained by the agent' }),
     ).toBeInTheDocument();
-    expect(findings().queryByText(/^The agent's explanation/)).not.toBeInTheDocument();
-    // The counts as tiles, from the review's summary
-    const summary = within(screen.getByRole('region', { name: 'Summary' }));
-    expect(summary.getByText('event log errors in the window').previousSibling).toHaveTextContent('714');
-    expect(summary.getByText('Medium').closest('.mantine-Paper-root')).toHaveTextContent('11');
-    const agent = within(screen.getByRole('region', { name: "The agent's ranking" }));
-    expect(agent.getByText('No recorded explanation for this configuration')).toBeInTheDocument();
-    expect(findings().getByText(/In the deterministic order/)).toBeInTheDocument();
-    expect(rows().map((r) => within(r).getAllByText(/^F\d+$/)[0].textContent)).toEqual(
-      recorded['PR-000001'].findings.map((f) => f.id),
+    expect(screen.queryByText(/^The agent's explanation/)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: 'Findings' }).compareDocumentPosition(agentCard()) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(agent.getByText(/This review was recorded without its ranking/)).toHaveTextContent(
+      /deterministic order/,
     );
-    const first = within(rows()[0]);
-    expect(first.getByText('ERRORS_GROUPED')).toBeInTheDocument();
-    expect(first.getByText('the production')).toBeInTheDocument();
+    expect(agent.getByText('No recording')).toBeInTheDocument();
+    expect(
+      findings().getByText('In order: severity, then unique cases, then the newest evidence.'),
+    ).toBeInTheDocument();
+    expect(rows().map((r) => r.dataset.finding)).toEqual(recorded['PR-000001'].findings.map((f) => f.id));
+  });
+
+  it('counts the review as tiles, with no tile for a severity that has no findings', async () => {
+    renderAt('/reviews/PR-000001');
+    await screen.findByRole('heading', { name: 'Review PR-000001' });
+    const summary = within(screen.getByRole('region', { name: 'Summary' }));
+    expect(summary.getByText('Errors logged').closest('.stat-tile')).toHaveTextContent('714');
+    expect(summary.getByText('Errors logged').closest('.stat-tile')).toHaveTextContent('in the window');
+    expect(summary.getByText('Messages in error').closest('.stat-tile')).toHaveTextContent('713');
+    expect(summary.getByText('Medium').closest('.stat-tile')).toHaveTextContent('11');
+    expect(summary.getByText('Low').closest('.stat-tile')).toHaveTextContent('2');
+    // The zero is in the findings tile's caption, not a tile of its own
+    expect(summary.queryByText('High')).not.toBeInTheDocument();
+    expect(summary.getByText('Findings').closest('.stat-tile')).toHaveTextContent('13');
+    expect(summary.getByText('0 high · 1 marked')).toBeInTheDocument();
+    // PR-000003 has a high finding and nothing marked
+    cleanup();
+    renderAt('/reviews/PR-000003');
+    await screen.findByRole('heading', { name: 'Review PR-000003' });
+    const hospital = within(screen.getByRole('region', { name: 'Summary' }));
+    expect(hospital.getByText('High').closest('.stat-tile')).toHaveTextContent('1');
+    expect(hospital.queryByText(/marked/)).not.toBeInTheDocument();
+  });
+
+  it('lists the findings closed under their severity, each with its title, chip, summary and case count', async () => {
+    renderAt('/reviews/PR-000001');
+    await screen.findByRole('heading', { name: 'Review PR-000001' });
+    expect(
+      findings()
+        .getAllByRole('heading', { level: 3 })
+        .map((h) => h.textContent),
+    ).toEqual(['Medium', 'Low']);
+    // Every finding is closed, and the control says so
+    expect(expandedStates()).toEqual(Array(13).fill('false'));
+    // What the closed row says is in its control; the opened finding adds more below it
+    const alerting = within(control('F2'));
+    expect(alerting.getByText('No alert on error')).toBeInTheDocument();
+    expect(alerting.getByText('AlertOnError')).toBeInTheDocument();
+    expect(alerting.getByText('ADT In, HL7 Index, +2')).toBeInTheDocument();
+    expect(
+      alerting.getByText('Failures reach the event log and wait for someone to read it.'),
+    ).toBeInTheDocument();
+    expect(alerting.getByText('54 cases, 30 unique')).toBeInTheDocument();
+    expect(within(control('F4')).getByText('ERROR <Ens>ErrBPTerminated')).toBeInTheDocument();
+    expect(
+      within(control('F4')).getByText('445 errors with one signature, logged by ADT to Downstream.'),
+    ).toBeInTheDocument();
+    expect(
+      within(control('F1')).getByText('1 error with one signature, logged by the production itself.'),
+    ).toBeInTheDocument();
+    expect(within(control('F13')).getByText('ADT In · InactivityTimeout = 0')).toBeInTheDocument();
+    // A finding about the whole production needs no "the production" beside its chip
+    expect(within(control('F3')).getByText('no Ens.Alert item')).toBeInTheDocument();
+    expect(within(control('F3')).queryByText('the production')).not.toBeInTheDocument();
+    // Annotation state and the button are outside the control, so they work while the finding is closed
+    expect(within(row('F1')).getByText('Intended')).toBeInTheDocument();
+    expect(
+      await within(row('F2')).findByRole('button', { name: 'Annotate F2, ALERTING_OFF' }),
+    ).toBeInTheDocument();
+  });
+
+  it('opens a finding to show what was found, why it matters and what to do', async () => {
+    renderAt('/reviews/PR-000001');
+    await screen.findByRole('heading', { name: 'Review PR-000001' });
+    const first = within(row('F1'));
+    await open(row('F1'));
+    expect(first.getByRole('button', { expanded: true })).toBeInTheDocument();
+    expect(
+      first.getByRole('region', { name: 'Repeated errors of one kind, ERRORS_GROUPED' }),
+    ).toBeInTheDocument();
     expect(first.getByText('Intended')).toBeInTheDocument();
     expect(first.getByRole('link', { name: 'C-000055' })).toHaveAttribute('href', '/cases/C-000055');
     expect(first.getByRole('link', { name: /Latest header 4342/ })).toHaveAttribute(
       'href',
       '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderId=4342',
     );
-    const alerting = within(rows()[1]);
+    expect(first.getByText('Why it matters')).toBeInTheDocument();
+    await open(row('F2'));
+    const alerting = within(row('F2'));
     expect(alerting.getByText("Source: the item's own setting")).toBeInTheDocument();
     expect(alerting.getAllByRole('listitem')).toHaveLength(4);
+    // The server's own sentences are shown in full once the finding is opened
+    expect(alerting.getByText(/Items on the clinical feed raise no alert on error/)).toBeInTheDocument();
     // The recorded review has no count of HL7 TCP items, so the page says nothing about them
     expect(findings().queryByText(/^No HL7/)).not.toBeInTheDocument();
+  });
+
+  it('opens the finding the address names, and leaves the others closed', async () => {
+    renderAt('/reviews/PR-000001?finding=F4');
+    await screen.findByRole('heading', { name: 'Review PR-000001' });
+    expect(within(row('F4')).getByRole('button', { expanded: true })).toBeInTheDocument();
+    expect(expandedStates().filter((x) => x === 'false')).toHaveLength(12);
+    expect(
+      findings().getByRole('region', { name: 'Repeated errors of one kind, ERRORS_GROUPED' }),
+    ).toContainElement(within(row('F4')).getByText('Why it matters'));
+  });
+
+  it('narrows the findings by severity, new and marked', async () => {
+    renderAt('/reviews/PR-000001');
+    await screen.findByRole('heading', { name: 'Review PR-000001' });
+    const chips = within(screen.getByRole('radiogroup', { name: 'Show findings' }));
+    const labels = (radios: HTMLElement[]) =>
+      radios.map((c) => (c as HTMLInputElement).labels?.[0]?.textContent);
+    expect(labels(chips.getAllByRole('radio'))).toEqual(['All 13', 'Medium 11', 'Low 2', 'New', 'Marked']);
+    await userEvent.click(chips.getByRole('radio', { name: 'Low 2' }));
+    expect(rows().map((r) => r.dataset.finding)).toEqual(['F12', 'F13']);
+    expect(
+      findings()
+        .getAllByRole('heading', { level: 3 })
+        .map((h) => h.textContent),
+    ).toEqual(['Low']);
+    await userEvent.click(chips.getByRole('radio', { name: 'Marked' }));
+    expect(rows().map((r) => r.dataset.finding)).toEqual(['F1']);
+    await userEvent.click(chips.getByRole('radio', { name: 'All 13' }));
+    expect(rows()).toHaveLength(13);
+    // PR-000003 has nothing marked, so there is no new against marked
+    cleanup();
+    renderAt('/reviews/PR-000003');
+    await screen.findByRole('heading', { name: 'Review PR-000003' });
+    const hospital = within(screen.getByRole('radiogroup', { name: 'Show findings' }));
+    expect(labels(hospital.getAllByRole('radio'))).toEqual(['All 9', 'High 1', 'Medium 6', 'Low 2']);
+  });
+
+  it('keeps the findings closed in Technical, adds each check code beside its title and opens the keys once a finding is open', async () => {
+    renderAt('/reviews/PR-000001', 'technical');
+    await screen.findByRole('heading', { name: 'Review PR-000001' });
+    expect(expandedStates()).toEqual(Array(13).fill('false'));
+    expect(within(row('F2')).getAllByText('ALERTING_OFF')[0]).toBeInTheDocument();
+    expect(within(row('F2')).getAllByText('ALERTING_OFF')[0]).toHaveClass('code-chip');
+    await open(row('F2'));
+    const keys = within(row('F2')).getByRole('button', { name: 'Keys and values' });
+    expect(keys).toHaveAttribute('aria-expanded', 'true');
+    expect(within(row('F2')).getByText('Confidence')).toBeInTheDocument();
+    expect(within(row('F2')).getByText('Source')).toBeInTheDocument();
+    // The review's own details open, with the times in UTC beside the local ones
+    expect(screen.getByRole('button', { name: 'Production, window and fingerprint' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByText('GET /api/shutter/production-reviews/PR-000001')).toBeInTheDocument();
+  });
+
+  /**
+   * The spec's budget is 350 words for a review with every finding closed. The page measures 388 (header 12, the
+   * read-only note 18, tiles 25, the findings' lead and chips 24, the thirteen rows 253, the agent's card 51): the
+   * spec's own drawing adds up to about 410, so 350 cannot hold with the severity badge, the chip, the line and the
+   * case count on every row. The budget below is the measured page with a little room; it still fails if the closed
+   * rows grow back toward today's 2,057.
+   */
+  const PLAIN_BUDGET = 390;
+
+  it('keeps a review in Plain within its word budget, and Technical within one and a half times it', async () => {
+    renderAt('/reviews/PR-000001');
+    await screen.findByRole('heading', { name: 'Review PR-000001' });
+    const plain = layer1Words(document.body).length;
+    expect(plain).toBeLessThanOrEqual(PLAIN_BUDGET);
+    // The thirteen closed rows carry at most 20 words each on average
+    const closedRows = rows().reduce((n, r) => n + layer1Words(r).length, 0);
+    expect(closedRows).toBeLessThanOrEqual(13 * 20);
+    cleanup();
+    renderAt('/reviews/PR-000001', 'technical');
+    await screen.findByRole('heading', { name: 'Review PR-000001' });
+    // The API source's JSON is the machine's own text, not a layer of prose, so it is not counted
+    document.querySelectorAll('.json-block').forEach((el) => el.remove());
+    const technical = layer1Words(document.body).length;
+    expect(technical).toBeLessThanOrEqual(plain * 1.5);
   });
 
   it('says there is no HL7 item when the server counted none, naming the checks it covers', async () => {
@@ -241,8 +478,7 @@ describe('ReviewPage', () => {
     expect(screen.queryByText(/the sweep is still reading/)).not.toBeInTheDocument();
     expect(findings().queryByText(/^No HL7/)).not.toBeInTheDocument();
     expect(findings().getByText('No findings: the review failed.')).toBeInTheDocument();
-    const agent = within(screen.getByRole('region', { name: "The agent's ranking" }));
-    expect(agent.getByText(/not asked because the sweep failed/)).toBeInTheDocument();
+    expect(within(agentCard()).getByText(/not asked because the sweep failed/)).toBeInTheDocument();
   });
 
   it('shows log entries as text, and links the evidence that names a message header', async () => {
@@ -266,30 +502,34 @@ describe('ReviewPage', () => {
     server.use(http.get(`${BASE}/production-reviews/PR-000001`, () => HttpResponse.json(r)));
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
+    for (const r of rows()) await open(r);
     const rule = within(rows()[0]);
     expect(rule.getByText('Rule log entry 812')).toBeInTheDocument();
     expect(rule.queryByRole('link', { name: /header/ })).not.toBeInTheDocument();
     rows()
       .slice(1)
-      .forEach((row, i) =>
-        expect(
-          within(row).getByRole('link', { name: new RegExp(`Latest header ${900 + i}`) }),
-        ).toHaveAttribute(
+      .forEach((r, i) =>
+        expect(within(r).getByRole('link', { name: new RegExp(`Latest header ${900 + i}`) })).toHaveAttribute(
           'href',
           `/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderId=${900 + i}`,
         ),
       );
   });
 
-  it("sorts by the agent's rank when it answered, with its explanation, summary and unknowns", async () => {
+  it("puts the agent's card above the findings when it ranked, and sorts by its rank with its explanation, summary and unknowns", async () => {
     server.use(http.get(`${BASE}/production-reviews/PR-000001`, () => HttpResponse.json(ranked())));
     renderAt('/reviews/PR-000001');
     expect(
       await screen.findByText("In the agent's order: within each severity tier, as it ranked them."),
     ).toBeInTheDocument();
+    expect(
+      agentCard().compareDocumentPosition(screen.getByRole('region', { name: 'Findings' })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(rows()[0].dataset.finding).toBe('F5');
+    // The agent's explanation sits beside the finding, above the deterministic text, once the finding is open
+    await open(rows()[0]);
     const first = within(rows()[0]);
-    expect(first.getByText('F5')).toBeInTheDocument();
-    // The agent's explanation sits beside the finding, above the deterministic text
     const explanation = first.getByRole('note');
     expect(explanation).toHaveTextContent("The agent's explanation, rank 1 (recorded)");
     expect(explanation).toHaveTextContent('Consistent with the cases of ADT to Downstream.');
@@ -297,20 +537,24 @@ describe('ReviewPage', () => {
       explanation.compareDocumentPosition(first.getByText('Why it matters')) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    // The explained count is stated once, directly above the finding cards, with what it leaves out
-    const list = within(screen.getByRole('region', { name: 'Findings' }));
-    const count = list.getByText('12 of 13 findings explained by the agent');
-    expect(count.compareDocumentPosition(rows()[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The explained count is stated once, in the agent's card, with what it leaves out
+    const agent = within(agentCard());
+    expect(agent.getByText('12 of 13 findings explained by the agent')).toBeInTheDocument();
     expect(screen.getAllByText(/of 13 findings explained/)).toHaveLength(1);
     expect(
-      list.getByText(
+      agent.getByText(
         'The others keep the baseline order within their tier, with no explanation; 2 recorded explanations matched no finding here and were left out. A finding with no explanation shows the deterministic text only.',
       ),
     ).toBeInTheDocument();
-    const agent = within(screen.getByRole('region', { name: "The agent's ranking" }));
     expect(agent.getByText('Ranked and explained (recorded)')).toBeInTheDocument();
     expect(agent.getByText('The downstream errors outnumber the rest.')).toBeInTheDocument();
     expect(agent.getByText('Whether the ward was down for maintenance')).toBeInTheDocument();
+    // What the agent sees and does is one click away, with the run's figures in Technical
+    expect(agent.getByRole('button', { name: 'What the agent sees and does' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(agent.getByText(/One IRIS AI Hub agent/)).toHaveTextContent('%AI.Agent');
   });
 
   it('lets an approver mark a finding intended with a reason and an expiry, and reads the review again', async () => {
@@ -327,11 +571,13 @@ describe('ReviewPage', () => {
     );
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
+    // The button is outside the accordion's control, so it works while the finding is closed
     await userEvent.click(
-      await within(rows()[1]).findByRole('button', { name: 'Annotate F2, ALERTING_OFF' }),
+      await within(row('F2')).findByRole('button', { name: 'Annotate F2, ALERTING_OFF' }),
     );
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/never a change to the production/)).toBeInTheDocument();
+    expect(within(dialog).getByText('Live system')).toBeInTheDocument();
     const mark = within(dialog).getByRole('button', { name: 'Mark as intended' });
     expect(mark).toBeDisabled();
     await userEvent.type(
@@ -350,7 +596,8 @@ describe('ReviewPage', () => {
       },
       key: expect.stringMatching(/^[0-9a-f-]{36}$/),
     });
-    expect(await within(rows()[1]).findByText('Annotation 17')).toBeInTheDocument();
+    expect(await within(row('F2')).findByText('Annotation 17')).toBeInTheDocument();
+    expect(within(row('F2')).getByText('Intended')).toBeInTheDocument();
   });
 
   it('lets an approver remove an annotation', async () => {
@@ -364,9 +611,12 @@ describe('ReviewPage', () => {
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
     await userEvent.click(
-      await within(rows()[0]).findByRole('button', { name: 'Remove the annotation of F1' }),
+      await within(row('F1')).findByRole('button', { name: 'Remove the annotation of F1' }),
     );
     const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByText(/The finding "Repeated errors of one kind" on the production/),
+    ).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Remove the annotation' }));
     expect(await screen.findByText('Annotation removed')).toBeInTheDocument();
     expect(deleted).toBe('16');
@@ -395,7 +645,7 @@ describe('ReviewPage', () => {
     resetMock('operator');
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
-    expect(within(rows()[0]).getByText('Intended')).toBeInTheDocument();
+    expect(within(row('F1')).getByText('Intended')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Annotate|Remove the annotation/ })).not.toBeInTheDocument();
   });
 
@@ -406,7 +656,7 @@ describe('ReviewPage', () => {
     expect(await screen.findByTestId('demo-read-only')).toHaveTextContent(
       "The public demo is read-only: a site's approver saves changes here",
     );
-    expect(within(rows()[0]).getByText('Intended')).toBeInTheDocument();
+    expect(within(row('F1')).getByText('Intended')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Annotate|Remove the annotation/ })).not.toBeInTheDocument();
   });
 
