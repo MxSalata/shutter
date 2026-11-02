@@ -1,22 +1,12 @@
-import {
-  Alert,
-  Button,
-  Checkbox,
-  Fieldset,
-  Group,
-  Radio,
-  SimpleGrid,
-  Stack,
-  Switch,
-  Text,
-  TextInput,
-} from '@mantine/core';
+import { Alert, Button, Fieldset, Group, SimpleGrid, Stack, Text } from '@mantine/core';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 import { useState } from 'react';
 import type { SiteProfile, SiteTeam } from '@/api/types';
 import { Section } from '@/components/Section';
+import { Checkbox, Radio, Switch, TextInput } from './controls';
+import { useEditable } from './editable';
 import { ZONE_LABELS, newTeam, parseList } from './profile';
-import { Question } from './Question';
+import { Question, QuestionDetails } from './Question';
 
 type Problem = { path: string; message: string } | null;
 type SetDraft = (fn: (d: SiteProfile) => void) => void;
@@ -79,6 +69,7 @@ function TeamFields({
   const err = (key: string) =>
     problem && problem.path.replace(/\[\d+\]$/, '') === `teams[${i}].${key}` ? problem.message : undefined;
   const id = (key: string) => `site-teams-${i}-${key}`;
+  const editable = useEditable();
   const named = t.receivers ?? [];
   const unknown = named.filter((r) => !receivers.includes(r));
   return (
@@ -182,6 +173,7 @@ function TeamFields({
             color="red"
             size="xs"
             leftSection={<IconTrash size={14} />}
+            disabled={!editable}
             onClick={remove}
           >
             Remove {t.name || 'this team'}
@@ -193,6 +185,7 @@ function TeamFields({
 }
 
 function Teams({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: SetDraft; problem: Problem }) {
+  const editable = useEditable();
   const teams = draft.teams ?? [];
   const receivers = draft.receivers.map((r) => r.name);
   const err = (path: string) =>
@@ -201,7 +194,7 @@ function Teams({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: Set
     <Section
       id="site-escalation"
       title="Escalation"
-      note="Question 9. When Shutter can't recover a case, it drafts an email from the stored case for a person to check and send: identifiers, date of birth and the event, never a name, an address or note text."
+      note="When Shutter can't recover a case, it drafts an email for a person to check and send."
     >
       <Question
         n={9}
@@ -234,6 +227,7 @@ function Teams({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: Set
           variant="light"
           size="xs"
           leftSection={<IconPlus size={14} />}
+          disabled={!editable}
           onClick={() =>
             setDraft((d) => {
               d.teams = [...(d.teams ?? []), newTeam()];
@@ -247,7 +241,7 @@ function Teams({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: Set
         <ListInput
           id="site-mail-allowed_domains"
           label="Mail domains allowed for the teams"
-          description="Every team mailbox and copy, and every address typed into an escalation, must be in one of these or a subdomain (nhs.net takes trust.nhs.net); empty allows none: a team mailbox needs a domain first"
+          description="Every team mailbox and every address typed into an escalation must be in one of these or a subdomain."
           value={draft.mail?.allowed_domains ?? []}
           onList={(list) =>
             setDraft((d) => {
@@ -272,6 +266,18 @@ function Teams({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: Set
           error={err('mail.from')}
         />
       </SimpleGrid>
+      <QuestionDetails
+        keys={[
+          [
+            'teams',
+            teams.length ? teams.map((t) => t.id) : undefined,
+            'no team: the person escalating types the address',
+          ],
+          ['mail.allowed_domains', draft.mail?.allowed_domains, 'none allowed'],
+          ['mail.from', draft.mail?.from, "the Escalation Mail operation's From setting"],
+        ]}
+        more="The draft is built from the stored case: identifiers, date of birth and the event, never a name, an address or note text. A domain also allows its subdomains (nhs.net takes trust.nhs.net). With none listed no address is allowed, so a team mailbox needs a domain first."
+      />
     </Section>
   );
 }
@@ -291,7 +297,7 @@ function Feed({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: SetD
     <Section
       id="site-feed"
       title="Feed"
-      note="Question 10. HL7 times that carry no offset (EVN-2, EVN-6, MSH-7, PV1-44) are read in this zone, and the gate orders and supersedes by them."
+      note="HL7 times that carry no offset (EVN-2, EVN-6, MSH-7, PV1-44) are read in this zone; the gate orders and supersedes by them."
     >
       <Question n={10} text="In which time zone does the PAS send times without an offset?" acts />
       <Radio.Group
@@ -305,7 +311,7 @@ function Feed({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: SetD
           <Radio
             value="Europe/London"
             label={ZONE_LABELS['Europe/London']}
-            description="GMT in winter, BST in summer; an event time within an hour of a clock change can't be ordered safely, and the gate leaves it to a person"
+            description="GMT in winter, BST in summer"
           />
           <Radio value="UTC" label={ZONE_LABELS.UTC} description="The PAS sends UTC all year" />
           <Radio
@@ -335,10 +341,10 @@ function Feed({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: SetD
           Not answered: Shutter reads these times as UTC, as it did before the question existed.
         </Text>
       ) : null}
-      <Text size="xs" c="dimmed">
-        Every operation key carries the event time in UTC, so a change here gives new keys from the next
-        message on: answer it before the first case, and not while cases are open.
-      </Text>
+      <QuestionDetails
+        keys={[['feed.time_zone', zone, 'UTC']]}
+        more="An event time within an hour of a clock change can't be ordered safely, and the gate leaves it to a person. Every operation key carries the event time in UTC, so a change here gives new keys from the next message on: answer it before the first case, and not while cases are open."
+      />
     </Section>
   );
 }
@@ -348,13 +354,13 @@ function Model({ draft, setDraft }: { draft: SiteProfile; setDraft: SetDraft }) 
     <Section
       id="site-model"
       title="What the model sees"
-      note="Question 11. The model always gets tokens for the patient's identifiers (MRN-T1, ENC-T1), and never the patient's name, date of birth or address as fields."
+      note="The model always gets tokens for the patient's identifiers, and never the patient's name, date of birth or address as fields."
     >
       <Question n={11} text="May the text of notes (OBX and NTE) go to the model?" acts />
       <Switch
         id="site-model_content-free_text"
         label="Send note text to the model"
-        description="Off: the model learns that a note is present and whether it reads like an instruction, never what it says. On: the text goes with the patient's identifiers, name and date of birth replaced by tokens, up to 500 characters (never a binary or reference value); it can still carry other people's names and clinical details"
+        description="Off: the model learns that a note is present and whether it reads like an instruction, never what it says."
         checked={draft.model_content?.free_text === true}
         onChange={(e) => {
           const v = e.currentTarget.checked;
@@ -362,6 +368,10 @@ function Model({ draft, setDraft }: { draft: SiteProfile; setDraft: SetDraft }) 
             d.model_content = { ...(d.model_content ?? {}), free_text: v };
           });
         }}
+      />
+      <QuestionDetails
+        keys={[['model_content.free_text', draft.model_content?.free_text, 'false']]}
+        more="The tokens look like MRN-T1 and ENC-T1. On: the note text goes with the patient's identifiers, name and date of birth replaced by tokens, up to 500 characters (never a binary or reference value); it can still carry other people's names and clinical details."
       />
     </Section>
   );
@@ -372,13 +382,13 @@ function Merges({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: Se
     <Section
       id="site-merges-section"
       title="Merges"
-      note="Question 12. An ADT^A40 merge changes which record a patient's history belongs to. By default Shutter never sends one: the case goes to the team whose sending applications name the merge's source."
+      note="A merge (ADT^A40) changes which record a patient's history belongs to. By default Shutter never sends one."
     >
       <Question n={12} text="May Shutter ever send a merge (A40)?" acts />
       <Switch
         id="site-merges"
         label="Merges may be sent to receivers that take them"
-        description="Off (the default): every merge is withheld and goes to a person. On: a merge goes, gated and verified, only to a receiver whose entry takes merges"
+        description="Off (the default): every merge is withheld and goes to a person."
         checked={draft.merges === 'allowed'}
         onChange={(e) => {
           const v = e.currentTarget.checked;
@@ -387,6 +397,10 @@ function Merges({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: Se
           });
         }}
         error={problem?.path === 'merges' ? problem.message : undefined}
+      />
+      <QuestionDetails
+        keys={[['merges', draft.merges, 'forbidden']]}
+        more="A withheld merge goes to the team whose sending applications name the merge's source. On: a merge goes, gated and verified, only to a receiver whose entry takes merges."
       />
     </Section>
   );
@@ -405,7 +419,7 @@ function PreventFailures({
     <Section
       id="site-prevent-failures"
       title="Prevent failures"
-      note="Question 13. Without its schema, IRIS still reads a message by segment position and delivers it, so the receiver can get values read from the wrong place. The risk is the interface, not one message."
+      note="Without its schema, IRIS still reads a message by segment position and delivers it, so a receiver can get misplaced values."
     >
       <Question
         n={13}
@@ -415,7 +429,7 @@ function PreventFailures({
       <Switch
         id="site-feed-prevent_failures"
         label="Hold messages whose schema is not loaded"
-        description="Off (the default): such a message is delivered as today, and Shutter steps in only when a delivery fails. On: each one is held as a case and nothing is sent; once the schema is imported and the inbound item's category set, the held cases are checked again and sent under the site's policy. A message that fails validation against a schema that is loaded is never held"
+        description="Off (the default): such a message is delivered as today, and Shutter steps in only when a delivery fails."
         checked={draft.feed?.prevent_failures === true}
         onChange={(e) => {
           const v = e.currentTarget.checked;
@@ -424,6 +438,10 @@ function PreventFailures({
           });
         }}
         error={problem?.path === 'feed.prevent_failures' ? problem.message : undefined}
+      />
+      <QuestionDetails
+        keys={[['feed.prevent_failures', draft.feed?.prevent_failures, 'false']]}
+        more="The risk is the interface, not one message. On: each such message is held as a case and nothing is sent; once the schema is imported and the inbound item's category set, the held cases are checked again and sent under the site's policy. A message that fails validation against a schema that is loaded is never held."
       />
     </Section>
   );

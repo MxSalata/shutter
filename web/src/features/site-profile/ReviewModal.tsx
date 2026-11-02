@@ -2,7 +2,9 @@ import { Accordion, Alert, Button, Checkbox, Group, List, Modal, Stack, Text } f
 import { useState } from 'react';
 import { DEMO_READ_ONLY } from '@/api/can';
 import type { SiteProfile, SiteProfileView } from '@/api/types';
+import { EnvChip } from '@/components/EnvChip';
 import { JsonBlock } from '@/components/JsonBlock';
+import { byEnv } from '@/env/copy';
 import type { Change } from './profile';
 
 export type SaveProblem =
@@ -46,15 +48,26 @@ export function ReviewModal({
       opened={opened}
       onClose={() => (saving ? undefined : onCancel())}
       title={
-        readOnly
-          ? `The changes for version ${next} of the site profile`
-          : confirmOnly
-            ? `Confirm the answers as version ${next}`
-            : `Save version ${next} of the site profile`
+        <span style={{ display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+          {readOnly
+            ? `The changes for version ${next} of the site profile`
+            : confirmOnly
+              ? `Confirm the answers as version ${next}`
+              : `Save version ${next} of the site profile`}
+          {readOnly ? null : <EnvChip />}
+        </span>
       }
       size="lg"
     >
       <Stack gap="sm">
+        {readOnly ? null : (
+          <Text size="md" fw={600}>
+            {byEnv({
+              live: 'This changes what Shutter does at this hospital from the next case.',
+              trial: "In the trial, saving changes only this browser's copy, until you reload or leave.",
+            })}
+          </Text>
+        )}
         {confirmOnly ? (
           <Text size="sm">
             The answers stay as they are, and are recorded as answered by you: the shipped answers stop being
@@ -89,15 +102,15 @@ export function ReviewModal({
         ) : null}
         {readOnly ? null : (
           <Alert color="blue" variant="light">
-            Shutter decides by the new version from now on, open cases that haven&apos;t reached their
-            approval included. Approvals and incident plans made under version {view.version} are refused at
-            release and come back to a person. Cases and incidents opened from now on use version {next}.
+            Open cases that have not reached their approval use it too. Approvals and incident plans made
+            under version {view.version} are refused at release and come back to a person. Cases and incidents
+            opened from now on use version {next}.
           </Alert>
         )}
         <Accordion variant="contained" chevronPosition="left">
           <Accordion.Item value="body">
             <Accordion.Control aria-label={readOnly ? 'What would be sent' : 'What is sent'}>
-              <Text size="xs">{readOnly ? 'What would be sent' : 'What is sent'}</Text>
+              <Text size="sm">{readOnly ? 'What would be sent' : 'What is sent'}</Text>
             </Accordion.Control>
             <Accordion.Panel>
               <JsonBlock value={body} label="the profile that is sent" />

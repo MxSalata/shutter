@@ -67,8 +67,8 @@ describe('SiteProfilePage', () => {
     expect(screen.getByRole('switch', { name: /Downstream Out accepts cancels/ })).not.toBeChecked();
     expect(screen.getByRole('combobox', { name: 'Tier 2, ordered chains' })).toHaveValue('approval');
     expect(screen.getByRole('textbox', { name: 'Failures' })).toHaveValue('5');
-    const summary = screen.getByRole('list', { name: 'Who releases each write' });
-    expect(within(summary).getAllByText("automatic: the site's written policy").length).toBeGreaterThan(0);
+    const matrix = screen.getByRole('table', { name: 'Who releases each write' });
+    expect(within(matrix).getAllByText("The site's written policy").length).toBeGreaterThan(0);
   });
 
   it('shows each receiver as a card with its category in plain words, and the kind no receiver has', async () => {
@@ -76,10 +76,16 @@ describe('SiteProfilePage', () => {
     const cards = await screen.findByRole('list', { name: 'The receivers and what each needs' });
     const beds = within(cards).getByRole('listitem', { name: 'Downstream Out' });
     expect(within(beds).getByText('Current state')).toBeInTheDocument();
+    expect(within(beds).getByText('Tier 2, operations')).toBeInTheDocument();
+    expect(within(beds).getByText("Only today's placement matters.")).toBeInTheDocument();
+    expect(within(beds).getByText('Overtaken failure: closes, no write.')).toBeInTheDocument();
+    // The whole sentence the case page reads stays in the card's second layer
     expect(within(beds).getByText(/An overtaken failure closes with no write/)).toBeInTheDocument();
-    expect(within(beds).getAllByText('A person, one approval').length).toBeGreaterThan(0);
     const records = within(cards).getByRole('listitem', { name: 'Records Out' });
     expect(within(records).getByText('History of record')).toBeInTheDocument();
+    expect(
+      within(records).getByText('Overtaken failure: asks a person to correct by hand.'),
+    ).toBeInTheDocument();
     expect(within(records).getByText(/asks for a correction by hand/)).toBeInTheDocument();
     expect(within(cards).getByText('Orders and results')).toBeInTheDocument();
     expect(within(cards).getByText('Not modelled yet')).toBeInTheDocument();
@@ -310,7 +316,7 @@ describe('SiteProfilePage', () => {
     renderPage();
     expect(
       await screen.findByText(
-        /^13\. Should Shutter hold the feed when a message arrives whose HL7 schema is not loaded here/,
+        /^Should Shutter hold the feed when a message arrives whose HL7 schema is not loaded here/,
       ),
     ).toBeInTheDocument();
     const sw = screen.getByRole('switch', { name: /^Hold messages whose schema is not loaded/ });
