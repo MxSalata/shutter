@@ -199,9 +199,9 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     Set hospital = $GET(^|ns|Shutter.Config("hospitalNamespace"))
     New $NAMESPACE
     Set $NAMESPACE = "%SYS"
-    For res = "Shutter_Operate", "Shutter_Approve", "Shutter_Intake", "Shutter_Configure", "Shutter_Scenarios", "Shutter_LiveAgents" {
+    For res = "Shutter_Operate", "Shutter_Approve", "Shutter_Intake", "Shutter_Configure", "Shutter_Scenarios", "Shutter_LiveAgents", "Shutter_Publish" {
         If '##class(Security.Resources).Exists(res) {
-            Set sc = ##class(Security.Resources).Create(res, "Shutter: " _ $CASE(res, "Shutter_Approve": "approve or reject recovery plans", "Shutter_Intake": "open a case from another production", "Shutter_LiveAgents": "spend the model budget: live questions and convening the board", "Shutter_Configure": "change the site: the site profile, the agent library, the schemas, the review annotations", "Shutter_Scenarios": "run and reset the demo's scenarios and purge the store", : "view cases, run scenarios, start investigations"), "")
+            Set sc = ##class(Security.Resources).Create(res, "Shutter: " _ $CASE(res, "Shutter_Approve": "approve or reject recovery plans", "Shutter_Intake": "open a case from another production", "Shutter_Publish": "read cases, incidents, evidence and plans through the MCP publisher", "Shutter_LiveAgents": "spend the model budget: live questions and convening the board", "Shutter_Configure": "change the site: the site profile, the agent library, the schemas, the review annotations", "Shutter_Scenarios": "run and reset the demo's scenarios and purge the store", : "view cases, run scenarios, start investigations"), "")
             Quit:$$$ISERR(sc)
         }
     }
@@ -227,7 +227,7 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     // Each role is created, or brought to this definition when it exists, so an upgraded instance is tightened too.
     // The approver monitors (traces, messages, the Workflow inbox) and approves; it never starts, stops or purges:
     // %EnsRole_Monitor with the message trace, header and content viewing resources, not %EnsRole_Operator (E2).
-    Set sc = ..EnsureRole("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U,Shutter_Scenarios:U,Shutter_LiveAgents:U," _ db _ ":RW" _ codeRead _ watchRead _ ",%Ens_Portal:U", "")
+    Set sc = ..EnsureRole("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U,Shutter_Scenarios:U,Shutter_LiveAgents:U,Shutter_Publish:U," _ db _ ":RW" _ codeRead _ watchRead _ ",%Ens_Portal:U", "")
     Quit:$$$ISERR(sc) sc
     // What an approver and the public demo's role share (v1.34): reading, approving, the traces; the approver adds the site's
     // writes (Shutter_Configure) and the demo controls (Shutter_Scenarios), which the demo role never holds.
@@ -1363,6 +1363,12 @@ ClassMethod Doctor() As %String [ SqlProc ]
     // Before the switch to %SYS below: New $NAMESPACE inside a Try lasts to the end of the method.
     Set r."precedent_days" = ##class(Shutter.Store.Precedent).Days()
     Set r."storm_cooldown_minutes" = ..StormCooldownMinutes()
+    // The publisher (15, v1.35): whether this build has it, its web application, and today's calls.
+    Set pub = {}
+    Do pub.%Set("available", ##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Publish.Service"), "boolean")
+    Do pub.%Set("webapp", ''$GET(^Shutter.Config("webapp", "/mcp/shutter")), "boolean")
+    Try { Set pub."calls_today" = ##class(Shutter.Store.PublishCall).CountSince($EXTRACT(##class(Shutter.Util.Time).NowUTC(), 1, 10) _ "T00:00:00Z") } Catch ex { Set pub."calls_today" = 0 }
+    Set r.publish = pub
     Try {
         New $NAMESPACE
         Set $NAMESPACE = "%SYS"
@@ -1535,12 +1541,54 @@ ClassMethod InstallAIHub(root As %String = "") As %String [ SqlProc ]
             Set out.knowledge = $SELECT(kdir = "": "no knowledge folder found", 1: "no library class")
         }
         Set out.mode = ..RecordAgentMode($SYSTEM.Util.GetEnviron("SHUTTER_AGENT_MODE"))
+        // The publisher (15, v1.35): its web application, where IRIS's MCP gateway and the publisher's classes are compiled.
+        Set out.publish = ..EnsurePublishApp($NAMESPACE)
         Set ^Shutter.Config("aihub", "installedAt") = ##class(Shutter.Util.Time).NowUTC()
         Set ^Shutter.Config("aihub", "root") = root
     } Catch ex {
         Set out.error = ex.DisplayString()
     }
     Quit out.%ToJSON()
+}
+
+/// The publisher's web application /mcp/shutter (CONTRACTS 15, v1.35): password authentication, dispatch to
+/// Shutter.Publish.Service (IRIS's MCP gateway with the publisher's tools), the resource Shutter_Publish on the
+/// application too. Made only where %AI.MCP.Service and the publisher's classes are compiled (the AI Hub build); elsewhere
+/// it says so and makes nothing. Returns a short status.
+ClassMethod EnsurePublishApp(ns As %String = "") As %String
+{
+    If ns = "" Set ns = $NAMESPACE
+    If '##class(%Dictionary.CompiledClass).%ExistsId("%AI.MCP.Service") Quit "no MCP gateway on this build (%AI.MCP.Service)"
+    If '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Publish.Service") Quit "the publisher's classes are not compiled"
+    Set out = ""
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = "%SYS"
+        Set props("NameSpace") = ns
+        Set props("Description") = "Shutter publisher: read-only MCP tools"
+        Set props("Enabled") = 1
+        // Password authentication: iris-mcp-server passes the MCP client's HTTP Basic credentials through, and the engine signs
+        // the caller in; the resource on the application and the service's own check both require Shutter_Publish.
+        Set props("AutheEnabled") = 32
+        Set props("DispatchClass") = "Shutter.Publish.Service"
+        Set props("Resource") = "Shutter_Publish"
+        Set props("MatchRoles") = ""
+        // An MCP Server application (Type bit 4, with the CSP/REST bit): what the portal's "Edit MCP Server" page makes, and
+        // what iris-mcp-server trusts; a plain web application at the same path fails its identity check.
+        Set props("Type") = 18
+        If ##class(Security.Applications).Exists("/mcp/shutter") {
+            Set sc = ##class(Security.Applications).Modify("/mcp/shutter", .props)
+            Set out = "updated"
+        } Else {
+            Set sc = ##class(Security.Applications).Create("/mcp/shutter", .props)
+            Set out = "created"
+        }
+        If $$$ISERR(sc) Set out = "failed: " _ $SYSTEM.Status.GetErrorText(sc) Quit
+        Set ^|ns|Shutter.Config("webapp", "/mcp/shutter") = 1
+    } Catch ex {
+        Set out = "failed: " _ ex.DisplayString()
+    }
+    Quit out _ " /mcp/shutter"
 }
 
 /// InstallAIHub as a %Status: what the aihub module's manifest invokes (the Invoke checks the status, so an install
