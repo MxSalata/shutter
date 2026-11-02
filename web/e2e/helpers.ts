@@ -38,10 +38,12 @@ export async function signOutOfTrial(page: Page) {
 }
 
 /**
- * Opens every closed story step of a case page and waits for the panels to finish opening: a closed step is hidden,
- * and a check of the page would skip it.
+ * Opens every closed story step of a case page, and its Outcome band when it is closed (a closed case's starts so), and
+ * waits for the panels to finish opening: a closed step is hidden, and a check of the page would skip it.
  */
 export async function openSteps(page: Page) {
+  const band = page.getByRole('button', { name: 'Outcome', exact: true, expanded: false });
+  if (await band.count()) await band.click();
   for (const step of await page.getByRole('button', { name: /^\d\. / }).all())
     if ((await step.getAttribute('aria-expanded')) !== 'true') await step.click();
   await expect(page.getByRole('button', { name: /^\d\. /, expanded: false })).toHaveCount(0);
