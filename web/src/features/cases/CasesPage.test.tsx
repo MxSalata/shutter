@@ -545,12 +545,6 @@ describe('the page', () => {
     const plain = renderPage();
     const table = await plain.findByRole('table');
     await plain.findByText('64 cases');
-    // The words a reader reads: the API's JSON, open in Technical, is a data dump, not prose
-    const proseWords = (c: HTMLElement) => {
-      const copy = c.cloneNode(true) as HTMLElement;
-      copy.querySelectorAll('.json-block').forEach((e) => e.remove());
-      return layer1WordCount(copy);
-    };
     // Everything above the table: the lead, the tiles, the filters and the count. The colour key is a legend, counted
     // apart; a native select shows its chosen option only, not the list it opens
     const above = (c: HTMLElement) => {
@@ -571,13 +565,13 @@ describe('the page', () => {
     };
     expect(table).toBeVisible();
     const plainAbove = above(plain.container);
-    const plainPage = proseWords(plain.container);
+    const plainPage = layer1WordCount(plain.container);
     plain.unmount();
     const technical = renderPage({ detail: 'technical' });
     await technical.findByRole('table');
     await technical.findByText('64 cases');
     const technicalAbove = above(technical.container);
-    const technicalPage = proseWords(technical.container);
+    const technicalPage = layer1WordCount(technical.container);
     // The spec's budget for the list above the table is 60 words (it was 110)
     expect(plainAbove).toBeLessThanOrEqual(60);
     expect(technicalAbove).toBeLessThanOrEqual(90);

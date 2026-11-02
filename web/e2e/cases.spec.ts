@@ -29,10 +29,13 @@ test.describe('the guided path', () => {
         /^Outcome is where the case stands, and what came of it\. Proposed action is what its plan proposed/,
       ),
     ).toBeVisible();
+    // 25 a page, newest first, as the API serves them: the older cases through their scenario
+    await page.getByLabel('Scenario', { exact: true }).selectOption('S2');
     await expect(row(page, 'C-000002')).toContainText('Board');
-    await expect(row(page, 'C-000021')).toContainText('Rules only');
     await expect(row(page, 'C-000028')).toContainText('Site policy');
     await expect(row(page, 'C-000028')).toContainText('entry E2');
+    await page.getByLabel('Scenario', { exact: true }).selectOption('S8');
+    await expect(row(page, 'C-000021')).toContainText('Rules only');
   });
 });
 

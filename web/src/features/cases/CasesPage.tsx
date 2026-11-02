@@ -269,7 +269,7 @@ export function CasesTable({
                 <StackTable.Td data-label="Outcome">
                   <OutcomeBadge c={c} scenario={scenario} />
                 </StackTable.Td>
-                <StackTable.Td data-label="Proposed action" className="case-last">
+                <StackTable.Td data-label="Proposed action" data-label-hidden className="case-last">
                   <DispositionBadge disposition={c.disposition} />
                   {proposalNote(c) ? (
                     <Text size="xs" c="dimmed" mt={2}>
@@ -277,19 +277,24 @@ export function CasesTable({
                     </Text>
                   ) : null}
                 </StackTable.Td>
-                <StackTable.Td data-label="At the receiver" className="case-meta">
+                <StackTable.Td data-label="At the receiver" data-label-hidden className="case-meta">
                   <AtReceiver c={c} />
                 </StackTable.Td>
-                <StackTable.Td data-label="What failed" maw={420} className="case-line">
+                <StackTable.Td
+                  data-label="What failed"
+                  data-label-hidden
+                  maw={420}
+                  className="stack-line case-line"
+                >
                   <WhatFailed c={c} />
                 </StackTable.Td>
-                <StackTable.Td data-label="Scenario" className="case-meta">
+                <StackTable.Td data-label="Scenario" data-label-hidden className="case-meta">
                   <Text size="sm">{c.scenario || 'none'}</Text>
                   <Text size="xs" c="dimmed" className="case-mode">
                     {humanize(c.mode)}
                   </Text>
                 </StackTable.Td>
-                <StackTable.Td data-label="Investigated by" className="case-meta">
+                <StackTable.Td data-label="Investigated by" data-label-hidden className="case-meta">
                   <InvestigatedBy c={c} />
                 </StackTable.Td>
               </StackTable.Tr>

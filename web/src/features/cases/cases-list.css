@@ -1,5 +1,6 @@
 /*
- * The Cases list's own rows (a stand-in for styles.css, which is not this package's: see requests/cases-list.md).
+ * The Cases list's own rows: the order and the inline facts of the phone card. The shared rules for the plain sentence
+ * and for hiding a column's visible name are styles.css's `stack-line` and `data-label-hidden`.
  *
  * At full width the table is a table. On a phone (`stack-table stack-cards`, styles.css) each case is a compact card:
  * line 1 its id and its outcome badge, line 2 the plain sentence of what failed, then one wrapping line of facts (the
@@ -45,11 +46,6 @@
   .cases-table.stack-table tr td.case-last {
     order: 3;
   }
-  .cases-table.stack-table td.case-meta::before,
-  .cases-table.stack-table td.case-last::before,
-  .cases-table.stack-table td.case-line::before {
-    display: none;
-  }
   .cases-table .at-receiver {
     flex-direction: row;
     flex-wrap: wrap;
@@ -60,12 +56,4 @@
   .cases-table.stack-table tr td:first-child {
     min-width: 0;
   }
-}
-
-/*
- * The colour key's badge keeps its whole word when its meaning wraps beside it on a narrow screen (the key itself is
- * ToneLegend's: see requests/cases-list.md).
- */
-.cases-legend .tone-legend > li > :first-child {
-  flex-shrink: 0;
 }
