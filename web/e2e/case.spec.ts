@@ -71,6 +71,8 @@ test.describe('the guided path', () => {
     await expect(page.getByTestId('correction-steps')).toHaveCount(0);
     await go(page, '/cases/C-000055');
     await expect(page.getByTestId('case-receiver')).toContainText('History of record');
+    // The steps wait behind the card's details, so the three cards keep one size
+    await page.getByRole('button', { name: 'Why, and what to do' }).click();
     const steps = page.getByTestId('correction-steps');
     await expect(steps.getByRole('heading', { name: 'Correcting the history at Records Out' })).toBeVisible();
     await expect(steps.getByRole('listitem')).toHaveCount(8);
@@ -143,6 +145,123 @@ test.describe('the S2 approval in the trial', () => {
     await page.getByRole('button', { name: /^6\. What was verified/ }).scrollIntoViewIfNeeded();
     await page.mouse.wheel(0, 1200);
     await expect(tabs).toBeInViewport();
+  });
+});
+
+test.describe('the case page made easier to read', () => {
+  test('draws where the held S2 case failed, with the patient and the message type in the header', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await go(page, '/cases/C-000002');
+    const picture = page.getByRole('img', { name: /^Where it failed: PAS sent the transfer to WARD-B/ });
+    await expect(picture).toBeVisible();
+    await expect(picture).toContainText('Not delivered');
+    await expect(picture).toContainText('HTTP 503 ward_unavailable');
+    await expect(picture).toContainText('Waiting for approval');
+    await expect(page.getByTestId('case-message-type')).toHaveText('2.5.1:ADT_A02');
+    await expect(page.getByText('MRN1002', { exact: true })).toBeVisible();
+  });
+
+  test('stacks the path down a phone screen with no sideways scroll', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page);
+    await go(page, '/cases/C-000064');
+    const nodes = page.locator('.fm-node');
+    await expect(nodes).toHaveCount(3);
+    const [a, b] = [await nodes.nth(0).boundingBox(), await nodes.nth(1).boundingBox()];
+    expect(b!.y).toBeGreaterThan(a!.y + a!.height);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  });
+
+  test('takes the reader from the action button to "What needs you now", opening the band', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await go(page, '/cases/C-000002');
+    const band = page.getByRole('region', { name: 'Outcome' });
+    // Close the band first, as a reader may have
+    await band.getByRole('button', { name: 'Outcome', exact: true }).click();
+    await expect(band.getByRole('button', { name: 'Outcome', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    await expect(band.getByTestId('outcome-line')).toHaveText('Waiting for approval');
+    await page.getByRole('button', { name: 'Needs you: decide on the resend' }).first().click();
+    await expect(band.getByRole('button', { name: 'Outcome', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    const heading = band.getByRole('heading', { name: 'What needs you now' });
+    await expect(heading).toBeInViewport();
+    await expect(heading).toBeFocused();
+    await expect(band.getByRole('button', { name: 'Why?' })).toHaveAttribute('aria-expanded', 'true');
+    // The band remembers the reader's choice: closed again, it stays closed on the next visit
+    await band.getByRole('button', { name: 'Outcome', exact: true }).click();
+    await page.reload();
+    await expect(
+      page.getByRole('region', { name: 'Outcome' }).getByRole('button', { name: 'Outcome', exact: true }),
+    ).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('keeps the action in reach in the sticky tab bar', async ({ page }) => {
+    await signIn(page);
+    await go(page, '/cases/C-000008');
+    await page.getByRole('button', { name: /^6\. What was verified/ }).scrollIntoViewIfNeeded();
+    await page.mouse.wheel(0, 1200);
+    const compact = page.getByTestId('case-action-compact');
+    await expect(compact).toBeInViewport();
+    await expect(compact).toHaveAccessibleName('Needs you: escalate to a team');
+    await compact.click();
+    await expect(page.getByRole('heading', { name: 'What needs you now' })).toBeFocused();
+    await expect(page.getByRole('heading', { name: 'What needs you now' })).toBeInViewport();
+  });
+
+  test('opens a closed case with its band closed, the outcome still said', async ({ page }) => {
+    await signIn(page);
+    await go(page, '/cases/C-000058');
+    const band = page.getByRole('region', { name: 'Outcome' });
+    await expect(band.getByRole('button', { name: 'Outcome', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    await expect(band.getByTestId('outcome-line')).toHaveText('Delivered: verified at the receiver');
+    await expect(page.getByTestId('case-action')).toHaveAccessibleName('No action needed on this case');
+    await expect(page.getByTestId('case-action')).toBeVisible();
+  });
+
+  test('opens the Evidence tab from the progress strip, its heading in view', async ({ page }) => {
+    await signIn(page);
+    await go(page, '/cases/C-000008');
+    await page.getByRole('button', { name: 'Evidence: done, show the evidence' }).click();
+    await expect(page.getByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
+    const heading = page.getByRole('heading', { name: 'Evidence', exact: true, level: 2 });
+    await expect(heading).toBeInViewport();
+    await expect(heading).toBeFocused();
+    // A stage the case did not reach is text, not a button
+    await expect(page.getByRole('button', { name: /^Dispatch/ })).toHaveCount(0);
+  });
+
+  test('opens the gate and decision step from Plan and gate, on a phone with 44 px targets', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page);
+    await go(page, '/cases/C-000064');
+    const stage = page.getByRole('button', {
+      name: 'Plan and gate: stopped here, show the plan and the gate',
+    });
+    expect((await stage.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    const compact = page.getByTestId('case-action-compact');
+    const box = (await compact.boundingBox())!;
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    await stage.click();
+    await expect(page.getByRole('button', { name: /^4\. Gate and decision/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    await expect(page.getByRole('heading', { name: 'The gate', exact: true })).toBeFocused();
   });
 });
 
