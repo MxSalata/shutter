@@ -52,6 +52,9 @@ Property BoardsPerMinute As %Integer [ InitialExpression = 6 ];
 /// The board mode a deferred case convenes with when its slot comes (v1.35; the policy path asks for the full board).
 Property DeferredMode As %String(MAXLEN = 16);
 
+/// The failure signature this case leads a board for (v1.35, one board per failure signature), until the lead is finished.
+Property LeadSignature As %String(MAXLEN = 80);
+
 Property DeferredBy As %String(MAXLEN = 100);
 
 /// How long an approval task may wait for a decision (v1.35): after this many seconds with no answer the task is cancelled
@@ -136,6 +139,7 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     Set response = ""
     If request.%IsA("Shutter.Msg.CaseRelease") Quit ..OnRelease(request, .response)
     If request.%IsA("Shutter.Msg.Reinvestigate") Quit ..OnReinvestigate(request, .response)
+    If request.%IsA("Shutter.Msg.LeadReady") Quit ..OnLeadReady(request, .response)
     If request.%IsA("Shutter.Msg.CaseClose") Quit ..OnClose(request, .response)
     If request.%IsA("Shutter.Msg.CaseAbandon") Quit ..OnAbandon(request, .response)
     If 'request.%IsA("Shutter.Msg.CaseIntake") Quit $$$ERROR($$$GeneralError, "Case Workflow expects a case intake, a case release, a reinvestigation, a close or an abandon, got " _ $CLASSNAME(request))
@@ -248,6 +252,10 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
         If $PIECE(completionkey, ":", 1, 2) = "board:timeout" {
             If +$PIECE(completionkey, ":", 3) '= +..Round { $$$TRACE("A board timeout from round " _ $PIECE(completionkey, ":", 3) _ " arrived in round " _ ..Round _ "; ignored") Quit }
             Set sc = ..OnBoardTimeout(case) Quit
+        }
+        If $PIECE(completionkey, ":", 1, 2) = "lead:timeout" {
+            If +$PIECE(completionkey, ":", 3) '= +..Round { $$$TRACE("A lead timeout from round " _ $PIECE(completionkey, ":", 3) _ " arrived in round " _ ..Round _ "; ignored") Quit }
+            Set sc = ..OnLeadTimeout(case) Quit
         }
         If completionkey = "preflight:retry" { Set sc = ..SendPreflight(case) Quit }
         If completionkey = "refresh:retry" { Set sc = ..StartEvidence(case) Quit }
@@ -398,9 +406,157 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
         If decision = "person" Quit ..PersonByCatalogue(case, cat)
         Do case.Note("note", "Catalogue: " _ $SELECT(decision = "": "no result", 1: decision) _ "; the board decides", "system")
     }
+    // One board per failure signature (v1.35): a case whose signature has a board running, or decided within the window,
+    // follows it instead of convening its own; the first case of a signature leads.
+    Set lead = ..LeadFor(case, summary, .signature)
+    If $ISOBJECT(lead) Quit ..Follow(case, lead, signature)
     Set sc = ..ConveneBoard(case, result.SummaryJSON, "", "", .convened)
     Quit:($$$ISERR(sc) || 'convened) sc
     Quit ..AfterConvene(case, result.SummaryJSON)
+}
+
+// ---- one board per failure signature (v1.35) ----
+
+/// The lead a case follows for its failure signature, or "" when it convenes its own board, and then leads the signature
+/// itself while coalescing is on and a board would convene. A forced board (a judge's request) and an incident's release
+/// never follow.
+Method LeadFor(case As Shutter.Store.Case, summary As %DynamicObject, Output signature As %String) As Shutter.Store.BoardLead
+{
+    Set signature = ""
+    If ..ForceBoard || ..Release || '$ISOBJECT(summary) Quit ""
+    If ##class(Shutter.Store.BoardLead).WindowSeconds() <= 0 Quit ""
+    Set mode = $SELECT(..Mode = "policy": "board", 1: ..Mode)
+    If ##class(Shutter.Store.BoardMember).MembersForMode(mode).%Size() = 0 Quit ""
+    Set signature = ##class(Shutter.Util.Signature).Of(case, summary)
+    If signature = "" Quit ""
+    Set lead = ##class(Shutter.Store.BoardLead).Current(signature)
+    If $ISOBJECT(lead) && (lead.LeaderCaseId '= case.CaseId) Quit lead
+    If '$ISOBJECT(lead) {
+        Set sc = ##class(Shutter.Store.BoardLead).Begin(signature, case, ##class(Shutter.Util.Signature).Parts(case, summary), .mine)
+        If $$$ISOK(sc) Set ..LeadSignature = signature, case.LeadSignature = signature
+    }
+    Quit ""
+}
+
+/// A case of a signature whose board runs or ran on another case: it takes that decision now when the lead is done, or
+/// waits for it (FollowsCase), with a bound of twice the board's timeout.
+Method Follow(case As Shutter.Store.Case, lead As Shutter.Store.BoardLead, signature As %String) As %Status
+{
+    Set case.LeadSignature = signature
+    If lead.State = "done" Quit ..TakeDiagnosis(case, lead)
+    Set case.FollowsCase = lead.LeaderCaseId
+    Set sc = case.%Save()
+    Do case.Note("note", "Board not convened: the same failure signature has a board running on case " _ lead.LeaderCaseId _ " (since " _ lead.StartedAt _ "); this case follows it and will take its decision, keeping its own gate, rehearsal and approval", "system", "lead:" _ lead.%Id())
+    Set alarm = ##class(Ens.AlarmRequest).%New()
+    Set alarm.Timeout = (2 * ..BoardTimeoutSeconds) + 60
+    Quit ..SendRequestAsync("Ens.Alarm", alarm, 1, "lead:timeout:" _ ..Round, "Waiting for the leader's board")
+}
+
+/// The board a follower waited for has ended (Shutter.Msg.LeadReady): a fresh instance carries the follower on from its
+/// evidence, as a reinvestigation does; the instance that waited ignores its alarm, since the case is driven here now.
+Method OnLeadReady(request As Shutter.Msg.LeadReady, Output response As %Library.Persistent) As %Status
+{
+    Set response = ""
+    Set case = ##class(Shutter.Store.Case).ByCaseId(request.CaseId)
+    If '$ISOBJECT(case) Quit $$$ERROR($$$GeneralError, "No case " _ request.CaseId _ " to carry on")
+    If (case.State '= "investigating") || (case.FollowsCase '= request.LeaderCaseId) {
+        $$$TRACE("Case " _ case.CaseId _ " is " _ case.State _ " and follows " _ $SELECT(case.FollowsCase = "": "nobody", 1: case.FollowsCase) _ "; the lead of " _ request.LeaderCaseId _ " changes nothing")
+        Quit $$$OK
+    }
+    Set ..CaseId = case.CaseId, ..Mode = case.Mode
+    Set case.WorkflowSessionId = ..%SessionId
+    Do case.%Save()
+    Set lead = ##class(Shutter.Store.BoardLead).ForLeader(request.LeaderCaseId)
+    If '$ISOBJECT(lead) || (lead.State '= "done") Quit ..LeadFailedFallback(case, lead)
+    Quit ..TakeDiagnosis(case, lead)
+}
+
+/// The bound on a follower's wait: the lead's decision if it is there by now, else the rules path.
+Method OnLeadTimeout(case As Shutter.Store.Case) As %Status
+{
+    If (case.State '= "investigating") || (case.FollowsCase = "") { $$$TRACE("The lead wait ended; the case is " _ case.State _ ", so nothing is due") Quit $$$OK }
+    Set lead = ##class(Shutter.Store.BoardLead).ForLeader(case.FollowsCase)
+    If $ISOBJECT(lead) && (lead.State = "done") Quit ..TakeDiagnosis(case, lead)
+    Quit ..LeadFailedFallback(case, lead)
+}
+
+/// The board this case followed ended without a decision, or never ended: the rules path proposes the plain resend and
+/// the gate judges it, as when no board member can answer.
+Method LeadFailedFallback(case As Shutter.Store.Case, lead As Shutter.Store.BoardLead) As %Status
+{
+    Set leader = case.FollowsCase
+    Set case.FollowsCase = ""
+    Set why = $SELECT('$ISOBJECT(lead): "no lead was recorded for it", lead.State = "running": "its board has not finished within the wait", lead.Reason '= "": lead.Reason, 1: "it ended without a plan")
+    Do case.Note("note", "The board this case followed (case " _ leader _ ") decided nothing: " _ why _ "; the rules path proposes the plain resend and the gate judges it", "system")
+    Quit ..RulesOnly(case)
+}
+
+/// The leader's decision applied to this case's own evidence: the disposition and action type, the catalogue entry and
+/// outcome when this case's own match shows the entry, and the members' verdicts, never a word of the leader's text (which
+/// carries the leader's patient); the operation key, the receiver version and the payload digest are this case's own.
+/// The plan then goes to the gate, the rehearsal and the approval as any plan does.
+Method TakeDiagnosis(case As Shutter.Store.Case, lead As Shutter.Store.BoardLead) As %Status
+{
+    Set json = "Shutter.Util.Json"
+    Set case.FollowsCase = ""
+    Set leaderPlan = $CLASSMETHOD(json, "Parse", lead.PlanJSON, .psc)
+    If '$ISOBJECT(leaderPlan) Quit ..LeadFailedFallback(case, lead)
+    Set snap = case.CurrentSnapshot
+    Set summary = $SELECT($ISOBJECT(snap): snap.SummaryObject(), 1: {})
+    Set ward = summary.%Get("ward_state")
+    Set version = $SELECT($ISOBJECT(ward): $CLASSMETHOD(json, "Str", ward, "version", 0), 1: 0)
+    Set disposition = $CLASSMETHOD(json, "Str", leaderPlan, "disposition", "resend")
+    Set leaderAction = leaderPlan.%Get("action")
+    Set actionType = $SELECT($ISOBJECT(leaderAction): $CLASSMETHOD(json, "Str", leaderAction, "type", disposition), 1: $SELECT(disposition = "escalate": "none", 1: disposition))
+    Set plan = {}
+    Set plan.disposition = disposition
+    Set action = {"type": (actionType)}
+    If actionType '= "none" {
+        Set action."operation_key" = case.OperationKey, action."expected_version" = +version
+        Set action."payload_digest" = $CLASSMETHOD(json, "Str", summary.%Get("operation"), "payload_digest")
+    }
+    Set plan.action = action
+    // The entry only when this case's own match shows it: the matcher ran on this case's evidence.
+    Set entry = $CLASSMETHOD(json, "Str", leaderPlan, "catalogue_entry"), outcome = $CLASSMETHOD(json, "Str", leaderPlan, "outcome")
+    Set cat = summary.%Get("catalogue"), own = 0
+    If (entry '= "") && $ISOBJECT(cat) && $ISOBJECT(cat.%Get("matches")) {
+        Set mi = cat.%Get("matches").%GetIterator()
+        While mi.%GetNext(, .m) { If $CLASSMETHOD(json, "Str", m, "id") = entry Set own = 1 }
+    }
+    If own Set plan."catalogue_entry" = entry, plan.outcome = outcome
+    Set verdicts = $CLASSMETHOD(json, "Parse", lead.VerdictsJSON, .vsc), words = ""
+    If $ISOBJECT(verdicts) {
+        Set vi = verdicts.%GetIterator()
+        While vi.%GetNext(, .v) {
+            Set words = words _ $SELECT(words = "": "", 1: ", ") _ $CLASSMETHOD(json, "Str", v, "memberCode") _ " " _ $CLASSMETHOD(json, "Str", v, "disposition") _ $SELECT($CLASSMETHOD(json, "Str", v, "confidence") '= "": " (" _ $CLASSMETHOD(json, "Str", v, "confidence") _ ")", 1: "")
+        }
+    }
+    Set window = ##class(Shutter.Store.BoardLead).WindowSeconds()
+    Set plan.summary = "Follows the board of case " _ lead.LeaderCaseId _ " (the same failure signature within " _ window _ " s): " _ disposition _ $SELECT(actionType '= "none": " the operation unchanged at receiver version " _ version _ " unless the gate objects", 1: ", a person decides")
+    Set plan.why = "The board convened for case " _ lead.LeaderCaseId _ " decided " _ disposition _ $SELECT(words '= "": "; its members: " _ words, 1: "") _ ". This case shares the receiver, the failure, the receiver's answer, the error and the catalogue match, so the decision is taken without another board; this case's own evidence, gate, rehearsal and approval still apply"
+    Set plan.preconditions = [], plan."evidence_refs" = [], plan.disagreements = []
+    Do lead.Followed()
+    Do case.Note("note", "Board not convened: the decision of case " _ lead.LeaderCaseId _ "'s board is taken (" _ disposition _ "); " _ lead.Followers _ " case(s) have followed that board", "system", "lead:" _ lead.%Id())
+    Quit ..AdoptPlan(case, plan, "lead:" _ lead.LeaderCaseId)
+}
+
+/// The leader's board ended, with a plan or without: the lead is finished for its signature and every follower still
+/// waiting is told (Shutter.Msg.LeadReady to this item), so each carries on at once.
+Method LeadFinish(case As Shutter.Store.Case, state As %String, plan As %DynamicObject = "", reason As %String = "")
+{
+    Quit:(..LeadSignature = "")
+    Set lead = ##class(Shutter.Store.BoardLead).Finish(case.CaseId, state, plan, ##class(Shutter.Store.BoardLead).VerdictsOf(case.CurrentSnapshot), reason)
+    Set ..LeadSignature = ""
+    Quit:'$ISOBJECT(lead)
+    Set followers = ##class(Shutter.Store.BoardLead).FollowersOf(case.CaseId), n = 0
+    Set it = followers.%GetIterator()
+    While it.%GetNext(, .fid) {
+        Set msg = ##class(Shutter.Msg.LeadReady).%New()
+        Set msg.CaseId = fid, msg.LeaderCaseId = case.CaseId, msg.Signature = lead.Signature, msg.Outcome = lead.State
+        Set sc = ..SendRequestAsync(..%ConfigName, msg, 0, "lead:" _ fid)
+        If $$$ISOK(sc) Set n = n + 1
+    }
+    If n > 0 Do case.Note("note", "This case's board led its failure signature: " _ n _ " waiting case(s) told that it " _ $SELECT(lead.State = "done": "decided", 1: "decided nothing"), "system", "lead:" _ lead.%Id())
 }
 
 /// The board convened on the evidence (6.6): a request to every member of the mode's board, the pending list kept for the
@@ -541,6 +697,7 @@ Method AgentRequestFor(case As Shutter.Store.Case, m As Shutter.Store.BoardMembe
 /// person looks.
 Method ModelViewFailed(case As Shutter.Store.Case, sc As %Status) As %Status
 {
+    Do ..LeadFinish(case, "failed", "", "the model view refused the evidence")
     Quit case.Transition("escalated", "The model's view of the case could not be built (" _ $EXTRACT($SYSTEM.Status.GetErrorText(sc), 1, 400) _ "), so nothing was sent to a model; a person must look", "system")
 }
 
@@ -608,10 +765,14 @@ Method AfterBoard(case As Shutter.Store.Case) As %Status
             Do case.Note("note", ..UnansweredNote(case), "system")
             Quit ..RulesOnly(case)
         }
+        Do ..LeadFinish(case, "failed", "", "no board member produced usable findings")
         Quit case.Transition("escalated", "No board member produced usable findings; a person must look", "system")
     }
     Set coordinator = ##class(Shutter.Store.BoardMember).Coordinator()
-    If '$ISOBJECT(coordinator) Quit case.Transition("escalated", "No coordinator is enabled; the findings are on the case for a person", "system")
+    If '$ISOBJECT(coordinator) {
+        Do ..LeadFinish(case, "failed", "", "no coordinator is enabled")
+        Quit case.Transition("escalated", "No coordinator is enabled; the findings are on the case for a person", "system")
+    }
     Set snap = case.CurrentSnapshot
     Set req = ..AgentRequestFor(case, coordinator, snap.Summary, all.%ToJSON(), .sc)
     If '$ISOBJECT(req) Quit ..ModelViewFailed(case, sc)
@@ -675,6 +836,7 @@ Method OnCoordinatorTimeout(case As Shutter.Store.Case) As %Status
 {
     If '..CoordinatorPending Quit $$$OK
     Set ..CoordinatorPending = 0
+    Do ..LeadFinish(case, "failed", "", "the coordinator did not answer")
     Quit case.Transition("escalated", "The coordinator did not answer within " _ ..BoardTimeoutSeconds _ " s; the findings are on the case for a person", "system")
 }
 
@@ -689,13 +851,17 @@ Method OnCoordinator(case As Shutter.Store.Case, result As Shutter.Bridge.Msg.Ag
     }
     Set ..CoordinatorPending = 0
     If (result.Status '= "ok") || (result.ResultJSON = "") {
+        Do ..LeadFinish(case, "failed", "", "the coordinator produced no plan (" _ result.Status _ ")")
         Quit case.Transition("escalated", "The coordinator produced no plan: " _ result.Status _ $SELECT(result.Error '= "": ", " _ result.Error, 1: ""), "system", "run:" _ run.%Id())
     }
     Set restored = ##class(Shutter.Util.ModelView).Restore(case, result.ResultJSON)
     Set left = ##class(Shutter.Util.ModelView).Unresolved(restored)
     If left '= "" Do case.Note("error", "The coordinator names tokens the case has no value for (" _ left _ "); they stay as written", "system", "run:" _ run.%Id())
     Set plan = ##class(Shutter.Util.Json).Parse(restored, .psc)
-    If '$ISOBJECT(plan) || $$$ISERR(psc) Quit case.Transition("escalated", "The coordinator's plan is not valid JSON", "system", "run:" _ run.%Id())
+    If '$ISOBJECT(plan) || $$$ISERR(psc) {
+        Do ..LeadFinish(case, "failed", "", "the coordinator's plan is not valid JSON")
+        Quit case.Transition("escalated", "The coordinator's plan is not valid JSON", "system", "run:" _ run.%Id())
+    }
     Do ..AttachCorrectionSteps(case, plan)
     Quit ..AdoptPlan(case, plan, "run:" _ run.%Id())
 }
@@ -932,6 +1098,8 @@ Method AdoptPlan(case As Shutter.Store.Case, plan As %DynamicObject, createdBy A
 {
     Set sc = ##class(Shutter.Store.Plan).Create(case, case.CurrentSnapshot, plan, createdBy, .p)
     Quit:$$$ISERR(sc) sc
+    // A case that leads its failure signature (v1.35) has decided: its followers take the plan.
+    Do ..LeadFinish(case, "done", plan)
     Set ..PlanId = p.%Id()
     Set case.CurrentPlan = p
     Set case.Disposition = p.Disposition
@@ -1786,6 +1954,9 @@ Storage Default
 </Value>
 <Value name="46">
 <Value>DeferredBy</Value>
+</Value>
+<Value name="47">
+<Value>LeadSignature</Value>
 </Value>
 </Data>
 <DefaultData>CaseWorkflowDefaultData</DefaultData>

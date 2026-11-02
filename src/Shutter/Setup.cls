@@ -1363,6 +1363,7 @@ ClassMethod Doctor() As %String [ SqlProc ]
     // Before the switch to %SYS below: New $NAMESPACE inside a Try lasts to the end of the method.
     Set r."precedent_days" = ##class(Shutter.Store.Precedent).Days()
     Set r."storm_cooldown_minutes" = ..StormCooldownMinutes()
+    Set r."lead_window_seconds" = ##class(Shutter.Store.BoardLead).WindowSeconds()
     // The publisher (15, v1.35): whether this build has it, its web application, and today's calls.
     Set pub = {}
     Do pub.%Set("available", ##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Publish.Service"), "boolean")
