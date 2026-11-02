@@ -729,8 +729,10 @@ to 600), and a connect timeout of 10 s, as `http_config` on the provider's confi
 sets one. The runner builds the provider itself for the item's `ProviderConfig`, for the mimic, and for Shutter's own
 configuration (`^Shutter.Config("aihub", "provider")`, written by `ConfigureProvider`), so the bound holds on the default live
 path too; only an agent class run with none of these falls back to its own `PROVIDERCONFIG` parameter. Without it a hung provider held a board member until the board's 600 s timeout, since the run's deadline is checked
-only between the model's turns; with it the call fails, the run ends in error and the board goes on without that member. The
-Doctor reports `provider_timeout_seconds`.
+only between the model's turns; with it the call fails, the run ends with status `timeout` and the board goes on without that member. Measured on build 154
+against a server that never answers: AI Hub retries the call, so the run ends after about four times the bound plus a few
+seconds (44 s at 10, 84 s at 20); at the default 120 s that is about eight minutes, inside the board's 600 s. The Doctor
+reports `provider_timeout_seconds`.
 
 **Findings and plans cite only what they were given (v1.35).** `evidence_refs` on a finding or a plan must name keys of the
 evidence object the run received, or keys one level down in it (`message`, `validation`, `error`, `operation`, `route`,
@@ -1503,8 +1505,8 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   `provider_timeout_seconds` (6.6, 12); the compose healthcheck and `last_live_run` in the Doctor and the health route (12); the agent operation's start-up line in
   the event log, with a warning for live mode without a provider (6.6); findings and plans cite only the evidence they were
   given (6.6); the image's `WITH_AIHUB` defaults to `auto` and the Doctor reports `edition` (12); a repeated decision answers with the
-  approval taken, an inactive Workflow user is no approver, and the intake refuses a body over 2 MB (5, 11, 14.5); each item of
-  the review that lands adds its line here.
+  approval taken, an inactive Workflow user is no approver, and the intake refuses a body over 2 MB (5, 11, 14.5); an approval
+  wait is bounded, `ApprovalWaitSeconds` (6.4); each item of the review that lands adds its line here.
 - v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:
   run, reset, purge) and `Shutter_Configure` (the site's writes: the profile, the library, a schema import, the review
   annotations), held by the operator and the approver as before; the role `Shutter_Demo` (reads, reinvestigates, approves and
