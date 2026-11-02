@@ -1063,6 +1063,14 @@ visitors spends at most the cap. **Each user's share** (`SHUTTER_JUDGE_BUDGET_US
 0 or unset means none): every agent request carries who asked (`RequestedBy`: a question's asker, a judge who convened the
 board, `system` for the feed's own runs), the run keeps it, and a run for a user whose live runs today have reached the share is
 refused `budget_exhausted` with "Your share of the day's model budget ... is spent", so one judge cannot spend the day.
+**Reserve, then settle (v1.35).** A run in flight has no `AgentRun` row yet, so three members running at once were not
+counted against the cap until they finished. The Agent item now reserves an estimate for each live run it starts
+(`Budget.Reserve`, keyed by the run) and settles it when the run ends whatever its outcome (`Budget.Settle`); the day's state
+carries `reservedUsd` and `inFlight`, `GET /settings` adds the caller's `reservedByMeUsd`, and a run is refused once spend plus
+reservations reach the cap (or spend plus the user's own reservations the share), the refusal naming the runs in flight. The
+estimate is `^Shutter.Config("budgetReserveUsd")` when the site sets it, else the mean cost of the last twenty live runs that
+cost anything, else 0.50 USD, never below 0.01; a reservation older than twenty minutes was left by a job that died and is
+dropped when next counted.
 
 **Invisible characters are stripped (v1.35).** `ModelView.Restore` removes from everything a model wrote, before the store
 keeps it, the zero-width characters (U+200B to U+200F, U+2060 to U+2064, U+FEFF), the bidirectional controls (U+202A to U+202E,
