@@ -294,6 +294,26 @@ ClassMethod EnsurePublicUsers(ns As %String, publicPw As %String, tracePw As %St
     Quit sc
 }
 
+/// The bound on one model call (v1.35): the seconds the provider's HTTP client waits for a reply before the call fails,
+/// from ^Shutter.Config("providerTimeoutSeconds") (SHUTTER_PROVIDER_TIMEOUT_SECONDS at a start), 120 when unset, held to 10
+/// to 600. The AI Hub runner passes it to the provider as http_config.request_timeout_secs unless the provider's own
+/// configuration sets one, so a hung model call ends in a run error instead of holding a board member until the board's
+/// timeout. Below the board's 600 s by design.
+ClassMethod ProviderTimeoutSeconds() As %Integer
+{
+    Set v = +$GET(^Shutter.Config("providerTimeoutSeconds"))
+    If v <= 0 Quit 120
+    Quit $SELECT(v < 10: 10, v > 600: 600, 1: v)
+}
+
+/// Sets the bound; "" or 0 puts the default back. Returns the value in force.
+ClassMethod ConfigureProviderTimeout(seconds As %String) As %Integer
+{
+    Set seconds = $ZSTRIP(seconds, "<>W")
+    If (seconds = "") || (+seconds <= 0) { Kill ^Shutter.Config("providerTimeoutSeconds") } Else { Set ^Shutter.Config("providerTimeoutSeconds") = +seconds }
+    Quit ..ProviderTimeoutSeconds()
+}
+
 /// The container's environment applied to a running instance (v1.34): the model budget (SHUTTER_DAILY_BUDGET_USD,
 /// SHUTTER_JUDGE_BUDGET_USD), the public demo's logins (SHUTTER_PUBLIC_DEMO_PASSWORD, SHUTTER_TRACE_PASSWORD,
 /// SHUTTER_JUDGE_PASSWORD) and the live hospital (SHUTTER_LIVE). Shutter.Production's OnStart calls it, so what .env says
@@ -303,20 +323,22 @@ ClassMethod EnsurePublicUsers(ns As %String, publicPw As %String, tracePw As %St
 /// an error when one step failed (the others still run).
 ClassMethod ApplyEnvironment(wait As %Integer = 0) As %String [ SqlProc ]
 {
-    Set out = ..ApplyRuntime($SYSTEM.Util.GetEnviron("SHUTTER_DAILY_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_TRACE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_LIVE"), wait)
+    Set out = ..ApplyRuntime($SYSTEM.Util.GetEnviron("SHUTTER_DAILY_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_TRACE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_LIVE"), wait, $SYSTEM.Util.GetEnviron("SHUTTER_PROVIDER_TIMEOUT_SECONDS"))
     Quit out.%ToJSON()
 }
 
 /// ApplyEnvironment's work on values, so a test can give them: each applied when not empty. live is "1" for on, any other
 /// non-empty value for off; wait is how many seconds the live hospital's item may be left to a background job while the
 /// hospital's production is still starting (the production's own start passes 120; by hand, 0 applies it at once).
-ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %String, tracePw As %String, judgePw As %String, live As %String, wait As %Integer = 0) As %DynamicObject
+ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %String, tracePw As %String, judgePw As %String, live As %String, wait As %Integer = 0, providerTimeout As %String = "") As %DynamicObject
 {
     Set out = {}, errors = []
     Set ns = $NAMESPACE
     Try {
         If $ZSTRIP(dailyUsd, "<>W") '= "" Set out.dailyBudgetUsd = ##class(Shutter.Util.Budget).Configure(dailyUsd)
         If $ZSTRIP(judgeUsd, "<>W") '= "" Set out.judgeBudgetUsd = ##class(Shutter.Util.Budget).ConfigureShare(judgeUsd)
+        // The bound on one model call (v1.35).
+        If $ZSTRIP(providerTimeout, "<>W") '= "" Set out.providerTimeoutSeconds = ..ConfigureProviderTimeout(providerTimeout)
     } Catch ex {
         Do errors.%Push("budget: " _ ex.DisplayString())
     }
@@ -1285,6 +1307,9 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Do r.%Set("ward_classes", ''##class(%Dictionary.CompiledClass).%ExistsId("Downstream.API"), "boolean")
     Do r.%Set("aihub_runner", ''##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Bridge.Runner.AIHub"), "boolean")
     Do r.%Set("ai_hub_present", ''##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent"), "boolean")
+    // The edition in one word (v1.35): aihub (the package and the module), core (neither: the replay edition), or broken when
+    // one is there without the other, which an install should never leave.
+    Set r.edition = $SELECT(r."ai_hub_present" && r."aihub_runner": "aihub", 'r."ai_hub_present" && 'r."aihub_runner": "core", r."ai_hub_present": "broken: AI Hub is present but the aihub module is not loaded", 1: "broken: the aihub module is loaded on an image without AI Hub")
     // The API mimic's switch as set (tests/mock), "" when off; it counts on a demo instance only (MockConfig).
     Set r."mock_config" = $GET(^Shutter.Config("aihub", "mock"))
     &sql(SELECT COUNT(*) INTO :members FROM Shutter_Store.BoardMember WHERE Enabled = 1)
@@ -1325,6 +1350,11 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Set r.live = ..LiveStatus()
     // The day's model budget and what the live runs spent today (v1.34).
     Set r.budget = ##class(Shutter.Util.Budget).Status()
+    // The bound on one model call (v1.35): the provider's request timeout the runner sets.
+    Set r."provider_timeout_seconds" = ..ProviderTimeoutSeconds()
+    // The newest run that reached a model (v1.35), beside the configured mode: what was last observed.
+    Set last = ##class(Shutter.Store.AgentRun).LastLive()
+    If $ISOBJECT(last) { Set r."last_live_run" = last } Else { Do r.%Set("last_live_run", "", "null") }
     // The Second Parser (v1.34): the jar, and whether the Java gateway answers a probe.
     Set r."second_parser" = ##class(Shutter.Util.SecondParser).Status()
     Set r.license = ##class(%DynamicObject).%FromJSON(..LicenseInfo())

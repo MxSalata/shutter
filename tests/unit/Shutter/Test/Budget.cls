@@ -7,6 +7,28 @@ Property SavedCap As %String;
 
 Property SavedShare As %String;
 
+/// The bound on one model call (v1.35): 120 s by default, held to 10 to 600, set and cleared by ConfigureProviderTimeout,
+/// applied from the environment at a start and shown by the Doctor.
+Method TestProviderTimeoutSetting()
+{
+    Set saved = $GET(^Shutter.Config("providerTimeoutSeconds"), "<none>")
+    Try {
+        Kill ^Shutter.Config("providerTimeoutSeconds")
+        Do $$$AssertEquals(##class(Shutter.Setup).ProviderTimeoutSeconds(), 120, "120 s unless configured")
+        Do $$$AssertEquals(##class(Shutter.Setup).ConfigureProviderTimeout("45"), 45, "set to 45")
+        Do $$$AssertEquals(##class(Shutter.Setup).ProviderTimeoutSeconds(), 45, "and read back")
+        Do $$$AssertEquals(##class(Shutter.Setup).ConfigureProviderTimeout("3"), 10, "never under 10")
+        Do $$$AssertEquals(##class(Shutter.Setup).ConfigureProviderTimeout("9999"), 600, "never over the board's 600")
+        Do $$$AssertEquals(##class(Shutter.Setup).ConfigureProviderTimeout(""), 120, "empty puts the default back")
+        Set applied = ##class(Shutter.Setup).ApplyRuntime("", "", "", "", "", "", 0, "90")
+        Do $$$AssertEquals(applied.providerTimeoutSeconds, 90, "the environment sets it at a start: " _ applied.%ToJSON())
+        Do $$$AssertTrue(##class(Shutter.Setup).Doctor() [ """provider_timeout_seconds"":90", "and the Doctor shows it")
+    } Catch ex {
+        Do $$$AssertTrue(0, "error: " _ ex.DisplayString())
+    }
+    If saved = "<none>" { Kill ^Shutter.Config("providerTimeoutSeconds") } Else { Set ^Shutter.Config("providerTimeoutSeconds") = saved }
+}
+
 Method OnBeforeAllTests() As %Status
 {
     Set ..SavedCap = $GET(^Shutter.Config("dailyBudgetUsd"), "<none>")

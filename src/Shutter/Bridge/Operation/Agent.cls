@@ -50,6 +50,25 @@ Parameter SETTINGS = "AgentClass:Agent,Runner:Agent,Mode:Agent,ProviderConfig:Ag
 /// While the API mimic is on (<var>mock</var>, Shutter.Setup MockConfig unless the caller read it), auto means live:
 /// the live runner sends the run to the mimic, and switching the mimic off brings back what the instance says. The
 /// mimic counts on a demo instance only (^Shutter.Config("demo")): a site ignores a stray switch, as MockConfig does.
+/// At the item's start (v1.35): one event-log line saying what this item will do, so an operator sees the effective mode
+/// (auto resolved to live or replay), the runner, the provider configuration and the mimic's switch without a run; and a
+/// warning when live is asked for with no provider configured, since every live run would then fail.
+Method OnInit() As %Status
+{
+    Try {
+        Set mock = ##class(Shutter.Setup).MockConfig()
+        Set mode = ..ResolveMode(..Mode, mock)
+        Set runnerThere = (..Runner = "") || ##class(%Dictionary.CompiledClass).%ExistsId(..Runner)
+        Set provider = $SELECT(mock '= "": "the API mimic (" _ mock _ ")", ..ProviderConfig '= "": ..ProviderConfig, ##class(Shutter.Setup).ProviderConfigured(): $GET(^Shutter.Config("aihub", "provider")), 1: "none configured")
+        $$$LOGINFO(..%ConfigName _ " starts in " _ mode _ " mode" _ $SELECT($ZCONVERT(..Mode, "L") = "auto": " (auto)", 1: "") _ "; runner " _ ..Runner _ $SELECT(runnerThere: "", 1: " (not installed)") _ "; provider " _ provider _ "; model " _ $SELECT(..Model '= "": ..Model, 1: "the configuration's") _ "; one call bounded at " _ ##class(Shutter.Setup).ProviderTimeoutSeconds() _ " s")
+        If (mode = "live") && (mock = "") && (..ProviderConfig = "") && '##class(Shutter.Setup).ProviderConfigured() $$$LOGWARNING(..%ConfigName _ ": live mode with no provider configured; every live run will fail until ANTHROPIC_API_KEY or a provider configuration is set (SELECT Shutter.Setup_ConfigureProvider)")
+        If (mode '= "replay") && 'runnerThere $$$LOGWARNING(..%ConfigName _ ": the runner " _ ..Runner _ " is not installed (the aihub module); live and record runs will fail, replay still works")
+    } Catch ex {
+        $$$LOGWARNING(..%ConfigName _ ": the start-up note failed: " _ ex.DisplayString())
+    }
+    Quit $$$OK
+}
+
 ClassMethod ResolveMode(mode As %String, mock As %String = {##class(Shutter.Setup).MockConfig()}) As %String
 {
     Set mode = $ZCONVERT(mode, "L")
@@ -95,6 +114,7 @@ Method OnAgentRequest(request As Shutter.Bridge.Msg.AgentRequest, Output respons
     Do ##class(Shutter.Bridge.Runner).Stamp(spec, response)
     If response.Mode = "" Set response.Mode = spec.Mode
     If response.StartedAt = "" Set response.StartedAt = ##class(Shutter.Util.Time).NowUTC()
+    If response.StartedAtMs = "" Set response.StartedAtMs = ##class(Shutter.Util.Time).NowUTCms()
     If response.DurationMs = "" Set response.DurationMs = (($ZHOROLOG - start) * 1000) \ 1
     If response.Status = "" Set response.Status = "ok"
     $$$TRACE("Agent run done: " _ response.Status _ ", model " _ response.Model _ ", tokens " _ (+response.PromptTokens) _ " in / " _ (+response.CompletionTokens) _ " out (cache read " _ (+response.CacheReadTokens) _ "), " _ (+response.Iterations) _ " turns, " _ (+response.ToolCalls) _ " tool calls, " _ (+response.DurationMs) _ " ms")

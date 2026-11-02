@@ -17,6 +17,8 @@ Method TestDoctorReportsTheNewPieces()
     Do $$$AssertTrue(r.%IsDefined("questions"), "the questions are counted")
     Do $$$AssertTrue(r.%IsDefined("python_zoneinfo"), "Embedded Python's zoneinfo is reported")
     Do $$$AssertTrue(r.%IsDefined("records_namespace"), "the records namespace is reported")
+    Do $$$AssertTrue((r.edition = "aihub") || (r.edition = "core"), "the edition is one word, never broken, on an installed instance: " _ r.edition)
+    Do $$$AssertTrue(r.%IsDefined("last_live_run") && ((r.%GetTypeOf("last_live_run") = "null") || r."last_live_run".%IsDefined("at")), "the newest run that reached a model, or null (v1.35)")
     If r.demo Do $$$AssertTrue(r."records_namespace", "a demo install has the RECORDS namespace")
     Do $$$AssertTrue(r.%IsDefined("records_webapp"), "the records web application is reported")
 }

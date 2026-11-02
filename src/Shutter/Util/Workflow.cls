@@ -89,7 +89,10 @@ ClassMethod Actor() As %String
 ClassMethod IsMember(role As %String, user As %String) As %Boolean
 {
     If (role = "") || (user = "") Quit 0
-    Quit ''##class(EnsLib.Workflow.RoleMembership).%ExistsId(role _ "||" _ user)
+    If '##class(EnsLib.Workflow.RoleMembership).%ExistsId(role _ "||" _ user) Quit 0
+    // A Workflow user marked inactive is no approver, whatever the membership row says (v1.35).
+    Set u = ##class(EnsLib.Workflow.UserDefinition).%OpenId(user)
+    Quit $SELECT($ISOBJECT(u): ''u.IsActive, 1: 1)
 }
 
 /// An error as JSON with its code, for the API's status mapping and for a SQL caller.
