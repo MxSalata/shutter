@@ -4,7 +4,6 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router';
 import { useCan, useLiveStatus, useSettings } from '@/api/hooks';
 import type { LiveStatus } from '@/api/types';
-import { LiveUnavailableNotice } from '@/components/LiveUnavailableNotice';
 import { TRIAL } from '@/env/mode';
 import type { StormRefusal } from '@/features/storm/view';
 import { budgetNoteLine } from '@/lib/budget';
@@ -25,6 +24,10 @@ const StormNotice = lazy(() =>
   import('@/features/storm/BreakTheFeed').then((m) => ({ default: m.StormNotice })),
 );
 const StormStrip = lazy(() => import('@/features/storm/StormStrip').then((m) => ({ default: m.StormStrip })));
+/** The notice that the live agents cannot run, in its own chunk too: a banner draws it only at the cap or an outage. */
+const LiveUnavailableNotice = lazy(() =>
+  import('@/components/LiveUnavailableNotice').then((m) => ({ default: m.LiveUnavailableNotice })),
+);
 
 /** "a new failure every 7 minutes", "every minute", or the unnumbered form when the server gave no interval. */
 function cadence(every: number | undefined): string {
@@ -133,8 +136,8 @@ export function LiveBanner() {
         </Group>
         {action}
       </Group>
-      {unavailable ? <LiveUnavailableNotice state={unavailable} className="live-unavailable" /> : null}
       <Suspense fallback={null}>
+        {unavailable ? <LiveUnavailableNotice state={unavailable} className="live-unavailable" /> : null}
         {refusal && !TRIAL ? <StormNotice refusal={refusal} onClose={() => setRefusal(null)} /> : null}
         {storm && pathname !== '/incidents' ? <StormStrip storm={storm} /> : null}
       </Suspense>
