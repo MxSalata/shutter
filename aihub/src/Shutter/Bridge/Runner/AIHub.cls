@@ -17,7 +17,7 @@ Class Shutter.Bridge.Runner.AIHub Extends Shutter.Bridge.Runner
 Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.AgentResponse) As %Status
 {
     Set start = $ZHOROLOG
-    Set response.StartedAt = ##class(Shutter.Util.Time).NowUTC()
+    Set response.StartedAt = ##class(Shutter.Util.Time).NowUTC(), response.StartedAtMs = ##class(Shutter.Util.Time).NowUTCms()
     Set response.Mode = $SELECT(spec.Mode = "": "live", 1: spec.Mode)
     Set agent = "", session = "", monitor = "", submit = "", trace = "", scope = ""
     Set turns = $SELECT(+spec.MaxIterations > 0: +spec.MaxIterations, 1: 8)
@@ -43,6 +43,10 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
                 Set provider = ..MockProvider(mock, spec, terminal, .model)
             } ElseIf spec.ProviderConfig '= "" {
                 Set provider = ..ProviderFrom(spec.ProviderConfig, .model)
+            } ElseIf ##class(Shutter.Setup).ProviderConfigured() {
+                // Shutter's own configuration (ConfigureProvider, v1.35): built here rather than by the agent class from its
+                // PROVIDERCONFIG parameter, so the bound on one call (BoundCall) applies to the default path too.
+                Set provider = ..ProviderFrom($GET(^Shutter.Config("aihub", "provider")), .model)
             }
             Set agent = $CLASSMETHOD(spec.AgentClass, "%New")
             If agent.%IsA("Shutter.Agent.Base") {
@@ -74,6 +78,8 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
                 Set submit.CaseId = caseKey
                 If terminal = "SubmitBoardAnswer" Set submit.FactIds = ..FactIdsOf(spec.Context)
                 If (terminal = "SubmitAnswer") || (terminal = "SubmitBoardAnswer") Set submit.CiteIds = ..CiteIdsOf(spec.Context)
+                // Findings and plans may cite only the evidence they were given (v1.35).
+                If (terminal = "SubmitFindings") || (terminal = "SubmitPlan") Set submit.CiteIds = ..EvidenceIdsOf(spec.Context)
                 Do agent.ToolManager.AddTool(submit)
                 // The member's knowledge collection as search tools, when the library is built.
                 Do ..AttachKnowledge(agent, spec)
@@ -140,7 +146,20 @@ ClassMethod ProviderFrom(name As %String, Output model As %String) As %AI.Provid
     Set fqn = $SELECT($LENGTH(name, ".") < 3: "AI.LLM." _ name, 1: name)
     $$$ThrowOnError(##class(%ConfigStore.Configuration).GetDetails(fqn, .details, 0, 1))
     Set model = details.%Get("model")
+    Do ..BoundCall(details)
     Quit ##class(%AI.Provider).Create(details.%Get("model_provider"), details)
+}
+
+/// A bound on one model call (v1.35): the provider's HTTP client gets a request timeout (Shutter.Setup.ProviderTimeoutSeconds,
+/// 120 s unless configured) and a connect timeout of 10 s, unless the configuration sets http_config itself. Without it a
+/// hung provider holds a board member until the board's 600 s timeout, since the run's deadline is only checked between
+/// the model's turns (Shutter.Bridge.Monitor).
+ClassMethod BoundCall(details As %DynamicObject)
+{
+    If '$ISOBJECT(details) || details.%IsDefined("http_config") Quit
+    Set http = {}
+    Set http."request_timeout_secs" = ##class(Shutter.Setup).ProviderTimeoutSeconds(), http."connect_timeout_secs" = 10
+    Set details."http_config" = http
 }
 
 /// The case a run works on: the correlation key, or for a question's run (keyed by its question id, CONTRACTS 14.2) the
@@ -173,6 +192,28 @@ ClassMethod CiteIdsOf(context As %String) As %String
     Quit ids
 }
 
+/// What findings and plans may cite (v1.35): the keys of the board context's evidence object and the keys one level down in
+/// it (where the error, the ward state's fields and the like sit), plus "findings" for the coordinator, comma separated.
+ClassMethod EvidenceIdsOf(context As %String) As %String
+{
+    Set ids = ""
+    Set o = ##class(Shutter.Util.Json).Parse(context, .sc)
+    If '$ISOBJECT(o) Quit ""
+    Set ev = o.%Get("evidence")
+    If $ISOBJECT(ev) && ev.%IsA("%Library.DynamicObject") {
+        Set it = ev.%GetIterator()
+        While it.%GetNext(.k, .v) {
+            Set ids = ids _ $SELECT(ids = "": "", 1: ",") _ k
+            If $ISOBJECT(v) && v.%IsA("%Library.DynamicObject") {
+                Set it2 = v.%GetIterator()
+                While it2.%GetNext(.k2) { If '$FIND("," _ ids _ ",", "," _ k2 _ ",") Set ids = ids _ "," _ k2 }
+            }
+        }
+    }
+    If o.%IsDefined("findings") Set ids = ids _ $SELECT(ids = "": "", 1: ",") _ "findings"
+    Quit ids
+}
+
 /// The ids of a question context's whatif.facts, comma separated: the only facts a board answer may name.
 ClassMethod FactIdsOf(context As %String) As %String
 {
@@ -200,6 +241,7 @@ ClassMethod MockProvider(config As %String, spec As Shutter.Bridge.RunSpec, term
     }
     Set model = details.%Get("model")
     Set details."api_key" = ..MockToken(spec, terminal)
+    Do ..BoundCall(details)
     Quit ##class(%AI.Provider).Create("openai", details)
 }
 
@@ -224,6 +266,10 @@ Method FillStats(response As Shutter.Bridge.Msg.AgentResponse, agent, session, m
                 Set response.PromptTokens = +stats."total_prompt_tokens"
                 Set response.CompletionTokens = +stats."total_completion_tokens"
                 Set response.ToolCalls = +stats."total_tool_calls"
+                // AI Hub's own timing counters and reasoning tokens (v1.35), when the build returns them.
+                If stats.%IsDefined("total_llm_duration_ms") Set response.LlmMs = +stats."total_llm_duration_ms"
+                If stats.%IsDefined("total_tool_duration_ms") Set response.ToolMs = +stats."total_tool_duration_ms"
+                If stats.%IsDefined("total_reasoning_tokens") Set response.ReasoningTokens = +stats."total_reasoning_tokens"
             }
         } Catch { }
         Try {

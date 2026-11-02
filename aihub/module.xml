@@ -21,6 +21,7 @@
       </Dependencies>
       <Resource Name="Shutter.Agent.PKG"/>
       <Resource Name="Shutter.Tools.PKG"/>
+      <Resource Name="Shutter.Publish.PKG"/>
       <Resource Name="Shutter.Schema.PKG"/>
       <Resource Name="Shutter.Knowledge.PKG"/>
       <Resource Name="Shutter.Bridge.Policy.PKG"/>

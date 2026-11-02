@@ -76,6 +76,48 @@ ClassMethod Clip(text As %String, max As %Integer = 200) As %String
 /// <var>json</var> with <code>null</code> inserted wherever a value is missing (<code>:,</code>, <code>:}</code>
 /// or <code>:]</code> outside string literals), as %JSON.Adaptor writes a numeric property with no value.
 /// Text inside strings is left alone.
+/// A persistent object's JSON projection as a dynamic object, with its id; an export that fails is reported as
+/// {id, error} rather than thrown. The one projection the API and the store classes share (v1.35).
+ClassMethod Project(obj As %JSON.Adaptor) As %DynamicObject
+{
+    If '$ISOBJECT(obj) Quit ""
+    Set sc = obj.%JSONExportToString(.json)
+    If $$$ISERR(sc) || ($GET(json) = "") {
+        Set o = {}
+        Set o.id = obj.%Id()
+        Set o.error = "projection failed: " _ $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "empty")
+        Quit o
+    }
+    Set o = ""
+    Try {
+        Set o = ##class(%DynamicObject).%FromJSON(json)
+    } Catch {
+        // A numeric property with no value (added after the row was saved) exports as an empty value,
+        // which is not JSON: null takes its place, outside string literals only.
+        Try {
+            Set o = ##class(%DynamicObject).%FromJSON(..NullEmptyValues(json))
+        } Catch ex {
+            Set o = {}
+            Set o.error = "projection failed: " _ ex.DisplayString()
+        }
+    }
+    Set o.id = obj.%Id()
+    Quit o
+}
+
+/// Rows of an SQL query (its first column the ID) as projected objects of a class.
+ClassMethod Rows(class As %String, sql As %String, args...) As %DynamicArray
+{
+    Set out = []
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, args...)
+    While rs.%Next() {
+        Set obj = $CLASSMETHOD(class, "%OpenId", rs.%Get("ID"))
+        Continue:'$ISOBJECT(obj)
+        Do out.%Push(..Project(obj))
+    }
+    Quit out
+}
+
 ClassMethod NullEmptyValues(json As %String) As %String [ SqlProc ]
 {
     Set out = "", start = 1, inString = 0, escaped = 0

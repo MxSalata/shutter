@@ -61,6 +61,7 @@ build arguments the installer reads once:
 | `SHUTTER_TRACE_PASSWORD` | When set, the user `demo-trace` exists with the role `Shutter_Trace`: the Visual Trace and the messages in the Management Portal, read only. No default. |
 | `SHUTTER_JUDGE_PASSWORD` | When set, the user `judge` exists with the role `Shutter_Judge`: the public demo's role plus the live agents (live questions, convening the board), under the model budget and the judge's share. No default. |
 | `SHUTTER_JUDGE_BUDGET_USD` | Each user's share of the day's model budget in US dollars (CONTRACTS 9): a user whose live runs today reach it is refused `budget_exhausted`. Empty or 0: no share, the day's cap alone. |
+| `SHUTTER_PROVIDER_TIMEOUT_SECONDS` | The bound on one model call (CONTRACTS 6.6): the seconds the provider's HTTP client waits for a reply before the call fails, 10 to 600; default 120. Applied at every start of the production, like the budget. |
 | `SHUTTER_DAILY_BUDGET_USD` | A cap in US dollars on what the agents' live runs may spend per day (00:00 to 00:00 UTC; CONTRACTS 9). At the cap, runs are refused with `budget_exhausted`, the board falls back to the rules path and the gate still judges the resend. Empty or 0: no cap. |
 | `SHUTTER_LIVE` | `1` turns on the live hospital (CONTRACTS 4.4): the demo hospital plays one of Shutter's scenarios every 7 minutes with fresh patients at present times and real faults, and sends an ordinary message a minute between stories, and the shipped profile's tier 2 single chains wait for an approval, so visitors have a case to approve. Demo only; off by default. `SELECT Hospital.Setup_SetLive(1)` in the HOSPITAL namespace switches it later. |
 | `SHUTTER_MESSAGE_PURGE` | `1` creates the daily task "Shutter message purge" (`Ens.Util.Tasks.Purge`, every message type in the namespace). On by default in the demo, off otherwise: only a namespace that holds nothing but Shutter should purge this way. |
@@ -266,3 +267,42 @@ has. Images built before 1 November 2026 kept the SHUTTER data database at the i
 installer's `DATADIR` was a name `%Installer` reserves); on such an instance the cases live in the container and go with it,
 so take what you need from it before replacing it, or copy `/usr/irissys/IRIS.DAT` out, create the database under
 `mgr/shutter/db/SHUTTERDATA` and mount it there.
+
+## The publisher: Shutter's read-only tools for an MCP client
+
+On the AI Hub build the install makes the web application `/mcp/shutter`: IRIS's own MCP gateway (`%AI.MCP.Service`)
+serving `Shutter.Publish.Tools`, read-only (cases, incidents, evidence, plans, events, precedents, health), with the
+patients' identifiers replaced by tokens and an audit row per call (`docs/CONTRACTS.md`, section 15). The core edition
+has no gateway; the Doctor's `publish.available` says which build this is.
+
+- **Who may read:** a user who holds the resource `Shutter_Publish`: operators and approvers do (`Shutter_Operator`
+  carries it), the forwarder and the public demo's visitors do not. The application asks for a password.
+- **From an MCP client** (a desktop assistant, an IDE, your own agent): run the sidecar the image ships with an HTTP or
+  SSE transport and point the client at it; the client sends its own HTTP Basic credentials (or a bearer), which the
+  sidecar passes through to Shutter, so each person reads as themselves. Inside the container, with a small TOML:
+
+  ```
+  cat > /tmp/shutter-mcp.toml <<'EOT'
+  [[iris]]
+  name = "default"
+
+  [iris.server]
+  host = "127.0.0.1"
+  port = 1972
+  username = "operator"
+  password = "shutter"
+
+  [[iris.endpoints]]
+  path = "/mcp/shutter"
+  EOT
+  iris-mcp-server -c /tmp/shutter-mcp.toml --transport http://127.0.0.1:8765 run --iris-host 127.0.0.1 --iris-port 1972 --iris-endpoint /mcp/shutter
+  ```
+
+  The client's MCP address is then `http://127.0.0.1:8765/mcp`; the tools appear as `mcp_shutter_ListCases`,
+  `mcp_shutter_GetCase` and so on. The `[iris.server]` user is the sidecar's own connection to the superserver; the
+  reader's identity comes from the client. A stdio transport carries no client credentials and is refused by the
+  publisher; the server's `--help` lists the transports and the TOML keys.
+- **From a script:** the gateway answers only the sidecar (a direct call gets 502 `GATEWAY_REQUIRED`), so a script talks to
+  the sidecar's HTTP transport with the MCP protocol and HTTP Basic.
+- **Nothing here writes.** Approvals, reinvestigations and closures stay in the app and its API, under their own
+  resources and the `X-Requested-With` header.

@@ -30,6 +30,8 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/cases/:caseId/plan" Method="GET" Call="CasePlan"/>
   <Route Url="/cases/:caseId/approvals" Method="GET" Call="CaseApprovals"/>
   <Route Url="/cases/:caseId/approvals" Method="POST" Call="CaseApprove"/>
+  <Route Url="/cases/:caseId/precedents" Method="GET" Call="CasePrecedents"/>
+  <Route Url="/precedents/:id/retire" Method="POST" Call="PrecedentRetire"/>
   <Route Url="/cases/:caseId/attempts" Method="GET" Call="CaseAttempts"/>
   <Route Url="/cases/:caseId/closure" Method="GET" Call="CaseClosure"/>
   <Route Url="/cases/:caseId/preview-blind-resend" Method="POST" Call="CasePreview"/>
@@ -46,6 +48,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/library" Method="GET" Call="Library"/>
   <Route Url="/library/:code" Method="PATCH" Call="LibraryPatch"/>
   <Route Url="/settings" Method="GET" Call="Settings"/>
+  <Route Url="/live/storm" Method="POST" Call="LiveStorm"/>
   <Route Url="/settings/schemas" Method="GET" Call="SchemasGet"/>
   <Route Url="/settings/schemas" Method="POST" Call="SchemasImport"/>
   <Route Url="/site-profile" Method="GET" Call="SiteProfileGet"/>
@@ -144,32 +147,10 @@ ClassMethod Body() As %DynamicObject
     Quit o
 }
 
-/// A persistent object's JSON projection as a dynamic object.
+/// A persistent object's JSON projection as a dynamic object (Shutter.Util.Json.Project, shared with the store classes).
 ClassMethod Project(obj As %JSON.Adaptor) As %DynamicObject
 {
-    If '$ISOBJECT(obj) Quit ""
-    Set sc = obj.%JSONExportToString(.json)
-    If $$$ISERR(sc) || ($GET(json) = "") {
-        Set o = {}
-        Set o.id = obj.%Id()
-        Set o.error = "projection failed: " _ $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "empty")
-        Quit o
-    }
-    Set o = ""
-    Try {
-        Set o = ##class(%DynamicObject).%FromJSON(json)
-    } Catch {
-        // A numeric property with no value (added after the row was saved) exports as an empty value,
-        // which is not JSON: null takes its place, outside string literals only.
-        Try {
-            Set o = ##class(%DynamicObject).%FromJSON(##class(Shutter.Util.Json).NullEmptyValues(json))
-        } Catch ex {
-            Set o = {}
-            Set o.error = "projection failed: " _ ex.DisplayString()
-        }
-    }
-    Set o.id = obj.%Id()
-    Quit o
+    Quit ##class(Shutter.Util.Json).Project(obj)
 }
 
 /// The case for a public id, or "" after writing a 404.
@@ -214,17 +195,10 @@ ClassMethod IdempotencyKey(key As %String) As %String
     Quit ..User() _ "|" _ %request.Method _ "|" _ %request.URL _ "|" _ key
 }
 
-/// Rows of a SQL query as projected objects of a class.
+/// Rows of a SQL query as projected objects of a class (Shutter.Util.Json.Rows).
 ClassMethod Rows(class As %String, sql As %String, args...) As %DynamicArray
 {
-    Set out = []
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, args...)
-    While rs.%Next() {
-        Set obj = $CLASSMETHOD(class, "%OpenId", rs.%Get("ID"))
-        Continue:'$ISOBJECT(obj)
-        Do out.%Push(..Project(obj))
-    }
-    Quit out
+    Quit ##class(Shutter.Util.Json).Rows(class, sql, args...)
 }
 
 ClassMethod PortalPath() As %String
@@ -284,7 +258,7 @@ ClassMethod Health() As %Status
     If $SYSTEM.Security.Check("Shutter_Operate", "USE") Quit ..Json(full)
     // Anyone may ask whether the instance is up and whether it is the demo; the rest is for signed-in users.
     Set o = {}
-    For key = "status", "ok", "demo", "version", "production", "production_state", "mode" { If full.%IsDefined(key) Do o.%Set(key, full.%Get(key), $SELECT(full.%GetTypeOf(key) = "boolean": "boolean", 1: "")) }
+    For key = "status", "ok", "demo", "version", "production", "production_state", "mode", "last_live_run" { If full.%IsDefined(key) Do o.%Set(key, full.%Get(key), $CASE(full.%GetTypeOf(key), "boolean": "boolean", "null": "null", : "")) }
     Do o.%Set("ok", ##class(Shutter.Util.Json).Str(full, "production_state") = "running", "boolean")
     Quit ..Json(o)
 }
@@ -545,6 +519,35 @@ ClassMethod CasePlan(caseId As %String) As %Status
     Quit ..Json(o)
 }
 
+/// The precedents a case's conditions match at its receiver (CONTRACTS 6.4, v1.35): the summary the approval task
+/// quotes, the signature, the conditions, and the rows newest first, retired ones included with active false.
+ClassMethod CasePrecedents(caseId As %String) As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set o = {}
+    Set conditions = ##class(Shutter.Store.Precedent).ConditionsOf(case)
+    Set o.receiver = case.Receiver
+    If $ISOBJECT(conditions) { Set o.conditions = conditions } Else { Do o.%Set("conditions", "", "null") }
+    Set o.summary = ##class(Shutter.Store.Precedent).Summary(case.Receiver, conditions)
+    Set o.precedents = ##class(Shutter.Store.Precedent).RowsFor(case)
+    Quit ..Json(o)
+}
+
+/// Retire a precedent (Shutter_Approve, X-Requested-With; body {reason}): it stays on record and counts for nothing.
+/// 404 not_found; 409 already_retired, naming who retired it and when.
+ClassMethod PrecedentRetire(id As %String) As %Status
+{
+    If '..Allow("Shutter_Approve", 1) Quit $$$OK
+    Set body = ..Body()
+    Set why = ##class(Shutter.Store.Precedent).Retire(id, ..User(), ##class(Shutter.Util.Json).Str(body, "reason"), .p)
+    If why = "not_found" Quit ..Fail("404 Not Found", "not_found", "No precedent " _ id)
+    If why = "already_retired" Quit ..Fail("409 Conflict", "already_retired", "Precedent " _ id _ " was retired on " _ p.RetiredAt _ " by " _ p.RetiredBy)
+    If why '= "" Quit ..Fail("500 Internal Server Error", "save_failed", why)
+    Quit ..Json(p.Projection())
+}
+
 ClassMethod CaseApprovals(caseId As %String) As %Status
 {
     If '..Allow() Quit $$$OK
@@ -576,7 +579,12 @@ ClassMethod CaseApprove(caseId As %String) As %Status
     If '$LISTFIND($LISTBUILD("approve", "reject"), decision) Quit ..Fail("400 Bad Request", "bad_request", "decision must be approve or reject")
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
-    If case.State '= "awaiting_approval" Quit ..Fail("409 Conflict", "wrong_state", "The case is " _ case.State _ ", not awaiting approval")
+    If case.State '= "awaiting_approval" {
+        // A second decision meets the first (v1.35): who decided, what and when, so two approvers see the same answer.
+        Set extra = {}, a = case.CurrentApproval
+        If $ISOBJECT(a) { Set extra.approval = {} Set extra.approval.decision = a.Decision, extra.approval.approver = a.Approver, extra.approval.decidedAt = a.DecidedAt, extra.approval.planDigest = a.PlanDigest }
+        Quit ..Fail("409 Conflict", "wrong_state", "The case is " _ case.State _ ", not awaiting approval" _ $SELECT($ISOBJECT(a) && (a.Decision '= ""): "; " _ a.Decision _ " by " _ a.Approver _ " at " _ a.DecidedAt, 1: ""), extra)
+    }
     Set plan = case.CurrentPlan
     Set digest = ##class(Shutter.Util.Json).Str(body, "planDigest")
     If '$ISOBJECT(plan) || (digest '= plan.Digest) {
@@ -1068,6 +1076,8 @@ ClassMethod Intake() As %Status
 {
     If '..Allow("Shutter_Intake", 1) Quit $$$OK
     Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    // A bound on the raw body (v1.35): an HL7 message with its envelope is far under 2 MB, and a forwarder gone wrong should not fill the store.
+    If $LENGTH(bodyText) > 2097152 Quit ..Fail("413 Payload Too Large", "too_large", "The intake body is over 2 MB; an HL7 message and its envelope are far smaller")
     Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
     If '$ISOBJECT(body) || $$$ISERR(psc) Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with message, failure, source and receiver")
     If $CLASSNAME(body) '= "%Library.DynamicObject" Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with message, failure, source and receiver")
@@ -1194,7 +1204,10 @@ ClassMethod SiteProfileHistory() As %Status
 ClassMethod IndexStatus() As %Status
 {
     If '..Allow() Quit $$$OK
-    Quit ..Json(##class(Shutter.Index.Indexer).Status())
+    Set o = ##class(Shutter.Index.Indexer).Status()
+    // The Case Releaser (8.1, v1.35), the host that took the releases over from the index adapter.
+    Try { Set o.releases = ##class(Shutter.Operation.Releaser).Status() } Catch ex { Set o.releases = {"error": (ex.DisplayString())} }
+    Quit ..Json(o)
 }
 
 /// The indexed messages for a visit number (?encounter=), a patient (?patient=) or an operation key (?key=), newest
@@ -1361,6 +1374,40 @@ ClassMethod IncidentDecide(id As %String, seq As %String) As %Status
     Set %response.Status = "202 Accepted"
     Write text
     Quit $$$OK
+}
+
+/// "Break the feed" (CONTRACTS 4.4, v1.35): asks the live hospital for a storm. 202 with the storm's record (state
+/// requested; the player picks it up within 5 s); 409 live_off, storm_in_progress or cooldown (Shutter.Setup.StormRefusal);
+/// 503 no_service when no hospital namespace is recorded. An Idempotency-Key replays the reply.
+ClassMethod LiveStorm() As %Status
+{
+    If '..Allow("Shutter_Operate", 1) Quit $$$OK
+    Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
+    If hospital = "" Quit ..Fail("503 Service Unavailable", "no_service", "No live hospital: the hospital namespace is not recorded")
+    // A press not yet picked up by the player counts as the storm in progress; else the player's record decides.
+    Set pending = $GET(^Shutter.Live("storm", "request"))
+    Set refusal = ##class(Shutter.Setup).StormRefusal(''$GET(^|hospital|Hospital.Config("live")), $SELECT(pending '= "": pending, 1: $GET(^|hospital|Hospital.Live("storm"))), ##class(Shutter.Setup).StormCooldownMinutes())
+    If $ISOBJECT(refusal) {
+        Set status = refusal.status, detail = refusal.%Get("detail")
+        Do refusal.%Remove("status"), refusal.%Remove("detail")
+        Quit ..Fail(status, refusal.error, detail, refusal)
+    }
+    Set n = $INCREMENT(^Shutter.Live("storm", "n"))
+    Set out = {}
+    Set out.stormId = "ST-" _ $TRANSLATE($JUSTIFY(n, 6), " ", "0"), out.state = "requested"
+    Set out.startedAt = ##class(Shutter.Util.Time).NowUTC(), out.requestedBy = ..User()
+    Set out.patients = 4, out.movements = 8, out.sent = 0
+    Set out.receiverDownSeconds = ##class(Hospital.LivePlayer).#STORMDOWNSECONDS, out.pickupWithinSeconds = 5
+    Set out.endsAt = ##class(Shutter.Util.Time).FromNow(##class(Hospital.LivePlayer).#STORMMINUTES * 60)
+    Set out.cooldownUntil = ##class(Shutter.Util.Time).FromNow(##class(Shutter.Setup).StormCooldownMinutes() * 60)
+    // The request waits here for the player (the API's users write nothing in the hospital's database); the player moves it
+    // into its own record within one call.
+    Set ^Shutter.Live("storm", "request") = out.%ToJSON()
+    Do ..Remember(bodyText, "202 Accepted", out.%ToJSON())
+    Quit ..Json(out, "202 Accepted")
 }
 
 ClassMethod Settings() As %Status

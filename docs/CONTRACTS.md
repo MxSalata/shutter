@@ -52,8 +52,18 @@ Responses:
 | 422 | `{"error": "patient_mismatch", "encounter_id": "…"}` | The encounter exists for another patient (identity never silently changes) |
 | 422 | `{"error": "payload_digest_mismatch"}` | The sender's `payload_digest` differs from the downstream system's own computation |
 | 422 | `{"error": "invalid_request", "detail": "…"}` | Missing or malformed fields |
-| 503 | `{"error": "ward_unavailable"}` | Fault `fail_before_accept` is on (section 1.5); nothing was validated or written |
+| 503 | `{"error": "ward_unavailable"}` | Fault `fail_before_accept` is on (section 1.5); nothing was validated or written. Since v1.35 every 503 carries `Retry-After: 20` (delta seconds), as a real receiver may |
 | 504 | empty body | Fault `commit_drop_response` is on: the operation **was committed** and the receipt stored, then the response was lost |
+
+**Retry-After as a minimum wait (v1.35).** When a receiver answers a delivery 503 or 429 with `Retry-After` in the
+delta-seconds form, Shutter's connector keeps it on the result (`retryAfterSeconds`, 1 to 3600; the HTTP-date form and
+anything else are ignored), the feed's intake carries it (`retry_after_seconds` in the connector's answer) and the case keeps
+until when the receiver asked not to retry (`retryAfterUntil`). The resend's first read of the receiver, the preflight after
+the approval or the automatic release, waits for what is left of it, 300 s at most, with a note on the case ("The receiver
+asked for a pause before a retry (Retry-After, until ...); the preflight read waits N s"), and the wait is spent once: the
+field is cleared when the wait is armed. A case whose approval comes later than the receiver asked waits nothing (the field is cleared then too). A preflight read
+that itself fails with a `Retry-After` waits the longer of its own backoff (10, 20, 40 s) and the header, 300 s at most,
+before it is read again. A case from another production (11) carries none: the forward has no header field.
 
 Decided with the downstream system (15 Oct): faults apply to real operations only, never to a dry run; a dry run reports a refusal as 200 with `would_apply` false, except `bed_occupied`, which it answers as the 409 itself (v1.24); a discharge sets `ward` to null; for an `admit`, `expected_version` 0 means "not yet seen"; the per-encounter lock waits 10 s and then answers 503 `ward_unavailable`; a reset answers 200 `{"reset": true}`; the dry run relies on a transaction rollback, so the database must be journaled (the default).
 
@@ -318,6 +328,31 @@ hospital has. It never resets anything, and the scenario runner's Run and Reset 
   `SELECT Hospital.Setup_SetLive(1)` (or `0`) in the hospital's namespace switches it without an install. Off, the item is
   disabled and a task that still runs does nothing. The install compiles `Hospital.Production` in the hospital's namespace
   on every run, so an upgrade's new items reach that namespace's production definition before `UpdateProduction`.
+- **"Break the feed", the storm** (v1.35). `POST /api/shutter/live/storm` (`Shutter_Operate`, `X-Requested-With`, an
+  `Idempotency-Key` honoured, body optional) asks the live hospital for a storm and answers 202 `{stormId, state
+  "requested", startedAt, requestedBy, patients 4, movements 8, sent 0, receiverDownSeconds 60, pickupWithinSeconds 5,
+  endsAt, cooldownUntil}`; 409 `live_off` when the live hospital is off, 409 `storm_in_progress` `{stormId, startedAt,
+  endsAt, state}` while one plays (one at a time for the whole demo), 409 `cooldown` `{until, retryAfterSeconds}` within
+  `^Shutter.Config("stormCooldownMinutes")` of the last storm's start (10 by default; the Doctor's `storm_cooldown_minutes`);
+  503 `no_service` with no hospital namespace recorded. The route writes the request (state `requested`) in Shutter's own
+  namespace, `^Shutter.Live("storm","request")`, since the API's users write nothing in the hospital's database; the
+  player (its adapter calls every 5 s since v1.35, the ordinary feed paced by `OrdinaryEverySeconds` 60) takes it on its
+  next call into its own record, `^Hospital.Live("storm")` in the hospital's namespace, and plays it: the receiver goes down (`fail_before_accept` on
+  `Downstream Out`, 1.5, for `StormReceiverDownSeconds` 60), then eight movements for four fresh patients go out about
+  three seconds apart, admissions to free beds first and then each patient's transfer to another ward, control ids
+  `STORM<n>-01` to `-08`, each failing in the hospital's production and handed to Shutter by its process as
+  `delivery_failed`; Shutter opens the cases (stamped scenario `storm`), the detector opens one incident at the threshold
+  and the rest join it, one chain per encounter in arrival order; when the outage is over the player brings the receiver
+  back, the incident's recovery check releases the chains in order under the site's policy, and every resend is rehearsed
+  and verified. The state moves `requested`, `sending`, `waiting_receiver`, `releasing`, `done` (the incident closed, or
+  ten minutes after the press), or `failed` with `error`. `GET /settings` and the Doctor carry `live.storm`: the player's
+  record (`stormId`, `state`, `startedAt`, `receiverDownUntil`, `receiverUpAt`, `sent`, `movements`, `patients` as
+  `[{mrn, encounterId, ward, toWard, movements}]`, `endsAt`, `endedAt`) with Shutter's own view added (`Setup.StormCounts`:
+  `incidentId` and `incidentState`, the incident the storm's cases joined, one the detector opened for them or one already
+  open for the receiver, null before any; `cases` and `resolved` for the storm's cases;
+  `cooldownUntil`). The rotation and the ordinary feed pause from the press until `done`, and the next story is then due
+  `EveryMinutes` later. No model is needed for the story: the chains follow the policy, and a board convenes only where it
+  says `board`. Fresh patients and beds mean the storm never collides with a story already playing.
 - **Settings** of `Hospital.LivePlayer`: `EveryMinutes` 7; `Scenarios` `S2,S8,S1,S23a,S3,S24,S15,S11`, played round robin
   (empty means every scenario of `fixtures/scenarios.json` but S13, S20 and S21, which need an operator or the records);
   `Faults` 1; `OrdinaryFeed` 1; `MaxWait` 30, the longest a `wait` step is given; `ShutterNamespace` `SHUTTER`.
@@ -393,6 +428,7 @@ escalation), the case's `outcome` ("Handled by hand, recorded by <who>: <reason>
 
 **Abandoning a case the workflow left behind** (v1.21). A case can be left in a working state (detected, collecting, investigating, grouped, proposed, gated, rehearsing, awaiting_approval, approved, executing or verifying) when the answer its workflow instance waits for never comes: a container killed in the middle of a scenario, an alarm or a delivered request lost with it. `POST /cases/{id}/abandon` with `{reason, expectedVersion?}` (`Shutter_Approve` only, whatever the site profile says; `X-Requested-With`; an `Idempotency-Key`) answers 202 `{caseId, state: "abandoning", requestedBy, reason}` and sends `Shutter.Msg.CaseAbandon` to the Case Workflow item, as `/close` and `/reinvestigate` go through it, so the abandon shows in the trace. There a fresh instance fails the case (`Shutter.Store.Case.Abandon`): state `failed`, disposition `abandoned`, headline "Abandoned by <who>. <reason>" (the reason clipped to 200), outcome "Abandoned, recorded by <who>: <reason>. The workflow stopped in <state>; nothing more is sent", the current approval revoked, every draft or queued escalation email cancelled, and an open approval task completed as cancelled (an `approval` event "Approval task <id> cancelled: the case was abandoned"). The record is the state event: its actor is the approver, its time when, its text "Abandoned from <state>: <reason>" (with "; N pending emails cancelled" when any were). The case keeps its `workflowSessionId`, so the trace link still shows where it stopped; the old instance, if it ever answers, finds the case closed and ignores the answer. A failed case reopens with `/reinvestigate`, so a wrong abandon is recoverable. Errors: 400 `bad_request` when the body is not a JSON object or `reason` is empty; 404 `not_found`; 409 `wrong_state` for a closed case (resolved, blocked, escalated or failed), whose detail says a closed case is marked handled (`/close`) or reopened (`/reinvestigate`); 409 `stale_version` with `currentVersion` when `expectedVersion` is not the case's version; 409 `busy` with `{state, inFlight, newestAt, deferred}` while the case's workflow has a message in flight. The in-flight rule (`Shutter.Store.Case.InFlight`): the case's workflow session (for a grouped case, its incident's) is busy while any `Ens.MessageHeader` of the session is Created, Queued or Deferred, or Delivered with `TimeCreated` within the last N minutes; a case with no session yet is busy while its last state event is younger than N minutes. `inFlight` is the count, `newestAt` the newest header's time (the state event's for a case with no session), and `deferred: true` means an approval task is waiting for a person: the case is not stuck, reject the plan through `POST /cases/{id}/approvals` instead (the detail says so). N is `^Shutter.Config("abandonAfterMinutes")`, 15 by default; a value of 10 or less reads as 11, since N must exceed the 600 s board timeout, the longest wait the workflow arms. Age is never judged by `updatedAt`, which a note writes (the start sweep's note, below, would make every stranded case look fresh). The 202 is given before the transition: when the instance moves the case between the route's check and the workflow's transition, the version check refuses the abandon (logged, case unchanged) and the approver re-reads the case and tries again.
 
+
 **Writes and verification on the list** (v1.24). Each `GET /cases` item carries `writes`, the number of its attempts that
 reached the receiver and may have landed (outcome `applied`, `already_committed` or `uncertain`, as the case page's receipt
 counts them; a refusal, a version conflict or an error is not a write), and `verification`, the outcome of its latest
@@ -450,7 +486,7 @@ conditions that matter; an unlisted condition is a wildcard. A listed condition 
 | `free_text` | `yes`, `no` | the message carries free text (an OBX note or an NTE) |
 | `chain` | `single`, `ordered`, `interleaved` | section 7; a case outside an incident is `single` |
 | `receiver_category` | `current_state`, `history_of_record`, `orders_results` | the case's receiver's category in the site profile (6.4, v1.23); `current_state` when its entry names none |
-| `bed_conflict` | `none`, `occupant_leaving`, `occupant_left`, `occupant_staying`, `unknown` | who holds the bed a `bed_occupied` refusal (1.1) named, from the `bed_conflict` section the evidence adds for such a refusal (v1.28): `occupant_left` (the occupant's encounter is discharged or placed elsewhere now), `occupant_leaving` (a transfer or discharge of the occupant after `since` was sent and not applied: failed, uncertain or pending, in another case when one was opened), `occupant_staying` (they still hold the bed and no movement out is known), `unknown` (no occupant named, or they could not be read); `none` without such a refusal. The fact `occupant_case` names the case about the occupant's movement, or is empty |
+| `bed_conflict` | `none`, `occupant_leaving`, `occupant_left`, `occupant_staying`, `unknown` | who holds the bed a `bed_occupied` refusal (1.1) named, from the `bed_conflict` section the evidence adds for such a refusal (v1.28): `occupant_left` (the occupant's encounter is discharged or placed elsewhere now), `occupant_leaving` (a transfer or discharge of the occupant after `since` was sent and not applied: failed, uncertain or pending, in another case when one was opened), `occupant_staying` (they still hold the bed and no movement out is known), `unknown` (no occupant named, or they could not be read, or the refusal named no ward or bed to compare the read with, v1.35); `none` without such a refusal. The fact `occupant_case` names the case about the occupant's movement, or is empty |
 
 **Flags read per receiver** (v1.23). An entry's `when` names a flag (`history_policy: correct`, `authoritative_source:
 other_source`). The matcher's facts carry `history_policy` and `receiver_category` for the case's receiver, from its site
@@ -691,6 +727,27 @@ reads it through `Shutter.Store.SiteProfile`.
   resources of section 5.
 - `merges` (v1.14): `forbidden` (the default when absent) or `allowed`, the only values the validator accepts. A receiver entry's `merges` and `cancels` (booleans, default false) say what it takes (1.1). A merge is delivered only under `allowed` to a receiver with `merges: true`; the gate's `MERGE_WITHHELD` blocks any write of a merge otherwise, so the exact repeat of a merge the receiver already holds (a receipt present) is E3's reconcile, and no other merge is ever resent by Shutter. `Shutter.Store.SiteProfile.MergesAllowed()` and `ReceiverFlag(name, flag)` read them.
 
+**Precedents** (v1.35). What approvers decided before on the same evidence at the same receiver, and whether it held.
+When a person's approval is verified at the receiver (the case resolves), and when an approver rejects a plan, the case
+writes a precedent (`Shutter.Store.Precedent`): the receiver; the signature, the SHA-256 of the snapshot's condition
+vocabulary (6.1) in canonical JSON, so the match is exact, as the message index is; the catalogue entry and outcome; the
+plan's disposition and digest; the approver; the decision (`approved` or `rejected`); and the policy, site profile and
+catalogue versions in force. An automatic release (approver `policy`) writes none: it is the policy, not a precedent. The
+evidence collector adds `precedents` to every snapshot summary, `{approved, rejected, lastDecision, lastApprover, lastAt,
+lastCaseId, samePolicy, windowDays, signature}`: the active rows of the last `windowDays` days
+(`^Shutter.Config("precedentDays")`, 1 to 3650, 180 by default; the Doctor's `precedent_days`), and `samePolicy` says
+whether the last decision was taken under the policy and site profile versions in force now. The approval task's text
+quotes it ("Precedents: approved and verified 2 times, rejected 0 times in the last 180 days; last approved by approver on
+2026-11-02 (case C-000301)", or "Precedents: none; these conditions at this receiver have not reached an approver in the
+last 180 days."), and the case's events note each precedent written. It is for the person and the app: the model view's
+allowlist (9) leaves `precedents` out of what a board member reads, so a run of approvals cannot anchor a model, and the
+material digest (A7) never includes it, so a new precedent changes nothing an approval binds. `GET /cases/{id}/precedents`
+(`Shutter_Operate`) answers `{receiver, conditions, summary, precedents: [...]}`, the rows newest first, retired ones
+included with `active` false; `POST /precedents/{id}/retire` (`Shutter_Approve`, `X-Requested-With`, body `{reason}`)
+retires one, which stays on record and counts for nothing (404 `not_found`; 409 `already_retired`, naming who retired it
+and when). A precedent informs the approver and never releases anything: only the policy path above releases without a
+person.
+
 ### 6.5 The gate's catalogue checks
 
 A new check, `catalogue`, with these reason codes (in `knowledge/block-reasons.json`):
@@ -714,6 +771,49 @@ the outcome, or leaves `catalogue_entry` empty when no entry fits (a new pattern
 four collections under `knowledge/` (`search_contracts`, `search_lifecycle`, `search_effects`, `search_playbooks`); the
 fifth collection, `review`, is the production review agent's (13.6) and reaches a board member only through a row whose
 `KnowledgeCollection` is `all` (the single investigator's).
+
+**An approval wait is bounded (v1.35).** The Case Workflow's `ApprovalWaitSeconds` (24 hours by default; 0 waits without
+limit) arms an `Ens.Alarm` beside each approval task, keyed by the plan's round. When it fires and the case still waits for
+that round's plan, the task is cancelled (`Cancel`, with the reason in its comment) and the case escalates with "No approval
+within N hours; a person must decide"; the task's text says so in advance. A decision taken meanwhile, or a later round,
+leaves the alarm with nothing to do. An incident's approval task (7.4) is not bounded this way: its chains wait on the
+incident.
+
+**Boards per minute are capped (v1.35; the review's B1 stopgap).** The Case Workflow's `BoardsPerMinute` (6 by default; 0 for
+no cap) counts the boards convened in the current UTC minute (`Shutter.Util.BoardSlots`, a global node per minute); a case
+whose turn finds the minute full does not convene at once: it notes "The board is busy: N convened this minute, the cap is M a
+minute; this case waits S s for a slot" (60 to 90 s), an `Ens.Alarm` keyed by the round brings it back (`board:defer`), and
+it convenes then, on its snapshot's summary, if it still waits and the round is the same. Both convening paths (the board on
+fresh evidence and the policy's `board`, which asks for the full board whatever the case's mode) go through one method,
+which builds every member's request first (a case the model view refuses, or one with no member to convene, spends no slot)
+and then takes the slot atomically (`BoardSlots.TryTake`: the count goes up and comes back down past the cap, so two cases
+cannot both pass a last slot); a deferred case keeps who asked and which members (`DeferredBy`, `DeferredMode`). A storm of failures therefore costs at most the cap a minute,
+each case waits its turn and none is lost; the fuller answer, one board per failure signature with followers taking the
+leader's diagnosis, is the next step and is not in this build.
+
+**One model call is bounded (v1.35).** The runner gives the provider an HTTP request timeout, `Shutter.Setup.ProviderTimeoutSeconds`
+(`^Shutter.Config("providerTimeoutSeconds")`, `SHUTTER_PROVIDER_TIMEOUT_SECONDS` at a start, 120 s unless set, held to 10
+to 600), and a connect timeout of 10 s, as `http_config` on the provider's configuration unless the site's own configuration
+sets one. The runner builds the provider itself for the item's `ProviderConfig`, for the mimic, and for Shutter's own
+configuration (`^Shutter.Config("aihub", "provider")`, written by `ConfigureProvider`), so the bound holds on the default live
+path too; only an agent class run with none of these falls back to its own `PROVIDERCONFIG` parameter. Without it a hung provider held a board member until the board's 600 s timeout, since the run's deadline is checked
+only between the model's turns; with it the call fails, the run ends with status `timeout` and the board goes on without that member. Measured on build 154
+against a server that never answers: AI Hub retries the call, so the run ends after about four times the bound plus a few
+seconds (44 s at 10, 84 s at 20); at the default 120 s that is about eight minutes, inside the board's 600 s. The Doctor
+reports `provider_timeout_seconds`.
+
+**Hostile and malformed output (v1.35).** The schema checks refuse what is not an object, a disposition outside the list
+(whatever its case, with nothing hidden inside it), a confidence that is not a number from 0 to 1, a `summary` or `why` over
+2,000 characters, and the shapes section 6.6 names; a table of such outputs (`Shutter.Test.Hostile`, run on the AI Hub build,
+skipped where the schema classes are not loaded) keeps it so, and asserts that the checks never throw and accept ordinary
+Unicode. What a model wrote and the checks accepted is cleaned when it is restored for the store (9).
+
+**Findings and plans cite only what they were given (v1.35).** `evidence_refs` on a finding or a plan must name keys of the
+evidence object the run received, or keys one level down in it (`message`, `validation`, `error`, `operation`, `route`,
+`ward_state`, `receipt`, `timeline`, and so on), or `findings` for the coordinator; the runner lists them for the terminal
+tool (`CiteIds`, as the question tools already have), `Shutter.Schema.Findings.CheckRefs` refuses the submission with the
+unknown names and the keys that are allowed, and the model repairs it in the same run. A reference to evidence that is not
+there is therefore never stored.
 
 ### 6.7 The Second Parser (v1.34)
 
@@ -886,6 +986,19 @@ separate, later tool.
   `LagSeconds`, because an id is taken before its row is written. The first start begins at the oldest header within
   `BackfillHours`. Defaults: `Routes` "ADT In", `BatchSize` 200, `LagSeconds` 5, `BackfillHours` 168; one call runs up to 20 passes while the walk is behind. A header whose message could not be indexed is recorded in `^Shutter.Index("failed")` (`GET /index` counts them as `failed_headers`) and cleared when `Rebuild` indexes it. A body already indexed is skipped, so a site may also name the class as a host's Search Table
   Class. `Rebuild(fromId, toId, routes)` walks a range again (SQL procedure, `Shutter_Operate`).
+- `Shutter.Operation.Releaser` (production item "Case Releaser", v1.35), a service on `Ens.InboundAdapter` (`CallInterval` 5 s)
+  that releases the cases no other host can: a case blocked or escalated while a newer message of its encounter was in
+  flight at a watched production (`waitsOnMessage`; that production's connector knows nothing of Shutter), and a case
+  held for a schema not loaded when its message was read (`heldSchema`, 11). Each sweep counts the candidates first; when
+  there are any it opens a run row, `Shutter.Store.ReleaseRun` (`startedAt`, `endedAt`, `state` running, done, failed or
+  interrupted, `waitingChecked`, `waitingReleased`, `heldChecked`, `heldReleased`, `error`, `job`), runs
+  `ResendGuard.ReleaseDeliveredWaits` and `Schemas.ReleaseHeld`, which send each release from this host to the Case
+  Workflow as an id-only `Shutter.Msg.Reinvestigate` (`caseId`, `requestedBy` system, `reason`), and ends the row: the
+  host is the one writer that ends a run. A quiet sweep writes no row, only its time. At start every run still open is
+  marked interrupted, since the host starting again means a restart cut it. The newest 500 runs are kept (`KeepRuns`).
+  `GET /index` carries `releases` `{host, started_at, last_sweep_at, sweeps, last_run, runs, interrupted_runs, candidates
+  {waiting, held}}` and the Doctor `release_sweep`. Until v1.35 the HL7 Index adapter's task ran the two checks beside its
+  walk; the adapter now only reads, and a site that installed Shutter earlier gets the item from the installer's item list.
 - The index is a finder, never a second source of truth: every decision still opens the message or asks the receiver.
 
 ### 8.2 The timeline
@@ -964,6 +1077,12 @@ left IRIS. A recording made before this rule replays with real ids in its result
 it. `GetFailure` answers a fresh failure object and the error item, never the case headline. `SELECT Shutter_Util.ModelView_Preview('C-000012')`
 shows what the model would see of a case.
 
+**Denied tool calls** (v1.35). A call the scope policy refuses before it runs (another case's evidence, a tool outside the
+role) never reaches the audit policy's `%LogExecution` on build 154; it reaches `%LogDenial`, and Shutter writes it as a
+tool-call row of its own: `denied` true, `ok` false, `durationMs` 0 and the reason in `error`, with a "denied" trace line
+in the Visual Trace. The case page lists it with the run's other calls (`GET /cases/{id}/runs`, `toolCalls`), so a prompt
+that tries to reach past its case leaves a mark, and `Shutter.Bridge.ToolCall.DeniedCount(runKey)` counts a run's refusals.
+
 - A merge's prior identifiers (v1.14: `prior_patient_id`, `prior_encounter_id`, `prior_patient_identifier`, `prior_visit_number`, and every MRG group's in `prior_identifiers`, each paired with the surviving patient identifier of its PATIENT group as `into`) are tokens like the case's own (PID or MRN or NHS by the identifier type, ENC, VISIT; the prior name's parts NAME); `merge_groups`, `patient_class` and the validation's version fields pass through.
 
 **The production review's agent** (v1.22; 13.6) is the one other place something leaves for a model, and it does not go through `ModelView.Reduce`: there is nothing to tokenise, by construction. Its context holds the review id, the namespace, the production and its state, the window, the summary, the findings without `evidence.example`, `annotationId`, `rank` and `explanation`, and the case aggregates per item (counts by failure kind, outcome, reason code and state; the newest case ids). The sweep never reads `CaseEvent.Text`, the operation key's patient and encounter pieces, `FailureText` or message content, so none can reach the context; item names, setting values, counts, header ids and case ids are operational identifiers, as the board's evidence carries them, and the error example text stays in the operator's `GET`. Nothing comes back to restore: the agent speaks in finding ids.
@@ -982,6 +1101,26 @@ visitors spends at most the cap. **Each user's share** (`SHUTTER_JUDGE_BUDGET_US
 0 or unset means none): every agent request carries who asked (`RequestedBy`: a question's asker, a judge who convened the
 board, `system` for the feed's own runs), the run keeps it, and a run for a user whose live runs today have reached the share is
 refused `budget_exhausted` with "Your share of the day's model budget ... is spent", so one judge cannot spend the day.
+**Reserve, then settle (v1.35).** A run in flight has no `AgentRun` row yet, so three members running at once were not
+counted against the cap until they finished. The Agent item now reserves an estimate for each live run it starts
+(`Budget.Reserve`, keyed by the run) and settles it when the run ends whatever its outcome (`Budget.Settle`); the day's state
+carries `reservedUsd` and `inFlight`, `GET /settings` adds the caller's `reservedByMeUsd`, and a run is refused once spend plus
+reservations reach the cap (or spend plus the user's own reservations the share), the refusal naming the runs in flight. The
+estimate is `^Shutter.Config("budgetReserveUsd")` when the site sets it, else the mean cost of the last twenty live runs that
+cost anything, else 0.50 USD, never below 0.01; a reservation older than twenty minutes was left by a job that died and is
+dropped when next counted.
+
+**Invisible characters are stripped (v1.35).** `ModelView.Restore` removes from everything a model wrote, before the store
+keeps it, the zero-width characters (U+200B to U+200F, U+2060 to U+2064, U+FEFF), the bidirectional controls (U+202A to U+202E,
+U+2066 to U+2069) and the control characters other than tab, line feed and carriage return, as characters and as JSON escapes
+(`ModelView.Clean`); tabs, line breaks and ordinary Unicode stay. So a summary an approver reads on the case page or in an
+escalation email reads as it is, with nothing hidden in it and nothing that reverses a line.
+
+**The run's own clock (v1.35).** Every run row keeps `startedAtMs`, the start to the millisecond, beside `startedAt`, and
+the three counters AI Hub's session returns on build 154 when it does: `llmMs` (time inside the model's calls), `toolMs`
+(time inside the tools) and `reasoningTokens`; a replay or a build that gives none leaves them empty, never zero. With the
+tool-call rows' `at` and `durationMs`, the case page can draw a run as a timeline (the run bar, the tool bars, the model's
+turns as the gaps between them) from stored rows alone, and the DPI-I-689 queries can split a run's time.
 
 ## 10. Escalation by email (v1.11)
 
@@ -1062,8 +1201,8 @@ copy of the message.
   "uncertain" | "rejected" | "", "http_status", "reason_code"}, "message": "<the HL7 text, segments separated by
   carriage returns>", "schema_category": "2.5.1", "mode": "board"}` (the last two optional). Answers 202 `{"caseId",
   "state", "opened"}` (`opened` false when a case for the same operation key is already open, as the feed's own
-  intake); 400 `bad_request` naming the field (no JSON object, no message, an unknown kind); 401; 403; 503 `no_service`
-  or `not_queued`.
+  intake); 400 `bad_request` naming the field (no JSON object, no message, an unknown kind); 413 `too_large` for a body over
+  2 MB (v1.35); 401; 403; 503 `no_service` or `not_queued`.
 - Inside the production: the API service sends `Shutter.Msg.ExternalIntake` (the body's fields as properties:
   `SourceNamespace`, `SourceProduction`, `SourceRoute`, `OriginHeaderId`, `Receiver`, `FailureKind`, `FailureText`,
   `FailureOutcome`, `FailureHttpStatus`, `FailureReasonCode`, `MessageText`, `SchemaCategory`, `Mode`) synchronously to
@@ -1108,7 +1247,7 @@ copy of the message.
   `schema_category` the category it was held for. Nothing was delivered: the engine held the message. The intake keeps the
   kind, parses Shutter's copy under 2.5.1 when the category does not resolve here, and the case carries `heldSchema` and
   `sourceNamespace`: the gate blocks it `SCHEMA_UNKNOWN` naming that namespace while the schema is missing there, the
-  matcher says `delivery: unreadable`, no incident counts it, and the index's check releases it (a reinvestigation with the
+  matcher says `delivery: unreadable`, no incident counts it, and the Case Releaser's sweep (8.1) releases it (a reinvestigation with the
   reason on the case) once the category is loaded in that namespace, after which it is a failed delivery to the catalogue
   and goes out through Shutter's connector under the site's policy. A production whose delivering process is its own code
   (the demo hospital's `PAS to Downstream`) does the check itself: while `^Hospital.Config("preventFailures")` is set
@@ -1117,6 +1256,28 @@ copy of the message.
   forwarder as the held message above (`Forwarder.ForwardFor`), delivering nothing. The HL7 service's `Validation` is not a
   setting on this build and only a routing engine has a `BadMessageHandler`, so a site with a routing engine points that at
   the forwarder, and one with its own process adds the check.
+- **The alert intake** (v1.35). A production whose delivering process does nothing on a failure beyond the error IRIS
+  logs can still hand Shutter the failure, with no change to its own code: `Shutter.Intake.AlertProcess`, added as the
+  production's `Ens.Alert` item (the name the engine sends alerts to), receives every `Ens.AlertRequest` an item raises
+  (`AlertOnError`, a queue alert, an inactivity alert). Every alert is first passed on to `PassTo`, the site's own alert
+  consumer renamed (an alert operation, an email), so Shutter adds to a production's alerting and never replaces it;
+  with `PassTo` empty the alert ends here, as it would with no `Ens.Alert` item at all. Then, for an alert from one of its
+  `Receivers` (the connector items, comma-separated; empty takes any item) whose session holds an HL7 message, it finds
+  that message (the session's first header with an `EnsLib.HL7.Message` body: the receiving service's) and sends the
+  forwarder (`ForwarderTarget`, default `Shutter Forwarder`) a `Forward` for it: `HeaderId`, `Route` the header's service,
+  `Receiver` the alerting item, `FailureKind` from the alert's words (`uncertain_outcome` for a timeout, no response or
+  an uncertain answer; `rejected` for a reject, a refusal, a NACK or an HTTP 4xx; else `delivery_failed`),
+  `FailureOutcome` to match (`uncertain`, `rejected`, `error`), `FailureHttpStatus` when the text names one ("HTTP 503"),
+  `FailureReasonCode` `alert`, `FailureText` "Alert from <item> at <time> UTC: <text>". One forward per session
+  (`^Shutter.AlertIntake("seen")`, kept a day), so a connector's retries alert the site each time but reach Shutter once.
+  An alert whose session has no HL7 message, or from an item outside `Receivers`, is passed on only; both sends are
+  asynchronous, so the feed never waits. The forwarder's refusal is a warning in the event log, as for the sending
+  process. The demo hospital's production carries the item with `Receivers` `Downstream Out`, and its connector raises an alert
+  for a delivery the ward system could not take or did not answer (`unavailable`, `uncertain`), as a real connector's
+  would, so the alert path plays in the demo; its process forwards the same failure (above), and the intake answers the
+  alert's forward with the case already open (`opened` false), so a failure reaches Shutter once as a case and twice in the
+  message trace. `PAS to Downstream` stays out of `Receivers`. The production review's `NO_ALERT_CONSUMER` (13) names the
+  item.
 - **The demo hospital** (shape A as a judge sees it): the image also creates the namespace `HOSPITAL` (`Installer.cls`;
   `SELECT Shutter.Installer_RunHospital('SHUTTER')` on an instance that has Shutter) with the packages `Shutter.Intake`,
   `Shutter.Util`, `Shutter.Msg`, `Shutter.Store` and `Hospital` mapped from Shutter's code database, and
@@ -1197,6 +1358,17 @@ on the server and answers `{ok, category, loaded, error}`; `GET /settings/schema
 `import_failed` with the importer's words: a file that is not there, not `.xml`, or not a schema). The install guide's
 section 7 says how a site loads its schema and what a case says meanwhile (6.5, `SCHEMA_UNKNOWN`).
 
+**The edition decides itself** (v1.35). The image build's `WITH_AIHUB` argument defaults to `auto`: `aihub.script` loads the
+aihub module when the base image has the `%AI` package and skips it, saying so, when it does not (the replay edition); `1`
+requires AI Hub and fails the build on an image without it, `0` skips it. The Doctor reports `edition`: `aihub`, `core`, or
+`broken: ...` when the package and the module disagree, which an install should never leave.
+
+**What was last observed** (v1.35). The Doctor and `GET /health` (its anonymous answer too) carry `last_live_run`: the newest run
+that reached a model (`live` or `record`, never the API mimic) as `{at, status, member, model, mode}`, or null when none
+has, so a capped or failing afternoon shows as such beside the configured mode. The image's compose file has a healthcheck
+on the health route's `"ok": true` (the production running; `wget`, since the image has no `curl`), so `docker compose ps`
+says healthy and `docker compose up --wait` returns when Shutter is ready.
+
 **The environment at a start** (v1.34). `Shutter.Production`'s `OnStart` calls `Shutter.Setup.ApplyEnvironment(120)`, which
 reads the container's `SHUTTER_DAILY_BUDGET_USD`, `SHUTTER_JUDGE_BUDGET_USD`, `SHUTTER_PUBLIC_DEMO_PASSWORD`,
 `SHUTTER_TRACE_PASSWORD`, `SHUTTER_JUDGE_PASSWORD` and `SHUTTER_LIVE` and applies each that is not empty: the budget's cap and
@@ -1221,9 +1393,9 @@ standard 2.5.1 (`Schemas.Canonical`, `OperationKey.FromCanonical`; a message wit
 which the gate blocks `UNMAPPABLE`), never saved and never delivered from. The evidence's validation says `schema_known`
 false and the Second Parser gives its reading (6.7); the gate blocks with `SCHEMA_UNKNOWN`; the matcher's `delivery` is
 `unreadable` (6.1), so no catalogue entry matches and the case escalates with the fix on it; the incident detector does not
-count the kind. Release: the index's task (every few seconds, beside the delivered waits of 6.5) runs `Schemas.ReleaseHeld`,
+count the kind. Release: the Case Releaser's sweep (8.1; every few seconds, beside the delivered waits of 6.5) runs `Schemas.ReleaseHeld`,
 which reinvestigates every blocked or escalated `unreadable` case whose `heldSchema` is loaded now where the message was read
-(`sourceNamespace`, else here), with the reason "the schema X is loaded in NS now, found by the index's check" on the case
+(`sourceNamespace`, else here), with the reason "the schema X is loaded in NS now, found by the Case Releaser's sweep" on the case
 and its `heldSchema` cleared, so a case is released once (a re-plan the gate blocks for another reason leaves a blocked case,
 not a held one, and `held_messages` counts only cases still waiting);
 the fresh evidence types the message under its schema (in memory; the stored copy stays as it arrived, untyped by a route
@@ -1448,8 +1620,68 @@ is approved or rejected first); `409 budget_exhausted` with the budget object wh
 
 The core IPM module is the repository root (`module.xml`, sources under `src/`): it compiles on any 2026.2 Community image and replays recorded runs. The aihub module is `aihub/` (`aihub/module.xml`, sources under `aihub/src/`): the live runner, the agents, tools, schemas, policies and knowledge bases, which need the `%AI` package. Both modules contribute classes to the `Shutter` package; nothing under `src/` may reference `%AI`.
 
+## 15. The publisher (v1.35)
+
+Shutter publishes what an operator may read, for an MCP client, through IRIS's own MCP gateway; it publishes no write.
+The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor's `publish.available` says which.
+
+- **The tools**, `Shutter.Publish.Tools` (`aihub/src/Shutter/Publish/`, a `%AI.Tool`: every public ClassMethod is a
+  stateless tool, its description from the method's comment): `ListCases(state, receiver, limit)`, `GetCase(caseId)`
+  (the public fields, the current plan's digest, disposition and summary, the approval of record, the place in the
+  incident, the precedents summary, `version`), `GetEvidence(caseId)`, `GetFailure(caseId)` and `GetTimeline(caseId)`
+  (the board's own evidence tools, 9), `GetPlan(caseId)` (the plan, the gate's decisions, the rehearsal's outcome),
+  `GetEvents(caseId, limit)`, `ListIncidents(state, limit)`, `GetIncident(incidentId)` (the chains and their cases),
+  `GetPrecedents(caseId)` (6.4) and `Health()`. No patient or encounter identifier leaves: the rows carry none, and
+  every text (headlines, outcomes, plan summaries, gate details, events) goes through the model view's tokens (9), as
+  the board's does. An unknown case or incident answers `{error: "not_found"}`.
+- **The audit.** Every call writes a `Shutter.Store.PublishCall` row: `at`, `user` (the IRIS user the gateway
+  authenticated), `tool`, `target` (the case or incident id, or the list's filter), `version` (the case's version when it
+  was read) and `durationMs`; never the answer. The Doctor's `publish.calls_today` counts them; `Health()` reports the
+  same.
+- **The gateway**, `Shutter.Publish.Service` (a `%AI.MCP.Service`): `SPECIFICATION` `Shutter.Publish.Tools`; its
+  `OnAuthenticate` requires `Shutter_Publish` of the caller the application signed in (and can sign an anonymous caller
+  in from an HTTP Basic header, should a site run the application unauthenticated). It answers `GET
+  /mcp/shutter/v1/health`, `GET /v1/services`, `POST /v1/tool_call` and `WS /v1/ws` to `iris-mcp-server` only: a direct
+  call gets 502 `GATEWAY_REQUIRED`, and the gateway checks the service's identity header before trusting its tools.
+- **The resource and the application.** `Shutter_Publish` (12) is held by `Shutter_Operator` and, through it,
+  `Shutter_Approver`; the forwarder and the public demo's visitors have no such access. `Setup.InstallAIHub` makes the
+  web application `/mcp/shutter` (`Setup.EnsurePublishApp`: an MCP Server application, `Type` 18 as the portal's "Edit MCP
+  Server" page makes them; password authentication; `DispatchClass` `Shutter.Publish.Service`; the resource
+  `Shutter_Publish` on the application too) where `%AI.MCP.Service` and the publisher's classes are compiled, and records
+  it in `^Shutter.Config("webapp","/mcp/shutter")`; the Doctor carries `publish {available, webapp, calls_today}`.
+- **The sidecar.** `iris-mcp-server`, shipped in the image at `/usr/irissys/bin/iris-mcp-server`, bridges an MCP client to
+  the gateway and passes the client's own credentials through: a client that sends HTTP Basic (or a bearer) to the
+  sidecar is signed in to `/mcp/shutter` as that user, so each person reads as themselves and the audit names them. Run it
+  with an HTTP or SSE transport, `iris-mcp-server -c shutter-mcp.toml --transport http://127.0.0.1:8765 run --iris-host
+  127.0.0.1 --iris-port 1972 --iris-endpoint /mcp/shutter`, the TOML naming the instance (`[[iris]] name`, `[iris.server]
+  host, port, username, password` for the sidecar's own connection to the superserver) and the endpoint (`[[iris.endpoints]]
+  path = "/mcp/shutter"`); the client's MCP address is then `http://127.0.0.1:8765/mcp`. A stdio transport carries no client
+  credentials, so its calls reach the application anonymous and are refused: use HTTP or SSE. A user without
+  `Shutter_Publish`, or with a wrong password, sees only the sidecar's own `iris_status` tool. Proven on the AI Hub build
+  (2 Nov 2026): eleven tools listed, `ListCases`, `GetCase` and `Health` answered, the forwarder refused. The install does
+  not start the sidecar: a site's MCP client configuration does (`docs/INSTALL.md`).
+
 ## Changes
 
+- v1.35, 2 Nov 2026 (the items of a review of competing entries' code): denied tool calls
+  recorded as rows with `denied` true and a trace line (9); the run's millisecond start and AI Hub's own counters
+  (`startedAtMs`, `llmMs`, `toolMs`, `reasoningTokens`) on the response and the run row (9); a bound on one model call,
+  `provider_timeout_seconds` (6.6, 12); the compose healthcheck and `last_live_run` in the Doctor and the health route (12); the agent operation's start-up line in
+  the event log, with a warning for live mode without a provider (6.6); findings and plans cite only the evidence they were
+  given (6.6); the image's `WITH_AIHUB` defaults to `auto` and the Doctor reports `edition` (12); a repeated decision answers with the
+  approval taken, an inactive Workflow user is no approver, and the intake refuses a body over 2 MB (5, 11, 14.5); an approval
+  wait is bounded, `ApprovalWaitSeconds` (6.4); boards per minute are capped, `BoardsPerMinute`, the storm stopgap (6.6); invisible
+  characters stripped from agent text, text caps and a hostile-output table (6.6, 9); precedents, a person's decision on the
+  same conditions at the same receiver, counted in the approval task's text, the snapshot summary and
+  `GET /cases/{id}/precedents` (6.4); the releases of waiting and held cases moved out of the index adapter into the Case
+  Releaser item, one sweep every few seconds with a run row when there are candidates (8.1); the alert intake,
+  `Shutter.Intake.AlertProcess` as a watched production's `Ens.Alert` item, which hands a delivery failure's message to
+  Shutter from the alert alone and passes every alert on to the site's consumer (11, 13); the storm, `POST /live/storm`,
+  eight failed movements for four fresh patients in the live hospital with the receiver down for a minute, followed on
+  `live.storm` (4.4); the budget reserves an estimate for each run in flight and settles it when the run ends (9); a receiver's
+  `Retry-After` on a 503 or 429 is a minimum wait before the resend's preflight read, and the demo receiver sends one (1);
+  the publisher, Shutter's read-only tools for an MCP client through IRIS's own gateway, with an audit row per call, on
+  the AI Hub build (15); each item of the review that lands adds its line here.
 - v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:
   run, reset, purge) and `Shutter_Configure` (the site's writes: the profile, the library, a schema import, the review
   annotations), held by the operator and the approver as before; the role `Shutter_Demo` (reads, reinvestigates, approves and

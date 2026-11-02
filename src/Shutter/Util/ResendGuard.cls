@@ -30,15 +30,18 @@ ClassMethod Pending(case As Shutter.Store.Case) As %DynamicArray
 /// after the delivery already happened: the gate judged the snapshot's pending messages, the Ward's release found no case
 /// waiting yet, and nothing would ever release it (S24 on the board, 1 Nov 2026). A case is released when no pending
 /// message of its encounter carries the awaited control id any more; the note says the delivery's outcome and where it was
-/// read. Returns how many were released; nothing here throws.
-ClassMethod ReleaseDeliveredWaits() As %Integer
+/// read. Returns how many were released, and checked how many waiting cases it looked at; nothing here throws. Called by
+/// the Case Releaser (Shutter.Operation.Releaser, v1.35), which passes itself as host so each release goes from that host
+/// to the Case Workflow; without a host the release goes through the Shutter API service.
+ClassMethod ReleaseDeliveredWaits(host As Ens.Host = "", target As %String = "Case Workflow", Output checked As %Integer) As %Integer
 {
-    Set n = 0, json = "Shutter.Util.Json"
+    Set n = 0, checked = 0, json = "Shutter.Util.Json"
     Try {
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE WaitsOnMessage <> '' AND State IN ('blocked', 'escalated')")
         While rs.%Next() {
             Set case = ##class(Shutter.Store.Case).%OpenId(rs.%Get("ID"))
             Continue:'$ISOBJECT(case)
+            Set checked = checked + 1
             Set control = case.WaitsOnMessage, still = 0, outcome = "", where = ""
             Set pending = ..Pending(case), pi = pending.%GetIterator()
             While pi.%GetNext(, .p) { If $CLASSMETHOD(json, "Str", p, "control_id") = control Set still = 1 }
@@ -48,7 +51,7 @@ ClassMethod ReleaseDeliveredWaits() As %Integer
                 Continue:($CLASSMETHOD(json, "Str", r, "source_message_id") '= control)
                 Set outcome = $CLASSMETHOD(json, "Str", r, "outcome"), where = $CLASSMETHOD(json, "Str", r, "namespace")
             }
-            Set n = n + ##class(Shutter.Store.Case).ReleaseWaitingOnMessage(control, $SELECT(outcome '= "": outcome, 1: "delivered") _ $SELECT(where '= "": " in " _ where, 1: "") _ ", found by the index's check")
+            Set n = n + ##class(Shutter.Store.Case).ReleaseWaitingOnMessage(control, $SELECT(outcome '= "": outcome, 1: "delivered") _ $SELECT(where '= "": " in " _ where, 1: "") _ ", found by the Case Releaser's sweep", host, target)
         }
     } Catch ex {
     }
@@ -58,7 +61,7 @@ ClassMethod ReleaseDeliveredWaits() As %Integer
 /// The former name of ReleaseDeliveredWaits, kept for a caller compiled against it.
 ClassMethod ReleaseForwardedWaits() As %Integer
 {
-    Quit ..ReleaseDeliveredWaits()
+    Quit ..ReleaseDeliveredWaits("", "Case Workflow", .checked)
 }
 
 /// When the case's own message reached Shutter: its source header's TimeCreated, else the case's opening time in the

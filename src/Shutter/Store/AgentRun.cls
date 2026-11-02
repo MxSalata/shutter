@@ -68,9 +68,32 @@ Property QuestionId As %String(%JSONFIELDNAME = "questionId", MAXLEN = 32);
 /// Who asked for the run (v1.34): a question's asker, a judge who convened the board; "system" for the feed's own.
 Property RequestedBy As %String(%JSONFIELDNAME = "requestedBy", MAXLEN = 100);
 
+/// When the run started, to the millisecond (v1.35), so the case page can draw the run's timeline against its tool calls.
+Property StartedAtMs As %String(%JSONFIELDNAME = "startedAtMs", MAXLEN = 30);
+
+/// AI Hub's own counters (v1.35): milliseconds inside the model's calls, milliseconds inside the tools, reasoning tokens.
+Property LlmMs As %Integer(%JSONFIELDNAME = "llmMs");
+
+Property ToolMs As %Integer(%JSONFIELDNAME = "toolMs");
+
+Property ReasoningTokens As %Integer(%JSONFIELDNAME = "reasoningTokens");
+
 Index QuestionIdx On QuestionId;
 
 /// Record a run from the bridge's response. A run that answered a question names it (questionId).
+/// The newest run that reached a model (live or record, not the API mimic; v1.35): {at, status, member, model, mode}, or "" when
+/// none has. The Doctor and the health route show it beside the configured mode, so a capped or failing afternoon is
+/// visible as what was last observed, not only as what is configured.
+ClassMethod LastLive() As %DynamicObject
+{
+    Set at = "", status = "", member = "", model = "", mode = ""
+    &sql(SELECT TOP 1 StartedAt, Status, MemberCode, Model, Mode INTO :at, :status, :member, :model, :mode FROM Shutter_Store.AgentRun WHERE Mode IN ('live', 'record') AND Model <> 'mock' ORDER BY ID DESC)
+    If (SQLCODE '= 0) || (at = "") Quit ""
+    Set o = {}
+    Set o.at = at, o.status = status, o.member = member, o.model = model, o.mode = mode
+    Quit o
+}
+
 ClassMethod FromResponse(case As Shutter.Store.Case, snapshot As Shutter.Store.Snapshot, role As %String, memberCode As %String, response As Shutter.Bridge.Msg.AgentResponse, ensMessageId As %String, Output run As Shutter.Store.AgentRun, questionId As %String = "") As %Status
 {
     Set run = ..%New()
@@ -86,6 +109,7 @@ ClassMethod FromResponse(case As Shutter.Store.Case, snapshot As Shutter.Store.S
     Set run.Iterations = response.Iterations, run.ToolCallCount = response.ToolCalls
     Set run.SessionId = response.SessionId, run.EnsMessageId = ensMessageId
     Set run.RequestedBy = response.RequestedBy
+    Set run.StartedAtMs = response.StartedAtMs, run.LlmMs = response.LlmMs, run.ToolMs = response.ToolMs, run.ReasoningTokens = response.ReasoningTokens
     // The run is read by people inside IRIS: the case's tokens become the identifiers again (T27).
     Set run.ResultJSON = ##class(Shutter.Util.ModelView).Restore(case, response.ResultJSON)
     Set run.Content = ##class(Shutter.Util.ModelView).Restore(case, response.Content)
@@ -179,6 +203,18 @@ Storage Default
 </Value>
 <Value name="27">
 <Value>RequestedBy</Value>
+</Value>
+<Value name="28">
+<Value>StartedAtMs</Value>
+</Value>
+<Value name="29">
+<Value>LlmMs</Value>
+</Value>
+<Value name="30">
+<Value>ToolMs</Value>
+</Value>
+<Value name="31">
+<Value>ReasoningTokens</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.AgentRunD</DataLocation>

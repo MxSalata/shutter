@@ -25,7 +25,7 @@ Property EvidenceRefs As list Of %String(%JSONFIELDNAME = "evidence_refs", MAXLE
 Parameter DISPOSITIONS = ",resend,reconcile,superseded,more_evidence,escalate,";
 
 /// Problems with a findings object as JSON text, as an array of messages; empty when it is valid.
-ClassMethod Check(json As %String) As %DynamicArray
+ClassMethod Check(json As %String, citeIds As %String = "") As %DynamicArray
 {
     Set problems = []
     Set o = ##class(Shutter.Util.Json).Parse(json, .sc)
@@ -34,12 +34,30 @@ ClassMethod Check(json As %String) As %DynamicArray
     If ..#DISPOSITIONS '[ ("," _ d _ ",") Do problems.%Push("disposition must be one of resend, reconcile, superseded, more_evidence, escalate")
     Set c = ##class(Shutter.Util.Json).Str(o, "confidence")
     If (c = "") || (c '= +c) || (c < 0) || (c > 1) Do problems.%Push("confidence must be a number from 0 to 1")
-    If ##class(Shutter.Util.Json).Str(o, "summary") = "" Do problems.%Push("summary is required")
+    Set summary = ##class(Shutter.Util.Json).Str(o, "summary")
+    If summary = "" Do problems.%Push("summary is required")
+    If $LENGTH(summary) > 2000 Do problems.%Push("summary must be at most 2000 characters; it is " _ $LENGTH(summary))
     For f = "violations", "unknowns", "evidence_refs" {
         If (o.%GetTypeOf(f) '= "unassigned") && (o.%GetTypeOf(f) '= "array") Do problems.%Push(f _ " must be an array of strings")
     }
     If o.%GetTypeOf("evidence_refs") '= "array" Do problems.%Push("evidence_refs must list the evidence used")
+    Do ..CheckRefs(o, citeIds, problems)
     Quit problems
+}
+
+/// Every evidence_refs entry must name evidence the run was given (v1.35): a key of the context's evidence, or a key one
+/// level down in it, as the runner lists them in citeIds (comma separated); "" leaves the list unchecked. An unknown name
+/// is a problem the model repairs in the same run, so a finding never cites evidence that is not there.
+ClassMethod CheckRefs(o As %DynamicObject, citeIds As %String, ByRef problems As %DynamicArray)
+{
+    If (citeIds = "") || '$ISOBJECT(o) || (o.%GetTypeOf("evidence_refs") '= "array") Quit
+    Set known = "," _ citeIds _ ",", bad = ""
+    Set it = o."evidence_refs".%GetIterator()
+    While it.%GetNext(, .ref) {
+        If $ISOBJECT(ref) || (ref = "") Set bad = bad _ $SELECT(bad = "": "", 1: ", ") _ "(not a name)" Continue
+        If known '[ ("," _ ref _ ",") Set bad = bad _ $SELECT(bad = "": "", 1: ", ") _ ref
+    }
+    If bad '= "" Do problems.%Push("evidence_refs names evidence that was not given: " _ bad _ "; cite the keys of the evidence you received (" _ $EXTRACT(citeIds, 1, 400) _ ")")
 }
 
 }

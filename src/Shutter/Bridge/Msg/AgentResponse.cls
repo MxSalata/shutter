@@ -55,6 +55,17 @@ Property RecordId As %String(MAXLEN = 20);
 /// Who asked for the run, copied from the request (v1.34).
 Property RequestedBy As %String(MAXLEN = 100);
 
+/// When the run started, to the millisecond (v1.35), for the case page's timeline; StartedAt keeps the second.
+Property StartedAtMs As %String(MAXLEN = 30);
+
+/// AI Hub's own counters for the run (v1.35, from the session's GetStats on build 154): time inside the model's calls, time
+/// inside the tools, and the model's reasoning tokens. Empty when the session gave none.
+Property LlmMs As %Integer;
+
+Property ToolMs As %Integer;
+
+Property ReasoningTokens As %Integer;
+
 /// The response as a dynamic object, for recordings and the API.
 Method ToObject() As %DynamicObject
 {
@@ -160,6 +171,18 @@ Storage Default
 </Value>
 <Value name="20">
 <Value>RequestedBy</Value>
+</Value>
+<Value name="21">
+<Value>StartedAtMs</Value>
+</Value>
+<Value name="22">
+<Value>LlmMs</Value>
+</Value>
+<Value name="23">
+<Value>ToolMs</Value>
+</Value>
+<Value name="24">
+<Value>ReasoningTokens</Value>
 </Value>
 </Data>
 <DefaultData>AgentResponseDefaultData</DefaultData>

@@ -112,6 +112,7 @@ Method OpenCase(op As %DynamicObject, kind As %String, text As %String, result A
         Set r = {}
         Set r."http_status" = result.HttpStatus, r.outcome = result.Outcome, r."reason_code" = result.ReasonCode
         Set r.response = result.ResponseObject(), r.error = result.Error
+        If result.RetryAfterSeconds '= "" Set r."retry_after_seconds" = result.RetryAfterSeconds
         Set intake.WardResultJSON = r.%ToJSON()
     }
     // Asynchronous on purpose: the feed must never wait for an investigation.

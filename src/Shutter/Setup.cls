@@ -199,9 +199,9 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     Set hospital = $GET(^|ns|Shutter.Config("hospitalNamespace"))
     New $NAMESPACE
     Set $NAMESPACE = "%SYS"
-    For res = "Shutter_Operate", "Shutter_Approve", "Shutter_Intake", "Shutter_Configure", "Shutter_Scenarios", "Shutter_LiveAgents" {
+    For res = "Shutter_Operate", "Shutter_Approve", "Shutter_Intake", "Shutter_Configure", "Shutter_Scenarios", "Shutter_LiveAgents", "Shutter_Publish" {
         If '##class(Security.Resources).Exists(res) {
-            Set sc = ##class(Security.Resources).Create(res, "Shutter: " _ $CASE(res, "Shutter_Approve": "approve or reject recovery plans", "Shutter_Intake": "open a case from another production", "Shutter_LiveAgents": "spend the model budget: live questions and convening the board", "Shutter_Configure": "change the site: the site profile, the agent library, the schemas, the review annotations", "Shutter_Scenarios": "run and reset the demo's scenarios and purge the store", : "view cases, run scenarios, start investigations"), "")
+            Set sc = ##class(Security.Resources).Create(res, "Shutter: " _ $CASE(res, "Shutter_Approve": "approve or reject recovery plans", "Shutter_Intake": "open a case from another production", "Shutter_Publish": "read cases, incidents, evidence and plans through the MCP publisher", "Shutter_LiveAgents": "spend the model budget: live questions and convening the board", "Shutter_Configure": "change the site: the site profile, the agent library, the schemas, the review annotations", "Shutter_Scenarios": "run and reset the demo's scenarios and purge the store", : "view cases, run scenarios, start investigations"), "")
             Quit:$$$ISERR(sc)
         }
     }
@@ -227,7 +227,7 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     // Each role is created, or brought to this definition when it exists, so an upgraded instance is tightened too.
     // The approver monitors (traces, messages, the Workflow inbox) and approves; it never starts, stops or purges:
     // %EnsRole_Monitor with the message trace, header and content viewing resources, not %EnsRole_Operator (E2).
-    Set sc = ..EnsureRole("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U,Shutter_Scenarios:U,Shutter_LiveAgents:U," _ db _ ":RW" _ codeRead _ watchRead _ ",%Ens_Portal:U", "")
+    Set sc = ..EnsureRole("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U,Shutter_Scenarios:U,Shutter_LiveAgents:U,Shutter_Publish:U," _ db _ ":RW" _ codeRead _ watchRead _ ",%Ens_Portal:U", "")
     Quit:$$$ISERR(sc) sc
     // What an approver and the public demo's role share (v1.34): reading, approving, the traces; the approver adds the site's
     // writes (Shutter_Configure) and the demo controls (Shutter_Scenarios), which the demo role never holds.
@@ -294,6 +294,26 @@ ClassMethod EnsurePublicUsers(ns As %String, publicPw As %String, tracePw As %St
     Quit sc
 }
 
+/// The bound on one model call (v1.35): the seconds the provider's HTTP client waits for a reply before the call fails,
+/// from ^Shutter.Config("providerTimeoutSeconds") (SHUTTER_PROVIDER_TIMEOUT_SECONDS at a start), 120 when unset, held to 10
+/// to 600. The AI Hub runner passes it to the provider as http_config.request_timeout_secs unless the provider's own
+/// configuration sets one, so a hung model call ends in a run error instead of holding a board member until the board's
+/// timeout. Below the board's 600 s by design.
+ClassMethod ProviderTimeoutSeconds() As %Integer
+{
+    Set v = +$GET(^Shutter.Config("providerTimeoutSeconds"))
+    If v <= 0 Quit 120
+    Quit $SELECT(v < 10: 10, v > 600: 600, 1: v)
+}
+
+/// Sets the bound; "" or 0 puts the default back. Returns the value in force.
+ClassMethod ConfigureProviderTimeout(seconds As %String) As %Integer
+{
+    Set seconds = $ZSTRIP(seconds, "<>W")
+    If (seconds = "") || (+seconds <= 0) { Kill ^Shutter.Config("providerTimeoutSeconds") } Else { Set ^Shutter.Config("providerTimeoutSeconds") = +seconds }
+    Quit ..ProviderTimeoutSeconds()
+}
+
 /// The container's environment applied to a running instance (v1.34): the model budget (SHUTTER_DAILY_BUDGET_USD,
 /// SHUTTER_JUDGE_BUDGET_USD), the public demo's logins (SHUTTER_PUBLIC_DEMO_PASSWORD, SHUTTER_TRACE_PASSWORD,
 /// SHUTTER_JUDGE_PASSWORD) and the live hospital (SHUTTER_LIVE). Shutter.Production's OnStart calls it, so what .env says
@@ -303,20 +323,22 @@ ClassMethod EnsurePublicUsers(ns As %String, publicPw As %String, tracePw As %St
 /// an error when one step failed (the others still run).
 ClassMethod ApplyEnvironment(wait As %Integer = 0) As %String [ SqlProc ]
 {
-    Set out = ..ApplyRuntime($SYSTEM.Util.GetEnviron("SHUTTER_DAILY_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_TRACE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_LIVE"), wait)
+    Set out = ..ApplyRuntime($SYSTEM.Util.GetEnviron("SHUTTER_DAILY_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_TRACE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_LIVE"), wait, $SYSTEM.Util.GetEnviron("SHUTTER_PROVIDER_TIMEOUT_SECONDS"))
     Quit out.%ToJSON()
 }
 
 /// ApplyEnvironment's work on values, so a test can give them: each applied when not empty. live is "1" for on, any other
 /// non-empty value for off; wait is how many seconds the live hospital's item may be left to a background job while the
 /// hospital's production is still starting (the production's own start passes 120; by hand, 0 applies it at once).
-ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %String, tracePw As %String, judgePw As %String, live As %String, wait As %Integer = 0) As %DynamicObject
+ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %String, tracePw As %String, judgePw As %String, live As %String, wait As %Integer = 0, providerTimeout As %String = "") As %DynamicObject
 {
     Set out = {}, errors = []
     Set ns = $NAMESPACE
     Try {
         If $ZSTRIP(dailyUsd, "<>W") '= "" Set out.dailyBudgetUsd = ##class(Shutter.Util.Budget).Configure(dailyUsd)
         If $ZSTRIP(judgeUsd, "<>W") '= "" Set out.judgeBudgetUsd = ##class(Shutter.Util.Budget).ConfigureShare(judgeUsd)
+        // The bound on one model call (v1.35).
+        If $ZSTRIP(providerTimeout, "<>W") '= "" Set out.providerTimeoutSeconds = ..ConfigureProviderTimeout(providerTimeout)
     } Catch ex {
         Do errors.%Push("budget: " _ ex.DisplayString())
     }
@@ -982,7 +1004,7 @@ ClassMethod SeedAll(root As %String) As %Status [ Private ]
 /// The items InstallInto adds to a site's production, in Shutter.Production's order: the recovery side, the index and
 /// the board, never the feed or the demo (ADT In, ADT to Downstream, Downstream Out, Scenario Player). Case Intake and
 /// Case Intake Store are added once Shutter.Production defines them. A new recovery item is listed here too.
-Parameter INSTALLITEMS = "HL7 Index,Escalation Mail,Case Workflow,Case Review,Case Question,Incident Workflow,Evidence Collector,Agent Conformance,Agent Encounter,Agent Impact,Agent Coordinator,Agent Board,Gate,Shutter Approvers,Shutter API,Verifier,Case Intake,Case Intake Store,Second Parser";
+Parameter INSTALLITEMS = "HL7 Index,Case Releaser,Escalation Mail,Case Workflow,Case Review,Case Question,Incident Workflow,Evidence Collector,Agent Conformance,Agent Encounter,Agent Impact,Agent Coordinator,Agent Board,Gate,Shutter Approvers,Shutter API,Verifier,Case Intake,Case Intake Store,Second Parser";
 
 /// Adds Shutter's items (INSTALLITEMS) to the named production, each as Shutter.Production's compiled definition has
 /// it (class, pool size, enabled, foreground, comment, category, trace flag, schedule and settings), when the
@@ -1285,6 +1307,9 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Do r.%Set("ward_classes", ''##class(%Dictionary.CompiledClass).%ExistsId("Downstream.API"), "boolean")
     Do r.%Set("aihub_runner", ''##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Bridge.Runner.AIHub"), "boolean")
     Do r.%Set("ai_hub_present", ''##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent"), "boolean")
+    // The edition in one word (v1.35): aihub (the package and the module), core (neither: the replay edition), or broken when
+    // one is there without the other, which an install should never leave.
+    Set r.edition = $SELECT(r."ai_hub_present" && r."aihub_runner": "aihub", 'r."ai_hub_present" && 'r."aihub_runner": "core", r."ai_hub_present": "broken: AI Hub is present but the aihub module is not loaded", 1: "broken: the aihub module is loaded on an image without AI Hub")
     // The API mimic's switch as set (tests/mock), "" when off; it counts on a demo instance only (MockConfig).
     Set r."mock_config" = $GET(^Shutter.Config("aihub", "mock"))
     &sql(SELECT COUNT(*) INTO :members FROM Shutter_Store.BoardMember WHERE Enabled = 1)
@@ -1325,9 +1350,25 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Set r.live = ..LiveStatus()
     // The day's model budget and what the live runs spent today (v1.34).
     Set r.budget = ##class(Shutter.Util.Budget).Status()
+    // The bound on one model call (v1.35): the provider's request timeout the runner sets.
+    Set r."provider_timeout_seconds" = ..ProviderTimeoutSeconds()
+    // The newest run that reached a model (v1.35), beside the configured mode: what was last observed.
+    Set last = ##class(Shutter.Store.AgentRun).LastLive()
+    If $ISOBJECT(last) { Set r."last_live_run" = last } Else { Do r.%Set("last_live_run", "", "null") }
+    // The Case Releaser's sweep (8.1, v1.35): when it last ran, and its last run with candidates.
+    Try { Set r."release_sweep" = ##class(Shutter.Operation.Releaser).Status() } Catch ex { Set r."release_sweep" = {"error": (ex.DisplayString())} }
     // The Second Parser (v1.34): the jar, and whether the Java gateway answers a probe.
     Set r."second_parser" = ##class(Shutter.Util.SecondParser).Status()
     Set r.license = ##class(%DynamicObject).%FromJSON(..LicenseInfo())
+    // Before the switch to %SYS below: New $NAMESPACE inside a Try lasts to the end of the method.
+    Set r."precedent_days" = ##class(Shutter.Store.Precedent).Days()
+    Set r."storm_cooldown_minutes" = ..StormCooldownMinutes()
+    // The publisher (15, v1.35): whether this build has it, its web application, and today's calls.
+    Set pub = {}
+    Do pub.%Set("available", ##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Publish.Service"), "boolean")
+    Do pub.%Set("webapp", ''$GET(^Shutter.Config("webapp", "/mcp/shutter")), "boolean")
+    Try { Set pub."calls_today" = ##class(Shutter.Store.PublishCall).CountSince($EXTRACT(##class(Shutter.Util.Time).NowUTC(), 1, 10) _ "T00:00:00Z") } Catch ex { Set pub."calls_today" = 0 }
+    Set r.publish = pub
     Try {
         New $NAMESPACE
         Set $NAMESPACE = "%SYS"
@@ -1386,9 +1427,74 @@ ClassMethod LiveStatus() As %DynamicObject
         Set text = $GET(^|hospital|Hospital.Live("status"))
         If text '= "" Set s = ##class(%DynamicObject).%FromJSON(text)
         Do s.%Set("enabled", ''$GET(^|hospital|Hospital.Config("live")), "boolean")
+        // The storm (4.4, v1.35): the player's record as it stands (the status above is rewritten only after each call,
+        // and a storm is played within one), a press the player has not picked up yet before it, with Shutter's own view
+        // of it: the incident and the case counts.
+        Set record = $GET(^|hospital|Hospital.Live("storm"))
+        If record '= "" Set s.storm = ##class(%DynamicObject).%FromJSON(record)
+        Set pending = $GET(^Shutter.Live("storm", "request"))
+        If pending '= "" Set s.storm = ##class(%DynamicObject).%FromJSON(pending)
+        Set storm = s.%Get("storm")
+        If $ISOBJECT(storm) Do ..StormCounts(storm)
     } Catch ex {
     }
     Quit s
+}
+
+/// Adds to a storm record what Shutter's store knows: the incident opened for Downstream Out since the press (incidentId
+/// and incidentState, null when none yet), the storm's cases and how many resolved, and when the cooldown ends.
+ClassMethod StormCounts(storm As %DynamicObject)
+{
+    Try {
+        Set since = storm.%Get("startedAt")
+        Set cases = 0, resolved = 0
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT COUNT(*) AS N, SUM(CASE WHEN State = 'resolved' THEN 1 ELSE 0 END) AS R FROM Shutter_Store.""Case"" WHERE Scenario = 'storm' AND OpenedAt >= ?", since)
+        If rs.%Next() Set cases = +rs.%Get("N"), resolved = +rs.%Get("R")
+        Set storm.cases = cases, storm.resolved = resolved
+        // The incident the storm's cases joined: one the detector opened for them, or one already open for the receiver.
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 i.IncidentId, i.State FROM Shutter_Store.""Case"" c JOIN Shutter_Store.Incident i ON c.Incident = i.ID WHERE c.Scenario = 'storm' AND c.OpenedAt >= ? ORDER BY c.ID DESC", since)
+        If rs.%Next() {
+            Set storm.incidentId = rs.%Get("IncidentId"), storm.incidentState = rs.%Get("State")
+        } Else {
+            Do storm.%Set("incidentId", "", "null")
+        }
+        If since '= "" {
+            Set elapsed = ##class(Shutter.Util.Time).SecondsBetween(since, ##class(Shutter.Util.Time).NowUTC())
+            Set storm.cooldownUntil = ##class(Shutter.Util.Time).FromNow((..StormCooldownMinutes() * 60) - elapsed)
+        }
+    } Catch ex {
+    }
+}
+
+/// Minutes between storms, measured from a storm's start: ^Shutter.Config("stormCooldownMinutes"), 0 to 1440, 10 by default.
+ClassMethod StormCooldownMinutes() As %Integer
+{
+    Set m = $GET(^Shutter.Config("stormCooldownMinutes"))
+    If (m '? 1.N) || (m > 1440) Quit 10
+    Quit +m
+}
+
+/// Why a storm may not be pressed now, or "" when it may (CONTRACTS 4.4): the live hospital off; a storm still playing
+/// (any state but done or failed); or the cooldown since the last storm's start. The answer carries the reply's status,
+/// error and detail, with the storm's id, start and end, or the cooldown's end and the seconds left.
+ClassMethod StormRefusal(liveOn As %Boolean, stormJson As %String, cooldownMinutes As %Integer = 10) As %DynamicObject
+{
+    If 'liveOn Quit {"status": "409 Conflict", "error": "live_off", "detail": "The live hospital is off; the storm plays in it"}
+    Set storm = ##class(Shutter.Util.Json).Parse(stormJson, .sc)
+    If '$ISOBJECT(storm) Quit ""
+    Set state = storm.%Get("state"), endsAt = storm.%Get("endsAt")
+    // A storm still marked as playing after its span is over was cut off (the player stopped): it blocks nothing.
+    Set stale = (endsAt '= "") && (##class(Shutter.Util.Time).SecondsBetween(endsAt, ##class(Shutter.Util.Time).NowUTC()) >= 0)
+    If (state '= "") && (state '= "done") && (state '= "failed") && 'stale {
+        Quit {"status": "409 Conflict", "error": "storm_in_progress", "detail": ("Storm " _ storm.%Get("stormId") _ " is " _ state), "stormId": (storm.%Get("stormId")), "startedAt": (storm.%Get("startedAt")), "endsAt": (endsAt), "state": (state)}
+    }
+    Set started = storm.%Get("startedAt")
+    If started '= "" {
+        Set elapsed = ##class(Shutter.Util.Time).SecondsBetween(started, ##class(Shutter.Util.Time).NowUTC())
+        Set left = (cooldownMinutes * 60) - elapsed
+        If left > 0 Quit {"status": "409 Conflict", "error": "cooldown", "detail": ("The last storm started " _ elapsed _ " s ago; the next may start in " _ left _ " s"), "until": (##class(Shutter.Util.Time).FromNow(left)), "retryAfterSeconds": (left)}
+    }
+    Quit ""
 }
 
 /// Import a site's HL7 schema (an .xml export) through IRIS's own importer, for an approver (CONTRACTS 12, v1.32). Returns
@@ -1435,12 +1541,54 @@ ClassMethod InstallAIHub(root As %String = "") As %String [ SqlProc ]
             Set out.knowledge = $SELECT(kdir = "": "no knowledge folder found", 1: "no library class")
         }
         Set out.mode = ..RecordAgentMode($SYSTEM.Util.GetEnviron("SHUTTER_AGENT_MODE"))
+        // The publisher (15, v1.35): its web application, where IRIS's MCP gateway and the publisher's classes are compiled.
+        Set out.publish = ..EnsurePublishApp($NAMESPACE)
         Set ^Shutter.Config("aihub", "installedAt") = ##class(Shutter.Util.Time).NowUTC()
         Set ^Shutter.Config("aihub", "root") = root
     } Catch ex {
         Set out.error = ex.DisplayString()
     }
     Quit out.%ToJSON()
+}
+
+/// The publisher's web application /mcp/shutter (CONTRACTS 15, v1.35): password authentication, dispatch to
+/// Shutter.Publish.Service (IRIS's MCP gateway with the publisher's tools), the resource Shutter_Publish on the
+/// application too. Made only where %AI.MCP.Service and the publisher's classes are compiled (the AI Hub build); elsewhere
+/// it says so and makes nothing. Returns a short status.
+ClassMethod EnsurePublishApp(ns As %String = "") As %String
+{
+    If ns = "" Set ns = $NAMESPACE
+    If '##class(%Dictionary.CompiledClass).%ExistsId("%AI.MCP.Service") Quit "no MCP gateway on this build (%AI.MCP.Service)"
+    If '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Publish.Service") Quit "the publisher's classes are not compiled"
+    Set out = ""
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = "%SYS"
+        Set props("NameSpace") = ns
+        Set props("Description") = "Shutter publisher: read-only MCP tools"
+        Set props("Enabled") = 1
+        // Password authentication: iris-mcp-server passes the MCP client's HTTP Basic credentials through, and the engine signs
+        // the caller in; the resource on the application and the service's own check both require Shutter_Publish.
+        Set props("AutheEnabled") = 32
+        Set props("DispatchClass") = "Shutter.Publish.Service"
+        Set props("Resource") = "Shutter_Publish"
+        Set props("MatchRoles") = ""
+        // An MCP Server application (Type bit 4, with the CSP/REST bit): what the portal's "Edit MCP Server" page makes, and
+        // what iris-mcp-server trusts; a plain web application at the same path fails its identity check.
+        Set props("Type") = 18
+        If ##class(Security.Applications).Exists("/mcp/shutter") {
+            Set sc = ##class(Security.Applications).Modify("/mcp/shutter", .props)
+            Set out = "updated"
+        } Else {
+            Set sc = ##class(Security.Applications).Create("/mcp/shutter", .props)
+            Set out = "created"
+        }
+        If $$$ISERR(sc) Set out = "failed: " _ $SYSTEM.Status.GetErrorText(sc) Quit
+        Set ^|ns|Shutter.Config("webapp", "/mcp/shutter") = 1
+    } Catch ex {
+        Set out = "failed: " _ ex.DisplayString()
+    }
+    Quit out _ " /mcp/shutter"
 }
 
 /// InstallAIHub as a %Status: what the aihub module's manifest invokes (the Invoke checks the status, so an install
