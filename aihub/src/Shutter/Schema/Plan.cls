@@ -31,7 +31,7 @@ Property Outcome As %String(%JSONFIELDNAME = "outcome", MAXLEN = 32);
 Property Why As %String(%JSONFIELDNAME = "why", MAXLEN = 1000);
 
 /// Problems with a plan object as JSON text, as an array of messages; empty when it is valid.
-ClassMethod Check(json As %String) As %DynamicArray
+ClassMethod Check(json As %String, citeIds As %String = "") As %DynamicArray
 {
     Set problems = []
     Set o = ##class(Shutter.Util.Json).Parse(json, .sc)
@@ -54,6 +54,8 @@ ClassMethod Check(json As %String) As %DynamicArray
         If (t = "none") && (d = "resend") Do problems.%Push("disposition resend needs action.type resend")
     }
     If o.%GetTypeOf("evidence_refs") '= "array" Do problems.%Push("evidence_refs must list the evidence used")
+    // The refs must name evidence the run was given (v1.35), as for findings.
+    Do ##class(Shutter.Schema.Findings).CheckRefs(o, citeIds, problems)
     If (o.%GetTypeOf("disagreements") '= "unassigned") && (o.%GetTypeOf("disagreements") '= "array") Do problems.%Push("disagreements must be an array of {member, said, why_kept}")
     Set entry = ##class(Shutter.Util.Json).Str(o, "catalogue_entry"), outcome = ##class(Shutter.Util.Json).Str(o, "outcome")
     If (entry '= "") && (outcome '= "preferred") && ($EXTRACT(outcome, 1, 12) '= "alternative:") Do problems.%Push("outcome must be preferred or alternative:<n> when a catalogue_entry is named")

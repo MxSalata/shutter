@@ -715,6 +715,13 @@ four collections under `knowledge/` (`search_contracts`, `search_lifecycle`, `se
 fifth collection, `review`, is the production review agent's (13.6) and reaches a board member only through a row whose
 `KnowledgeCollection` is `all` (the single investigator's).
 
+**Findings and plans cite only what they were given (v1.35).** `evidence_refs` on a finding or a plan must name keys of the
+evidence object the run received, or keys one level down in it (`message`, `validation`, `error`, `operation`, `route`,
+`ward_state`, `receipt`, `timeline`, and so on), or `findings` for the coordinator; the runner lists them for the terminal
+tool (`CiteIds`, as the question tools already have), `Shutter.Schema.Findings.CheckRefs` refuses the submission with the
+unknown names and the keys that are allowed, and the model repairs it in the same run. A reference to evidence that is not
+there is therefore never stored.
+
 ### 6.7 The Second Parser (v1.34)
 
 When IRIS cannot read a message (the validation's `parsed` is false: no parse, or a schema category this namespace has not
