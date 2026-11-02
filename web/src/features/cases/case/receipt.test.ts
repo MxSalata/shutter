@@ -24,8 +24,8 @@ describe('safetyReceipt', () => {
     expect(r.planDigest).toBe(fixtures.cases['C-000021'].plan.plan.digest);
     expect(r.snapshotDigest).toBe(fixtures.cases['C-000021'].snapshot.digest);
     expect(r.expectedVersion).toBe('2');
-    expect(r.receiverEpoch).toBe('227');
-    expect(r.gate).toMatchObject({ outcome: 'pass', policyVersion: '2026-10-20.1' });
+    expect(r.receiverEpoch).toBe('132');
+    expect(r.gate).toMatchObject({ outcome: 'pass', policyVersion: '2026-11-01.1' });
     expect(r.decidedBy).toBe('Approved by approver');
     expect(r.writes).toBe(1);
     expect(r.acknowledged).toBe(1);
@@ -133,7 +133,7 @@ describe("the receipt's plain captions", () => {
     const r = receiptOf('C-000021');
     expect(proposalCaption(r)).toBe('Send it again, unchanged');
     expect(writesCaption(r)).toBe('1 update, accepted');
-    expect(writesDetail(r)).toBe('1 acknowledged; conditional on version 2, epoch 227');
+    expect(writesDetail(r)).toBe('1 acknowledged; conditional on version 2, epoch 132');
   });
 
   it('keeps the proposal of a plan that writes nothing as it is, and says nothing beside 0 writes', () => {

@@ -119,9 +119,6 @@ function settingsWith(live: Partial<LiveStatus> | undefined) {
     http.get(`${BASE}/settings`, () => {
       reads.n += 1;
       return HttpResponse.json({
-        mock: false,
-        mockConfig: '',
-        mockModel: '',
         ...fixtures.settings,
         ...(live ? { live } : {}),
       });

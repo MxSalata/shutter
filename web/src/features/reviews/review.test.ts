@@ -33,9 +33,10 @@ const byId = (r: ReviewDetail, id: string) => r.findings.find((f) => f.id === id
 function ranked(): ReviewDetail {
   const r = structuredClone(own);
   r.agent = { ...r.agent, state: 'ok', mode: 'replay', error: '', summary: 'Two signatures stand out.' };
+  const high = r.findings.filter((f) => f.severity === 'high');
   const medium = r.findings.filter((f) => f.severity === 'medium').reverse();
   const low = r.findings.filter((f) => f.severity === 'low');
-  [...medium, ...low].forEach((f, i) => {
+  [...high, ...medium, ...low].forEach((f, i) => {
     f.rank = i + 1;
     f.explanation = `Consistent with ${f.id}.`;
   });
@@ -52,7 +53,9 @@ describe('the order of the findings', () => {
     const r = ranked();
     expect(rankedByAgent(r)).toBe(true);
     const order = orderedFindings(r).map((f) => f.id);
-    expect(order[0]).toBe(r.findings.filter((f) => f.severity === 'medium').at(-1)!.id);
+    // The high finding first, then the medium tier in the agent's order
+    expect(order[0]).toBe('F1');
+    expect(order[1]).toBe(r.findings.filter((f) => f.severity === 'medium').at(-1)!.id);
     expect(order).toHaveLength(r.findings.length);
     // The server's array is left as it came
     expect(r.findings[0].id).toBe('F1');
@@ -96,6 +99,8 @@ describe('what a finding is about', () => {
       'HL7 Index (AlertOnError 0, class default, no AlertGroups)',
       'ADT to Downstream (AlertOnError 0, class default, no AlertGroups)',
       'Downstream Out (AlertOnError 0, class default, no AlertGroups)',
+      'ADT to Records (AlertOnError 0, class default, no AlertGroups)',
+      'Records Out (AlertOnError 0, class default, no AlertGroups)',
     ]);
     expect(foundList({ code: 'GIVES_UP_EARLY', found: 'FailureTimeout 5 with RetryInterval 5; x' })).toEqual([
       'FailureTimeout 5 with RetryInterval 5; x',
@@ -104,7 +109,10 @@ describe('what a finding is about', () => {
 
   it('names the HL7 checks with no subject only from the counts the server sent', () => {
     const at = (summary: object) => hl7Note({ ...own, summary: { ...own.summary, ...summary } });
-    expect(hl7Note(own)).toBe('');
+    // The recording counts none of either
+    expect(hl7Note(own)).toMatch(/^No HL7 operation or HL7 TCP item in this production/);
+    const { hl7Operations: _ops, hl7TcpItems: _tcp, ...uncounted } = own.summary;
+    expect(hl7Note({ ...own, summary: uncounted })).toBe('');
     expect(at({ hl7Operations: 0, hl7TcpItems: 0 })).toMatch(
       /^No HL7 operation or HL7 TCP item .* reply code and framing/,
     );
@@ -133,7 +141,7 @@ describe("the agent's state in words", () => {
   const agent = (change: Partial<ReviewAgent>): ReviewAgent => ({ ...own.agent, ...change });
 
   it('says plainly that no explanation was recorded for this configuration, and what the agent does on a live system', () => {
-    const view = describeAgent(own.agent, 'done');
+    const view = describeAgent(agent({ state: 'no_record', mode: 'replay' }), 'done');
     expect(view.title).toBe('No recorded explanation for this configuration');
     expect(view.text).toBe(
       'On a live system, an agent ranks these findings and explains each against the cases. This review was recorded without its ranking, so the findings keep the deterministic order.',
@@ -197,25 +205,28 @@ describe('the closed row of a finding', () => {
     expect(findingTitle({ code: 'MESSAGE_ERRORS' })).toBe('Messages that ended in error');
     expect(findingTitle({ code: 'PURGE_MISSING' })).toBe('No message purge task');
     expect(findingTitle({ code: 'FEED_SILENCE_UNWATCHED' })).toBe('A silent feed goes unnoticed');
+    expect(findingTitle({ code: 'SUSPENDED_MESSAGES' })).toBe('Suspended messages');
+    expect(findingTitle({ code: 'ITEM_DISABLED' })).toBe('An item is switched off');
     expect(findingTitle({ code: 'RETRY_FOREVER' })).toBe('Retry forever');
   });
 
   it('builds the chip per code from the finding own fields (PR-000001)', () => {
-    expect(findingChip(byId(own, 'F1'))).toBe('ERROR <Ens>ErrProductionNotQuiescent');
-    expect(findingChip(byId(own, 'F2'))).toBe('AlertOnError');
-    expect(findingChip(byId(own, 'F3'))).toBe('no Ens.Alert item');
-    expect(findingChip(byId(own, 'F4'))).toBe('ERROR <Ens>ErrBPTerminated');
-    expect(findingChip(byId(own, 'F5'))).toBe('ADT to Downstream');
-    expect(findingChip(byId(own, 'F10'))).toBe('Case Workflow');
-    expect(findingChip(byId(own, 'F12'))).toBe('QueueCountAlert · Downstream Out');
-    expect(findingChip(byId(own, 'F13'))).toBe('ADT In · InactivityTimeout = 0');
+    expect(findingChip(byId(own, 'F1'))).toBe('Second Parser · 1 suspended');
+    expect(findingChip(byId(own, 'F2'))).toBe('ERROR <Ens>ErrBPTerminated');
+    expect(findingChip(byId(own, 'F3'))).toBe('ADT to Downstream');
+    expect(findingChip(byId(own, 'F10'))).toBe('AlertOnError');
+    expect(findingChip(byId(own, 'F11'))).toBe('no Ens.Alert item');
+    expect(findingChip(byId(own, 'F12'))).toBe('ADT In · InactivityTimeout = 0');
+    // A queue finding over two items names the setting alone; over one, the item too
+    expect(findingChip(byId(own, 'F13'))).toBe('QueueCountAlert');
+    expect(findingChip(byId(hospital, 'F7'))).toBe('QueueCountAlert · Downstream Out');
   });
 
   it('builds the chip of the purge finding, and never cuts a long value', () => {
     // The purge finding has no setting and a long value: no chip, the open finding shows it in full
-    expect(findingChip(byId(hospital, 'F1'))).toBeNull();
-    // ALERTING_OFF lists four items: the row shows the setting, never half of the list
-    const alerting = byId(own, 'F2');
+    expect(findingChip(byId(hospital, 'F2'))).toBeNull();
+    // ALERTING_OFF lists six items: the row shows the setting, never half of the list
+    const alerting = byId(own, 'F10');
     expect(alerting.found.length).toBeGreaterThan(100);
     expect(findingChip(alerting)).toBe('AlertOnError');
     // A code without a template takes item, setting and a short value, each only when present
@@ -234,23 +245,32 @@ describe('the closed row of a finding', () => {
   });
 
   it('builds a summary of at most 15 words for each of PR-000001 and PR-000003, with real plurals', () => {
-    expect(findingSummary(byId(own, 'F1'))).toBe(
-      '1 error with one signature, logged by the production itself.',
-    );
     expect(findingSummary(byId(own, 'F2'))).toBe(
+      '82 errors with one signature, logged by ADT to Downstream.',
+    );
+    expect(findingSummary(byId(own, 'F3'))).toBe('82 messages ended in error, from ADT In.');
+    expect(findingSummary(byId(own, 'F6'))).toBe('1 error with one signature, logged by Second Parser.');
+    expect(findingSummary(byId(own, 'F10'))).toBe(
       'Failures reach the event log and wait for someone to read it.',
     );
-    expect(findingSummary(byId(own, 'F3'))).toBe('An alert raised by any item reaches nobody.');
-    expect(findingSummary(byId(own, 'F4'))).toBe(
-      '445 errors with one signature, logged by ADT to Downstream.',
+    expect(findingSummary(byId(own, 'F11'))).toBe('An alert raised by any item reaches nobody.');
+    expect(findingSummary(byId(own, 'F12'))).toBe('A feed that falls silent is never noticed.');
+    expect(findingSummary(byId(own, 'F13'))).toBe('A growing queue at 2 items raises no alert.');
+    expect(findingSummary(byId(hospital, 'F2'))).toBe('Old messages are never purged.');
+    expect(findingSummary(byId(hospital, 'F3'))).toBe(
+      '1 error with one signature, logged by PAS to Downstream.',
     );
-    expect(findingSummary(byId(own, 'F5'))).toBe('445 messages ended in error, from ADT In.');
-    expect(findingSummary(byId(own, 'F10'))).toBe('1 message ended in error, from Evidence Collector.');
-    expect(findingSummary(byId(own, 'F12'))).toBe('A growing queue at Downstream Out raises no alert.');
-    expect(findingSummary(byId(own, 'F13'))).toBe('A feed that falls silent is never noticed.');
-    expect(findingSummary(byId(hospital, 'F1'))).toBe('Old messages are never purged.');
-    expect(findingSummary(byId(hospital, 'F2'))).toBe(
-      '3 errors with one signature, logged by the production itself.',
+    expect(findingSummary(byId(hospital, 'F4'))).toBe('1 message ended in error, from PAS In.');
+    expect(findingSummary(byId(hospital, 'F7'))).toBe('A growing queue at Downstream Out raises no alert.');
+    // An error group the production logged itself, with no item
+    expect(findingSummary({ ...byId(own, 'F6'), item: '' })).toBe(
+      '1 error with one signature, logged by the production itself.',
+    );
+    expect(findingSummary(byId(own, 'F1'))).toBe(
+      '1 message to Second Parser is suspended, waiting for a person.',
+    );
+    expect(findingSummary(byId(hospital, 'F1'))).toBe(
+      'Live PAS is switched off: its messages queue up or go nowhere.',
     );
   });
 
@@ -267,75 +287,72 @@ describe('the closed row of a finding', () => {
       }
       expect(findingSummary(f).split(/\s+/).length).toBeLessThanOrEqual(15);
     }
-    // The server's sentence for a finding with no item is what the row avoids
-    expect(byId(own, 'F1').why).toContain('1 error(s)');
-    expect(byId(own, 'F1').why).toContain('logged by .');
+    // The server's sentence with a count in the singular is what the row avoids
+    expect(byId(own, 'F1').why).toContain('1 message(s)');
+    expect(findingSummary(byId(own, 'F1'))).not.toContain('(s)');
   });
 
   it('takes the first clean sentence of the server text for a code without a template, else the plain title', () => {
     const base = byId(own, 'F13');
     const clean = {
       ...base,
-      code: 'ITEM_DISABLED',
+      code: 'GIVES_UP_EARLY',
       why: 'The item is switched off. A message sent to it waits in the queue.',
     };
     expect(findingSummary(clean)).toBe('The item is switched off.');
-    expect(findingSummary({ ...clean, why: 'The item has 2 setting(s) off. More.' })).toBe('Item disabled');
-    expect(findingSummary({ ...clean, why: 'Logged by . It stays.' })).toBe('Item disabled');
+    expect(findingSummary({ ...clean, why: 'The item has 2 setting(s) off. More.' })).toBe('Gives up early');
+    expect(findingSummary({ ...clean, why: 'Logged by . It stays.' })).toBe('Gives up early');
     expect(
       findingSummary({
         ...clean,
         why: 'This sentence has far too many words for a closed row to carry in full, so it is not used. Second.',
       }),
-    ).toBe('Item disabled');
+    ).toBe('Gives up early');
   });
 
   it('puts the subject beside the chip only when the chip or the summary does not name it already', () => {
     expect(findingSubject(byId(own, 'F1'))).toBeNull();
-    expect(findingSubject(byId(own, 'F2'))).toBe('ADT In, HL7 Index, +2');
+    expect(findingSubject(byId(own, 'F10'))).toBe('ADT In, HL7 Index, +4');
     // A finding about the whole production with a chip needs no "the production" beside it
+    expect(findingSubject(byId(own, 'F11'))).toBeNull();
+    expect(findingSubject(byId(own, 'F13'))).toBeNull();
     expect(findingSubject(byId(own, 'F3'))).toBeNull();
     expect(findingSubject(byId(own, 'F12'))).toBeNull();
-    expect(findingSubject(byId(own, 'F5'))).toBeNull();
-    expect(findingSubject(byId(own, 'F13'))).toBeNull();
-    expect(findingSubject(byId(hospital, 'F1'))).toBe('the namespace');
+    expect(findingSubject(byId(hospital, 'F2'))).toBe('the namespace');
     expect(
-      findingSubject({ ...byId(own, 'F2'), found: 'ADT In (AlertOnError 0); HL7 Index (AlertOnError 0)' }),
+      findingSubject({ ...byId(own, 'F10'), found: 'ADT In (AlertOnError 0); HL7 Index (AlertOnError 0)' }),
     ).toBe('ADT In, HL7 Index');
   });
 
   it('counts the cases in the right number, and says nothing for a finding with none', () => {
-    expect(findingCases(byId(own, 'F2'))).toBe('54 cases, 30 unique');
-    expect(findingCases({ cases: { count: 1, unique: 1, latest: ['C-1'] } })).toBe('1 case, 1 unique');
-    expect(findingCases(byId(own, 'F4'))).toBeNull();
+    expect(findingCases(byId(hospital, 'F6'))).toBe('1 case, 1 unique');
+    expect(findingCases({ cases: { count: 54, unique: 30, latest: [] } })).toBe('54 cases, 30 unique');
+    expect(findingCases(byId(own, 'F2'))).toBeNull();
   });
 });
 
 describe('grouping and filtering the findings', () => {
   it('groups by severity, most severe first, keeping the order within each tier', () => {
     expect(groupBySeverity(own.findings).map((g) => [g.severity, g.findings.length])).toEqual([
-      ['medium', 11],
+      ['high', 1],
+      ['medium', 10],
       ['low', 2],
     ]);
     expect(groupBySeverity(hospital.findings).map((g) => g.severity)).toEqual(['high', 'medium', 'low']);
-    expect(groupBySeverity(hospital.findings)[1].findings.map((f) => f.id)).toEqual([
-      'F2',
-      'F3',
-      'F4',
-      'F5',
-      'F6',
-      'F7',
-    ]);
+    expect(groupBySeverity(hospital.findings)[1].findings.map((f) => f.id)).toEqual(['F3', 'F4', 'F5']);
     expect(groupBySeverity([])).toEqual([]);
   });
 
   it('filters by tier, new and marked (any status but new)', () => {
-    const marked = own.findings.filter((f) => inFilter(f, 'marked'));
-    expect(marked.map((f) => f.id)).toEqual(['F1']);
-    expect(own.findings.filter((f) => inFilter(f, 'new'))).toHaveLength(12);
-    expect(own.findings.filter((f) => inFilter(f, 'low')).map((f) => f.id)).toEqual(['F12', 'F13']);
-    expect(own.findings.filter((f) => inFilter(f, 'all'))).toHaveLength(13);
-    expect(own.findings.filter((f) => inFilter(f, 'high'))).toHaveLength(0);
+    // The recording marks nothing; with its first finding marked intended
+    expect(own.findings.filter((f) => inFilter(f, 'marked'))).toEqual([]);
+    const findings = structuredClone(own.findings);
+    findings[0].status = 'intended';
+    expect(findings.filter((f) => inFilter(f, 'marked')).map((f) => f.id)).toEqual(['F1']);
+    expect(findings.filter((f) => inFilter(f, 'new'))).toHaveLength(12);
+    expect(findings.filter((f) => inFilter(f, 'low')).map((f) => f.id)).toEqual(['F12', 'F13']);
+    expect(findings.filter((f) => inFilter(f, 'all'))).toHaveLength(13);
+    expect(findings.filter((f) => inFilter(f, 'high')).map((f) => f.id)).toEqual(['F1']);
   });
 });
 

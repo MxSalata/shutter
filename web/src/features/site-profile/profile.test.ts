@@ -33,8 +33,8 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
     expect(validateProfile(recorded)).toBe('');
   });
 
-  it('serves the seed: two receivers, each with its category, and no site-wide history policy', () => {
-    expect(recorded.version).toBe(6);
+  it("serves the recorded profile, the seed's at the instance's version: two receivers, each with its category, and no site-wide history policy", () => {
+    expect(recorded.version).toBe(7);
     expect(recorded.receivers.map((r) => [r.name, r.category])).toEqual([
       ['Downstream Out', 'current_state'],
       ['Records Out', 'history_of_record'],

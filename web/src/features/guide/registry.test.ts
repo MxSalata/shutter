@@ -54,9 +54,9 @@ describe('the guide registry', () => {
   });
 
   it("gives every screen every enabled step that is not the engineers' alone, one to four a chapter", () => {
-    expect(RANKED_REVIEW_RECORDED).toBe(false);
-    expect(SCOPES.all).toHaveLength(31);
-    expect(SCOPES.all).not.toContain('review/agent');
+    expect(RANKED_REVIEW_RECORDED).toBe(true);
+    expect(SCOPES.all).toHaveLength(32);
+    expect(SCOPES.all).toContain('review/agent');
     expect(SCOPES.all).toEqual(
       STEPS.filter(({ c, s }) => enabled(c, s) && !(s.scopes.length === 1 && s.scopes[0] === 'engineer')).map(
         (x) => x.path,

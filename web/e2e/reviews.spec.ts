@@ -31,19 +31,25 @@ test.describe('the production review', () => {
       const findings = page.getByRole('region', { name: 'Findings' });
       // The closed rows lead with a plain title; the check's code is in Technical and in the open finding
       for (const title of [
-        'Alerts have nowhere to go',
         'No alert on error',
         'No alert on a growing queue',
         'A silent feed goes unnoticed',
       ])
-        await expect(findings.getByText(title, { exact: true })).toBeVisible();
-      // The recorded reviews carry no count of HL7 TCP items, so the page says nothing about them
-      await expect(findings).not.toContainText('No HL7');
-      // No recorded ranking: the agent's card says so, below the findings
-      await expect(page.getByRole('region', { name: "The agent's ranking" })).toContainText(
-        'This review was recorded without its ranking',
-      );
+        await expect(findings.getByText(title, { exact: true }).first()).toBeVisible();
+      // The recorded reviews count no HL7 operation and no HL7 TCP item, and the page says what that leaves unchecked
+      await expect(findings).toContainText('No HL7 operation or HL7 TCP item in this production');
     }
+    // The hospital's review was ranked by the agent: its card leads, above the findings
+    const agent = page.getByRole('region', { name: "The agent's ranking" });
+    await expect(agent).toContainText('Ranked and explained (recorded)');
+    const above = await agent.evaluate(
+      (card) =>
+        !!(
+          card.compareDocumentPosition(document.querySelector('#findings')!) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+        ),
+    );
+    expect(above).toBe(true);
     await expect(
       page.getByRole('region', { name: 'Findings' }).getByText('No message purge task', { exact: true }),
     ).toBeVisible();
@@ -71,7 +77,7 @@ test.describe('the production review', () => {
     ])
       await expect(open.getByText(part, { exact: true })).toBeVisible();
     // The Annotate button works while a finding is closed: it sits beside the control, not in it
-    await expect(findings.getByRole('button', { name: 'Annotate F3, NO_ALERT_CONSUMER' })).toBeVisible();
+    await expect(findings.getByRole('button', { name: 'Annotate F11, NO_ALERT_CONSUMER' })).toBeVisible();
   });
 
   test('narrows the findings with the filter chips', async ({ page }) => {
@@ -79,9 +85,10 @@ test.describe('the production review', () => {
     await go(page, '/reviews/PR-000001');
     const findings = page.getByRole('region', { name: 'Findings' });
     await expect(findings.getByRole('heading', { name: 'Low', level: 3 })).toBeVisible();
-    await findings.getByText('Marked', { exact: true }).click();
+    await findings.getByText('High 1', { exact: true }).click();
     await expect(findings.getByRole('heading', { name: 'Low', level: 3 })).toHaveCount(0);
-    await expect(findings.getByText('Repeated errors of one kind', { exact: true })).toHaveCount(1);
+    await expect(findings.getByText('Suspended messages', { exact: true })).toHaveCount(1);
+    await expect(findings.getByText('Repeated errors of one kind', { exact: true })).toHaveCount(0);
     await findings.getByText('All 13', { exact: true }).click();
     await expect(findings.getByRole('heading', { name: 'Low', level: 3 })).toBeVisible();
   });

@@ -283,7 +283,7 @@ test.describe('the trial on the build IRIS serves', () => {
         path: paths[i],
         size: new TextEncoder().encode(t).length,
         // A line only the recordings carry (fixtures.json's source)
-        recording: t.includes('REST API at 2026-10-20T17:55:04Z'),
+        recording: t.includes('on an instance with IRIS AI Hub at 2026-11-02T14:56:18Z'),
       }));
     }, scripts);
     expect(bodies.filter((b) => b.recording)).toEqual([]);
@@ -299,10 +299,11 @@ test.describe('the trial on the build IRIS serves', () => {
 
 /**
  * "Live" inside the trial (DESIGN.md 1.3, N7): with Detail on Plain, no visible text of a trial page says "live"
- * except "live system" and the Leave trial control. Each area turns its check on (`liveWordChecked`) once its pages
- * are written in the trial's words.
+ * except "live system" and the Leave trial control. A name is data, not the trial's words: "Live PAS", the hospital
+ * production's item that the recorded review of it finds disabled. Each area turns its check on (`liveWordChecked`)
+ * once its pages are written in the trial's words.
  */
-const LIVE_ALLOWED = /\blive system\b/gi;
+const LIVE_ALLOWED = /\blive system\b|\bLive PAS\b/gi;
 
 async function liveWords(page: Page, scope: 'shell' | 'page'): Promise<string[]> {
   return page.evaluate(

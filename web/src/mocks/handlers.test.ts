@@ -12,6 +12,7 @@ import type {
   LibraryMember,
   Me,
   PlanView,
+  PrecedentSummary,
   PrecedentsView,
   ReviewDetail,
   ReviewList,
@@ -236,20 +237,20 @@ describe('the costs', () => {
     const costs = await api.get<Costs>('/costs');
     expect(costs.byReview).toEqual([
       {
-        reviewId: 'PR-000003',
-        production: 'Hospital.Production',
-        model: '',
+        reviewId: 'PR-000004',
+        production: 'Shutter.Production',
+        model: 'claude-opus-5-5',
         mode: 'replay',
         costUsd: 0,
-        startedAt: '2026-10-25T11:35:14Z',
+        startedAt: '2026-11-02T14:36:56Z',
       },
       {
-        reviewId: 'PR-000001',
-        production: 'Shutter.Production',
-        model: '',
+        reviewId: 'PR-000003',
+        production: 'Hospital.Production',
+        model: 'claude-opus-5-5',
         mode: 'replay',
         costUsd: 0,
-        startedAt: '2026-10-25T11:33:36Z',
+        startedAt: '2026-11-02T14:36:56Z',
       },
     ]);
   });
@@ -298,7 +299,7 @@ describe('the production reviews', () => {
     const first = await api.get<ReviewDetail>('/production-reviews/PR-000005');
     expect([first.state, first.findings, first.agent.state]).toEqual(['sweeping', [], 'pending']);
     const done = await api.get<ReviewDetail>('/production-reviews/PR-000005');
-    expect([done.state, done.agentState, done.findings.length]).toEqual(['done', 'skipped', 9]);
+    expect([done.state, done.agentState, done.findings.length]).toEqual(['done', 'skipped', 7]);
   });
 
   it('refuse a target the server does not know and a window outside 1 to 90 days', async () => {
@@ -319,8 +320,9 @@ describe('the production reviews', () => {
       api.post('/production-reviews/PR-000001/annotations', { ...body, findingId: 'F99' }),
     );
     expect(unknown.status).toBe(404);
+    // The recording marks no finding, so there is no annotation to remove
     const removed = await refusal(api.del('/production-reviews/annotations/16'));
-    expect([removed.status, removed.code]).toEqual([403, 'demo']);
+    expect([removed.status, removed.code]).toEqual([404, 'not_found']);
     await signIn('operator');
     const operator = await refusal(api.post('/production-reviews/PR-000001/annotations', body));
     expect([operator.status, operator.code]).toEqual([403, 'forbidden']);
@@ -543,8 +545,9 @@ describe("the public demo's role", () => {
     expect(Date.parse(live?.last_played?.at ?? '')).toBeLessThan(Date.now());
     expect(live?.next?.scenario).toBe('S8');
     expect(Date.parse(live?.next?.at ?? '')).toBeGreaterThan(Date.now());
+    // Anyone else reads the recording's: the live hospital off
     resetMock('approver');
-    expect((await api.get<Settings>('/settings')).live).toBeUndefined();
+    expect((await api.get<Settings>('/settings')).live).toEqual({ enabled: false });
   });
 });
 
@@ -591,34 +594,55 @@ describe('the cases list', () => {
 describe('the precedents', () => {
   beforeEach(() => resetMock('approver'));
 
-  it('are none in the trial: every snapshot summary says so, in the default window, and the recording is unchanged', async () => {
-    const snap = await api.get<Snapshot>(`/cases/${HELD}/snapshot`);
-    expect((snap.summary as { precedents: unknown }).precedents).toEqual({
-      approved: 0,
+  it("are as recorded: the held case's snapshot found none before it, a later case's names the approvals before it", async () => {
+    const held = await api.get<Snapshot>(`/cases/${HELD}/snapshot`);
+    const none = (held.summary as { precedents: PrecedentSummary }).precedents;
+    expect([none.approved, none.rejected, none.lastCaseId, none.windowDays]).toEqual([0, 0, '', 180]);
+    expect(none).toEqual((recorded.snapshot.summary as { precedents: unknown }).precedents);
+    const later = await api.get<Snapshot>('/cases/C-000009/snapshot');
+    expect((later.summary as { precedents: PrecedentSummary }).precedents).toMatchObject({
+      approved: 1,
       rejected: 0,
-      lastDecision: '',
-      lastApprover: '',
-      lastAt: '',
-      lastCaseId: '',
-      samePolicy: false,
-      windowDays: 180,
-      signature: '',
+      lastDecision: 'approved',
+      lastApprover: 'approver',
+      lastCaseId: 'C-000002',
+      signature: none.signature,
     });
-    expect('precedents' in (recorded.snapshot.summary as object)).toBe(false);
   });
 
-  it('list none for the case, with its receiver and the conditions they would be matched on', async () => {
+  it('list for a case the precedents on record when its evidence was collected, never its own or a later one', async () => {
     const view = await api.get<PrecedentsView>(`/cases/${HELD}/precedents`);
     expect(view.receiver).toBe('Downstream Out');
     expect(view.conditions).toMatchObject({ delivery: 'failed', receiver_answer: 'unavailable' });
     expect(view.summary.approved + view.summary.rejected).toBe(0);
     expect(view.precedents).toEqual([]);
+    const later = await api.get<PrecedentsView>('/cases/C-000022/precedents');
+    expect(later.precedents.map((p) => p.caseId)).toEqual(['C-000015', 'C-000009', 'C-000002']);
+    expect(later.summary).toMatchObject({ approved: 3, lastCaseId: 'C-000015' });
+    // Every case's list agrees with the summary its snapshot carries
+    for (const id of Object.keys(fixtures.cases)) {
+      const v = await api.get<PrecedentsView>(`/cases/${id}/precedents`);
+      const active = v.precedents.filter((p) => p.active);
+      expect([active.filter((p) => p.decision === 'approved').length, active[0]?.caseId ?? ''], id).toEqual([
+        v.summary.approved,
+        v.summary.lastCaseId,
+      ]);
+      expect(
+        v.precedents.every((p) => p.caseId !== id),
+        id,
+      ).toBe(true);
+    }
     expect((await refusal(api.get('/cases/C-999999/precedents'))).status).toBe(404);
   });
 
-  it('have nothing to retire, for an approver only, and the guard against forged requests', async () => {
-    const none = await refusal(api.post('/precedents/1/retire', { reason: 'tried' }));
+  it('are retired by an approver only, with a reason, and the trial refuses politely to change the record', async () => {
+    const none = await refusal(api.post('/precedents/999/retire', { reason: 'tried' }));
     expect([none.status, none.code]).toEqual([404, 'not_found']);
+    const kept = await refusal(api.post('/precedents/1/retire', { reason: 'tried' }));
+    expect([kept.status, kept.code]).toEqual([403, 'demo']);
+    expect(kept.detail).toMatch(/^The trial keeps the recorded precedents as they were\./);
+    const why = await refusal(api.post('/precedents/1/retire', { reason: ' ' }));
+    expect([why.status, why.code]).toEqual([400, 'bad_request']);
     resetMock('operator');
     const operator = await refusal(api.post('/precedents/1/retire', { reason: 'tried' }));
     expect(operator.status).toBe(403);

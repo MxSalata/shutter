@@ -12,7 +12,10 @@ import { useAppearance } from '@/stores/appearance';
 import { layer1Words } from '@/test/words';
 import { theme } from '@/theme';
 import { createTrialTransport } from '@/trial/transport';
+import fixtures from '@/mocks/fixtures.json';
+import { HealthGroup } from './HealthGroup';
 import HealthPage from './HealthPage';
+import { groupReport } from './report';
 import { PLAIN_BUDGET, TECHNICAL_BUDGET } from './wordBudget';
 
 // The page reads TRIAL when it renders, so each block can say whether it is the trial. The live tests answer a report
@@ -111,6 +114,38 @@ describe('HealthPage on a live system', () => {
   });
 });
 
+describe("the trial's chip for a piece the recorded instance did not have", () => {
+  beforeEach(() => resetMock('approver'));
+
+  it('marks the row No with the chip, keeps its note in the group detail, and shows it when the keyboard reaches it', async () => {
+    // The recording has AI Hub: a recording from an instance without it
+    const report = { ...fixtures.health, ai_hub_present: false };
+    const agents = groupReport(report, true).groups.find((g) => g.def.id === 'agents')!;
+    render(
+      <MantineProvider theme={theme}>
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <MemoryRouter>
+            <HealthGroup group={agents} report={report} />
+          </MemoryRouter>
+        </QueryClientProvider>
+      </MantineProvider>,
+    );
+    const hub = await row('AI Hub installed');
+    expect(within(hub).getByText('No')).toBeInTheDocument();
+    expect(within(await row('AI Hub runner compiled')).getByText('Yes')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Why they are missing' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Agents and AI Hub' })).toHaveTextContent(
+      'AI Hub installed. This report is from the instance that served the cases',
+    );
+    const chip = within(hub).getByText('Not on the recorded instance').closest<HTMLElement>('[tabindex]')!;
+    expect(chip).toHaveAttribute('tabindex', '0');
+    act(() => chip.focus());
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'This report is from the instance that served the cases',
+    );
+  });
+});
+
 describe('HealthPage in the trial', () => {
   /** The trial never sends a call: its transport answers from the recording in the browser. */
   const sent = vi.fn(() => Promise.reject(new Error('fetch was called from the trial')));
@@ -140,11 +175,9 @@ describe('HealthPage in the trial', () => {
     expect(hero).toHaveTextContent('Shutter.Production');
     expect(hero).toHaveTextContent('SHUTTER');
     expect(hero).toHaveTextContent('version 0.1.0');
-    expect(hero).toHaveTextContent('read 20 Oct 2026, 17:55 UTC');
-    // The agents badge names IRIS AI Hub and the build, never "not needed"
-    expect(
-      within(hero).getByText('Board runs recorded on IRIS AI Hub (build 154); replayed here'),
-    ).toBeInTheDocument();
+    expect(hero).toHaveTextContent('read 2 Nov 2026, 14:56 UTC');
+    // The recorded instance had AI Hub and its runner: the agents badge says so, never "not needed"
+    expect(within(hero).getByText('Agents run on IRIS AI Hub')).toBeInTheDocument();
     expect(hero).not.toHaveTextContent(/not needed/i);
     expect(
       screen.getByText(
@@ -153,33 +186,16 @@ describe('HealthPage in the trial', () => {
     ).toBeInTheDocument();
   });
 
-  it('says that a piece the recorded instance did not have is No, with a chip, and only for those pieces', async () => {
+  it('says Yes for AI Hub and its runner, which the recorded instance had, with no chip', async () => {
     renderHealth();
-    const hub = await row('AI Hub installed');
-    expect(within(hub).getByText('No')).toBeInTheDocument();
-    expect(within(hub).getByText('Not on the recorded instance')).toBeInTheDocument();
-    const interop = await row('Interoperability enabled in the namespace');
-    expect(within(interop).getByText('Yes')).toBeInTheDocument();
-    expect(interop).not.toHaveTextContent('Not on the recorded instance');
-    // The full note is in the group's detail, for touch, and in the chip's tooltip, which the foundation's hint opens
-    // on hover, focus and tap
+    for (const name of ['AI Hub installed', 'AI Hub runner compiled']) {
+      const r = await row(name);
+      expect(within(r).getByText('Yes')).toBeInTheDocument();
+      expect(r).not.toHaveTextContent('Not on the recorded instance');
+    }
     const agents = screen.getByRole('region', { name: 'Agents and AI Hub' });
-    expect(within(agents).getByRole('button', { name: 'Why they are missing' })).toBeInTheDocument();
-    expect(agents).toHaveTextContent(
-      'AI Hub installed. This report is from the instance that served the cases',
-    );
-    const chip = within(hub).getByText('Not on the recorded instance');
-    expect(chip.closest('[tabindex]')).toHaveAttribute('tabindex', '0');
-  });
-
-  it("shows the chip's note when the keyboard reaches it", async () => {
-    renderHealth();
-    const hub = await row('AI Hub installed');
-    const chip = within(hub).getByText('Not on the recorded instance').closest<HTMLElement>('[tabindex]')!;
-    act(() => chip.focus());
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(
-      'This report is from the instance that served the cases',
-    );
+    expect(within(agents).queryByRole('button', { name: 'Why they are missing' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Not on the recorded instance')).not.toBeInTheDocument();
   });
 
   it('is one line of links to the groups, each with its count, that move focus to the heading', async () => {
@@ -192,21 +208,28 @@ describe('HealthPage in the trial', () => {
       'Agents and AI Hub',
       'Cases and housekeeping',
       'Installation and licence',
+      'Other',
     ]);
     const user = userEvent.setup();
     await user.click(within(nav).getByRole('button', { name: 'Web applications 3 of 3 pass' }));
     expect(screen.getByRole('heading', { level: 2, name: 'Web applications' })).toHaveFocus();
   });
 
-  it('groups the rows, with the Agents group saying where the runs were recorded', async () => {
+  it('groups the rows, the Agents group with nothing missing and every other field one click away', async () => {
     renderHealth();
     const agents = await screen.findByRole('region', { name: 'Agents and AI Hub' });
-    expect(agents).toHaveTextContent(
-      "The agents' runs were recorded on IRIS AI Hub; this report's instance replays them.",
-    );
-    expect(agents).toHaveTextContent('2 not on the recorded instance');
-    expect(within(agents).getAllByText('Not on the recorded instance')).toHaveLength(2);
+    expect(agents).not.toHaveTextContent('not on the recorded instance');
     expect(within(agents).getByRole('rowheader', { name: 'Enabled agents' })).toBeInTheDocument();
+    expect(
+      within(agents).getByRole('rowheader', { name: 'Recorded agent runs' }).closest('tr'),
+    ).toHaveTextContent(String(fixtures.health.recordings));
+    // The fields no group names, in a data disclosure, closed in both modes
+    const other = screen.getByRole('region', { name: 'Other' });
+    expect(within(other).getByRole('button', { name: /^The report's other \d+ fields$/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(other).toHaveTextContent(fixtures.health.gate_policy_version);
     const production = screen.getByRole('region', { name: 'Production' });
     expect(production).toHaveTextContent('4 of 4 pass');
     const rowOf = (name: string) => within(production).getByRole('rowheader', { name }).closest('tr')!;
@@ -238,7 +261,9 @@ describe('HealthPage in the trial', () => {
     expect(provenance).toHaveAttribute('aria-expanded', 'false');
     const list = document.getElementById(provenance.getAttribute('aria-controls')!)!;
     expect(list.querySelectorAll('li').length).toBeGreaterThanOrEqual(5);
-    expect(list).toHaveTextContent("Recorded from Shutter's REST API at 20 Oct 2026, 17:55 UTC");
+    expect(list).toHaveTextContent(
+      "Recorded from Shutter's REST API on an instance with IRIS AI Hub at 2 Nov 2026, 14:56 UTC",
+    );
     const api = screen.getByRole('button', { name: 'The report as the API sends it' });
     expect(api).toHaveAttribute('aria-expanded', 'false');
     // The provenance is never a row

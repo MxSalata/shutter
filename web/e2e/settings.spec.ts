@@ -71,13 +71,15 @@ test.describe('Settings and costs @settings', () => {
     await expect(page.locator('[data-tour="settings-costs"]')).toBeVisible();
   });
 
-  test('opens the production items, what the instance lacks and the API in Technical', async ({ page }) => {
+  test('opens the production items, what the recorded instance had and the API in Technical', async ({
+    page,
+  }) => {
     await signIn(page, { detail: 'technical' });
     await go(page, '/settings', { detail: 'technical' });
     await expect(page.getByRole('table', { name: 'Settings of the agent items' })).toBeVisible();
-    await expect(
-      page.getByText(/^Not on this instance: AI Hub, the live runner, a model provider\./),
-    ).toBeVisible();
+    // Recorded on the AI Hub instance: nothing is missing, so no line of absences
+    await expect(page.getByText(/^Not on this instance:/)).toHaveCount(0);
+    await expect(page.getByText('AI Hub runner installed', { exact: true })).toBeVisible();
     await expect(page.getByText('Shutter.Agent.Coordinator', { exact: true })).toBeVisible();
     await expect(page.getByText('GET /api/shutter/settings', { exact: true })).toBeVisible();
     await expect(page.getByText('GET /api/shutter/costs', { exact: true })).toBeVisible();

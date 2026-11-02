@@ -84,9 +84,8 @@ describe('CasePage', () => {
     ).toBeInTheDocument();
     // A board case shows its board under the outcome, with no step to open
     const board = await screen.findByRole('region', { name: 'The board' });
-    expect(await within(board).findByText('Conformance')).toBeInTheDocument();
-    expect(await within(board).findByText('Encounter Integrity')).toBeInTheDocument();
-    expect(await within(board).findByText('Impact Analysis')).toBeInTheDocument();
+    for (const name of ['Conformance', 'Encounter Integrity', 'Impact Analysis'])
+      expect(await within(board).findByRole('region', { name })).toBeInTheDocument();
     await openStep('What was written');
     const dispatch = await screen.findByRole('region', { name: 'Dispatch' });
     expect(await within(dispatch).findByText(/Acknowledged/)).toBeInTheDocument();
@@ -181,7 +180,7 @@ describe('CasePage', () => {
     expect(within(dissent).getByText('Proposed: Resend')).toBeInTheDocument();
     expect(
       within(dissent).getByText(
-        'Proposed resend: the message is structurally valid, the WIC-2.1 fields are present and the WIC-2.2 key matches',
+        'Proposed resend: MSG00802 is valid 2.5.1 ADT^A02, the key matches, and the 503 was not caused by the content',
       ),
     ).toBeInTheDocument();
     // Its confidence is its own report, with the definition on its first use; the board says how it works once
@@ -205,7 +204,7 @@ describe('CasePage', () => {
     expect(within(coordinator).getByText('Proposed: Escalate')).toBeInTheDocument();
     expect(within(coordinator).getByText('Dissent kept: Conformance')).toBeInTheDocument();
     expect(
-      within(coordinator).getByText(/^The message is acceptable as a message, but the member itself left/),
+      within(coordinator).getByText(/^Conformance only checks the message, and the message is valid\./),
     ).toBeInTheDocument();
     // The whole finding waits behind its toggle, named for its card
     const more = within(dissent).getByRole('button', { name: 'Show the finding' });
@@ -227,21 +226,45 @@ describe('CasePage', () => {
     const dissent = await within(board).findByRole('region', { name: 'Conformance' });
     expect(
       within(dissent).getByText(
-        'Proposed resend: MSG01109 conforms as a message and the 503 does not come from its content',
+        'Proposed resend: message MSG01109 is structurally valid, its key matches, and the 503 was not caused by the content',
       ),
     ).toBeInTheDocument();
     expect(within(dissent).queryByText(/0\.8/)).not.toBeInTheDocument();
     expect(within(dissent).queryByText(/^Proposed resend: .*confidence/)).not.toBeInTheDocument();
   });
 
-  it('reads a dissent recorded as "resend (why)" with its reason after a colon', async () => {
-    renderCase('C-000010');
+  it('reads a dissent recorded as "resend (0.7). Why." with its reason after a colon, and no figure', async () => {
+    renderCase('C-000006');
     const board = await screen.findByRole('region', { name: 'The board' });
     const dissent = await within(board).findByRole('region', { name: 'Conformance' });
     expect(
       within(dissent).getByText(
-        'Proposed resend: the message conforms and the 503 was not caused by content',
+        'Proposed resend: The message is structurally valid and the key matches. Business intent was explicitly deferred to the other specialists.',
       ),
+    ).toBeInTheDocument();
+    expect(within(dissent).queryByText(/0\.7/)).not.toBeInTheDocument();
+  });
+
+  it('reads a dissent recorded as "resend (why)" with its reason after a colon', async () => {
+    // The coordinator's recorded dissent, in the shape an earlier recording wrote it
+    const runs = structuredClone(fixtures.cases['C-000010'].runs) as {
+      role: string;
+      result: Record<string, unknown>;
+    }[];
+    const coordinator = runs.filter((r) => r.role === 'coordinator').at(-1)!;
+    coordinator.result.disagreements = [
+      {
+        member: 'encounter',
+        said: 'resend (the transfer still holds and nothing supersedes it)',
+        why_kept: 'A resend cannot be conditioned on v1 while conditional_writes=false.',
+      },
+    ];
+    server.use(http.get('/api/shutter/cases/C-000010/runs', () => HttpResponse.json(runs)));
+    renderCase('C-000010');
+    const board = await screen.findByRole('region', { name: 'The board' });
+    const dissent = await within(board).findByRole('region', { name: 'Encounter Integrity' });
+    expect(
+      within(dissent).getByText('Proposed resend: the transfer still holds and nothing supersedes it'),
     ).toBeInTheDocument();
   });
 
@@ -303,7 +326,7 @@ describe('CasePage', () => {
     const keys = within(top).getByRole('button', { name: 'Versions, keys and times' });
     expect(keys).toHaveAttribute('aria-expanded', 'false');
     expect(
-      await within(top).findByText('1 acknowledged; conditional on version 2, epoch 227'),
+      await within(top).findByText('1 acknowledged; conditional on version 2, epoch 132'),
     ).toBeInTheDocument();
     expect(within(top).getByText(/^Verified: Committed and current/)).toBeInTheDocument();
     expect(within(top).getByText('No pending action')).toBeInTheDocument();
@@ -932,16 +955,16 @@ describe('the case page for both audiences', () => {
     const board = await screen.findByRole('region', { name: 'The board' });
     const conformance = await within(board).findByRole('region', { name: 'Conformance' });
     expect(conformance).toHaveTextContent(
-      'Replay · claude-opus-5-5 · 14.6 s · 3 steps · 5 tool calls · message 16615',
+      'Replay · claude-opus-5-5 · 14.7 s · 3 steps · 5 tool calls · message 8006',
     );
     expect(within(conformance).getByText('Cited 8 evidence sections')).toBeInTheDocument();
     // Encounter Integrity did not cite the schema validation
     const encounter = within(board).getByRole('region', { name: 'Encounter Integrity' });
-    expect(within(encounter).getByText('Cited 7 evidence sections')).toBeInTheDocument();
+    expect(within(encounter).getByText('Cited 6 evidence sections')).toBeInTheDocument();
     expect(within(encounter).queryByRole('button', { name: 'Schema validation' })).toBeNull();
     const coordinator = within(board).getByRole('region', { name: 'Coordinator' });
     expect(coordinator).toHaveTextContent(
-      'Replay · claude-opus-5-5 · 16.3 s · 3 steps · 2 tool calls · message 16622',
+      'Replay · claude-opus-5-5 · 14.9 s · 3 steps · 2 tool calls · message 8013',
     );
     expect(coordinator).toHaveTextContent(/Cited 8 evidence sections and catalogue entry.*E7/);
     // What must still hold waits one click away, its operation keys as codes
@@ -959,7 +982,7 @@ describe('the case page for both audiences', () => {
     renderCase('C-000008');
     const board = await screen.findByRole('region', { name: 'The board' });
     const conformance = await within(board).findByRole('region', { name: 'Conformance' });
-    expect(conformance).toHaveTextContent('Replay · claude-opus-5-5 · 14.6 s · 3 iterations · 5 tool calls');
+    expect(conformance).toHaveTextContent('Replay · claude-opus-5-5 · 14.7 s · 3 iterations · 5 tool calls');
     expect(within(conformance).getByRole('button', { name: /^Which ones\s?, Conformance$/ })).toHaveAttribute(
       'aria-expanded',
       'true',
@@ -1046,7 +1069,7 @@ describe('the case page in the trial', () => {
     // Under reduced motion, the final state at once
     await outcomeLine('Delivered: verified at the receiver');
     expect(await screen.findByTestId('replay-note')).toHaveTextContent(
-      'Replayed from the recording: approved 20 Oct, 17:24 UTC. Your approval is noted at the end of the audit trail.',
+      'Replayed from the recording: approved 2 Nov, 14:16 UTC. Your approval is noted at the end of the audit trail.',
     );
     expect(screen.getByTestId('replay-announcement')).toHaveTextContent(
       'Approved in the trial. The recording shows it delivered and verified.',

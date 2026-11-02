@@ -7,6 +7,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chooseTransport, resetTransportForTests } from '@/api/transport';
 import { server } from '@/mocks/node';
+import fixtures from '@/mocks/fixtures.json';
 import { NO_RECORDED_ANSWER, resetMock } from '@/mocks/handlers';
 import { journal } from '@/trial/journal';
 import { createTrialTransport } from '@/trial/transport';
@@ -382,6 +383,12 @@ describe('Ask about this case', () => {
 
   it('locks free text on an instance with no model key, and opens it when one is configured', async () => {
     demo.value = false;
+    // The recorded instance had a key: an instance without one
+    server.use(
+      http.get(`${BASE}/settings`, () =>
+        HttpResponse.json({ ...fixtures.settings, providerConfigured: false }),
+      ),
+    );
     renderCase('C-000008');
     let p = await panel();
     expect(

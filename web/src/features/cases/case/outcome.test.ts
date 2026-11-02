@@ -228,7 +228,7 @@ describe('what Shutter did, by outcome', () => {
   });
 
   it('names when the recorded case was approved, for the note after a replay in the trial', () => {
-    expect(recordedApprovalTime(fixtures.cases['C-000002'].events as never)).toBe('20 Oct, 17:24 UTC');
+    expect(recordedApprovalTime(fixtures.cases['C-000002'].events as never)).toBe('2 Nov, 14:16 UTC');
     expect(recordedApprovalTime(fixtures.cases['C-000008'].events as never)).toBe('');
     expect(recordedApprovalTime(undefined)).toBe('');
   });

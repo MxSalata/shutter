@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Costs, Settings } from '@/api/types';
+import fixtures from '@/mocks/fixtures.json';
 import { PROOF } from '@/lib/proof';
 import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
@@ -108,8 +109,8 @@ describe('SettingsPage', () => {
     ).toBeInTheDocument();
     const table = screen.getByText('By production review').parentElement!;
     const rows = within(table).getAllByRole('row').slice(1);
-    expect(rows.map((r) => within(r).getByRole('link').textContent)).toEqual(['PR-000003', 'PR-000001']);
-    expect(within(rows[0]).getByText('Hospital.Production')).toBeInTheDocument();
+    expect(rows.map((r) => within(r).getByRole('link').textContent)).toEqual(['PR-000004', 'PR-000003']);
+    expect(within(rows[0]).getByText('Shutter.Production')).toBeInTheDocument();
     expect(within(rows[0]).getByText(/replayed/)).toBeInTheDocument();
     expect(within(rows[0]).getByText('$0.00')).toBeInTheDocument();
   });
@@ -266,11 +267,17 @@ describe('the Agents section', () => {
   });
 
   it('moves what the instance lacks into the data detail, and a replay needs none of it', async () => {
-    renderSettings();
+    // The recording has all three: an instance with none of them, replaying
+    renderSettings({
+      ...(fixtures.settings as unknown as Settings),
+      aiHubPresent: false,
+      liveRunnerPresent: false,
+      providerConfigured: false,
+    });
     await screen.findByTestId('agents-intro');
     expect(
       screen.getByText(
-        'Not on this instance: AI Hub, the live runner, a model provider. A replay needs none of them.',
+        'Not on this instance: AI Hub, the AI Hub runner, a model provider. A replay needs none of them.',
       ),
     ).toBeInTheDocument();
     const toggle = screen.getByRole('button', { name: 'Classes, modes, models and budgets' });
@@ -424,11 +431,12 @@ describe('the words on the page', () => {
   /**
    * The spec's budget is 140 words on the first layer. The layout it draws carries more than that on its own: the
    * four tiles are 37 words, the Agents intro 26, the sentence and the reviews' sentence 23, and the price table's
-   * sources 24 before a single heading, so the page as built reads about 300 for the recorded instance. The budget
-   * here is that figure with a little room (the page was 478 before), and the Technical page (`layer1Words` leaves
-   * out the API's JSON, a data dump, not prose) may read half as many again.
+   * sources 24 before a single heading, so the page as built reads about 300 for the recorded instance, and some 310
+   * since it was recorded on the AI Hub instance (three more badges, AI Hub, its runner and a model provider, and the
+   * day's budget line). The budget here is that figure with a little room (the page was 478 before), and the Technical
+   * page (`layer1Words` leaves out the API's JSON, a data dump, not prose) may read half as many again.
    */
-  const PLAIN_BUDGET = 300;
+  const PLAIN_BUDGET = 320;
 
   it('keeps the first layer within its budget in Plain, and Technical within half as much again', async () => {
     const plain = renderSettings();

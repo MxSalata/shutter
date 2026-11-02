@@ -37,36 +37,32 @@ test.describe('the trial report @health', () => {
     );
     await expect(hero.getByRole('list', { name: 'Core checks' }).getByRole('listitem')).toHaveCount(7);
     await expect(hero).toContainText('Shutter.Production');
-    await expect(hero).toContainText('read 20 Oct 2026, 17:55 UTC');
-    await expect(hero).toContainText('Board runs recorded on IRIS AI Hub (build 154); replayed here');
+    await expect(hero).toContainText('read 2 Nov 2026, 14:56 UTC');
+    // Recorded on the AI Hub instance, which had AI Hub and its runner
+    await expect(hero).toContainText('Agents run on IRIS AI Hub');
     await expect(hero).not.toContainText(/not needed/i);
     await expect(
       page.getByText('This is the report of the instance the trial was recorded on.'),
     ).toBeVisible();
   });
 
-  test('groups the rows and marks the pieces the recorded instance did not have', async ({ page }) => {
+  test('groups the rows: AI Hub and its runner Yes, and the fields no group names one click away', async ({
+    page,
+  }) => {
     await signIn(page);
     await go(page, '/health');
     const agents = page.getByRole('region', { name: 'Agents and AI Hub' });
-    await expect(agents).toContainText(
-      "The agents' runs were recorded on IRIS AI Hub; this report's instance replays them.",
-    );
-    await expect(agents).toContainText('2 not on the recorded instance');
+    await expect(agents).not.toContainText('not on the recorded instance');
     await expect(agents).toContainText('3 specialist agents and the coordinator agent');
-    const hub = agents
-      .getByRole('row')
-      .filter({ has: page.getByRole('rowheader', { name: 'AI Hub installed' }) });
-    await expect(hub).toContainText('No');
-    // The note is in the chip's tooltip, which the keyboard reaches too
-    const chip = hub.getByText('Not on the recorded instance');
-    await chip.hover();
-    await expect(page.getByRole('tooltip')).toContainText(
-      "The board's runs were recorded with the real agents on the AI Hub build and replay here.",
-    );
-    await page.mouse.move(0, 0);
-    await hub.locator('[tabindex="0"]', { hasText: 'Not on the recorded instance' }).focus();
-    await expect(page.getByRole('tooltip')).toContainText('which had no AI Hub');
+    for (const name of ['AI Hub installed', 'AI Hub runner compiled'])
+      await expect(
+        agents.getByRole('row').filter({ has: page.getByRole('rowheader', { name }) }),
+      ).toContainText('Yes');
+    const other = page.getByRole('region', { name: 'Other' });
+    const fields = other.getByRole('button', { name: /^The report's other \d+ fields$/ });
+    await expect(fields).toHaveAttribute('aria-expanded', 'false');
+    await fields.click();
+    await expect(other.getByRole('rowheader', { name: 'Gate policy version' })).toBeVisible();
     const install = page.getByRole('region', { name: 'Installation and licence' });
     await expect(install).toContainText(
       'Concurrent User licence: 1 unit consumed, 7 available, up to 25 connections',
@@ -95,7 +91,11 @@ test.describe('the trial report @health', () => {
     await expect(provenance).toHaveAttribute('aria-expanded', 'false');
     await expect(api).toHaveAttribute('aria-expanded', 'false');
     await provenance.click();
-    await expect(page.getByText("Recorded from Shutter's REST API at 20 Oct 2026, 17:55 UTC")).toBeVisible();
+    await expect(
+      page.getByText(
+        "Recorded from Shutter's REST API on an instance with IRIS AI Hub at 2 Nov 2026, 14:56 UTC",
+      ),
+    ).toBeVisible();
     // Technical opens the data disclosures (the licence fields, the API response) and leaves the explanation closed
     await go(page, '/health', { detail: 'technical' });
     await expect(page.getByRole('button', { name: 'The report as the API sends it' })).toHaveAttribute(

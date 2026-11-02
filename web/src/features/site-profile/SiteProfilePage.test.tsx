@@ -123,8 +123,8 @@ describe('SiteProfilePage', () => {
     expect(
       within(dialog).getByText('Downstream Out, category: from current state to history of record'),
     ).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
-    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
+    expect(await screen.findByText('Version 8 saved')).toBeInTheDocument();
     const sent = puts[0].body.receivers as { category?: string; history_policy?: string }[];
     expect(sent.map((r) => r.category)).toEqual(['history_of_record', 'history_of_record']);
     expect(sent[0].history_policy).toBeUndefined();
@@ -146,7 +146,7 @@ describe('SiteProfilePage', () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Confirm these answers…' }));
     const dialog = await screen.findByRole('dialog');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm as version 11' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm as version 8' }));
     expect(
       await screen.findByText(
         'Receiver 2, category: must be current_state, history_of_record or orders_results',
@@ -171,8 +171,8 @@ describe('SiteProfilePage', () => {
     expect(
       within(dialog).getByText('Closing a case by hand: only an approver, from now on'),
     ).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
-    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
+    expect(await screen.findByText('Version 8 saved')).toBeInTheDocument();
     expect(puts[0].body.approvers).toEqual({ ...recorded.profile.approvers, close_needs_approver: true });
   });
 
@@ -195,9 +195,9 @@ describe('SiteProfilePage', () => {
     expect(
       within(dialog).getByText('Downstream Out, tier: from 2, operations to 3, clinical safety'),
     ).toBeInTheDocument();
-    expect(within(dialog).getByText(/made under version 10 are refused at release/)).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
-    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
+    expect(within(dialog).getByText(/made under version 7 are refused at release/)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
+    expect(await screen.findByText('Version 8 saved')).toBeInTheDocument();
     expect(puts).toHaveLength(1);
     expect(puts[0].headers.get('X-Requested-With')).toBe('Shutter');
     const { version: _v, ...expected } = structuredClone(recorded.profile);
@@ -227,8 +227,8 @@ describe('SiteProfilePage', () => {
         'Team added: Bed management <beds@example.nhs.uk>, copies oncall@example.nhs.uk, for Downstream Out',
       ),
     ).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
-    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
+    expect(await screen.findByText('Version 8 saved')).toBeInTheDocument();
     // The seed's two teams first, as stored, then the new one
     const teams = puts[0].body.teams as { id: string }[];
     expect(teams.map((t) => t.id)).toEqual(['integration', 'pas', 'beds']);
@@ -274,8 +274,8 @@ describe('SiteProfilePage', () => {
     expect(
       within(dialog).getByText(/Feed time zone: from Europe\/London to -03:30\. Every operation key/),
     ).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
-    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
+    expect(await screen.findByText('Version 8 saved')).toBeInTheDocument();
     expect(puts[0].body.feed).toEqual({ time_zone: '-03:30' });
   });
 
@@ -307,8 +307,8 @@ describe('SiteProfilePage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('Note text: sent to the model from now on')).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
-    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
+    expect(await screen.findByText('Version 8 saved')).toBeInTheDocument();
     expect(puts[0].body.model_content).toEqual({ free_text: true });
   });
 
@@ -329,8 +329,8 @@ describe('SiteProfilePage', () => {
         "Prevent failures: from now on, a message whose HL7 schema isn't loaded here is held as a case, and nothing is sent until the schema is imported",
       ),
     ).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
-    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
+    expect(await screen.findByText('Version 8 saved')).toBeInTheDocument();
     expect(puts[0].body.feed).toMatchObject({ prevent_failures: true });
   });
 
@@ -338,7 +338,7 @@ describe('SiteProfilePage', () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Confirm these answers…' }));
     const dialog = await screen.findByRole('dialog');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm as version 11' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm as version 8' }));
     expect(await screen.findByText('Saved in Shutter')).toBeInTheDocument();
     const { version: _v, ...expected } = structuredClone(recorded.profile);
     expect(puts[0].body).toEqual({ ...expected, expectedVersion: recorded.version });
@@ -352,7 +352,7 @@ describe('SiteProfilePage', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
     const dialog = await screen.findByRole('dialog');
-    const save = within(dialog).getByRole('button', { name: 'Save version 11' });
+    const save = within(dialog).getByRole('button', { name: 'Save version 8' });
     expect(save).toBeDisabled();
     expect(within(dialog).getByText('Fewer releases wait for a person')).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('checkbox', { name: /I mean it/ }));
@@ -373,27 +373,27 @@ describe('SiteProfilePage', () => {
   it('keeps the edits when someone else saved meanwhile, and saves them against the newer version', async () => {
     renderPage();
     await userEvent.click((await inReceiver1()).getByRole('radio', { name: /3, clinical safety/ }));
-    // Someone else saves version 11 while this page holds version 10
+    // Someone else saves version 8 while this page holds version 7
     const theirs = structuredClone(recorded.profile);
     delete theirs.version;
     theirs.incident = { ...theirs.incident, threshold: 8 };
     const res = await fetch(`${BASE}/site-profile`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'Shutter' },
-      body: JSON.stringify({ ...theirs, expectedVersion: 10 }),
+      body: JSON.stringify({ ...theirs, expectedVersion: 7 }),
     });
     expect(res.status).toBe(200);
     await userEvent.click(screen.getByRole('button', { name: 'Review and save\u2026' }));
     let dialog = await screen.findByRole('dialog');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
-    expect(await within(dialog).findByText(/Version 11 was saved by someone else/)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
+    expect(await within(dialog).findByText(/Version 8 was saved by someone else/)).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }));
     await userEvent.click(screen.getByRole('button', { name: 'Review and save\u2026' }));
     dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('Incidents, failures: from 8 to 5')).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 12' }));
-    expect(await screen.findByText('Version 12 saved')).toBeInTheDocument();
-    expect(puts.at(-1)?.body.expectedVersion).toBe(11);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 9' }));
+    expect(await screen.findByText('Version 9 saved')).toBeInTheDocument();
+    expect(puts.at(-1)?.body.expectedVersion).toBe(8);
   });
 
   it('counts a save whose answer was lost as saved when the stored profile is ours', async () => {
@@ -411,8 +411,8 @@ describe('SiteProfilePage', () => {
     await userEvent.click((await inReceiver1()).getByRole('radio', { name: /3, clinical safety/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Review and save\u2026' }));
     const dialog = await screen.findByRole('dialog');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
-    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
+    expect(await screen.findByText('Version 8 saved')).toBeInTheDocument();
   });
 
   it('marks the field a server refusal names, and focuses its chosen radio', async () => {
@@ -431,7 +431,7 @@ describe('SiteProfilePage', () => {
     await userEvent.click((await inReceiver1()).getByRole('radio', { name: /3, clinical safety/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Review and save\u2026' }));
     const dialog = await screen.findByRole('dialog');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
     expect(await screen.findByText('Receiver 1, tier: must be 1, 2 or 3')).toBeInTheDocument();
     await waitFor(() => expect(receiver1().getByRole('radio', { name: /3, clinical safety/ })).toHaveFocus());
   });
@@ -439,8 +439,8 @@ describe('SiteProfilePage', () => {
   it('lists the versions with what each changed', async () => {
     renderPage();
     const versions = await screen.findByRole('region', { name: 'Versions' });
-    expect(await within(versions).findByRole('button', { name: /Version 8/ })).toBeInTheDocument();
-    await userEvent.click(within(versions).getByRole('button', { name: /Version 8/ }));
+    expect(await within(versions).findByRole('button', { name: /Version 1\b/ })).toBeInTheDocument();
+    await userEvent.click(within(versions).getByRole('button', { name: /Version 1\b/ }));
     expect(await within(versions).findByText('The first stored version.')).toBeInTheDocument();
   });
 });
@@ -454,7 +454,7 @@ describe('SiteProfilePage, a change a case suggested', () => {
     await waitFor(() => expect(heading).toHaveFocus());
     const card = screen.getByRole('region', { name: 'A suggested change from case C-000008' });
     const table = within(card).getByRole('table', { name: 'The change in this draft' });
-    expect(within(table).getByRole('columnheader', { name: 'Now, version 10' })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Now, version 7' })).toBeInTheDocument();
     const row = within(table)
       .getByRole('rowheader', { name: /Authoritative source/ })
       .closest('tr')!;
@@ -472,10 +472,10 @@ describe('SiteProfilePage, a change a case suggested', () => {
     await userEvent.click(within(card).getByRole('button', { name: 'Review and save…' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/Authoritative source: from .* to BEDMGR/)).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
-    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
+    expect(await screen.findByText('Version 8 saved')).toBeInTheDocument();
     expect(puts).toHaveLength(1);
-    expect(puts[0].body).toMatchObject({ authoritative_source: 'BEDMGR', expectedVersion: 10 });
+    expect(puts[0].body).toMatchObject({ authoritative_source: 'BEDMGR', expectedVersion: 7 });
     // Saved: the suggestion leaves the page and the address
     await waitFor(() =>
       expect(screen.queryByRole('region', { name: /A suggested change/ })).not.toBeInTheDocument(),

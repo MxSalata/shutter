@@ -65,8 +65,8 @@ test.describe('the trial, as the approver of the recorded runs', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toContainText('Trial only');
     await expect(dialog).toContainText("In the trial, saving changes only this browser's copy");
-    await dialog.getByRole('button', { name: 'Save version 11' }).click();
-    await expect(page.getByText('Version 11 saved')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Save version 8' }).click();
+    await expect(page.getByText('Version 8 saved')).toBeVisible();
     await expect(page.getByText('Saved in the trial. It lasts until you reload or leave.')).toBeVisible();
     await expect(bar).toHaveCount(0);
     await expect(page.getByText('Shipped answers')).toHaveCount(0);

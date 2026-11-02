@@ -1,7 +1,7 @@
 import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -85,10 +85,14 @@ describe('the production review in the trial', () => {
     expect(visibleWords()).toMatch(/Start a review/);
   });
 
-  it('keeps the word "live" to "live system" in a review, where the agent card says what it does on one', async () => {
+  it('keeps the word "live" out of a review, ranked by the agent or not', async () => {
+    renderAt('/reviews/PR-000004');
+    await screen.findByRole('heading', { name: 'Review PR-000004' });
+    expect(layer1Words(document.body).join(' ')).toMatch(/Ranked and explained \(recorded\)/);
+    expect(visibleWords()).not.toMatch(/\blive\b/i);
+    cleanup();
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
-    expect(layer1Words(document.body).join(' ')).toMatch(/On a live system, an agent ranks/);
     expect(visibleWords()).not.toMatch(/\blive\b/i);
   });
 

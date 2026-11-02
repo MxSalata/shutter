@@ -79,8 +79,8 @@ describe('SiteProfilePage in the trial', () => {
     expect(
       within(dialog).queryByText('This changes what Shutter does at this hospital from the next case.'),
     ).not.toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 11' }));
-    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
+    expect(await screen.findByText('Version 8 saved')).toBeInTheDocument();
     expect(screen.getByText('Saved in the trial. It lasts until you reload or leave.')).toBeInTheDocument();
   });
 

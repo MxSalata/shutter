@@ -55,6 +55,21 @@ function summaryOf(id: string): CaseSummary {
   const c = (recording.cases as unknown as Record<string, CaseFixture>)[id];
   return { ...(c.summary as unknown as CaseSummary), ...writesOf(c) };
 }
+/** A scenario's newest recorded case, as the instance's list named it when the trial was recorded. */
+function recordedLatest(id: string) {
+  const newest = Object.values(recording.cases as unknown as Record<string, CaseFixture>)
+    .map((c) => c.summary as unknown as CaseSummary)
+    .filter((c) => c.scenario === id)
+    .sort((a, b) => b.openedAt.localeCompare(a.openedAt) || b.caseId.localeCompare(a.caseId))[0];
+  return newest
+    ? {
+        caseId: newest.caseId,
+        state: newest.state,
+        disposition: newest.disposition,
+        headline: newest.headline,
+      }
+    : null;
+}
 /** The recorded scenario list with one scenario's latest case replaced. */
 function withLatest(id: string, caseId: string) {
   const c = summaryOf(caseId);
@@ -65,7 +80,7 @@ function withLatest(id: string, caseId: string) {
         latestCase:
           d.id === id
             ? { caseId, state: c.state, disposition: c.disposition, headline: c.headline }
-            : (recording.scenarios.find((r) => r.id === d.id)?.latestCase ?? null),
+            : recordedLatest(d.id),
       })),
       run: null,
     }),

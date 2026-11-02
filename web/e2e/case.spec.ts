@@ -116,7 +116,7 @@ test.describe('the S2 approval in the trial', () => {
     expect(await replayed).toBe(true);
     await expect(outcome).toHaveAttribute('data-tone', 'positive');
     await expect(page.getByTestId('replay-note')).toHaveText(
-      'Replayed from the recording: approved 20 Oct, 17:24 UTC. Your approval is noted at the end of the audit trail.',
+      'Replayed from the recording: approved 2 Nov, 14:16 UTC. Your approval is noted at the end of the audit trail.',
     );
     const stages = page.locator('.lifecycle-step');
     await expect(stages).toHaveCount(7);

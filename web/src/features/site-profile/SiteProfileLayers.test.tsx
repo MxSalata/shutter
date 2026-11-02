@@ -55,8 +55,8 @@ describe('the header', () => {
     expect(
       screen.getByText(/This hospital's answers: they decide what Shutter may do at each/),
     ).toBeInTheDocument();
-    // The version badge (the list of versions below says "Version 10" too, once it has loaded)
-    expect(screen.getAllByText('Version 10').some((e) => e.closest('[data-tone="neutral"]'))).toBe(true);
+    // The version badge (the list of versions below says "Version 7" too, once it has loaded)
+    expect(screen.getAllByText('Version 7').some((e) => e.closest('[data-tone="neutral"]'))).toBe(true);
     expect(screen.getByText('Shipped answers')).toBeInTheDocument();
     // The long paragraph is a list in the header's second layer, closed
     const detail = screen.getByRole('button', { name: 'Technical detail' });
@@ -68,10 +68,10 @@ describe('the header', () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Confirm these answers…' }));
     const dialog = await screen.findByRole('dialog');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm as version 11' }));
-    expect(await screen.findByText('Version 11 saved')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm as version 8' }));
+    expect(await screen.findByText('Version 8 saved')).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.getAllByText('Version 11').some((e) => e.closest('[data-tone="neutral"]'))).toBe(true),
+      expect(screen.getAllByText('Version 8').some((e) => e.closest('[data-tone="neutral"]'))).toBe(true),
     );
     expect(screen.queryByText('Shipped answers')).not.toBeInTheDocument();
     expect(screen.queryByText('Shutter is running on the shipped answers')).not.toBeInTheDocument();
@@ -286,7 +286,7 @@ describe('the save bar and the confirm', () => {
     expect(within(dialog).getByText('Live system')).toBeInTheDocument();
     expect(within(dialog).queryByText('Trial only')).not.toBeInTheDocument();
     // Approvals made under the version in force still come back to a person, as the page has always said
-    expect(within(dialog).getByText(/made under version 10 are refused at release/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/made under version 7 are refused at release/)).toBeInTheDocument();
   });
 });
 

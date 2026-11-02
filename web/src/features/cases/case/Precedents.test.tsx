@@ -174,7 +174,7 @@ describe('precedents on the case page', () => {
   });
 
   it('are in the Audit trail of every case, with the record a click away', async () => {
-    renderCase('C-000009');
+    renderCase('C-000008');
     const section = await openAuditTrail();
     expect(within(section).getByRole('heading', { level: 2, name: 'Precedents' })).toBeInTheDocument();
     expect(line(section)).toContain(
@@ -190,7 +190,26 @@ describe('precedents on the case page', () => {
       'No precedent is recorded for these conditions at this receiver.',
     );
     await waitFor(() => expect(empty).toBeVisible());
-    expect(within(section).getByText('GET /api/shutter/cases/C-000009/precedents')).toBeInTheDocument();
+    expect(within(section).getByText('GET /api/shutter/cases/C-000008/precedents')).toBeInTheDocument();
+  });
+
+  it('name the recorded approval before a later case of the same conditions, and list it in the record', async () => {
+    renderCase('C-000009');
+    const section = await openAuditTrail();
+    expect(line(section)).toContain(
+      'Approved and verified 1 time, rejected 0 times here in the last 180 days; last approved by approver on 2 Nov (case C-000002).',
+    );
+    expect(within(section).getByRole('link', { name: 'C-000002' })).toHaveAttribute(
+      'href',
+      '/cases/C-000002',
+    );
+    await userEvent.click(within(section).getByRole('button', { name: 'See them' }));
+    const table = await within(section).findByRole('table');
+    const [, only, ...more] = within(table).getAllByRole('row');
+    expect(more).toHaveLength(0);
+    expect(only).toHaveTextContent('Approved, verified');
+    expect(within(only).getByRole('link', { name: 'C-000002' })).toHaveAttribute('href', '/cases/C-000002');
+    expect(only).toHaveTextContent('2026-11-01.1');
   });
 
   it('count the approvals and rejections, name the last decision and its case, and say when the policy was earlier', async () => {
@@ -249,12 +268,12 @@ describe('precedents on the case page', () => {
 
   it('are retired by an approver only', async () => {
     resetMock('operator');
-    renderCase('C-000009');
+    renderCase('C-000008');
     const section = await openAuditTrail();
     expect(line(section)).toContain('No approver has seen');
     // The trial's store has none: the list is a stand-in for a server that has them
     server.use(
-      http.get('/api/shutter/cases/C-000009/precedents', () =>
+      http.get('/api/shutter/cases/C-000008/precedents', () =>
         HttpResponse.json({
           receiver: 'Downstream Out',
           conditions: null,
@@ -354,7 +373,13 @@ describe('precedents on the case page', () => {
   });
 
   it('say nothing when the snapshot was collected before precedents were', async () => {
-    server.use(http.get(`/api/shutter/cases/${HELD}/snapshot`, () => HttpResponse.json(recorded.snapshot)));
+    // A snapshot from a server before v1.35: no precedents in its summary
+    const { precedents: _none, ...before } = recorded.snapshot.summary;
+    server.use(
+      http.get(`/api/shutter/cases/${HELD}/snapshot`, () =>
+        HttpResponse.json({ ...recorded.snapshot, summary: before }),
+      ),
+    );
     renderCase(HELD);
     await screen.findByRole('heading', { name: 'What needs you now' });
     await screen.findByText('Review the plan and decide');

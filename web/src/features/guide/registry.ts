@@ -66,10 +66,11 @@ export interface GuideChapter {
 }
 
 /**
- * Whether the demo's recording holds a production review the agent ranked (DESIGN.md decision 6). Until it does, the
- * step about the agent's ranking is left out of every route.
+ * Whether the demo's recording holds a production review the agent ranked (DESIGN.md decision 6): it does since the
+ * re-recording on the AI Hub instance, whose newest review of each production is ranked. Without one, the step about
+ * the agent's ranking is left out of every route.
  */
-export const RANKED_REVIEW_RECORDED = false;
+export const RANKED_REVIEW_RECORDED = true;
 
 const Q: GuideScope[] = ['quick', 'all'];
 const A: GuideScope[] = ['all'];

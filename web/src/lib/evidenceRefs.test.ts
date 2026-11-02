@@ -32,6 +32,14 @@ describe("the evidence the board's members and the plan cite", () => {
     expect(catalogueEntriesOf(c.plan.plan.evidenceRefs)).toEqual(['E7']);
   });
 
+  it("reads a catalogue entry cited by its id alone, as a v1.35 run cites the evidence's keys, or with the prefix", () => {
+    expect(catalogueEntriesOf(['message', 'MSG00802', 'E7', 'catalogue:E9@1', 'catalogue:E7'])).toEqual([
+      'E7',
+      'E9@1',
+    ]);
+    expect(catalogueEntriesOf(['EVENT', 'E', 'catalogue:'])).toEqual([]);
+  });
+
   it('counts only the round whose runs made the plan, and names the plan alone when no member cites a section', () => {
     const run = (code: string, snapshotId: string, refs: string[]) =>
       ({ memberCode: code, snapshotId, result: { evidence_refs: refs } }) as unknown as AgentRun;

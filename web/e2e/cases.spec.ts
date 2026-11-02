@@ -93,7 +93,7 @@ test.describe('the Technical detail', () => {
     await signIn(page);
     await go(page, '/cases');
     await expect(row(page, 'C-000058')).toContainText('Delivered, verified');
-    await expect(row(page, 'C-000058')).not.toContainText('header 31947');
+    await expect(row(page, 'C-000058')).not.toContainText('header 9625');
     await expect(row(page, 'C-000058')).not.toContainText('catalogue E16');
   });
 
@@ -101,7 +101,7 @@ test.describe('the Technical detail', () => {
     await signIn(page, { detail: 'technical' });
     await go(page, '/cases', { detail: 'technical' });
     const c58 = row(page, 'C-000058');
-    await expect(c58).toContainText('header 31947');
+    await expect(c58).toContainText('header 9625');
     await expect(c58).toContainText('catalogue E16');
     await expect(c58).toContainText('rejected');
   });

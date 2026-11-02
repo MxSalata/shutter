@@ -62,11 +62,10 @@ describe('SettingsPage in the trial', () => {
     renderTrial();
     const detail = await screen.findByRole('button', { name: 'Classes, modes, models and budgets' });
     expect(detail).toHaveAttribute('aria-expanded', 'true');
-    expect(
-      screen.getByText(
-        'Not on this instance: AI Hub, the live runner, a model provider. A replay needs none of them.',
-      ),
-    ).toBeVisible();
+    // The recorded instance had AI Hub, its runner and a provider, so nothing is listed as missing
+    expect(screen.queryByText(/^Not on this instance:/)).not.toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'Settings of the agent items' })).toBeVisible();
+    expect(document.body.textContent).toMatch(/\blive\b/i);
   });
 
   it('names a run by how it was made: replayed, and a real one as "real", never "live"', async () => {
@@ -106,11 +105,12 @@ describe('SettingsPage in the trial', () => {
     expect(within(table).queryByText(/live/)).not.toBeInTheDocument();
   });
 
-  it('names a replayed review run by its mode alone: it has no model to name', async () => {
+  it('names a replayed review run by the model its recording was made with, and as replayed', async () => {
     renderTrial();
     const table = await screen.findByRole('table', { name: 'Costs by production review' });
     const row = within(table).getAllByRole('row')[1];
-    expect(within(row).getByText('replayed')).toBeInTheDocument();
+    expect(within(row).getByText('claude-opus-5-5')).toBeInTheDocument();
+    expect(within(row).getByText(/replayed/)).toBeInTheDocument();
     expect(within(row).queryByText(/none/)).not.toBeInTheDocument();
   });
 });

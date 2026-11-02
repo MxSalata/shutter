@@ -21,7 +21,7 @@ describe('s8Pair', () => {
     const { rules, board } = s8Pair(all);
     expect(rules?.caseId).toBe('C-000021');
     expect(board?.caseId).toBe('C-000008');
-    const newer = { ...board!, caseId: 'C-000099', openedAt: '2026-10-30T00:00:00Z' };
+    const newer = { ...board!, caseId: 'C-000099', openedAt: '2026-11-03T00:00:00Z' };
     expect(s8Pair([...all, newer]).board?.caseId).toBe('C-000099');
     expect(s8Pair(all.filter((c) => c.mode !== 'rules')).rules).toBeUndefined();
   });

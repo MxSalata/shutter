@@ -120,7 +120,7 @@ describe('the guide', () => {
     expect(quick).toBeChecked();
     expect(quick).toHaveTextContent('9 steps, about 4 min');
     expect(within(d).getByRole('radio', { name: /Every screen/ })).toHaveTextContent(
-      '31 steps in 15 chapters',
+      '32 steps in 15 chapters',
     );
     expect(within(d).getByRole('radio', { name: /For integration engineers/ })).toHaveTextContent('6 steps');
     expect(within(d).getByRole('button', { name: 'Start the tour' })).toBeInTheDocument();

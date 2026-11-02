@@ -171,7 +171,7 @@ test.describe('the Evidence and Audit trail tabs', tagged, () => {
     await expect(message.getByRole('list', { name: "The message's segments" })).toContainText(
       'MSH-9 ADT^A02',
     );
-    await expect(evidence).toContainText('Snapshot 1, taken 20 Oct, 18:27:03 BST, 17:27:03Z');
+    await expect(evidence).toContainText('Snapshot 1, taken 2 Nov, 14:18:54 GMT, 14:18:54Z');
     await expect(evidence.getByRole('button', { name: 'As the API sends it' })).toHaveAttribute(
       'aria-expanded',
       'true',
@@ -197,12 +197,14 @@ test.describe('the Evidence and Audit trail tabs', tagged, () => {
   });
 
   test('the audit trail says "Rationale as in the plan" instead of repeating it', async ({ page }) => {
+    // A week after the recording, whenever the test runs: an event of another day carries its date
+    await page.clock.setFixedTime(new Date('2026-11-09T12:00:00Z'));
     await signIn(page);
     await go(page, '/cases/C-000008?tab=audit');
     const timeline = page.getByRole('region', { name: 'Timeline' });
     await expect(timeline.getByText('Plan v1 (escalate). Rationale as in the plan.')).toBeVisible();
     await expect(timeline.getByText('The plan asks for a person. Rationale as in the plan.')).toBeVisible();
-    await expect(timeline.getByText('20 Oct, 18:26:48 BST').first()).toBeVisible();
+    await expect(timeline.getByText('2 Nov, 14:18:39 GMT').first()).toBeVisible();
   });
 });
 

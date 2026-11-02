@@ -89,14 +89,30 @@ function ranked(): ReviewDetail {
     recordedEntries: 14,
   };
   r.agentState = 'ok';
-  // Within the medium tier the agent puts MESSAGE_ERRORS on ADT to Downstream (F5) first
-  const order = ['F5', 'F1', 'F2', 'F3', 'F4', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12', 'F13'];
+  // The high finding first; within the medium tier the agent puts MESSAGE_ERRORS on ADT to Downstream (F3) first
+  const order = ['F1', 'F3', 'F2', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12', 'F13'];
   for (const f of r.findings) {
     f.rank = order.indexOf(f.id) + 1;
     f.explanation = `Consistent with the cases of ${f.item || 'the production'}.`;
   }
   return r;
 }
+
+/**
+ * PR-000001 with what the recording does not hold: its alerting finding (F10) marked intended by an approver, and the
+ * cases and the latest message header an instance with failures there would name.
+ */
+function marked(): ReviewDetail {
+  const r = structuredClone(recorded['PR-000001']);
+  const alerting = r.findings.find((f) => f.id === 'F10')!;
+  Object.assign(alerting, { status: 'intended', annotationId: '16' });
+  alerting.cases = { count: 54, unique: 30, latest: ['C-000055'] };
+  r.findings.find((f) => f.id === 'F2')!.evidence.latestHeaderId = '4342';
+  r.summary = { ...r.summary, intended: 1 };
+  return r;
+}
+const serveMarked = () =>
+  server.use(http.get(`${BASE}/production-reviews/PR-000001`, () => HttpResponse.json(marked())));
 
 describe('ReviewsPage', () => {
   it('lists the past reviews newest first, with their state, the agent and the findings by severity', async () => {
@@ -114,9 +130,10 @@ describe('ReviewsPage', () => {
       'PR-000001',
     ]);
     expect(within(lines[1]).getByText('Hospital.Production')).toBeInTheDocument();
-    expect(within(lines[1]).getByText('No recording')).toBeInTheDocument();
-    expect(within(lines[1]).getByText('1 high')).toBeInTheDocument();
-    expect(within(lines[0]).getByText('Agent not asked')).toBeInTheDocument();
+    expect(within(lines[1]).getByText('Ranked')).toBeInTheDocument();
+    expect(within(lines[1]).getByText('2 high')).toBeInTheDocument();
+    expect(within(lines[0]).getByText('Ranked')).toBeInTheDocument();
+    expect(within(lines[3]).getByText('Agent not asked')).toBeInTheDocument();
     expect(screen.getByText(/The review never changes the production/)).toBeInTheDocument();
   });
 
@@ -148,11 +165,13 @@ describe('ReviewsPage', () => {
     );
     expect(latest.getByText('Shutter.Production')).toBeInTheDocument();
     expect(latest.getByText('SHUTTER')).toBeInTheDocument();
-    expect(latest.getByText('10 medium')).toBeInTheDocument();
-    expect(latest.getByText('3 low')).toBeInTheDocument();
-    expect(latest.getByText('Hospital.Production')).toBeInTheDocument();
     expect(latest.getByText('1 high')).toBeInTheDocument();
-    expect(latest.getByText('No recording')).toBeInTheDocument();
+    expect(latest.getByText('10 medium')).toBeInTheDocument();
+    expect(latest.getAllByText('2 low')).toHaveLength(2);
+    expect(latest.getByText('Hospital.Production')).toBeInTheDocument();
+    expect(latest.getByText('2 high')).toBeInTheDocument();
+    // The newest review of each was ranked by the agent
+    expect(latest.getAllByText('Ranked')).toHaveLength(2);
     // The older reviews of the same productions are not cards
     expect(latest.queryByText('Open PR-000002')).not.toBeInTheDocument();
   });
@@ -250,7 +269,7 @@ describe('ReviewsPage', () => {
 });
 
 describe('ReviewPage', () => {
-  it('shows the review read only, closed and grouped, with the agent plainly not recorded below the findings', async () => {
+  it('shows the review read only, closed and grouped, with the agent plainly not asked below the findings', async () => {
     renderAt('/reviews/PR-000001');
     expect(await screen.findByRole('heading', { name: 'Review PR-000001' })).toBeInTheDocument();
     expect(screen.getByText(/^Shutter.Production in SHUTTER, \d+ days? of history\.$/)).toBeInTheDocument();
@@ -258,21 +277,18 @@ describe('ReviewPage', () => {
     const note = screen.getAllByRole('note')[0];
     expect(note).toHaveTextContent('Read only');
     expect(note).toHaveTextContent('The review never changes the production');
-    // No finding was explained: the agent's card says so, below the findings, and no row carries an explanation
+    // The review was started without the agent: its card says so, below the findings, with no count of explanations
     const agent = within(agentCard());
-    expect(agent.getByText('0 of 13 findings explained by the agent')).toBeInTheDocument();
-    expect(
-      agent.getByRole('progressbar', { name: '0 of 13 findings explained by the agent' }),
-    ).toBeInTheDocument();
+    expect(agent.queryByText(/findings explained by the agent/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^The agent's explanation/)).not.toBeInTheDocument();
     expect(
       screen.getByRole('region', { name: 'Findings' }).compareDocumentPosition(agentCard()) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(agent.getByText(/This review was recorded without its ranking/)).toHaveTextContent(
+    expect(agent.getByText(/^The agent was not asked: the review was started without it/)).toHaveTextContent(
       /deterministic order/,
     );
-    expect(agent.getByText('No recording')).toBeInTheDocument();
+    expect(agent.getByText('Agent not asked')).toBeInTheDocument();
     expect(
       findings().getByText('In order: severity, then unique cases, then the newest evidence.'),
     ).toBeInTheDocument();
@@ -283,85 +299,88 @@ describe('ReviewPage', () => {
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
     const summary = within(screen.getByRole('region', { name: 'Summary' }));
-    expect(summary.getByText('Errors logged').closest('.stat-tile')).toHaveTextContent('714');
+    expect(summary.getByText('Errors logged').closest('.stat-tile')).toHaveTextContent('94');
     expect(summary.getByText('Errors logged').closest('.stat-tile')).toHaveTextContent('in the window');
-    expect(summary.getByText('Messages in error').closest('.stat-tile')).toHaveTextContent('713');
-    expect(summary.getByText('Medium').closest('.stat-tile')).toHaveTextContent('11');
+    expect(summary.getByText('Messages in error').closest('.stat-tile')).toHaveTextContent('90');
+    expect(summary.getByText('High').closest('.stat-tile')).toHaveTextContent('1');
+    expect(summary.getByText('Medium').closest('.stat-tile')).toHaveTextContent('10');
     expect(summary.getByText('Low').closest('.stat-tile')).toHaveTextContent('2');
-    // The zero is in the findings tile's caption, not a tile of its own
-    expect(summary.queryByText('High')).not.toBeInTheDocument();
     expect(summary.getByText('Findings').closest('.stat-tile')).toHaveTextContent('13');
-    expect(summary.getByText('0 high · 1 marked')).toBeInTheDocument();
-    // PR-000003 has a high finding and nothing marked
+    // Nothing marked: the findings tile's caption says nothing of marks
+    expect(summary.queryByText(/marked/)).not.toBeInTheDocument();
+    // With a finding marked, and a zero in a tier: the zero is in the caption, not a tile of its own
     cleanup();
-    renderAt('/reviews/PR-000003');
-    await screen.findByRole('heading', { name: 'Review PR-000003' });
-    const hospital = within(screen.getByRole('region', { name: 'Summary' }));
-    expect(hospital.getByText('High').closest('.stat-tile')).toHaveTextContent('1');
-    expect(hospital.queryByText(/marked/)).not.toBeInTheDocument();
+    const noHigh = marked();
+    Object.assign(noHigh.summary.bySeverity ?? {}, { high: 0 });
+    server.use(http.get(`${BASE}/production-reviews/PR-000001`, () => HttpResponse.json(noHigh)));
+    renderAt('/reviews/PR-000001');
+    await screen.findByRole('heading', { name: 'Review PR-000001' });
+    const tiles = within(screen.getByRole('region', { name: 'Summary' }));
+    expect(tiles.queryByText('High')).not.toBeInTheDocument();
+    expect(tiles.getByText('0 high · 1 marked')).toBeInTheDocument();
   });
 
   it('lists the findings closed under their severity, each with its title, chip, summary and case count', async () => {
+    serveMarked();
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
     expect(
       findings()
         .getAllByRole('heading', { level: 3 })
         .map((h) => h.textContent),
-    ).toEqual(['Medium', 'Low']);
+    ).toEqual(['High', 'Medium', 'Low']);
     // Every finding is closed, and the control says so
     expect(expandedStates()).toEqual(Array(13).fill('false'));
     // What the closed row says is in its control; the opened finding adds more below it
-    const alerting = within(control('F2'));
+    const alerting = within(control('F10'));
     expect(alerting.getByText('No alert on error')).toBeInTheDocument();
     expect(alerting.getByText('AlertOnError')).toBeInTheDocument();
-    expect(alerting.getByText('ADT In, HL7 Index, +2')).toBeInTheDocument();
+    expect(alerting.getByText('ADT In, HL7 Index, +4')).toBeInTheDocument();
     expect(
       alerting.getByText('Failures reach the event log and wait for someone to read it.'),
     ).toBeInTheDocument();
     expect(alerting.getByText('54 cases, 30 unique')).toBeInTheDocument();
-    expect(within(control('F4')).getByText('ERROR <Ens>ErrBPTerminated')).toBeInTheDocument();
+    expect(within(control('F2')).getByText('ERROR <Ens>ErrBPTerminated')).toBeInTheDocument();
     expect(
-      within(control('F4')).getByText('445 errors with one signature, logged by ADT to Downstream.'),
+      within(control('F2')).getByText('82 errors with one signature, logged by ADT to Downstream.'),
     ).toBeInTheDocument();
-    expect(
-      within(control('F1')).getByText('1 error with one signature, logged by the production itself.'),
-    ).toBeInTheDocument();
-    expect(within(control('F13')).getByText('ADT In · InactivityTimeout = 0')).toBeInTheDocument();
+    expect(within(control('F1')).getByText('Second Parser · 1 suspended')).toBeInTheDocument();
+    expect(within(control('F12')).getByText('ADT In · InactivityTimeout = 0')).toBeInTheDocument();
     // A finding about the whole production needs no "the production" beside its chip
-    expect(within(control('F3')).getByText('no Ens.Alert item')).toBeInTheDocument();
-    expect(within(control('F3')).queryByText('the production')).not.toBeInTheDocument();
+    expect(within(control('F11')).getByText('no Ens.Alert item')).toBeInTheDocument();
+    expect(within(control('F11')).queryByText('the production')).not.toBeInTheDocument();
     // Annotation state and the button are outside the control, so they work while the finding is closed
-    expect(within(row('F1')).getByText('Intended')).toBeInTheDocument();
+    expect(within(row('F10')).getByText('Intended')).toBeInTheDocument();
     expect(
-      await within(row('F2')).findByRole('button', { name: 'Annotate F2, ALERTING_OFF' }),
+      await within(row('F2')).findByRole('button', { name: 'Annotate F2, ERRORS_GROUPED' }),
     ).toBeInTheDocument();
   });
 
   it('opens a finding to show what was found, why it matters and what to do', async () => {
+    serveMarked();
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
-    const first = within(row('F1'));
-    await open(row('F1'));
-    expect(first.getByRole('button', { expanded: true })).toBeInTheDocument();
+    const errors = within(row('F2'));
+    await open(row('F2'));
+    expect(errors.getByRole('button', { expanded: true })).toBeInTheDocument();
     expect(
-      first.getByRole('region', { name: 'Repeated errors of one kind, ERRORS_GROUPED' }),
+      errors.getByRole('region', { name: 'Repeated errors of one kind, ERRORS_GROUPED' }),
     ).toBeInTheDocument();
-    expect(first.getByText('Intended')).toBeInTheDocument();
-    expect(first.getByRole('link', { name: 'C-000055' })).toHaveAttribute('href', '/cases/C-000055');
-    expect(first.getByRole('link', { name: /Latest header 4342/ })).toHaveAttribute(
+    expect(errors.getByRole('link', { name: /Latest header 4342/ })).toHaveAttribute(
       'href',
       '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderId=4342',
     );
-    expect(first.getByText('Why it matters')).toBeInTheDocument();
-    await open(row('F2'));
-    const alerting = within(row('F2'));
-    expect(alerting.getByText("Source: the item's own setting")).toBeInTheDocument();
-    expect(alerting.getAllByRole('listitem')).toHaveLength(4);
+    expect(errors.getByText('Why it matters')).toBeInTheDocument();
+    await open(row('F10'));
+    const alerting = within(row('F10'));
+    expect(alerting.getByText('Intended')).toBeInTheDocument();
+    expect(alerting.getByRole('link', { name: 'C-000055' })).toHaveAttribute('href', '/cases/C-000055');
+    expect(alerting.getByText('Source: the class default')).toBeInTheDocument();
+    expect(alerting.getAllByRole('listitem')).toHaveLength(6);
     // The server's own sentences are shown in full once the finding is opened
     expect(alerting.getByText(/Items on the clinical feed raise no alert on error/)).toBeInTheDocument();
-    // The recorded review has no count of HL7 TCP items, so the page says nothing about them
-    expect(findings().queryByText(/^No HL7/)).not.toBeInTheDocument();
+    // The recorded review counts no HL7 operation and no HL7 TCP item, and the page says what that leaves unchecked
+    expect(findings().getByText(/^No HL7 operation or HL7 TCP item in this production/)).toBeInTheDocument();
   });
 
   it('opens the finding the address names, and leaves the others closed', async () => {
@@ -375,12 +394,20 @@ describe('ReviewPage', () => {
   });
 
   it('narrows the findings by severity, new and marked', async () => {
+    serveMarked();
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
     const chips = within(screen.getByRole('radiogroup', { name: 'Show findings' }));
     const labels = (radios: HTMLElement[]) =>
       radios.map((c) => (c as HTMLInputElement).labels?.[0]?.textContent);
-    expect(labels(chips.getAllByRole('radio'))).toEqual(['All 13', 'Medium 11', 'Low 2', 'New', 'Marked']);
+    expect(labels(chips.getAllByRole('radio'))).toEqual([
+      'All 13',
+      'High 1',
+      'Medium 10',
+      'Low 2',
+      'New',
+      'Marked',
+    ]);
     await userEvent.click(chips.getByRole('radio', { name: 'Low 2' }));
     expect(rows().map((r) => r.dataset.finding)).toEqual(['F12', 'F13']);
     expect(
@@ -389,7 +416,7 @@ describe('ReviewPage', () => {
         .map((h) => h.textContent),
     ).toEqual(['Low']);
     await userEvent.click(chips.getByRole('radio', { name: 'Marked' }));
-    expect(rows().map((r) => r.dataset.finding)).toEqual(['F1']);
+    expect(rows().map((r) => r.dataset.finding)).toEqual(['F10']);
     await userEvent.click(chips.getByRole('radio', { name: 'All 13' }));
     expect(rows()).toHaveLength(13);
     // PR-000003 has nothing marked, so there is no new against marked
@@ -397,20 +424,20 @@ describe('ReviewPage', () => {
     renderAt('/reviews/PR-000003');
     await screen.findByRole('heading', { name: 'Review PR-000003' });
     const hospital = within(screen.getByRole('radiogroup', { name: 'Show findings' }));
-    expect(labels(hospital.getAllByRole('radio'))).toEqual(['All 9', 'High 1', 'Medium 6', 'Low 2']);
+    expect(labels(hospital.getAllByRole('radio'))).toEqual(['All 7', 'High 2', 'Medium 3', 'Low 2']);
   });
 
   it('keeps the findings closed in Technical, adds each check code beside its title and opens the keys once a finding is open', async () => {
     renderAt('/reviews/PR-000001', 'technical');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
     expect(expandedStates()).toEqual(Array(13).fill('false'));
-    expect(within(row('F2')).getAllByText('ALERTING_OFF')[0]).toBeInTheDocument();
-    expect(within(row('F2')).getAllByText('ALERTING_OFF')[0]).toHaveClass('code-chip');
-    await open(row('F2'));
-    const keys = within(row('F2')).getByRole('button', { name: 'Keys and values' });
+    expect(within(row('F10')).getAllByText('ALERTING_OFF')[0]).toBeInTheDocument();
+    expect(within(row('F10')).getAllByText('ALERTING_OFF')[0]).toHaveClass('code-chip');
+    await open(row('F10'));
+    const keys = within(row('F10')).getByRole('button', { name: 'Keys and values' });
     expect(keys).toHaveAttribute('aria-expanded', 'true');
-    expect(within(row('F2')).getByText('Confidence')).toBeInTheDocument();
-    expect(within(row('F2')).getByText('Source')).toBeInTheDocument();
+    expect(within(row('F10')).getByText('Confidence')).toBeInTheDocument();
+    expect(within(row('F10')).getByText('Source')).toBeInTheDocument();
     // The review's own details open, with the times in UTC beside the local ones
     expect(screen.getByRole('button', { name: 'Production, window and fingerprint' })).toHaveAttribute(
       'aria-expanded',
@@ -420,13 +447,14 @@ describe('ReviewPage', () => {
   });
 
   /**
-   * The spec's budget is 350 words for a review with every finding closed. The page measures 388 (header 12, the
-   * read-only note 18, tiles 25, the findings' lead and chips 24, the thirteen rows 253, the agent's card 51): the
-   * spec's own drawing adds up to about 410, so 350 cannot hold with the severity badge, the chip, the line and the
-   * case count on every row. The budget below is the measured page with a little room; it still fails if the closed
-   * rows grow back toward today's 2,057.
+   * The spec's budget is 350 words for a review with every finding closed. The page measured 388 on the first
+   * recording (header 12, the read-only note 18, tiles 25, the findings' lead and chips 24, the thirteen rows 253, the
+   * agent's card 51), and 406 on the AI Hub recording, whose four error groups on Second Parser carry long signatures
+   * as their chips: the spec's own drawing adds up to about 410, so 350 cannot hold with the severity badge, the chip,
+   * the line and the case count on every row. The budget below is the measured page with a little room; it still fails
+   * if the closed rows grow back toward today's 2,057.
    */
-  const PLAIN_BUDGET = 390;
+  const PLAIN_BUDGET = 420;
 
   it('keeps a review in Plain within its word budget, and Technical within one and a half times it', async () => {
     renderAt('/reviews/PR-000001');
@@ -525,12 +553,17 @@ describe('ReviewPage', () => {
       agentCard().compareDocumentPosition(screen.getByRole('region', { name: 'Findings' })) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(rows()[0].dataset.finding).toBe('F5');
+    // The high finding first, then the medium tier in the agent's order: MESSAGE_ERRORS (F3) before F2
+    expect(
+      rows()
+        .map((r) => r.dataset.finding)
+        .slice(0, 3),
+    ).toEqual(['F1', 'F3', 'F2']);
     // The agent's explanation sits beside the finding, above the deterministic text, once the finding is open
-    await open(rows()[0]);
-    const first = within(rows()[0]);
+    await open(rows()[1]);
+    const first = within(rows()[1]);
     const explanation = first.getByRole('note');
-    expect(explanation).toHaveTextContent("The agent's explanation, rank 1 (recorded)");
+    expect(explanation).toHaveTextContent("The agent's explanation, rank 2 (recorded)");
     expect(explanation).toHaveTextContent('Consistent with the cases of ADT to Downstream.');
     expect(
       explanation.compareDocumentPosition(first.getByText('Why it matters')) &
@@ -556,6 +589,28 @@ describe('ReviewPage', () => {
     expect(agent.getByText(/One IRIS AI Hub agent/)).toHaveTextContent('%AI.Agent');
   });
 
+  it("puts the recorded ranking of the newest review above the findings: the agent's summary, what it explained and its order", async () => {
+    const r = recorded['PR-000004'];
+    renderAt('/reviews/PR-000004');
+    expect(
+      await screen.findByText("In the agent's order: within each severity tier, as it ranked them."),
+    ).toBeInTheDocument();
+    expect(
+      agentCard().compareDocumentPosition(screen.getByRole('region', { name: 'Findings' })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const agent = within(agentCard());
+    expect(agent.getByText('Ranked and explained (recorded)')).toBeInTheDocument();
+    expect(agent.getByText(r.agent.summary)).toBeInTheDocument();
+    expect(
+      agent.getByText(`${r.agent.explained} of ${r.findings.length} findings explained by the agent`),
+    ).toBeInTheDocument();
+    for (const u of r.agent.unknowns) expect(agent.getByText(u)).toBeInTheDocument();
+    // The rows in the recorded rank, the high finding first
+    const byRank = [...r.findings].sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0)).map((f) => f.id);
+    expect(rows().map((x) => x.dataset.finding)).toEqual(byRank);
+  });
+
   it('lets an approver mark a finding intended with a reason and an expiry, and reads the review again', async () => {
     let posted: { body: unknown; key: string | null } | null = null;
     let served = recorded['PR-000001'];
@@ -564,7 +619,10 @@ describe('ReviewPage', () => {
       http.post(`${BASE}/production-reviews/PR-000001/annotations`, async ({ request }) => {
         posted = { body: await request.json(), key: request.headers.get('Idempotency-Key') };
         served = structuredClone(served);
-        Object.assign(served.findings[1], { status: 'intended', annotationId: '17' });
+        Object.assign(
+          served.findings.find((f) => f.id === 'F10')!,
+          { status: 'intended', annotationId: '17' },
+        );
         return HttpResponse.json({ annotationId: '17', status: 'intended' }, { status: 201 });
       }),
     );
@@ -572,9 +630,9 @@ describe('ReviewPage', () => {
     await screen.findByRole('heading', { name: 'Review PR-000001' });
     // The button is outside the accordion's control, so it works while the finding is closed
     await userEvent.click(
-      await within(row('F2')).findByRole('button', { name: 'Annotate F2, ALERTING_OFF' }),
+      await within(row('F10')).findByRole('button', { name: 'Annotate F10, ALERTING_OFF' }),
     );
-    const dialog = await screen.findByRole('dialog', { name: /^Annotate F2: / });
+    const dialog = await screen.findByRole('dialog', { name: /^Annotate F10: / });
     expect(within(dialog).getByText(/never a change to the production/)).toBeInTheDocument();
     expect(within(dialog).getByText('Live system')).toBeInTheDocument();
     const mark = within(dialog).getByRole('button', { name: 'Mark as intended' });
@@ -588,15 +646,15 @@ describe('ReviewPage', () => {
     expect(await screen.findByText('Marked as intended')).toBeInTheDocument();
     expect(posted).toEqual({
       body: {
-        findingId: 'F2',
+        findingId: 'F10',
         status: 'intended',
         reason: 'Alerts go to the night desk',
         expiresAt: '2099-01-31T23:59:59Z',
       },
       key: expect.stringMatching(/^[0-9a-f-]{36}$/),
     });
-    expect(await within(row('F2')).findByText('Annotation 17')).toBeInTheDocument();
-    expect(within(row('F2')).getByText('Intended')).toBeInTheDocument();
+    expect(await within(row('F10')).findByText('Annotation 17')).toBeInTheDocument();
+    expect(within(row('F10')).getByText('Intended')).toBeInTheDocument();
   });
 
   it('lets an approver remove an annotation', async () => {
@@ -607,15 +665,14 @@ describe('ReviewPage', () => {
         return new HttpResponse(null, { status: 204 });
       }),
     );
+    serveMarked();
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
     await userEvent.click(
-      await within(row('F1')).findByRole('button', { name: 'Remove the annotation of F1' }),
+      await within(row('F10')).findByRole('button', { name: 'Remove the annotation of F10' }),
     );
-    const dialog = await screen.findByRole('dialog', { name: 'Remove the annotation of F1' });
-    expect(
-      within(dialog).getByText(/The finding "Repeated errors of one kind" on the production/),
-    ).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog', { name: 'Remove the annotation of F10' });
+    expect(within(dialog).getByText(/The finding "No alert on error" on the production/)).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Remove the annotation' }));
     expect(await screen.findByText('Annotation removed')).toBeInTheDocument();
     expect(deleted).toBe('16');
@@ -642,20 +699,22 @@ describe('ReviewPage', () => {
 
   it('hides the annotations from an operator', async () => {
     resetMock('operator');
+    serveMarked();
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
-    expect(within(row('F1')).getByText('Intended')).toBeInTheDocument();
+    expect(within(row('F10')).getByText('Intended')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Annotate|Remove the annotation/ })).not.toBeInTheDocument();
   });
 
   it("hides the annotations from the public demo's role, which reads the review and the notes already made", async () => {
     resetMock('demo');
+    serveMarked();
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
     expect(await screen.findByTestId('demo-read-only')).toHaveTextContent(
       "The public demo is read-only: a site's approver saves changes here",
     );
-    expect(within(row('F1')).getByText('Intended')).toBeInTheDocument();
+    expect(within(row('F10')).getByText('Intended')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Annotate|Remove the annotation/ })).not.toBeInTheDocument();
   });
 

@@ -2,6 +2,7 @@ import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import type { ReactElement } from 'react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -103,6 +104,7 @@ describe('the Evidence tab', () => {
       "Downstream Out's encounter",
       "Downstream Out's receipt for this operation",
       'The operation timeline',
+      'Pending messages',
     ]);
     expect(citedBy(await section('The HL7 message'))).toBe('Cited by all three agents and the plan');
     // Encounter Integrity did not cite the schema validation: its ring is empty and its name is left out
@@ -152,16 +154,14 @@ describe('the Evidence tab', () => {
       within(message).getByRole('button', { name: 'The HL7 message: What was recorded' }),
     ).toHaveAttribute('aria-expanded', 'true');
     const panel = screen.getByRole('region', { name: 'Evidence' });
-    expect(panel).toHaveTextContent(
-      'Snapshot 1, taken 20 Oct, 18:27:03 BST, 17:27:03Z, with 7 observations.',
-    );
-    expect(within(message).getByText('Observed 20 Oct, 18:27:03 BST, 17:27:03Z')).toBeInTheDocument();
+    expect(panel).toHaveTextContent('Snapshot 1, taken 2 Nov, 14:18:54 GMT, 14:18:54Z, with 8 observations.');
+    expect(within(message).getByText('Observed 2 Nov, 14:18:54 GMT, 14:18:54Z')).toBeInTheDocument();
   });
 
   it('says what each observation found in plain words, every time with its date', async () => {
     evidence('C-000008');
     const panel = await loaded();
-    expect(panel).toHaveTextContent('Snapshot 1, taken 20 Oct, 18:27:03 BST, with 7 observations.');
+    expect(panel).toHaveTextContent('Snapshot 1, taken 2 Nov, 14:18:54 GMT, with 8 observations.');
     expect(await section('The failed operation')).toHaveTextContent(
       'Transfer to WARD-B for ENC-1008, event time 15 Oct, 09:20:00 BST.',
     );
@@ -187,10 +187,16 @@ describe('the Evidence tab', () => {
     await userEvent.click(chip);
     expect(chip).toHaveAttribute('aria-expanded', 'true');
     expect(entry).toBeVisible();
-    expect(entry).toHaveTextContent(/^Catalogue entry E7, version 2E7 matches: another source \(BEDMGR\)/);
+    expect(entry).toHaveTextContent(
+      /^Catalogue entry E7, version 2E7 matches: another source system \(BEDMGR\)/,
+    );
   });
 
   it('shows later events as none when the snapshot found none and the plan cites them (C-000002)', async () => {
+    // C-000002's plan as an earlier recording wrote it, citing the later events its snapshot found none of
+    const view = structuredClone(fixtures.cases['C-000002'].plan);
+    view.plan.evidenceRefs = [...view.plan.evidenceRefs, 'later_event'];
+    server.use(http.get('/api/shutter/cases/C-000002/plan', () => HttpResponse.json(view)));
     evidence('C-000002');
     const later = await section('Later events');
     expect(later).toHaveTextContent('None: the snapshot found no later event for the encounter.');
@@ -277,17 +283,21 @@ describe('the audit trail', () => {
     expect(toggles).toHaveLength(2);
     expect(toggles.every((t) => t.getAttribute('aria-expanded') === 'false')).toBe(true);
     // The text stays on the page for a search, out of the first layer until opened
-    expect(timeline).toHaveTextContent(/Escalate to a person to decide which source is authoritative\./);
-    expect(layer1Words(timeline).join(' ')).not.toContain('supersession');
+    expect(timeline).toHaveTextContent(
+      /would overwrite the bed manager's placement\. Escalate to the integration team\./,
+    );
+    expect(layer1Words(timeline).join(' ').toLowerCase()).not.toContain('supersession');
     // An event that says something of its own is shown whole
     expect(
       within(timeline).getByText(
-        'Snapshot 1 taken: 7 observations, 0 later events, digest sha256:36d4b435753b',
+        'Snapshot 1 taken: 8 observations, 0 later events, digest sha256:f780635fba40',
       ),
     ).toBeInTheDocument();
   });
 
   it("dates every event that isn't today's, and gives today's its time alone", async () => {
+    // A week after the recording, whenever the test runs
+    vi.useFakeTimers({ now: new Date('2026-11-09T12:00:00Z'), toFake: ['Date'] });
     const now = new Date();
     now.setMilliseconds(0);
     const today: CaseEvent = { ...recorded[0], seq: 99, at: now.toISOString(), text: 'Noted today' };
@@ -296,8 +306,9 @@ describe('the audit trail', () => {
     const times = within(timeline)
       .getAllByRole('time')
       .map((t) => t.textContent);
-    expect(times[0]).toBe('20 Oct, 18:26:48 BST');
+    expect(times[0]).toBe('2 Nov, 14:18:39 GMT');
     expect(times.at(-1)).toMatch(/^\d{2}:\d{2}:\d{2} (GMT|BST)$/);
+    vi.useRealTimers();
   });
 
   it('marks the events the trial replays from the recording', async () => {
