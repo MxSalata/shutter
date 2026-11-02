@@ -716,12 +716,21 @@ four collections under `knowledge/` (`search_contracts`, `search_lifecycle`, `se
 fifth collection, `review`, is the production review agent's (13.6) and reaches a board member only through a row whose
 `KnowledgeCollection` is `all` (the single investigator's).
 
+<<<<<<< HEAD
 **One model call is bounded (v1.35).** The runner gives the provider an HTTP request timeout, `Shutter.Setup.ProviderTimeoutSeconds`
 (`^Shutter.Config("providerTimeoutSeconds")`, `SHUTTER_PROVIDER_TIMEOUT_SECONDS` at a start, 120 s unless set, held to 10
 to 600), and a connect timeout of 10 s, as `http_config` on the provider's configuration unless the site's own configuration
 sets one. Without it a hung provider held a board member until the board's 600 s timeout, since the run's deadline is checked
 only between the model's turns; with it the call fails, the run ends in error and the board goes on without that member. The
 Doctor reports `provider_timeout_seconds`.
+=======
+**Findings and plans cite only what they were given (v1.35).** `evidence_refs` on a finding or a plan must name keys of the
+evidence object the run received, or keys one level down in it (`message`, `validation`, `error`, `operation`, `route`,
+`ward_state`, `receipt`, `timeline`, and so on), or `findings` for the coordinator; the runner lists them for the terminal
+tool (`CiteIds`, as the question tools already have), `Shutter.Schema.Findings.CheckRefs` refuses the submission with the
+unknown names and the keys that are allowed, and the model repairs it in the same run. A reference to evidence that is not
+there is therefore never stored.
+>>>>>>> core/evidence-refs
 
 ### 6.7 The Second Parser (v1.34)
 
@@ -1480,8 +1489,8 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   recorded as rows with `denied` true and a trace line (9); the run's millisecond start and AI Hub's own counters
   (`startedAtMs`, `llmMs`, `toolMs`, `reasoningTokens`) on the response and the run row (9); a bound on one model call,
   `provider_timeout_seconds` (6.6, 12); the compose healthcheck and `last_live_run` in the Doctor and the health route (12); the agent operation's start-up line in
-  the event log, with a warning for live mode without a provider (6.6); each item of the review that lands adds its line
-  here.
+  the event log, with a warning for live mode without a provider (6.6); findings and plans cite only the evidence they were
+  given (6.6); each item of the review that lands adds its line here.
 - v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:
   run, reset, purge) and `Shutter_Configure` (the site's writes: the profile, the library, a schema import, the review
   annotations), held by the operator and the approver as before; the role `Shutter_Demo` (reads, reinvestigates, approves and

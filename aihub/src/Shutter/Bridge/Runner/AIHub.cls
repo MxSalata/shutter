@@ -74,6 +74,8 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
                 Set submit.CaseId = caseKey
                 If terminal = "SubmitBoardAnswer" Set submit.FactIds = ..FactIdsOf(spec.Context)
                 If (terminal = "SubmitAnswer") || (terminal = "SubmitBoardAnswer") Set submit.CiteIds = ..CiteIdsOf(spec.Context)
+                // Findings and plans may cite only the evidence they were given (v1.35).
+                If (terminal = "SubmitFindings") || (terminal = "SubmitPlan") Set submit.CiteIds = ..EvidenceIdsOf(spec.Context)
                 Do agent.ToolManager.AddTool(submit)
                 // The member's knowledge collection as search tools, when the library is built.
                 Do ..AttachKnowledge(agent, spec)
@@ -183,6 +185,28 @@ ClassMethod CiteIdsOf(context As %String) As %String
             While it2.%GetNext(.k2) { Set ids = ids _ "," _ k2 }
         }
     }
+    Quit ids
+}
+
+/// What findings and plans may cite (v1.35): the keys of the board context's evidence object and the keys one level down in
+/// it (where the error, the ward state's fields and the like sit), plus "findings" for the coordinator, comma separated.
+ClassMethod EvidenceIdsOf(context As %String) As %String
+{
+    Set ids = ""
+    Set o = ##class(Shutter.Util.Json).Parse(context, .sc)
+    If '$ISOBJECT(o) Quit ""
+    Set ev = o.%Get("evidence")
+    If $ISOBJECT(ev) && ev.%IsA("%Library.DynamicObject") {
+        Set it = ev.%GetIterator()
+        While it.%GetNext(.k, .v) {
+            Set ids = ids _ $SELECT(ids = "": "", 1: ",") _ k
+            If $ISOBJECT(v) && v.%IsA("%Library.DynamicObject") {
+                Set it2 = v.%GetIterator()
+                While it2.%GetNext(.k2) { If '$FIND("," _ ids _ ",", "," _ k2 _ ",") Set ids = ids _ "," _ k2 }
+            }
+        }
+    }
+    If o.%IsDefined("findings") Set ids = ids _ $SELECT(ids = "": "", 1: ",") _ "findings"
     Quit ids
 }
 
