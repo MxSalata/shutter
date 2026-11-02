@@ -118,6 +118,23 @@ describe('the five steps', () => {
     expect(v.steps[2]).toMatchObject({ status: 'current', incidentId: 'I-000016' });
   });
 
+  it('says the release waits for an approval while the incident does', () => {
+    const v = stormView(
+      storm({
+        state: 'releasing',
+        sent: 8,
+        cases: 8,
+        resolved: 0,
+        incidentId: 'I-000017',
+        incidentState: 'awaiting_approval',
+        receiverUpAt: at(-5),
+      }),
+    );
+    expect(v.current).toBe(3);
+    expect(v.line).toBe('Step 4 of 5: The bed manager is back; the release waits for an approval');
+    expect(v.steps[3].detail).toBe('An approver releases it on incident I-000017');
+  });
+
   it('releases in order once the bed manager is back, with the cases resolved so far', () => {
     const v = stormView(
       storm({

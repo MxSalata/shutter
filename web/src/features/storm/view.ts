@@ -143,6 +143,15 @@ export function stormView(storm: LiveStorm): StormView {
           incidentId: storm.incidentId ?? '',
         };
       case 'release':
+        // The release waits for a person when the site's policy doesn't release the chains by itself: say so, rather
+        // than "releasing" with nothing moving.
+        if (status === 'current' && storm.incidentState === 'awaiting_approval')
+          return {
+            key,
+            status,
+            words: 'The bed manager is back; the release waits for an approval',
+            detail: `An approver releases it on incident ${storm.incidentId ?? ''}`.trim(),
+          };
         return {
           key,
           status,
