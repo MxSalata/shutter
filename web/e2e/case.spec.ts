@@ -81,7 +81,7 @@ test.describe('the guided path', () => {
     await go(page, '/cases/C-000008');
     await page.getByRole('tab', { name: 'Evidence' }).click();
     await expect(page).toHaveURL(/#\/cases\/C-000008\?tab=evidence$/);
-    await expect(page.getByRole('region', { name: 'Evidence' })).toContainText('Encounter timeline');
+    await expect(page.getByRole('region', { name: 'Evidence' })).toContainText('The operation timeline');
     // A link that names the tab opens it
     await go(page, '/cases/C-000009');
     await go(page, '/cases/C-000008?tab=evidence');

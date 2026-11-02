@@ -396,11 +396,13 @@ describe('CasePage', () => {
     expect(router.state.location.search).toBe('');
   });
 
-  it("draws the encounter's timeline at the top of the evidence, flagging the two transfers at the same time", async () => {
+  it("draws the encounter's operation timeline among the evidence, flagging the two transfers at the same time", async () => {
     renderCase('C-000008');
     await openTab('Evidence');
     const evidence = await screen.findByRole('region', { name: 'Evidence' });
-    expect(await within(evidence).findByText('Encounter timeline')).toBeInTheDocument();
+    expect(
+      await within(evidence).findByRole('heading', { name: 'The operation timeline' }),
+    ).toBeInTheDocument();
     expect(within(evidence).getAllByText('Same event time')).toHaveLength(2);
     expect(within(evidence).getByText('This case')).toBeInTheDocument();
     expect(within(evidence).getByText('BEDMGR')).toBeInTheDocument();
@@ -835,7 +837,7 @@ describe('CasePage', () => {
     ).toBeInTheDocument();
     await openTab('Evidence');
     const evidence = await screen.findByRole('region', { name: 'Evidence' });
-    const item = await within(evidence).findByRole('button', { name: /Where the original message lives/ });
+    const item = await within(evidence).findByRole('region', { name: 'Where the original message lives' });
     expect(item).toHaveTextContent(
       'Forwarded from HOSPITAL / Hospital.Production, route PAS In, message header 4243',
     );
