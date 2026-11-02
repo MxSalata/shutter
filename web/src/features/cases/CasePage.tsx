@@ -10,6 +10,7 @@ import { ApiSource } from '@/components/ApiSource';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { isApiError } from '@/lib/errors';
+import { REPLAY_DONE } from '@/lib/events';
 import { usePrefersReducedMotion, useStagedReveal } from '@/lib/motion';
 import { caseOutcome } from '@/lib/status';
 import { CaseHeader } from './case/CaseHeader';
@@ -46,12 +47,8 @@ const STEPS: StoryStep[] = ['failed', 'evidence', 'proposed', 'decision', 'writt
 /** What the trial says, once, when the replay after an approval has played. */
 const REPLAYED = 'Approved in the trial. The recording shows it delivered and verified.';
 
-/**
- * The event the guide waits for once the trial has played out what came of a reader's approval. The guide's own
- * `REPLAY_DONE` (features/guide/Guide.tsx) has the same name; it is not imported, since the guide is in the chunk only
- * trial pages load and importing it here would bring it into every case page. A test keeps the two the same.
- */
-export const REPLAY_DONE = 'shutter:replay-done';
+/** The event the guide waits for once the trial has played out what came of a reader's approval (`@/lib/events`). */
+export { REPLAY_DONE };
 
 /**
  * A tab panel clears the header and the sticky tab bar when it is scrolled to, as `.case-tab-panel` makes the

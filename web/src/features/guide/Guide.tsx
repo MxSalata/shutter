@@ -45,6 +45,7 @@ import { keys } from '@/api/hooks';
 import type { CaseDetail, PlanView } from '@/api/types';
 import { TechDetail } from '@/components/TechDetail';
 import { ENV } from '@/env/mode';
+import { REPLAY_DONE } from '@/lib/events';
 import { useLeaveTrial } from '@/trial/leave';
 import { onRoute, positionOf, stepsIn, welcomeDue, type GuidePosition } from './controller';
 import { usePlace } from './places';
@@ -72,8 +73,7 @@ import { useGuide, type GuidePhase } from './store';
 
 /** The comment an approval the tour makes for the reader carries (Next on the S2 decision step). */
 export const APPROVED_FOR_YOU = "Approved for you by the trial's tour";
-/** The case page's event when its replay after a trial approval has ended (owned by the case page). */
-export const REPLAY_DONE = 'shutter:replay-done';
+export { REPLAY_DONE };
 
 const ENTRANCE_MS = 220;
 const RING_MS = 1600 * 2;
