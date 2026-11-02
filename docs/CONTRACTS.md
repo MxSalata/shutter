@@ -318,6 +318,31 @@ hospital has. It never resets anything, and the scenario runner's Run and Reset 
   `SELECT Hospital.Setup_SetLive(1)` (or `0`) in the hospital's namespace switches it without an install. Off, the item is
   disabled and a task that still runs does nothing. The install compiles `Hospital.Production` in the hospital's namespace
   on every run, so an upgrade's new items reach that namespace's production definition before `UpdateProduction`.
+- **"Break the feed", the storm** (v1.35). `POST /api/shutter/live/storm` (`Shutter_Operate`, `X-Requested-With`, an
+  `Idempotency-Key` honoured, body optional) asks the live hospital for a storm and answers 202 `{stormId, state
+  "requested", startedAt, requestedBy, patients 4, movements 8, sent 0, receiverDownSeconds 60, pickupWithinSeconds 5,
+  endsAt, cooldownUntil}`; 409 `live_off` when the live hospital is off, 409 `storm_in_progress` `{stormId, startedAt,
+  endsAt, state}` while one plays (one at a time for the whole demo), 409 `cooldown` `{until, retryAfterSeconds}` within
+  `^Shutter.Config("stormCooldownMinutes")` of the last storm's start (10 by default; the Doctor's `storm_cooldown_minutes`);
+  503 `no_service` with no hospital namespace recorded. The route writes the request (state `requested`) in Shutter's own
+  namespace, `^Shutter.Live("storm","request")`, since the API's users write nothing in the hospital's database; the
+  player (its adapter calls every 5 s since v1.35, the ordinary feed paced by `OrdinaryEverySeconds` 60) takes it on its
+  next call into its own record, `^Hospital.Live("storm")` in the hospital's namespace, and plays it: the receiver goes down (`fail_before_accept` on
+  `Downstream Out`, 1.5, for `StormReceiverDownSeconds` 60), then eight movements for four fresh patients go out about
+  three seconds apart, admissions to free beds first and then each patient's transfer to another ward, control ids
+  `STORM<n>-01` to `-08`, each failing in the hospital's production and handed to Shutter by its process as
+  `delivery_failed`; Shutter opens the cases (stamped scenario `storm`), the detector opens one incident at the threshold
+  and the rest join it, one chain per encounter in arrival order; when the outage is over the player brings the receiver
+  back, the incident's recovery check releases the chains in order under the site's policy, and every resend is rehearsed
+  and verified. The state moves `requested`, `sending`, `waiting_receiver`, `releasing`, `done` (the incident closed, or
+  ten minutes after the press), or `failed` with `error`. `GET /settings` and the Doctor carry `live.storm`: the player's
+  record (`stormId`, `state`, `startedAt`, `receiverDownUntil`, `receiverUpAt`, `sent`, `movements`, `patients` as
+  `[{mrn, encounterId, ward, toWard, movements}]`, `endsAt`, `endedAt`) with Shutter's own view added (`Setup.StormCounts`:
+  `incidentId` and `incidentState`, the incident the storm's cases joined, one the detector opened for them or one already
+  open for the receiver, null before any; `cases` and `resolved` for the storm's cases;
+  `cooldownUntil`). The rotation and the ordinary feed pause from the press until `done`, and the next story is then due
+  `EveryMinutes` later. No model is needed for the story: the chains follow the policy, and a board convenes only where it
+  says `board`. Fresh patients and beds mean the storm never collides with a story already playing.
 - **Settings** of `Hospital.LivePlayer`: `EveryMinutes` 7; `Scenarios` `S2,S8,S1,S23a,S3,S24,S15,S11`, played round robin
   (empty means every scenario of `fixtures/scenarios.json` but S13, S20 and S21, which need an operator or the records);
   `Faults` 1; `OrdinaryFeed` 1; `MaxWait` 30, the longest a `wait` step is given; `ShutterNamespace` `SHUTTER`.
@@ -1586,8 +1611,9 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   `GET /cases/{id}/precedents` (6.4); the releases of waiting and held cases moved out of the index adapter into the Case
   Releaser item, one sweep every few seconds with a run row when there are candidates (8.1); the alert intake,
   `Shutter.Intake.AlertProcess` as a watched production's `Ens.Alert` item, which hands a delivery failure's message to
-  Shutter from the alert alone and passes every alert on to the site's consumer (11, 13); each item of the review that
-  lands adds its line here.
+  Shutter from the alert alone and passes every alert on to the site's consumer (11, 13); the storm, `POST /live/storm`,
+  eight failed movements for four fresh patients in the live hospital with the receiver down for a minute, followed on
+  `live.storm` (4.4); each item of the review that lands adds its line here.
 - v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:
   run, reset, purge) and `Shutter_Configure` (the site's writes: the profile, the library, a schema import, the review
   annotations), held by the operator and the approver as before; the role `Shutter_Demo` (reads, reinvestigates, approves and

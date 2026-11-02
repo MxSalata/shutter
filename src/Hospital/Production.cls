@@ -33,7 +33,7 @@ XData ProductionDefinition
     <Setting Target="Host" Name="Receivers">Downstream Out</Setting>
   </Item>
   <Item Name="Live PAS" Category="Feed" ClassName="Hospital.LivePlayer" PoolSize="1" Enabled="false" Foreground="false" Comment="The live hospital's PAS: one of Shutter's scenarios every few minutes with fresh patients at present times and real faults, and an ordinary message a minute between them; on only when the install was told live" LogTraceEvents="true" Schedule="">
-    <Setting Target="Adapter" Name="CallInterval">60</Setting>
+    <Setting Target="Adapter" Name="CallInterval">5</Setting>
   </Item>
   <Item Name="Shutter Forwarder" Category="Shutter" ClassName="Shutter.Intake.Forwarder" PoolSize="1" Enabled="true" Foreground="false" Comment="Hands a failed delivery to Shutter's intake, so that a case opens in Shutter's own production" LogTraceEvents="true" Schedule="">
     <Setting Target="Adapter" Name="Credentials">ShutterIntake</Setting>
