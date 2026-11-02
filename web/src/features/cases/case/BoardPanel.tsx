@@ -277,8 +277,11 @@ function Citations({ run, name, receiver }: { run: AgentRun; name: string; recei
   );
 }
 
-/** An operation key (`BEDMGR^HOSP^MRN1008^ENC-1008^transfer^2026-10-15T08:20:00Z`) in a sentence, as a wrapping code. */
-const KEY = /([A-Z][A-Z0-9]*(?:\^[^\s^]+){3,})/;
+/**
+ * An operation key (`BEDMGR^HOSP^MRN1008^ENC-1008^transfer^2026-10-15T08:20:00Z`) in a sentence, as a wrapping code:
+ * without a bracket, comma or semicolon round it, or the full stop after it ("(set by BEDMGR^...^08:20:00Z)").
+ */
+const KEY = /([A-Z][A-Z0-9]*(?:\^[^\s^(),;]+){2,}\^[^\s^(),;]*[^\s^(),;.])/;
 
 function WithKeys({ text }: { text: string }) {
   const parts = text.split(KEY);
@@ -651,12 +654,13 @@ export function BoardPanel({
     const d = disagreements
       .map((x) => asObject(x) ?? {})
       .find((x) => String(x.member ?? '') === r.memberCode);
-    // The recorded text puts a confidence after the disposition, "resend (confidence 0.8): why" or
-    // "resend (0.8): why", or the reason itself in brackets, "resend (why)". Keep the disposition and
-    // the reason, never the figure.
+    // The recorded text puts a confidence after the disposition, "resend (confidence 0.8): why",
+    // "resend (0.8): why" or "resend (0.7). Why.", or the reason itself in brackets, "resend (why)". Keep the
+    // disposition and the reason, never the figure.
     const said = String(d?.said ?? '')
       .trim()
-      .replace(/^([a-z_]+)\s*\((?:confidence\s*)?[0-9.]+%?\)/i, '$1')
+      .replace(/^([a-z_]+)\s*\((?:confidence\s*)?[0-9.]+%?\)\s*[:.]?\s*(?=\S)/i, '$1: ')
+      .replace(/^([a-z_]+)\s*\((?:confidence\s*)?[0-9.]+%?\)\s*$/i, '$1')
       .replace(/^([a-z_]+)\s*\(([^()]+)\)$/i, '$1: $2');
     return said ? `Proposed ${said.charAt(0).toLowerCase()}${said.slice(1)}` : undefined;
   };

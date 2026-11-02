@@ -125,7 +125,7 @@ function ItemSettings({ items, mimic }: { items: AgentItem[]; mimic: boolean }) 
 function absences(s: Settings, replaying: boolean): string | null {
   const missing = [
     !s.aiHubPresent && 'AI Hub',
-    !s.liveRunnerPresent && 'the live runner',
+    !s.liveRunnerPresent && 'the AI Hub runner',
     s.providerConfigured === false && 'a model provider',
   ].filter(Boolean) as string[];
   if (!missing.length) return null;

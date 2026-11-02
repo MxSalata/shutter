@@ -25,7 +25,7 @@ function Flags({ s }: { s: Settings }) {
     s.demo && 'Demo instance',
     s.mock && `API mimic on${s.mockConfig ? ` (${s.mockConfig})` : ''}`,
     s.aiHubPresent && 'AI Hub present',
-    s.liveRunnerPresent && 'Live runner installed',
+    s.liveRunnerPresent && 'AI Hub runner installed',
     s.providerConfigured && 'Model provider configured',
   ].filter(Boolean) as string[];
   if (!flags.length) return null;

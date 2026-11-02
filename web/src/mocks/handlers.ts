@@ -13,6 +13,8 @@ import type {
   IncidentEvent,
   IncidentSummary,
   Me,
+  Precedent,
+  PrecedentSummary,
   ReviewAgent,
   ReviewDetail,
   ReviewListItem,
@@ -547,13 +549,15 @@ function incidentPart(id: string, pick: (i: IncidentFixture) => unknown) {
 
 /**
  * Precedents (CONTRACTS 6.4, v1.35): what approvers decided before on the same conditions at the same receiver. The
- * recording was made before precedents were written, so the trial's store holds none: every snapshot's summary says
- * none in the server's default window, as a v1.35 server with no precedents does, GET /cases/{id}/precedents lists
- * none, and a retire finds nothing to retire. The signature is the server's hash of the conditions, which the trial
- * does not compute, so it is left empty.
+ * recording holds every precedent the recorded cases' approvals wrote (`fixtures.precedents`, newest first). A case's
+ * route answers as the store stood when the case's evidence was collected: the precedents of its snapshot's signature at
+ * its receiver made before then, never its own or a later one, so the held case lists none while it waits; the summary
+ * is the one its snapshot carries, which the server worked out from those same rows. A snapshot recorded before
+ * precedents were collected says none in the server's default window, as a v1.35 server with no precedents does.
+ * Retiring one is refused politely: the trial keeps the record as it was recorded.
  */
 const PRECEDENT_DAYS = 180;
-const noPrecedents = () => ({
+const noPrecedents = (): PrecedentSummary => ({
   approved: 0,
   rejected: 0,
   lastDecision: '',
@@ -564,6 +568,27 @@ const noPrecedents = () => ({
   windowDays: PRECEDENT_DAYS,
   signature: '',
 });
+
+const recordedPrecedents = ((fixtures as unknown as { precedents?: Precedent[] }).precedents ?? []).map((p) =>
+  structuredClone(p),
+);
+
+type SnapshotWithPrecedents = { takenAt?: string; summary?: { precedents?: PrecedentSummary } } | null;
+
+/** The precedents on record when the case's evidence was collected, newest first: its signature, its receiver. */
+function precedentsBefore(c: CaseFixture): Precedent[] {
+  const snap = c.snapshot as SnapshotWithPrecedents;
+  const signature = snap?.summary?.precedents?.signature;
+  const takenAt = snap?.takenAt ?? '';
+  if (!signature || !takenAt) return [];
+  return recordedPrecedents.filter(
+    (p) =>
+      p.signature === signature &&
+      p.receiver === c.detail.receiver &&
+      p.caseId !== c.summary.caseId &&
+      p.createdAt < takenAt,
+  );
+}
 
 /** The recorded snapshot with the precedents a v1.35 collector adds to its summary, unless it already has them. */
 function withPrecedents(snapshot: unknown): unknown {
@@ -711,7 +736,7 @@ export const handlers = [
   http.get(`${BASE}/cases/:id/snapshot`, ({ params }) =>
     part(String(params.id), (c) => withPrecedents(c.snapshot), 'no_snapshot'),
   ),
-  // The precedents these conditions match at the case's receiver: none in the trial (above)
+  // The precedents these conditions matched at the case's receiver when its evidence was collected (above)
   http.get(`${BASE}/cases/:id/precedents`, ({ params }) => {
     if (!session) return signedOut();
     const id = String(params.id);
@@ -720,15 +745,26 @@ export const handlers = [
     return HttpResponse.json({
       receiver: c.detail.receiver,
       conditions: conditionsOf(c),
-      summary: noPrecedents(),
-      precedents: [],
+      summary: (c.snapshot as SnapshotWithPrecedents)?.summary?.precedents ?? noPrecedents(),
+      precedents: precedentsBefore(c),
     });
   }),
-  // As the server answers (Shutter_Approve, X-Requested-With): there is no precedent to retire in the trial
-  http.post(`${BASE}/precedents/:id/retire`, ({ request, params }) => {
+  // As the server answers (Shutter_Approve, X-Requested-With, a reason), and then a polite refusal: the trial keeps the
+  // recorded precedents as they were
+  http.post(`${BASE}/precedents/:id/retire`, async ({ request, params }) => {
     const denied = csrf(request) ?? guard('approver');
     if (denied) return denied;
-    return error(404, 'not_found', `No precedent ${String(params.id)}`);
+    const body = (await request.json().catch(() => ({}))) as { reason?: unknown };
+    if (typeof body?.reason !== 'string' || !body.reason.trim())
+      return error(400, 'bad_request', 'reason is required: say why the precedent no longer counts');
+    const id = String(params.id);
+    const p = recordedPrecedents.find((x) => String(x.id) === id);
+    if (!p) return error(404, 'not_found', `No precedent ${id}`);
+    return error(
+      403,
+      'demo',
+      'The trial keeps the recorded precedents as they were. On an installation an approver retires one with a reason: it stays on record and counts for nothing from then on.',
+    );
   }),
   http.get(`${BASE}/cases/:id/runs`, ({ params }) => part(String(params.id), (c) => c.runs, 'not_found')),
   http.get(`${BASE}/cases/:id/plan`, ({ params }) => part(String(params.id), (c) => c.plan, 'no_plan')),
@@ -1212,13 +1248,9 @@ export const handlers = [
     Object.assign(m, (await request.json()) as object);
     return HttpResponse.json(m);
   }),
-  // A recording from before the API mimic was reported has no mock fields: the mimic was off
   http.get(`${BASE}/settings`, () =>
     session
       ? HttpResponse.json({
-          mock: false,
-          mockConfig: '',
-          mockModel: '',
           ...fixtures.settings,
           // The public demo's role is signed in to a live hospital
           ...(session.username === 'demo' ? { live: liveStatus() } : {}),

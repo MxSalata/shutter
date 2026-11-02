@@ -191,7 +191,8 @@ export function CostsSection({
   const sentences = totals?.spentUsd !== undefined ? costsSentences(totals, TRIAL) : null;
   return (
     <Section id="settings-costs" title="Costs" tour="settings-costs">
-      {settings?.budget ? <BudgetWords b={settings.budget} s={settings} /> : null}
+      {/* The trial calls no model: the recorded instance's budget for its own day says nothing about it */}
+      {settings?.budget && !TRIAL ? <BudgetWords b={settings.budget} s={settings} /> : null}
       {costs.isError ? <ErrorAlert error={costs.error} title="The costs could not be read" /> : null}
       {sentences ? (
         <Text size="sm">

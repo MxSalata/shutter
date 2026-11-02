@@ -99,11 +99,18 @@ export function citationsOf(
   }));
 }
 
-/** The catalogue entries a list of refs names (`catalogue:E7`, `catalogue:E9@1`): "E7", "E9@1". */
+/** A catalogue entry's id, with its version or without: E7, E9@1. */
+const ENTRY = /^E\d+(@\d+)?$/;
+
+/**
+ * The catalogue entries a list of refs names: "E7", "E9@1" from `catalogue:E7` and `catalogue:E9@1`, or from the entry's
+ * id alone, as a v1.35 run cites a key of the evidence it was given (CONTRACTS 6.6), each once.
+ */
 export function catalogueEntriesOf(refs: unknown): string[] {
-  return refsOf(refs)
-    .filter((r) => r.startsWith('catalogue:'))
-    .map((r) => r.slice('catalogue:'.length));
+  const entries = refsOf(refs)
+    .map((r) => (r.startsWith('catalogue:') ? r.slice('catalogue:'.length) : r))
+    .filter((r) => ENTRY.test(r));
+  return [...new Set(entries)];
 }
 
 const NAMES: Record<string, string> = {

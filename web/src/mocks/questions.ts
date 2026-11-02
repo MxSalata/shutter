@@ -8,6 +8,7 @@ import type {
   SuggestedQuestions,
   WhatIf,
 } from '@/api/types';
+import fixtures from './fixtures.json';
 import recordedFile from './recorded-questions.json';
 
 /**
@@ -109,7 +110,7 @@ export function whatIfFor(caseId: string): WhatIf {
     outcome: 'none',
     outcome_ref: '',
     disposition: '',
-    profile_version: 9,
+    profile_version: fixtures.siteProfile.version,
     note: 'Sample data: this case matched no catalogue entry that a site profile setting selects.',
     facts: [],
   };

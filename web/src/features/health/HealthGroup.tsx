@@ -163,7 +163,10 @@ function CheckRow({ row, report }: { row: Row; report: Report }) {
   );
 }
 
-/** A group of the report: a section with its heading, its count and its rows (so each row keeps its row header). */
+/**
+ * A group of the report: a section with its heading, its count and its rows (so each row keeps its row header). Other,
+ * the fields no group names, keeps its rows in a data disclosure, closed in both modes.
+ */
 export function HealthGroup({
   group,
   report,
@@ -177,6 +180,15 @@ export function HealthGroup({
   const { def } = group;
   const reasons = group.rows.filter((r) => r.info.reason);
   const licence = def.id === 'installation' && report.license && typeof report.license === 'object';
+  const rows = (
+    <StackTable className="health-rows" withRowBorders={false} verticalSpacing={4}>
+      <StackTable.Tbody>
+        {group.rows.map((row) => (
+          <CheckRow key={row.key} row={row} report={report} />
+        ))}
+      </StackTable.Tbody>
+    </StackTable>
+  );
   return (
     <div className="health-group" data-tone={group.edge ?? undefined} data-group={def.id}>
       <Section
@@ -189,13 +201,18 @@ export function HealthGroup({
           ) : undefined
         }
       >
-        <StackTable className="health-rows" withRowBorders={false} verticalSpacing={4}>
-          <StackTable.Tbody>
-            {group.rows.map((row) => (
-              <CheckRow key={row.key} row={row} report={report} />
-            ))}
-          </StackTable.Tbody>
-        </StackTable>
+        {def.id === 'other' ? (
+          // The fields the groups do not name, one click away in both modes: a v1.35 report sends some twenty more
+          <TechDetail
+            label={`The report's other ${group.rows.length === 1 ? 'field' : `${group.rows.length} fields`}`}
+            kind="data"
+            defaultOpen={false}
+          >
+            {rows}
+          </TechDetail>
+        ) : (
+          rows
+        )}
         {reasons.length ? (
           <TechDetail label="Why they are missing" kind="data">
             <List spacing={4} size="sm">
