@@ -80,8 +80,12 @@ const RING_MS = 1600 * 2;
 const LATEST_START_MS = 5000;
 
 /** The guide's buttons: at least 44 px high, for touch. */
-function GuideButton(props: ButtonProps & Omit<ComponentPropsWithoutRef<'button'>, keyof ButtonProps>) {
-  return <Button className="guide-control" {...props} />;
+function GuideButton({
+  className,
+  ...props
+}: ButtonProps & Omit<ComponentPropsWithoutRef<'button'>, keyof ButtonProps>) {
+  // A menu's target passes its own class: keep the 44 px rule's beside it
+  return <Button className={className ? `guide-control ${className}` : 'guide-control'} {...props} />;
 }
 
 const tryControl = (action: string) => document.querySelector<HTMLElement>(`[data-tour-action="${action}"]`);
@@ -804,7 +808,13 @@ function Pointing({ action }: { action: string }) {
   const point = useGuide((s) => s.point);
   const { pathname } = useLocation();
   const [control, setControl] = useState<HTMLElement | null>(null);
-  const [at] = useState(pathname);
+  // The page the control was found on. Not the page at mount: the finish card navigates as it asks for the pointing,
+  // and the router can show the new page after this has mounted
+  const [at, setAt] = useState<string | null>(null);
+  const path = useRef(pathname);
+  useEffect(() => {
+    path.current = pathname;
+  }, [pathname]);
   useEffect(() => {
     let el: HTMLElement | null = null;
     const look = window.setInterval(() => {
@@ -815,6 +825,7 @@ function Pointing({ action }: { action: string }) {
       bringToHand(found, reduced);
       found.dataset.tourTry = reduced ? 'rest' : 'true';
       setControl(found);
+      setAt(path.current);
     }, 100);
     const stop = window.setTimeout(() => window.clearInterval(look), 10_000);
     return () => {
@@ -825,7 +836,7 @@ function Pointing({ action }: { action: string }) {
   }, [action, reduced]);
   // Going elsewhere ends the pointing
   useEffect(() => {
-    if (pathname !== at) point(null);
+    if (at !== null && pathname !== at) point(null);
   }, [pathname, at, point]);
   return control ? <TryItPointer control={control} motion={reduced ? 'rest' : 'run'} /> : null;
 }
