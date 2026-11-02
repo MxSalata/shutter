@@ -13,8 +13,8 @@ export type LibraryField = 'enabled' | 'inDefaultBoard';
 
 /**
  * One member of the library as a card (DESIGN 2.5): its avatar and hue, the role, the question it asks, what it does,
- * what it knows, the two settings, and its code one click away. An article named for the member, so a screen reader
- * can move from one member to the next. A member that is not enabled turns gray (its words say so; no fade).
+ * what it knows, the two settings, and its code one click away. An article named by the member's heading, so a screen
+ * reader can move from one member to the next. A member that is not enabled turns gray (its words say so; no fade).
  */
 export function MemberLibraryCard({
   m,
@@ -41,73 +41,75 @@ export function MemberLibraryCard({
   const identity = memberIdentity(m.code, m.name);
   const line = boardLine(m.role);
   return (
-    <article aria-label={m.name} className="library-member" data-not-enabled={!m.enabled || undefined}>
-      <MemberCard
-        member={m.code}
-        name={m.name}
-        badge={
-          <>
-            <IdentityBadge hue={m.enabled ? identity.hue : 'gray'}>{roleLabel(m.role)}</IdentityBadge>
-            {m.enabled ? null : (
-              <Badge color="gray" variant="outline" size="sm" style={{ textTransform: 'none' }}>
-                Not enabled
-              </Badge>
-            )}
-          </>
-        }
-      >
-        {m.perspective ? (
-          <Text component="blockquote" size="lg" fw={500} className="library-question">
-            <span aria-hidden>“</span>
-            {m.perspective}
-            <span aria-hidden>”</span>
-          </Text>
-        ) : null}
-        <Text size="sm">{m.description}</Text>
-        <Text size="sm">
-          {knowsTerm ? <Term term="knows">Knows</Term> : 'Knows'}: {knowsWords(m.knowledgeCollection)}
+    <MemberCard
+      component="article"
+      titleId={`library-member-${m.code}`}
+      member={m.code}
+      name={m.name}
+      muted={!m.enabled}
+      className="library-member"
+      badge={
+        <>
+          <IdentityBadge hue={m.enabled ? identity.hue : 'gray'}>{roleLabel(m.role)}</IdentityBadge>
+          {m.enabled ? null : (
+            <Badge color="gray" variant="outline" size="sm" style={{ textTransform: 'none' }}>
+              Not enabled
+            </Badge>
+          )}
+        </>
+      }
+    >
+      {m.perspective ? (
+        <Text component="blockquote" size="lg" fw={500} className="library-question">
+          <span aria-hidden>“</span>
+          {m.perspective}
+          <span aria-hidden>”</span>
         </Text>
-        <Stack gap="xs" className="library-settings">
-          <Group gap="lg" wrap="wrap" align="center">
-            {reading ? (
-              <Setting label="Enabled" value={m.enabled} />
-            ) : (
-              <SettingSwitch
-                label="Enabled"
-                name={`${m.name} enabled`}
-                checked={m.enabled}
-                disabled={!canEdit || busy}
-                canEdit={canEdit}
-                onChange={(v) => onChange(m, 'enabled', v)}
-              />
-            )}
-            {line ? (
-              <Text size="sm">{line}</Text>
-            ) : reading ? (
-              <Setting label="On the default board" value={m.inDefaultBoard} />
-            ) : (
-              <SettingSwitch
-                label="On the default board"
-                name={`${m.name} on the default board`}
-                checked={m.inDefaultBoard}
-                disabled={!canEdit || !m.enabled || busy}
-                canEdit={canEdit}
-                onChange={(v) => onChange(m, 'inDefaultBoard', v)}
-              />
-            )}
-          </Group>
-          {changedInTrial ? <Text size="sm">Changed in the trial only.</Text> : null}
-          <TechDetail label="Technical detail" kind="data">
-            <dl className="library-detail">
-              <Fact label="Class">{`${m.agentClass} · v${m.configVersion}`}</Fact>
-              <Fact label="Production item">{m.configItem}</Fact>
-              <Fact label="Knowledge collection">{m.knowledgeCollection}</Fact>
-              <Fact label="Terminal tool">{m.terminalTool}</Fact>
-            </dl>
-          </TechDetail>
-        </Stack>
-      </MemberCard>
-    </article>
+      ) : null}
+      <Text size="sm">{m.description}</Text>
+      <Text size="sm">
+        {knowsTerm ? <Term term="knows">Knows</Term> : 'Knows'}: {knowsWords(m.knowledgeCollection)}
+      </Text>
+      <Stack gap="xs" className="library-settings">
+        <Group gap="lg" wrap="wrap" align="center">
+          {reading ? (
+            <Setting label="Enabled" value={m.enabled} />
+          ) : (
+            <SettingSwitch
+              label="Enabled"
+              name={`${m.name} enabled`}
+              checked={m.enabled}
+              disabled={!canEdit || busy}
+              canEdit={canEdit}
+              onChange={(v) => onChange(m, 'enabled', v)}
+            />
+          )}
+          {line ? (
+            <Text size="sm">{line}</Text>
+          ) : reading ? (
+            <Setting label="On the default board" value={m.inDefaultBoard} />
+          ) : (
+            <SettingSwitch
+              label="On the default board"
+              name={`${m.name} on the default board`}
+              checked={m.inDefaultBoard}
+              disabled={!canEdit || !m.enabled || busy}
+              canEdit={canEdit}
+              onChange={(v) => onChange(m, 'inDefaultBoard', v)}
+            />
+          )}
+        </Group>
+        {changedInTrial ? <Text size="sm">Changed in the trial only.</Text> : null}
+        <TechDetail label="Technical detail" kind="data">
+          <dl className="library-detail">
+            <Fact label="Class">{`${m.agentClass} · v${m.configVersion}`}</Fact>
+            <Fact label="Production item">{m.configItem}</Fact>
+            <Fact label="Knowledge collection">{m.knowledgeCollection}</Fact>
+            <Fact label="Terminal tool">{m.terminalTool}</Fact>
+          </dl>
+        </TechDetail>
+      </Stack>
+    </MemberCard>
   );
 }
 

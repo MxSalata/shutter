@@ -63,6 +63,8 @@ const serve = (members: LibraryMember[]) =>
 
 /** A member's card. */
 const cardOf = (name: string) => screen.getByRole('article', { name });
+/** A card's name: its heading, which names the article. */
+const nameOf = (card: HTMLElement) => within(card).getByRole('heading', { level: 3 }).textContent;
 
 /** The line on a card that starts "Knows". */
 const knowsLine = (name: string) =>
@@ -149,9 +151,7 @@ describe('the board as cards', () => {
     renderPage();
     await screen.findByRole('article', { name: conformance.name });
     const board = screen.getByRole('region', { name: 'The board' });
-    const names = within(board)
-      .getAllByRole('article')
-      .map((a) => a.getAttribute('aria-label'));
+    const names = within(board).getAllByRole('article').map(nameOf);
     expect(names).toEqual(['Conformance', 'Encounter Integrity', 'Impact Analysis', 'Coordinator']);
     // The gate's caption comes after the coordinator, as the flow does
     const gate = within(board).getByText(
@@ -212,6 +212,9 @@ describe('the board as cards', () => {
     renderPage();
     const card = within(await screen.findByRole('article', { name: 'Encounter Integrity' }));
     expect(card.getByText('Not enabled')).toBeInTheDocument();
+    // The shared card draws it gray (edge and avatar), with no fade; the enabled members keep their hues
+    expect(cardOf('Encounter Integrity')).toHaveAttribute('data-muted', 'true');
+    expect(cardOf('Conformance')).not.toHaveAttribute('data-muted');
     expect(card.getByRole('switch', { name: 'Encounter Integrity enabled' })).not.toBeChecked();
     expect(card.getByRole('switch', { name: 'Encounter Integrity on the default board' })).toBeDisabled();
     expect(within(cardOf('Conformance')).queryByText('Not enabled')).not.toBeInTheDocument();
@@ -226,7 +229,7 @@ describe('the board as cards', () => {
     ]);
     renderPage();
     const board = within(await screen.findByRole('region', { name: 'The board' }));
-    const names = board.getAllByRole('article').map((a) => a.getAttribute('aria-label'));
+    const names = board.getAllByRole('article').map(nameOf);
     expect(names).toEqual([
       'Conformance',
       'Encounter Integrity',
@@ -310,22 +313,15 @@ describe('the words on the page', () => {
    */
   const PLAIN_BUDGET = 290;
 
-  /** The words a reader reads: the API's JSON, open in Technical, is a data dump and not prose. */
-  const proseWords = (container: HTMLElement) => {
-    const copy = container.cloneNode(true) as HTMLElement;
-    copy.querySelectorAll('.json-block').forEach((e) => e.remove());
-    return layer1WordCount(copy);
-  };
-
   it('keeps the first layer within its budget in Plain, and Technical within half as much again', async () => {
     resetMock('approver');
     const plain = renderPage();
     await screen.findByRole('article', { name: conformance.name });
-    const plainWords = proseWords(plain.container);
+    const plainWords = layer1WordCount(plain.container);
     plain.unmount();
     const technical = renderPage('technical');
     await screen.findByRole('article', { name: conformance.name });
-    const technicalWords = proseWords(technical.container);
+    const technicalWords = layer1WordCount(technical.container);
     expect(plainWords).toBeLessThanOrEqual(PLAIN_BUDGET);
     expect(technicalWords).toBeGreaterThan(plainWords);
     expect(technicalWords).toBeLessThanOrEqual(plainWords * 1.5);
