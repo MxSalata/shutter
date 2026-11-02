@@ -19,6 +19,36 @@ Method OnAfterAllTests() As %Status
     Quit $$$OK
 }
 
+/// The millisecond counters survive the response's JSON (a recording), the time helpers move times by milliseconds, and a
+/// replay writes the recorded tool calls for the run at their recorded pace, once.
+Method TestReplayKeepsThePace()
+{
+    Set time = "Shutter.Util.Time"
+    Do $$$AssertEquals($CLASSMETHOD(time, "MillisBetween", "2026-11-02T01:00:00.250Z", "2026-11-02T01:00:02.750Z"), 2500, "two and a half seconds")
+    Do $$$AssertEquals($CLASSMETHOD(time, "MillisBetween", "2026-11-02T01:00:00Z", "2026-11-02T01:00:01.5Z"), 1500, "a time without a fraction, and a fraction of one digit")
+    Do $$$AssertEquals($CLASSMETHOD(time, "MillisBetween", "", "2026-11-02T01:00:01Z"), "", "no time, no answer")
+    Do $$$AssertEquals($CLASSMETHOD(time, "PlusMillis", "2026-11-02T01:00:59.900Z", 1350), "2026-11-02T01:01:01.250Z", "moved past the minute")
+    Do $$$AssertEquals($CLASSMETHOD(time, "PlusMillis", "2026-11-02T00:00:00.100Z", -200), "2026-11-01T23:59:59.900Z", "moved back past midnight")
+    Set r = ##class(Shutter.Bridge.Msg.AgentResponse).%New()
+    Set r.Status = "ok", r.StartedAt = "2026-11-02T01:00:00Z", r.StartedAtMs = "2026-11-02T01:00:00.123Z", r.LlmMs = 4200, r.ToolMs = 310, r.ReasoningTokens = 77
+    Set back = ##class(Shutter.Bridge.Msg.AgentResponse).%New()
+    Do $$$AssertStatusOK(back.FromObject(r.ToObject()), "the response round-trips through its JSON")
+    Do $$$AssertEquals(back.StartedAtMs _ "|" _ back.LlmMs _ "|" _ back.ToolMs _ "|" _ back.ReasoningTokens, "2026-11-02T01:00:00.123Z|4200|310|77", "with the millisecond counters")
+    // The replayed calls: a run key of this test, the recorded times moved by the shift, written once.
+    Set key = "test-replay-" _ $JOB _ "-" _ ($PIECE($ZTIMESTAMP, ",", 2) \ 1)
+    Set calls = [{"at": "2026-10-25T13:22:53.467Z", "name": "GetRoute", "arguments": {"caseId": "C-1"}, "durationMs": 120, "ok": true, "resultPreview": "{}"}, {"at": "2026-10-25T13:22:55.000Z", "name": "GetFailure", "arguments": "{}", "durationMs": 80, "ok": true, "resultPreview": "{}"}]
+    Set shift = $CLASSMETHOD(time, "MillisBetween", "2026-10-25T13:22:53.467Z", "2026-11-02T01:00:00.000Z")
+    Do $$$AssertEquals(##class(Shutter.Bridge.Runner.Replay).ReplayToolCalls(key, calls.%ToJSON(), shift), 2, "two calls written")
+    Set rows = ##class(Shutter.Bridge.ToolCall).ForRun(key)
+    Do $$$AssertEquals(rows.%Size(), 2, "two rows for the run")
+    Do $$$AssertEquals(rows.%Get(0).at _ "|" _ rows.%Get(0).name _ "|" _ rows.%Get(0).durationMs, "2026-11-02T01:00:00.000Z|GetRoute|120", "the first at the shifted start")
+    Do $$$AssertEquals(rows.%Get(1).at, "2026-11-02T01:00:01.533Z", "the second 1.533 s later, as recorded")
+    Do $$$AssertEquals(##class(Shutter.Bridge.Runner.Replay).ReplayToolCalls(key, calls.%ToJSON(), shift), 0, "a run with rows already is left alone")
+    Do $$$AssertEquals(##class(Shutter.Bridge.Runner.Replay).ReplayToolCalls(key _ "-x", "", shift), 0, "no calls recorded, nothing written")
+    &sql(DELETE FROM Shutter_Bridge.ToolCall WHERE RunKey = :key)
+    Kill ^Shutter.Counter("toolcall", key)
+}
+
 Method TestRunKeepsTheCounters()
 {
     Set op = {"operation_key": (..#KEY), "encounter_id": "ENC-UT8", "patient_id": "MRN-UT8", "patient_id_authority": "HOSP", "event": "admit", "ward": "WARD-A", "bed": null, "event_time": "2026-11-02T01:00:00Z", "source_system": "PAS", "source_message_id": "UT8", "payload_digest": "sha256:ut8"}

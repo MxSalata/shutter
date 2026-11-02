@@ -30,16 +30,24 @@ Property Error As %String(%JSONFIELDNAME = "error", MAXLEN = 2000);
 Property Denied As %Boolean(%JSONFIELDNAME = "denied") [ InitialExpression = 0 ];
 
 /// Append a call for a run.
-ClassMethod Append(runKey As %String, name As %String, arguments As %String, durationMs As %Integer, ok As %Boolean, resultPreview As %String, error As %String = "", denied As %Boolean = 0) As %Status
+ClassMethod Append(runKey As %String, name As %String, arguments As %String, durationMs As %Integer, ok As %Boolean, resultPreview As %String, error As %String = "", denied As %Boolean = 0, at As %String = "") As %Status
 {
     Set c = ..%New()
     Set c.RunKey = runKey
     Set c.Seq = $INCREMENT(^Shutter.Counter("toolcall", runKey))
-    Set c.At = ##class(Shutter.Util.Time).NowUTCms()
+    Set c.At = $SELECT(at '= "": at, 1: ##class(Shutter.Util.Time).NowUTCms())
     Set c.Name = name, c.ArgumentsJSON = arguments, c.DurationMs = durationMs, c.Ok = ok
     Set c.ResultPreview = $EXTRACT(resultPreview, 1, 1000), c.Error = $EXTRACT(error, 1, 2000)
     Set c.Denied = ''denied
     Quit c.%Save()
+}
+
+/// Whether a run has any call recorded yet.
+ClassMethod HasRows(runKey As %String) As %Boolean
+{
+    Set n = 0
+    &sql(SELECT COUNT(*) INTO :n FROM Shutter_Bridge.ToolCall WHERE RunKey = :runKey)
+    Quit +n > 0
 }
 
 /// How many of a run's calls the authorisation policy refused (v1.35).
