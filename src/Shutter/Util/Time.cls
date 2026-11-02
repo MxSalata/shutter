@@ -23,6 +23,40 @@ ClassMethod NowUTCms() As %String
     Quit $ZDATE(ts, 3) _ "T" _ $ZTIME(secs \ 1, 1) _ "." _ ms _ "Z"
 }
 
+/// Milliseconds from a to b, both ISO UTC times with or without a fraction ("2026-11-02T01:02:03.456Z"); "" when either is
+/// empty or unreadable.
+ClassMethod MillisBetween(a As %String, b As %String) As %Integer
+{
+    Set ma = ..EpochMillis(a), mb = ..EpochMillis(b)
+    If (ma = "") || (mb = "") Quit ""
+    Quit mb - ma
+}
+
+/// An ISO UTC time with milliseconds, moved by a number of milliseconds (negative values go back); "" when unreadable.
+ClassMethod PlusMillis(iso As %String, millis As %Integer) As %String
+{
+    Set m = ..EpochMillis(iso)
+    If m = "" Quit ""
+    Set m = m + +millis
+    Set secs = m \ 1000, frac = m # 1000
+    If frac < 0 Set frac = frac + 1000, secs = secs - 1
+    Set days = secs \ 86400, rest = secs # 86400
+    If rest < 0 Set rest = rest + 86400, days = days - 1
+    Quit $ZDATE(days, 3) _ "T" _ $ZTIME(rest, 1) _ "." _ $TRANSLATE($JUSTIFY(frac, 3), " ", "0") _ "Z"
+}
+
+/// Milliseconds since the IRIS epoch of an ISO UTC time, or "" when it does not read.
+ClassMethod EpochMillis(iso As %String) As %Integer [ Private ]
+{
+    If $GET(iso) = "" Quit ""
+    Set base = $PIECE(iso, "Z", 1), frac = $PIECE(base, ".", 2), base = $PIECE(base, ".", 1)
+    Set h = ""
+    Try { Set h = $ZDATETIMEH($TRANSLATE(base, "T", " "), 3, 1) } Catch ex { Set h = "" }
+    If h = "" Quit ""
+    Set ms = $SELECT(frac = "": 0, 1: +$EXTRACT(frac _ "000", 1, 3))
+    Quit (($PIECE(h, ",", 1) * 86400) + ($PIECE(h, ",", 2) \ 1)) * 1000 + ms
+}
+
 /// Seconds since the IRIS epoch, from the clock: for intervals that need no formatting.
 ClassMethod EpochSeconds() As %Integer
 {

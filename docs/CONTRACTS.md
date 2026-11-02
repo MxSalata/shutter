@@ -743,9 +743,9 @@ last 180 days."), and the case's events note each precedent written. It is for t
 allowlist (9) leaves `precedents` out of what a board member reads, so a run of approvals cannot anchor a model, and the
 material digest (A7) never includes it, so a new precedent changes nothing an approval binds. `GET /cases/{id}/precedents`
 (`Shutter_Operate`) answers `{receiver, conditions, summary, precedents: [...]}`, the rows newest first, retired ones
-included with `active` false; `POST /precedents/{id}/retire` (`Shutter_Approve`, `X-Requested-With`, body `{reason}`)
-retires one, which stays on record and counts for nothing (404 `not_found`; 409 `already_retired`, naming who retired it
-and when). A precedent informs the approver and never releases anything: only the policy path above releases without a
+included with `active` false; `POST /precedents/{id}/retire` (`Shutter_Approve`, `X-Requested-With`, body `{reason}`, required: 400
+`bad_request` with `field` `reason` without one) retires one, which stays on record and counts for nothing (404 `not_found`;
+409 `already_retired` with `retiredBy`, `retiredAt` and `retiredReason`). A precedent informs the approver and never releases anything: only the policy path above releases without a
 person.
 
 ### 6.5 The gate's catalogue checks

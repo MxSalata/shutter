@@ -535,15 +535,17 @@ ClassMethod CasePrecedents(caseId As %String) As %Status
     Quit ..Json(o)
 }
 
-/// Retire a precedent (Shutter_Approve, X-Requested-With; body {reason}): it stays on record and counts for nothing.
-/// 404 not_found; 409 already_retired, naming who retired it and when.
+/// Retire a precedent (Shutter_Approve, X-Requested-With; body {reason}, required): it stays on record and counts for
+/// nothing. 400 bad_request without a reason; 404 not_found; 409 already_retired with retiredBy, retiredAt and retiredReason.
 ClassMethod PrecedentRetire(id As %String) As %Status
 {
     If '..Allow("Shutter_Approve", 1) Quit $$$OK
     Set body = ..Body()
-    Set why = ##class(Shutter.Store.Precedent).Retire(id, ..User(), ##class(Shutter.Util.Json).Str(body, "reason"), .p)
+    Set reason = $ZSTRIP(##class(Shutter.Util.Json).Str(body, "reason"), "<>W")
+    If reason = "" Quit ..Fail("400 Bad Request", "bad_request", "reason is required: say why the precedent no longer counts", {"field": "reason"})
+    Set why = ##class(Shutter.Store.Precedent).Retire(id, ..User(), reason, .p)
     If why = "not_found" Quit ..Fail("404 Not Found", "not_found", "No precedent " _ id)
-    If why = "already_retired" Quit ..Fail("409 Conflict", "already_retired", "Precedent " _ id _ " was retired on " _ p.RetiredAt _ " by " _ p.RetiredBy)
+    If why = "already_retired" Quit ..Fail("409 Conflict", "already_retired", "Precedent " _ id _ " was retired on " _ p.RetiredAt _ " by " _ p.RetiredBy, {"retiredBy": (p.RetiredBy), "retiredAt": (p.RetiredAt), "retiredReason": (p.RetiredReason)})
     If why '= "" Quit ..Fail("500 Internal Server Error", "save_failed", why)
     Quit ..Json(p.Projection())
 }
