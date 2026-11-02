@@ -65,6 +65,8 @@ function settingsWith(live: Partial<LiveStatus> | undefined) {
 const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000).toISOString();
 const inMinutes = (n: number) => minutesAgo(-n);
 const banner = () => screen.findByLabelText('Live hospital');
+/** The banner's line alone: for a user who operates, the banner also carries "Break the feed" (features/storm). */
+const line = async () => within(await banner()).getByTestId('live-line');
 const noBanner = async () => {
   // The settings are read by the banner; wait for the page, then for a beat that the banner is not coming
   await screen.findByRole('heading', { name: /page$/ });
@@ -97,7 +99,7 @@ describe('the live hospital banner', () => {
   it('shows for the public demo role of the mock, which is signed in to a live hospital', async () => {
     resetMock('demo');
     renderFrame();
-    expect(await banner()).toHaveTextContent(
+    expect(await line()).toHaveTextContent(
       /^Live hospital: a new failure every 7 minutes\. Last: S2, 4 min ago\. Next: S8 at \d\d:\d\d (GMT|BST|UTC)\.$/,
     );
   });
@@ -122,7 +124,7 @@ describe('the live hospital banner', () => {
       next: { scenario: 'S8', at: inMinutes(3) },
     });
     const first = renderFrame();
-    expect(await banner()).toHaveTextContent(/ Next: S8 at \d\d:\d\d (GMT|BST|UTC)\.$/);
+    expect(await line()).toHaveTextContent(/ Next: S8 at \d\d:\d\d (GMT|BST|UTC)\.$/);
     first.unmount();
     // A story that was due and has not played: the player is behind or stopped, so no time is promised
     settingsWith({
@@ -138,7 +140,7 @@ describe('the live hospital banner', () => {
   it('says every minute for a one-minute interval, and leaves out a last story that has not played', async () => {
     settingsWith({ enabled: true, every_minutes: 1, last_played: null });
     renderFrame();
-    const text = await banner();
+    const text = await line();
     expect(text).toHaveTextContent(/^Live hospital: a new failure every minute\.$/);
     expect(text).not.toHaveTextContent('Last:');
   });
