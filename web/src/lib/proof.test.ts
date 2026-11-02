@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import slice from '../../../docs/readme/evaluation.json?proof';
-import { PROOF, playedFor, proofFrom, type ProofSource } from './proof';
+import { PROOF, playedFor, playedResult, proofFrom, type ProofSource } from './proof';
 
 describe("the proof's figures, from the board's evaluation", () => {
   it("counts the board's proposals: 24 of 24 scored passes, 25 passes in 24 cases, 1 not scored", () => {
@@ -31,6 +31,28 @@ describe("the proof's figures, from the board's evaluation", () => {
     // Not in the comparison's table, and an incident's chains are played per encounter
     expect(playedFor('S22')).toBeNull();
     expect(playedFor('S11')).toBeNull();
+  });
+
+  it('gives the played result of any one pass, as the per-scenario figures read it', () => {
+    expect(
+      playedResult({
+        board_live: { status: 'as expected' },
+        rules: { status: 'differs', state: 'blocked', wrote: false },
+      }),
+    ).toEqual({ board: 'as-expected', rules: 'stopped' });
+    expect(
+      playedResult({ board_live: { status: 'differs' }, rules: { status: 'differs', wrote: true } }),
+    ).toEqual({
+      board: 'differs',
+      rules: 'wrote-wrongly',
+    });
+    expect(playedResult(undefined)).toEqual({ board: 'not-played', rules: 'not-played' });
+    for (const id of ['S1', 'S8'])
+      expect(
+        playedResult(
+          (slice as ProofSource).passes.find((p) => p.scenario === id && p.played?.board_live)?.played,
+        ),
+      ).toEqual(playedFor(id));
   });
 
   it('says who the cited entries leave the decision to, over the 24 scored passes: 16, 3 and 5', () => {

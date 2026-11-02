@@ -1,9 +1,9 @@
 node_modules
 coverage
-public/mockServiceWorker.js
 package-lock.json
 src/mocks/fixtures.json
 src/mocks/recorded-questions.json
 dist-demo
 playwright-report
 test-results
+dist-iris-e2e
