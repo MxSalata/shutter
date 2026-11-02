@@ -25,11 +25,12 @@ RUN PEX_STRICT="${PEX_STRICT}" bash /home/irisowner/dev/pex/build.sh /usr/irissy
 # AI Hub and fails the build without it; 0 loads the core alone whatever the image has.
 ARG WITH_AIHUB=auto
 
-# Read by the installer while the image is built (empty keeps the defaults: the demo password shutter, a purge of 90 days).
-# The rest of .env (the live hospital, the budget, the public demo's logins) is container environment, applied each time the
-# production starts (docker-compose.yml, Shutter.Setup.ApplyEnvironment): never a build argument, which the image's history
-# would keep.
-ARG SHUTTER_DEMO_PASSWORD=
+# Read by the installer while the image is built (empty keeps the defaults: a purge of 90 days). The demo users' password
+# (SHUTTER_DEMO_PASSWORD, default shutter) comes in as a BuildKit secret, never a build argument: a build argument's value
+# is printed in the build log and kept in the image's history (docker history). docker-compose.yml sources the secret from
+# the environment or .env; a plain docker build passes --secret id=shutter_demo_password,env=SHUTTER_DEMO_PASSWORD; with no
+# secret the default applies (the mount is world-readable, since the install runs as irisowner, not root). The rest of .env (the live hospital, the budget, the public demo's logins) is container
+# environment, applied each time the production starts (Shutter.Setup.ApplyEnvironment).
 ARG SHUTTER_MESSAGE_DAYS=
 ARG SHUTTER_MESSAGE_PURGE=
 ARG SHUTTER_ESCALATION_DAYS=
@@ -39,6 +40,6 @@ ARG SHUTTER_ESCALATION_DAYS=
 # step that fails ends its session with exit code 1 and fails the build, so no image is made that
 # would answer 404. The production is set to start with the instance; SHUTTER_BUILD tells the install
 # not to start it here.
-RUN iris start IRIS \
- && SHUTTER_BUILD=1 SHUTTER_WITH_AIHUB="${WITH_AIHUB}" SHUTTER_DEMO_PASSWORD="${SHUTTER_DEMO_PASSWORD}" SHUTTER_MESSAGE_DAYS="${SHUTTER_MESSAGE_DAYS}" SHUTTER_MESSAGE_PURGE="${SHUTTER_MESSAGE_PURGE}" SHUTTER_ESCALATION_DAYS="${SHUTTER_ESCALATION_DAYS}" iris session IRIS < /home/irisowner/dev/iris.script \
+RUN --mount=type=secret,id=shutter_demo_password,mode=0444 iris start IRIS \
+ && SHUTTER_BUILD=1 SHUTTER_WITH_AIHUB="${WITH_AIHUB}" SHUTTER_DEMO_PASSWORD="$(cat /run/secrets/shutter_demo_password 2>/dev/null || true)" SHUTTER_MESSAGE_DAYS="${SHUTTER_MESSAGE_DAYS}" SHUTTER_MESSAGE_PURGE="${SHUTTER_MESSAGE_PURGE}" SHUTTER_ESCALATION_DAYS="${SHUTTER_ESCALATION_DAYS}" iris session IRIS < /home/irisowner/dev/iris.script \
  && iris stop IRIS quietly

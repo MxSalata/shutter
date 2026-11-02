@@ -1367,8 +1367,8 @@ demo items, switched off on a site install with the others.
 - **The message purge.** "Shutter message purge" (`Ens.Util.Tasks.Purge`, every message type in the namespace, bodies
   too, sessions kept whole) is created only when `SHUTTER_MESSAGE_PURGE` is 1, or, when unset, on a demo instance; it
   keeps `SHUTTER_MESSAGE_DAYS` days of messages (90 when unset). The installer reads both from the environment of the
-  process that runs it (the Dockerfile passes them as build arguments from `.env`; a `zpm load` by hand reads the
-  shell's). The task is made once: an existing instance changes it in the Task Manager. The Doctor reports
+  process that runs it (the Dockerfile passes them as build arguments from `.env`, and the demo password as a BuildKit
+  secret since v1.38, so the build log and the image's history never carry it; a `zpm load` by hand reads the shell's). The task is made once: an existing instance changes it in the Task Manager. The Doctor reports
   `purge_task` and `message_days`.
 - **The start sweep.** `Shutter.Production.OnStart` calls `Shutter.Store.Case.MarkOpenAtStart()`: every case not in a closed state gets one `error`-kind event by `system` (ref `start:<time>`): "The production started at <UTC> while this case was <state>. Work in flight resumes when the production was stopped cleanly; if the case does not move on within N minutes, an approver can abandon it (POST /cases/<id>/abandon, or "Abandon the case" on the case page)". It never closes a case: a clean stop and start keeps queued requests and reloads suspended alarms, so the work resumes and the note is the audit trail of the restart. When the count is above 0 the event log carries an info entry with it. Only `Shutter.Production` runs the sweep: a site's own production filled by `InstallInto` (shape B) gets none, and `POST /cases/{id}/abandon` still works there. The Doctor and `GET /health` (for `Shutter_Operate` callers) carry `working_cases`, the count of cases not in a closed state, and `abandon_after_minutes`, `python_zoneinfo` (v1.30), N as read.
 - **Escalation retention** (v1.21). The retention task is always made, with `EscalationDays` from
@@ -1425,7 +1425,8 @@ share (9), the three public logins made or brought back to their definition and 
 the live profile policy (4.4) and the hospital's switch (`Hospital.Setup.SetLive`, at once when its production runs, else from a
 background job that waits up to the seconds given). An empty variable leaves the setting as it is, so an approver's later change
 survives a restart that does not name it. The install reads the same variables (its own semantics: an empty budget means no
-cap), so the image's build arguments stay the three the installer alone reads (INSTALL.md section 3). The call returns JSON
+cap), so the image's build arguments stay the two the installer alone reads, with the demo password as a build secret
+(INSTALL.md section 3). The call returns JSON
 naming what was applied, with `errors` when a step failed, and the event log carries it; `SELECT Shutter.Setup_ApplyEnvironment()`
 runs it by hand. `ApplyRuntime(...)` is the same on given values, for the tests.
 
@@ -1717,7 +1718,9 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   takes the production's own report of the failure when it arrives before the evidence is collected, so the catalogue
   reads the connector's answer (11); the alert's time in the failure text is read as the engine's UTC timestamp (11);
   two words put right: the rehearsal check blocks at dispatch, the only stage that sends it (6.5), and a deferred board waits
-  60 to 89 s (6.6); the live hospital's rotation drops S11 and takes `SHUTTER_LIVE_SCENARIOS` (4.4).
+  60 to 89 s (6.6); the live hospital's rotation drops S11 and takes `SHUTTER_LIVE_SCENARIOS` (4.4); the demo users'
+  password reaches the image build as a BuildKit secret, never a build argument, and CI proves it is in neither the build
+  log nor the image's history (12, 13).
 - v1.37, 2 Nov 2026: whether the live agents can run, `live.agents` in `GET /settings` with reasons `budget` and `provider_auth`,
   the Agent item's `provider_auth` refusal while the provider refuses the key, and `409 live_unavailable` on the board and a
   live question (12), for the demo's notice to visitors; `live.budgetNote` from `SHUTTER_DEMO_BUDGET_USD` and
