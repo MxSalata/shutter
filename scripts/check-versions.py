@@ -10,8 +10,8 @@ tag names the same commit.
 
 The places (a file that is missing, or a field it does not carry, is reported and fails the check, except the two
 marked optional):
-  module.xml                 the core module's <Version>
-  aihub/module.xml           the aihub module's <Version>, and its dependency on iris-shutter
+  module.xml                 the full package's <Version> (iris-shutter, the AI Hub build)
+  core/module.xml            the core module's <Version> (iris-shutter-core, loaded by path on 2026.2)
   src/Shutter/Setup.cls      Parameter VERSION (optional), which the install records and /health reports
   web/package.json           "version"
   web/package-lock.json      "version" and packages[""].version
@@ -34,10 +34,10 @@ SEMVER = re.compile(r"\d+\.\d+\.\d+")
 
 # Each pattern's first group ends just before the version and its second group starts just after it, so that --set and
 # --blank change the version and nothing else. A module's <Version> follows its <Name>; so does a dependency's.
-XML_VERSION = r"(<Name>(?:iris-shutter|iris-shutter-aihub)</Name>\s*<Version>)[^<]*(</Version>)"
+XML_VERSION = r"(<Name>(?:iris-shutter|iris-shutter-core)</Name>\s*<Version>)[^<]*(</Version>)"
 PATTERNS = {
     "module.xml": [XML_VERSION],
-    "aihub/module.xml": [XML_VERSION],
+    "core/module.xml": [XML_VERSION],
     "src/Shutter/Setup.cls": [r'(^Parameter VERSION = ")[^"]*(";)'],
     # The top-level "version" is the first one at two spaces' indent.
     "web/package.json": [r'(^  "version": ")[^"]*(")'],
@@ -60,7 +60,7 @@ def found(root):
     """Every place and the version it holds: a list of (place, version or None, note)."""
     out = []
 
-    for rel, name in (("module.xml", "iris-shutter"), ("aihub/module.xml", "iris-shutter-aihub")):
+    for rel, name in (("module.xml", "iris-shutter"), ("core/module.xml", "iris-shutter-core")):
         text = read(root, rel)
         if text is None:
             out.append((rel, None, "file missing"))
@@ -74,12 +74,6 @@ def found(root):
             out.append((rel, None, f"no <Module> named {name}"))
             continue
         out.append((f"{rel} <Version>", (module.findtext("Version") or "").strip(), ""))
-        if rel == "aihub/module.xml":
-            refs = [r for r in module.findall("./Dependencies/ModuleReference") if r.findtext("Name") == "iris-shutter"]
-            if len(refs) != 1:
-                out.append((f"{rel} dependency on iris-shutter", None, "missing"))
-            else:
-                out.append((f"{rel} dependency on iris-shutter", (refs[0].findtext("Version") or "").strip(), ""))
 
     text = read(root, "src/Shutter/Setup.cls")
     m = re.search(PATTERNS["src/Shutter/Setup.cls"][0], text or "", re.M)
@@ -127,7 +121,7 @@ def substitute(rel, text, version):
     """The text with every version field of the file set to version; an error if a field is not found."""
     for pattern in PATTERNS[rel]:
         text, n = re.subn(pattern, lambda m: m.group(1) + version + m.group(2), text, flags=re.M)
-        expected = 2 if rel == "aihub/module.xml" else 1
+        expected = 1
         if n != expected:
             raise ValueError(f"{rel}: {n} matches of a version field, expected {expected}")
     return text

@@ -151,7 +151,7 @@ jobs:
       - name: Nothing personal from the fixtures reached the model in any recording
         run: python3 tests/privacy_check.py --demo web/src/mocks/fixtures.json
       # The IPM version equals the release tag, so every place that writes the version holds the same one: both
-      # module.xml files (and the aihub module's dependency on the core), Setup.cls, the web package and its lockfile,
+      # module.xml files (the full package and the core module), Setup.cls, the web package and its lockfile,
       # and the recorded demo's health.version. On a version tag (a run started by hand on the tag) they must also equal
       # the tag.
       - name: The version is the same everywhere it is written
@@ -164,7 +164,7 @@ jobs:
       # Open Exchange's reader of module.xml keeps only the low byte of a character, so anything outside ASCII breaks a
       # publish.
       - name: Both module.xml files are plain ASCII
-        run: python3 scripts/check-ascii.py module.xml aihub/module.xml
+        run: python3 scripts/check-ascii.py module.xml core/module.xml
       # The writing rules: no em or en dashes, no tool's name and no Co-Authored-By trailer, in every tracked file but
       # the built www/ and the vendored installer, and in the messages of the commits a push brings.
       - name: The files and the pushed commit messages keep the writing rules
@@ -252,7 +252,9 @@ jobs:
           echo "$out" | tail -20
           echo "$out" | grep -q '^RESULT: ok'
       - name: Load and compile the core, the downstream system and its tests
-        run: python3 scripts/iris-load.py --url "$IRIS_URL" --ns SHUTTER src tests/unit/Downstream tests/unit/Shutter
+        # The core module's sources only (scripts/module-sources.py reads core/module.xml): the agents' classes under src/
+        # need the %AI package, which the plain image has not.
+        run: python3 scripts/iris-load.py --url "$IRIS_URL" --ns SHUTTER $(python3 scripts/module-sources.py core/module.xml) tests/unit/Downstream tests/unit/Shutter
       - name: Install (roles, demo users, web applications, the production)
         run: |
           out=$(printf '%s\n' 'Set r = ##class(Shutter.Setup).Install("/home/irisowner/dev/") Write !,"RESULT: ",r,!' 'Halt' \
@@ -429,7 +431,7 @@ jobs:
   # requests were merged together and whichever runs a newer push replaced. Until the first version tag (v1.0.0, made
   # when the owner releases on Open Exchange) they do nothing. When any of the updates changed
   # web/package.json or web/package-lock.json, the last figure of the version moves in every place
-  # scripts/check-versions.py knows (both module.xml files, the aihub module's dependency on the core, Setup.cls, the
+  # scripts/check-versions.py knows (both module.xml files, Setup.cls, the
   # web package and its lockfile, the recorded demo's health.version), the CHANGELOG gets a section naming every update
   # (scripts/dependency-release.mjs), www/ is rebuilt, and the commit is pushed to main with its annotated tag and a
   # GitHub release; the image job then builds from that commit. Open Exchange's "Release app" with the same version
@@ -498,7 +500,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A www
           if [ -n "$version" ]; then
-            git add module.xml aihub/module.xml src/Shutter/Setup.cls web/package.json web/package-lock.json \
+            git add module.xml core/module.xml src/Shutter/Setup.cls web/package.json web/package-lock.json \
               web/src/mocks/fixtures.json CHANGELOG.md
             # The subject, a blank line, then the notes: git takes -m or -F, not both.
             { printf '%s\n\n' "$version: dependency updates"; cat release-notes.md; } | git commit -F -
@@ -552,9 +554,9 @@ jobs:
           if [ "$(git rev-list --count "$GITHUB_SHA..$commit")" != 1 ] || [ "$(git rev-parse "$commit^")" != "$GITHUB_SHA" ]; then
             echo "The bundle is not one commit on $GITHUB_SHA"; exit 1
           fi
-          versioned='module.xml aihub/module.xml src/Shutter/Setup.cls web/package.json web/package-lock.json web/src/mocks/fixtures.json'
+          versioned='module.xml core/module.xml src/Shutter/Setup.cls web/package.json web/package-lock.json web/src/mocks/fixtures.json'
           other=$(git diff --name-only "$GITHUB_SHA" "$commit" \
-            | grep -vxE 'www/.*|module\.xml|aihub/module\.xml|src/Shutter/Setup\.cls|web/package(-lock)?\.json|web/src/mocks/fixtures\.json|CHANGELOG\.md' || true)
+            | grep -vxE 'www/.*|module\.xml|core/module\.xml|src/Shutter/Setup\.cls|web/package(-lock)?\.json|web/src/mocks/fixtures\.json|CHANGELOG\.md' || true)
           if [ -n "$other" ]; then echo "The release commit changes other files:"; echo "$other"; exit 1; fi
           # The build ran package code, so the versioned files may differ only in their version ($versioned is split on
           # purpose: one path per word).
