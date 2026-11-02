@@ -1089,8 +1089,8 @@ copy of the message.
   "uncertain" | "rejected" | "", "http_status", "reason_code"}, "message": "<the HL7 text, segments separated by
   carriage returns>", "schema_category": "2.5.1", "mode": "board"}` (the last two optional). Answers 202 `{"caseId",
   "state", "opened"}` (`opened` false when a case for the same operation key is already open, as the feed's own
-  intake); 400 `bad_request` naming the field (no JSON object, no message, an unknown kind); 401; 403; 503 `no_service`
-  or `not_queued`.
+  intake); 400 `bad_request` naming the field (no JSON object, no message, an unknown kind); 413 `too_large` for a body over
+  2 MB (v1.35); 401; 403; 503 `no_service` or `not_queued`.
 - Inside the production: the API service sends `Shutter.Msg.ExternalIntake` (the body's fields as properties:
   `SourceNamespace`, `SourceProduction`, `SourceRoute`, `OriginHeaderId`, `Receiver`, `FailureKind`, `FailureText`,
   `FailureOutcome`, `FailureHttpStatus`, `FailureReasonCode`, `MessageText`, `SchemaCategory`, `Mode`) synchronously to
