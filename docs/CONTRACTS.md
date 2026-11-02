@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.36, 2 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.37, 2 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -1127,6 +1127,17 @@ visitors spends at most the cap. **Each user's share** (`SHUTTER_JUDGE_BUDGET_US
 0 or unset means none): every agent request carries who asked (`RequestedBy`: a question's asker, a judge who convened the
 board, `system` for the feed's own runs), the run keeps it, and a run for a user whose live runs today have reached the share is
 refused `budget_exhausted` with "Your share of the day's model budget ... is spent", so one judge cannot spend the day.
+**Whether the live agents can run (v1.37).** `GET /settings` carries `live.agents = {available, reason, until, detail}`
+(`Shutter.Util.LiveAgents`), one signal for the web's notice: `reason` is `budget` when the day's cap or the caller's share
+is spent (`until` = `budget.resetsAt`), `provider_auth` when a live run failed with an authentication error (a 401, a bad or
+deactivated key) within the last 15 minutes (`until` = the next 00:00 UTC, when a key a site deactivates for the day comes
+back; the flag clears on the next live run the provider accepts, and after 15 minutes one run tries again), and null when
+live runs can go; `detail` is the sentence to show. While the provider refuses the key the Agent item refuses runs that would
+call a model with the status `provider_auth` and makes no call (a board whose members were all refused so takes the rules
+path, with a note saying why, as for `budget_exhausted`), `POST /cases/{id}/board` answers `409 live_unavailable` with `live`
+(the availability object) before the budget is looked at, and a question from a caller with the live agents is answered from
+its recording when it has one and refused `409 live_unavailable` when it has none.
+
 **Reserve, then settle (v1.35).** A run in flight has no `AgentRun` row yet, so three members running at once were not
 counted against the cap until they finished. The Agent item now reserves an estimate for each live run it starts
 (`Budget.Reserve`, keyed by the run) and settles it when the run ends whatever its outcome (`Budget.Settle`); the day's state
@@ -1619,7 +1630,7 @@ always; a suggested turn when no `question:` recording matches its conversation 
 as a reinvestigation does (`Shutter.Msg.Reinvestigate` with `ForceBoard`), takes fresh evidence and convenes the board whatever
 the site policy says, the plan then going through the gate, rehearsal and approvals as any plan; `202 {caseId, state:
 "evidence", requestedBy}`; `403 forbidden` without the resource; `409 wrong_state` for any other state (a case awaiting approval
-is approved or rejected first); `409 budget_exhausted` with the budget object when the day's cap or the caller's share is spent
+is approved or rejected first); `409 budget_exhausted` with the budget object when the day's cap or the caller's share is spent; `409 live_unavailable` with `live` (the availability object) while the model provider refuses the key (v1.37)
 (9). The case notes "Board convened by <user>", and the board's runs carry the user for the share.
 
 - `POST /cases/{id}/questions` (`Shutter_Operate`; `X-Requested-With`; `Idempotency-Key`) `{tier: "explain" | "board",
@@ -1690,6 +1701,9 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
 
 ## Changes
 
+- v1.37, 2 Nov 2026: whether the live agents can run, `live.agents` in `GET /settings` with reasons `budget` and `provider_auth`,
+  the Agent item's `provider_auth` refusal while the provider refuses the key, and `409 live_unavailable` on the board and a
+  live question (12), for the demo's notice to visitors.
 - v1.36, 2 Nov 2026: a decision that lands while the Workflow engine is still distributing the task waits for the engine's
   worklist row and assigns again when its own row meets the engine's (5; a CI run's 409 "ID key not unique" of 2 Nov).
 - v1.35, 2 Nov 2026 (the items of the competitor code review of 1 Nov 2026): denied tool calls

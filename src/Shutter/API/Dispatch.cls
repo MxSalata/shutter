@@ -919,6 +919,12 @@ ClassMethod CaseBoard(caseId As %String) As %Status
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
     If 'case.IsClosed() || (case.State = "resolved") Quit ..Fail("409 Conflict", "wrong_state", "The case is " _ case.State _ "; the board convenes on a blocked, escalated or failed case" _ $SELECT(case.State = "awaiting_approval": " (approve or reject the plan first)", 1: ""))
+    // The provider refusing the key (v1.37): a board would only fail, so it is refused here, before the budget.
+    Set avail = ##class(Shutter.Util.LiveAgents).Availability(..User())
+    If 'avail.available && (avail.reason = "provider_auth") {
+        Set extra = {} Set extra.live = avail
+        Quit ..Fail("409 Conflict", "live_unavailable", avail.detail, extra)
+    }
     If '##class(Shutter.Util.Budget).AllowsFor(..User(), .budget) {
         Set extra = {}
         Set extra.budget = budget
@@ -1423,6 +1429,8 @@ ClassMethod Settings() As %Status
     // The day's model budget (v1.34): {dailyUsd, spentTodayUsd, exhausted, since, resetsAt, perUserUsd, spentByMeUsd,
     // shareExhausted}, the caller's own spend included.
     Set o.budget = ##class(Shutter.Util.Budget).StatusFor(..User())
+    // Whether the live agents can run now (v1.37): the budget and the provider's answer to the key, for the web's notice.
+    Do o.live.%Set("agents", ##class(Shutter.Util.LiveAgents).Availability(..User()))
     // The hold for a schema not loaded (v1.34, "prevent failures"): the site's setting, and the held cases by category.
     Do o.%Set("preventFailures", ##class(Shutter.Store.SiteProfile).PreventFailures(), "boolean")
     Set o.heldMessages = ##class(Shutter.Util.Schemas).Held()
@@ -1598,6 +1606,11 @@ ClassMethod CaseQuestionAsk(caseId As %String) As %Status
     // Who may spend the model budget (v1.34): without the live agents, only a recorded answer is given, and a question that
     // has none is refused here, before anything runs.
     Set liveAllowed = $SYSTEM.Security.Check("Shutter_LiveAgents", "USE")
+    // The provider refusing the key (v1.37): a live question would only fail, so one with no recorded answer is refused
+    // here as the board is, and one with a recording is answered from it.
+    Set avail = ##class(Shutter.Util.LiveAgents).Availability(..User())
+    Set providerDown = liveAllowed && 'avail.available && (avail.reason = "provider_auth")
+    If providerDown Set liveAllowed = 0
     If 'liveAllowed {
         Set recorded = 0
         If (source = "suggested") && (case.Scenario '= "") {
@@ -1606,6 +1619,7 @@ ClassMethod CaseQuestionAsk(caseId As %String) As %Status
             &sql(SELECT COUNT(*) INTO :recorded FROM Shutter_Bridge.Record WHERE "Key" LIKE :pattern)
             If SQLCODE '= 0 Set recorded = 0
         }
+        If 'recorded && providerDown { Set extra = {} Set extra.live = avail Quit ..Fail("409 Conflict", "live_unavailable", avail.detail, extra) }
         If 'recorded Quit ..Fail("409 Conflict", "no_recorded_answer", "This question has no recorded answer; a judge can ask it live")
     }
     Set msg = ##class(Shutter.Msg.QuestionRequest).%New()
