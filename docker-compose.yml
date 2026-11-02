@@ -9,10 +9,13 @@ services:
         # auto: live agents when the image has AI Hub, the replay edition otherwise; 1 requires AI Hub; 0 skips it.
         WITH_AIHUB: ${SHUTTER_WITH_AIHUB:-auto}
         # Read by the installer at build time (see .env.example); empty keeps the defaults.
-        SHUTTER_DEMO_PASSWORD: ${SHUTTER_DEMO_PASSWORD:-}
         SHUTTER_MESSAGE_DAYS: ${SHUTTER_MESSAGE_DAYS:-}
         SHUTTER_MESSAGE_PURGE: ${SHUTTER_MESSAGE_PURGE:-}
         SHUTTER_ESCALATION_DAYS: ${SHUTTER_ESCALATION_DAYS:-}
+      # The demo users' password reaches the build as a secret, not a build argument, so neither the build log nor the
+      # image's history carries it; unset, the installer's default (shutter) applies.
+      secrets:
+        - shutter_demo_password
     image: shutter:dev
     container_name: shutter
     restart: unless-stopped
@@ -58,3 +61,7 @@ services:
       - shutter-mgr:/usr/irissys/mgr/shutter
 volumes:
   shutter-mgr:
+
+secrets:
+  shutter_demo_password:
+    environment: SHUTTER_DEMO_PASSWORD

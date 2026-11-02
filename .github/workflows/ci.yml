@@ -625,13 +625,28 @@ jobs:
       # the runner out of disk keeping a second copy of the image. The public base has no AI Hub package, so the image
       # gets the core (replay) edition: WITH_AIHUB=0. PEX_STRICT=1 fails the build if the Second Parser can't be built
       # here, so the 2026.2 path stays checked; a judge's build skips it with the reason instead.
+      # The demo users' password is a BuildKit secret (the Dockerfile), never a build argument: this build gives it a random
+      # value and the step after the build proves it is in neither the build log nor the image's history, while the users
+      # sign in with it (SHUTTER_PASSWORD is what the scenario checker signs in with).
       - name: Build the image from the public base
-        run: >-
-          docker build --progress plain
-          --build-arg IRIS_IMAGE="$IRIS_IMAGE"
-          --build-arg WITH_AIHUB=0
-          --build-arg PEX_STRICT=1
-          -t "shutter:ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" .
+        run: |
+          SHUTTER_DEMO_PASSWORD="ci-$(openssl rand -hex 12)"
+          echo "SHUTTER_PASSWORD=$SHUTTER_DEMO_PASSWORD" >> "$GITHUB_ENV"
+          export SHUTTER_DEMO_PASSWORD
+          docker build --progress plain \
+            --secret id=shutter_demo_password,env=SHUTTER_DEMO_PASSWORD \
+            --build-arg IRIS_IMAGE="$IRIS_IMAGE" \
+            --build-arg WITH_AIHUB=0 \
+            --build-arg PEX_STRICT=1 \
+            -t "shutter:ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" . 2>&1 | tee build.log | grep -v "$SHUTTER_DEMO_PASSWORD"
+          test "${PIPESTATUS[0]}" -eq 0
+      - name: The password is in neither the build log nor the image's history
+        run: |
+          if grep -q -- "$SHUTTER_PASSWORD" build.log; then echo "the build log carries the demo password"; exit 1; fi
+          if docker history --no-trunc "shutter:ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" | grep -q -- "$SHUTTER_PASSWORD"; then echo "the image's history carries the demo password"; exit 1; fi
+          if docker image inspect "shutter:ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" | grep -q -- "$SHUTTER_PASSWORD"; then echo "the image's configuration carries the demo password"; exit 1; fi
+          echo "the password is in neither the build log, the image's history nor its configuration"
+          rm -f build.log
       - name: Start it
         # The startup alerts are cleared by the production's own start; no after-start script is needed. The container and
         # the image carry this run's id, and Docker picks the host port, so jobs that share one Docker never collide.
@@ -689,7 +704,7 @@ jobs:
           check() {
             JUDGE=$(curl -s -u "judge:$SHUTTER_JUDGE_PASSWORD" "$url/me" || true) \
             DEMO=$(curl -s -u "demo:$SHUTTER_PUBLIC_DEMO_PASSWORD" "$url/me" || true) \
-            SETTINGS=$(curl -s -u operator:shutter "$url/settings" || true) \
+            SETTINGS=$(curl -s -u "operator:$SHUTTER_PASSWORD" "$url/settings" || true) \
             python3 -c '
           import json, os, sys
           def read(name):

@@ -59,8 +59,11 @@ applied every time `Shutter.Production` starts (`Shutter.Setup.ApplyEnvironment`
 image they travel as container environment from `.env` through `docker-compose.yml`, need no build argument (a password in a
 build argument would sit in the image's history), and a change takes effect on the next `docker compose up`; a variable that is
 empty leaves the instance's setting as it is. `SELECT Shutter.Setup_ApplyEnvironment()` applies them by hand, for an instance
-whose production is a site's own (shape B). The other three (`SHUTTER_DEMO_PASSWORD`, the purge and the retention days) are
-build arguments the installer reads once:
+whose production is a site's own (shape B). The other three are read once, while the image is built: the purge and the
+retention days as build arguments, and `SHUTTER_DEMO_PASSWORD` as a BuildKit secret (`docker-compose.yml` sources it from
+the environment or `.env`; a plain `docker build` passes `--secret id=shutter_demo_password,env=SHUTTER_DEMO_PASSWORD`), so
+neither the build log nor the image's history carries it; the build needs BuildKit, the default builder since Docker 23
+(`DOCKER_BUILDKIT=1` before that). Unset, the default applies:
 
 | Variable | Meaning |
 | --- | --- |
