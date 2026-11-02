@@ -6,3 +6,8 @@ declare module '*evaluation.json?proof' {
   const slice: import('./lib/proof').ProofSource;
   export default slice;
 }
+
+/** In trial pages only: what the trial answered in this browser and what was refused (src/trial/journal.ts). */
+interface Window {
+  shutterTrial?: { journal: import('./trial/journal').Journal };
+}

@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { IconFlask2 } from '@tabler/icons-react';
+import { createRef } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderUi } from '@/test/render';
 import { HeroBand } from './HeroBand';
@@ -49,6 +50,22 @@ describe('StatTile and SummaryBand', () => {
     expect(choose).toHaveBeenCalledOnce();
     expect(screen.getByRole('link', { name: /24 of 24/ })).toHaveAttribute('href', '/evaluation');
   });
+
+  it('leaves the figure out for a graphic, and makes its label a heading, except on a button', () => {
+    renderUi(
+      <>
+        <StatTile label="Head to head" labelOrder={3}>
+          <span>the bars</span>
+        </StatTile>
+        <StatTile label="Escalated" figure="15" labelOrder={3} onClick={() => {}} aria-label="15 Escalated" />
+      </>,
+    );
+    const heading = screen.getByRole('heading', { name: 'Head to head', level: 3 });
+    const tile = heading.closest('.stat-tile')!;
+    expect(tile.querySelector('.stat-figure')).toBeNull();
+    expect(tile).toHaveTextContent('Head to headthe bars');
+    expect(screen.queryByRole('heading', { name: 'Escalated' })).not.toBeInTheDocument();
+  });
 });
 
 describe('HeroBand', () => {
@@ -69,5 +86,28 @@ describe('HeroBand', () => {
     expect(band).toHaveClass('hero-band', 'outcome-band');
     expect(band).toHaveTextContent('Delivered: verified at the receiver');
     expect(band).toHaveTextContent('1 write to Downstream Out');
+  });
+
+  it('takes an overline heading, and an id, a tab index and a ref on its statement, which then names it', () => {
+    const ref = createRef<HTMLElement>();
+    renderUi(
+      <HeroBand
+        tone="attention"
+        id="site-suggestion"
+        overline="The board against the expected outcome"
+        overlineOrder={2}
+        statement="A suggested change from case C-000008"
+        statementAs="h2"
+        statementProps={{ id: 'site-suggestion-title', tabIndex: -1, ref }}
+      />,
+    );
+    const band = screen.getByRole('region', { name: 'A suggested change from case C-000008' });
+    expect(band).toHaveAttribute('id', 'site-suggestion');
+    expect(
+      screen.getByRole('heading', { name: 'The board against the expected outcome', level: 2 }),
+    ).toBeInTheDocument();
+    expect(ref.current).toHaveAttribute('id', 'site-suggestion-title');
+    ref.current!.focus();
+    expect(screen.getByRole('heading', { name: 'A suggested change from case C-000008' })).toHaveFocus();
   });
 });

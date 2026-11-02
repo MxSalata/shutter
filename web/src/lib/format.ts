@@ -86,16 +86,18 @@ export function zoneLabel(iso: string | undefined | null): string {
   return zoneName.formatToParts(d).find((p) => p.type === 'timeZoneName')?.value ?? zone;
 }
 
-/** "15 Oct, 09:20:00 BST": a time in the feed's zone, named. */
-export function formatZoned(iso: string | undefined | null): string {
+/** "15 Oct, 09:20:00 BST": a time in the feed's zone, named; "15 Oct, 09:20:00" with `named` false. */
+export function formatZoned(iso: string | undefined | null, named = true): string {
   const d = parseTime(iso);
-  return d ? `${dateTime.format(d)} ${zoneLabel(iso)}` : '';
+  if (!d) return '';
+  return named ? `${dateTime.format(d)} ${zoneLabel(iso)}` : dateTime.format(d);
 }
 
-/** "09:20:00 BST": the time alone in the feed's zone, named, for a moment of today. */
-export function formatZonedTime(iso: string | undefined | null): string {
+/** "09:20:00 BST": the time alone in the feed's zone, named (or not, with `named` false), for a moment of today. */
+export function formatZonedTime(iso: string | undefined | null, named = true): string {
   const d = parseTime(iso);
-  return d ? `${timeOnly.format(d)} ${zoneLabel(iso)}` : '';
+  if (!d) return '';
+  return named ? `${timeOnly.format(d)} ${zoneLabel(iso)}` : timeOnly.format(d);
 }
 
 /** "08:20:00Z": the same moment's UTC time, short, to sit beside the local one in Technical. */
