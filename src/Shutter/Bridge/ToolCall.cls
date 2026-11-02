@@ -25,8 +25,12 @@ Property ResultPreview As %String(%JSONFIELDNAME = "resultPreview", MAXLEN = 100
 
 Property Error As %String(%JSONFIELDNAME = "error", MAXLEN = 2000);
 
+/// Whether the authorisation policy refused the call before it ran (v1.35): a request for another case's evidence, or a
+/// tool outside the role. The reason is in Error, Ok is false and DurationMs is 0, since nothing ran.
+Property Denied As %Boolean(%JSONFIELDNAME = "denied") [ InitialExpression = 0 ];
+
 /// Append a call for a run.
-ClassMethod Append(runKey As %String, name As %String, arguments As %String, durationMs As %Integer, ok As %Boolean, resultPreview As %String, error As %String = "") As %Status
+ClassMethod Append(runKey As %String, name As %String, arguments As %String, durationMs As %Integer, ok As %Boolean, resultPreview As %String, error As %String = "", denied As %Boolean = 0) As %Status
 {
     Set c = ..%New()
     Set c.RunKey = runKey
@@ -34,7 +38,16 @@ ClassMethod Append(runKey As %String, name As %String, arguments As %String, dur
     Set c.At = ##class(Shutter.Util.Time).NowUTCms()
     Set c.Name = name, c.ArgumentsJSON = arguments, c.DurationMs = durationMs, c.Ok = ok
     Set c.ResultPreview = $EXTRACT(resultPreview, 1, 1000), c.Error = $EXTRACT(error, 1, 2000)
+    Set c.Denied = ''denied
     Quit c.%Save()
+}
+
+/// How many of a run's calls the authorisation policy refused (v1.35).
+ClassMethod DeniedCount(runKey As %String) As %Integer
+{
+    Set n = 0
+    &sql(SELECT COUNT(*) INTO :n FROM Shutter_Bridge.ToolCall WHERE RunKey = :runKey AND Denied = 1)
+    Quit +n
 }
 
 /// The calls of a run, in order, as a dynamic array.
@@ -83,6 +96,9 @@ Storage Default
 </Value>
 <Value name="10">
 <Value>Error</Value>
+</Value>
+<Value name="11">
+<Value>Denied</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Bridge.ToolCallD</DataLocation>
