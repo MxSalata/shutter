@@ -5,8 +5,9 @@
 
 Signs in as the demo users `operator` and `approver` (password from SHUTTER_PASSWORD, default "shutter"). As the
 operator it lists the review targets (Shutter's own production and the demo hospital's), and reviews each twice with
-agent false: each review ends done with the demo's configuration findings by code (NO_ALERT_CONSUMER, ALERTING_OFF,
-QUEUE_ALERTS_OFF and FEED_SILENCE_UNWATCHED in both, PURGE_MISSING in the hospital's), in baseline order, and with the
+agent false: each review ends done with the demo's configuration findings by code (ALERTING_OFF, QUEUE_ALERTS_OFF and
+FEED_SILENCE_UNWATCHED in both, NO_ALERT_CONSUMER in Shutter's, PURGE_MISSING in the hospital's, whose Ens.Alert item is
+Shutter's alert intake), in baseline order, and with the
 same fingerprint both times: 64 hex characters over the configuration findings alone, which the script computes again.
 When a review's own summary or case aggregates count errors in its window, they show as MESSAGE_ERRORS and
 ERRORS_GROUPED on an item, which are counts with their latest message and do not enter the fingerprint. A second start
@@ -35,11 +36,11 @@ import urllib.parse
 import urllib.request
 import uuid
 
-# The demo's configuration findings by production (the design's section 7); the hospital's has no purge task.
+# The demo's configuration findings by production (the design's section 7); the hospital's has no purge task, and its
+# Ens.Alert item is Shutter's alert intake (CONTRACTS 11), so it has an alert consumer.
 EXPECTED = {
     ("SHUTTER", "Shutter.Production"): {"NO_ALERT_CONSUMER", "ALERTING_OFF", "QUEUE_ALERTS_OFF", "FEED_SILENCE_UNWATCHED"},
-    ("HOSPITAL", "Hospital.Production"): {"NO_ALERT_CONSUMER", "ALERTING_OFF", "QUEUE_ALERTS_OFF", "FEED_SILENCE_UNWATCHED",
-                                          "PURGE_MISSING"},
+    ("HOSPITAL", "Hospital.Production"): {"ALERTING_OFF", "QUEUE_ALERTS_OFF", "FEED_SILENCE_UNWATCHED", "PURGE_MISSING"},
 }
 # Counts and observations, which never move the fingerprint (Shutter.Review.Sweep.Fingerprint)
 VOLATILE = {"ERRORS_GROUPED", "RULE_ERRORS", "MESSAGE_ERRORS", "SUSPENDED_MESSAGES", "QUEUE_BACKLOG", "NAMESPACE_UNREADABLE"}
