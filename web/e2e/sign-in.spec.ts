@@ -1,6 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { skipWelcome } from './guide';
-import { signIn } from './helpers';
+import { signIn, signOutOfTrial } from './helpers';
 
 /**
  * Signing in. The demo build is always the trial and opens signed in, so the sign-in page it can show is the trial's
@@ -11,19 +11,10 @@ import { signIn } from './helpers';
 // The guide's welcome would cover the page these tests are about; guide.spec.ts tests it
 test.beforeEach(({ page }) => skipWelcome(page));
 
-/** Signs the trial's user out, to the trial's own sign-in page. */
-async function signOut(page: Page) {
-  await page.getByRole('button', { name: /^Signed in as / }).click();
-  await page.getByRole('menuitem', { name: 'Sign out' }).click();
-  await expect(
-    page.getByRole('heading', { name: 'Choose who you are in the trial', level: 1 }),
-  ).toBeVisible();
-}
-
 test.describe("the trial's sign-in page", () => {
   test('offers the four roles with no password, and no way out of the demo build', async ({ page }) => {
     await signIn(page);
-    await signOut(page);
+    await signOutOfTrial(page);
     await expect(page.getByText("No password: these are the trial's own roles.")).toBeVisible();
     for (const role of ['approver', 'operator', 'public demo role', 'judge'])
       await expect(page.getByRole('button', { name: `Continue as ${role}` })).toBeVisible();
@@ -34,7 +25,7 @@ test.describe("the trial's sign-in page", () => {
 
   test('signs in as the role chosen', async ({ page }) => {
     await signIn(page);
-    await signOut(page);
+    await signOutOfTrial(page);
     await page.getByRole('button', { name: 'Continue as operator' }).click();
     await expect(page.getByRole('heading', { name: 'Scenarios', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Signed in as operator' })).toBeVisible();
