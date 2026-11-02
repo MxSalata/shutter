@@ -54,6 +54,12 @@ describe('IncidentsPage', () => {
     expect(
       within(held).getByText(/Import the schema where it is missing and set the inbound item's category/),
     ).toBeInTheDocument();
+    // An attention notice: the fact in a sentence, the instruction one click away
+    expect(held.querySelector('[data-tone="attention"]')).not.toBeNull();
+    expect(within(held).getByRole('button', { name: 'How to release them' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
   });
 
   it('shows no such list while nothing is held, as on a site that does not prevent failures', async () => {

@@ -1,12 +1,17 @@
-import { Alert, Button, Group, Modal, Stack, Text, Textarea } from '@mantine/core';
+import { Alert, Button, Group, Stack, Text, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { newIdempotencyKey } from '@/api/client';
 import { useDecideIncident } from '@/api/hooks';
 import type { Chain, IncidentDetail } from '@/api/types';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { Digest } from '@/components/Digest';
 import { KeyValueList } from '@/components/KeyValueList';
+import { TechDetail } from '@/components/TechDetail';
+import { byEnv } from '@/env/copy';
 import { describeError, isApiError } from '@/lib/errors';
+import { plural } from '@/lib/format';
+import { ApproveWords } from './ApproveWords';
 
 export type Decision = 'approve' | 'reject';
 
@@ -48,7 +53,10 @@ export function useDecideDialog(inc: IncidentDetail) {
             title: decision === 'approve' ? 'Approved' : 'Rejected',
             message:
               decision === 'approve'
-                ? 'The chains are released in order; each operation is checked again just before it goes.'
+                ? byEnv({
+                    live: 'The chains are released in order; each operation is checked again just before it goes.',
+                    trial: 'The recorded chains go out in order. Nothing leaves this browser.',
+                  })
                 : 'Nothing is sent for these chains: their cases go to a person.',
           });
         },
@@ -56,28 +64,33 @@ export function useDecideDialog(inc: IncidentDetail) {
     );
   };
   const changed = decide.error && isApiError(decide.error) && decide.error.code === 'plan_changed';
-  const what = chain
-    ? `chain ${chain.seq} (${chain.encounterId})`
-    : `${covered.length} chain${covered.length === 1 ? '' : 's'}`;
+  const what = chain ? `chain ${chain.seq} (${chain.encounterId})` : `${plural(covered.length, 'chain')}`;
   const modal = (
-    <Modal
+    <ConfirmModal
       opened={decision !== null}
       onClose={close}
       title={decision === 'approve' ? `Approve the release of ${what}` : `Reject the release of ${what}`}
       size="lg"
     >
       <Stack gap="sm">
-        <Text size="sm">
-          {decision === 'approve'
-            ? `You approve exactly this: resend these ${operations} operation${operations === 1 ? '' : 's'} to ${inc.receiver}, in this order. Each one is rehearsed, gated and verified just before it goes, and goes at exactly the receiver version the one before it verified; a chain stops at the first surprise, and the rest comes back to a person. Each operation goes only under the catalogue entry and outcome listed for it; one whose fresh evidence reads differently stops its chain and comes back to a person.`
-            : 'You reject the release: nothing is sent for these chains, and their cases go to a person with the reason.'}
-        </Text>
+        {decision === 'approve' ? (
+          <ApproveWords operations={operations} receiver={inc.receiver} />
+        ) : (
+          <Text size="sm">
+            You reject the release: nothing is sent for these chains, and their cases go to a person with the
+            reason.
+          </Text>
+        )}
         <KeyValueList
-          rows={[
-            ['Plan digest', <Digest key="p" value={inc.planDigest} label="incident plan digest" />],
-            ['Chains', covered.map((c) => `${c.seq} (${c.encounterId})`).join(', ')],
-          ]}
+          rows={[['Chains', covered.map((c) => `${c.seq} (${c.encounterId})`).join(', ')]]}
+          labelWidth={120}
         />
+        <TechDetail label="What this decision is bound to" kind="data">
+          <KeyValueList
+            rows={[['Plan digest', <Digest key="p" value={inc.planDigest} label="incident plan digest" />]]}
+            labelWidth={120}
+          />
+        </TechDetail>
         <Textarea
           label="Comment"
           description="Recorded with your decision"
@@ -107,7 +120,7 @@ export function useDecideDialog(inc: IncidentDetail) {
           </Button>
         </Group>
       </Stack>
-    </Modal>
+    </ConfirmModal>
   );
   return { open, modal };
 }
