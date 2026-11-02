@@ -122,7 +122,7 @@ Method TestEveryCheckFires()
     If $ISOBJECT(f) {
         Do $$$AssertEquals(f.evidence.count, 3, "with the count")
         Do $$$AssertEquals(f.evidence.latestHeaderId, "900", "the latest header id")
-        Do $$$AssertTrue(f.why [ "3 message(s)", "and the count in the words: " _ f.why)
+        Do $$$AssertTrue(f.why [ "3 messages", "and the count in the words, with its plural: " _ f.why)
     }
     Set f = ..Find(findings, "MESSAGE_ERRORS", "Ward Out")
     Do $$$AssertTrue($ISOBJECT(f), "MESSAGE_ERRORS fires on status 8 headers")
@@ -191,6 +191,27 @@ Method TestEveryCheckFires()
 
 /// A production set the safer way yields no finding: the HL7 checks run only for HL7 operations, a pool of two off
 /// the feed is no finding, and an operation pointed at another host does not pair with the local service.
+/// The finding's words read as sentences for one and for many (no "(s)"), and an item left empty (an error the production
+/// itself logged) reads "the production itself", never "logged by ." (the restyle review's D3).
+Method TestTextsReadForOneAndForNone()
+{
+    Set f = ##class(Shutter.Review.Checks).Finding("ERRORS_GROUPED", "", "", "", "ERROR <Ens>ErrBPTerminated", "", 1)
+    Do $$$AssertTrue(f.why [ "1 error with the signature ERROR <Ens>ErrBPTerminated in the window, logged by the production itself.", "one error, logged by the production itself: " _ f.why)
+    Do $$$AssertEquals($FIND(f.why _ f.action _ f.suggested, "(s)"), 0, "no (s) plural anywhere")
+    Do $$$AssertTrue(f.action [ "filtered on the production itself", "the action names the production: " _ f.action)
+    Set f = ##class(Shutter.Review.Checks).Finding("ERRORS_GROUPED", "ADT to Downstream", "EnsLib.HL7.Operation.TCPOperation", "", "ERROR <Ens>ErrBPTerminated", "", 445)
+    Do $$$AssertTrue(f.why [ "445 errors with the signature ERROR <Ens>ErrBPTerminated in the window, logged by ADT to Downstream.", "many errors, logged by the item: " _ f.why)
+    Do $$$AssertTrue(f.action [ "filtered on ADT to Downstream", "the action names the item: " _ f.action)
+    Set f = ##class(Shutter.Review.Checks).Finding("RULE_ERRORS", "Router", "", "", "", "", 2)
+    Do $$$AssertTrue(f.why [ "2 rule or transform errors in the window for Router", "rule errors in the plural: " _ f.why)
+    Set f = ##class(Shutter.Review.Checks).Finding("QUEUE_BACKLOG", "ADT to Downstream", "", "QueueCountAlert", "100", "", 1)
+    Do $$$AssertTrue(f.why [ "1 message in the queue of ADT to Downstream, above the threshold (100)", "one message in the queue: " _ f.why)
+    Set f = ##class(Shutter.Review.Checks).Finding("SUSPENDED_MESSAGES", "", "", "", "", "", 3)
+    Do $$$AssertTrue(f.why [ "3 messages to the production itself, suspended in the window", "suspended messages with no item: " _ f.why)
+    Set f = ##class(Shutter.Review.Checks).Finding("MESSAGE_ERRORS", "ADT to Downstream", "", "", "Errored", "", 1)
+    Do $$$AssertTrue(f.why [ "1 message to ADT to Downstream ended in an error status in the window (Errored)", "one message in error: " _ f.why)
+}
+
 Method TestNothingFiresOnASafeProduction()
 {
     Set data = ..Data()
