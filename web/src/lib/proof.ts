@@ -95,19 +95,27 @@ export interface Proof {
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 /** The board's played result from the comparison's status. */
-function boardResult(p: ProofPlayed | undefined): PlayedResult {
+export function boardResult(p: ProofPlayed | undefined): PlayedResult {
   if (p?.status === 'as expected') return 'as-expected';
   if (p?.status === 'differs') return 'differs';
   return 'not-played';
 }
 
 /** Simple rules' played result: a miss split by whether the gate stopped it or it wrote. */
-function rulesResult(p: ProofPlayed | undefined): PlayedResult {
+export function rulesResult(p: ProofPlayed | undefined): PlayedResult {
   if (p?.status === 'as expected') return 'as-expected';
   if (p?.status !== 'differs') return 'not-played';
   if (p.wrote === true) return 'wrote-wrongly';
   if (p.state === 'blocked' && p.wrote === false) return 'stopped';
   return 'differs';
+}
+
+/**
+ * How one pass ended when it was played end to end, for the board (its live run) and for simple rules: per pass, as
+ * the evaluation's table shows every scored pass, where `playedBy` keeps one row per scenario.
+ */
+export function playedResult(played: ProofPass['played']): { board: PlayedResult; rules: PlayedResult } {
+  return { board: boardResult(played?.board_live), rules: rulesResult(played?.rules) };
 }
 
 /** The figures from a slice of the evaluation; pure, so a test can give it an older document. */
