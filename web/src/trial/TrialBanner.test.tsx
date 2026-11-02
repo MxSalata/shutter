@@ -1,6 +1,7 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/mocks/node';
@@ -12,7 +13,7 @@ import { useGuide } from '@/features/guide/store';
 import { GUIDE_KEY } from '@/features/guide/storage';
 import { LIVE_WELCOME_KEY } from './LiveWelcome';
 import { journal } from './journal';
-import { journalLine, TRIAL_WORDS } from './words';
+import { journalLine, TRIAL_ONLY_WORDS, TRIAL_WORDS } from './words';
 import { provideTrialChrome } from './slot';
 import { bannerForm, compactBanner, enterTrialPage } from './visit';
 
@@ -158,5 +159,40 @@ describe("the header's help and user menus", () => {
     const help = within(header()).getByRole('button', { name: 'Help' });
     expect(help).toHaveTextContent('Help');
     expect(help).toHaveClass('header-help');
+  });
+
+  it('offers Leave trial in both menus where a live system waits, with no trial-only line', async () => {
+    await renderShell(true);
+    await userEvent.click(within(header()).getByRole('button', { name: 'Tour' }));
+    let menu = await screen.findByRole('menu');
+    expect(within(menu).getByRole('menuitem', { name: 'Leave trial' })).toBeInTheDocument();
+    expect(screen.queryByText(TRIAL_ONLY_WORDS)).not.toBeInTheDocument();
+    expect(menu).not.toHaveAttribute('aria-describedby');
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(within(header()).getByRole('button', { name: /^Signed in as / }));
+    menu = await screen.findByRole('menu');
+    expect(within(menu).getByRole('menuitem', { name: 'Leave trial' })).toBeInTheDocument();
+    expect(screen.queryByText(TRIAL_ONLY_WORDS)).not.toBeInTheDocument();
+  });
+
+  it('says the demo build is the trial only where Leave trial would be, in both menus', async () => {
+    await renderShell(true, true);
+    await userEvent.click(within(header()).getByRole('button', { name: 'Tour' }));
+    let menu = await screen.findByRole('menu');
+    expect(within(menu).queryByRole('menuitem', { name: 'Leave trial' })).not.toBeInTheDocument();
+    expect(within(menu).getByText(TRIAL_ONLY_WORDS)).toBeInTheDocument();
+    expect(menu).toHaveAccessibleDescription(TRIAL_ONLY_WORDS);
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(within(header()).getByRole('button', { name: /^Signed in as / }));
+    menu = await screen.findByRole('menu');
+    expect(within(menu).queryByRole('menuitem', { name: 'Leave trial' })).not.toBeInTheDocument();
+    expect(within(menu).getByText(TRIAL_ONLY_WORDS)).toBeInTheDocument();
+    expect(menu).toHaveAccessibleDescription(TRIAL_ONLY_WORDS);
+    // The trial's words: "live" only in "live system", no dashes
+    expect(TRIAL_ONLY_WORDS).toBe(
+      'This copy is the trial only. The live system runs on an IRIS instance: your own install or the online demo.',
+    );
+    expect(TRIAL_ONLY_WORDS.replace(/\blive system\b/g, '')).not.toMatch(/\blive\b/i);
+    expect(TRIAL_ONLY_WORDS).not.toMatch(/[\u2013\u2014]/);
   });
 });

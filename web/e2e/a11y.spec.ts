@@ -133,6 +133,23 @@ for (const { colorScheme, contrast, palette } of MODES) {
       expect(await audit(page)).toEqual([]);
     });
 
+    // The header's menus in the demo build: Tour's and the user's, each with the line that the copy is the trial only
+    test(`the header's Tour and user menus ${shell.tag}`, async ({ page }) => {
+      await signIn(page);
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await page.getByRole('button', { name: 'Tour' }).click();
+      const tour = page.getByRole('menu', { name: 'Tour' });
+      await expect(tour.getByTestId('trial-only-note')).toBeVisible();
+      expect(await audit(page)).toEqual([]);
+      await page.keyboard.press('Escape');
+      await expect(tour).toBeHidden();
+      await page.getByRole('button', { name: /^Signed in as / }).click();
+      await expect(
+        page.getByRole('menu', { name: /^Signed in as / }).getByTestId('trial-only-note'),
+      ).toBeVisible();
+      expect(await audit(page)).toEqual([]);
+    });
+
     // The appearance menu, open: its items and their current-state labels are audited too.
     test(`appearance menu ${shell.tag}`, async ({ page }) => {
       await signIn(page);

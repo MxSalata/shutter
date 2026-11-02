@@ -119,6 +119,25 @@ test.describe('the shell', () => {
     }
   });
 
+  test('says where Leave trial would be: the demo build is the trial only', async ({ page }) => {
+    await signIn(page);
+    const words =
+      'This copy is the trial only. The live system runs on an IRIS instance: your own install or the online demo.';
+    await page.getByRole('button', { name: /^Signed in as / }).click();
+    const user = page.getByRole('menu', { name: /^Signed in as / });
+    await expect(user.getByTestId('trial-only-note')).toHaveText(words);
+    await expect(user.getByRole('menuitem', { name: 'Leave trial' })).toHaveCount(0);
+    await expect(user).toHaveAccessibleDescription(words);
+    // Closed from its button: with its first item (the current role) disabled, focus stays on the button
+    await page.getByRole('button', { name: /^Signed in as / }).click();
+    await expect(user).toBeHidden();
+    await page.getByRole('button', { name: 'Tour' }).click();
+    const help = page.getByRole('menu', { name: 'Tour' });
+    await expect(help.getByTestId('trial-only-note')).toHaveText(words);
+    await expect(help.getByRole('menuitem', { name: 'Leave trial' })).toHaveCount(0);
+    await expect(help).toHaveAccessibleDescription(words);
+  });
+
   test('marks every page of the demo build as the trial: banner, frame, pill and title', async ({ page }) => {
     await signIn(page);
     const trial = page.getByRole('region', { name: 'Trial environment' });

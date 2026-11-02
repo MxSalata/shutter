@@ -222,9 +222,13 @@ function AppearanceMenu() {
   );
 }
 
+/** The id of the user menu's trial-only line (the help menu has its own). */
+const TRIAL_ONLY_USER_ID = 'trial-only-note-user';
+
 /**
  * The user menu. In a trial page the user is the trial's own ("approver (trial user)"), with Switch trial role and
- * Leave trial beside Sign out.
+ * Leave trial beside Sign out; in the demo build, which has no live system, a line saying the copy is the trial only
+ * stands where Leave trial would.
  */
 function UserMenu() {
   const me = useMe().data;
@@ -248,7 +252,7 @@ function UserMenu() {
           </Group>
         </UnstyledButton>
       </Menu.Target>
-      <Menu.Dropdown>
+      <Menu.Dropdown aria-describedby={chrome && !ENV.canLeave ? TRIAL_ONLY_USER_ID : undefined}>
         <Menu.Label>Signed in as {name}</Menu.Label>
         <Group gap={4} px="sm" pb="xs">
           {roles.length ? (
@@ -267,12 +271,8 @@ function UserMenu() {
           <>
             <Menu.Divider />
             <chrome.TrialRoleItems />
-            {ENV.canLeave ? (
-              <>
-                <Menu.Divider />
-                <chrome.LeaveTrialItem />
-              </>
-            ) : null}
+            <Menu.Divider />
+            {ENV.canLeave ? <chrome.LeaveTrialItem /> : <chrome.TrialOnlyNote id={TRIAL_ONLY_USER_ID} />}
           </>
         ) : null}
         <Menu.Divider />

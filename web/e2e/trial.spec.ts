@@ -208,6 +208,27 @@ test.describe('the trial on the build IRIS serves', () => {
     expect(stub.trial()).toEqual([]);
   });
 
+  test("offers Leave trial in the user menu and the tour's menu, where a live system waits", async ({
+    page,
+  }) => {
+    const stub = await stubInstance(page);
+    stub.enter();
+    await skipWelcome(page);
+    await openTrial(page);
+    await page.getByRole('button', { name: /^Signed in as approver/ }).click();
+    const user = page.getByRole('menu', { name: /^Signed in as approver/ });
+    await expect(user.getByRole('menuitem', { name: 'Leave trial' })).toBeVisible();
+    await expect(page.getByTestId('trial-only-note')).toHaveCount(0);
+    await page.getByRole('button', { name: /^Signed in as approver/ }).click();
+    await expect(user).toBeHidden();
+    await page.getByRole('button', { name: 'Tour' }).click();
+    await expect(
+      page.getByRole('menu', { name: 'Tour' }).getByRole('menuitem', { name: 'Leave trial' }),
+    ).toBeVisible();
+    await expect(page.getByTestId('trial-only-note')).toHaveCount(0);
+    expect(stub.trial()).toEqual([]);
+  });
+
   test('starts afresh on a reload, as the same role, with the guide where it was', async ({ page }) => {
     const stub = await stubInstance(page);
     stub.enter();
