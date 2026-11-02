@@ -46,18 +46,27 @@ export function StatusBadge({
   );
 }
 
-/** A status given as a notice: a tinted box with the tone's icon, its title and a few lines. */
+/**
+ * A status given as a notice: a tinted box with the tone's icon, its title and a few lines; with `onClose`, a close
+ * button named `closeLabel`.
+ */
 export function StatusNotice({
   tone,
   title,
   icon,
   role,
+  onClose,
+  closeLabel = 'Close',
+  className,
   children,
 }: {
   tone: Tone;
   title?: React.ReactNode;
   icon?: Icon;
   role?: string;
+  onClose?: () => void;
+  closeLabel?: string;
+  className?: string;
   children?: React.ReactNode;
 }) {
   const I = icon ?? TONE_ICONS[tone];
@@ -68,6 +77,10 @@ export function StatusNotice({
       icon={<I size={18} aria-hidden />}
       role={role}
       data-tone={tone}
+      className={className}
+      withCloseButton={!!onClose}
+      onClose={onClose}
+      closeButtonLabel={closeLabel}
     >
       {children}
     </Alert>
