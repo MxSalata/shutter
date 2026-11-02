@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.34, 1 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.36, 2 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -414,7 +414,11 @@ is ignored. The route assigns the case's or the incident's open Workflow task to
 `planDigest` into the task's `PlanDigest` form value and completes it; the case or incident workflow then checks that
 digest against the plan (6.4, 7.3). The 202 reply carries `approver`. For a signed-in holder of `Shutter_Approve` who is
 not a member of the task's Workflow role (`Shutter Approvers`) the route answers 403 `forbidden` with a detail naming
-the role, and for a task another approver has accepted in the Workflow inbox 409 `wrong_state` naming them. The same
+the role, and for a task another approver has accepted in the Workflow inbox 409 `wrong_state` naming them. A decision
+that lands while the Workflow engine is still distributing a new task to the role's members (the case awaits approval
+from just before the task is sent, so a poller can answer within milliseconds of the task's save) waits up to 2 s for
+the engine's worklist row for the user before assigning, and assigns once more if its own row still meets the engine's
+(v1.36; before it, that collision was a 409 `wrong_state` carrying the engine's "ID key not unique" error). The same
 step from SQL is `Shutter.Util.Workflow.Decide(caseId, action, digest, comment)` (`SELECT
 Shutter_Util.Workflow_Decide(...)`): the actor is the SQL session's user, never an argument, the same role check
 applies, and an approval with an empty digest is refused (`no_digest`). An approver who decides in the Management
@@ -1686,6 +1690,8 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
 
 ## Changes
 
+- v1.36, 2 Nov 2026: a decision that lands while the Workflow engine is still distributing the task waits for the engine's
+  worklist row and assigns again when its own row meets the engine's (5; a CI run's 409 "ID key not unique" of 2 Nov).
 - v1.35, 2 Nov 2026 (the items of a review of competing entries' code): denied tool calls
   recorded as rows with `denied` true and a trace line (9); the run's millisecond start and AI Hub's own counters
   (`startedAtMs`, `llmMs`, `toolMs`, `reasoningTokens`) on the response and the run row (9); a bound on one model call,

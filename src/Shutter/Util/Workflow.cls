@@ -66,7 +66,7 @@ ClassMethod Decide(caseId As %String, action As %String = "Approve", digest As %
     If '..IsMember(task.%RoleName, user) Quit ..ErrorJSON("not_in_role", user _ " is not a member of the Workflow role " _ task.%RoleName)
     Set assigned = $SELECT($ISOBJECT(task.%TaskStatus): task.%TaskStatus.AssignedTo, 1: "")
     If (assigned '= "") && (assigned '= user) Quit ..ErrorJSON("assigned_to_other", "the task is assigned to " _ assigned)
-    Set sc = ##class(EnsLib.Workflow.Engine).AssignTask(task, user)
+    Set sc = ..Assign(task, user)
     If $$$ISERR(sc) Quit ..ErrorJSON("engine", $SYSTEM.Status.GetErrorText(sc))
     Do task.%FormValues.SetAt(digest, "PlanDigest")
     Do task.%FormValues.SetAt(comment, "Comment")
@@ -77,6 +77,57 @@ ClassMethod Decide(caseId As %String, action As %String = "Approve", digest As %
     Set r = {}
     Set r."task_id" = task.%Id(), r.action = action, r.user = user, r."case_id" = caseId
     Quit r.%ToJSON()
+}
+
+/// How long Assign waits for the engine's distribution to reach the user, in seconds.
+Parameter DISTRIBUTIONWAIT = 2;
+
+/// Assigns the task to the user through the engine, in step with the engine's own distribution of it. The engine saves
+/// a new task and then writes a worklist row per member of its role, and AssignTask writes the user's row itself when
+/// it finds none. A decision can land in that gap: the API's approver polls the case and answers as soon as it awaits
+/// approval, which the workflow sets just before it sends the task (CI, 2 Nov 2026, once in some hundreds of runs:
+/// "ID key not unique for extent 'EnsLib.Workflow.Worklist'" from AssignTask, whose row met the engine's). So this
+/// waits, briefly, for the engine to reach the user's row, and when its own save still meets the engine's, assigns
+/// once more: the row is there by then, and the engine uses it. A task the engine never reaches (no row after the wait)
+/// is assigned as before.
+ClassMethod Assign(task As EnsLib.Workflow.TaskResponse, user As %String) As %Status
+{
+    Do ..WaitForWorklist(task, user, ..#DISTRIBUTIONWAIT)
+    Set sc = ##class(EnsLib.Workflow.Engine).AssignTask(task, user)
+    If $$$ISERR(sc) && ..MeetsEnginesRow(sc) {
+        Hang 0.05
+        Set sc = ##class(EnsLib.Workflow.Engine).AssignTask(task, user)
+    }
+    Quit sc
+}
+
+/// Whether the engine's worklist row for the task and user exists: the engine's own record, whose id is <task>||<user>.
+ClassMethod HasWorklistRow(task As EnsLib.Workflow.TaskResponse, user As %String) As %Boolean
+{
+    If '$ISOBJECT(task) || (task.%Id() = "") || (user = "") Quit 0
+    Quit ''##class(EnsLib.Workflow.Worklist).%ExistsId(task.%Id() _ "||" _ user)
+}
+
+/// Waits up to <var>seconds</var> for the engine's worklist row for the task and user, looking every 50 ms: 1 when it
+/// exists, 0 when the wait ran out.
+ClassMethod WaitForWorklist(task As EnsLib.Workflow.TaskResponse, user As %String, seconds As %Numeric = 2) As %Boolean
+{
+    Set until = $ZHOROLOG + seconds
+    While 1 {
+        If ..HasWorklistRow(task, user) Return 1
+        If $ZHOROLOG > until Return 0
+        Hang 0.05
+    }
+    Quit 0
+}
+
+/// Whether an assignment failed because its worklist row met the engine's: error 5805, the ID key not unique, on the
+/// worklist's extent.
+ClassMethod MeetsEnginesRow(sc As %Status) As %Boolean
+{
+    If $$$ISOK(sc) Quit 0
+    If '$LISTFIND($LISTFROMSTRING($SYSTEM.Status.GetErrorCodes(sc), ","), "5805") Quit 0
+    Quit $SYSTEM.Status.GetErrorText(sc) [ "EnsLib.Workflow.Worklist"
 }
 
 /// The user the process runs as (the REST session's, a SQL session's, the terminal's), or "" when there is none.
