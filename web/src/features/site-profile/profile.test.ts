@@ -1,13 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import type { SiteProfile } from '@/api/types';
+import { glossary } from '@/lib/glossary';
+import { RELEASES } from '@/lib/status';
 import { recordedSiteProfile } from '@/mocks/profile';
 import {
+  EFFECT_WORDS,
+  KINDS,
+  KIND_TERMS,
+  POLICY_LABELS,
+  TIERS,
+  TIER_NAMES,
   checkDraft,
   closeNeedsApprover,
+  describeIncident,
   describePath,
   describeSource,
   diffProfiles,
   fieldId,
+  incidentRule,
+  overtakenLine,
   problemField,
   toPutBody,
   validateProfile,
@@ -412,5 +423,57 @@ describe('describeSource', () => {
     );
     expect(describeSource('api')).toBe('Saved in Shutter');
     expect(describeSource('defaults')).toBe('The built-in defaults, never stored');
+  });
+});
+
+describe('the words the restyled page reads from the model', () => {
+  it('heads the three chain kinds with the glossary’s plain terms, one for each kind the profile names', () => {
+    expect(KINDS.map((k) => glossary(KIND_TERMS[k]).term)).toEqual([
+      'One failed message',
+      'Several, in a row',
+      'Several, with deliveries between',
+    ]);
+  });
+
+  it('names the three tiers in full, the words the matrix and the grid share', () => {
+    expect(TIERS.map((t) => `Tier ${t}: ${TIER_NAMES[t]}`)).toEqual([
+      'Tier 1: information',
+      'Tier 2: operations',
+      'Tier 3: clinical safety',
+    ]);
+  });
+
+  it('shortens the approval choices, one for each release the shared map knows', () => {
+    expect(Object.keys(POLICY_LABELS).sort()).toEqual(Object.keys(RELEASES).sort());
+    for (const label of Object.values(POLICY_LABELS)) expect(label.length).toBeLessThanOrEqual(26);
+    expect(POLICY_LABELS.automatic).toBe('Automatic (written policy)');
+  });
+
+  it('says what an overtaken failure does in one line, by category and policy', () => {
+    expect(overtakenLine('current_state', 'current')).toBe('Overtaken failure: closes, no write.');
+    expect(overtakenLine('history_of_record', 'correct')).toBe(
+      'Overtaken failure: asks a person to correct by hand.',
+    );
+    // A receiver whose own policy differs from its category's is read by the policy
+    expect(overtakenLine('current_state', 'correct')).toBe(
+      'Overtaken failure: asks a person to correct by hand.',
+    );
+    expect(overtakenLine('orders_results', 'current')).toBe('Every failure goes to a person.');
+  });
+
+  it('keeps each icon’s words short enough for a tooltip', () => {
+    expect(EFFECT_WORDS.acts).toBe('Changes what Shutter does');
+    expect(EFFECT_WORDS.record).toBe('Kept on record; nothing reads it yet');
+  });
+
+  it('gives the incident rule in one line, with the core’s defaults for what is not set', () => {
+    expect(incidentRule(recorded)).toBe('An incident opens at 5 failures to one receiver within 10 minutes.');
+    const p = copy();
+    p.incident = { threshold: 8, window_minutes: 3 };
+    expect(incidentRule(p)).toBe('An incident opens at 8 failures to one receiver within 3 minutes.');
+    delete p.incident;
+    expect(incidentRule(p)).toBe('An incident opens at 5 failures to one receiver within 10 minutes.');
+    // The full sentence stays for the question’s second layer
+    expect(describeIncident(p)).toMatch(/takes no more cases after 60 seconds with no new failure/);
   });
 });

@@ -1,5 +1,6 @@
-import type { ChainKind, SiteProfile, SiteReceiver, SiteTeam } from '@/api/types';
+import type { ChainKind, ReceiverCategory, SiteProfile, SiteReceiver, SiteTeam } from '@/api/types';
 import { CATEGORY_TEXT, categoryOf, historyPolicyOf } from '@/lib/categories';
+import type { GlossaryKey } from '@/lib/glossary';
 
 /**
  * The site profile's questionnaire, without React: labels, the diff the review and the history show, the port of
@@ -28,9 +29,45 @@ export const KIND_LABELS: Record<ChainKind, string> = {
   interleaved: 'interleaved chains',
 };
 
+/** What an answer does, in words: the legend at the top of the answers, and each question's icon (tooltip and name). */
+export const EFFECT_WORDS = {
+  acts: 'Changes what Shutter does',
+  record: 'Kept on record; nothing reads it yet',
+} as const;
+
+/** What happens to a failure a later event has overtaken, in one line, by the receiver's history policy. */
+export const OVERTAKEN_LINE = {
+  current: 'Overtaken failure: closes, no write.',
+  correct: 'Overtaken failure: asks a person to correct by hand.',
+  none: 'Every failure goes to a person.',
+} as const;
+
+/** The category's line for a receiver (or for a category no receiver has), from its history policy. */
+export const overtakenLine = (category: ReceiverCategory, policy: 'current' | 'correct') =>
+  category === 'orders_results' ? OVERTAKEN_LINE.none : OVERTAKEN_LINE[policy];
+
+/** The tiers' names, for the release matrix's row heads ("Tier 3: clinical safety"). */
+export const TIER_NAMES: Record<string, string> = {
+  '1': 'information',
+  '2': 'operations',
+  '3': 'clinical safety',
+};
+
+/**
+ * Each chain kind in the words a manager uses, as the glossary defines them from the code's own definitions: the
+ * release matrix's column heads and the plain line under each approval select. The kind's own name (`single`,
+ * `ordered`, `interleaved`) sits beside the head in Technical.
+ */
+export const KIND_TERMS = {
+  single: 'one-failure',
+  ordered: 'in-a-row',
+  interleaved: 'with-deliveries-between',
+} as const satisfies Record<ChainKind, GlossaryKey>;
+
+/** The choices of an approval select, short enough that the select never cuts its value. */
 export const POLICY_LABELS: Record<string, string> = {
-  automatic: 'Automatic: gated, rehearsed and verified, no person',
-  approval: 'One approval for the case or incident',
+  automatic: 'Automatic (written policy)',
+  approval: 'One approval',
   per_chain: 'One approval per chain',
   board: 'The board decides',
 };
@@ -692,7 +729,14 @@ export function closeNeedsApprover(p: SiteProfile | undefined): boolean {
 export const receiversAt = (p: SiteProfile, tier: string) =>
   p.receivers.filter((r) => String(r.tier) === tier).map((r) => r.name || 'unnamed');
 
-/** The incident rule in one sentence. */
+/** The incident rule in one line, with the answers as the page now holds them. */
+export function incidentRule(p: SiteProfile): string {
+  const i = p.incident ?? {};
+  const n = (x: unknown, d: number) => (x === undefined || x === null || x === '' ? d : x);
+  return `An incident opens at ${n(i.threshold, 5)} failures to one receiver within ${n(i.window_minutes, 10)} minutes.`;
+}
+
+/** The incident rule in full, with what closes its intake and what keeps its own case. */
 export function describeIncident(p: SiteProfile): string {
   const i = p.incident ?? {};
   const n = (x: unknown, d: number) => (x === undefined || x === null || x === '' ? d : x);
