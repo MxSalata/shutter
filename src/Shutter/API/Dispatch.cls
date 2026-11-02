@@ -904,7 +904,7 @@ ClassMethod CaseEscalationSend(caseId As %String, seq As %String) As %Status
     Quit $$$OK
 }
 
-/// Convene the board on a case (v1.34, the owner's judges): the case is reopened as a reinvestigation is, and on the fresh
+/// Convene the board on a case (v1.34, the judges): the case is reopened as a reinvestigation is, and on the fresh
 /// evidence the board convenes live whatever the site policy says; the earlier plan and approval stay as history. For
 /// callers who may spend the model budget (Shutter_LiveAgents), on a blocked, escalated or failed case, within the day's
 /// budget and the caller's share.

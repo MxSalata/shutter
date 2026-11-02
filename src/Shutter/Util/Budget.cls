@@ -73,7 +73,7 @@ ClassMethod Cap() As %Numeric
     Quit +$GET(^Shutter.Config("dailyBudgetUsd"))
 }
 
-/// Each user's share of the day, in USD (SHUTTER_JUDGE_BUDGET_USD; the owner's judges, v1.34): what one signed-in user's
+/// Each user's share of the day, in USD (SHUTTER_JUDGE_BUDGET_USD; the judges, v1.34): what one signed-in user's
 /// live runs may cost between one 00:00 UTC and the next; 0 means no share, only the day's cap.
 ClassMethod Share() As %Numeric
 {

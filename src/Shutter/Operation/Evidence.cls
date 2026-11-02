@@ -132,7 +132,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
         }
     }
 
-    // 6b. The messages of the encounter pending ahead of a resend (v1.29, the owner's failsafe): received after the case's own
+    // 6b. The messages of the encounter pending ahead of a resend (v1.29, the failsafe): received after the case's own
     // and not yet delivered to the receiver, from the feed's deliveries and the exact index (Shutter.Util.ResendGuard). The
     // gate blocks a write while one is pending, and the connector checks again at the moment of the write.
     Set pending = $SELECT(noEncounter: [], 1: ##class(Shutter.Util.ResendGuard).Pending(case))

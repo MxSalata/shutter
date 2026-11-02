@@ -1,4 +1,4 @@
-/// What a model may see of a case (T27, the owner's rule of 19 Oct): the evidence and every tool result pass through
+/// What a model may see of a case (T27, the rule of 19 Oct): the evidence and every tool result pass through
 /// Reduce before they leave IRIS, and the model's findings, plan and text pass through Restore before they are stored.
 /// Reduce rebuilds the object from allowlists chosen by each node's shape (the summary, the operation, the message,
 /// the validation, a receiver's body, a history entry, a receipt, the failure, a timeline row, the route) and a denylist
