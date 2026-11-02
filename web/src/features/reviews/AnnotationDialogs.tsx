@@ -6,7 +6,8 @@ import { useAnnotateFinding, useRemoveAnnotation } from '@/api/hooks';
 import type { ReviewAnnotation, ReviewDetail, ReviewFinding } from '@/api/types';
 import { TRIAL } from '@/env/mode';
 import { describeError } from '@/lib/errors';
-import { expiryForApi, expiryProblem, STATUS_LABELS, subjectOf } from './review';
+import { DialogTitle } from './DialogTitle';
+import { expiryForApi, expiryProblem, findingTitle, STATUS_LABELS, subjectOf } from './review';
 
 type Status = ReviewAnnotation['status'];
 
@@ -93,7 +94,7 @@ export function useAnnotationDialogs(review: ReviewDetail) {
       <Modal
         opened={marking !== null}
         onClose={() => setMarking(null)}
-        title={marking ? `Annotate ${marking.id}: ${marking.code}` : ''}
+        title={marking ? <DialogTitle>{`Annotate ${marking.id}: ${findingTitle(marking)}`}</DialogTitle> : ''}
       >
         {marking ? (
           <Stack gap="sm">
@@ -152,12 +153,12 @@ export function useAnnotationDialogs(review: ReviewDetail) {
       <Modal
         opened={removing !== null}
         onClose={() => setRemoving(null)}
-        title={removing ? `Remove the annotation of ${removing.id}` : ''}
+        title={removing ? <DialogTitle>{`Remove the annotation of ${removing.id}`}</DialogTitle> : ''}
       >
         {removing ? (
           <Stack gap="sm">
             <Text size="sm">
-              The finding {removing.code} on {subjectOf(removing)} is marked{' '}
+              The finding &quot;{findingTitle(removing)}&quot; on {subjectOf(removing)} is marked{' '}
               {STATUS_LABELS[removing.status].toLowerCase()}. Removed, it is new again in every review of{' '}
               {review.production}; the annotation is kept for the record.
             </Text>
