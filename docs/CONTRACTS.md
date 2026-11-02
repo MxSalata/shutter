@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.37, 2 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.38, 2 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -584,7 +584,11 @@ checks: [ordering, effect, state_transition, identity, capability]
 The matcher runs after the evidence is collected, before any agent, in every mode: its result (the conditions, the
 facts, the matches) is part of the snapshot summary, so the board reads it and the gate checks the plan against it.
 The investigation mode decides who settles the case:
-- `policy`: the rules below (chosen per run; the installed default, and the mode after every scenario reset, is `board`);
+- `policy`: the rules below (chosen per run; the installed default, and the mode after every scenario reset, is `board`;
+  a failure from a watched production (11) runs in the site's watched mode, `^Shutter.Config("watchedMode")`, `policy`
+  unless the site set another, whatever mode the scenarios run in, since v1.38: on the demo the live hospital's cases and
+  a storm's are settled by the catalogue and the site profile, and a scenario run or reset cannot flip them to the board;
+  `GET /settings` carries `watchedMode`);
 - `board`: the board always runs, the match in its evidence; the comparison's board column keeps its meaning;
 - `single`: the single investigator always runs;
 - `rules`: no agents and no catalogue path: a plain resend for the gate to judge.
@@ -764,7 +768,7 @@ The plan's `catalogue_entry` and `outcome` are bound by the approval's digest li
 
 Two `intent` checks for withheld cases (v1.14, policy version 2026-10-19.3), appended for every plan on a case of kind `withheld` as `UNMAPPABLE` is, and as guards on any write of a merge or a cancel: `MERGE_WITHHELD` (the case's event is `merge` and the site profile does not allow merges, or the receiver does not take them) and `CANCEL_UNSUPPORTED` (a `cancel_*` event to a receiver whose entry says `cancels: false`). The identity check answers `NO_ENCOUNTER` (pass) for a case whose encounter piece is `-`, and the state-transition and concurrency checks answer `PATIENT_LEVEL_WRITE` (block) for a write on such a case: there is no encounter state or version to check, so a person decides, and nothing is retried.
 
-**The rehearsal check** (v1.21, policy version 2026-10-25.1), between authorization and concurrency: `NOT_APPLICABLE` (pass) for a plan that writes nothing, `NOT_YET_REQUIRED` (pass) at the proposal, and at approval and dispatch `REHEARSED` (pass: the approval's bound rehearsal is of this plan, reported `would_apply`, and was checked against the plan's expected version, the receiver's epoch and the evidence's payload digest), `DRY_RUN_MISSING` (block: no rehearsal bound, or one of another plan), `DRY_RUN_FAILED` (block: the bound rehearsal reported it would not apply) and `DRY_RUN_STALE` (block: checked against another version, a rehearsal with no version from the receiver included, against another epoch than the preflight's, against another payload digest than the evidence's, or sent with an expected version other than the plan's). The capability check adds `DRY_RUN_UNSUPPORTED` (block: the capability profile reports no dry run). The approval binds the latest rehearsal of its plan, not the case's latest. The rehearsal record carries `expectedVersion` and `payloadDigest`, what was sent; the execution attempt carries `rehearsalId`, the approval's bound rehearsal, or the rehearsal itself when the receiver applied it. An approval given under 2026-10-20.1 and not yet dispatched is void at dispatch (`APPROVAL_POLICY_CHANGED`).
+**The rehearsal check** (v1.21, policy version 2026-10-25.1), between authorization and concurrency: `NOT_APPLICABLE` (pass) for a plan that writes nothing, `NOT_YET_REQUIRED` (pass) at the proposal, and at dispatch `REHEARSED` (pass: the approval's bound rehearsal is of this plan, reported `would_apply`, and was checked against the plan's expected version, the receiver's epoch and the evidence's payload digest), `DRY_RUN_MISSING` (block: no rehearsal bound, or one of another plan), `DRY_RUN_FAILED` (block: the bound rehearsal reported it would not apply) and `DRY_RUN_STALE` (block: checked against another version, a rehearsal with no version from the receiver included, against another epoch than the preflight's, against another payload digest than the evidence's, or sent with an expected version other than the plan's). The capability check adds `DRY_RUN_UNSUPPORTED` (block: the capability profile reports no dry run). The approval binds the latest rehearsal of its plan, not the case's latest. The rehearsal record carries `expectedVersion` and `payloadDigest`, what was sent; the execution attempt carries `rehearsalId`, the approval's bound rehearsal, or the rehearsal itself when the receiver applied it. An approval given under 2026-10-20.1 and not yet dispatched is void at dispatch (`APPROVAL_POLICY_CHANGED`).
 
 ### 6.6 The board and the catalogue
 
@@ -786,7 +790,7 @@ incident.
 **Boards per minute are capped (v1.35; the review's B1 stopgap).** The Case Workflow's `BoardsPerMinute` (6 by default; 0 for
 no cap) counts the boards convened in the current UTC minute (`Shutter.Util.BoardSlots`, a global node per minute); a case
 whose turn finds the minute full does not convene at once: it notes "The board is busy: N convened this minute, the cap is M a
-minute; this case waits S s for a slot" (60 to 90 s), an `Ens.Alarm` keyed by the round brings it back (`board:defer`), and
+minute; this case waits S s for a slot" (60 to 89 s), an `Ens.Alarm` keyed by the round brings it back (`board:defer`), and
 it convenes then, on its snapshot's summary, if it still waits and the round is the same. Both convening paths (the board on
 fresh evidence and the policy's `board`, which asks for the full board whatever the case's mode) go through one method,
 which builds every member's request first (a case the model view refuses, or one with no member to convene, spends no slot)
@@ -1705,6 +1709,12 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
 
 ## Changes
 
+- v1.38, 2 Nov 2026 (the demo rehearsal's storm, whose cases all convened boards): a watched production's failures run in the
+  site's watched mode, policy by default, whatever mode the scenarios run in (6.3, 11); a case the alert intake opened
+  takes the production's own report of the failure when it arrives before the evidence is collected, so the catalogue
+  reads the connector's answer (11); the alert's time in the failure text is read as the engine's UTC timestamp (11);
+  two words put right: the rehearsal check blocks at dispatch, the only stage that sends it (6.5), and a deferred board waits
+  60 to 89 s (6.6).
 - v1.37, 2 Nov 2026: whether the live agents can run, `live.agents` in `GET /settings` with reasons `budget` and `provider_auth`,
   the Agent item's `provider_auth` refusal while the provider refuses the key, and `409 live_unavailable` on the board and a
   live question (12), for the demo's notice to visitors; `live.budgetNote` from `SHUTTER_DEMO_BUDGET_USD` and

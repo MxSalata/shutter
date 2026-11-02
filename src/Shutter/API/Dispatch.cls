@@ -1423,6 +1423,8 @@ ClassMethod Settings() As %Status
     If '..Allow() Quit $$$OK
     Set o = {}
     Set o.mode = $GET(^Shutter.Config("mode")), o.scenario = $GET(^Shutter.Config("scenario")), o.resetAt = $GET(^Shutter.Config("resetAt"))
+    // The mode a watched production's failures run in (v1.38): policy unless the site set another.
+    Set o.watchedMode = $GET(^Shutter.Config("watchedMode"), "policy")
     Do o.%Set("demo", ''$GET(^Shutter.Config("demo")), "boolean")
     // The live hospital's player (v1.34), for the app's banner: {enabled, every_minutes, scenarios, last_played, next}.
     Set o.live = ##class(Shutter.Setup).LiveStatus()

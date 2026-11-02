@@ -69,6 +69,10 @@ Method TestForwardFromAlert()
     Do $$$AssertEquals(f.FailureKind _ "|" _ f.FailureOutcome _ "|" _ f.FailureHttpStatus _ "|" _ f.FailureReasonCode, "delivery_failed|error|503|alert", "the failure from the words")
     Do $$$AssertEquals($EXTRACT(f.FailureText, 1, 53), "Alert from Downstream Out at 2026-11-02 01:50:00 UTC:", "the text names the item and the time")
     Do $$$AssertTrue(f.FailureText [ "Received non-OK status 503", "and carries the alert's words")
+    // The engine's own AlertTime is a UTC timestamp string, which once read as a $HOROLOG day (1846-07-19).
+    Set alert.AlertTime = "2026-11-02 19:39:34.123"
+    Set f = $CLASSMETHOD(ap, "ForwardFromAlert", alert, header, "Downstream Out")
+    Do $$$AssertEquals($EXTRACT(f.FailureText, 1, 53), "Alert from Downstream Out at 2026-11-02 19:39:34 UTC:", "a timestamp string reads as itself, to the second")
     Set alert.AlertText = "Response timeout after 15 seconds", alert.AlertTime = ""
     Set f = $CLASSMETHOD(ap, "ForwardFromAlert", alert, header, "Downstream Out")
     Do $$$AssertEquals(f.FailureKind _ "|" _ f.FailureOutcome _ "|" _ f.FailureHttpStatus, "uncertain_outcome|uncertain|", "a timeout: uncertain, no status")
