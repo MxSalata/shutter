@@ -1720,7 +1720,9 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   two words put right: the rehearsal check blocks at dispatch, the only stage that sends it (6.5), and a deferred board waits
   60 to 89 s (6.6); the live hospital's rotation drops S11 and takes `SHUTTER_LIVE_SCENARIOS` (4.4); the demo users'
   password reaches the image build as a BuildKit secret, never a build argument, and CI proves it is in neither the build
-  log nor the image's history (12, 13).
+  log nor the image's history (12, 13); the Doctor tries the stored credentials (DownstreamAPI here, the demo hospital's
+  DownstreamAPI and ShutterIntake) against their users and reports `credentials` and `credentials_ok`, which the anonymous
+  health report carries too (12).
 - v1.37, 2 Nov 2026: whether the live agents can run, `live.agents` in `GET /settings` with reasons `budget` and `provider_auth`,
   the Agent item's `provider_auth` refusal while the provider refuses the key, and `409 live_unavailable` on the board and a
   live question (12), for the demo's notice to visitors; `live.budgetNote` from `SHUTTER_DEMO_BUDGET_USD` and

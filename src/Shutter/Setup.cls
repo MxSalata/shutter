@@ -382,6 +382,77 @@ ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %
     Quit out
 }
 
+/// The production's stored credentials against the users they name (v1.38; the v0.2.1 demo rehearsal: a rebuild that
+/// kept the data volume while the users got a new password left ShutterIntake and DownstreamAPI with the old one, so every
+/// forward and delivery answered 401 and no case opened). Each credential the install makes, DownstreamAPI here on a demo
+/// install and the demo hospital's DownstreamAPI and ShutterIntake, is tried with one GET to the instance's own web server
+/// as the user and password it stores: {namespace, name, user, status, ok, detail}, ok false when the server answers 401
+/// (refused) or the credential is missing. The Doctor carries the list as credentials, and credentials_ok.
+ClassMethod CredentialChecks() As %DynamicArray
+{
+    Set out = []
+    If $GET(^Shutter.Config("demo")) {
+        Set port = $GET(^Shutter.Config("downstreamPort"), $GET(^Shutter.Config("wardPort"), 52773))
+        Do out.%Push(..CredentialCheck($NAMESPACE, "DownstreamAPI", "127.0.0.1", port, "/downstream/api/encounters/none", "200,404"))
+    }
+    Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
+    If hospital '= "" {
+        Set hserver = $GET(^|hospital|Hospital.Config("httpServer"), "127.0.0.1"), hport = $GET(^|hospital|Hospital.Config("httpPort"), 52773)
+        Do out.%Push(..CredentialCheck(hospital, "DownstreamAPI", hserver, hport, "/downstream/api/encounters/none", "200,404"))
+        Do out.%Push(..CredentialCheck(hospital, "ShutterIntake", hserver, hport, "/api/shutter/me", "200"))
+    }
+    Quit out
+}
+
+/// One stored credential tried: its user and password as Basic authentication in a GET of path on the web server, and
+/// the answer against the statuses a signed-in user gets there (expected, comma-separated): the downstream API answers 404
+/// for an unknown encounter to a signed-in client and 401 to a wrong password; Shutter's API answers /me with 200 and the
+/// user's name to a signed-in user, and 404 to a wrong password (the web application allows unauthenticated requests, so
+/// the gateway falls through to the login page). Any other answer is refused.
+ClassMethod CredentialCheck(ns As %String, name As %String, server As %String, port As %Integer, path As %String, expected As %String = "200") As %DynamicObject
+{
+    Set c = {}
+    Set c.namespace = ns, c.name = name, c.user = "", c.status = "", c.detail = ""
+    Do c.%Set("ok", 0, "boolean")
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = ns
+        Set cred = ##class(Ens.Config.Credentials).%OpenId(name)
+        If '$ISOBJECT(cred) {
+            Set c.status = "missing", c.detail = "no credential " _ name _ " in " _ ns
+        } Else {
+            Set c.user = cred.Username
+            Set code = ..Probe(server, port, path, cred.Username, cred.Password, .detail, .body)
+            // Shutter's own API names the signed-in user: the credential's user, or the request was not theirs.
+            Set named = (path '[ "/me") || (body [ ("""username"":""" _ cred.Username _ """"))
+            If code = "" {
+                Set c.status = "unreachable", c.detail = detail
+            } ElseIf '$LISTFIND($LISTFROMSTRING(expected, ","), code) || 'named {
+                Set c.status = "refused", c.detail = "the web server at " _ server _ ":" _ port _ " did not sign " _ cred.Username _ " in with the stored password (HTTP " _ code _ " from " _ path _ ", expected " _ expected _ "): the credential and the user disagree, as after a rebuild that kept the data volume while the users got a new password"
+            } Else {
+                Set c.status = "ok", c.detail = "HTTP " _ code _ " from " _ path _ " as " _ cred.Username
+                Do c.%Set("ok", 1, "boolean")
+            }
+        }
+    } Catch ex {
+        Set c.status = "error", c.detail = ex.DisplayString()
+    }
+    Quit c
+}
+
+/// A GET with Basic authentication to a web server: the HTTP status and the body's first 500 characters, or "" with the
+/// reason in detail.
+ClassMethod Probe(server As %String, port As %Integer, path As %String, user As %String, password As %String, Output detail As %String, Output body As %String) As %String
+{
+    Set detail = "", body = ""
+    Set req = ##class(%Net.HttpRequest).%New()
+    Set req.Server = server, req.Port = port, req.Timeout = 5, req.Username = user, req.Password = password
+    Set sc = req.Get(path)
+    If $$$ISERR(sc) Set detail = $SYSTEM.Status.GetErrorText(sc) Quit ""
+    Try { Set body = req.HttpResponse.Data.Read(500) } Catch ex { Set body = "" }
+    Quit req.HttpResponse.StatusCode
+}
+
 /// The live hospital's rotation from the build (SHUTTER_LIVE_SCENARIOS, v1.38): the scenario ids, comma-separated, each
 /// an S and a number with an optional letter (S23a), in the order to play; "default" or no valid id clears the override, and
 /// the player's own Scenarios setting applies again. Written as ^Hospital.Config("liveScenarios") in the hospital's
@@ -1346,6 +1417,12 @@ ClassMethod Doctor() As %String [ SqlProc ]
     // The cases still in a working state, and the quiet minutes after which an approver may abandon one (CONTRACTS 5, 12).
     &sql(SELECT COUNT(*) INTO :working FROM Shutter_Store."Case" WHERE State NOT IN ('resolved', 'blocked', 'escalated', 'failed'))
     Set r."working_cases" = +working, r."abandon_after_minutes" = ##class(Shutter.Store.Case).AbandonAfterMinutes()
+    // The stored credentials against the users they name (v1.38): each tried with one request to this web server.
+    Set checks = ..CredentialChecks(), allOk = 1
+    Set r.credentials = checks
+    Set cit = checks.%GetIterator()
+    While cit.%GetNext(, .check) { If 'check.ok Set allOk = 0 }
+    Do r.%Set("credentials_ok", allOk, "boolean")
     // The pieces of the builds since 25 Oct (CONTRACTS 12, v1.31), so a fresh install and an upgrade show the same: every item
     // of INSTALLITEMS in the production and enabled, the gate's policy version, the catalogue's entries, the records namespace
     // of a demo install, the index's adapter, the questions.
