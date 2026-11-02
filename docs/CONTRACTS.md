@@ -788,8 +788,30 @@ fresh evidence and the policy's `board`, which asks for the full board whatever 
 which builds every member's request first (a case the model view refuses, or one with no member to convene, spends no slot)
 and then takes the slot atomically (`BoardSlots.TryTake`: the count goes up and comes back down past the cap, so two cases
 cannot both pass a last slot); a deferred case keeps who asked and which members (`DeferredBy`, `DeferredMode`). A storm of failures therefore costs at most the cap a minute,
-each case waits its turn and none is lost; the fuller answer, one board per failure signature with followers taking the
-leader's diagnosis, is the next step and is not in this build.
+each case waits its turn and none is lost.
+
+**One board per failure signature (v1.35; the review's B1 in full).** A storm of the same failure buys one board, not one
+per message. When a case reaches the board, its failure signature is computed (`Shutter.Util.Signature`: the receiver, the
+failure kind, the receiver's answer and the delivery word of the condition vocabulary (6.1), the catalogue entry and outcome
+the match chose, the connector's error sentence with its numbers and digests normalised, the policy version, and the
+scenario stamp, so a demo's scenarios never coalesce with each other). The first case of a signature convenes the board and
+**leads** it (`Shutter.Store.BoardLead`: the signature, the leader, `running`, the window's end); a case of the same
+signature arriving within the window (`^Shutter.Config("leadWindowSeconds")`, 600 by default, 0 for no coalescing; the
+Doctor's `lead_window_seconds`) **follows**: it convenes no board. While the leader's board runs the follower waits in
+`investigating` with `followsCase` set and a note; when the leader adopts its plan (from its board, or from the rules path
+when nobody could answer) the lead is finished `done` with the plan and the members' verdicts (member, role, disposition,
+confidence; no text), and every waiting follower is told (`Shutter.Msg.LeadReady`, a fresh instance as a reinvestigation).
+The follower then takes the decision through its own evidence: the disposition and action type, the catalogue entry and
+outcome when its own match shows that entry, and the verdicts in the plan's `why`; the operation key, the receiver version
+and the payload digest are its own, and not a word of the leader's text crosses (it carries the leader's patient). The plan's
+`createdBy` is `lead:<leader case>`, and the follower keeps its own gate at the proposal, its rehearsal, its approval, its
+preflight and its dispatch gate, as any case. A follower arriving after the leader decided takes the decision at once. A
+lead whose board ended without a plan (no findings, no coordinator, a timeout, the model view's refusal) is `failed` and
+attracts no followers; a follower waiting on it, or on a leader whose board never ended within twice the board timeout and a
+minute, falls to the rules path with a note. A lead begun before the last scenario reset counts for nothing, as the incident
+detector's window. A judge's forced board and an incident's released chain items never follow. The lead's row keeps how
+many followed; `GET /cases/{id}` shows `followsCase` and `leadSignature`. Approvals stay with the existing mechanisms: an
+incident's one task for its chains (7), else one per case.
 
 **One model call is bounded (v1.35).** The runner gives the provider an HTTP request timeout, `Shutter.Setup.ProviderTimeoutSeconds`
 (`^Shutter.Config("providerTimeoutSeconds")`, `SHUTTER_PROVIDER_TIMEOUT_SECONDS` at a start, 120 s unless set, held to 10
@@ -1680,6 +1702,8 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   eight failed movements for four fresh patients in the live hospital with the receiver down for a minute, followed on
   `live.storm` (4.4); the budget reserves an estimate for each run in flight and settles it when the run ends (9); a receiver's
   `Retry-After` on a 503 or 429 is a minimum wait before the resend's preflight read, and the demo receiver sends one (1);
+  one board per failure signature, the first case leading and the rest taking its decision through their own evidence,
+  gate, rehearsal and approval (6.6);
   the publisher, Shutter's read-only tools for an MCP client through IRIS's own gateway, with an audit row per call, on
   the AI Hub build (15); each item of the review that lands adds its line here.
 - v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:
