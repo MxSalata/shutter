@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { AttemptView, CaseDetail, CaseSummary, Closure, PlanView, Snapshot } from '@/api/types';
 import fixtures from '@/mocks/fixtures.json';
-import { compareSide, evidenceRows, s8Pair } from './compare';
+import { compareSide, evidenceRows, playedMark, s8Pair } from './compare';
+import { playedFor } from '@/lib/proof';
 
 function sideOf(id: 'C-000008' | 'C-000021') {
   const x = fixtures.cases[id];
@@ -65,5 +66,25 @@ describe('evidenceRows', () => {
 
   it('is empty until both sides have evidence', () => {
     expect(evidenceRows(sideOf('C-000021').evidence, null)).toEqual([]);
+  });
+});
+
+describe('playedMark', () => {
+  it("marks S8 as the evaluation scored it: the board as expected, rules alone's write as differing", () => {
+    const s8 = playedFor('S8');
+    expect(playedMark('board', s8?.board)).toEqual({ label: 'Board: as expected', tone: 'positive' });
+    expect(playedMark('rules', s8?.rules, 'WARD-B')).toEqual({
+      label: 'Rules alone: differs, wrote WARD-B',
+      tone: 'blocking',
+    });
+  });
+
+  it('marks a stop by the gate neutral, and nothing for a mode that did not play', () => {
+    expect(playedMark('rules', 'stopped')).toEqual({
+      label: 'Rules alone: stopped by the gate, nothing written',
+      tone: 'neutral',
+    });
+    expect(playedMark('board', 'not-played')).toBeNull();
+    expect(playedMark('board', null)).toBeNull();
   });
 });

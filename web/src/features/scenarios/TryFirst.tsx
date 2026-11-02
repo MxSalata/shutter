@@ -5,7 +5,6 @@ import {
   Card,
   Group,
   Loader,
-  Paper,
   SimpleGrid,
   Stack,
   Text,
@@ -17,8 +16,14 @@ import { IconPlayerPlay, IconShieldCheck } from '@tabler/icons-react';
 import { Link } from 'react-router';
 import { useCases, usePlan } from '@/api/hooks';
 import type { Mode, Scenario } from '@/api/types';
+import { OutcomeBadge } from '@/components/OutcomeBadge';
 import { StateBadge } from '@/components/StateBadge';
+import { TechDetail } from '@/components/TechDetail';
+import { Term } from '@/components/Term';
 import { caseOf } from '@/features/guide/places';
+import { hueVar, MODE_IDENTITY } from '@/lib/hues';
+import { MoreAbout } from './MoreAbout';
+import { ProofLine } from './ProofLine';
 
 /** The modes by the names the Scenarios page gives them. */
 const MODE_NAMES: Record<Mode, string> = {
@@ -28,29 +33,54 @@ const MODE_NAMES: Record<Mode, string> = {
   rules: 'Rules only',
 };
 
+/** A run mode's name with its identity dot (Board violet, Site policy teal, the others gray); the words say it. */
+export function ModeName({ mode, children }: { mode: Mode; children?: React.ReactNode }) {
+  const identity = MODE_IDENTITY[mode];
+  return (
+    <Group gap={6} wrap="nowrap" component="span" display="inline-flex">
+      <span
+        className="identity-dot"
+        style={{ ['--mark-hue' as string]: hueVar(identity?.hue ?? 'gray') }}
+        aria-hidden
+      />
+      {children ?? MODE_NAMES[mode]}
+    </Group>
+  );
+}
+
 /** What Shutter does with a failed delivery, in the order it does it; the gate is the step a write cannot pass without. */
 const STEPS = ['Open case', 'Evidence', 'Board plan', 'Gate checks', 'Release', 'Verify'];
 
-/** The page's opening: the one sentence, what a scenario is, and the six steps every case goes through. */
+/**
+ * The page's opening: the one sentence, what a scenario is, the six steps every case goes through, and the proof. The
+ * steps' numbers are in the brand's light colour, since blue means running; the gate's step carries its shield.
+ */
 export function ScenariosHero() {
   return (
     <Card padding="lg" component="section" aria-labelledby="scenarios-headline">
       <Stack gap="sm">
-        <Text id="scenarios-headline" component="h2" fz={{ base: 20, sm: 26 }} fw={700} lh={1.25} m={0}>
-          When an HL7 transfer fails, Shutter works out what is true and fixes it only when it is safe.
+        <Text id="scenarios-headline" component="h2" fz={{ base: 22, sm: 26 }} fw={600} lh={1.25} m={0}>
+          When an <Term term="hl7-transfer">HL7 transfer</Term> fails, Shutter works out what is true and
+          fixes it only when it is safe.
         </Text>
-        <Text size="sm" c="dimmed" maw="90ch">
-          Each scenario plays a known failure into the production: HL7 ADT files into its inbound folder and
-          faults on the downstream system. Shutter opens a case, investigates, checks the plan at the gate,
-          has a person or the site&apos;s written policy release it, and verifies the result at the receiver.
+        <Text size="md" maw="68ch">
+          Each scenario plays a known failure. Watch Shutter investigate, check, release and verify.
         </Text>
+        <TechDetail label="What a scenario does" kind="explain">
+          <Text size="sm" maw="68ch">
+            Each scenario plays a known failure into the production: HL7 ADT files into its inbound folder and
+            faults on the downstream system. Shutter opens a case, investigates, checks the plan at the gate,
+            has a person or the site&apos;s written policy release it, and verifies the result at the
+            receiver.
+          </Text>
+        </TechDetail>
         <Box component="ol" className="step-strip" aria-label="What happens to every case">
           {STEPS.map((step, i) => {
             const gate = step === 'Gate checks';
             return (
               <li key={step} data-gate={gate || undefined}>
-                <ThemeIcon size={22} radius="xl" variant="light" color="blue" aria-hidden>
-                  <Text span size="xs" fw={700}>
+                <ThemeIcon size={24} radius="xl" variant="light" aria-hidden>
+                  <Text span size="sm" fw={700}>
                     {i + 1}
                   </Text>
                 </ThemeIcon>
@@ -62,10 +92,10 @@ export function ScenariosHero() {
             );
           })}
         </Box>
-        <Text size="xs" c="dimmed">
-          Nothing is written unless the gate passes the plan, and an unknown blocks a write as surely as a
-          failure.
+        <Text size="sm" c="dimmed">
+          Nothing is written unless the gate passes the plan; an unknown blocks a write too.
         </Text>
+        <ProofLine />
       </Stack>
     </Card>
   );
@@ -80,7 +110,14 @@ export function ScenariosHero() {
  * reason; ScenariosPage.test checks each claim against fixtures/scenarios.json). The catalogue entry S8's coordinator
  * cites is read from the plan of its latest board case, and left unsaid until there is one.
  */
-const FIRST: { id: string; mode: Mode; title: string; see: (entry?: string) => string }[] = [
+const FIRST: {
+  id: string;
+  mode: Mode;
+  title: string;
+  see: (entry?: string) => string;
+  /** The rest, behind "More about <id>", where the short text leaves something out. */
+  more?: string;
+}[] = [
   {
     id: 'S2',
     mode: 'board',
@@ -93,21 +130,22 @@ const FIRST: { id: string; mode: Mode; title: string; see: (entry?: string) => s
     mode: 'board',
     title: 'The board withholds a write',
     see: (entry) =>
-      `Three specialists and the coordinator. The evidence cannot decide which movement is current, so the coordinator escalates to a person${entry ? `, citing catalogue entry ${entry},` : ''} and keeps the dissent.`,
+      `The evidence cannot tell which movement is current, so the coordinator agent escalates to a person${entry ? `, citing catalogue entry ${entry},` : ''} and keeps the dissent.`,
   },
   {
     id: 'S20',
     mode: 'rules',
     title: 'The gate stops a write',
     see: () =>
-      "The resend waits for approval, bound to the receiver's version. A nurse's move by hand changes that version, so the approval no longer holds; planned again, the resend is superseded by the later move, the gate blocks it and nothing is written.",
+      "The approval stops holding when a nurse's move changes the record; the gate blocks the replanned resend, and nothing is written.",
+    more: "The resend waits for approval, bound to the receiver's version. A nurse's move by hand changes that version, so the approval no longer holds; planned again, the resend is superseded by the later move, the gate blocks it and nothing is written.",
   },
 ];
 
 /** What you will see, with the catalogue entry the case's plan cites when the card has a case in its mode. */
 function SeeWithEntry({ caseId, see }: { caseId: string; see: (entry?: string) => string }) {
   const plan = usePlan(caseId, false).data;
-  return <Text size="sm">{see(plan?.plan?.catalogueEntry || undefined)}</Text>;
+  return <Text size="md">{see(plan?.plan?.catalogueEntry || undefined)}</Text>;
 }
 
 export function TryFirst({
@@ -134,11 +172,11 @@ export function TryFirst({
   );
   return (
     <section aria-labelledby="try-first-title" data-tour="scenarios">
-      <Group gap="xs" align="baseline" mb="xs" wrap="wrap">
-        <Title order={2} fz="lg" id="try-first-title">
+      <Group gap="xs" align="baseline" mb="sm" wrap="wrap">
+        <Title order={2} id="try-first-title">
           Try these three first
         </Title>
-        <Text size="sm" c="dimmed">
+        <Text size="md" c="dimmed">
           Each one in the mode that shows what it is for.
         </Text>
       </Group>
@@ -161,45 +199,52 @@ export function TryFirst({
         </Text>
       ) : (
         <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
-          {first.map(({ s, mode, title, see }) => {
+          {first.map(({ s, mode, title, see, more }) => {
             const inMode = caseOf(cases, s.id, mode);
             const latest = inMode ?? (s.latestCase ? { ...s.latestCase, mode: undefined } : undefined);
             const reason = why(s, mode);
             const modeName = MODE_NAMES[mode];
             return (
-              <Card key={s.id} padding="md">
-                <Stack gap="sm" h="100%">
-                  <Stack gap={2}>
-                    <Text size="xs" c="dimmed" fw={600}>
-                      {s.id}, {modeName} mode
+              <Card key={s.id} padding="md" data-first={s.id}>
+                <Stack gap="sm" style={{ flex: 1 }}>
+                  <Stack gap={4}>
+                    <Text component="div" className="overline">
+                      <Group gap={6} wrap="nowrap" component="span" display="inline-flex">
+                        <span>{s.id} ·</span>
+                        <ModeName mode={mode} />
+                      </Group>
                     </Text>
-                    <Title order={3} fz="md">
+                    <Title order={3} fw={600}>
                       {title}
                     </Title>
                     <Text size="sm">{s.title}</Text>
                   </Stack>
-                  <Paper p="sm" bg="var(--mantine-color-default-hover)" radius="sm">
-                    <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                      You will see
-                    </Text>
+                  <Stack gap={4}>
+                    <Text className="overline">You will see</Text>
                     {inMode ? (
                       <SeeWithEntry caseId={inMode.caseId} see={see} />
                     ) : (
-                      <Text size="sm">{see()}</Text>
+                      <Text size="md">{see()}</Text>
                     )}
-                  </Paper>
-                  <div style={{ flex: 1 }} />
-                  <Group justify="space-between" gap="xs" wrap="wrap">
+                    {more ? (
+                      <MoreAbout about={s.id}>
+                        <Text size="sm">{more}</Text>
+                      </MoreAbout>
+                    ) : null}
+                  </Stack>
+                  {/* The action row sits at the card's foot, so the three Run buttons line up */}
+                  <Stack gap="xs" mt="auto" align="flex-start">
                     {runnable ? (
                       <Tooltip label={reason || `Play ${s.id} in ${modeName} mode`} multiline maw={260}>
                         <span>
                           <Button
-                            size="xs"
-                            leftSection={<IconPlayerPlay size={14} />}
+                            size="sm"
+                            leftSection={<IconPlayerPlay size={16} />}
                             disabled={!!reason}
                             loading={starting(s, mode)}
                             onClick={() => onRun(s, mode)}
                             aria-label={`Run ${s.id} in ${modeName} mode`}
+                            data-tour-action={`run-${s.id}`}
                           >
                             Run {s.id}
                           </Button>
@@ -207,7 +252,7 @@ export function TryFirst({
                       </Tooltip>
                     ) : null}
                     {latest ? (
-                      <Group gap={6} wrap="nowrap">
+                      <Group gap={8} wrap="wrap">
                         <Anchor
                           component={Link}
                           to={`/cases/${encodeURIComponent(latest.caseId)}`}
@@ -217,19 +262,23 @@ export function TryFirst({
                         >
                           Open {latest.caseId}
                         </Anchor>
-                        <StateBadge state={latest.state} size="xs" />
+                        {inMode ? (
+                          <OutcomeBadge c={inMode} scenario={s} />
+                        ) : (
+                          <StateBadge state={latest.state} />
+                        )}
                       </Group>
                     ) : (
-                      <Text size="xs" c="dimmed">
+                      <Text size="sm" c="dimmed">
                         Not played since the last reset
                       </Text>
                     )}
-                  </Group>
-                  {latest && !inMode ? (
-                    <Text size="xs" c="dimmed">
-                      Its latest case, in any mode: none in {modeName} mode among the newest cases.
-                    </Text>
-                  ) : null}
+                    {latest && !inMode ? (
+                      <Text size="sm" c="dimmed">
+                        Its latest case, in any mode: none in {modeName} mode among the newest cases.
+                      </Text>
+                    ) : null}
+                  </Stack>
                 </Stack>
               </Card>
             );

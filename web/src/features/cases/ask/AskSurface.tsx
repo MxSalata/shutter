@@ -2,6 +2,8 @@ import { Button, Card, CloseButton, Drawer, Group, Stack, Title } from '@mantine
 import { useMediaQuery } from '@mantine/hooks';
 import { IconMessageQuestion } from '@tabler/icons-react';
 import { forwardRef, useEffect, useRef, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router';
+import { SHOW_EVIDENCE } from '../case/evidenceLinks';
 import { AskPanel } from './AskPanel';
 
 export const ASK_PANEL_ID = 'ask-panel';
@@ -19,6 +21,7 @@ export const AskButton = forwardRef<HTMLButtonElement, { open: boolean; onToggle
           aria-expanded={open}
           aria-controls={open ? ASK_PANEL_ID : undefined}
           onClick={onToggle}
+          data-tour-action="ask-open"
         >
           {TITLE}
         </Button>
@@ -48,7 +51,7 @@ function Beside({ onClose, children }: { onClose: () => void; children: ReactNod
     >
       <Stack gap="md">
         <Group justify="space-between" wrap="nowrap">
-          <Title order={2} fz="lg" id={`${ASK_PANEL_ID}-title`} tabIndex={-1} ref={heading}>
+          <Title order={2} id={`${ASK_PANEL_ID}-title`} tabIndex={-1} ref={heading}>
             {TITLE}
           </Title>
           <CloseButton onClick={onClose} aria-label="Close Ask about this case" />
@@ -60,9 +63,10 @@ function Beside({ onClose, children }: { onClose: () => void; children: ReactNod
 }
 
 /**
- * The case page with the panel: side by side from laptop width (75em), where the case stays readable beside it; below
- * that a drawer from the right, the whole screen on a phone. Focus goes to the panel's heading when it opens, in either
- * layout, and back to the button when it closes.
+ * The case page with the panel: side by side from 90em (1440 px), where the case keeps room for its board beside it;
+ * below that a drawer from the right over the page, so the case keeps its full width, and the whole screen on a phone.
+ * Focus goes to the panel's heading when it opens, in either layout (the drawer traps it), and back to the button when
+ * it closes.
  */
 export function AskSurface({
   caseId,
@@ -75,8 +79,27 @@ export function AskSurface({
   onClose: () => void;
   children: ReactNode;
 }) {
-  const wide = useMediaQuery('(min-width: 75em)', false, { getInitialValueInEffect: false });
+  const wide = useMediaQuery('(min-width: 90em)', false, { getInitialValueInEffect: false });
   const phone = useMediaQuery('(max-width: 48em)', false, { getInitialValueInEffect: false });
+  // A citation in an answer opens the Evidence tab behind the drawer, so the drawer closes for the evidence to be seen:
+  // once the address names the tab, since closing edits the address too and must keep it
+  const citing = useRef(false);
+  const [search] = useSearchParams();
+  const onEvidence = search.get('tab') === 'evidence';
+  useEffect(() => {
+    if (!open || wide) return;
+    const cite = () => {
+      if (onEvidence) onClose();
+      else citing.current = true;
+    };
+    window.addEventListener(SHOW_EVIDENCE, cite);
+    return () => window.removeEventListener(SHOW_EVIDENCE, cite);
+  }, [open, wide, onEvidence, onClose]);
+  useEffect(() => {
+    if (!citing.current || !onEvidence) return;
+    citing.current = false;
+    if (open && !wide) onClose();
+  }, [onEvidence, open, wide, onClose]);
   // The page keeps its place in the tree whether the panel is open or not, so nothing on it is mounted afresh
   return (
     <>

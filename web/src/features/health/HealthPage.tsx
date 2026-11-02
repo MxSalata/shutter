@@ -1,208 +1,113 @@
-import { Accordion, Card, Group, Stack, Text, ThemeIcon } from '@mantine/core';
-import { IconCheck, IconMinus, IconX } from '@tabler/icons-react';
-import { Fragment, type ReactNode } from 'react';
-import { useHealth, useLibrary } from '@/api/hooks';
-import { PageHeader } from '@/components/PageHeader';
+import { Anchor, List, Stack, Text, VisuallyHidden } from '@mantine/core';
+import { IconHeartbeat } from '@tabler/icons-react';
+import { useHealth } from '@/api/hooks';
+import { ApiSource } from '@/components/ApiSource';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { PageHeader } from '@/components/PageHeader';
 import { PageSkeleton } from '@/components/PageSkeleton';
-import { JsonBlock } from '@/components/JsonBlock';
-import { Timestamp } from '@/components/Timestamp';
-import { StackTable } from '@/components/StackTable';
-import { DEMO } from '@/demo';
-import { humanize, keyLabel } from '@/lib/format';
+import { TechDetail } from '@/components/TechDetail';
+import { TRIAL } from '@/env/mode';
+import { PROOF } from '@/lib/proof';
+import { HealthGroup } from './HealthGroup';
+import { HealthHero } from './HealthHero';
+import { agentsBadge, groupReport, provenanceFacts, type Group, type Report } from './report';
+import './health.css';
 
-/** The report's keys in words; any other key is humanized. */
-const LABELS: Record<string, string> = {
-  installed_at: 'Installed',
-  demo: 'Demo installation',
-  adt_in: 'ADT inbound folder',
-  interoperability: 'Interoperability enabled in the namespace',
-  production_class: 'Production class compiled',
-  production_state: 'Production state',
-  aihub_runner: 'AI Hub runner compiled',
-  ai_hub_present: 'AI Hub installed',
-  mock_config: 'API mimic setting',
-  recordings: 'Recorded agent runs',
-  working_cases: 'Cases still in progress',
-  abandon_after_minutes: 'Abandon allowed after (minutes)',
-  license: 'Licence',
-  api_webapp: 'REST API web application',
-  ui_webapp: 'Web app (this page)',
-  wards_webapp: 'Downstream system web application',
-  webapps_checked: 'Web applications checked from',
-};
-const label = (k: string) => LABELS[k] ?? keyLabel(k);
-
-/**
- * What a No means in the demo, for the checks the instance the demo was recorded on did not have: said in a neutral
- * tone, since nothing is wrong with the demo.
- */
-const DEMO_ABSENT: Record<string, string> = {
-  aihub_runner:
-    "Not in the demo: the recorded instance had no AI Hub, so the class that runs agents through it was not compiled. The board's runs in the demo are replays of recorded runs.",
-  ai_hub_present:
-    'Not in the demo: the demo was recorded on an instance without AI Hub. An installation on the AI Hub image has it.',
-  purge_task:
-    'Not in the demo: the recorded instance had no message purge task. An installation makes one when SHUTTER_MESSAGE_PURGE asks for it.',
-};
-
-/** An icon and its word side by side: the icon never carries the meaning alone. */
-function Mark({ color, icon, word }: { color: string; icon: ReactNode; word: string }) {
-  return (
-    <Group gap={6} wrap="nowrap">
-      <ThemeIcon size="sm" radius="xl" color={color} variant="light" aria-hidden>
-        {icon}
-      </ThemeIcon>
-      <Text size="sm">{word}</Text>
-    </Group>
-  );
+/** A group link scrolls to the group's heading and moves focus to it (the hash belongs to the router). */
+function jumpTo(group: Group) {
+  const target = document.getElementById(`health-${group.def.id}-title`);
+  target?.scrollIntoView?.({ block: 'start' });
+  target?.focus({ preventScroll: true });
 }
 
-/**
- * A report value: true and false as a mark and a word (a No the demo is expected to show says why, in grey), nothing
- * as "Not reported", a time as a time, an object as its fields in words, numbers and text as they are (a 1 can be a
- * count).
- */
-function Value({ k, value }: { k: string; value: unknown }) {
-  if (value === true) return <Mark color="green" icon={<IconCheck size={14} />} word="Yes" />;
-  if (value === false) {
-    const absent = DEMO ? DEMO_ABSENT[k] : undefined;
-    return (
-      <Stack gap={2}>
-        <Mark color="gray" icon={absent ? <IconMinus size={14} /> : <IconX size={14} />} word="No" />
-        {absent ? (
-          <Text size="xs" c="dimmed" maw="80ch">
-            {absent}
-          </Text>
-        ) : null}
-      </Stack>
-    );
-  }
-  if (value === null || value === undefined || value === '') {
-    return <Mark color="yellow" icon={<IconMinus size={14} />} word="Not reported" />;
-  }
-  if (typeof value === 'string' && k.endsWith('_at') && !Number.isNaN(Date.parse(value))) {
-    return <Timestamp iso={value} />;
-  }
-  if (typeof value === 'object' && !Array.isArray(value)) {
-    return (
-      <Stack gap={0}>
-        {Object.entries(value as Record<string, unknown>).map(([field, v]) => (
-          <Text key={field} size="sm">
-            {`${humanize(field)}: ${typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v)}`}
-          </Text>
-        ))}
-      </Stack>
-    );
-  }
-  const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
-  // Names, paths and codes in the monospace font; a sentence or a phrase in the text font
+/** One line of links to the groups, each with its count where the group has checks: no tiles that repeat the groups. */
+function GroupLinks({ groups }: { groups: Group[] }) {
   return (
-    <Text size="sm" className={/\s/.test(text) ? undefined : 'mono-wrap'}>
-      {text}
-    </Text>
-  );
-}
-
-/**
- * The board a case convenes by default, apart from the enabled agents the report counts: the library's members on
- * the default board, by role, and the enabled coordinator ("3 specialists and the coordinator").
- */
-function DefaultBoard() {
-  const library = useLibrary();
-  if (!library.data) return null;
-  const board = library.data.filter((m) => m.enabled && m.inDefaultBoard);
-  const specialists = board.filter((m) => m.role === 'specialist').length;
-  // The server convenes any enabled coordinator, whether or not it is marked for the default board
-  const coordinator = library.data.some((m) => m.enabled && m.role === 'coordinator');
-  const others = board.filter((m) => m.role !== 'specialist' && m.role !== 'coordinator').length;
-  const parts = [
-    specialists ? `${specialists} specialist${specialists === 1 ? '' : 's'}` : '',
-    coordinator ? 'the coordinator' : '',
-    others ? `${others} other${others === 1 ? '' : 's'}` : '',
-  ].filter(Boolean);
-  return (
-    <StackTable.Tr>
-      <StackTable.Th w={220} style={{ fontWeight: 500 }}>
-        <Text size="sm" c="dimmed">
-          Default board
-        </Text>
-      </StackTable.Th>
-      <StackTable.Td>
-        <Text size="sm">{parts.length ? parts.join(' and ') : 'nobody'}</Text>
-        <Text size="xs" c="dimmed">
-          From the agent library; the generalist answers only in single investigator mode
-        </Text>
-      </StackTable.Td>
-    </StackTable.Tr>
+    <nav aria-label="Groups">
+      <ul className="health-links" role="list">
+        {groups.map((g) => {
+          const counted = g.checks.length
+            ? ` ${g.checks.filter((c) => c.passed).length} of ${g.checks.length}`
+            : '';
+          return (
+            <li key={g.def.id}>
+              <Anchor component="button" type="button" size="sm" onClick={() => jumpTo(g)}>
+                {g.def.title}
+                {counted}
+                {counted ? <VisuallyHidden> pass</VisuallyHidden> : null}
+              </Anchor>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
   );
 }
 
 export default function HealthPage() {
   const health = useHealth();
-  const report =
-    health.data && typeof health.data === 'object' ? (health.data as Record<string, unknown>) : null;
+  const report: Report | null =
+    health.data && typeof health.data === 'object' ? (health.data as Report) : null;
+  if (health.isPending) return <PageSkeleton label="Checking…" shape="detail" />;
+  const { verdict, groups } = report ? groupReport(report, TRIAL) : { verdict: null, groups: [] };
+  const facts = report ? provenanceFacts(report.recorded) : [];
+  const replays = report ? agentsBadge(report, TRIAL, PROOF.recordedOn)?.kind === 'recorded' : false;
   return (
     <>
       <PageHeader
         tour="health"
+        icon={IconHeartbeat}
+        hue="indigo"
         title="Health"
-        subtitle="The installation's own readiness report: namespace, production, web applications, downstream system, knowledge and agents."
+        lead="The installation checks itself: its message engine, web pages, agents and licence."
+        details="The installation's own readiness report: namespace, production, web applications, downstream system, knowledge and agents."
       />
-      <Card padding="md">
-        {health.isPending ? <PageSkeleton label="Checking…" /> : null}
-        {health.isError ? (
-          <ErrorAlert
-            error={health.error}
-            title="The readiness report could not be read"
-            onRetry={() => void health.refetch()}
-          />
-        ) : null}
-        {report ? (
+      {health.isError ? (
+        <ErrorAlert
+          error={health.error}
+          title="The readiness report could not be read"
+          onRetry={() => void health.refetch()}
+        />
+      ) : null}
+      {report && verdict ? (
+        <Stack gap="md">
           <Stack gap="sm">
-            {DEMO ? (
-              <Text size="sm" maw="80ch">
-                The report of the instance the demo was recorded on. A No that carries a note saying
-                &ldquo;Not in the demo&rdquo; is a piece that instance did not have: expected, not a fault.
+            <HealthHero report={report} verdict={verdict} trial={TRIAL} recordedOn={PROOF.recordedOn} />
+            <GroupLinks groups={groups} />
+            {TRIAL ? (
+              <Text size="sm" c="dimmed" maw="68ch">
+                This is the report of the instance the trial was recorded on. Parts it did not have say so.
               </Text>
             ) : null}
-            <StackTable className="kv-list" withRowBorders={false} verticalSpacing={4}>
-              <StackTable.Tbody>
-                {Object.entries(report).map(([k, v]) => (
-                  <Fragment key={k}>
-                    <StackTable.Tr>
-                      <StackTable.Th w={220} style={{ fontWeight: 500 }}>
-                        <Text size="sm" c="dimmed">
-                          {label(k)}
-                        </Text>
-                      </StackTable.Th>
-                      <StackTable.Td>
-                        <Value k={k} value={v} />
-                        {k === 'mode' ? (
-                          <Text size="xs" c="dimmed">
-                            Set by the last scenario run or a reset; live failures are investigated in it too
-                          </Text>
-                        ) : null}
-                      </StackTable.Td>
-                    </StackTable.Tr>
-                    {k === 'board_members' ? <DefaultBoard /> : null}
-                  </Fragment>
-                ))}
-              </StackTable.Tbody>
-            </StackTable>
-            <Accordion variant="contained" chevronPosition="left">
-              <Accordion.Item value="raw">
-                <Accordion.Control>
-                  <Text size="xs">The report as the API sends it</Text>
-                </Accordion.Control>
-                <Accordion.Panel>
-                  <JsonBlock value={report} label="readiness report" />
-                </Accordion.Panel>
-              </Accordion.Item>
-            </Accordion>
           </Stack>
-        ) : null}
-      </Card>
+          {groups.map((g) => (
+            <HealthGroup
+              key={g.def.id}
+              group={g}
+              report={report}
+              intro={
+                TRIAL && replays && g.def.id === 'agents'
+                  ? "The agents' runs were recorded on IRIS AI Hub; this report's instance replays them."
+                  : undefined
+              }
+            />
+          ))}
+          {facts.length ? (
+            <TechDetail label="Where this report comes from" kind="explain">
+              <List spacing={4} size="sm">
+                {facts.map((f) => (
+                  <List.Item key={f}>{f}</List.Item>
+                ))}
+              </List>
+            </TechDetail>
+          ) : null}
+          <ApiSource
+            endpoint="GET /api/shutter/health"
+            data={report}
+            label="The report as the API sends it"
+          />
+        </Stack>
+      ) : null}
     </>
   );
 }

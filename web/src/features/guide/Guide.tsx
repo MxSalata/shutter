@@ -1,317 +1,556 @@
 import {
+  ActionIcon,
   Affix,
-  Alert,
+  Badge,
   Button,
   type ButtonProps,
-  Drawer,
   Group,
-  Loader,
+  Menu,
   Modal,
   Paper,
   Radio,
+  SimpleGrid,
   Stack,
   Text,
+  Title,
   VisuallyHidden,
 } from '@mantine/core';
 import { useMediaQuery, useReducedMotion } from '@mantine/hooks';
 import {
+  IconArrowDown,
   IconArrowLeft,
   IconArrowRight,
   IconCheck,
-  IconEye,
-  IconMapPin,
+  IconChevronDown,
+  IconDoorExit,
+  IconList,
   IconPlayerPlay,
   IconPlayerSkipForward,
   IconX,
 } from '@tabler/icons-react';
+import { autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useEffect,
   useEffectEvent,
   useRef,
   useState,
   type ComponentPropsWithoutRef,
-  type ReactNode,
+  type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router';
-import { positionOf, welcomeDue, type GuidePosition } from './controller';
+import { api, newIdempotencyKey, seg } from '@/api/client';
+import { keys } from '@/api/hooks';
+import type { CaseDetail, PlanView } from '@/api/types';
+import { TechDetail } from '@/components/TechDetail';
+import { ENV } from '@/env/mode';
+import { REPLAY_DONE } from '@/lib/events';
+import { useLeaveTrial } from '@/trial/leave';
+import { onRoute, positionOf, stepsIn, welcomeDue, type GuidePosition } from './controller';
 import { usePlace } from './places';
-import { CHAPTERS, SCOPE_LABELS, SCOPES, type GuideScope } from './registry';
-import { focusFrom, headingOf, pageHeading, waitForTarget } from './reveal';
+import {
+  CHAPTERS,
+  SCOPE_LABELS,
+  SCOPE_OVERLINE,
+  SCOPES,
+  stepAt,
+  tourMinutes,
+  type ChapterGroup,
+  type GuideScope,
+} from './registry';
+import { focusFrom, pageHeading, waitForTarget } from './reveal';
 import { useGuide, type GuidePhase } from './store';
 
 /**
- * The first-run guide: a welcome on the first visit, then one step at a time in a dialog (a bottom sheet on a
- * phone). Show this section closes the dialog, opens the step's page and section, moves focus to its heading and
- * puts Continue guide right after it. The guide only moves between pages and opens sections; every action on them
- * stays the reader's.
+ * The first-run guide, in the trial only: the welcome with its three routes, then one step at a time in an inline card
+ * placed just before the section it is about (so it never covers it, and the reading and tab order are the card, then
+ * the section), then the finish card. Its movements play one at a time (DESIGN.md 6.2): the card rises in; then its
+ * notch nudges toward the section while the section's ring pulses; then, once the control a step invites the reader to
+ * try is at least half in view, a pointer beside it and a halo on it. Nothing moves under reduced motion: everything
+ * stands in its resting, pointing state at once.
  */
 
-const DIALOG_PHASES: GuidePhase[] = ['welcome', 'step', 'chapters'];
+/** The comment an approval the tour makes for the reader carries (Next on the S2 decision step). */
+export const APPROVED_FOR_YOU = "Approved for you by the trial's tour";
+export { REPLAY_DONE };
 
-const stepLabel = (pos: GuidePosition) => `Step ${pos.n} of ${pos.m} · ${pos.chapter.title}`;
+const ENTRANCE_MS = 220;
+const RING_MS = 1600 * 2;
+const LATEST_START_MS = 5000;
 
 /** The guide's buttons: at least 44 px high, for touch. */
-function GuideButton(props: ButtonProps & Omit<ComponentPropsWithoutRef<'button'>, keyof ButtonProps>) {
-  return <Button className="guide-control" {...props} />;
+function GuideButton({
+  className,
+  ...props
+}: ButtonProps & Omit<ComponentPropsWithoutRef<'button'>, keyof ButtonProps>) {
+  // A menu's target passes its own class: keep the 44 px rule's beside it
+  return <Button className={className ? `guide-control ${className}` : 'guide-control'} {...props} />;
 }
 
-function Sheet({
-  opened,
-  title,
-  onClose,
-  children,
-}: {
-  opened: boolean;
-  title: string;
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  const phone = useMediaQuery('(max-width: 47.99em)', false);
-  const reduced = useReducedMotion();
-  const common = {
-    opened,
-    onClose,
-    title,
-    // Focus goes back by hand: where the reader was, or to the section the dialog sends them to
-    returnFocus: false,
-    transitionProps: reduced ? { duration: 0 } : undefined,
-    closeButtonProps: { 'aria-label': 'Exit guide', size: 'xl' },
-  };
-  return phone ? (
-    // As tall as its content, at most most of the screen, so the page behind still shows where the reader is
-    <Drawer
-      {...common}
-      position="bottom"
-      padding="md"
-      styles={{ content: { flex: '0 0 auto', height: 'auto', maxHeight: '90dvh' } }}
-    >
-      {children}
-    </Drawer>
-  ) : (
-    <Modal {...common} centered size="lg">
-      {children}
-    </Modal>
-  );
+const tryControl = (action: string) => document.querySelector<HTMLElement>(`[data-tour-action="${action}"]`);
+const visible = (el: HTMLElement | null): el is HTMLElement =>
+  !!el && el.isConnected && (typeof el.checkVisibility !== 'function' || el.checkVisibility());
+
+/** Scrolls a control to the middle of the screen and focuses it. */
+function bringToHand(el: HTMLElement, reduced: boolean) {
+  el.scrollIntoView?.({ block: 'center', behavior: reduced ? 'auto' : 'smooth' });
+  el.focus({ preventScroll: true });
 }
 
-function Welcome() {
-  const progress = useGuide((s) => s.progress);
+const overline = (pos: GuidePosition, scope: GuideScope) =>
+  `${SCOPE_OVERLINE[scope]} · ${pos.chapter.title}${scope !== 'quick' && pos.chapter.code ? ` (${pos.chapter.code})` : ''}`;
+
+const sentence = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+
+// ---- the welcome ----
+
+const SCOPE_WORDS: Record<GuideScope, () => string> = {
+  quick: () =>
+    `${SCOPES.quick.length} steps, about ${tourMinutes('quick')} min. A transfer delivered, a fix held back, the gate stopping one, and the proof.`,
+  all: () =>
+    `${SCOPES.all.length} steps in ${new Set(SCOPES.all.map((p) => p.split('/')[0])).size} chapters, about ${tourMinutes('all')} min.`,
+  engineer: () =>
+    `${SCOPES.engineer.length} steps, about ${tourMinutes('engineer')} min, technical detail on: the receipt, the gate's codes, what each agent cited, the message trace.`,
+};
+
+function Welcome({ initial }: { initial: GuideScope }) {
   const begin = useGuide((s) => s.begin);
   const notNow = useGuide((s) => s.notNow);
   const dontShowAgain = useGuide((s) => s.dontShowAgain);
-  const [scope, setScope] = useState<GuideScope>(progress.scope);
+  const [scope, setScope] = useState<GuideScope>(initial);
   return (
     <Stack gap="md">
-      <Text size="sm">
-        A short walkthrough of the screens. It only opens pages and sections: it never plays a scenario,
-        approves, dispatches, saves configuration or sends mail. Every write passes the gate, then a person,
-        or the site&apos;s written policy, releases it, and each case shows which.
+      <Text fz={18}>
+        When a patient movement fails to reach another system, Shutter finds out why and writes a fix only
+        when it is safe to.
       </Text>
-      <Radio.Group label="What to see" value={scope} onChange={(v) => setScope(v as GuideScope)}>
-        <Stack gap="sm" mt="xs">
-          <Radio
-            value="quick"
-            label={SCOPE_LABELS.quick}
-            description="Scenarios, an S2 case, an S8 case with rules and the board side by side, an S20 case and the evaluation."
-          />
-          <Radio
-            value="all"
-            label={SCOPE_LABELS.all}
-            description={`One or two steps on every screen, in ${SCOPES.all.length} chapters.`}
-          />
-        </Stack>
+      <Text fz={15}>
+        A demo hospital with made-up patients, recorded. Approve, run, save or escalate: each replays the
+        recording, and nothing leaves this browser.
+      </Text>
+      <Radio.Group value={scope} onChange={(v) => setScope(v as GuideScope)} label="Choose a tour">
+        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm" mt="xs">
+          {(['quick', 'all', 'engineer'] as const).map((s) => (
+            <Radio.Card key={s} value={s} className="guide-scope-card" p="sm" radius="md">
+              <Group gap="sm" wrap="nowrap" align="flex-start">
+                <Radio.Indicator color="grape" />
+                <div>
+                  <Text fw={600}>{SCOPE_LABELS[s]}</Text>
+                  <Text size="sm">{SCOPE_WORDS[s]()}</Text>
+                </div>
+              </Group>
+            </Radio.Card>
+          ))}
+        </SimpleGrid>
       </Radio.Group>
       <Group gap="sm" wrap="wrap">
         <GuideButton
-          leftSection={<IconPlayerPlay size={16} />}
+          color="grape"
+          leftSection={<IconPlayerPlay size={16} aria-hidden />}
           onClick={() => begin(scope)}
           data-autofocus
-          data-guide-focus
         >
-          Start guide
+          Start the tour
         </GuideButton>
         <GuideButton variant="default" onClick={notNow}>
-          Not now
-        </GuideButton>
-        <GuideButton variant="subtle" onClick={dontShowAgain}>
-          Don&apos;t show again
+          Explore on my own
         </GuideButton>
       </Group>
-      <Text size="xs" c="dimmed">
-        Help in the header resumes the guide, starts it again or opens a chapter.
-      </Text>
+      <div>
+        <Button variant="subtle" color="gray" size="compact-sm" onClick={dontShowAgain}>
+          Don&apos;t show again
+        </Button>
+      </div>
     </Stack>
   );
 }
 
-function StepBody({ pos }: { pos: GuidePosition }) {
+// ---- the movements ----
+
+type Motion = 'waiting' | 'run' | 'rest';
+
+/**
+ * The pointer beside a control a step invites the reader to try: an arrow and "Try it", placed by Floating UI above
+ * the control's start (flipped or shifted to stay on the screen), so it never covers the control or widens the page.
+ * It writes its position straight to its own element as the page scrolls or resizes, with no render of its own.
+ */
+function TryItPointer({ control, motion }: { control: HTMLElement; motion: Motion }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const pointer = ref.current;
+    // Only where the page is laid out: jsdom (the component tests) has no layout, and no IntersectionObserver
+    if (!pointer || typeof IntersectionObserver === 'undefined') return;
+    const place = () =>
+      void computePosition(control, pointer, {
+        placement: 'top-start',
+        strategy: 'absolute',
+        middleware: [offset(10), flip(), shift({ padding: 8 })],
+      }).then(({ x, y }) => {
+        pointer.style.left = `${x}px`;
+        pointer.style.top = `${y}px`;
+      });
+    return autoUpdate(control, pointer, place);
+  }, [control]);
+  return createPortal(
+    <div
+      ref={ref}
+      style={{ position: 'absolute', left: 0, top: 0 }}
+      className="guide-pointer guide-try-pointer"
+      data-motion={motion}
+      data-testid="guide-try-pointer"
+      aria-hidden
+    >
+      <IconArrowDown size={16} />
+      <span>Try it</span>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * The step's movements, one at a time: the card's entrance; then the section's ring and the card's notch; then, for a
+ * step that invites an action, the pointer and the control's halo, once the control is at least half in view and the
+ * ring has played, or at once when the reader presses the card's chip. A movement that has not started 5 seconds after
+ * the step opened appears in its resting state when its control comes into view. Under reduced motion all of them
+ * stand at rest from the start.
+ */
+function useStepMotion(target: HTMLElement | null, action: string | undefined, reduced: boolean) {
+  const [ring, setRing] = useState<Motion>('waiting');
+  const [trying, setTrying] = useState<{ control: HTMLElement; motion: Motion } | null>(null);
+  const started = useRef(0);
+
+  // The ring and the notch, after the card's entrance
+  useEffect(() => {
+    if (!target) return;
+    started.current = Date.now();
+    const timer = window.setTimeout(
+      () => {
+        target.dataset.tourActive = 'true';
+        if (reduced) target.dataset.motion = 'rest';
+        setRing(reduced ? 'rest' : 'run');
+      },
+      reduced ? 0 : ENTRANCE_MS,
+    );
+    return () => {
+      window.clearTimeout(timer);
+      delete target.dataset.tourActive;
+      delete target.dataset.motion;
+      setRing('waiting');
+    };
+  }, [target, reduced]);
+
+  // The try-it, once its control is in view
+  useEffect(() => {
+    if (!target || !action) return;
+    let control: HTMLElement | null = null;
+    let inView = typeof IntersectionObserver === 'undefined';
+    let done = false;
+    let observer: IntersectionObserver | null = null;
+    const start = (motion: Motion) => {
+      if (done || !control) return;
+      done = true;
+      control.dataset.tourTry = motion === 'run' ? 'true' : 'rest';
+      setTrying({ control, motion });
+    };
+    const consider = () => {
+      if (done || !control || !inView) return;
+      const since = Date.now() - started.current;
+      if (reduced || since >= LATEST_START_MS) start('rest');
+      else if (since >= ENTRANCE_MS + RING_MS) start('run');
+    };
+    const find = window.setInterval(() => {
+      if (!control) {
+        const el = tryControl(action);
+        if (!visible(el)) return;
+        control = el;
+        if (typeof IntersectionObserver !== 'undefined') {
+          observer = new IntersectionObserver(
+            (entries) => {
+              inView = entries.some((e) => e.intersectionRatio >= 0.5);
+              consider();
+            },
+            { threshold: 0.5 },
+          );
+          observer.observe(control);
+        }
+      }
+      consider();
+    }, 100);
+    const press = () => {
+      if (!control) control = tryControl(action);
+      if (!control) return;
+      bringToHand(control, reduced);
+      if (!done) start(reduced ? 'rest' : 'run');
+    };
+    pressers.set(action, press);
+    return () => {
+      window.clearInterval(find);
+      observer?.disconnect();
+      pressers.delete(action);
+      if (control) delete control.dataset.tourTry;
+      setTrying(null);
+    };
+  }, [target, action, reduced]);
+
+  return { ring, trying };
+}
+
+/** The card's try-it chip presses through here, so the pointer starts at once (useStepMotion registers it). */
+const pressers = new Map<string, () => void>();
+
+// ---- a step ----
+
+/** Approves the held case for the reader, through the same call Approve plan makes, when it still waits. */
+async function approveForYou(caseId: string): Promise<boolean> {
+  const c = await api.get<CaseDetail>(`/cases/${seg(caseId)}`);
+  if (c.state !== 'awaiting_approval') return false;
+  const view = await api.get<PlanView>(`/cases/${seg(caseId)}/plan`);
+  await api.post(
+    `/cases/${seg(caseId)}/approvals`,
+    {
+      decision: 'approve',
+      planDigest: view.plan.digest,
+      expectedVersion: c.version,
+      comment: APPROVED_FOR_YOU,
+    },
+    { idempotencyKey: newIdempotencyKey() },
+  );
+  return true;
+}
+
+/** The case page's replay after a trial approval, awaited by the step after it, for at most 3 seconds. */
+let replay: Promise<void> | null = null;
+function awaitReplay() {
+  replay = new Promise<void>((resolve) => {
+    const timer = window.setTimeout(resolve, 3000);
+    window.addEventListener(
+      REPLAY_DONE,
+      () => {
+        window.clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+}
+
+function MoreMenu() {
+  const skipChapter = useGuide((s) => s.skipChapter);
+  const openChapters = useGuide((s) => s.openChapters);
+  const exit = useGuide((s) => s.exit);
+  return (
+    <Menu position="top" withinPortal shadow="md">
+      <Menu.Target>
+        <GuideButton variant="default" rightSection={<IconChevronDown size={16} aria-hidden />}>
+          More
+        </GuideButton>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Item leftSection={<IconPlayerSkipForward size={16} aria-hidden />} onClick={skipChapter}>
+          Skip chapter
+        </Menu.Item>
+        <Menu.Item leftSection={<IconList size={16} aria-hidden />} onClick={openChapters}>
+          Choose a chapter
+        </Menu.Item>
+        <Menu.Item leftSection={<IconX size={16} aria-hidden />} onClick={exit}>
+          Exit guide
+        </Menu.Item>
+      </Menu.Dropdown>
+    </Menu>
+  );
+}
+
+function StepCard({
+  pos,
+  path,
+  ring,
+  notFound,
+  titleRef,
+}: {
+  pos: GuidePosition;
+  path: string | undefined;
+  ring: Motion;
+  notFound: boolean;
+  titleRef: RefObject<HTMLHeadingElement | null>;
+}) {
+  const scope = useGuide((s) => s.progress.scope);
+  const approvedForYou = useGuide((s) => s.approvedForYou);
   const next = useGuide((s) => s.next);
   const back = useGuide((s) => s.back);
-  const skipChapter = useGuide((s) => s.skipChapter);
   const exit = useGuide((s) => s.exit);
-  const show = useGuide((s) => s.show);
-  const place = usePlace(pos.step);
-  const missing = place.data && 'missing' in place.data ? place.data.missing : undefined;
-  return (
-    <Stack gap="md">
-      <Text size="sm">{pos.step.text}</Text>
-      {place.isPending ? (
-        <Group gap="xs">
-          <Loader size="xs" />
-          <Text size="sm" c="dimmed">
-            Finding the page…
-          </Text>
-        </Group>
-      ) : null}
-      {missing ? (
-        <Alert color="gray" variant="light" title="Not here yet">
-          <Text size="sm">{missing}</Text>
-        </Alert>
-      ) : null}
-      <Group gap="sm" wrap="wrap">
-        {!missing ? (
-          <GuideButton
-            leftSection={<IconEye size={16} />}
-            onClick={show}
-            disabled={!place.data}
-            data-autofocus
-            data-guide-focus
-          >
-            Show this section
-          </GuideButton>
-        ) : null}
-        <GuideButton
-          variant={missing ? 'filled' : 'light'}
-          rightSection={pos.last ? <IconCheck size={16} /> : <IconArrowRight size={16} />}
-          onClick={next}
-          data-autofocus={missing ? true : undefined}
-          data-guide-focus={missing ? true : undefined}
-        >
-          {pos.last ? 'Finish' : missing ? 'Skip this step' : 'Next'}
-        </GuideButton>
-      </Group>
-      <Group gap="sm" wrap="wrap">
-        <GuideButton
-          variant="default"
-          leftSection={<IconArrowLeft size={16} />}
-          onClick={back}
-          disabled={pos.first}
-        >
-          Back
-        </GuideButton>
-        <GuideButton
-          variant="default"
-          leftSection={<IconPlayerSkipForward size={16} />}
-          onClick={skipChapter}
-        >
-          Skip chapter
-        </GuideButton>
-        <GuideButton variant="subtle" leftSection={<IconX size={16} />} onClick={exit}>
-          Exit guide
-        </GuideButton>
-      </Group>
-    </Stack>
-  );
-}
+  const client = useQueryClient();
+  const reduced = useReducedMotion() ?? false;
+  const [busy, setBusy] = useState(false);
+  const { step } = pos;
+  const [present, setPresent] = useState<{ tryIt: boolean; chip: boolean }>({ tryIt: false, chip: false });
 
-function Chapters() {
-  const progress = useGuide((s) => s.progress);
-  const choose = useGuide((s) => s.chooseChapter);
-  const exit = useGuide((s) => s.exit);
-  return (
-    <Stack gap="sm">
-      <Text size="sm">
-        Every chapter of {SCOPE_LABELS.all}. The {SCOPE_LABELS.quick.toLowerCase()} has {SCOPES.quick.length}{' '}
-        of them.
-      </Text>
-      <Stack gap={6} component="ul" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-        {CHAPTERS.map((c, i) => {
-          const done = progress.completed.includes(c.id);
-          const current = progress.chapter === c.id;
-          return (
-            <li key={c.id}>
-              <GuideButton
-                variant={current ? 'light' : 'default'}
-                fullWidth
-                justify="space-between"
-                // The current chapter says so in words and with a mark, not by its tint alone
-                leftSection={current ? <IconMapPin size={16} aria-hidden /> : null}
-                rightSection={done ? <IconCheck size={16} aria-hidden /> : null}
-                onClick={() => choose(c.id)}
-                data-autofocus={i === 0 || undefined}
-                data-guide-focus={i === 0 || undefined}
-              >
-                {c.title}
-                {done ? <VisuallyHidden> (finished)</VisuallyHidden> : null}
-                {current ? (
-                  <Text span size="xs" fw={600}>
-                    {' '}
-                    (current)
-                  </Text>
-                ) : null}
-              </GuideButton>
-            </li>
-          );
-        })}
-      </Stack>
-      <Group>
-        <GuideButton variant="subtle" leftSection={<IconX size={16} />} onClick={exit}>
-          Exit guide
-        </GuideButton>
-      </Group>
-    </Stack>
-  );
-}
+  // The chips show only while their control is on the page: the try-it never leads nowhere
+  useEffect(() => {
+    const look = () =>
+      setPresent({
+        tryIt: !!step.tryIt && visible(tryControl(step.tryIt.action)),
+        chip: !!step.chip && visible(tryControl(step.chip.action)),
+      });
+    look();
+    const timer = window.setInterval(look, 500);
+    return () => window.clearInterval(timer);
+  }, [step]);
 
-/** Continue guide, placed right after the shown section's heading, or at the foot of the screen when it has none. */
-function ContinueBar({ pos, notFound }: { pos: GuidePosition; notFound: boolean }) {
-  const continueGuide = useGuide((s) => s.continueGuide);
-  const exit = useGuide((s) => s.exit);
+  const onNext = async () => {
+    // Next without trying on the S2 decision: the tour never lands on an unverified case, so it approves for you
+    const caseId = /^\/cases\/([^?]+)/.exec(path ?? '')?.[1];
+    if (step.tryIt?.action === 'approve-plan' && caseId) {
+      setBusy(true);
+      try {
+        awaitReplay();
+        const approved = await approveForYou(decodeURIComponent(caseId));
+        await client.invalidateQueries({ queryKey: keys.case(decodeURIComponent(caseId)) });
+        next(approved);
+      } catch {
+        next();
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    next();
+  };
+
   return (
     <Paper
-      withBorder
-      shadow="sm"
-      p="xs"
-      my="xs"
+      className="guide-card guide-card-enter"
       role="region"
       aria-label="Guide"
-      className="guide-continue"
+      withBorder
+      shadow="sm"
+      p="md"
+      maw={720}
+      data-guide-card
       onKeyDown={(e) => {
         if (e.key === 'Escape') exit();
       }}
     >
-      <Group gap="sm" justify="space-between" wrap="wrap">
-        <Text size="sm">
-          {stepLabel(pos)}
-          {notFound ? '. This section is not on the page just now.' : ''}
-        </Text>
-        <Group gap="xs" wrap="wrap">
-          <GuideButton size="sm" rightSection={<IconArrowRight size={16} />} onClick={continueGuide}>
-            Continue guide
-          </GuideButton>
-          <GuideButton size="sm" variant="subtle" onClick={exit}>
-            Exit guide
-          </GuideButton>
+      <Stack gap="xs">
+        <Group justify="space-between" wrap="nowrap" gap="xs">
+          <Text className="guide-overline">{overline(pos, scope)}</Text>
+          <Group gap="xs" wrap="nowrap">
+            <Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>
+              Step {pos.n} of {pos.m}
+            </Text>
+            <ActionIcon variant="subtle" color="gray" size="lg" aria-label="Exit guide" onClick={exit}>
+              <IconX size={18} aria-hidden />
+            </ActionIcon>
+          </Group>
         </Group>
-      </Group>
+        <div className="guide-progress" aria-hidden>
+          <div style={{ width: `${(pos.n / pos.m) * 100}%` }} />
+        </div>
+        {approvedForYou === pos.path ? (
+          <Group gap={6} className="guide-approved">
+            <IconCheck size={16} aria-hidden />
+            <Text size="sm" fw={600}>
+              Approved for you, in the trial.
+            </Text>
+          </Group>
+        ) : null}
+        {notFound ? (
+          <Text size="sm" c="dimmed">
+            This section is not on the page just now.
+          </Text>
+        ) : null}
+        <Title order={2} fz={22} tabIndex={-1} ref={titleRef} className="guide-title">
+          {step.title}
+        </Title>
+        <Text fz={18}>{step.say}</Text>
+        {step.tryIt && present.tryIt ? (
+          <div>
+            <Button
+              color="grape"
+              variant="light"
+              className="guide-control guide-try-chip"
+              leftSection={<IconArrowRight size={16} aria-hidden />}
+              onClick={() => pressers.get(step.tryIt!.action)?.()}
+            >
+              {step.tryIt.text}
+            </Button>
+          </div>
+        ) : null}
+        {step.chip && present.chip ? (
+          <div>
+            <Button
+              variant="subtle"
+              color="grape"
+              size="compact-sm"
+              onClick={() => {
+                const el = tryControl(step.chip!.action);
+                if (el) bringToHand(el, reduced);
+              }}
+            >
+              {step.chip.text}
+            </Button>
+          </div>
+        ) : null}
+        {step.detail ? (
+          <TechDetail kind="data" label="Technical detail">
+            <Text size="sm">{step.detail}</Text>
+          </TechDetail>
+        ) : null}
+        <Group justify="space-between" gap="sm" wrap="wrap" mt={4}>
+          <GuideButton
+            variant="default"
+            leftSection={<IconArrowLeft size={16} aria-hidden />}
+            onClick={back}
+            disabled={pos.first}
+          >
+            Back
+          </GuideButton>
+          <Group gap="sm" wrap="nowrap">
+            <MoreMenu />
+            <GuideButton
+              color="grape"
+              rightSection={
+                pos.last ? <IconCheck size={16} aria-hidden /> : <IconArrowRight size={16} aria-hidden />
+              }
+              onClick={() => void onNext()}
+              loading={busy}
+            >
+              {pos.last ? 'Finish' : 'Next'}
+            </GuideButton>
+          </Group>
+        </Group>
+      </Stack>
+      {notFound ? null : (
+        <div className="guide-pointer guide-notch" data-motion={ring} aria-hidden>
+          <IconArrowDown size={20} />
+        </div>
+      )}
     </Paper>
   );
 }
 
-/** The shown phase: opens the step's page and section, marks it, focuses its heading and offers Continue guide. */
-function Shown({ pos }: { pos: GuidePosition }) {
+/** Opens the step's page (and its story step or tab), waits for its section, and places the card just before it. */
+function StepHost({ pos }: { pos: GuidePosition }) {
   const place = usePlace(pos.step);
   const navigate = useNavigate();
   const location = useLocation();
   const here = location.pathname + location.search;
   // The same address again still counts: the case page reopens its story step on every visit
   const go = useEffectEvent((to: string) => navigate(to, { replace: here === to }));
-  const reduced = useReducedMotion();
+  const reduced = useReducedMotion() ?? false;
   const [host, setHost] = useState<HTMLElement | null>(null);
-  const [notFound, setNotFound] = useState(false);
+  const [target, setTarget] = useState<HTMLElement | null>(null);
+  const [absent, setAbsent] = useState(false);
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
   const path = place.data && 'path' in place.data ? place.data.path : undefined;
-  const target = pos.step.target;
+  // A safeguard only: in the trial every place of the quick tour resolves (guide.spec.ts checks it)
+  const notFound = absent || (!!place.data && 'missing' in place.data);
+  const { ring, trying } = useStepMotion(target, pos.step.tryIt?.action, reduced);
+  // Read when the card is placed, not a reason to place it again
+  const reducedNow = useRef(reduced);
+  useEffect(() => {
+    reducedNow.current = reduced;
+  }, [reduced]);
 
   useEffect(() => {
     if (path) go(path);
@@ -319,78 +558,305 @@ function Shown({ pos }: { pos: GuidePosition }) {
 
   // Only once the address is the step's: until then the page before it, with its own sections, is still showing
   const arrived = !!path && here === path;
-  const started = useRef(false);
+  const placed = useRef(false);
   useEffect(() => {
-    if (!arrived || started.current) return;
-    started.current = true;
+    if (!arrived || placed.current) return;
+    placed.current = true;
     let cancelled = false;
-    let marked: HTMLElement | null = null;
-    let placed: HTMLElement | null = null;
-    void waitForTarget(target).then((el) => {
+    let made: HTMLElement | null = null;
+    void (async () => {
+      const el = await waitForTarget(pos.step.target);
+      // The step after an approval waits for the case page's replay to finish, for at most 3 seconds
+      if (replay) {
+        await replay;
+        replay = null;
+      }
       if (cancelled) return;
       if (!el) {
-        setNotFound(true);
-        const h = pageHeading();
-        if (h) focusFrom(h);
+        setAbsent(true);
         return;
       }
-      // A story step opening below its heading moves the page: wait for the panel before scrolling to it
-      window.setTimeout(
-        () => {
-          if (cancelled) return;
-          marked = el;
-          el.dataset.tourActive = 'true';
-          el.scrollIntoView?.({ block: 'start', behavior: reduced ? 'auto' : 'smooth' });
-          const heading = headingOf(el);
-          placed = document.createElement('div');
-          placed.dataset.guideHost = 'true';
-          // Right after the heading, so Continue guide is the next stop; first in a section with no heading
-          heading.insertAdjacentElement(/^H[1-6]$/.test(heading.tagName) ? 'afterend' : 'afterbegin', placed);
-          setHost(placed);
-          focusFrom(heading);
-        },
-        reduced ? 0 : 250,
-      );
-    });
-    // Leaving the page ends the showing; coming back by hand does not show it again, unless it never got as far
+      // A story step opening below its heading moves the page: give its panel a moment before scrolling
+      if (!reducedNow.current) await new Promise((r) => window.setTimeout(r, 250));
+      if (cancelled) return;
+      made = document.createElement('div');
+      made.className = 'guide-host';
+      made.dataset.guideHost = 'true';
+      el.insertAdjacentElement('beforebegin', made);
+      setHost(made);
+      setTarget(el);
+      made.scrollIntoView?.({ block: 'start', behavior: reducedNow.current ? 'auto' : 'smooth' });
+    })();
+    // Leaving the page ends the step's showing; coming back by hand does not show it again
     return () => {
       cancelled = true;
-      if (marked) delete marked.dataset.tourActive;
-      else started.current = false;
-      placed?.remove();
+      made?.remove();
+      if (!made) placed.current = false;
+      setHost(null);
+      setTarget(null);
     };
-  }, [arrived, target, reduced]);
+  }, [arrived, pos.step.target]);
 
-  // The reader may leave the page: Continue guide then waits at the foot of the screen
+  // Focus moves to the card's title on every step
   useEffect(() => {
-    if (!host) return;
-    const timer = window.setInterval(() => {
-      if (!host.isConnected) setHost(null);
-    }, 500);
-    return () => window.clearInterval(timer);
-  }, [host]);
+    if (!host && !notFound) return;
+    const timer = window.setTimeout(() => {
+      if (titleRef.current) focusFrom(titleRef.current);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [host, notFound]);
 
-  if (host?.isConnected) return createPortal(<ContinueBar pos={pos} notFound={notFound} />, host);
+  const card = <StepCard pos={pos} path={path} ring={ring} notFound={notFound} titleRef={titleRef} />;
   return (
-    <Affix position={{ bottom: 16, right: 16, left: 16 }} zIndex={150}>
-      <ContinueBar pos={pos} notFound={notFound} />
-    </Affix>
+    <>
+      {host?.isConnected ? createPortal(card, host) : null}
+      {!host && notFound ? (
+        <Affix position={{ bottom: 16, right: 16, left: 16 }} zIndex={150}>
+          {card}
+        </Affix>
+      ) : null}
+      {trying ? <TryItPointer control={trying.control} motion={trying.motion} /> : null}
+    </>
   );
 }
 
+// ---- the chapters, the finish and the pointer with no card ----
+
+const GROUPS: ChapterGroup[] = ['Operate', 'Results', 'Configure'];
+
+function Chapters() {
+  const progress = useGuide((s) => s.progress);
+  const choose = useGuide((s) => s.chooseChapter);
+  const exit = useGuide((s) => s.exit);
+  const pos = positionOf(progress);
+  return (
+    <Stack gap="sm">
+      <Group gap="md" aria-hidden className="guide-legend">
+        <Group gap={6}>
+          <span className="guide-dot" data-kind="quick" />
+          <Text size="sm">Quick tour</Text>
+        </Group>
+        <Group gap={6}>
+          <span className="guide-dot" data-kind="engineer" />
+          <Text size="sm">Engineers&apos; tour</Text>
+        </Group>
+      </Group>
+      {GROUPS.map((group) => {
+        const chapters = CHAPTERS.filter((c) => c.group === group && onRoute(c.id, 'all'));
+        return (
+          <div key={group} role="group" aria-labelledby={`guide-group-${group}`}>
+            <Text id={`guide-group-${group}`} className="nav-group-label" tt="uppercase" mb={4}>
+              {group}
+            </Text>
+            <Stack gap={4} component="ul" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              {chapters.map((c) => {
+                const done = progress.completed.includes(c.id);
+                const current = pos?.chapter.id === c.id;
+                const n = stepsIn(c.id, progress.scope);
+                return (
+                  <li key={c.id}>
+                    <GuideButton
+                      variant={current ? 'light' : 'default'}
+                      color={current ? 'grape' : undefined}
+                      fullWidth
+                      justify="space-between"
+                      onClick={() => choose(c.id)}
+                      // Its name in words: the chapter, its steps on this route, finished, and Current
+                      aria-label={`${c.title}${c.code ? ` (${c.code})` : ''} ${n === 1 ? '1 step' : `${n} steps`}${done ? ' (finished)' : ''}${current ? ' Current' : ''}`}
+                      leftSection={
+                        <Group gap={4} wrap="nowrap" w={22}>
+                          {onRoute(c.id, 'quick') ? <span className="guide-dot" data-kind="quick" /> : null}
+                          {onRoute(c.id, 'engineer') ? (
+                            <span className="guide-dot" data-kind="engineer" />
+                          ) : null}
+                        </Group>
+                      }
+                      rightSection={
+                        <Group gap={6} wrap="nowrap">
+                          {done ? <IconCheck size={16} aria-hidden /> : null}
+                          {current ? (
+                            <Badge size="sm" color="grape" variant="light" style={{ textTransform: 'none' }}>
+                              Current
+                            </Badge>
+                          ) : null}
+                        </Group>
+                      }
+                      styles={{ label: { flex: 1, justifyContent: 'space-between', gap: 8 } }}
+                    >
+                      <span>
+                        {c.title}
+                        {c.code ? ` (${c.code})` : ''}
+                      </span>
+                      <Text span size="sm" c="dimmed" fw={400}>
+                        {n === 1 ? '1 step' : `${n} steps`}
+                      </Text>
+                    </GuideButton>
+                  </li>
+                );
+              })}
+            </Stack>
+          </div>
+        );
+      })}
+      <Group>
+        <GuideButton
+          variant="subtle"
+          color="gray"
+          leftSection={<IconX size={16} aria-hidden />}
+          onClick={exit}
+        >
+          Exit guide
+        </GuideButton>
+      </Group>
+    </Stack>
+  );
+}
+
+/** The finish card, in place of the last step's card: what the tour showed, and what to do next. */
+function Finish() {
+  const navigate = useNavigate();
+  const exit = useGuide((s) => s.exit);
+  const openChapters = useGuide((s) => s.openChapters);
+  const point = useGuide((s) => s.point);
+  const ask = useLeaveTrial((s) => s.ask);
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
+  const scope = useGuide((s) => s.progress.scope);
+  const [host] = useState(() => {
+    const d = document.createElement('div');
+    d.className = 'guide-host';
+    return d;
+  });
+  useEffect(() => {
+    // Where the last step's card stood, before its section, when that is still on the page; else the screen's foot
+    const last = stepAt(SCOPES[scope].at(-1))?.step.target;
+    const el = last ? document.querySelector<HTMLElement>(`[data-tour="${last}"]`) : null;
+    if (el) el.insertAdjacentElement('beforebegin', host);
+    else {
+      host.classList.add('guide-host-floating');
+      document.body.append(host);
+    }
+    const timer = window.setTimeout(() => titleRef.current && focusFrom(titleRef.current), 0);
+    return () => {
+      window.clearTimeout(timer);
+      host.remove();
+    };
+  }, [host, scope]);
+  const card = (
+    <Paper
+      className="guide-card guide-card-enter"
+      role="region"
+      aria-label="Guide"
+      withBorder
+      shadow="sm"
+      p="md"
+      maw={720}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') exit();
+      }}
+    >
+      <Stack gap="sm">
+        <Title order={2} fz={22} tabIndex={-1} ref={titleRef} className="guide-title">
+          That is the tour.
+        </Title>
+        <Text fz={18}>
+          You saw a transfer delivered and verified, a fix held back for a person, and the gate stopping one.
+        </Text>
+        <Group gap="sm" wrap="wrap" align="center">
+          <GuideButton
+            color="grape"
+            leftSection={<IconPlayerPlay size={16} aria-hidden />}
+            onClick={() => {
+              navigate('/scenarios');
+              point('run-S20');
+            }}
+          >
+            Run S20 yourself
+          </GuideButton>
+          <Text size="sm">Watch the gate stop a fix.</Text>
+        </Group>
+        <Group gap="sm" wrap="wrap">
+          <GuideButton variant="default" onClick={exit}>
+            Explore on my own
+          </GuideButton>
+          <GuideButton
+            variant="default"
+            leftSection={<IconList size={16} aria-hidden />}
+            onClick={openChapters}
+          >
+            Choose a chapter
+          </GuideButton>
+          {ENV.canLeave ? (
+            <GuideButton
+              variant="subtle"
+              color="grape"
+              leftSection={<IconDoorExit size={16} aria-hidden />}
+              onClick={ask}
+            >
+              Leave trial
+            </GuideButton>
+          ) : null}
+        </Group>
+      </Stack>
+    </Paper>
+  );
+  return createPortal(card, host);
+}
+
+/** The pointer with no card: the finish card's "Run S20 yourself" shows the control, focuses it and points at it. */
+function Pointing({ action }: { action: string }) {
+  const reduced = useReducedMotion() ?? false;
+  const point = useGuide((s) => s.point);
+  const { pathname } = useLocation();
+  const [control, setControl] = useState<HTMLElement | null>(null);
+  // The page the control was found on. Not the page at mount: the finish card navigates as it asks for the pointing,
+  // and the router can show the new page after this has mounted
+  const [at, setAt] = useState<string | null>(null);
+  const path = useRef(pathname);
+  useEffect(() => {
+    path.current = pathname;
+  }, [pathname]);
+  useEffect(() => {
+    let el: HTMLElement | null = null;
+    const look = window.setInterval(() => {
+      const found = tryControl(action);
+      if (!visible(found)) return;
+      window.clearInterval(look);
+      el = found;
+      bringToHand(found, reduced);
+      found.dataset.tourTry = reduced ? 'rest' : 'true';
+      setControl(found);
+      setAt(path.current);
+    }, 100);
+    const stop = window.setTimeout(() => window.clearInterval(look), 10_000);
+    return () => {
+      window.clearInterval(look);
+      window.clearTimeout(stop);
+      if (el) delete el.dataset.tourTry;
+    };
+  }, [action, reduced]);
+  // Going elsewhere ends the pointing
+  useEffect(() => {
+    if (at !== null && pathname !== at) point(null);
+  }, [pathname, at, point]);
+  return control ? <TryItPointer control={control} motion={reduced ? 'rest' : 'run'} /> : null;
+}
+
+// ---- the guide ----
+
 /** One polite announcement per step change, short: the step, never the page's content. */
-function useAnnouncement(phase: GuidePhase, pos: GuidePosition | undefined) {
+function useAnnouncement(phase: GuidePhase, pos: GuidePosition | undefined, approved: boolean) {
   const [message, setMessage] = useState('');
-  const key = pos ? `${pos.chapter.id}:${pos.n}` : '';
+  const key = pos ? pos.path : '';
   const [before, setBefore] = useState({ phase, key });
   if (before.phase !== phase || before.key !== key) {
     setBefore({ phase, key });
-    if (phase === 'step' && pos && before.phase === 'step')
-      setMessage(`${stepLabel(pos)}: ${pos.step.title}`);
-    else if (phase === 'shown' && pos)
-      setMessage(`Showing ${pos.step.title}. Continue guide follows its heading.`);
-    else if (phase === 'closed' && before.phase === 'step' && !pos)
-      setMessage('The guide is finished. Help in the header starts it again.');
+    if (phase === 'step' && pos)
+      setMessage(
+        `${approved ? 'Approved for you, in the trial. ' : ''}Step ${pos.n} of ${pos.m}, ${sentence(pos.chapter.title)}. ${pos.step.title}.`,
+      );
+    else if (phase === 'finished') setMessage('That is the tour.');
+    else if (phase === 'closed' && before.phase === 'step')
+      setMessage('The tour is closed. Help in the header resumes it.');
   }
   return message;
 }
@@ -398,64 +864,65 @@ function useAnnouncement(phase: GuidePhase, pos: GuidePosition | undefined) {
 export function Guide() {
   const phase = useGuide((s) => s.phase);
   const progress = useGuide((s) => s.progress);
+  const approvedForYou = useGuide((s) => s.approvedForYou);
+  const pointAt = useGuide((s) => s.pointAt);
+  const openedAt = useGuide((s) => s.openedAt);
   const exit = useGuide((s) => s.exit);
-  const shownAt = useGuide((s) => s.shownAt);
+  const phone = useMediaQuery('(max-width: 47.99em)', false);
+  const reduced = useReducedMotion();
   const pos = positionOf(progress);
-  const message = useAnnouncement(phase, pos);
+  const message = useAnnouncement(phase, pos, !!pos && approvedForYou === pos.path);
+  const [welcomeScope] = useState<GuideScope>(() =>
+    ENV.openGuide === 'engineer' ? 'engineer' : progress.scope,
+  );
 
-  // The first visit: the welcome opens by itself, once
+  // On arrival with ?trial=tour or ?trial=engineer the welcome opens with that tour chosen; on a first entry, by itself
   useEffect(() => {
     const s = useGuide.getState();
-    if (s.phase === 'closed' && !s.snoozed && welcomeDue(s.progress)) s.openWelcome();
+    if (s.phase !== 'closed') return;
+    if (ENV.openGuide || (!s.snoozed && welcomeDue(s.progress))) s.openWelcome();
   }, []);
 
-  // Focus: into the dialog's main action when it turns to another view, and back where the reader was when it closes
+  // Focus goes back where the reader was when a modal or the tour closes
   const opener = useRef<HTMLElement | null>(null);
   const previous = useRef(phase);
-  const dialog = DIALOG_PHASES.includes(phase);
   useEffect(() => {
     const was = previous.current;
     previous.current = phase;
-    const wasDialog = DIALOG_PHASES.includes(was);
-    if (dialog && !wasDialog)
+    if (phase !== 'closed' && was === 'closed')
       opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    if (dialog && wasDialog)
-      window.requestAnimationFrame(() =>
-        document.querySelector<HTMLElement>('[data-guide-focus]:not([disabled])')?.focus(),
-      );
-    if (phase === 'closed' && wasDialog) {
+    if (phase === 'closed' && was !== 'closed') {
       const back = opener.current?.isConnected ? opener.current : pageHeading();
       opener.current = null;
-      if (back) window.setTimeout(() => focusFrom(back), 0);
+      if (back && !pointAt) window.setTimeout(() => focusFrom(back), 0);
     }
-  }, [phase, dialog]);
+  }, [phase, pointAt]);
 
-  const title =
-    phase === 'welcome'
-      ? 'Welcome to Shutter'
-      : phase === 'chapters'
-        ? 'Choose a chapter'
-        : (pos?.step.title ?? '');
+  const modal = {
+    onClose: exit,
+    // Focus goes back by hand: where the reader was, or into the step's card
+    returnFocus: false,
+    transitionProps: reduced ? { duration: 0 } : undefined,
+    closeButtonProps: { 'aria-label': 'Exit guide' },
+    fullScreen: phone,
+    size: 'xl' as const,
+    centered: true,
+  };
   return (
     <>
       <VisuallyHidden aria-live="polite" data-guide-announcer>
         {message}
       </VisuallyHidden>
-      <Sheet opened={dialog && (phase !== 'step' || !!pos)} title={title} onClose={exit}>
-        {phase === 'welcome' ? <Welcome /> : null}
+      <Modal {...modal} opened={phase === 'welcome'} title="Welcome to the Shutter trial">
+        {phase === 'welcome' ? <Welcome initial={welcomeScope} /> : null}
+      </Modal>
+      <Modal {...modal} size="lg" opened={phase === 'chapters'} title="Choose a chapter">
         {phase === 'chapters' ? <Chapters /> : null}
-        {phase === 'step' && pos ? (
-          <Stack gap="xs">
-            <Text size="xs" c="dimmed" fw={600}>
-              {stepLabel(pos)}
-            </Text>
-            {/* Not keyed by step: the button pressed keeps focus as the step changes */}
-            <StepBody pos={pos} />
-          </Stack>
-        ) : null}
-      </Sheet>
-      {/* Keyed by the moment it was asked for: Show this section again on the same step starts afresh */}
-      {phase === 'shown' && pos ? <Shown key={`${pos.chapter.id}:${pos.n}:${shownAt}`} pos={pos} /> : null}
+      </Modal>
+      {/* Keyed by the step and the moment it opened: opening it again plays its movements again */}
+      {phase === 'step' && pos ? <StepHost key={`${pos.path}:${openedAt}`} pos={pos} /> : null}
+      {phase === 'finished' ? <Finish /> : null}
+      {pointAt ? <Pointing key={pointAt} action={pointAt} /> : null}
     </>
   );
 }

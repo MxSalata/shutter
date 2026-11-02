@@ -2,7 +2,7 @@
 <html lang="en-GB">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'self'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
@@ -14,7 +14,7 @@
     <!-- Applies the stored colour scheme, contrast and palette before the first paint (see public/color-scheme.js). -->
     <script src="/shutter/color-scheme.js"></script>
     <style>
-      /* Shown until React's first render replaces #root: the demo loads its API mock first. */
+      /* Shown until React's first render replaces #root: a trial page loads its recorded mock first. */
       .boot {
         position: fixed;
         inset: 0;
@@ -68,6 +68,27 @@
         background: #000;
         color: #fff;
       }
+      /* A trial page (data-shutter-env, set by color-scheme.js before the first paint) opens in the trial's colour */
+      .boot-trial {
+        display: none;
+      }
+      html[data-shutter-env='trial'] .boot-live {
+        display: none;
+      }
+      html[data-shutter-env='trial'] .boot-trial {
+        display: block;
+        color: #862e9c;
+        font-weight: 600;
+      }
+      html[data-shutter-env='trial'] .boot-mark {
+        background: linear-gradient(135deg, #862e9c, #cc5de8);
+      }
+      html[data-shutter-env='trial'][data-mantine-color-scheme='dark'] .boot-trial {
+        color: #eebefa;
+      }
+      html[data-shutter-env='trial'][data-shutter-contrast='high'] .boot-trial {
+        color: inherit;
+      }
       @keyframes boot-pulse {
         50% {
           transform: scale(0.92);
@@ -80,17 +101,19 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="/shutter/assets/index-BuANPEAf.js"></script>
-    <link rel="modulepreload" crossorigin href="/shutter/assets/mantine-DDRA6tWb.js">
-    <link rel="modulepreload" crossorigin href="/shutter/assets/react-Yu11pFTM.js">
-    <link rel="modulepreload" crossorigin href="/shutter/assets/query-D5BDva27.js">
-    <link rel="stylesheet" crossorigin href="/shutter/assets/index-DzJmS4AB.css">
+    <script type="module" crossorigin src="/shutter/assets/index-It4SsYeb.js"></script>
+    <link rel="modulepreload" crossorigin href="/shutter/assets/react-Be1dNEbh.js">
+    <link rel="modulepreload" crossorigin href="/shutter/assets/mantine-D2ogilxe.js">
+    <link rel="modulepreload" crossorigin href="/shutter/assets/query-CDMPkAN6.js">
+    <link rel="stylesheet" crossorigin href="/shutter/assets/mantine-Ble7_ipu.css">
+    <link rel="stylesheet" crossorigin href="/shutter/assets/index-vMHZwtj4.css">
   </head>
   <body>
     <div id="root">
       <div class="boot" role="status" aria-live="polite">
         <div class="boot-mark"></div>
-        <div>Loading Shutter…</div>
+        <div class="boot-live">Loading Shutter…</div>
+        <div class="boot-trial">Opening the trial environment</div>
       </div>
     </div>
   </body>

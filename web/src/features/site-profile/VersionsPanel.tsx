@@ -1,10 +1,11 @@
-import { Accordion, Badge, Group, List, Stack, Text } from '@mantine/core';
+import { Accordion, Group, List, Stack, Text } from '@mantine/core';
 import { useSiteProfileHistory } from '@/api/hooks';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { JsonBlock } from '@/components/JsonBlock';
 import { PageSkeleton } from '@/components/PageSkeleton';
+import { NotYet, Section } from '@/components/Section';
+import { StatusBadge } from '@/components/StatusBadge';
 import { formatZoned } from '@/lib/format';
-import { NotYet, Section } from '../cases/case/Section';
 import { describeSource, diffProfiles } from './profile';
 
 /** Every stored version, newest first, each with what changed from the one before it. */
@@ -15,7 +16,7 @@ export function VersionsPanel({ current }: { current: number }) {
     <Section
       id="site-versions"
       title="Versions"
-      note="Every saved version is kept, with who saved it and from where. Approvals and incident plans made under an earlier version are refused at release and come back to a person."
+      note="Every saved version is kept. A save refuses approvals made under an earlier version, and they come back to a person."
     >
       {history.isPending ? <PageSkeleton label="Loading the versions…" /> : null}
       {history.isError ? (
@@ -38,12 +39,8 @@ export function VersionsPanel({ current }: { current: number }) {
                     <Text size="sm" fw={600}>
                       Version {e.version}
                     </Text>
-                    {e.version === current ? (
-                      <Badge size="xs" color="blue" variant="light" style={{ textTransform: 'none' }}>
-                        current
-                      </Badge>
-                    ) : null}
-                    <Text size="xs" c="dimmed">
+                    {e.version === current ? <StatusBadge tone="info" label="Current" /> : null}
+                    <Text size="sm" c="dimmed" component="span">
                       {formatZoned(e.updatedAt)} · {e.updatedBy || 'Setup'} · {describeSource(e.source)}
                     </Text>
                   </Group>
@@ -65,7 +62,7 @@ export function VersionsPanel({ current }: { current: number }) {
                       <Accordion variant="contained" chevronPosition="left">
                         <Accordion.Item value="json">
                           <Accordion.Control aria-label={`The stored profile of version ${e.version}`}>
-                            <Text size="xs">The stored profile</Text>
+                            <Text size="sm">The stored profile</Text>
                           </Accordion.Control>
                           <Accordion.Panel>
                             <JsonBlock value={e.profile} label={`site profile version ${e.version}`} />

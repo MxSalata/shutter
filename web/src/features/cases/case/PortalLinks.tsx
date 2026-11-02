@@ -5,7 +5,10 @@ import { humanize } from '@/lib/format';
 import { traceScreenshot } from '@/lib/screenshots';
 import { NotYet, Section } from './Section';
 
-/** The case in the Management Portal, in one place: its message trace, its workflow and each agent run's message. */
+/**
+ * The case in the Management Portal, in one place, on the audit trail: its message trace, its workflow and each agent
+ * run's message. The header's IRIS row carries the guide's marks (`case-iris`, `open-trace`).
+ */
 export function PortalLinks({
   c,
   runs,

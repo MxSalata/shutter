@@ -1,3 +1,4 @@
+import type { CaseEvent } from '@/api/types';
 import { asArray, asObject } from '@/lib/json';
 
 /**
@@ -133,4 +134,62 @@ export function encounterTimeline(summary: unknown, zone: string): TimelineRow[]
       (time(a) || 0) - (time(b) || 0) ||
       (a.received ?? Number.MAX_SAFE_INTEGER) - (b.received ?? Number.MAX_SAFE_INTEGER),
   );
+}
+
+/**
+ * The audit trail's own rule for a plan's rationale. The server writes the plan's rationale into the event that
+ * proposes the plan ("Plan v1 (escalate): <rationale>") and again into the events that follow from it ("The plan asks
+ * for a person: <rationale>"), and the Summary tab shows it on the coordinator's card: three copies of some 65 words.
+ * So an event that only repeats a plan's rationale says so, and keeps the text behind a disclosure.
+ */
+const PROPOSAL = /^Plan v\d+ \([^)]*\): ([\s\S]+)$/;
+/** Shorter than this, a matching text is a phrase, not a rationale worth folding. */
+const MIN_RATIONALE = 40;
+const ELLIPSIS = /(…|\.\.\.)$/;
+
+/**
+ * The rationales the case's plans gave, as the events that propose them state them: the text after "Plan vN (...): "
+ * in each move into proposed. The plan the case page reads is only the latest, so the events are the record of every
+ * round's plan.
+ */
+export function planRationales(events: Pick<CaseEvent, 'kind' | 'toState' | 'text'>[]): string[] {
+  const found = new Set<string>();
+  for (const e of events) {
+    if (e.kind !== 'state' || e.toState !== 'proposed') continue;
+    const m = PROPOSAL.exec(e.text ?? '');
+    if (m && m[1].trim().length >= MIN_RATIONALE) found.add(m[1].trim());
+  }
+  return [...found];
+}
+
+/** One event's text as the audit trail shows it: whole, or its own words (`lead`) and the plan rationale it repeats. */
+export interface AuditText {
+  /** The event's own words before the rationale ("Plan v1 (escalate)"); the whole text when it repeats nothing. */
+  lead: string;
+  /** The rationale the event repeats, as the event states it, when it repeats one. */
+  rationale?: string;
+}
+
+/**
+ * Splits an event's text when it repeats a plan's rationale: the text is the rationale, or ends with ": " and the
+ * rationale, or (a server that cuts long texts) ends with ": " and the rationale's start and an ellipsis.
+ */
+export function auditText(text: string, rationales: string[]): AuditText {
+  const t = (text ?? '').trim();
+  for (const r of rationales) {
+    if (r.length < MIN_RATIONALE) continue;
+    if (t === r) return { lead: '', rationale: r };
+    if (t.endsWith(`: ${r}`)) return { lead: t.slice(0, t.length - r.length - 2), rationale: r };
+  }
+  const cut = t.indexOf(': ');
+  if (cut > 0 && ELLIPSIS.test(t)) {
+    const rest = t.slice(cut + 2);
+    const start = rest.replace(ELLIPSIS, '').trimEnd();
+    if (
+      start.length >= MIN_RATIONALE &&
+      rationales.some((r) => r.length >= MIN_RATIONALE && r.startsWith(start))
+    )
+      return { lead: t.slice(0, cut), rationale: rest };
+  }
+  return { lead: t };
 }

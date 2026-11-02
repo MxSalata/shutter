@@ -47,8 +47,19 @@ export const themeBase: MantineThemeOverride = {
   fontFamily:
     'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
   fontFamilyMonospace: 'ui-monospace, Menlo, Consolas, "Liberation Mono", monospace',
-  headings: { fontWeight: '650', sizes: { h1: { fontSize: rem(28), lineHeight: '1.25' } } },
-  fontSizes: { xs: rem(12), sm: rem(13.5), md: rem(15), lg: rem(17), xl: rem(20) },
+  // One type scale for every page (the restyle's design system, section 3): headings take their size from their
+  // level, so no Title sets its own fz; body prose is md, table cells and secondary text sm.
+  headings: {
+    fontWeight: '650',
+    sizes: {
+      h1: { fontSize: rem(30), lineHeight: '1.2' },
+      h2: { fontSize: rem(20), lineHeight: '1.3' },
+      h3: { fontSize: rem(17), lineHeight: '1.35' },
+      h4: { fontSize: rem(15), lineHeight: '1.4' },
+    },
+  },
+  fontSizes: { xs: rem(12), sm: rem(14), md: rem(15), lg: rem(17), xl: rem(20) },
+  lineHeights: { xs: '1.4', sm: '1.45', md: '1.55', lg: '1.45', xl: '1.3' },
   components: {
     Table: { defaultProps: { highlightOnHover: true, verticalSpacing: 'xs', fz: 'sm' } },
     // Cards sit on the page tone (styles.css --shutter-page) with a hairline shadow.
@@ -67,6 +78,15 @@ export const themeBase: MantineThemeOverride = {
 };
 
 export const theme = createTheme(themeBase);
+
+/**
+ * The events of a tooltip that carries a hint on an element made focusable for it (a status badge's hint, a time, a
+ * digest, a comparison bar, a trace that is not a link in the trial): it opens on hover, on keyboard focus and on a
+ * tap, so the keyboard and a touch screen reach the hint too (WCAG 2.1.1 and 1.4.13). Pass it as `events` to such a
+ * tooltip. It is not the theme's default for every tooltip: in jsdom every focus counts as a visible one, so a page
+ * test that clicks any control inside a tooltip would open it, and a control's own name already says what it does.
+ */
+export const HINT_EVENTS = { hover: true, focus: true, touch: true };
 
 /**
  * Under high contrast the low-opacity `light` variant of badges and alerts is replaced by

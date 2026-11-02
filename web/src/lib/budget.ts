@@ -1,27 +1,46 @@
-import type { Budget } from '@/api/types';
+import type { Budget, LiveStatus } from '@/api/types';
 import { formatUsd } from './format';
 
 /**
- * The day's model budget in words (CONTRACTS 9): what has been spent since 00:00 UTC against the cap, and the signed-in
- * user's own share when the site gives each judge one. Null when the server sends no budget.
+ * Whether the model budget resets with the instance every hour rather than at 00:00 UTC: the public demo, where the
+ * server reports the live hospital on (`GET /settings` `live.enabled`), resets every hour, so its budget is per reset,
+ * never "today".
  */
-export function budgetText(b: Budget | undefined): { today: string; share?: string } | null {
+export const resetsHourly = (s: { live?: LiveStatus } | undefined | null): boolean =>
+  s?.live?.enabled === true;
+
+/**
+ * The model budget in words (CONTRACTS 9): what has been spent against the cap, and the signed-in user's own share
+ * when the site gives each judge one. Elsewhere the cap is the day's (spent since 00:00 UTC); on the public demo
+ * (`resetsHourly`) it is per reset, spent since the demo last reset. Null when the server sends no budget.
+ */
+export function budgetText(
+  b: Budget | undefined,
+  { resetsHourly: hourly = false }: { resetsHourly?: boolean } = {},
+): { today: string; share?: string } | null {
   if (!b) return null;
   const spent = formatUsd(b.spentTodayUsd ?? 0);
-  const today =
-    !b.dailyUsd || b.dailyUsd <= 0
+  const cap = formatUsd(b.dailyUsd);
+  const since = 'since the demo last reset (every hour)';
+  const today = hourly
+    ? !b.dailyUsd || b.dailyUsd <= 0
+      ? `No cap: ${spent} spent on live runs ${since}`
+      : b.exhausted
+        ? `The ${cap} per reset is spent: live runs wait for the demo's next reset (every hour)`
+        : `${spent} of the ${cap} per reset spent on live runs ${since}`
+    : !b.dailyUsd || b.dailyUsd <= 0
       ? `No daily cap: ${spent} spent on live runs today`
       : b.exhausted
-        ? `Today's ${formatUsd(b.dailyUsd)} is spent: live runs wait for the reset at 00:00 UTC`
-        : `${spent} of today's ${formatUsd(b.dailyUsd)} spent on live runs`;
+        ? `Today's ${cap} is spent: live runs wait for the reset at 00:00 UTC`
+        : `${spent} of today's ${cap} spent on live runs`;
   const share =
     b.perUserUsd && b.perUserUsd > 0
-      ? `Your share: ${formatUsd(b.spentByMeUsd ?? 0)} of ${formatUsd(b.perUserUsd)}`
+      ? `Your share: ${formatUsd(b.spentByMeUsd ?? 0)} of ${formatUsd(b.perUserUsd)}${hourly ? ' per reset' : ''}`
       : undefined;
   return { today, share };
 }
 
-/** Whether the signed-in user can spend nothing more today: the day's cap, or their own share, is used up. */
+/** Whether the signed-in user can spend nothing more for now: the cap, or their own share, is used up. */
 export function budgetSpent(b: Budget | undefined): boolean {
   if (!b) return false;
   if (b.exhausted || b.shareExhausted) return true;

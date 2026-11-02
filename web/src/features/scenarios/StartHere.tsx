@@ -1,16 +1,21 @@
-import { Anchor, Card, Group, List, Stack, Text, Title } from '@mantine/core';
+import { Box, Button, Card, Group, Stack, Text, ThemeIcon, Title } from '@mantine/core';
 import { Link } from 'react-router';
 import { useCases } from '@/api/hooks';
 import type { CaseSummary, Mode } from '@/api/types';
+import { MoreAbout } from './MoreAbout';
 
 /**
  * The demo's guided path: a short path through the recorded cases, and then the Settings and Evaluation pages. Each
  * step's case is found among the recorded cases by scenario and mode, never by a written-in id, so a recording made
  * again still links to the right case; a step whose recording is missing is left out. The demo build alone shows it.
+ * Each step is a title, one sentence and its links; the rest of what it shows is behind "More".
  */
 interface Step {
   title: string;
+  /** One sentence of at most 20 words. */
   text: string;
+  /** The rest, behind "More about step N". */
+  more: string;
   /** The scenario whose case the step opens, and the mode it was played in (any mode when not given). */
   scenario?: string;
   mode?: Mode;
@@ -32,31 +37,36 @@ const STEPS: Step[] = [
     scenario: 'S2',
     mode: 'board',
     title: 'S2 in board mode: approve, then verified',
-    text: 'A transfer never arrived. Three specialists review the evidence, the coordinator proposes a resend, the gate passes it and the receiver\'s dry run says it would apply. Approve: one conditional write, then "Verified" from the receiver\'s own history.',
+    text: 'A transfer never arrived; approve the resend and see it verified.',
+    more: 'Three specialist agents review the evidence, the coordinator agent proposes a resend, the gate passes it and the receiver\'s dry run says it would apply. Approve: one conditional write, then "Verified" from the receiver\'s own history.',
   },
   {
     scenario: 'S8',
     mode: 'rules',
     title: "S8 in Rules only mode: the resend that overwrote the bed manager's placement",
-    text: "Two systems moved the same patient in the same minute. Rules alone pass every check, and the approved resend writes WARD-B over the bed manager's WARD-C.",
+    text: 'Two systems moved the same patient at exactly the same recorded time, and rules alone pass every check.',
+    more: "The approved resend writes WARD-B over the bed manager's WARD-C.",
   },
   {
     scenario: 'S8',
     mode: 'board',
     title: 'S8 in board mode: escalated, citing catalogue entry E7',
-    text: 'The same failure on the board: the evidence cannot decide which movement is current, so the coordinator escalates to a person, citing entry E7 (two sources at the same time). The side-by-side puts the two cases and the evidence they share next to each other.',
+    text: 'The same failure on the board: the evidence cannot tell which movement is current, so a person decides.',
+    more: 'The coordinator agent escalates, citing entry E7 (two sources at the same time). The side-by-side puts the two cases and the evidence they share next to each other.',
     compare: true,
   },
   {
     scenario: 'S15',
     title: 'S15: a merge withheld, escalated to the PAS team, marked handled',
-    text: 'A patient merge (ADT^A40) is never sent by default: the gate blocks every plan, the board is not convened, Escalate drafts the email to the PAS team, and Mark as handled by the team closes the case with what they did.',
+    text: 'A patient merge (ADT^A40) is never sent by default: the gate blocks every plan.',
+    more: 'The board is not convened, Escalate drafts the email to the PAS team, and Mark as handled by the team closes the case with what they did.',
   },
   {
     scenario: 'S11',
     incident: true,
     title: 'S11: the outage incident, with a chain per encounter',
-    text: 'The receiver went down twice and eight deliveries failed: one incident, a chain per encounter in event order, released one operation at a time at the version the one before verified.',
+    text: 'The receiver went down twice and eight deliveries failed: one incident, a chain per encounter.',
+    more: 'Each chain is released in event order, one operation at a time, at the version the one before verified.',
   },
   {
     pages: [
@@ -64,7 +74,8 @@ const STEPS: Step[] = [
       { to: '/evaluation', label: 'Evaluation' },
     ],
     title: 'Settings and costs, and the evaluation of the board',
-    text: "Every agent run with its model, tokens, cache and cost; a replayed run costs nothing. The evaluation gives each board member's disposition and confidence per scenario, from the recorded live runs.",
+    text: 'Every agent run with its model, tokens and cost, and how each board member scored.',
+    more: "A replayed run costs nothing. The evaluation gives each board member's disposition and confidence per scenario, from the runs recorded with the real agents.",
   },
 ];
 
@@ -107,33 +118,49 @@ export function StartHere() {
     <Card padding="md" component="section" aria-labelledby="start-here-title">
       <Stack gap="sm">
         <Stack gap={2}>
-          <Title order={2} fz="lg" id="start-here-title">
+          <Title order={2} id="start-here-title">
             Start here
           </Title>
-          <Text size="sm" c="dimmed">
-            A short path through the recorded cases. The demo replays recorded runs in the browser, so Approve
-            in step 1, and the escalation and the close in step 4, work here too; nothing leaves the browser.
+          <Text size="md" c="dimmed" maw="68ch">
+            A short path through the recorded cases. Approve, escalate and close replay here; nothing leaves
+            your browser.
           </Text>
         </Stack>
-        <List type="ordered" spacing="sm">
-          {steps.map((s) => (
-            <List.Item key={s.title}>
-              <Stack gap={2}>
-                <Text size="sm" fw={600}>
-                  {s.title}
-                </Text>
-                <Text size="sm">{s.text}</Text>
-                <Group gap="md">
-                  {s.links.map((l) => (
-                    <Anchor key={l.to} component={Link} to={l.to} size="sm" fw={600}>
-                      {l.label}
-                    </Anchor>
-                  ))}
-                </Group>
-              </Stack>
-            </List.Item>
+        <Stack component="ol" gap="md" m={0} p={0} style={{ listStyle: 'none' }}>
+          {steps.map((s, i) => (
+            <Box component="li" key={s.title}>
+              <Group gap="sm" wrap="nowrap" align="flex-start">
+                <ThemeIcon size={26} radius="xl" variant="light" aria-hidden>
+                  <Text span size="sm" fw={700}>
+                    {i + 1}
+                  </Text>
+                </ThemeIcon>
+                <Stack gap={4} style={{ minWidth: 0, flex: 1 }}>
+                  <Group justify="space-between" align="flex-start" gap="xs" wrap="wrap">
+                    <Text size="md" fw={600} style={{ flex: '1 1 260px' }}>
+                      {s.title}
+                    </Text>
+                    <Group gap="xs" wrap="wrap">
+                      {s.links.map((l) => (
+                        <Button key={l.to} component={Link} to={l.to} size="compact-sm" variant="light">
+                          {l.label}
+                        </Button>
+                      ))}
+                    </Group>
+                  </Group>
+                  <Text size="md" maw="68ch">
+                    {s.text}
+                  </Text>
+                  <MoreAbout about={`step ${i + 1}`}>
+                    <Text size="sm" maw="68ch">
+                      {s.more}
+                    </Text>
+                  </MoreAbout>
+                </Stack>
+              </Group>
+            </Box>
           ))}
-        </List>
+        </Stack>
       </Stack>
     </Card>
   );

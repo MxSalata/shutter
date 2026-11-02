@@ -1,8 +1,10 @@
 import { MantineProvider } from '@mantine/core';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import type { CaseDetail } from '@/api/types';
+import fixtures from '@/mocks/fixtures.json';
+import { renderUi } from '@/test/render';
 import { theme } from '@/theme';
 import { CaseHeader } from './CaseHeader';
 
@@ -77,5 +79,64 @@ describe('CaseHeader', () => {
     renderHeader({ ...base, sourceHeaderId: '11961', sourceNamespace: '', sourceProduction: '' });
     expect(screen.queryByText('Source')).not.toBeInTheDocument();
     expect(screen.queryByText(/^Forwarded from/)).not.toBeInTheDocument();
+  });
+});
+
+describe('the case header status and IRIS row', () => {
+  const recorded = fixtures.cases['C-000021'].detail as unknown as CaseDetail;
+  const s8 = fixtures.scenarios.find((x) => x.id === 'S8') as never;
+  const verified = { ...recorded, writes: 1, verification: 'verified' };
+
+  it('puts the outcome first and the state after it, smaller, as one verdict and two facts', () => {
+    renderUi(<CaseHeader c={verified} />);
+    const outcome = screen.getByText('Delivered, verified');
+    const state = screen.getByText('Resolved');
+    expect(outcome.compareDocumentPosition(state) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(state.closest('.mantine-Badge-root')).toHaveAttribute('data-size', 'xs');
+    expect(state.closest('.mantine-Badge-root')).toHaveAttribute('data-variant', 'outline');
+    expect(outcome.closest('[data-tone]')).toHaveAttribute('data-tone', 'positive');
+  });
+
+  it("reads rules alone's S8 write as not as expected, with its scenario", () => {
+    renderUi(<CaseHeader c={verified} scenario={s8} />);
+    expect(screen.getByText('Not as expected').closest('[data-tone]')).toHaveAttribute(
+      'data-tone',
+      'blocking',
+    );
+    // In Plain the expectation mark is left to the outcome's own words
+    expect(screen.getAllByText('Not as expected')).toHaveLength(1);
+  });
+
+  it("shows the case's message trace, workflow trace and source message in IRIS, always, with the guide's marks", () => {
+    const { container } = renderUi(<CaseHeader c={recorded} portalBase="/csp/shutter/" />);
+    const row = container.querySelector('[data-tour="case-iris"]') as HTMLElement;
+    expect(row).toHaveTextContent(
+      new RegExp(`^In IRIS:\\s*Message trace \\(session ${recorded.ensSessionId}\\)`),
+    );
+    const trace = within(row).getByRole('link', { name: /^Message trace/ });
+    expect(trace).toHaveAttribute('href', recorded.links!.visualTrace);
+    expect(trace).toHaveAttribute('data-tour-action', 'open-trace');
+    expect(within(row).getByRole('link', { name: /^Workflow trace/ })).toBeInTheDocument();
+    expect(within(row).getByRole('link', { name: /^Source message/ })).toHaveAttribute(
+      'href',
+      `/csp/shutter/EnsPortal.MessageContents.zen?HeaderId=${recorded.sourceHeaderId}`,
+    );
+    expect(row).toHaveTextContent(recorded.sourceMessageId!);
+    // The record's other facts stay behind Details
+    expect(screen.getByRole('button', { name: 'Details' })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it("adds the expectation and the failure's code in Technical", () => {
+    renderUi(<CaseHeader c={verified} scenario={s8} />, { detail: 'technical' });
+    expect(screen.getAllByText('Not as expected')).toHaveLength(2);
+    expect(screen.getByText('Failure')).toBeInTheDocument();
+    expect(
+      screen.getByText(`${recorded.failureHttpStatus} ${recorded.failureReasonCode}`),
+    ).toBeInTheDocument();
+  });
+
+  it('leaves the failure code out of Plain, where the sentence says it', () => {
+    renderUi(<CaseHeader c={verified} scenario={s8} />);
+    expect(screen.queryByText('Failure')).not.toBeInTheDocument();
   });
 });

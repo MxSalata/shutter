@@ -1,8 +1,9 @@
 import { Anchor, Image, Modal, Stack, Text, Tooltip } from '@mantine/core';
 import { IconExternalLink, IconExternalLinkOff } from '@tabler/icons-react';
 import { useState } from 'react';
-import { DEMO } from '@/demo';
+import { TRIAL } from '@/env/mode';
 import type { Screenshot } from '@/lib/screenshots';
+import { HINT_EVENTS } from '@/theme';
 
 /**
  * A link into the Management Portal (a message trace, a workflow trace, an agent's message). The portal is part of a
@@ -15,6 +16,7 @@ export function PortalLink({
   what,
   size = 'sm',
   screenshot,
+  tourAction,
 }: {
   href: string;
   children: React.ReactNode;
@@ -23,12 +25,20 @@ export function PortalLink({
   size?: 'xs' | 'sm';
   /** A picture of the page the link opens, which the demo shows instead. */
   screenshot?: Screenshot;
+  /** The guide's name for the control, when a step invites the reader to use it (`data-tour-action`). */
+  tourAction?: string;
 }) {
   const [shown, setShown] = useState(false);
-  if (DEMO && screenshot)
+  if (TRIAL && screenshot)
     return (
       <>
-        <Anchor component="button" type="button" size={size} onClick={() => setShown(true)}>
+        <Anchor
+          component="button"
+          type="button"
+          size={size}
+          onClick={() => setShown(true)}
+          data-tour-action={tourAction}
+        >
           {children} (screenshot)
         </Anchor>
         <Modal opened={shown} onClose={() => setShown(false)} title={screenshot.alt} size="auto" centered>
@@ -41,22 +51,30 @@ export function PortalLink({
         </Modal>
       </>
     );
-  if (DEMO)
+  if (TRIAL)
     return (
       <Tooltip
         label={`On an IRIS instance this opens ${what} in the Management Portal. The demo runs in the browser, with no instance behind it.`}
         multiline
         maw={300}
+        events={HINT_EVENTS}
       >
         {/* Not a link here: dimmed and plain, with an icon that says so, and the tooltip says where it would go */}
-        <Text span size={size} c="dimmed" tabIndex={0} style={{ cursor: 'help', whiteSpace: 'nowrap' }}>
+        <Text
+          span
+          size={size}
+          c="dimmed"
+          tabIndex={0}
+          style={{ cursor: 'help', whiteSpace: 'nowrap' }}
+          data-tour-action={tourAction}
+        >
           <IconExternalLinkOff size={12} aria-hidden style={{ verticalAlign: 'middle', marginRight: 2 }} />
           {children} (on an instance)
         </Text>
       </Tooltip>
     );
   return (
-    <Anchor href={href} target="_blank" rel="noreferrer" size={size}>
+    <Anchor href={href} target="_blank" rel="noreferrer" size={size} data-tour-action={tourAction}>
       {children} {size === 'sm' ? <IconExternalLink size={12} /> : null}
     </Anchor>
   );

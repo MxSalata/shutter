@@ -1,0 +1,39 @@
+/*
+ * The Agent library's member cards. The shared MemberCard draws the avatar, the name, the 3 px edge in the member's
+ * hue and, for a member that is not enabled, the gray edge and avatar (its `muted` state); these rules only fit it
+ * into the library's grid.
+ */
+
+/* The card is the grid cell and fills it, so a row of members is one height. */
+.library-member {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.library-member > .mantine-Stack-root {
+  flex: 1 1 auto;
+}
+
+/* The question, set as a quote. It is the card's lead line, in the text colour. */
+.library-question {
+  margin: 0;
+  line-height: 1.35;
+}
+
+/* The settings and the technical detail sit at the foot of the card, whatever the length of the description. */
+.library-settings {
+  margin-top: auto;
+}
+
+/* A member's code: each fact's label over its code. The facts take as many columns as the card is wide enough for, so
+   a narrow card of three reads one column and the full-width coordinator one row. */
+.library-detail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+}
+.library-fact {
+  margin: 0;
+  min-width: 0;
+}

@@ -1,21 +1,19 @@
 import {
   Alert,
   Anchor,
+  Box,
   Button,
   Card,
+  Collapse,
   Fieldset,
   Group,
-  NativeSelect,
-  NumberInput,
-  Radio,
+  List,
   SimpleGrid,
   Stack,
-  Switch,
   Text,
-  TextInput,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconChevronDown, IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconChevronDown, IconPlus, IconTrash, IconVersions } from '@tabler/icons-react';
 import { useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -23,40 +21,55 @@ import { api } from '@/api/client';
 import { DEMO_READ_ONLY, readOnlyDemo } from '@/api/can';
 import { keys, useCan, useMe, useSaveSiteProfile, useSiteProfile, useWhatIf } from '@/api/hooks';
 import type { SiteProfile, SiteProfileView, SiteReceiver, WhatIf } from '@/api/types';
+import { ApiSource } from '@/components/ApiSource';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { KeyValueList } from '@/components/KeyValueList';
 import { PageHeader } from '@/components/PageHeader';
 import { PageSkeleton } from '@/components/PageSkeleton';
+import { Section } from '@/components/Section';
+import { StatusBadge, StatusNotice } from '@/components/StatusBadge';
+import { TechDetail } from '@/components/TechDetail';
+import { Term } from '@/components/Term';
 import { Timestamp } from '@/components/Timestamp';
-import { DEMO } from '@/demo';
-import { describeError, isApiError } from '@/lib/errors';
-import { humanize } from '@/lib/format';
-import { Section } from '../cases/case/Section';
+import { byEnv } from '@/env/copy';
+import { TRIAL } from '@/env/mode';
 import { CATEGORIES, CATEGORY_TEXT, categoryOf, derivedPolicy } from '@/lib/categories';
+import { describeError, isApiError } from '@/lib/errors';
+import { glossary } from '@/lib/glossary';
+import { SITE_ICON } from '@/lib/hues';
+import { NativeSelect, NumberInput, Radio, Switch, TextInput } from './controls';
+import { EditableProvider } from './editable';
 import { MoreQuestions } from './MoreQuestions';
-import { PolicySummary } from './PolicySummary';
+import { PageIndexNav, PageIndexSelect } from './PageIndex';
 import { ReceiverCards } from './ReceiverCards';
-import { Effect, Question } from './Question';
+import { ReleaseMatrix } from './ReleaseMatrix';
+import { Effect, Question, QuestionDetails, type KeyRow } from './Question';
 import {
   KINDS,
   KIND_LABELS,
+  KIND_TERMS,
   POLICY_LABELS,
   TIERS,
   TIER_HINTS,
   TIER_LABELS,
+  TIER_NAMES,
   checkDraft,
   closeNeedsApprover,
   describeIncident,
+  EFFECT_WORDS,
   describePath,
   describeSource,
   diffProfiles,
   fieldId,
+  incidentRule,
   isShipped,
   newReceiver,
+  overtakenLine,
   problemField,
   toPutBody,
 } from './profile';
 import { ReviewModal, type SaveProblem } from './ReviewModal';
+import { SaveBar } from './SaveBar';
 import { VersionsPanel } from './VersionsPanel';
 import { SuggestionCard } from './SuggestionCard';
 import {
@@ -152,7 +165,7 @@ function CategoryFields({
         error={err('category')}
       />
       <Text size="sm" id={id('category-meaning')}>
-        {text.examples}. {text.overtaken}
+        {text.examples}. {overtakenLine(category, derived)}
       </Text>
       <Group>
         <Button
@@ -213,26 +226,22 @@ function ReceiverFields({
   i,
   only,
   problem,
+  editable,
   update,
   remove,
 }: {
   r: SiteReceiver;
   i: number;
   only: boolean;
+  editable: boolean;
   problem: Problem;
   update: (fn: (r: SiteReceiver) => void) => void;
   remove: () => void;
 }) {
   const err = (key: string) => (problem?.path === `receivers[${i}].${key}` ? problem.message : undefined);
   const id = (key: string) => `site-receivers-${i}-${key}`;
-  // As the core reads them: no api means the downstream system's paths, and no features means every feature is assumed
-  const declared = r.features
-    ? Object.entries(r.features)
-        .filter(([, on]) => on)
-        .map(([k]) => humanize(k).toLowerCase())
-        .join(', ') || 'none'
-    : 'all assumed (none declared)';
-  const endpoints = `Endpoints: ${r.api ? `at ${r.api.base ?? 'the downstream system\u2019s base'}` : 'the downstream system\u2019s defaults'}; features: ${declared}`;
+  const at = (key: string) => `receivers[${i}].${key}`;
+  const category = categoryOf(r);
   return (
     <Fieldset legend={`Receiver ${i + 1}: ${r.name || 'new'}`}>
       <Stack gap="sm">
@@ -265,6 +274,13 @@ function ReceiverFields({
         </SimpleGrid>
         <Question n={2} text="What kind of system is it?" acts />
         <CategoryFields r={r} i={i} err={err} update={update} />
+        <QuestionDetails
+          keys={[
+            [at('category'), r.category, 'current_state'],
+            [at('history_policy'), r.history_policy, 'from its category'],
+          ]}
+          more={CATEGORY_TEXT[category].overtaken}
+        />
         <Question n={3} text="Its tier" acts />
         <Choice
           id={id('tier')}
@@ -277,6 +293,10 @@ function ReceiverFields({
             })
           }
           error={err('tier')}
+        />
+        <QuestionDetails
+          keys={[[at('tier'), r.tier]]}
+          more="The tier is how sensitive the receiver is. It picks the row of the approval table: who releases a write to it."
         />
         <Question n={4} text="Does it apply messages in arrival order or by event time?" acts={false} />
         <Choice
@@ -298,9 +318,15 @@ function ReceiverFields({
           }
           error={err('applies')}
         />
+        <QuestionDetails keys={[[at('applies'), r.applies]]} />
         <Question
           n={5}
-          text="Does it take a resend with its original MSH-7, or need a fresh one?"
+          text={
+            <>
+              Does it take a resend with its original {i === 0 ? <Term term="msh-7">MSH-7</Term> : 'MSH-7'},
+              or need a fresh one?
+            </>
+          }
           acts={false}
         />
         <Choice
@@ -318,6 +344,7 @@ function ReceiverFields({
           }
           error={err('resend_timestamp')}
         />
+        <QuestionDetails keys={[[at('resend_timestamp'), r.resend_timestamp]]} />
         <Question n={6} text="Does it accept cancels (A11, A12, A13) and merges (A40)?" acts />
         <Switch
           id={id('cancels')}
@@ -345,16 +372,20 @@ function ReceiverFields({
           }}
           error={err('merges')}
         />
-        <Text size="xs" c="dimmed">
-          {endpoints}. Kept as they are when you save.
-        </Text>
+        <QuestionDetails
+          keys={[
+            [at('cancels'), r.cancels, 'false'],
+            [at('merges'), r.merges, 'false'],
+          ]}
+          more="Its endpoints and declared features are kept as they are when you save."
+        />
         <Group>
           <Button
             variant="subtle"
             color="red"
             size="xs"
             leftSection={<IconTrash size={14} />}
-            disabled={only}
+            disabled={only || !editable}
             onClick={remove}
           >
             Remove {r.name || 'this receiver'}
@@ -378,36 +409,70 @@ function ProfileForm({
 }) {
   const err = (path: string) => (problem?.path === path ? problem.message : undefined);
   const num = (v: string | number) => (v === '' ? (undefined as unknown as number) : Number(v));
+  // Offered, not applied: the receivers are the longest section, and every field stays in the page when it is folded
+  const [folded, setFolded] = useState(false);
+  const showReceivers = !folded || /^receivers\[/.test(problem?.path ?? '');
   return (
-    <Fieldset disabled={!editable} variant="unstyled">
+    <EditableProvider value={editable}>
       <Stack gap="md">
         <Section
           id="site-receivers"
           title="Receivers"
-          note="Questions 1 to 6, for each system this production feeds. The category sets what an overtaken failure does to it; the tier picks the row of the approval table below."
-        >
-          <Question n={1} text="Which receivers does this production feed, and what does each do?" acts />
-          {draft.receivers.map((r, i) => (
-            <ReceiverFields
-              key={i}
-              r={r}
-              i={i}
-              only={draft.receivers.length === 1}
-              problem={problem}
-              update={(fn) => setDraft((d) => fn(d.receivers[i]))}
-              remove={() => setDraft((d) => void d.receivers.splice(i, 1))}
-            />
-          ))}
-          <Group>
+          note="For each system this production feeds. The category sets what an overtaken failure does; the tier sets who releases a write."
+          aside={
             <Button
-              variant="light"
-              size="xs"
-              leftSection={<IconPlus size={14} />}
-              onClick={() => setDraft((d) => void d.receivers.push(newReceiver()))}
+              variant="subtle"
+              color="gray"
+              size="compact-sm"
+              aria-expanded={showReceivers}
+              aria-controls="site-receivers-body"
+              leftSection={
+                <IconChevronDown
+                  size={14}
+                  aria-hidden
+                  style={{ transform: showReceivers ? 'rotate(180deg)' : undefined }}
+                />
+              }
+              onClick={() => setFolded(showReceivers)}
             >
-              Add a receiver
+              {showReceivers ? 'Collapse the receivers' : `Show the receivers (${draft.receivers.length})`}
             </Button>
-          </Group>
+          }
+        >
+          <Collapse in={showReceivers} id="site-receivers-body">
+            <Stack gap="sm">
+              <Question n={1} text="Which receivers does this production feed, and what does each do?" acts />
+              {draft.receivers.map((r, i) => (
+                <ReceiverFields
+                  key={i}
+                  r={r}
+                  i={i}
+                  only={draft.receivers.length === 1}
+                  editable={editable}
+                  problem={problem}
+                  update={(fn) => setDraft((d) => fn(d.receivers[i]))}
+                  remove={() => setDraft((d) => void d.receivers.splice(i, 1))}
+                />
+              ))}
+              <Group>
+                <Button
+                  variant="light"
+                  size="xs"
+                  leftSection={<IconPlus size={14} />}
+                  disabled={!editable}
+                  onClick={() => setDraft((d) => void d.receivers.push(newReceiver()))}
+                >
+                  Add a receiver
+                </Button>
+              </Group>
+              <QuestionDetails
+                keys={[
+                  ['receivers[].name', draft.receivers.map((r) => r.name)],
+                  ['receivers[].system', draft.receivers.map((r) => r.system ?? '')],
+                ]}
+              />
+            </Stack>
+          </Collapse>
         </Section>
         {/* The site-wide answer is read only for a receiver with neither a category nor its own policy: shown only then */}
         {draft.history_policy !== undefined &&
@@ -446,11 +511,11 @@ function ProfileForm({
           id="site-approvals"
           tour="site-approvals"
           title="Approvals"
-          note="Question 7. Automatic is still gated, rehearsed and verified; only the person's approval is left out."
+          note="Automatic is still gated, rehearsed and verified; only the person's approval is left out."
         >
-          <Question n={7} text="How each tier\u2019s chains are approved" acts />
+          <Question n={7} text="How each tier's chains are approved" acts />
           {TIERS.map((tier) => (
-            <Fieldset key={tier} legend={`Tier ${TIER_LABELS[tier]}`}>
+            <Fieldset key={tier} legend={`Tier ${tier}: ${TIER_NAMES[tier]}`}>
               <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
                 {KINDS.map((kind) => {
                   const value = draft.policy?.[tier]?.[kind] ?? '';
@@ -460,6 +525,7 @@ function ProfileForm({
                       key={kind}
                       id={`site-policy-${tier}-${kind}`}
                       label={`Tier ${tier}, ${KIND_LABELS[kind]}`}
+                      description={glossary(KIND_TERMS[kind]).term}
                       value={value}
                       onChange={(e) => {
                         const v = e.currentTarget.value;
@@ -479,8 +545,12 @@ function ProfileForm({
               </SimpleGrid>
             </Fieldset>
           ))}
-          <Group gap="xs" wrap="wrap">
-            <Text fw={600} size="sm">
+          <QuestionDetails
+            keys={TIERS.map((tier): KeyRow => [`policy.${tier}`, draft.policy?.[tier], 'one approval'])}
+            more="Single, ordered and interleaved are the names the profile gives the three kinds of failure. A tier or kind that is not set needs one approval."
+          />
+          <Group gap="sm" wrap="nowrap" align="flex-start">
+            <Text fw={600} size="md" style={{ flex: 1, minWidth: 0 }}>
               Who approves, and the escalation when nobody is available
             </Text>
             <Effect acts={false} />
@@ -489,7 +559,7 @@ function ProfileForm({
             <TextInput
               id="site-approvers-role"
               label="Who approves"
-              description="On record: nothing reads it yet. The permission itself is the Shutter_Approve resource"
+              description="The permission itself is the Shutter_Approve resource."
               value={draft.approvers?.role ?? ''}
               onChange={(e) => {
                 const v = e.currentTarget.value;
@@ -510,8 +580,14 @@ function ProfileForm({
               }}
             />
           </SimpleGrid>
-          <Group gap="xs" wrap="wrap">
-            <Text fw={600} size="sm">
+          <QuestionDetails
+            keys={[
+              ['approvers.role', draft.approvers?.role],
+              ['approvers.escalation', draft.approvers?.escalation],
+            ]}
+          />
+          <Group gap="sm" wrap="nowrap" align="flex-start">
+            <Text fw={600} size="md" style={{ flex: 1, minWidth: 0 }}>
               Who closes a case the team corrected by hand
             </Text>
             <Effect acts />
@@ -519,7 +595,7 @@ function ProfileForm({
           <Switch
             id="site-approvers-close_needs_approver"
             label="Closing a case by hand needs an approver"
-            description="On: only an approver marks a case handled by the team once it is corrected, so an operator on call escalates it and asks an approver to close it. Shutter checks the role of whoever closes the case, not that it is a second person: an approver may escalate and close the same case. Off: an operator can close it too, the one who escalated it included."
+            description="On: only an approver marks a case handled once the team has corrected it. Off: an operator can too."
             checked={closeNeedsApprover(draft)}
             onChange={(e) => {
               const v = e.currentTarget.checked;
@@ -529,8 +605,19 @@ function ProfileForm({
             }}
             error={err('approvers.close_needs_approver')}
           />
+          <Text size="sm">
+            A case the team corrected by hand is marked handled by{' '}
+            {closeNeedsApprover(draft)
+              ? 'an approver only (the two-person rule)'
+              : 'an operator or an approver'}
+            .
+          </Text>
+          <QuestionDetails
+            keys={[['approvers.close_needs_approver', draft.approvers?.close_needs_approver, 'false']]}
+            more="On, an operator on call escalates a case and asks an approver to close it. Shutter checks the role of whoever closes the case, not that it is a second person: an approver may escalate and close the same case. Off, an operator can close it too, the one who escalated it included."
+          />
         </Section>
-        <Section id="site-incident" title="Incidents" note="Question 8.">
+        <Section id="site-incident" title="Incidents">
           <Question n={8} text="When do many failures to one receiver become one incident?" acts />
           <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
             <NumberInput
@@ -576,25 +663,46 @@ function ProfileForm({
               error={err('incident.quiet_seconds')}
             />
           </SimpleGrid>
-          <Text size="sm">{describeIncident(draft)}</Text>
+          <Text size="sm">{incidentRule(draft)}</Text>
+          <QuestionDetails
+            keys={[
+              ['incident.threshold', draft.incident?.threshold, '5'],
+              ['incident.window_minutes', draft.incident?.window_minutes, '10'],
+              ['incident.quiet_seconds', draft.incident?.quiet_seconds, '60'],
+            ]}
+            more={describeIncident(draft)}
+          />
         </Section>
         <MoreQuestions draft={draft} setDraft={setDraft} problem={problem} />
       </Stack>
-    </Fieldset>
+    </EditableProvider>
   );
 }
 
-function OtherSettings({ profile }: { profile: SiteProfile }) {
+/**
+ * The version in force and where it came from, then the stored settings the questions don't ask about: second-layer
+ * data, open in Technical. What a reader needs in the first layer is the header's version and "Shipped answers".
+ */
+function OtherSettings({ profile, base }: { profile: SiteProfile; base: SiteProfileView }) {
   return (
-    <Card padding="md">
+    <TechDetail label="Version, source and other settings" kind="data">
       <Stack gap="xs">
-        <Text fw={600}>Other settings, kept as they are</Text>
-        <Text size="sm" c="dimmed">
-          The questions don&apos;t ask about these. They are part of the stored profile and are sent back
-          unchanged when you save.
-        </Text>
         <KeyValueList
           rows={[
+            ['Version', String(base.version)],
+            ['Source', describeSource(base.source)],
+            [
+              'Saved',
+              base.updatedAt ? (
+                <Group key="s" gap={6}>
+                  <Timestamp iso={base.updatedAt} />
+                  <Text size="sm">by {base.updatedBy || 'Setup'}</Text>
+                </Group>
+              ) : (
+                ''
+              ),
+            ],
+            ['Catalogue entries', String(base.catalogueEntries ?? '')],
             ['Authoritative source', profile.authoritative_source || 'none named'],
             ['Unconditional resends', profile.unconditional_resend || 'not set'],
             ...profile.receivers.map((r, i): [string, ReactNode] => [
@@ -619,8 +727,12 @@ function OtherSettings({ profile }: { profile: SiteProfile }) {
               .filter(([, v]) => v),
           ]}
         />
+        <Text size="sm" c="dimmed">
+          The questions don&apos;t ask about the last settings here. They are part of the stored profile and
+          are sent back unchanged when you save.
+        </Text>
       </Stack>
-    </Card>
+    </TechDetail>
   );
 }
 
@@ -766,7 +878,10 @@ function Profile({
     notifications.show({
       color: 'blue',
       title: `Version ${v.version} saved`,
-      message: 'Shutter decides by it from now on, open cases that have not reached their approval included.',
+      message: byEnv({
+        live: 'Shutter decides by it from now on, open cases that have not reached their approval included.',
+        trial: 'Saved in the trial. It lasts until you reload or leave.',
+      }),
     });
   };
 
@@ -818,123 +933,196 @@ function Profile({
   };
 
   const dirty = changes.length > 0;
-  const canReview = dirty || shipped;
+  // Something to say about the answer a review refused: in the save bar while it shows, else on its own
+  const problemAlert = problem ? (
+    <Alert color="red" variant="light" role="alert" title="Check this answer">
+      {problem.path ? (
+        <Anchor component="button" type="button" size="sm" onClick={() => focusField(problem.path)}>
+          {describePath(problem.path)}: {problem.message}
+        </Anchor>
+      ) : (
+        problem.message
+      )}
+    </Alert>
+  ) : null;
   return (
-    <Stack gap="md">
-      {suggested && showSuggestion ? (
-        <SuggestionCard
-          caseId={suggested.ref.caseId}
-          s={suggested.s}
-          result={suggested.result}
-          version={base.version}
-          editable={editable}
-          reviewOnly={reading}
-          onReview={review}
-          onDiscard={() => {
-            // Only the suggested field goes back to the stored value: other edits in the draft stay
-            const s = suggested.s;
-            if (suggested.result.ok && s) {
-              setProblem(null);
-              setDraftState((prev) => revertSuggestion(prev, base.profile, s));
-            }
-            dropSuggestion();
-          }}
-        />
-      ) : null}
-      <Card padding="md">
-        <Stack gap="sm">
-          <KeyValueList
-            rows={[
-              ['Version', String(base.version)],
-              ['Source', describeSource(base.source)],
-              [
-                'Saved',
-                base.updatedAt ? (
-                  <Group key="s" gap={6}>
-                    <Timestamp iso={base.updatedAt} />
-                    <Text size="sm">by {base.updatedBy || 'Setup'}</Text>
-                  </Group>
-                ) : (
-                  ''
-                ),
-              ],
-              ['Catalogue entries', String(base.catalogueEntries ?? '')],
-            ]}
-          />
-          {shipped ? (
-            <Alert color="blue" variant="light" title="Shutter is running on the shipped answers">
-              They are in force now, but they are defaults, not this site&apos;s choices. Check the thirteen
-              questions below, change what differs here and save, or confirm them unchanged: either way they
-              are then recorded as this site&apos;s answers.
-              {editable ? '' : ' An approver answers them.'}
-            </Alert>
-          ) : null}
-          {DEMO && !reading ? (
-            <Text size="xs" c="dimmed">
-              In the online demo a save lasts until the page is reloaded.
-            </Text>
-          ) : null}
-        </Stack>
-      </Card>
-      <ReceiverCards profile={draft} />
-      <Card padding="md">
-        <PolicySummary profile={draft} />
-      </Card>
-      <ProfileForm draft={draft} setDraft={setDraft} problem={problem} editable={editable} />
-      {problem ? (
-        <Alert color="red" variant="light" role="alert" title="Check this answer">
-          {problem.path ? (
-            <Anchor component="button" type="button" size="sm" onClick={() => focusField(problem.path)}>
-              {describePath(problem.path)}: {problem.message}
-            </Anchor>
-          ) : (
-            problem.message
-          )}
-        </Alert>
-      ) : null}
-      {editable ? (
-        <Group gap="sm">
-          <Button onClick={review} disabled={!canReview}>
-            {dirty ? 'Review and save…' : 'Confirm these answers…'}
-          </Button>
-          <Button variant="default" disabled={!dirty} onClick={() => reseed(base)}>
-            Discard changes
-          </Button>
-          {!canReview ? (
+    <>
+      <PageHeader
+        title="Site profile"
+        icon={SITE_ICON}
+        hue="teal"
+        status={
+          <Group gap={6}>
+            <StatusBadge tone="neutral" icon={IconVersions} label={`Version ${base.version}`} />
+            {shipped ? <StatusBadge tone="info" label="Shipped answers" /> : null}
+          </Group>
+        }
+        lead={
+          <>
+            This hospital&apos;s answers: they decide what Shutter may do at each{' '}
+            <Term term="receiver">receiver</Term>.
+          </>
+        }
+        details={<HeaderDetails />}
+        meta={
+          !shipped && base.updatedAt ? (
             <Text size="sm" c="dimmed">
-              Nothing has changed since version {base.version}.
+              Saved <Timestamp iso={base.updatedAt} span inherit /> by {base.updatedBy || 'Setup'}
             </Text>
-          ) : null}
-        </Group>
-      ) : reading ? (
-        <Group gap="sm">
-          {dirty ? <Button onClick={review}>Review the changes…</Button> : null}
+          ) : null
+        }
+      />
+      <Stack gap="lg">
+        {suggested && showSuggestion ? (
+          <SuggestionCard
+            caseId={suggested.ref.caseId}
+            s={suggested.s}
+            result={suggested.result}
+            version={base.version}
+            editable={editable}
+            reviewOnly={reading}
+            onReview={review}
+            onDiscard={() => {
+              // Only the suggested field goes back to the stored value: other edits in the draft stay
+              const s = suggested.s;
+              if (suggested.result.ok && s) {
+                setProblem(null);
+                setDraftState((prev) => revertSuggestion(prev, base.profile, s));
+              }
+              dropSuggestion();
+            }}
+          />
+        ) : null}
+        {shipped ? (
+          <StatusNotice tone="info" title="Shutter is running on the shipped answers">
+            <Stack gap="xs">
+              <Text size="md">
+                They are defaults, not this site&apos;s choices. Check the questions below, then confirm or
+                change them and save.
+                {editable ? '' : ' An approver answers them.'}
+              </Text>
+              {editable && !dirty ? (
+                <>
+                  <Group>
+                    <Button onClick={review}>Confirm these answers…</Button>
+                  </Group>
+                  {TRIAL ? <Text size="sm">A save lasts until you reload or leave.</Text> : null}
+                </>
+              ) : null}
+            </Stack>
+          </StatusNotice>
+        ) : null}
+        <Stack gap="md" component="section" aria-labelledby="site-policy-title">
+          <Text component="h2" id="site-policy-title" className="overline" m={0}>
+            What this site&apos;s policy does
+          </Text>
+          <ReceiverCards profile={draft} />
+          <Card withBorder padding="md">
+            <ReleaseMatrix profile={draft} />
+          </Card>
+        </Stack>
+        <Box component="section" aria-labelledby="site-answers-title">
+          <Group align="flex-start" wrap="nowrap" gap="lg">
+            <Stack gap="md" style={{ flex: 1, minWidth: 0 }}>
+              <Text component="h2" id="site-answers-title" className="overline" m={0}>
+                The answers
+              </Text>
+              <PageIndexSelect />
+              <ul
+                aria-label="What the icons mean"
+                style={{
+                  listStyle: 'none',
+                  margin: 0,
+                  padding: 0,
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 16,
+                }}
+              >
+                {([true, false] as const).map((acts) => (
+                  <li key={String(acts)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Effect acts={acts} decorative />
+                    <Text span size="sm">
+                      {acts ? EFFECT_WORDS.acts : EFFECT_WORDS.record}
+                    </Text>
+                  </li>
+                ))}
+              </ul>
+              <ProfileForm draft={draft} setDraft={setDraft} problem={problem} editable={editable} />
+              <VersionsPanel current={base.version} />
+              <OtherSettings profile={draft} base={base} />
+            </Stack>
+            <PageIndexNav />
+          </Group>
+        </Box>
+        {reading && !dirty ? (
           <Text size="sm" c="dimmed" data-testid="demo-read-only">
             {DEMO_READ_ONLY}.
           </Text>
-        </Group>
-      ) : (
-        <Text size="sm" c="dimmed">
-          Changing the answers needs the approver role: sign in as approver.
-        </Text>
-      )}
-      <OtherSettings profile={draft} />
-      <VersionsPanel current={base.version} />
-      {reviewing ? (
-        <ReviewModal
-          key={reviewing}
-          opened
-          view={base}
-          changes={changes}
-          body={body}
-          saving={save.isPending || checking}
-          readOnly={reading}
-          problem={saveProblem}
-          onCancel={() => setReviewing(0)}
-          onSave={onSave}
-          onLoadTheirs={() => void loadTheirs()}
-        />
-      ) : null}
+        ) : null}
+        {!editable && !reading ? (
+          <Text size="sm" c="dimmed">
+            Changing the answers needs the approver role: sign in as approver.
+          </Text>
+        ) : null}
+        {!dirty ? problemAlert : null}
+        <ApiSource endpoint="GET /api/shutter/site-profile" data={base} />
+        {dirty && (editable || reading) ? (
+          <SaveBar
+            count={changes.length}
+            onReview={review}
+            onDiscard={editable ? () => reseed(base) : undefined}
+            reviewLabel={editable ? 'Review and save…' : 'Review the changes…'}
+            alert={problemAlert}
+            note={
+              !editable ? (
+                <Text size="sm" c="dimmed" data-testid="demo-read-only">
+                  {DEMO_READ_ONLY}.
+                </Text>
+              ) : TRIAL ? (
+                <Text size="sm" c="dimmed">
+                  A save lasts until you reload or leave.
+                </Text>
+              ) : null
+            }
+          />
+        ) : null}
+        {reviewing ? (
+          <ReviewModal
+            key={reviewing}
+            opened
+            view={base}
+            changes={changes}
+            body={body}
+            saving={save.isPending || checking}
+            readOnly={reading}
+            problem={saveProblem}
+            onCancel={() => setReviewing(0)}
+            onSave={onSave}
+            onLoadTheirs={() => void loadTheirs()}
+          />
+        ) : null}
+      </Stack>
+    </>
+  );
+}
+
+/** The long expert paragraph the header used to carry, as a list of what Shutter reads from the answers. */
+function HeaderDetails() {
+  return (
+    <Stack gap={4}>
+      <Text size="sm">Shutter reads these answers for:</Text>
+      <List size="sm" spacing={2}>
+        <List.Item>each receiver&apos;s category and tier</List.Item>
+        <List.Item>the approval each chain needs</List.Item>
+        <List.Item>who may close a case by hand</List.Item>
+        <List.Item>when many failures become an incident</List.Item>
+        <List.Item>who an escalation goes to</List.Item>
+        <List.Item>the feed&apos;s time zone</List.Item>
+        <List.Item>what the model may see</List.Item>
+        <List.Item>whether a merge is ever sent</List.Item>
+      </List>
+      <Text size="sm">Every saved version is kept.</Text>
     </Stack>
   );
 }
@@ -951,10 +1139,19 @@ export default function SiteProfilePage() {
   // Profile keeps its own copy from its first props: a background refetch never overwrites what someone is typing.
   return (
     <>
-      <PageHeader
-        title="Site profile"
-        subtitle="The site's answers to the induction questions. Shutter reads them for each receiver's category and tier, the approval each chain needs, who may close a case by hand, when many failures become an incident, who an escalation goes to, the feed's time zone, what the model may see and whether a merge is ever sent. Every saved version is kept."
-      />
+      {!view.data || me.isPending || waiting ? (
+        <PageHeader
+          title="Site profile"
+          icon={SITE_ICON}
+          hue="teal"
+          lead={
+            <>
+              This hospital&apos;s answers: they decide what Shutter may do at each{' '}
+              <Term term="receiver">receiver</Term>.
+            </>
+          }
+        />
+      ) : null}
       {view.isPending || me.isPending || waiting ? <PageSkeleton label="Loading the site profile…" /> : null}
       {view.isError ? (
         <ErrorAlert

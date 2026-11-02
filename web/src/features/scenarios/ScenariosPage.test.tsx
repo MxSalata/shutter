@@ -1,16 +1,24 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { keys } from '@/api/hooks';
-import type { Scenario } from '@/api/types';
+import type { CaseSummary, Scenario } from '@/api/types';
 import { server } from '@/mocks/node';
-import { resetMock } from '@/mocks/handlers';
+import { resetMock, writesOf } from '@/mocks/handlers';
+import type { CaseFixture } from '@/mocks/hold';
+import { caseOutcome } from '@/lib/status';
+import { PROOF } from '@/lib/proof';
+import { useAppearance } from '@/stores/appearance';
+import type { DetailLevel } from '@/env/mode';
+import { layer1WordCount } from '@/test/words';
 import { theme } from '@/theme';
 import ScenariosPage from './ScenariosPage';
+import { SCENARIOS_LEAD } from './scenarioText';
+import { PLAIN_BUDGET, TECHNICAL_BUDGET } from './wordBudget';
 import definitions from '../../../../fixtures/scenarios.json';
 import recording from '@/mocks/fixtures.json';
 
@@ -18,7 +26,8 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
-function renderScenarios() {
+function renderScenarios(detail: DetailLevel = 'plain') {
+  useAppearance.setState({ detail });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <MantineProvider theme={theme}>
@@ -41,6 +50,27 @@ async function card(id: string) {
 const scenarioDefs = definitions as unknown as Scenario[];
 /** The scenarios the mock lists: the recording's, with their definitions. */
 const listed = scenarioDefs.filter((d) => recording.scenarios.some((s) => s.id === d.id));
+/** A recorded case's summary, as the list sends it: with the writes and the verification the mock counts. */
+function summaryOf(id: string): CaseSummary {
+  const c = (recording.cases as unknown as Record<string, CaseFixture>)[id];
+  return { ...(c.summary as unknown as CaseSummary), ...writesOf(c) };
+}
+/** The recorded scenario list with one scenario's latest case replaced. */
+function withLatest(id: string, caseId: string) {
+  const c = summaryOf(caseId);
+  return http.get('/api/shutter/scenarios', () =>
+    HttpResponse.json({
+      scenarios: listed.map((d) => ({
+        ...d,
+        latestCase:
+          d.id === id
+            ? { caseId, state: c.state, disposition: c.disposition, headline: c.headline }
+            : (recording.scenarios.find((r) => r.id === d.id)?.latestCase ?? null),
+      })),
+      run: null,
+    }),
+  );
+}
 
 describe('ScenariosPage', () => {
   beforeEach(() => resetMock('approver'));
@@ -145,7 +175,7 @@ describe('ScenariosPage', () => {
     await screen.findByRole('button', { name: 'Run S2' });
     const inRules = listed.filter((d) => !d.expected?.modes || d.expected.modes.includes('rules')).length;
     expect(rules).toHaveAccessibleDescription(
-      new RegExp(`Plays ${inRules} of the ${listed.length} scenarios\\.$`),
+      new RegExp(`Plays ${inRules} of the ${listed.length} scenarios$`),
     );
     const list = screen.getByRole('region', { name: 'Every scenario' });
     await within(list).findByRole('button', { name: 'Run S2' });
@@ -172,18 +202,18 @@ describe('ScenariosPage', () => {
     expect(prompt.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("greys out a scenario in a mode it isn't defined for, and says which modes it is", async () => {
+  it("marks a scenario a mode doesn't play, at full contrast, and says which modes it is", async () => {
     renderScenarios();
     expect(await screen.findByRole('button', { name: 'Run S7' })).toBeEnabled();
     await userEvent.click(screen.getByRole('radio', { name: 'Site policy' }));
     const s7 = await card('S7');
     expect(within(s7).getByRole('button', { name: 'Run S7' })).toBeDisabled();
-    expect(
-      within(s7).getByText(
-        'Not defined for Site policy mode. Its modes: Board, Single investigator, Rules only.',
-      ),
-    ).toBeInTheDocument();
+    expect(within(s7).getByText('Not in Site policy mode')).toBeInTheDocument();
+    expect(within(s7).getByText('Its modes: Board, Single investigator, Rules only.')).toBeInTheDocument();
+    // The row itself is not dimmed: it reads as a scenario this mode leaves out, not as a broken one
+    expect(s7.style.background).toBe('');
     expect(within(await card('S2')).getByRole('button', { name: 'Run S2' })).toBeEnabled();
+    expect(within(await card('S2')).queryByText(/^Not in /)).not.toBeInTheDocument();
   });
 
   it("shows a mode's own expected outcome: S21's resend that the gate blocks, in Rules only mode only", async () => {
@@ -203,7 +233,11 @@ describe('ScenariosPage', () => {
     s = await card('S21');
     expect(within(s).getByText('or Resend')).toBeInTheDocument();
     expect(within(s).queryByText('or More evidence')).not.toBeInTheDocument();
-    expect(within(s).getByText('EVENT_TIME_IMPLAUSIBLE')).toBeInTheDocument();
+    // The code the gate stops on is a code beside its words, not a red badge
+    const code = within(s).getByText('EVENT_TIME_IMPLAUSIBLE');
+    expect(code.tagName).toBe('CODE');
+    expect(code.closest('.mantine-Badge-root')).toBeNull();
+    expect(within(s).getByText('Stops on')).toBeInTheDocument();
     expect(within(s).getByText('Nothing written')).toBeInTheDocument();
   });
 
@@ -273,8 +307,8 @@ describe('ScenariosPage', () => {
     for (const run of runs) expect(run).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
     expect(screen.queryByRole('radio', { name: 'Board' })).not.toBeInTheDocument();
-    // No card is greyed out for a mode when there is no mode to play in
-    expect(screen.queryByText(/^Not defined for/)).not.toBeInTheDocument();
+    // No row is marked for a mode when there is no mode to play in
+    expect(screen.queryByText(/^Not in .+ mode$/)).not.toBeInTheDocument();
   });
 });
 
@@ -336,3 +370,201 @@ describe('ScenariosPage, as each role has it', () => {
     expect(screen.queryByText(/plays its stories by itself/)).not.toBeInTheDocument();
   });
 });
+
+describe('ScenariosPage, its rows and its proof', () => {
+  beforeEach(() => resetMock('approver'));
+
+  it('reads the live lead outside the trial', async () => {
+    renderScenarios();
+    expect(await screen.findByText(SCENARIOS_LEAD.live)).toBeInTheDocument();
+    expect(screen.queryByText(SCENARIOS_LEAD.trial)).not.toBeInTheDocument();
+  });
+
+  it("colours a row by its latest case's outcome when the case is among the newest cases", async () => {
+    renderScenarios();
+    // S5's latest case: a resolved resend, written and verified at the receiver
+    const s5 = await card('S5');
+    const link = await within(s5).findByRole('link', { name: /^C-\d+$/ });
+    const found = summaryOf(link.textContent!);
+    expect(found).toMatchObject({ state: 'resolved', disposition: 'resend', verification: 'verified' });
+    expect(found.writes).toBeGreaterThan(0);
+    // The badge reads the short form; its tooltip is the long one
+    const badge = await within(s5).findByText('Delivered, verified');
+    expect(
+      caseOutcome(
+        found,
+        listed.find((d) => d.id === 'S5'),
+      ).label,
+    ).toBe('Delivered: verified at the receiver');
+    expect(badge.closest('[data-tone]')).toHaveAttribute('data-tone', 'positive');
+    expect(s5).toHaveAttribute('data-tone', 'positive');
+    expect(within(s5).getByText('As expected')).toBeInTheDocument();
+  });
+
+  it('keeps the state badge for a latest case older than the newest cases', async () => {
+    const s5 = listed.find((d) => d.id === 'S5')!;
+    server.use(
+      http.get('/api/shutter/scenarios', () =>
+        HttpResponse.json({
+          scenarios: [
+            {
+              ...s5,
+              latestCase: { caseId: 'C-009999', state: 'resolved', disposition: 'resend', headline: '' },
+            },
+          ],
+          run: null,
+        }),
+      ),
+    );
+    const client = renderScenarios();
+    const row = await card('S5');
+    await waitFor(() => expect(client.getQueryState(keys.cases({ limit: 100 }))?.status).toBe('success'));
+    expect(within(row).getByRole('link', { name: 'C-009999' })).toBeInTheDocument();
+    expect(within(row).getByText('Resolved')).toBeInTheDocument();
+    expect(within(row).queryByText('Delivered, verified')).not.toBeInTheDocument();
+    expect(within(row).queryByText('As expected')).not.toBeInTheDocument();
+    expect(row).toHaveAttribute('data-tone', 'neutral');
+  });
+
+  it("marks S8's Rules only write not as expected, once, and S20's blocked case as expected", async () => {
+    server.use(withLatest('S8', 'C-000021'));
+    renderScenarios();
+    const s8 = await card('S8');
+    expect(within(s8).getByRole('link', { name: 'C-000021' })).toBeInTheDocument();
+    expect(await within(s8).findAllByText('Not as expected')).toHaveLength(1);
+    expect(within(s8).queryByText('Delivered, verified')).not.toBeInTheDocument();
+    expect(s8).toHaveAttribute('data-tone', 'blocking');
+    // S20's latest case is blocked, which is what S20 expects
+    await userEvent.click(screen.getByRole('radio', { name: 'Rules only' }));
+    const s20 = await card('S20');
+    expect(await within(s20).findByText('Blocked')).toBeInTheDocument();
+    expect(within(s20).getByText('As expected')).toBeInTheDocument();
+  });
+
+  it('says what the comparison recorded under what should happen, by its split', async () => {
+    renderScenarios();
+    for (const id of PROOF.rulesMisses!.stopped)
+      expect(
+        within(await card(id)).getByText('Recorded: board as expected; simple rules stopped by the gate'),
+      ).toBeInTheDocument();
+    expect(PROOF.rulesMisses!.wrote).toEqual(['S8']);
+    expect(
+      within(await card('S8')).getByText('Recorded: board as expected; simple rules wrote, not as expected'),
+    ).toBeInTheDocument();
+    expect(
+      within(await card('S2')).getByText('Recorded: board as expected; simple rules as expected'),
+    ).toBeInTheDocument();
+    // A scenario the comparison did not play says nothing of it
+    expect(within(await card('S15')).queryByText(/^Recorded:/)).not.toBeInTheDocument();
+  });
+
+  it("shows each row's first sentence in full and the rest behind a button named for its scenario", async () => {
+    renderScenarios();
+    const s1 = await card('S1');
+    const def = listed.find((d) => d.id === 'S1')!;
+    const [first] = def.summary.split('. ');
+    expect(within(s1).getByText(`${first}.`)).toBeInTheDocument();
+    const more = within(s1).getByRole('button', { name: 'More about S1' });
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(more);
+    expect(more).toHaveAttribute('aria-expanded', 'true');
+    expect(
+      within(s1)
+        .getByText(def.summary.slice(first.length + 2))
+        .closest('[data-tech-detail]'),
+    ).toHaveAttribute('data-tech-detail', 'open');
+  });
+
+  it("shows the scenario's HL7 events as a code in Technical only", async () => {
+    renderScenarios('technical');
+    expect(within(await card('S2')).getByText('A01, A02 fails')).toBeInTheDocument();
+    expect(within(await card('S15')).getByText('A01, A02, A40 withheld')).toBeInTheDocument();
+  });
+
+  it('keeps the HL7 events out of Plain', async () => {
+    renderScenarios();
+    expect(within(await card('S2')).queryByText('A01, A02 fails')).not.toBeInTheDocument();
+  });
+
+  it("states the proof from the board's evaluation, each comparison on its own base", async () => {
+    renderScenarios();
+    const board = PROOF.board!;
+    const played = PROOF.played!;
+    expect(board).toMatchObject({ matched: 24, scored: 24 });
+    expect(played).toMatchObject({ of: 11, board: 11, rules: 4 });
+    const line = (await screen.findByText(/^Tested on/)).closest<HTMLElement>('[data-proof-line]')!;
+    // The words a reader sees (the definitions the terms carry for screen readers aside)
+    expect(visibleText(line)).toContain(
+      `Tested on ${board.scored} recorded failures, the board chose the expected action every time. Played end to end on ${played.of} of them: the board ${played.board}, simple rules ${played.rules}.`,
+    );
+    expect(within(line).getByRole('link', { name: 'See the evaluation' })).toHaveAttribute(
+      'href',
+      '/evaluation',
+    );
+    expect(line).not.toHaveTextContent('scored passes');
+  });
+
+  it('names the bases of the proof in Technical', async () => {
+    renderScenarios('technical');
+    const line = (await screen.findByText(/^Tested on/)).closest<HTMLElement>('[data-proof-line]')!;
+    expect(visibleText(line)).toContain(
+      `(${PROOF.board!.scored} scored passes, proposed action; ${PROOF.played!.of} scenarios, played end to end)`,
+    );
+  });
+
+  it('names the agents in the Board mode, and says how many scenarios each mode plays as a badge', async () => {
+    renderScenarios();
+    const board = await screen.findByRole('radio', { name: 'Board' });
+    await screen.findByRole('button', { name: 'Run S2' });
+    expect(board).toHaveAccessibleDescription(
+      /^Three specialist agents review the evidence in parallel; a coordinator agent proposes one plan\. Plays \d+ of the \d+ scenarios$/,
+    );
+    await screen.findByRole('button', { name: 'Run S2' });
+    const count = document.getElementById('mode-board-count')!;
+    expect(count).toHaveClass('mantine-Badge-root');
+  });
+
+  it("wraps the headline's HL7 transfer and the proof's simple rules in their definitions", async () => {
+    renderScenarios();
+    const heading = await screen.findByRole('heading', { name: /^When an HL7 transfer fails/ });
+    expect(within(heading).getByText('HL7 transfer')).toHaveAccessibleDescription(
+      'A message telling another hospital system that a patient moved ward.',
+    );
+    const line = (await screen.findByText(/^Tested on/)).closest<HTMLElement>('[data-proof-line]')!;
+    expect(within(line).getByText('simple rules')).toHaveAttribute('aria-describedby');
+  });
+
+  /** Waits for every part of the page that loads: the rows, their latest cases' outcomes, S8's cited entry. */
+  async function loaded() {
+    await screen.findByRole('button', { name: 'Run S2' });
+    await within(await card('S5')).findByText('Delivered, verified');
+    await screen.findByText('citing catalogue entry E7,', { exact: false });
+  }
+
+  it('keeps the first layer within its word budget, in Plain and in Technical', async () => {
+    renderScenarios();
+    await loaded();
+    const plain = layer1WordCount(document.body);
+    expect(plain).toBeLessThanOrEqual(PLAIN_BUDGET);
+    cleanupAndReset();
+    renderScenarios('technical');
+    await loaded();
+    const technical = layer1WordCount(document.body);
+    expect(technical).toBeLessThanOrEqual(TECHNICAL_BUDGET);
+    expect(technical).toBeLessThanOrEqual(plain * 1.5);
+  });
+});
+
+/** An element's text as a reader sees it: without hidden parts (a term's definition) and visually hidden ones. */
+function visibleText(el: HTMLElement): string {
+  const copy = el.cloneNode(true) as HTMLElement;
+  for (const h of copy.querySelectorAll('[hidden], [aria-hidden="true"], .mantine-VisuallyHidden-root'))
+    h.remove();
+  return (copy.textContent ?? '').replace(/\s+/g, ' ').trim();
+}
+
+/** Unmounts the page and clears the mock between two renders in one test. */
+function cleanupAndReset() {
+  cleanup();
+  resetMock('approver');
+}

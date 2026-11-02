@@ -4,9 +4,9 @@ import type { CaseList, CaseSummary, IncidentList, Mode, ReviewList } from '@/ap
 import type { GuidePlace, GuideStep } from './registry';
 
 /**
- * Where a step leads. A case, incident or review is found among the ones already there, read through the API (in
- * the demo, the recorded ones); when there is none, the step says so and offers to go on. The guide only reads: it
- * never plays a scenario or starts a review to make one.
+ * Where a step leads. A case, incident or review is found among the recorded ones, read through the API (the guide
+ * runs only in the trial, so every place of the quick tour resolves); the "not here" answer stays only as a safeguard.
+ * A case's address can open a story step (`?open=`) and a tab (`?tab=`); a page's place may carry its own query.
  */
 export type ResolvedPlace = { path: string } | { missing: string };
 
@@ -26,7 +26,7 @@ export function caseOf(cases: CaseSummary[], scenario: string, mode?: Mode): Cas
   return of.find((c) => c.mode === 'board') ?? of[0];
 }
 
-export async function resolvePlace(place: GuidePlace, open?: string): Promise<ResolvedPlace> {
+export async function resolvePlace(place: GuidePlace, open?: string, tab?: string): Promise<ResolvedPlace> {
   if ('page' in place) return { path: place.page };
   if ('scenario' in place) {
     const list = await api.get<CaseList>(`/cases?scenario=${encodeURIComponent(place.scenario)}&limit=100`);
@@ -34,10 +34,11 @@ export async function resolvePlace(place: GuidePlace, open?: string): Promise<Re
     if (!c) {
       const mode = place.mode ? ` in ${MODE_NAMES[place.mode]} mode` : '';
       return {
-        missing: `There is no ${place.scenario} case${mode} here yet. The guide never plays a scenario: play ${place.scenario} from Scenarios yourself if you want one, or go on to the next step.`,
+        missing: `There is no ${place.scenario} case${mode} here yet. Run ${place.scenario} from Scenarios if you want one, or go on to the next step.`,
       };
     }
-    return { path: `/cases/${encodeURIComponent(c.caseId)}${open ? `?open=${open}` : ''}` };
+    const query = [open ? `open=${open}` : '', tab ? `tab=${tab}` : ''].filter(Boolean).join('&');
+    return { path: `/cases/${encodeURIComponent(c.caseId)}${query ? `?${query}` : ''}` };
   }
   if ('incident' in place) {
     const list = await api.get<IncidentList>('/incidents?limit=100');
@@ -45,7 +46,7 @@ export async function resolvePlace(place: GuidePlace, open?: string): Promise<Re
     if (!newest)
       return {
         missing:
-          'There is no incident here yet: one opens when several deliveries to one receiver fail within a few minutes, as in scenarios S11 and S12. The guide never plays them; go on to the next step.',
+          'There is no incident here yet: one opens when several deliveries to one receiver fail within a few minutes, as in scenarios S11 and S12. Go on to the next step.',
       };
     return { path: `/incidents/${encodeURIComponent(newest.incidentId)}` };
   }
@@ -56,7 +57,7 @@ export async function resolvePlace(place: GuidePlace, open?: string): Promise<Re
   if (!newest)
     return {
       missing:
-        'There is no finished production review here yet. Starting one is your own action on Production review; go on to the next step.',
+        'There is no finished production review here yet. Start one on Production review, or go on to the next step.',
     };
   return { path: `/reviews/${encodeURIComponent(newest.reviewId)}` };
 }
@@ -64,10 +65,10 @@ export async function resolvePlace(place: GuidePlace, open?: string): Promise<Re
 /** The step's place, read when the step opens; a read that fails explains itself like a missing case. */
 export function usePlace(step: GuideStep | undefined) {
   return useQuery({
-    queryKey: ['guide-place', step?.place, step?.open],
+    queryKey: ['guide-place', step?.place, step?.open, step?.tab],
     queryFn: async (): Promise<ResolvedPlace> => {
       try {
-        return await resolvePlace(step!.place, step!.open);
+        return await resolvePlace(step!.place, step!.open, step!.tab);
       } catch {
         return {
           missing:

@@ -26,11 +26,20 @@ import {
 import type { BoardAnswer, CaseQuestion, QuestionTier, SuggestedTurn } from '@/api/types';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { StatusBadge } from '@/components/StatusBadge';
-import { DEMO } from '@/demo';
+import { TechDetail } from '@/components/TechDetail';
+import { TRIAL } from '@/env/mode';
 import { isApiError } from '@/lib/errors';
 import { keyLabel } from '@/lib/format';
 import { showEvidence } from '../case/evidenceLinks';
-import { MEMBER_NAMES, TIERS, answersBadge, provenanceText, tierLabel } from './labels';
+import {
+  MEMBER_NAMES,
+  TIERS,
+  TRIAL_NO_ANSWER,
+  answerParts,
+  answersBadge,
+  provenanceText,
+  tierLabel,
+} from './labels';
 import { WHATIF_ID, WhatIfCard } from './WhatIfCard';
 
 /** A turn's heading id, which takes focus when its answer is asked for or shown. */
@@ -46,6 +55,44 @@ function focusSoon(id: string) {
 
 const isBoard = (a: CaseQuestion['answer']): a is BoardAnswer =>
   !!a && Array.isArray((a as BoardAnswer).perspectives);
+
+/**
+ * An answer's opening, and the rest of it one click away: the rest of its text and, for the board, each agent's own
+ * view, which stays in the page for a text search.
+ */
+function AnswerText({ text, views }: { text: string; views?: BoardAnswer['perspectives'] }) {
+  const { lead, rest } = answerParts(text);
+  return (
+    <Stack gap={4}>
+      <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
+        {lead}
+      </Text>
+      {rest || views?.length ? (
+        <TechDetail kind="explain" label="Show the whole answer">
+          <Stack gap={6}>
+            {rest ? (
+              <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
+                {rest}
+              </Text>
+            ) : null}
+            {views?.length ? (
+              <List size="sm" spacing={4} aria-label="Each agent's view">
+                {views.map((p) => (
+                  <List.Item key={p.member}>
+                    <Text span fw={600} size="sm">
+                      {MEMBER_NAMES[p.member] ?? keyLabel(p.member)}:
+                    </Text>{' '}
+                    {p.view}
+                  </List.Item>
+                ))}
+              </List>
+            ) : null}
+          </Stack>
+        </TechDetail>
+      ) : null}
+    </Stack>
+  );
+}
 
 /** An answer's citations: evidence ids open the Evidence tab on that kind, W<n> moves to the What-if card. */
 function Cites({ cites }: { cites: string[] }) {
@@ -83,7 +130,7 @@ function Turn({ q }: { q: CaseQuestion }) {
     <Box component="article" aria-labelledby={turnId(q)} className="ask-turn">
       <Stack gap={6}>
         <Group gap="xs" wrap="nowrap" align="flex-start" justify="space-between">
-          <Title order={4} fz="sm" id={turnId(q)} tabIndex={-1}>
+          <Title order={4} id={turnId(q)} tabIndex={-1}>
             {q.question}
           </Title>
           <Badge
@@ -104,21 +151,7 @@ function Turn({ q }: { q: CaseQuestion }) {
           </Group>
         ) : q.state === 'answered' && a ? (
           <Stack gap={6}>
-            <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-              {a.answer}
-            </Text>
-            {isBoard(a) && a.perspectives.length ? (
-              <List size="sm" spacing={4}>
-                {a.perspectives.map((p) => (
-                  <List.Item key={p.member}>
-                    <Text span fw={600} size="sm">
-                      {MEMBER_NAMES[p.member] ?? keyLabel(p.member)}:
-                    </Text>{' '}
-                    {p.view}
-                  </List.Item>
-                ))}
-              </List>
-            ) : null}
+            <AnswerText text={a.answer} views={isBoard(a) ? a.perspectives : undefined} />
             {isBoard(a) && a.suggested_change ? (
               <Text size="sm">
                 The board suggests a profile change
@@ -147,36 +180,44 @@ function Turn({ q }: { q: CaseQuestion }) {
 
 /**
  * Why a question was not asked. A suggested turn with no recording, asked by someone who may not spend the model budget,
- * is 409 no_recorded_answer: not a fault, so it reads as a note naming who can ask it live.
+ * is 409 no_recorded_answer: not a fault, so it reads as a note naming who can ask it live. In the trial nobody can,
+ * so it steers to the suggested questions instead.
  */
 function AskError({ error }: { error: unknown }) {
   if (isApiError(error) && error.code === 'no_recorded_answer')
     return (
       <Alert color="blue" title="No recorded answer">
-        {error.detail || 'This question has no recorded answer; a judge can ask it live.'}
+        {TRIAL
+          ? TRIAL_NO_ANSWER
+          : error.detail || 'This question has no recorded answer; a judge can ask it live.'}
       </Alert>
     );
   return <ErrorAlert error={error} title="The question was not asked" />;
 }
 
+/** Whether the person may ask in their own words, and if not, why; `trial` when the trial is the reason. */
+interface FreeTextAccess {
+  open: boolean;
+  why: string;
+  badge?: string;
+  trial?: boolean;
+}
+
 /**
  * Whether the person may ask in their own words: a model key on a real instance, the operator role, and the right to
- * spend the day's model budget (the public demo's own user has it not, a judge has).
+ * spend the day's model budget (the public demo's own user has it not, a judge has). The trial has no model, so there
+ * the box shows, disabled, with its reason, and points to the suggested questions.
  */
-function useFreeText(): { open: boolean; why: string; badge?: string } {
+function useFreeText(): FreeTextAccess {
   const me = useMe().data;
   const settings = useSettings();
+  if (TRIAL) return { open: false, trial: true, why: 'Needs a real model: not in the trial.' };
   if (!me?.operator) return { open: false, why: 'Asking needs the operator role.' };
   if (me.can?.liveAgents === false)
     return {
       open: false,
       why: 'On the public demo, a question of your own is for a judge to ask live. Pick a suggested question above: its answers were recorded live.',
       badge: 'Judges only',
-    };
-  if (DEMO)
-    return {
-      open: false,
-      why: 'Free text needs a model key. In this demo, pick a suggested question above.',
     };
   const s = settings.data;
   if (!s?.providerConfigured || s.mock)
@@ -195,13 +236,30 @@ function FreeText({
   onAsked,
 }: {
   caseId: string;
-  access: { open: boolean; why: string; badge?: string };
+  access: FreeTextAccess;
   tier: QuestionTier;
   conversation?: string;
   onAsked: (conversation: string, turn: number) => void;
 }) {
   const ask = useAskQuestion(caseId);
   const [text, setText] = useState('');
+  // In the trial the box stays in sight, disabled, so the capability is seen and the reason is given
+  if (access.trial)
+    return (
+      <Stack gap="xs">
+        <Textarea
+          label="Your own question"
+          description={access.why}
+          placeholder="In the trial, pick a suggested question"
+          autosize
+          minRows={2}
+          disabled
+        />
+        <Group>
+          <Button disabled>Ask</Button>
+        </Group>
+      </Stack>
+    );
   if (!access.open)
     return (
       <Group className="ask-locked" justify="space-between" wrap="wrap" gap="xs" p="sm">
@@ -429,14 +487,14 @@ export function AskPanel({ caseId }: { caseId: string }) {
             <Stack gap={2}>
               <Group gap="xs">
                 <IconMessageQuestion size={16} aria-hidden />
-                <Title order={3} fz="sm" id="ask-thread-title">
+                <Title order={3} id="ask-thread-title">
                   {example ? 'Example conversation' : 'Conversation'}
                 </Title>
               </Group>
               {head ? (
                 <Text size="xs" c="dimmed">
                   {provenanceText(head)}.
-                  {!access.open ? ' With an API key you can ask your own questions.' : ''}
+                  {!access.open && !access.trial ? ' With an API key you can ask your own questions.' : ''}
                 </Text>
               ) : null}
             </Stack>

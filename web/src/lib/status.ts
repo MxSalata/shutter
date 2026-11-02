@@ -1,6 +1,9 @@
 import {
   IconBroadcast,
+  IconChecks,
   IconCircleCheck,
+  IconCircleMinus,
+  IconCircleOff,
   IconCircleX,
   IconClock,
   IconCode,
@@ -10,19 +13,25 @@ import {
   IconLockCancel,
   IconMinus,
   IconPlayerPlay,
+  IconPlayerSkipForward,
   IconProgress,
   IconQuestionMark,
+  IconRepeat,
   IconSend,
   IconShieldCheck,
   IconShieldQuestion,
   IconShieldX,
+  IconTargetOff,
+  IconTool,
   IconUserCheck,
   IconUserQuestion,
+  IconUsers,
   IconAlertCircle,
   IconAlertTriangle,
   IconInfoCircle,
 } from '@tabler/icons-react';
-import { humanize } from './format';
+import type { CaseState, CaseSummary, IncidentSummary, Mode, Scenario } from '@/api/types';
+import { humanize, plural } from './format';
 import type { Status, Tone } from './tone';
 
 /**
@@ -99,14 +108,14 @@ export const DISPOSITIONS: Record<string, Status> = {
     'neutral',
     'Resend',
     'Send the same operation again, conditional on the receiver version, after rehearsal and the gate',
-    IconListDetails,
+    IconRepeat,
   ),
-  reconcile: s('neutral', 'Reconcile', 'It was applied already: record that, send nothing', IconListDetails),
+  reconcile: s('neutral', 'Reconcile', 'It was applied already: record that, send nothing', IconChecks),
   superseded: s(
     'neutral',
     'Superseded',
     'A later event moved the encounter on: sending it now would undo that',
-    IconListDetails,
+    IconPlayerSkipForward,
   ),
   more_evidence: s('attention', 'More evidence', 'The evidence does not decide it yet', IconQuestionMark),
   escalate: s('attention', 'Escalate', 'A person must decide', IconUserQuestion),
@@ -114,13 +123,13 @@ export const DISPOSITIONS: Record<string, Status> = {
     'neutral',
     'Handled by hand',
     'The team corrected the systems by hand, and a person closed the case; Shutter did not verify the correction',
-    IconListDetails,
+    IconTool,
   ),
   abandoned: s(
     'neutral',
     'Abandoned',
     'An approver gave the case up after its workflow stopped moving; nothing more is sent, and it can be reinvestigated',
-    IconListDetails,
+    IconCircleOff,
   ),
 };
 
@@ -312,3 +321,271 @@ export const SEVERITY_STATUS: Record<string, Status> = {
   low: s('info', 'Low', undefined, IconInfoCircle),
   info: s('neutral', 'Info', undefined, IconInfoCircle),
 };
+
+/**
+ * Who releases a write of a kind at a tier, as the site profile answers it: the site's written policy (information, so
+ * it stands out), a person (attention: a person is needed), a person for each chain, or the board (neutral). One map
+ * for the site profile's matrix, its receiver cards and a case's receiver line.
+ */
+export const RELEASES: Record<string, Status> = {
+  automatic: s(
+    'info',
+    "The site's written policy",
+    'Released by the site profile without a person, after the gate',
+    IconFileDescription,
+  ),
+  approval: s('attention', 'A person', 'One approval by a person with the approver role', IconUserCheck),
+  per_chain: s(
+    'attention',
+    'A person, per chain',
+    "A person approves each chain's release on its own",
+    IconUserCheck,
+  ),
+  board: s(
+    'neutral',
+    'The board decides',
+    'The board of agents decides; a person releases its plan',
+    IconUsers,
+  ),
+};
+
+export const release = (value: string): Status => RELEASES[value] ?? s('neutral', humanize(value));
+
+/** The states a case passes through while its workflow runs, before it ends or waits for a person. */
+const RUNNING_STATES: readonly CaseState[] = [
+  'detected',
+  'collecting',
+  'investigating',
+  'grouped',
+  'proposed',
+  'gated',
+  'rehearsing',
+  'approved',
+  'executing',
+  'verifying',
+];
+
+/** What a case needs for its outcome: the summary's state and disposition, and what it wrote and verified when sent. */
+export type OutcomeCase = Pick<CaseSummary, 'state' | 'disposition'> &
+  Partial<Pick<CaseSummary, 'writes' | 'verification' | 'receiver'>> & { mode?: Mode | string };
+
+/** The part of a scenario its cases are compared with. */
+export type ExpectedScenario = Pick<Scenario, 'id' | 'expected'>;
+
+export interface Expectation {
+  /** as-expected: matches; stopped: blocked by the gate where the scenario expects no block; differs: not expected. */
+  kind: 'as-expected' | 'stopped' | 'differs' | 'unknown';
+  label: string;
+  /** The disposition the scenario expects of this case, when one applies. */
+  expects?: string;
+}
+
+/**
+ * How a case compares with its scenario's expectation, where one applies: the receiver's own expectation when the
+ * scenario names one (S22), the mode's own additions when it has them (S21 in Rules only mode), and none for an incident
+ * scenario (S11, S12: their expectation is per encounter) or a scenario with no expected disposition. Unknown, too,
+ * while the case has not ended or waits for a person's approval.
+ */
+export function expectationOf(c: OutcomeCase, scenario?: ExpectedScenario | null): Expectation {
+  const unknown: Expectation = { kind: 'unknown', label: '' };
+  const base = scenario?.expected;
+  if (!scenario || !base || base.incident) return unknown;
+  const byMode = c.mode ? base.by_mode?.[c.mode as Mode] : undefined;
+  const e = byMode ? { ...base, ...byMode } : base;
+  const receiver = c.receiver ? e.by_receiver?.[c.receiver] : undefined;
+  const expects = receiver ? receiver.disposition : e.disposition;
+  const write = receiver ? receiver.write : e.write;
+  if (!expects) return unknown;
+  const matches = c.disposition === expects || (e.acceptable ?? []).includes(c.disposition);
+  if (c.state === 'blocked')
+    return e.blocked_by
+      ? { kind: 'as-expected', label: 'As expected', expects }
+      : { kind: 'stopped', label: `Stopped by the gate; ${scenario.id} expects ${expects}`, expects };
+  if (c.state === 'resolved') {
+    const wroteWrongly = (c.writes ?? 0) > 0 && write === false;
+    return !matches || wroteWrongly
+      ? { kind: 'differs', label: `Not the expected outcome: ${scenario.id} expects ${expects}`, expects }
+      : { kind: 'as-expected', label: 'As expected', expects };
+  }
+  if (c.state === 'escalated' && matches) return { kind: 'as-expected', label: 'As expected', expects };
+  return unknown;
+}
+
+/** The case outcome's kinds, one per row of the rule below, for counting and filtering. */
+export type CaseOutcomeKey =
+  | 'handled-by-hand'
+  | 'abandoned'
+  | 'awaiting-approval'
+  | 'escalated'
+  | 'blocked'
+  | 'failed'
+  | 'running'
+  | 'not-as-expected'
+  | 'not-committed'
+  | 'contradiction'
+  | 'unverified'
+  | 'delivered'
+  | 'nothing-to-send-verified'
+  | 'nothing-to-send'
+  | 'resolved';
+
+export type CaseOutcome = Status & { short: string; key: CaseOutcomeKey };
+
+const o = (
+  key: CaseOutcomeKey,
+  tone: Tone,
+  label: string,
+  short: string,
+  icon: Status['icon'],
+  hint?: string,
+): CaseOutcome => ({ key, tone, label, short, icon, hint });
+
+/**
+ * What came of a case, coloured by its outcome rather than its workflow state: the first rule that matches wins. A
+ * verification knows a write landed, not that it was right, so a delivery reads "Delivered: verified at the receiver",
+ * never "recovered"; and a resolved case its scenario did not expect (rules alone's S8 resend, C-000021) is blocking,
+ * however verified. The writes and the verification count only when the summary sends them; without them a resolved
+ * case is "Resolved", as before. `label` is the long form (the case page, a list badge's tooltip), `short` the list's.
+ */
+export function caseOutcome(c: OutcomeCase, scenario?: ExpectedScenario | null): CaseOutcome {
+  if (c.disposition === 'handled_by_hand')
+    return o('handled-by-hand', 'neutral', 'Handled by hand', 'Handled by hand', IconTool);
+  if (c.disposition === 'abandoned')
+    return o('abandoned', 'neutral', 'Abandoned', 'Abandoned', IconCircleOff);
+  if (c.state === 'awaiting_approval')
+    return o(
+      'awaiting-approval',
+      'attention',
+      'Waiting for approval',
+      'Waiting for approval',
+      IconUserQuestion,
+    );
+  if (c.state === 'escalated')
+    return o('escalated', 'attention', 'Escalated: a person decides', 'Escalated', IconUserQuestion);
+  if (c.state === 'blocked')
+    return o('blocked', 'blocking', 'Blocked: nothing sent', 'Blocked', IconHandStop);
+  if (c.state === 'failed') return o('failed', 'blocking', 'Failed', 'Failed', IconAlertCircle);
+  if (RUNNING_STATES.includes(c.state)) {
+    const label = caseState(c.state).label;
+    return o('running', 'info', label, label, IconProgress);
+  }
+  if (c.state === 'resolved') {
+    const expectation = expectationOf(c, scenario);
+    if (expectation.kind === 'differs')
+      return o('not-as-expected', 'blocking', expectation.label, 'Not as expected', IconTargetOff);
+    const known = c.writes !== undefined && c.verification !== undefined;
+    if (known && c.verification === 'not_committed')
+      return o(
+        'not-committed',
+        'blocking',
+        "Didn't take effect at the receiver",
+        "Didn't take effect",
+        IconCircleX,
+      );
+    if (known && c.verification === 'failed')
+      return o(
+        'contradiction',
+        'blocking',
+        'Contradiction at the receiver: a person must check',
+        'Contradiction',
+        IconCircleX,
+      );
+    if (known && c.verification === 'unresolved')
+      return o(
+        'unverified',
+        'attention',
+        "Couldn't verify at the receiver",
+        "Couldn't verify",
+        IconQuestionMark,
+      );
+    if (known && c.verification === 'verified')
+      return (c.writes ?? 0) > 0
+        ? o(
+            'delivered',
+            'positive',
+            'Delivered: verified at the receiver',
+            'Delivered, verified',
+            IconCircleCheck,
+          )
+        : o(
+            'nothing-to-send-verified',
+            'positive',
+            'Nothing to send: verified at the receiver',
+            'Nothing to send, verified',
+            IconCircleCheck,
+          );
+    // A superseded or reconciled case sends nothing by its nature, so its writes need not be sent to say so
+    if ((c.writes === undefined || c.writes === 0) && ['superseded', 'reconcile'].includes(c.disposition))
+      return o('nothing-to-send', 'neutral', 'Nothing to send', 'Nothing to send', IconCircleMinus);
+  }
+  return o(
+    'resolved',
+    'neutral',
+    c.state === 'resolved' ? 'Resolved' : humanize(c.state),
+    c.state === 'resolved' ? 'Resolved' : humanize(c.state),
+    IconCircleCheck,
+    'Closed. The record does not say what was written or verified.',
+  );
+}
+
+/** The incident outcome's kinds, for counting and filtering. */
+export type IncidentOutcomeKey =
+  'verified' | 'stopped' | 'rejected' | 'person' | 'taking' | 'running' | 'closed';
+
+/**
+ * What came of an incident, from its state and its chains' states (`progress.byState`): every chain verified is
+ * positive; a chain stopped or rejected is blocking; a chain escalated or waiting for a person is attention; while
+ * open, it is taking cases (information).
+ */
+export function incidentOutcome(
+  i: Pick<IncidentSummary, 'state' | 'progress'>,
+): Status & { key: IncidentOutcomeKey } {
+  const by = i.progress?.byState ?? {};
+  const chains = i.progress?.chains ?? Object.values(by).reduce((a, b) => a + b, 0);
+  const n = (k: string) => by[k] ?? 0;
+  if (n('stopped'))
+    return {
+      key: 'stopped',
+      tone: 'blocking',
+      label: `${n('stopped')} stopped`,
+      hint: `${plural(n('stopped'), 'chain')} stopped at the first surprise: the rest went to a person`,
+      icon: IconHandStop,
+    };
+  if (n('rejected'))
+    return {
+      key: 'rejected',
+      tone: 'blocking',
+      label: `${n('rejected')} rejected`,
+      hint: `A person rejected ${plural(n('rejected'), 'chain')}: nothing of ${n('rejected') === 1 ? 'it' : 'them'} was sent`,
+      icon: IconCircleX,
+    };
+  if (n('escalated') || n('awaiting_approval') || i.state === 'awaiting_approval')
+    return {
+      key: 'person',
+      tone: 'attention',
+      label: n('escalated') ? `${n('escalated')} escalated` : 'Waiting for approval',
+      hint: n('escalated')
+        ? `${plural(n('escalated'), 'chain')} handed to a person`
+        : 'A person must approve its release',
+      icon: IconUserQuestion,
+    };
+  if (i.state === 'open')
+    return {
+      key: 'taking',
+      tone: 'info',
+      label: 'Taking cases',
+      hint: 'Failures to the receiver join it',
+      icon: IconProgress,
+    };
+  if (i.state !== 'closed')
+    return { key: 'running', tone: 'info', label: humanize(i.state), icon: IconProgress };
+  if (chains > 0 && n('resolved') === chains)
+    return {
+      key: 'verified',
+      tone: 'positive',
+      label: chains === 1 ? 'Its chain verified' : `All ${chains} chains verified`,
+      hint: 'Every operation verified at the receiver',
+      icon: IconCircleCheck,
+    };
+  return { key: 'closed', tone: 'neutral', label: 'Closed', icon: IconCircleCheck };
+}
