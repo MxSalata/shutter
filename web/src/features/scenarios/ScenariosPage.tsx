@@ -49,11 +49,11 @@ import { formatAge, humanize } from '@/lib/format';
 import { playedFor } from '@/lib/proof';
 import type { Tone } from '@/lib/tone';
 import { useTechnical } from '@/stores/appearance';
+import { HINT_EVENTS } from '@/theme';
 import { MoreAbout } from './MoreAbout';
 import { StartHere } from './StartHere';
 import { ModeName, ScenariosHero, TryFirst } from './TryFirst';
 import { hl7Events, recordedLine, SCENARIOS_LEAD, splitSummary } from './scenarioText';
-import './scenarios.css';
 
 const ALL_MODES: { value: Mode; label: string; hint: string }[] = [
   {
@@ -207,7 +207,7 @@ function ExpectedOutcome({ s, mode }: { s: Scenario; mode: Mode }) {
         {e.acceptable
           ?.filter((a) => a !== e.disposition)
           .map((a) => (
-            <Tooltip key={a} label="Also an acceptable answer">
+            <Tooltip key={a} label="Also an acceptable answer" events={HINT_EVENTS}>
               <Badge variant="dot" color="gray" style={{ textTransform: 'none' }} tabIndex={0}>
                 or {humanize(a)}
               </Badge>
@@ -219,7 +219,12 @@ function ExpectedOutcome({ s, mode }: { s: Scenario; mode: Mode }) {
         <Group gap={6} wrap="nowrap" align="center">
           <IconShieldX size={16} aria-hidden style={{ flex: 'none' }} />
           <Text size="sm">Stops on</Text>
-          <Tooltip label="The reason code the gate or the dispatch should stop on" multiline maw={260}>
+          <Tooltip
+            label="The reason code the gate or the dispatch should stop on"
+            multiline
+            maw={260}
+            events={HINT_EVENTS}
+          >
             <CodeChip tabIndex={0}>{e.blocked_by}</CodeChip>
           </Tooltip>
         </Group>
@@ -355,7 +360,7 @@ function ScenarioRow({
   const events = technical ? hl7Events(s.steps ?? []) : '';
   return (
     <StackTable.Tr
-      className="tone-row scenario-row"
+      className="tone-row"
       data-scenario={s.id}
       data-defined={defined ? undefined : 'false'}
       data-tone={latestTone(s, found)}
