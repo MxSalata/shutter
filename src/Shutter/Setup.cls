@@ -137,7 +137,7 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         }
         If root '= "" {
             Set sc = ##class(Shutter.Store.SiteProfile).SeedFromFile(root _ "knowledge/site/profile.json") Quit:$$$ISERR(sc)
-            // The live hospital (CONTRACTS 4.4, v1.34; the owner, 1 Nov 2026): its single cases at tier 2 wait for a person.
+            // The live hospital (CONTRACTS 4.4, v1.34; decided on 1 Nov 2026): its single cases at tier 2 wait for a person.
             Set sc = ..LiveProfilePolicy(root _ "knowledge/site/profile.json") Quit:$$$ISERR(sc)
             Set sc = ##class(Shutter.Catalogue.Entry).SeedFromFile(root _ "knowledge/catalogue/catalogue.json", .entries) Quit:$$$ISERR(sc)
             Set ^Shutter.Config("catalogue", "entries") = $GET(entries, 0)
@@ -236,7 +236,7 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     Quit:$$$ISERR(sc) sc
     Set sc = ..EnsureRole("Shutter_Demo", "Shutter public demo: reads everything, reinvestigates, approves and asks; cannot run or reset scenarios, save the site profile or the library, or import a schema", approverRes _ ",%Ens_Portal:U", "%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc
-    // A judge (v1.34, the owner's choice of 1 Nov 2026): the public demo's role plus the live agents, under the model budget and
+    // A judge (v1.34, decided on 1 Nov 2026): the public demo's role plus the live agents, under the model budget and
     // a share of their own; the demo role never spends.
     Set sc = ..EnsureRole("Shutter_Judge", "Shutter judge: the public demo's role plus the live agents (live questions, convening the board), under the model budget", approverRes _ ",%Ens_Portal:U,Shutter_LiveAgents:U", "%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc
@@ -804,7 +804,7 @@ ClassMethod ApplyDefaultSettings(production As %String = "Shutter.Production") A
 /// Make Shutter.Production the namespace's production and start it, when the class is compiled. When InstallInto
 /// put Shutter's items in the site's own production, there is nothing of Shutter's to start, and that production is
 /// never stopped here.
-/// The live hospital's policy (CONTRACTS 4.4, v1.34; the owner's choice of 1 Nov 2026, "single cases at tier 2 wait for an
+/// The live hospital's policy (CONTRACTS 4.4, v1.34; decided on 1 Nov 2026, "single cases at tier 2 wait for an
 /// approval in the live hospital"): when the install is told SHUTTER_LIVE=1 (or on is 1), the shipped profile's policy for
 /// tier 2, single chains becomes approval, so the demo's visitors always have a case to approve, and the profile is stored
 /// with the seed's path and " (live hospital)" as its source, which the seed then leaves alone on a reinstall. A profile a
