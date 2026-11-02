@@ -1515,7 +1515,8 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   the event log, with a warning for live mode without a provider (6.6); findings and plans cite only the evidence they were
   given (6.6); the image's `WITH_AIHUB` defaults to `auto` and the Doctor reports `edition` (12); a repeated decision answers with the
   approval taken, an inactive Workflow user is no approver, and the intake refuses a body over 2 MB (5, 11, 14.5); an approval
-  wait is bounded, `ApprovalWaitSeconds` (6.4); each item of the review that lands adds its line here.
+  wait is bounded, `ApprovalWaitSeconds` (6.4); boards per minute are capped, `BoardsPerMinute`, the storm stopgap (6.6); each
+  item of the review that lands adds its line here.
 - v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:
   run, reset, purge) and `Shutter_Configure` (the site's writes: the profile, the library, a schema import, the review
   annotations), held by the operator and the approver as before; the role `Shutter_Demo` (reads, reinvestigates, approves and
