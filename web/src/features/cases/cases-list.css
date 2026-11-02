@@ -1,0 +1,59 @@
+/*
+ * The Cases list's own rows: the order and the inline facts of the phone card. The shared rules for the plain sentence
+ * and for hiding a column's visible name are styles.css's `stack-line` and `data-label-hidden`.
+ *
+ * At full width the table is a table. On a phone (`stack-table stack-cards`, styles.css) each case is a compact card:
+ * line 1 its id and its outcome badge, line 2 the plain sentence of what failed, then one wrapping line of facts (the
+ * receiver and what reached it, the scenario, who investigated) and last the proposed action. The cells keep their
+ * `data-label`s for screen readers and tests; the visible column names are hidden, since each value names itself.
+ */
+.cases-table .at-receiver {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+@media (max-width: 35.99em) {
+  /* The six tiles are two rows of three, with their words and their figures: the tone icon gives way on a phone */
+  .cases-tiles .stat-tile {
+    padding: 10px 10px 8px !important;
+  }
+  .cases-tiles .tile-icon {
+    display: none;
+  }
+  /* The facts of a case on one wrapping line: the scenario's mode beside its id, who investigated beside its entry */
+  .cases-table td[data-label='Scenario'] > p {
+    display: inline;
+  }
+  .cases-table .case-mode {
+    margin-inline-start: 6px;
+  }
+  .cases-table .case-who {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 6px;
+  }
+  .cases-table.stack-table tr td.case-line {
+    order: 1;
+  }
+  .cases-table.stack-table tr td.case-meta {
+    order: 2;
+    flex: 0 1 auto;
+    width: auto !important;
+  }
+  .cases-table.stack-table tr td.case-last {
+    order: 3;
+  }
+  .cases-table .at-receiver {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 6px;
+  }
+  /* The case id's cell holds its time under it; the forwarded tag stays beside the id */
+  .cases-table.stack-table tr td:first-child {
+    min-width: 0;
+  }
+}

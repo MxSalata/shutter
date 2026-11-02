@@ -1,22 +1,28 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/mocks/node';
-import { resetMock } from '@/mocks/handlers';
+import { resetMock, writesOf } from '@/mocks/handlers';
 import recording from '@/mocks/fixtures.json';
 import { ToneLegend } from '@/components/ToneLegend';
-import type { CaseSummary } from '@/api/types';
+import type { CaseSummary, Scenario } from '@/api/types';
+import { layer1WordCount } from '@/test/words';
+import { renderUi } from '@/test/render';
 import { theme } from '@/theme';
 import { MemoryRouter } from 'react-router';
-import {
+import CasesPage, {
   AttentionTile,
+  casesOfGroup,
   CasesTable,
+  closedCounts,
   ForwardedBadge,
   InvestigatedBy,
   investigatedBy,
   proposalNote,
+  whatFailed,
 } from './CasesPage';
 
 // The list's tag on its own: the page's filters (two Selects) take tens of seconds to render under jsdom, and so
@@ -149,7 +155,7 @@ describe('CasesTable', () => {
         .map((h) => h.textContent),
     ).toEqual([
       'Case',
-      'State',
+      'Outcome',
       'Proposed action',
       'At the receiver',
       'What failed',
@@ -162,7 +168,7 @@ describe('CasesTable', () => {
     // The first cell is the case id, the card's title on a phone; every other one carries its column's name
     expect(cells[0]).not.toHaveAttribute('data-label');
     expect(cells.slice(1).map((c) => c.getAttribute('data-label'))).toEqual([
-      'State',
+      'Outcome',
       'Proposed action',
       'At the receiver',
       'What failed',
@@ -226,6 +232,9 @@ describe('ToneLegend', () => {
     const legend = screen.getByRole('list', { name: 'What the colours mean' });
     expect(within(legend).getAllByRole('listitem')).toHaveLength(5);
     expect(legend).toHaveTextContent('Attentiona person is needed');
+    expect(legend).toHaveTextContent('closed, or a decision; nothing waiting');
+    expect(legend).toHaveTextContent('verified at the receiver, a passed check, or a result as expected');
+    expect(legend).toHaveTextContent('refused, failed or contradicted at the receiver');
   });
 });
 
@@ -242,5 +251,331 @@ describe('the list from the mock', () => {
     const blocked = body.items.find((c) => c.caseId === 'C-000014');
     expect(resolved).toMatchObject({ writes: 1, verification: 'verified' });
     expect(blocked).toMatchObject({ writes: 0, verification: '' });
+  });
+});
+
+const scenarios = recording.scenarios as unknown as Scenario[];
+// The list as the mock sends it: each summary with the writes and the verification counted from its attempts
+const summaries = Object.values(recording.cases as unknown as Record<string, { summary: CaseSummary }>).map(
+  (c) => ({ ...c.summary, ...writesOf(c as never) }),
+);
+const scenarioOf = (c: CaseSummary) => scenarios.find((s) => s.id === c.scenario);
+
+describe('whatFailed', () => {
+  const at = (headline: string) =>
+    whatFailed({ headline, event: 'transfer', ward: 'WARD-B', encounterId: 'ENC-1' });
+
+  it('gives the first sentence in full and keeps the rest for the disclosure', () => {
+    const w = at(
+      'Resend the transfer to WARD-B unchanged, after rehearsal and approval. Catalogue E16, The destination bed is held by a patient who is leaving.',
+    );
+    expect(w.first).toBe('Resend the transfer to WARD-B unchanged, after rehearsal and approval.');
+    expect(w.rest).toBe('Catalogue E16, The destination bed is held by a patient who is leaving.');
+  });
+
+  it('takes the next sentence with one of under six words, so the cell says what failed', () => {
+    expect(
+      at('Valid message. Do not resend: a later event moved the encounter on. Catalogue E1, Superseded.'),
+    ).toEqual({
+      first: 'Valid message. Do not resend: a later event moved the encounter on.',
+      rest: 'Catalogue E1, Superseded.',
+    });
+    const escalated = at(
+      'Escalated to a person. PAS transfer MSG00802 failed with HTTP 503 ward_unavailable, and there is no receipt (404). The receiver is at v2.',
+    );
+    expect(escalated.first).toMatch(/^Escalated to a person\. PAS transfer MSG00802 failed/);
+    expect(escalated.rest).toBe('The receiver is at v2.');
+  });
+
+  it("reads the gate's headline as the checks that failed, and a summary with no headline as its own fields", () => {
+    expect(
+      at('Blocked by the gate: Blocked: conformance PARSE_FAILED (policy 2026-11-01.1, stage proposal)'),
+    ).toEqual({ first: 'Blocked by the gate: the conformance check failed.', rest: '' });
+    expect(at('')).toEqual({ first: 'Transfer to WARD-B for ENC-1', rest: '' });
+  });
+
+  it('leaves no first sentence cut with an ellipsis of the page', () => {
+    for (const c of summaries) expect(whatFailed(c).first).not.toMatch(/\.\.\.$/);
+  });
+});
+
+describe('the closed outcomes', () => {
+  it('count the recorded cases by outcome, each against its own scenario: the rules-only S8 resend is not a delivery', () => {
+    const counts = closedCounts(summaries, scenarioOf);
+    const delivered = casesOfGroup(summaries, 'delivered', scenarioOf);
+    expect(delivered.map((c) => c.caseId)).not.toContain('C-000021');
+    expect(delivered.length).toBe(counts.delivered);
+    // Without its scenario the same case would be a verified delivery
+    expect(casesOfGroup(summaries, 'delivered', () => undefined).map((c) => c.caseId)).toContain('C-000021');
+    expect(counts.delivered).toBeGreaterThan(20);
+    expect(counts.nothing).toBeGreaterThan(5);
+    expect(counts['by-hand']).toBe(0);
+  });
+
+  it('put a hand fix and an abandoned case in "By hand", and both kinds of nothing to send in one', () => {
+    const base = { state: 'resolved', scenario: '' } as CaseSummary;
+    const items = [
+      { ...base, caseId: 'a', disposition: 'handled_by_hand' },
+      { ...base, caseId: 'b', disposition: 'abandoned' },
+      { ...base, caseId: 'c', disposition: 'superseded', writes: 0, verification: 'verified' },
+      { ...base, caseId: 'd', disposition: 'superseded', writes: 0, verification: '' },
+      { ...base, caseId: 'e', disposition: 'resend', writes: 1, verification: 'verified' },
+    ] as CaseSummary[];
+    expect(closedCounts(items, () => undefined)).toEqual({ delivered: 1, nothing: 2, 'by-hand': 2 });
+  });
+});
+
+describe('the technical chips', () => {
+  const c = {
+    ...base,
+    encounterId: 'ENC-1232',
+    disposition: 'resend',
+    mode: 'policy',
+    scenario: 'S23a',
+    openedAt: '2026-11-01T05:46:06Z',
+    failureKind: 'delivery_failed',
+    sourceHeaderId: '31947',
+    planCreatedBy: 'policy:E16',
+    headline: 'Resend the transfer to WARD-B unchanged, after rehearsal and approval.',
+  } as CaseSummary;
+
+  it("show a row's event, failure kind, source header and catalogue entry in Technical only", () => {
+    const { unmount } = renderUi(<CasesTable items={[c]} />);
+    expect(screen.queryByText('delivery_failed')).not.toBeInTheDocument();
+    expect(screen.queryByText('header 31947')).not.toBeInTheDocument();
+    expect(screen.getByText('entry E16')).toBeInTheDocument();
+    unmount();
+    renderUi(<CasesTable items={[c]} />, { detail: 'technical' });
+    expect(screen.getByText('transfer')).toBeInTheDocument();
+    expect(screen.getByText('delivery_failed')).toBeInTheDocument();
+    expect(screen.getByText('header 31947')).toBeInTheDocument();
+    expect(screen.getByText('catalogue E16')).toBeInTheDocument();
+  });
+
+  it('say nothing for a field the summary does not send', () => {
+    renderUi(<CasesTable items={[{ ...c, sourceHeaderId: undefined, planCreatedBy: 'rules' }]} />, {
+      detail: 'technical',
+    });
+    expect(screen.queryByText(/^header /)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^catalogue /)).not.toBeInTheDocument();
+  });
+});
+
+describe('the rows', () => {
+  it('colour each row by what came of the case, and keep the rest of a long headline behind its own button', async () => {
+    renderUi(
+      <CasesTable
+        items={[
+          {
+            ...base,
+            caseId: 'C-000058',
+            disposition: 'resend',
+            scenario: 'S23a',
+            mode: 'policy',
+            writes: 1,
+            verification: 'verified',
+            openedAt: '2026-11-01T05:46:06Z',
+            headline:
+              'Resend the transfer to WARD-B unchanged, after rehearsal and approval. Catalogue E16, The destination bed is held by a patient who is leaving.',
+          } as CaseSummary,
+          {
+            ...base,
+            caseId: 'C-000021',
+            disposition: 'resend',
+            scenario: 'S8',
+            mode: 'rules',
+            writes: 1,
+            verification: 'verified',
+            openedAt: '2026-10-20T17:31:00Z',
+          } as CaseSummary,
+          {
+            ...base,
+            caseId: 'C-000099',
+            state: 'escalated',
+            disposition: 'escalate',
+            mode: 'board',
+            openedAt: '2026-10-20T17:31:00Z',
+          } as CaseSummary,
+        ]}
+        scenarios={scenarios}
+      />,
+    );
+    const row = (id: string) => screen.getByRole('link', { name: id }).closest('tr')!;
+    expect(row('C-000058')).toHaveAttribute('data-tone', 'positive');
+    expect(within(row('C-000058')).getByText('Delivered, verified')).toBeInTheDocument();
+    // The rules-only S8 resend was verified too, but it is not what S8 expects
+    expect(row('C-000021')).toHaveAttribute('data-tone', 'blocking');
+    expect(within(row('C-000021')).getByText('Not as expected')).toBeInTheDocument();
+    expect(row('C-000099')).toHaveAttribute('data-tone', 'attention');
+
+    const first = within(row('C-000058'));
+    const more = first.getByRole('button', { name: 'More about C-000058' });
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      first.getByText('Resend the transfer to WARD-B unchanged, after rehearsal and approval.'),
+    ).toBeVisible();
+    await userEvent.click(more);
+    expect(more).toHaveAttribute('aria-expanded', 'true');
+    await waitFor(() => expect(first.getByText(/^Catalogue E16, The destination bed is held/)).toBeVisible());
+    // A case whose headline is one short sentence has no disclosure
+    expect(within(row('C-000021')).queryByRole('button', { name: /^More about/ })).not.toBeInTheDocument();
+  });
+
+  it('carry the phone card hooks: the sentence and the facts are cells of their own', () => {
+    renderUi(<CasesTable items={[{ ...base, disposition: 'resend', mode: 'board' } as CaseSummary]} />);
+    const row = screen.getByRole('link', { name: 'C-000123' }).closest('tr')!;
+    const cells = within(row).getAllByRole('cell');
+    expect(cells[4]).toHaveClass('case-line');
+    expect(cells.filter((c) => c.classList.contains('case-meta'))).toHaveLength(3);
+    expect(cells[2]).toHaveClass('case-last');
+  });
+});
+
+describe('the page', () => {
+  beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+  afterEach(() => server.resetHandlers());
+  afterAll(() => server.close());
+  beforeEach(() => resetMock('approver'));
+
+  const renderPage = (options: Parameters<typeof renderUi>[1] = {}) =>
+    renderUi(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <CasesPage />
+      </QueryClientProvider>,
+      options,
+    );
+
+  const closedTile = (name: RegExp) => screen.findByRole('button', { name });
+
+  it('counts the closed cases by outcome over the newest 100, and says nothing of a base when it holds them all', async () => {
+    renderPage();
+    const closed = await screen.findByRole('region', { name: 'Closed' });
+    // The trial holds C-000002 at its approval, so one fewer delivery than the 27 that wrote and were verified
+    expect(
+      await within(closed).findByRole('button', { name: /^26 Delivered, verified Show these$/ }),
+    ).toBeVisible();
+    expect(within(closed).getByRole('button', { name: /^12 Nothing to send Show these$/ })).toBeVisible();
+    expect(within(closed).getByRole('button', { name: /^0 By hand Show these$/ })).toBeVisible();
+    expect(screen.queryByText(/in the newest 100/)).not.toBeInTheDocument();
+    // Needs a person: the API's own totals
+    const need = screen.getByRole('region', { name: 'Needs a person' });
+    expect(
+      await within(need).findByRole('button', { name: /^1 Waiting for approval Show these$/ }),
+    ).toBeVisible();
+    expect(within(need).getByRole('button', { name: /^15 Escalated Show these$/ })).toBeVisible();
+    expect(within(need).getByRole('button', { name: /^9 Blocked Show these$/ })).toBeVisible();
+  });
+
+  it('shows the list with an Outcome column, C-000021 as not what its scenario expects, and the count of cases', async () => {
+    renderPage();
+    const table = await screen.findByRole('table');
+    expect(within(table).getByRole('columnheader', { name: 'Outcome' })).toBeVisible();
+    expect(within(table).queryByRole('columnheader', { name: 'State' })).not.toBeInTheDocument();
+    expect(await screen.findByText('64 cases')).toBeVisible();
+    // The newest 25 are shown; C-000021 is older, so find it by its scenario
+    await userEvent.selectOptions(screen.getByLabelText('Scenario', { exact: true }), 'S8');
+    const row = (await screen.findByRole('link', { name: 'C-000021' })).closest('tr')!;
+    expect(row).toHaveAttribute('data-tone', 'blocking');
+    expect(within(row).getByText('Not as expected')).toBeInTheDocument();
+  });
+
+  it('filters the list to a closed outcome from the same read, and a second press shows every case again', async () => {
+    renderPage();
+    const tile = await closedTile(/^26 Delivered, verified Show these$/);
+    expect(tile).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(tile);
+    expect(await screen.findByText('26 cases')).toBeVisible();
+    expect(tile).toHaveAttribute('aria-pressed', 'true');
+    expect(tile).toHaveAccessibleName('26 Delivered, verified Showing these; press to clear');
+    const rows = () => screen.getAllByRole('row').slice(1);
+    await waitFor(() => expect(rows()).toHaveLength(25));
+    for (const r of rows()) expect(within(r).getAllByText('Delivered, verified').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Showing the newest 100 cases/)).not.toBeInTheDocument();
+    // The 26th is on the second page
+    await userEvent.click(screen.getByRole('button', { name: 'Page 2' }));
+    await waitFor(() => expect(rows()).toHaveLength(1));
+    await userEvent.click(tile);
+    expect(await screen.findByText('64 cases')).toBeVisible();
+    expect(tile).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('puts an attention tile and a closed outcome on the list one at a time', async () => {
+    renderPage();
+    const escalated = await screen.findByRole('button', { name: /^15 Escalated Show these$/ });
+    await userEvent.click(escalated);
+    expect(await screen.findByText('15 cases')).toBeVisible();
+    const delivered = await closedTile(/^26 Delivered, verified Show these$/);
+    await userEvent.click(delivered);
+    expect(await screen.findByText('26 cases')).toBeVisible();
+    expect(delivered).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /^15 Escalated Show these$/ })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  it('states its base when there are more than 100 cases: the closed tiles count the newest 100 only', async () => {
+    const many = Array.from({ length: 120 }, (_, i) => ({
+      ...summaries.find((c) => c.caseId === 'C-000058')!,
+      caseId: `C-${String(900 + i).padStart(6, '0')}`,
+      openedAt: new Date(Date.UTC(2026, 10, 1, 5, 0, 0) - i * 60_000).toISOString(),
+    }));
+    server.use(
+      http.get('/api/shutter/cases', ({ request }) => {
+        const q = new URL(request.url).searchParams;
+        const state = q.get('state');
+        const rows = many.filter((c) => !state || c.state === state);
+        const offset = Number(q.get('offset') ?? 0);
+        return HttpResponse.json({
+          items: rows.slice(offset, offset + Number(q.get('limit') ?? 25)),
+          total: rows.length,
+        });
+      }),
+    );
+    renderPage();
+    const closed = await screen.findByRole('region', { name: 'Closed, in the newest 100' });
+    const tile = await within(closed).findByRole('button', { name: /^100 Delivered, verified Show these$/ });
+    expect(screen.queryByText(/Showing the newest 100 cases/)).not.toBeInTheDocument();
+    await userEvent.click(tile);
+    expect(await screen.findByText('Showing the newest 100 cases with this outcome')).toBeVisible();
+    expect(await screen.findByText('100 cases')).toBeVisible();
+  });
+
+  it('keeps its words above the table within the budget, and Technical within one and a half times the Plain page', async () => {
+    const plain = renderPage();
+    const table = await plain.findByRole('table');
+    await plain.findByText('64 cases');
+    // Everything above the table: the lead, the tiles, the filters and the count. The colour key is a legend, counted
+    // apart; a native select shows its chosen option only, not the list it opens
+    const above = (c: HTMLElement) => {
+      const range = document.createRange();
+      range.setStart(c, 0);
+      const card = c.querySelector('[data-tour="cases-list"]')!;
+      let wrapper = c.querySelector('table')!.parentElement!;
+      while (wrapper.parentElement !== card) wrapper = wrapper.parentElement!;
+      range.setEndBefore(wrapper);
+      const box = document.createElement('div');
+      box.appendChild(range.cloneContents());
+      box.querySelectorAll('ul[aria-label="What the colours mean"]').forEach((e) => e.remove());
+      box.querySelectorAll('select').forEach((select) => {
+        const chosen = select.selectedOptions[0]?.textContent ?? '';
+        select.replaceWith(document.createTextNode(chosen));
+      });
+      return layer1WordCount(box);
+    };
+    expect(table).toBeVisible();
+    const plainAbove = above(plain.container);
+    const plainPage = layer1WordCount(plain.container);
+    plain.unmount();
+    const technical = renderPage({ detail: 'technical' });
+    await technical.findByRole('table');
+    await technical.findByText('64 cases');
+    const technicalAbove = above(technical.container);
+    const technicalPage = layer1WordCount(technical.container);
+    // The spec's budget for the list above the table is 60 words (it was 110)
+    expect(plainAbove).toBeLessThanOrEqual(60);
+    expect(technicalAbove).toBeLessThanOrEqual(90);
+    expect(technicalPage).toBeLessThanOrEqual(plainPage * 1.5);
+    expect(technicalPage).toBeGreaterThan(plainPage);
   });
 });
