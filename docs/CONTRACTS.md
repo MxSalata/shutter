@@ -723,6 +723,15 @@ within N hours; a person must decide"; the task's text says so in advance. A dec
 leaves the alarm with nothing to do. An incident's approval task (7.4) is not bounded this way: its chains wait on the
 incident.
 
+**Boards per minute are capped (v1.35; the review's B1 stopgap).** The Case Workflow's `BoardsPerMinute` (6 by default; 0 for
+no cap) counts the boards convened in the current UTC minute (`Shutter.Util.BoardSlots`, a global node per minute); a case
+whose turn finds the minute full does not convene at once: it notes "The board is busy: N convened this minute, the cap is M a
+minute; this case waits S s for a slot" (60 to 90 s), an `Ens.Alarm` keyed by the round brings it back (`board:defer`), and
+it convenes then, on its snapshot's summary, if it still waits and the round is the same. Both convening paths (the board on
+fresh evidence and the policy's `board`) go through one method. A storm of failures therefore costs at most the cap a minute,
+each case waits its turn and none is lost; the fuller answer, one board per failure signature with followers taking the
+leader's diagnosis, is the next step and is not in this build.
+
 **One model call is bounded (v1.35).** The runner gives the provider an HTTP request timeout, `Shutter.Setup.ProviderTimeoutSeconds`
 (`^Shutter.Config("providerTimeoutSeconds")`, `SHUTTER_PROVIDER_TIMEOUT_SECONDS` at a start, 120 s unless set, held to 10
 to 600), and a connect timeout of 10 s, as `http_config` on the provider's configuration unless the site's own configuration
@@ -733,6 +742,12 @@ only between the model's turns; with it the call fails, the run ends with status
 against a server that never answers: AI Hub retries the call, so the run ends after about four times the bound plus a few
 seconds (44 s at 10, 84 s at 20); at the default 120 s that is about eight minutes, inside the board's 600 s. The Doctor
 reports `provider_timeout_seconds`.
+
+**Hostile and malformed output (v1.35).** The schema checks refuse what is not an object, a disposition outside the list
+(whatever its case, with nothing hidden inside it), a confidence that is not a number from 0 to 1, a `summary` or `why` over
+2,000 characters, and the shapes section 6.6 names; a table of such outputs (`Shutter.Test.Hostile`, run on the AI Hub build,
+skipped where the schema classes are not loaded) keeps it so, and asserts that the checks never throw and accept ordinary
+Unicode. What a model wrote and the checks accepted is cleaned when it is restored for the store (9).
 
 **Findings and plans cite only what they were given (v1.35).** `evidence_refs` on a finding or a plan must name keys of the
 evidence object the run received, or keys one level down in it (`message`, `validation`, `error`, `operation`, `route`,
@@ -1014,6 +1029,12 @@ visitors spends at most the cap. **Each user's share** (`SHUTTER_JUDGE_BUDGET_US
 0 or unset means none): every agent request carries who asked (`RequestedBy`: a question's asker, a judge who convened the
 board, `system` for the feed's own runs), the run keeps it, and a run for a user whose live runs today have reached the share is
 refused `budget_exhausted` with "Your share of the day's model budget ... is spent", so one judge cannot spend the day.
+
+**Invisible characters are stripped (v1.35).** `ModelView.Restore` removes from everything a model wrote, before the store
+keeps it, the zero-width characters (U+200B to U+200F, U+2060 to U+2064, U+FEFF), the bidirectional controls (U+202A to U+202E,
+U+2066 to U+2069) and the control characters other than tab, line feed and carriage return, as characters and as JSON escapes
+(`ModelView.Clean`); tabs, line breaks and ordinary Unicode stay. So a summary an approver reads on the case page or in an
+escalation email reads as it is, with nothing hidden in it and nothing that reverses a line.
 
 **The run's own clock (v1.35).** Every run row keeps `startedAtMs`, the start to the millisecond, beside `startedAt`, and
 the three counters AI Hub's session returns on build 154 when it does: `llmMs` (time inside the model's calls), `toolMs`
@@ -1506,7 +1527,9 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   the event log, with a warning for live mode without a provider (6.6); findings and plans cite only the evidence they were
   given (6.6); the image's `WITH_AIHUB` defaults to `auto` and the Doctor reports `edition` (12); a repeated decision answers with the
   approval taken, an inactive Workflow user is no approver, and the intake refuses a body over 2 MB (5, 11, 14.5); an approval
-  wait is bounded, `ApprovalWaitSeconds` (6.4); each item of the review that lands adds its line here.
+  wait is bounded, `ApprovalWaitSeconds` (6.4); boards per minute are capped, `BoardsPerMinute`, the storm stopgap (6.6); invisible
+  characters stripped from agent text, text caps and a hostile-output table (6.6, 9); each item of the review that lands adds
+  its line here.
 - v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:
   run, reset, purge) and `Shutter_Configure` (the site's writes: the profile, the library, a schema import, the review
   annotations), held by the operator and the approver as before; the role `Shutter_Demo` (reads, reinvestigates, approves and

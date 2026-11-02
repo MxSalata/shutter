@@ -43,6 +43,16 @@ Property VerifyTarget As %String(MAXLEN = 128) [ InitialExpression = "Verifier" 
 /// Seconds an approval stays valid.
 Property ApprovalValidSeconds As %Integer [ InitialExpression = 3600 ];
 
+/// Boards convened per minute at most (v1.35): a case that finds the minute's cap reached waits about a minute for a slot
+/// instead of convening at once (Shutter.Util.BoardSlots), so a storm of failures costs the cap a minute rather than one paid
+/// board per message, and no case is lost. 0 means no cap.
+Property BoardsPerMinute As %Integer [ InitialExpression = 6 ];
+
+/// Whether this case is waiting for a board slot, and who asked for the board (OnBoardDefer convenes it then).
+Property BoardDeferred As %Boolean [ InitialExpression = 0 ];
+
+Property DeferredBy As %String(MAXLEN = 100);
+
 /// How long an approval task may wait for a decision (v1.35): after this many seconds with no answer the task is cancelled
 /// and the case escalates, so a plan nobody looked at never waits for ever; 0 waits without limit. 24 hours by default.
 Property ApprovalWaitSeconds As %Integer [ InitialExpression = 86400 ];
@@ -118,7 +128,7 @@ Property ForceBoard As %Boolean [ InitialExpression = 0 ];
 
 Property ConvenedBy As %String(MAXLEN = 100);
 
-Parameter SETTINGS = "EvidenceTarget:Targets,GateTarget:Targets,WardTarget:Targets,ApprovalTarget:Targets,VerifyTarget:Targets,IncidentTarget:Targets,ApprovalValidSeconds:Approval,ApprovalWaitSeconds:Approval,SettleSeconds:Timing,BoardTimeoutSeconds:Timing,MaxRefreshes:Timing";
+Parameter SETTINGS = "EvidenceTarget:Targets,GateTarget:Targets,WardTarget:Targets,ApprovalTarget:Targets,VerifyTarget:Targets,IncidentTarget:Targets,ApprovalValidSeconds:Approval,ApprovalWaitSeconds:Approval,SettleSeconds:Timing,BoardTimeoutSeconds:Timing,BoardsPerMinute:Timing,MaxRefreshes:Timing";
 
 Method OnRequest(request As %Library.Persistent, Output response As %Library.Persistent) As %Status
 {
@@ -250,6 +260,7 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
         If completionkey = "rehearsal" { Set sc = ..OnRehearsal(case, callrequest, callresponse) Quit }
         If completionkey = "approval" { Set sc = ..OnApproval(case, callresponse) Quit }
         If $PIECE(completionkey, ":", 1, 2) = "approval:timeout" { Set sc = ..OnApprovalTimeout(case, +$PIECE(completionkey, ":", 3)) Quit }
+        If $PIECE(completionkey, ":", 1, 2) = "board:defer" { Set sc = ..OnBoardDefer(case, +$PIECE(completionkey, ":", 3)) Quit }
         If completionkey = "preflight" { Set sc = ..OnPreflight(case, callresponse) Quit }
         If completionkey = "gate:dispatch" { Set sc = ..OnGateDispatch(case, callresponse) Quit }
         If completionkey = "execute" { Set sc = ..OnExecute(case, callresponse) Quit }
@@ -383,14 +394,35 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
         If decision = "person" Quit ..PersonByCatalogue(case, cat)
         Do case.Note("note", "Catalogue: " _ $SELECT(decision = "": "no result", 1: decision) _ "; the board decides", "system")
     }
+    Set sc = ..ConveneBoard(case, result.SummaryJSON, "", .convened)
+    Quit:($$$ISERR(sc) || 'convened) sc
+    Quit ..AfterConvene(case, result.SummaryJSON)
+}
+
+/// The board convened on the evidence (6.6): a request to every member of the mode's board, the pending list kept for the
+/// answers, one slot of the minute taken. Under the per-minute cap (v1.35, BoardsPerMinute; 0 for none) a case that finds
+/// the minute full waits for a slot instead: a note says so, an alarm keyed by the round brings it back (OnBoardDefer), and
+/// convened is 0. With no member to convene the rules path takes over (RulesOnly), convened 0 too.
+Method ConveneBoard(case As Shutter.Store.Case, summaryJSON As %String, byWhom As %String = "", Output convened As %Boolean) As %Status
+{
+    Set convened = 0, ..BoardDeferred = 0, sc = $$$OK
+    If ##class(Shutter.Util.BoardSlots).Full(..BoardsPerMinute) {
+        Set wait = 60 + $RANDOM(30)
+        Set ..BoardDeferred = 1, ..DeferredBy = byWhom
+        Do case.Note("note", "The board is busy: " _ ##class(Shutter.Util.BoardSlots).Count() _ " convened this minute, the cap is " _ ..BoardsPerMinute _ " a minute; this case waits " _ wait _ " s for a slot", "system")
+        Set alarm = ##class(Ens.AlarmRequest).%New()
+        Set alarm.Timeout = wait
+        Quit ..SendRequestAsync("Ens.Alarm", alarm, 1, "board:defer:" _ ..Round, "Waiting for a board slot")
+    }
     Set members = ##class(Shutter.Store.BoardMember).MembersForMode($SELECT(..Mode = "policy": "board", 1: ..Mode))
     If members.%Size() = 0 Quit ..RulesOnly(case)
+    Do ##class(Shutter.Util.BoardSlots).Take()
     Set pending = []
     Set iter = members.%GetIterator()
     While iter.%GetNext(.i, .code) {
         Set m = ##class(Shutter.Store.BoardMember).ByCode(code)
         Continue:'$ISOBJECT(m)
-        Set req = ..AgentRequestFor(case, m, result.SummaryJSON, "", .sc)
+        Set req = ..AgentRequestFor(case, m, summaryJSON, "", .sc)
         If '$ISOBJECT(req) Set refused = sc Quit
         Set sc = ..SendRequestAsync(m.ConfigItem, req, 1, "member:" _ code)
         Quit:$$$ISERR(sc)
@@ -398,15 +430,34 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
     }
     If $DATA(refused) Quit ..ModelViewFailed(case, refused)
     Quit:$$$ISERR(sc) sc
-    Set ..PendingJSON = pending.%ToJSON()
-    Do case.Note("note", "Board convened: " _ $REPLACE($REPLACE(pending.%ToJSON(), "[", ""), "]", ""), "system")
+    Set ..PendingJSON = pending.%ToJSON(), convened = 1
+    Do case.Note("note", "Board convened" _ $SELECT(byWhom '= "": " by " _ byWhom, 1: "") _ ": " _ $REPLACE($REPLACE(pending.%ToJSON(), "[", ""), "]", ""), $SELECT(..ForceBoard && (..ConvenedBy '= ""): ..ConvenedBy, 1: "system"))
+    Quit $$$OK
+}
+
+/// After the board is convened: the audit of free text that left IRIS, and the board's timeout armed.
+Method AfterConvene(case As Shutter.Store.Case, summaryJSON As %String) As %Status
+{
     // The audit trail says when free text left IRIS under the site's switch (T27).
     If ##class(Shutter.Store.SiteProfile).ModelFreeText() {
-        Set sm = ##class(Shutter.Util.Json).Parse(result.SummaryJSON, .psc), notesN = 0
+        Set sm = ##class(Shutter.Util.Json).Parse(summaryJSON, .psc), notesN = 0
         If $ISOBJECT(sm) && $ISOBJECT(sm.%Get("message")) && $ISOBJECT(sm.%Get("message").%Get("notes")) Set notesN = sm.%Get("message").%Get("notes").%Size()
         If notesN > 0 Do case.Note("note", "The free text of " _ notesN _ " note(s) is sent to the board, as the site profile (version " _ ##class(Shutter.Util.Json).Str(##class(Shutter.Store.SiteProfile).Current(), "version", 0) _ ") allows", "system")
     }
     Quit ..ArmTimeout("board:timeout")
+}
+
+/// A board slot came round for a deferred case (v1.35): convene now on the snapshot's summary, unless the case has moved on
+/// or the round has changed; a case with no summary to convene on goes to a person.
+Method OnBoardDefer(case As Shutter.Store.Case, round As %Integer) As %Status
+{
+    If round '= ..Round { $$$TRACE("A board slot from round " _ round _ "; the case is in round " _ ..Round) Quit $$$OK }
+    If case.State '= "investigating" { $$$TRACE("A board slot came; the case is " _ case.State _ ", so nothing is due") Quit $$$OK }
+    Set summaryJSON = $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.Summary, 1: "")
+    If summaryJSON = "" Quit case.Transition("escalated", "A board slot came, but the case has no evidence summary to convene the board on; a person must look", "system")
+    Set sc = ..ConveneBoard(case, summaryJSON, ..DeferredBy, .convened)
+    Quit:($$$ISERR(sc) || 'convened) sc
+    Quit ..AfterConvene(case, summaryJSON)
 }
 
 /// The request the case workflow sends a board member, built from the case, its current snapshot's summary,
@@ -706,22 +757,9 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
     Set profile = ##class(Shutter.Store.SiteProfile).Current()
     Do case.Note("note", "Catalogue " _ entry _ " (" _ title _ ") matched alone: " _ outcome _ ". Site policy for tier " _ tier _ ", " _ kind _ ": " _ ..Policy _ " (profile v" _ $CLASSMETHOD(json, "Str", profile, "version", 0) _ ")", "system")
     If (..Policy = "board") || ..ForceBoard {
-        Set members = ##class(Shutter.Store.BoardMember).MembersForMode("board")
-        Set pending = []
-        Set iter = members.%GetIterator()
-        While iter.%GetNext(.i, .code) {
-            Set mem = ##class(Shutter.Store.BoardMember).ByCode(code)
-            Continue:'$ISOBJECT(mem)
-            Set req = ..AgentRequestFor(case, mem, summary.%ToJSON(), "", .sc)
-            If '$ISOBJECT(req) Set refused = sc Quit
-            Set sc = ..SendRequestAsync(mem.ConfigItem, req, 1, "member:" _ code)
-            Quit:$$$ISERR(sc)
-            Do pending.%Push(code)
-        }
-        If $DATA(refused) Quit ..ModelViewFailed(case, refused)
-        Set ..PendingJSON = pending.%ToJSON()
-        Do case.Note("note", "Board convened by " _ $SELECT(..ForceBoard: ..ConvenedBy, 1: "site policy") _ ": " _ $REPLACE($REPLACE(pending.%ToJSON(), "[", ""), "]", ""), $SELECT(..ForceBoard: ..ConvenedBy, 1: "system"))
-        Quit ..ArmTimeout("board:timeout")
+        Set sc = ..ConveneBoard(case, summary.%ToJSON(), $SELECT(..ForceBoard: ..ConvenedBy, 1: "site policy"), .convened)
+        Quit:($$$ISERR(sc) || 'convened) sc
+        Quit ..AfterConvene(case, summary.%ToJSON())
     }
     Set ward = summary.%Get("ward_state")
     Set version = $SELECT($ISOBJECT(ward): $CLASSMETHOD(json, "Str", ward, "version", 0), 1: 0)
@@ -1660,6 +1698,15 @@ Storage Default
 </Value>
 <Value name="43">
 <Value>ConvenedBy</Value>
+</Value>
+<Value name="44">
+<Value>BoardsPerMinute</Value>
+</Value>
+<Value name="45">
+<Value>BoardDeferred</Value>
+</Value>
+<Value name="46">
+<Value>DeferredBy</Value>
 </Value>
 </Data>
 <DefaultData>CaseWorkflowDefaultData</DefaultData>

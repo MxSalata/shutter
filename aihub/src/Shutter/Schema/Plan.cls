@@ -38,7 +38,10 @@ ClassMethod Check(json As %String, citeIds As %String = "") As %DynamicArray
     If '$ISOBJECT(o) || $$$ISERR(sc) Do problems.%Push("plan must be a JSON object") Quit problems
     Set d = ##class(Shutter.Util.Json).Str(o, "disposition")
     If ##class(Shutter.Schema.Findings).#DISPOSITIONS '[ ("," _ d _ ",") Do problems.%Push("disposition must be one of resend, reconcile, superseded, more_evidence, escalate")
-    If ##class(Shutter.Util.Json).Str(o, "summary") = "" Do problems.%Push("summary is required")
+    Set summary = ##class(Shutter.Util.Json).Str(o, "summary")
+    If summary = "" Do problems.%Push("summary is required")
+    If $LENGTH(summary) > 2000 Do problems.%Push("summary must be at most 2000 characters; it is " _ $LENGTH(summary))
+    If $LENGTH(##class(Shutter.Util.Json).Str(o, "why")) > 2000 Do problems.%Push("why must be at most 2000 characters")
     Set action = o.%Get("action")
     If '$ISOBJECT(action) {
         Do problems.%Push("action is required: {type: resend | reconcile | none, operation_key, expected_version}")

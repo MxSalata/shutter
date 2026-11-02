@@ -52,6 +52,19 @@ Method Case() As Shutter.Store.Case
     Quit ##class(Shutter.Store.Case).%OpenId(..CaseRowId)
 }
 
+/// Invisible characters a model wrote are gone once the text is restored (v1.35): zero-width, bidirectional and control
+/// characters, as characters and as JSON escapes; tabs, line breaks and ordinary Unicode stay.
+Method TestInvisibleCharactersAreStripped()
+{
+    Set mv = "Shutter.Util.ModelView"
+    Set dirty = "Re" _ $CHAR(8203) _ "send" _ $CHAR(8234) _ " the message" _ $CHAR(8236) _ $CHAR(0) _ $CHAR(7) _ $CHAR(65279) _ " now" _ $CHAR(9) _ "ok" _ $CHAR(10) _ "Überweisung nach Станция"
+    Do $$$AssertNotTrue(dirty = ##class(Shutter.Util.ModelView).Clean(dirty), "the test text is dirty")
+    Do $$$AssertEquals($CLASSMETHOD(mv, "Clean", dirty), "Resend the message now" _ $CHAR(9) _ "ok" _ $CHAR(10) _ "Überweisung nach Станция", "zero-width, bidi and control characters go; tab, line feed and Unicode letters stay")
+    Do $$$AssertEquals($CLASSMETHOD(mv, "Clean", "{""summary"":""Re\u200Bsend\u202E now\u0007""}"), "{""summary"":""Resend now""}", "the same code points as JSON escapes go too")
+    Do $$$AssertEquals($CLASSMETHOD(mv, "Clean", "{""a"":""\u00e9\n""}"), "{""a"":""\u00e9\n""}", "other escapes stay")
+    Do $$$AssertEquals($CLASSMETHOD(mv, "Restore", "", "x" _ $CHAR(8203) _ "y"), "xy", "Restore cleans even with no case")
+}
+
 Method TestTwoLetterNamesAndAnyCase()
 {
     Set c = ..Case()
