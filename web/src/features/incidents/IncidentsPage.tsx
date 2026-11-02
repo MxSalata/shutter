@@ -3,7 +3,7 @@ import { IconStack2 } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useIncidents, useSettings, useSiteProfile } from '@/api/hooks';
-import type { HeldMessages, IncidentSummary } from '@/api/types';
+import type { HeldMessages, IncidentSummary, LiveStorm } from '@/api/types';
 import { ApiSource } from '@/components/ApiSource';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -17,9 +17,13 @@ import { SummaryBand } from '@/components/SummaryBand';
 import { Term } from '@/components/Term';
 import { TechDetail } from '@/components/TechDetail';
 import { Timestamp } from '@/components/Timestamp';
+import { TRIAL } from '@/env/mode';
+import { StormStrip } from '@/features/storm/StormStrip';
 import { humanize, plural } from '@/lib/format';
 import { MODE_IDENTITY } from '@/lib/hues';
 import { incidentOutcome } from '@/lib/status';
+import { isStormShown } from '@/lib/storm';
+import { useNow } from '@/lib/useNow';
 import { HINT_EVENTS } from '@/theme';
 import { ChainBar } from './ChainBar';
 import { describeHeld, describeKinds, describePolicy, INCIDENT_STATES, statesFromCounts } from './describe';
@@ -80,6 +84,26 @@ function HeldInterfaces({ held }: { held: HeldMessages }) {
         </Table.ScrollContainer>
       </Card>
     </Stack>
+  );
+}
+
+/**
+ * "Break the feed" while a storm plays on the live hospital, or has just finished: the banner's strip, here in its own
+ * card above the incidents, where the storm's incident appears (the banner leaves its strip out on this page).
+ */
+function StormCard({ storm }: { storm: LiveStorm }) {
+  return (
+    <Card padding="md" data-testid="incidents-storm">
+      <StormStrip
+        storm={storm}
+        place="page"
+        heading={
+          <Title order={2} fz="md">
+            Break the feed
+          </Title>
+        }
+      />
+    </Card>
   );
 }
 
@@ -165,7 +189,12 @@ function NoIncidents() {
 export default function IncidentsPage() {
   const [state, setState] = useState<string | null>(null);
   const incidents = useIncidents({ limit: 100 });
-  const held = useSettings().data?.heldMessages;
+  const settings = useSettings().data;
+  const held = settings?.heldMessages;
+  // The banner in the frame reads the settings every 3 s while a storm plays, so this page follows it too
+  const now = useNow();
+  const live = settings?.live?.enabled ? settings.live : undefined;
+  const storm = !TRIAL && live?.storm && isStormShown(live.storm, now) ? live.storm : null;
   const all = incidents.data?.items ?? [];
   const shown = state ? all.filter((i) => i.state === state) : all;
 
@@ -180,6 +209,7 @@ export default function IncidentsPage() {
         details="Chains per encounter, released in order and verified one operation at a time."
       />
       <Stack gap="md">
+        {storm ? <StormCard storm={storm} /> : null}
         {held && held.count > 0 ? <HeldInterfaces held={held} /> : null}
         {incidents.isError ? (
           <ErrorAlert
