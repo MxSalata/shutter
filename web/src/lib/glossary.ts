@@ -130,6 +130,11 @@ export const GLOSSARY = {
     standard: true,
   },
   pass: { term: 'Pass', definition: 'One board decision on one case.' },
+  precedent: {
+    term: 'Precedent',
+    definition:
+      'What an approver decided before on the same evidence at the same receiver. It informs a decision and never releases anything.',
+  },
   replay: {
     term: 'Replay',
     definition: "The agent's answer is the one a run recorded with the real agent gave; no model is called.",

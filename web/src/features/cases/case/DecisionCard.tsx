@@ -22,6 +22,7 @@ import { CATEGORY_TEXT } from '@/lib/categories';
 import { TONE_COLOURS, TONE_ICONS, toneText, type Tone } from '@/lib/tone';
 import { Reinvestigate } from './Closure';
 import { checksOf } from './derive';
+import { NextActionPrecedents } from './Precedents';
 import {
   actionHeadline,
   evidenceSummary,
@@ -126,6 +127,7 @@ export function DecisionCard({
   onReview,
   outcome,
   fading = false,
+  onSeePrecedents,
 }: {
   facts: CaseFacts;
   /** The case's round of evidence and planning: a re-plan after the receiver changed starts another. */
@@ -136,6 +138,8 @@ export function DecisionCard({
   outcome?: CaseOutcome;
   /** The outcome has just changed in the trial's replay: its words fade in. */
   fading?: boolean;
+  /** Opens the precedents' list in the Audit trail. */
+  onSeePrecedents?: () => void;
 }) {
   const { c, receipt: r } = facts;
   const verdict = outcome ?? caseOutcome(outcomeCaseOf(facts));
@@ -315,6 +319,10 @@ export function DecisionCard({
                   </Button>
                 ) : null}
               </Group>
+            ) : null}
+            {/* What approvers decided before on these conditions here, under the button: what happened, not what to do */}
+            {c.state === 'awaiting_approval' ? (
+              <NextActionPrecedents caseId={c.caseId} snapshot={facts.snapshot} onSee={onSeePrecedents} />
             ) : null}
             {hasWhy && why ? (
               <Stack id="next-action-why" gap="xs">

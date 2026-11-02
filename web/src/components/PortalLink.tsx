@@ -74,7 +74,15 @@ export function PortalLink({
       </Tooltip>
     );
   return (
-    <Anchor href={href} target="_blank" rel="noreferrer" size={size} data-tour-action={tourAction}>
+    // Underlined: these links sit in running text (the IRIS row, a run's line), where colour alone does not mark them
+    <Anchor
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      size={size}
+      underline="always"
+      data-tour-action={tourAction}
+    >
       {children} {size === 'sm' ? <IconExternalLink size={12} /> : null}
     </Anchor>
   );

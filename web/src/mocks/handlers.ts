@@ -545,6 +545,39 @@ function incidentPart(id: string, pick: (i: IncidentFixture) => unknown) {
   return i ? HttpResponse.json(pick(i) as object) : error(404, 'not_found', `No incident ${id}`);
 }
 
+/**
+ * Precedents (CONTRACTS 6.4, v1.35): what approvers decided before on the same conditions at the same receiver. The
+ * recording was made before precedents were written, so the trial's store holds none: every snapshot's summary says
+ * none in the server's default window, as a v1.35 server with no precedents does, GET /cases/{id}/precedents lists
+ * none, and a retire finds nothing to retire. The signature is the server's hash of the conditions, which the trial
+ * does not compute, so it is left empty.
+ */
+const PRECEDENT_DAYS = 180;
+const noPrecedents = () => ({
+  approved: 0,
+  rejected: 0,
+  lastDecision: '',
+  lastApprover: '',
+  lastAt: '',
+  lastCaseId: '',
+  samePolicy: false,
+  windowDays: PRECEDENT_DAYS,
+  signature: '',
+});
+
+/** The recorded snapshot with the precedents a v1.35 collector adds to its summary, unless it already has them. */
+function withPrecedents(snapshot: unknown): unknown {
+  const snap = snapshot as { summary?: unknown } | null | undefined;
+  const summary = snap?.summary as Record<string, unknown> | null | undefined;
+  if (!snap || !summary || typeof summary !== 'object' || 'precedents' in summary) return snapshot;
+  return { ...snap, summary: { ...summary, precedents: noPrecedents() } };
+}
+
+/** The conditions the snapshot's catalogue match read (6.1), which a precedent's signature is made from. */
+const conditionsOf = (c: CaseFixture) =>
+  (c.snapshot as { summary?: { catalogue?: { conditions?: unknown } } } | null)?.summary?.catalogue
+    ?.conditions ?? null;
+
 /** As the API decides (CONTRACTS 7.5): the plan's digest must match, and something must await this approval. */
 async function decideIncident(request: Request, id: string, seq: number | null) {
   const denied = csrf(request) ?? guard('approver');
@@ -676,8 +709,27 @@ export const handlers = [
   http.get(`${BASE}/cases/:id`, ({ params }) => part(String(params.id), (c) => c.detail, 'not_found')),
   http.get(`${BASE}/cases/:id/events`, ({ params }) => part(String(params.id), (c) => c.events, 'not_found')),
   http.get(`${BASE}/cases/:id/snapshot`, ({ params }) =>
-    part(String(params.id), (c) => c.snapshot, 'no_snapshot'),
+    part(String(params.id), (c) => withPrecedents(c.snapshot), 'no_snapshot'),
   ),
+  // The precedents these conditions match at the case's receiver: none in the trial (above)
+  http.get(`${BASE}/cases/:id/precedents`, ({ params }) => {
+    if (!session) return signedOut();
+    const id = String(params.id);
+    const c = caseOf(id);
+    if (!c) return error(404, 'not_found', `No case ${id}`);
+    return HttpResponse.json({
+      receiver: c.detail.receiver,
+      conditions: conditionsOf(c),
+      summary: noPrecedents(),
+      precedents: [],
+    });
+  }),
+  // As the server answers (Shutter_Approve, X-Requested-With): there is no precedent to retire in the trial
+  http.post(`${BASE}/precedents/:id/retire`, ({ request, params }) => {
+    const denied = csrf(request) ?? guard('approver');
+    if (denied) return denied;
+    return error(404, 'not_found', `No precedent ${String(params.id)}`);
+  }),
   http.get(`${BASE}/cases/:id/runs`, ({ params }) => part(String(params.id), (c) => c.runs, 'not_found')),
   http.get(`${BASE}/cases/:id/plan`, ({ params }) => part(String(params.id), (c) => c.plan, 'no_plan')),
   http.get(`${BASE}/cases/:id/approvals`, ({ params }) =>

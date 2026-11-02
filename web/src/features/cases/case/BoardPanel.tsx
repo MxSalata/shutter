@@ -33,6 +33,7 @@ import { PROVENANCE } from '@/lib/status';
 import { useTechnical } from '@/stores/appearance';
 import { describeEntry } from './derive';
 import { showEvidence } from './evidenceLinks';
+import { RunTimeline } from './RunTimeline';
 import { NotYet, Section } from './Section';
 
 /** Small counts in words, as the board's note says them. */
@@ -748,6 +749,8 @@ export function BoardPanel({
           ))}
         </SimpleGrid>
       ) : null}
+      {/* When each agent worked: the pass's runs on one time axis, between the specialists and the coordinator */}
+      {board ? <RunTimeline runs={list} /> : null}
       {coordinator ? (
         <CoordinatorCard
           run={coordinator}

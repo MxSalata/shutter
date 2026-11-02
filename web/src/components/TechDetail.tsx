@@ -16,6 +16,7 @@ export function TechDetail({
   children,
   defaultOpen,
   tour,
+  lazy = false,
 }: {
   /** What the disclosure holds, in words. */
   label: ReactNode;
@@ -25,12 +26,19 @@ export function TechDetail({
   defaultOpen?: boolean;
   /** The guide's name for it (`data-tour`). */
   tour?: string;
+  /**
+   * Its content is made only once it first opens, then kept: for content that reads the API, which a closed disclosure
+   * should not ask for. Until then a text search does not find it.
+   */
+  lazy?: boolean;
 }) {
   const detail = useDetail();
   const byDetail = kind === 'data' && detail === 'technical';
   // The reader's own choice, remembered with the Detail level it was made under: a new level starts afresh
   const [own, setOwn] = useState<{ open: boolean; under: string } | null>(null);
   const opened = own && own.under === detail ? own.open : (defaultOpen ?? byDetail);
+  const [made, setMade] = useState(opened);
+  if (opened && !made) setMade(true);
   const id = useId();
   return (
     <Box data-tour={tour}>
@@ -51,7 +59,7 @@ export function TechDetail({
           fz="sm"
           inert={!opened || undefined}
         >
-          {children}
+          {!lazy || made ? children : null}
         </Box>
       </Collapse>
     </Box>

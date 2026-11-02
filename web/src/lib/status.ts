@@ -314,6 +314,27 @@ export const APPROVALS: Record<string, Status> = {
   ),
 };
 
+/**
+ * A precedent's decision (CONTRACTS 6.4): approved means a person approved and the write was verified at the receiver,
+ * so it is positive, as a verified effect is; rejected is blocking, as a rejection is. A retired one counts for nothing
+ * and is neutral. These say what happened before, never what to do now.
+ */
+export const PRECEDENT_DECISIONS: Record<string, Status> = {
+  approved: s(
+    'positive',
+    'Approved, verified',
+    'A person approved the plan and the write was verified at the receiver',
+    IconUserCheck,
+  ),
+  rejected: s('blocking', 'Rejected', 'A person rejected the plan: nothing was sent', IconCircleX),
+  retired: s(
+    'neutral',
+    'Retired',
+    'Retired by an approver: it stays on record and counts for nothing',
+    IconCircleOff,
+  ),
+};
+
 /** A production review's finding severities: blocking, attention, information and neutral, highest first. */
 export const SEVERITY_STATUS: Record<string, Status> = {
   high: s('blocking', 'High', undefined, IconAlertCircle),

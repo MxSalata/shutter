@@ -23,6 +23,7 @@ import { CaseStory, type StoryStep } from './case/CaseStory';
 import { BoardPanel } from './case/BoardPanel';
 import { DecisionCard } from './case/DecisionCard';
 import { PortalLinks } from './case/PortalLinks';
+import { PrecedentsSection } from './case/Precedents';
 import { CounterpartStrip } from './case/S8Compare';
 import { SHOW_EVIDENCE } from './case/evidenceLinks';
 import { rounds } from './case/derive';
@@ -167,6 +168,19 @@ function CaseBody({ c }: { c: CaseDetail }) {
     setVisited(visit);
     if (!steps.includes(asks)) setSteps([...steps, asks]);
   }
+  // "See them" under the approval: the Audit trail, its precedents' list open and its heading focused
+  const [precedentsOpen, setPrecedentsOpen] = useState(false);
+  const seePrecedents = () => {
+    const from = document.activeElement;
+    setPrecedentsOpen(true);
+    setTab('audit');
+    window.setTimeout(() => {
+      document.getElementById('precedents')?.scrollIntoView?.({ block: 'start' });
+      // Unless the reader has already moved on, as a quick hand does to a Retire button
+      if (document.activeElement === from || document.activeElement === document.body)
+        document.getElementById('precedents-title')?.focus({ preventScroll: true });
+    }, 250);
+  };
   const openStep = (step: StoryStep, target: string) => {
     setSteps((s) => (s.includes(step) ? s : [...s, step]));
     setTab('summary');
@@ -249,6 +263,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
         onReview={() => openStep('decision', 'approval')}
         outcome={shown}
         fading={played}
+        onSeePrecedents={seePrecedents}
       />
       {placing ? <PageSkeleton label="Loading the investigation…" /> : null}
       {placing ? null : (
@@ -306,6 +321,14 @@ function CaseBody({ c }: { c: CaseDetail }) {
           <Tabs.Panel value="audit" pt="md" {...PANEL}>
             <Stack gap="md">
               <CaseTimeline events={events.data ?? []} />
+              {/* What approvers decided before on these conditions here; "What needs you now" names them first when
+                  the case waits for an approval */}
+              <PrecedentsSection
+                caseId={c.caseId}
+                snapshot={facts.snapshot}
+                define={c.state !== 'awaiting_approval'}
+                open={precedentsOpen}
+              />
               {/* A stopped case's hand-off is part of its next action; once closed by hand, it is history here */}
               {!stopped ? <EscalationPanel c={c} /> : null}
               <PortalLinks c={c} runs={facts.runs} portalBase={base} />
