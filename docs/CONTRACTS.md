@@ -692,6 +692,27 @@ reads it through `Shutter.Store.SiteProfile`.
   resources of section 5.
 - `merges` (v1.14): `forbidden` (the default when absent) or `allowed`, the only values the validator accepts. A receiver entry's `merges` and `cancels` (booleans, default false) say what it takes (1.1). A merge is delivered only under `allowed` to a receiver with `merges: true`; the gate's `MERGE_WITHHELD` blocks any write of a merge otherwise, so the exact repeat of a merge the receiver already holds (a receipt present) is E3's reconcile, and no other merge is ever resent by Shutter. `Shutter.Store.SiteProfile.MergesAllowed()` and `ReceiverFlag(name, flag)` read them.
 
+**Precedents** (v1.35). What approvers decided before on the same evidence at the same receiver, and whether it held.
+When a person's approval is verified at the receiver (the case resolves), and when an approver rejects a plan, the case
+writes a precedent (`Shutter.Store.Precedent`): the receiver; the signature, the SHA-256 of the snapshot's condition
+vocabulary (6.1) in canonical JSON, so the match is exact, as the message index is; the catalogue entry and outcome; the
+plan's disposition and digest; the approver; the decision (`approved` or `rejected`); and the policy, site profile and
+catalogue versions in force. An automatic release (approver `policy`) writes none: it is the policy, not a precedent. The
+evidence collector adds `precedents` to every snapshot summary, `{approved, rejected, lastDecision, lastApprover, lastAt,
+lastCaseId, samePolicy, windowDays, signature}`: the active rows of the last `windowDays` days
+(`^Shutter.Config("precedentDays")`, 1 to 3650, 180 by default; the Doctor's `precedent_days`), and `samePolicy` says
+whether the last decision was taken under the policy and site profile versions in force now. The approval task's text
+quotes it ("Precedents: approved and verified 2 times, rejected 0 times in the last 180 days; last approved by approver on
+2026-11-02 (case C-000301)", or "Precedents: none; these conditions at this receiver have not reached an approver in the
+last 180 days."), and the case's events note each precedent written. It is for the person and the app: the model view's
+allowlist (9) leaves `precedents` out of what a board member reads, so a run of approvals cannot anchor a model, and the
+material digest (A7) never includes it, so a new precedent changes nothing an approval binds. `GET /cases/{id}/precedents`
+(`Shutter_Operate`) answers `{receiver, conditions, summary, precedents: [...]}`, the rows newest first, retired ones
+included with `active` false; `POST /precedents/{id}/retire` (`Shutter_Approve`, `X-Requested-With`, body `{reason}`)
+retires one, which stays on record and counts for nothing (404 `not_found`; 409 `already_retired`, naming who retired it
+and when). A precedent informs the approver and never releases anything: only the policy path above releases without a
+person.
+
 ### 6.5 The gate's catalogue checks
 
 A new check, `catalogue`, with these reason codes (in `knowledge/block-reasons.json`):
@@ -1528,8 +1549,9 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   given (6.6); the image's `WITH_AIHUB` defaults to `auto` and the Doctor reports `edition` (12); a repeated decision answers with the
   approval taken, an inactive Workflow user is no approver, and the intake refuses a body over 2 MB (5, 11, 14.5); an approval
   wait is bounded, `ApprovalWaitSeconds` (6.4); boards per minute are capped, `BoardsPerMinute`, the storm stopgap (6.6); invisible
-  characters stripped from agent text, text caps and a hostile-output table (6.6, 9); each item of the review that lands adds
-  its line here.
+  characters stripped from agent text, text caps and a hostile-output table (6.6, 9); precedents, a person's decision on the
+  same conditions at the same receiver, counted in the approval task's text, the snapshot summary and
+  `GET /cases/{id}/precedents` (6.4); each item of the review that lands adds its line here.
 - v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:
   run, reset, purge) and `Shutter_Configure` (the site's writes: the profile, the library, a schema import, the review
   annotations), held by the operator and the approver as before; the role `Shutter_Demo` (reads, reinvestigates, approves and
