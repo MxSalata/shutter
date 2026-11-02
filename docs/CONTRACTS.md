@@ -318,6 +318,31 @@ hospital has. It never resets anything, and the scenario runner's Run and Reset 
   `SELECT Hospital.Setup_SetLive(1)` (or `0`) in the hospital's namespace switches it without an install. Off, the item is
   disabled and a task that still runs does nothing. The install compiles `Hospital.Production` in the hospital's namespace
   on every run, so an upgrade's new items reach that namespace's production definition before `UpdateProduction`.
+- **"Break the feed", the storm** (v1.35). `POST /api/shutter/live/storm` (`Shutter_Operate`, `X-Requested-With`, an
+  `Idempotency-Key` honoured, body optional) asks the live hospital for a storm and answers 202 `{stormId, state
+  "requested", startedAt, requestedBy, patients 4, movements 8, sent 0, receiverDownSeconds 60, pickupWithinSeconds 5,
+  endsAt, cooldownUntil}`; 409 `live_off` when the live hospital is off, 409 `storm_in_progress` `{stormId, startedAt,
+  endsAt, state}` while one plays (one at a time for the whole demo), 409 `cooldown` `{until, retryAfterSeconds}` within
+  `^Shutter.Config("stormCooldownMinutes")` of the last storm's start (10 by default; the Doctor's `storm_cooldown_minutes`);
+  503 `no_service` with no hospital namespace recorded. The route writes the request (state `requested`) in Shutter's own
+  namespace, `^Shutter.Live("storm","request")`, since the API's users write nothing in the hospital's database; the
+  player (its adapter calls every 5 s since v1.35, the ordinary feed paced by `OrdinaryEverySeconds` 60) takes it on its
+  next call into its own record, `^Hospital.Live("storm")` in the hospital's namespace, and plays it: the receiver goes down (`fail_before_accept` on
+  `Downstream Out`, 1.5, for `StormReceiverDownSeconds` 60), then eight movements for four fresh patients go out about
+  three seconds apart, admissions to free beds first and then each patient's transfer to another ward, control ids
+  `STORM<n>-01` to `-08`, each failing in the hospital's production and handed to Shutter by its process as
+  `delivery_failed`; Shutter opens the cases (stamped scenario `storm`), the detector opens one incident at the threshold
+  and the rest join it, one chain per encounter in arrival order; when the outage is over the player brings the receiver
+  back, the incident's recovery check releases the chains in order under the site's policy, and every resend is rehearsed
+  and verified. The state moves `requested`, `sending`, `waiting_receiver`, `releasing`, `done` (the incident closed, or
+  ten minutes after the press), or `failed` with `error`. `GET /settings` and the Doctor carry `live.storm`: the player's
+  record (`stormId`, `state`, `startedAt`, `receiverDownUntil`, `receiverUpAt`, `sent`, `movements`, `patients` as
+  `[{mrn, encounterId, ward, toWard, movements}]`, `endsAt`, `endedAt`) with Shutter's own view added (`Setup.StormCounts`:
+  `incidentId` and `incidentState`, the incident the storm's cases joined, one the detector opened for them or one already
+  open for the receiver, null before any; `cases` and `resolved` for the storm's cases;
+  `cooldownUntil`). The rotation and the ordinary feed pause from the press until `done`, and the next story is then due
+  `EveryMinutes` later. No model is needed for the story: the chains follow the policy, and a board convenes only where it
+  says `board`. Fresh patients and beds mean the storm never collides with a story already playing.
 - **Settings** of `Hospital.LivePlayer`: `EveryMinutes` 7; `Scenarios` `S2,S8,S1,S23a,S3,S24,S15,S11`, played round robin
   (empty means every scenario of `fixtures/scenarios.json` but S13, S20 and S21, which need an operator or the records);
   `Faults` 1; `OrdinaryFeed` 1; `MaxWait` 30, the longest a `wait` step is given; `ShutterNamespace` `SHUTTER`.
@@ -948,6 +973,19 @@ separate, later tool.
   `LagSeconds`, because an id is taken before its row is written. The first start begins at the oldest header within
   `BackfillHours`. Defaults: `Routes` "ADT In", `BatchSize` 200, `LagSeconds` 5, `BackfillHours` 168; one call runs up to 20 passes while the walk is behind. A header whose message could not be indexed is recorded in `^Shutter.Index("failed")` (`GET /index` counts them as `failed_headers`) and cleared when `Rebuild` indexes it. A body already indexed is skipped, so a site may also name the class as a host's Search Table
   Class. `Rebuild(fromId, toId, routes)` walks a range again (SQL procedure, `Shutter_Operate`).
+- `Shutter.Operation.Releaser` (production item "Case Releaser", v1.35), a service on `Ens.InboundAdapter` (`CallInterval` 5 s)
+  that releases the cases no other host can: a case blocked or escalated while a newer message of its encounter was in
+  flight at a watched production (`waitsOnMessage`; that production's connector knows nothing of Shutter), and a case
+  held for a schema not loaded when its message was read (`heldSchema`, 11). Each sweep counts the candidates first; when
+  there are any it opens a run row, `Shutter.Store.ReleaseRun` (`startedAt`, `endedAt`, `state` running, done, failed or
+  interrupted, `waitingChecked`, `waitingReleased`, `heldChecked`, `heldReleased`, `error`, `job`), runs
+  `ResendGuard.ReleaseDeliveredWaits` and `Schemas.ReleaseHeld`, which send each release from this host to the Case
+  Workflow as an id-only `Shutter.Msg.Reinvestigate` (`caseId`, `requestedBy` system, `reason`), and ends the row: the
+  host is the one writer that ends a run. A quiet sweep writes no row, only its time. At start every run still open is
+  marked interrupted, since the host starting again means a restart cut it. The newest 500 runs are kept (`KeepRuns`).
+  `GET /index` carries `releases` `{host, started_at, last_sweep_at, sweeps, last_run, runs, interrupted_runs, candidates
+  {waiting, held}}` and the Doctor `release_sweep`. Until v1.35 the HL7 Index adapter's task ran the two checks beside its
+  walk; the adapter now only reads, and a site that installed Shutter earlier gets the item from the installer's item list.
 - The index is a finder, never a second source of truth: every decision still opens the message or asks the receiver.
 
 ### 8.2 The timeline
@@ -1050,6 +1088,14 @@ visitors spends at most the cap. **Each user's share** (`SHUTTER_JUDGE_BUDGET_US
 0 or unset means none): every agent request carries who asked (`RequestedBy`: a question's asker, a judge who convened the
 board, `system` for the feed's own runs), the run keeps it, and a run for a user whose live runs today have reached the share is
 refused `budget_exhausted` with "Your share of the day's model budget ... is spent", so one judge cannot spend the day.
+**Reserve, then settle (v1.35).** A run in flight has no `AgentRun` row yet, so three members running at once were not
+counted against the cap until they finished. The Agent item now reserves an estimate for each live run it starts
+(`Budget.Reserve`, keyed by the run) and settles it when the run ends whatever its outcome (`Budget.Settle`); the day's state
+carries `reservedUsd` and `inFlight`, `GET /settings` adds the caller's `reservedByMeUsd`, and a run is refused once spend plus
+reservations reach the cap (or spend plus the user's own reservations the share), the refusal naming the runs in flight. The
+estimate is `^Shutter.Config("budgetReserveUsd")` when the site sets it, else the mean cost of the last twenty live runs that
+cost anything, else 0.50 USD, never below 0.01; a reservation older than twenty minutes was left by a job that died and is
+dropped when next counted.
 
 **Invisible characters are stripped (v1.35).** `ModelView.Restore` removes from everything a model wrote, before the store
 keeps it, the zero-width characters (U+200B to U+200F, U+2060 to U+2064, U+FEFF), the bidirectional controls (U+202A to U+202E,
@@ -1188,7 +1234,7 @@ copy of the message.
   `schema_category` the category it was held for. Nothing was delivered: the engine held the message. The intake keeps the
   kind, parses Shutter's copy under 2.5.1 when the category does not resolve here, and the case carries `heldSchema` and
   `sourceNamespace`: the gate blocks it `SCHEMA_UNKNOWN` naming that namespace while the schema is missing there, the
-  matcher says `delivery: unreadable`, no incident counts it, and the index's check releases it (a reinvestigation with the
+  matcher says `delivery: unreadable`, no incident counts it, and the Case Releaser's sweep (8.1) releases it (a reinvestigation with the
   reason on the case) once the category is loaded in that namespace, after which it is a failed delivery to the catalogue
   and goes out through Shutter's connector under the site's policy. A production whose delivering process is its own code
   (the demo hospital's `PAS to Downstream`) does the check itself: while `^Hospital.Config("preventFailures")` is set
@@ -1197,6 +1243,25 @@ copy of the message.
   forwarder as the held message above (`Forwarder.ForwardFor`), delivering nothing. The HL7 service's `Validation` is not a
   setting on this build and only a routing engine has a `BadMessageHandler`, so a site with a routing engine points that at
   the forwarder, and one with its own process adds the check.
+- **The alert intake** (v1.35). A production whose delivering process does nothing on a failure beyond the error IRIS
+  logs can still hand Shutter the failure, with no change to its own code: `Shutter.Intake.AlertProcess`, added as the
+  production's `Ens.Alert` item (the name the engine sends alerts to), receives every `Ens.AlertRequest` an item raises
+  (`AlertOnError`, a queue alert, an inactivity alert). Every alert is first passed on to `PassTo`, the site's own alert
+  consumer renamed (an alert operation, an email), so Shutter adds to a production's alerting and never replaces it;
+  with `PassTo` empty the alert ends here, as it would with no `Ens.Alert` item at all. Then, for an alert from one of its
+  `Receivers` (the connector items, comma-separated; empty takes any item) whose session holds an HL7 message, it finds
+  that message (the session's first header with an `EnsLib.HL7.Message` body: the receiving service's) and sends the
+  forwarder (`ForwarderTarget`, default `Shutter Forwarder`) a `Forward` for it: `HeaderId`, `Route` the header's service,
+  `Receiver` the alerting item, `FailureKind` from the alert's words (`uncertain_outcome` for a timeout, no response or
+  an uncertain answer; `rejected` for a reject, a refusal, a NACK or an HTTP 4xx; else `delivery_failed`),
+  `FailureOutcome` to match (`uncertain`, `rejected`, `error`), `FailureHttpStatus` when the text names one ("HTTP 503"),
+  `FailureReasonCode` `alert`, `FailureText` "Alert from <item> at <time> UTC: <text>". One forward per session
+  (`^Shutter.AlertIntake("seen")`, kept a day), so a connector's retries alert the site each time but reach Shutter once.
+  An alert whose session has no HL7 message, or from an item outside `Receivers`, is passed on only; both sends are
+  asynchronous, so the feed never waits. The forwarder's refusal is a warning in the event log, as for the sending
+  process. The demo hospital's production carries the item with `Receivers` `Downstream Out` and `AlertOnError` on that
+  connector; its process forwards its own failures (above), so `PAS to Downstream` stays out of `Receivers` and a failure
+  reaches Shutter once. The production review's `NO_ALERT_CONSUMER` (13) names the item.
 - **The demo hospital** (shape A as a judge sees it): the image also creates the namespace `HOSPITAL` (`Installer.cls`;
   `SELECT Shutter.Installer_RunHospital('SHUTTER')` on an instance that has Shutter) with the packages `Shutter.Intake`,
   `Shutter.Util`, `Shutter.Msg`, `Shutter.Store` and `Hospital` mapped from Shutter's code database, and
@@ -1312,9 +1377,9 @@ standard 2.5.1 (`Schemas.Canonical`, `OperationKey.FromCanonical`; a message wit
 which the gate blocks `UNMAPPABLE`), never saved and never delivered from. The evidence's validation says `schema_known`
 false and the Second Parser gives its reading (6.7); the gate blocks with `SCHEMA_UNKNOWN`; the matcher's `delivery` is
 `unreadable` (6.1), so no catalogue entry matches and the case escalates with the fix on it; the incident detector does not
-count the kind. Release: the index's task (every few seconds, beside the delivered waits of 6.5) runs `Schemas.ReleaseHeld`,
+count the kind. Release: the Case Releaser's sweep (8.1; every few seconds, beside the delivered waits of 6.5) runs `Schemas.ReleaseHeld`,
 which reinvestigates every blocked or escalated `unreadable` case whose `heldSchema` is loaded now where the message was read
-(`sourceNamespace`, else here), with the reason "the schema X is loaded in NS now, found by the index's check" on the case
+(`sourceNamespace`, else here), with the reason "the schema X is loaded in NS now, found by the Case Releaser's sweep" on the case
 and its `heldSchema` cleared, so a case is released once (a re-plan the gate blocks for another reason leaves a blocked case,
 not a held one, and `held_messages` counts only cases still waiting);
 the fresh evidence types the message under its schema (in memory; the stored copy stays as it arrived, untyped by a route
@@ -1551,7 +1616,13 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   wait is bounded, `ApprovalWaitSeconds` (6.4); boards per minute are capped, `BoardsPerMinute`, the storm stopgap (6.6); invisible
   characters stripped from agent text, text caps and a hostile-output table (6.6, 9); precedents, a person's decision on the
   same conditions at the same receiver, counted in the approval task's text, the snapshot summary and
-  `GET /cases/{id}/precedents` (6.4); each item of the review that lands adds its line here.
+  `GET /cases/{id}/precedents` (6.4); the releases of waiting and held cases moved out of the index adapter into the Case
+  Releaser item, one sweep every few seconds with a run row when there are candidates (8.1); the alert intake,
+  `Shutter.Intake.AlertProcess` as a watched production's `Ens.Alert` item, which hands a delivery failure's message to
+  Shutter from the alert alone and passes every alert on to the site's consumer (11, 13); the storm, `POST /live/storm`,
+  eight failed movements for four fresh patients in the live hospital with the receiver down for a minute, followed on
+  `live.storm` (4.4); the budget reserves an estimate for each run in flight and settles it when the run ends (9); each item of
+  the review that lands adds its line here.
 - v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:
   run, reset, purge) and `Shutter_Configure` (the site's writes: the profile, the library, a schema import, the review
   annotations), held by the operator and the approver as before; the role `Shutter_Demo` (reads, reinvestigates, approves and

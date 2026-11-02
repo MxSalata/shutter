@@ -99,6 +99,13 @@ Method OnAgentRequest(request As Shutter.Bridge.Msg.AgentRequest, Output respons
         Set response.Status = "error"
         Set response.Error = "Runner class not available: " _ runnerClass _ ". Install the aihub module for live runs, or set the Mode to replay."
     } Else {
+        // Reserve, then settle (Shutter.Util.Budget, v1.35): the run counts against the cap while it is in flight.
+        Set reserveKey = ""
+        If spec.Mode '= "replay" {
+            Set reserveKey = spec.CorrelationKey _ "|" _ spec.MemberCode _ "|" _ $JOB _ "|" _ $ZHOROLOG
+            Set reserved = ##class(Shutter.Util.Budget).Reserve(reserveKey, request.RequestedBy)
+            $$$TRACE("Reserved " _ ##class(Shutter.Util.Budget).Dollars(reserved) _ " of the day's budget for this run")
+        }
         Try {
             Set runner = $CLASSMETHOD(runnerClass, "%New")
             Set sc = runner.Run(spec, .response)
@@ -110,6 +117,7 @@ Method OnAgentRequest(request As Shutter.Bridge.Msg.AgentRequest, Output respons
             Set response.Status = "error"
             Set response.Error = ex.DisplayString()
         }
+        If reserveKey '= "" Do ##class(Shutter.Util.Budget).Settle(reserveKey)
     }
     Do ##class(Shutter.Bridge.Runner).Stamp(spec, response)
     If response.Mode = "" Set response.Mode = spec.Mode

@@ -28,13 +28,8 @@ Parameter SETTINGS = "Routes:Index,BatchSize:Index,LagSeconds:Index,BackfillHour
 /// Each task: the next batches after the mark, each handed to the service; the mark moves when the service has taken one.
 Method OnTask() As %Status
 {
-    // The cases waiting for a message that has since been delivered (v1.34): released here, since a watched production's
-    // connector cannot tell Shutter, and a case that began to wait after the delivery (a slow plan) would wait for ever
-    // (Shutter.Util.ResendGuard).
-    Do ##class(Shutter.Util.ResendGuard).ReleaseDeliveredWaits()
-    // The cases held for a schema not loaded (v1.34, "prevent failures"): released once the schema is imported where the
-    // message was read (Shutter.Util.Schemas).
-    Do ##class(Shutter.Util.Schemas).ReleaseHeld()
+    // Only the walk: the releases of waiting and held cases that ran here in v1.34 are the Case Releaser's (v1.35,
+    // Shutter.Operation.Releaser), one host for each job.
     Set total = 0, batches = 0
     Do ..EnsureMark()
     Set ^Shutter.Index("routes") = ..Routes, ^Shutter.Index("lag") = ..LagSeconds
