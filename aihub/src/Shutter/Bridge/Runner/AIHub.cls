@@ -140,7 +140,20 @@ ClassMethod ProviderFrom(name As %String, Output model As %String) As %AI.Provid
     Set fqn = $SELECT($LENGTH(name, ".") < 3: "AI.LLM." _ name, 1: name)
     $$$ThrowOnError(##class(%ConfigStore.Configuration).GetDetails(fqn, .details, 0, 1))
     Set model = details.%Get("model")
+    Do ..BoundCall(details)
     Quit ##class(%AI.Provider).Create(details.%Get("model_provider"), details)
+}
+
+/// A bound on one model call (v1.35): the provider's HTTP client gets a request timeout (Shutter.Setup.ProviderTimeoutSeconds,
+/// 120 s unless configured) and a connect timeout of 10 s, unless the configuration sets http_config itself. Without it a
+/// hung provider holds a board member until the board's 600 s timeout, since the run's deadline is only checked between
+/// the model's turns (Shutter.Bridge.Monitor).
+ClassMethod BoundCall(details As %DynamicObject)
+{
+    If '$ISOBJECT(details) || details.%IsDefined("http_config") Quit
+    Set http = {}
+    Set http."request_timeout_secs" = ##class(Shutter.Setup).ProviderTimeoutSeconds(), http."connect_timeout_secs" = 10
+    Set details."http_config" = http
 }
 
 /// The case a run works on: the correlation key, or for a question's run (keyed by its question id, CONTRACTS 14.2) the
@@ -200,6 +213,7 @@ ClassMethod MockProvider(config As %String, spec As Shutter.Bridge.RunSpec, term
     }
     Set model = details.%Get("model")
     Set details."api_key" = ..MockToken(spec, terminal)
+    Do ..BoundCall(details)
     Quit ##class(%AI.Provider).Create("openai", details)
 }
 
