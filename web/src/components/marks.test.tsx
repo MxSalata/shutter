@@ -97,6 +97,36 @@ describe('the small marks', () => {
     expect(card).toHaveTextContent('claude-opus-5-5 · 14.6 s');
   });
 
+  it('stands alone as an article named by its heading, muted when not enabled, keeping its hue under a caller style', () => {
+    renderUi(
+      <>
+        <MemberCard member="impact" component="article" titleId="impact-name" muted>
+          Not enabled
+        </MemberCard>
+        <MemberCard
+          member="conformance"
+          className="dissent"
+          style={{ minWidth: 0 }}
+          aria-label="Conformance's finding"
+        >
+          Resend
+        </MemberCard>
+      </>,
+    );
+    const muted = screen.getByRole('article', { name: 'Impact Analysis' });
+    expect(within(muted).getByRole('heading', { name: 'Impact Analysis' })).toHaveAttribute(
+      'id',
+      'impact-name',
+    );
+    expect(muted).toHaveAttribute('data-muted', 'true');
+    expect(muted.style.getPropertyValue('--mark-hue')).toBe('var(--shutter-hue-gray)');
+    expect(muted.querySelector('.identity-mark')).toHaveAttribute('data-muted', 'true');
+    const card = screen.getByRole('region', { name: "Conformance's finding" });
+    expect(card).toHaveClass('member-card', 'dissent');
+    expect(card.style.getPropertyValue('--mark-hue')).toBe('var(--shutter-hue-cyan)');
+    expect(card.style.minWidth).toBe('0');
+  });
+
   it('says beside a confirm whether it acts in the trial or on the live system', () => {
     const { unmount } = renderUi(<EnvChip />);
     expect(screen.getByText('Live system')).toBeInTheDocument();
