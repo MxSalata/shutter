@@ -373,27 +373,29 @@ Method ReleaseWaiting(toState As %String) As %Integer
 /// The blocked or escalated cases waiting for a message (WaitsOnMessage, v1.29) are reopened once it has been delivered,
 /// whatever the receiver answered: the fresh evidence then shows the later event applied, or its own case, and the gate
 /// decides. Returns how many were released.
-ClassMethod ReleaseWaitingOnMessage(controlId As %String, outcome As %String = "") As %Integer
+ClassMethod ReleaseWaitingOnMessage(controlId As %String, outcome As %String = "", host As Ens.Host = "", target As %String = "Case Workflow") As %Integer
 {
     If controlId = "" Quit 0
-    Quit ..Reopen("WaitsOnMessage", controlId, "message " _ controlId _ " of this encounter was delivered" _ $SELECT(outcome '= "": " (" _ outcome _ ")", 1: "") _ "; the resend is checked again")
+    Quit ..Reopen("WaitsOnMessage", controlId, "message " _ controlId _ " of this encounter was delivered" _ $SELECT(outcome '= "": " (" _ outcome _ ")", 1: "") _ "; the resend is checked again", host, target)
 }
 
 /// Release a case held for a schema that is loaded now (v1.34): reopened as a case waiting on a message is, with the reason,
 /// and its HeldSchema cleared, so the check releases it once (the gate may block the re-plan for another reason, and the case
 /// is then a blocked case like any other, not a held one).
-ClassMethod ReleaseHeld(caseId As %String, category As %String, where As %String) As %Integer
+ClassMethod ReleaseHeld(caseId As %String, category As %String, where As %String, host As Ens.Host = "", target As %String = "Case Workflow") As %Integer
 {
     If caseId = "" Quit 0
-    Set n = ..Reopen("CaseId", caseId, "the schema " _ category _ " is loaded in " _ where _ " now, found by the index's check; the message is read again")
+    Set n = ..Reopen("CaseId", caseId, "the schema " _ category _ " is loaded in " _ where _ " now, found by the Case Releaser's sweep; the message is read again", host, target)
     If n > 0 {
         &sql(UPDATE Shutter_Store."Case" SET HeldSchema = '' WHERE CaseId = :caseId)
     }
     Quit n
 }
 
-/// Reopen every blocked or escalated case whose field names the value, through the API service to the Case Workflow.
-ClassMethod Reopen(field As %String, value As %String, reason As %String) As %Integer [ Private ]
+/// Reopen every blocked or escalated case whose field names the value, with an id-only Reinvestigate to the Case Workflow:
+/// sent from the given host (the Case Releaser, v1.35), or through the API service when there is none (a caller outside
+/// the production, or the Ward operation's release of Shutter's own feed).
+ClassMethod Reopen(field As %String, value As %String, reason As %String, host As Ens.Host = "", target As %String = "Case Workflow") As %Integer [ Private ]
 {
     Set n = 0
     Try {
@@ -401,6 +403,11 @@ ClassMethod Reopen(field As %String, value As %String, reason As %String) As %In
         While rs.%Next() {
             Set msg = ##class(Shutter.Msg.Reinvestigate).%New()
             Set msg.CaseId = rs.%Get("CaseId"), msg.RequestedBy = "system", msg.Reason = reason
+            If $ISOBJECT(host) {
+                Set sc = host.SendRequestAsync($SELECT(target '= "": target, 1: "Case Workflow"), msg)
+                If $$$ISOK(sc) Set n = n + 1
+                Continue
+            }
             Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
             If $$$ISERR(sc) || '$ISOBJECT(service) Quit
             Set service.Target = "Case Workflow", service.Async = 1

@@ -1232,7 +1232,10 @@ ClassMethod SiteProfileHistory() As %Status
 ClassMethod IndexStatus() As %Status
 {
     If '..Allow() Quit $$$OK
-    Quit ..Json(##class(Shutter.Index.Indexer).Status())
+    Set o = ##class(Shutter.Index.Indexer).Status()
+    // The Case Releaser (8.1, v1.35), the host that took the releases over from the index adapter.
+    Try { Set o.releases = ##class(Shutter.Operation.Releaser).Status() } Catch ex { Set o.releases = {"error": (ex.DisplayString())} }
+    Quit ..Json(o)
 }
 
 /// The indexed messages for a visit number (?encounter=), a patient (?patient=) or an operation key (?key=), newest

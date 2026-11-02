@@ -948,6 +948,19 @@ separate, later tool.
   `LagSeconds`, because an id is taken before its row is written. The first start begins at the oldest header within
   `BackfillHours`. Defaults: `Routes` "ADT In", `BatchSize` 200, `LagSeconds` 5, `BackfillHours` 168; one call runs up to 20 passes while the walk is behind. A header whose message could not be indexed is recorded in `^Shutter.Index("failed")` (`GET /index` counts them as `failed_headers`) and cleared when `Rebuild` indexes it. A body already indexed is skipped, so a site may also name the class as a host's Search Table
   Class. `Rebuild(fromId, toId, routes)` walks a range again (SQL procedure, `Shutter_Operate`).
+- `Shutter.Operation.Releaser` (production item "Case Releaser", v1.35), a service on `Ens.InboundAdapter` (`CallInterval` 5 s)
+  that releases the cases no other host can: a case blocked or escalated while a newer message of its encounter was in
+  flight at a watched production (`waitsOnMessage`; that production's connector knows nothing of Shutter), and a case
+  held for a schema not loaded when its message was read (`heldSchema`, 11). Each sweep counts the candidates first; when
+  there are any it opens a run row, `Shutter.Store.ReleaseRun` (`startedAt`, `endedAt`, `state` running, done, failed or
+  interrupted, `waitingChecked`, `waitingReleased`, `heldChecked`, `heldReleased`, `error`, `job`), runs
+  `ResendGuard.ReleaseDeliveredWaits` and `Schemas.ReleaseHeld`, which send each release from this host to the Case
+  Workflow as an id-only `Shutter.Msg.Reinvestigate` (`caseId`, `requestedBy` system, `reason`), and ends the row: the
+  host is the one writer that ends a run. A quiet sweep writes no row, only its time. At start every run still open is
+  marked interrupted, since the host starting again means a restart cut it. The newest 500 runs are kept (`KeepRuns`).
+  `GET /index` carries `releases` `{host, started_at, last_sweep_at, sweeps, last_run, runs, interrupted_runs, candidates
+  {waiting, held}}` and the Doctor `release_sweep`. Until v1.35 the HL7 Index adapter's task ran the two checks beside its
+  walk; the adapter now only reads, and a site that installed Shutter earlier gets the item from the installer's item list.
 - The index is a finder, never a second source of truth: every decision still opens the message or asks the receiver.
 
 ### 8.2 The timeline
@@ -1188,7 +1201,7 @@ copy of the message.
   `schema_category` the category it was held for. Nothing was delivered: the engine held the message. The intake keeps the
   kind, parses Shutter's copy under 2.5.1 when the category does not resolve here, and the case carries `heldSchema` and
   `sourceNamespace`: the gate blocks it `SCHEMA_UNKNOWN` naming that namespace while the schema is missing there, the
-  matcher says `delivery: unreadable`, no incident counts it, and the index's check releases it (a reinvestigation with the
+  matcher says `delivery: unreadable`, no incident counts it, and the Case Releaser's sweep (8.1) releases it (a reinvestigation with the
   reason on the case) once the category is loaded in that namespace, after which it is a failed delivery to the catalogue
   and goes out through Shutter's connector under the site's policy. A production whose delivering process is its own code
   (the demo hospital's `PAS to Downstream`) does the check itself: while `^Hospital.Config("preventFailures")` is set
@@ -1312,9 +1325,9 @@ standard 2.5.1 (`Schemas.Canonical`, `OperationKey.FromCanonical`; a message wit
 which the gate blocks `UNMAPPABLE`), never saved and never delivered from. The evidence's validation says `schema_known`
 false and the Second Parser gives its reading (6.7); the gate blocks with `SCHEMA_UNKNOWN`; the matcher's `delivery` is
 `unreadable` (6.1), so no catalogue entry matches and the case escalates with the fix on it; the incident detector does not
-count the kind. Release: the index's task (every few seconds, beside the delivered waits of 6.5) runs `Schemas.ReleaseHeld`,
+count the kind. Release: the Case Releaser's sweep (8.1; every few seconds, beside the delivered waits of 6.5) runs `Schemas.ReleaseHeld`,
 which reinvestigates every blocked or escalated `unreadable` case whose `heldSchema` is loaded now where the message was read
-(`sourceNamespace`, else here), with the reason "the schema X is loaded in NS now, found by the index's check" on the case
+(`sourceNamespace`, else here), with the reason "the schema X is loaded in NS now, found by the Case Releaser's sweep" on the case
 and its `heldSchema` cleared, so a case is released once (a re-plan the gate blocks for another reason leaves a blocked case,
 not a held one, and `held_messages` counts only cases still waiting);
 the fresh evidence types the message under its schema (in memory; the stored copy stays as it arrived, untyped by a route
@@ -1551,7 +1564,9 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   wait is bounded, `ApprovalWaitSeconds` (6.4); boards per minute are capped, `BoardsPerMinute`, the storm stopgap (6.6); invisible
   characters stripped from agent text, text caps and a hostile-output table (6.6, 9); precedents, a person's decision on the
   same conditions at the same receiver, counted in the approval task's text, the snapshot summary and
-  `GET /cases/{id}/precedents` (6.4); each item of the review that lands adds its line here.
+  `GET /cases/{id}/precedents` (6.4); the releases of waiting and held cases moved out of the index adapter into the Case
+  Releaser item, one sweep every few seconds with a run row when there are candidates (8.1); each item of the review that
+  lands adds its line here.
 - v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:
   run, reset, purge) and `Shutter_Configure` (the site's writes: the profile, the library, a schema import, the review
   annotations), held by the operator and the approver as before; the role `Shutter_Demo` (reads, reinvestigates, approves and
