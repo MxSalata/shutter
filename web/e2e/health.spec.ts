@@ -24,7 +24,7 @@ async function openEverything(page: Page) {
   );
 }
 
-test.describe('the trial report', () => {
+test.describe('the trial report @health', () => {
   test('opens as a recording: ready, with its core checks, when it was read and where the agents ran', async ({
     page,
   }) => {
@@ -113,7 +113,7 @@ test.describe('the trial report', () => {
   });
 });
 
-test.describe('on a phone', () => {
+test.describe('on a phone @health', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
   test('puts a short value beside its label and a long one under it', async ({ page }) => {
@@ -139,11 +139,11 @@ test.describe('on a phone', () => {
 
 for (const { colorScheme, contrast, palette } of MODES) {
   const mode = `${palette === 'pastel' ? 'pastel' : colorScheme}${contrast === 'more' ? ', high contrast' : ''}`;
-  test.describe(`with every disclosure open, ${mode}`, () => {
+  test.describe(`with every disclosure open, ${mode} @health`, () => {
     test.use({ colorScheme, contrast });
     if (palette === 'pastel') test.beforeEach(({ page }) => choosePastel(page));
 
-    test(`passes axe-core @health`, async ({ page }) => {
+    test('passes axe-core', async ({ page }) => {
       await signIn(page);
       await go(page, '/health');
       await expect(page.getByRole('heading', { name: 'Health', exact: true })).toBeVisible();
