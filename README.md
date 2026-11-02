@@ -6,7 +6,7 @@
 
 **Jump to:** [Try it](https://github.com/MxSalata/shutter#try-it) · [What to look at](https://github.com/MxSalata/shutter#what-to-look-at) · [How it works](https://github.com/MxSalata/shutter#how-it-works) · [AI Hub](https://github.com/MxSalata/shutter#ai-hub-inside-shutter) · [Bonuses](https://github.com/MxSalata/shutter#technology-bonuses) · [Testing](https://github.com/MxSalata/shutter#how-it-is-tested) · [Limits](https://github.com/MxSalata/shutter#limits-plainly) · [Run details](https://github.com/MxSalata/shutter#run-details)
 
-**Demo** [link at submission] | **Video** [link at submission] | **Articles** [link at submission] | **Open Exchange** [link at submission]
+**Trial** [link at submission] | **Online demo** [link at submission] | **Video** [link at submission] | **Articles** [link at submission] | **Open Exchange** [link at submission]
 
 When a hospital's HL7 delivery fails, the usual fix is **Resend** in the Message Viewer. If the patient has moved since, that resend moves them back. Shutter makes each failed delivery a case instead: AI Hub agents read sealed evidence and propose a plan, a deterministic gate checks it, a person or the site's written policy releases it, and one conditional write follows, proven from the receiver's history. The AI board proposes; the gate disposes. Shutter is the failsafe for what no integration can foresee.
 
@@ -28,6 +28,8 @@ The three specialists (conformance, encounter and impact) and the coordinator ar
 ## Try it
 
 **Online demo:** [link at submission]: a live hospital where a story fails every 7 minutes and Shutter recovers it, the board running live on the cases handed to it. Sign in as `demo` / `shutter`. The Management Portal's Visual Trace, read only: `demo-trace` / `Shutter-Demo-IRIS-Portal`.
+
+**In the browser, nothing to install:** [the trial](link at submission) opens signed in on the demo hospital's recorded runs. Every action replays the recording, and nothing leaves the browser. Two tours start from an address: [the quick tour](link at submission, `?trial=tour`), 9 steps in about 4 minutes (a transfer delivered, a fix held back, the gate stopping one, and the proof), and [the engineers' tour](link at submission, `?trial=engineer`), 6 steps in about 3 minutes with Detail on Technical (the receipt, the gate's codes, what each agent cited, the message trace).
 
 **On your machine:** Docker, then one command. `install.sh` checks Docker, Compose, memory, disk, the port and the image first, prints the fix for anything missing and changes nothing until every check passes; then it builds, starts and waits until Shutter reports healthy.
 
@@ -178,7 +180,7 @@ Measured on build `2026.3.0AI.154.0`:
 - The receiver is a demo bed-management system built for the scenarios. Shutter resends only to a receiver whose API the site profile describes; any other is investigated and escalated, never resent. A plain MLLP receiver, which only acknowledges, gets the board's diagnosis and an escalation with the steps to put it right: an ACK says a message arrived, not what the receiver now holds, so Shutter could not verify a resend there.
 - The shipped site profile is a demo: it releases the single cases the catalogue settles at tier 2 without asking a person. A real site first answers the profile's induction questions.
 - Order communications and results systems are declared but not modelled; a case for one escalates before any model runs.
-- There is no local-model profile (Ollama and the like): every board member works through tool calls, and Shutter is tested only with a provider whose models make them reliably.
+- There is no local-model profile (Ollama and the like), on purpose. The board works through tool calls (typed drill-downs, and terminal tools that refuse a bad result), and Shutter uses a frontier model (`claude-opus-5-5`) because that is what makes those calls reliably on evidence this detailed. A hospital is unlikely to run its own large models; one that does most likely serves them through an API, which AI Hub can reach as a provider configured in the Config Store, as Shutter's own is. Shutter has not been tested that way.
 - The evaluation is one recording per board member and case, with one model. It can't show how often a repeat run agrees, and the catalogue the agents read was written alongside these scenarios.
 - The one injected instruction (S4) stays in IRIS: the agents see only a flag that note text is present and reads like an instruction. That shows they notice the flag, not that they would resist the text.
 - Timeouts never form incidents, so a storm of them convenes one board pass per message, 0.34 to 0.50 USD each when live: 100 timeouts would cost 34 to 50 USD. `BoardsPerMinute` (6 by default) spreads the passes out, a token budget limits each run, and `SHUTTER_DAILY_BUDGET_USD` caps a day's live spend; at the cap the board's cases take the rules path, so none is left unhandled. Unset, nothing limits the total, so set it on any instance with a key (15 USD a day is a sensible start). The public demo caps live spend at 2 USD between its hourly resets, 1 USD of it per judge.
