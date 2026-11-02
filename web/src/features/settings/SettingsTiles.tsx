@@ -3,10 +3,12 @@ import { IconArrowRight } from '@tabler/icons-react';
 import { Link } from 'react-router';
 import type { Costs, Settings } from '@/api/types';
 import { StatTile } from '@/components/StatTile';
+import { LiveUnavailableNotice } from '@/components/LiveUnavailableNotice';
 import { StatusBadge } from '@/components/StatusBadge';
 import { SummaryBand } from '@/components/SummaryBand';
 import { budgetSpent, budgetText, resetsHourly } from '@/lib/budget';
 import { formatInt, formatUsd, plural } from '@/lib/format';
+import { liveUnavailable } from '@/lib/liveAgents';
 import { PROOF } from '@/lib/proof';
 import { costRange, replayTile } from './settingsText';
 
@@ -25,14 +27,17 @@ function spentCaption(s: Settings | undefined, words: ReturnType<typeof budgetTe
  * The four figures a newcomer asks first, the real cost before the zeros (N22): what a board pass costs with the real
  * agents, what the recorded runs cost in all (both from the evaluation, through `lib/proof.ts`), what was spent here
  * and how many replayed runs cost nothing. A tile whose figure is missing is left out. Where money can be spent, the
- * spent tile takes the attention tone once the day's cap, or the user's share of it, is used up.
+ * spent tile takes the attention tone once the day's cap, or the user's share of it, is used up, or while the model
+ * provider refuses the key; then the notice's words (until when, and on a demo how to install Shutter with one's own
+ * key) stand in for its caption.
  */
 export function SettingsTiles({ s, costs }: { s: Settings | undefined; costs: Costs | undefined }) {
   const totals = costs?.totals;
   const spent = totals?.spentUsd;
   const replay = replayTile(s, spent);
   const words = budgetText(s?.budget, { resetsHourly: resetsHourly(s) });
-  const used = !replay && budgetSpent(s?.budget);
+  const unavailable = replay ? null : liveUnavailable(s);
+  const used = !replay && (budgetSpent(s?.budget) || !!unavailable);
   const realFigure = s?.budget ? s.budget.spentTodayUsd : spent;
   return (
     <SummaryBand title="Summary" cols={{ base: 2, md: 4 }}>
@@ -61,10 +66,19 @@ export function SettingsTiles({ s, costs }: { s: Settings | undefined; costs: Co
         <StatTile
           label="Spent on real model runs"
           figure={formatUsd(realFigure)}
-          caption={spentCaption(s, words, used)}
+          caption={unavailable ? undefined : spentCaption(s, words, used)}
           tone={used ? 'attention' : undefined}
-          status={used ? <StatusBadge tone="attention" label="Budget used up" /> : undefined}
-        />
+          status={
+            used ? (
+              <StatusBadge
+                tone="attention"
+                label={unavailable?.reason === 'service' ? 'Live agents unavailable' : 'Budget used up'}
+              />
+            ) : undefined
+          }
+        >
+          {unavailable ? <LiveUnavailableNotice state={unavailable} variant="inline" compact /> : null}
+        </StatTile>
       ) : null}
       {totals?.replayedRuns !== undefined ? (
         <StatTile label="Replayed runs" figure={formatInt(totals.replayedRuns)} caption="cost nothing" />

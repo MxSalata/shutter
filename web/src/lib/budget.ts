@@ -1,4 +1,4 @@
-import type { Budget, LiveStatus } from '@/api/types';
+import type { Budget, LiveStatus, Settings } from '@/api/types';
 import { formatUsd } from './format';
 
 /**
@@ -45,4 +45,24 @@ export function budgetSpent(b: Budget | undefined): boolean {
   if (!b) return false;
   if (b.exhausted || b.shareExhausted) return true;
   return !!b.perUserUsd && b.perUserUsd > 0 && (b.spentByMeUsd ?? 0) >= b.perUserUsd;
+}
+
+/** "$15" for a whole figure, "$2.50" otherwise. */
+const figure = (n: number) => (Number.isInteger(n) ? `$${n}` : formatUsd(n));
+
+/**
+ * The live banner's line about what the author pays for the live agents, figure first: `live.budgetNote` when the server
+ * sends it (the demo build's own figure, said alone: the hourly reset makes the instance's spend undercount a daily
+ * figure), else the instance's own cap, per hour on the public demo (`resetsHourly`) and per day elsewhere, with what was
+ * spent against it so far. Null when neither gives a positive figure.
+ */
+export function budgetNoteLine(s: Settings | undefined): string | null {
+  const note = s?.live?.budgetNote;
+  const lead = (amount: number, period: 'day' | 'hour') =>
+    `${figure(amount)} ${period === 'hour' ? 'an hour' : 'a day'}, paid by the author, runs the live agents`;
+  if (note && Number(note.amountUsd) > 0 && (note.period === 'day' || note.period === 'hour'))
+    return `${lead(Number(note.amountUsd), note.period)}.`;
+  const b = s?.budget;
+  if (!b || !(b.dailyUsd > 0)) return null;
+  return `${lead(b.dailyUsd, resetsHourly(s) ? 'hour' : 'day')} (so far: ${formatUsd(b.spentTodayUsd ?? 0)}).`;
 }

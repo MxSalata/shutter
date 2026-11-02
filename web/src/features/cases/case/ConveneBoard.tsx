@@ -9,7 +9,9 @@ import { TRIAL } from '@/env/mode';
 import { NOT_IN_TRIAL } from '@/env/copy';
 import { budgetSpent, budgetText, resetsHourly } from '@/lib/budget';
 import { describeError } from '@/lib/errors';
+import { liveRefusal, liveUnavailable } from '@/lib/liveAgents';
 import { ConfirmModal } from '@/components/ConfirmModal';
+import { LiveUnavailableNotice } from '@/components/LiveUnavailableNotice';
 
 /** The states a reinvestigation reopens, and so the board may be convened on. */
 const REOPENABLE: string[] = ['blocked', 'escalated', 'failed'];
@@ -20,7 +22,9 @@ const REOPENABLE: string[] = ['blocked', 'escalated', 'failed'];
  * decides it whatever the site's policy says; its plan then meets the same gate, rehearsal and approval. It reopens a
  * case as a reinvestigation does, so it is offered on the same cases: blocked, escalated or failed. A case awaiting an
  * approval is approved or rejected first, and one still being investigated is left to finish. The trial shows it on
- * the same cases, disabled with its reason, and never as if a run started: it needs a real model.
+ * the same cases, disabled with its reason, and never as if a run started: it needs a real model. While the live
+ * agents cannot run (the budget used up, the provider refusing the key), or once the server refused the press for that
+ * reason (409 live_unavailable or budget_exhausted), the dialog says so in the notice and Convene cannot be pressed.
  */
 export function ConveneBoard({ c }: { c: CaseDetail }) {
   const can = resolveCan(useMe().data);
@@ -44,7 +48,11 @@ export function ConveneBoard({ c }: { c: CaseDetail }) {
   if (!can.liveAgents) return null;
   // On the public demo the budget is per reset, every hour, never the day's
   const words = budgetText(budget, { resetsHourly: resetsHourly(settings) });
-  const spent = budgetSpent(budget);
+  // While the live agents cannot run (the budget, the provider refusing the key), or once the server refused this
+  // convening for that reason, the notice stands in for the budget's line and says until when
+  const refusal = liveRefusal(convene.error, settings);
+  const unavailable = refusal ?? liveUnavailable(settings);
+  const spent = budgetSpent(budget) || !!unavailable;
   const open = () => {
     setKey(newIdempotencyKey());
     convene.reset();
@@ -80,7 +88,9 @@ export function ConveneBoard({ c }: { c: CaseDetail }) {
             whatever the site&apos;s policy says. Its plan meets the same gate, rehearsal and approval as any
             other; the earlier plan and approval stay as history.
           </Text>
-          {words ? (
+          {unavailable ? (
+            <LiveUnavailableNotice state={unavailable} role={refusal ? 'status' : undefined} />
+          ) : words ? (
             <Stack gap={2}>
               <Text size="sm" c="dimmed">
                 {words.today}
@@ -92,7 +102,7 @@ export function ConveneBoard({ c }: { c: CaseDetail }) {
               ) : null}
             </Stack>
           ) : null}
-          {convene.error ? (
+          {convene.error && !refusal ? (
             <Text size="sm" c="red">
               {describeError(convene.error)}
             </Text>

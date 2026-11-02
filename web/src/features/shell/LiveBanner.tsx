@@ -1,12 +1,15 @@
-import { Group, Text, Tooltip } from '@mantine/core';
+import { Group, Stack, Text, Tooltip } from '@mantine/core';
 import { IconBroadcast } from '@tabler/icons-react';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router';
-import { useCan, useLiveStatus } from '@/api/hooks';
+import { useCan, useLiveStatus, useSettings } from '@/api/hooks';
 import type { LiveStatus } from '@/api/types';
+import { LiveUnavailableNotice } from '@/components/LiveUnavailableNotice';
 import { TRIAL } from '@/env/mode';
 import type { StormRefusal } from '@/features/storm/view';
+import { budgetNoteLine } from '@/lib/budget';
 import { formatAge, formatTime, parseTime, zoneLabel } from '@/lib/format';
+import { liveUnavailable } from '@/lib/liveAgents';
 import { isStormShown, STORM_IN_TRIAL } from '@/lib/storm';
 import { useNow } from '@/lib/useNow';
 import { HINT_EVENTS } from '@/theme';
@@ -59,6 +62,10 @@ function usePulse(at: string | undefined): number {
  * while one plays or has just finished it carries the storm's strip, on every page but Incidents, which shows the strip
  * in its own place (so it is neither drawn nor announced twice). A refusal stands under the line as a calm notice. A
  * trial page has no demo hospital to break: its banner says where the storm plays instead.
+ *
+ * The live budget: a short line under the feed's, figure first, says what the author pays for the live agents
+ * (`budgetNoteLine`), and while the live agents cannot run (the budget used up, the provider refusing the key) the
+ * notice under it says so plainly, until when, and where to install Shutter with one's own key. Neither is in the trial.
  */
 export function LiveBanner() {
   const live = useLiveStatus();
@@ -67,7 +74,10 @@ export function LiveBanner() {
   const can = useCan();
   const { pathname } = useLocation();
   const [refusal, setRefusal] = useState<StormRefusal | null>(null);
+  const settings = useSettings().data;
   if (!live) return null;
+  const note = TRIAL ? null : budgetNoteLine(settings);
+  const unavailable = TRIAL ? null : liveUnavailable(settings);
   const name = TRIAL ? 'Hospital feed (replayed)' : 'Live hospital';
   const last = live.last_played;
   const next = nextDue(live, now);
@@ -93,29 +103,37 @@ export function LiveBanner() {
         <Group gap="xs" wrap="nowrap" align="flex-start" style={{ minWidth: 0, flex: '1 1 20rem' }}>
           <IconBroadcast size={18} aria-hidden style={{ flex: 'none', marginTop: 2 }} />
           <span className="live-dot" aria-hidden key={pulse} data-pulse={pulse > 0 || undefined} />
-          <Text size="sm" data-testid="live-line">
-            {name}: {cadence(live.every_minutes)}.
-            {last?.scenario ? (
-              <>
-                {' '}
-                Last:{' '}
-                {last.title ? (
-                  <Tooltip label={last.title} withArrow events={HINT_EVENTS}>
-                    <span className="live-story" tabIndex={0}>
-                      {last.scenario}
-                    </span>
-                  </Tooltip>
-                ) : (
-                  last.scenario
-                )}
-                {last.at ? `, ${formatAge(last.at, now)}` : ''}.
-              </>
+          <Stack gap={0} style={{ minWidth: 0, flex: '1 1 auto' }}>
+            <Text size="sm" data-testid="live-line">
+              {name}: {cadence(live.every_minutes)}.
+              {last?.scenario ? (
+                <>
+                  {' '}
+                  Last:{' '}
+                  {last.title ? (
+                    <Tooltip label={last.title} withArrow events={HINT_EVENTS}>
+                      <span className="live-story" tabIndex={0}>
+                        {last.scenario}
+                      </span>
+                    </Tooltip>
+                  ) : (
+                    last.scenario
+                  )}
+                  {last.at ? `, ${formatAge(last.at, now)}` : ''}.
+                </>
+              ) : null}
+              {next ? ` ${next}` : ''}
+            </Text>
+            {note ? (
+              <Text size="xs" className="live-budget-line" data-testid="live-budget-line">
+                {note}
+              </Text>
             ) : null}
-            {next ? ` ${next}` : ''}
-          </Text>
+          </Stack>
         </Group>
         {action}
       </Group>
+      {unavailable ? <LiveUnavailableNotice state={unavailable} className="live-unavailable" /> : null}
       <Suspense fallback={null}>
         {refusal && !TRIAL ? <StormNotice refusal={refusal} onClose={() => setRefusal(null)} /> : null}
         {storm && pathname !== '/incidents' ? <StormStrip storm={storm} /> : null}
