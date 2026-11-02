@@ -137,7 +137,7 @@ export function InvestigatedBy({ c }: { c: CaseSummary }) {
   const { who, entry } = investigatedBy(c);
   const hue = WHO_HUE[who];
   return (
-    <Stack gap={2} align="flex-start">
+    <Stack gap={2} align="flex-start" className="case-who">
       {hue ? <IdentityBadge hue={hue}>{who}</IdentityBadge> : <Text size="sm">{who}</Text>}
       {entry ? (
         <Text size="xs" c="dimmed">
@@ -191,10 +191,10 @@ function WhatFailed({ c }: { c: CaseSummary }) {
       <Text size="sm">{first}</Text>
       {technical ? (
         <Group gap={4} wrap="wrap">
-          {c.event ? <CodeChip>{c.event}</CodeChip> : null}
-          {c.failureKind ? <CodeChip>{c.failureKind}</CodeChip> : null}
-          {c.sourceHeaderId ? <CodeChip>{`header ${c.sourceHeaderId}`}</CodeChip> : null}
-          {entry ? <CodeChip>{`catalogue ${entry}`}</CodeChip> : null}
+          {c.event ? <CodeChip fz="xs">{c.event}</CodeChip> : null}
+          {c.failureKind ? <CodeChip fz="xs">{c.failureKind}</CodeChip> : null}
+          {c.sourceHeaderId ? <CodeChip fz="xs">{`header ${c.sourceHeaderId}`}</CodeChip> : null}
+          {entry ? <CodeChip fz="xs">{`catalogue ${entry}`}</CodeChip> : null}
         </Group>
       ) : null}
       {rest ? (
@@ -233,7 +233,7 @@ export function CasesTable({
   const byId = new Map(scenarios.map((s) => [s.id, s]));
   return (
     <Table.ScrollContainer minWidth={760} className="stack-scroll">
-      <StackTable className="stack-table stack-cards cases-table">
+      <StackTable className="stack-table stack-cards cases-table" horizontalSpacing={7}>
         <StackTable.Thead>
           <StackTable.Tr>
             <StackTable.Th>Case</StackTable.Th>
@@ -285,7 +285,7 @@ export function CasesTable({
                 </StackTable.Td>
                 <StackTable.Td data-label="Scenario" className="case-meta">
                   <Text size="sm">{c.scenario || 'none'}</Text>
-                  <Text size="xs" c="dimmed">
+                  <Text size="xs" c="dimmed" className="case-mode">
                     {humanize(c.mode)}
                   </Text>
                 </StackTable.Td>
@@ -432,7 +432,7 @@ function TileGroup({ title, children }: { title: string; children: ReactNode }) 
       <Text id={id} className="overline" mb={6}>
         {title}
       </Text>
-      <SimpleGrid cols={{ base: 2, xs: 3 }} spacing="xs">
+      <SimpleGrid cols={3} spacing="xs" className="cases-tiles">
         {children}
       </SimpleGrid>
     </section>
@@ -524,7 +524,7 @@ export default function CasesPage() {
             ))}
           </TileGroup>
         </SimpleGrid>
-        <Stack gap={6}>
+        <Stack gap={6} className="cases-legend">
           <ToneLegend />
           <TechDetail label="How to read this list" kind="explain">
             <Text size="sm" maw="68ch">

@@ -473,7 +473,7 @@ describe('the page', () => {
     expect(within(table).queryByRole('columnheader', { name: 'State' })).not.toBeInTheDocument();
     expect(await screen.findByText('64 cases')).toBeVisible();
     // The newest 25 are shown; C-000021 is older, so find it by its scenario
-    await userEvent.selectOptions(screen.getByLabelText('Scenario'), 'S8');
+    await userEvent.selectOptions(screen.getByLabelText('Scenario', { exact: true }), 'S8');
     const row = (await screen.findByRole('link', { name: 'C-000021' })).closest('tr')!;
     expect(row).toHaveAttribute('data-tone', 'blocking');
     expect(within(row).getByText('Not as expected')).toBeInTheDocument();

@@ -46,7 +46,7 @@ test.describe('the outcome of each case', () => {
     await expect(row(page, 'C-000058')).toContainText('Delivered, verified');
     await expect(row(page, 'C-000063')).toContainText('Nothing to send, verified');
     // C-000021 is older than the first page: find it through its scenario
-    await page.getByLabel('Scenario').selectOption('S8');
+    await page.getByLabel('Scenario', { exact: true }).selectOption('S8');
     await expect(row(page, 'C-000021')).toContainText('Not as expected');
     await expect(row(page, 'C-000021')).toHaveAttribute('data-tone', 'blocking');
   });
@@ -109,7 +109,10 @@ test.describe('on a phone', () => {
     await expect(card).toContainText('Delivered, verified');
     await expect(card).toContainText('Resend the transfer to WARD-B unchanged');
     // The visible column names are hidden: the values name themselves
-    await expect(card.getByText('At the receiver', { exact: true })).toBeHidden();
+    const label = await card
+      .locator('td[data-label="At the receiver"]')
+      .evaluate((td) => getComputedStyle(td, '::before').display);
+    expect(label).toBe('none');
     const box = (await card.boundingBox())!;
     expect(box.height).toBeLessThan(330);
     expect(box.width).toBeLessThanOrEqual(390);
