@@ -41,7 +41,7 @@ ClassMethod Estimate() As %Numeric
 ClassMethod Reserve(key As %String, user As %String = "") As %Numeric
 {
     Set est = ..Estimate()
-    Set now = $PIECE($HOROLOG, ",", 1) * 86400 + $PIECE($HOROLOG, ",", 2)
+    Set now = ##class(Shutter.Util.Time).EpochSeconds()
     Set ^Shutter.Budget("reserve", key) = $LISTBUILD(est, now, user)
     Quit est
 }
@@ -56,7 +56,7 @@ ClassMethod Settle(key As %String)
 ClassMethod Reserved(user As %String = "", Output count As %Integer) As %Numeric
 {
     Set total = 0, count = 0
-    Set now = $PIECE($HOROLOG, ",", 1) * 86400 + $PIECE($HOROLOG, ",", 2)
+    Set now = ##class(Shutter.Util.Time).EpochSeconds()
     Set key = ""
     For {
         Set key = $ORDER(^Shutter.Budget("reserve", key), 1, value) Quit:key=""

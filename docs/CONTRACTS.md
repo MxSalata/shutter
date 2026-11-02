@@ -61,8 +61,9 @@ anything else are ignored), the feed's intake carries it (`retry_after_seconds` 
 until when the receiver asked not to retry (`retryAfterUntil`). The resend's first read of the receiver, the preflight after
 the approval or the automatic release, waits for what is left of it, 300 s at most, with a note on the case ("The receiver
 asked for a pause before a retry (Retry-After, until ...); the preflight read waits N s"), and the wait is spent once: the
-field is cleared when the wait is armed. A case whose approval comes later than the receiver asked waits nothing. A case
-from another production (11) carries none: the forward has no header field.
+field is cleared when the wait is armed. A case whose approval comes later than the receiver asked waits nothing (the field is cleared then too). A preflight read
+that itself fails with a `Retry-After` waits the longer of its own backoff (10, 20, 40 s) and the header, 300 s at most,
+before it is read again. A case from another production (11) carries none: the forward has no header field.
 
 Decided with the downstream system (15 Oct): faults apply to real operations only, never to a dry run; a dry run reports a refusal as 200 with `would_apply` false, except `bed_occupied`, which it answers as the 409 itself (v1.24); a discharge sets `ward` to null; for an `admit`, `expected_version` 0 means "not yet seen"; the per-encounter lock waits 10 s and then answers 503 `ward_unavailable`; a reset answers 200 `{"reset": true}`; the dry run relies on a transaction rollback, so the database must be journaled (the default).
 
@@ -783,7 +784,10 @@ no cap) counts the boards convened in the current UTC minute (`Shutter.Util.Boar
 whose turn finds the minute full does not convene at once: it notes "The board is busy: N convened this minute, the cap is M a
 minute; this case waits S s for a slot" (60 to 90 s), an `Ens.Alarm` keyed by the round brings it back (`board:defer`), and
 it convenes then, on its snapshot's summary, if it still waits and the round is the same. Both convening paths (the board on
-fresh evidence and the policy's `board`) go through one method. A storm of failures therefore costs at most the cap a minute,
+fresh evidence and the policy's `board`, which asks for the full board whatever the case's mode) go through one method,
+which builds every member's request first (a case the model view refuses, or one with no member to convene, spends no slot)
+and then takes the slot atomically (`BoardSlots.TryTake`: the count goes up and comes back down past the cap, so two cases
+cannot both pass a last slot); a deferred case keeps who asked and which members (`DeferredBy`, `DeferredMode`). A storm of failures therefore costs at most the cap a minute,
 each case waits its turn and none is lost; the fuller answer, one board per failure signature with followers taking the
 leader's diagnosis, is the next step and is not in this build.
 
@@ -1268,9 +1272,12 @@ copy of the message.
   (`^Shutter.AlertIntake("seen")`, kept a day), so a connector's retries alert the site each time but reach Shutter once.
   An alert whose session has no HL7 message, or from an item outside `Receivers`, is passed on only; both sends are
   asynchronous, so the feed never waits. The forwarder's refusal is a warning in the event log, as for the sending
-  process. The demo hospital's production carries the item with `Receivers` `Downstream Out` and `AlertOnError` on that
-  connector; its process forwards its own failures (above), so `PAS to Downstream` stays out of `Receivers` and a failure
-  reaches Shutter once. The production review's `NO_ALERT_CONSUMER` (13) names the item.
+  process. The demo hospital's production carries the item with `Receivers` `Downstream Out`, and its connector raises an alert
+  for a delivery the ward system could not take or did not answer (`unavailable`, `uncertain`), as a real connector's
+  would, so the alert path plays in the demo; its process forwards the same failure (above), and the intake answers the
+  alert's forward with the case already open (`opened` false), so a failure reaches Shutter once as a case and twice in the
+  message trace. `PAS to Downstream` stays out of `Receivers`. The production review's `NO_ALERT_CONSUMER` (13) names the
+  item.
 - **The demo hospital** (shape A as a judge sees it): the image also creates the namespace `HOSPITAL` (`Installer.cls`;
   `SELECT Shutter.Installer_RunHospital('SHUTTER')` on an instance that has Shutter) with the packages `Shutter.Intake`,
   `Shutter.Util`, `Shutter.Msg`, `Shutter.Store` and `Hospital` mapped from Shutter's code database, and

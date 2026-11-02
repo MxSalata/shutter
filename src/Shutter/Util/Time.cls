@@ -23,6 +23,12 @@ ClassMethod NowUTCms() As %String
     Quit $ZDATE(ts, 3) _ "T" _ $ZTIME(secs \ 1, 1) _ "." _ ms _ "Z"
 }
 
+/// Seconds since the IRIS epoch, from the clock: for intervals that need no formatting.
+ClassMethod EpochSeconds() As %Integer
+{
+    Quit $PIECE($HOROLOG, ",", 1) * 86400 + $PIECE($HOROLOG, ",", 2)
+}
+
 /// An ISO UTC time a number of seconds from now (negative values go back).
 ClassMethod FromNow(seconds As %Integer) As %String
 {

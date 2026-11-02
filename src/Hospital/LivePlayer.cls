@@ -47,7 +47,7 @@ Method OnProcessInput(pInput As %RegisteredObject, Output pOutput As %Registered
 {
     Set pOutput = ""
     If '$GET(^Hospital.Config("live")) Quit $$$OK
-    Set now = $PIECE($HOROLOG, ",", 1) * 86400 + $PIECE($HOROLOG, ",", 2)
+    Set now = ##class(Shutter.Util.Time).EpochSeconds()
     // The storm first (v1.35): a press is picked up within one call, and nothing else plays under it; the rotation and the
     // ordinary feed wait until it is done.
     Set storm = ..StormState(.json)
@@ -212,7 +212,7 @@ Method StormWatch() As %Status
         If $ISOBJECT(inc) && (inc.state = "closed") Set over = 1
         If over {
             Set json.state = "done", json.endedAt = now
-            Set ^Hospital.Live("last_story_at") = $PIECE($HOROLOG, ",", 1) * 86400 + $PIECE($HOROLOG, ",", 2)
+            Set ^Hospital.Live("last_story_at") = ##class(Shutter.Util.Time).EpochSeconds()
             $$$TRACE("Storm " _ json.stormId _ " done")
         }
         Do ..StormSave(json)
@@ -271,7 +271,7 @@ Method PlayNext() As %Status
     If list = "" Quit $$$ERROR($$$GeneralError, "No scenario to play")
     Set n = $INCREMENT(^Hospital.Live("plays"))
     Set id = $LIST(list, 1 + ((n - 1) # $LISTLENGTH(list)))
-    Set ^Hospital.Live("last_story_at") = $PIECE($HOROLOG, ",", 1) * 86400 + $PIECE($HOROLOG, ",", 2)
+    Set ^Hospital.Live("last_story_at") = ##class(Shutter.Util.Time).EpochSeconds()
     Set ^Hospital.Live("next") = $LIST(list, 1 + (n # $LISTLENGTH(list)))
     Quit ..Play(id, n)
 }

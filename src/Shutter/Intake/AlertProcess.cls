@@ -37,31 +37,38 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
         Set sc = ..SendRequestAsync(..PassTo, request, 0, "pass")
         If $$$ISERR(sc) $$$LOGWARNING("The alert could not be passed on to " _ ..PassTo _ ": " _ $SYSTEM.Status.GetErrorText(sc))
     }
-    If '..Takes(request.SourceConfigName, ..Receivers) {
-        $$$TRACE("Alert from " _ request.SourceConfigName _ ": not a receiver in " _ $SELECT(..Receivers = "": "(any)", 1: ..Receivers) _ ", passed on only")
+    // An alert a host built by hand may name no source or session: its message header does.
+    Set source = request.SourceConfigName, session = request.SessionId
+    If $ISOBJECT(..%PrimaryRequestHeader) {
+        If source = "" Set source = ..%PrimaryRequestHeader.SourceConfigName
+        If session = "" Set session = ..%PrimaryRequestHeader.SessionId
+    }
+    If request.SourceConfigName = "" Set request.SourceConfigName = source
+    If '..Takes(source, ..Receivers) {
+        $$$TRACE("Alert from " _ source _ ": not a receiver in " _ $SELECT(..Receivers = "": "(any)", 1: ..Receivers) _ ", passed on only")
         Quit $$$OK
     }
-    If request.SessionId = "" {
-        $$$TRACE("Alert from " _ request.SourceConfigName _ " carries no session: nothing to hand to Shutter")
+    If session = "" {
+        $$$TRACE("Alert from " _ source _ " carries no session: nothing to hand to Shutter")
         Quit $$$OK
     }
-    If ..Seen(request.SessionId) {
-        $$$TRACE("Alert from " _ request.SourceConfigName _ " for session " _ request.SessionId _ ": its message was handed to Shutter already")
+    If ..Seen(session) {
+        $$$TRACE("Alert from " _ source _ " for session " _ session _ ": its message was handed to Shutter already")
         Quit $$$OK
     }
-    Set header = ..HL7HeaderOfSession(request.SessionId, .problem)
+    Set header = ..HL7HeaderOfSession(session, .problem)
     If '$ISOBJECT(header) {
-        $$$TRACE("Alert from " _ request.SourceConfigName _ " for session " _ request.SessionId _ ": " _ problem _ "; passed on only")
+        $$$TRACE("Alert from " _ source _ " for session " _ session _ ": " _ problem _ "; passed on only")
         Quit $$$OK
     }
-    Set forward = ..ForwardFromAlert(request, header, request.SourceConfigName)
+    Set forward = ..ForwardFromAlert(request, header, source)
     Set sc = ..SendRequestAsync(..ForwarderTarget, forward, 1, "forward")
     If $$$ISERR(sc) {
         $$$LOGWARNING("The alert's message (header " _ header.%Id() _ ") could not be handed to " _ ..ForwarderTarget _ ": " _ $SYSTEM.Status.GetErrorText(sc))
         Quit $$$OK
     }
-    Do ..MarkSeen(request.SessionId, request.SourceConfigName)
-    $$$TRACE("Alert from " _ request.SourceConfigName _ ": message header " _ header.%Id() _ " (" _ header.SourceConfigName _ ") handed to " _ ..ForwarderTarget _ " as " _ forward.FailureKind)
+    Do ..MarkSeen(session, source)
+    $$$TRACE("Alert from " _ source _ ": message header " _ header.%Id() _ " (" _ header.SourceConfigName _ ") handed to " _ ..ForwarderTarget _ " as " _ forward.FailureKind)
     Quit $$$OK
 }
 
@@ -114,13 +121,15 @@ ClassMethod HL7HeaderOfSession(sessionId As %String, Output problem As %String) 
     Quit $GET(header)
 }
 
-/// The failure as the alert's words tell it: a timeout or no answer is an uncertain outcome, a refusal or a NACK a
-/// rejection, anything else a failed delivery.
+/// The failure as the alert's words tell it: a connection that never opened is a failed delivery, a timeout or no answer an
+/// uncertain outcome, a reject, a NACK or an HTTP 4xx a rejection, anything else a failed delivery.
 ClassMethod Classify(text As %String) As %String
 {
     Set t = $ZCONVERT(text, "L")
+    // A connection that never opened: nothing was sent, so nothing was refused by the receiver.
+    If (t [ "connection refused") || (t [ "connect failed") || (t [ "unable to connect") || (t [ "no route") || (t [ "unable to open tcp") Quit "delivery_failed"
     If (t [ "timeout") || (t [ "timed out") || (t [ "no response") || (t [ "did not answer") || (t [ "did not respond") || (t [ "uncertain") Quit "uncertain_outcome"
-    If (t [ "reject") || (t [ "refused") || (t [ "nack") || $MATCH(t, ".*\b(ae|ar)\b.*") Quit "rejected"
+    If (t [ "reject") || (t [ "refused by") || (t [ "nack") || $MATCH(t, ".*\b(ae|ar)\b.*") Quit "rejected"
     If $EXTRACT(..HttpStatusIn(text), 1) = "4" Quit "rejected"
     Quit "delivery_failed"
 }
@@ -161,7 +170,7 @@ ClassMethod Seen(sessionId As %String) As %Boolean
 
 ClassMethod MarkSeen(sessionId As %String, source As %String)
 {
-    Set now = $PIECE($HOROLOG, ",", 1) * 86400 + $PIECE($HOROLOG, ",", 2)
+    Set now = ##class(Shutter.Util.Time).EpochSeconds()
     Set ^Shutter.AlertIntake("seen", sessionId) = $LISTBUILD(source, now)
     // Sessions are numbered upwards, so the oldest entries come first: drop what is older than a day.
     Set k = ""

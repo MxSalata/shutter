@@ -44,6 +44,14 @@ Method OnWardOperation(request As Shutter.Msg.WardOperation, Output response As 
     Set parsed = ##class(Shutter.Util.Json).Parse(text, .psc)
     If '$ISOBJECT(parsed) || $$$ISERR(psc) || 'parsed.%IsA("%DynamicObject") Set parsed = {}
     Do ..Classify(response, sc, parsed)
+    // A delivery the ward system could not take or did not answer is an alert as well as a failed result, as a real
+    // connector's would be: the production's Ens.Alert item (Shutter's alert intake, CONTRACTS 11) hears of it too.
+    If (response.Outcome = "unavailable") || (response.Outcome = "uncertain") {
+        Set alert = ##class(Ens.AlertRequest).%New()
+        Set alert.AlertText = "Delivery " _ response.Outcome _ " for " _ request.OperationKey _ ": " _ $SELECT(response.Error '= "": response.Error, 1: "HTTP " _ response.HttpStatus)
+        Set alert.SourceConfigName = ..%ConfigName, alert.SessionId = ..%SessionId
+        Do ..SendAlert(alert)
+    }
     $$$TRACE("Outcome " _ response.Outcome _ $SELECT(response.ReasonCode '= "": " (" _ response.ReasonCode _ ")", 1: "") _ ", HTTP " _ response.HttpStatus _ ", " _ response.DurationMs _ " ms")
     Quit $$$OK
 }
