@@ -1307,6 +1307,9 @@ ClassMethod Doctor() As %String [ SqlProc ]
     Do r.%Set("ward_classes", ''##class(%Dictionary.CompiledClass).%ExistsId("Downstream.API"), "boolean")
     Do r.%Set("aihub_runner", ''##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Bridge.Runner.AIHub"), "boolean")
     Do r.%Set("ai_hub_present", ''##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent"), "boolean")
+    // The edition in one word (v1.35): aihub (the package and the module), core (neither: the replay edition), or broken when
+    // one is there without the other, which an install should never leave.
+    Set r.edition = $SELECT(r."ai_hub_present" && r."aihub_runner": "aihub", 'r."ai_hub_present" && 'r."aihub_runner": "core", r."ai_hub_present": "broken: AI Hub is present but the aihub module is not loaded", 1: "broken: the aihub module is loaded on an image without AI Hub")
     // The API mimic's switch as set (tests/mock), "" when off; it counts on a demo instance only (MockConfig).
     Set r."mock_config" = $GET(^Shutter.Config("aihub", "mock"))
     &sql(SELECT COUNT(*) INTO :members FROM Shutter_Store.BoardMember WHERE Enabled = 1)

@@ -1224,6 +1224,11 @@ on the server and answers `{ok, category, loaded, error}`; `GET /settings/schema
 `import_failed` with the importer's words: a file that is not there, not `.xml`, or not a schema). The install guide's
 section 7 says how a site loads its schema and what a case says meanwhile (6.5, `SCHEMA_UNKNOWN`).
 
+**The edition decides itself** (v1.35). The image build's `WITH_AIHUB` argument defaults to `auto`: `aihub.script` loads the
+aihub module when the base image has the `%AI` package and skips it, saying so, when it does not (the replay edition); `1`
+requires AI Hub and fails the build on an image without it, `0` skips it. The Doctor reports `edition`: `aihub`, `core`, or
+`broken: ...` when the package and the module disagree, which an install should never leave.
+
 **What was last observed** (v1.35). The Doctor and `GET /health` (its anonymous answer too) carry `last_live_run`: the newest run
 that reached a model (`live` or `record`, never the API mimic) as `{at, status, member, model, mode}`, or null when none
 has, so a capped or failing afternoon shows as such beside the configured mode. The image's compose file has a healthcheck
