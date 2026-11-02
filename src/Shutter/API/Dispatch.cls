@@ -258,7 +258,7 @@ ClassMethod Health() As %Status
     If $SYSTEM.Security.Check("Shutter_Operate", "USE") Quit ..Json(full)
     // Anyone may ask whether the instance is up and whether it is the demo; the rest is for signed-in users.
     Set o = {}
-    For key = "status", "ok", "demo", "version", "production", "production_state", "mode", "last_live_run" { If full.%IsDefined(key) Do o.%Set(key, full.%Get(key), $CASE(full.%GetTypeOf(key), "boolean": "boolean", "null": "null", : "")) }
+    For key = "status", "ok", "demo", "version", "production", "production_state", "mode", "last_live_run", "credentials_ok" { If full.%IsDefined(key) Do o.%Set(key, full.%Get(key), $CASE(full.%GetTypeOf(key), "boolean": "boolean", "null": "null", : "")) }
     Do o.%Set("ok", ##class(Shutter.Util.Json).Str(full, "production_state") = "running", "boolean")
     Quit ..Json(o)
 }
