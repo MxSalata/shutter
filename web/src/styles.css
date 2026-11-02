@@ -841,14 +841,17 @@ body {
   border: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
   border-left: 4px solid var(--mantine-primary-color-filled);
 }
-/* A receipt's badge keeps its whole label: in a narrow column it wraps rather than ending in an ellipsis. */
-.receipt-band .mantine-Badge-root {
+/*
+ * A badge that keeps its whole label: in a narrow column or cell it wraps rather than ending in an ellipsis (no
+ * ellipsis on a fact, DESIGN.md 5.5). A receipt's badges always do; elsewhere put `wrap-badges` on the cell or group.
+ */
+:is(.receipt-band, .wrap-badges) .mantine-Badge-root {
   height: auto;
   min-height: var(--badge-height);
   max-width: 100%;
   padding-block: 2px;
 }
-.receipt-band .mantine-Badge-label {
+:is(.receipt-band, .wrap-badges) .mantine-Badge-label {
   white-space: normal;
   overflow: visible;
   text-overflow: clip;
@@ -903,6 +906,38 @@ body {
 }
 
 /*
+ * A long table that scrolls sideways inside its card keeps its first column (the row's name) in view: put
+ * `sticky-first-col` on the card that holds the `Table.ScrollContainer`. The sticky cells take the card's own surface
+ * in every appearance (white, dark, Pastel's card fill, high contrast's body), by inheriting it down the table's
+ * parts, each of which is transparent over the card. On a phone, where the rows are compact cards, nothing sticks.
+ */
+.sticky-first-col
+  :is(
+    .mantine-Table-scrollContainer,
+    .mantine-Table-scrollContainerInner,
+    .mantine-ScrollArea-root,
+    .mantine-ScrollArea-viewport,
+    .mantine-ScrollArea-viewport > div,
+    table,
+    thead,
+    tbody,
+    tr
+  ) {
+  background-color: inherit;
+}
+.sticky-first-col table :is(td, th):first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background-color: inherit;
+}
+@media (max-width: 35.99em) {
+  .sticky-first-col table :is(td, th):first-child {
+    position: static;
+  }
+}
+
+/*
  * The Scenarios page's six steps: a numbered strip that wraps on a phone. The gate's step carries a shield and a
  * heavier border, so it stands out without a colour of its own.
  */
@@ -927,11 +962,14 @@ body {
   border-color: var(--mantine-color-text);
 }
 
-/* The tone legend is a plain list. */
+/* The tone legend is a plain list. A badge keeps its width when its meaning wraps on a narrow screen. */
 .tone-legend {
   list-style: none;
   margin: 0;
   padding: 0;
+}
+.tone-legend > li > :first-child {
+  flex-shrink: 0;
 }
 
 /*
@@ -995,11 +1033,11 @@ body {
     [data-tone='attention'],
     [data-tone='blocking']
   )
-  td:first-child {
+  :is(td, th):first-child {
   box-shadow: inset 3px 0 0 var(--row-edge);
 }
 @media (max-width: 35.99em) {
-  :is(.case-row, .tone-row)[data-tone] td:first-child {
+  :is(.case-row, .tone-row)[data-tone] :is(td, th):first-child {
     box-shadow: none;
   }
   .stack-table
@@ -1415,4 +1453,225 @@ body {
   .stack-cards td[data-label-hidden]::before {
     display: none;
   }
+}
+
+/*
+ * The hospital feed's banner (the public demo's live hospital): a neutral band, never an information tone, with a
+ * 3 px edge in the text colour, a broadcast mark and a dot that pulses three times when a new story has played.
+ */
+.live-banner {
+  margin-bottom: var(--mantine-spacing-md);
+  padding: 6px var(--mantine-spacing-sm);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-default-hover);
+  box-shadow: inset 3px 0 0 var(--mantine-color-text);
+}
+.live-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.live-dot[data-pulse] {
+  animation: live-pulse var(--motion-slow) var(--motion-ease-inout) 3;
+}
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(1.5);
+  }
+}
+.live-story {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+/* The count beside Cases: an attention badge, its accessible name the full sentence. */
+.nav-count {
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The trial banner's height matches the header's sum (styles above): 40 px, 32 px once it is one line, 36 px on a
+ * phone. Its words keep to one line: the two sentences from 1280 px, the short form below that, none on a phone, where
+ * "What's different?" holds them.
+ */
+.trial-banner {
+  height: 40px;
+  display: flex;
+  align-items: center;
+}
+.trial-banner > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.trial-banner[data-compact] {
+  height: 32px;
+}
+@media (max-width: 47.99em) {
+  .trial-banner,
+  .trial-banner[data-compact] {
+    height: 36px;
+  }
+}
+.trial-banner-words {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.trial-banner-long {
+  display: none;
+}
+@media (min-width: 80em) {
+  .trial-banner-long {
+    display: inline;
+  }
+  .trial-banner-short {
+    display: none;
+  }
+}
+.trial-banner .trial-banner-control {
+  color: var(--shutter-trial-on-surface);
+}
+:root[data-shutter-contrast='high'] .trial-banner .trial-banner-control {
+  color: var(--mantine-color-text);
+  text-decoration: underline;
+}
+
+/*
+ * The guide's card: inline, just before the section it is about, at most 720 px, with a 4 px edge in the trial's
+ * colour along its top, a sentence-case overline, a 4 px progress bar (the words "Step 3 of 9" carry it for screen
+ * readers) and a notch under it that points at the section. Scrolled to 16 px under the header.
+ */
+.guide-host {
+  grid-column: 1 / -1;
+  flex: 0 0 auto;
+  width: 100%;
+  margin-bottom: var(--mantine-spacing-md);
+  scroll-margin-top: calc(var(--shutter-header-h) + 16px);
+}
+.guide-host-floating {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 150;
+  margin: 0;
+}
+.guide-card {
+  position: relative;
+  border-top: 4px solid var(--shutter-trial-accent);
+}
+.guide-overline {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--shutter-muted);
+  min-width: 0;
+}
+.guide-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--mantine-color-default-hover);
+  overflow: hidden;
+}
+.guide-progress > div {
+  height: 100%;
+  background: var(--shutter-trial-accent);
+}
+.guide-title:focus {
+  outline: none;
+}
+.guide-title:focus-visible {
+  outline: 2px solid var(--shutter-trial-accent);
+  outline-offset: 2px;
+}
+.guide-notch {
+  position: absolute;
+  left: 24px;
+  bottom: -22px;
+  color: var(--shutter-trial-accent);
+  pointer-events: none;
+  line-height: 0;
+}
+.guide-try-pointer {
+  z-index: 190;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--mantine-radius-xl);
+  background: var(--shutter-trial-filled);
+  color: #fff;
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 700;
+  pointer-events: none;
+  box-shadow: var(--mantine-shadow-sm);
+}
+/* A movement at rest, or not started: it points, and does not move. */
+[data-motion='rest'],
+[data-motion='rest'] svg,
+[data-tour-active='true'][data-motion='rest'] {
+  animation: none;
+}
+[data-tour-try='rest'] {
+  outline: 2px solid var(--shutter-trial-accent);
+  outline-offset: 3px;
+  animation: none;
+}
+.guide-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.guide-dot[data-kind='quick'] {
+  background: var(--shutter-trial-accent);
+}
+.guide-dot[data-kind='engineer'] {
+  border: 1.5px solid var(--shutter-trial-accent);
+}
+.guide-scope-card[data-checked] {
+  border-color: var(--shutter-trial-accent);
+  box-shadow: inset 0 0 0 1px var(--shutter-trial-accent);
+}
+.guide-approved {
+  color: var(--mantine-color-green-text);
+}
+:root[data-shutter-contrast='high'] .guide-card {
+  border-top: 3px solid currentColor;
+}
+:root[data-shutter-contrast='high'] .guide-try-pointer {
+  background: var(--mantine-color-body);
+  color: var(--mantine-color-text);
+  border: 2px solid currentColor;
+  box-shadow: none;
+}
+:root[data-shutter-contrast='high'] [data-tour-try='rest'] {
+  outline: 3px dashed currentColor;
+}
+@media (forced-colors: active) {
+  .guide-card {
+    border-top-color: Highlight;
+  }
+  [data-tour-try='rest'] {
+    outline-color: Highlight;
+  }
+}
+
+/*
+ * Under the case page's sticky tab bar (36 px and its gap): a section, a cited evidence section or the guide's card
+ * scrolled to stops below the bar as well as the header, so the bar never hides what was scrolled to or focused.
+ */
+.case-tab-panel :is([data-tour], section[id], .guide-host) {
+  scroll-margin-top: calc(var(--shutter-header-h) + 3.5rem);
 }
