@@ -240,6 +240,8 @@ export const PLAIN_TITLES: Record<string, string> = {
   MESSAGE_ERRORS: 'Messages that ended in error',
   PURGE_MISSING: 'No message purge task',
   FEED_SILENCE_UNWATCHED: 'A silent feed goes unnoticed',
+  SUSPENDED_MESSAGES: 'Suspended messages',
+  ITEM_DISABLED: 'An item is switched off',
 };
 
 /** A finding's title in plain words: "No alert on error" for ALERTING_OFF. */
@@ -324,6 +326,16 @@ export function findingSummary(f: ReviewFinding): string {
       return 'Old messages are never purged.';
     case 'FEED_SILENCE_UNWATCHED':
       return 'A feed that falls silent is never noticed.';
+    case 'SUSPENDED_MESSAGES': {
+      const n = count > 0 ? count : Number(/^\d+/.exec(f.found)?.[0] ?? 0);
+      const to = f.item ? ` to ${f.item}` : '';
+      if (n > 0)
+        return `${plural(n, 'message')}${to} ${n === 1 ? 'is' : 'are'} suspended, waiting for a person.`;
+      break;
+    }
+    case 'ITEM_DISABLED':
+      if (f.item) return `${f.item} is switched off: its messages queue up or go nowhere.`;
+      break;
   }
   const why = firstSentence(f.why);
   return why && isClean(why) && wordCount(why) <= 15 ? why : findingTitle(f);
