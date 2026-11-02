@@ -111,8 +111,15 @@ if [ "$problems" -eq 0 ] && [ "$edition" = aihub ]; then
   if docker image inspect "$image" > /dev/null 2>&1; then
     ok "The AI Hub image $image is loaded"
   else
-    loaded=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E "/irishealth-community:2026\.3\.0AI\.154\.0$" | head -1 || true)
-    if [ -n "$loaded" ]; then
+    loaded=""
+    # Only the tested build is tagged automatically, and only under the name .env.example expects
+    if [ "$image" = "$AIHUB_IMAGE" ]; then
+      loaded=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E "/irishealth-community:2026\.3\.0AI\.154\.0$" | head -1 || true)
+    fi
+    if [ "$image" != "$AIHUB_IMAGE" ] && [ -z "$image_file" ]; then
+      fail ".env names the image $image, which is not loaded." \
+        "Load that image, or set SHUTTER_IMAGE=$AIHUB_IMAGE in .env for the tested build 154, then run ./install.sh again."
+    elif [ -n "$loaded" ]; then
       plan_tag="$loaded"
       ok "The AI Hub image is loaded as $loaded (it will be tagged $image)"
     elif [ -n "$image_file" ] && [ -f "$image_file" ]; then
@@ -176,7 +183,7 @@ if [ -n "$plan_load" ]; then
   out=$(docker image load -i "$plan_load")
   echo "$out" | sed 's/^/    /'
   loaded=$(echo "$out" | sed -n 's/^Loaded image: //p' | grep -E "irishealth-community:2026\.3\.0AI\.154\.0$" | head -1)
-  [ -n "$loaded" ] && [ "$loaded" != "$image" ] && plan_tag="$loaded"
+  if [ -n "$loaded" ] && [ "$loaded" != "$image" ] && [ "$image" = "$AIHUB_IMAGE" ]; then plan_tag="$loaded"; fi
 fi
 if [ -n "$plan_tag" ]; then
   docker tag "$plan_tag" "$image"
