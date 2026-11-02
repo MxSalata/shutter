@@ -1,9 +1,10 @@
-import { Text } from '@mantine/core';
+import { Group, Text } from '@mantine/core';
 import type { CaseDetail } from '@/api/types';
+import { CodeChip } from '@/components/CodeChip';
 import { KeyValueList } from '@/components/KeyValueList';
-import { Digest } from '@/components/Digest';
 import { Timestamp } from '@/components/Timestamp';
 import { humanize } from '@/lib/format';
+import { useTechnical } from '@/stores/appearance';
 import { receiverNoun } from './receiver';
 import { Section } from './Section';
 
@@ -17,7 +18,21 @@ const kinds = (receiver: string): Record<string, string> => ({
     'Withheld: never sent (a merge the site keeps for the PAS team, or a cancellation the receiver cannot reverse)',
 });
 
+/**
+ * What failed, as the production recorded it. The receiver's answer stays in its own words; in Technical its HTTP
+ * status and reason code sit beside them as codes. The message id and the operation key are codes, wrapping rather
+ * than cut, and the event time carries its date (and UTC in Technical).
+ */
 export function FailurePanel({ c }: { c: CaseDetail }) {
+  const technical = useTechnical();
+  const noun = receiverNoun(c.receiver);
+  const codes =
+    technical && (c.failureHttpStatus || c.failureReasonCode) ? (
+      <Group gap={4} wrap="wrap">
+        {c.failureHttpStatus ? <CodeChip>{`HTTP ${c.failureHttpStatus}`}</CodeChip> : null}
+        {c.failureReasonCode ? <CodeChip>{c.failureReasonCode}</CodeChip> : null}
+      </Group>
+    ) : null;
   return (
     <Section
       id="failure"
@@ -26,13 +41,18 @@ export function FailurePanel({ c }: { c: CaseDetail }) {
     >
       <KeyValueList
         rows={[
-          ['Failure', kinds(receiverNoun(c.receiver))[c.failureKind] ?? humanize(c.failureKind)],
+          ['Failure', kinds(noun)[c.failureKind] ?? humanize(c.failureKind)],
           [
-            `What ${receiverNoun(c.receiver)} answered`,
-            c.failureText ? (
-              <Text size="sm" className="mono-wrap">
-                {c.failureText}
-              </Text>
+            `What ${noun} answered`,
+            c.failureText || codes ? (
+              <Group gap={6} wrap="wrap">
+                {c.failureText ? (
+                  <Text size="sm" className="mono-wrap">
+                    {c.failureText}
+                  </Text>
+                ) : null}
+                {codes}
+              </Group>
             ) : (
               ''
             ),
@@ -41,8 +61,18 @@ export function FailurePanel({ c }: { c: CaseDetail }) {
           ['Event time', <Timestamp key="t" iso={c.eventTime} />],
           ['Encounter', c.encounterId],
           ['Patient', c.patientId ? `${c.patientId} (${c.patientIdAuthority})` : ''],
-          ['Sent by', c.sourceSystem ? `${c.sourceSystem}, message ${c.sourceMessageId}` : ''],
-          ['Operation key', <Digest key="k" value={c.operationKey} label="operation key" length={80} />],
+          [
+            'Sent by',
+            c.sourceSystem ? (
+              <Text key="s" size="sm">
+                {`${c.sourceSystem}, message `}
+                <CodeChip>{c.sourceMessageId}</CodeChip>
+              </Text>
+            ) : (
+              ''
+            ),
+          ],
+          ['Operation key', c.operationKey ? <CodeChip key="k">{c.operationKey}</CodeChip> : ''],
         ]}
       />
     </Section>
