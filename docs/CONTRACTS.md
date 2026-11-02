@@ -964,6 +964,12 @@ left IRIS. A recording made before this rule replays with real ids in its result
 it. `GetFailure` answers a fresh failure object and the error item, never the case headline. `SELECT Shutter_Util.ModelView_Preview('C-000012')`
 shows what the model would see of a case.
 
+**Denied tool calls** (v1.35). A call the scope policy refuses before it runs (another case's evidence, a tool outside the
+role) never reaches the audit policy's `%LogExecution` on build 154; it reaches `%LogDenial`, and Shutter writes it as a
+tool-call row of its own: `denied` true, `ok` false, `durationMs` 0 and the reason in `error`, with a "denied" trace line
+in the Visual Trace. The case page lists it with the run's other calls (`GET /cases/{id}/runs`, `toolCalls`), so a prompt
+that tries to reach past its case leaves a mark, and `Shutter.Bridge.ToolCall.DeniedCount(runKey)` counts a run's refusals.
+
 - A merge's prior identifiers (v1.14: `prior_patient_id`, `prior_encounter_id`, `prior_patient_identifier`, `prior_visit_number`, and every MRG group's in `prior_identifiers`, each paired with the surviving patient identifier of its PATIENT group as `into`) are tokens like the case's own (PID or MRN or NHS by the identifier type, ENC, VISIT; the prior name's parts NAME); `merge_groups`, `patient_class` and the validation's version fields pass through.
 
 **The production review's agent** (v1.22; 13.6) is the one other place something leaves for a model, and it does not go through `ModelView.Reduce`: there is nothing to tokenise, by construction. Its context holds the review id, the namespace, the production and its state, the window, the summary, the findings without `evidence.example`, `annotationId`, `rank` and `explanation`, and the case aggregates per item (counts by failure kind, outcome, reason code and state; the newest case ids). The sweep never reads `CaseEvent.Text`, the operation key's patient and encounter pieces, `FailureText` or message content, so none can reach the context; item names, setting values, counts, header ids and case ids are operational identifiers, as the board's evidence carries them, and the error example text stays in the operator's `GET`. Nothing comes back to restore: the agent speaks in finding ids.
@@ -1450,6 +1456,8 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
 
 ## Changes
 
+- v1.35, 2 Nov 2026 (the items of a review of competing entries' code): denied tool calls
+  recorded as rows with `denied` true and a trace line (9); each item of the review that lands adds its line here.
 - v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:
   run, reset, purge) and `Shutter_Configure` (the site's writes: the profile, the library, a schema import, the review
   annotations), held by the operator and the approver as before; the role `Shutter_Demo` (reads, reinvestigates, approves and
