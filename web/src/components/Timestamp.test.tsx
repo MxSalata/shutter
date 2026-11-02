@@ -35,6 +35,14 @@ describe('Timestamp', () => {
     expect(screen.getByText('15 Oct, 09:20:00 BST')).toBeInTheDocument();
   });
 
+  it("leaves the zone's name out for a page that names it once, keeping it in the tooltip's words", () => {
+    const { unmount } = renderUi(<Timestamp iso="2026-10-15T08:20:00Z" zone={false} />);
+    expect(screen.getByText('15 Oct, 09:20:00')).toHaveAttribute('datetime', '2026-10-15T08:20:00Z');
+    unmount();
+    renderUi(<Timestamp iso="2026-10-15T08:20:00Z" zone={false} />, { detail: 'technical' });
+    expect(screen.getByText('15 Oct, 09:20:00, 08:20:00Z')).toBeInTheDocument();
+  });
+
   it('puts the UTC time beside the local one in Technical', () => {
     renderUi(<Timestamp iso="2026-10-15T08:20:00Z" />, { detail: 'technical' });
     expect(screen.getByText('15 Oct, 09:20:00 BST, 08:20:00Z')).toBeInTheDocument();

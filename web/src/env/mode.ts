@@ -50,19 +50,53 @@ export function envFrom(search: string, demoBuild: boolean): Env {
 /** The demo build: recorded runs on the in-browser mock, with no IRIS instance behind it. */
 export const DEMO_BUILD = import.meta.env.MODE === 'demo' || import.meta.env.VITE_MOCK === '1';
 
-const fromAddress = envFrom(typeof window === 'undefined' ? '' : window.location.search, DEMO_BUILD);
+/** The tab's trial role, kept in `sessionStorage` so a reload signs the same fake user in again. */
+export const TRIAL_ROLE_KEY = 'shutter:trial:as';
+
+const isRole = (v: unknown): v is TrialRole => ROLES.includes(v as TrialRole);
+
+/** The role this tab last chose in the trial, if any (storage can refuse: then none). */
+function storedRole(): TrialRole | null {
+  try {
+    const v = window.sessionStorage.getItem(TRIAL_ROLE_KEY);
+    return isRole(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Keeps the trial role chosen in this tab for its reloads (the trial's sign-in page, Switch trial role). */
+export function rememberTrialRole(role: TrialRole): void {
+  try {
+    window.sessionStorage.setItem(TRIAL_ROLE_KEY, role);
+  } catch {
+    // Storage refused: a reload starts as the address says
+  }
+}
 
 /**
- * This page's environment. Until the trial has its own in-memory transport, only the demo build can be the trial
- * (its mock's service worker answers every call): a build IRIS serves ignores `?trial`, so no page shows the trial's
- * wording over live data.
+ * The environment this page was loaded in, with the trial's starting role: the one `?as=` names, else the one this
+ * tab chose before a reload, else the approver.
  */
-export const ENV: Env = DEMO_BUILD
-  ? fromAddress
-  : { ...fromAddress, trial: false, canLeave: false, openGuide: false };
+export function pageEnv(search: string, demoBuild: boolean): Env {
+  const env = envFrom(search, demoBuild);
+  if (!env.trial || new URLSearchParams(search).has('as')) return env;
+  return { ...env, role: storedRole() ?? env.role };
+}
+
+/** This page's environment, fixed for the life of the page: a trial page and a live one never share memory. */
+export const ENV: Env = pageEnv(typeof window === 'undefined' ? '' : window.location.search, DEMO_BUILD);
 
 /** This page is the trial. The demo build is always the trial. */
 export const TRIAL = ENV.trial;
+
+/**
+ * The address after start: `?trial=tour` and `?trial=engineer` become `?trial`, so a reload does not open the tour's
+ * welcome again; the rest of the address, and React Router's own history state, are kept.
+ */
+export function normalisedSearch(search: string): string {
+  return search.replace(/([?&])trial=(tour|engineer)(?=&|$)/, '$1trial');
+}
 
 /** The trial's sign-in for a role: the mock's user of that name, with the demo users' password. */
 export const trialUser = (role: TrialRole) => ({ username: role, password: 'shutter' });

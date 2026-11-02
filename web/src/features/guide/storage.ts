@@ -5,7 +5,7 @@ import { INITIAL, isProgress, type GuideProgress } from './controller';
  * (a private window, blocked site data): then the progress lives in memory for the visit. A stored value this version
  * cannot read starts the guide afresh.
  */
-export const GUIDE_KEY = 'shutter:guide:v1';
+export const GUIDE_KEY = 'shutter:guide:v2';
 
 let memory: GuideProgress | null = null;
 

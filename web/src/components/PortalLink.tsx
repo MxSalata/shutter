@@ -3,6 +3,7 @@ import { IconExternalLink, IconExternalLinkOff } from '@tabler/icons-react';
 import { useState } from 'react';
 import { TRIAL } from '@/env/mode';
 import type { Screenshot } from '@/lib/screenshots';
+import { HINT_EVENTS } from '@/theme';
 
 /**
  * A link into the Management Portal (a message trace, a workflow trace, an agent's message). The portal is part of a
@@ -56,6 +57,7 @@ export function PortalLink({
         label={`On an IRIS instance this opens ${what} in the Management Portal. The demo runs in the browser, with no instance behind it.`}
         multiline
         maw={300}
+        events={HINT_EVENTS}
       >
         {/* Not a link here: dimmed and plain, with an icon that says so, and the tooltip says where it would go */}
         <Text
