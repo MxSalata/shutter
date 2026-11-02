@@ -140,3 +140,59 @@ describe('the case header status and IRIS row', () => {
     expect(screen.queryByText('Failure')).not.toBeInTheDocument();
   });
 });
+
+describe('the case header facts: the patient and the message', () => {
+  const recorded = (id: keyof typeof fixtures.cases) => fixtures.cases[id].detail as unknown as CaseDetail;
+  const snapshot = (id: keyof typeof fixtures.cases) => fixtures.cases[id].snapshot as never;
+
+  it("names the patient by the hospital number the message carries, and the message's HL7 type as IRIS parsed it", () => {
+    renderUi(<CaseHeader c={recorded('C-000002')} snapshot={snapshot('C-000002')} />);
+    const patient = screen.getByText('Patient').parentElement!;
+    expect(patient).toHaveTextContent(/^PatientMRN1002$/);
+    expect(screen.getByText('Message')).toBeInTheDocument();
+    expect(screen.getByTestId('case-message-type')).toHaveTextContent(/^2\.5\.1:ADT_A02$/);
+    // Never the patient's name, which the evidence holds
+    expect(document.body).not.toHaveTextContent('SYNTH');
+  });
+
+  it("names a merge's structure as IRIS does: ADT^A40 parses as ADT_A39", () => {
+    renderUi(<CaseHeader c={recorded('C-000012')} snapshot={snapshot('C-000012')} />);
+    expect(screen.getByTestId('case-message-type')).toHaveTextContent('2.5.1:ADT_A39');
+  });
+
+  it('adds, in Technical, the version a message declares when the route parsed it as another', () => {
+    const { unmount } = renderUi(<CaseHeader c={recorded('C-000050')} snapshot={snapshot('C-000050')} />);
+    expect(screen.getByTestId('case-message-type')).toHaveTextContent('2.5.1:ADT_A02');
+    expect(screen.queryByText('The message says HL7 2.4')).not.toBeInTheDocument();
+    unmount();
+    renderUi(<CaseHeader c={recorded('C-000050')} snapshot={snapshot('C-000050')} />, {
+      detail: 'technical',
+    });
+    expect(screen.getByText('The message says HL7 2.4')).toBeInTheDocument();
+  });
+
+  it('falls back to MSH-9 and its version when the evidence names no document type', () => {
+    const s = {
+      ...fixtures.cases['C-000002'].snapshot,
+      summary: {},
+      items: [
+        {
+          seq: 1,
+          kind: 'message',
+          source: 'message_store',
+          observed_at: '',
+          data: { message_type: 'ADT^A03', message_version: '2.4' },
+        },
+      ],
+    };
+    renderUi(<CaseHeader c={recorded('C-000002')} snapshot={s as never} />);
+    expect(screen.getByTestId('case-message-type')).toHaveTextContent('ADT^A03, HL7 2.4');
+  });
+
+  it('leaves out what is not known: no message before the evidence is read, no patient without an identifier', () => {
+    renderUi(<CaseHeader c={{ ...recorded('C-000002'), patientId: '' }} />);
+    expect(screen.queryByText('Patient')).not.toBeInTheDocument();
+    expect(screen.queryByText('Message')).not.toBeInTheDocument();
+    expect(screen.getByText('Receiver')).toBeInTheDocument();
+  });
+});

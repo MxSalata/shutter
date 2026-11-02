@@ -348,7 +348,7 @@ export function failedTitle(c: CaseDetail): string {
 }
 
 /** The sending systems a header names, glossed at first use. */
-const SYSTEMS: Record<string, string> = {
+export const SYSTEMS: Record<string, string> = {
   PAS: 'patient administration system',
   BEDMGR: 'bed manager',
 };
@@ -533,4 +533,28 @@ export function provenanceOf(mode: string, runs: AgentRun[] | null | undefined):
     };
   if (list.some((r) => r.mode !== 'replay')) return PROVENANCE.live;
   return PROVENANCE.replay;
+}
+
+const wordCount = (t: string) => t.trim().split(/\s+/).filter(Boolean).length;
+
+/**
+ * A next action short enough to head its card, and the rest of it for the card's details: an action of up to 16 words
+ * stays whole; a longer one is cut after its first sentence, and a first sentence still longer than that at its first
+ * colon or semicolon. Never mid-phrase, and no word is dropped: the head and the rest together say all of it.
+ */
+export function actionHead(text: string, most = 16): { head: string; rest: string } {
+  const all = text.trim();
+  if (wordCount(all) <= most) return { head: all, rest: '' };
+  const sentence = /^(.+?[.!?])\s+(\S.*)$/s.exec(all);
+  let head = sentence ? sentence[1] : all;
+  let rest = sentence ? sentence[2] : '';
+  if (wordCount(head) > most) {
+    const clause = /^(.+?)[;:]\s+(\S.*)$/s.exec(head);
+    if (clause && wordCount(clause[1]) >= 3) {
+      const after = clause[2].charAt(0).toUpperCase() + clause[2].slice(1);
+      head = clause[1];
+      rest = [after, rest].filter(Boolean).join(' ');
+    }
+  }
+  return { head, rest };
 }

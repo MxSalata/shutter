@@ -46,7 +46,7 @@ import type { CaseDetail, PlanView } from '@/api/types';
 import { TechDetail } from '@/components/TechDetail';
 import { ENV } from '@/env/mode';
 import { REPLAY_DONE } from '@/lib/events';
-import { guideCard, useGuideDock } from '@/lib/guideDock';
+import { guideCard, guideTarget, useGuideDock } from '@/lib/guideDock';
 import { useLeaveTrial } from '@/trial/leave';
 import { onRoute, positionOf, stepsIn, welcomeDue, type GuidePosition } from './controller';
 import { usePlace } from './places';
@@ -577,6 +577,12 @@ function StepHost({ pos }: { pos: GuidePosition }) {
   useEffect(() => {
     if (path) go(path);
   }, [path]);
+
+  // The page learns what the step points at before the step looks for it, so a folded section can open for it
+  useEffect(() => {
+    guideTarget.set(pos.step.target);
+    return () => guideTarget.set(null);
+  }, [pos.step.target]);
 
   // Only once the address is the step's: until then the page before it, with its own sections, is still showing
   const arrived = !!path && here === path;
