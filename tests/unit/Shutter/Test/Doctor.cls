@@ -23,4 +23,44 @@ Method TestDoctorReportsTheNewPieces()
     Do $$$AssertTrue(r.%IsDefined("records_webapp"), "the records web application is reported")
 }
 
+/// The stored credentials are tried against their users (v1.38) by a login in a background job, never a web request: on
+/// this instance every one the install made signs in, a wrong password is refused with a reason, and the result is cached
+/// for ten minutes unless a refresh is asked for. The cache is cleared at the end, so the next Doctor recomputes.
+Method TestCredentialsAreTried()
+{
+    Set r = ##class(Shutter.Util.Json).Parse(##class(Shutter.Setup).Doctor(1), .sc)
+    Do $$$AssertTrue(r.%IsDefined("credentials") && r.%IsDefined("credentials_ok") && r.%IsDefined("credentials_checked_at"), "the Doctor carries the checks and their time")
+    Set it = r.credentials.%GetIterator(), n = 0
+    While it.%GetNext(, .c) {
+        Set n = n + 1
+        Do $$$AssertEquals(c.ok, 1, c.namespace _ ":" _ c.name _ " as " _ c.user _ " is " _ c.status _ ": " _ c.detail)
+    }
+    If r.demo Do $$$AssertTrue(n >= 1, "a demo install has at least its DownstreamAPI credential to try: " _ n)
+    Do $$$AssertEquals(r."credentials_ok", 1, "and all of them sign in")
+    Do $$$AssertEquals(##class(Shutter.Setup).TryLogin("operator", "shutter", .reason), 1, "the demo operator signs in: " _ reason)
+    Do $$$AssertEquals(##class(Shutter.Setup).TryLogin("operator", "not-the-password", .reason), 0, "a wrong password is refused")
+    Do $$$AssertTrue(reason [ "not the user's", "with the reason: " _ reason)
+    Do $$$AssertEquals($USERNAME = "operator", 0, "and this process keeps its own identity: " _ $USERNAME)
+    Set c = ##class(Shutter.Setup).CredentialCheck("SHUTTER", "NoSuchCredential")
+    Do $$$AssertEquals(c.status _ "|" _ c.ok, "missing|0", "a credential the namespace lacks is missing: " _ c.detail)
+    Do $$$AssertEquals($DATA(^Shutter.Health("login")), 0, "the jobs' answers are cleaned up")
+}
+
+Method TestCredentialChecksAreCached()
+{
+    Set keep = $GET(^Shutter.Health("credentials", "json")), keepAt = $GET(^Shutter.Health("credentials", "at")), keepIso = $GET(^Shutter.Health("credentials", "iso"))
+    Set fresh = ##class(Shutter.Setup).CredentialChecks(1)
+    Do $$$AssertNotEquals($GET(^Shutter.Health("credentials", "at")), "", "a refresh writes the cache with its time")
+    Set ^Shutter.Health("credentials", "json") = "[{""name"":""marker""}]"
+    Set cached = ##class(Shutter.Setup).CredentialChecks()
+    Do $$$AssertEquals(cached.%Size() _ "|" _ cached.%Get(0).name, "1|marker", "within ten minutes the cache is answered, no login made")
+    Set ^Shutter.Health("credentials", "at") = ##class(Shutter.Util.Time).EpochSeconds() - 601
+    Set again = ##class(Shutter.Setup).CredentialChecks()
+    Do $$$AssertNotEquals($SELECT(again.%Size() > 0: again.%Get(0).name, 1: ""), "marker", "after ten minutes the checks run again")
+    Set forced = ##class(Shutter.Setup).CredentialChecks(1)
+    Do $$$AssertEquals(forced.%Size(), fresh.%Size(), "a refresh runs them whatever the cache's age")
+    Kill ^Shutter.Health("credentials")
+    If keepAt '= "" Set ^Shutter.Health("credentials", "json") = keep, ^Shutter.Health("credentials", "at") = keepAt, ^Shutter.Health("credentials", "iso") = keepIso
+}
+
 }
