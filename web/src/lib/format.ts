@@ -100,6 +100,19 @@ export function formatZonedTime(iso: string | undefined | null, named = true): s
   return named ? `${timeOnly.format(d)} ${zoneLabel(iso)}` : timeOnly.format(d);
 }
 
+/** "2 Nov": the day of a moment in the feed's zone, with its year when that is not this year ("2 Nov 2025"). */
+export function formatDay(iso: string | undefined | null, now: number = Date.now()): string {
+  const d = parseTime(iso);
+  if (!d) return '';
+  const year = (t: Date) => new Intl.DateTimeFormat('en-GB', { timeZone: zone, year: 'numeric' }).format(t);
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: zone,
+    day: 'numeric',
+    month: 'short',
+    ...(year(d) === year(new Date(now)) ? {} : { year: 'numeric' }),
+  }).format(d);
+}
+
 /** "08:20:00Z": the same moment's UTC time, short, to sit beside the local one in Technical. */
 export function formatUtcTime(iso: string | undefined | null): string {
   const d = parseTime(iso);
