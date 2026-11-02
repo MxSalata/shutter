@@ -151,7 +151,11 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     Set started.CaseId = case.CaseId, started.Opened = opened, started.State = case.State
     Set response = started
     If 'opened {
-        $$$TRACE("Case " _ case.CaseId _ " already open; the new failure was noted")
+        // The production's own report of a failure the alert intake reported first (v1.38): the alert's words gave the
+        // case its failure with no reason code, so the catalogue matched nothing (new_pattern) where the report's
+        // ward_unavailable matches an entry. Before the evidence is collected, the report's fields replace the alert's.
+        Set taken = ..TakeReport(case, request)
+        $$$TRACE("Case " _ case.CaseId _ " already open; the new failure was noted" _ $SELECT(taken: ", and its failure is now the production's own report", 1: ""))
         Quit $$$OK
     }
     Set ..CaseId = case.CaseId, ..Mode = case.Mode
@@ -780,6 +784,31 @@ Method AfterBoard(case As Shutter.Store.Case) As %Status
     Quit:$$$ISERR(sc) sc
     Set ..CoordinatorPending = 1
     Quit ..ArmTimeout("coordinator:timeout")
+}
+
+/// A case the alert intake opened (CONTRACTS 11: FailureReasonCode "alert", the failure read from the alert's words) takes
+/// the production's own report of the same failure when that arrives second and the case is still detected or
+/// collecting (v1.38): the kind, text, outcome, reason code, HTTP status and Retry-After the connector answered, and the
+/// headline from them. After the evidence is collected the case keeps what its snapshot was built on. Returns 1 when the
+/// fields were taken.
+ClassMethod TakeReport(case As Shutter.Store.Case, request As Shutter.Msg.CaseIntake) As %Boolean
+{
+    If '$ISOBJECT(case) || (case.FailureReasonCode '= "alert") Quit 0
+    If '$LISTFIND($LISTBUILD("detected", "collecting"), case.State) Quit 0
+    Set wr = ##class(Shutter.Util.Json).Parse(request.WardResultJSON, .wsc)
+    If '$ISOBJECT(wr) Quit 0
+    Set reason = ##class(Shutter.Util.Json).Str(wr, "reason_code")
+    If (reason = "") || (reason = "alert") Quit 0
+    Set case.FailureKind = request.FailureKind, case.FailureText = $EXTRACT(request.FailureText, 1, 2000)
+    Set case.FailureOutcome = ##class(Shutter.Util.Json).Str(wr, "outcome"), case.FailureReasonCode = reason
+    Set status = ##class(Shutter.Util.Json).Str(wr, "http_status")
+    If +status > 0 Set case.FailureHttpStatus = +status
+    Set retryAfter = ##class(Shutter.Util.Json).Str(wr, "retry_after_seconds")
+    If +retryAfter > 0 Set case.RetryAfterUntil = ##class(Shutter.Util.Time).FromNow(+retryAfter)
+    Set case.Headline = ##class(Shutter.Store.Case).DescribeFailure(case)
+    Do case.Note("note", "The production's own report of the failure replaces the alert's words: " _ reason _ $SELECT(+status > 0: ", HTTP " _ +status, 1: "") _ " (" _ request.FailureKind _ ")", "system", "ens:" _ request.SourceHeaderId)
+    Set sc = case.%Save()
+    Quit $$$ISOK(sc)
 }
 
 /// Whether every agent run of the current snapshot ended with no recording (replay mode outside the fixtures).

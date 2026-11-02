@@ -20,6 +20,18 @@ Property WaitSeconds As %Integer [ InitialExpression = 30 ];
 
 Parameter SETTINGS = "StoreTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},CaseTarget:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId},WaitSeconds:Basic";
 
+/// The investigation mode of a case from this intake (v1.38): the mode the request names; else, for a failure from a
+/// watched production (CONTRACTS 11: the forwarder's and the alert intake's requests name their source namespace), the
+/// site's watched mode, ^Shutter.Config("watchedMode"), policy unless a site sets another, so the catalogue and the site
+/// profile settle such cases whatever mode the demo's scenarios run in (a scenario run sets the global mode, and a reset
+/// puts it back to board); else the global mode of the scenario runs.
+ClassMethod ModeFor(request As Shutter.Msg.ExternalIntake) As %String
+{
+    If request.Mode '= "" Quit request.Mode
+    If request.SourceNamespace '= "" Quit $GET(^Shutter.Config("watchedMode"), "policy")
+    Quit $GET(^Shutter.Config("mode"), "board")
+}
+
 Method OnRequest(request As %Library.Persistent, Output response As %Library.Persistent) As %Status
 {
     Set response = ""
@@ -58,7 +70,7 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     Set intake.HeldSchema = heldSchema
     Set intake.SourceHeaderId = headerId
     Set intake.EnsSessionId = ..%SessionId
-    Set intake.Mode = $SELECT(request.Mode '= "": request.Mode, 1: $GET(^Shutter.Config("mode"), "board"))
+    Set intake.Mode = ..ModeFor(request)
     // The receiver's answer as the source saw it, structured, when it reported one: the matcher reads it, never prose.
     If (request.FailureOutcome '= "") || (request.FailureReasonCode '= "") || (request.FailureHttpStatus '= "") {
         Set r = {}

@@ -269,7 +269,7 @@ ClassMethod PurgeClosedBefore(cutoff As %String) As %Integer
 }
 
 /// One closed case and everything that hangs off it, in one transaction.
-ClassMethod PurgeCase(id As %String) As %Status [ Private ]
+ClassMethod PurgeCase(id As %String) As %Status
 {
     // The tool calls of the case's runs, and their counters.
     Set keys = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT EnsMessageId FROM Shutter_Store.AgentRun WHERE ""Case"" = ? AND EnsMessageId IS NOT NULL", id)
@@ -737,7 +737,7 @@ ClassMethod NextId() As %String [ Private ]
 /// WARD-B of 2026-10-15 09:20:00 for encounter ENC-1001 was not delivered"); a cancel reads "The cancellation of the
 /// transfer to WARD-B at ...", a merge "The merge of <prior patient id> into <patient id> at ...", and the encounter
 /// clause is left out when the key's encounter piece is the literal "-" (no visit number).
-ClassMethod DescribeFailure(case As Shutter.Store.Case) As %String [ Private ]
+ClassMethod DescribeFailure(case As Shutter.Store.Case) As %String
 {
     Set what = $CASE(case.Event, "admit": "admission", "transfer": "transfer to " _ case.Ward _ $SELECT(case.Bed '= "": " bed " _ case.Bed, 1: ""), "discharge": "discharge", "update": "update", "merge": $SELECT(case.PriorPatientId '= "": "merge of " _ case.PriorPatientId _ " into " _ case.PatientId, 1: "merge into " _ case.PatientId), "cancel_admit": "cancellation of the admission", "cancel_transfer": "cancellation of the transfer" _ $SELECT(case.Ward '= "": " to " _ case.Ward, 1: ""), "cancel_discharge": "cancellation of the discharge", "register": "registration", "preadmit": "pre-admission", "person_add": "person record", "person_update": "person update", "": "message", : case.Event _ " message")
     Set when = $REPLACE($PIECE(case.EventTime, "Z", 1), "T", " ")
