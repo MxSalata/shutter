@@ -1210,6 +1210,25 @@ copy of the message.
   forwarder as the held message above (`Forwarder.ForwardFor`), delivering nothing. The HL7 service's `Validation` is not a
   setting on this build and only a routing engine has a `BadMessageHandler`, so a site with a routing engine points that at
   the forwarder, and one with its own process adds the check.
+- **The alert intake** (v1.35). A production whose delivering process does nothing on a failure beyond the error IRIS
+  logs can still hand Shutter the failure, with no change to its own code: `Shutter.Intake.AlertProcess`, added as the
+  production's `Ens.Alert` item (the name the engine sends alerts to), receives every `Ens.AlertRequest` an item raises
+  (`AlertOnError`, a queue alert, an inactivity alert). Every alert is first passed on to `PassTo`, the site's own alert
+  consumer renamed (an alert operation, an email), so Shutter adds to a production's alerting and never replaces it;
+  with `PassTo` empty the alert ends here, as it would with no `Ens.Alert` item at all. Then, for an alert from one of its
+  `Receivers` (the connector items, comma-separated; empty takes any item) whose session holds an HL7 message, it finds
+  that message (the session's first header with an `EnsLib.HL7.Message` body: the receiving service's) and sends the
+  forwarder (`ForwarderTarget`, default `Shutter Forwarder`) a `Forward` for it: `HeaderId`, `Route` the header's service,
+  `Receiver` the alerting item, `FailureKind` from the alert's words (`uncertain_outcome` for a timeout, no response or
+  an uncertain answer; `rejected` for a reject, a refusal, a NACK or an HTTP 4xx; else `delivery_failed`),
+  `FailureOutcome` to match (`uncertain`, `rejected`, `error`), `FailureHttpStatus` when the text names one ("HTTP 503"),
+  `FailureReasonCode` `alert`, `FailureText` "Alert from <item> at <time> UTC: <text>". One forward per session
+  (`^Shutter.AlertIntake("seen")`, kept a day), so a connector's retries alert the site each time but reach Shutter once.
+  An alert whose session has no HL7 message, or from an item outside `Receivers`, is passed on only; both sends are
+  asynchronous, so the feed never waits. The forwarder's refusal is a warning in the event log, as for the sending
+  process. The demo hospital's production carries the item with `Receivers` `Downstream Out` and `AlertOnError` on that
+  connector; its process forwards its own failures (above), so `PAS to Downstream` stays out of `Receivers` and a failure
+  reaches Shutter once. The production review's `NO_ALERT_CONSUMER` (13) names the item.
 - **The demo hospital** (shape A as a judge sees it): the image also creates the namespace `HOSPITAL` (`Installer.cls`;
   `SELECT Shutter.Installer_RunHospital('SHUTTER')` on an instance that has Shutter) with the packages `Shutter.Intake`,
   `Shutter.Util`, `Shutter.Msg`, `Shutter.Store` and `Hospital` mapped from Shutter's code database, and
@@ -1565,7 +1584,9 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   characters stripped from agent text, text caps and a hostile-output table (6.6, 9); precedents, a person's decision on the
   same conditions at the same receiver, counted in the approval task's text, the snapshot summary and
   `GET /cases/{id}/precedents` (6.4); the releases of waiting and held cases moved out of the index adapter into the Case
-  Releaser item, one sweep every few seconds with a run row when there are candidates (8.1); each item of the review that
+  Releaser item, one sweep every few seconds with a run row when there are candidates (8.1); the alert intake,
+  `Shutter.Intake.AlertProcess` as a watched production's `Ens.Alert` item, which hands a delivery failure's message to
+  Shutter from the alert alone and passes every alert on to the site's consumer (11, 13); each item of the review that
   lands adds its line here.
 - v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:
   run, reset, purge) and `Shutter_Configure` (the site's writes: the profile, the library, a schema import, the review
