@@ -1493,7 +1493,8 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   (`startedAtMs`, `llmMs`, `toolMs`, `reasoningTokens`) on the response and the run row (9); a bound on one model call,
   `provider_timeout_seconds` (6.6, 12); the compose healthcheck and `last_live_run` in the Doctor and the health route (12); the agent operation's start-up line in
   the event log, with a warning for live mode without a provider (6.6); findings and plans cite only the evidence they were
-  given (6.6); each item of the review that lands adds its line here.
+  given (6.6); the image's `WITH_AIHUB` defaults to `auto` and the Doctor reports `edition` (12); each item of the review that
+  lands adds its line here.
 - v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:
   run, reset, purge) and `Shutter_Configure` (the site's writes: the profile, the library, a schema import, the review
   annotations), held by the operator and the approver as before; the role `Shutter_Demo` (reads, reinvestigates, approves and
