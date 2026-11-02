@@ -1,0 +1,1 @@
+import{j as c}from"./react-Be1dNEbh.js";import{c as i}from"./status-TDHd5HNF.js";import{S as l}from"./StatusBadge-BvI26GJS.js";function p({c:s,scenario:e,form:o="short",size:r}){const t=i(s,e),n=o==="short"?t.short:t.label,a=o==="short"&&t.label!==t.short?t.label:t.hint;return c.jsx(l,{tone:t.tone,label:n,hint:a,icon:t.icon,size:r})}export{p as O};
