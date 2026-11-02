@@ -1,6 +1,6 @@
 name: CI
 
-# The jobs run on House's own runner (house-runner, a VM with only the internet, the owner's choice of 20 Oct), so CI
+# The jobs run on House's own runner (house-runner, a VM with only the internet, since 20 Oct), so CI
 # costs no GitHub minutes; it runs one job at a time and keeps Docker images between runs. CI runs on main after a merge, and on a branch only by hand (workflow_dispatch): branch work is tested on House's IRIS
 # instances before it is pushed, and the free Actions minutes are kept for main. A push that changes only the docs
 # (docs/ and the top-level Markdown) runs nothing; the knowledge's Markdown is checked, so it still runs.
@@ -11,8 +11,8 @@ on:
       - 'docs/**'
       - '*.md'
   workflow_dispatch:
-  # Dependabot's update pull requests are tested on House's runner before they are merged (the owner, 20 Oct); no
-  # other pull request runs, since the runner is the owner's own machine
+  # Dependabot's update pull requests are tested on House's runner before they are merged (since 20 Oct); no
+  # other pull request runs, since the runner is a private machine
   pull_request:
 
 # Least privilege by default; the Pages deployment raises what it needs.
@@ -429,13 +429,13 @@ jobs:
   # and the image ship. These two jobs make them a patch release. They run on every push to main and read the history,
   # not the push: the Dependabot commits since the last version tag are the unreleased updates, however many pull
   # requests were merged together and whichever runs a newer push replaced. Until the first version tag (v1.0.0, made
-  # when the owner releases on Open Exchange) they do nothing. When any of the updates changed
+  # when a release is published on Open Exchange) they do nothing. When any of the updates changed
   # web/package.json or web/package-lock.json, the last figure of the version moves in every place
   # scripts/check-versions.py knows (both module.xml files, Setup.cls, the
   # web package and its lockfile, the recorded demo's health.version), the CHANGELOG gets a section naming every update
   # (scripts/dependency-release.mjs), www/ is rebuilt, and the commit is pushed to main with its annotated tag and a
   # GitHub release; the image job then builds from that commit. Open Exchange's "Release app" with the same version
-  # publishes it to the package manager: that stays the owner's step, so the IPM version follows the tag. Updates to
+  # publishes it to the package manager: that stays a person's step, so the IPM version follows the tag. Updates to
   # workflows alone bump nothing (the next release names them). Pull requests never reach these jobs, so no run that
   # Dependabot starts holds a write token. A push made with GITHUB_TOKEN starts no workflow, so the commit is checked
   # by the next push.
