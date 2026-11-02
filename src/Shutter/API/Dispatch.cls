@@ -48,6 +48,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/library" Method="GET" Call="Library"/>
   <Route Url="/library/:code" Method="PATCH" Call="LibraryPatch"/>
   <Route Url="/settings" Method="GET" Call="Settings"/>
+  <Route Url="/live/storm" Method="POST" Call="LiveStorm"/>
   <Route Url="/settings/schemas" Method="GET" Call="SchemasGet"/>
   <Route Url="/settings/schemas" Method="POST" Call="SchemasImport"/>
   <Route Url="/site-profile" Method="GET" Call="SiteProfileGet"/>
@@ -1402,6 +1403,40 @@ ClassMethod IncidentDecide(id As %String, seq As %String) As %Status
     Set %response.Status = "202 Accepted"
     Write text
     Quit $$$OK
+}
+
+/// "Break the feed" (CONTRACTS 4.4, v1.35): asks the live hospital for a storm. 202 with the storm's record (state
+/// requested; the player picks it up within 5 s); 409 live_off, storm_in_progress or cooldown (Shutter.Setup.StormRefusal);
+/// 503 no_service when no hospital namespace is recorded. An Idempotency-Key replays the reply.
+ClassMethod LiveStorm() As %Status
+{
+    If '..Allow("Shutter_Operate", 1) Quit $$$OK
+    Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
+    If hospital = "" Quit ..Fail("503 Service Unavailable", "no_service", "No live hospital: the hospital namespace is not recorded")
+    // A press not yet picked up by the player counts as the storm in progress; else the player's record decides.
+    Set pending = $GET(^Shutter.Live("storm", "request"))
+    Set refusal = ##class(Shutter.Setup).StormRefusal(''$GET(^|hospital|Hospital.Config("live")), $SELECT(pending '= "": pending, 1: $GET(^|hospital|Hospital.Live("storm"))), ##class(Shutter.Setup).StormCooldownMinutes())
+    If $ISOBJECT(refusal) {
+        Set status = refusal.status, detail = refusal.%Get("detail")
+        Do refusal.%Remove("status"), refusal.%Remove("detail")
+        Quit ..Fail(status, refusal.error, detail, refusal)
+    }
+    Set n = $INCREMENT(^Shutter.Live("storm", "n"))
+    Set out = {}
+    Set out.stormId = "ST-" _ $TRANSLATE($JUSTIFY(n, 6), " ", "0"), out.state = "requested"
+    Set out.startedAt = ##class(Shutter.Util.Time).NowUTC(), out.requestedBy = ..User()
+    Set out.patients = 4, out.movements = 8, out.sent = 0
+    Set out.receiverDownSeconds = ##class(Hospital.LivePlayer).#STORMDOWNSECONDS, out.pickupWithinSeconds = 5
+    Set out.endsAt = ##class(Shutter.Util.Time).FromNow(##class(Hospital.LivePlayer).#STORMMINUTES * 60)
+    Set out.cooldownUntil = ##class(Shutter.Util.Time).FromNow(##class(Shutter.Setup).StormCooldownMinutes() * 60)
+    // The request waits here for the player (the API's users write nothing in the hospital's database); the player moves it
+    // into its own record within one call.
+    Set ^Shutter.Live("storm", "request") = out.%ToJSON()
+    Do ..Remember(bodyText, "202 Accepted", out.%ToJSON())
+    Quit ..Json(out, "202 Accepted")
 }
 
 ClassMethod Settings() As %Status

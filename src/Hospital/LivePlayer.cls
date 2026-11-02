@@ -29,23 +29,210 @@ Property MaxWait As %Integer [ InitialExpression = 30 ];
 /// Shutter's namespace: the fixtures' root and the receivers' faults are there.
 Property ShutterNamespace As %String(MAXLEN = 64) [ InitialExpression = "SHUTTER" ];
 
-Parameter SETTINGS = "EveryMinutes:Live,Scenarios:Live,Faults:Live,OrdinaryFeed:Live,MaxWait:Live,ShutterNamespace:Live";
+/// Seconds between ordinary messages (the adapter calls every 5 s since v1.35, so that a storm is picked up quickly).
+Property OrdinaryEverySeconds As %Integer [ InitialExpression = 60 ];
+
+/// How long the storm keeps the receiver down, in seconds (v1.35; CONTRACTS 4.4).
+Property StormReceiverDownSeconds As %Integer [ InitialExpression = {..#STORMDOWNSECONDS} ];
+
+/// The storm's receiver outage, as the route announces it.
+Parameter STORMDOWNSECONDS = 60;
+
+/// The storm's whole span: done at the latest this many minutes after the press.
+Parameter STORMMINUTES = 10;
+
+Parameter SETTINGS = "EveryMinutes:Live,Scenarios:Live,Faults:Live,OrdinaryFeed:Live,OrdinaryEverySeconds:Live,MaxWait:Live,ShutterNamespace:Live,StormReceiverDownSeconds:Live";
 
 Method OnProcessInput(pInput As %RegisteredObject, Output pOutput As %RegisteredObject) As %Status
 {
     Set pOutput = ""
     If '$GET(^Hospital.Config("live")) Quit $$$OK
     Set now = $PIECE($HOROLOG, ",", 1) * 86400 + $PIECE($HOROLOG, ",", 2)
+    // The storm first (v1.35): a press is picked up within one call, and nothing else plays under it; the rotation and the
+    // ordinary feed wait until it is done.
+    Set storm = ..StormState(.json)
+    If ..StormPickup() Set storm = "requested"
+    If storm = "requested" {
+        Set sc = ..PlayStorm()
+        If $$$ISERR(sc) $$$LOGWARNING("The storm failed: " _ $SYSTEM.Status.GetErrorText(sc))
+        Do ..WriteStatus()
+        Quit $$$OK
+    }
+    If (storm '= "") && (storm '= "done") && (storm '= "failed") {
+        Do ..StormWatch()
+        Do ..WriteStatus()
+        Quit $$$OK
+    }
     Set last = +$GET(^Hospital.Live("last_story_at"))
     If (now - last) >= (..EveryMinutes * 60) {
         Set sc = ..PlayNext()
         If $$$ISERR(sc) $$$LOGWARNING("The live story failed: " _ $SYSTEM.Status.GetErrorText(sc))
-    } ElseIf ..OrdinaryFeed {
+    } ElseIf ..OrdinaryFeed && ((now - +$GET(^Hospital.Live("last_ordinary_at"))) >= ..OrdinaryEverySeconds) {
+        Set ^Hospital.Live("last_ordinary_at") = now
         Set sc = ..Ordinary()
         If $$$ISERR(sc) $$$LOGWARNING("The ordinary message failed: " _ $SYSTEM.Status.GetErrorText(sc))
     }
     Do ..WriteStatus()
     Quit $$$OK
+}
+
+/// The storm's state ("" when none has ever been pressed) and its record.
+ClassMethod StormState(Output json As %DynamicObject) As %String
+{
+    Set json = ""
+    Set text = $GET(^Hospital.Live("storm"))
+    If text = "" Quit ""
+    Try { Set json = ##class(%DynamicObject).%FromJSON(text) } Catch ex { Set json = "" }
+    If '$ISOBJECT(json) Quit ""
+    Quit json.%Get("state")
+}
+
+ClassMethod StormSave(json As %DynamicObject)
+{
+    Set ^Hospital.Live("storm") = json.%ToJSON()
+}
+
+/// A press waiting in Shutter's namespace (the route writes ^Shutter.Live("storm","request") there, since the API's users
+/// write nothing in this database) becomes this namespace's record, state requested; true when one was taken.
+Method StormPickup() As %Boolean
+{
+    Set ns = ..ShutterNamespace
+    Set text = $GET(^|ns|Shutter.Live("storm", "request"))
+    If text = "" Quit 0
+    Set ^Hospital.Live("storm") = text
+    Kill ^|ns|Shutter.Live("storm", "request")
+    $$$TRACE("Storm requested: " _ text)
+    Quit 1
+}
+
+/// The storm's plan (CONTRACTS 4.4, v1.35): four fresh patients, each admitted to a free bed and then moved to another
+/// ward; eight movements, admissions first, control ids STORM<n>-01 to -08. The beds are taken as the ordinary feed takes
+/// them, so the storm never collides with a story that is playing, and the ordinary feed knows the patients afterwards.
+/// The texts are written at send time (PlayStorm), so each movement carries the time it went out.
+ClassMethod StormPlan(n As %Integer, zone As %String = "") As %DynamicObject
+{
+    Set now = ##class(Shutter.Util.LiveFeed).LocalNow(zone)
+    Set plan = {"patients": [], "movements": []}
+    Set k = 0
+    For i = 1:1:4 {
+        Set p = ##class(Shutter.Util.LiveFeed).NewPatient(), bed = ##class(Shutter.Util.LiveFeed).FreeBed()
+        Set ward = $LIST(bed, 1), room = $LIST(bed, 2), bedNo = $LIST(bed, 3)
+        Set ^Hospital.Live("adm", p.mrn) = $LISTBUILD(p.enc, ward, room, bedNo, now)
+        Set ^Hospital.Live("bed", ward, room, bedNo) = p.mrn
+        If '$DATA(^Hospital.Live("patient", p.mrn)) Set ^Hospital.Live("patient", p.mrn) = p.%ToJSON()
+        Set k = k + 1
+        Do plan.movements.%Push({"control": ("STORM" _ n _ "-" _ $TRANSLATE($JUSTIFY(k, 2), " ", "0")), "event": "admit", "mrn": (p.mrn), "encounterId": (p.enc), "ward": (ward), "room": (room), "bed": (bedNo), "prior": ""})
+        Do plan.patients.%Push({"mrn": (p.mrn), "encounterId": (p.enc), "ward": (ward), "toWard": "", "movements": 2})
+    }
+    For i = 1:1:4 {
+        Set pat = plan.patients.%Get(i - 1)
+        Set adm = ^Hospital.Live("adm", pat.mrn), ward = $LIST(adm, 2), room = $LIST(adm, 3), bedNo = $LIST(adm, 4)
+        Set to = ##class(Shutter.Util.LiveFeed).FreeBed(ward)
+        Kill ^Hospital.Live("bed", ward, room, bedNo)
+        Set ^Hospital.Live("bed", $LIST(to, 1), $LIST(to, 2), $LIST(to, 3)) = pat.mrn
+        Set ^Hospital.Live("adm", pat.mrn) = $LISTBUILD(pat.encounterId, $LIST(to, 1), $LIST(to, 2), $LIST(to, 3), $LIST(adm, 5))
+        Set pat.toWard = $LIST(to, 1)
+        Set k = k + 1
+        Do plan.movements.%Push({"control": ("STORM" _ n _ "-" _ $TRANSLATE($JUSTIFY(k, 2), " ", "0")), "event": "transfer", "mrn": (pat.mrn), "encounterId": (pat.encounterId), "ward": ($LIST(to, 1)), "room": ($LIST(to, 2)), "bed": ($LIST(to, 3)), "prior": (ward _ "^" _ room _ "^" _ bedNo _ "^HOSP")})
+    }
+    Quit plan
+}
+
+/// The storm (CONTRACTS 4.4, v1.35): the receiver goes down (fail_before_accept on Downstream Out), eight movements for
+/// four fresh patients go out about three seconds apart and fail, and each is handed to Shutter by the hospital's own
+/// process; the state moves requested, sending, waiting_receiver. StormWatch brings the receiver back and ends the storm.
+Method PlayStorm() As %Status
+{
+    Set state = ..StormState(.json)
+    If '$ISOBJECT(json) Quit $$$ERROR($$$GeneralError, "No storm requested")
+    Set folder = $GET(^Hospital.Config("dir", "in"))
+    If folder = "" {
+        Set json.state = "failed", json.error = "The hospital's inbound folder is not recorded"
+        Do ..StormSave(json)
+        Quit $$$ERROR($$$GeneralError, json.error)
+    }
+    Set n = +$EXTRACT(json.%Get("stormId"), 4, *), zone = ..LiveZone(), sc = $$$OK
+    Set json.state = "sending", json.sent = 0
+    Set json.receiverDownUntil = ##class(Shutter.Util.Time).FromNow(..StormReceiverDownSeconds)
+    Set plan = ..StormPlan(n, zone)
+    Set json.patients = plan.patients, json.movements = plan.movements.%Size()
+    Do ..StormSave(json)
+    Do ..Stamp("storm")
+    Try {
+        Do ..Fault("Downstream Out", {"mode": "fail_before_accept"})
+        Set mi = plan.movements.%GetIterator(), k = 0
+        While mi.%GetNext(, .m) {
+            Set k = k + 1
+            Set now = ##class(Shutter.Util.LiveFeed).LocalNow(zone)
+            Set p = ##class(Shutter.Util.LiveFeed).PatientNamed(m.mrn)
+            Set adm = $GET(^Hospital.Live("adm", m.mrn))
+            If m.event = "admit" {
+                Set admitted = now
+                If adm '= "" Set $LIST(adm, 5) = now, ^Hospital.Live("adm", m.mrn) = adm
+            } Else {
+                Set admitted = $SELECT(adm '= "": $LIST(adm, 5), 1: now)
+            }
+            Set text = ##class(Shutter.Util.LiveFeed).Adt($SELECT(m.event = "admit": "A01", 1: "A02"), m.control, now, p, m.encounterId, m.ward, m.room, m.bed, m.prior, admitted)
+            Set path = folder _ "live-storm-" _ $TRANSLATE($JUSTIFY(n, 4), " ", "0") _ "-" _ $TRANSLATE($JUSTIFY(k, 2), " ", "0") _ ".hl7"
+            Do ..WriteFile(path, text)
+            Set deadline = $ZHOROLOG + 15
+            While ##class(%File).Exists(path) && ($ZHOROLOG < deadline) { Hang 0.2 }
+            Hang 1.5
+            Set json.sent = k
+            Do ..StormSave(json)
+        }
+        Set json.state = "waiting_receiver"
+    } Catch ex {
+        Set sc = ex.AsStatus(), json.state = "failed", json.error = ex.DisplayString()
+        Do ..Fault("Downstream Out", {"mode": "off"})
+    }
+    Do ..StormSave(json)
+    $$$TRACE("Storm " _ json.stormId _ ": " _ json.sent _ " movement(s) sent, state " _ json.state)
+    Quit sc
+}
+
+/// The storm's later moves: the receiver comes back when its outage is over (releasing), and the storm is done when
+/// Shutter's incident has closed or the storm's span is over; then the rotation starts again from now.
+Method StormWatch() As %Status
+{
+    Set state = ..StormState(.json)
+    If '$ISOBJECT(json) Quit $$$OK
+    Set now = ##class(Shutter.Util.Time).NowUTC()
+    If ((state = "sending") || (state = "waiting_receiver")) && (json.%Get("receiverDownUntil") '= "") && (##class(Shutter.Util.Time).SecondsBetween(json.receiverDownUntil, now) >= 0) {
+        Do ..Fault("Downstream Out", {"mode": "off"})
+        Set json.state = "releasing", json.receiverUpAt = now
+        Do ..StormSave(json)
+        $$$TRACE("Storm " _ json.stormId _ ": the receiver answers again")
+        Quit $$$OK
+    }
+    If state = "releasing" {
+        Set inc = ..StormIncident(json.%Get("startedAt"))
+        If $ISOBJECT(inc) Set json.incidentId = inc.incidentId, json.incidentState = inc.state
+        Set over = (json.%Get("endsAt") '= "") && (##class(Shutter.Util.Time).SecondsBetween(json.endsAt, now) >= 0)
+        If $ISOBJECT(inc) && (inc.state = "closed") Set over = 1
+        If over {
+            Set json.state = "done", json.endedAt = now
+            Set ^Hospital.Live("last_story_at") = $PIECE($HOROLOG, ",", 1) * 86400 + $PIECE($HOROLOG, ",", 2)
+            $$$TRACE("Storm " _ json.stormId _ " done")
+        }
+        Do ..StormSave(json)
+    }
+    Quit $$$OK
+}
+
+/// The incident Shutter opened for the storm's failures: the newest for Downstream Out since the press, read in Shutter's
+/// namespace; "" when none yet.
+Method StormIncident(startedAt As %String) As %DynamicObject
+{
+    Set out = ""
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = ..ShutterNamespace
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 IncidentId, State FROM Shutter_Store.Incident WHERE Receiver = 'Downstream Out' AND OpenedAt >= ? ORDER BY ID DESC", startedAt)
+        If rs.%Next() Set out = {"incidentId": (rs.%Get("IncidentId")), "state": (rs.%Get("State"))}
+    } Catch ex {
+    }
+    Quit out
 }
 
 /// The scenario list as the setting says, or every playable scenario of the file.
@@ -244,6 +431,9 @@ Method WriteStatus()
         Set s.next.scenario = $GET(^Hospital.Live("next")), s.next.at = $ZDATE(due \ 86400, 3) _ "T" _ $ZTIME(due # 86400, 1) _ "Z"
     }
     Set s."last_ordinary" = $GET(^Hospital.Live("last_ordinary"))
+    // The storm (v1.35), when one has ever been pressed: Shutter's LiveStatus adds the incident and the case counts.
+    Set state = ..StormState(.storm)
+    If $ISOBJECT(storm) Set s.storm = storm
     Set ^Hospital.Live("status") = s.%ToJSON()
 }
 
