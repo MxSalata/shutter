@@ -51,7 +51,9 @@ import {
   type SiteProfileVersionEntry,
   type SiteProfileView,
   type Snapshot,
+  type StormStarted,
 } from './types';
+import { isStormPlaying, LIVE_POLL_MS, STORM_POLL_MS } from '@/lib/storm';
 
 /** How often an open case and the lists refresh, in milliseconds. */
 const LIVE = 2_500;
@@ -598,22 +600,50 @@ export function useSettings() {
   return useQuery({ queryKey: keys.settings, queryFn: () => api.get<Settings>('/settings') });
 }
 
-/** How often the live hospital's banner reads its status again, in milliseconds. */
-const LIVE_BANNER = 30_000;
+/**
+ * How often the live hospital's banner reads the settings again, in milliseconds: every 3 s while a storm plays (the
+ * strip follows it), every half minute otherwise while a live hospital is on, and never on any other instance.
+ */
+export function livePollInterval(settings: Settings | undefined, now: number = Date.now()): number | false {
+  if (!settings?.live?.enabled) return false;
+  return isStormPlaying(settings.live.storm, now) ? STORM_POLL_MS : LIVE_POLL_MS;
+}
 
 /**
  * The live hospital's status (`GET /settings`, `live`), for the banner on every page: null unless the server says
- * `live.enabled`. It reads the settings again every half minute only while a live hospital is on, so no other
+ * `live.enabled`. It reads the settings again only while a live hospital is on (livePollInterval), so no other
  * instance polls for it. A user who may not read the settings (a 403) has no banner.
  */
 export function useLiveStatus(): LiveStatus | null {
   const settings = useQuery({
     queryKey: keys.settings,
     queryFn: () => api.get<Settings>('/settings'),
-    refetchInterval: (query) => (query.state.data?.live?.enabled ? LIVE_BANNER : false),
+    refetchInterval: (query) => livePollInterval(query.state.data),
   });
   const live = settings.data?.live;
   return live?.enabled === true ? live : null;
+}
+
+/**
+ * "Break the feed" (CONTRACTS 4.4, v1.35): asks the live hospital for a storm, under the Idempotency-Key of the press
+ * (one per press of the button, reused only when that same confirm is sent again after an error, so a lost answer
+ * never starts a second storm). The 202 is the press as recorded; it stands in the settings' `live.storm` at once, so
+ * the strip appears before the next read, and the settings are read again whatever the answer (a refusal for a storm
+ * in progress then shows that one).
+ */
+export function useStartStorm() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (idempotencyKey: string) => api.post<StormStarted>('/live/storm', {}, { idempotencyKey }),
+    onSuccess: (storm) => {
+      client.setQueryData<Settings>(keys.settings, (old) =>
+        old?.live ? { ...old, live: { ...old.live, storm } } : old,
+      );
+    },
+    onSettled: async () => {
+      await client.invalidateQueries({ queryKey: keys.settings });
+    },
+  });
 }
 
 export function useCosts() {

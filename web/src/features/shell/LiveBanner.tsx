@@ -1,12 +1,27 @@
 import { Group, Text, Tooltip } from '@mantine/core';
 import { IconBroadcast } from '@tabler/icons-react';
-import { useEffect, useRef, useState } from 'react';
-import { useLiveStatus } from '@/api/hooks';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router';
+import { useCan, useLiveStatus } from '@/api/hooks';
 import type { LiveStatus } from '@/api/types';
 import { TRIAL } from '@/env/mode';
+import type { StormRefusal } from '@/features/storm/view';
 import { formatAge, formatTime, parseTime, zoneLabel } from '@/lib/format';
+import { isStormShown, STORM_IN_TRIAL } from '@/lib/storm';
 import { useNow } from '@/lib/useNow';
 import { HINT_EVENTS } from '@/theme';
+
+/**
+ * "Break the feed"'s button, notice and strip, in a chunk of their own: only a live banner draws them, so the entry stays
+ * small for every other instance (e2e/trial.spec.ts holds the entry to its budget).
+ */
+const StormButton = lazy(() =>
+  import('@/features/storm/BreakTheFeed').then((m) => ({ default: m.StormButton })),
+);
+const StormNotice = lazy(() =>
+  import('@/features/storm/BreakTheFeed').then((m) => ({ default: m.StormNotice })),
+);
+const StormStrip = lazy(() => import('@/features/storm/StormStrip').then((m) => ({ default: m.StormStrip })));
 
 /** "a new failure every 7 minutes", "every minute", or the unnumbered form when the server gave no interval. */
 function cadence(every: number | undefined): string {
@@ -39,15 +54,33 @@ function usePulse(at: string | undefined): number {
  * next. A neutral band with a broadcast mark, never an information tone. In a trial page it is the recorded feed
  * replayed, and says so: "Hospital feed (replayed)", so the trial never says "live" of itself. Nothing is rendered
  * for any other instance.
+ *
+ * "Break the feed" (after-restyle B7): for a user who operates, a live banner offers the storm (StormButton), and
+ * while one plays or has just finished it carries the storm's strip, on every page but Incidents, which shows the strip
+ * in its own place (so it is neither drawn nor announced twice). A refusal stands under the line as a calm notice. A
+ * trial page has no demo hospital to break: its banner says where the storm plays instead.
  */
 export function LiveBanner() {
   const live = useLiveStatus();
   const now = useNow();
   const pulse = usePulse(live?.last_played?.at);
+  const can = useCan();
+  const { pathname } = useLocation();
+  const [refusal, setRefusal] = useState<StormRefusal | null>(null);
   if (!live) return null;
   const name = TRIAL ? 'Hospital feed (replayed)' : 'Live hospital';
   const last = live.last_played;
   const next = nextDue(live, now);
+  const storm = !TRIAL && live.storm && isStormShown(live.storm, now) ? live.storm : null;
+  const action = TRIAL ? (
+    <Text size="sm" data-testid="storm-in-trial">
+      {STORM_IN_TRIAL}
+    </Text>
+  ) : can.operate ? (
+    <Suspense fallback={null}>
+      <StormButton onRefused={setRefusal} />
+    </Suspense>
+  ) : null;
   return (
     <div
       // A region, not a status: the age changes every few seconds and a screen reader should not announce each change
@@ -56,30 +89,37 @@ export function LiveBanner() {
       className="live-banner"
       data-testid="live-banner"
     >
-      <Group gap="xs" wrap="nowrap" align="flex-start">
-        <IconBroadcast size={18} aria-hidden style={{ flex: 'none', marginTop: 2 }} />
-        <span className="live-dot" aria-hidden key={pulse} data-pulse={pulse > 0 || undefined} />
-        <Text size="sm">
-          {name}: {cadence(live.every_minutes)}.
-          {last?.scenario ? (
-            <>
-              {' '}
-              Last:{' '}
-              {last.title ? (
-                <Tooltip label={last.title} withArrow events={HINT_EVENTS}>
-                  <span className="live-story" tabIndex={0}>
-                    {last.scenario}
-                  </span>
-                </Tooltip>
-              ) : (
-                last.scenario
-              )}
-              {last.at ? `, ${formatAge(last.at, now)}` : ''}.
-            </>
-          ) : null}
-          {next ? ` ${next}` : ''}
-        </Text>
+      <Group gap="xs" wrap="wrap" justify="space-between" align="flex-start">
+        <Group gap="xs" wrap="nowrap" align="flex-start" style={{ minWidth: 0, flex: '1 1 20rem' }}>
+          <IconBroadcast size={18} aria-hidden style={{ flex: 'none', marginTop: 2 }} />
+          <span className="live-dot" aria-hidden key={pulse} data-pulse={pulse > 0 || undefined} />
+          <Text size="sm" data-testid="live-line">
+            {name}: {cadence(live.every_minutes)}.
+            {last?.scenario ? (
+              <>
+                {' '}
+                Last:{' '}
+                {last.title ? (
+                  <Tooltip label={last.title} withArrow events={HINT_EVENTS}>
+                    <span className="live-story" tabIndex={0}>
+                      {last.scenario}
+                    </span>
+                  </Tooltip>
+                ) : (
+                  last.scenario
+                )}
+                {last.at ? `, ${formatAge(last.at, now)}` : ''}.
+              </>
+            ) : null}
+            {next ? ` ${next}` : ''}
+          </Text>
+        </Group>
+        {action}
       </Group>
+      <Suspense fallback={null}>
+        {refusal && !TRIAL ? <StormNotice refusal={refusal} onClose={() => setRefusal(null)} /> : null}
+        {storm && pathname !== '/incidents' ? <StormStrip storm={storm} /> : null}
+      </Suspense>
     </div>
   );
 }

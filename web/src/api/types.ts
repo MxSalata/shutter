@@ -950,7 +950,59 @@ export interface LiveStatus {
   next?: { scenario: string; at: string } | null;
   /** The last ordinary message: its kind and when ("admission at 2026-11-01T10:04:00Z"). */
   last_ordinary?: string;
+  /** "Break the feed" (v1.35): the storm playing or played last, absent before the first. */
+  storm?: LiveStorm | null;
 }
+
+/**
+ * A storm's state (CONTRACTS 4.4, v1.35): asked for, its movements going out, all sent while the receiver is down, the
+ * receiver back and the chains released, then done (the incident closed, or ten minutes after the press) or failed.
+ */
+export type StormState = 'requested' | 'sending' | 'waiting_receiver' | 'releasing' | 'done' | 'failed';
+
+/** One of the storm's four fresh patients: admitted to `ward`, then moved to `toWard`. No names. */
+export interface StormPatient {
+  mrn: string;
+  encounterId: string;
+  ward: string;
+  toWard?: string;
+  movements?: number;
+}
+
+/**
+ * `GET /settings` `live.storm`: the player's record of the storm (or the press it has not picked up yet), with
+ * Shutter's own view added: the incident its cases joined, how many cases it opened and resolved, and when the next
+ * storm may start.
+ */
+export interface LiveStorm {
+  stormId: string;
+  state: StormState | string;
+  startedAt?: string;
+  requestedBy?: string;
+  receiverDownUntil?: string;
+  receiverUpAt?: string;
+  /** Movements sent so far. */
+  sent?: number;
+  /** Movements in the storm (8). */
+  movements?: number;
+  /** The patients once the player has planned the storm; the press's own record says only how many (4). */
+  patients?: StormPatient[] | number;
+  endsAt?: string;
+  endedAt?: string;
+  /** Set when the storm failed. */
+  error?: string;
+  incidentId?: string | null;
+  incidentState?: string | null;
+  cases?: number;
+  resolved?: number;
+  cooldownUntil?: string;
+}
+
+/** `POST /live/storm`'s 202: the press as recorded, before the player takes it. */
+export type StormStarted = LiveStorm & {
+  receiverDownSeconds?: number;
+  pickupWithinSeconds?: number;
+};
 
 /** One story the live hospital played (`^Hospital.Live("played", n)`). */
 export interface LivePlay {
