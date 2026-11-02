@@ -76,9 +76,16 @@ ClassMethod SignatureOf(conditions As %DynamicObject) As %String
 /// The conditions of a case's current snapshot (its summary's catalogue.conditions), or "" when it has none.
 ClassMethod ConditionsOf(case As Shutter.Store.Case) As %DynamicObject
 {
-    If '$ISOBJECT(case) || '$ISOBJECT(case.CurrentSnapshot) Quit ""
+    If '$ISOBJECT(case) Quit ""
+    Quit ..ConditionsOfSnapshot(case.CurrentSnapshot)
+}
+
+/// The conditions a snapshot's summary shows (catalogue.conditions), or "" when it has none.
+ClassMethod ConditionsOfSnapshot(snap As Shutter.Store.Snapshot) As %DynamicObject
+{
+    If '$ISOBJECT(snap) Quit ""
     Set summary = ""
-    Try { Set summary = case.CurrentSnapshot.SummaryObject() } Catch ex { Set summary = "" }
+    Try { Set summary = snap.SummaryObject() } Catch ex { Set summary = "" }
     If '$ISOBJECT(summary) Quit ""
     Set cat = summary.%Get("catalogue")
     If '$ISOBJECT(cat) Quit ""
@@ -86,19 +93,21 @@ ClassMethod ConditionsOf(case As Shutter.Store.Case) As %DynamicObject
     Quit $SELECT($ISOBJECT(c): c, 1: "")
 }
 
-/// Record a case's decision as a precedent, from its current snapshot, the plan and the approval of record. Nothing
-/// is written for an automatic release (approver "policy"), for a case with no snapshot conditions, or when the same
-/// case and plan digest were recorded already (a verification read twice writes one row).
+/// Record a case's decision as a precedent, from the snapshot the plan was made from (what the approver saw; the case's
+/// current one when the plan names none), the plan and the approval of record. Nothing is written for an automatic
+/// release (approver "policy"), for a snapshot with no conditions, or when the same case and plan digest were recorded
+/// already (a verification read twice writes one row).
 ClassMethod Record(case As Shutter.Store.Case, plan As Shutter.Store.Plan, approval As Shutter.Store.Approval, decision As %String, Output p As Shutter.Store.Precedent) As %Status
 {
     Set p = ""
     If '$ISOBJECT(case) || '$ISOBJECT(plan) || '$ISOBJECT(approval) Quit $$$OK
     If (approval.Approver = "") || (approval.Approver = "policy") Quit $$$OK
-    Set conditions = ..ConditionsOf(case)
+    Set snap = $SELECT($ISOBJECT(plan.Snapshot): plan.Snapshot, 1: case.CurrentSnapshot)
+    Set conditions = ..ConditionsOfSnapshot(snap)
     If '$ISOBJECT(conditions) Quit $$$OK
     Set entry = "", outcome = ""
     Try {
-        Set cat = case.CurrentSnapshot.SummaryObject().%Get("catalogue")
+        Set cat = snap.SummaryObject().%Get("catalogue")
         If $ISOBJECT(cat) Set entry = ##class(Shutter.Util.Json).Str(cat, "entry"), outcome = ##class(Shutter.Util.Json).Str(cat, "outcome")
     } Catch ex {}
     Set caseId = case.CaseId, digest = plan.Digest, existing = ""
@@ -193,9 +202,7 @@ ClassMethod RowsFor(case As Shutter.Store.Case) As %DynamicArray
 /// The row as JSON, with the conditions as an object.
 Method Projection() As %DynamicObject
 {
-    Set sc = ..%JSONExportToString(.json)
-    Set o = ##class(%DynamicObject).%FromJSON($SELECT($$$ISOK(sc): json, 1: "{}"))
-    Set o.id = ..%Id()
+    Set o = ##class(Shutter.Util.Json).Project($THIS)
     If o.%GetTypeOf("conditions") = "string" Set o.conditions = ##class(Shutter.Util.Json).Parse(o.conditions, .psc)
     Quit o
 }

@@ -112,6 +112,30 @@ Method TestWindowAndRetire()
     Kill ^Shutter.Config("precedentDays")
 }
 
+/// The precedent is signed with the snapshot the plan was made from, not a later one the approver never saw.
+Method TestRecordUsesThePlanSnapshot()
+{
+    Set pre = "Shutter.Store.Precedent"
+    Set case = ##class(Shutter.Store.Case).%New()
+    Set case.CaseId = "C-TEST-9", case.Receiver = ..Receiver
+    Set seen = ##class(Shutter.Store.Snapshot).%New(), later = ##class(Shutter.Store.Snapshot).%New()
+    Set seen.Summary = {"catalogue": {"conditions": (..Conditions("unavailable")), "entry": "E2", "outcome": "resend"}}.%ToJSON()
+    Set later.Summary = {"catalogue": {"conditions": (..Conditions("timeout")), "entry": "E3", "outcome": "wait"}}.%ToJSON()
+    Set case.CurrentSnapshot = later
+    Set plan = ##class(Shutter.Store.Plan).%New()
+    Set plan.Snapshot = seen, plan.Digest = "sha256:plan-nine", plan.Disposition = "resend"
+    Set approval = ##class(Shutter.Store.Approval).%New()
+    Set approval.Approver = "approver", approval.PolicyVersion = "p", approval.SiteProfileVersion = "1"
+    Do $$$AssertStatusOK($CLASSMETHOD(pre, "Record", case, plan, approval, "approved", .p), "recorded")
+    Do $$$AssertTrue($ISOBJECT(p), "a row")
+    Do $$$AssertEquals(p.Signature, $CLASSMETHOD(pre, "SignatureOf", ..Conditions("unavailable")), "signed with the plan's snapshot")
+    Do $$$AssertNotEquals(p.Signature, $CLASSMETHOD(pre, "SignatureOf", ..Conditions("timeout")), "not with the later one")
+    Do $$$AssertEquals(p.CatalogueEntry _ "|" _ p.CatalogueOutcome, "E2|resend", "and its entry and outcome")
+    Set plan.Snapshot = ""
+    Do $$$AssertStatusOK($CLASSMETHOD(pre, "Record", case, plan, approval, "rejected", .q), "a plan with no snapshot falls back to the case's")
+    Do $$$AssertEquals(q.Signature, $CLASSMETHOD(pre, "SignatureOf", ..Conditions("timeout")), "the current snapshot then")
+}
+
 Method TestRecordGuards()
 {
     Set pre = "Shutter.Store.Precedent"

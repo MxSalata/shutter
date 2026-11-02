@@ -30,6 +30,12 @@ Method TestPreflightWait()
     Set wait = $CLASSMETHOD(wf, "PreflightWaitSeconds", case)
     Do $$$AssertTrue((wait >= 38) && (wait <= 40), "against the clock: " _ wait)
     Do $$$AssertEquals($CLASSMETHOD(wf, "PreflightWaitSeconds", ""), 0, "no case, no wait")
+    // The preflight's own retry honours a Retry-After on the read: the longer of the backoff and the header, 300 s at most.
+    Do $$$AssertEquals($CLASSMETHOD(wf, "RetryAfterWait", "", 10), 10, "no header, the backoff")
+    Do $$$AssertEquals($CLASSMETHOD(wf, "RetryAfterWait", 60, 10), 60, "a longer Retry-After wins")
+    Do $$$AssertEquals($CLASSMETHOD(wf, "RetryAfterWait", 5, 20), 20, "a shorter one leaves the backoff")
+    Do $$$AssertEquals($CLASSMETHOD(wf, "RetryAfterWait", 900, 40), 300, "five minutes at most")
+    Do $$$AssertEquals($CLASSMETHOD(wf, "RetryAfterWait", 0, 40), 40, "nought means none")
 }
 
 }

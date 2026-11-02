@@ -38,6 +38,17 @@ Method TestSlots()
     Do $$$AssertEquals($DATA(^Shutter.Board("convened", "202611020100")), 0, "a minute eight back is dropped")
     Do $$$AssertEquals($DATA(^Shutter.Board("convened", "202611020107")), 0, "and the last minute too: only the current minute counts")
     Do $$$AssertEquals($CLASSMETHOD(slots, "Count", "202611020108"), 1, "the new minute holds its one")
+    // TryTake: the atomic take under a cap.
+    Set m = "202611020109"
+    Do $$$AssertTrue($CLASSMETHOD(slots, "TryTake", 2, .count, m), "the first slot of the minute")
+    Do $$$AssertEquals(count, 1, "one taken")
+    Do $$$AssertTrue($CLASSMETHOD(slots, "TryTake", 2, .count, m), "the second")
+    Do $$$AssertEquals(count, 2, "two taken")
+    Do $$$AssertNotTrue($CLASSMETHOD(slots, "TryTake", 2, .count, m), "a third is refused")
+    Do $$$AssertEquals(count, 2, "and the count stays at the cap")
+    Do $$$AssertEquals($CLASSMETHOD(slots, "Count", m), 2, "nothing leaked past it")
+    Do $$$AssertTrue($CLASSMETHOD(slots, "TryTake", 0, .count, m), "no cap, always taken")
+    Do $$$AssertEquals(count, 3, "and counted")
 }
 
 }

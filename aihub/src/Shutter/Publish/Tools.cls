@@ -151,7 +151,7 @@ ClassMethod GetEvents(caseId As %String, limit As %Integer = 50) As %DynamicObje
     Set case = ##class(Shutter.Store.Case).ByCaseId(caseId)
     If '$ISOBJECT(case) Return ..Unknown(caseId)
     Set n = $SELECT(+limit < 1: 50, +limit > 500: 500, 1: +limit)
-    Set rows = ##class(Shutter.API.Dispatch).Rows("Shutter.Store.CaseEvent", "SELECT TOP " _ n _ " ID FROM Shutter_Store.CaseEvent WHERE ""Case"" = ? ORDER BY ID DESC", case.%Id())
+    Set rows = ##class(Shutter.Util.Json).Rows("Shutter.Store.CaseEvent", "SELECT TOP " _ n _ " ID FROM Shutter_Store.CaseEvent WHERE ""Case"" = ? ORDER BY ID DESC", case.%Id())
     Set o = {"caseId": (case.CaseId), "caseVersion": (case.Version), "events": []}
     Set it = rows.%GetIterator()
     While it.%GetNext(, .e) {
