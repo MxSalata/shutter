@@ -1217,6 +1217,12 @@ on the server and answers `{ok, category, loaded, error}`; `GET /settings/schema
 `import_failed` with the importer's words: a file that is not there, not `.xml`, or not a schema). The install guide's
 section 7 says how a site loads its schema and what a case says meanwhile (6.5, `SCHEMA_UNKNOWN`).
 
+**What was last observed** (v1.35). The Doctor and `GET /health` (its anonymous answer too) carry `last_live_run`: the newest run
+that reached a model (`live` or `record`, never the API mimic) as `{at, status, member, model, mode}`, or null when none
+has, so a capped or failing afternoon shows as such beside the configured mode. The image's compose file has a healthcheck
+on the health route's `"ok": true` (the production running; `wget`, since the image has no `curl`), so `docker compose ps`
+says healthy and `docker compose up --wait` returns when Shutter is ready.
+
 **The environment at a start** (v1.34). `Shutter.Production`'s `OnStart` calls `Shutter.Setup.ApplyEnvironment(120)`, which
 reads the container's `SHUTTER_DAILY_BUDGET_USD`, `SHUTTER_JUDGE_BUDGET_USD`, `SHUTTER_PUBLIC_DEMO_PASSWORD`,
 `SHUTTER_TRACE_PASSWORD`, `SHUTTER_JUDGE_PASSWORD` and `SHUTTER_LIVE` and applies each that is not empty: the budget's cap and

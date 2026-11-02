@@ -81,6 +81,19 @@ Property ReasoningTokens As %Integer(%JSONFIELDNAME = "reasoningTokens");
 Index QuestionIdx On QuestionId;
 
 /// Record a run from the bridge's response. A run that answered a question names it (questionId).
+/// The newest run that reached a model (live or record, not the API mimic; v1.35): {at, status, member, model, mode}, or "" when
+/// none has. The Doctor and the health route show it beside the configured mode, so a capped or failing afternoon is
+/// visible as what was last observed, not only as what is configured.
+ClassMethod LastLive() As %DynamicObject
+{
+    Set at = "", status = "", member = "", model = "", mode = ""
+    &sql(SELECT TOP 1 StartedAt, Status, MemberCode, Model, Mode INTO :at, :status, :member, :model, :mode FROM Shutter_Store.AgentRun WHERE Mode IN ('live', 'record') AND Model <> 'mock' ORDER BY ID DESC)
+    If (SQLCODE '= 0) || (at = "") Quit ""
+    Set o = {}
+    Set o.at = at, o.status = status, o.member = member, o.model = model, o.mode = mode
+    Quit o
+}
+
 ClassMethod FromResponse(case As Shutter.Store.Case, snapshot As Shutter.Store.Snapshot, role As %String, memberCode As %String, response As Shutter.Bridge.Msg.AgentResponse, ensMessageId As %String, Output run As Shutter.Store.AgentRun, questionId As %String = "") As %Status
 {
     Set run = ..%New()
