@@ -1621,7 +1621,8 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   `Shutter.Intake.AlertProcess` as a watched production's `Ens.Alert` item, which hands a delivery failure's message to
   Shutter from the alert alone and passes every alert on to the site's consumer (11, 13); the storm, `POST /live/storm`,
   eight failed movements for four fresh patients in the live hospital with the receiver down for a minute, followed on
-  `live.storm` (4.4); each item of the review that lands adds its line here.
+  `live.storm` (4.4); the budget reserves an estimate for each run in flight and settles it when the run ends (9); each item of
+  the review that lands adds its line here.
 - v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:
   run, reset, purge) and `Shutter_Configure` (the site's writes: the profile, the library, a schema import, the review
   annotations), held by the operator and the approver as before; the role `Shutter_Demo` (reads, reinvestigates, approves and
