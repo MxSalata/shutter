@@ -11,7 +11,7 @@ import { KeyValueList } from '@/components/KeyValueList';
 import { Timestamp } from '@/components/Timestamp';
 import { asArray } from '@/lib/json';
 import { humanize } from '@/lib/format';
-import { ConfirmModal } from './ApprovalPanel';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { Section } from './Section';
 
 const text = (x: unknown) => (typeof x === 'string' ? x : JSON.stringify(x));

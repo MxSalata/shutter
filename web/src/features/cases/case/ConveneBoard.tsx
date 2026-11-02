@@ -9,7 +9,7 @@ import { TRIAL } from '@/env/mode';
 import { NOT_IN_TRIAL } from '@/env/copy';
 import { budgetSpent, budgetText, resetsHourly } from '@/lib/budget';
 import { describeError } from '@/lib/errors';
-import { ConfirmModal } from './ApprovalPanel';
+import { ConfirmModal } from '@/components/ConfirmModal';
 
 /** The states a reinvestigation reopens, and so the board may be convened on. */
 const REOPENABLE: string[] = ['blocked', 'escalated', 'failed'];

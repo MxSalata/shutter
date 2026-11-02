@@ -1,15 +1,4 @@
-import {
-  Alert,
-  Button,
-  Group,
-  Modal,
-  Stack,
-  Table,
-  Text,
-  Textarea,
-  Tooltip,
-  type ModalRootProps,
-} from '@mantine/core';
+import { Alert, Button, Group, Stack, Table, Text, Textarea, Tooltip } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconCheck, IconEye, IconX } from '@tabler/icons-react';
 import { useState } from 'react';
@@ -20,7 +9,7 @@ import type { ApprovalsView, CaseDetail, Me, PlanView } from '@/api/types';
 import { TRIAL } from '@/env/mode';
 import { byEnv } from '@/env/copy';
 import { Digest } from '@/components/Digest';
-import { EnvChip } from '@/components/EnvChip';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { TechDetail } from '@/components/TechDetail';
 import { KeyValueList } from '@/components/KeyValueList';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -33,33 +22,6 @@ import { humanize } from '@/lib/format';
 import { approvalsByPlan, earlierApprovalText } from './receipt';
 import { NotYet, Section } from './Section';
 import { capitalReceiverNoun, receiverNoun } from './receiver';
-
-/**
- * A confirm dialog for an action with an effect outside the browser: its title, with the environment's chip beside it
- * ("Live system", or "Trial only"), so nobody approves a real write believing it is the trial. The title alone names
- * the dialog.
- */
-export function ConfirmModal({
-  title,
-  children,
-  ...props
-}: { title: string; children: React.ReactNode } & Omit<ModalRootProps, 'title' | 'children'>) {
-  return (
-    <Modal.Root {...props}>
-      <Modal.Overlay />
-      <Modal.Content>
-        <Modal.Header>
-          <Group gap="sm" wrap="wrap" style={{ minWidth: 0 }}>
-            <Modal.Title>{title}</Modal.Title>
-            <EnvChip />
-          </Group>
-          <Modal.CloseButton />
-        </Modal.Header>
-        <Modal.Body>{children}</Modal.Body>
-      </Modal.Content>
-    </Modal.Root>
-  );
-}
 
 function BlindResendPreview({ c, me }: { c: CaseDetail; me: Me }) {
   const preview = usePreviewBlindResend(c.caseId);

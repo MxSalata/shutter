@@ -41,7 +41,7 @@ import type { Tone } from '@/lib/tone';
 import { describeError, isApiError } from '@/lib/errors';
 import { addressesProblem, closeNeedsApprover, controlProblem } from '../../site-profile/profile';
 import { formatZoned, humanize } from '@/lib/format';
-import { ConfirmModal } from './ApprovalPanel';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { receiverNoun, receiverTeam } from './receiver';
 import { Section } from './Section';
 

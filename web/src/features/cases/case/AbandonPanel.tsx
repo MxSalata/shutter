@@ -11,7 +11,7 @@ import { NOT_IN_TRIAL } from '@/env/copy';
 import { describeError, isApiError } from '@/lib/errors';
 import { formatZoned, humanize } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
-import { ConfirmModal } from './ApprovalPanel';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { Section } from './Section';
 
 /** How long nothing of a case may move before an approver can abandon it: the server's abandonAfterMinutes default. */

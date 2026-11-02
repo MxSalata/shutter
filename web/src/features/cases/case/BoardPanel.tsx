@@ -392,8 +392,8 @@ function SpecialistCard({
   return (
     <MemberCard
       member={run.memberCode}
-      name={<span id={`agent-${key}`}>{name}</span>}
-      aria-labelledby={`agent-${key}`}
+      name={name}
+      titleId={`agent-${key}`}
       badge={
         dissent ? <StatusBadge tone="attention" label="Dissent" icon={IconMessageExclamation} /> : undefined
       }
@@ -459,8 +459,8 @@ function CoordinatorCard({
   return (
     <MemberCard
       member="coordinator"
-      name={<span id={`agent-${key}`}>Coordinator</span>}
-      aria-labelledby={`agent-${key}`}
+      name="Coordinator"
+      titleId={`agent-${key}`}
       badge={
         <Text component="span" className="overline">
           Proposes the plan
@@ -572,8 +572,8 @@ function FindingCard({
   return (
     <MemberCard
       member="generalist"
-      name={<span id={`agent-${key}`}>{nameOf(run)}</span>}
-      aria-labelledby={`agent-${key}`}
+      name={nameOf(run)}
+      titleId={`agent-${key}`}
       meta={<RunLine run={run} portalBase={portalBase} />}
     >
       <Group gap="xs" wrap="wrap">

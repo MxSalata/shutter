@@ -12,6 +12,7 @@ import { useAppearance } from '@/stores/appearance';
 import { layer1Words } from '@/test/words';
 import { theme } from '@/theme';
 import CasePage, { REPLAY_DONE } from './CasePage';
+import { REPLAY_DONE as GUIDE_REPLAY_DONE } from '@/features/guide/Guide';
 
 /** Whether the page is the trial, and whether the reader asked for reduced motion: set per test. */
 const env = vi.hoisted(() => ({ trial: false, reduced: false }));
@@ -993,15 +994,12 @@ describe('the case page for both audiences', () => {
       expect(screen.getAllByRole('button', { name: /^\d\. / })[2]).not.toHaveTextContent('Not read yet'),
     );
     await within(await outcome()).findByText('Operator');
-    // The case's JSON is the machine's view, not reading: it is left out of the count
-    const json = [...document.querySelectorAll<HTMLElement>('.json-block')]
-      .filter((el) => !el.closest('[data-tech-detail="closed"]'))
-      .reduce((n, el) => n + layer1Words(el).length, 0);
+    // The case's JSON is the machine's view, not reading: `layer1Words` leaves it out of the count.
     // A drop-down's options are not read until it opens: only the chosen one counts
     const options = [...document.querySelectorAll<HTMLOptionElement>('option')]
       .filter((o) => !o.selected)
       .reduce((n, el) => n + layer1Words(el).length, 0);
-    return layer1Words(document.body).length - json - options;
+    return layer1Words(document.body).length - options;
   }
 
   // The spec's budget (cases-list-and-case-page.md 3): at most 600 words, today 1,130; Technical at most 1.5 times
@@ -1029,6 +1027,8 @@ describe('the case page in the trial', () => {
   });
 
   it('plays out what came of an approval: the steps, then the band, the note, one announcement and the event', async () => {
+    // The event is the one the guide waits for
+    expect(REPLAY_DONE).toBe(GUIDE_REPLAY_DONE);
     const done = vi.fn();
     window.addEventListener(REPLAY_DONE, done);
     renderCase('C-000002');

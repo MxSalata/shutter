@@ -23,12 +23,6 @@ import { GatePanel, PlanPanel, RehearsalPanel } from './PlanPanel';
 import { S8Compare } from './S8Compare';
 import { NestedSections } from './Section';
 
-/**
- * How far a section on a tab of the case page must stop below the top when it is scrolled to: under the header and
- * the sticky tab bar, so a focused heading is never hidden behind them.
- */
-export const UNDER_TABS = 'calc(var(--shutter-header-h) + 3.5rem)';
-
 /** The summary's steps in story order, and the S8 comparison after them. */
 export type StoryStep = 'failed' | 'evidence' | 'proposed' | 'decision' | 'written' | 'verified' | 'compare';
 
@@ -49,12 +43,8 @@ function Step({
   children: ReactNode;
 }) {
   return (
-    <Accordion.Item
-      value={value}
-      id={`story-${value}`}
-      data-tour={`case-${value}`}
-      style={{ scrollMarginTop: UNDER_TABS }}
-    >
+    // Scrolled to, it stops under the sticky tab bar: the tab panel's class (`.case-tab-panel`) sets its margin
+    <Accordion.Item value={value} id={`story-${value}`} data-tour={`case-${value}`}>
       <Accordion.Control>
         <Text span display="block" fw={600}>
           {n ? `${n}. ${title}` : title}

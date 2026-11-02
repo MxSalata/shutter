@@ -18,7 +18,7 @@ import { EvidencePanel } from './case/EvidencePanel';
 import { EscalationPanel } from './case/EscalationPanel';
 import { AbandonPanel } from './case/AbandonPanel';
 import { CaseTimeline } from './case/CaseTimeline';
-import { CaseStory, UNDER_TABS, type StoryStep } from './case/CaseStory';
+import { CaseStory, type StoryStep } from './case/CaseStory';
 import { BoardPanel } from './case/BoardPanel';
 import { DecisionCard } from './case/DecisionCard';
 import { PortalLinks } from './case/PortalLinks';
@@ -43,14 +43,24 @@ type Tab = (typeof TABS)[number];
 /** The story steps a link may open (`?open=decision`), as the guide does to show one. */
 const STEPS: StoryStep[] = ['failed', 'evidence', 'proposed', 'decision', 'written', 'verified', 'compare'];
 
-/** The event the guide waits for once the trial has played out what came of a reader's approval. */
-export const REPLAY_DONE = 'shutter:replay-done';
-
 /** What the trial says, once, when the replay after an approval has played. */
 const REPLAYED = 'Approved in the trial. The recording shows it delivered and verified.';
 
-/** A tab panel clears the header and the sticky tab bar when it is scrolled to. */
-const PANEL = { scrollMarginTop: UNDER_TABS };
+/**
+ * The event the guide waits for once the trial has played out what came of a reader's approval. The guide's own
+ * `REPLAY_DONE` (features/guide/Guide.tsx) has the same name; it is not imported, since the guide is in the chunk only
+ * trial pages load and importing it here would bring it into every case page. A test keeps the two the same.
+ */
+export const REPLAY_DONE = 'shutter:replay-done';
+
+/**
+ * A tab panel clears the header and the sticky tab bar when it is scrolled to, as `.case-tab-panel` makes the
+ * sections, steps and guide cards inside it do.
+ */
+const PANEL = {
+  className: 'case-tab-panel',
+  style: { scrollMarginTop: 'calc(var(--shutter-header-h) + 3.5rem)' },
+};
 
 function CaseBody({ c }: { c: CaseDetail }) {
   const [search, setSearch] = useSearchParams();
@@ -257,7 +267,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
               Audit trail
             </Tabs.Tab>
           </Tabs.List>
-          <Tabs.Panel value="summary" pt="md" style={PANEL}>
+          <Tabs.Panel value="summary" pt="md" {...PANEL}>
             <Stack gap="md">
               {boardOnTop ? (
                 <BoardPanel
@@ -286,7 +296,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
               />
             </Stack>
           </Tabs.Panel>
-          <Tabs.Panel value="evidence" pt="md" data-tour="case-evidence-tab" style={PANEL}>
+          <Tabs.Panel value="evidence" pt="md" data-tour="case-evidence-tab" {...PANEL}>
             <EvidencePanel
               caseId={c.caseId}
               receiver={c.receiver}
@@ -295,7 +305,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
               onFocused={clearFocus}
             />
           </Tabs.Panel>
-          <Tabs.Panel value="audit" pt="md" style={PANEL}>
+          <Tabs.Panel value="audit" pt="md" {...PANEL}>
             <Stack gap="md">
               <CaseTimeline events={events.data ?? []} />
               {/* A stopped case's hand-off is part of its next action; once closed by hand, it is history here */}
