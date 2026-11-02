@@ -1,4 +1,5 @@
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { Scenario } from '@/api/types';
 import fixtures from '@/mocks/fixtures.json';
@@ -95,6 +96,45 @@ describe('the small marks', () => {
     expect(within(card).getByRole('heading', { name: 'Encounter Integrity' })).toBeInTheDocument();
     expect(card).toHaveClass('member-card');
     expect(card).toHaveTextContent('claude-opus-5-5 · 14.6 s');
+  });
+
+  it('stands alone as an article named by its heading, muted when not enabled, keeping its hue under a caller style', () => {
+    renderUi(
+      <>
+        <MemberCard member="impact" component="article" titleId="impact-name" muted>
+          Not enabled
+        </MemberCard>
+        <MemberCard
+          member="conformance"
+          className="dissent"
+          style={{ minWidth: 0 }}
+          aria-label="Conformance's finding"
+        >
+          Resend
+        </MemberCard>
+      </>,
+    );
+    const muted = screen.getByRole('article', { name: 'Impact Analysis' });
+    expect(within(muted).getByRole('heading', { name: 'Impact Analysis' })).toHaveAttribute(
+      'id',
+      'impact-name',
+    );
+    expect(muted).toHaveAttribute('data-muted', 'true');
+    expect(muted.style.getPropertyValue('--mark-hue')).toBe('var(--shutter-hue-gray)');
+    expect(muted.querySelector('.identity-mark')).toHaveAttribute('data-muted', 'true');
+    const card = screen.getByRole('region', { name: "Conformance's finding" });
+    expect(card).toHaveClass('member-card', 'dissent');
+    expect(card.style.getPropertyValue('--mark-hue')).toBe('var(--shutter-hue-cyan)');
+    expect(card.style.minWidth).toBe('0');
+  });
+
+  it("opens a badge's hint on keyboard focus, so the keyboard reaches it", async () => {
+    renderUi(
+      <StatusBadge tone="attention" label="Held" hint="Waits for an approver before anything is sent." />,
+    );
+    await userEvent.tab();
+    expect(screen.getByText('Held').closest('.mantine-Badge-root')).toHaveFocus();
+    expect(await screen.findByText('Waits for an approver before anything is sent.')).toBeInTheDocument();
   });
 
   it('says beside a confirm whether it acts in the trial or on the live system', () => {
