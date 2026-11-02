@@ -76,6 +76,10 @@ test.describe('the guide', () => {
         // Next on the decision approved the held case for the reader, through Approve plan's own call
         await expect(guide).toContainText('Approved for you, in the trial.');
         await expect(page.locator('[data-tour-action="approve-plan"]')).toHaveCount(0);
+        // The case page played out the recording after that approval
+        await expect(page.getByRole('region', { name: 'Outcome' }).getByTestId('outcome-line')).toHaveText(
+          'Delivered: verified at the receiver',
+        );
       }
       await guide.getByRole('button', { name: n === 9 ? 'Finish' : 'Next' }).click();
     }
