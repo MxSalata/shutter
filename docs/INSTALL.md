@@ -267,3 +267,25 @@ has. Images built before 1 November 2026 kept the SHUTTER data database at the i
 installer's `DATADIR` was a name `%Installer` reserves); on such an instance the cases live in the container and go with it,
 so take what you need from it before replacing it, or copy `/usr/irissys/IRIS.DAT` out, create the database under
 `mgr/shutter/db/SHUTTERDATA` and mount it there.
+
+## The publisher: Shutter's read-only tools for an MCP client
+
+On the AI Hub build the install makes the web application `/mcp/shutter`: IRIS's own MCP gateway (`%AI.MCP.Service`)
+serving `Shutter.Publish.Tools`, read-only (cases, incidents, evidence, plans, events, precedents, health), with the
+patients' identifiers replaced by tokens and an audit row per call (`docs/CONTRACTS.md`, section 15). The core edition
+has no gateway; the Doctor's `publish.available` says which build this is.
+
+- **Who may read:** a user who holds the resource `Shutter_Publish`: operators and approvers do (`Shutter_Operator`
+  carries it), the forwarder and the public demo's visitors do not. The application asks for a password.
+- **From an MCP client** (a desktop assistant, an IDE, your own agent): run the sidecar the image ships, signed in as
+  such a user, and point the client at it. Inside the container:
+
+  ```
+  iris-mcp-server run --iris-host 127.0.0.1 --iris-port 1972 --iris-endpoint /mcp/shutter --transport stdio
+  ```
+
+  The server's own `--help` lists the HTTP and SSE transports and the TOML configuration for credentials.
+- **From a script:** the gateway answers REST too, with HTTP Basic: `GET /mcp/shutter/v1/health`, `GET /mcp/shutter/v1/services`
+  (the tools and their schemas) and `POST /mcp/shutter/v1/tool_call`.
+- **Nothing here writes.** Approvals, reinvestigations and closures stay in the app and its API, under their own
+  resources and the `X-Requested-With` header.

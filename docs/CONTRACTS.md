@@ -1613,6 +1613,38 @@ is approved or rejected first); `409 budget_exhausted` with the budget object wh
 
 The core IPM module is the repository root (`module.xml`, sources under `src/`): it compiles on any 2026.2 Community image and replays recorded runs. The aihub module is `aihub/` (`aihub/module.xml`, sources under `aihub/src/`): the live runner, the agents, tools, schemas, policies and knowledge bases, which need the `%AI` package. Both modules contribute classes to the `Shutter` package; nothing under `src/` may reference `%AI`.
 
+## 15. The publisher (v1.35)
+
+Shutter publishes what an operator may read, for an MCP client, through IRIS's own MCP gateway; it publishes no write.
+The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor's `publish.available` says which.
+
+- **The tools**, `Shutter.Publish.Tools` (`aihub/src/Shutter/Publish/`, a `%AI.Tool`: every public ClassMethod is a
+  stateless tool, its description from the method's comment): `ListCases(state, receiver, limit)`, `GetCase(caseId)`
+  (the public fields, the current plan's digest, disposition and summary, the approval of record, the place in the
+  incident, the precedents summary, `version`), `GetEvidence(caseId)`, `GetFailure(caseId)` and `GetTimeline(caseId)`
+  (the board's own evidence tools, 9), `GetPlan(caseId)` (the plan, the gate's decisions, the rehearsal's outcome),
+  `GetEvents(caseId, limit)`, `ListIncidents(state, limit)`, `GetIncident(incidentId)` (the chains and their cases),
+  `GetPrecedents(caseId)` (6.4) and `Health()`. No patient or encounter identifier leaves: the rows carry none, and
+  every text (headlines, outcomes, plan summaries, gate details, events) goes through the model view's tokens (9), as
+  the board's does. An unknown case or incident answers `{error: "not_found"}`.
+- **The audit.** Every call writes a `Shutter.Store.PublishCall` row: `at`, `user` (the IRIS user the gateway
+  authenticated), `tool`, `target` (the case or incident id, or the list's filter), `version` (the case's version when it
+  was read) and `durationMs`; never the answer. The Doctor's `publish.calls_today` counts them; `Health()` reports the
+  same.
+- **The gateway**, `Shutter.Publish.Service` (a `%AI.MCP.Service`): `SPECIFICATION` `Shutter.Publish.Tools`, `RESOURCE`
+  `Shutter_Publish`, so every request, REST or WebSocket, needs that resource on top of the application's own
+  authentication. It answers `GET /mcp/shutter/v1/health`, `GET /v1/services`, `POST /v1/tool_call` (a stateless tool
+  call) and `WS /v1/ws` (the stateful protocol `iris-mcp-server` speaks).
+- **The resource and the application.** `Shutter_Publish` (12) is held by `Shutter_Operator` and, through it,
+  `Shutter_Approver`; the forwarder and the public demo's visitors have no such access. `Setup.InstallAIHub` makes the
+  web application `/mcp/shutter` (password authentication, `DispatchClass` `Shutter.Publish.Service`, the resource on the
+  application too; `Setup.EnsurePublishApp`) where `%AI.MCP.Service` and the publisher's classes are compiled, and
+  records it in `^Shutter.Config("webapp","/mcp/shutter")`; the Doctor carries `publish {available, webapp, calls_today}`.
+- **The sidecar.** `iris-mcp-server`, shipped in the image at `/usr/irissys/bin/iris-mcp-server`, bridges an MCP client
+  (stdio, SSE or HTTP) to the gateway: `iris-mcp-server run --iris-host 127.0.0.1 --iris-port 1972 --iris-endpoint
+  /mcp/shutter --transport stdio`, signed in as a user who holds `Shutter_Publish`. The install does not start it: a
+  site's MCP client configuration does, with the user it chooses (`docs/INSTALL.md`).
+
 ## Changes
 
 - v1.35, 2 Nov 2026 (the items of a review of competing entries' code): denied tool calls
@@ -1632,7 +1664,8 @@ The core IPM module is the repository root (`module.xml`, sources under `src/`):
   eight failed movements for four fresh patients in the live hospital with the receiver down for a minute, followed on
   `live.storm` (4.4); the budget reserves an estimate for each run in flight and settles it when the run ends (9); a receiver's
   `Retry-After` on a 503 or 429 is a minimum wait before the resend's preflight read, and the demo receiver sends one (1);
-  each item of the review that lands adds its line here.
+  the publisher, Shutter's read-only tools for an MCP client through IRIS's own gateway, with an audit row per call, on
+  the AI Hub build (15); each item of the review that lands adds its line here.
 - v1.34, 1 Nov 2026: the public demo's roles (5, 12), for the live hospital: the resources `Shutter_Scenarios` (the demo controls:
   run, reset, purge) and `Shutter_Configure` (the site's writes: the profile, the library, a schema import, the review
   annotations), held by the operator and the approver as before; the role `Shutter_Demo` (reads, reinvestigates, approves and
