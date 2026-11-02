@@ -369,13 +369,39 @@ ClassMethod TokeniseWith(text As %String, ByRef map) As %String [ Private ]
 /// hold no character JSON escapes, so the model's JSON can be restored as text.
 ClassMethod Restore(case As Shutter.Store.Case, text As %String) As %String
 {
-    If (text = "") || '$ISOBJECT(case) Quit text
+    If text = "" Quit text
+    If '$ISOBJECT(case) Quit ..Clean(text)
     Set list = ##class(Shutter.Store.CaseToken).Map(case)
     For i = 1:1:$LISTLENGTH(list) {
         Set e = $LIST(list, i)
         Set text = ..ReplaceBounded(text, $LIST(e, 1), $LIST(e, 2))
     }
-    Quit text
+    Quit ..Clean(text)
+}
+
+/// Agent-written text with its invisible characters removed (v1.35): zero-width characters (U+200B to U+200F, U+2060 to
+/// U+2064, U+FEFF), the bidirectional controls (U+202A to U+202E, U+2066 to U+2069) and the control characters other than
+/// tab, line feed and carriage return (U+0000 to U+001F, U+007F to U+009F), as characters and as JSON escapes of the same
+/// code points. Restore applies it to everything a model wrote before the store keeps it, so what an approver reads on the
+/// case page or in an email is what the text says, with nothing hidden in it and nothing that reverses or breaks a line.
+ClassMethod Clean(text As %String) As %String
+{
+    If text = "" Quit text
+    Set out = ""
+    For i = 1:1:$LENGTH(text) {
+        Set c = $ASCII(text, i)
+        Continue:(((c >= 8203) && (c <= 8207)) || ((c >= 8234) && (c <= 8238)) || ((c >= 8288) && (c <= 8292)) || ((c >= 8294) && (c <= 8297)) || (c = 65279))
+        Continue:(((c < 32) && (c '= 9) && (c '= 10) && (c '= 13)) || ((c >= 127) && (c <= 159)))
+        Set out = out _ $CHAR(c)
+    }
+    // The same code points written as JSON escapes inside a text the model returned as JSON.
+    Set pos = 1
+    For {
+        Set at = $LOCATE(out, "(?i)\\u(200[b-f]|202[a-e]|206[0-9]|feff|000[0-8]|000[b-f]|001[0-9a-f]|007f|008[0-9a-f]|009[0-9a-f])", pos, after)
+        Quit:at=0
+        Set out = $EXTRACT(out, 1, at - 1) _ $EXTRACT(out, after, *), pos = at
+    }
+    Quit out
 }
 
 /// The tokens left in a text after Restore (ones the case has no value for), as a comma list; "" when none.

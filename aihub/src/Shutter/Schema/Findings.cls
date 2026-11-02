@@ -34,7 +34,9 @@ ClassMethod Check(json As %String, citeIds As %String = "") As %DynamicArray
     If ..#DISPOSITIONS '[ ("," _ d _ ",") Do problems.%Push("disposition must be one of resend, reconcile, superseded, more_evidence, escalate")
     Set c = ##class(Shutter.Util.Json).Str(o, "confidence")
     If (c = "") || (c '= +c) || (c < 0) || (c > 1) Do problems.%Push("confidence must be a number from 0 to 1")
-    If ##class(Shutter.Util.Json).Str(o, "summary") = "" Do problems.%Push("summary is required")
+    Set summary = ##class(Shutter.Util.Json).Str(o, "summary")
+    If summary = "" Do problems.%Push("summary is required")
+    If $LENGTH(summary) > 2000 Do problems.%Push("summary must be at most 2000 characters; it is " _ $LENGTH(summary))
     For f = "violations", "unknowns", "evidence_refs" {
         If (o.%GetTypeOf(f) '= "unassigned") && (o.%GetTypeOf(f) '= "array") Do problems.%Push(f _ " must be an array of strings")
     }

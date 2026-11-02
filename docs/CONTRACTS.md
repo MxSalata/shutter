@@ -743,6 +743,12 @@ against a server that never answers: AI Hub retries the call, so the run ends af
 seconds (44 s at 10, 84 s at 20); at the default 120 s that is about eight minutes, inside the board's 600 s. The Doctor
 reports `provider_timeout_seconds`.
 
+**Hostile and malformed output (v1.35).** The schema checks refuse what is not an object, a disposition outside the list
+(whatever its case, with nothing hidden inside it), a confidence that is not a number from 0 to 1, a `summary` or `why` over
+2,000 characters, and the shapes section 6.6 names; a table of such outputs (`Shutter.Test.Hostile`, run on the AI Hub build,
+skipped where the schema classes are not loaded) keeps it so, and asserts that the checks never throw and accept ordinary
+Unicode. What a model wrote and the checks accepted is cleaned when it is restored for the store (9).
+
 **Findings and plans cite only what they were given (v1.35).** `evidence_refs` on a finding or a plan must name keys of the
 evidence object the run received, or keys one level down in it (`message`, `validation`, `error`, `operation`, `route`,
 `ward_state`, `receipt`, `timeline`, and so on), or `findings` for the coordinator; the runner lists them for the terminal
@@ -1023,6 +1029,12 @@ visitors spends at most the cap. **Each user's share** (`SHUTTER_JUDGE_BUDGET_US
 0 or unset means none): every agent request carries who asked (`RequestedBy`: a question's asker, a judge who convened the
 board, `system` for the feed's own runs), the run keeps it, and a run for a user whose live runs today have reached the share is
 refused `budget_exhausted` with "Your share of the day's model budget ... is spent", so one judge cannot spend the day.
+
+**Invisible characters are stripped (v1.35).** `ModelView.Restore` removes from everything a model wrote, before the store
+keeps it, the zero-width characters (U+200B to U+200F, U+2060 to U+2064, U+FEFF), the bidirectional controls (U+202A to U+202E,
+U+2066 to U+2069) and the control characters other than tab, line feed and carriage return, as characters and as JSON escapes
+(`ModelView.Clean`); tabs, line breaks and ordinary Unicode stay. So a summary an approver reads on the case page or in an
+escalation email reads as it is, with nothing hidden in it and nothing that reverses a line.
 
 **The run's own clock (v1.35).** Every run row keeps `startedAtMs`, the start to the millisecond, beside `startedAt`, and
 the three counters AI Hub's session returns on build 154 when it does: `llmMs` (time inside the model's calls), `toolMs`
