@@ -17,7 +17,7 @@ Class Shutter.Bridge.Runner.AIHub Extends Shutter.Bridge.Runner
 Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.AgentResponse) As %Status
 {
     Set start = $ZHOROLOG
-    Set response.StartedAt = ##class(Shutter.Util.Time).NowUTC()
+    Set response.StartedAt = ##class(Shutter.Util.Time).NowUTC(), response.StartedAtMs = ##class(Shutter.Util.Time).NowUTCms()
     Set response.Mode = $SELECT(spec.Mode = "": "live", 1: spec.Mode)
     Set agent = "", session = "", monitor = "", submit = "", trace = "", scope = ""
     Set turns = $SELECT(+spec.MaxIterations > 0: +spec.MaxIterations, 1: 8)
@@ -224,6 +224,10 @@ Method FillStats(response As Shutter.Bridge.Msg.AgentResponse, agent, session, m
                 Set response.PromptTokens = +stats."total_prompt_tokens"
                 Set response.CompletionTokens = +stats."total_completion_tokens"
                 Set response.ToolCalls = +stats."total_tool_calls"
+                // AI Hub's own timing counters and reasoning tokens (v1.35), when the build returns them.
+                If stats.%IsDefined("total_llm_duration_ms") Set response.LlmMs = +stats."total_llm_duration_ms"
+                If stats.%IsDefined("total_tool_duration_ms") Set response.ToolMs = +stats."total_tool_duration_ms"
+                If stats.%IsDefined("total_reasoning_tokens") Set response.ReasoningTokens = +stats."total_reasoning_tokens"
             }
         } Catch { }
         Try {

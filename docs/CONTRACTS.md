@@ -989,6 +989,12 @@ visitors spends at most the cap. **Each user's share** (`SHUTTER_JUDGE_BUDGET_US
 board, `system` for the feed's own runs), the run keeps it, and a run for a user whose live runs today have reached the share is
 refused `budget_exhausted` with "Your share of the day's model budget ... is spent", so one judge cannot spend the day.
 
+**The run's own clock (v1.35).** Every run row keeps `startedAtMs`, the start to the millisecond, beside `startedAt`, and
+the three counters AI Hub's session returns on build 154 when it does: `llmMs` (time inside the model's calls), `toolMs`
+(time inside the tools) and `reasoningTokens`; a replay or a build that gives none leaves them empty, never zero. With the
+tool-call rows' `at` and `durationMs`, the case page can draw a run as a timeline (the run bar, the tool bars, the model's
+turns as the gaps between them) from stored rows alone, and the DPI-I-689 queries can split a run's time.
+
 ## 10. Escalation by email (v1.11)
 
 **Correcting the history** (v1.23). When a `history_of_record` receiver's case escalates with the outcome
