@@ -77,6 +77,11 @@ Method ToObject() As %DynamicObject
     Set o."cache_read_tokens" = +..CacheReadTokens, o."cache_creation_tokens" = +..CacheCreationTokens
     Set o.iterations = +..Iterations, o."tool_calls" = +..ToolCalls
     Set o."session_id" = ..SessionId
+    // The run's millisecond start and AI Hub's own counters (v1.35): kept in a recording, so a replay has them too.
+    Set o."started_at_ms" = ..StartedAtMs
+    If ..LlmMs '= "" Set o."llm_ms" = +..LlmMs
+    If ..ToolMs '= "" Set o."tool_ms" = +..ToolMs
+    If ..ReasoningTokens '= "" Set o."reasoning_tokens" = +..ReasoningTokens
     If ..ResultJSON '= "" { Set o.result = ##class(%DynamicAbstractObject).%FromJSON(..ResultJSON) } Else { Do o.%Set("result", "", "null") }
     Set o.content = ..Content, o.error = ..Error, o."record_id" = ..RecordId
     Quit o
@@ -100,6 +105,10 @@ Method FromObject(o As %DynamicObject) As %Status
     Set ..Iterations = +##class(Shutter.Util.Json).Str(o, "iterations", 0)
     Set ..ToolCalls = +##class(Shutter.Util.Json).Str(o, "tool_calls", 0)
     Set ..SessionId = ##class(Shutter.Util.Json).Str(o, "session_id")
+    Set ..StartedAtMs = ##class(Shutter.Util.Json).Str(o, "started_at_ms")
+    If o.%IsDefined("llm_ms") Set ..LlmMs = +o.%Get("llm_ms")
+    If o.%IsDefined("tool_ms") Set ..ToolMs = +o.%Get("tool_ms")
+    If o.%IsDefined("reasoning_tokens") Set ..ReasoningTokens = +o.%Get("reasoning_tokens")
     Set result = o.%Get("result")
     Set ..ResultJSON = $SELECT($ISOBJECT(result): result.%ToJSON(), 1: "")
     Set ..Content = ##class(Shutter.Util.Json).Str(o, "content")
