@@ -43,6 +43,10 @@ Property VerifyTarget As %String(MAXLEN = 128) [ InitialExpression = "Verifier" 
 /// Seconds an approval stays valid.
 Property ApprovalValidSeconds As %Integer [ InitialExpression = 3600 ];
 
+/// How long an approval task may wait for a decision (v1.35): after this many seconds with no answer the task is cancelled
+/// and the case escalates, so a plan nobody looked at never waits for ever; 0 waits without limit. 24 hours by default.
+Property ApprovalWaitSeconds As %Integer [ InitialExpression = 86400 ];
+
 /// The site's policy for this case when the catalogue settled it: automatic, approval, per_chain or board.
 Property Policy As %String(MAXLEN = 16);
 
@@ -114,7 +118,7 @@ Property ForceBoard As %Boolean [ InitialExpression = 0 ];
 
 Property ConvenedBy As %String(MAXLEN = 100);
 
-Parameter SETTINGS = "EvidenceTarget:Targets,GateTarget:Targets,WardTarget:Targets,ApprovalTarget:Targets,VerifyTarget:Targets,IncidentTarget:Targets,ApprovalValidSeconds:Approval,SettleSeconds:Timing,BoardTimeoutSeconds:Timing,MaxRefreshes:Timing";
+Parameter SETTINGS = "EvidenceTarget:Targets,GateTarget:Targets,WardTarget:Targets,ApprovalTarget:Targets,VerifyTarget:Targets,IncidentTarget:Targets,ApprovalValidSeconds:Approval,ApprovalWaitSeconds:Approval,SettleSeconds:Timing,BoardTimeoutSeconds:Timing,MaxRefreshes:Timing";
 
 Method OnRequest(request As %Library.Persistent, Output response As %Library.Persistent) As %Status
 {
@@ -245,6 +249,7 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
         If completionkey = "gate:proposal" { Set sc = ..OnGateProposal(case, callresponse) Quit }
         If completionkey = "rehearsal" { Set sc = ..OnRehearsal(case, callrequest, callresponse) Quit }
         If completionkey = "approval" { Set sc = ..OnApproval(case, callresponse) Quit }
+        If $PIECE(completionkey, ":", 1, 2) = "approval:timeout" { Set sc = ..OnApprovalTimeout(case, +$PIECE(completionkey, ":", 3)) Quit }
         If completionkey = "preflight" { Set sc = ..OnPreflight(case, callresponse) Quit }
         If completionkey = "gate:dispatch" { Set sc = ..OnGateDispatch(case, callresponse) Quit }
         If completionkey = "execute" { Set sc = ..OnExecute(case, callresponse) Quit }
@@ -1059,19 +1064,48 @@ Method OnRehearsal(case As Shutter.Store.Case, sent As Shutter.Msg.WardOperation
     If ..Policy = "incident" Quit ..ReleaseByIncident(case, plan, r)
     Set sc = case.Transition("awaiting_approval", "Rehearsal passed; asking an approver for the exact plan", "system", "rehearsal:" _ r.%Id())
     Quit:$$$ISERR(sc) sc
-    Quit ..SendRequestAsync(..ApprovalTarget, ..ApprovalTask(case, plan), 1, "approval")
+    Set sc = ..SendRequestAsync(..ApprovalTarget, ..ApprovalTask(case, plan, ..ApprovalWaitSeconds), 1, "approval")
+    Quit:$$$ISERR(sc) sc
+    // The wait is bounded (v1.35): an alarm keyed by the round, so one from an earlier plan is ignored.
+    If ..ApprovalWaitSeconds > 0 {
+        Set alarm = ##class(Ens.AlarmRequest).%New()
+        Set alarm.Timeout = ..ApprovalWaitSeconds
+        Set sc = ..SendRequestAsync("Ens.Alarm", alarm, 1, "approval:timeout:" _ ..Round, "The approval wait")
+    }
+    Quit sc
+}
+
+/// The approval task got no answer within the wait (v1.35): if the case still waits for this round's plan, the task is
+/// cancelled and the case escalates, so a person sees it as work left undone rather than a request nobody noticed; a
+/// decision taken meanwhile, or a later round, leaves the alarm with nothing to do.
+Method OnApprovalTimeout(case As Shutter.Store.Case, round As %Integer) As %Status
+{
+    If round '= ..Round { $$$TRACE("An approval wait from round " _ round _ " ended; the case is in round " _ ..Round) Quit $$$OK }
+    If case.State '= "awaiting_approval" { $$$TRACE("The approval wait ended; the case is " _ case.State _ ", so nothing is due") Quit $$$OK }
+    Set wait = ..WaitWords(..ApprovalWaitSeconds)
+    Do ..CancelOpenTask(case, "", "no decision within " _ wait)
+    Set case.Headline = "No approval within " _ wait _ "; a person must decide"
+    Quit case.Transition("escalated", "The approval task got no answer within " _ wait _ "; it is cancelled, and the plan waits for a reinvestigation or a hand close", "system")
+}
+
+/// A wait in words: whole minutes under an hour, else hours to one decimal.
+ClassMethod WaitWords(seconds As %Integer) As %String
+{
+    If seconds < 3600 Quit (seconds \ 60) _ " minutes"
+    Quit $FNUMBER(seconds / 3600, "", 1) _ " hours"
 }
 
 /// The approval task for a case's plan (CONTRACTS 6.4). Its PlanDigest form value starts empty: the decider supplies
 /// the digest (the API from the body it checked, an approver in the Workflow inbox by pasting it from this message),
 /// and OnApproval blocks the case when the answer carries none, or another one.
-ClassMethod ApprovalTask(case As Shutter.Store.Case, plan As Shutter.Store.Plan) As EnsLib.Workflow.TaskRequest
+ClassMethod ApprovalTask(case As Shutter.Store.Case, plan As Shutter.Store.Plan, waitSeconds As %Integer = 0) As EnsLib.Workflow.TaskRequest
 {
     Set task = ##class(EnsLib.Workflow.TaskRequest).%New()
     Set task.%Actions = "Approve,Reject"
     Set task.%Subject = "Shutter " _ case.CaseId _ ": approve plan v" _ plan.Version _ " (" _ plan.Disposition _ ")"
     Set task.%Message = case.Headline _ $CHAR(10) _ "Exact action: " _ plan.ActionType _ " " _ plan.OperationKey _ " at receiver version " _ plan.ExpectedVersion _ $CHAR(10) _ "Plan digest: " _ plan.Digest _ $CHAR(10) _ "Snapshot digest: " _ $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.Digest, 1: "") _ $CHAR(10) _ "Rehearsal: would apply (rolled back)."
     Set task.%Message = task.%Message _ $CHAR(10) _ "To approve from the Workflow inbox, paste the plan digest above into the PlanDigest field: an approval with no digest, or another one, binds nothing and blocks the case."
+    If waitSeconds > 0 Set task.%Message = task.%Message _ $CHAR(10) _ "Unanswered after " _ ..WaitWords(waitSeconds) _ ", the task is cancelled and the case escalates to a person."
     Set task.%Priority = 2
     Set task.%FormFields = "PlanDigest,Comment"
     Quit task

@@ -716,6 +716,13 @@ four collections under `knowledge/` (`search_contracts`, `search_lifecycle`, `se
 fifth collection, `review`, is the production review agent's (13.6) and reaches a board member only through a row whose
 `KnowledgeCollection` is `all` (the single investigator's).
 
+**An approval wait is bounded (v1.35).** The Case Workflow's `ApprovalWaitSeconds` (24 hours by default; 0 waits without
+limit) arms an `Ens.Alarm` beside each approval task, keyed by the plan's round. When it fires and the case still waits for
+that round's plan, the task is cancelled (`Cancel`, with the reason in its comment) and the case escalates with "No approval
+within N hours; a person must decide"; the task's text says so in advance. A decision taken meanwhile, or a later round,
+leaves the alarm with nothing to do. An incident's approval task (7.4) is not bounded this way: its chains wait on the
+incident.
+
 **One model call is bounded (v1.35).** The runner gives the provider an HTTP request timeout, `Shutter.Setup.ProviderTimeoutSeconds`
 (`^Shutter.Config("providerTimeoutSeconds")`, `SHUTTER_PROVIDER_TIMEOUT_SECONDS` at a start, 120 s unless set, held to 10
 to 600), and a connect timeout of 10 s, as `http_config` on the provider's configuration unless the site's own configuration
