@@ -1,5 +1,5 @@
 import type { Budget, LiveStatus } from '@/api/types';
-import { budgetText } from '@/lib/budget';
+import { budgetText, resetsHourly } from '@/lib/budget';
 import { humanize, keyLabel, plural } from '@/lib/format';
 import type { Proof } from '@/lib/proof';
 import type { Tone } from '@/lib/tone';
@@ -439,8 +439,8 @@ export function objectLines(value: Record<string, unknown>): string[] {
 /** The model budget in words, as the Settings page says it (on the public demo it is per reset, never "today"). */
 export function budgetLine(budget: unknown, report: Report): string | null {
   if (!budget || typeof budget !== 'object' || Array.isArray(budget)) return null;
-  const live = report.live as LiveStatus | undefined;
-  const words = budgetText(budget as Budget, { resetsHourly: live?.enabled === true });
+  const hourly = resetsHourly({ live: report.live as LiveStatus | undefined });
+  const words = budgetText(budget as Budget, { resetsHourly: hourly });
   return words ? [words.today, words.share].filter(Boolean).join('. ') : null;
 }
 
