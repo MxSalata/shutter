@@ -5,8 +5,11 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { chooseTransport, resetTransportForTests } from '@/api/transport';
 import { server } from '@/mocks/node';
-import { resetMock } from '@/mocks/handlers';
+import { NO_RECORDED_ANSWER, resetMock } from '@/mocks/handlers';
+import { journal } from '@/trial/journal';
+import { createTrialTransport } from '@/trial/transport';
 import { theme } from '@/theme';
 import CasePage from '../CasePage';
 import recordedAnswers from '@/mocks/recorded-questions.json';
@@ -440,6 +443,64 @@ describe('Ask about this case', () => {
     ).toBeInTheDocument();
     const card = await within(p).findByRole('region', { name: 'What if: the setting behind this outcome' });
     expect(within(card).getByText('No setting changes this outcome')).toBeInTheDocument();
+  });
+});
+
+/**
+ * The trial's own path (trial-architecture.md 7, test 12): every call is answered in memory by the recorded mock through
+ * the trial's transport, as in a trial page, not by `msw/node`, and `fetch` is a spy that fails the test if anything
+ * reaches it.
+ */
+describe("in the trial, through the trial's own transport", () => {
+  const sent = vi.fn(() => Promise.reject(new Error('fetch was called from the trial')));
+  beforeAll(() => {
+    vi.stubGlobal('fetch', sent);
+    resetTransportForTests();
+    chooseTransport(createTrialTransport('approver'));
+  });
+  afterEach(() => {
+    expect(sent).not.toHaveBeenCalled();
+  });
+  afterAll(() => {
+    vi.unstubAllGlobals();
+    resetTransportForTests();
+  });
+
+  it('opens on the recorded example and answers a suggested question from its recording, in this browser', async () => {
+    renderCase('C-000008');
+    const p = await panel();
+    const example = await within(p).findByRole('region', { name: 'Example conversation' });
+    expect(within(example).getByText(`${RECORDED_LABEL}.`)).toBeInTheDocument();
+    await userEvent.click(await within(p).findByRole('button', { name: 'Which movement is current?' }));
+    const thread = await within(p).findByRole('region', { name: 'Conversation' });
+    await waitFor(() => expect(thread).toHaveTextContent(firstSentence('S8', 'Downstream Out', 'c2.1')));
+    // The trial's journal holds the question, answered by the mock, not sent anywhere
+    const asked = journal
+      .entries()
+      .filter((e) => e.method === 'POST' && e.path === `${BASE}/cases/C-000008/questions`);
+    expect(asked).toHaveLength(1);
+    expect(asked[0].status).toBeLessThan(300);
+  });
+
+  it("reads the What-if card and its draft link from the trial's recording", async () => {
+    renderCase('C-000008');
+    const p = await panel();
+    const card = await within(p).findByRole('region', { name: 'What if: the setting behind this outcome' });
+    expect(await within(card).findByText('If it were BEDMGR')).toBeInTheDocument();
+    expect(within(card).getByRole('link', { name: 'Open in Site profile' })).toHaveAttribute(
+      'href',
+      '/site-profile?suggest=C-000008&fact=W1',
+    );
+  });
+
+  it("keeps the box for a question of one's own disabled, and words a question with no recording as the mock does", async () => {
+    renderCase('C-000008');
+    const p = await panel();
+    const box = await within(p).findByRole('textbox', { name: 'Your own question' });
+    expect(box).toBeDisabled();
+    expect(box).toHaveAccessibleDescription('Needs a real model: not in the trial.');
+    // The panel's own words for a question the trial has no recording of are the mock's refusal, word for word
+    expect(TRIAL_NO_ANSWER).toBe(NO_RECORDED_ANSWER);
   });
 });
 
