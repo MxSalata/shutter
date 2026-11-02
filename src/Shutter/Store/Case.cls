@@ -48,6 +48,10 @@ Property HeldSchema As %String(%JSONFIELDNAME = "heldSchema", MAXLEN = 128);
 
 Property FailureHttpStatus As %Integer(%JSONFIELDNAME = "failureHttpStatus");
 
+/// Until when the receiver asked not to retry (its Retry-After on the failed delivery, v1.35): the preflight read of the
+/// resend waits for it (CaseWorkflow.SendPreflight, 300 s at most), then it is cleared. "" when it sent none.
+Property RetryAfterUntil As %String(%JSONFIELDNAME = "retryAfterUntil", MAXLEN = 30);
+
 Property EncounterId As %String(%JSONFIELDNAME = "encounterId", MAXLEN = 100);
 
 Index EncounterIdx On EncounterId;
@@ -894,6 +898,9 @@ Storage Default
 </Value>
 <Value name="47">
 <Value>HeldSchema</Value>
+</Value>
+<Value name="48">
+<Value>RetryAfterUntil</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>
