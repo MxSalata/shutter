@@ -648,7 +648,7 @@ export default function ScenariosPage() {
   const reset = useResetScenarios();
   const [mode, setMode] = useState<Mode>('board');
   const canRun = can.scenarios;
-  // The public demo's role operates but may not run or reset: no Run, no Reset, and a line saying why
+  // The public demo's role operates but may not run or reset: no Run, no Reset, its own three cards, and a line saying why
   const hidden = scenariosHidden(can);
   // Only a report that says so switches the runs off: an older server, or one not answering yet, keeps them.
   const playerOff = useHealth().data?.demo === false;
@@ -754,7 +754,7 @@ export default function ScenariosPage() {
           why={whyNot}
           starting={(s, m) => run.isPending && run.variables?.id === s.id && run.variables?.mode === m}
           onRun={start}
-          runnable={!hidden}
+          demo={hidden}
         />
         {/* The demo's guided path through the recorded cases, past the first three */}
         {TRIAL ? <StartHere /> : null}
