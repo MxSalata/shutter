@@ -1,16 +1,22 @@
 /// "Prevent failures" (v1.34; CONTRACTS 6.4, 11 and 12): the profile setting and its validator, the schema category a message
 /// is read under, the canonical 2.5.1 reading for a held case's identity, the forward a refused message gets, a held case's
-/// headline and its place in the held report, and the matcher's word for it before and after the schema is loaded.
+/// headline and its place in the held report, the matcher's word for it before and after the schema is loaded, and the
+/// release once the schema is there, which clears the field.
 Class Shutter.Test.Held Extends %UnitTest.TestCase
 {
 
 Parameter KEY = "PAS^HOSP^MRN-UT9^ENC-UT9^admit^2026-11-01T10:00:00Z";
 
+Parameter RELEASEDKEY = "PAS^HOSP^MRN-UT9^ENC-UT9^transfer^2026-11-01T11:00:00Z";
+
 Property CaseRowId As %String;
+
+Property ReleasedRowId As %String;
 
 Method OnAfterAllTests() As %Status
 {
     If ..CaseRowId '= "" Do ..Purge(..CaseRowId)
+    If ..ReleasedRowId '= "" Do ..Purge(..ReleasedRowId)
     Quit $$$OK
 }
 
@@ -134,6 +140,36 @@ Method TestHeldCaseAndMatcher()
     Do $$$AssertStatusOK(case.%Save(), "saved as blocked")
     Do $$$AssertEquals(##class(Shutter.Util.Schemas).ReleaseHeld(), 0, "nothing is released while the schema is still missing")
     Do $$$AssertEquals(##class(Shutter.Store.Case).ReleaseHeld("", "x", "y"), 0, "no case id, nothing released")
+}
+
+/// The release of a held case (what the sweep does once the schema is known): one reinvestigation goes from the host to
+/// the Case Workflow, and the case's HeldSchema is an empty property afterwards, not SQL's empty string ($CHAR(0)), so the
+/// case read again, its JSON and every reader testing HeldSchema '= "" see it released.
+Method TestReleaseClearsTheHeldSchema()
+{
+    Set op = {"operation_key": (..#RELEASEDKEY), "encounter_id": "ENC-UT9", "patient_id": "MRN-UT9", "patient_id_authority": "HOSP", "event": "transfer", "ward": "WARD-B", "bed": null, "event_time": "2026-11-01T11:00:00Z", "source_system": "PAS", "source_message_id": "UT9T", "payload_digest": "sha256:ut9t"}
+    Set sc = ##class(Shutter.Store.Case).Open(op, "unreadable", "Held: the schema MYSITE_2.5.1 is not loaded here", "", "", "policy", .case, .opened, "", "MYSITE_2.5.1")
+    Do $$$AssertStatusOK(sc, "a held case opens")
+    Set ..ReleasedRowId = case.%Id()
+    Set case.State = "blocked"
+    Do $$$AssertStatusOK(case.%Save(), "saved as blocked")
+    Set host = ##class(Shutter.Test.FakeReleaser).%New("Case Releaser (unit test)")
+    Do $$$AssertTrue($ISOBJECT(host), "a stand-in for the Case Releaser")
+    Set n = ##class(Shutter.Store.Case).ReleaseHeld(case.CaseId, "MYSITE_2.5.1", $NAMESPACE, host)
+    Do $$$AssertEquals(n, 1, "the one blocked case held for the schema is released")
+    Do $$$AssertEquals(host.Sent.Count(), 1, "one reinvestigation went from the host")
+    Set sent = host.Sent.GetAt(1)
+    Do $$$AssertTrue(($PIECE(sent, "|", 1) = "Case Workflow") && ($PIECE(sent, "|", 2) = case.CaseId) && (sent [ "MYSITE_2.5.1") && (sent [ $NAMESPACE), "to the Case Workflow, for this case, with the reason: " _ sent)
+    Do $$$AssertStatusOK(case.%Reload(), "the case read again")
+    Do $$$AssertTrue((case.HeldSchema = "") && ($LENGTH(case.HeldSchema) = 0), "holds no schema any more (" _ $LENGTH(case.HeldSchema) _ " characters)")
+    Do $$$AssertStatusOK(case.%JSONExportToString(.json), "and exports")
+    Do $$$AssertNotTrue(json [ "\u0000", "with no control character for the schema")
+    Do $$$AssertTrue(('(json [ """heldSchema""")) || (json [ """heldSchema"":"""""), "heldSchema absent or empty")
+    // Released once: the sweep's candidates (Shutter.Operation.Releaser.Candidates and Schemas.ReleaseHeld read the same
+    // predicate) no longer count the case, which stays blocked until the Case Workflow takes the reinvestigation.
+    Set caseId = case.CaseId, held = -1
+    &sql(SELECT COUNT(*) INTO :held FROM Shutter_Store."Case" WHERE CaseId = :caseId AND FailureKind = 'unreadable' AND HeldSchema <> '' AND State IN ('blocked', 'escalated'))
+    Do $$$AssertEquals(held, 0, "and the sweep no longer counts it as held (SQLCODE " _ SQLCODE _ ")")
 }
 
 }

@@ -393,13 +393,14 @@ ClassMethod ReleaseWaitingOnMessage(controlId As %String, outcome As %String = "
 
 /// Release a case held for a schema that is loaded now (v1.34): reopened as a case waiting on a message is, with the reason,
 /// and its HeldSchema cleared, so the check releases it once (the gate may block the re-plan for another reason, and the case
-/// is then a blocked case like any other, not a held one).
+/// is then a blocked case like any other, not a held one). The field is cleared with NULL (v1.39): SQL's '' is stored as
+/// $CHAR(0), which the opened case, its JSON and the publisher's case tool would then carry as a one-character schema.
 ClassMethod ReleaseHeld(caseId As %String, category As %String, where As %String, host As Ens.Host = "", target As %String = "Case Workflow") As %Integer
 {
     If caseId = "" Quit 0
     Set n = ..Reopen("CaseId", caseId, "the schema " _ category _ " is loaded in " _ where _ " now, found by the Case Releaser's sweep; the message is read again", host, target)
     If n > 0 {
-        &sql(UPDATE Shutter_Store."Case" SET HeldSchema = '' WHERE CaseId = :caseId)
+        &sql(UPDATE Shutter_Store."Case" SET HeldSchema = NULL WHERE CaseId = :caseId)
     }
     Quit n
 }
