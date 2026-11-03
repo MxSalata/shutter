@@ -108,6 +108,20 @@ Method TestTheWalletIsAsked()
 }
 
 /// The Doctor carries the provider the record names and the two probes, each true, false or null.
+Method TestACallerWithoutTheRightIsToldNothing()
+{
+    // The wallet answers a caller without Shutter_Secrets as if the secret were gone, and the Config Store refuses one
+    // without %Admin_ConfigStore: either would read as false in the Doctor. Each probe checks the right first.
+    Do $$$AssertEquals(##class(Shutter.Setup).WalletSecretState(0), "", "no right to read the wallet: the probe says nothing, not false")
+    Do $$$AssertEquals(##class(Shutter.Setup).ProviderConfigState(0), "", "no right to read the Config Store: the same")
+    // With the right, the answer is what the instance holds (1 or 0), or nothing where the class is absent.
+    Set wallet = ##class(Shutter.Setup).WalletSecretState(1), config = ##class(Shutter.Setup).ProviderConfigState(1)
+    Do $$$AssertTrue((wallet = "") || (wallet = 0) || (wallet = 1), "with the right, the wallet probe answers 1, 0 or nothing: " _ wallet)
+    Do $$$AssertTrue((config = "") || (config = 0) || (config = 1), "with the right, the Config Store probe answers 1, 0 or nothing: " _ config)
+    Do $$$AssertEquals(##class(Shutter.Setup).WalletSecretState(), ##class(Shutter.Setup).WalletSecretState($SYSTEM.Security.Check("Shutter_Secrets", "USE")), "by default the probe reads this process's own right")
+    Do $$$AssertEquals(##class(Shutter.Setup).ProviderConfigState(), ##class(Shutter.Setup).ProviderConfigState($SYSTEM.Security.Check("%Admin_ConfigStore", "USE")), "and so does the Config Store's")
+}
+
 Method TestTheDoctorReportsTheSecret()
 {
     Set r = ##class(Shutter.Util.Json).Parse(##class(Shutter.Setup).Doctor(), .sc)

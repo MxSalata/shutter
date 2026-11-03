@@ -1729,9 +1729,10 @@ ClassMethod Doctor(refresh As %Boolean = 0) As %String [ SqlProc ]
     // The API mimic's switch as set (tests/mock), "" when off; it counts on a demo instance only (MockConfig).
     Set r."mock_config" = $GET(^Shutter.Config("aihub", "mock"))
     // The provider the record names, and whether the instance still holds what it names (v1.39): the wallet secret and
-    // the Config Store configuration, each true or false, or null where its class is absent (the core edition) or it
-    // cannot be read. A recorded provider with a missing secret is what a container recreated on the same volume shows
-    // until the production's next start writes the key again (ProviderNeedsRewrite).
+    // the Config Store configuration, each true or false, or null where its class is absent (the core edition) or this
+    // process may not read it (the wallet's Shutter_Secrets, the Config Store's %Admin_ConfigStore: an operator or a
+    // judge without them is told nothing, not "gone"). A recorded provider with a missing secret is what a container
+    // recreated on the same volume shows until the production's next start writes the key again (ProviderNeedsRewrite).
     Set r.provider = $GET(^Shutter.Config("aihub", "provider"))
     Set state = ..WalletSecretState()
     If state = "" { Do r.%Set("wallet_secret", "", "null") } Else { Do r.%Set("wallet_secret", state, "boolean") }
@@ -2158,8 +2159,8 @@ ClassMethod ProviderKeyMatches(key As %String) As %Boolean
 /// instance state in IRISSYS, which the image brings, so a container recreated on the same volume keeps the record and
 /// loses the secret, and the record alone would say that nothing needs writing while every live run failed at the
 /// provider. Each probe (WalletSecretState, ProviderConfigState) says nothing where its class is absent (the core
-/// edition) or it cannot be read, and the answer then comes from the record alone; <var>probe</var> 0 skips them, which
-/// is what a core edition's answer amounts to.
+/// edition) or this process may not read it (the production's own process may: it wrote them), and the answer then
+/// comes from the record alone; <var>probe</var> 0 skips them, which is what a core edition's answer amounts to.
 ClassMethod ProviderNeedsRewrite(key As %String, Output reason As %String, probe As %Boolean = 1) As %Boolean
 {
     Set reason = ""
@@ -2173,9 +2174,14 @@ ClassMethod ProviderNeedsRewrite(key As %String, Output reason As %String, probe
 }
 
 /// Whether the wallet holds the secret Shutter.Anthropic: 1 or 0, or "" where the wallet class is absent (the core
-/// edition) or the wallet cannot be read by this process.
-ClassMethod WalletSecretState() As %String
+/// edition) or this process may not read the wallet. The collection's use resource is Shutter_Secrets, and the wallet
+/// answers a caller without it as if the secret were not there (0 from Exists, no error; AI Hub build 109), so the
+/// resource is checked first: a signed-in reader of the Doctor without it is told nothing rather than "gone".
+/// <var>mayRead</var> stands in for that check in a test; -1 reads the process's own right.
+ClassMethod WalletSecretState(mayRead As %Integer = -1) As %String
 {
+    If mayRead = -1 Set mayRead = $SYSTEM.Security.Check("Shutter_Secrets", "USE")
+    If 'mayRead Return ""
     Try {
         Return ''$CLASSMETHOD("%Wallet.KeyValue", "Exists", "Shutter.Anthropic")
     } Catch ex {
@@ -2184,10 +2190,13 @@ ClassMethod WalletSecretState() As %String
 }
 
 /// Whether the Config Store holds the configuration AI.LLM.Shutter (read as the live runner reads it, with no secret
-/// resolved): 1 or 0, or "" where the Config Store class is absent (the core edition) or it cannot be read by this
-/// process.
-ClassMethod ProviderConfigState() As %String
+/// resolved): 1 or 0, or "" where the Config Store class is absent (the core edition) or this process may not read it.
+/// The Config Store refuses a reader without %Admin_ConfigStore:USE (error 790), which would read as "gone", so the
+/// resource is checked first. <var>mayRead</var> stands in for that check in a test; -1 reads the process's own right.
+ClassMethod ProviderConfigState(mayRead As %Integer = -1) As %String
 {
+    If mayRead = -1 Set mayRead = $SYSTEM.Security.Check("%Admin_ConfigStore", "USE")
+    If 'mayRead Return ""
     Try {
         Set sc = $CLASSMETHOD("%ConfigStore.Configuration", "GetDetails", "AI.LLM.Shutter", .details, 0, 0)
         Return ''$$$ISOK(sc)
