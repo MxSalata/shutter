@@ -45,11 +45,11 @@ The three specialists (conformance, encounter and impact) and the coordinator ar
 
 ## Try it
 
-**Fastest, with no key and no cost:** the trial in the browser (the quick tour: 9 steps, about 4 minutes), then the replay edition on your machine, `./install.sh --replay`. With the AI Hub file, a fresh clone was healthy in 3 min 21 s on build 109 on a 12-thread VM ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md)).
-
-**Online demo:** [link at submission]: my fictional hospital, live, with made-up patients. A new failure arrives every 7 minutes and Shutter recovers it under the site's written policy. Sign in as `demo` / `shutter`. The Management Portal's Visual Trace, read only: `demo-trace` / `Shutter-Demo-IRIS-Portal`. The portal's address (`/csp/`) may first ask for your email address and send a one-time code to it; then that sign-in. The demo runs on AI Hub build `2026.3.0AI.154.0`; on your machine, use `2027.1.0AI.109.0` (below). The board runs live for the judges' account, within a model budget of 15 USD a day; everyone can see its recorded runs in the trial.
+**Fastest, with no key and no cost:** the trial in the browser (the quick tour: 9 steps, about 4 minutes), then the replay edition on your machine, `./install.sh --replay`, built and healthy in 2 min 4 s from a fresh copy once the 6 GB public image is pulled. With the AI Hub file, a fresh clone was healthy in 3 min 21 s on build 109 ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md)). Both on a 12-thread VM.
 
 **In the browser, nothing to install:** the trial [link at submission] opens signed in on the demo hospital's recorded runs. Every action replays the recording, and nothing leaves the browser. Two tours start from an address: the quick tour [link at submission, `?trial=tour`], 9 steps in about 4 minutes, and the engineers' tour [link at submission, `?trial=engineer`], 6 steps in about 3 minutes with Detail on Technical.
+
+**Online demo:** [link at submission]: my fictional hospital, live, with made-up patients. A new failure arrives every 7 minutes and Shutter recovers it under the site's written policy. Sign in as `demo` / `shutter`. The Management Portal's Visual Trace, read only: `demo-trace` / `Shutter-Demo-IRIS-Portal`. The portal's address (`/csp/`) may first ask for your email address and send a one-time code to it; then that sign-in. The demo runs on AI Hub build `2026.3.0AI.154.0`; on your machine, use `2027.1.0AI.109.0` (below). The board runs live for the judges' account, within a model budget of 15 USD a day; everyone can see its recorded runs in the trial.
 
 **On your machine:** Docker, then one command. `install.sh` checks Docker, Compose, memory, disk, the port and the image first and changes nothing until every check passes; then it builds, starts and waits until Shutter is healthy. On Windows, run it in Git Bash or a WSL 2 shell; from PowerShell, use the [Run details](https://github.com/MxSalata/shutter#run-details) commands.
 
@@ -63,6 +63,15 @@ git clone https://github.com/MxSalata/shutter.git && cd shutter
 ./install.sh --replay
 ```
 
+It ends with what to open:
+
+```text
+Shutter is ready after 10 s:
+  the web app:   http://localhost:52773/shutter/index.html  (approver / shutter, or operator / shutter)
+  first steps:   Scenarios, run S2 in Board mode, then approve its case (the README's "On your machine or in the trial, first")
+  the portal:    http://localhost:52773/csp/sys/UtilHome.csp  (_SYSTEM / SYS, namespace SHUTTER)
+```
+
 - **Builds:** Shutter is verified on the AI Hub Community builds `2027.1.0AI.109.0`, the one the [Early Access portal](https://evaluation.intersystems.com/Eval/early-access/AIHub) offers since 2 November 2026, and `2026.3.0AI.154.0`, the contest's first ([receipt on 109](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md), [receipt on 154](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)). `install.sh` loads and tags either, from the file or already loaded; judges, please use 109.
 - For live agents, set `ANTHROPIC_API_KEY` in `.env`; without a key the board replays its recorded live runs. The live board uses Anthropic's API only, so with another provider's key it replays too. The case page's board panel marks each run Live or Replay, and so does each `AgentResponse` in the Visual Trace (`Mode`). The replay edition is the same without live agents or knowledge search.
 - The first build takes 2 to 15 minutes. Allow Docker at least 5 GB of memory and about 25 GB of free disk. Then open http://localhost:52773/shutter/index.html.
@@ -70,10 +79,10 @@ git clone https://github.com/MxSalata/shutter.git && cd shutter
 
 ### On the online demo, first
 
-1. Press **Break the feed** on the hospital's banner. Its bed manager goes down for a minute and eight movements for four new patients fail; a strip follows Shutter grouping them into one incident and, once the bed manager is back, releasing them in order. In the demo's rehearsal on 3 November 2026 that took **one incident, one approval and no model call**; on the build before, each of the eight cases convened a board of its own. Unlike a Resend of each message, each item goes in event order at the version the previous one's verified receipt reports, stopping at the first surprise.
+1. Press **Break the feed** on the hospital's banner. Its bed manager goes down for a minute and eight movements for four new patients fail; a strip follows Shutter grouping them into one incident and, once the bed manager is back, releasing them in order. In the demo's rehearsal on 3 November 2026 that took **one incident, one approval and no model call**; on the build before, each of the eight cases convened a board of its own. Unlike a Resend of each message, each item goes in event order at the version the previous one's verified receipt reports, stopping at the first surprise. Step 4 shows the agents decide.
 2. Open a case that **waits for approval** and **Approve** it: one conditional write, then "Verified" from the receiver's history.
 3. On any case, **In IRIS: Message trace** opens its session in the Visual Trace (`demo-trace`).
-4. The hospital's own stories are settled by its policy, with no board. **See the board decide**, under the banner, opens S8's recorded board in the trial.
+4. **See the agents decide.** The hospital's own stories are settled by its policy, with no board. With the judges' account, **Convene the board** on an escalated or blocked case: the board investigates it again, live, on fresh evidence. Without it, **See the board decide**, under the banner, opens S8's recorded board in the trial.
 
 ### On your machine or in the trial, first
 
@@ -121,7 +130,7 @@ The case and incident workflows are written in ObjectScript rather than BPL, by 
 | `%AI.Tool` with typed arguments: the evidence drill-downs and the terminal tools (`SubmitFindings`, `SubmitPlan`, `SubmitReview`, `SubmitAnswer`, `SubmitBoardAnswer`); the answer tools refuse a setting that is not among the case's facts | [Tools](https://github.com/MxSalata/shutter/tree/main/src/Shutter/Tools), [Schema](https://github.com/MxSalata/shutter/tree/main/src/Shutter/Schema) |
 | `%AI.Policy.Authorization` holds each run to its own case; `%AI.Policy.Audit` writes each tool call to the trace's log | [Policy](https://github.com/MxSalata/shutter/tree/main/src/Shutter/Bridge/Policy) |
 | RAG on `%AI.RAG.VectorStore.IRIS` with FastEmbed: the interface contract, encounter lifecycle, operation effects, member playbooks and review rules | [Library.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Knowledge/Library.cls) |
-| The provider key in the IRIS wallet, the provider in the Config Store (`AI.LLM.Shutter`); sessions with prompt caching; tokens and cost per run | [Setup.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Setup.cls), [AIHub.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Bridge/Runner/AIHub.cls) |
+| The provider key in the IRIS wallet, named in the Config Store as `secret://Shutter.Anthropic#key` (`AI.LLM.Shutter`); only holders of `Shutter_LiveAgents` may run the board live, and each live run is charged to its requester within the day's budget; sessions with prompt caching; tokens and cost per run | [Setup.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Setup.cls), [AIHub.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Bridge/Runner/AIHub.cls) |
 | `Model`, `ProviderConfig`, `TokenBudget` and `MaxIterations` as settings of each board item | [Agent.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Bridge/Operation/Agent.cls) |
 | The tool catalogue, pinned: before any model call a run checks that `%Discover` names exactly its declared tools, and any other catalogue ends it as `catalogue_mismatch` | [Catalogue.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Bridge/Catalogue.cls) |
 | Findings checked on the way back: each must cite evidence the run was given (`evidence_refs`), or the model repairs it in the same run; precedents (what approvers decided before) are shown to the person and never to an agent | [Findings.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Schema/Findings.cls), [CONTRACTS.md](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#64-the-site-profile-and-the-policy-path) |
@@ -183,17 +192,17 @@ WHERE h.SessionId = ?
 ORDER BY h.ID, t.Seq
 ```
 
-<details>
-<summary><b>Building on AI Hub: what worked, what was hard</b></summary>
+### Building on AI Hub and Interoperability: what worked, what was hard
 
-Measured on build `2026.3.0AI.154.0`:
+What I found building Shutter, measured on build `2026.3.0AI.154.0`; the longer story is article 1 [link at submission].
 
 - **Worked well:** typed tools (a `%JSON.Adaptor` parameter gives the model a full JSON Schema and arrives as an instance, so a terminal tool refuses a bad result with reasons); the two policies, a few lines each; FastEmbed knowledge bases, built from Markdown in about 11 seconds; prompt caching.
 - **Hard:** `agent.Run()` takes three arguments (the guide shows four) and calls only `OnRunStart` and `OnRunComplete`, so a token budget is judged after the run, and `MaxIterations` and the provider's timeout bound the loop.
 - **Hard:** a provider must be named `@{config:<Name>}`, and a fresh Config Store needs `%ConfigStore.DescriptorManager.RebuildRegistry()` before `AI.LLM` has a descriptor.
 - **Hard:** `%LogExecution` must be declared `As %Status`, which the guide doesn't show; the image has no IPM, so the build installs it; when two properties of a tool's argument share one schema class, the rest reach the model as a bare `object`, so the description spells out their fields; the Community licence's 8 units run out under cookie-less HTTP bursts, so scripts keep one cookie.
-
-</details>
+- **Interoperability, worked well:** every agent run and approval is a production message and each tool call is in the trace's log, so the Visual Trace and the Message Viewer already show a case end to end; `FailureTimeout` 0 makes a feed fail forward, so no later message waits behind a failed one.
+- **Interoperability, hard:** a production sends its alerts to the one item named `Ens.Alert`, so the alert intake has to take that name and pass every alert on to the site's own consumer; a Workflow task's form fields are filled by the approver, so the plan's digest starts empty and an inbox approval must paste it, or it binds nothing.
+- **Would like to see:** `Run()` calling `OnIterationStart` and `OnIterationComplete` ([#12](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/12)), so a token budget can stop a run between turns rather than after it.
 
 ## How it is tested
 
