@@ -7,7 +7,7 @@
  * with its seven core checks, the chips and the agents badge (56), the group links (19) and the trial note (18) come to
  * 108 before any group. The page measured 298 words in Plain and 440 in Technical on 2 November 2026, and this ceiling
  * keeps that from growing. What the page spends on is the five groups' 23 rows with their labels, values and counts
- * (about 180, the Agents group's sentence and the two "Why they are missing" buttons among them); what it saves is the
+ * (about 180, the Agents group's sentence and the two "What the dashes mean" buttons among them); what it saves is the
  * 98-word provenance paragraph, the 34-word note, the rows' 12-pixel explanations and the licence's four lines, which
  * are one click away.
  */

@@ -56,7 +56,16 @@ export const GROUPS: readonly GroupDef[] = [
   {
     id: 'agents',
     title: 'Agents and AI Hub',
-    keys: ['ai_hub_present', 'aihub_runner', 'board_members', 'recordings', 'mock_config'],
+    keys: [
+      'ai_hub_present',
+      'aihub_runner',
+      'board_members',
+      'recordings',
+      'mock_config',
+      'provider',
+      'wallet_secret',
+      'provider_config',
+    ],
   },
   {
     id: 'cases',
@@ -86,6 +95,9 @@ const LABELS: Record<string, string> = {
   aihub_runner: 'AI Hub runner compiled',
   ai_hub_present: 'AI Hub installed',
   mock_config: 'API mimic setting',
+  provider: 'Model provider configured',
+  wallet_secret: 'Provider key in the wallet',
+  provider_config: 'Provider configuration in the Config Store',
   recordings: 'Recorded agent runs',
   working_cases: 'Cases still in progress',
   abandon_after_minutes: 'Abandon allowed after (minutes)',
@@ -307,6 +319,23 @@ const ABSENT_IN_TRIAL: Record<string, string> = {
 
 const NOT_ON_RECORDED = 'Not on the recorded instance';
 
+/**
+ * The provider's two pieces live in IRISSYS behind their own rights (the wallet's Shutter_Secrets, the Config Store's
+ * %Admin_ConfigStore). The Doctor sends null where the reader may not look, and in the replay edition, which has
+ * neither; a null is then a fact about the reader or the edition, not a gap in the report.
+ */
+const PROVIDER_PIECES = new Set(['wallet_secret', 'provider_config']);
+const NOT_VISIBLE = 'Not visible to you';
+const NOT_VISIBLE_NOTES: Record<string, string> = {
+  wallet_secret:
+    'The provider key lives in the IRIS wallet, which answers only a reader with the resource Shutter_Secrets, so this report cannot say whether it is there. The production checks it at every start and writes it again from ANTHROPIC_API_KEY when it is gone; the Event Log shows that check.',
+  provider_config:
+    'The provider configuration lives in the Config Store, which answers only a reader with %Admin_ConfigStore, so this report cannot say whether it is there. The production checks it at every start, with the key; the Event Log shows that check.',
+};
+const NOT_IN_EDITION = 'Not in this edition';
+const NOT_IN_EDITION_NOTE =
+  'The replay edition has no wallet and no Config Store: its agents replay recorded runs, so there is no provider key to hold.';
+
 const NO_PURGE_NOTE =
   'Nothing deletes old messages. An installation makes the task when SHUTTER_MESSAGE_PURGE asks for it.';
 
@@ -321,6 +350,22 @@ const NO_PURGE_NOTE =
 export function rowInfo(key: string, value: unknown, report: Report, trial: boolean): RowInfo {
   // The API mimic's switch is "" when it is off: a setting, not a missing value
   if (key === 'mock_config' && value === '') return { mark: 'none', tone: null, missing: false };
+  // A null for the provider's pieces is the Doctor's own answer: this reader may not look, or the edition has none
+  if (PROVIDER_PIECES.has(key) && value === null) {
+    return report.ai_hub_present === true
+      ? {
+          mark: 'dash',
+          tone: 'neutral',
+          missing: false,
+          reason: { chip: NOT_VISIBLE, note: NOT_VISIBLE_NOTES[key], tone: 'neutral' },
+        }
+      : {
+          mark: 'dash',
+          tone: 'neutral',
+          missing: false,
+          reason: { chip: NOT_IN_EDITION, note: NOT_IN_EDITION_NOTE, tone: 'neutral' },
+        };
+  }
   if (!sent(value)) return { mark: 'dash', tone: 'attention', missing: true };
   const core = coreFor(report).find((c) => c.key === key);
   if (core) {
