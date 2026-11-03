@@ -212,10 +212,10 @@ What I found building Shutter, measured on build `2026.3.0AI.154.0`; the longer 
 
 ## How it is tested
 
-- **On a real IRIS, every push to `main` that changes code:** the full install on IRIS for Health Community 2026.2, the receiver's 36 contract tests, 250 unit tests (test methods in `tests/unit`; 7 more run only on an AI Hub build) and 26 scenarios end to end through the REST API, one through the demo hospital's production.
+- **On a real IRIS, every push to `main` that changes code:** the full install on IRIS for Health Community 2026.2, the receiver's 37 contract tests, 250 unit tests (test methods in `tests/unit`; 7 more run only on an AI Hub build) and 26 scenarios end to end through the REST API, one through the demo hospital's production.
 - **The approval boundary, attacked over HTTP:** an approval naming another plan or a stale version (409), an operator's approval (403), one approval sent twice (one write), the receiver changed after approval (S20, no write), and a resend of a delivery the receiver already holds (S3, no write).
 - **Privacy, and a question that tries to act:** [evaluation.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md#what-the-agents-see-and-a-question-that-tries-to-act).
-- **The web app:** 1219 component and 652 browser tests (`npm test`, `npm run test:e2e`), axe-core on 67 screens and states in 5 appearances.
+- **The web app:** 1265 component and 652 browser tests (`npm test`, `npm run test:e2e`), axe-core on 67 screens and states in 5 appearances.
 - **The AI Hub module:** CI can't download an Early Access build, so it builds the core on the public image. The AI Hub module is proven by fresh clones installed with `install.sh` on builds 109 and 154 (each Doctor clean, the Second Parser running), every scenario on 109, 29 plays across the three modes ([receipt on 109](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md), [receipt on 154](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)), the board recorded live on build 154 on 25 October and 1 November 2026 (100 agent runs, 10.00 USD at list prices), which CI replays on every push, and run live on build 109 on 3 November (S2, four runs, 0.42 USD).
 
 ## Limits, plainly
