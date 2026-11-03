@@ -60,13 +60,13 @@ Method TestHardenPortalAndRestore()
 /// leaves the portal alone. Put back as TestHardenPortalAndRestore does.
 Method TestApplyRuntimeHardens()
 {
-    If '$SYSTEM.Security.Check("%Admin_Secure", "USE") { Do $$$AssertTrue(1, "no %Admin_Secure here: nothing to try") Quit }
+    If '$SYSTEM.Security.Check("%Admin_Secure", "USE") { Do $$$AssertSkipped("no %Admin_Secure here: nothing to try") Quit }
     Set before = ##class(Shutter.Util.Json).Parse(##class(Shutter.Setup).PortalState(), .sc)
     Do $$$AssertStatusOK(sc, "the state reads: " _ before.%ToJSON())
     Set exists = 0
     Set it = before.apps.%GetIterator()
     While it.%GetNext(, .a) { If a.exists Set exists = exists + 1 }
-    If exists = 0 { Do $$$AssertTrue(1, "this instance has no portal application for the namespaces: nothing to harden") Quit }
+    If exists = 0 { Do $$$AssertSkipped("this instance has no portal application for the namespaces: nothing to harden") Quit }
     Set roleWas = before."trace_role", recordWas = $GET(^Shutter.Config("portalHardened"))
     Kill ^Shutter.Config("portalHardened")
     // Any value but 1 leaves the portal and the record alone.
