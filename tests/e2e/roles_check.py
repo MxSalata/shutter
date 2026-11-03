@@ -14,8 +14,11 @@ pending email, and leaves no email to edit or send; and that with the site profi
 on, the operator is refused (403) and the approver closes the case, while a misspelt approvers key is refused (400); and
 that reading the production reviews and starting one (agent false) is the operator's, while annotating a finding and
 revoking an annotation need Shutter_Approve (403 for the operator), every review route is 401 signed out and each change
-is 403 csrf without the X-Requested-With header. The profile is put back with the answers it had, saved from the API:
-from then on a change of the seed file no longer replaces it, as for any profile a person saved.
+is 403 csrf without the X-Requested-With header; and, when SHUTTER_PUBLIC_DEMO_PASSWORD names the user demo's password (the
+instance has one only when its install was given it), that the demo starts a review with agent false and reinvestigates with
+liveAgents false, never spending the model budget (a `skip` line says so when the variable is unset). The profile is put
+back with the answers it had, saved from the API: from then on a change of the seed file no longer replaces it, as for any
+profile a person saved.
 
 It closes two cases that are escalated, blocked or failed, the newest first, so run it after the scenarios (CI runs it
 after them), and not on an instance someone else is using. Exit status 1 when a check fails. Standard library only.
@@ -157,8 +160,12 @@ def main():
     check(f"operator: POST {annotations} is 403 forbidden, naming Shutter_Configure",
           status == 403 and error_of(body) == "forbidden" and "Shutter_Configure" in (body or {}).get("detail", ""), f"{status} {body}")
     # ---- the demo user (when the instance has one) reads and starts reviews but never spends the model budget ----
-    demo_password = os.environ.get("SHUTTER_DEMO_PASSWORD", "")
-    if demo_password:
+    # The user demo exists only where the install was given SHUTTER_PUBLIC_DEMO_PASSWORD (Setup.cls, EnsurePublicUsers);
+    # SHUTTER_DEMO_PASSWORD sets the operator's and the approver's at the install (read here from SHUTTER_PASSWORD), not demo's
+    demo_password = os.environ.get("SHUTTER_PUBLIC_DEMO_PASSWORD", "")
+    if not demo_password:
+        print("skip demo: SHUTTER_PUBLIC_DEMO_PASSWORD is not set, so the demo user's checks do not run", flush=True)
+    else:
         demo = Session(args.url).sign_in("demo", demo_password)
         status, me = demo.call("GET", "/me")
         if check("demo: GET /me says no live agents", status == 200 and (me.get("can") or {}).get("liveAgents") is False, f"{status} {me}"):
