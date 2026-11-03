@@ -167,7 +167,9 @@ export function formatDuration(ms: number | undefined | null): string {
   const n = Number(ms);
   if (n < 1000) return `${n} ms`;
   if (n < 60_000) return `${(n / 1000).toFixed(1)} s`;
-  return `${Math.floor(n / 60_000)} min ${Math.round((n % 60_000) / 1000)} s`;
+  // Whole seconds first, so 119,900 ms is "2 min 0 s" and never "1 min 60 s"
+  const s = Math.round(n / 1000);
+  return `${Math.floor(s / 60)} min ${s % 60} s`;
 }
 
 const integer = new Intl.NumberFormat('en-GB');

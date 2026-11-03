@@ -54,6 +54,26 @@ describe('the transport', () => {
     expect(seen?.credentials).toBe('same-origin');
   });
 
+  it('refuses a 2xx whose body is not JSON, with the page it got, instead of handing the page a string', async () => {
+    // A gate's sign-in page or a proxy's maintenance page, answered as 200: not the API's answer
+    server.use(
+      http.get('/api/shutter/cases', () =>
+        HttpResponse.text('<html><head><title>Sign in</title></head><body>Session expired</body></html>'),
+      ),
+    );
+    const error = await api.get('/cases').catch((e: unknown) => e);
+    expect(isApiError(error) && [error.status, error.detail, error.message]).toEqual([
+      502,
+      'Sign in',
+      'Sign in',
+    ]);
+  });
+
+  it('resolves an empty 2xx body as null, as a 204 answers', async () => {
+    server.use(http.delete('/api/shutter/session', () => new HttpResponse(null, { status: 204 })));
+    expect(await api.del('/session')).toBeNull();
+  });
+
   it('sends a read without a body or the CSRF header, as before', async () => {
     let seen: Request | undefined;
     server.use(
