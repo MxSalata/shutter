@@ -10,10 +10,11 @@ import {
   Text,
   Title,
   Tooltip,
+  VisuallyHidden,
 } from '@mantine/core';
 import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { IconInfoCircle, IconTestPipe } from '@tabler/icons-react';
-import { useSyncExternalStore, type ReactNode } from 'react';
+import { useId, useSyncExternalStore, type ReactNode } from 'react';
 import { useCan } from '@/api/hooks';
 import type { Can } from '@/api/types';
 import { TechDetail } from '@/components/TechDetail';
@@ -128,6 +129,7 @@ export function TrialDifferences() {
 function WhatsDifferent({ iconOnly }: { iconOnly: boolean }) {
   const phone = useMediaQuery('(max-width: 47.99em)', false);
   const [opened, { toggle, close }] = useDisclosure(false);
+  const headingId = useId();
   const target: ReactNode = iconOnly ? (
     <Tooltip label="What's different?">
       <ActionIcon
@@ -173,7 +175,11 @@ function WhatsDifferent({ iconOnly }: { iconOnly: boolean }) {
       returnFocus
     >
       <Popover.Target>{target}</Popover.Target>
-      <Popover.Dropdown aria-label="The trial environment">
+      {/* Named by its own heading, as the phone's sheet is: Mantine would name it by the button, as aria-labelledby wins over aria-label */}
+      <Popover.Dropdown aria-labelledby={headingId}>
+        <VisuallyHidden id={headingId} component="h2">
+          The trial environment
+        </VisuallyHidden>
         <TrialDifferences />
       </Popover.Dropdown>
     </Popover>

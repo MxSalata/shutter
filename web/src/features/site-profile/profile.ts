@@ -343,7 +343,7 @@ export function validateProfile(p: unknown): string {
       }
       if (k !== 'time_zone') return `feed.${k}: unknown setting`;
       if (typeof v !== 'string' || !(ZONES.includes(v) || FIXED_OFFSET.test(v) || IANA_ZONE.test(v)))
-        return 'feed.time_zone: must be UTC, Europe/London, a fixed offset such as +01:00 (up to 14:00), or an IANA zone name such as Europe/Paris';
+        return 'feed.time_zone: must be UTC, Europe/London, a fixed offset such as +01:00 (up to 14:00), or an IANA zone name this IRIS knows (for example Europe/Paris)';
     }
   }
   // What may leave IRIS for a model: free text off unless the site says so.
