@@ -820,7 +820,7 @@ preflight and its dispatch gate, as any case. A follower arriving after the lead
 lead whose board ended without a plan (no findings, no coordinator, a timeout, the model view's refusal) is `failed` and
 attracts no followers; a follower waiting on it, or on a leader whose board never ended within twice the board timeout and a
 minute, falls to the rules path with a note. A lead begun before the last scenario reset counts for nothing, as the incident
-detector's window. A judge's forced board and an incident's released chain items never follow. The lead's row keeps how
+detector's window. A judge's forced board and an incident's released chain items never follow. A lead whose leader fails (a workflow error, or an escalation with no summary when its board slot comes), is abandoned or is closed by hand is finished as failed at once (v1.39), so a case of the signature that arrives afterwards leads itself and every case waiting on it takes the rules path without waiting out the bound. The lead's row keeps how
 many followed; `GET /cases/{id}` shows `followsCase` and `leadSignature`. Approvals stay with the existing mechanisms: an
 incident's one task for its chains (7), else one per case.
 
@@ -1316,8 +1316,7 @@ copy of the message.
   `Receiver` the alerting item, `FailureKind` from the alert's words (`uncertain_outcome` for a timeout, no response or
   an uncertain answer; `rejected` for a reject, a refusal, a NACK or an HTTP 4xx; else `delivery_failed`),
   `FailureOutcome` to match (`uncertain`, `rejected`, `error`), `FailureHttpStatus` when the text names one ("HTTP 503"),
-  `FailureReasonCode` `alert`, `FailureText` "Alert from <item> at <time> UTC: <text>". One forward per session
-  (`^Shutter.AlertIntake("seen")`, kept a day), so a connector's retries alert the site each time but reach Shutter once.
+  `FailureReasonCode` `alert`, `FailureText` "Alert from <item> at <time> UTC: <text>". One forward per session (v1.39): the session is pending while the forward is out (`^Shutter.AlertIntake("pending")`, ten minutes at most) and seen (`^Shutter.AlertIntake("seen")`, kept a day) only once Shutter has taken the message, so a connector's retries alert the site each time but reach Shutter once, while a forward Shutter refused or that failed is built again from the session's next alert.
   An alert whose session has no HL7 message, or from an item outside `Receivers`, is passed on only; both sends are
   asynchronous, so the feed never waits. The forwarder's refusal is a warning in the event log, as for the sending
   process. The demo hospital's production carries the item with `Receivers` `Downstream Out`, and its connector raises an alert
@@ -1735,6 +1734,8 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   Releaser's two checks throw their errors so the run row records them; the unit runner reports skipped methods (`skipped`,
   `skips`); `SHUTTER_DEMO_PORTAL` hardens the portal at every start and the Doctor says so (12); the demo's `PurgeStore`
   empties the precedents and board leads too and stamps `resetAt` (12).
+  The alert intake marks a session seen only once Shutter took its message, pending meanwhile (11); a board lead whose
+  leader fails, is abandoned or is closed by hand ends at once for its followers (6.6).
 - v1.38, 2 and 3 Nov 2026 (the demo rehearsal's storm, whose cases all convened boards): a watched production's failures run in the
   site's watched mode, policy by default, whatever mode the scenarios run in (6.3, 11); a case the alert intake opened
   takes the production's own report of the failure when it arrives before the evidence is collected, so the catalogue
