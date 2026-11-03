@@ -413,16 +413,18 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
             Do case.Note("note", "Released on the chain's own path (" _ ..ChainDecides _ " decides)", "system")
         }
     } ElseIf ..Mode = "policy" {
-        // In policy mode the catalogue's match settles the easy cases (CONTRACTS 6.3); the rest go to the board.
+        // In policy mode the catalogue's match settles the easy cases (CONTRACTS 6.3); the rest go to the board. A judge's
+        // forced board (v1.34; v1.39) comes before the person path: the catalogue's "person" is the decision the board
+        // was asked to take again on fresh evidence, so the case convenes it instead of escalating again.
         If decision = "policy" Quit ..PolicyPath(case, summary, cat)
-        If decision = "person" Quit ..PersonByCatalogue(case, cat)
-        Do case.Note("note", "Catalogue: " _ $SELECT(decision = "": "no result", 1: decision) _ "; the board decides", "system")
+        If (decision = "person") && '..ForceBoard Quit ..PersonByCatalogue(case, cat)
+        Do case.Note("note", "Catalogue: " _ $SELECT(decision = "": "no result", 1: decision) _ "; the board decides" _ $SELECT(..ForceBoard && (decision = "person"): " (convened by " _ ..ConvenedBy _ " on the catalogue's person decision)", 1: ""), "system")
     }
     // One board per failure signature (v1.35): a case whose signature has a board running, or decided within the window,
     // follows it instead of convening its own; the first case of a signature leads.
     Set lead = ..LeadFor(case, summary, .signature)
     If $ISOBJECT(lead) Quit ..Follow(case, lead, signature)
-    Set sc = ..ConveneBoard(case, result.SummaryJSON, "", "", .convened)
+    Set sc = ..ConveneBoard(case, result.SummaryJSON, $SELECT(..ForceBoard: ..ConvenedBy, 1: ""), "", .convened)
     Quit:($$$ISERR(sc) || 'convened) sc
     Quit ..AfterConvene(case, result.SummaryJSON)
 }
@@ -709,13 +711,14 @@ Method AgentRequestFor(case As Shutter.Store.Case, m As Shutter.Store.BoardMembe
 /// gets recordings only (ModeOverride replay), as a question's runs do (14).
 Method StampRequester(req As Shutter.Bridge.Msg.AgentRequest)
 {
-    Set req.RequestedBy = ..RunRequester()
-    If '..LiveAllowed Set req.ModeOverride = "replay"
+    Do ..Stamp(req, ..ForceBoard, ..ConvenedBy, ..ReopenedBy, ..LiveAllowed)
 }
 
-Method RunRequester() As %String
+/// The rule itself, a class method so a test can apply it without a running process.
+ClassMethod Stamp(req As Shutter.Bridge.Msg.AgentRequest, forceBoard As %Boolean = 0, convenedBy As %String = "", reopenedBy As %String = "", liveAllowed As %Boolean = 1)
 {
-    Quit $SELECT(..ForceBoard && (..ConvenedBy '= ""): ..ConvenedBy, ..ReopenedBy '= "": ..ReopenedBy, 1: "system")
+    Set req.RequestedBy = $SELECT(forceBoard && (convenedBy '= ""): convenedBy, reopenedBy '= "": reopenedBy, 1: "system")
+    If 'liveAllowed Set req.ModeOverride = "replay"
 }
 
 /// The model view of the case could not be built (Shutter.Util.ModelView.Learn): nothing was sent to a model, and a
@@ -989,6 +992,10 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
     Set profile = ##class(Shutter.Store.SiteProfile).Current()
     Do case.Note("note", "Catalogue " _ entry _ " (" _ title _ ") matched alone: " _ outcome _ ". Site policy for tier " _ tier _ ", " _ kind _ ": " _ ..Policy _ " (profile v" _ $CLASSMETHOD(json, "Str", profile, "version", 0) _ ")", "system")
     If (..Policy = "board") || ..ForceBoard {
+        // A forced board's plan is a board's plan (v1.39): a person approves it, and the site policy the entry would have
+        // had (automatic on this tier, say) does not release it, which the dispatch gate would then block as plan_origin;
+        // the entry and outcome stay for the notes.
+        If ..ForceBoard Set ..Policy = ""
         Set sc = ..ConveneBoard(case, summary.%ToJSON(), $SELECT(..ForceBoard: ..ConvenedBy, 1: "site policy"), "board", .convened)
         Quit:($$$ISERR(sc) || 'convened) sc
         Quit ..AfterConvene(case, summary.%ToJSON())

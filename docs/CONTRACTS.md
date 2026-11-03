@@ -1640,7 +1640,7 @@ anything runs: `409 no_recorded_answer`, "This question has no recorded answer; 
 always; a suggested turn when no `question:` recording matches its conversation and turn). **Convening the board:**
 `POST /cases/{id}/board` (`Shutter_Operate` and `Shutter_LiveAgents`; body optional) reopens a blocked, escalated or failed case
 as a reinvestigation does (`Shutter.Msg.Reinvestigate` with `ForceBoard`), takes fresh evidence and convenes the board whatever
-the site policy says, the plan then going through the gate, rehearsal and approvals as any plan; `202 {caseId, state:
+the site policy says, the plan then going through the gate, rehearsal and approvals as any plan (v1.39: in policy mode a catalogue decision of person convenes the board instead of escalating the case again, and the board's plan is a board's plan, approved by a person even where the site policy for the entry's tier is automatic, so the gate never blocks it as `plan_origin`; a withheld operation and an orders_results receiver stay a person's decision whatever the request); `202 {caseId, state:
 "evidence", requestedBy}`; `403 forbidden` without the resource; `409 wrong_state` for any other state (a case awaiting approval
 is approved or rejected first); `409 budget_exhausted` with the budget object when the day's cap or the caller's share is spent; `409 live_unavailable` with `live` (the availability object) while the model provider refuses the key (v1.37)
 (9). The case notes "Board convened by <user>", and the board's runs carry the user for the share.
@@ -1719,7 +1719,10 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   requester, so it counts against that person's share, as a question's does (5, 13.5); a reinvestigation's runs carry the
   person who reopened the case, not "system", and without `Shutter_LiveAgents` (or with the provider refusing the key) they
   answer from recordings only, `ModeOverride` `replay`, so a board with no recording takes the rules path (the 202 carries
-  `liveAgents`; `Shutter.Msg.Reinvestigate.LiveAllowed`); a judge's forced board keeps its convener (5, 14.5).
+  `liveAgents`; `Shutter.Msg.Reinvestigate.LiveAllowed`); a judge's forced board keeps its convener (5, 14.5). The forced board
+  itself (the same sweep): in policy mode it is honoured before the catalogue's person path, which escalated the case again
+  with no board, and its plan goes to a person's approval even on an automatic tier, where the site policy released it and
+  the gate then blocked it as `plan_origin` (14.5).
 - v1.38, 2 and 3 Nov 2026 (the demo rehearsal's storm, whose cases all convened boards): a watched production's failures run in the
   site's watched mode, policy by default, whatever mode the scenarios run in (6.3, 11); a case the alert intake opened
   takes the production's own report of the failure when it arrives before the evidence is collected, so the catalogue

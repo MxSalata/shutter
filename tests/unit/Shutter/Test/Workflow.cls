@@ -206,27 +206,25 @@ ClassMethod TaskCount(caseId As %String) As %Integer
 
 /// A reopened case's agent requests carry the person who reopened it, for the budget's share, and run from recordings
 /// only when that person may not spend the model budget (v1.39); a judge's forced board keeps the convener; the feed's
-/// own case runs as "system" and live as its mode says.
+/// own case runs as "system" and live as its mode says. The rule is CaseWorkflow.Stamp, which the process applies with
+/// its own state.
 Method TestReopenedRunsCarryTheReopener()
 {
-    Set p = ##class(Shutter.Process.CaseWorkflow).%New()
+    Set cls = "Shutter.Process.CaseWorkflow"
     Set req = ##class(Shutter.Bridge.Msg.AgentRequest).%New()
-    Do p.StampRequester(req)
+    Do $CLASSMETHOD(cls, "Stamp", req)
     Do $$$AssertEquals(req.RequestedBy, "system", "the feed's own case runs as system")
     Do $$$AssertEquals(req.ModeOverride, "", "and in the mode the item resolves")
-    Set p.ReopenedBy = "demo", p.LiveAllowed = 0
     Set req = ##class(Shutter.Bridge.Msg.AgentRequest).%New()
-    Do p.StampRequester(req)
+    Do $CLASSMETHOD(cls, "Stamp", req, 0, "", "demo", 0)
     Do $$$AssertEquals(req.RequestedBy, "demo", "a reopened case's runs name the reopener")
     Do $$$AssertEquals(req.ModeOverride, "replay", "and replay when the reopener may not spend")
-    Set p.ReopenedBy = "operator", p.LiveAllowed = 1
     Set req = ##class(Shutter.Bridge.Msg.AgentRequest).%New()
-    Do p.StampRequester(req)
+    Do $CLASSMETHOD(cls, "Stamp", req, 0, "", "operator", 1)
     Do $$$AssertEquals(req.RequestedBy, "operator", "an operator's reopening counts against the operator")
     Do $$$AssertEquals(req.ModeOverride, "", "and runs as the mode says")
-    Set p.ForceBoard = 1, p.ConvenedBy = "judge", p.ReopenedBy = "judge"
     Set req = ##class(Shutter.Bridge.Msg.AgentRequest).%New()
-    Do p.StampRequester(req)
+    Do $CLASSMETHOD(cls, "Stamp", req, 1, "judge", "judge", 1)
     Do $$$AssertEquals(req.RequestedBy, "judge", "a forced board keeps its convener")
 }
 
