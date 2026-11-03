@@ -29,7 +29,7 @@ describe('floating parts in jsdom (setup.ts)', () => {
     );
     const started = performance.now();
     await placed();
-    // Without the setup's measurements this one tick took 50 to 70 s on House
+    // Without the setup's measurements this one tick took 50 to 70 s on the development machine
     expect(performance.now() - started).toBeLessThan(5_000);
     expect(screen.getByText('The hint')).toBeVisible();
     await userEvent.click(screen.getByRole('button', { name: 'Open' }));

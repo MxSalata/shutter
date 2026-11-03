@@ -32,8 +32,9 @@ if (!window.ResizeObserver) {
 
 // Floating UI places every Mantine tooltip, popover, menu and select. jsdom has no layout, so a position means
 // nothing there, but three of its measurements walk the element's ancestors with getComputedStyle and take seconds
-// each in jsdom: one opened tooltip held the event loop for 50 to 70 s on House. Here they answer at once: the window
-// is the offset parent, a rect needs no converting, and the clipping rect reaches past the window on every side.
+// each in jsdom: one opened tooltip held the event loop for 50 to 70 s on the development machine. Here they answer
+// at once: the window is the offset parent, a rect needs no converting, and the clipping rect reaches past the window
+// on every side.
 // Every jsdom rect is empty at the origin, which a clipping rect starting at the origin would count as clipped, so
 // Mantine would hide an open dropdown (its hideDetached); nothing is clipped, as for a control in view.
 const floating = platform as unknown as Record<string, unknown>;

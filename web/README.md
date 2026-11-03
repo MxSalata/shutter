@@ -8,14 +8,14 @@ React, Mantine and TanStack Query, built with Vite. IRIS serves the build from `
 
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | The app on `http://localhost:5173`, with `/api/shutter` proxied to IRIS (`VITE_IRIS_URL`, default `http://192.168.0.10:52775`) |
+| `npm run dev` | The app on `http://localhost:5173`, with `/api/shutter` proxied to IRIS (`VITE_IRIS_URL`, default `http://localhost:52773`, the compose instance) |
 | `VITE_MOCK=1 npm run dev` | The same against an in-browser mock of the API, which serves answers recorded from the real one (`src/mocks/fixtures.json`) |
 | `npm test` | Unit and page tests (Vitest, jsdom, the same mock) |
 | `npm run lint`, `npm run typecheck`, `npm run format:check` | ESLint, TypeScript and Prettier |
 | `npm run build:www` | Builds into `../www/`, the folder IRIS serves (committed, so an install needs no Node) |
 | `npm run build:demo`, `npm run preview:demo` | The demo, which is always the trial: recorded runs on the in-browser mock, opening signed in as the approver (`dist-demo/`, `VITE_BASE` for GitHub Pages) |
 | `npm run record:demo -- --url http://host:52773` | Records the demo's data from a running Shutter's API into `src/mocks/fixtures.json` (reads only; `SHUTTER_PASSWORD` for the operator's password; `--cases`, `--incidents` and `--reviews` keep the ones named, and `--ids` maps the instance's ids onto the demo's, so a re-recording keeps the ids the tests and the guide name) |
-| `npm run export:answers -- --url http://host:52774` | Exports the recorded answers to "Ask about this case" from a running Shutter's API into `src/mocks/recorded-questions.json` (reads only; `SHUTTER_PASSWORD` for the approver's password; the demo cases come from `fixtures.json`) |
+| `npm run export:answers -- --url http://host:52773` | Exports the recorded answers to "Ask about this case" from a running Shutter's API into `src/mocks/recorded-questions.json` (reads only; `SHUTTER_PASSWORD` for the approver's password; the demo cases come from `fixtures.json`) |
 | `npm run test:e2e` | Playwright, Chromium, two projects. `chromium`, on the demo build (always the trial): axe-core (WCAG 2.1 A and AA) on every screen, the trial's sign-in page and the guide open, in all five appearances; the layout at a phone's and a laptop's width; each page's paths, the guide's tours, and the public demo's role (`?as=demo`). `iris-trial`, on the build IRIS serves, previewed with no instance behind it: a visit to the trial from the live app sends nothing to IRIS (every call is recorded, and refused by the trial and by the browser), the trial never calls itself live, and the live sign-in page is audited |
 
 ## Notes
