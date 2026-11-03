@@ -243,7 +243,7 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     Quit:$$$ISERR(sc) sc
     // The Management Portal user of the public demo sees the Visual Trace and the messages, nothing of Shutter's and nothing it
     // could change.
-    Set sc = ..EnsureRole("Shutter_Trace", "Shutter public demo: the Visual Trace and the messages in the Management Portal, read only", "%Ens_MessageTrace:U,%Ens_MessageHeader:U,%Ens_MessageContent:U,%Ens_Portal:U,%Ens_Dashboard:U,%Ens_ProductionConfig:R,%Service_WebGateway:U," _ db _ ":R" _ codeRead, "")
+    Set sc = ..EnsureRole("Shutter_Trace", "Shutter public demo: the Visual Trace and the messages in the Management Portal, read only", "%Ens_MessageTrace:U,%Ens_MessageHeader:U,%Ens_MessageContent:U,%Ens_EventLog:U,%Ens_Portal:U,%Ens_Dashboard:U,%Ens_ProductionConfig:R,%Service_WebGateway:U," _ db _ ":R" _ codeRead, "")
     Quit:$$$ISERR(sc) sc
     // The production's client of the downstream API needs the database as well as the downstream system's own
     // resource (the Downstream_API role carries only that), or the web application answers 403.
@@ -555,6 +555,7 @@ ClassMethod HardenPortal(hospital As %String = "") As %String [ SqlProc ]
                 Continue:$PIECE(r, ":", 1)="Shutter_Portal"
                 Set kept = kept _ $SELECT(kept = "": "", 1: ",") _ r
             }
+            If '$FIND(kept, "%Ens_EventLog:") Set kept = kept _ $SELECT(kept = "": "", 1: ",") _ "%Ens_EventLog:U"
             Set resources = kept _ $SELECT(kept = "": "", 1: ",") _ reads _ ",Shutter_Portal:U"
             Kill props
             Set props("Resources") = resources
@@ -562,6 +563,16 @@ ClassMethod HardenPortal(hospital As %String = "") As %String [ SqlProc ]
             If $$$ISERR(sc) Do errors.%Push("role: " _ $SYSTEM.Status.GetErrorText(sc))
             Set out.role = resources
         }
+        // The pages read through SQL too (the Message Viewer's search and contents, the Event Log): SELECT alone on the
+        // message tables of both namespaces, since the MatchRoles that carried it are gone; never a %DB_ role.
+        Set grants = {}
+        For n = ns, hospital {
+            Continue:(n="")||(n=$CHAR(0))
+            Set r = ..TraceSelectGrant(n, 1, .count, .problem)
+            Do grants.%Set(n, count, "number")
+            If problem '= "" Do errors.%Push(n _ " grants: " _ problem)
+        }
+        Set out."select_grants" = grants
         For app = ..PortalApp(ns), ..PortalApp(hospital) {
             Continue:app=""
             Continue:'##class(Security.Applications).Exists(app)
@@ -581,6 +592,68 @@ ClassMethod HardenPortal(hospital As %String = "") As %String [ SqlProc ]
     Set out.apps = apps
     If errors.%Size() > 0 Set out.errors = errors
     Quit out.%ToJSON()
+}
+
+/// The tables the portal's pages read through SQL in a namespace: the Interoperability tables (the message headers, the
+/// event log, the configuration, the alerts), the HL7 messages, and the productions' own message bodies.
+ClassMethod TraceSelectTables(ns As %String) As %List
+{
+    Set out = ""
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = ns
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND (TABLE_SCHEMA = 'Ens' OR TABLE_SCHEMA %STARTSWITH 'Ens_' OR TABLE_SCHEMA %STARTSWITH 'EnsLib_HL7' OR TABLE_SCHEMA IN ('Shutter_Msg', 'Shutter_Bridge_Msg', 'Shutter_Intake', 'Hospital_Msg', 'Downstream_Msg')) ORDER BY TABLE_SCHEMA, TABLE_NAME")
+        While rs.%Next() { Set out = out _ $LISTBUILD(rs.%Get("TABLE_SCHEMA") _ "." _ rs.%Get("TABLE_NAME")) }
+    } Catch ex {
+    }
+    Quit out
+}
+
+/// SELECT on TraceSelectTables for the role Shutter_Trace in a namespace (grant 1), or taken away again (grant 0, for
+/// the tests). count is how many tables were done; problem the first failure.
+ClassMethod TraceSelectGrant(ns As %String, grant As %Boolean = 1, Output count As %Integer, Output problem As %String) As %Status [ SqlProc ]
+{
+    Set count = 0, problem = "", sc = $$$OK
+    Set tables = ..TraceSelectTables(ns)
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = ns
+        For i = 1:1:$LISTLENGTH(tables) {
+            Set t = $LIST(tables, i)
+            Set one = $SELECT(grant: $SYSTEM.SQL.Security.GrantPrivilege("SELECT", t, "TABLE", "Shutter_Trace"), 1: $SYSTEM.SQL.Security.RevokePrivilege("SELECT", t, "TABLE", "Shutter_Trace"))
+            If $$$ISOK(one) { Set count = count + 1 } ElseIf problem = "" { Set problem = t _ ": " _ $SYSTEM.Status.GetErrorText(one), sc = one }
+        }
+    } Catch ex {
+        Set problem = ex.DisplayString(), sc = ex.AsStatus()
+    }
+    Quit sc
+}
+
+/// The trace role's SQL privileges in a namespace, asked table by table ($SYSTEM.SQL.Security.CheckPrivilege, which
+/// answers for a role): reads (SELECT on Ens.MessageHeader, Ens_Util.Log and the HL7 message table), writes_none (no
+/// INSERT, UPDATE or DELETE on any of the tables the pages read), and the counts.
+ClassMethod TraceSqlState(ns As %String) As %DynamicObject
+{
+    Set o = {}
+    Do o.%Set("reads", 0, "boolean"), o.%Set("writes_none", 1, "boolean")
+    Set o."select_tables" = 0, o."write_privileges" = 0
+    Try {
+        Set tables = ..TraceSelectTables(ns), key = 0
+        For i = 1:1:$LISTLENGTH(tables) {
+            Set t = $LIST(tables, i)
+            If $SYSTEM.SQL.Security.CheckPrivilege("Shutter_Trace", 1, t, "s", ns) {
+                Set o."select_tables" = o."select_tables" + 1
+                If $LISTFIND($LISTBUILD("Ens.MessageHeader", "Ens_Util.Log", "EnsLib_HL7.Message"), t) Set key = key + 1
+            }
+            For a = "i", "u", "d" { If $SYSTEM.SQL.Security.CheckPrivilege("Shutter_Trace", 1, t, a, ns) Set o."write_privileges" = o."write_privileges" + 1 }
+        }
+        Do o.%Set("reads", key = 3, "boolean")
+        Do o.%Set("writes_none", o."write_privileges" = 0, "boolean")
+    } Catch ex {
+        Set o.error = ex.DisplayString()
+        Do o.%Set("reads", 0, "boolean")
+    }
+    Quit o
 }
 
 /// The portal web application of a namespace, as IRIS for Health names it; "" for no namespace.
@@ -652,7 +725,17 @@ ClassMethod PortalState(hospital As %String = "") As %String [ SqlProc ]
                 If ($EXTRACT(r, 1, 4) = "%DB_") && ($PIECE(r, ":", 2) [ "W") Set hardened = 0
             }
             If '$FIND($GET(rp("Resources")), "Shutter_Portal:U") Set hardened = 0
+            If '$FIND($GET(rp("Resources")), "%Ens_EventLog:U") Set hardened = 0
         }
+        // The SQL side (v1.38): SELECT on the message tables, and no INSERT, UPDATE or DELETE anywhere, in each namespace.
+        Set sql = {}
+        For n = ns, hospital {
+            Continue:(n="")||(n=$CHAR(0))
+            Set one = ..TraceSqlState(n)
+            Do sql.%Set(n, one)
+            If 'one.reads || 'one."writes_none" Set hardened = 0
+        }
+        Set out.sql = sql
     } Catch ex {
         Set out.error = ex.DisplayString(), hardened = 0
     }
