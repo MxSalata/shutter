@@ -111,7 +111,9 @@ test.describe('the S2 approval in the trial', () => {
     );
     await page.getByRole('button', { name: 'Approve plan' }).click();
     const dialog = page.getByRole('dialog', { name: 'Approve plan v1' });
-    await expect(dialog).toContainText('Nothing leaves this browser, and a reload starts the recording afresh.');
+    await expect(dialog).toContainText(
+      'Nothing leaves this browser, and a reload starts the recording afresh.',
+    );
     await expect(dialog.getByText('Trial only')).toBeVisible();
     await dialog.getByRole('button', { name: 'Approve this plan' }).click();
     await expect(outcome.getByTestId('outcome-line')).toHaveText('Delivered: verified at the receiver');
