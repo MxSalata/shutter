@@ -1,8 +1,8 @@
 name: CI
 
-# The jobs run on a self-hosted runner (label house: a VM with only the internet, since 20 Oct), so CI
-# costs no GitHub minutes; it runs one job at a time and keeps Docker images between runs. CI runs on main after a merge, and on a branch only by hand (workflow_dispatch): branch work is tested on the repository's own IRIS
-# instances before it is pushed, and the free Actions minutes are kept for main. A push that changes only the docs
+# The jobs run on GitHub-hosted runners: the repository is public, and no job of a public repository runs on
+# private machines. CI runs on main after a merge, and on a branch only by hand (workflow_dispatch): branch work is
+# tested on the development IRIS instances before it is pushed. A push that changes only the docs
 # (docs/ and the top-level Markdown) runs nothing; the knowledge's Markdown is checked, so it still runs.
 on:
   push:
@@ -11,8 +11,7 @@ on:
       - 'docs/**'
       - '*.md'
   workflow_dispatch:
-  # Dependabot's update pull requests are tested on the self-hosted runner before they are merged (since 20 Oct); no
-  # other pull request runs, since the runner is a private machine
+  # Dependabot's update pull requests are tested before they are merged; no other pull request runs
   pull_request:
 
 # Least privilege by default; the Pages deployment raises what it needs.
@@ -36,13 +35,13 @@ env:
   IRIS_IMAGE: containers.intersystems.com/intersystems/irishealth-community:2026.2
 
 jobs:
-  # The web application: types, lint, format, unit and page tests, the committed www/ build, and axe-core on every
-  # screen in every appearance against the demo build. The demo build is kept as an artifact.
+  # The web application: types, lint, format, unit tests and the committed www/ build. The demo build is kept as an
+  # artifact. The browser suite runs beside it, in the next job.
   web:
     name: Web application
-    runs-on: [self-hosted, house]
+    runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
-    timeout-minutes: 45
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: web
@@ -82,8 +81,40 @@ jobs:
           echo "www/ is stale: run 'npm run build:www' in web/ and commit the result"
           git status --porcelain -- ../www
           exit 1
-      # The self-hosted runner keeps ~/.cache between jobs, so the browser downloads once and later installs only check it; the
-      # system libraries come with it (a GitHub cache restore once reported a hit without the headless shell)
+      - name: Build the online demo (recorded runs on the in-browser mock)
+        run: npm run build:demo
+      # Every run keeps the demo as a plain artifact (unzip and serve with any static server). The Pages artifact and
+      # the deployment below are opt-in through the repository variable DEPLOY_DEMO: Pages needs a public repository.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: demo-site
+          path: web/dist-demo
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        if: vars.DEPLOY_DEMO == 'true' && github.ref == 'refs/heads/main'
+        with:
+          path: web/dist-demo
+
+  # The browser suite: the page tests, and axe-core on every screen in every appearance against the demo build. A job
+  # of its own beside the web job: on a hosted runner's four vCPUs Playwright runs two workers, and together with the
+  # web job's other steps the suite would come close to the 45 minutes one job may take (a dry run, 2 November 2026).
+  web-e2e:
+    name: Web application in the browser
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
+    timeout-minutes: 75
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      # The browser and its system libraries are installed fresh in each job (a GitHub cache restore once reported a hit
+      # without the headless shell)
       - name: Install Playwright's Chromium
         run: npx playwright install --with-deps chromium
       # A free port of its own for the demo preview, since runners can share one host
@@ -99,24 +130,12 @@ jobs:
         with:
           name: playwright-report
           path: web/playwright-report
-      - name: Build the online demo (recorded runs on the in-browser mock)
-        run: npm run build:demo
-      # Every run keeps the demo as a plain artifact (unzip and serve with any static server). The Pages artifact and
-      # the deployment below are opt-in through the repository variable DEPLOY_DEMO: Pages needs a public repository.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: demo-site
-          path: web/dist-demo
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        if: vars.DEPLOY_DEMO == 'true' && github.ref == 'refs/heads/main'
-        with:
-          path: web/dist-demo
 
   # The board's recorded runs, offline: each file's key, member, agent class and result shape within the schemas the
   # live agents submit, and a full board set for every scenario.
   fixtures:
     name: Recordings and scenarios
-    runs-on: [self-hosted, house]
+    runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
     timeout-minutes: 5
     steps:
@@ -210,7 +229,7 @@ jobs:
   # approver's routes, the attempts to break the approval boundary, and the production review.
   iris:
     name: IRIS ${{ matrix.shard }} (the downstream system's contract, scenarios in replay)
-    runs-on: [self-hosted, house]
+    runs-on: ubuntu-latest
     # Three shards, each on its own IRIS, so the scenarios run side by side when several runners are free: the board's
     # scenarios and the routes (which need their cases), the site-policy and rules scenarios, and the in-process tests
     # with the boundary and the production review.
@@ -459,14 +478,13 @@ jobs:
   # its commit over as a git bundle; the second holds the write token and runs no package code: it checks the commit
   # touches only the release's files, and the versioned files only in their version, then pushes, tags and releases
   # it. Both work on this push's commit, never a newer one, and when main has moved on the release is left to the run
-  # for the newer push, so nothing is published that its own checks have not passed. The second runs on a fresh
-  # GitHub-hosted runner, not the self-hosted one: the self-hosted runner keeps its home folder and tools between jobs, so package code the
-  # first job ran there could change what the push runs with the write token. It runs only once a version tag exists,
-  # when the repository is public and a GitHub-hosted runner costs no minutes.
+  # for the newer push, so nothing is published that its own checks have not passed. Each runs on a fresh
+  # GitHub-hosted runner, so package code the first job ran cannot change what the second runs with the write token. It
+  # runs only once a version tag exists.
   dependency-release-build:
-    needs: [web, fixtures, iris]
+    needs: [web, web-e2e, fixtures, iris]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, house]
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
       commit: ${{ steps.build.outputs.commit }}
@@ -619,7 +637,7 @@ jobs:
   image:
     name: Image (Dockerfile, iris.script, the IPM module)
     needs: [dependency-release-build, www-after-dependabot-merge]
-    runs-on: [self-hosted, house]
+    runs-on: ubuntu-latest
     if: >-
       ${{ !cancelled()
       && (github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]')
@@ -640,6 +658,10 @@ jobs:
       # the runner out of disk keeping a second copy of the image. The public base has no AI Hub package, so the image
       # gets the core (replay) edition: WITH_AIHUB=0. PEX_STRICT=1 fails the build if the Second Parser can't be built
       # here, so the 2026.2 path stays checked; a judge's build skips it with the reason instead.
+      # A hosted runner starts with about 14 GB free; the IRIS base and the built image need more, so the runner's unused
+      # SDKs go first
+      - name: Free disk space for the image
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
       # The demo users' password is a BuildKit secret (the Dockerfile), never a build argument: this build gives it a random
       # value and the step after the build proves it is in neither the build log nor the image's history, while the users
       # sign in with it (SHUTTER_PASSWORD is what the scenario checker signs in with).
@@ -765,15 +787,15 @@ jobs:
           docker builder prune -af --filter until=2h > /dev/null 2>&1 || true
 
   # Publishes the demo to GitHub Pages. Skipped (not failed) until the repository is public, Pages is enabled
-  # (Settings, Pages, Source: GitHub Actions) and the repository variable DEPLOY_DEMO is 'true'. The four checks are
+  # (Settings, Pages, Source: GitHub Actions) and the repository variable DEPLOY_DEMO is 'true'. The five checks are
   # named in the condition: the release jobs before the image are skipped on most runs, and a skipped job further up
   # would otherwise skip this one too.
   deploy-demo:
     if: >-
-      ${{ !cancelled() && needs.web.result == 'success' && needs.fixtures.result == 'success'
-      && needs.iris.result == 'success' && needs.image.result == 'success'
+      ${{ !cancelled() && needs.web.result == 'success' && needs.web-e2e.result == 'success'
+      && needs.fixtures.result == 'success' && needs.iris.result == 'success' && needs.image.result == 'success'
       && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_DEMO == 'true' }}
-    needs: [web, fixtures, iris, image]
+    needs: [web, web-e2e, fixtures, iris, image]
     runs-on: ubuntu-latest
     permissions:
       contents: read
