@@ -126,6 +126,12 @@ name Shutter's server, port, URL (`/api/shutter/intake`), SSL configuration and 
 `Shutter_Forwarder`. The hospital's HL7 process calls it on a failed delivery with the failed message's header id, the
 receiver's item name, the outcome and the receiver's answer; the class documents the call.
 
+The alert intake needs no change to the hospital's own code. `Shutter.Intake.AlertProcess`, added as the watched
+production's `Ens.Alert` item (the name the engine sends its alerts to), receives every alert an item raises and passes
+it first to `PassTo`, the site's own alert consumer renamed, so Shutter adds to the production's alerting and never
+replaces it. For an alert from one of its `Receivers` whose session holds an HL7 message, it hands that message to the
+forwarder (`docs/CONTRACTS.md`, section 11).
+
 **3.3 The index.** Shutter's exact index (the "HL7 Index" item) is per namespace: in SHUTTER it covers the messages
 Shutter stores, so a case's timeline shows what the intake brought. An index of a watched production's whole feed,
 readable from SHUTTER, is not in this version.

@@ -129,7 +129,7 @@ All 26 scenarios (S1 to S25 without S14, with S23 in three parts), step by step,
 
 ![A case's life, from the failed delivery to verification](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/case-lifecycle.png)
 
-1. **A failed delivery becomes a case.** The feed fails forward (`FailureTimeout` 0), so no later message is stuck behind it. A hospital's own production hands its failures to Shutter through its `Shutter Forwarder`, or through its alerts with `Shutter.Intake.AlertProcess` as its `Ens.Alert` item, which still passes every alert to its own consumer first ([to put Shutter behind your own production](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md)).
+1. **A failed delivery becomes a case.** The feed fails forward (`FailureTimeout` 0), so no later message is stuck behind it. A hospital's own production hands its failures to Shutter through a forwarder or through its alerts ([to put Shutter behind your own production](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md)).
 2. **Evidence, sealed.** One immutable snapshot with a digest: the message, the receiver's state, history, receipt and capabilities, the encounter's other operations and the catalogue match. Before a model sees it, identifiers become per-case tokens (`MRN-T1`), demographics are dropped and note text becomes a flag.
 3. **The board decides.** Each specialist reviews the evidence from its own view; the coordinator's one plan records every specialist it overruled and why.
 4. **The gate checks** identity, conformance, intent, ordering, state transition, effect, authorisation, rehearsal, concurrency, evidence freshness, the receiver's capabilities and the catalogue. An unknown blocks a write as surely as a failed check. Patient merges, and cancels the receiver cannot take, are withheld before any agent runs.
@@ -185,7 +185,7 @@ The idea asks whether Interoperability could do the job of a tracing tool such a
 
    ![One board member's run as an AgentResponse in the Visual Trace: model, mode, tokens, iterations and tool calls](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/trace-agentresponse.png)
 
-4. In the Management Portal's SQL page (namespace `SHUTTER`), run the second query below with that session number: every tool call of the pass, in order, with its duration, whether it was allowed, and the board member that made it.
+4. In the Management Portal's SQL page (namespace `SHUTTER`), run the query below with that session number: every tool call of the pass, in order, with its duration, whether it was allowed, and the board member that made it.
 5. On the case page, **When each agent worked** draws the same rows as a timeline, and the **Settings and costs** page sums them by case.
 
 | A tracing tool records | In Shutter |
@@ -199,21 +199,14 @@ The idea asks whether Interoperability could do the job of a tracing tool such a
 | Spans and timing | Each run's start to the millisecond, its model and tool time, and each tool call's time and duration |
 
 ```sql
--- Agent runs, tokens and cost by board member, model and mode
-SELECT %EXACT(MemberCode) AS Member, %EXACT(Model) AS Model, %EXACT(Mode) AS Mode, COUNT(*) AS Runs,
-       SUM(PromptTokens) AS Prompt, SUM(CompletionTokens) AS Completion, ROUND(SUM(CostUSD), 4) AS CostUSD
-FROM Shutter_Store.AgentRun
-GROUP BY %EXACT(MemberCode), %EXACT(Model), %EXACT(Mode)
-ORDER BY Member, Mode
-```
-
-```sql
 -- One session's tool calls in order, with the board member that made each (? is the session number)
 SELECT t.Seq, %EXACT(t.Name) AS Tool, t.DurationMs, t.Ok, %EXACT(h.TargetConfigName) AS Member
 FROM Shutter_Bridge.ToolCall t JOIN Ens.MessageHeader h ON h.ID = t.RunKey
 WHERE h.SessionId = ?
 ORDER BY h.ID, t.Seq
 ```
+
+Tokens and cost by board member, model and mode, in SQL: [docs/readme/running.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md#agent-runs-by-board-member-in-sql).
 
 ### Building on AI Hub and Interoperability: what worked, what was hard
 
