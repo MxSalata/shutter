@@ -34,6 +34,9 @@ Method OnInit() As %Status
 /// Each call of the adapter: one sweep.
 Method OnProcessInput(pInput As %RegisteredObject, Output pOutput As %RegisteredObject) As %Status
 {
+    // The Doctor's credential checks are kept fresh from here (v1.38): this sweep runs every few seconds as the production's
+    // user, which may write the cache; a request with no roles only reads it. Recomputed only when older than ten minutes.
+    Do ##class(Shutter.Setup).RefreshCredentialCache()
     Set pOutput = ""
     Quit ..Sweep()
 }

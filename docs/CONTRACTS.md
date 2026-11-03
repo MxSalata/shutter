@@ -1721,9 +1721,11 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   60 to 89 s (6.6); the live hospital's rotation drops S11 and takes `SHUTTER_LIVE_SCENARIOS` (4.4); the demo users'
   password reaches the image build as a BuildKit secret, never a build argument, and CI proves it is in neither the build
   log nor the image's history (12, 13); the Doctor tries the stored credentials (DownstreamAPI here, the demo hospital's
-  DownstreamAPI and ShutterIntake) against their users by a login in a background job, never a web request, cached ten
-  minutes (`GET /health?refresh=1` recomputes for an operator), and reports `credentials`, `credentials_ok` and
-  `credentials_checked_at`; the anonymous health report carries `credentials_ok` (12).
+  DownstreamAPI and ShutterIntake) against their users by a login in a background job, never a web request; the
+  production keeps the result cached ten minutes (its start and the Case Releaser's sweep), a request that cannot write the
+  database only reads it (the hardened demo's anonymous health report has no roles), `GET /health?refresh=1` recomputes
+  for an operator who may write, and the Doctor reports `credentials`, `credentials_ok`, `credentials_state` (fresh,
+  refreshed, stale, unchecked) and `credentials_checked_at`; the anonymous health report carries `credentials_ok` (12).
 - v1.37, 2 Nov 2026: whether the live agents can run, `live.agents` in `GET /settings` with reasons `budget` and `provider_auth`,
   the Agent item's `provider_auth` refusal while the provider refuses the key, and `409 live_unavailable` on the board and a
   live question (12), for the demo's notice to visitors; `live.budgetNote` from `SHUTTER_DEMO_BUDGET_USD` and
