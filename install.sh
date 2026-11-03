@@ -101,8 +101,13 @@ else
 fi
 
 # The container's own healthcheck (docker-compose.yml: wget against the health route inside the container), so the host
-# needs neither curl nor wget: healthy, unhealthy, starting, or empty when the container is not there
-healthy() { [ "$(docker compose ps --format '{{.Health}}' shutter 2> /dev/null | head -1)" = healthy ]; }
+# needs neither curl nor wget: healthy, unhealthy, starting, or empty when the container is not there. The status is read
+# from the engine (docker inspect), not from docker compose ps --format, whose Go templates older Compose versions reject.
+shutter_id() { docker compose ps -q shutter 2> /dev/null | head -1 || true; }
+healthy() {
+  id=$(shutter_id)
+  [ -n "$id" ] && [ "$(docker inspect --format '{{.State.Health.Status}}' "$id" 2> /dev/null)" = healthy ]
+}
 
 # 3. Already running?
 port=$(setting SHUTTER_WEB_PORT); port=${port:-52773}
@@ -125,7 +130,8 @@ fi
 # 4. The image: .env's when there is one; else the build of --image-file's name; else a verified build already loaded
 image=""
 with=""
-if [ -f .env ]; then image=$(setting SHUTTER_IMAGE); with=$(setting SHUTTER_WITH_AIHUB); fi
+env_image=""
+if [ -f .env ]; then image=$(setting SHUTTER_IMAGE); with=$(setting SHUTTER_WITH_AIHUB); env_image=$image; fi
 # .env written for the replay edition (by ./install.sh --replay, or by hand): the AI Hub edition must not build on it
 env_replay=""
 if [ "$edition" = aihub ] && [ -f .env ]; then
@@ -211,7 +217,7 @@ if [ -f .env ]; then
     # The mirror of the guard above: after ./install.sh --replay, a plain ./install.sh or --image-file would otherwise
     # build the replay edition again while saying the AI Hub image is loaded
     again="./install.sh"; [ -n "$image_file" ] && again="./install.sh --image-file $image_file"
-    fail ".env is set up for the replay edition (SHUTTER_IMAGE=$image, SHUTTER_WITH_AIHUB=${with:-auto}), and you asked for the AI Hub edition." \
+    fail ".env is set up for the replay edition (SHUTTER_IMAGE=${env_image:-unset}, SHUTTER_WITH_AIHUB=${with:-auto}), and you asked for the AI Hub edition." \
       "If an instance ran before, run docker compose down -v first: it removes that instance's data. Then remove .env (or set SHUTTER_IMAGE=${AIHUB_IMAGE} and SHUTTER_WITH_AIHUB=auto in it) and run $again again."
   else
     ok ".env is there and is kept as it is"
@@ -292,7 +298,8 @@ while :; do
     if command -v curl > /dev/null 2>&1; then echo "Its health report: curl $health_url"; else echo "Its health report: $health_url (open it in a browser)"; fi
     exit 1
   fi
-  state=$(docker compose ps --format '{{.Status}}' shutter 2> /dev/null | head -1)
+  id=$(shutter_id); state=""
+  [ -n "$id" ] && state=$(docker inspect --format '{{.State.Status}}' "$id" 2> /dev/null || true)
   printf '  waiting: %s s, container %s\n' "$(( $(date +%s) - start ))" "${state:-starting}"
   sleep 10
 done
