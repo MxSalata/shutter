@@ -1,11 +1,13 @@
 /// The alert intake (Shutter.Intake.AlertProcess; CONTRACTS 11, v1.35): which alerts it takes, how it reads the failure
-/// from an alert's words, the session's HL7 header, the forward it builds, and the once-per-session mark.
+/// from an alert's words, the session's HL7 header, the forward it builds, and the once-per-session marks: pending while
+/// the forward is out, seen once Shutter took the message.
 Class Shutter.Test.AlertIntake Extends %UnitTest.TestCase
 {
 
 Method OnAfterAllTests() As %Status
 {
-    Kill ^Shutter.AlertIntake("seen", 999999991), ^Shutter.AlertIntake("seen", 999999992)
+    Kill ^Shutter.AlertIntake("seen", 999999991), ^Shutter.AlertIntake("seen", 999999992), ^Shutter.AlertIntake("seen", 999999993)
+    Kill ^Shutter.AlertIntake("pending", 999999993), ^Shutter.AlertIntake("pending", 999999994), ^Shutter.AlertIntake("pending", 999999995)
     Quit $$$OK
 }
 
@@ -92,6 +94,49 @@ Method TestSeenOnce()
     Do $CLASSMETHOD(ap, "MarkSeen", 999999992, "Downstream Out")
     Do $$$AssertEquals($DATA(^Shutter.AlertIntake("seen", 999999990)), 0, "the old entry is gone")
     Do $$$AssertTrue($CLASSMETHOD(ap, "Seen", 999999991) && $CLASSMETHOD(ap, "Seen", 999999992), "the fresh ones stay")
+}
+
+/// A forward Shutter refused leaves the session forwardable: only an answer without Error marks it seen.
+Method TestRefusedForwardIsNotSeen()
+{
+    Set ap = "Shutter.Intake.AlertProcess"
+    Kill ^Shutter.AlertIntake("seen", 999999993), ^Shutter.AlertIntake("pending", 999999993)
+    Do $CLASSMETHOD(ap, "MarkPending", 999999993, "Downstream Out")
+    Do $$$AssertTrue($CLASSMETHOD(ap, "Pending", 999999993), "pending while the forward is out")
+    Do $$$AssertNotTrue($CLASSMETHOD(ap, "Seen", 999999993), "but not seen before Shutter answers")
+    Set refused = ##class(Shutter.Intake.Forwarded).%New()
+    Set refused.Error = "No answer from Shutter at /api/shutter/intake: HTTP 503"
+    Do $$$AssertNotTrue($CLASSMETHOD(ap, "ForwardAnswered", 999999993, refused), "a refusal: Shutter did not take the message")
+    Do $$$AssertNotTrue($CLASSMETHOD(ap, "Seen", 999999993), "a refused forward does not mark the session seen")
+    Do $$$AssertNotTrue($CLASSMETHOD(ap, "Pending", 999999993), "and the pending mark is gone, so the next alert forwards again")
+    // The forwarder failed the forward outright (OnError): the same.
+    Do $CLASSMETHOD(ap, "MarkPending", 999999993, "Downstream Out")
+    Do $$$AssertNotTrue($CLASSMETHOD(ap, "ForwardAnswered", 999999993, ""), "no answer at all: not taken")
+    Do $$$AssertNotTrue($CLASSMETHOD(ap, "Seen", 999999993) || $CLASSMETHOD(ap, "Pending", 999999993), "neither seen nor pending")
+    // Shutter took the message: seen, with the item the pending mark recorded.
+    Do $CLASSMETHOD(ap, "MarkPending", 999999993, "Downstream Out")
+    Set taken = ##class(Shutter.Intake.Forwarded).%New()
+    Set taken.CaseId = "CASE-1", taken.State = "sealed"
+    Do $$$AssertTrue($CLASSMETHOD(ap, "ForwardAnswered", 999999993, taken), "an answer without Error: taken")
+    Do $$$AssertTrue($CLASSMETHOD(ap, "Seen", 999999993), "the session is seen once Shutter took the message")
+    Do $$$AssertNotTrue($CLASSMETHOD(ap, "Pending", 999999993), "and no longer pending")
+    Do $$$AssertEquals($LISTGET(^Shutter.AlertIntake("seen", 999999993), 1), "Downstream Out", "with the item")
+}
+
+/// A pending mark no answer clears lapses after ten minutes, and the next mark drops it.
+Method TestPendingLapses()
+{
+    Set ap = "Shutter.Intake.AlertProcess"
+    Kill ^Shutter.AlertIntake("pending", 999999994), ^Shutter.AlertIntake("pending", 999999995)
+    Set now = ##class(Shutter.Util.Time).EpochSeconds()
+    Set ^Shutter.AlertIntake("pending", 999999994) = $LISTBUILD("Downstream Out", now - 601)
+    Do $$$AssertNotTrue($CLASSMETHOD(ap, "Pending", 999999994), "a mark older than ten minutes no longer holds the session")
+    Set ^Shutter.AlertIntake("pending", 999999994) = $LISTBUILD("Downstream Out", now - 599)
+    Do $$$AssertTrue($CLASSMETHOD(ap, "Pending", 999999994), "a younger one does")
+    Set ^Shutter.AlertIntake("pending", 999999994) = $LISTBUILD("Downstream Out", now - 601)
+    Do $CLASSMETHOD(ap, "MarkPending", 999999995, "Downstream Out")
+    Do $$$AssertEquals($DATA(^Shutter.AlertIntake("pending", 999999994)), 0, "the lapsed entry is dropped by the next mark")
+    Do $$$AssertTrue($CLASSMETHOD(ap, "Pending", 999999995), "the fresh one stays")
 }
 
 }
