@@ -767,7 +767,7 @@ A new check, `catalogue`, with these reason codes (in `knowledge/block-reasons.j
 - `OUTCOME_NOT_ALLOWED`: the chosen alternative's `when` does not hold for this site (block);
 - `NEW_PATTERN`: no entry matches (block; the case escalates as a candidate entry);
 - `POLICY_REQUIRES_APPROVAL`: an automatic release where the profile requires an approval (block; an internal guard).
-The plan's `catalogue_entry` and `outcome` are bound by the approval's digest like every other field of the plan. The incident plan's digest binds each item's catalogue entry and outcome the same way (7.2).
+The plan's `catalogue_entry` and `outcome` are bound by the approval's digest like every other field of the plan. The incident plan's digest binds each item's catalogue entry and outcome the same way (7.2). A receiver the site profile does not describe gets no write (v1.39): when the case names a receiver and the profile has no entry for it, the proposal gate blocks with `RECEIVER_NOT_IN_PROFILE` before any rehearsal, since the connector would otherwise send the write to the production's default receiver; the evidence was read at the default API, and the note says so; the block reason is in `knowledge/block-reasons.json`.
 
 Two `intent` checks for withheld cases (v1.14, policy version 2026-10-19.3), appended for every plan on a case of kind `withheld` as `UNMAPPABLE` is, and as guards on any write of a merge or a cancel: `MERGE_WITHHELD` (the case's event is `merge` and the site profile does not allow merges, or the receiver does not take them) and `CANCEL_UNSUPPORTED` (a `cancel_*` event to a receiver whose entry says `cancels: false`). The identity check answers `NO_ENCOUNTER` (pass) for a case whose encounter piece is `-`, and the state-transition and concurrency checks answer `PATIENT_LEVEL_WRITE` (block) for a write on such a case: there is no encounter state or version to check, so a person decides, and nothing is retried.
 
@@ -1743,6 +1743,8 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   API service could not take leaves no queued record behind (4).
   An impossible date reads as no time on every path (the time rules); the receiver's demo controls (faults, reset, the
   capability switch) take the new resource `Downstream_Admin`, granted to no role of Shutter's (1.5, 1.7, 1.8).
+  A receiver the site profile does not describe is blocked at the proposal gate, `RECEIVER_NOT_IN_PROFILE`, instead of
+  being written at the default receiver (6.5).
 - v1.38, 2 and 3 Nov 2026 (the demo rehearsal's storm, whose cases all convened boards): a watched production's failures run in the
   site's watched mode, policy by default, whatever mode the scenarios run in (6.3, 11); a case the alert intake opened
   takes the production's own report of the failure when it arrives before the evidence is collected, so the catalogue
