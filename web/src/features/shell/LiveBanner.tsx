@@ -1,14 +1,14 @@
-import { Group, Stack, Text, Tooltip } from '@mantine/core';
+import { Anchor, Group, Stack, Text, Tooltip } from '@mantine/core';
 import { IconBroadcast } from '@tabler/icons-react';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router';
 import { useCan, useLiveStatus, useSettings } from '@/api/hooks';
 import type { LiveStatus } from '@/api/types';
-import { TRIAL } from '@/env/mode';
+import { TRIAL, trialHref } from '@/env/mode';
 import type { StormRefusal } from '@/features/storm/view';
 import { budgetNoteLine } from '@/lib/budget';
 import { formatAge, formatTime, parseTime, zoneLabel } from '@/lib/format';
-import { HOSPITAL_NAME } from '@/lib/hospital';
+import { HOSPITAL_NAME, TRIAL_BOARD_CASE } from '@/lib/hospital';
 import { liveUnavailable } from '@/lib/liveAgents';
 import { isStormShown, STORM_IN_TRIAL } from '@/lib/storm';
 import { useNow } from '@/lib/useNow';
@@ -131,6 +131,15 @@ export function LiveBanner() {
             {note ? (
               <Text size="xs" className="live-budget-line" data-testid="live-budget-line">
                 {note}
+              </Text>
+            ) : null}
+            {!TRIAL && !can.liveAgents ? (
+              // The live hospital's own stories are settled by the site's policy, with no board; a visitor without the
+              // live agents sees the board decide in the trial's recording of S8, at no cost
+              <Text size="xs" data-testid="live-board-link">
+                <Anchor href={trialHref(`#/cases/${TRIAL_BOARD_CASE}`)} size="xs">
+                  See the board decide: S8 in the trial
+                </Anchor>
               </Text>
             ) : null}
           </Stack>
