@@ -50,8 +50,10 @@ export default function LoginPage() {
     );
   };
   const error = signIn.error;
+  // POST /session answers 401 for a wrong password (CONTRACTS 5.1). A 403 comes from outside the API (the web
+  // application's own roles, a gateway), so its reason is shown as the server gave it.
   const message =
-    error && isApiError(error) && (error.isUnauthorized || error.isForbidden)
+    error && isApiError(error) && error.isUnauthorized
       ? 'The user name or the password is wrong.'
       : error
         ? describeError(error)

@@ -5,6 +5,7 @@ import { call, livePass, replayedPass, run } from '@/test/runs';
 import {
   clockLabel,
   clockSentence,
+  investigationRuns,
   offsetSeconds,
   partSeconds,
   passClock,
@@ -208,6 +209,17 @@ describe("the run's own clock", () => {
     const counted = livePass();
     counted[2] = { ...counted[2], toolCalls: [], toolCallCount: 6 };
     expect(passClock(counted)!.rows.every((r) => r.marks.length === 0)).toBe(true);
+  });
+
+  it("keeps the investigation's runs and leaves a question's out, whatever their roles", () => {
+    const asked = [
+      run({ id: 'q1', role: 'coordinator', memberCode: 'coordinator', questionId: 'Q-000001' }),
+      run({ id: 'q2', role: 'explain', memberCode: 'explain', questionId: 'Q-000001' }),
+    ];
+    const pass = livePass();
+    expect(investigationRuns([...pass, ...asked]).map((r) => r.id)).toEqual(pass.map((r) => r.id));
+    expect(investigationRuns(pass.map((r) => ({ ...r, questionId: null })))).toHaveLength(pass.length);
+    expect(investigationRuns(undefined)).toEqual([]);
   });
 
   it("reads the latest pass: the last coordinator's snapshot, the last run of each specialist, Ask's runs left out", () => {

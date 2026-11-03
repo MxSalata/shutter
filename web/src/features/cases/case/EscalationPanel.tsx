@@ -42,6 +42,7 @@ import { describeError, isApiError } from '@/lib/errors';
 import { addressesProblem, closeNeedsApprover, controlProblem } from '../../site-profile/profile';
 import { formatZoned, humanize } from '@/lib/format';
 import { ConfirmModal } from '@/components/ConfirmModal';
+import { closableByHand } from './caseAction';
 import { receiverNoun, receiverTeam } from './receiver';
 import { Section } from './Section';
 
@@ -286,11 +287,8 @@ export function EscalationPanel({
   const escalations = list.data ?? [];
   if (!stopped && !(handled && escalations.length)) return null;
   const pending = escalations.find((e) => e.state === 'draft' || e.state === 'failed');
-  const latest = escalations.reduce<Escalation | undefined>(
-    (a, e) => (!a || e.seq > a.seq ? e : a),
-    undefined,
-  );
-  const closable = stopped && (c.failureKind === 'withheld' || latest?.state === 'sent');
+  // The same rule as the action button at the top, so the button it names is here when it is pressed
+  const closable = stopped && closableByHand(c, escalations);
   // Closing needs the operator resource first, as the server checks it; then the site's two-person rule: an operator
   // without the approver role closes only where the profile allows it, and the server decides when the profile could
   // not be read

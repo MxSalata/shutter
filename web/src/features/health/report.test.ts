@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   agentsBadge,
   budgetLine,
+  credentialChecks,
   groupReport,
   licenceSentence,
   provenanceFacts,
@@ -44,6 +45,27 @@ const RECORDED: Report = {
 
 const without = (r: Report, ...keys: string[]): Report =>
   Object.fromEntries(Object.entries(r).filter(([k]) => !keys.includes(k)));
+
+/** The stored credentials the Doctor tried (v1.38): one that signs in and one that no longer does. */
+const CREDENTIALS = [
+  {
+    namespace: 'SHUTTER',
+    name: 'DownstreamAPI',
+    user: 'downstream-api',
+    status: 'refused',
+    detail:
+      'downstream-api does not sign in with the stored password (ERROR #798): the credential and the user disagree',
+    ok: false,
+  },
+  {
+    namespace: 'HOSPITAL',
+    name: 'ShutterIntake',
+    user: 'forwarder',
+    status: 'ok',
+    detail: 'forwarder signs in with the stored password',
+    ok: true,
+  },
+];
 
 const RECORDED_ON = {
   image: 'irishealth-community:2026.3.0AI.154.0',
@@ -91,6 +113,30 @@ describe('the verdict', () => {
     expect(verdictStatement(none, false)).toBe(
       'Checks not reported: this report has none of the core checks.',
     );
+  });
+
+  it('is Not ready when a stored credential no longer signs in, saying what to do and where to refresh', () => {
+    const v = verdictOf({
+      ...RECORDED,
+      credentials_ok: false,
+      credentials_state: 'fresh',
+      credentials_checked_at: '2026-11-03T10:00:00Z',
+      credentials: [CREDENTIALS[0]],
+    });
+    expect(v).toMatchObject({ kind: 'not-ready', tone: 'blocking', word: 'Not ready', passed: 7 });
+    expect(v.failing.map((f) => f.label)).toEqual(['Stored credentials sign in']);
+    expect(v.failing[0].group).toBe('credentials');
+    expect(v.failing[0].todo).toContain('run the install again');
+    expect(v.failing[0].todo).toContain('GET /health?refresh=1');
+    expect(verdictStatement(v, false)).toBe('Not ready: 1 core check fails.');
+    expect(verdictOf({ ...RECORDED, credentials_ok: true, credentials: [CREDENTIALS[1]] })).toMatchObject({
+      kind: 'ready',
+      passed: 8,
+    });
+    // The trial's recording predates the credential checks and sends none of their keys: the check is not counted,
+    // not even as "not reported"; a report that sends the key as null is one that left it out
+    expect(verdictOf(RECORDED)).toMatchObject({ kind: 'ready', passed: 7, notSent: 0 });
+    expect(verdictOf({ ...RECORDED, credentials_ok: null })).toMatchObject({ passed: 7, notSent: 1 });
   });
 
   it('counts a production that is not running as a failure, not as a pass', () => {
@@ -165,6 +211,111 @@ describe('the groups', () => {
     expect(groupReport(RECORDED, false).groups.some((g) => g.def.title === 'Other')).toBe(false);
   });
 
+  it('puts the install items and the edition in Production, and the stored credentials in their own group', () => {
+    const { groups } = groupReport(
+      {
+        ...RECORDED,
+        edition: 'core',
+        missing_items: [],
+        disabled_items: [],
+        credentials_ok: true,
+        credentials_state: 'fresh',
+        credentials_checked_at: '2026-11-03T10:00:00Z',
+        credentials: [CREDENTIALS[1]],
+      },
+      false,
+    );
+    expect(groups.map((g) => g.def.title)).toEqual([
+      'Production',
+      'Web applications',
+      'Stored credentials',
+      'Agents and AI Hub',
+      'Cases and housekeeping',
+      'Installation and licence',
+    ]);
+    const production = groups[0];
+    expect(production.rows.map((r) => r.key).slice(-3)).toEqual([
+      'edition',
+      'missing_items',
+      'disabled_items',
+    ]);
+    expect(production.rows.map((r) => r.label).slice(-3)).toEqual([
+      'Edition',
+      'Missing items',
+      'Disabled items',
+    ]);
+    // Nothing missing and nothing disabled is a value with no mark, not a gap
+    expect(production.rows.find((r) => r.key === 'missing_items')!.info).toEqual({
+      mark: 'none',
+      tone: null,
+      missing: false,
+    });
+    expect(production.status).toEqual({ tone: 'positive', label: '4 of 4 pass' });
+    expect(production.edge).toBeNull();
+    const credentials = groups[2];
+    expect(credentials.rows.map((r) => r.key)).toEqual([
+      'credentials_ok',
+      'credentials_state',
+      'credentials_checked_at',
+      'credentials',
+    ]);
+    expect(credentials.rows[0].label).toBe('Stored credentials sign in');
+    expect(credentials.rows[0].info).toMatchObject({ mark: 'check', tone: 'positive' });
+    expect(credentials.rows[3].info).toMatchObject({ mark: 'check', tone: 'positive' });
+    expect(credentials.status).toEqual({ tone: 'positive', label: '1 of 1 pass' });
+    expect(credentials.edge).toBeNull();
+  });
+
+  it('marks an item missing from the production and a broken edition as blocking, with the group edged and counted', () => {
+    const missing = groupReport(
+      { ...RECORDED, missing_items: ['Scenario Player'], disabled_items: [], edition: 'core' },
+      false,
+    ).groups[0];
+    const row = missing.rows.find((r) => r.key === 'missing_items')!;
+    expect(row.info).toEqual({
+      mark: 'x',
+      tone: 'blocking',
+      missing: false,
+      todo: 'Run the install again: these items are missing from the production.',
+    });
+    expect(missing.edge).toBe('blocking');
+    expect(missing.status).toEqual({ tone: 'blocking', label: '4 of 4 pass, 1 to fix' });
+    const broken = groupReport(
+      { ...RECORDED, edition: 'broken: the aihub module is loaded on an image without AI Hub' },
+      false,
+    ).groups[0];
+    expect(broken.rows.find((r) => r.key === 'edition')!.info).toMatchObject({ mark: 'x', tone: 'blocking' });
+    expect(broken.edge).toBe('blocking');
+    // A disabled item is a row to look at, except the Second Parser, which the report leaves out when its jar is absent
+    const disabled = groupReport({ ...RECORDED, disabled_items: ['Case Releaser'] }, false).groups[0];
+    expect(disabled.rows.find((r) => r.key === 'disabled_items')!.info).toMatchObject({
+      mark: 'dash',
+      tone: 'attention',
+      todo: 'Enable these items in the production, or run the install again.',
+    });
+    expect(disabled.edge).toBe('attention');
+    expect(disabled.status).toEqual({ tone: 'positive', label: '4 of 4 pass' });
+    // A failing core check keeps the plain count: the group is blocking already
+    const both = groupReport({ ...RECORDED, production_class: false, missing_items: ['Gate'] }, false)
+      .groups[0];
+    expect(both.status).toEqual({ tone: 'blocking', label: '3 of 4 pass' });
+  });
+
+  it('counts a credential that no longer signs in against the group and marks its list blocking', () => {
+    const { groups } = groupReport(
+      { ...RECORDED, credentials_ok: false, credentials_state: 'stale', credentials: CREDENTIALS },
+      false,
+    );
+    const credentials = groups.find((g) => g.def.id === 'credentials')!;
+    expect(credentials.status).toEqual({ tone: 'blocking', label: '0 of 1 pass' });
+    expect(credentials.edge).toBe('blocking');
+    expect(credentials.rows.find((r) => r.key === 'credentials')!.info).toMatchObject({
+      mark: 'x',
+      tone: 'blocking',
+    });
+    expect(credentials.checks.map((c) => c.key)).toEqual(['credentials_ok']);
+  });
+
   it("shows the running production when it is not Shutter's own", () => {
     const { groups } = groupReport({ ...RECORDED, production: 'Site.Production' }, false);
     const rows = groups[0].rows;
@@ -235,6 +386,15 @@ describe('the row rule', () => {
     expect(live.reason).toMatchObject({ chip: 'No message purge task', tone: 'attention' });
     expect(info('purge_task', false, true).reason?.chip).toBe('Not on the recorded instance');
     expect(info('purge_task', true, false)).toMatchObject({ mark: 'check', tone: 'positive' });
+  });
+
+  it('reads the credential checks as records, with the fields the report left out empty', () => {
+    expect(credentialChecks(CREDENTIALS)).toEqual(CREDENTIALS);
+    expect(credentialChecks([{ name: 'DownstreamAPI', ok: 1 }])).toEqual([
+      { namespace: '', name: 'DownstreamAPI', user: '', status: '', detail: '', ok: false },
+    ]);
+    expect(credentialChecks('not a list')).toEqual([]);
+    expect(info('credentials', [])).toEqual({ mark: 'none', tone: null, missing: false });
   });
 
   it('says a value the report did not send is attention, and gives names, paths and numbers no mark', () => {

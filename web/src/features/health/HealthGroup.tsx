@@ -13,6 +13,7 @@ import { toneText, type Tone } from '@/lib/tone';
 import { useDetail } from '@/stores/appearance';
 import {
   budgetLine,
+  credentialChecks,
   isLong,
   licenceSentence,
   objectLines,
@@ -60,7 +61,8 @@ function DefaultBoardValue() {
 
 /**
  * A report value: true and false as Yes and No, nothing as "Not reported", a time as a time, the licence as its
- * sentence, a name, path or code in a chip, a number as a number, and any other object as its fields in words.
+ * sentence, the stored credentials tried as one line per check (the one that does not sign in in the blocking tone),
+ * a name, path or code in a chip, a number as a number, and any other object as its fields in words.
  */
 function ValueView({ row, report }: { row: Row; report: Report }) {
   const { key, value, info } = row;
@@ -85,6 +87,23 @@ function ValueView({ row, report }: { row: Row; report: Report }) {
     const line = budgetLine(value, report);
     if (line) return <Text size="sm">{line}</Text>;
   }
+  if (key === 'credentials' && Array.isArray(value)) {
+    if (!value.length) return <Text size="sm">None checked yet</Text>;
+    return (
+      <Stack gap={2}>
+        {credentialChecks(value).map((c, i) => (
+          <Text key={i} size="sm" c={c.ok ? undefined : toneText('blocking')} fw={c.ok ? undefined : 500}>
+            {`${c.namespace} ${c.name}: ${c.status}`}
+            {c.detail ? (
+              <Text component="span" size="sm" c="dimmed">
+                {` ${c.detail}`}
+              </Text>
+            ) : null}
+          </Text>
+        ))}
+      </Stack>
+    );
+  }
   if (Array.isArray(value)) {
     if (!value.length) return <Text size="sm">None</Text>;
     return (
@@ -107,7 +126,8 @@ function ValueView({ row, report }: { row: Row; report: Report }) {
     );
   const text = String(value);
   // A state word or a phrase in the text font; a name, a path or a code in a chip
-  if (key === 'production_state' || /\s/.test(text)) return <Text size="sm">{text}</Text>;
+  if (key === 'production_state' || key === 'credentials_state' || /\s/.test(text))
+    return <Text size="sm">{text}</Text>;
   return <CodeChip>{text}</CodeChip>;
 }
 

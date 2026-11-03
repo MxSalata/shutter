@@ -110,14 +110,16 @@ export function ScenariosHero() {
  * reason; ScenariosPage.test checks each claim against fixtures/scenarios.json). The catalogue entry S8's coordinator
  * cites is read from the plan of its latest board case, and left unsaid until there is one.
  */
-const FIRST: {
+interface Featured {
   id: string;
   mode: Mode;
   title: string;
   see: (entry?: string) => string;
   /** The rest, behind "More about <id>", where the short text leaves something out. */
   more?: string;
-}[] = [
+}
+
+const FIRST: Featured[] = [
   {
     id: 'S2',
     mode: 'board',
@@ -142,6 +144,39 @@ const FIRST: {
   },
 ];
 
+/**
+ * The public demo's three: its hospital plays its rotation by itself, in Site policy mode (S8 is out of it and S20 never
+ * in it), so the cards are three of the rotation's stories, in the mode they are played in: a recovery the written
+ * policy holds for a person, a case that waits on another patient's case, and a write the gate withholds. A card shows
+ * the scenario's latest case in that mode, else its latest case in any mode under that case's own mode, and is left out
+ * while the scenario has no case at all: there is no Run to offer instead.
+ */
+const DEMO_FIRST: Featured[] = [
+  {
+    id: 'S2',
+    mode: 'policy',
+    title: 'A failed transfer recovered',
+    see: (entry) =>
+      `A transfer that never arrived${entry ? ` (catalogue entry ${entry})` : ''}: the site's written policy holds the one conditional resend for a person. Approve it, and the receiver's own history verifies the effect.`,
+  },
+  {
+    id: 'S23a',
+    mode: 'policy',
+    title: 'One case waits for another',
+    see: () =>
+      "The receiver refuses the transfer: the bed is held by a patient whose own transfer out failed a moment before. Shutter reads who holds the bed, as a token, and once that patient's case frees it, this one is resent into the bed.",
+    more: "The receiver answers 409 bed_occupied. Shutter reads the occupant as a token, never the other patient's identifiers, and finds them leaving in another case; this case waits for that one, and when its resend lands, this transfer is released and resent into the freed bed, then verified from the receiver's history.",
+  },
+  {
+    id: 'S15',
+    mode: 'policy',
+    title: 'The gate withholds a write',
+    see: () =>
+      'A patient merge is never sent by default: the gate blocks every plan, no board is convened, and the case goes to the PAS team, whose email Shutter drafts.',
+    more: "The PAS merges an older record into the admitted patient (ADT^A40). A merge changes which record a patient's history belongs to, so the gate withholds it (MERGE_WITHHELD) and Escalate drafts the email to the team the site profile names for merges from the PAS; nothing is written.",
+  },
+];
+
 /** What you will see, with the catalogue entry the case's plan cites when the card has a case in its mode. */
 function SeeWithEntry({ caseId, see }: { caseId: string; see: (entry?: string) => string }) {
   const plan = usePlan(caseId, false).data;
@@ -154,7 +189,7 @@ export function TryFirst({
   why,
   starting,
   onRun,
-  runnable = true,
+  demo = false,
 }: {
   /** The scenarios, once read; the section and its heading render before that, as the guide's first target. */
   scenarios: Scenario[] | undefined;
@@ -163,13 +198,32 @@ export function TryFirst({
   why: (s: Scenario, mode: Mode) => string;
   starting: (s: Scenario, mode: Mode) => boolean;
   onRun: (s: Scenario, mode: Mode) => void;
-  /** False where the user may not run scenarios (the public demo): the cards stay, their Run buttons do not. */
-  runnable?: boolean;
+  /**
+   * True on the public demo, whose user may not run scenarios: the cards are the demo's three (DEMO_FIRST), each with
+   * the case it has, and no Run buttons.
+   */
+  demo?: boolean;
 }) {
   const cases = useCases({ limit: 100 }).data?.items ?? [];
-  const first = FIRST.map((f) => ({ ...f, s: scenarios?.find((s) => s.id === f.id) })).filter(
-    (f): f is (typeof FIRST)[number] & { s: Scenario } => !!f.s,
-  );
+  const list = demo ? DEMO_FIRST : FIRST;
+  const first = list
+    .map((f) => ({ ...f, s: scenarios?.find((s) => s.id === f.id) }))
+    .filter((f): f is Featured & { s: Scenario } => !!f.s)
+    .flatMap((f) => {
+      const inMode = caseOf(cases, f.s.id, f.mode);
+      if (!demo)
+        return [
+          {
+            ...f,
+            inMode,
+            latest: inMode ?? (f.s.latestCase ? { ...f.s.latestCase, mode: undefined } : undefined),
+          },
+        ];
+      // The demo: the case in the mode, else the latest in any mode as the card's own; none, no card
+      const found = inMode ?? caseOf(cases, f.s.id);
+      return found ? [{ ...f, mode: found.mode, inMode: found, latest: found }] : [];
+    });
+  const ids = list.map((f) => f.id).join(', ');
   return (
     <section aria-labelledby="try-first-title" data-tour="scenarios">
       <Group gap="xs" align="baseline" mb="sm" wrap="wrap">
@@ -177,7 +231,9 @@ export function TryFirst({
           Try these three first
         </Title>
         <Text size="md" c="dimmed">
-          Each one in the mode that shows what it is for.
+          {demo
+            ? "The demo's hospital plays these by itself, in Site policy mode."
+            : 'Each one in the mode that shows what it is for.'}
         </Text>
       </Group>
       {!scenarios ? (
@@ -195,13 +251,13 @@ export function TryFirst({
         )
       ) : !first.length ? (
         <Text size="sm" c="dimmed">
-          None of {FIRST.map((f) => f.id).join(', ')} is among this install&apos;s scenarios.
+          {demo
+            ? `None of ${ids} has a case among the newest yet: the demo's hospital plays one every few minutes.`
+            : `None of ${ids} is among this install's scenarios.`}
         </Text>
       ) : (
         <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
-          {first.map(({ s, mode, title, see, more }) => {
-            const inMode = caseOf(cases, s.id, mode);
-            const latest = inMode ?? (s.latestCase ? { ...s.latestCase, mode: undefined } : undefined);
+          {first.map(({ s, mode, title, see, more, inMode, latest }) => {
             const reason = why(s, mode);
             const modeName = MODE_NAMES[mode];
             return (
@@ -234,7 +290,7 @@ export function TryFirst({
                   </Stack>
                   {/* The action row sits at the card's foot, so the three Run buttons line up */}
                   <Stack gap="xs" mt="auto" align="flex-start">
-                    {runnable ? (
+                    {demo ? null : (
                       <Tooltip label={reason || `Play ${s.id} in ${modeName} mode`} multiline maw={260}>
                         <span>
                           <Button
@@ -250,6 +306,11 @@ export function TryFirst({
                           </Button>
                         </span>
                       </Tooltip>
+                    )}
+                    {!demo && reason ? (
+                      <Text size="xs" c="dimmed">
+                        {reason}
+                      </Text>
                     ) : null}
                     {latest ? (
                       <Group gap={8} wrap="wrap">

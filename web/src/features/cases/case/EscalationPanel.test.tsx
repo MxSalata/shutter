@@ -195,6 +195,42 @@ describe('EscalationPanel', () => {
     ).toBeInTheDocument();
   });
 
+  it('offers the closing after a sent email whatever was drafted since, as the action button says', async () => {
+    const sentOne: Escalation = {
+      caseId: 'C-000008',
+      seq: 1,
+      state: 'sent',
+      teamName: 'Integration team',
+      to: 'integration@example.nhs.uk',
+      subject: 'Correct encounter by hand',
+      body: 'Please correct the encounter by hand.',
+      bodyDigest: 'sha256:abc123',
+    };
+    const draftAfter: Escalation = { ...sentOne, seq: 2, state: 'draft', bodyDigest: 'sha256:def456' };
+    server.use(
+      http.get('/api/shutter/cases/:id/escalations', () => HttpResponse.json([sentOne, draftAfter])),
+    );
+    renderCase('C-000008');
+    const panel = await screen.findByRole('region', { name: 'Escalations' });
+    expect(
+      await within(panel).findByRole('button', { name: /Mark as handled by the team/ }),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId('case-action')).toHaveAccessibleName('Needs you: mark as handled'),
+    );
+  });
+
+  it('names the closing at the top of a withheld case, where the panel offers it at once', async () => {
+    renderCase('C-000012');
+    const panel = await screen.findByRole('region', { name: 'Escalations' });
+    expect(
+      await within(panel).findByRole('button', { name: /Mark as handled by the team/ }),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId('case-action')).toHaveAccessibleName('Needs you: mark as handled'),
+    );
+  });
+
   it("keeps the closing from an operator where the site's two-person rule needs an approver", async () => {
     const view = recordedSiteProfile()!;
     view.profile.approvers = { ...view.profile.approvers, close_needs_approver: true };

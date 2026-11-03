@@ -41,7 +41,7 @@ import {
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router';
 import { api, newIdempotencyKey, seg } from '@/api/client';
-import { keys } from '@/api/hooks';
+import { keys, useCan } from '@/api/hooks';
 import type { CaseDetail, PlanView } from '@/api/types';
 import { TechDetail } from '@/components/TechDetail';
 import { ENV } from '@/env/mode';
@@ -50,9 +50,10 @@ import { HOSPITAL_NAME } from '@/lib/hospital';
 import { guideCard, guideTarget, useGuideDock } from '@/lib/guideDock';
 import { useLeaveTrial } from '@/trial/leave';
 import { onRoute, positionOf, stepsIn, welcomeDue, type GuidePosition } from './controller';
-import { usePlace } from './places';
+import { resolvePlace, usePlace } from './places';
 import {
   CHAPTERS,
+  SCOPE_FINISH,
   SCOPE_LABELS,
   SCOPE_OVERLINE,
   SCOPES,
@@ -146,7 +147,7 @@ function Welcome({ initial }: { initial: GuideScope }) {
       </Text>
       <Text fz={15}>
         {HOSPITAL_NAME}: a demo hospital with made-up patients, recorded. Approve, run, save or escalate: each
-        replays the recording, and nothing leaves this browser.
+        replays the recording, and nothing leaves this browser. A reload starts the recording afresh.
       </Text>
       <Radio.Group value={scope} onChange={(v) => setScope(v as GuideScope)} label="Choose a tour">
         <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm" mt="xs">
@@ -753,15 +754,25 @@ function Chapters() {
   );
 }
 
-/** The finish card, in place of the last step's card: what the tour showed, and what to do next. */
+/**
+ * The finish card, in place of the last step's card: what the route showed, and what to do next. A reader who may run
+ * scenarios is pointed at Run S20; one who may not (the public demo and judge roles) is taken to S20's newest rules
+ * case instead, where the gate stopped the fix.
+ */
 function Finish() {
   const navigate = useNavigate();
   const exit = useGuide((s) => s.exit);
   const openChapters = useGuide((s) => s.openChapters);
   const point = useGuide((s) => s.point);
   const ask = useLeaveTrial((s) => s.ask);
+  const can = useCan();
   const titleRef = useRef<HTMLHeadingElement | null>(null);
   const scope = useGuide((s) => s.progress.scope);
+  const seeS20 = () =>
+    resolvePlace({ scenario: 'S20', mode: 'rules' })
+      .then((to) => navigate('path' in to ? to.path : '/scenarios'))
+      .catch(() => navigate('/scenarios'))
+      .finally(exit);
   const [host] = useState(() => {
     const d = document.createElement('div');
     d.className = 'guide-host';
@@ -799,21 +810,29 @@ function Finish() {
         <Title order={2} fz={22} tabIndex={-1} ref={titleRef} className="guide-title">
           That is the tour.
         </Title>
-        <Text fz={18}>
-          You saw a transfer delivered and verified, a fix held back for a person, and the gate stopping one.
-        </Text>
+        <Text fz={18}>{SCOPE_FINISH[scope]}</Text>
         <Group gap="sm" wrap="wrap" align="center">
-          <GuideButton
-            color="grape"
-            leftSection={<IconPlayerPlay size={16} aria-hidden />}
-            onClick={() => {
-              navigate('/scenarios');
-              point('run-S20');
-            }}
-          >
-            Run S20 yourself
-          </GuideButton>
-          <Text size="sm">Watch the gate stop a fix.</Text>
+          {can.scenarios ? (
+            <GuideButton
+              color="grape"
+              leftSection={<IconPlayerPlay size={16} aria-hidden />}
+              onClick={() => {
+                navigate('/scenarios');
+                point('run-S20');
+              }}
+            >
+              Run S20 yourself
+            </GuideButton>
+          ) : (
+            <GuideButton
+              color="grape"
+              leftSection={<IconArrowRight size={16} aria-hidden />}
+              onClick={seeS20}
+            >
+              See the gate stop a fix
+            </GuideButton>
+          )}
+          <Text size="sm">{can.scenarios ? 'Watch the gate stop a fix.' : 'S20, as the rules ran it.'}</Text>
         </Group>
         <Group gap="sm" wrap="wrap">
           <GuideButton variant="default" onClick={exit}>

@@ -1,3 +1,5 @@
+import { readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { GLOSSARY } from './glossary';
 
@@ -15,6 +17,14 @@ describe('the glossary', () => {
       .map(([k]) => k)
       .sort();
     expect(standard).toEqual(['adt', 'hl7', 'hl7-transfer', 'msh-7', 'pas']);
+  });
+
+  it("names the catalogue's range as knowledge/catalogue has it", () => {
+    // The tests run from web/, beside the catalogue's folder
+    const entries = readdirSync(resolve(process.cwd(), '../knowledge/catalogue')).filter((f) =>
+      /^E\d+\.md$/.test(f),
+    );
+    expect(GLOSSARY['catalogue-entry'].term).toBe(`Catalogue entry (E1 to E${entries.length})`);
   });
 
   it('calls the board agents, on IRIS AI Hub', () => {

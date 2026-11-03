@@ -38,12 +38,20 @@ export const GROUPS: readonly GroupDef[] = [
       'production',
       'adt_in',
       'mode',
+      'edition',
+      'missing_items',
+      'disabled_items',
     ],
   },
   {
     id: 'web-applications',
     title: 'Web applications',
     keys: ['api_webapp', 'ui_webapp', 'wards_webapp', 'webapps_checked'],
+  },
+  {
+    id: 'credentials',
+    title: 'Stored credentials',
+    keys: ['credentials_ok', 'credentials_state', 'credentials_checked_at', 'credentials'],
   },
   {
     id: 'agents',
@@ -86,8 +94,25 @@ const LABELS: Record<string, string> = {
   ui_webapp: 'Web app (this page)',
   wards_webapp: 'Downstream system web application',
   webapps_checked: 'Web applications checked from',
+  edition: 'Edition',
+  missing_items: 'Missing items',
+  disabled_items: 'Disabled items',
+  credentials_ok: 'Stored credentials sign in',
+  credentials_state: 'Credential check',
+  credentials_checked_at: 'Credentials checked',
+  credentials: 'Credentials tried',
   budget: 'Model budget',
 };
+
+/** What to do when a stored credential no longer signs in (a rebuild that kept the data volume, a changed password). */
+const CREDENTIALS_TODO =
+  'A stored credential no longer signs in: run the install again (or Shutter.Setup.RefreshCredentialCache(1)), then GET /health?refresh=1 as an operator who may write, and reload.';
+
+/** What to do about the install items the Doctor found missing, disabled, or on the wrong image. */
+const MISSING_ITEMS_TODO = 'Run the install again: these items are missing from the production.';
+const DISABLED_ITEMS_TODO = 'Enable these items in the production, or run the install again.';
+const BROKEN_EDITION_TODO =
+  'Run the install again on the matching image: the aihub module and AI Hub go together, or neither.';
 
 // ---- the core checks and the verdict ----
 
@@ -97,6 +122,8 @@ interface CoreDef {
   label: string;
   /** A downstream-system check: core only on a demo installation. */
   demoOnly?: boolean;
+  /** A check a report before v1.38 does not carry: core only when the report sends its key, never "not reported". */
+  since138?: boolean;
   passes?: (v: unknown) => boolean;
   /** What to do when it fails. */
   todo: (v: unknown) => string;
@@ -142,6 +169,12 @@ const CORE: readonly CoreDef[] = [
     demoOnly: true,
     todo: () => "Create the downstream system's web application, then reload.",
   },
+  {
+    key: 'credentials_ok',
+    label: 'Stored credentials sign in',
+    since138: true,
+    todo: () => CREDENTIALS_TODO,
+  },
 ];
 
 /** One core check the report sent, and how it stands. */
@@ -174,8 +207,12 @@ export interface Verdict {
 
 const groupOf = (key: string) => GROUPS.find((g) => g.keys.includes(key))?.id ?? OTHER.id;
 
-/** The core checks that count on this report: five, and the downstream system's two on a demo installation. */
-const coreFor = (report: Report) => CORE.filter((c) => !c.demoOnly || report.demo === true);
+/**
+ * The core checks that count on this report: five, the downstream system's two on a demo installation, and the stored
+ * credentials on a report that carries the check (v1.38; the trial's recording predates it).
+ */
+const coreFor = (report: Report) =>
+  CORE.filter((c) => (!c.demoOnly || report.demo === true) && (!c.since138 || c.key in report));
 
 /**
  * Whether it is ready: every core check the report sent passes (Ready), any fails (Not ready), or it sent none of
@@ -277,7 +314,9 @@ const NO_PURGE_NOTE =
  * A row's mark, tone and reason, by the row rule: a core check that passes is positive and one that fails is blocking
  * with what to do; another yes is positive; another no is neutral, with the reason chip where the trial's recording
  * lacked the piece, and attention for a missing message purge task on a live installation; a value the report did not
- * send is attention ("Not reported"); a name, a path or a number has no mark.
+ * send is attention ("Not reported"); an install item missing from the production or an edition that is broken is
+ * blocking with what to do, a disabled item attention, and a stored credential that does not sign in blocking; a name,
+ * a path or a number has no mark.
  */
 export function rowInfo(key: string, value: unknown, report: Report, trial: boolean): RowInfo {
   // The API mimic's switch is "" when it is off: a setting, not a missing value
@@ -309,7 +348,44 @@ export function rowInfo(key: string, value: unknown, report: Report, trial: bool
       };
     return { mark: 'dash', tone: 'neutral', missing: false };
   }
+  if (key === 'missing_items' && Array.isArray(value) && value.length)
+    return { mark: 'x', tone: 'blocking', missing: false, todo: MISSING_ITEMS_TODO };
+  if (key === 'disabled_items' && Array.isArray(value) && value.length)
+    return { mark: 'dash', tone: 'attention', missing: false, todo: DISABLED_ITEMS_TODO };
+  if (key === 'edition' && typeof value === 'string' && value.startsWith('broken'))
+    return { mark: 'x', tone: 'blocking', missing: false, todo: BROKEN_EDITION_TODO };
+  if (key === 'credentials' && Array.isArray(value) && value.length)
+    return credentialChecks(value).every((c) => c.ok)
+      ? { mark: 'check', tone: 'positive', missing: false }
+      : { mark: 'x', tone: 'blocking', missing: false };
   return { mark: 'none', tone: null, missing: false };
+}
+
+/** One stored credential the Doctor tried, as the report lists it. */
+export interface CredentialCheck {
+  namespace: string;
+  name: string;
+  user: string;
+  status: string;
+  detail: string;
+  ok: boolean;
+}
+
+/** The report's credential checks as typed records: a field it did not send is empty, ok only when it is true. */
+export function credentialChecks(value: unknown): CredentialCheck[] {
+  if (!Array.isArray(value)) return [];
+  const str = (v: unknown) => (typeof v === 'string' ? v : v === undefined || v === null ? '' : String(v));
+  return value.map((v) => {
+    const c = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
+    return {
+      namespace: str(c.namespace),
+      name: str(c.name),
+      user: str(c.user),
+      status: str(c.status),
+      detail: str(c.detail),
+      ok: c.ok === true,
+    };
+  });
 }
 
 export interface Row {
@@ -329,9 +405,12 @@ export interface GroupStatus {
 export interface Group {
   def: GroupDef;
   rows: Row[];
-  /** The group's count: its core checks passing, else the pieces missing from the recording, else rows to look at. */
+  /**
+   * The group's count: its core checks passing (and the rows to fix besides them), else the rows to fix, else the pieces
+   * missing from the recording, else rows to look at.
+   */
   status: GroupStatus | null;
-  /** The tone of a group that needs a look (a core check failed, or a row is attention); null otherwise. */
+  /** The tone of a group that needs a look (a core check or a row is blocking, or a row is attention); null otherwise. */
   edge: Tone | null;
   /** Core checks in the group, as the group links count them. */
   checks: CoreResult[];
@@ -383,13 +462,18 @@ export function groupReport(report: Report, trial: boolean): { verdict: Verdict;
     const checks = verdict.results.filter((r) => def.keys.includes(r.key));
     const absent = rows.filter((r) => r.info.reason?.chip === NOT_ON_RECORDED).length;
     const look = rows.filter((r) => r.info.tone === 'attention').length;
+    // A row that is blocking on its own, apart from the core checks: an item missing from the production
+    const fix = rows.filter((r) => r.info.tone === 'blocking' && !checks.some((c) => c.key === r.key)).length;
     let status: GroupStatus | null = null;
     if (checks.length) {
       const ok = checks.filter((c) => c.passed).length;
+      const pass = `${ok} of ${checks.length} pass`;
       status = {
-        tone: ok === checks.length ? 'positive' : 'blocking',
-        label: `${ok} of ${checks.length} pass`,
+        tone: ok === checks.length && !fix ? 'positive' : 'blocking',
+        label: ok === checks.length && fix ? `${pass}, ${fix} to fix` : pass,
       };
+    } else if (fix) {
+      status = { tone: 'blocking', label: `${fix} to fix` };
     } else if (absent) {
       status = { tone: 'neutral', label: `${absent} not on the recorded instance` };
     } else if (look) {
@@ -399,7 +483,7 @@ export function groupReport(report: Report, trial: boolean): { verdict: Verdict;
       def,
       rows,
       status,
-      edge: checks.some((c) => !c.passed) ? 'blocking' : look ? 'attention' : null,
+      edge: checks.some((c) => !c.passed) || fix ? 'blocking' : look ? 'attention' : null,
       checks,
     });
   }

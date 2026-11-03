@@ -220,6 +220,55 @@ describe('CasePage', () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps a question's runs off the board: the recorded board and its provenance stay as they were", async () => {
+    // Ask about this case stores its runs as the case's rows too (CONTRACTS 14): a board-tier question adds a
+    // coordinator that synthesised the answer and an explain member, both live, each naming the question
+    const recorded = structuredClone(fixtures.cases['C-000008'].runs) as (Record<string, unknown> & {
+      role: string;
+    })[];
+    const coordinator = recorded.filter((r) => r.role === 'coordinator').at(-1)!;
+    const answer = { answer: 'x', cites: [], confidence: 'high', perspectives: [] };
+    const asked = [
+      { ...coordinator, id: 9001, role: 'coordinator', questionId: 'Q-000001', mode: 'live', result: answer },
+      {
+        ...coordinator,
+        id: 9002,
+        role: 'explain',
+        memberCode: 'explain',
+        member: { code: 'explain', name: 'Explainer', perspective: 'Plain words' },
+        questionId: 'Q-000001',
+        mode: 'live',
+        result: answer,
+      },
+    ];
+    server.use(
+      http.get('/api/shutter/cases/C-000008/runs', () => HttpResponse.json([...recorded, ...asked])),
+    );
+    renderCase('C-000008');
+    const board = await screen.findByRole('region', { name: 'The board' });
+    const cards = await within(board).findAllByRole('region');
+    expect(cards.map((c) => within(c).getByRole('heading').textContent)).toEqual([
+      'Conformance',
+      'Encounter Integrity',
+      'Impact Analysis',
+      'Coordinator',
+    ]);
+    expect(within(board).getByText('With the majority')).toBeInTheDocument();
+    expect(within(board).getByText('1 dissent kept')).toBeInTheDocument();
+    expect(within(board).getAllByText('Dissent')).toHaveLength(1);
+    expect(
+      within(within(board).getByRole('region', { name: 'Conformance' })).getByText('Dissent'),
+    ).toBeInTheDocument();
+    const coordinatorCard = within(board).getByRole('region', { name: 'Coordinator' });
+    expect(within(coordinatorCard).getByText('Proposed: Escalate')).toBeInTheDocument();
+    expect(within(coordinatorCard).getByText('Dissent kept: Conformance')).toBeInTheDocument();
+    expect(within(board).queryByText(/No disagreements to keep/)).not.toBeInTheDocument();
+    // The investigation was replayed; the question's live runs do not make it a live one
+    await userEvent.click(screen.getByRole('button', { name: 'Details' }));
+    expect(await screen.findByText('Recorded replay')).toBeInTheDocument();
+    expect(screen.queryByText('Live model')).not.toBeInTheDocument();
+  });
+
   it('leaves the confidence out of a dissent recorded as "resend (0.8): why"', async () => {
     renderCase('C-000039');
     const board = await screen.findByRole('region', { name: 'The board' });
@@ -717,6 +766,30 @@ describe('CasePage', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
+  it('needs nobody on an abandoned case: the card in the neutral tone, Reinvestigate kept, the button says so', async () => {
+    const recorded = fixtures.cases['C-000008'].detail;
+    server.use(
+      http.get('/api/shutter/cases/C-000008', () =>
+        HttpResponse.json({ ...recorded, state: 'failed', disposition: 'abandoned' }),
+      ),
+    );
+    renderCase('C-000008');
+    const top = await outcome();
+    // Given up on purpose: a closed kind of case, whose band starts closed (unless a test before chose otherwise)
+    const band = within(top).getByRole('button', { name: 'Outcome' });
+    if (band.getAttribute('aria-expanded') !== 'true') await userEvent.click(band);
+    const card = (await within(top).findByRole('heading', { name: 'What needs you now' })).closest(
+      '[data-tone]',
+    ) as HTMLElement;
+    expect(card).toHaveAttribute('data-tone', 'neutral');
+    expect(within(card).getByText('No pending action: the case was abandoned')).toBeInTheDocument();
+    expect(within(card).queryByText(/Reinvestigate once the cause is fixed/)).not.toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Reinvestigate' })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId('case-action')).toHaveAccessibleName('No action needed on this case'),
+    );
+  });
+
   it('does not offer to reinvestigate a verified case', async () => {
     renderCase('C-000009');
     await outcomeLine('Delivered: verified at the receiver');
@@ -1074,7 +1147,7 @@ describe('the case page in the trial', () => {
     await userEvent.click(await within(approval).findByRole('button', { name: 'Approve plan' }));
     const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
     expect(within(dialog).getByTestId('confirm-consequence')).toHaveTextContent(
-      'Go ahead. You will see what happened next in the recording: the fix goes out and the receiving system confirms it. Nothing leaves this browser.',
+      'Go ahead. You will see what happened next in the recording: the fix goes out and the receiving system confirms it. Nothing leaves this browser, and a reload starts the recording afresh.',
     );
     expect(within(dialog).getByText('Trial only')).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve this plan' }));

@@ -14,6 +14,8 @@ import {
 import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { IconInfoCircle, IconTestPipe } from '@tabler/icons-react';
 import { useSyncExternalStore, type ReactNode } from 'react';
+import { useCan } from '@/api/hooks';
+import type { Can } from '@/api/types';
 import { TechDetail } from '@/components/TechDetail';
 import { ENV } from '@/env/mode';
 import { journal } from './journal';
@@ -21,15 +23,21 @@ import { journalLine, TRIAL_WORDS, TRIAL_WORDS_SHORT } from './words';
 import { LeaveTrialButton } from './LeaveTrial';
 import { bannerForm } from './visit';
 
-const WORKS = [
-  'Approve or reject a plan',
-  'Run a scenario',
-  'Save the site profile',
-  'Draft and send an escalation',
-  'Start a production review',
-  'Ask a suggested question',
-  'Switch role',
-];
+/**
+ * What works here, replayed, for this role: the public demo and judge roles approve but cannot run a scenario or save
+ * the site profile, and the operator cannot approve, so the list promises only what the page then offers.
+ */
+function worksHere(can: Can): string[] {
+  return [
+    can.approve ? 'Approve or reject a plan' : '',
+    can.scenarios ? 'Run a scenario' : '',
+    can.configure ? 'Save the site profile' : '',
+    'Draft and send an escalation',
+    'Start a production review',
+    'Ask a suggested question',
+    'Switch role',
+  ].filter(Boolean);
+}
 const NOT_HERE = [
   'A real model: Convene the board, Reinvestigate',
   'Questions in your own words',
@@ -59,6 +67,7 @@ function useJournal() {
 /** What "What's different?" holds, in DESIGN.md 7.1's order. */
 export function TrialDifferences() {
   const { counts, recording } = useJournal();
+  const works = worksHere(useCan());
   return (
     <Stack gap="xs" maw={420}>
       <Text size="sm">{TRIAL_WORDS}</Text>
@@ -67,7 +76,7 @@ export function TrialDifferences() {
           Works here (replayed)
         </Title>
         <List size="sm" spacing={2}>
-          {WORKS.map((w) => (
+          {works.map((w) => (
             <List.Item key={w}>{w}</List.Item>
           ))}
         </List>
@@ -159,6 +168,9 @@ function WhatsDifferent({ iconOnly }: { iconOnly: boolean }) {
       position="bottom-end"
       withinPortal
       shadow="md"
+      // Focus moves into the dropdown, so Escape reaches it and closes it, and comes back to the button
+      trapFocus
+      returnFocus
     >
       <Popover.Target>{target}</Popover.Target>
       <Popover.Dropdown aria-label="The trial environment">

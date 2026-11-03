@@ -140,11 +140,26 @@ jobs:
         run: |
           python3 scripts/check-records.py --self-test
           python3 tests/privacy_check.py --self-test
+          python3 tests/knowledge_check.py --self-test
+      # The HL7 folders and scenarios.json are made by fixtures/generate.py, so a rerun must write the committed files
+      # byte for byte: a scenario edited by hand instead of in the script would otherwise be lost at the next rerun. The
+      # copy runs next to a copy of scenarios.json, which keeps S22 (written by hand) as the script does.
+      - name: fixtures/generate.py writes the committed HL7 fixtures and scenarios.json
+        run: |
+          out=$(mktemp -d)
+          cp fixtures/generate.py fixtures/scenarios.json "$out"/
+          python3 "$out/generate.py"
+          cmp "$out/scenarios.json" fixtures/scenarios.json
+          for folder in "$out"/S*/; do diff -r "$folder" "fixtures/$(basename "$folder")"; done
       # No API key, token or private key in a tracked file or in what the last 20 commits added, and no committed .env
       - name: No credentials in the repository
         run: python3 scripts/secret-scan.py --commits 20
       - name: The scenario catalogue keeps to the condition vocabulary, and catalogue.json is built from it
         run: python3 scripts/build-catalogue.py knowledge/catalogue --check
+      # The Explain agent searches the explain collection for the plain meaning of a gate check, so every reason code
+      # of block-reasons.json is written there as that file gives it (scripts/build-explain.py rebuilds the section)
+      - name: Every reason code of the gate is explained in plain words, as block-reasons.json gives it
+        run: python3 tests/knowledge_check.py
       # The model gets tokens (MRN-T1, ENC-T1) for the patient's identifiers and never their name, date of birth,
       # address, phone numbers or note text: nothing personal from the fixtures may appear in what a recorded run saw,
       # and no NHS number in it or in the demo's agent output.

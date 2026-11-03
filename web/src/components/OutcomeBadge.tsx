@@ -11,11 +11,13 @@ export function OutcomeBadge({
   scenario,
   form = 'short',
   size,
+  focusable,
 }: {
   c: OutcomeCase;
   scenario?: ExpectedScenario | null;
   form?: 'short' | 'long';
   size?: BadgeProps['size'];
+  focusable?: boolean;
 }) {
   const o = caseOutcome(c, scenario);
   const label = form === 'short' ? o.short : o.label;
@@ -27,6 +29,7 @@ export function OutcomeBadge({
       hint={hint}
       icon={o.icon}
       size={size as 'xs' | 'sm' | 'md' | 'lg' | 'xl' | undefined}
+      focusable={focusable}
     />
   );
 }

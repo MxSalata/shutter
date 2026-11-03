@@ -15,8 +15,10 @@ the productions a hospital already runs; the README's `docker compose up` is the
   HTTP; Shutter stores its own copy, opens the case and records where the original lives.
 - **Shape B: Shutter's items inside a production the hospital already runs**, in that namespace, through
   `Setup.InstallInto`. One production to look at, with Shutter's queues, settings and upgrades beside the hospital's.
-- **Both start from a non-demo install** (`-Ddemo=0`): no demo users, no demo receiver, no credential, no scenario or
-  feed items, and no namespace-wide purge unless asked for.
+- **Both start from a non-demo install** (`-Ddemo=0`): no demo users, no demo receiver, no credential, and no
+  namespace-wide purge unless asked for. The feed, records and scenario items (`ADT In`, `ADT to Downstream`,
+  `Downstream Out`, `ADT to Records`, `Records Out` and `Scenario Player`) are present but switched off in shape A (the
+  installer disables them in `Shutter.Production`), and not added at all in shape B (`InstallInto`).
 - **A receiver with no API is escalated, never resent.** Shutter resends only to a receiver whose site profile entry
   describes its API (state, receipt, capabilities and operations paths). A ward system that takes HL7 over TCP and
   keeps no receipts is investigated and escalated; the team corrects it by hand and marks the case handled.
@@ -96,7 +98,8 @@ says so. Nothing else depends on it.
 
 **3.1 The namespace.** Create it with `Installer.cls` as the image does (two databases, Interoperability on) or with
 `SELECT Shutter.Setup_CreateNamespace('SHUTTER')`, its data database on storage the trust backs up. Load the module
-with `-Ddemo=0`: `Shutter.Production` starts with no feed items.
+with `-Ddemo=0`: `Shutter.Production` starts with its feed, records and scenario items disabled (the six named in section
+1), so it has no feed of its own until the intake route or the site's own items bring it one.
 
 **3.2 The hook.** A failure reaches Shutter through `POST /api/shutter/intake`. The caller signs in with HTTP Basic
 authentication as a user holding `Shutter_Forwarder` (the resource `Shutter_Intake`), sends the header
@@ -266,14 +269,19 @@ After a rebuild, run the install once inside the new container, which re-reads t
 into the kept data and is safe to repeat:
 
 ```sh
-docker compose exec shutter iris session IRIS -U SHUTTER "##class(Shutter.Setup).Install(\"/home/irisowner/dev/\", 1)"
-docker compose exec shutter iris session IRIS -U HOSPITAL "##class(Hospital.Setup).Install(\"SHUTTER\")"
+printf '%s\n' 'Set r = ##class(Shutter.Setup).Install("/home/irisowner/dev/", 1) Write !,"RESULT: ",r,!' 'Halt' \
+  | docker compose exec -T shutter iris session IRIS -U SHUTTER
+printf '%s\n' 'Set r = ##class(Hospital.Setup).Install("SHUTTER") Write !,"RESULT: ",r,!' 'Halt' \
+  | docker compose exec -T shutter iris session IRIS -U HOSPITAL
 ```
 
-(or `SELECT Shutter.Setup_Install('/home/irisowner/dev/', 1)` in SHUTTER and `SELECT Hospital.Setup_Install('SHUTTER')` in
-HOSPITAL from any SQL tool; the second is for the demo hospital, a demo install only; a site install uses `demo` 0 and its
-own root). The install recompiles each production's class in its namespace, so items that are new in the image reach the
-kept production definition, then updates the running production, seeds what is new and leaves what is there. Then
+Each prints the installer's progress (the production's start writes to the terminal too) and then, on a line of its own,
+`RESULT: ok`; anything else after `RESULT:` is the error text, and the install stopped there. The `Write` is what shows the
+result: `Install` returns `ok` or the error as a string, so a bare `iris session IRIS -U SHUTTER "##class(Shutter.Setup).Install(...)"`
+runs it and shows nothing of the outcome. (Or `SELECT Shutter.Setup_Install('/home/irisowner/dev/', 1)` in SHUTTER and
+`SELECT Hospital.Setup_Install('SHUTTER')` in HOSPITAL from any SQL tool, each answering `ok`; the second is for the demo
+hospital, a demo install only; a site install uses `demo` 0 and its own root.) The install recompiles each production's
+class in its namespace, so items that are new in the image reach the kept production definition, then updates the running production, seeds what is new and leaves what is there. Then
 `SELECT Shutter.Setup_Doctor()`: `missing_items` and `disabled_items` must be empty, and the rest says what the instance
 has. Images built before 1 November 2026 kept the SHUTTER data database at the install directory, outside the volume (the
 installer's `DATADIR` was a name `%Installer` reserves); on such an instance the cases live in the container and go with it,

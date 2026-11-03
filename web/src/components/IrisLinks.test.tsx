@@ -1,9 +1,26 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderUi } from '@/test/render';
 import { ApiSource } from './ApiSource';
 import { caseIrisLinks, IrisLinks } from './IrisLinks';
+import { PortalLink } from './PortalLink';
+
+/** Whether the page is the trial: set per test. */
+const env = vi.hoisted(() => ({ trial: false }));
+vi.mock('@/env/mode', async (importOriginal) => {
+  const mode = await importOriginal<typeof import('@/env/mode')>();
+  return {
+    ...mode,
+    get TRIAL() {
+      return env.trial;
+    },
+  };
+});
+
+beforeEach(() => {
+  env.trial = false;
+});
 
 const CASE = {
   ensSessionId: '16603',
@@ -28,6 +45,26 @@ describe('IrisLinks', () => {
       'href',
       '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderId=16601',
     );
+  });
+});
+
+describe('PortalLink', () => {
+  it('says in the trial what the link would open, calling the page the trial, never the demo', async () => {
+    env.trial = true;
+    renderUi(
+      <PortalLink href="/csp/trace?session=16603" what="the Visual Trace of session 16603">
+        Message trace
+      </PortalLink>,
+    );
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    const note = screen.getByText('Message trace (on an instance)');
+    await userEvent.tab();
+    expect(note).toHaveFocus();
+    const tip = await screen.findByRole('tooltip');
+    expect(tip).toHaveTextContent(
+      'On an IRIS instance this opens the Visual Trace of session 16603 in the Management Portal. The trial runs in the browser, with no instance behind it.',
+    );
+    expect(tip).not.toHaveTextContent(/demo/);
   });
 });
 

@@ -343,9 +343,103 @@ describe('ScenariosPage, as each role has it', () => {
     expect(screen.queryByRole('radio', { name: 'Board' })).not.toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Investigation modes' })).toBeInTheDocument();
     const first = screen.getByRole('region', { name: 'Try these three first' });
-    expect(await within(first).findByRole('link', { name: /the latest S8 case/ })).toBeInTheDocument();
+    expect(await within(first).findByRole('link', { name: /the latest S2 case/ })).toBeInTheDocument();
     // Nobody is asked to answer the induction questions in a read-only demo
     expect(screen.queryByText('Shutter is running on the shipped site profile')).not.toBeInTheDocument();
+  });
+
+  it('gives the public demo its own three, in the mode its hospital plays them, each with the case it has', async () => {
+    resetMock('demo');
+    renderScenarios();
+    const first = await screen.findByRole('region', { name: 'Try these three first' });
+    // S2 and S23a have a Site policy case in the recording; S15 has none, so its card shows its latest case under
+    // that case's own mode, never a mode it was not played in
+    const s2 = await within(first).findByRole('link', {
+      name: 'Open C-000028, the latest S2 case in Site policy mode',
+    });
+    expect(
+      within(first).getByText("The demo's hospital plays these by itself, in Site policy mode."),
+    ).toBeInTheDocument();
+    expect(s2).toHaveAttribute('href', '/cases/C-000028');
+    const s23a = within(first).getByRole('link', {
+      name: 'Open C-000058, the latest S23a case in Site policy mode',
+    });
+    expect(s23a).toHaveAttribute('href', '/cases/C-000058');
+    const s15 = within(first).getByRole('link', { name: 'Open C-000012, the latest S15 case in Board mode' });
+    expect(s15).toHaveAttribute('href', '/cases/C-000012');
+    expect(within(first).getAllByText('You will see')).toHaveLength(3);
+    expect(within(s15.closest('[data-first]')!).getByText('Board')).toBeInTheDocument();
+    expect(within(first).queryByText(/Not played since the last reset/)).not.toBeInTheDocument();
+    expect(within(first).queryByText(/none in .* mode among the newest cases/)).not.toBeInTheDocument();
+    expect(within(first).queryByRole('button', { name: /^Run / })).not.toBeInTheDocument();
+    expect(within(first).queryByText(/S8|S20/)).not.toBeInTheDocument();
+    // The catalogue entry S2's plan cites comes from the case, not from the page
+    const cases = recording.cases as unknown as Record<
+      string,
+      { plan: { plan: { catalogueEntry?: string } } }
+    >;
+    const entry = cases['C-000028'].plan.plan.catalogueEntry!;
+    expect(entry).toBe('E2');
+    expect(
+      await within(first).findByText(`(catalogue entry ${entry})`, { exact: false }),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the demo only the cards whose scenario has a case, under the mode of the case it links', async () => {
+    resetMock('demo');
+    server.use(
+      http.get('/api/shutter/cases', () =>
+        HttpResponse.json({ items: [summaryOf('C-000028'), summaryOf('C-000025')], total: 2 }),
+      ),
+    );
+    renderScenarios();
+    const first = await screen.findByRole('region', { name: 'Try these three first' });
+    expect(
+      await within(first).findByRole('link', {
+        name: 'Open C-000028, the latest S2 case in Site policy mode',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(first).getByRole('link', { name: 'Open C-000025, the latest S15 case in Rules only mode' }),
+    ).toBeInTheDocument();
+    expect(within(first).getAllByRole('link', { name: /^Open C-/ })).toHaveLength(2);
+    expect(within(first).queryByText(/S23a/)).not.toBeInTheDocument();
+    expect(within(first).queryByText(/Not played since the last reset/)).not.toBeInTheDocument();
+    expect(within(first).queryByText(/none in .* mode/)).not.toBeInTheDocument();
+    expect(within(first).queryByRole('button', { name: /^Run / })).not.toBeInTheDocument();
+  });
+
+  it('tells the demo its hospital is still to play the three when none has a case yet', async () => {
+    resetMock('demo');
+    server.use(http.get('/api/shutter/cases', () => HttpResponse.json({ items: [], total: 0 })));
+    renderScenarios();
+    const first = await screen.findByRole('region', { name: 'Try these three first' });
+    expect(
+      await within(first).findByText(
+        "None of S2, S23a, S15 has a case among the newest yet: the demo's hospital plays one every few minutes.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(first).queryByRole('link', { name: /^Open C-/ })).not.toBeInTheDocument();
+    expect(within(first).queryByText(/Not played since the last reset/)).not.toBeInTheDocument();
+  });
+
+  it("says what the demo's three will show only as the scenarios' definitions have it", async () => {
+    const def = (id: string) =>
+      scenarioDefs.find((d) => d.id === id)!.expected as Scenario['expected'] & { blocked_by?: string };
+    // S2 in Site policy mode: one conditional resend, a write, which the live hospital's policy holds for approval
+    expect(def('S2')).toMatchObject({ disposition: 'resend', write: true });
+    // S23a: the second patient's transfer is resent into the freed bed, in Site policy mode among others
+    expect(def('S23a')).toMatchObject({ disposition: 'resend', write: true, modes: ['board', 'policy'] });
+    // S15: the merge is withheld by the gate and escalated, nothing written
+    expect(def('S15')).toMatchObject({ disposition: 'escalate', write: false, blocked_by: 'MERGE_WITHHELD' });
+    resetMock('demo');
+    renderScenarios();
+    const first = await screen.findByRole('region', { name: 'Try these three first' });
+    expect(
+      await within(first).findByText(/holds the one conditional resend for a person/),
+    ).toBeInTheDocument();
+    expect(within(first).getByText(/this one is resent into the bed/)).toBeInTheDocument();
+    expect(within(first).getByText(/the gate blocks every plan/)).toBeInTheDocument();
   });
 
   it('keeps Run and Reset for an approver, and says nothing about a demo that plays itself', async () => {
@@ -383,6 +477,39 @@ describe('ScenariosPage, as each role has it', () => {
     expect(await screen.findByRole('button', { name: 'Run S2' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
     expect(screen.queryByText(/plays its stories by itself/)).not.toBeInTheDocument();
+    // The reason is written under the buttons, not only in a tooltip a disabled button cannot open
+    expect(screen.getAllByText('Running a scenario needs the operator role').length).toBeGreaterThan(0);
+    expect(screen.getByText('Resetting needs the operator role')).toBeInTheDocument();
+    const first = screen.getByRole('region', { name: 'Try these three first' });
+    expect(within(first).getAllByText('Running a scenario needs the operator role').length).toBeGreaterThan(
+      0,
+    );
+  });
+
+  it('says why Run is disabled while another scenario plays, under the button', async () => {
+    resetMock('approver');
+    server.use(
+      http.get('/api/shutter/scenarios', () =>
+        HttpResponse.json({
+          scenarios: listed.map((d) => ({ ...d, latestCase: recordedLatest(d.id) })),
+          run: {
+            scenario: 'S2',
+            mode: 'board',
+            startedAt: new Date().toISOString(),
+            state: 'running',
+            files: [],
+            timeouts: [],
+            step: 'delivering S2-01-A01.hl7',
+          },
+        }),
+      ),
+    );
+    renderScenarios();
+    expect(await screen.findByRole('button', { name: 'Run S5' })).toBeDisabled();
+    expect(screen.getAllByText('A run of S2 is still playing').length).toBeGreaterThan(0);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Now delivering S2-01-A01.hl7. Files delivered so far: none.',
+    );
   });
 });
 
@@ -414,6 +541,10 @@ describe('ScenariosPage, its rows and its proof', () => {
     expect(badge.closest('[data-tone]')).toHaveAttribute('data-tone', 'positive');
     expect(s5).toHaveAttribute('data-tone', 'positive');
     expect(within(s5).getByText('As expected')).toBeInTheDocument();
+    // No badge in the list is a tab stop: the row's stops are its link, its More and its Run
+    expect(s5.querySelectorAll('[tabindex="0"]')).toHaveLength(0);
+    expect(s5.querySelectorAll('a, button, [tabindex="0"]').length).toBeLessThanOrEqual(3);
+    expect(screen.getByRole('button', { name: 'How to read this list' })).toBeInTheDocument();
   });
 
   it('keeps the state badge for a latest case older than the newest cases', async () => {
