@@ -370,6 +370,53 @@ Method TestResetRefusedOutsideDemo()
     Do $$$AssertEquals(body.error, "not_a_demo_instance", "as not_a_demo_instance")
 }
 
+/// <var>method</var> <var>path</var> of the web application, called over HTTP on this instance's own web server as the
+/// production's client would call it: as the user of the <code>DownstreamAPI</code> credential (downstream-client, which
+/// holds Downstream_API and Shutter_DownstreamClient and not Downstream_Admin), with an empty JSON object as the body of
+/// a POST. Returns the HTTP status, or "" with the reason in <var>skip</var> when the call could not be made (no
+/// credential, as on a site install; no web server port; no answer), so the caller can skip rather than fail.
+ClassMethod AsClient(method As %String, path As %String, Output skip As %String) As %String
+{
+    Set skip = "", status = ""
+    Try {
+        Set sc = ##class(Ens.Config.Credentials).GetCredentialsObj(.cred, $CLASSNAME(), "Ens.Config.Credentials", "DownstreamAPI")
+        If $$$ISERR(sc) || '$ISOBJECT($GET(cred)) Set skip = "the DownstreamAPI credential is not on this instance" Quit
+        Do ##class(%RoutineMgr).GetWebServerPort(.port)
+        If +$GET(port) = 0 Set skip = "this instance has no web server port" Quit
+        Set http = ##class(%Net.HttpRequest).%New()
+        Set http.Server = "127.0.0.1", http.Port = port, http.Timeout = 30
+        Set http.Username = cred.Username, http.Password = cred.Password
+        Set http.ContentType = "application/json"
+        If method = "POST" Do http.EntityBody.Write("{}")
+        Set sc = http.Send(method, "/downstream/api" _ path)
+        If $$$ISERR(sc) || '$ISOBJECT(http.HttpResponse) Set skip = "no answer from the web server: " _ $SYSTEM.Status.GetErrorText(sc) Quit
+        Set status = +http.HttpResponse.StatusCode
+    } Catch ex {
+        Set skip = ex.DisplayString()
+    }
+    Quit status
+}
+
+/// The demo controls (1.5, 1.7, 1.8) refuse the production's client, which holds the web application's resource
+/// alone: Downstream_Admin is required, and nothing is changed before the refusal; the client's reads still answer.
+Method TestControlsRefuseTheClient()
+{
+    Set saved = ##class(Downstream.Service).GetFault(.ignore)
+    Set epoch = ##class(Downstream.Service).Epoch()
+    Set status = ..AsClient("GET", "/faults", .skip)
+    If status = "" {
+        Do $$$AssertSkipped("the controls are not checked as the client: " _ skip)
+        Quit
+    }
+    Do $$$AssertEquals(status, 200, "the client reads the fault setting with Downstream_API alone")
+    For path = "/faults", "/reset", "/capabilities" {
+        Do $$$AssertEquals(..AsClient("POST", path, .skip), 403, "POST " _ path _ " refuses the client, which holds Downstream_API alone" _ $SELECT(skip = "": "", 1: ": " _ skip))
+    }
+    Do $$$AssertEquals(##class(Downstream.Service).Epoch(), epoch, "no reset happened")
+    Do $$$AssertEquals(##class(Downstream.Service).GetFault(.ignore).%ToJSON(), saved.%ToJSON(), "and the fault setting stands")
+    Do $$$AssertTrue($SYSTEM.Security.Check("Downstream_Admin", "USE"), "the test's own user holds Downstream_Admin, as an administrator does")
+}
+
 /// A bed name of this run's own, so a bed held by other data never answers these tests.
 Method Bed(n As %Integer) As %String
 {
