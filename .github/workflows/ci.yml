@@ -738,11 +738,16 @@ jobs:
       - name: IRIS log
         if: always()
         run: docker logs "$CTR" 2>&1 | tail -100 || true
+      # BuildKit keeps every build's layers as build cache, and since every commit changes every layer after the base,
+      # none of it is used again: on a runner that keeps its Docker between runs it filled the disk (32 GB, 3 Nov), the
+      # runners' own logs could no longer be written and the jobs on it were dropped. Cache unused for two hours goes
+      # (a build still running on another runner keeps its own).
       - name: Remove the container
         if: always()
         run: |
           docker rm -f "$CTR" > /dev/null 2>&1 || true
           docker image rm "shutter:ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" > /dev/null 2>&1 || true
+          docker builder prune -af --filter until=2h > /dev/null 2>&1 || true
 
   # Publishes the demo to GitHub Pages. Skipped (not failed) until the repository is public, Pages is enabled
   # (Settings, Pages, Source: GitHub Actions) and the repository variable DEPLOY_DEMO is 'true'. The four checks are
