@@ -7,8 +7,9 @@
 #   ./install.sh --image-file FILE       the same, loading the AI Hub image from the Early Access file first
 #   ./install.sh --replay                the replay edition on the public IRIS for Health image (no AI Hub, no key)
 #
-# Then it builds and starts the container and waits until Shutter's health report says it is ready (2 to 15 minutes
-# the first time). A Shutter that is already running and healthy is left as it is. Works with bash 3.2 (macOS) too.
+# Then it builds and starts the container (the whole build log goes to install-build.log) and waits until the container
+# reports healthy (2 to 15 minutes the first time). A Shutter that is already running and healthy is left as it is.
+# Works with bash 3.2 (macOS) too.
 set -euo pipefail
 
 # The AI Hub builds Shutter is verified on, newest first: the Early Access portal offers 2027.1.0AI.109.0 since 2 Nov 2026
@@ -73,9 +74,12 @@ else
   fi
 
   # 2. Memory and disk available to Docker
+  # Docker Desktop's VM reports a little less than its memory setting (the kernel's own share), so a setting of exactly
+  # MIN_MEMORY_GB passes: the comparison is in MiB with a 512 MiB margin, and the printed figure is rounded.
   mem=$(docker info --format '{{.MemTotal}}' 2>/dev/null || echo 0)
-  mem_gb=$((mem / 1024 / 1024 / 1024))
-  if [ "$mem_gb" -lt "$MIN_MEMORY_GB" ]; then
+  mem_mb=$((mem / 1024 / 1024))
+  mem_gb=$(( (mem_mb + 512) / 1024 ))
+  if [ "$mem_mb" -lt $((MIN_MEMORY_GB * 1024 - 512)) ]; then
     fail "Docker has about ${mem_gb} GB of memory; Shutter's first build needs at least ${MIN_MEMORY_GB} GB." \
       "Docker Desktop: Settings, Resources, Memory: ${MIN_MEMORY_GB} GB or more. Then run ./install.sh again."
   else
@@ -96,11 +100,15 @@ else
   fi
 fi
 
+# The container's own healthcheck (docker-compose.yml: wget against the health route inside the container), so the host
+# needs neither curl nor wget: healthy, unhealthy, starting, or empty when the container is not there
+healthy() { [ "$(docker compose ps --format '{{.Health}}' shutter 2> /dev/null | head -1)" = healthy ]; }
+
 # 3. Already running?
 port=$(setting SHUTTER_WEB_PORT); port=${port:-52773}
 health_url="http://localhost:${port}/api/shutter/health"
 if [ "$problems" -eq 0 ] && docker compose ps --status running --services 2> /dev/null | grep -qx shutter; then
-  if curl -fsS -m 10 "$health_url" 2> /dev/null | grep -q '"ok":true'; then
+  if healthy; then
     echo
     echo "Shutter is already running and healthy: http://localhost:${port}/shutter/index.html (approver / shutter)."
     echo "Nothing was changed."
@@ -116,11 +124,24 @@ fi
 
 # 4. The image: .env's when there is one; else the build of --image-file's name; else a verified build already loaded
 image=""
-[ -f .env ] && image=$(setting SHUTTER_IMAGE)
-build=""
-if [ -z "$image" ] && [ -n "$image_file" ]; then
-  build=$(basename "$image_file" | sed -n 's/^irishealth\(_arm64\)\{0,1\}-community-\(.*\)-docker\.tar\.gz$/\2/p')
-  [ -n "$build" ] && image="irishealth-community:$build"
+with=""
+if [ -f .env ]; then image=$(setting SHUTTER_IMAGE); with=$(setting SHUTTER_WITH_AIHUB); fi
+# .env written for the replay edition (by ./install.sh --replay, or by hand): the AI Hub edition must not build on it
+env_replay=""
+if [ "$edition" = aihub ] && [ -f .env ]; then
+  if [ "${with:-auto}" = 0 ]; then env_replay=yes; fi
+  case "$image" in ""|irishealth-community:*) ;; *) env_replay=yes ;; esac
+fi
+file_build=""
+if [ -n "$image_file" ]; then
+  file_build=$(basename "$image_file" | sed -n 's/^irishealth\(_arm64\)\{0,1\}-community-\(.*\)-docker\.tar\.gz$/\2/p')
+fi
+if [ -z "$image" ] && [ -n "$file_build" ]; then
+  image="irishealth-community:$file_build"
+elif [ -n "$file_build" ] && [ -z "$env_replay" ] && [ "$image" != "irishealth-community:$file_build" ]; then
+  # .env may be a deliberate choice, so neither side wins quietly
+  fail "The file $image_file is build $file_build, but .env names the image $image." \
+    "Keep .env's image (run ./install.sh without --image-file), or switch to the file's build: if an instance ran before, run docker compose down -v first (it removes that instance's data); then set SHUTTER_IMAGE=irishealth-community:$file_build in .env and run ./install.sh --image-file $image_file again."
 fi
 if [ -z "$image" ] && [ "$edition" = aihub ] && docker info > /dev/null 2>&1; then
   for b in $AIHUB_BUILDS; do
@@ -132,7 +153,7 @@ image=${image:-$AIHUB_IMAGE}
 build=${image#irishealth-community:}
 plan_load=""
 plan_tag=""
-if [ "$problems" -eq 0 ] && [ "$edition" = aihub ]; then
+if [ "$problems" -eq 0 ] && [ "$edition" = aihub ] && [ -z "$env_replay" ]; then
   verified=no
   for b in $AIHUB_BUILDS; do [ "$build" = "$b" ] && verified=yes; done
   [ "$verified" = no ] && note "$image is not one of the builds Shutter is verified on ($AIHUB_BUILDS); trying it anyway"
@@ -163,8 +184,11 @@ if [ "$problems" -eq 0 ] && [ "$edition" = aihub ]; then
   if docker image inspect "$image" > /dev/null 2>&1; then
     size=$(docker image inspect --format '{{.Size}}' "$image")
     if [ "$size" -lt 4000000000 ]; then
-      fail "The AI Hub image is only $((size / 1000000)) MB; a complete load is about 5.4 GB of content." \
-        "Load it again: docker image load -i irishealth-community-$build-docker.tar.gz"
+      case "$image" in
+        irishealth-community:*) again="Load it again: docker image load -i irishealth-community-$build-docker.tar.gz" ;;
+        *) again="Load it again from its Early Access file: docker image load -i <that file>" ;;
+      esac
+      fail "The AI Hub image is only $((size / 1000000)) MB; a complete load is about 5.4 GB of content." "$again"
     fi
     arch=$(docker image inspect --format '{{.Architecture}}' "$image")
     host=$(docker info --format '{{.Architecture}}')
@@ -173,17 +197,22 @@ if [ "$problems" -eq 0 ] && [ "$edition" = aihub ]; then
       *) fail "The image is for $arch and Docker runs on $host." "Download the Early Access file for your machine's architecture." ;;
     esac
   fi
-elif [ "$problems" -eq 0 ]; then
+elif [ "$problems" -eq 0 ] && [ "$edition" = replay ]; then
   ok "The replay edition builds on the public image $PUBLIC_IMAGE (pulled during the build)"
 fi
 
 # 5. .env
 plan_env=""
 if [ -f .env ]; then
-  with=$(setting SHUTTER_WITH_AIHUB)
   if [ "$edition" = replay ] && [ "${with:-1}" != 0 ]; then
     fail ".env is set up for the AI Hub edition, and you asked for the replay edition." \
       "Remove .env (or set SHUTTER_IMAGE=$PUBLIC_IMAGE and SHUTTER_WITH_AIHUB=0 in it). If an instance ran before, run docker compose down -v first: it removes that instance's data. Then run ./install.sh --replay again."
+  elif [ -n "$env_replay" ]; then
+    # The mirror of the guard above: after ./install.sh --replay, a plain ./install.sh or --image-file would otherwise
+    # build the replay edition again while saying the AI Hub image is loaded
+    again="./install.sh"; [ -n "$image_file" ] && again="./install.sh --image-file $image_file"
+    fail ".env is set up for the replay edition (SHUTTER_IMAGE=$image, SHUTTER_WITH_AIHUB=${with:-auto}), and you asked for the AI Hub edition." \
+      "If an instance ran before, run docker compose down -v first: it removes that instance's data. Then remove .env (or set SHUTTER_IMAGE=${AIHUB_IMAGE} and SHUTTER_WITH_AIHUB=auto in it) and run $again again."
   else
     ok ".env is there and is kept as it is"
   fi
@@ -227,13 +256,28 @@ if [ -n "$plan_env" ]; then
   fi
   echo "  created .env"
 fi
-echo "  building and starting (2 to 15 minutes the first time)"
-docker compose up -d --build 2>&1 | tail -5 | sed 's/^/    /'
+echo "  building and starting (2 to 15 minutes the first time; the whole log goes to install-build.log)"
+if docker compose up -d --build > install-build.log 2>&1; then
+  tail -5 install-build.log | sed 's/^/    /'
+else
+  echo
+  echo "The build failed. The whole log is in install-build.log; its last lines:"
+  tail -30 install-build.log | sed 's/^/    /'
+  # The lines that name the reason: iris.script's BUILD FAILED, the Second Parser's build, BuildKit's ERROR
+  reason=$(grep -n 'BUILD FAILED\|pex/build.sh\|ERROR' install-build.log | tail -8 || true)
+  if [ -n "$reason" ]; then
+    echo "The lines that name the reason (line numbers in install-build.log):"
+    echo "$reason" | sed 's/^/    /'
+  fi
+  echo
+  fail "The build failed, so Shutter was not started." "Fix what install-build.log names (no network for the image, the package or Maven Central is the usual cause), then run ./install.sh again."
+  exit 1
+fi
 
 start=$(date +%s)
 deadline=$((start + 25 * 60))
 while :; do
-  if curl -fsS -m 10 "$health_url" 2> /dev/null | grep -q '"ok":true'; then
+  if healthy; then
     echo
     echo "Shutter is ready after $(( $(date +%s) - start )) s:"
     echo "  the web app:   http://localhost:${port}/shutter/index.html  (approver / shutter, or operator / shutter)"
@@ -245,7 +289,7 @@ while :; do
     echo
     echo "Shutter did not report healthy within 25 minutes. The last lines of its log:"
     docker compose logs --tail 30 shutter 2>&1 | sed 's/^/    /'
-    echo "Its health report: curl $health_url"
+    if command -v curl > /dev/null 2>&1; then echo "Its health report: curl $health_url"; else echo "Its health report: $health_url (open it in a browser)"; fi
     exit 1
   fi
   state=$(docker compose ps --format '{{.Status}}' shutter 2> /dev/null | head -1)
