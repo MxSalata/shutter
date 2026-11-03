@@ -5,7 +5,7 @@
  * conversations (knowledge/questions/S*.json) in record mode, and writes them to src/mocks/recorded-questions.json,
  * which the in-browser mock serves in the demo build and the tests.
  *
- *   node scripts/export-recorded-answers.mjs [--url http://192.168.0.10:52774] [--user approver] [--out src/mocks/recorded-questions.json]
+ *   node scripts/export-recorded-answers.mjs [--url http://localhost:52773] [--user approver] [--out src/mocks/recorded-questions.json]
  *                                            [--fixtures src/mocks/fixtures.json] [--records ../fixtures/records]
  *                                            [--questions ../knowledge/questions]
  *
@@ -43,7 +43,7 @@ const args = Object.fromEntries(
       [],
     ),
 );
-const base = `${(args.url ?? 'http://192.168.0.10:52774').replace(/\/$/, '')}/api/shutter`;
+const base = `${(args.url ?? 'http://localhost:52773').replace(/\/$/, '')}/api/shutter`;
 const user = args.user ?? 'approver';
 const password = process.env.SHUTTER_PASSWORD ?? 'shutter';
 const out = args.out ?? 'src/mocks/recorded-questions.json';
