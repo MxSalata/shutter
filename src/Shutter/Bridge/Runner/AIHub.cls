@@ -82,7 +82,7 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
                 If (terminal = "SubmitFindings") || (terminal = "SubmitPlan") Set submit.CiteIds = ..EvidenceIdsOf(spec.Context)
                 Do agent.ToolManager.AddTool(submit)
                 // The member's knowledge collection as search tools, when the library is built.
-                Do ..AttachKnowledge(agent, spec)
+                Do ..AttachKnowledge(agent, spec, .attached)
                 // Policies: the run is held to its case; every tool call is audited into the trace.
                 Set scope = ##class(Shutter.Bridge.Policy.Scope).%New()
                 Set scope.CaseId = caseKey
@@ -90,6 +90,12 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
                 Set trace = ##class(Shutter.Bridge.Policy.Trace).%New()
                 Set trace.RunKey = spec.EnsMessageId
                 Do agent.ToolManager.SetAuditPolicy(trace)
+                // The tool catalogue is pinned (Shutter.Bridge.Catalogue, v1.38): what the framework discovered must be exactly
+                // the evidence tools, the terminal and the attached collections' search tools, or no model call is made.
+                If '..CataloguePinned(agent, terminal, $GET(attached), .catalogueProblem) {
+                    Set response.Status = "catalogue_mismatch", response.Error = "The agent's tools are not the declared ones: " _ catalogueProblem
+                    Quit
+                }
                 // The session, with prompt caching on, and the monitor.
                 Set config = {"max_tokens": 16000, "cache": {"enabled": true, "cache_system_prompt": true, "cache_tool_definitions": true}}
                 Set session = agent.CreateSession(config)
@@ -291,15 +297,58 @@ Method FillStats(response As Shutter.Bridge.Msg.AgentResponse, agent, session, m
 /// The member's knowledge collection, as search tools, when the library is present and built: the board member row's
 /// collection; for an agent with no row (the production review's), the agent class's KNOWLEDGE parameter; else every
 /// collection.
-Method AttachKnowledge(agent, spec As Shutter.Bridge.RunSpec) [ Private ]
+/// The tool catalogue against the declared one (Shutter.Bridge.Catalogue, v1.38): the agent class's TOOLSETS, the run's
+/// terminal tool and the knowledge collections attached; problem says what differs.
+ClassMethod CataloguePinned(agent, terminal As %String, attached As %String, Output problem As %String) As %Boolean
 {
+    Set problem = ""
+    Set toolsets = $SELECT(##class(%Dictionary.CompiledParameter).%ExistsId($CLASSNAME(agent) _ "||TOOLSETS"): $PARAMETER(agent, "TOOLSETS"), 1: "")
+    Set expected = ##class(Shutter.Bridge.Catalogue).Expected(toolsets, terminal, attached)
+    Set discovered = ##class(Shutter.Bridge.Catalogue).NamesOf(agent.ToolManager.%Discover())
+    Quit ##class(Shutter.Bridge.Catalogue).Check(expected, discovered, .problem)
+}
+
+/// The pin as the runner applies it, for the proof over SQL on an AI Hub build: the agent built as Run builds it (its
+/// toolsets, the terminal, the collection's search tools), plus an extra tool when one is named, and the verdict with
+/// the names: {expected, discovered, ok, problem}.
+ClassMethod CataloguePin(agentClass As %String = "Shutter.Agent.Conformance", terminal As %String = "SubmitFindings", collection As %String = "", extra As %String = "") As %String [ SqlProc ]
+{
+    Try {
+        // SQL passes its empty string as $CHAR(0).
+        If terminal = $CHAR(0) Set terminal = ""
+        If collection = $CHAR(0) Set collection = ""
+        If extra = $CHAR(0) Set extra = ""
+        Set agent = $CLASSMETHOD(agentClass, "%New")
+        Set toolsets = $SELECT(##class(%Dictionary.CompiledParameter).%ExistsId(agentClass _ "||TOOLSETS"): $PARAMETER(agentClass, "TOOLSETS"), 1: "")
+        For i = 1:1:$LENGTH(toolsets, ",") { Set ts = $ZSTRIP($PIECE(toolsets, ",", i), "<>W") If ts '= "" Do agent.UseToolSet(ts) }
+        If terminal '= "" Do agent.ToolManager.AddTool($CLASSMETHOD("Shutter.Tools." _ terminal, "%New"))
+        Set attached = ""
+        If collection '= "" Set n = ##class(Shutter.Knowledge.Library).Attach(agent, collection, .problems, .attached)
+        If extra '= "" Do agent.ToolManager.AddTool($CLASSMETHOD("Shutter.Tools." _ extra, "%New"))
+        Set expected = ##class(Shutter.Bridge.Catalogue).Expected(toolsets, terminal, attached)
+        Set discovered = ##class(Shutter.Bridge.Catalogue).NamesOf(agent.ToolManager.%Discover())
+        Set ok = ##class(Shutter.Bridge.Catalogue).Check(expected, discovered, .problem)
+        Set out = {}
+        Set out.expected = $LISTTOSTRING(expected, ","), out.discovered = $LISTTOSTRING(discovered, ",")
+        Do out.%Set("ok", ok, "boolean")
+        Set out.problem = problem, out.attached = attached
+        If $GET(problems) '= "" Set out."knowledge_problems" = problems
+        Return out.%ToJSON()
+    } Catch ex {
+        Return {"error": (ex.DisplayString())}.%ToJSON()
+    }
+}
+
+Method AttachKnowledge(agent, spec As Shutter.Bridge.RunSpec, Output attached As %String) [ Private ]
+{
+    Set attached = ""
     If '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Knowledge.Library") Quit
     Set collection = ""
     Set member = ##class(Shutter.Store.BoardMember).ByCode(spec.MemberCode)
     If $ISOBJECT(member) && (member.KnowledgeCollection '= "") Set collection = member.KnowledgeCollection
     If (collection = "") && ##class(%Dictionary.CompiledParameter).%ExistsId($CLASSNAME(agent) _ "||KNOWLEDGE") Set collection = $PARAMETER(agent, "KNOWLEDGE")
     If collection = "" Set collection = "all"
-    Set n = $CLASSMETHOD("Shutter.Knowledge.Library", "Attach", agent, collection, .problems)
+    Set n = $CLASSMETHOD("Shutter.Knowledge.Library", "Attach", agent, collection, .problems, .attached)
     If $GET(problems) '= "" $$$LOGWARNING("Knowledge for " _ spec.MemberCode _ ": " _ problems)
     $$$TRACE("Knowledge collections attached for " _ spec.MemberCode _ ": " _ n _ " (" _ collection _ ")")
 }
