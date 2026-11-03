@@ -55,7 +55,7 @@ reads without privilege checks, but a cached query that has to be compiled again
 as the caller. Once the demo hospital is installed, the operator and approver roles also read its databases. With `demo=1` it also creates the demo users, the demo receiver's resource, role, user and
 `/downstream/api`, the `DownstreamAPI` credential and the feed and demo items.
 
-Environment variables read when the installer runs. Six of them, `SHUTTER_LIVE`, `SHUTTER_DAILY_BUDGET_USD`,
+Environment variables read when the installer runs. Seven of them, `SHUTTER_LIVE`, `SHUTTER_DEMO_PORTAL`, `SHUTTER_DAILY_BUDGET_USD`,
 `SHUTTER_JUDGE_BUDGET_USD`, `SHUTTER_PUBLIC_DEMO_PASSWORD`, `SHUTTER_TRACE_PASSWORD` and `SHUTTER_JUDGE_PASSWORD`, are also
 applied every time `Shutter.Production` starts (`Shutter.Setup.ApplyEnvironment`, from the production's `OnStart`), so in the
 image they travel as container environment from `.env` through `docker-compose.yml`, need no build argument (a password in a
@@ -77,6 +77,7 @@ neither the build log nor the image's history carries it; the build needs BuildK
 | `SHUTTER_PROVIDER_TIMEOUT_SECONDS` | The bound on one model call (CONTRACTS 6.6): the seconds the provider's HTTP client waits for a reply before the call fails, 10 to 600; default 120. Applied at every start of the production, like the budget. |
 | `SHUTTER_DAILY_BUDGET_USD` | A cap in US dollars on what the agents' live runs may spend per day (00:00 to 00:00 UTC; CONTRACTS 9). At the cap, runs are refused with `budget_exhausted`, the board falls back to the rules path and the gate still judges the resend. Empty or 0: no cap. |
 | `SHUTTER_LIVE` | `1` turns on the live hospital (CONTRACTS 4.4): the demo hospital plays one of Shutter's scenarios every 7 minutes with fresh patients at present times and real faults, and sends an ordinary message a minute between stories, and the shipped profile's tier 2 single chains wait for an approval, so visitors have a case to approve. Demo only; off by default. `SELECT Hospital.Setup_SetLive(1)` in the HOSPITAL namespace switches it later. |
+| `SHUTTER_DEMO_PORTAL` | `1` makes the Management Portal read only at every start of the production (CONTRACTS 12 and 14.5: the portal applications lose their MatchRoles and require `Shutter_Portal`, which only the trace role holds), since that hardening lives in the instance, not the kept data, and a recreated container would come back with the portal open. For a public demo; leave it unset on a local install, where the approver's "In IRIS" links rely on the portal as IRIS made it. |
 | `SHUTTER_MESSAGE_PURGE` | `1` creates the daily task "Shutter message purge" (`Ens.Util.Tasks.Purge`, every message type in the namespace). On by default in the demo, off otherwise: only a namespace that holds nothing but Shutter should purge this way. |
 | `SHUTTER_MESSAGE_DAYS` | Days the purge keeps (default 90). |
 | `SHUTTER_ESCALATION_DAYS` | Days after a case closes before the daily task "Shutter retention" removes the text of its escalation emails (the hospital number, the NHS number and the date of birth) and their `.eml` files; the rows stay with their digest, recipients and who sent them. Default: `SHUTTER_MESSAGE_DAYS` (90); `0` keeps them. An instance upgraded in place runs the default, 90, until the task's `EscalationDays` is changed in the Task Manager. |

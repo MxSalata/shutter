@@ -2,16 +2,16 @@
 /// a ranking that names every finding once with the ranks 1 to n and an explanation each is accepted; a repeated id, a
 /// rank outside 1 to n or given twice, a missing or overlong explanation and a ranking that is not an array are refused
 /// by name; the tool refuses another review id and keeps the accepted JSON. Both classes belong to the aihub module
-/// (they extend %JSON.Adaptor and %AI.Tool there), so each test runs only where its class is compiled and passes
-/// trivially, saying so, on an instance with the core alone. Nothing is written.
+/// (they extend %JSON.Adaptor and %AI.Tool there), so each test runs only where its class is compiled and is reported as
+/// skipped, saying so, on an instance with the core alone. Nothing is written.
 Class Shutter.Test.ReviewSchema Extends %UnitTest.TestCase
 {
 
-/// Whether the aihub class is compiled on this instance; when it is not, the test says so and passes.
+/// Whether the aihub class is compiled on this instance; when it is not, the test is skipped, saying so.
 Method Present(class As %String) As %Boolean
 {
     If ##class(%Dictionary.CompiledClass).%ExistsId(class) Quit 1
-    Do $$$AssertTrue(1, class _ " is not compiled on this instance (the aihub module is not loaded): nothing to check here")
+    Do $$$AssertSkipped(class _ " is not compiled on this instance (the aihub module is not loaded): nothing to check here")
     Quit 0
 }
 

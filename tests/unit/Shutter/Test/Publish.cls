@@ -1,13 +1,13 @@
 /// The publisher's tools (Shutter.Publish.Tools; CONTRACTS 15, v1.35): the shapes, that no patient or encounter identifier
-/// leaves, and the audit row per call. Runs where the aihub module is loaded (the tools class is compiled) and is skipped
-/// on the core edition.
+/// leaves, and the audit row per call. Runs where the aihub module is loaded (the tools class is compiled) and is reported
+/// as skipped on the core edition.
 Class Shutter.Test.Publish Extends %UnitTest.TestCase
 {
 
 Method TestPublisher()
 {
     If '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Publish.Tools") {
-        Do $$$AssertTrue(1, "Shutter.Publish.Tools is not compiled here (the core edition): the publisher's test is skipped")
+        Do $$$AssertSkipped("Shutter.Publish.Tools is not compiled here (the core edition): the publisher's test is skipped")
         Quit
     }
     Set t = "Shutter.Publish.Tools", audit = "Shutter.Store.PublishCall"
