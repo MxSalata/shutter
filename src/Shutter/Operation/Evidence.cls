@@ -144,34 +144,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     // 7. The route, with the receiver's own capability profile (its capabilities endpoint): the gate's capability
     // check reads this, never an assumption. A receiver without such an endpoint is described by the site profile's
     // declared features, and the route says so.
-    Set capsPath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "capabilities")
-    Set declared = ##class(Shutter.Store.SiteProfile).ReceiverFeatures(receiver)
-    If capsPath = "" {
-        Set caps = declared, cstatus = 200
-    } Else {
-        Set caps = ..WardGet(capsPath, .cstatus)
-    }
-    Set route = {}
-    Set route.feed = "ADT In -> ADT to Downstream -> " _ receiver
-    Set route.connector = receiver
-    Set route.receiver = ##class(Shutter.Store.SiteProfile).ReceiverLabel(receiver)
-    Set route.tier = ##class(Shutter.Store.SiteProfile).TierOf(receiver)
-    // The receiver's category and the history policy it derives (v1.23), as the snapshot saw them
-    Set route.category = ##class(Shutter.Store.SiteProfile).ReceiverCategory(receiver)
-    Set route."history_policy" = ##class(Shutter.Store.SiteProfile).ReceiverHistoryPolicy(receiver)
-    Set route."capabilities_source" = $SELECT(capsPath = "": "declared by the site profile", 1: "read from " _ capsPath)
-    Set route.declared = declared
-    Set route."capabilities_http_status" = cstatus
-    If cstatus = 200 {
-        Set route.capabilities = caps
-        Do route.%Set("conditional_writes", ##class(Shutter.Util.Json).Bool(caps, "conditional_writes"), "boolean")
-        Do route.%Set("receipts", ##class(Shutter.Util.Json).Bool(caps, "receipts"), "boolean")
-        Do route.%Set("dry_run", ##class(Shutter.Util.Json).Bool(caps, "dry_run"), "boolean")
-        Set route.epoch = ##class(Shutter.Util.Json).Str(caps, "epoch")
-    } Else {
-        Do route.%Set("capabilities", "", "null")
-        Set route.note = "The receiver's capability profile could not be read; nothing is assumed about it"
-    }
+    Set route = ..Route(receiver)
     Do snap.AddItem("route", "ward_api", now, route) Set count = count + 1
 
     // The summary the agents and the gate read.
@@ -447,6 +420,51 @@ Method StandardCategory(category As %String) As %String [ Private ]
         Set out = ""
     }
     Quit out
+}
+
+/// The route item (CONTRACTS 6.4): the receiver's own capability profile, read from its capabilities endpoint, or
+/// the features its entry in the site profile declares when it has no such endpoint. An entry without an endpoint that
+/// declares no features vouches for nothing: the route then records the capabilities as unread (status 0), so the gate
+/// answers unknown (CAPABILITIES_UNREADABLE) rather than pass on the defaults. The declared features stay on the route
+/// as the record of what the site believes.
+Method Route(receiver As %String) As %DynamicObject
+{
+    Set capsPath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "capabilities")
+    Set declared = ##class(Shutter.Store.SiteProfile).ReceiverFeatures(receiver)
+    Set entry = ##class(Shutter.Store.SiteProfile).Receiver(receiver)
+    Set undeclared = (capsPath = "") && '($ISOBJECT(entry) && $ISOBJECT(entry.%Get("features")))
+    If undeclared {
+        Set caps = {}, cstatus = 0
+    } ElseIf capsPath = "" {
+        Set caps = declared, cstatus = 200
+    } Else {
+        Set caps = ..WardGet(capsPath, .cstatus)
+    }
+    Set route = {}
+    Set route.feed = "ADT In -> ADT to Downstream -> " _ receiver
+    Set route.connector = receiver
+    Set route.receiver = ##class(Shutter.Store.SiteProfile).ReceiverLabel(receiver)
+    Set route.tier = ##class(Shutter.Store.SiteProfile).TierOf(receiver)
+    // The receiver's category and the history policy it derives (v1.23), as the snapshot saw them
+    Set route.category = ##class(Shutter.Store.SiteProfile).ReceiverCategory(receiver)
+    Set route."history_policy" = ##class(Shutter.Store.SiteProfile).ReceiverHistoryPolicy(receiver)
+    Set route."capabilities_source" = $SELECT(undeclared: "not declared by the site profile", capsPath = "": "declared by the site profile", 1: "read from " _ capsPath)
+    Set route.declared = declared
+    Set route."capabilities_http_status" = cstatus
+    If cstatus = 200 {
+        Set route.capabilities = caps
+        Do route.%Set("conditional_writes", ##class(Shutter.Util.Json).Bool(caps, "conditional_writes"), "boolean")
+        Do route.%Set("receipts", ##class(Shutter.Util.Json).Bool(caps, "receipts"), "boolean")
+        Do route.%Set("dry_run", ##class(Shutter.Util.Json).Bool(caps, "dry_run"), "boolean")
+        Set route.epoch = ##class(Shutter.Util.Json).Str(caps, "epoch")
+    } ElseIf undeclared {
+        Do route.%Set("capabilities", "", "null")
+        Set route.note = "The receiver has no capabilities endpoint and its entry in the site profile declares no features; nothing is assumed about it"
+    } Else {
+        Do route.%Set("capabilities", "", "null")
+        Set route.note = "The receiver's capability profile could not be read; nothing is assumed about it"
+    }
+    Quit route
 }
 
 /// GET a path on the downstream system; returns the parsed body (an object) and the HTTP status (0 when no answer).

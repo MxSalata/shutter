@@ -15,7 +15,7 @@ Property Action As Shutter.Schema.PlanAction(%JSONFIELDNAME = "action") [ Requir
 /// What must still hold at dispatch; the gate checks what it can.
 Property Preconditions As list Of %String(%JSONFIELDNAME = "preconditions", MAXLEN = 1000);
 
-/// Snapshot item kinds or identifiers the plan rests on.
+/// Keys of the evidence the plan rests on, or keys one level down in it; findings for the specialists' findings.
 Property EvidenceRefs As list Of %String(%JSONFIELDNAME = "evidence_refs", MAXLEN = 200);
 
 /// The specialists' views the plan does not follow, kept.
