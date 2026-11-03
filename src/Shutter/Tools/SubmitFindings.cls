@@ -11,7 +11,8 @@ Property Description As %String(MAXLEN = "") [ InitialExpression = "Submit the f
 Property CaseId As %String(MAXLEN = 32);
 
 /// What the result may cite (v1.35): the keys of the evidence the run was given, and the keys one level down, comma
-/// separated; the runner sets them from the request's context. "" leaves the evidence_refs unchecked.
+/// separated, with the names the earlier prompts used (error, later_event; v1.39); the runner sets them from the request's
+/// context. "" leaves the evidence_refs unchecked.
 Property CiteIds As %String(MAXLEN = "");
 
 /// The accepted findings as JSON, or "".
@@ -21,7 +22,7 @@ Property Submissions As %Integer [ InitialExpression = 0 ];
 
 Property LastError As %String(MAXLEN = 2000);
 
-/// Submit your findings for the case, exactly once, when the review is complete. The disposition is one of resend, reconcile, superseded, more_evidence or escalate; confidence is 0 to 1; violations lists the contract clauses the message or the situation breaks (empty when none); unknowns lists what could not be established; evidence_refs lists the snapshot items the findings rest on (message, validation, ward_state, receipt, timeline, route, error). If the submission is refused, fix the fields it names and submit again.
+/// Submit your findings for the case, exactly once, when the review is complete. The disposition is one of resend, reconcile, superseded, more_evidence or escalate; confidence is 0 to 1; violations lists the contract clauses the message or the situation breaks (empty when none); unknowns lists what could not be established; evidence_refs lists the keys of the evidence the findings rest on (operation, failure, message, validation, ward_state, receipt, timeline, route, or a key one level down in them, such as reason_code or history); a name that is not a key of the evidence is refused. If the submission is refused, fix the fields it names and submit again.
 /// caseId: the case identifier the findings are for
 /// findings: the findings object
 Method SubmitFindings(caseId As %String, findings As Shutter.Schema.Findings) As %DynamicObject
