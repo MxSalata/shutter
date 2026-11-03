@@ -1568,8 +1568,10 @@ ClassMethod EnsureTask(name As %String, ns As %String, class As %String, descrip
 }
 
 /// Empty Shutter's own tables (cases and everything attached to them, their escalation emails and the .eml files of
-/// those rows included, recordings excepted) on a demo instance. Refused elsewhere. Returns the number of tables
-/// emptied or the error.
+/// those rows included, the precedents and board leads that name them, recordings excepted) on a demo instance, reset
+/// the counters so the next case is C-000001 again, and stamp ^Shutter.Config("resetAt") with the time of the purge, as a
+/// scenario reset does, so nothing from before it is read as this instance's history. Refused elsewhere. Returns the
+/// number of tables emptied or the error.
 ClassMethod PurgeStore() As %String [ SqlProc ]
 {
     If '$SYSTEM.Security.Check("Shutter_Scenarios", "USE") Quit "Shutter_Scenarios is required"
@@ -1579,7 +1581,7 @@ ClassMethod PurgeStore() As %String [ SqlProc ]
     // another instance's files.
     Set emails = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Seq, Result FROM Shutter_Store.Escalation WHERE Transport = 'file'")
     While emails.%Next() { Do ##class(Shutter.Store.Escalation).RemoveFile(emails.%Get("Result"), emails.%Get("Seq")) }
-    For cls = "Shutter.Store.CaseToken", "Shutter.Store.ChainItem", "Shutter.Store.Chain", "Shutter.Store.IncidentEvent", "Shutter.Store.Incident", "Shutter.Store.Verification", "Shutter.Store.ExecutionAttempt", "Shutter.Store.Approval", "Shutter.Store.Rehearsal", "Shutter.Store.GateDecision", "Shutter.Store.Plan", "Shutter.Store.Finding", "Shutter.Store.CaseQuestion", "Shutter.Store.AgentRun", "Shutter.Store.SnapshotItem", "Shutter.Store.Snapshot", "Shutter.Store.CaseEvent", "Shutter.Store.Escalation", "Shutter.Store.Case", "Shutter.Store.ReviewAnnotation", "Shutter.Store.Review", "Shutter.Store.Idempotency", "Shutter.Bridge.ToolCall" {
+    For cls = "Shutter.Store.CaseToken", "Shutter.Store.ChainItem", "Shutter.Store.Chain", "Shutter.Store.IncidentEvent", "Shutter.Store.Incident", "Shutter.Store.Verification", "Shutter.Store.ExecutionAttempt", "Shutter.Store.Approval", "Shutter.Store.Rehearsal", "Shutter.Store.GateDecision", "Shutter.Store.Plan", "Shutter.Store.Finding", "Shutter.Store.CaseQuestion", "Shutter.Store.AgentRun", "Shutter.Store.SnapshotItem", "Shutter.Store.Snapshot", "Shutter.Store.CaseEvent", "Shutter.Store.Escalation", "Shutter.Store.Case", "Shutter.Store.Precedent", "Shutter.Store.BoardLead", "Shutter.Store.ReviewAnnotation", "Shutter.Store.Review", "Shutter.Store.Idempotency", "Shutter.Bridge.ToolCall" {
         Set sc = $CLASSMETHOD(cls, "%KillExtent")
         If $$$ISERR(sc) Quit
         Set n = n + 1
@@ -1596,6 +1598,9 @@ ClassMethod PurgeStore() As %String [ SqlProc ]
     // Worklist rows whose task is gone (a task deleted by hand) would show as broken entries in the inbox.
     Do ##class(%SQL.Statement).%ExecDirectNoPriv(, "DELETE FROM EnsLib_Workflow.Worklist WHERE Task NOT IN (SELECT ID FROM EnsLib_Workflow.TaskResponse)")
     Kill ^Shutter.Counter, ^Shutter.Scenarios
+    // The counters start again, so a new case may carry a purged case's id: the reset stamp keeps a lead begun before
+    // the purge from being followed, and the evidence collector from reading older message-store events.
+    Set ^Shutter.Config("resetAt") = ##class(Shutter.Util.Time).NowUTC()
     Quit n
 }
 
