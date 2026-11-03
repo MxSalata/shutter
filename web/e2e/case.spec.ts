@@ -256,8 +256,9 @@ test.describe('the case page made easier to read', () => {
     expect(Math.round((await stage.boundingBox())!.height * 100) / 100).toBeGreaterThanOrEqual(44);
     const compact = page.getByTestId('case-action-compact');
     const box = (await compact.boundingBox())!;
-    expect(box.height).toBeGreaterThanOrEqual(44);
-    expect(box.width).toBeGreaterThanOrEqual(44);
+    // A sub-pixel layout can measure 43.99997: a 44 px target to the hundredth of a pixel
+    expect(Math.round(box.height * 100) / 100).toBeGreaterThanOrEqual(44);
+    expect(Math.round(box.width * 100) / 100).toBeGreaterThanOrEqual(44);
     await stage.click();
     await expect(page.getByRole('button', { name: /^4\. Gate and decision/ })).toHaveAttribute(
       'aria-expanded',

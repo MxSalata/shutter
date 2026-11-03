@@ -412,7 +412,7 @@ export interface Plan {
   plan: unknown;
   createdAt: string;
   createdBy: string;
-  /** The scenario catalogue's entry the plan follows, when it names one (E1 to E10). */
+  /** The scenario catalogue's entry the plan follows, when it names one (E1 to E18). */
   catalogueEntry?: string;
   /** "preferred", or the alternative taken, with the reason. */
   outcome?: string;
