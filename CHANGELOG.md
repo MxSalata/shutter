@@ -4,7 +4,7 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
-## Unreleased
+## 1.0.0 (6 November 2026)
 
 What the first release holds: Shutter, supervised recovery of failed deliveries in an InterSystems IRIS
 Interoperability production, with a board of IRIS AI Hub agents.
@@ -163,7 +163,3 @@ Interoperability production, with a board of IRIS AI Hub agents.
   data databases live on the `shutter-mgr` volume, so a rebuilt image upgrades in place (`docs/INSTALL.md`, section 8),
   and `Shutter.Setup.Doctor` reports what an install or an upgrade left (`missing_items`, `disabled_items`, `edition`,
   `second_parser`, `credentials_ok`).
-
-## 1.0.0
-
-To be dated at release: the entries above move here when 1.0.0 is tagged and released on Open Exchange.
