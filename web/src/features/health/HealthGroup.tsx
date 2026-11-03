@@ -234,7 +234,7 @@ export function HealthGroup({
           rows
         )}
         {reasons.length ? (
-          <TechDetail label="Why they are missing" kind="data">
+          <TechDetail label="What the dashes mean" kind="data">
             <List spacing={4} size="sm">
               {reasons.map((r) => (
                 <List.Item key={r.key}>
