@@ -165,6 +165,12 @@ const members = (x: object): [string, unknown][] =>
 
 const ZONES = ['UTC', 'Europe/London'];
 const FIXED_OFFSET = /^[+-](0[0-9]|1[0-4]):[0-5][0-9]$/;
+/**
+ * The shape of an IANA zone name with a region (Europe/Paris, America/Argentina/Buenos_Aires). The server accepts any
+ * zone its Python knows (CONTRACTS 11, v1.30), a list the page does not have, so a name of this shape passes here and
+ * the server has the last word: its 400 lands on the field. A one-word name (GMT, Japan) is refused as before.
+ */
+export const IANA_ZONE = /^[A-Za-z]+(\/[A-Za-z0-9_+-]+)+$/;
 
 // The ports of Shutter.Util.Mail (CONTRACTS 10): the same address passes or fails here as at the server.
 // $ZSTRIP's C class: $CHAR(0) to $CHAR(31) and $CHAR(127) to $CHAR(159).
@@ -336,8 +342,8 @@ export function validateProfile(p: unknown): string {
         continue;
       }
       if (k !== 'time_zone') return `feed.${k}: unknown setting`;
-      if (typeof v !== 'string' || !(ZONES.includes(v) || FIXED_OFFSET.test(v)))
-        return 'feed.time_zone: must be UTC, Europe/London or a fixed offset such as +01:00 (up to 14:00)';
+      if (typeof v !== 'string' || !(ZONES.includes(v) || FIXED_OFFSET.test(v) || IANA_ZONE.test(v)))
+        return 'feed.time_zone: must be UTC, Europe/London, a fixed offset such as +01:00 (up to 14:00), or an IANA zone name such as Europe/Paris';
     }
   }
   // What may leave IRIS for a model: free text off unless the site says so.

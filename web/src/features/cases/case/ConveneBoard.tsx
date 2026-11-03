@@ -15,14 +15,25 @@ import { LiveUnavailableNotice } from '@/components/LiveUnavailableNotice';
 
 /** The states a reinvestigation reopens, and so the board may be convened on. */
 const REOPENABLE: string[] = ['blocked', 'escalated', 'failed'];
+/**
+ * The modes in which a reopened case convenes a board: the workflow keeps the case's mode, so a rules case is
+ * reinvestigated by the rules alone and a single case by its one agent, with no board to convene.
+ */
+const BOARD_MODES: string[] = ['board', 'policy'];
+/** Why the board is not offered on a case of another mode, said where the button would stand. */
+const NO_BOARD: Record<string, string> = {
+  rules: 'No board to convene: a rules case is decided by the rules alone.',
+  single: 'No board to convene: a single-agent case is decided by its one agent.',
+};
 
 /**
  * Convene the board on a case, live (CONTRACTS 5.3, v1.34): for those who may spend the day's model budget (a judge on
  * the public demo, a site's operator or approver). The case is investigated again on fresh evidence and the board
  * decides it whatever the site's policy says; its plan then meets the same gate, rehearsal and approval. It reopens a
- * case as a reinvestigation does, so it is offered on the same cases: blocked, escalated or failed. A case awaiting an
- * approval is approved or rejected first, and one still being investigated is left to finish. The trial shows it on
- * the same cases, disabled with its reason, and never as if a run started: it needs a real model. While the live
+ * case as a reinvestigation does, so it is offered on the same cases: blocked, escalated or failed, in board or site
+ * policy mode; on a rules or single case a line says why there is no board to convene. A case awaiting an approval
+ * is approved or rejected first, and one still being investigated is left to finish. The trial shows it on the same
+ * cases, disabled with its reason, and never as if a run started: it needs a real model. While the live
  * agents cannot run (the budget used up, the provider refusing the key), or once the server refused the press for that
  * reason (409 live_unavailable or budget_exhausted), the dialog says so in the notice and Convene cannot be pressed.
  */
@@ -34,6 +45,14 @@ export function ConveneBoard({ c }: { c: CaseDetail }) {
   const [opened, setOpened] = useState(false);
   const [key, setKey] = useState('');
   if (!REOPENABLE.includes(c.state)) return null;
+  if (!BOARD_MODES.includes(c.mode)) {
+    if (!TRIAL && !can.liveAgents) return null;
+    return (
+      <Text size="xs" c="dimmed" data-testid="convene-reason">
+        {NO_BOARD[c.mode] ?? `No board to convene on a ${c.mode} case.`}
+      </Text>
+    );
+  }
   if (TRIAL)
     return (
       <Stack gap={2} align="flex-end">
