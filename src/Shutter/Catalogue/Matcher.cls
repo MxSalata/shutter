@@ -24,6 +24,10 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     Set error = ..Item(summary, "error")
     Set reason = $ZCONVERT($SELECT($ISOBJECT(error): $CLASSMETHOD(json, "Str", error, "reason_code"), 1: ""), "L")
     Set status = $SELECT($ISOBJECT(error): $CLASSMETHOD(json, "Str", error, "http_status"), 1: "")
+    // An alert's reason code (Shutter.Intake.AlertProcess forwards an alert's failure with "alert") names no answer of the
+    // receiver's, so the status and the outcome decide: a 503 reads unavailable, no status reads none, or timeout for an
+    // uncertain alert.
+    If reason = "alert" Set reason = ""
     Set c."receiver_answer" = $SELECT(reason [ "unavailable": "unavailable", (reason [ "timeout") || (status = 504): "timeout", reason [ "duplicate": "duplicate", reason [ "version": "version_conflict", (reason '= "") || (status = 422) || (status = 409): "refused", status = 503: "unavailable", 1: "none")
     If (c."receiver_answer" = "none") && (c.delivery = "uncertain") Set c."receiver_answer" = "timeout"
     // A withheld operation was never sent, so no receiver answered (T31); nor was a held message (v1.34), whose reason code
