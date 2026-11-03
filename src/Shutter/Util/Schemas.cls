@@ -221,22 +221,22 @@ ClassMethod Held() As %DynamicObject
 /// (Shutter.Store.Case.ReleaseHeld), and the fresh evidence reads the message under its schema. Called by the Case
 /// Releaser's sweep every few seconds (Shutter.Operation.Releaser, v1.35; the index's task before), which passes itself
 /// as host so each release goes from that host to the Case Workflow; the categories are read afresh while anything is
-/// held. Returns how many were released, and checked how many held cases it looked at.
+/// held. Returns how many were released, and checked how many held cases it looked at so far. An error in the check is
+/// thrown to the caller once the counts are written (v1.39; until then it was swallowed and the check answered a partial
+/// count as if it were whole), so the Case Releaser's run row records it; a namespace that cannot be read is not an
+/// error (KnownIn answers that it knows nothing), nor is a release the Case Workflow does not take.
 ClassMethod ReleaseHeld(host As Ens.Host = "", target As %String = "Case Workflow", Output checked As %Integer) As %Integer
 {
     Set n = 0, checked = 0, first = 1
-    Try {
-        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT CaseId, HeldSchema, SourceNamespace FROM Shutter_Store.""Case"" WHERE FailureKind = 'unreadable' AND HeldSchema <> '' AND State IN ('blocked', 'escalated') ORDER BY ID")
-        While rs.%Next() {
-            If first Kill ^||Shutter.SchemaKnown  Set first = 0
-            Set checked = checked + 1
-            Set category = rs.%Get("HeldSchema"), ns = rs.%Get("SourceNamespace")
-            Continue:'..KnownIn(ns, category)
-            // Loaded since the case was held: every job's cache of the categories is stale.
-            Do ..Changed()
-            Set n = n + ##class(Shutter.Store.Case).ReleaseHeld(rs.%Get("CaseId"), category, $SELECT(ns = "": $NAMESPACE, 1: ns), host, target)
-        }
-    } Catch ex {
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT CaseId, HeldSchema, SourceNamespace FROM Shutter_Store.""Case"" WHERE FailureKind = 'unreadable' AND HeldSchema <> '' AND State IN ('blocked', 'escalated') ORDER BY ID")
+    While rs.%Next() {
+        If first Kill ^||Shutter.SchemaKnown  Set first = 0
+        Set checked = checked + 1
+        Set category = rs.%Get("HeldSchema"), ns = rs.%Get("SourceNamespace")
+        Continue:'..KnownIn(ns, category)
+        // Loaded since the case was held: every job's cache of the categories is stale.
+        Do ..Changed()
+        Set n = n + ##class(Shutter.Store.Case).ReleaseHeld(rs.%Get("CaseId"), category, $SELECT(ns = "": $NAMESPACE, 1: ns), host, target)
     }
     Quit n
 }

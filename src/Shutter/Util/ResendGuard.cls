@@ -30,30 +30,30 @@ ClassMethod Pending(case As Shutter.Store.Case) As %DynamicArray
 /// after the delivery already happened: the gate judged the snapshot's pending messages, the Ward's release found no case
 /// waiting yet, and nothing would ever release it (S24 on the board, 1 Nov 2026). A case is released when no pending
 /// message of its encounter carries the awaited control id any more; the note says the delivery's outcome and where it was
-/// read. Returns how many were released, and checked how many waiting cases it looked at; nothing here throws. Called by
-/// the Case Releaser (Shutter.Operation.Releaser, v1.35), which passes itself as host so each release goes from that host
-/// to the Case Workflow; without a host the release goes through the Shutter API service.
+/// read. Returns how many were released, and checked how many waiting cases it looked at so far. An error in the check (a
+/// query that fails, a timeline that cannot be read) is thrown to the caller once the counts are written (v1.39; until then
+/// it was swallowed and the check answered a partial count as if it were whole), so the Case Releaser's run row records
+/// it; a release that the Case Workflow does not take is not an error, only not counted. Called by the Case Releaser
+/// (Shutter.Operation.Releaser, v1.35), which passes itself as host so each release goes from that host to the Case
+/// Workflow; without a host the release goes through the Shutter API service.
 ClassMethod ReleaseDeliveredWaits(host As Ens.Host = "", target As %String = "Case Workflow", Output checked As %Integer) As %Integer
 {
     Set n = 0, checked = 0, json = "Shutter.Util.Json"
-    Try {
-        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE WaitsOnMessage <> '' AND State IN ('blocked', 'escalated')")
-        While rs.%Next() {
-            Set case = ##class(Shutter.Store.Case).%OpenId(rs.%Get("ID"))
-            Continue:'$ISOBJECT(case)
-            Set checked = checked + 1
-            Set control = case.WaitsOnMessage, still = 0, outcome = "", where = ""
-            Set pending = ..Pending(case), pi = pending.%GetIterator()
-            While pi.%GetNext(, .p) { If $CLASSMETHOD(json, "Str", p, "control_id") = control Set still = 1 }
-            Continue:still
-            Set rows = ##class(Shutter.Index.Timeline).Deliveries(case.EncounterId, case.Receiver, case.SourceNamespace), ri = rows.%GetIterator()
-            While ri.%GetNext(, .r) {
-                Continue:($CLASSMETHOD(json, "Str", r, "source_message_id") '= control)
-                Set outcome = $CLASSMETHOD(json, "Str", r, "outcome"), where = $CLASSMETHOD(json, "Str", r, "namespace")
-            }
-            Set n = n + ##class(Shutter.Store.Case).ReleaseWaitingOnMessage(control, $SELECT(outcome '= "": outcome, 1: "delivered") _ $SELECT(where '= "": " in " _ where, 1: "") _ ", found by the Case Releaser's sweep", host, target)
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE WaitsOnMessage <> '' AND State IN ('blocked', 'escalated')")
+    While rs.%Next() {
+        Set case = ##class(Shutter.Store.Case).%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(case)
+        Set checked = checked + 1
+        Set control = case.WaitsOnMessage, still = 0, outcome = "", where = ""
+        Set pending = ..Pending(case), pi = pending.%GetIterator()
+        While pi.%GetNext(, .p) { If $CLASSMETHOD(json, "Str", p, "control_id") = control Set still = 1 }
+        Continue:still
+        Set rows = ##class(Shutter.Index.Timeline).Deliveries(case.EncounterId, case.Receiver, case.SourceNamespace), ri = rows.%GetIterator()
+        While ri.%GetNext(, .r) {
+            Continue:($CLASSMETHOD(json, "Str", r, "source_message_id") '= control)
+            Set outcome = $CLASSMETHOD(json, "Str", r, "outcome"), where = $CLASSMETHOD(json, "Str", r, "namespace")
         }
-    } Catch ex {
+        Set n = n + ##class(Shutter.Store.Case).ReleaseWaitingOnMessage(control, $SELECT(outcome '= "": outcome, 1: "delivered") _ $SELECT(where '= "": " in " _ where, 1: "") _ ", found by the Case Releaser's sweep", host, target)
     }
     Quit n
 }
