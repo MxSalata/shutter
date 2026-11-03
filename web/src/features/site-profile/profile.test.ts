@@ -27,7 +27,7 @@ import {
 const recorded = recordedSiteProfile()!.profile;
 const copy = (): SiteProfile => structuredClone(recorded);
 const FEED_ZONE =
-  'feed.time_zone: must be UTC, Europe/London, a fixed offset such as +01:00 (up to 14:00), or an IANA zone name such as Europe/Paris';
+  'feed.time_zone: must be UTC, Europe/London, a fixed offset such as +01:00 (up to 14:00), or an IANA zone name this IRIS knows (for example Europe/Paris)';
 
 describe('validateProfile, the port of SiteProfile.Validate', () => {
   it('accepts the recorded profile', () => {

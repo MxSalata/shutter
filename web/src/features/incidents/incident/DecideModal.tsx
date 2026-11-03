@@ -55,7 +55,8 @@ export function useDecideDialog(inc: IncidentDetail) {
               decision === 'approve'
                 ? byEnv({
                     live: 'The chains are released in order; each operation is checked again just before it goes.',
-                    trial: 'The recorded chains go out in order. Nothing leaves this browser.',
+                    trial:
+                      'The recorded chains go out in order. Nothing leaves this browser, and a reload starts the recording afresh.',
                   })
                 : 'Nothing is sent for these chains: their cases go to a person.',
           });
