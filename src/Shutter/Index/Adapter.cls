@@ -18,7 +18,7 @@ Property BatchSize As %Integer [ InitialExpression = 200 ];
 /// Headers younger than this wait for the next task.
 Property LagSeconds As %Integer [ InitialExpression = 5 ];
 
-/// On the first start, how far back the walk begins (hours). 0 starts at the newest header.
+/// On the first start, how far back the walk begins (hours). 0 starts after the newest header.
 Property BackfillHours As %Integer [ InitialExpression = 168 ];
 
 /// Batches per task at most, while the walk is behind.
@@ -50,7 +50,7 @@ Method OnTask() As %Status
     Quit $$$OK
 }
 
-/// The first start: the mark begins at the oldest header within the back-fill window, or at the newest header when none
+/// The first start: the mark begins at the oldest header within the back-fill window, or after the newest header when none
 /// is that recent (and when BackfillHours is 0), so an old, quiet store is never walked from header 1.
 Method EnsureMark()
 {
@@ -61,7 +61,7 @@ Method EnsureMark()
 }
 
 /// Where a first walk starts: one below the oldest header created at or after sinceTs (the ODBC form), else the newest
-/// header's id (no window, or no header that recent), and 0 for an empty table. A read, nothing written, so a test can
+/// header's id, so the walk begins after it (no window, or no header that recent), and 0 for an empty table. A read, nothing written, so a test can
 /// call it with any window.
 ClassMethod FirstMark(sinceTs As %String = "") As %Integer
 {
