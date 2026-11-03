@@ -237,7 +237,7 @@ while :; do
     echo
     echo "Shutter is ready after $(( $(date +%s) - start )) s:"
     echo "  the web app:   http://localhost:${port}/shutter/index.html  (approver / shutter, or operator / shutter)"
-    echo "  first steps:   Scenarios, run S2 in Board mode, then approve its case (the README's \"Your first two minutes\")"
+    echo "  first steps:   Scenarios, run S2 in Board mode, then approve its case (the README's \"On your machine or in the trial, first\")"
     echo "  the portal:    http://localhost:${port}/csp/sys/UtilHome.csp  (_SYSTEM / SYS, namespace SHUTTER)"
     exit 0
   fi
