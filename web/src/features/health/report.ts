@@ -373,6 +373,8 @@ const NO_PURGE_NOTE =
 export function rowInfo(key: string, value: unknown, report: Report, trial: boolean): RowInfo {
   // The API mimic's switch is "" when it is off: a setting, not a missing value
   if (key === 'mock_config' && value === '') return { mark: 'none', tone: null, missing: false };
+  // No time when the portal was never hardened, the case on any instance but the public demo: not a missing value
+  if (key === 'portal_hardened_at' && value === '') return { mark: 'none', tone: null, missing: false };
   // The provider is "" until the install has configured one: not configured, or not in the replay edition
   if (key === 'provider' && value === '')
     return report.ai_hub_present === true

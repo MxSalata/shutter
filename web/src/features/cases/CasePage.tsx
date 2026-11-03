@@ -21,6 +21,7 @@ import { CaseActionButton } from './case/CaseActionButton';
 import { caseActionOf } from './case/caseAction';
 import { closeNeedsApprover } from '../site-profile/profile';
 import { EvidencePanel } from './case/EvidencePanel';
+import { revealSection } from './case/revealSection';
 import { EscalationPanel } from './case/EscalationPanel';
 import { AbandonPanel } from './case/AbandonPanel';
 import { CaseTimeline } from './case/CaseTimeline';
@@ -192,21 +193,15 @@ function CaseBody({ c }: { c: CaseDetail }) {
     const from = document.activeElement;
     setPrecedentsOpen(true);
     setTab('audit');
-    window.setTimeout(() => {
-      document.getElementById('precedents')?.scrollIntoView?.({ block: 'start' });
-      // Unless the reader has already moved on, as a quick hand does to a Retire button
-      if (document.activeElement === from || document.activeElement === document.body)
-        document.getElementById('precedents-title')?.focus({ preventScroll: true });
-    }, 250);
+    // Unless the reader has already moved on, as a quick hand does to a Retire button
+    revealSection(
+      ['precedents'],
+      () => document.activeElement === from || document.activeElement === document.body,
+    );
   };
   // Scrolls the first of these sections that is on the page under the tab bar and moves focus to its heading
-  const reveal = (...targets: string[]) =>
-    window.setTimeout(() => {
-      const found = targets.map((t) => document.getElementById(t)).find(Boolean);
-      found?.scrollIntoView?.({ block: 'start' });
-      // Focus follows the scroll, so a keyboard or screen reader user lands on the section, not back at the button
-      document.getElementById(`${found?.id}-title`)?.focus({ preventScroll: true });
-    }, 250);
+  // Focus goes with the scroll, so a keyboard or screen reader user lands on the section, not back at the button
+  const reveal = (...targets: string[]) => revealSection(targets);
   const openStep = (step: StoryStep, target: string, ...fallbacks: string[]) => {
     setSteps((s) => (s.includes(step) ? s : [...s, step]));
     setTab('summary');
