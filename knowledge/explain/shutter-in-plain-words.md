@@ -1,15 +1,15 @@
 ---
 id: shutter-in-plain-words
-version: 1.0
+version: 1.1
 collection: explain
 applies_to: [shutter, hl7-v2-adt]
-effective_from: 2026-10-26
+effective_from: 2026-11-03
 ---
 
 # Shutter in plain words
 
 What Shutter's words mean for a person reading a case: the outcomes, who decides, the gate's checks and the site profile
-settings that change what Shutter does. Version 1.0, in force from 26 October 2026. These words explain; they never
+settings that change what Shutter does. Version 1.1, in force from 3 November 2026. These words explain; they never
 decide anything about a case. The case's own evidence, the gate's checks and the what-if facts do.
 
 ## SPW-1 What a case is
@@ -86,7 +86,7 @@ SPW-5.2. **UNKNOWN_ENCOUNTER: The downstream system has never seen this encounte
 
 SPW-5.3. **RECEIVER_UNREADABLE: The downstream system's record couldn't be read.** Without the downstream system's current state and history, supersession and transitions can't be judged, so nothing is eligible. Next: Collect the evidence again. If the downstream system stays unreadable, contact the downstream system team.
 
-SPW-5.4. **PARSE_FAILED: The message couldn't be mapped to an operation.** Fields the operation needs, such as the visit number, the event time or the patient identifier, are missing or malformed. Next: Escalate to the integration team with the message.
+SPW-5.4. **PARSE_FAILED: The message couldn't be read or mapped to an operation.** IRIS couldn't read the message against this namespace's schema, or fields the operation needs, such as the visit number, the event time or the patient identifier, are missing or malformed. A second, independent parser says which: a sound message whose site segment isn't defined here, or a malformed one. Next: Read the gate's words. When the second parser reads the message as sound and names a site segment the schema lacks, import the site's schema and set the inbound item's schema category to it (INSTALL.md section 7), then reinvestigate; nothing is resent meanwhile. Otherwise escalate to the integration team with the message.
 
 SPW-5.5. **UNMAPPABLE: The message can't become a downstream operation.** The feed couldn't map the message to an operation: a field the operation needs is missing or malformed, or the profile maps no operation for its event. Shutter opened a case so the failure isn't lost, but nothing can be resent from it. Next: Escalate to the integration team with the message: correct it at the source and send it again.
 
@@ -193,3 +193,15 @@ SPW-5.55. **DRY_RUN_STALE: The rehearsal was checked against another version.** 
 SPW-5.56. **WRITE_NOT_COMMITTED: The resend was not committed.** The write's answer was lost. After the settle window the receiver holds no receipt for the operation and its history does not show it, and the encounter is still at the version the write was conditional on (or moved past it by something else, so the conditional write can no longer apply): nothing was applied. The approval authorised one write and it is spent; a reinvestigation makes a new plan on fresh evidence. Next: Check the receiver's history and receipts for the operation key; reinvestigate the case when the receiver's state is known. Never resend blind.
 
 SPW-5.57. **WRITE_OUTCOME_UNKNOWN: The resend's outcome is unknown.** The write's answer was lost, and the reads that followed could not settle whether the receiver applied it: a lookup failed, the receiver no longer knows the encounter, or the budget of reads ran out. Nothing is established either way, so nothing is resent until a person has checked at the receiver. Next: Check the receiver's history and receipts for the operation key; reinvestigate the case when the receiver's state is known. Never resend blind.
+
+SPW-5.58. **WAITING_FOR_OCCUPANT_CASE: Waiting for the bed's occupant to leave.** The receiver refused this movement because another patient's encounter holds the bed, and that patient's movement out is still being recovered in another case. Resending now would be refused again, so this case waits for that one. Next: Nothing to do yet. The case is checked again when the case about the occupant's movement closes; recover that case first if it needs a person.
+
+SPW-5.59. **OCCUPANT_CASE_FAILED: The bed's occupant is not leaving after all.** The case about the occupant's movement out of the bed ended escalated, failed or abandoned, so the bed will not free itself. A person must decide where each patient is. Next: Escalate to the bed manager with the conflict: the bed, the occupant's encounter, the refused movement. Nothing is sent.
+
+SPW-5.60. **BED_OCCUPIED: Two patients for one bed.** The receiver holds another patient's encounter in the destination bed and nothing says they are leaving, or the occupant could not be read. That is a clash on the ward, not a delivery fault. Next: Escalate to the bed manager with the conflict laid out. Nothing is sent: a resend would be refused again or double-book the bed.
+
+SPW-5.61. **OCCUPANT_MOVED_OUT: The bed's occupant has left.** The patient who held the destination bed has moved out of it at the receiver, so the refused movement can be sent again. The receiver refuses it again if the bed is held after all. Next: None: a pass. The resend goes ahead under the tier's approval policy, conditional on this encounter's version.
+
+SPW-5.62. **NEWER_MESSAGE_PENDING: A newer message for this patient is on its way.** While Shutter was about to resend this movement, a newer message for the same patient arrived from the source system and has not yet reached the receiver. Resending first would be pointless at best, and wrong behind a cancellation or a merge, so the resend waits for the newer message. Next: Nothing to do yet. The case waits for that message; when it is delivered, the case is checked again on fresh evidence, and a newer movement usually means nothing needs resending.
+
+SPW-5.63. **SCHEMA_UNKNOWN: The message's schema is not loaded here.** The message names a schema category that Shutter's namespace does not have, such as a site's own variant of HL7 2.5.1 with extra segments. That is missing evidence, not an invalid message: Shutter cannot validate the message until the schema is imported. Next: Import the site's schema into Shutter's namespace (the Doctor's hl7_schemas check names the category and the command), then reinvestigate the case. Nothing is sent meanwhile.
