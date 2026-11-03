@@ -93,7 +93,10 @@ Shutter is ready after 10 s:
 
 ![The Scenarios page: six steps and three scenarios to try first](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/scenarios-start.png)
 
-- **S2, a transfer that never arrived.** The gate passes the board's resend, the receiver's dry run says it would apply, and the approval waits as a Workflow task. "Acknowledged" is never "Verified".
+- **S2, a transfer that never arrived.** The gate passes the board's resend, the receiver's dry run says it would apply, and the approval waits as a Workflow task. "Acknowledged" is never "Verified". The web app's Approve completes that same `EnsLib.Workflow` task as the signed-in approver; from the IRIS Workflow inbox, paste the plan's digest into the task's `PlanDigest` field.
+
+![S2's approval waits as a task in the IRIS Workflow inbox, for the role Shutter Approvers](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/workflow-inbox-s2.png)
+
 - **S8, the case a gate cannot catch.** The plan records the conformance specialist's dissent and why it was overruled. The case page sets rules alone and the board side by side:
 
 ![S8 played twice: rules alone overwrite WARD-C; the board escalates and writes nothing](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-rules-and-board.png)
@@ -162,6 +165,9 @@ The idea asks whether Interoperability could do the job of a tracing tool such a
 1. Open http://localhost:52773/shutter/index.html as `operator` / `shutter`. In **Scenarios**, run **S8** in **Board** mode.
 2. On S8's case page, **In IRIS: Message trace (session N)** opens the case's session in the Management Portal's Visual Trace. Each production item has its own lane: `Case Workflow`, `Evidence Collector`, then `Agent Conformance`, `Agent Encounter` and `Agent Impact` in parallel, then `Agent Coordinator` and the `Gate`.
 3. Click an `AgentResponse` arrow. Its contents are the generation: `Model`, `Mode` (live or replay), `PromptTokens`, `CompletionTokens`, `CacheReadTokens`, `Iterations`, `ToolCalls`, `DurationMs` split into `LlmMs` and `ToolMs`, and `ConfigVersion`, the prompt's version.
+
+   ![One board member's run as an AgentResponse in the Visual Trace: model, mode, tokens, iterations and tool calls](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/trace-agentresponse.png)
+
 4. In the Management Portal's SQL page (namespace `SHUTTER`), run the second query below with that session number: every tool call of the pass, in order, with its duration, whether it was allowed, and the board member that made it.
 5. On the case page, **When each agent worked** draws the same rows as a timeline, and the Costs page sums them by case.
 
