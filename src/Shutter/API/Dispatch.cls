@@ -1669,7 +1669,7 @@ ClassMethod SchemasGet() As %Status
     Quit ..Json(##class(Shutter.Util.Schemas).Report())
 }
 
-/// Import a site's schema XML from a path on this server (Shutter_Approve): {path} -> 200 {ok, category, loaded}; 400 for a
+/// Import a site's schema XML from a path on this server (Shutter_Configure): {path} -> 200 {ok, category, loaded}; 400 for a
 /// body without a path; 422 import_failed with the importer's words (a file that is not there, not .xml, or not a schema).
 ClassMethod SchemasImport() As %Status
 {
@@ -1809,7 +1809,7 @@ ClassMethod ProductionReviewGet(id As %String) As %Status
     Quit ..Json(r.ToObject(1))
 }
 
-/// Annotate a finding (Shutter_Approve): {findingId, status (intended|accepted_risk|false_positive), reason, expiresAt?,
+/// Annotate a finding (Shutter_Configure): {findingId, status (intended|accepted_risk|false_positive), reason, expiresAt?,
 /// owner?}. The annotation binds the finding's code, item, setting and effective value, so every later review's matching
 /// finding carries the status until the value changes, the annotation expires or it is revoked. 201 the annotation; 404
 /// not_found for an unknown review or finding id; 400 bad_request for a status outside the three or a missing reason.
@@ -1844,7 +1844,7 @@ ClassMethod ProductionReviewAnnotate(id As %String) As %Status
     Quit $$$OK
 }
 
-/// Revoke an annotation (Shutter_Approve): the finding reopens as new at the next read; the row is kept for the record.
+/// Revoke an annotation (Shutter_Configure): the finding reopens as new at the next read; the row is kept for the record.
 /// 204; 404 not_found for an unknown id. Revoking twice is a 204 too.
 ClassMethod ProductionReviewAnnotationDelete(annotationId As %String) As %Status
 {
