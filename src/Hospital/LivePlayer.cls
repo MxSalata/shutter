@@ -4,6 +4,9 @@
 /// the feed looks like a working hospital. It writes the messages into the hospital's own inbound folder, where PAS In
 /// picks them up: the path a real hospital has. It never resets anything, and it records what it played for the Doctor and
 /// the web app's banner (^Hospital.Live("status")). The text work is Shutter.Util.LiveFeed's, which the unit tests cover.
+/// While a story plays, ^Hospital.Live("playing") holds its id and start (the scenario runner's reset leaves the bed map
+/// alone then), and ^Hospital.Live("faulted", receiver) the receivers it faulted, so that a job cut off mid-story (a
+/// production restart, SetLive(0)) leaves no fault behind: the next job's OnInit turns them off.
 Class Hospital.LivePlayer Extends Ens.BusinessService
 {
 
@@ -47,6 +50,48 @@ Parameter STORMDOWNSECONDS = 60;
 Parameter STORMMINUTES = 10;
 
 Parameter SETTINGS = "EveryMinutes:Live,Scenarios:Live,Faults:Live,OrdinaryFeed:Live,OrdinaryEverySeconds:Live,MaxWait:Live,ShutterNamespace:Live,StormReceiverDownSeconds:Live";
+
+/// A story the last job was playing when it stopped left its faults on the receivers (they are persistent in Shutter's
+/// namespace, and Play turns them off only at its end) and its playing mark set: both go when the next job starts. The
+/// storm's own fault is not touched while its record says sending or waiting_receiver (StormWatch turns it off at
+/// receiverDownUntil).
+Method OnInit() As %Status
+{
+    Set cleared = ..ClearFaultsLeft(..ShutterNamespace)
+    If cleared '= "" $$$LOGINFO("A story was cut off: the fault(s) it left on " _ cleared _ " turned off")
+    Kill ^Hospital.Live("playing")
+    Quit $$$OK
+}
+
+/// Turns off the faults a story left in ^Hospital.Live("faulted", receiver), in Shutter's namespace, and forgets them;
+/// returns the receivers cleared, comma separated ("" for none). Left as they are while a storm is sending or waiting for
+/// its receiver: its outage is meant to last until receiverDownUntil.
+ClassMethod ClearFaultsLeft(shutterNs As %String = "SHUTTER") As %String
+{
+    Set state = ..StormState(.json)
+    If (state = "sending") || (state = "waiting_receiver") Quit ""
+    Set cleared = "", name = ""
+    For {
+        Set name = $ORDER(^Hospital.Live("faulted", name))
+        Quit:name=""
+        Do ..FaultOff(name, shutterNs)
+        Set cleared = cleared _ $SELECT(cleared = "": "", 1: ",") _ name
+    }
+    Kill ^Hospital.Live("faulted")
+    Quit cleared
+}
+
+/// A receiver's fault turned off in Shutter's namespace, in a method of its own so that the namespace is back on return (a
+/// New $NAMESPACE lasts to the end of the method, not of the block).
+ClassMethod FaultOff(receiver As %String, shutterNs As %String)
+{
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = shutterNs
+        Do ##class(Shutter.Scenarios.Runner).InReceiver(receiver, "SetFault", {"mode": "off"}, .status)
+    } Catch ex {
+    }
+}
 
 Method OnProcessInput(pInput As %RegisteredObject, Output pOutput As %RegisteredObject) As %Status
 {
@@ -308,6 +353,9 @@ Method Play(id As %String, n As %Integer) As %Status
     // Cases opened while the story plays carry its scenario id, as the scenario runner's do (Shutter.Store.Case reads the
     // stamp when a case opens); the ordinary feed clears it a minute later, so a case of an ordinary message carries none.
     Do ..Stamp(id)
+    // The scenario runner's reset reads the mark: the bed map stays while this story plays (its patients are read below
+    // without $GET), and a mark older than its longest story is a job that died, which the next job's OnInit clears too.
+    Set ^Hospital.Live("playing") = $LISTBUILD(id, ##class(Shutter.Util.Time).EpochSeconds())
     Try {
         Set si = steps.%GetIterator(), t = 0
         While si.%GetNext(, .step) {
@@ -334,6 +382,8 @@ Method Play(id As %String, n As %Integer) As %Status
                 If '$ISOBJECT(receivers) Set receivers = ["Downstream Out"]
                 Set ri = receivers.%GetIterator()
                 While ri.%GetNext(, .name) {
+                    // Recorded before it is applied, so a job cut off between the two leaves nothing unrecorded.
+                    Set ^Hospital.Live("faulted", name) = 1
                     Do ..Fault(name, request)
                     If '$LISTFIND(used, name) Set used = used _ $LISTBUILD(name)
                 }
@@ -344,6 +394,7 @@ Method Play(id As %String, n As %Integer) As %Status
     }
     // Whatever happened, no fault outlives its story.
     For i = 1:1:$LISTLENGTH(used) { Do ..Fault($LIST(used, i), {"mode": "off"}) }
+    Kill ^Hospital.Live("faulted"), ^Hospital.Live("playing")
     Set played = {}
     Set played.scenario = id, played.title = scenario.%Get("title"), played.at = ##class(Shutter.Util.Time).NowUTC(), played.n = n
     Set patients = [], pi = map.patients.%GetIterator()
