@@ -120,6 +120,30 @@ describe('Convene the board', () => {
     expect(screen.queryByRole('button', { name: 'Convene the board' })).not.toBeInTheDocument();
   });
 
+  // C-000014 is S1's blocked rules case, C-000061 S23c's blocked site policy case
+  it('says why there is no board to convene on a rules case, in place of the button', async () => {
+    withBudget({ dailyUsd: 15, spentTodayUsd: 4.2, exhausted: false });
+    renderCase('C-000014');
+    expect(
+      await screen.findByText('No board to convene: a rules case is decided by the rules alone.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Convene the board' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the board on a site policy case, which the policy may leave to the board', async () => {
+    withBudget({ dailyUsd: 15, spentTodayUsd: 4.2, exhausted: false });
+    renderCase('C-000061');
+    expect(await screen.findByRole('button', { name: 'Convene the board' })).toBeInTheDocument();
+  });
+
+  it("says nothing of the board on a rules case to the public demo's own user, who is never offered it", async () => {
+    resetMock('demo');
+    renderCase('C-000014');
+    expect(await screen.findByRole('heading', { name: 'Case C-000014' })).toBeInTheDocument();
+    expect(screen.queryByTestId('convene-reason')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Convene the board' })).not.toBeInTheDocument();
+  });
+
   it('is not offered on a resolved case', async () => {
     renderCase('C-000001');
     expect(await screen.findByRole('heading', { name: 'Case C-000001' })).toBeInTheDocument();
@@ -240,6 +264,15 @@ describe('Convene the board', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.queryByText('The board is convening')).not.toBeInTheDocument();
     expect(posted).toBe(0);
+  });
+
+  it('says in the trial too why a rules case has no board to convene, with no disabled button', async () => {
+    env.trial = true;
+    renderCase('C-000014');
+    expect(
+      await screen.findByText('No board to convene: a rules case is decided by the rules alone.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Convene the board' })).not.toBeInTheDocument();
   });
 
   it('is not shown in the trial on a resolved case either', async () => {

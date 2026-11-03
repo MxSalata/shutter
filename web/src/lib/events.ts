@@ -15,3 +15,14 @@ export const SHOW_NEXT_ACTION = 'shutter:show-next-action';
 export function showNextAction() {
   window.dispatchEvent(new CustomEvent(SHOW_NEXT_ACTION));
 }
+
+/**
+ * The abandon dialog's "reject the plan instead", when the server says an approval task is open: the case page reads
+ * the case again, opens the decision step on its Summary tab and scrolls the Approval section into view. Not a
+ * `#approval` link: under the hash router that would be read as the route /approval and land on the not-found page.
+ */
+export const SHOW_APPROVAL = 'shutter:show-approval';
+
+export function showApproval() {
+  window.dispatchEvent(new CustomEvent(SHOW_APPROVAL));
+}

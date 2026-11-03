@@ -7,8 +7,9 @@ import { HINT_EVENTS } from '@/theme';
 
 /**
  * A link into the Management Portal (a message trace, a workflow trace, an agent's message). The portal is part of a
- * running IRIS instance, which the demo doesn't have, so there the link is a note saying what it would open, or, when
- * a screenshot of that page is given, a button that shows it.
+ * running IRIS instance, which the trial doesn't have, so there the link is a note saying what it would open, or, when
+ * a screenshot of that page is given, a button that shows it. The trial's words: a trial page calls itself the trial,
+ * whether it is the demo build or a trial opened on an instance.
  */
 export function PortalLink({
   href,
@@ -20,10 +21,10 @@ export function PortalLink({
 }: {
   href: string;
   children: React.ReactNode;
-  /** What the link opens, for the demo's note: "the Visual Trace of session 11714". */
+  /** What the link opens, for the trial's note: "the Visual Trace of session 11714". */
   what: string;
   size?: 'xs' | 'sm';
-  /** A picture of the page the link opens, which the demo shows instead. */
+  /** A picture of the page the link opens, which the trial shows instead. */
   screenshot?: Screenshot;
   /** The guide's name for the control, when a step invites the reader to use it (`data-tour-action`). */
   tourAction?: string;
@@ -54,7 +55,7 @@ export function PortalLink({
   if (TRIAL)
     return (
       <Tooltip
-        label={`On an IRIS instance this opens ${what} in the Management Portal. The demo runs in the browser, with no instance behind it.`}
+        label={`On an IRIS instance this opens ${what} in the Management Portal. The trial runs in the browser, with no instance behind it.`}
         multiline
         maw={300}
         events={HINT_EVENTS}

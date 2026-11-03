@@ -32,6 +32,7 @@ const recorded = (fixtures.cases as unknown as Record<string, { detail: CaseDeta
 
 let bodies: Record<string, unknown>[] = [];
 let state: { detail: CaseDetail; events: CaseEvent[] };
+let lastRouter: ReturnType<typeof createMemoryRouter> | undefined;
 
 /** The recorded case as one its workflow left collecting evidence, with the given events. */
 function leftCollecting(events: CaseEvent[]) {
@@ -62,6 +63,7 @@ function renderCase() {
   const router = createMemoryRouter([{ path: '/cases/:caseId', element: <CasePage /> }], {
     initialEntries: [`/cases/${ID}`],
   });
+  lastRouter = router;
   return render(
     <MantineProvider theme={theme}>
       <Notifications />
@@ -158,6 +160,42 @@ describe('AbandonPanel', () => {
     expect(alert).toHaveTextContent("The case's workflow has 1 message in flight");
     expect(alert).toHaveTextContent(/Try again after/);
     expect(screen.getByRole('dialog', { name: `Abandon ${ID}` })).toBeInTheDocument();
+  });
+
+  it('takes the approver to the approval when the refusal says a task is open, staying on the case', async () => {
+    leftCollecting(recorded.events);
+    // The server's answer when the open approval task is what is in flight (the page has not read the case's new
+    // state yet: once it has, the panel is not offered at all)
+    server.use(
+      http.post(`/api/shutter/cases/${ID}/abandon`, () =>
+        HttpResponse.json(
+          {
+            error: 'busy',
+            detail: "The case's workflow has 1 message in flight (an approval task)",
+            state: 'awaiting_approval',
+            inFlight: 1,
+            newestAt: new Date().toISOString(),
+            deferred: true,
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderCase();
+    const panel = await screen.findByRole('region', { name: 'Still working' });
+    await userEvent.click(within(panel).getByRole('button', { name: 'Abandon the case…' }));
+    const dialog = await screen.findByRole('dialog', { name: `Abandon ${ID}` });
+    await userEvent.type(within(dialog).getByRole('textbox', { name: /Why give it up/ }), 'Stuck');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Abandon the case' }));
+    const alert = await within(dialog).findByRole('alert');
+    await userEvent.click(
+      within(alert).getByRole('button', { name: 'An approval task is open: reject the plan instead' }),
+    );
+    // Not a #approval link, which the hash router would read as the route /approval: the page stays, the dialog
+    // closes and the Approval section opens on the Summary tab
+    expect(lastRouter!.state.location.pathname).toBe(`/cases/${ID}`);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(await screen.findByRole('region', { name: 'Approval' })).toBeInTheDocument();
   });
 
   it('is not offered while the case still moves, nor to an operator', async () => {

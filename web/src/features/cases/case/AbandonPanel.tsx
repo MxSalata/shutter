@@ -9,6 +9,7 @@ import { CLOSED_STATES, type CaseDetail, type CaseEvent } from '@/api/types';
 import { TRIAL } from '@/env/mode';
 import { NOT_IN_TRIAL } from '@/env/copy';
 import { describeError, isApiError } from '@/lib/errors';
+import { showApproval } from '@/lib/events';
 import { formatZoned, humanize } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
 import { ConfirmModal } from '@/components/ConfirmModal';
@@ -141,7 +142,17 @@ export function AbandonPanel({ c, events }: { c: CaseDetail; events: CaseEvent[]
                     : describeError(error)}
               </Text>
               {busy?.deferred ? (
-                <Anchor href="#approval" size="sm" onClick={() => setOpened(false)}>
+                // A button, not a #approval link, which the hash router would read as a route: the page opens the
+                // decision step and scrolls the Approval section into view
+                <Anchor
+                  component="button"
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    setOpened(false);
+                    showApproval();
+                  }}
+                >
                   An approval task is open: reject the plan instead
                 </Anchor>
               ) : retryAt ? (

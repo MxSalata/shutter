@@ -113,6 +113,21 @@ describe("the case's action for its reader", () => {
     expect(caseActionOf(after, { me: ME.operator, closeNeedsApprover: false }).label).toBe('Mark as handled');
   });
 
+  it('asks to mark a withheld case handled at once, and a case with a later draft after the sent email', () => {
+    // C-000012 is S15's withheld merge: the team closes it, with no email first (the Escalations panel's rule)
+    expect(caseActionOf(factsOf('C-000012'), { me: ME.approver })).toMatchObject({
+      needsYou: true,
+      label: 'Mark as handled',
+    });
+    expect(caseActionOf(factsOf('C-000012'), { me: ME.operator, closeNeedsApprover: false }).label).toBe(
+      'Mark as handled',
+    );
+    const draftAfter = factsOf('C-000008', {
+      escalations: [sent, { seq: 2, state: 'draft' } as Escalation],
+    });
+    expect(caseActionOf(draftAfter, { me: ME.approver }).label).toBe('Mark as handled');
+  });
+
   it("escalates S25's blocked message, whose next action says to escalate otherwise", () => {
     expect(caseActionOf(factsOf('C-000064'), { me: ME.approver })).toMatchObject({
       needsYou: true,
