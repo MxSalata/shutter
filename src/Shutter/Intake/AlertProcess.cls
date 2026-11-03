@@ -5,8 +5,11 @@
 /// silences a site's alerting. Then, for an alert from one of the Receivers (the connector items; empty takes any item)
 /// whose session holds an HL7 message, it finds that message (the session's first header with an EnsLib.HL7.Message
 /// body: the receiving service's), builds a Shutter.Intake.Forward for it with the failure read from the alert's words,
-/// and sends it to the forwarder, once per session. The feed never waits: both sends are asynchronous. An alert whose
-/// session has no HL7 message, or from an item outside Receivers, is passed on only.
+/// and sends it to the forwarder, once per session: the session is pending while the forward is out, and seen (for a day)
+/// only once Shutter has taken the message, so a forward Shutter refused or that failed is built again from the session's
+/// next alert; a pending mark that no answer clears (a forwarder job that died, a production stopped mid-call) lapses
+/// after ten minutes. The feed never waits: both sends are asynchronous. An alert whose session has no HL7 message, or
+/// from an item outside Receivers, is passed on only.
 /// The demo hospital's production carries this item with Receivers "Downstream Out"; its own process already forwards
 /// its failures (Hospital.Process.PASToDownstream), so that process stays out of Receivers and a failure reaches Shutter
 /// once.
@@ -56,33 +59,52 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
         $$$TRACE("Alert from " _ source _ " for session " _ session _ ": its message was handed to Shutter already")
         Quit $$$OK
     }
+    If ..Pending(session) {
+        $$$TRACE("Alert from " _ source _ " for session " _ session _ ": its message is being handed to Shutter")
+        Quit $$$OK
+    }
     Set header = ..HL7HeaderOfSession(session, .problem)
     If '$ISOBJECT(header) {
         $$$TRACE("Alert from " _ source _ " for session " _ session _ ": " _ problem _ "; passed on only")
         Quit $$$OK
     }
     Set forward = ..ForwardFromAlert(request, header, source)
-    Set sc = ..SendRequestAsync(..ForwarderTarget, forward, 1, "forward")
+    // The completion key carries the session, so the answer (or the error) finds its pending mark.
+    Set sc = ..SendRequestAsync(..ForwarderTarget, forward, 1, "forward:" _ session)
     If $$$ISERR(sc) {
         $$$LOGWARNING("The alert's message (header " _ header.%Id() _ ") could not be handed to " _ ..ForwarderTarget _ ": " _ $SYSTEM.Status.GetErrorText(sc))
         Quit $$$OK
     }
-    Do ..MarkSeen(session, source)
+    Do ..MarkPending(session, source)
     $$$TRACE("Alert from " _ source _ ": message header " _ header.%Id() _ " (" _ header.SourceConfigName _ ") handed to " _ ..ForwarderTarget _ " as " _ forward.FailureKind)
     Quit $$$OK
 }
 
-/// The forwarder's answer: a refusal is a warning here, as the sending process has it; the alert itself was passed on already.
+/// The forwarder's answer: Shutter took the message, so the session is seen; a refusal is a warning here, as the sending
+/// process has it, and leaves the session forwardable again; the alert itself was passed on already.
 Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Persistent, callrequest As %Library.Persistent, callresponse As %Library.Persistent, completionkey As %String) As %Status
 {
-    If (completionkey = "forward") && $ISOBJECT(callresponse) && callresponse.%IsA("Shutter.Intake.Forwarded") {
-        If callresponse.Error '= "" {
-            $$$LOGWARNING("Shutter did not take the alert's message: " _ callresponse.Error)
+    If ($PIECE(completionkey, ":", 1) = "forward") && $ISOBJECT(callresponse) && callresponse.%IsA("Shutter.Intake.Forwarded") {
+        Set session = $PIECE(completionkey, ":", 2, *)
+        If ..ForwardAnswered(session, callresponse) {
+            $$$TRACE("Shutter opened or found case " _ callresponse.CaseId _ " (" _ callresponse.State _ ") for session " _ session)
         } Else {
-            $$$TRACE("Shutter opened or found case " _ callresponse.CaseId _ " (" _ callresponse.State _ ")")
+            $$$LOGWARNING("Shutter did not take the alert's message (session " _ session _ "): " _ callresponse.Error)
         }
     }
     Quit $$$OK
+}
+
+/// The forwarder failed the forward (no answer at all): the session is forwardable again, and the error stands as the
+/// engine reports it.
+Method OnError(request As %Library.Persistent, ByRef response As %Library.Persistent, callrequest As %Library.Persistent, pErrorStatus As %Status, pCompletionKey As %String) As %Status
+{
+    If $PIECE(pCompletionKey, ":", 1) = "forward" {
+        Set session = $PIECE(pCompletionKey, ":", 2, *)
+        Do ..ForwardAnswered(session, "")
+        $$$LOGWARNING("The alert's message (session " _ session _ ") was not handed to Shutter: " _ $SYSTEM.Status.GetErrorText(pErrorStatus))
+    }
+    Quit pErrorStatus
 }
 
 /// Whether an alert from the item is one to hand to Shutter: receivers empty takes any; else the item must be listed.
@@ -163,7 +185,10 @@ ClassMethod ForwardFromAlert(alert As Ens.AlertRequest, header As Ens.MessageHea
     Quit f
 }
 
-/// Whether the session's message was handed to Shutter already (once per session, kept a day).
+/// How long a pending mark stands without an answer, in seconds: ten minutes, well past the forwarder's call.
+Parameter PENDINGSECONDS = 600;
+
+/// Whether the session's message was taken by Shutter already (once per session, kept a day).
 ClassMethod Seen(sessionId As %String) As %Boolean
 {
     Quit $DATA(^Shutter.AlertIntake("seen", sessionId)) > 0
@@ -173,12 +198,43 @@ ClassMethod MarkSeen(sessionId As %String, source As %String)
 {
     Set now = ##class(Shutter.Util.Time).EpochSeconds()
     Set ^Shutter.AlertIntake("seen", sessionId) = $LISTBUILD(source, now)
-    // Sessions are numbered upwards, so the oldest entries come first: drop what is older than a day.
+    Do ..DropOlder("seen", now, 86400)
+}
+
+/// Whether the session's message is out with the forwarder and unanswered: a mark younger than PENDINGSECONDS.
+ClassMethod Pending(sessionId As %String) As %Boolean
+{
+    If '$DATA(^Shutter.AlertIntake("pending", sessionId), mark) Quit 0
+    Quit (##class(Shutter.Util.Time).EpochSeconds() - $LISTGET(mark, 2, 0)) < ..#PENDINGSECONDS
+}
+
+ClassMethod MarkPending(sessionId As %String, source As %String)
+{
+    Set now = ##class(Shutter.Util.Time).EpochSeconds()
+    Set ^Shutter.AlertIntake("pending", sessionId) = $LISTBUILD(source, now)
+    Do ..DropOlder("pending", now, ..#PENDINGSECONDS)
+}
+
+/// The forward's outcome for a session: an answer without Error marks the session seen, with the item its pending mark
+/// recorded; a refusal (Error set) or no answer at all drops the pending mark, so the session's next alert forwards
+/// again. Returns whether Shutter took the message.
+ClassMethod ForwardAnswered(sessionId As %String, forwarded As Shutter.Intake.Forwarded = "") As %Boolean
+{
+    Set source = $LISTGET($GET(^Shutter.AlertIntake("pending", sessionId)), 1)
+    Kill ^Shutter.AlertIntake("pending", sessionId)
+    If '$ISOBJECT(forwarded) || (forwarded.Error '= "") Quit 0
+    Do ..MarkSeen(sessionId, source)
+    Quit 1
+}
+
+/// Sessions are numbered upwards, so the oldest entries come first: drop the kind's entries older than the age.
+ClassMethod DropOlder(kind As %String, now As %Integer, age As %Integer) [ Private ]
+{
     Set k = ""
     For {
-        Set k = $ORDER(^Shutter.AlertIntake("seen", k)) Quit:k=""
-        If (now - $LISTGET(^Shutter.AlertIntake("seen", k), 2, 0)) < 86400 Quit
-        Kill ^Shutter.AlertIntake("seen", k)
+        Set k = $ORDER(^Shutter.AlertIntake(kind, k)) Quit:k=""
+        If (now - $LISTGET(^Shutter.AlertIntake(kind, k), 2, 0)) < age Quit
+        Kill ^Shutter.AlertIntake(kind, k)
     }
 }
 
