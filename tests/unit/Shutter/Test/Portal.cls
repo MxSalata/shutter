@@ -24,6 +24,11 @@ Method TestHardenPortalAndRestore()
         Do $$$AssertEquals(a."match_roles" _ "|" _ a.resource, "|Shutter_Portal", a.name _ ": no MatchRoles, Shutter_Portal required")
     }
     Do $$$AssertTrue(after."trace_role" [ "Shutter_Portal:U", "the trace role holds the portal resource: " _ after."trace_role")
+    Do $$$AssertTrue(after."trace_role" [ "%Ens_EventLog:U", "and the Event Log's: " _ after."trace_role")
+    Set sqlState = after.sql.%Get($NAMESPACE)
+    Do $$$AssertTrue($ISOBJECT(sqlState) && sqlState.reads, "the trace role reads the message tables through SQL: " _ $SELECT($ISOBJECT(sqlState): sqlState.%ToJSON(), 1: "none"))
+    Do $$$AssertTrue($ISOBJECT(sqlState) && sqlState."writes_none", "and writes none of them")
+    Do $$$AssertTrue($ISOBJECT(sqlState) && (sqlState."select_tables" >= 3), "SELECT on the message tables: " _ $SELECT($ISOBJECT(sqlState): sqlState."select_tables", 1: 0))
     Do $$$AssertTrue(after."trace_role" [ "%Ens_MessageTrace:U", "and keeps its Interoperability resources")
     Do $$$AssertTrue(after."trace_role" [ (##class(Shutter.Setup).DatabaseResource($NAMESPACE) _ ":R"), "and reads the data database")
     Do $$$AssertEquals($FIND(after."trace_role", ":RW"), 0, "and writes no database: " _ after."trace_role")
@@ -41,6 +46,10 @@ Method TestHardenPortalAndRestore()
     Set props("Resources") = roleWas
     Do $$$AssertStatusOK(##class(Security.Roles).Modify("Shutter_Trace", .props), "the role put back")
     Set $NAMESPACE = "SHUTTER"
+    Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
+    For n = $NAMESPACE, hospital { If n '= "" Do $$$AssertStatusOK(##class(Shutter.Setup).TraceSelectGrant(n, 0, .count, .problem), "the SELECT grants taken away again in " _ n _ " (" _ count _ "): " _ problem) }
+    Set gone = ##class(Shutter.Setup).TraceSqlState($NAMESPACE)
+    Do $$$AssertEquals(gone."select_tables", 0, "no SELECT grant left: " _ gone.%ToJSON())
     Set restored = ##class(Shutter.Util.Json).Parse(##class(Shutter.Setup).PortalState(), .sc)
     Do $$$AssertEquals(restored."trace_role", roleWas, "the role's resources as before")
     Do $$$AssertEquals(restored.hardened, before.hardened, "and the state as before")
