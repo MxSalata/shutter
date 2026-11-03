@@ -1428,7 +1428,7 @@ survives a restart that does not name it. The install reads the same variables (
 cap), so the image's build arguments stay the two the installer alone reads, with the demo password as a build secret
 (INSTALL.md section 3). The call returns JSON
 naming what was applied, with `errors` when a step failed, and the event log carries it; `SELECT Shutter.Setup_ApplyEnvironment()`
-runs it by hand. `ApplyRuntime(...)` is the same on given values, for the tests.
+runs it by hand. `ApplyRuntime(...)` is the same on given values, for the tests. At every start (v1.39) the production checks that the wallet secret and the Config Store entry still exist, not only the key's digest, and writes them again from `ANTHROPIC_API_KEY` when either is missing (`Shutter.Setup.ProviderNeedsRewrite`; a container recreated on the same volume loses both, since they live in IRISSYS while the record lives in the volume); the Doctor reports `provider`, `wallet_secret` and `provider_config`, each true, false or null where the edition has no such class.
 
 **Prevent failures** (v1.34; decided on 1 Nov 2026: an interface deployed without its schema would read every field from the
 wrong place, so Shutter "would actually stop an incident waiting to happen until the schema is imported"). With the site
@@ -1725,6 +1725,8 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   the gate then blocked it as `plan_origin` (14.5). Two corrections of the text: `PUT /site-profile` and the review
   annotations take `Shutter_Configure`, as the code always did (7.5, 13.5), and the approvals body with `expectedVersion`
   and its `409 stale_version` is written down (5).
+  The provider key is written again at a start whose wallet secret or Config Store entry is gone, not only when the
+  digest changed (12); the Doctor reports both.
 - v1.38, 2 and 3 Nov 2026 (the demo rehearsal's storm, whose cases all convened boards): a watched production's failures run in the
   site's watched mode, policy by default, whatever mode the scenarios run in (6.3, 11); a case the alert intake opened
   takes the production's own report of the failure when it arrives before the evidence is collected, so the catalogue
