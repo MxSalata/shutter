@@ -132,6 +132,14 @@ Property ForceBoard As %Boolean [ InitialExpression = 0 ];
 
 Property ConvenedBy As %String(MAXLEN = 100);
 
+/// Who reopened the case (v1.39): the person whose share the reopened case's runs count against; "" for a case the feed
+/// opened, whose runs are the feed's own ("system").
+Property ReopenedBy As %String(MAXLEN = 100);
+
+/// Whether the reopened case's agents may run live (v1.39): false for a reopener without Shutter_LiveAgents, or while the
+/// provider refuses the key; then every agent request carries ModeOverride replay, as a question's does (14).
+Property LiveAllowed As %Boolean [ InitialExpression = 1 ];
+
 Parameter SETTINGS = "EvidenceTarget:Targets,GateTarget:Targets,WardTarget:Targets,ApprovalTarget:Targets,VerifyTarget:Targets,IncidentTarget:Targets,ApprovalValidSeconds:Approval,ApprovalWaitSeconds:Approval,SettleSeconds:Timing,BoardTimeoutSeconds:Timing,BoardsPerMinute:Timing,MaxRefreshes:Timing";
 
 Method OnRequest(request As %Library.Persistent, Output response As %Library.Persistent) As %Status
@@ -692,9 +700,22 @@ ClassMethod BuildAgentRequest(case As Shutter.Store.Case, m As Shutter.Store.Boa
 Method AgentRequestFor(case As Shutter.Store.Case, m As Shutter.Store.BoardMember, summaryJSON As %String, findingsJSON As %String, Output sc As %Status) As Shutter.Bridge.Msg.AgentRequest
 {
     Set req = ..BuildAgentRequest(case, m, summaryJSON, findingsJSON, ..Replans, .sc)
-    // Who asked, for the budget's share (v1.34): a judge who convened the board, else the feed itself.
-    If $ISOBJECT(req) Set req.RequestedBy = $SELECT(..ForceBoard && (..ConvenedBy '= ""): ..ConvenedBy, 1: "system")
+    If $ISOBJECT(req) Do ..StampRequester(req)
     Quit req
+}
+
+/// Who asked, for the budget's share (v1.34, v1.39): a judge who convened the board, else the person who reopened the
+/// case, else the feed itself ("system", no share); and whether the run may go live: a reopener without the live agents
+/// gets recordings only (ModeOverride replay), as a question's runs do (14).
+Method StampRequester(req As Shutter.Bridge.Msg.AgentRequest)
+{
+    Set req.RequestedBy = ..RunRequester()
+    If '..LiveAllowed Set req.ModeOverride = "replay"
+}
+
+Method RunRequester() As %String
+{
+    Quit $SELECT(..ForceBoard && (..ConvenedBy '= ""): ..ConvenedBy, ..ReopenedBy '= "": ..ReopenedBy, 1: "system")
 }
 
 /// The model view of the case could not be built (Shutter.Util.ModelView.Learn): nothing was sent to a model, and a
@@ -1462,6 +1483,7 @@ Method OnReinvestigate(request As Shutter.Msg.Reinvestigate, Output response As 
     }
     Set ..CaseId = case.CaseId, ..Mode = case.Mode, ..Reopened = 1
     Set ..ForceBoard = request.ForceBoard, ..ConvenedBy = $SELECT(request.ForceBoard: request.RequestedBy, 1: "")
+    Set ..ReopenedBy = request.RequestedBy, ..LiveAllowed = request.LiveAllowed
     Set case.WorkflowSessionId = ..%SessionId, case.ClosedAt = ""
     // A wait on another case ends with the reopening; the fresh gate sets it again if the bed is still held (v1.28).
     Set case.WaitsOnCase = "", case.WaitsOnMessage = ""
@@ -1976,6 +1998,12 @@ Storage Default
 </Value>
 <Value name="43">
 <Value>ConvenedBy</Value>
+</Value>
+<Value name="48">
+<Value>ReopenedBy</Value>
+</Value>
+<Value name="49">
+<Value>LiveAllowed</Value>
 </Value>
 <Value name="44">
 <Value>BoardsPerMinute</Value>

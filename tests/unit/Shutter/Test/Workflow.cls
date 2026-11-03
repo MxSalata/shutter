@@ -204,4 +204,30 @@ ClassMethod TaskCount(caseId As %String) As %Integer
     Quit +rs.%Get("N")
 }
 
+/// A reopened case's agent requests carry the person who reopened it, for the budget's share, and run from recordings
+/// only when that person may not spend the model budget (v1.39); a judge's forced board keeps the convener; the feed's
+/// own case runs as "system" and live as its mode says.
+Method TestReopenedRunsCarryTheReopener()
+{
+    Set p = ##class(Shutter.Process.CaseWorkflow).%New()
+    Set req = ##class(Shutter.Bridge.Msg.AgentRequest).%New()
+    Do p.StampRequester(req)
+    Do $$$AssertEquals(req.RequestedBy, "system", "the feed's own case runs as system")
+    Do $$$AssertEquals(req.ModeOverride, "", "and in the mode the item resolves")
+    Set p.ReopenedBy = "demo", p.LiveAllowed = 0
+    Set req = ##class(Shutter.Bridge.Msg.AgentRequest).%New()
+    Do p.StampRequester(req)
+    Do $$$AssertEquals(req.RequestedBy, "demo", "a reopened case's runs name the reopener")
+    Do $$$AssertEquals(req.ModeOverride, "replay", "and replay when the reopener may not spend")
+    Set p.ReopenedBy = "operator", p.LiveAllowed = 1
+    Set req = ##class(Shutter.Bridge.Msg.AgentRequest).%New()
+    Do p.StampRequester(req)
+    Do $$$AssertEquals(req.RequestedBy, "operator", "an operator's reopening counts against the operator")
+    Do $$$AssertEquals(req.ModeOverride, "", "and runs as the mode says")
+    Set p.ForceBoard = 1, p.ConvenedBy = "judge", p.ReopenedBy = "judge"
+    Set req = ##class(Shutter.Bridge.Msg.AgentRequest).%New()
+    Do p.StampRequester(req)
+    Do $$$AssertEquals(req.RequestedBy, "judge", "a forced board keeps its convener")
+}
+
 }

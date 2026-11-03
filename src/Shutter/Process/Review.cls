@@ -103,7 +103,7 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
         Do ##class(Shutter.Store.Review).Trim(ns, prod)
         Quit $$$OK
     }
-    Set req = ..BuildAgentRequest(r, result, ..MaxIterations, ..TokenBudget)
+    Set req = ..BuildAgentRequest(r, result, ..MaxIterations, ..TokenBudget, request.RequestedBy)
     Set ..AgentPending = 1
     Set sc = ..SendRequestAsync(..AgentTarget, req, 1, "review")
     If $$$ISERR(sc) {
@@ -125,11 +125,13 @@ ClassMethod RecordKeyFor(namespace As %String, production As %String, fingerprin
 /// The agent's request for a review: the findings as the sweep wrote them, less what is not for the model (the error
 /// example text, which may quote an HL7 segment; the annotation id; the rank and explanation it is to fill), and the
 /// per-item case aggregates (counts and case ids only: the sweep never reads note text, operation-key pieces or failure
-/// text, so no patient or encounter identifier reaches the context by construction). A class method, so a test can
-/// build the same request outside the production.
-ClassMethod BuildAgentRequest(review As Shutter.Store.Review, result As %DynamicObject, maxIterations As %Integer = 3, tokenBudget As %Integer = 60000) As Shutter.Bridge.Msg.AgentRequest
+/// text, so no patient or encounter identifier reaches the context by construction). Who asked (v1.39) is the run's
+/// requester, for the budget's share; nobody named means the feed's own ("system", no share). A class method, so a
+/// test can build the same request outside the production.
+ClassMethod BuildAgentRequest(review As Shutter.Store.Review, result As %DynamicObject, maxIterations As %Integer = 3, tokenBudget As %Integer = 60000, requestedBy As %String = "") As Shutter.Bridge.Msg.AgentRequest
 {
     Set req = ##class(Shutter.Bridge.Msg.AgentRequest).%New()
+    Set req.RequestedBy = $SELECT(requestedBy '= "": requestedBy, 1: "system")
     Set req.Role = "review", req.MemberCode = "review", req.AgentClass = ..#AGENTCLASS
     Set req.TerminalTool = "SubmitReview", req.ResultClass = "Shutter.Schema.Review"
     Set req.ConfigVersion = ..#CONFIGVERSION
