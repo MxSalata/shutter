@@ -69,12 +69,11 @@ Method TestTheTable()
 /// The names the prompts used before v1.39, error for the failure and later_event for the timeline, stay citable: the
 /// runner lists them with what a finding or a plan may cite whenever the evidence has the key they stand for, so the
 /// recordings and the evaluation table pass the check, and a name outside the evidence is refused as before. The runner
-/// belongs to the aihub module, so on an instance without it this is skipped with a note.
+/// belongs to the aihub module, so on an instance without it this is reported as skipped, as the table is.
 Method TestEarlierNamesStayCitable()
 {
     If '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Bridge.Runner.AIHub") || '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Schema.Findings") {
-        Do $$$LogMessage("The aihub module is not on this instance: the evidence-key check is skipped (it runs on the AI Hub build)")
-        Do $$$AssertTrue(1, "skipped here")
+        Do $$$AssertSkipped("The aihub module is not on this instance: the evidence-key check is skipped (it runs on the AI Hub build)")
         Quit
     }
     // A receipt with a committed body, so that error is not already a key one level down (as receipt.error is when there is none).

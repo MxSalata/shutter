@@ -59,17 +59,26 @@ Method TestFirstMarkStartsInsideTheWindow()
     If newestTs ] oldestTs {
         Do $$$AssertTrue(mark >= oldest, "the headers older than the window are skipped (the oldest is " _ oldest _ ", the mark " _ mark _ ")")
     }
-    // A window holding no header (it opens a day after the newest): the newest header, not header 1.
+    // A window holding no header (it opens a day after the newest): the newest header, not header 1. The production may
+    // write headers while this runs, so each answer is checked against the newest id read just before and just after it.
+    &sql(SELECT MAX(ID) INTO :newest FROM Ens.MessageHeader)
     Set empty = ##class(Shutter.Index.Adapter).FirstMark($SYSTEM.SQL.Functions.DATEADD("day", 1, newestTs))
-    Do $$$AssertEquals(empty, +newest, "an empty window starts at the newest header")
+    &sql(SELECT MAX(ID) INTO :latest FROM Ens.MessageHeader)
+    Do $$$AssertTrue((empty >= +newest) && (empty <= +latest), "an empty window starts at the newest header (" _ empty _ ", the newest " _ newest _ " to " _ latest _ ")")
     Do $$$AssertNotEquals(empty, 0, "and never at header 1")
-    Do $$$AssertEquals(##class(Shutter.Index.Adapter).FirstMark(""), +newest, "no window starts at the newest header too")
+    &sql(SELECT MAX(ID) INTO :newest FROM Ens.MessageHeader)
+    Set none = ##class(Shutter.Index.Adapter).FirstMark("")
+    &sql(SELECT MAX(ID) INTO :latest FROM Ens.MessageHeader)
+    Do $$$AssertTrue((none >= +newest) && (none <= +latest), "no window starts at the newest header too (" _ none _ ", the newest " _ newest _ " to " _ latest _ ")")
     // EnsureMark writes the mark: the newest header without a back-fill, the first header in a window that holds them all.
     Set hwm = $GET(^Shutter.Index("hwm")), startedAt = $GET(^Shutter.Index("started_at"))
     Set a = ##class(Shutter.Index.Adapter).%New(), a.BackfillHours = 0
     Kill ^Shutter.Index("hwm")
+    &sql(SELECT MAX(ID) INTO :newest FROM Ens.MessageHeader)
     Do a.EnsureMark()
-    Do $$$AssertEquals($GET(^Shutter.Index("hwm")), +newest, "without a back-fill the high-water mark is the newest header")
+    &sql(SELECT MAX(ID) INTO :latest FROM Ens.MessageHeader)
+    Set written = $GET(^Shutter.Index("hwm"))
+    Do $$$AssertTrue((written >= +newest) && (written <= +latest), "without a back-fill the high-water mark is the newest header (" _ written _ ", the newest " _ newest _ " to " _ latest _ ")")
     Set a.BackfillHours = 24 * 366 * 100
     Kill ^Shutter.Index("hwm")
     Do a.EnsureMark()
