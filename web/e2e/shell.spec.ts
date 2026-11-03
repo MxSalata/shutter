@@ -138,6 +138,26 @@ test.describe('the shell', () => {
     await expect(help).toHaveAccessibleDescription(words);
   });
 
+  test("opens What's different? from the keyboard and closes it on Escape, focus back on the button", async ({
+    page,
+  }) => {
+    await signIn(page);
+    const trial = page.getByRole('region', { name: 'Trial environment' });
+    const button = trial.getByRole('button', { name: "What's different?" });
+    await button.focus();
+    await page.keyboard.press('Enter');
+    const dropdown = page.getByRole('dialog', { name: 'The trial environment' });
+    await expect(dropdown).toBeVisible();
+    await expect(dropdown).toContainText('Resets when you reload or leave.');
+    await page.keyboard.press('Escape');
+    await expect(dropdown).toBeHidden();
+    await expect(button).toBeFocused();
+    // The header's user menu is reachable again
+    await page.getByRole('button', { name: /^Signed in as / }).click();
+    await expect(page.getByRole('menu', { name: /^Signed in as / })).toBeVisible();
+    await page.keyboard.press('Escape');
+  });
+
   test('marks every page of the demo build as the trial: banner, frame, pill and title', async ({ page }) => {
     await signIn(page);
     const trial = page.getByRole('region', { name: 'Trial environment' });

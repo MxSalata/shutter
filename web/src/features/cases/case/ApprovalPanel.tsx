@@ -262,33 +262,40 @@ export function ApprovalPanel({
             ]}
           />
           {awaiting ? (
-            <Group gap="sm">
-              <Tooltip label={why || 'Approve exactly this plan'} disabled={!why}>
-                <span>
-                  <Button
-                    leftSection={<IconCheck size={16} />}
-                    disabled={!!why}
-                    onClick={() => openDialog('approve')}
-                    data-tour-action="approve-plan"
-                  >
-                    Approve plan
-                  </Button>
-                </span>
-              </Tooltip>
-              <Tooltip label={why || 'Reject the plan: nothing will be sent'} disabled={!why}>
-                <span>
-                  <Button
-                    color="red"
-                    variant="light"
-                    leftSection={<IconX size={16} />}
-                    disabled={!!why}
-                    onClick={() => openDialog('reject')}
-                  >
-                    Reject plan
-                  </Button>
-                </span>
-              </Tooltip>
-            </Group>
+            <Stack gap={4}>
+              <Group gap="sm">
+                <Tooltip label={why || 'Approve exactly this plan'} disabled={!why}>
+                  <span>
+                    <Button
+                      leftSection={<IconCheck size={16} />}
+                      disabled={!!why}
+                      onClick={() => openDialog('approve')}
+                      data-tour-action="approve-plan"
+                    >
+                      Approve plan
+                    </Button>
+                  </span>
+                </Tooltip>
+                <Tooltip label={why || 'Reject the plan: nothing will be sent'} disabled={!why}>
+                  <span>
+                    <Button
+                      color="red"
+                      variant="light"
+                      leftSection={<IconX size={16} />}
+                      disabled={!!why}
+                      onClick={() => openDialog('reject')}
+                    >
+                      Reject plan
+                    </Button>
+                  </span>
+                </Tooltip>
+              </Group>
+              {why ? (
+                <Text size="xs" c="dimmed">
+                  {why}
+                </Text>
+              ) : null}
+            </Stack>
           ) : null}
           <BlindResendPreview c={c} me={me} />
           {approvals?.tasks?.length ? (
@@ -343,11 +350,12 @@ export function ApprovalPanel({
                 ? byEnv({
                     live: `This sends the fix to ${receiverNoun(c.receiver)}, for real. The receiver is read again and the gate checks the dispatch.`,
                     trial:
-                      'Go ahead. You will see what happened next in the recording: the fix goes out and the receiving system confirms it. Nothing leaves this browser.',
+                      'Go ahead. You will see what happened next in the recording: the fix goes out and the receiving system confirms it. Nothing leaves this browser, and a reload starts the recording afresh.',
                   })
                 : byEnv({
                     live: `Nothing is sent to ${receiverNoun(c.receiver)}: the case closes as blocked for a person to take further.`,
-                    trial: 'Nothing is sent. The case closes as blocked, in this browser only.',
+                    trial:
+                      'Nothing is sent. The case closes as blocked, in this browser only, until a reload starts the recording afresh.',
                   })}
             </Text>
             {decision === 'approve' ? (

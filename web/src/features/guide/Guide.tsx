@@ -147,7 +147,7 @@ function Welcome({ initial }: { initial: GuideScope }) {
       </Text>
       <Text fz={15}>
         {HOSPITAL_NAME}: a demo hospital with made-up patients, recorded. Approve, run, save or escalate: each
-        replays the recording, and nothing leaves this browser.
+        replays the recording, and nothing leaves this browser. A reload starts the recording afresh.
       </Text>
       <Radio.Group value={scope} onChange={(v) => setScope(v as GuideScope)} label="Choose a tour">
         <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm" mt="xs">

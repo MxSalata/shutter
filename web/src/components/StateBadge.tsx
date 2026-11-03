@@ -9,8 +9,16 @@ export const CASE_STATE_NAMES = Object.keys(CASE_STATES);
 export const stateColour = (state: string) => TONE_COLOURS[caseState(state).tone];
 
 /** A case's workflow state: information while it runs, attention when a person is needed, blocking when stopped. */
-export function StateBadge({ state, size = 'sm' }: { state: string; size?: 'xs' | 'sm' | 'md' | 'lg' }) {
-  return <StatusBadge {...caseState(state)} size={size} />;
+export function StateBadge({
+  state,
+  size = 'sm',
+  focusable,
+}: {
+  state: string;
+  size?: 'xs' | 'sm' | 'md' | 'lg';
+  focusable?: boolean;
+}) {
+  return <StatusBadge {...caseState(state)} size={size} focusable={focusable} />;
 }
 
 /** The dispositions a plan proposes; a hand correction or an abandoned case is what happened, not a proposal. */
@@ -23,12 +31,14 @@ const PROPOSALS = new Set(['resend', 'reconcile', 'superseded', 'more_evidence',
 export function DispositionBadge({
   disposition,
   proposed = false,
+  focusable,
 }: {
   disposition: string;
   proposed?: boolean;
+  focusable?: boolean;
 }) {
   if (!disposition) return null;
   const status = dispositionStatus(disposition);
   const label = proposed && PROPOSALS.has(disposition) ? `Proposed: ${status.label}` : status.label;
-  return <StatusBadge {...status} label={label} variant="outline" />;
+  return <StatusBadge {...status} label={label} variant="outline" focusable={focusable} />;
 }

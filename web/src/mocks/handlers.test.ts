@@ -205,6 +205,40 @@ describe('the scenarios', () => {
     expect(scenarios.find((s) => s.id === 'S2')?.expected.modes).toBeUndefined();
   });
 
+  it('advance a run file by file while it plays, the step naming the next file', async () => {
+    const realNow = Date.now;
+    const files = (fixtures.scenarios.find((s) => s.id === 'S15')!.steps as { file?: string }[]).flatMap(
+      (s) => (s.file ? [s.file] : []),
+    );
+    expect(files.length).toBe(3);
+    await api.post('/scenarios/S15/run', { mode: 'board' });
+    try {
+      const each = 8_000 / files.length;
+      // Nothing yet: the first file is going out
+      let { run } = await api.get<ScenarioList>('/scenarios');
+      expect(run).toMatchObject({ state: 'running', files: [], step: `delivering ${files[0]}` });
+      // Past the first interval: one file delivered, the second on its way
+      Date.now = () => realNow() + each + 100;
+      ({ run } = await api.get<ScenarioList>('/scenarios'));
+      expect(run).toMatchObject({ state: 'running', files: [files[0]], step: `delivering ${files[1]}` });
+      // Past the second: two
+      Date.now = () => realNow() + 2 * each + 100;
+      ({ run } = await api.get<ScenarioList>('/scenarios'));
+      expect(run).toMatchObject({
+        state: 'running',
+        files: files.slice(0, 2),
+        step: `delivering ${files[2]}`,
+      });
+      // Past the whole run: done, with every file and no step
+      Date.now = () => realNow() + 8_000;
+      ({ run } = await api.get<ScenarioList>('/scenarios'));
+      expect(run).toMatchObject({ state: 'done', files });
+      expect(run?.step).toBeUndefined();
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
   it("report the files the scenario's steps deliver once a run is done", async () => {
     const realNow = Date.now;
     await api.post('/scenarios/S15/run', { mode: 'board' });

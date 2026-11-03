@@ -477,6 +477,39 @@ describe('ScenariosPage, as each role has it', () => {
     expect(await screen.findByRole('button', { name: 'Run S2' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
     expect(screen.queryByText(/plays its stories by itself/)).not.toBeInTheDocument();
+    // The reason is written under the buttons, not only in a tooltip a disabled button cannot open
+    expect(screen.getAllByText('Running a scenario needs the operator role').length).toBeGreaterThan(0);
+    expect(screen.getByText('Resetting needs the operator role')).toBeInTheDocument();
+    const first = screen.getByRole('region', { name: 'Try these three first' });
+    expect(within(first).getAllByText('Running a scenario needs the operator role').length).toBeGreaterThan(
+      0,
+    );
+  });
+
+  it('says why Run is disabled while another scenario plays, under the button', async () => {
+    resetMock('approver');
+    server.use(
+      http.get('/api/shutter/scenarios', () =>
+        HttpResponse.json({
+          scenarios: listed.map((d) => ({ ...d, latestCase: recordedLatest(d.id) })),
+          run: {
+            scenario: 'S2',
+            mode: 'board',
+            startedAt: new Date().toISOString(),
+            state: 'running',
+            files: [],
+            timeouts: [],
+            step: 'delivering S2-01-A01.hl7',
+          },
+        }),
+      ),
+    );
+    renderScenarios();
+    expect(await screen.findByRole('button', { name: 'Run S5' })).toBeDisabled();
+    expect(screen.getAllByText('A run of S2 is still playing').length).toBeGreaterThan(0);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Now delivering S2-01-A01.hl7. Files delivered so far: none.',
+    );
   });
 });
 
@@ -508,6 +541,10 @@ describe('ScenariosPage, its rows and its proof', () => {
     expect(badge.closest('[data-tone]')).toHaveAttribute('data-tone', 'positive');
     expect(s5).toHaveAttribute('data-tone', 'positive');
     expect(within(s5).getByText('As expected')).toBeInTheDocument();
+    // No badge in the list is a tab stop: the row's stops are its link, its More and its Run
+    expect(s5.querySelectorAll('[tabindex="0"]')).toHaveLength(0);
+    expect(s5.querySelectorAll('a, button, [tabindex="0"]').length).toBeLessThanOrEqual(3);
+    expect(screen.getByRole('button', { name: 'How to read this list' })).toBeInTheDocument();
   });
 
   it('keeps the state badge for a latest case older than the newest cases', async () => {
