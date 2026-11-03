@@ -67,6 +67,19 @@ On build 109 the first is WIC-5.2, the receipts route (0.747), then WIC-2.5, the
 
 The query compares stored embeddings. A fresh phrase can't be embedded from SQL on this build: `%AI.RAG.Embedding.FastEmbed` embeds only inside AI Hub's own bridge (its `EmbedBatch` throws "use the Rust bridge directly", AI Hub bug report #8), and `%AI.RAG.KnowledgeBase` has no search of its own. So a phrase search is the agents' tool (`search_contracts` and the other five, `TopK` 4), which the Visual Trace shows as a tool call of a run.
 
+### Agent runs by board member, in SQL
+
+In the Management Portal's SQL page (namespace `SHUTTER`): every agent run's tokens and cost, by board member, model and mode (live or replay).
+
+```sql
+-- Agent runs, tokens and cost by board member, model and mode
+SELECT %EXACT(MemberCode) AS Member, %EXACT(Model) AS Model, %EXACT(Mode) AS Mode, COUNT(*) AS Runs,
+       SUM(PromptTokens) AS Prompt, SUM(CompletionTokens) AS Completion, ROUND(SUM(CostUSD), 4) AS CostUSD
+FROM Shutter_Store.AgentRun
+GROUP BY %EXACT(MemberCode), %EXACT(Model), %EXACT(Mode)
+ORDER BY Member, Mode
+```
+
 ### Limits not listed in the README
 
 - The shipped site profile is a demo: it releases the single cases the catalogue settles at tier 2 without asking a person. A real site first answers the profile's induction questions.
