@@ -81,4 +81,23 @@ Earlier the same afternoon, on the same VM, commit `7d85c18` built on build 109 
 - In Rules only mode: S20 (the nurse's entry stands, no write) and S21, both as expected.
 - `lineage_check.py`: 47 cases, every write after the gate and a rehearsal, every resolved resend verified; `eventlog_check.py`: no runtime errors.
 
-With no key in `.env`, the board replayed its live runs recorded on build 154. The live board was not run on build 109 for this receipt.
+With no key in `.env`, the board replayed its live runs recorded on build 154.
+
+## The board live on build 109
+
+The same afternoon, on a separate instance built from commit `e5ae5d2` on build 109 with an Anthropic key in the IRIS wallet and the agents set live, S2 on the board through the REST API:
+
+```text
+$ python3 tests/e2e/scenario_check.py S2 --modes board --approve
+ok      S2 board: C-000001 resolved, resend, one write, downstream admitted WARD-B
+all 1 as expected
+```
+
+| Member | Model | Status | Prompt tokens | Completion | Cache read | Cache written | Iterations | Duration | Model time | Tool time | Cost |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| conformance | `claude-opus-5-5` | ok | 16,713 | 941 | 3,812 | 1,906 | 3 | 13.6 s | 12.9 s | 161 ms | 0.096 USD |
+| impact | `claude-opus-5-5` | ok | 16,809 | 1,043 | 3,794 | 1,897 | 3 | 13.6 s | 13.0 s | 83 ms | 0.098 USD |
+| encounter | `claude-opus-5-5` | ok | 24,162 | 999 | 5,694 | 1,898 | 4 | 16.7 s | 16.1 s | 107 ms | 0.127 USD |
+| coordinator | `claude-opus-5-5` | ok | 18,352 | 863 | 4,258 | 2,129 | 3 | 14.8 s | 14.3 s | 100 ms | 0.102 USD |
+
+The pass cost 0.42 USD; its 20 tool calls all succeeded; prompt caching and AI Hub's own model and tool timings work on build 109 as on 154.
