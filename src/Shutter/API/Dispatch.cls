@@ -337,7 +337,11 @@ ClassMethod ScenarioRun(id As %String) As %Status
         Set msg = ##class(Shutter.Msg.ScenarioRun).%New()
         Set msg.Scenario = id, msg.Mode = mode, msg.RequestedBy = $USERNAME
         Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
-        If $$$ISERR(sc) || '$ISOBJECT(service) Quit ..Fail("503 Service Unavailable", "no_service", "The API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
+        If $$$ISERR(sc) || '$ISOBJECT(service) {
+            // Nothing was queued: a record left saying queued would refuse every later run as wrong_state.
+            Kill ^Shutter.Scenarios("run")
+            Quit ..Fail("503 Service Unavailable", "no_service", "The API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
+        }
         Set service.Target = "Scenario Player", service.Async = 1
         Set sc = service.ProcessInput(msg)
         If $$$ISERR(sc) {
