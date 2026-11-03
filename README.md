@@ -212,7 +212,7 @@ What I found building Shutter, measured on build `2026.3.0AI.154.0`; the longer 
 
 ## How it is tested
 
-- **On a real IRIS, every push to `main` that changes code:** the full install on IRIS for Health Community 2026.2, the receiver's 36 contract tests, 236 unit tests (test methods in `tests/unit`) and 26 scenarios end to end through the REST API, one through the demo hospital's production.
+- **On a real IRIS, every push to `main` that changes code:** the full install on IRIS for Health Community 2026.2, the receiver's 36 contract tests, 250 unit tests (test methods in `tests/unit`; 7 more run only on an AI Hub build) and 26 scenarios end to end through the REST API, one through the demo hospital's production.
 - **The approval boundary, attacked over HTTP:** an approval naming another plan or a stale version (409), an operator's approval (403), one approval sent twice (one write), the receiver changed after approval (S20, no write), and a resend of a delivery the receiver already holds (S3, no write).
 - **Privacy, and a question that tries to act:** [evaluation.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md#what-the-agents-see-and-a-question-that-tries-to-act).
 - **The web app:** 1219 component and 652 browser tests (`npm test`, `npm run test:e2e`), axe-core on 67 screens and states in 5 appearances.
