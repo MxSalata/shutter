@@ -127,6 +127,23 @@ Method TestCapabilitiesFreeTextChain()
     Do ..RunRows("other")
 }
 
+/// An alert-only failure (the alert intake's reason code "alert", a 503 read from the alert's words) matches E4 in an
+/// ordered chain, as a failure the connector recorded with ward_unavailable does: the reason code names no answer of the
+/// receiver's, so the status decides and the case is not a new pattern.
+Method TestAlertReasonReadsAsOutage()
+{
+    Set alert = ..Conditions({"chain": "ordered", "summary": {"failure": {"reason_code": "alert", "http_status": 503}}})
+    Set recorded = ..Conditions({"chain": "ordered"})
+    Do $$$AssertEquals(alert."receiver_answer", "unavailable", "the alert's 503 reads as the receiver unavailable")
+    Do $$$AssertEquals(alert."receiver_answer", recorded."receiver_answer", "the same answer as the connector's ward_unavailable")
+    Set alertMatch = ##class(Shutter.Catalogue.Matcher).Match(alert)
+    Set recordedMatch = ##class(Shutter.Catalogue.Matcher).Match(recorded)
+    Do $$$AssertEquals(recordedMatch.entry, "E4", "the recorded outage matches E4")
+    Do $$$AssertEquals(alertMatch.entry, "E4", "the alert matches E4 too")
+    Do $$$AssertEquals(alertMatch.decision, recordedMatch.decision, "the same decision")
+    Do $$$AssertEquals(alertMatch.outcome, "resend_chain", "the resend chain")
+}
+
 /// Every condition the matcher computes is in the vocabulary with one of its values, and the rows reach every value.
 Method TestEveryValueIsReached()
 {
@@ -377,6 +394,10 @@ XData Rows [ MimeType = application/json ]
   {"group": "receiver_answer", "name": "an uncertain outcome the connector gave a status for", "case": {"failure_kind": "uncertain_outcome"}, "summary": {"failure": {"reason_code": null, "http_status": 502, "outcome": "uncertain"}}, "expect": {"receiver_answer": "timeout"}},
   {"group": "receiver_answer", "name": "an uncertain outcome with no answer at all", "case": {"failure_kind": "uncertain_outcome"}, "summary": {"failure": {"reason_code": null, "http_status": null}}, "expect": {"delivery": "uncertain", "receiver_answer": "timeout"}},
   {"group": "receiver_answer", "name": "a failure with no answer", "summary": {"failure": {"reason_code": null, "http_status": null}}, "expect": {"receiver_answer": "none"}},
+  {"group": "receiver_answer", "name": "an alert with a 503", "summary": {"failure": {"reason_code": "alert", "http_status": 503}}, "expect": {"receiver_answer": "unavailable"}},
+  {"group": "receiver_answer", "name": "an alert with no status", "summary": {"failure": {"reason_code": "alert", "http_status": null}}, "expect": {"receiver_answer": "none"}},
+  {"group": "receiver_answer", "name": "an uncertain alert with no status", "case": {"failure_kind": "uncertain_outcome"}, "summary": {"failure": {"reason_code": "alert", "http_status": null, "outcome": "uncertain"}}, "expect": {"delivery": "uncertain", "receiver_answer": "timeout"}},
+  {"group": "receiver_answer", "name": "an alert that reads a 422", "summary": {"failure": {"reason_code": "alert", "http_status": 422}}, "expect": {"receiver_answer": "refused"}},
   {"group": "receiver_answer", "name": "no failure item", "summary": {"failure": null}, "expect": {"receiver_answer": "none"}},
   {"group": "receiver_answer", "name": "the receiver's answer as the connector recorded it", "summary": {"failure": {"reason_code": null, "http_status": null, "error": {"reason_code": "DUPLICATE", "http_status": 409}}}, "expect": {"receiver_answer": "duplicate"}},
   {"group": "receiver_answer", "name": "a refusal read from the failure text", "summary": {"failure": {"reason_code": null, "http_status": null, "text": "Delivery refused (duplicate_message), HTTP 409"}}, "expect": {"receiver_answer": "duplicate"}},
