@@ -1,7 +1,7 @@
 name: CI
 
-# The jobs run on House's own runner (house-runner, a VM with only the internet, since 20 Oct), so CI
-# costs no GitHub minutes; it runs one job at a time and keeps Docker images between runs. CI runs on main after a merge, and on a branch only by hand (workflow_dispatch): branch work is tested on House's IRIS
+# The jobs run on a self-hosted runner (label house: a VM with only the internet, since 20 Oct), so CI
+# costs no GitHub minutes; it runs one job at a time and keeps Docker images between runs. CI runs on main after a merge, and on a branch only by hand (workflow_dispatch): branch work is tested on the repository's own IRIS
 # instances before it is pushed, and the free Actions minutes are kept for main. A push that changes only the docs
 # (docs/ and the top-level Markdown) runs nothing; the knowledge's Markdown is checked, so it still runs.
 on:
@@ -11,7 +11,7 @@ on:
       - 'docs/**'
       - '*.md'
   workflow_dispatch:
-  # Dependabot's update pull requests are tested on House's runner before they are merged (since 20 Oct); no
+  # Dependabot's update pull requests are tested on the self-hosted runner before they are merged (since 20 Oct); no
   # other pull request runs, since the runner is a private machine
   pull_request:
 
@@ -82,7 +82,7 @@ jobs:
           echo "www/ is stale: run 'npm run build:www' in web/ and commit the result"
           git status --porcelain -- ../www
           exit 1
-      # House's runner keeps ~/.cache between jobs, so the browser downloads once and later installs only check it; the
+      # The self-hosted runner keeps ~/.cache between jobs, so the browser downloads once and later installs only check it; the
       # system libraries come with it (a GitHub cache restore once reported a hit without the headless shell)
       - name: Install Playwright's Chromium
         run: npx playwright install --with-deps chromium
@@ -445,7 +445,7 @@ jobs:
   # touches only the release's files, and the versioned files only in their version, then pushes, tags and releases
   # it. Both work on this push's commit, never a newer one, and when main has moved on the release is left to the run
   # for the newer push, so nothing is published that its own checks have not passed. The second runs on a fresh
-  # GitHub-hosted runner, not House's: House's runner keeps its home folder and tools between jobs, so package code the
+  # GitHub-hosted runner, not the self-hosted one: the self-hosted runner keeps its home folder and tools between jobs, so package code the
   # first job ran there could change what the push runs with the write token. It runs only once a version tag exists,
   # when the repository is public and a GitHub-hosted runner costs no minutes.
   dependency-release-build:
