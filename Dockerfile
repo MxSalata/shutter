@@ -1,7 +1,7 @@
 # Shutter on InterSystems IRIS for Health Community with AI Hub.
-# The contest build is irishealth-community:2026.3.0AI.154.0, loaded and tagged as the README says.
+# The AI Hub builds are irishealth-community:2027.1.0AI.109.0 and 2026.3.0AI.154.0, loaded and tagged as the README says.
 # Any IRIS for Health Community 2026.2 or later builds the core (replay) edition: pass IRIS_IMAGE as a build argument.
-ARG IRIS_IMAGE=irishealth-community:2026.3.0AI.154.0
+ARG IRIS_IMAGE=irishealth-community:2027.1.0AI.109.0
 FROM ${IRIS_IMAGE}
 
 USER root

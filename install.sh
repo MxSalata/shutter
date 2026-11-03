@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Installs Shutter with Docker: checks everything first, and changes nothing until every check passes.
 #
-#   ./install.sh                         the AI Hub edition (build 154): live agents with ANTHROPIC_API_KEY in .env,
-#                                        the recorded board without one
+#   ./install.sh                         the AI Hub edition (build 2027.1.0AI.109.0, or 2026.3.0AI.154.0 if that is the
+#                                        one loaded): live agents with ANTHROPIC_API_KEY in .env, the recorded board
+#                                        without one
 #   ./install.sh --image-file FILE       the same, loading the AI Hub image from the Early Access file first
 #   ./install.sh --replay                the replay edition on the public IRIS for Health image (no AI Hub, no key)
 #
@@ -10,14 +11,18 @@
 # the first time). A Shutter that is already running and healthy is left as it is. Works with bash 3.2 (macOS) too.
 set -euo pipefail
 
-AIHUB_IMAGE="irishealth-community:2026.3.0AI.154.0"
+# The AI Hub builds Shutter is verified on, newest first: the Early Access portal offers 2027.1.0AI.109.0 since 2 Nov 2026
+# and no longer 2026.3.0AI.154.0, the contest's first build, which still works if it is the one loaded.
+AIHUB_BUILDS="2027.1.0AI.109.0 2026.3.0AI.154.0"
+AIHUB_IMAGE="irishealth-community:2027.1.0AI.109.0"
+AIHUB_FILE="irishealth-community-2027.1.0AI.109.0-docker.tar.gz"
 PUBLIC_IMAGE="containers.intersystems.com/intersystems/irishealth-community:2026.2"
 MIN_MEMORY_GB=5
 MIN_DISK_GB=25
 edition=aihub
 image_file=""
 
-usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --replay) edition=replay ;;
@@ -33,6 +38,14 @@ problems=0
 fail() { problems=$((problems + 1)); printf '  [fix] %s\n' "$1"; shift; for line in "$@"; do printf '        %s\n' "$line"; done; }
 ok() { printf '  [ok]  %s\n' "$1"; }
 note() { printf '  [..]  %s\n' "$1"; }
+
+# The name an Early Access image loads under, for one build: docker.iscinternal.com/.../irishealth-community:<build>, or
+# the ARM64 file's irishealth_arm64-community:<build>
+loaded_as() {
+  local re
+  re=$(printf '%s' "$1" | sed 's/\./\\./g')
+  docker images --format '{{.Repository}}:{{.Tag}}' | grep -E "(^|/)irishealth(_arm64)?-community:${re}\$" | head -1 || true
+}
 
 # A value from .env (or .env.example when .env is not there yet), without sourcing either file
 setting() {
@@ -101,24 +114,37 @@ else
   ok "Port ${port} is free"
 fi
 
-# 4. The image
-image=$(setting SHUTTER_IMAGE)
+# 4. The image: .env's when there is one; else the build of --image-file's name; else a verified build already loaded
+image=""
+[ -f .env ] && image=$(setting SHUTTER_IMAGE)
+build=""
+if [ -z "$image" ] && [ -n "$image_file" ]; then
+  build=$(basename "$image_file" | sed -n 's/^irishealth\(_arm64\)\{0,1\}-community-\(.*\)-docker\.tar\.gz$/\2/p')
+  [ -n "$build" ] && image="irishealth-community:$build"
+fi
+if [ -z "$image" ] && [ "$edition" = aihub ] && docker info > /dev/null 2>&1; then
+  for b in $AIHUB_BUILDS; do
+    if docker image inspect "irishealth-community:$b" > /dev/null 2>&1 || [ -n "$(loaded_as "$b")" ]; then image="irishealth-community:$b"; break; fi
+  done
+fi
 [ "$edition" = replay ] && image="$PUBLIC_IMAGE"
 image=${image:-$AIHUB_IMAGE}
+build=${image#irishealth-community:}
 plan_load=""
 plan_tag=""
 if [ "$problems" -eq 0 ] && [ "$edition" = aihub ]; then
+  verified=no
+  for b in $AIHUB_BUILDS; do [ "$build" = "$b" ] && verified=yes; done
+  [ "$verified" = no ] && note "$image is not one of the builds Shutter is verified on ($AIHUB_BUILDS); trying it anyway"
   if docker image inspect "$image" > /dev/null 2>&1; then
     ok "The AI Hub image $image is loaded"
   else
     loaded=""
-    # Only the tested build is tagged automatically, and only under the name .env.example expects
-    if [ "$image" = "$AIHUB_IMAGE" ]; then
-      loaded=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E "/irishealth-community:2026\.3\.0AI\.154\.0$" | head -1 || true)
-    fi
-    if [ "$image" != "$AIHUB_IMAGE" ] && [ -z "$image_file" ]; then
+    # An Early Access image loads under its long internal name: it is tagged with the short name the build uses
+    case "$image" in irishealth-community:*) loaded=$(loaded_as "$build") ;; esac
+    if [ -z "$loaded" ] && [ -z "$image_file" ] && [ "$image" != "$AIHUB_IMAGE" ]; then
       fail ".env names the image $image, which is not loaded." \
-        "Load that image, or set SHUTTER_IMAGE=$AIHUB_IMAGE in .env for the tested build 154, then run ./install.sh again."
+        "Load that image, or set SHUTTER_IMAGE=$AIHUB_IMAGE in .env, then run ./install.sh again."
     elif [ -n "$loaded" ]; then
       plan_tag="$loaded"
       ok "The AI Hub image is loaded as $loaded (it will be tagged $image)"
@@ -126,10 +152,10 @@ if [ "$problems" -eq 0 ] && [ "$edition" = aihub ]; then
       plan_load="$image_file"
       ok "The AI Hub image will be loaded from $image_file"
     elif [ -n "$image_file" ]; then
-      fail "No file at $image_file." "Give the path of irishealth-community-2026.3.0AI.154.0-docker.tar.gz, as downloaded."
+      fail "No file at $image_file." "Give the path of $AIHUB_FILE (or another AI Hub Community file), as downloaded."
     else
       fail "The AI Hub image ($image) is not loaded." \
-        "Download irishealth-community-2026.3.0AI.154.0-docker.tar.gz from InterSystems' Early Access portal" \
+        "Download $AIHUB_FILE from InterSystems' Early Access portal" \
         "(https://evaluation.intersystems.com/Eval/early-access/AIHub), then: ./install.sh --image-file <that file>." \
         "No Early Access file? ./install.sh --replay runs the replay edition on the public image."
     fi
@@ -138,7 +164,7 @@ if [ "$problems" -eq 0 ] && [ "$edition" = aihub ]; then
     size=$(docker image inspect --format '{{.Size}}' "$image")
     if [ "$size" -lt 4000000000 ]; then
       fail "The AI Hub image is only $((size / 1000000)) MB; a complete load is about 5.4 GB of content." \
-        "Load it again: docker image load -i irishealth-community-2026.3.0AI.154.0-docker.tar.gz"
+        "Load it again: docker image load -i irishealth-community-$build-docker.tar.gz"
     fi
     arch=$(docker image inspect --format '{{.Architecture}}' "$image")
     host=$(docker info --format '{{.Architecture}}')
@@ -182,8 +208,8 @@ if [ -n "$plan_load" ]; then
   echo "  loading the AI Hub image (a few minutes)"
   out=$(docker image load -i "$plan_load")
   echo "$out" | sed 's/^/    /'
-  loaded=$(echo "$out" | sed -n 's/^Loaded image: //p' | grep -E "irishealth-community:2026\.3\.0AI\.154\.0$" | head -1)
-  if [ -n "$loaded" ] && [ "$loaded" != "$image" ] && [ "$image" = "$AIHUB_IMAGE" ]; then plan_tag="$loaded"; fi
+  loaded=$(echo "$out" | sed -n 's/^Loaded image: //p' | grep -E "irishealth(_arm64)?-community:" | head -1 || true)
+  if [ -n "$loaded" ] && [ "$loaded" != "$image" ]; then plan_tag="$loaded"; fi
 fi
 if [ -n "$plan_tag" ]; then
   docker tag "$plan_tag" "$image"
@@ -193,6 +219,10 @@ if [ -n "$plan_env" ]; then
   cp .env.example .env
   if [ "$edition" = replay ]; then
     sed -i.bak -e "s|^SHUTTER_IMAGE=.*|SHUTTER_IMAGE=$PUBLIC_IMAGE|" -e 's|^SHUTTER_WITH_AIHUB=.*|SHUTTER_WITH_AIHUB=0|' .env
+    rm -f .env.bak
+  elif [ "$(setting SHUTTER_IMAGE)" != "$image" ]; then
+    # The AI Hub build that was found or loaded, which may not be .env.example's
+    sed -i.bak -e "s|^SHUTTER_IMAGE=.*|SHUTTER_IMAGE=$image|" .env
     rm -f .env.bak
   fi
   echo "  created .env"
@@ -207,7 +237,7 @@ while :; do
     echo
     echo "Shutter is ready after $(( $(date +%s) - start )) s:"
     echo "  the web app:   http://localhost:${port}/shutter/index.html  (approver / shutter, or operator / shutter)"
-    echo "  first steps:   Scenarios, run S2 in Board mode, then approve its case (the README's \"Your first two minutes\")"
+    echo "  first steps:   Scenarios, run S2 in Board mode, then approve its case (the README's \"On your machine or in the trial, first\")"
     echo "  the portal:    http://localhost:${port}/csp/sys/UtilHome.csp  (_SYSTEM / SYS, namespace SHUTTER)"
     exit 0
   fi

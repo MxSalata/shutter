@@ -26,8 +26,8 @@ the productions a hospital already runs; the README's `docker compose up` is the
 The package `iris-shutter` (the repository root, published on IPM) is the whole of Shutter for an InterSystems IRIS AI
 Hub build: the core, the demo receiver's classes, and the live agents with their tools, policies, schemas and knowledge
 bases. Its manifest requires IRIS 2026.3 or later with Interoperability (the organisers' line: the agents need the `%AI`
-package, which build 154 of the early access has and 2026.2 has not), so `zpm "install iris-shutter"` on build 154 installs
-everything and an earlier version refuses it. The core alone, for a plain IRIS for Health Community 2026.2 that replays
+package, which the early access builds 2026.3.0AI.154.0 and 2027.1.0AI.109.0 have and 2026.2 has not), so
+`zpm "install iris-shutter"` on either installs everything and an earlier version refuses it. The core alone, for a plain IRIS for Health Community 2026.2 that replays
 recorded agent runs, is the module `iris-shutter-core` in the repository's `core/` folder: loaded by path
 (`zpm "load <repository>/core"`), never published; the image build loads one or the other by what the base image has
 (`WITH_AIHUB`). Both manifests run `Shutter.Setup.InstallStatus(root, demo, production)`, and the full package then
