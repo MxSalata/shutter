@@ -9,6 +9,7 @@ import fixtures from '@/mocks/fixtures.json';
 import { resetMock } from '@/mocks/handlers';
 import { server } from '@/mocks/node';
 import { formatTime, zoneLabel } from '@/lib/format';
+import { TRIAL_BOARD_CASE } from '@/lib/hospital';
 import { INSTALL_URL } from '@/lib/liveAgents';
 import { axeViolations } from '@/test/axe';
 import { layer1Words } from '@/test/words';
@@ -105,6 +106,26 @@ describe('the live hospital banner', () => {
     expect(await line()).toHaveTextContent(
       /^Mikolaj's Fictional Hospital, live: a new failure every 7 minutes\. Last: S2, 4 min ago\. Next: S8 at \d\d:\d\d (GMT|BST|UTC)\.$/,
     );
+  });
+
+  it("links the public demo's role to the board deciding S8 in the trial, which costs nothing", async () => {
+    resetMock('demo');
+    renderFrame();
+    const link = within(await banner()).getByRole('link', { name: 'See the board decide: S8 in the trial' });
+    expect(link.getAttribute('href')).toMatch(new RegExp(`\\?trial#/cases/${TRIAL_BOARD_CASE}$`));
+    // The case the link opens is the trial's recorded S8 in Board mode, the board escalating
+    const recorded = (
+      fixtures.cases as Record<string, { summary: { scenario?: string; mode?: string; state?: string } }>
+    )[TRIAL_BOARD_CASE];
+    expect(recorded.summary).toMatchObject({ scenario: 'S8', mode: 'board', state: 'escalated' });
+  });
+
+  it('offers no trial link to a user who may convene the board live', async () => {
+    resetMock('judge');
+    settingsWith({ enabled: true, every_minutes: 7 });
+    renderFrame();
+    await banner();
+    expect(screen.queryByTestId('live-board-link')).not.toBeInTheDocument();
   });
 
   it("keeps the story's title for a tooltip on its code, so the line stays short", async () => {
