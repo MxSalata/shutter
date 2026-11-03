@@ -295,7 +295,11 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
     }
     If $$$ISERR(sc) {
         Set case = ##class(Shutter.Store.Case).ByCaseId(..CaseId)
-        If $ISOBJECT(case) && 'case.IsClosed() Do case.Transition("failed", "Workflow error at " _ completionkey _ ": " _ $SYSTEM.Status.GetErrorText(sc), "system")
+        If $ISOBJECT(case) && 'case.IsClosed() {
+            // A lead this case holds ends with it, so the cases following it carry on at once instead of waiting out the bound.
+            Do ..LeadFinish(case, "failed", "", "the leader's workflow failed: " _ $EXTRACT($SYSTEM.Status.GetErrorText(sc), 1, 400))
+            Do case.Transition("failed", "Workflow error at " _ completionkey _ ": " _ $SYSTEM.Status.GetErrorText(sc), "system")
+        }
     }
     Quit sc
 }
@@ -327,6 +331,8 @@ Method OnError(request As %Library.Persistent, ByRef response As %Library.Persis
                 Do case.Transition("escalated", "Error from the write call: " _ text _ ". Whether the receiver applied the operation is unknown; a person must check", "system")
                 Quit
             }
+            // A lead this case holds ends with it, so the cases following it carry on at once instead of waiting out the bound.
+            Do ..LeadFinish(case, "failed", "", "the leader's workflow failed: " _ text)
             Set case.Headline = "Failed: " _ text
             Do case.Transition("failed", "Error from the call " _ pCompletionKey _ ": " _ text, "system")
         }
@@ -562,15 +568,39 @@ Method LeadFinish(case As Shutter.Store.Case, state As %String, plan As %Dynamic
     Set lead = ##class(Shutter.Store.BoardLead).Finish(case.CaseId, state, plan, ##class(Shutter.Store.BoardLead).VerdictsOf(case.CurrentSnapshot), reason)
     Set ..LeadSignature = ""
     Quit:'$ISOBJECT(lead)
-    Set followers = ##class(Shutter.Store.BoardLead).FollowersOf(case.CaseId), n = 0
+    Set n = ..TellFollowers(case.CaseId, lead)
+    If n > 0 Do case.Note("note", "This case's board led its failure signature: " _ n _ " waiting case(s) told that it " _ $SELECT(lead.State = "done": "decided", 1: "decided nothing"), "system", "lead:" _ lead.%Id())
+}
+
+/// Every case still waiting on a leader's lead is told that it ended (Shutter.Msg.LeadReady to this item), so each
+/// carries on at once: with the leader's decision when the lead is done, on the rules path when it failed. The followers
+/// are found by the leader's case id, so a fresh instance that never knew the lead (an abandon, a close by hand) can tell
+/// them too. Returns how many were told.
+Method TellFollowers(leaderCaseId As %String, lead As Shutter.Store.BoardLead) As %Integer
+{
+    Set followers = ##class(Shutter.Store.BoardLead).FollowersOf(leaderCaseId), n = 0
     Set it = followers.%GetIterator()
     While it.%GetNext(, .fid) {
         Set msg = ##class(Shutter.Msg.LeadReady).%New()
-        Set msg.CaseId = fid, msg.LeaderCaseId = case.CaseId, msg.Signature = lead.Signature, msg.Outcome = lead.State
+        Set msg.CaseId = fid, msg.LeaderCaseId = leaderCaseId, msg.Signature = lead.Signature, msg.Outcome = lead.State
         Set sc = ..SendRequestAsync(..%ConfigName, msg, 0, "lead:" _ fid)
         If $$$ISOK(sc) Set n = n + 1
     }
-    If n > 0 Do case.Note("note", "This case's board led its failure signature: " _ n _ " waiting case(s) told that it " _ $SELECT(lead.State = "done": "decided", 1: "decided nothing"), "system", "lead:" _ lead.%Id())
+    Quit n
+}
+
+/// A case closed by a person while it led a board (abandoned, or handled by hand): the lead is finished as failed with
+/// the reason and the cases following it are told (TellFollowers), so none waits out the bound for a board that will
+/// never end. A lead already ended, or none, changes nothing.
+Method LeadLeftBehind(case As Shutter.Store.Case, reason As %String)
+{
+    Set lead = ##class(Shutter.Store.BoardLead).ForLeader(case.CaseId)
+    Quit:'$ISOBJECT(lead)
+    Quit:(lead.State '= "running")
+    Set lead = ##class(Shutter.Store.BoardLead).Finish(case.CaseId, "failed", "", ##class(Shutter.Store.BoardLead).VerdictsOf(case.CurrentSnapshot), reason)
+    Quit:'$ISOBJECT(lead)
+    Set n = ..TellFollowers(case.CaseId, lead)
+    If n > 0 Do case.Note("note", "This case led its failure signature's board when it was closed: " _ n _ " waiting case(s) told that it decided nothing", "system", "lead:" _ lead.%Id())
 }
 
 /// The board convened on the evidence (6.6): a request to every member of the mode's board, the pending list kept for the
@@ -638,7 +668,10 @@ Method OnBoardDefer(case As Shutter.Store.Case, round As %Integer) As %Status
     If round '= ..Round { $$$TRACE("A board slot from round " _ round _ "; the case is in round " _ ..Round) Quit $$$OK }
     If case.State '= "investigating" { $$$TRACE("A board slot came; the case is " _ case.State _ ", so nothing is due") Quit $$$OK }
     Set summaryJSON = $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.Summary, 1: "")
-    If summaryJSON = "" Quit case.Transition("escalated", "A board slot came, but the case has no evidence summary to convene the board on; a person must look", "system")
+    If summaryJSON = "" {
+        Do ..LeadFinish(case, "failed", "", "the leader had no evidence summary to convene the board on")
+        Quit case.Transition("escalated", "A board slot came, but the case has no evidence summary to convene the board on; a person must look", "system")
+    }
     Set sc = ..ConveneBoard(case, summaryJSON, ..DeferredBy, ..DeferredMode, .convened)
     Quit:($$$ISERR(sc) || 'convened) sc
     Quit ..AfterConvene(case, summaryJSON)
@@ -1523,6 +1556,7 @@ Method OnClose(request As Shutter.Msg.CaseClose, Output response As %Library.Per
     Quit:$$$ISERR(sc) sc
     Set started.State = case.State
     $$$TRACE("Case " _ case.CaseId _ " handled by hand, closed by " _ who)
+    Do ..LeadLeftBehind(case, "the leader was handled by hand")
     Quit ..CancelOpenTask(case, request.Actor, "the case was handled by hand")
 }
 
@@ -1549,6 +1583,7 @@ Method OnAbandon(request As Shutter.Msg.CaseAbandon, Output response As %Library
     Quit:$$$ISERR(sc) sc
     Set started.State = case.State
     $$$TRACE("Case " _ case.CaseId _ " abandoned by " _ who)
+    Do ..LeadLeftBehind(case, "the leader was abandoned")
     Quit ..CancelOpenTask(case, request.Actor, "the case was abandoned")
 }
 
