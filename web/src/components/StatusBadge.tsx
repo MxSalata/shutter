@@ -7,7 +7,9 @@ const ICON_SIZES = { xs: 10, sm: 12, md: 14, lg: 16, xl: 18 } as const;
 
 /**
  * A status in one of the five tones, with its icon and its words; the hint, when there is one, is a tooltip the
- * keyboard and a tap reach too. The icon is decorative: the label says everything.
+ * keyboard and a tap reach too. The icon is decorative: the label says everything. In a long list, where a tab stop
+ * on every badge would make the keyboard's way across it long, `focusable={false}` keeps the hint for hover and touch
+ * and the list writes it out once in its legend.
  */
 export function StatusBadge({
   tone,
@@ -17,11 +19,13 @@ export function StatusBadge({
   size = 'sm',
   variant,
   w,
+  focusable = true,
 }: Omit<Status, 'icon'> & {
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   variant?: BadgeProps['variant'];
   w?: BadgeProps['w'];
   icon?: Icon | null;
+  focusable?: boolean;
 }) {
   const I = icon === null ? null : (icon ?? TONE_ICONS[tone]);
   const badge = (
@@ -32,7 +36,7 @@ export function StatusBadge({
       w={w}
       data-tone={tone}
       leftSection={I ? <I size={ICON_SIZES[size]} stroke={2} aria-hidden /> : undefined}
-      tabIndex={hint ? 0 : undefined}
+      tabIndex={hint && focusable ? 0 : undefined}
       style={{ textTransform: 'none' }}
     >
       {label}

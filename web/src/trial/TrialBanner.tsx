@@ -168,6 +168,9 @@ function WhatsDifferent({ iconOnly }: { iconOnly: boolean }) {
       position="bottom-end"
       withinPortal
       shadow="md"
+      // Focus moves into the dropdown, so Escape reaches it and closes it, and comes back to the button
+      trapFocus
+      returnFocus
     >
       <Popover.Target>{target}</Popover.Target>
       <Popover.Dropdown aria-label="The trial environment">

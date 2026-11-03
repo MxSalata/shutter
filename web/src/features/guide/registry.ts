@@ -275,7 +275,7 @@ export const CHAPTERS: GuideChapter[] = [
       {
         id: 'ask',
         title: 'Ask about this case',
-        say: 'Pick one of the suggested questions: the trial has their recorded answers. Explain answers quickly; Ask the board puts it to the agents.',
+        say: 'Pick a suggested question: the trial has its recorded answer. "Explain" is one agent, quick; "Ask the board" puts it to all four.',
         place: { scenario: 'S8', mode: 'board' },
         target: 'case-ask',
         tryIt: { action: 'ask-open', text: 'Try it: open Ask, pick a question' },

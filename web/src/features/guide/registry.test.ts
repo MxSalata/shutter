@@ -105,6 +105,12 @@ describe('the guide registry', () => {
     }
   });
 
+  it('names the two depths of Ask on the quick tour as the panel does, each in its own quotes', () => {
+    const say = stepAt('s8/ask')!.step.say;
+    expect(say).toMatch(/"Explain" is one agent, quick; "Ask the board" puts it to all four\.$/);
+    expect(say).not.toMatch(/Explain answers/);
+  });
+
   it('keeps the wording rules: no dashes, no exclamations, and never a person approving every write', () => {
     for (const { c, s } of STEPS) {
       const text = `${c.title} ${s.title} ${s.say} ${s.detail ?? ''} ${s.tryIt?.text ?? ''} ${s.chip?.text ?? ''}`;

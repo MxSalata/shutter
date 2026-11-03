@@ -6,7 +6,15 @@ import { StatusBadge } from './StatusBadge';
  * the gate" (neutral) or "Not as expected" (blocking), each with the scenario's expectation as its tooltip; nothing
  * where no expectation applies.
  */
-export function ExpectedMark({ c, scenario }: { c: OutcomeCase; scenario?: ExpectedScenario | null }) {
+export function ExpectedMark({
+  c,
+  scenario,
+  focusable,
+}: {
+  c: OutcomeCase;
+  scenario?: ExpectedScenario | null;
+  focusable?: boolean;
+}) {
   const e = expectationOf(c, scenario);
   if (e.kind === 'unknown') return null;
   const words = {
@@ -21,6 +29,7 @@ export function ExpectedMark({ c, scenario }: { c: OutcomeCase; scenario?: Expec
       label={words[e.kind]}
       hint={e.kind === 'as-expected' ? `${scenario?.id} expects ${e.expects}` : e.label}
       variant="outline"
+      focusable={focusable}
     />
   );
 }

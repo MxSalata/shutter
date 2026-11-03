@@ -21,7 +21,8 @@ export function ApproveWords({ operations, receiver }: { operations: number; rec
     ),
     trial: (
       <Text size="sm">
-        Go ahead. You will see the recorded chain go out in order. Nothing leaves this browser.
+        Go ahead. You will see the recorded chain go out in order. Nothing leaves this browser, and a reload
+        starts the recording afresh.
       </Text>
     ),
   });
