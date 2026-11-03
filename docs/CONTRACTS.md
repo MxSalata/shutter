@@ -1745,7 +1745,7 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   `SHUTTER_DEMO_BUDGET_PERIOD` for the banner (12).
 - v1.36, 2 Nov 2026: a decision that lands while the Workflow engine is still distributing the task waits for the engine's
   worklist row and assigns again when its own row meets the engine's (5; a CI run's 409 "ID key not unique" of 2 Nov).
-- v1.35, 2 Nov 2026 (the items of the competitor code review of 1 Nov 2026): denied tool calls
+- v1.35, 2 Nov 2026 (the items of a review of competing entries' code): denied tool calls
   recorded as rows with `denied` true and a trace line (9); the run's millisecond start and AI Hub's own counters
   (`startedAtMs`, `llmMs`, `toolMs`, `reasoningTokens`) on the response and the run row (9); a bound on one model call,
   `provider_timeout_seconds` (6.6, 12); the compose healthcheck and `last_live_run` in the Doctor and the health route (12); the agent operation's start-up line in

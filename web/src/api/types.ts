@@ -925,6 +925,35 @@ export interface Budget {
   spentByMeUsd?: number;
   /** The signed-in user's share is used up (the day's cap may not be). */
   shareExhausted?: boolean;
+  /** What the runs in flight have reserved against the cap, and how many there are (v1.35). */
+  reservedUsd?: number;
+  inFlight?: number;
+  /** What the signed-in user's own runs in flight have reserved against their share (v1.35). */
+  reservedByMeUsd?: number;
+}
+
+/**
+ * `GET /settings` `live.agents` (CONTRACTS 9, v1.37): whether a live agent run can go out now, and if not why and until
+ * when. `reason` `budget` is the day's cap or the caller's share spent (`until` is `budget.resetsAt`), `provider_auth` the
+ * model provider refusing the key in the last 15 minutes (the public demo's key is switched off at a daily limit outside
+ * Shutter; `until` is the next 00:00 UTC), null while live runs can go. `until` is an ISO UTC time, null when none is
+ * given; `detail` is the server's sentence, for Technical. Absent from an older server: the app then reads the budget.
+ * A refused live call answers `409 live_unavailable` with the same object as `live`.
+ */
+export interface LiveAgents {
+  available: boolean;
+  reason?: 'budget' | 'provider_auth' | null;
+  until?: string | null;
+  detail?: string;
+}
+
+/**
+ * `GET /settings` `live.budgetNote`: what the author pays for the live agents, as the demo's build sets it (not yet sent
+ * by the server). Absent: the banner reads the instance's own cap.
+ */
+export interface LiveBudgetNote {
+  amountUsd: number;
+  period: 'day' | 'hour';
 }
 
 /** `GET /settings` `heldMessages`: held cases (failure kind `unreadable`) by the schema category they name. */
@@ -952,6 +981,10 @@ export interface LiveStatus {
   last_ordinary?: string;
   /** "Break the feed" (v1.35): the storm playing or played last, absent before the first. */
   storm?: LiveStorm | null;
+  /** Whether live agent runs can go out now (v1.37); absent from an older server. */
+  agents?: LiveAgents;
+  /** What the author pays for the live agents, for the banner; absent until the server sends it. */
+  budgetNote?: LiveBudgetNote;
 }
 
 /**

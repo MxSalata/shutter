@@ -25,11 +25,13 @@ import {
 } from '@/api/hooks';
 import type { BoardAnswer, CaseQuestion, QuestionTier, SuggestedTurn } from '@/api/types';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { LiveUnavailableNotice } from '@/components/LiveUnavailableNotice';
 import { StatusBadge } from '@/components/StatusBadge';
 import { TechDetail } from '@/components/TechDetail';
 import { TRIAL } from '@/env/mode';
 import { isApiError } from '@/lib/errors';
 import { keyLabel } from '@/lib/format';
+import { liveRefusal, liveRefusalInText, liveUnavailable } from '@/lib/liveAgents';
 import { showEvidence } from '../case/evidenceLinks';
 import {
   MEMBER_NAMES,
@@ -127,6 +129,9 @@ function Cites({ cites }: { cites: string[] }) {
 
 function Turn({ q }: { q: CaseQuestion }) {
   const a = q.answer;
+  const settings = useSettings().data;
+  // A question the live agents could not run (the budget, the provider refusing the key) says so in plain words
+  const refused = q.state === 'failed' ? liveRefusalInText(q.error, settings) : null;
   return (
     <Box component="article" aria-labelledby={turnId(q)} className="ask-turn">
       <Stack gap="xs">
@@ -164,6 +169,8 @@ function Turn({ q }: { q: CaseQuestion }) {
             ) : null}
             <Cites cites={a.cites} />
           </Stack>
+        ) : refused ? (
+          <LiveUnavailableNotice state={refused} variant="inline" />
         ) : (
           <Text size="sm" c="var(--mantine-color-red-text)">
             {q.state === 'schema_failed'
@@ -182,9 +189,13 @@ function Turn({ q }: { q: CaseQuestion }) {
 /**
  * Why a question was not asked. A suggested turn with no recording, asked by someone who may not spend the model budget,
  * is 409 no_recorded_answer: not a fault, so it reads as a note naming who can ask it live. In the trial nobody can,
- * so it steers to the suggested questions instead.
+ * so it steers to the suggested questions instead. A question refused because the live agents cannot run (409
+ * live_unavailable or budget_exhausted) reads as the notice that says until when, and how to run them oneself.
  */
 function AskError({ error }: { error: unknown }) {
+  const settings = useSettings().data;
+  const refused = liveRefusal(error, settings);
+  if (refused) return <LiveUnavailableNotice state={refused} role="status" />;
   if (isApiError(error) && error.code === 'no_recorded_answer')
     return (
       <Alert color="blue" title="No recorded answer">
@@ -244,6 +255,7 @@ function FreeText({
 }) {
   const ask = useAskQuestion(caseId);
   const [text, setText] = useState('');
+  const unavailable = liveUnavailable(useSettings().data);
   // In the trial the box stays in sight, disabled, so the capability is seen and the reason is given
   if (access.trial)
     return (
@@ -273,6 +285,8 @@ function FreeText({
   const cost = tier === 'board' ? 'about 0.40 USD' : 'about 0.05 to 0.10 USD';
   return (
     <Stack gap="xs">
+      {/* While the live agents cannot run, a question of one's own would only be refused: the notice says why and until when */}
+      {unavailable ? <LiveUnavailableNotice state={unavailable} /> : null}
       <Textarea
         label="Your own question"
         description={`Runs live with ${tierLabel(tier)}, ${cost} a question.${conversation ? ' It continues the conversation shown above.' : ''}`}
@@ -285,7 +299,7 @@ function FreeText({
       {ask.isError ? <AskError error={ask.error} /> : null}
       <Group>
         <Button
-          disabled={!text.trim()}
+          disabled={!text.trim() || !!unavailable}
           loading={ask.isPending}
           onClick={() =>
             ask.mutate(

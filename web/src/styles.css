@@ -850,6 +850,268 @@ body {
 }
 
 /*
+ * The case's Outcome band, compact: its heading is the band's disclosure (a chevron and "Outcome", 17 px), the outcome
+ * sentence beside it at 20 px, so a closed band still says it in one line. The toggle is 44 px high on a phone.
+ */
+.outcome-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 2rem;
+  padding-right: 4px;
+  font: inherit;
+  color: inherit;
+  border-radius: var(--mantine-radius-sm);
+}
+.outcome-statement {
+  font-size: var(--mantine-font-size-xl);
+  line-height: 1.3;
+  font-weight: 600;
+}
+@media (max-width: 35.99em) {
+  .outcome-toggle {
+    min-height: 2.75rem;
+  }
+  .outcome-statement {
+    font-size: var(--mantine-font-size-lg);
+  }
+}
+
+/*
+ * The case's action (`CaseActionButton`): in the attention tone when the reader has to act, its edge in the tone's
+ * outline so it reads as a call even beside the light Ask button; a quiet outline otherwise. The compact copy sits at the
+ * end of the sticky tab bar: the icon and a word, the icon alone on a phone, at least 44 px square there.
+ */
+.case-action[data-needs-you] {
+  border: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-yellow-outline);
+}
+.case-tab-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-xs);
+}
+.case-tab-bar > .mantine-Tabs-list {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.case-action-compact {
+  flex: none;
+}
+@media (max-width: 35.99em) {
+  /* On a phone the tabs drop their icons and some padding, so the three and the action keep to one line */
+  .case-tab-bar .mantine-Tabs-tabSection {
+    display: none;
+  }
+  .case-tab-bar .mantine-Tabs-tab {
+    padding-inline: 10px;
+  }
+  .case-action-compact {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    padding-inline: 0;
+  }
+  .case-action-compact .case-action-word {
+    display: none;
+  }
+  .case-action-compact .mantine-Button-section {
+    margin: 0;
+  }
+}
+
+/*
+ * The progress strip's reached stages are buttons to where the page tells them: the pointer, a visible focus ring, and
+ * at least 44 px high on a phone. A stage not reached yet is plain text.
+ */
+.lifecycle-step[data-stage] {
+  cursor: pointer;
+  border-radius: var(--mantine-radius-sm);
+}
+.lifecycle-step[data-stage]:hover .mantine-Stepper-stepLabel {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.lifecycle-step[data-stage]:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 3px;
+}
+@media (max-width: 35.99em) {
+  .lifecycle-step[data-stage] {
+    min-height: 2.75rem;
+  }
+}
+
+/*
+ * "Where it failed" (`FailureMap`): the message's path as boxes in a row, the sending system, IRIS and the receiving
+ * system, joined by lines with an arrow; a failed hop breaks its line in its tone around a cross, its words and the
+ * receiver's answer under it, and a hop never attempted is dashed. Under them, Shutter's line, with a 3 px edge in the
+ * outcome's tone. The map is a size container: below 600 px of its own width the path runs down instead of across. The
+ * lines are graphics in the text's dimmed colour or the tone's filled one (3:1 on every surface); nothing moves.
+ */
+.failure-map {
+  container-type: inline-size;
+}
+.fm-flow {
+  display: flex;
+  align-items: stretch;
+}
+.fm-node {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 8px 10px;
+  border: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-body);
+}
+.fm-node[data-role='iris'] {
+  flex-grow: 1.3;
+}
+.fm-trouble {
+  color: var(--mantine-color-yellow-text);
+}
+.fm-now {
+  color: var(--mantine-color-green-text);
+}
+.fm-link {
+  --fm-colour: var(--mantine-color-dimmed);
+  flex: 0 0 8.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 0 6px;
+  text-align: center;
+}
+.fm-link[data-broken] {
+  flex-basis: 10rem;
+}
+.fm-answer {
+  overflow-wrap: anywhere;
+}
+.fm-link[data-tone='blocking'] {
+  --fm-colour: var(--mantine-color-red-filled);
+}
+.fm-link[data-tone='attention'] {
+  --fm-colour: var(--mantine-color-yellow-filled);
+}
+.fm-line {
+  display: flex;
+  align-items: center;
+  color: var(--fm-colour);
+}
+.fm-seg {
+  flex: 1;
+  border-top: 2px solid var(--fm-colour);
+}
+.fm-link[data-dashed] .fm-seg {
+  border-top-style: dashed;
+}
+.fm-arrow {
+  flex: none;
+  margin-left: -6px;
+}
+.fm-break {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin: 0 3px;
+  border-radius: 50%;
+  border: 2px solid var(--fm-colour);
+  color: var(--fm-colour);
+}
+.fm-link[data-tone='blocking'] .fm-label-words {
+  color: var(--mantine-color-red-text);
+}
+.fm-link[data-tone='attention'] .fm-label-words {
+  color: var(--mantine-color-yellow-text);
+}
+.fm-shutter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: var(--mantine-radius-sm);
+  border-left: 3px solid var(--fm-edge, var(--mantine-color-gray-filled));
+  background: var(--mantine-color-default-hover);
+}
+.fm-shutter[data-tone='info'] {
+  --fm-edge: var(--mantine-color-blue-filled);
+}
+.fm-shutter[data-tone='positive'] {
+  --fm-edge: var(--mantine-color-green-filled);
+}
+.fm-shutter[data-tone='attention'] {
+  --fm-edge: var(--mantine-color-yellow-filled);
+}
+.fm-shutter[data-tone='blocking'] {
+  --fm-edge: var(--mantine-color-red-filled);
+}
+.fm-shutter-now {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.fm-shutter .mantine-Badge-root {
+  height: auto;
+  min-height: var(--badge-height);
+  max-width: 100%;
+}
+.fm-shutter .mantine-Badge-label {
+  white-space: normal;
+  overflow: visible;
+  line-height: 1.3;
+}
+:root[data-shutter-contrast='high'] :is(.fm-link, .fm-shutter) {
+  --fm-colour: currentColor;
+  --fm-edge: currentColor;
+}
+@container (max-width: 600px) {
+  .fm-flow {
+    flex-direction: column;
+  }
+  .fm-link {
+    flex: none;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    min-height: 2.75rem;
+    padding: 0 0 0 1.25rem;
+    text-align: left;
+  }
+  .fm-line {
+    flex-direction: column;
+    align-self: stretch;
+    min-height: 2.75rem;
+  }
+  .fm-seg {
+    border-top: 0;
+    border-left: 2px solid var(--fm-colour);
+  }
+  .fm-link[data-dashed] .fm-seg {
+    border-left-style: dashed;
+  }
+  .fm-arrow {
+    margin: -6px 0 0;
+    transform: rotate(90deg);
+  }
+  .fm-break {
+    margin: 3px 0;
+  }
+}
+@media (forced-colors: active) {
+  .fm-seg,
+  .fm-break,
+  .fm-shutter {
+    border-color: CanvasText;
+  }
+}
+
+/*
  * The case's decision receipt: a band set apart from the cards around it by a tinted surface and a thick edge in the
  * primary colour, so the receipt reads as the record it is. The tint is the hovered surface the badges are already
  * tuned against, so nothing on it needs a contrast rule of its own. On a phone each fact becomes a card of its own,
@@ -1642,6 +1904,17 @@ body {
   text-decoration: underline dotted;
   text-underline-offset: 3px;
   cursor: help;
+}
+/* The line on what the author pays, under the feed's line: on a phone it starts at the band's edge, under the mark and
+   the dot (the feed's line above is taller than they are), so it keeps to one line at 360 px */
+@media (max-width: 47.99em) {
+  .live-budget-line {
+    margin-inline-start: calc(-26px - 2 * var(--mantine-spacing-xs));
+  }
+}
+/* The notice under the banner's line while the live agents cannot run: calm, in the band */
+.live-unavailable {
+  margin-top: var(--mantine-spacing-xs);
 }
 
 /* The count beside Cases: an attention badge, its accessible name the full sentence. Its tint is laid over the page's

@@ -114,7 +114,9 @@ describe('the guide', () => {
     expect(d).toHaveTextContent(
       'When a patient movement fails to reach another system, Shutter finds out why and writes a fix only when it is safe to.',
     );
-    expect(d).toHaveTextContent('A demo hospital with made-up patients, recorded.');
+    expect(d).toHaveTextContent(
+      "Mikolaj's Fictional Hospital: a demo hospital with made-up patients, recorded.",
+    );
     expect(d).not.toHaveTextContent(/try anything|every action works|it never plays/i);
     const quick = within(d).getByRole('radio', { name: /Quick tour/ });
     expect(quick).toBeChecked();

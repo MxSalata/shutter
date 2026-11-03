@@ -13,7 +13,7 @@
       </Author>
       <Packaging>module</Packaging>
       <SourcesRoot>src</SourcesRoot>
-      <!-- The AI Hub build: the agents need the %AI package, which 2026.3 (build 154 of the early access) has and 2026.2 has not.
+      <!-- The AI Hub build: the agents need the %AI package, which the early access builds 2026.3.0AI.154.0 and 2027.1.0AI.109.0 have and 2026.2 has not.
            The organisers asked for this line, so that the package refuses an earlier version (announcement thread, 2 Nov 2026). -->
       <SystemRequirements Version=">=2026.3" Interoperability="enabled"/>
       <!-- demo = 1 installs the demo: the demo users, the demo receiver's web application and client, the recorded

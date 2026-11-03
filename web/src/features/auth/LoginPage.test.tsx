@@ -295,13 +295,14 @@ describe('LoginPage, the way into the trial', () => {
     renderLogin(false);
     const card = await screen.findByRole('region', { name: 'New to Shutter?' });
     expect(card).toHaveTextContent(
-      'Try it in the trial environment: a demo hospital with made-up patients, where each action replays a recording. Nothing reaches IRIS.',
+      "Try it in the trial environment: Mikolaj's Fictional Hospital, with made-up patients, where each action replays a recording. Nothing reaches IRIS.",
     );
     const tour = within(card).getByRole('link', { name: 'Take the guided tour of the trial' });
     const open = within(card).getByRole('link', { name: 'Open the trial' });
     expect(tour.getAttribute('href')).toMatch(/\?trial=tour#\/scenarios$/);
     expect(open.getAttribute('href')).toMatch(/\?trial#\/scenarios$/);
     expect(card.querySelector('input')).toBeNull();
+    expect(within(card).getByText('No sign-in required')).toBeInTheDocument();
     // The words on the link are "Take the guided tour"; "of the trial" is only for those who do not see the card
     expect(tour).toHaveTextContent(/^Take the guided tour/);
   });
