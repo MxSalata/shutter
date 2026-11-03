@@ -85,11 +85,20 @@ const counter = (v: number | null | undefined): number | undefined =>
     : Number(v);
 
 /**
+ * The investigation's runs: the case's agent runs without those that answered a question (Ask about this case), which
+ * the server stores as the case's rows too (CONTRACTS 5 and 14). The board, the plan's provenance and the evidence's
+ * citations read the investigation; a question's runs are the question's own.
+ */
+export function investigationRuns(runs: AgentRun[] | null | undefined): AgentRun[] {
+  return (runs ?? []).filter((r) => !r.questionId);
+}
+
+/**
  * The runs of the board's latest pass: the last coordinator's, with the specialists that read the same snapshot (the
  * last run of each), Ask's runs left out. A pass with no coordinator yet has none.
  */
 export function passRuns(runs: AgentRun[]): AgentRun[] {
-  const investigation = runs.filter((r) => !r.questionId);
+  const investigation = investigationRuns(runs);
   const coordinators = investigation.filter((r) => r.role === 'coordinator');
   const coordinator = coordinators.at(-1);
   if (!coordinator) return [];

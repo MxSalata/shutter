@@ -29,6 +29,7 @@ import { useNow } from '@/lib/useNow';
 import { useTechnical } from '@/stores/appearance';
 import { describeEntry, describeItem, kindLabel } from './derive';
 import { EncounterTimeline } from './EncounterTimeline';
+import { investigationRuns } from './runClock';
 import { NotYet, Section } from './Section';
 import { encounterTimeline } from './timeline';
 
@@ -514,7 +515,8 @@ export function EvidencePanel({
 }) {
   const snap = useSnapshot(caseId, open);
   const plan = usePlan(caseId, open).data?.plan;
-  const runs = useRuns(caseId, open).data ?? [];
+  // The investigation's runs alone: a question's runs (Ask about this case) sit on the case too
+  const runs = investigationRuns(useRuns(caseId, open).data);
   const s = snap.data;
   const now = useNow();
   const expired = s && parseTime(s.freshUntil) ? parseTime(s.freshUntil)!.getTime() < now : false;
