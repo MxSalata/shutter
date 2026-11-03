@@ -687,7 +687,7 @@ reads it through `Shutter.Store.SiteProfile`.
   collector, the verifier and the connector read their paths from the entry named by the case's receiver (the
   production item that delivered to it), so a second receiver is configuration, not code. A path left empty means the
   receiver has no such endpoint: no receipt lookup, and the capabilities are the declared features, which the route
-  item records as `capabilities_source`. An entry without `api` takes the downstream system's paths. `dry_run: false` in a receiver's declared features, or in
+  item records as `capabilities_source`. An entry with neither a capabilities endpoint nor declared features reads as capabilities unread (`capabilities_source` "not declared by the site profile", status 0), and the gate answers `CAPABILITIES_UNREADABLE` (v1.39). An entry without `api` takes the downstream system's paths. `dry_run: false` in a receiver's declared features, or in
   its capability profile, means the gate offers no resend to it (`DRY_RUN_UNSUPPORTED`) and the connector refuses to send
   a dry run to it (v1.21). Declare all four flags: for a receiver with no capabilities endpoint the route takes the
   declared features, and a flag left out reads as false there (the connector alone reads an absent flag as true, so the
