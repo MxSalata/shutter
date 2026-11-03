@@ -842,8 +842,8 @@ skipped where the schema classes are not loaded) keeps it so, and asserts that t
 Unicode. What a model wrote and the checks accepted is cleaned when it is restored for the store (9).
 
 **Findings and plans cite only what they were given (v1.35).** `evidence_refs` on a finding or a plan must name keys of the
-evidence object the run received, or keys one level down in it (`message`, `validation`, `error`, `operation`, `route`,
-`ward_state`, `receipt`, `timeline`, and so on), or `findings` for the coordinator; the runner lists them for the terminal
+evidence object the run received, or keys one level down in it (`operation`, `failure`, `message`, `validation`, `ward_state`, `receipt`,
+`timeline`, `route`, `bed_conflict`, `catalogue`, and so on), or `findings` for the coordinator; the names the prompts used before v1.39 for two of those keys, `error` for `failure` and `later_event` for `timeline`, stay citable while the evidence has the key they stand for, so the recordings made before v1.35 and the evaluation table pass the check, and the rules of the house, the SubmitFindings and SubmitPlan descriptions and the Goal line now name the keys rather than snapshot item kinds or identifiers (v1.39), with no change to the record keys, which carry the member's configuration version; the runner lists them for the terminal
 tool (`CiteIds`, as the question tools already have), `Shutter.Schema.Findings.CheckRefs` refuses the submission with the
 unknown names and the keys that are allowed, and the model repairs it in the same run. A reference to evidence that is not
 there is therefore never stored.
@@ -1736,6 +1736,9 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   empties the precedents and board leads too and stamps `resetAt` (12).
   The alert intake marks a session seen only once Shutter took its message, pending meanwhile (11); a board lead whose
   leader fails, is abandoned or is closed by hand ends at once for its followers (6.6).
+  The prompts name the evidence keys and the earlier names stay citable (6.1); an alert's reason code reads as no
+  answer of the receiver's, so the status and the outcome decide the match (11); a receiver entry with neither a
+  capabilities endpoint nor declared features reads as capabilities unread, `CAPABILITIES_UNREADABLE` (6.4).
 - v1.38, 2 and 3 Nov 2026 (the demo rehearsal's storm, whose cases all convened boards): a watched production's failures run in the
   site's watched mode, policy by default, whatever mode the scenarios run in (6.3, 11); a case the alert intake opened
   takes the production's own report of the failure when it arrives before the evidence is collected, so the catalogue
