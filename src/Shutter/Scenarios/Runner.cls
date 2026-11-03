@@ -363,7 +363,8 @@ ClassMethod Drop(source As %String, inbound As %String) As %String
     Quit ""
 }
 
-/// The downstream system reset, the inbound and archive folders (Shutter's and the demo hospital's) emptied of
+/// The downstream system reset, the live hospital's bed map cleared (unless a story is playing), the inbound and archive
+/// folders (Shutter's and the demo hospital's) emptied of
 /// fixtures, the mode back to board, the
 /// running scenario and any run record that isn't playing cleared, and <code>^Shutter.Config("resetAt")</code> set to
 /// the time of the reset: the evidence collector ignores message-store events older than it, since encounter ids are
@@ -380,6 +381,7 @@ ClassMethod Reset() As %String [ SqlProc ]
         Set answer = ..InReceiver(name, "Reset", "", .rstatus)
         Do receivers.%Set(name, $SELECT($ISOBJECT(answer): answer, 1: {"error": ("HTTP " _ rstatus)}))
     }
+    Set live = ..ResetLive()
     Set emptied = []
     For setting = "adtIn", "adtArchive", "hospitalIn", "hospitalArchive" {
         Set dir = $GET(^Shutter.Config(setting))
@@ -398,7 +400,27 @@ ClassMethod Reset() As %String [ SqlProc ]
     // A run record left queued or finished goes with the reset (a queued run whose player stopped would otherwise
     // refuse every later run); one that is playing stays, since that run's own reset comes through here
     Kill:'..Running() ^Shutter.Scenarios("run")
-    Quit {"ward": (ward), "receivers": (receivers), "emptied": (emptied), "mode": "board", "reset_at": (resetAt), "abandoned_incidents": (abandoned)}.%ToJSON()
+    Quit {"ward": (ward), "receivers": (receivers), "live": (live), "emptied": (emptied), "mode": "board", "reset_at": (resetAt), "abandoned_incidents": (abandoned)}.%ToJSON()
+}
+
+/// A playing mark older than this, in seconds, was left by a job that died: no story takes this long.
+Parameter PLAYINGSTALESECONDS = 1800;
+
+/// The live hospital's bed map goes with the reset (CONTRACTS 4.4): the receiver has just forgotten every encounter, so
+/// each patient the ordinary feed still knew (Shutter.Util.LiveFeed.Ordinary, ^Hospital.Live("adm") and ("bed") in the
+/// hospital's namespace) would from now on fail its transfer, update or discharge as unknown_encounter and open a spurious
+/// case; with the map empty the feed admits fresh patients, and the turn counter starts again. Not while a story is
+/// playing (^Hospital.Live("playing"), set by Hospital.LivePlayer.Play, which reads its own patients without $GET): the
+/// map stays. Returns "cleared", "playing" or "none" (no hospital namespace recorded in
+/// ^Shutter.Config("hospitalNamespace")).
+ClassMethod ResetLive() As %String
+{
+    Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
+    If hospital = "" Quit "none"
+    Set playing = $GET(^|hospital|Hospital.Live("playing"))
+    If $LISTVALID(playing), playing '= "", (##class(Shutter.Util.Time).EpochSeconds() - +$LISTGET(playing, 2)) < ..#PLAYINGSTALESECONDS Quit "playing"
+    Kill ^|hospital|Hospital.Live("adm"), ^|hospital|Hospital.Live("bed"), ^|hospital|Hospital.Live("turn")
+    Quit "cleared"
 }
 
 /// A call on the demo receiver package in the namespace a receiver runs in (its profile entry's demo.namespace, else this
