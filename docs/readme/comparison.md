@@ -45,8 +45,9 @@ receiving system's final state with the scenario's expected outcome (`fixtures/s
 - **S15 and S16 are what Shutter must never send by itself.** A merge (ADT^A40) changes which record a patient's
   history belongs to, and a cancel the downstream system can't take would be refused or misapplied: Shutter withholds
   both before any agent runs, the gate blocks every plan (`MERGE_WITHHELD`, `CANCEL_UNSUPPORTED`), and the case goes to
-  the team that corrects it by hand, the PAS team for a merge. Played on 20 October 2026, in replay and rules only; they
-  need no recordings.
+  the team that corrects it by hand, the PAS team for a merge. Their rows were played on 20 October 2026, in replay and
+  rules only, and kept as they were when the rest of the table was played again on 1 November 2026; they need no
+  recordings.
 - **S13 is bad data from the PAS.** A transfer timed half an hour before the patient's admission can't be resent or
   ordered: the gate refuses the write (`EVENT_TIME_IMPLAUSIBLE`), and the board, matching catalogue entry E13, escalates
   so the PAS team can check the source.

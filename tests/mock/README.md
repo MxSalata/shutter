@@ -4,7 +4,7 @@ A test fixture for the live agent path. It answers the live runner's model calls
 agent loop, the evidence tools, the knowledge search, the scope and trace policies, the saved sessions and the
 Visual Trace all run, at no cost. Only the model's answers are mimicked.
 
-It needs an AI Hub build (the `%AI` package) with the aihub module loaded. The classes here are in neither IPM module,
+It needs an AI Hub build (the `%AI` package) with the `iris-shutter` package loaded. The classes here are in neither IPM module,
 and `.dockerignore` keeps this folder out of the image: load them by hand, on a test instance.
 
 | Class | What it does |
