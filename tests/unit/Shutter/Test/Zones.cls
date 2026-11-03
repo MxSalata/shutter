@@ -37,6 +37,23 @@ Method TestNativeRulesStand()
     Do $$$AssertNotTrue(##class(Shutter.Util.Time).KnownZone("Europe/Paris; drop table"), "a zone name with other characters is not looked up")
 }
 
+/// Digits that make no date or time (30 February, a thirteenth month, 24:00:00) read as no time at all, "", in every
+/// zone and with an offset of their own, never as an error; the interval helpers answer "" for them too.
+Method TestImpossibleDateReadsAsNoTime()
+{
+    For ts = "20260230120000", "20261301120000", "20260701240000" {
+        Do $$$AssertEquals(##class(Shutter.Util.Time).FromHL7(ts, "UTC"), "", ts _ " in UTC")
+        Do $$$AssertEquals(##class(Shutter.Util.Time).FromHL7(ts, "Europe/London"), "", ts _ " in Europe/London")
+        Do $$$AssertEquals(##class(Shutter.Util.Time).FromHL7(ts _ "+0100", "UTC", .had), "", ts _ " with its own offset")
+        Do $$$AssertNotTrue(had, ts _ " with its own offset reports none")
+    }
+    Do $$$AssertEquals(##class(Shutter.Util.Time).FromHL7("20260228235959", "UTC"), "2026-02-28T23:59:59Z", "the last second of February still reads")
+    Do $$$AssertEquals(##class(Shutter.Util.Time).SecondsBetween("2026-02-30T12:00:00Z", "2026-03-01T12:00:00Z"), "", "no seconds from a date that does not exist")
+    Do $$$AssertEquals(##class(Shutter.Util.Time).SecondsBetween("2026-03-01T12:00:00Z", "not a time"), "", "nor to text that is no time")
+    Do $$$AssertEquals(##class(Shutter.Util.Time).SecondsBetween("2026-03-01T12:00:00Z", "2026-03-01T12:00:30Z"), 30, "a real interval still counts")
+    Do $$$AssertEquals(##class(Shutter.Util.Time).MillisBetween("2026-02-30T12:00:00Z", "2026-03-01T12:00:00Z"), "", "no milliseconds from it either")
+}
+
 /// The site profile accepts any zone Shutter knows, and refuses one nobody does.
 Method TestProfileValidation()
 {

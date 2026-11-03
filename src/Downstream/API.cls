@@ -1,6 +1,8 @@
 /// The downstream system's REST API at <code>/downstream/api</code> (docs/CONTRACTS.md, section 1). The web
-/// application requires password authentication and the <code>Downstream_API</code> resource; this class only
-/// translates between HTTP and <class>Downstream.Service</class>.
+/// application requires password authentication and the <code>Downstream_API</code> resource; the demo controls
+/// (<code>POST /faults</code>, <code>POST /reset</code> and <code>POST /capabilities</code>) also require the
+/// <code>Downstream_Admin</code> resource, which the production's client does not hold (1.5, 1.7). Otherwise this
+/// class only translates between HTTP and <class>Downstream.Service</class>.
 Class Downstream.API Extends %CSP.REST
 {
 
@@ -48,6 +50,7 @@ ClassMethod GetReceipt(key As %String) As %Status
 
 ClassMethod PostFault() As %Status
 {
+    If '..AdminAllowed() Quit ..Forbidden()
     Set request = ..Body(.problem)
     If problem '= "" {
         Quit ..Reply(422, {"error": "invalid_request", "detail": (problem)})
@@ -64,6 +67,7 @@ ClassMethod GetFault() As %Status
 
 ClassMethod PostReset() As %Status
 {
+    If '..AdminAllowed() Quit ..Forbidden()
     Set body = ##class(Downstream.Service).Reset(.status)
     Quit ..Reply(status, body)
 }
@@ -76,12 +80,28 @@ ClassMethod GetCapabilities() As %Status
 
 ClassMethod PostCapabilities() As %Status
 {
+    If '..AdminAllowed() Quit ..Forbidden()
     Set request = ..Body(.problem)
     If problem '= "" {
         Quit ..Reply(422, {"error": "invalid_request", "detail": (problem)})
     }
     Set body = ##class(Downstream.Service).SetCapabilities(request, .status)
     Quit ..Reply(status, body)
+}
+
+/// Whether the caller may use the demo controls: the <code>Downstream_Admin</code> resource, created by the installer
+/// beside <code>Downstream_API</code> and granted to none of the production's roles. An administrator holds it through
+/// %All; a site that wants a user for the controls gives a role both resources. The scenario runner and the live
+/// player set faults and reset in process, through <class>Downstream.Service</class>, and never pass here.
+ClassMethod AdminAllowed() As %Boolean
+{
+    Quit $SYSTEM.Security.Check("Downstream_Admin", "USE")
+}
+
+/// 403 for a caller without the controls' resource; nothing is read or changed first.
+ClassMethod Forbidden() As %Status [ Private ]
+{
+    Quit ..Reply(403, {"error": "forbidden", "detail": "This needs Downstream_Admin"})
 }
 
 /// The request body as a JSON object, or an empty object and the reason in <var>problem</var>.
