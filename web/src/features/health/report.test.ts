@@ -139,6 +139,21 @@ describe('the verdict', () => {
     expect(verdictOf({ ...RECORDED, credentials_ok: null })).toMatchObject({ passed: 7, notSent: 1 });
   });
 
+  it('does not count a credential check that threw as passing, whatever credentials_ok says', () => {
+    // The Doctor's catch leaves credentials_ok true and puts the error in the state
+    const v = verdictOf({
+      ...RECORDED,
+      credentials_ok: true,
+      credentials_state: 'error: <THROW> reading the credential cache',
+      credentials_checked_at: '',
+      credentials: [],
+    });
+    expect(v).toMatchObject({ kind: 'not-ready', passed: 7 });
+    expect(v.failing.map((f) => f.key)).toEqual(['credentials_ok']);
+    expect(v.failing[0].todo).toContain('could not run');
+    expect(v.failing[0].todo).toContain('GET /health?refresh=1');
+  });
+
   it('counts a production that is not running as a failure, not as a pass', () => {
     expect(verdictOf({ ...RECORDED, production_state: 'another production running' }).kind).toBe('not-ready');
     expect(verdictOf({ ...RECORDED, production_state: undefined }).running).toBe(false);
@@ -433,6 +448,46 @@ describe('the row rule', () => {
     expect(info('cases', 53)).toMatchObject({ mark: 'none' });
     // The API mimic's switch is empty when it is off: a setting, not a gap
     expect(info('mock_config', '')).toMatchObject({ mark: 'none', missing: false });
+  });
+
+  it('reads an empty provider as not configured on the AI Hub edition and as the edition in the replay one', () => {
+    const hub = { ...RECORDED, ai_hub_present: true };
+    const unset = info('provider', '', false, hub);
+    expect(unset).toMatchObject({ mark: 'dash', tone: 'neutral', missing: false });
+    expect(unset.reason).toMatchObject({ chip: 'Not configured', tone: 'neutral' });
+    expect(unset.reason?.note).toContain('ANTHROPIC_API_KEY');
+    const core = { ...RECORDED, ai_hub_present: false };
+    expect(info('provider', '', false, core)).toMatchObject({
+      mark: 'dash',
+      tone: 'neutral',
+      missing: false,
+    });
+    expect(info('provider', '', true, core).reason?.chip).toBe('Not in this edition');
+    // A name is the provider the install recorded; a key the report never sent is still a gap
+    expect(info('provider', 'AI.LLM.Shutter', false, hub)).toMatchObject({ mark: 'none', tone: null });
+    expect(info('provider', undefined, false, hub)).toMatchObject({ tone: 'attention', missing: true });
+  });
+
+  it('marks a credential check that threw as attention and fails its core check', () => {
+    const thrown = {
+      ...RECORDED,
+      credentials_ok: true,
+      credentials_state: 'error: <THROW> reading the credential cache',
+      credentials_checked_at: '',
+      credentials: [],
+    };
+    const state = info('credentials_state', thrown.credentials_state, false, thrown);
+    expect(state).toMatchObject({ mark: 'dash', tone: 'attention', missing: false });
+    expect(state.reason).toMatchObject({ chip: 'Check did not run', tone: 'attention' });
+    expect(info('credentials_ok', true, false, thrown)).toMatchObject({ mark: 'x', tone: 'blocking' });
+    expect(info('credentials_state', 'fresh', false, { ...thrown, credentials_state: 'fresh' })).toEqual({
+      mark: 'none',
+      tone: null,
+      missing: false,
+    });
+    const group = groupReport(thrown, false).groups.find((g) => g.def.id === 'credentials')!;
+    expect(group.status).toEqual({ tone: 'blocking', label: '0 of 1 pass' });
+    expect(group.edge).toBe('blocking');
   });
 });
 
