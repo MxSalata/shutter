@@ -69,6 +69,10 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     If 'okDisp {
         Do ..Check(checks, "intent", "block", "UNKNOWN_DISPOSITION", "Disposition '" _ plan.Disposition _ "' is not one the gate knows")
     } ElseIf isWrite {
+        // A receiver the site profile does not describe gets no write: Shutter resends only to a receiver whose API the
+        // profile names. The connector would otherwise send the write to the production's default receiver, so the case
+        // is refused here, at the proposal gate, before any rehearsal; its evidence was read at the default API.
+        If (case.Receiver '= "") && '$ISOBJECT(##class(Shutter.Store.SiteProfile).Receiver(case.Receiver)) Do ..Check(checks, "intent", "block", "RECEIVER_NOT_IN_PROFILE", "The site profile has no entry for the receiver " _ case.Receiver _ ": its evidence was read at the default receiver API, and Shutter resends only to a receiver the profile describes; add the receiver to the profile and reinvestigate")
         // A receiver whose category is orders_results takes nothing from Shutter yet (v1.23): it keeps orders and
         // results, which the ADT catalogue does not model, so every write to it is blocked and a person handles it.
         If ##class(Shutter.Store.SiteProfile).ReceiverCategory(case.Receiver) = "orders_results" Do ..Check(checks, "intent", "block", "RECEIVER_NOT_MODELLED", "The receiver's category is orders_results: order communications and results are not modelled yet, so Shutter sends it nothing")
