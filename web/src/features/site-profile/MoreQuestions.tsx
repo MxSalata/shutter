@@ -5,7 +5,7 @@ import type { SiteProfile, SiteTeam } from '@/api/types';
 import { Section } from '@/components/Section';
 import { Checkbox, Radio, Switch, TextInput } from './controls';
 import { useEditable } from './editable';
-import { ZONE_LABELS, newTeam, parseList } from './profile';
+import { IANA_ZONE, ZONE_LABELS, newTeam, parseList } from './profile';
 import { Question, QuestionDetails } from './Question';
 
 type Problem = { path: string; message: string } | null;
@@ -284,8 +284,10 @@ function Teams({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: Set
 
 function Feed({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: SetDraft; problem: Problem }) {
   const zone = draft.feed?.time_zone;
-  // Not answered, one of the named zones, or an offset (an empty one is the offset field being cleared to retype)
-  const choice = zone === undefined ? '' : zone in ZONE_LABELS ? zone : 'offset';
+  // Not answered, one of the named zones, another IANA zone kept as stored (the page offers no list of them, and the
+  // server knows which it has), or an offset (an empty one is the offset field being cleared to retype)
+  const choice = zone === undefined ? '' : zone in ZONE_LABELS || IANA_ZONE.test(zone) ? zone : 'offset';
+  const stored = choice !== '' && choice !== 'offset' && !(choice in ZONE_LABELS);
   // The field shows the draft's own value; this only remembers the last offset for coming back to it from UTC or UK time
   const [lastOffset, setLastOffset] = useState(choice === 'offset' && zone ? zone : '+01:00');
   const setZone = (z: string) =>
@@ -319,6 +321,14 @@ function Feed({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: SetD
             label="A fixed offset from UTC"
             description="The same offset all year, such as +01:00"
           />
+          {stored ? (
+            <Radio
+              value={choice}
+              label={`Kept as stored: ${choice}`}
+              description="An IANA zone name the server knows"
+              disabled
+            />
+          ) : null}
         </Stack>
       </Radio.Group>
       {choice === 'offset' ? (

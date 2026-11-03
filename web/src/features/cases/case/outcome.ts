@@ -277,12 +277,16 @@ export function nextAction(f: CaseFacts): NextAction {
   const { c } = f;
   const none = { blocking: '', lookAgain: '', handoff: '', escalate: false };
   if (c.state === 'resolved') return { kind: 'none', action: 'No pending action', role: '', ...none };
+  // An abandoned case was given up on purpose: nothing is pending, and the card keeps Reinvestigate for when the cause
+  // is fixed, in the neutral tone, as the action button at the top says no action is needed
+  if (c.state === 'failed' && c.disposition === 'abandoned')
+    return { kind: 'none', action: 'No pending action: the case was abandoned', role: '', ...none };
   if (c.state === 'failed')
     return {
       kind: 'person',
       action: 'Reinvestigate once the cause is fixed, or leave the case closed',
       role: 'Operator',
-      blocking: c.disposition === 'abandoned' ? 'The case was abandoned' : 'The workflow failed',
+      blocking: 'The workflow failed',
       lookAgain: '',
       handoff: '',
       escalate: false,

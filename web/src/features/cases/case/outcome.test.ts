@@ -102,6 +102,24 @@ describe('the outcome sentence', () => {
     expect(nextAction(factsOf('C-000053')).escalate).toBe(false);
   });
 
+  it('asks for a reinvestigation of a failed case, and nothing of an abandoned one, which was given up on purpose', () => {
+    const f = factsOf('C-000008');
+    const failed = { ...f, c: { ...f.c, state: 'failed' as const } };
+    expect(nextAction(failed)).toMatchObject({
+      kind: 'person',
+      action: 'Reinvestigate once the cause is fixed, or leave the case closed',
+      role: 'Operator',
+      blocking: 'The workflow failed',
+    });
+    const abandoned = { ...failed, c: { ...failed.c, disposition: 'abandoned' as const } };
+    expect(nextAction(abandoned)).toMatchObject({
+      kind: 'none',
+      action: 'No pending action: the case was abandoned',
+      role: '',
+      escalate: false,
+    });
+  });
+
   it('says whether the hand-off went out', () => {
     const sent = { seq: 1, state: 'sent', teamName: 'Integration team' } as Escalation;
     expect(nextAction(factsOf('C-000008', { escalations: [sent] })).handoff).toBe('Sent to Integration team');

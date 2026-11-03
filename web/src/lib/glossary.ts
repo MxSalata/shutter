@@ -50,7 +50,7 @@ export const GLOSSARY = {
     definition: 'A person must decide. Shutter writes nothing and drafts the hand-off.',
   },
   'catalogue-entry': {
-    term: 'Catalogue entry (E1 to E17)',
+    term: 'Catalogue entry (E1 to E18)',
     definition: "A known failure pattern and its recovery, in the site's catalogue.",
   },
   board: {

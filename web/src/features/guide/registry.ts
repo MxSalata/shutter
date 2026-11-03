@@ -571,6 +571,15 @@ export const SCOPE_OVERLINE: Record<GuideScope, string> = {
   engineer: "Engineers' tour",
 };
 
+/** The finish card's one sentence on what the route showed: each route its own, since their steps differ. */
+export const SCOPE_FINISH: Record<GuideScope, string> = {
+  quick:
+    'You saw a transfer delivered and verified, a fix held back for a person, and the gate stopping one.',
+  all: 'You saw a transfer delivered and verified, a fix held back for a person, the gate stopping one, and every screen on the way.',
+  engineer:
+    "You saw the decision receipt as JSON, the gate's reason codes, what each agent cited, S8 beside its rules-only run, the message trace in IRIS, and where simple rules went wrong.",
+};
+
 export function chapterById(id: string | null | undefined): GuideChapter | undefined {
   return CHAPTERS.find((c) => c.id === id);
 }
