@@ -519,6 +519,17 @@ ClassMethod Rows() As %DynamicArray
 XData Rows [ MimeType = application/json ]
 {
 [
+  {"group": "intent", "name": "a write to a receiver the site profile does not describe",
+   "profile": {"receivers": [{"name": "Records Out", "tier": 2, "category": "history_of_record"}]},
+   "expect": [["intent", "block", "RECEIVER_NOT_IN_PROFILE"]], "outcome": "block",
+   "contains": [["intent", "RECEIVER_NOT_IN_PROFILE", "no entry for the receiver Downstream Out"], ["intent", "RECEIVER_NOT_IN_PROFILE", "read at the default receiver API"]]},
+  {"group": "intent", "name": "a write to a receiver the site profile describes",
+   "profile": {"receivers": [{"name": "Records Out", "tier": 2, "category": "history_of_record"}, {"name": "Downstream Out", "tier": 2, "category": "current_state"}]},
+   "expect": [["intent", "pass", "EXACT_OPERATION"]], "absent": [["intent", "RECEIVER_NOT_IN_PROFILE"]], "outcome": "pass"},
+  {"group": "intent", "name": "a plan that writes nothing, for a receiver the site profile does not describe",
+   "profile": {"receivers": [{"name": "Records Out", "tier": 2, "category": "history_of_record"}]},
+   "plan": {"disposition": "escalate", "action": null},
+   "expect": [["intent", "pass", "NO_WRITE"]], "absent": [["intent", "RECEIVER_NOT_IN_PROFILE"]]},
   {"group": "intent", "name": "a write to a receiver whose category is orders_results",
    "profile": {"receivers": [{"name": "Downstream Out", "tier": 2, "category": "orders_results"}]},
    "expect": [["intent", "block", "RECEIVER_NOT_MODELLED"]], "outcome": "block"},
