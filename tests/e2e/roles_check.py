@@ -156,6 +156,28 @@ def main():
     # Annotating a review changes how the site reads it, so it needs Shutter_Configure (v1.34), which the approver holds
     check(f"operator: POST {annotations} is 403 forbidden, naming Shutter_Configure",
           status == 403 and error_of(body) == "forbidden" and "Shutter_Configure" in (body or {}).get("detail", ""), f"{status} {body}")
+    # ---- the demo user (when the instance has one) reads and starts reviews but never spends the model budget ----
+    demo_password = os.environ.get("SHUTTER_DEMO_PASSWORD", "")
+    if demo_password:
+        demo = Session(args.url).sign_in("demo", demo_password)
+        status, me = demo.call("GET", "/me")
+        if check("demo: GET /me says no live agents", status == 200 and (me.get("can") or {}).get("liveAgents") is False, f"{status} {me}"):
+            wait(lambda: (operator.call("GET", f"/production-reviews/{review_id}")[1] or {}).get("state") in ("done", "failed"), args.timeout)
+            status, body = demo.call("POST", "/production-reviews", {"agent": True}, idempotent=True)
+            check("demo: POST /production-reviews with agent true is 202 with agent false (skipped, never a 403)",
+                  status == 202 and (body or {}).get("agent") is False, f"{status} {body}")
+            demo_review = (body or {}).get("reviewId")
+            if demo_review:
+                done = wait(lambda: (lambda r: r if r.get("state") in ("done", "failed") else None)(
+                    demo.call("GET", f"/production-reviews/{demo_review}")[1] or {}), args.timeout) or {}
+                check("demo: the review's agent part is skipped", done.get("agentState") == "skipped", done.get("agentState"))
+            _, closed = operator.call("GET", "/cases?state=blocked,escalated,failed&limit=1")
+            reopenable = next((c["caseId"] for c in (closed or {}).get("items", []) if c.get("state") in ("blocked", "escalated", "failed")), "")
+            if reopenable:
+                status, body = demo.call("POST", f"/cases/{urllib.parse.quote(reopenable)}/reinvestigate", {"reason": "roles check"}, idempotent=True)
+                check("demo: POST /cases/{id}/reinvestigate is 202 with liveAgents false",
+                      status == 202 and (body or {}).get("liveAgents") is False, f"{status} {body}")
+
     status, body = operator.call("DELETE", "/production-reviews/annotations/0")
     check("operator: DELETE /production-reviews/annotations/{id} is 403 forbidden",
           status == 403 and error_of(body) == "forbidden" and "Shutter_Configure" in (body or {}).get("detail", ""), f"{status} {body}")
