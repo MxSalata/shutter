@@ -120,6 +120,26 @@ describe('the trial banner', () => {
     expect(document.title).toBe('Shutter (trial)');
   });
 
+  it("lists under Works here only what the role may do: the public demo's role cannot run or configure", async () => {
+    resetMock('demo');
+    await renderShell(true);
+    await userEvent.click(screen.getByRole('button', { name: "What's different?" }));
+    const popover = await screen.findByRole('dialog', { name: 'The trial environment' });
+    expect(await within(popover).findByText('Approve or reject a plan')).toBeInTheDocument();
+    expect(within(popover).getByText('Switch role')).toBeInTheDocument();
+    expect(within(popover).queryByText('Run a scenario')).not.toBeInTheDocument();
+    expect(within(popover).queryByText('Save the site profile')).not.toBeInTheDocument();
+  });
+
+  it('lists running a scenario and saving the site profile for the approver, who may', async () => {
+    await renderShell(true);
+    await userEvent.click(screen.getByRole('button', { name: "What's different?" }));
+    const popover = await screen.findByRole('dialog', { name: 'The trial environment' });
+    expect(await within(popover).findByText('Run a scenario')).toBeInTheDocument();
+    expect(within(popover).getByText('Save the site profile')).toBeInTheDocument();
+    expect(within(popover).getByText('Approve or reject a plan')).toBeInTheDocument();
+  });
+
   it('counts what was answered in the browser, and nothing sent to IRIS', () => {
     journal.add('GET', '/api/shutter/cases', 200);
     journal.add('GET', '/api/shutter/me', 200);

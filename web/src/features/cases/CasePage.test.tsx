@@ -717,6 +717,30 @@ describe('CasePage', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
+  it('needs nobody on an abandoned case: the card in the neutral tone, Reinvestigate kept, the button says so', async () => {
+    const recorded = fixtures.cases['C-000008'].detail;
+    server.use(
+      http.get('/api/shutter/cases/C-000008', () =>
+        HttpResponse.json({ ...recorded, state: 'failed', disposition: 'abandoned' }),
+      ),
+    );
+    renderCase('C-000008');
+    const top = await outcome();
+    // Given up on purpose: a closed kind of case, whose band starts closed (unless a test before chose otherwise)
+    const band = within(top).getByRole('button', { name: 'Outcome' });
+    if (band.getAttribute('aria-expanded') !== 'true') await userEvent.click(band);
+    const card = (await within(top).findByRole('heading', { name: 'What needs you now' })).closest(
+      '[data-tone]',
+    ) as HTMLElement;
+    expect(card).toHaveAttribute('data-tone', 'neutral');
+    expect(within(card).getByText('No pending action: the case was abandoned')).toBeInTheDocument();
+    expect(within(card).queryByText(/Reinvestigate once the cause is fixed/)).not.toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Reinvestigate' })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId('case-action')).toHaveAccessibleName('No action needed on this case'),
+    );
+  });
+
   it('does not offer to reinvestigate a verified case', async () => {
     renderCase('C-000009');
     await outcomeLine('Delivered: verified at the receiver');

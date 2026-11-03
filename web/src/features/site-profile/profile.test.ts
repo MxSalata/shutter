@@ -26,7 +26,8 @@ import {
 
 const recorded = recordedSiteProfile()!.profile;
 const copy = (): SiteProfile => structuredClone(recorded);
-const FEED_ZONE = 'feed.time_zone: must be UTC, Europe/London or a fixed offset such as +01:00 (up to 14:00)';
+const FEED_ZONE =
+  'feed.time_zone: must be UTC, Europe/London, a fixed offset such as +01:00 (up to 14:00), or an IANA zone name such as Europe/Paris';
 
 describe('validateProfile, the port of SiteProfile.Validate', () => {
   it('accepts the recorded profile', () => {
@@ -41,6 +42,14 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
     ]);
     expect(recorded.receivers[1].demo).toEqual({ namespace: 'RECORDS' });
     expect('history_policy' in recorded).toBe(false);
+  });
+
+  it('accepts an IANA zone name with a region, which the server checks against the zones it knows', () => {
+    for (const zone of ['Europe/Paris', 'America/Argentina/Buenos_Aires', 'Etc/GMT+2']) {
+      const p = copy();
+      p.feed = { time_zone: zone };
+      expect(validateProfile(p), zone).toBe('');
+    }
   });
 
   it('accepts a receiver with no category, as every profile before categories', () => {
@@ -256,6 +265,12 @@ describe('the PUT body', () => {
     expect(body.approvers).toEqual(recorded.approvers);
     expect(body.mail).toEqual(recorded.mail);
     expect(body.feed?.time_zone).toBe('Europe/London');
+  });
+
+  it('sends an IANA zone as stored', () => {
+    const p = copy();
+    p.feed = { time_zone: 'Europe/Paris' };
+    expect(toPutBody(p, 7).feed).toEqual({ time_zone: 'Europe/Paris' });
   });
 });
 

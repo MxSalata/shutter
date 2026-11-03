@@ -289,7 +289,7 @@ describe('SiteProfilePage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
     expect(
       await screen.findByRole('button', {
-        name: /^Feed, time zone: must be UTC, Europe\/London or a fixed offset/,
+        name: /^Feed, time zone: must be UTC, Europe\/London, a fixed offset/,
       }),
     ).toBeInTheDocument();
     await waitFor(() => expect(offset).toHaveFocus());
@@ -297,6 +297,25 @@ describe('SiteProfilePage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
     expect(screen.getByRole('radio', { name: /UK time/ })).toBeChecked();
     expect(screen.queryByRole('textbox', { name: 'Offset' })).not.toBeInTheDocument();
+  });
+
+  it('shows a stored IANA zone as kept, and saves a change elsewhere without refusing the zone', async () => {
+    const view = recordedSiteProfile()!;
+    view.profile.feed = { time_zone: 'Europe/Paris' };
+    server.use(http.get(`${BASE}/site-profile`, () => HttpResponse.json(view)));
+    renderPage();
+    const kept = await screen.findByRole('radio', { name: 'Kept as stored: Europe/Paris' });
+    expect(kept).toBeChecked();
+    expect(kept).toBeDisabled();
+    expect(screen.queryByRole('textbox', { name: 'Offset' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('switch', { name: /Downstream Out accepts cancels/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(screen.queryByRole('button', { name: /^Feed, time zone/ })).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/Feed time zone/)).not.toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
+    expect(await screen.findByText('Version 8 saved')).toBeInTheDocument();
+    expect(puts[0].body.feed).toEqual({ time_zone: 'Europe/Paris' });
   });
 
   it('sends note text to the model only when the site says so', async () => {

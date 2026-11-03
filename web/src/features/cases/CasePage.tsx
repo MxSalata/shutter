@@ -10,7 +10,7 @@ import { ApiSource } from '@/components/ApiSource';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { isApiError } from '@/lib/errors';
-import { REPLAY_DONE } from '@/lib/events';
+import { REPLAY_DONE, SHOW_APPROVAL } from '@/lib/events';
 import { usePrefersReducedMotion, useStagedReveal } from '@/lib/motion';
 import { caseOutcome } from '@/lib/status';
 import { CaseHeader } from './case/CaseHeader';
@@ -236,6 +236,16 @@ function CaseBody({ c }: { c: CaseDetail }) {
     window.addEventListener(SHOW_EVIDENCE, show);
     return () => window.removeEventListener(SHOW_EVIDENCE, show);
   }, [setTab]);
+  // The abandon dialog's "reject the plan instead": the case read again (its approval task is open, so it waits for a
+  // person now), then the decision step with the Approval section in view
+  useEffect(() => {
+    const show = () => {
+      void client.invalidateQueries({ queryKey: keys.case(c.caseId) });
+      openStep('decision', 'approval');
+    };
+    window.addEventListener(SHOW_APPROVAL, show);
+    return () => window.removeEventListener(SHOW_APPROVAL, show);
+  });
 
   // A board case shows its board first on the Summary tab: the specialists, their proposals and any dissent are the
   // point of it. So does a site policy case the policy left to the board, once its runs show the board sat. A withheld
