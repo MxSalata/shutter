@@ -237,7 +237,7 @@ describe('HealthPage in the trial', () => {
     expect(within(hero).getByRole('list', { name: 'Core checks' }).children).toHaveLength(7);
     expect(hero).toHaveTextContent('Shutter.Production');
     expect(hero).toHaveTextContent('SHUTTER');
-    expect(hero).toHaveTextContent('version 0.1.0');
+    expect(hero).toHaveTextContent('version 1.0.0');
     expect(hero).toHaveTextContent('read 2 Nov 2026, 14:56 UTC');
     // The recorded instance had AI Hub and its runner: the agents badge says so, never "not needed"
     expect(within(hero).getByText('Agents run on IRIS AI Hub')).toBeInTheDocument();
