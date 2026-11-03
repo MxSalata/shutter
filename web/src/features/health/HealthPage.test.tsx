@@ -196,7 +196,7 @@ describe("the trial's chip for a piece the recorded instance did not have", () =
     const hub = await row('AI Hub installed');
     expect(within(hub).getByText('No')).toBeInTheDocument();
     expect(within(await row('AI Hub runner compiled')).getByText('Yes')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Why they are missing' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'What the dashes mean' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Agents and AI Hub' })).toHaveTextContent(
       'AI Hub installed. This report is from the instance that served the cases',
     );
@@ -257,7 +257,7 @@ describe('HealthPage in the trial', () => {
       expect(r).not.toHaveTextContent('Not on the recorded instance');
     }
     const agents = screen.getByRole('region', { name: 'Agents and AI Hub' });
-    expect(within(agents).queryByRole('button', { name: 'Why they are missing' })).not.toBeInTheDocument();
+    expect(within(agents).queryByRole('button', { name: 'What the dashes mean' })).not.toBeInTheDocument();
     expect(screen.queryByText('Not on the recorded instance')).not.toBeInTheDocument();
   });
 

@@ -397,6 +397,35 @@ describe('the row rule', () => {
     expect(info('credentials', [])).toEqual({ mark: 'none', tone: null, missing: false });
   });
 
+  it("reads a null for the provider's pieces as the reader's right or the edition, never as a gap", () => {
+    // On the AI Hub edition the Doctor sends null to a reader without the wallet's or the Config Store's right
+    const hub = { ...RECORDED, ai_hub_present: true };
+    const wallet = info('wallet_secret', null, false, hub);
+    expect(wallet).toMatchObject({ mark: 'dash', tone: 'neutral', missing: false });
+    expect(wallet.reason).toMatchObject({ chip: 'Not visible to you', tone: 'neutral' });
+    expect(wallet.reason?.note).toContain('Shutter_Secrets');
+    expect(info('provider_config', null, false, hub).reason?.note).toContain('%Admin_ConfigStore');
+    // In the replay edition there is no wallet and no Config Store, so the same null is the edition
+    const core = { ...RECORDED, ai_hub_present: false };
+    expect(info('wallet_secret', null, false, core).reason).toMatchObject({
+      chip: 'Not in this edition',
+      tone: 'neutral',
+    });
+    expect(info('provider_config', null, true, core).reason?.chip).toBe('Not in this edition');
+    // A true or a false is what the instance holds, and a key the report never sent is still a gap
+    expect(info('wallet_secret', true, false, hub)).toMatchObject({ mark: 'check', tone: 'positive' });
+    expect(info('wallet_secret', false, false, hub)).toEqual({
+      mark: 'dash',
+      tone: 'neutral',
+      missing: false,
+    });
+    expect(info('provider_config', undefined, false, hub)).toMatchObject({
+      mark: 'dash',
+      tone: 'attention',
+      missing: true,
+    });
+  });
+
   it('says a value the report did not send is attention, and gives names, paths and numbers no mark', () => {
     expect(info('adt_in', null)).toMatchObject({ mark: 'dash', tone: 'attention', missing: true });
     expect(info('adt_in', '')).toMatchObject({ missing: true });
