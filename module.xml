@@ -27,6 +27,7 @@
       <Resource Name="Shutter.API.PKG"/>
       <Resource Name="Shutter.Bridge.Msg.PKG"/>
       <Resource Name="Shutter.Bridge.Operation.PKG"/>
+      <Resource Name="Shutter.Bridge.Catalogue.CLS"/>
       <Resource Name="Shutter.Bridge.Record.CLS"/>
       <Resource Name="Shutter.Bridge.RunSpec.CLS"/>
       <Resource Name="Shutter.Bridge.Runner.Replay.CLS"/>
