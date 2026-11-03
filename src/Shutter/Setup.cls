@@ -1701,6 +1701,15 @@ ClassMethod Doctor(refresh As %Boolean = 0) As %String [ SqlProc ]
     Set r.edition = $SELECT(r."ai_hub_present" && r."aihub_runner": "aihub", 'r."ai_hub_present" && 'r."aihub_runner": "core", r."ai_hub_present": "broken: AI Hub is present but the aihub module is not loaded", 1: "broken: the aihub module is loaded on an image without AI Hub")
     // The API mimic's switch as set (tests/mock), "" when off; it counts on a demo instance only (MockConfig).
     Set r."mock_config" = $GET(^Shutter.Config("aihub", "mock"))
+    // The provider the record names, and whether the instance still holds what it names (v1.39): the wallet secret and
+    // the Config Store configuration, each true or false, or null where its class is absent (the core edition) or it
+    // cannot be read. A recorded provider with a missing secret is what a container recreated on the same volume shows
+    // until the production's next start writes the key again (ProviderNeedsRewrite).
+    Set r.provider = $GET(^Shutter.Config("aihub", "provider"))
+    Set state = ..WalletSecretState()
+    If state = "" { Do r.%Set("wallet_secret", "", "null") } Else { Do r.%Set("wallet_secret", state, "boolean") }
+    Set state = ..ProviderConfigState()
+    If state = "" { Do r.%Set("provider_config", "", "null") } Else { Do r.%Set("provider_config", state, "boolean") }
     &sql(SELECT COUNT(*) INTO :members FROM Shutter_Store.BoardMember WHERE Enabled = 1)
     Set r."board_members" = +members
     &sql(SELECT COUNT(*) INTO :records FROM Shutter_Bridge.Record)
@@ -2070,8 +2079,8 @@ ClassMethod RebuildDescriptorRegistry() As %Boolean
 
 /// The resource guarding the wallet collection, created with no public permission. The production's jobs run as
 /// _Ensemble, whose role %All holds every resource, so they resolve the secret through the Config Store; any other
-/// account needs a role that grants Shutter_Secrets.
-ClassMethod EnsureSecretResource() As %Status [ Private ]
+/// account needs a role that grants Shutter_Secrets. Public so that a test makes the collection as ConfigureProvider does.
+ClassMethod EnsureSecretResource() As %Status
 {
     Set sc = $$$OK
     Try {
@@ -2109,6 +2118,51 @@ ClassMethod ProviderKeyMatches(key As %String) As %Boolean
     Set stored = $GET(^Shutter.Config("aihub", "keyDigest"))
     If stored = "" Quit 0
     Quit stored = ##class(Shutter.Util.Digest).SHA256Hex($ZSTRIP(key, "<>W"))
+}
+
+/// Whether the production's start must write the provider configuration from the environment's key again, with the
+/// reason in <var>reason</var> ("" when it need not): no provider is recorded, or the record's digest is of another key
+/// (the .env changed), or the wallet secret or the Config Store configuration the record names is gone. The record
+/// (^Shutter.Config) is in the data database, which the container's volume keeps; the wallet and the Config Store are
+/// instance state in IRISSYS, which the image brings, so a container recreated on the same volume keeps the record and
+/// loses the secret, and the record alone would say that nothing needs writing while every live run failed at the
+/// provider. Each probe (WalletSecretState, ProviderConfigState) says nothing where its class is absent (the core
+/// edition) or it cannot be read, and the answer then comes from the record alone; <var>probe</var> 0 skips them, which
+/// is what a core edition's answer amounts to.
+ClassMethod ProviderNeedsRewrite(key As %String, Output reason As %String, probe As %Boolean = 1) As %Boolean
+{
+    Set reason = ""
+    If '..ProviderConfigured() Set reason = "no provider is configured" Quit 1
+    If '..ProviderKeyMatches(key) Set reason = "the provider was configured from another key" Quit 1
+    If probe {
+        If ..WalletSecretState() = 0 Set reason = "the wallet secret Shutter.Anthropic is gone" Quit 1
+        If ..ProviderConfigState() = 0 Set reason = "the Config Store configuration AI.LLM.Shutter is gone" Quit 1
+    }
+    Quit 0
+}
+
+/// Whether the wallet holds the secret Shutter.Anthropic: 1 or 0, or "" where the wallet class is absent (the core
+/// edition) or the wallet cannot be read by this process.
+ClassMethod WalletSecretState() As %String
+{
+    Try {
+        Return ''$CLASSMETHOD("%Wallet.KeyValue", "Exists", "Shutter.Anthropic")
+    } Catch ex {
+        Return ""
+    }
+}
+
+/// Whether the Config Store holds the configuration AI.LLM.Shutter (read as the live runner reads it, with no secret
+/// resolved): 1 or 0, or "" where the Config Store class is absent (the core edition) or it cannot be read by this
+/// process.
+ClassMethod ProviderConfigState() As %String
+{
+    Try {
+        Set sc = $CLASSMETHOD("%ConfigStore.Configuration", "GetDetails", "AI.LLM.Shutter", .details, 0, 0)
+        Return ''$$$ISOK(sc)
+    } Catch ex {
+        Return ""
+    }
 }
 
 /// Re-reads the knowledge files that changed since they were last read (by their modification stamps): the block
