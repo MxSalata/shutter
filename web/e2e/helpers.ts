@@ -57,11 +57,11 @@ export async function openSteps(page: Page) {
 }
 
 /**
- * The hospital feed's banner, which the public demo's role sees on every page: "Live hospital" on a live page, and
- * "Hospital feed (replayed)" in the trial, which the demo build always is.
+ * The hospital feed's banner, which the public demo's role sees on every page: "Mikolaj's Fictional Hospital, live" on a live page,
+ * and "Mikolaj's Fictional Hospital, replayed" in the trial, which the demo build always is.
  */
 export const banner = (page: Page) =>
-  page.getByRole('region', { name: /^(Live hospital|Hospital feed \(replayed\))$/ });
+  page.getByRole('region', { name: /^Mikolaj's Fictional Hospital, (live|replayed)$/ });
 
 /** The note that stands where Save would be for the public demo's role. */
 export const READ_ONLY = /The public demo is read-only: a site's approver saves changes here/;

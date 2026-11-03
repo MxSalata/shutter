@@ -8,6 +8,7 @@ import { TRIAL } from '@/env/mode';
 import type { StormRefusal } from '@/features/storm/view';
 import { budgetNoteLine } from '@/lib/budget';
 import { formatAge, formatTime, parseTime, zoneLabel } from '@/lib/format';
+import { HOSPITAL_NAME } from '@/lib/hospital';
 import { liveUnavailable } from '@/lib/liveAgents';
 import { isStormShown, STORM_IN_TRIAL } from '@/lib/storm';
 import { useNow } from '@/lib/useNow';
@@ -58,7 +59,7 @@ function usePulse(at: string | undefined): number {
  * The hospital feed's banner, on every page while `GET /settings` says `live.enabled` (the public demo's live
  * hospital): how often a new failure arrives, the story that played last (its title on hover or focus) and the one due
  * next. A neutral band with a broadcast mark, never an information tone. In a trial page it is the recorded feed
- * replayed, and says so: "Hospital feed (replayed)", so the trial never says "live" of itself. Nothing is rendered
+ * replayed, and says so: "Mikolaj's Fictional Hospital, replayed", so the trial never says "live" of itself. Nothing is rendered
  * for any other instance.
  *
  * "Break the feed" (after-restyle B7): for a user who operates, a live banner offers the storm (StormButton), and
@@ -81,7 +82,7 @@ export function LiveBanner() {
   if (!live) return null;
   const note = TRIAL ? null : budgetNoteLine(settings);
   const unavailable = TRIAL ? null : liveUnavailable(settings);
-  const name = TRIAL ? 'Hospital feed (replayed)' : 'Live hospital';
+  const name = `${HOSPITAL_NAME}, ${TRIAL ? 'replayed' : 'live'}`;
   const last = live.last_played;
   const next = nextDue(live, now);
   const storm = !TRIAL && live.storm && isStormShown(live.storm, now) ? live.storm : null;

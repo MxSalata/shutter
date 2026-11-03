@@ -2,6 +2,7 @@ import { Badge, Button, Group, Paper, Stack, Text, Title, VisuallyHidden } from 
 import { IconLockOpen, IconTestPipe } from '@tabler/icons-react';
 import { useId } from 'react';
 import { trialHref } from '@/env/mode';
+import { HOSPITAL_NAME } from '@/lib/hospital';
 
 /**
  * The way into the trial from the live sign-in page: a card of its own under the form, in the trial's colour (a grape
@@ -36,7 +37,7 @@ export function TrialCard() {
           </Badge>
         </Group>
         <Text size="sm">
-          Try it in the trial environment: a demo hospital with made-up patients, where each action replays a
+          Try it in the trial environment: {HOSPITAL_NAME}, with made-up patients, where each action replays a
           recording. Nothing reaches IRIS.
         </Text>
         <Group gap="xs" mt={4}>

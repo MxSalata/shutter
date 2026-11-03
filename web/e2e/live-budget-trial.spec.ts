@@ -86,7 +86,7 @@ async function stubServer(page: Page, s: unknown, board?: { status: number; body
   });
 }
 
-const banner = (page: Page) => page.getByRole('region', { name: 'Live hospital' });
+const banner = (page: Page) => page.getByRole('region', { name: "Mikolaj's Fictional Hospital, live" });
 
 /** A part's words as they read, its lines (paragraphs of their own) joined by a space. */
 const said = (page: Page, testId: string) =>

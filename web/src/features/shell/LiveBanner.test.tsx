@@ -65,14 +65,14 @@ function settingsWith(live: Partial<LiveStatus> | undefined) {
 
 const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000).toISOString();
 const inMinutes = (n: number) => minutesAgo(-n);
-const banner = () => screen.findByLabelText('Live hospital');
+const banner = () => screen.findByLabelText("Mikolaj's Fictional Hospital, live");
 /** The banner's line alone: for a user who operates, the banner also carries "Break the feed" (features/storm). */
 const line = async () => within(await banner()).getByTestId('live-line');
 const noBanner = async () => {
   // The settings are read by the banner; wait for the page, then for a beat that the banner is not coming
   await screen.findByRole('heading', { name: /page$/ });
   await new Promise((r) => setTimeout(r, 150));
-  expect(screen.queryByLabelText('Live hospital')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Mikolaj's Fictional Hospital, live")).not.toBeInTheDocument();
 };
 
 describe('the live hospital banner', () => {
@@ -90,18 +90,20 @@ describe('the live hospital banner', () => {
     });
     const { router } = renderFrame('/cases');
     expect(await banner()).toHaveTextContent(
-      'Live hospital: a new failure every 7 minutes. Last: S23a, 4 min ago.',
+      "Mikolaj's Fictional Hospital, live: a new failure every 7 minutes. Last: S23a, 4 min ago.",
     );
     await router.navigate('/library');
     expect(await screen.findByRole('heading', { name: 'Library page' })).toBeInTheDocument();
-    expect(await banner()).toHaveTextContent('Live hospital: a new failure every 7 minutes.');
+    expect(await banner()).toHaveTextContent(
+      "Mikolaj's Fictional Hospital, live: a new failure every 7 minutes.",
+    );
   });
 
   it('shows for the public demo role of the mock, which is signed in to a live hospital', async () => {
     resetMock('demo');
     renderFrame();
     expect(await line()).toHaveTextContent(
-      /^Live hospital: a new failure every 7 minutes\. Last: S2, 4 min ago\. Next: S8 at \d\d:\d\d (GMT|BST|UTC)\.$/,
+      /^Mikolaj's Fictional Hospital, live: a new failure every 7 minutes\. Last: S2, 4 min ago\. Next: S8 at \d\d:\d\d (GMT|BST|UTC)\.$/,
     );
   });
 
@@ -142,14 +144,16 @@ describe('the live hospital banner', () => {
     settingsWith({ enabled: true, every_minutes: 1, last_played: null });
     renderFrame();
     const text = await line();
-    expect(text).toHaveTextContent(/^Live hospital: a new failure every minute\.$/);
+    expect(text).toHaveTextContent(/^Mikolaj's Fictional Hospital, live: a new failure every minute\.$/);
     expect(text).not.toHaveTextContent('Last:');
   });
 
   it('does not say a number when the server gave none', async () => {
     settingsWith({ enabled: true });
     renderFrame();
-    expect(await banner()).toHaveTextContent('Live hospital: a new failure every few minutes.');
+    expect(await banner()).toHaveTextContent(
+      "Mikolaj's Fictional Hospital, live: a new failure every few minutes.",
+    );
   });
 
   it('is hidden when the settings carry no live object', async () => {
@@ -183,7 +187,7 @@ describe('the live hospital banner', () => {
   it('is not shown by the mock to an approver, who is on the recorded demo', async () => {
     renderFrame();
     await noBanner();
-    await waitFor(() => expect(screen.queryByLabelText('Live hospital')).toBeNull());
+    await waitFor(() => expect(screen.queryByLabelText("Mikolaj's Fictional Hospital, live")).toBeNull());
   });
 });
 
@@ -219,7 +223,7 @@ describe('the live budget on the banner', () => {
     );
     expect(within(await banner()).queryByRole('note')).not.toBeInTheDocument();
     expect(within(await banner()).getByTestId('live-line')).toHaveTextContent(
-      /^Live hospital: a new failure/,
+      /^Mikolaj's Fictional Hospital, live: a new failure/,
     );
   });
 
