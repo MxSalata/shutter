@@ -448,6 +448,7 @@ describe('the row rule', () => {
     expect(info('cases', 53)).toMatchObject({ mark: 'none' });
     // The API mimic's switch is empty when it is off: a setting, not a gap
     expect(info('mock_config', '')).toMatchObject({ mark: 'none', missing: false });
+    expect(info('portal_hardened_at', '')).toMatchObject({ mark: 'none', missing: false });
   });
 
   it('reads an empty provider as not configured on the AI Hub edition and as the edition in the replay one', () => {
