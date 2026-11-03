@@ -50,6 +50,23 @@ Other settings are in `.env.example`: the published ports, the agents' mode and 
 
 **Spend, in full.** A storm of one kind convenes one board: the cases with the same failure signature within ten minutes follow its lead, each through its own gate and approval. `BoardsPerMinute` (6) spreads the others out, a token budget limits each run, and `SHUTTER_DAILY_BUDGET_USD` caps a day's live spend, after which cases take the rules path: set it on any instance with a key.
 
+### The knowledge in IRIS vector tables
+
+`Shutter.Knowledge.Library.TableFor(collection)` names each collection's vector table `Shutter_Knowledge.<collection>`; `%AI.RAG.VectorStore.IRIS` (384 dimensions, model `AllMiniLML6V2`) creates it with the columns `id` (the chunk's digest), `text`, `vector`, `metadata` and `source` (the Markdown file), and a `<collection>_Config` table beside it. On build `2027.1.0AI.109.0` (3 November 2026): `contracts` 26 chunks, `lifecycle` 17, `effects` 11, `playbooks` 20, `review` 57 and `explain` 76.
+
+In the Management Portal's SQL page (namespace `SHUTTER`), the interface contract's chunks nearest its own rule WIC-3.1 ("Only a receipt proves that an operation was committed"), by cosine similarity of the stored embeddings:
+
+```sql
+SELECT TOP 3 b.id, SUBSTRING(b.text, 1, 120) AS chunk, ROUND(VECTOR_COSINE(b.vector, a.vector), 3) AS similarity
+FROM Shutter_Knowledge.contracts a, Shutter_Knowledge.contracts b
+WHERE a.text LIKE 'WIC-3.1.%' AND b.id <> a.id
+ORDER BY similarity DESC
+```
+
+On build 109 the first is WIC-5.2, the receipts route (0.747), then WIC-2.5, the dry run (0.690). Across collections, `FROM Shutter_Knowledge.contracts a, Shutter_Knowledge.playbooks b` finds the recovery playbook's RP-3.1, "The receipt decides whether a movement was committed" (0.663).
+
+The query compares stored embeddings. A fresh phrase can't be embedded from SQL on this build: `%AI.RAG.Embedding.FastEmbed` embeds only inside AI Hub's own bridge (its `EmbedBatch` throws "use the Rust bridge directly", AI Hub bug report #8), and `%AI.RAG.KnowledgeBase` has no search of its own. So a phrase search is the agents' tool (`search_contracts` and the other five, `TopK` 4), which the Visual Trace shows as a tool call of a run.
+
 ### Limits not listed in the README
 
 - The shipped site profile is a demo: it releases the single cases the catalogue settles at tier 2 without asking a person. A real site first answers the profile's induction questions.
