@@ -334,7 +334,8 @@ ClassMethod ApplyEnvironment(wait As %Integer = 0) As %String [ SqlProc ]
 /// ApplyEnvironment's work on values, so a test can give them: each applied when not empty. live is "1" for on, any other
 /// non-empty value for off; wait is how many seconds the live hospital's item may be left to a background job while the
 /// hospital's production is still starting (the production's own start passes 120; by hand, 0 applies it at once). portal is
-/// "1" to harden the Management Portal (HardenPortal) and record it as ^Shutter.Config("portalHardened"), the time; any
+/// "1" to harden the Management Portal (HardenPortal) and record it as ^Shutter.Config("portalHardened"), the time, or on a
+/// failure the errors as ^Shutter.Config("portalHardeningErrors"), the stamp of an earlier start cleared either way; any
 /// other value leaves the portal as it is. Never a reading of the demo flag: a local demo keeps the portal as IRIS made it.
 ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %String, tracePw As %String, judgePw As %String, live As %String, wait As %Integer = 0, providerTimeout As %String = "", demoUsd As %String = "", demoPeriod As %String = "", liveScenarios As %String = "", portal As %String = "") As %DynamicObject
 {
@@ -383,24 +384,33 @@ ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %
     } Catch ex {
         Do errors.%Push("live: " _ ex.DisplayString())
     }
+    Set portalOn = ($ZSTRIP(portal, "<>W") = "1"), problem = ""
     Try {
         // The public demo's portal (v1.39): the hardening lives in IRISSYS, which no volume keeps, so a recreated container
         // would come back with the portal open to the demo users; applied again at every start when the environment asks.
-        If $ZSTRIP(portal, "<>W") = "1" {
+        // The record stands for the latest start alone (the delta sweep of 3 Nov 2026): both nodes are cleared before the
+        // attempt, so a start whose hardening fails leaves no stamp from an earlier success, and its errors beside it for
+        // the Doctor (portal_hardening_errors).
+        If portalOn {
+            Kill ^Shutter.Config("portalHardened"), ^Shutter.Config("portalHardeningErrors")
             Set hardened = ##class(Shutter.Util.Json).Parse(..HardenPortal(), .sc)
             If $$$ISERR(sc) || '$ISOBJECT(hardened) {
-                Do errors.%Push("portal: " _ $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "no answer"))
+                Set problem = $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "no answer")
             } ElseIf hardened.%IsDefined("error") {
-                Do errors.%Push("portal: " _ hardened.error)
+                Set problem = hardened.error
             } ElseIf hardened.%IsDefined("errors") {
-                Do errors.%Push("portal: " _ hardened.errors.%ToJSON())
+                Set problem = hardened.errors.%ToJSON()
             } Else {
                 Set ^Shutter.Config("portalHardened") = ##class(Shutter.Util.Time).NowUTC()
                 Set out.portal = {"hardened": true, "at": (^Shutter.Config("portalHardened"))}
             }
         }
     } Catch ex {
-        Do errors.%Push("portal: " _ ex.DisplayString())
+        Set problem = ex.DisplayString()
+    }
+    If problem '= "" {
+        Do errors.%Push("portal: " _ problem)
+        If portalOn Set ^Shutter.Config("portalHardeningErrors") = problem
     }
     If errors.%Size() > 0 Set out.errors = errors
     Quit out
@@ -1310,10 +1320,10 @@ ClassMethod StartProduction() As %Status
 }
 
 /// On a site install (demo = 0): the demo's items of Shutter.Production are switched off, so the production runs
-/// with no feed of its own: "ADT In", "ADT to Downstream", "Downstream Out" and "Scenario Player". A site adds its
-/// own feed items or uses the intake route. The definition is saved, and a running production takes the change at
-/// once. A demo install leaves the items as the class defines them; a reinstall compiles the class afresh (the items
-/// enabled again) and switches them off again.
+/// with no feed of its own: "ADT In", "ADT to Downstream", "Downstream Out", "ADT to Records", "Records Out" and
+/// "Scenario Player". A site adds its own feed items or uses the intake route. The definition is saved, and a running
+/// production takes the change at once. A demo install leaves the items as the class defines them; a reinstall compiles
+/// the class afresh (the items enabled again) and switches them off again.
 ClassMethod DisableDemoItems() As %Status
 {
     Set sc = $$$OK
@@ -1413,8 +1423,9 @@ ClassMethod SeedAll(root As %String) As %Status [ Private ]
 }
 
 /// The items InstallInto adds to a site's production, in Shutter.Production's order: the recovery side, the index and
-/// the board, never the feed or the demo (ADT In, ADT to Downstream, Downstream Out, Scenario Player). Case Intake and
-/// Case Intake Store are added once Shutter.Production defines them. A new recovery item is listed here too.
+/// the board, never the feed or the demo (ADT In, ADT to Downstream, Downstream Out, ADT to Records, Records Out,
+/// Scenario Player). Case Intake and Case Intake Store are added once Shutter.Production defines them. A new recovery
+/// item is listed here too.
 Parameter INSTALLITEMS = "HL7 Index,Case Releaser,Escalation Mail,Case Workflow,Case Review,Case Question,Incident Workflow,Evidence Collector,Agent Conformance,Agent Encounter,Agent Impact,Agent Coordinator,Agent Board,Gate,Shutter Approvers,Shutter API,Verifier,Case Intake,Case Intake Store,Second Parser";
 
 /// Adds Shutter's items (INSTALLITEMS) to the named production, each as Shutter.Production's compiled definition has
@@ -1760,9 +1771,11 @@ ClassMethod Doctor(refresh As %Boolean = 0) As %String [ SqlProc ]
     Do r.%Set("credentials_ok", allOk, "boolean")
     Set r."credentials_checked_at" = $GET(^Shutter.Health("credentials", "iso"))
     // The public demo's portal (v1.39): whether the production's start hardened it (SHUTTER_DEMO_PORTAL), and when; the
-    // record alone, since reading the portal's own state (PortalState) needs %Admin_Secure.
+    // record alone, since reading the portal's own state (PortalState) needs %Admin_Secure. The latest start's errors when
+    // its hardening failed (the stamp cleared then), or "".
     Do r.%Set("portal_hardened", $GET(^Shutter.Config("portalHardened")) '= "", "boolean")
     Set r."portal_hardened_at" = $GET(^Shutter.Config("portalHardened"))
+    Set r."portal_hardening_errors" = $GET(^Shutter.Config("portalHardeningErrors"))
     // The pieces of the builds since 25 Oct (CONTRACTS 12, v1.31), so a fresh install and an upgrade show the same: every item
     // of INSTALLITEMS in the production and enabled, the gate's policy version, the catalogue's entries, the records namespace
     // of a demo install, the index's adapter, the questions.
