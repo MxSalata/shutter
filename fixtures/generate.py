@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Writes the HL7 fixtures and scenarios.json for the scenarios S1 to S21 (docs/CONTRACTS.md, sections 3, 4 and 7.6).
+"""Writes the HL7 fixtures and scenarios.json for the scenarios S1 to S25 (docs/CONTRACTS.md, sections 3, 4 and 7.6).
 
     python3 fixtures/generate.py
 
-Run it from anywhere; it writes next to itself. The files it writes are committed; edit this script, not them.
+Run it from anywhere; it writes next to itself. The files it writes are committed; edit this script, not them. CI reruns
+a copy and fails when its output differs from the committed files, so a scenario edited by hand is caught.
 """
 import json
 import os
@@ -656,14 +657,14 @@ def scenarios():
             {"wait": 5},
             {"fault": "off"},
         ],
-        # Rules and site policy until the board's runs are recorded; more evidence is acceptable, as in S13. Site
-        # policy escalates on the catalogue's E13 (an event time the receiver's record can't hold) before any write is
-        # planned. Rules alone propose the resend, which is wrong, and the gate blocks it: rules mode's pass is the
-        # gate's catch, not a right answer from rules (S13, with no rules expectation of its own, counts the same
-        # outcome as differing).
+        # The board (its runs recorded live on 1 November 2026), rules and site policy; more evidence is acceptable, as
+        # in S13. Site policy escalates on the catalogue's E13 (an event time the receiver's record can't hold) before
+        # any write is planned. Rules alone propose the resend, which is wrong, and the gate blocks it: rules mode's
+        # pass is the gate's catch, not a right answer from rules (S13, with no rules expectation of its own, counts
+        # the same outcome as differing).
         "expected": {"disposition": "escalate", "acceptable": ["more_evidence"], "write": False,
                      "final_state": "admitted", "final_ward": "WARD-A",
-                     "failed_operation_key": b[2]["operation_key"], "modes": ["rules", "policy"],
+                     "failed_operation_key": b[2]["operation_key"], "modes": ["board", "rules", "policy"],
                      "by_mode": {"rules": {"acceptable": ["resend"], "blocked_by": "EVENT_TIME_IMPLAUSIBLE",
                                            "final_reason": "EVENT_TIME_IMPLAUSIBLE"}}},
     }, [a, b]))
@@ -700,9 +701,10 @@ def scenarios():
         # Site policy (E16 and E2): the refused transfer's own case is judged. The occupant's resend lands before that
         # case reads its evidence, so the bed is free by then (the gate's OCCUPANT_MOVED_OUT) and no wait is seen; the
         # wait (WAITING_FOR_OCCUPANT_CASE, expected.waits_on_key) needs an occupant's case that takes longer, such as one
-        # awaiting approval. The board's runs come with the re-record.
+        # awaiting approval. The board's runs for S23a to S25 were recorded live on 1 November 2026.
         "expected": {"disposition": "resend", "write": True, "final_state": "admitted", "final_ward": "WARD-B",
-                     "failed_operation_key": a4[2]["operation_key"], "case_by_key": True, "modes": ["policy"]},
+                     "failed_operation_key": a4[2]["operation_key"], "case_by_key": True,
+                     "modes": ["board", "policy"]},
     }, [a1, a2, a3, a4]))
 
     # S23b: two patients allocated to one bed. As S23a, but the first patient is not leaving: no movement out of Ward B
@@ -723,7 +725,7 @@ def scenarios():
             {"file": b3[0], "expect": "delivery_fails"},
         ],
         "expected": {"disposition": "escalate", "write": False, "final_state": "admitted", "final_ward": "WARD-A",
-                     "failed_operation_key": b3[2]["operation_key"], "modes": ["policy"]},
+                     "failed_operation_key": b3[2]["operation_key"], "modes": ["board", "policy"]},
     }, [b1, b2, b3]))
 
     # S23c: as S23a, but the occupant's transfer keeps failing (a fault on that operation alone), so their case cannot
@@ -751,7 +753,7 @@ def scenarios():
         # resend, its state is escalated, and the reason it names is OCCUPANT_CASE_FAILED.
         "expected": {"disposition": "resend", "write": False, "final_state": "admitted", "final_ward": "WARD-A",
                      "failed_operation_key": c4[2]["operation_key"], "case_by_key": True,
-                     "final_reason": "OCCUPANT_CASE_FAILED", "modes": ["policy"]},
+                     "final_reason": "OCCUPANT_CASE_FAILED", "modes": ["board", "policy"]},
     }, [c1, c2, c3, c4]))
 
     # S24: S2's transfer fails while the downstream system is down; then a newer transfer for the same patient arrives
@@ -780,7 +782,7 @@ def scenarios():
         "expected": {"disposition": "superseded", "write": False, "final_state": "admitted", "final_ward": "WARD-C",
                      "failed_operation_key": b[2]["operation_key"], "case_by_key": True,
                      "blocked_by": "NEWER_MESSAGE_PENDING", "last_operation_key": c[2]["operation_key"],
-                     "modes": ["policy"]},
+                     "modes": ["board", "policy"]},
     }, [a, b, c]))
 
     # S25: a sound message IRIS can't read. The PAS adds the site's own segment ZZZ after PV1, as many trusts' feeds do,
@@ -811,7 +813,7 @@ def scenarios():
         "expected": {"disposition": "escalate", "acceptable": ["more_evidence", "resend"], "write": False,
                      "final_state": "admitted", "final_ward": "WARD-A", "case_by_key": True,
                      "final_reason": "PARSE_FAILED",
-                     "failed_operation_key": b[2]["operation_key"], "modes": ["policy"]},
+                     "failed_operation_key": b[2]["operation_key"], "modes": ["board", "policy"]},
     }, [a, b]))
 
     return out

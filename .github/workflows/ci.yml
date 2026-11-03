@@ -141,6 +141,16 @@ jobs:
           python3 scripts/check-records.py --self-test
           python3 tests/privacy_check.py --self-test
           python3 tests/knowledge_check.py --self-test
+      # The HL7 folders and scenarios.json are made by fixtures/generate.py, so a rerun must write the committed files
+      # byte for byte: a scenario edited by hand instead of in the script would otherwise be lost at the next rerun. The
+      # copy runs next to a copy of scenarios.json, which keeps S22 (written by hand) as the script does.
+      - name: fixtures/generate.py writes the committed HL7 fixtures and scenarios.json
+        run: |
+          out=$(mktemp -d)
+          cp fixtures/generate.py fixtures/scenarios.json "$out"/
+          python3 "$out/generate.py"
+          cmp "$out/scenarios.json" fixtures/scenarios.json
+          for folder in "$out"/S*/; do diff -r "$folder" "fixtures/$(basename "$folder")"; done
       # No API key, token or private key in a tracked file or in what the last 20 commits added, and no committed .env
       - name: No credentials in the repository
         run: python3 scripts/secret-scan.py --commits 20
