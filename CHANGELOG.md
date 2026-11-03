@@ -12,9 +12,10 @@ Interoperability production, with a board of IRIS AI Hub agents.
 - **A failed delivery is a case, not a retry.** When a delivery from an HL7 ADT feed fails, Shutter opens a case,
   gathers the evidence (the message, the receiver's state, receipt and history) and decides what should happen:
   resend it, reconcile it because it already arrived, leave it because a later event superseded it, or escalate it.
-- **A board of AI Hub agents** (the `iris-shutter-aihub` module): three specialists review a case in parallel and a
-  coordinator proposes one plan, each agent a business operation in `Shutter.Production`, with their tools, schemas
-  and knowledge bases. Without an API key or the AI Hub build, the agents replay recorded runs.
+- **A board of AI Hub agents** (in the `iris-shutter` package; the core module `iris-shutter-core` replays their
+  recordings): three specialists review a case in parallel and a coordinator proposes one plan, each agent a business
+  operation in `Shutter.Production`, with their tools, schemas and knowledge bases on IRIS Vector Search
+  (`%AI.RAG.VectorStore.IRIS`). Without an API key or the AI Hub build, the agents replay recorded runs.
 - **A deterministic gate** checks every plan (identity, conformance, intent, ordering, state transition, effect,
   authorization, rehearsal, concurrency, evidence freshness, the receiver's capabilities and the catalogue); an unknown blocks
   a write as surely as a failed check.
@@ -69,12 +70,64 @@ Interoperability production, with a board of IRIS AI Hub agents.
 - **The web application:** scenarios, cases, incidents, the board's findings, the gate, approvals, verification, the
   site profile, the library, and costs and tokens per agent run; served by IRIS, and as an online demo of recorded
   runs.
-- **Scenarios** S1 to S21 (S14 aside) that play each kind of failure end to end on the demo downstream system, a
-  demo hospital production in its own namespace that Shutter watches (S19), a nurse's move entered by hand in the
+- **Scenarios** S1 to S25 (S14 aside; S23 in three parts; 26 in all) that play each kind of failure end to end on the
+  demo downstream system, a demo hospital production in its own namespace that Shutter watches (S19), a nurse's move entered by hand in the
   downstream system while a resend waits for approval: the approval is bound to the receiver's version, so the resend
   never writes over her entry (S20), and a transfer timed in the hour that happens twice when British clocks go back,
   which nothing writes (S21). Their messages carry what a real PAS feed sends: an NHS number beside the hospital
   number in PID-3, the prior location of a transfer and the location on an update or a discharge.
+- **One transfer, two receivers** (S22): the same feed goes to the bed manager and to a demo patient records system
+  (the `RECORDS` namespace behind `/records/api`, the items `ADT to Records` and `Records Out`, category
+  `history_of_record`). A case is one failed delivery to one receiver, so the bed manager's case closes superseded with
+  no write and the records system's escalates with the steps that correct its history.
+- **The occupied bed** (S23a to S23c): for a `409 bed_occupied` refusal the evidence reads who holds the bed and whether
+  they are leaving, and the gate answers `OCCUPANT_MOVED_OUT`, `WAITING_FOR_OCCUPANT_CASE`, `OCCUPANT_CASE_FAILED` or
+  `BED_OCCUPIED`, a case waiting on the occupant's own case. **A newer message on its way** (S24): the gate holds a resend
+  with `NEWER_MESSAGE_PENDING` while a later message for the encounter is still undelivered, and the connector checks
+  again at the moment of the write. **A site's own segment** (S25): a message IRIS cannot read against the loaded schema
+  is never resent (`PARSE_FAILED`, with the Second Parser's verdict). The gate's policy version in this release is
+  `2026-11-01.1`; an approval given under an earlier version and not yet dispatched is void at dispatch
+  (`APPROVAL_POLICY_CHANGED`).
+- **The Second Parser:** a Java business operation through PEX (`Shutter.Operation.SecondParser`, HAPI 2.6.0, built by
+  `pex/build.sh`) that the Evidence Collector asks when IRIS cannot read a message; it says whether the message is well
+  formed and of a schema this namespace lacks, or malformed and where, and the gate's `SCHEMA_UNKNOWN` and `PARSE_FAILED`
+  words carry its verdict. Without the jar the item is disabled and the Doctor's `second_parser` says so.
+- **Custom HL7 schemas, and prevent failures:** the Doctor's `hl7_schemas` (loaded, needed, missing),
+  `Shutter.Setup.ImportSchema` and `GET` and `POST /settings/schemas`; a message whose category is not loaded is
+  `unknown schema`, blocked `SCHEMA_UNKNOWN` until the schema is there. With the site profile's `feed.prevent_failures`
+  such a message is held as a case of kind `unreadable` instead of delivered, and the index's check releases it once the
+  schema is imported (catalogue entry E18).
+- **The index walk is an adapter of Shutter's own** (`Shutter.Index.Adapter`, handing batches of message headers to
+  the HL7 Index item), and **any IANA time zone** for the feed through Embedded Python's `zoneinfo`
+  (`Shutter.Util.Time.PyOffset`), beside the native rules for UTC, Europe/London and fixed offsets.
+- **Ask about this case:** a deterministic what-if card (`GET /cases/{id}/whatif`) and questions to the Explain agent or
+  to the board (`/cases/{id}/questions`), answered from recorded conversations without a key; the agents cannot write.
+- **A storm is survivable:** the alert intake (`Shutter.Intake.AlertProcess`, a watched production's `Ens.Alert` item,
+  hands a failed delivery to Shutter from the alert alone); one board per failure signature (the first case leads, the
+  rest take its decision through their own evidence, gate, rehearsal and approval); boards per minute capped
+  (`BoardsPerMinute`); a bounded approval wait (`ApprovalWaitSeconds`); a bound on one model call
+  (`SHUTTER_PROVIDER_TIMEOUT_SECONDS`); a receiver's `Retry-After` kept as a minimum wait before a resend; and the Case
+  Releaser item, which releases waiting and held cases in a sweep of its own.
+- **Precedents:** what approvers decided before on the same conditions at the same receiver, and whether it held,
+  counted in the approval task's text and answered by `GET /cases/{id}/precedents`.
+- **The tool catalogue is pinned** when a run starts (`Shutter.Bridge.Catalogue`): what the framework discovered must be
+  exactly the agent's evidence tools, its terminal tool and its collections' search tools, or the run ends
+  `catalogue_mismatch` before any model call. Findings and plans may cite only the evidence they were given, and
+  invisible characters are stripped from everything a model wrote.
+- **The live hospital and the storm:** with `SHUTTER_LIVE=1` the demo hospital's Live PAS item plays one of Shutter's
+  scenarios every 7 minutes with fresh patients at present times and real faults, and writes an ordinary message a
+  minute between stories; `POST /live/storm` ("Break the feed") fails eight movements for four fresh patients with the
+  receiver down for a minute, so an incident can be watched on demand.
+- **The public demo's users and the model budget:** `demo` (reads, reinvestigates, approves and asks; never spends),
+  `demo-trace` (the Visual Trace and the messages in the Management Portal, read only) and `judge` (the demo's role plus
+  the live agents), each made only when its password is set. `SHUTTER_DAILY_BUDGET_USD` caps what the live runs spend
+  per day, with an estimate reserved for each run in flight, and `SHUTTER_JUDGE_BUDGET_USD` gives each user a share; at
+  the cap a run is refused `budget_exhausted` and the board takes the rules path. `GET /settings` says whether the live
+  agents can run (`live.agents`). The demo's Management Portal is read only: its applications require `Shutter_Portal`,
+  which `Shutter_Trace` alone holds.
+- **The publisher:** Shutter's cases, incidents, evidence, plans, events, precedents and health as read-only MCP tools
+  (`Shutter.Publish.Tools`) through IRIS's own MCP gateway at `/mcp/shutter`, on the AI Hub build; identifiers
+  tokenised, an audit row per call, nothing written.
 - **A case the workflow left behind can be abandoned.** The production's start notes every case still in a working state (an error-kind event saying when it started and the way out), and an approver abandons a case whose workflow has had nothing in flight for 15 minutes (`POST /cases/{id}/abandon`; 409 `busy` while it has, with what is in flight): the case fails with disposition `abandoned`, its approval is revoked, its pending escalation emails and open approval task are cancelled, and it can be reinvestigated. The Doctor and `GET /health` report `working_cases` and `abandon_after_minutes`.
 - **A production review, on request.** `POST /api/shutter/production-reviews` runs one read-only pass over a production
   Shutter knows (its own, or a watched one such as the demo hospital's) through the new Case Review item:
@@ -103,8 +156,13 @@ Interoperability production, with a board of IRIS AI Hub agents.
   after the nurse's move and lets rules alone resend S3, and checks each is refused with nothing written; CI runs it
   after the roles check, and the Evaluation page lists the attempts from `docs/readme/boundary.json`, which the script
   writes.
-- **Install:** the `iris-shutter` and `iris-shutter-aihub` IPM modules, a Dockerfile and `docker compose up`, and a
-  site install into an existing production.
+- **Install:** the `iris-shutter` IPM package (the whole of Shutter for an AI Hub build, IRIS 2026.3 or later) and the
+  `iris-shutter-core` module (loaded by path on IRIS for Health 2026.2, where the board replays its recordings),
+  `install.sh`, a Dockerfile and `docker compose up` (the image decides its edition itself, `WITH_AIHUB=auto`, and the
+  demo users' password reaches the build as a BuildKit secret), and a site install into an existing production. The
+  data databases live on the `shutter-mgr` volume, so a rebuilt image upgrades in place (`docs/INSTALL.md`, section 8),
+  and `Shutter.Setup.Doctor` reports what an install or an upgrade left (`missing_items`, `disabled_items`, `edition`,
+  `second_parser`, `credentials_ok`).
 
 ## 1.0.0
 
