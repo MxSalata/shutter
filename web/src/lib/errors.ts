@@ -65,6 +65,8 @@ export function httpStatusText(status: number): string {
       return 'Conflict: something changed meanwhile';
     case 500:
       return 'Internal server error';
+    case 502:
+      return 'The answer did not come from the API';
     default:
       return `HTTP ${status}`;
   }
