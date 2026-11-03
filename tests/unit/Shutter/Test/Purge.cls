@@ -1,7 +1,9 @@
 /// The demo's PurgeStore (Shutter.Setup; CONTRACTS 12): the precedents and the board leads go with the cases they name,
 /// since the case counter starts again at C-000001 and a new case would otherwise read a purged case's history, and the
-/// reset stamp is set. The purge empties every case table of the instance, so this test owns the instance's state while
-/// it runs; on an instance that is not a demo, or without Shutter_Scenarios, only the refusal is checked.
+/// reset stamp is set. The purge empties every case table of the instance, so the purge itself is tried only when the
+/// case store is empty (as it is in CI, where the suite runs before any scenario); on a demo that has been played the
+/// test is reported as skipped rather than taking its cases, and on an instance that is not a demo, or without
+/// Shutter_Scenarios, only the refusal is checked.
 Class Shutter.Test.Purge Extends %UnitTest.TestCase
 {
 
@@ -36,6 +38,12 @@ Method TestPurgeTakesThePrecedentsAndTheLeads()
         Set answer = $CLASSMETHOD(setup, "PurgeStore")
         Do $$$AssertNotTrue(answer ? 1.N, "not a demo instance with Shutter_Scenarios: the purge is refused and nothing is tried: " _ answer)
         Do $$$LogMessage("not a demo instance with Shutter_Scenarios: the purge itself was not tried here")
+        Quit
+    }
+    Set cases = 0
+    &sql(SELECT COUNT(*) INTO :cases FROM Shutter_Store."Case")
+    If cases > 0 {
+        Do $$$AssertSkipped("the case store holds " _ cases _ " case(s) that are not this test's: the purge is not tried here, since it would take them")
         Quit
     }
     Set receiver = "test-purge-" _ $JOB, signature = "sig:test-purge-" _ $JOB

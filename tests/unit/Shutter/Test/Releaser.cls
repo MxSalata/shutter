@@ -91,7 +91,9 @@ Method TestStatusAndCandidates()
 
 /// A sweep whose check throws ends its run failed, with the error's text on the row, and answers the adapter ok; a sweep
 /// whose checks run ends its run done. The sweep needs a candidate to open a run, so a case held for a schema that is not
-/// loaded is opened first; the production's own Case Releaser may sweep it too, so the rows are found by this job.
+/// loaded is opened first; the production's own Case Releaser may sweep it too, so the rows are found by this job. The
+/// second sweep runs the real checks through the fake host over every candidate of the instance, and the fake host
+/// answers a release without queueing it, so it is tried only when this test's case is the instance's one candidate.
 Method TestACheckThatThrowsFailsTheRun()
 {
     Set op = {"operation_key": (..#KEY), "encounter_id": "ENC-UT10", "patient_id": "MRN-UT10", "patient_id_authority": "HOSP", "event": "admit", "ward": "WARD-A", "bed": null, "event_time": "2026-11-01T12:00:00Z", "source_system": "PAS", "source_message_id": "UT10", "payload_digest": "sha256:ut10"}
@@ -114,6 +116,11 @@ Method TestACheckThatThrowsFailsTheRun()
     Do $$$AssertTrue(run.Error [ "the lookup threw (unit test)", "with the error's text: " _ run.Error)
     Do $$$AssertNotEquals(run.EndedAt, "", "and an end time")
     Set host.ThrowInChecks = ""
+    Do ##class(Shutter.Operation.Releaser).Candidates(.waiting, .held)
+    If (waiting '= 0) || (held '= 1) {
+        Do $$$LogMessage("the instance has candidates of its own (" _ waiting _ " waiting, " _ held _ " held): the sweep whose checks run is not tried here, since the fake host would release them without a reinvestigation")
+        Quit
+    }
     Set edge = ..LastRunId()
     Do $$$AssertStatusOK(host.Sweep(), "a sweep whose checks run")
     Set run = ..RunByThisJobAfter(edge)

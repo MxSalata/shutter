@@ -107,7 +107,8 @@ Method TestTheWalletIsAsked()
     Do $$$AssertTrue(reason [ "wallet secret", "with the reason: " _ reason)
 }
 
-/// The Doctor carries the provider the record names and the two probes, each true, false or null.
+/// A caller without the right a probe needs is told nothing (null), never false: the wallet and the Config Store would
+/// otherwise answer such a caller as if the secret or the record were gone.
 Method TestACallerWithoutTheRightIsToldNothing()
 {
     // The wallet answers a caller without Shutter_Secrets as if the secret were gone, and the Config Store refuses one
@@ -122,6 +123,7 @@ Method TestACallerWithoutTheRightIsToldNothing()
     Do $$$AssertEquals(##class(Shutter.Setup).ProviderConfigState(), ##class(Shutter.Setup).ProviderConfigState($SYSTEM.Security.Check("%Admin_ConfigStore", "USE")), "and so does the Config Store's")
 }
 
+/// The Doctor carries the provider the record names and the two probes, each true, false or null.
 Method TestTheDoctorReportsTheSecret()
 {
     Set r = ##class(Shutter.Util.Json).Parse(##class(Shutter.Setup).Doctor(), .sc)
