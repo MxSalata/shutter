@@ -220,6 +220,55 @@ describe('CasePage', () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps a question's runs off the board: the recorded board and its provenance stay as they were", async () => {
+    // Ask about this case stores its runs as the case's rows too (CONTRACTS 14): a board-tier question adds a
+    // coordinator that synthesised the answer and an explain member, both live, each naming the question
+    const recorded = structuredClone(fixtures.cases['C-000008'].runs) as (Record<string, unknown> & {
+      role: string;
+    })[];
+    const coordinator = recorded.filter((r) => r.role === 'coordinator').at(-1)!;
+    const answer = { answer: 'x', cites: [], confidence: 'high', perspectives: [] };
+    const asked = [
+      { ...coordinator, id: 9001, role: 'coordinator', questionId: 'Q-000001', mode: 'live', result: answer },
+      {
+        ...coordinator,
+        id: 9002,
+        role: 'explain',
+        memberCode: 'explain',
+        member: { code: 'explain', name: 'Explainer', perspective: 'Plain words' },
+        questionId: 'Q-000001',
+        mode: 'live',
+        result: answer,
+      },
+    ];
+    server.use(
+      http.get('/api/shutter/cases/C-000008/runs', () => HttpResponse.json([...recorded, ...asked])),
+    );
+    renderCase('C-000008');
+    const board = await screen.findByRole('region', { name: 'The board' });
+    const cards = await within(board).findAllByRole('region');
+    expect(cards.map((c) => within(c).getByRole('heading').textContent)).toEqual([
+      'Conformance',
+      'Encounter Integrity',
+      'Impact Analysis',
+      'Coordinator',
+    ]);
+    expect(within(board).getByText('With the majority')).toBeInTheDocument();
+    expect(within(board).getByText('1 dissent kept')).toBeInTheDocument();
+    expect(within(board).getAllByText('Dissent')).toHaveLength(1);
+    expect(
+      within(within(board).getByRole('region', { name: 'Conformance' })).getByText('Dissent'),
+    ).toBeInTheDocument();
+    const coordinatorCard = within(board).getByRole('region', { name: 'Coordinator' });
+    expect(within(coordinatorCard).getByText('Proposed: Escalate')).toBeInTheDocument();
+    expect(within(coordinatorCard).getByText('Dissent kept: Conformance')).toBeInTheDocument();
+    expect(within(board).queryByText(/No disagreements to keep/)).not.toBeInTheDocument();
+    // The investigation was replayed; the question's live runs do not make it a live one
+    await userEvent.click(screen.getByRole('button', { name: 'Details' }));
+    expect(await screen.findByText('Recorded replay')).toBeInTheDocument();
+    expect(screen.queryByText('Live model')).not.toBeInTheDocument();
+  });
+
   it('leaves the confidence out of a dissent recorded as "resend (0.8): why"', async () => {
     renderCase('C-000039');
     const board = await screen.findByRole('region', { name: 'The board' });

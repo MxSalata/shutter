@@ -11,6 +11,7 @@ import {
 import type { CaseDetail } from '@/api/types';
 import type { CaseFacts } from './outcome';
 import { safetyReceipt } from './receipt';
+import { investigationRuns } from './runClock';
 
 /** The case's facts as the top of the page reads them; the queries are the ones the tabs read too. */
 export function useCaseFacts(c: CaseDetail, open: boolean): CaseFacts {
@@ -46,7 +47,8 @@ export function useCaseFacts(c: CaseDetail, open: boolean): CaseFacts {
     blocked: blocked.isSuccess ? blocked.data : stopped ? undefined : null,
     snapshot: snapshot.data,
     escalations: escalations.isSuccess ? escalations.data : undefined,
-    runs: runs.isSuccess ? runs.data : undefined,
+    // The investigation's runs alone: a question's runs (Ask about this case) are the question's own
+    runs: runs.isSuccess ? investigationRuns(runs.data) : undefined,
     runsSettled: runs.isSuccess || runs.isError,
   };
 }
