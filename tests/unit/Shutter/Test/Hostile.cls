@@ -67,4 +67,37 @@ Method TestTheTable()
     Do $$$AssertTrue(n >= 20, n _ " rows")
 }
 
+/// The names the prompts used before v1.39, error for the failure and later_event for the timeline, stay citable: the
+/// runner lists them with what a finding or a plan may cite whenever the evidence has the key they stand for, so the
+/// recordings and the evaluation table pass the check, and a name outside the evidence is refused as before. The runner
+/// belongs to the aihub module, so on an instance without it this is skipped with a note.
+Method TestEarlierNamesStayCitable()
+{
+    If '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Bridge.Runner.AIHub") || '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Schema.Findings") {
+        Do $$$LogMessage("The aihub module is not on this instance: the evidence-key check is skipped (it runs on the AI Hub build)")
+        Do $$$AssertTrue(1, "skipped here")
+        Quit
+    }
+    // A receipt with a committed body, so that error is not already a key one level down (as receipt.error is when there is none).
+    Set context = {"case_id": "C-000003", "evidence": {"operation": {"operation_key": "K", "event": "transfer"}, "failure": {"kind": "error", "outcome": "nack", "reason_code": "AR", "http_status": 409}, "message": {"message_control_id": "MSG00001"}, "receipt": {"operation_key": "K", "applied_at": "2026-10-15T08:50:00Z", "version_after": 4}, "timeline": [{"event": "transfer", "later": true, "operation_key": "K2"}], "route": {"receiver": "ward_api"}}}
+    Set ids = ##class(Shutter.Bridge.Runner.AIHub).EvidenceIdsOf(context.%ToJSON())
+    Set known = "," _ ids _ ","
+    Do $$$AssertTrue((known [ ",failure,") && (known [ ",timeline,") && (known [ ",reason_code,"), "the keys and the keys one level down: " _ ids)
+    Do $$$AssertTrue((known [ ",error,") && (known [ ",later_event,"), "the earlier names of the failure and the timeline: " _ ids)
+    Do $$$AssertEquals($LENGTH(known, ",error,"), 2, "error is listed once")
+    Set good = "{""disposition"":""reconcile"",""confidence"":0.7,""summary"":""committed"",""evidence_refs"":[""error"",""later_event"",""receipt""]}"
+    Set problems = ##class(Shutter.Schema.Findings).Check(good, ids)
+    Do $$$AssertEquals(problems.%Size(), 0, "a finding citing error and later_event is accepted: " _ problems.%ToJSON())
+    Set bad = "{""disposition"":""reconcile"",""confidence"":0.7,""summary"":""x"",""evidence_refs"":[""later_event"",""MSG00001""]}"
+    Set problems = ##class(Shutter.Schema.Findings).Check(bad, ids)
+    Do $$$AssertEquals(problems.%Size(), 1, "an identifier from the content is refused as before: " _ problems.%ToJSON())
+    Set named = $SELECT(problems.%Size() = 1: $PIECE(problems.%Get(0), ";", 1), 1: "")
+    Do $$$AssertTrue((named [ "MSG00001") && (named '[ "later_event"), "naming only the unknown one: " _ named)
+    // Without the key they stand for, the names are not listed.
+    Set context = {"evidence": {"message": {"message_control_id": "MSG00001"}}}
+    Set ids = ##class(Shutter.Bridge.Runner.AIHub).EvidenceIdsOf(context.%ToJSON())
+    Do $$$AssertEquals(ids, "message,message_control_id", "no failure and no timeline, no earlier name: " _ ids)
+    Do $$$AssertEquals(##class(Shutter.Bridge.Runner.AIHub).EvidenceIdsOf(""), "", "no context, nothing to cite")
+}
+
 }

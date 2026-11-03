@@ -200,6 +200,8 @@ ClassMethod CiteIdsOf(context As %String) As %String
 
 /// What findings and plans may cite (v1.35): the keys of the board context's evidence object and the keys one level down in
 /// it (where the error, the ward state's fields and the like sit), plus "findings" for the coordinator, comma separated.
+/// The names the prompts used before v1.39 for two of the keys, "error" for the failure and "later_event" for the timeline,
+/// stay citable while the evidence has the key they stand for: the recordings and the evaluation table carry them.
 ClassMethod EvidenceIdsOf(context As %String) As %String
 {
     Set ids = ""
@@ -215,6 +217,8 @@ ClassMethod EvidenceIdsOf(context As %String) As %String
                 While it2.%GetNext(.k2) { If '$FIND("," _ ids _ ",", "," _ k2 _ ",") Set ids = ids _ "," _ k2 }
             }
         }
+        If ev.%IsDefined("failure") && '$FIND("," _ ids _ ",", ",error,") Set ids = ids _ ",error"
+        If ev.%IsDefined("timeline") && '$FIND("," _ ids _ ",", ",later_event,") Set ids = ids _ ",later_event"
     }
     If o.%IsDefined("findings") Set ids = ids _ $SELECT(ids = "": "", 1: ",") _ "findings"
     Quit ids
