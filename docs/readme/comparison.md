@@ -51,7 +51,7 @@ receiving system's final state with the scenario's expected outcome (`fixtures/s
 - **S13 is bad data from the PAS.** A transfer timed half an hour before the patient's admission can't be resent or
   ordered: the gate refuses the write (`EVENT_TIME_IMPLAUSIBLE`), and the board, matching catalogue entry E13, escalates
   so the PAS team can check the source.
-- **What a live case costs.** Most cases took one board pass, four agent runs, for 0.34 to 0.44 USD and 24 to 32 s.
+- **What a live case costs** (the live recording of 25 October 2026). Most cases took one board pass, four agent runs, for 0.34 to 0.44 USD and 24 to 32 s.
   S7 took two passes, 0.74 USD: a later transfer arrived while the first plan awaited approval, so the case was planned
   again and closed as superseded. The whole recording: 56 agent runs, 5.38 USD at list prices
   ([evaluation.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)).
