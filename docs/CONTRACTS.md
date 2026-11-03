@@ -1719,7 +1719,11 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   reads the connector's answer (11); the alert's time in the failure text is read as the engine's UTC timestamp (11);
   the tool catalogue pinned at a run's start, `Shutter.Bridge.Catalogue`: what the framework discovered must be exactly the
   agent's evidence tools, its terminal tool and its attached collections' search tools, or the run ends with the status
-  `catalogue_mismatch` before any model call (9); two words put right: the rehearsal check blocks at dispatch, the only
+  `catalogue_mismatch` before any model call (9); the demo's Management Portal made read only for the demo's harden script,
+  `Shutter.Setup.HardenPortal` and `PortalState`: the portal applications of both namespaces lose the MatchRoles that gave
+  every signed-in user the data databases read and write, require the resource `Shutter_Portal`, which `Shutter_Trace`
+  alone holds, and the trace role reads the HealthShare and both namespaces' databases and writes none, so demo-trace can
+  no longer switch items off or save settings and demo and judge cannot sign in to the portal (12); two words put right: the rehearsal check blocks at dispatch, the only
   stage that sends it (6.5), and a deferred board waits 60 to 89 s (6.6); the live hospital's rotation drops S11 and takes `SHUTTER_LIVE_SCENARIOS` (4.4); the demo users'
   password reaches the image build as a BuildKit secret, never a build argument, and CI proves it is in neither the build
   log nor the image's history (12, 13); the Doctor tries the stored credentials (DownstreamAPI here, the demo hospital's
