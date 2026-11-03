@@ -317,7 +317,7 @@ ClassMethod ConfigureProviderTimeout(seconds As %String) As %Integer
 
 /// The container's environment applied to a running instance (v1.34): the model budget (SHUTTER_DAILY_BUDGET_USD,
 /// SHUTTER_JUDGE_BUDGET_USD), the public demo's logins (SHUTTER_PUBLIC_DEMO_PASSWORD, SHUTTER_TRACE_PASSWORD,
-/// SHUTTER_JUDGE_PASSWORD), the live hospital (SHUTTER_LIVE) and the public demo's portal (SHUTTER_DEMO_PORTAL, v1.38: 1
+/// SHUTTER_JUDGE_PASSWORD), the live hospital (SHUTTER_LIVE) and the public demo's portal (SHUTTER_DEMO_PORTAL, v1.39: 1
 /// hardens the Management Portal at every start, HardenPortal). Shutter.Production's OnStart calls it, so what .env says
 /// reaches an instance started with `docker compose up` without a build argument (and a changed cap or password takes effect
 /// on the next start); SELECT Shutter.Setup_ApplyEnvironment() applies it by hand. A variable that is empty or unset leaves
@@ -384,7 +384,7 @@ ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %
         Do errors.%Push("live: " _ ex.DisplayString())
     }
     Try {
-        // The public demo's portal (v1.38): the hardening lives in IRISSYS, which no volume keeps, so a recreated container
+        // The public demo's portal (v1.39): the hardening lives in IRISSYS, which no volume keeps, so a recreated container
         // would come back with the portal open to the demo users; applied again at every start when the environment asks.
         If $ZSTRIP(portal, "<>W") = "1" {
             Set hardened = ##class(Shutter.Util.Json).Parse(..HardenPortal(), .sc)
@@ -1758,7 +1758,7 @@ ClassMethod Doctor(refresh As %Boolean = 0) As %String [ SqlProc ]
     Set r.credentials = checks, r."credentials_state" = cstate
     Do r.%Set("credentials_ok", allOk, "boolean")
     Set r."credentials_checked_at" = $GET(^Shutter.Health("credentials", "iso"))
-    // The public demo's portal (v1.38): whether the production's start hardened it (SHUTTER_DEMO_PORTAL), and when; the
+    // The public demo's portal (v1.39): whether the production's start hardened it (SHUTTER_DEMO_PORTAL), and when; the
     // record alone, since reading the portal's own state (PortalState) needs %Admin_Secure.
     Do r.%Set("portal_hardened", $GET(^Shutter.Config("portalHardened")) '= "", "boolean")
     Set r."portal_hardened_at" = $GET(^Shutter.Config("portalHardened"))
