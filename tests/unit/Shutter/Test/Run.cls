@@ -7,6 +7,9 @@ Class Shutter.Test.Run
 /// many test methods passed and failed, and the names of the failures.
 ClassMethod Triggers(repo As %String = "/home/irisowner/dev/") As %String [ SqlProc ]
 {
+    // Called over HTTP, the suite can outlast the web gateway's 60-second response timeout: ask it to wait (as the
+    // scenario runner does for a long run).
+    Set:$ISOBJECT($GET(%response)) %response.Timeout = 900
     If (repo = "") || (repo = $CHAR(0)) Set repo = "/home/irisowner/dev/"
     Set root = $GET(^UnitTestRoot)
     Set ^UnitTestRoot = repo _ "tests/unit/"
