@@ -224,6 +224,8 @@ export function AgentsSection({ s }: { s: Settings }) {
       </TechDetail>
       <Group gap="xs" wrap="wrap" align="baseline">
         <Text size="sm">Investigation mode for new cases: {humanize(s.mode)}</Text>
+        {/* A watched production's forwarded failures run in the site's watched mode, whatever the scenarios run in */}
+        {s.watchedMode ? <Text size="sm">· Forwarded failures: {humanize(s.watchedMode)}</Text> : null}
         {s.scenario ? <Text size="sm">· Last scenario: {s.scenario}</Text> : null}
         {s.resetAt ? (
           <Group gap={4} wrap="nowrap" align="baseline">

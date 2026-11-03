@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatDateTime,
+  formatDuration,
   formatUsd,
   formatUtc,
   formatZoned,
@@ -45,6 +46,14 @@ describe('formatting', () => {
     expect(displayZone()).toBe('UTC');
     setDisplayZone('Europe/London');
     expect(displayZone()).toBe('Europe/London');
+  });
+  it('rounds a duration to whole seconds before splitting the minutes, never "1 min 60 s"', () => {
+    expect(formatDuration(119_900)).toBe('2 min 0 s');
+    expect(formatDuration(89_400)).toBe('1 min 29 s');
+    expect(formatDuration(60_000)).toBe('1 min 0 s');
+    expect(formatDuration(59_950)).toBe('60.0 s');
+    expect(formatDuration(850)).toBe('850 ms');
+    expect(formatDuration(undefined)).toBe('');
   });
   it('turns codes into words', () => {
     expect(humanize('release_failed')).toBe('Release failed');

@@ -119,6 +119,21 @@ describe('LoginPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('The user name or the password is wrong.');
   });
+
+  it("shows a 403's own reason: it comes from outside the API, not from the password", async () => {
+    server.use(
+      http.post('/api/shutter/session', () =>
+        HttpResponse.json({ error: 'forbidden', detail: 'This needs Shutter_WebApp' }, { status: 403 }),
+      ),
+    );
+    renderLogin(true);
+    await userEvent.type(await screen.findByLabelText(/User name/), 'approver');
+    await userEvent.type(screen.getByLabelText(/Password/), 'shutter');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('This needs Shutter_WebApp (forbidden)');
+    expect(alert).not.toHaveTextContent('The user name or the password is wrong.');
+  });
 });
 
 describe('LoginPage, the headline and what it is for', () => {
