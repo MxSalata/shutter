@@ -1,6 +1,7 @@
 /// Shutter's own inbound adapter for the index walk (Shutter.Index.Adapter, Shutter.Index.Batch, Shutter.Index.Indexer;
 /// CONTRACTS 8.1, v1.31), read-only against this instance's message headers: the batch's shape and order, the routes
-/// filter, the settings the production sees, and the indexer's take of a batch of messages already indexed.
+/// filter, the settings the production sees, where a first walk starts, and the indexer's take of a batch of messages
+/// already indexed.
 Class Shutter.Test.IndexAdapter Extends %UnitTest.TestCase
 {
 
@@ -36,6 +37,46 @@ Method TestSettingsAndWiring()
     Do $$$AssertTrue(##class(Shutter.Index.Adapter).%Extends("Ens.InboundAdapter"), "it is an inbound adapter")
     Set a = ##class(Shutter.Index.Adapter).%New()
     Do $$$AssertEquals(a.Routes _ "|" _ a.BatchSize _ "|" _ a.LagSeconds _ "|" _ a.BackfillHours, "ADT In|200|5|168", "its defaults")
+}
+
+/// The first mark: a walk whose window holds headers starts at the first header inside it (the older ones are skipped), a
+/// walk whose window holds none starts at the newest header, never at header 1; EnsureMark writes that mark.
+Method TestFirstMarkStartsInsideTheWindow()
+{
+    Set newest = "", newestTs = "", oldest = "", oldestTs = ""
+    &sql(SELECT MAX(ID), MIN(ID) INTO :newest, :oldest FROM Ens.MessageHeader)
+    &sql(SELECT TimeCreated INTO :newestTs FROM Ens.MessageHeader WHERE ID = :newest)
+    &sql(SELECT TimeCreated INTO :oldestTs FROM Ens.MessageHeader WHERE ID = :oldest)
+    Do $$$AssertTrue(+newest > 0, "the instance has headers to walk")
+    // A window that starts at the newest header's time: the walk begins one below the first header created since then.
+    Set first = ""
+    &sql(SELECT MIN(ID) INTO :first FROM Ens.MessageHeader WHERE TimeCreated >= :newestTs)
+    Set mark = ##class(Shutter.Index.Adapter).FirstMark(newestTs)
+    Do $$$AssertEquals(mark, first - 1, "the walk starts at the first header inside the window")
+    Set inside = 0
+    &sql(SELECT COUNT(*) INTO :inside FROM Ens.MessageHeader WHERE ID <= :mark AND TimeCreated >= :newestTs)
+    Do $$$AssertEquals(inside, 0, "no header inside the window is below the mark")
+    If newestTs ] oldestTs {
+        Do $$$AssertTrue(mark >= oldest, "the headers older than the window are skipped (the oldest is " _ oldest _ ", the mark " _ mark _ ")")
+    }
+    // A window holding no header (it opens a day after the newest): the newest header, not header 1.
+    Set empty = ##class(Shutter.Index.Adapter).FirstMark($SYSTEM.SQL.Functions.DATEADD("day", 1, newestTs))
+    Do $$$AssertEquals(empty, +newest, "an empty window starts at the newest header")
+    Do $$$AssertNotEquals(empty, 0, "and never at header 1")
+    Do $$$AssertEquals(##class(Shutter.Index.Adapter).FirstMark(""), +newest, "no window starts at the newest header too")
+    // EnsureMark writes the mark: the newest header without a back-fill, the first header in a window that holds them all.
+    Set hwm = $GET(^Shutter.Index("hwm")), startedAt = $GET(^Shutter.Index("started_at"))
+    Set a = ##class(Shutter.Index.Adapter).%New(), a.BackfillHours = 0
+    Kill ^Shutter.Index("hwm")
+    Do a.EnsureMark()
+    Do $$$AssertEquals($GET(^Shutter.Index("hwm")), +newest, "without a back-fill the high-water mark is the newest header")
+    Set a.BackfillHours = 24 * 366 * 100
+    Kill ^Shutter.Index("hwm")
+    Do a.EnsureMark()
+    Do $$$AssertEquals($GET(^Shutter.Index("hwm")), oldest - 1, "a window that holds every header starts the walk at the oldest")
+    Do $$$AssertNotEquals($GET(^Shutter.Index("started_at")), "", "the start is recorded")
+    If hwm '= "" { Set ^Shutter.Index("hwm") = hwm } Else { Kill ^Shutter.Index("hwm") }
+    If startedAt '= "" { Set ^Shutter.Index("started_at") = startedAt } Else { Kill ^Shutter.Index("started_at") }
 }
 
 /// A batch of messages the index already holds adds nothing and fails nothing; a header without a body is skipped.
