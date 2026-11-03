@@ -447,6 +447,15 @@
       "text": "The receiver keeps orders and results (category orders_results), which Shutter's catalogue does not model yet. Shutter sends it nothing and does not judge the failure; a person handles it in the receiving system."
     },
     {
+      "code": "RECEIVER_NOT_IN_PROFILE",
+      "title": "The site profile does not describe the receiver",
+      "prerequisite": "An entry for the receiver in the site profile's receivers list, naming its API and what it can do",
+      "next_action": "Add the receiver to the site profile (its name, tier, category, API paths and features), then reinvestigate the case. Nothing is sent meanwhile.",
+      "owner": "Integration team",
+      "reevaluate_when": "The site profile gains an entry for the receiver",
+      "text": "The case's receiver has no entry in the site profile, so Shutter does not know its API or what it guarantees: the evidence was read at the default receiver API, and a resend would go to the production's default receiver rather than this one. Shutter resends only to a receiver the profile describes, so nothing is sent."
+    },
+    {
       "code": "PATIENT_LEVEL_WRITE",
       "title": "The operation names no encounter",
       "prerequisite": "An encounter whose state and version the receiver can show",
