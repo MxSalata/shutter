@@ -12,7 +12,9 @@ Signs in as the demo users `operator` and `approver` (password from SHUTTER_PASS
 --approve, a plan waiting for approval is approved as the approver once the scenario's own steps have finished (S7
 and S20 change the downstream system while its plan waits). The downstream system's final state is read through its API
 (--downstream-user and --downstream-password, default _SYSTEM / SYS). The expected outcomes are in
-fixtures/scenarios.json. Prints one line per scenario and exits 1 when any differs. Standard library only.
+fixtures/scenarios.json. Prints one line per scenario and exits 1 when any differs. A scenario skipped in a mode it is
+not defined for is no pass: the summary counts skips apart ("all 7 as expected (2 skipped)"), and when every requested
+scenario is skipped in every mode nothing was proved, so the check exits 1. Standard library only.
 
 A scenario whose expected outcome says "incident" (S11) has several cases: the check follows the incident the run
 opens, approves its plan and its cases' plans with --approve, and compares each encounter's chain (kind, who decided,
@@ -136,12 +138,13 @@ def wait_until_idle(operator, timeout):
 
 
 def play(args, operator, approver, scenario, mode):
-    """Plays one scenario in one mode and returns (as_expected, line, outcome)."""
+    """Plays one scenario in one mode and returns (as_expected, line, outcome); as_expected is None for a scenario not
+    defined in that mode, which is skipped."""
     expected = scenario["expected"]
     if expected.get("incident"):
         return play_incident(args, operator, approver, scenario, mode)
     if mode not in expected.get("modes", [mode]):
-        return True, f"skipped {scenario['id']} {mode}: defined for {', '.join(expected['modes'])}", "not defined"
+        return None, f"skipped {scenario['id']} {mode}: defined for {', '.join(expected['modes'])}", "not defined"
     wait_until_idle(operator, args.timeout)
     before = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     status, started = operator.call("POST", f"/scenarios/{scenario['id']}/run", {"mode": mode}, idempotent=True)
@@ -278,7 +281,7 @@ def play_incident(args, operator, approver, scenario, mode):
     """Plays a scenario that opens an incident, approves what waits with --approve, and judges every encounter."""
     expected = scenario["expected"]
     if mode not in expected.get("modes", [mode]):
-        return True, f"skipped {scenario['id']} {mode}: defined for {', '.join(expected['modes'])}", "not defined"
+        return None, f"skipped {scenario['id']} {mode}: defined for {', '.join(expected['modes'])}", "not defined"
     wait_until_idle(operator, args.timeout)
     before = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     status, started = operator.call("POST", f"/scenarios/{scenario['id']}/run", {"mode": mode}, idempotent=True)
@@ -518,7 +521,8 @@ def write_markdown(path, modes, rows):
             ok, outcome = row["results"][m]
             # A pass by the mode's own expectation (S21's rules: the gate's catch) is no pass by the Expected column
             own = m in e.get("by_mode", {})
-            label = "**differs**" if not ok else "as this mode's own expectation says" if own else "as expected"
+            label = ("skipped" if ok is None else "**differs**" if not ok
+                     else "as this mode's own expectation says" if own else "as expected")
             cells.append(f"{label}: {outcome}")
         lines.append(f"| {s['id']} {s['title']} | {expected} | " + " | ".join(cells) + " |")
     with open(path, "w", encoding="utf-8") as f:
@@ -546,7 +550,7 @@ def main():
     unknown_modes = [m for m in modes if m not in ("board", "single", "rules", "policy")]
     if unknown_modes:
         raise SystemExit(f"unknown mode {', '.join(unknown_modes)}: use board, single, rules or policy")
-    failures, rows = 0, []
+    failures, skipped, rows = 0, 0, []
     for scenario_id in args.scenarios:
         if scenario_id not in known:
             print(f"DIFFERS {scenario_id}: no such scenario")
@@ -559,13 +563,21 @@ def main():
             except (TimeoutError, RuntimeError) as error:
                 ok, line, outcome = False, f"DIFFERS {scenario_id} {mode}: {error}", str(error)
             print(line, flush=True)
-            failures += 0 if ok else 1
+            if ok is None:
+                skipped += 1
+            elif not ok:
+                failures += 1
             row["results"][mode] = (ok, outcome)
         rows.append(row)
     if args.markdown:
         write_markdown(args.markdown, modes, rows)
     runs = len(args.scenarios) * len(modes)
-    print(f"{failures} of {runs} differ" if failures else f"all {runs} as expected")
+    counted = f" ({skipped} skipped)" if skipped else ""
+    if skipped == runs:
+        # Every requested scenario was skipped in every mode: nothing was played, so nothing is proved
+        print(f"DIFFERS: all {runs} skipped, none of {', '.join(args.scenarios)} is defined for {', '.join(modes)}")
+        return 1
+    print(f"{failures} of {runs} differ{counted}" if failures else f"all {runs} as expected{counted}")
     return 1 if failures else 0
 
 
