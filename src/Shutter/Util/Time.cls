@@ -94,6 +94,11 @@ ClassMethod FromHL7(ts As %String, zone As %String = "", Output hadOffset As %Bo
     If mi = "" Set mi = "00"
     If ss = "" Set ss = "00"
     Set iso = y _ "-" _ mo _ "-" _ d _ "T" _ hh _ ":" _ mi _ ":" _ ss
+    // The digits must make a real date and time: 30 February, month 13 or 24:00:00 are no time at all. $ZDATETIMEH
+    // has no error option in this position, so the Try is the only guard; h is the $HOROLOG form for the shift below.
+    Set h = ""
+    Try { Set h = $ZDATETIMEH(iso, 3, 1) } Catch ex { Set h = "" }
+    If h = "" Quit ""
     If offset = "" {
         // SQL hands an empty string over as $CHAR(0): both mean the profile's zone.
         If ($GET(zone) = "") || (zone = $CHAR(0)) Set zone = $GET(^Shutter.Config("feedZone"))
@@ -106,7 +111,6 @@ ClassMethod FromHL7(ts As %String, zone As %String = "", Output hadOffset As %Bo
     // Apply the offset so the result is UTC.
     Set sign = $EXTRACT(offset, 1), oh = +$EXTRACT(offset, 2, 3), om = +$EXTRACT(offset, 4, 5)
     Set shift = (oh * 3600) + (om * 60)
-    Set h = $ZDATETIMEH(iso, 3, 1)
     Set total = ($PIECE(h, ",", 1) * 86400) + $PIECE(h, ",", 2)
     Set total = $SELECT(sign = "+": total - shift, 1: total + shift)
     Quit $ZDATE(total \ 86400, 3) _ "T" _ $ZTIME(total # 86400, 1) _ "Z"
@@ -272,12 +276,19 @@ ClassMethod Probe(ts As %String, zone As %String = "") As %String [ SqlProc ]
     Quit o.%ToJSON()
 }
 
-/// Seconds between two ISO UTC timestamps (b minus a). Returns "" when either is empty.
+/// Seconds between two ISO UTC timestamps (b minus a). Returns "" when either is empty or unreadable (a date that does
+/// not exist, or text that is no time), never an error.
 ClassMethod SecondsBetween(a As %String, b As %String) As %Integer
 {
     If (a = "") || (b = "") Quit ""
-    Set ha = $ZDATETIMEH($TRANSLATE($PIECE(a, "Z", 1), "T", " "), 3, 1)
-    Set hb = $ZDATETIMEH($TRANSLATE($PIECE(b, "Z", 1), "T", " "), 3, 1)
+    Set ha = "", hb = ""
+    Try {
+        Set ha = $ZDATETIMEH($TRANSLATE($PIECE(a, "Z", 1), "T", " "), 3, 1)
+        Set hb = $ZDATETIMEH($TRANSLATE($PIECE(b, "Z", 1), "T", " "), 3, 1)
+    } Catch ex {
+        Set ha = "", hb = ""
+    }
+    If (ha = "") || (hb = "") Quit ""
     Quit (($PIECE(hb, ",", 1) - $PIECE(ha, ",", 1)) * 86400) + ($PIECE(hb, ",", 2) \ 1 - $PIECE(ha, ",", 2) \ 1)
 }
 
