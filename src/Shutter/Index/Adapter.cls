@@ -3,8 +3,9 @@
 /// than the lag (an id is taken before its row is written, so the newest few can appear out of order), and hands the
 /// indexer (Shutter.Index.Indexer) each batch as a Shutter.Index.Batch through ProcessInput; once the service has taken a
 /// batch the mark moves to its last id. Several batches per task while the walk is behind (a back-fill, a burst), bounded so
-/// the service stays responsive. The first start begins at the oldest header within the back-fill window. The site's Search
-/// Table Class settings stay as they are; the index is a finder, never a second source of truth.
+/// the service stays responsive. The first start begins at the oldest header within the back-fill window, or at the newest
+/// header when none is that recent. The site's Search Table Class settings stay as they are; the index is a finder, never a
+/// second source of truth.
 Class Shutter.Index.Adapter Extends Ens.InboundAdapter
 {
 
@@ -49,21 +50,30 @@ Method OnTask() As %Status
     Quit $$$OK
 }
 
-/// The first start: the mark begins at the oldest header within the back-fill window, or at the newest header.
+/// The first start: the mark begins at the oldest header within the back-fill window, or at the newest header when none
+/// is that recent (and when BackfillHours is 0), so an old, quiet store is never walked from header 1.
 Method EnsureMark()
 {
     Quit:($GET(^Shutter.Index("hwm")) '= "")
-    Set hwm = 0
-    If ..BackfillHours > 0 {
-        Set sinceTs = ..Odbc(##class(Shutter.Util.Time).FromNow(-3600 * ..BackfillHours)), first = ""
+    Set sinceTs = ""
+    If ..BackfillHours > 0 Set sinceTs = ..Odbc(##class(Shutter.Util.Time).FromNow(-3600 * ..BackfillHours))
+    Set ^Shutter.Index("hwm") = ..FirstMark(sinceTs), ^Shutter.Index("started_at") = ##class(Shutter.Util.Time).NowUTC()
+}
+
+/// Where a first walk starts: one below the oldest header created at or after sinceTs (the ODBC form), else the newest
+/// header's id (no window, or no header that recent), and 0 for an empty table. A read, nothing written, so a test can
+/// call it with any window.
+ClassMethod FirstMark(sinceTs As %String = "") As %Integer
+{
+    If sinceTs '= "" {
+        Set first = ""
         &sql(SELECT MIN(ID) INTO :first FROM Ens.MessageHeader WHERE TimeCreated >= :sinceTs)
-        If (SQLCODE = 0) && (first '= "") Set hwm = first - 1
-    } Else {
-        Set last = ""
-        &sql(SELECT MAX(ID) INTO :last FROM Ens.MessageHeader)
-        If (SQLCODE = 0) && (last '= "") Set hwm = last
+        If (SQLCODE = 0) && (first '= "") Quit first - 1
     }
-    Set ^Shutter.Index("hwm") = hwm, ^Shutter.Index("started_at") = ##class(Shutter.Util.Time).NowUTC()
+    Set last = ""
+    &sql(SELECT MAX(ID) INTO :last FROM Ens.MessageHeader)
+    If (SQLCODE = 0) && (last '= "") Quit +last
+    Quit 0
 }
 
 /// The next batch of HL7 headers after a mark, on the routes, older than the lag: a read, nothing written, so a test can
