@@ -2,7 +2,7 @@ import { Anchor, Button, Group, Stack, Text } from '@mantine/core';
 import { IconChevronDown, IconHandStop, IconListDetails, IconSparkles } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import type { CaseDetail } from '@/api/types';
+import type { CaseDetail, Snapshot } from '@/api/types';
 import { CodeChip } from '@/components/CodeChip';
 import { ExpectedMark } from '@/components/ExpectedMark';
 import { caseIrisLinks, IrisLinks } from '@/components/IrisLinks';
@@ -17,6 +17,7 @@ import { caseOutcome, caseState, type ExpectedScenario, type OutcomeCase } from 
 import type { Status } from '@/lib/tone';
 import { useDetail } from '@/stores/appearance';
 import { forwardedFrom } from './derive';
+import { messageTypeLabel, messageTypeOf } from './message';
 import { headerSentence } from './outcome';
 
 /** Where the case sits in its incident: the chain, its place in it and how the chain is released. */
@@ -70,6 +71,7 @@ export function CaseHeader({
   outcome,
   scenario,
   portalBase = '/csp/shutter/',
+  snapshot,
 }: {
   c: CaseDetail;
   provenance?: Status;
@@ -81,6 +83,8 @@ export function CaseHeader({
   scenario?: ExpectedScenario | null;
   /** The Management Portal's base path, for the source message's link. */
   portalBase?: string;
+  /** The case's evidence, once read: the message's HL7 type, as IRIS parsed it. */
+  snapshot?: Snapshot | null;
 }) {
   const technical = useDetail() === 'technical';
   const what = `${humanize(c.event)}${c.ward ? ` to ${c.ward}` : ''}`;
@@ -99,6 +103,7 @@ export function CaseHeader({
   const [details, setDetails] = useState(false);
   const failure = failureCode(c);
   const iris = caseIrisLinks(c, portalBase);
+  const message = messageTypeOf(snapshot);
   return (
     <PageHeader
       title={`Case ${c.caseId}`}
@@ -138,12 +143,30 @@ export function CaseHeader({
       lead={headerSentence(c)}
       meta={
         <Stack gap="sm" w="100%">
-          <Group gap="xl" wrap="wrap" align="flex-start">
+          <Group gap="lg" wrap="wrap" align="flex-start" style={{ rowGap: 'var(--mantine-spacing-sm)' }}>
             <Meta label="What">
               {c.encounterId && c.encounterId !== '-'
                 ? `${what}, encounter ${c.encounterId}`
                 : `${what}, no encounter`}
             </Meta>
+            {/* The hospital number the message carries (PID-3), as the Evidence tab shows it: never a name or a birth date */}
+            {c.patientId ? <Meta label="Patient">{c.patientId}</Meta> : null}
+            {/* The message's HL7 type as IRIS parsed it ("2.5.1:ADT_A02"), from the evidence; in Technical, the version
+                the message declares when the route parsed it as another */}
+            {message ? (
+              <Meta label="Message">
+                <Stack gap={0}>
+                  <Text size="sm" className="mono-wrap" data-testid="case-message-type">
+                    {messageTypeLabel(message)}
+                  </Text>
+                  {technical && message.declaredOther ? (
+                    <Text size="xs" c="dimmed">
+                      {`The message says HL7 ${message.declaredOther}`}
+                    </Text>
+                  ) : null}
+                </Stack>
+              </Meta>
+            ) : null}
             {/* A case is one failed delivery to one receiver; one recorded before the server named it went to the bed manager */}
             <Meta label="Receiver">{c.receiver || 'Downstream Out'}</Meta>
             {source ? <Meta label="Source">{source}</Meta> : null}

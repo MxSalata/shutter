@@ -47,4 +47,24 @@ Method TestResourcesAndRoles()
     Do $$$AssertTrue((trace [ "%Ens_MessageTrace:U") && (trace [ "%Ens_Portal:U") && '(trace [ "Shutter_"), "the trace role sees traces and nothing of Shutter's: " _ trace)
 }
 
+/// SELECT on a table for a role, as the SQL engine checks it when a stale cached query is compiled again in the
+/// caller's process (Shutter.Setup.GrantSqlPrivileges). Checked in this namespace, where the grants were made.
+ClassMethod CanSelect(role As %String, table As %String) As %Boolean
+{
+    Quit $SYSTEM.SQL.Security.CheckPrivilege(role, 1, table, "s")
+}
+
+/// Every role that calls the API holds SQL SELECT on Shutter's schemas and on the production's configuration, the
+/// public demo's roles included: a judge or a demo user whose read compiles a stale cached query again must not be the
+/// one refused (SQLCODE -99). The trace role reads the Management Portal, never the API, and is granted nothing.
+Method TestApiRolesHaveSqlSelect()
+{
+    For role = "Shutter_Operator", "Shutter_Approver", "Shutter_Demo", "Shutter_Judge" {
+        For table = "Shutter_Store.Case", "Shutter_Index.Message", "Ens_Config.Item" {
+            Do $$$AssertTrue(..CanSelect(role, table), role _ " selects from " _ table)
+        }
+    }
+    Do $$$AssertNotTrue(..CanSelect("Shutter_Trace", "Shutter_Store.Case"), "the trace role has no SELECT on the case store")
+}
+
 }

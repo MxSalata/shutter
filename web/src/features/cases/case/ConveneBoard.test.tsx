@@ -7,6 +7,10 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import fixtures from '@/mocks/fixtures.json';
+import { formatTime, zoneLabel } from '@/lib/format';
+import { INSTALL_URL } from '@/lib/liveAgents';
+import { axeViolations } from '@/test/axe';
+import { layer1Words } from '@/test/words';
 import { resetMock } from '@/mocks/handlers';
 import { server } from '@/mocks/node';
 import { theme } from '@/theme';
@@ -94,9 +98,12 @@ describe('Convene the board', () => {
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('Your share: $1.00 of $3.00')).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Convene' }));
-    expect(
-      await within(dialog).findByText(/Your share of today's model budget is spent/),
-    ).toBeInTheDocument();
+    // The refusal reads as the notice, the share apart from the cap, and Convene can't be pressed again
+    expect(layer1Words(await within(dialog).findByRole('status')).join(' ')).toBe(
+      'Your share of the live budget is used up until 00:00 UTC. Open cases, recorded runs and the trial still work. To run the live agents yourself, install Shutter with your own API key: how to install',
+    );
+    expect(within(dialog).queryByText(/budget_exhausted/)).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Convene' })).toBeDisabled();
   });
 
   it('disables Convene when the share is already used up', async () => {
@@ -144,6 +151,76 @@ describe('Convene the board', () => {
       ),
     ).toBeInTheDocument();
     expect(within(dialog).queryByText(/today/)).not.toBeInTheDocument();
+  });
+
+  it('says the live agents cannot run, and until when, while live.agents says so, and cannot be pressed', async () => {
+    const until = new Date(Date.now() + 200 * 60_000).toISOString();
+    server.use(
+      http.get('/api/shutter/settings', () =>
+        HttpResponse.json({
+          ...fixtures.settings,
+          live: { enabled: false, agents: { available: false, reason: 'provider_auth', until } },
+          budget: { dailyUsd: 15, spentTodayUsd: 4.2, exhausted: false },
+        }),
+      ),
+    );
+    renderCase('C-000008');
+    await userEvent.click(await screen.findByRole('button', { name: 'Convene the board' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Convene the board on C-000008' });
+    const note = await within(dialog).findByRole('note');
+    expect(note).toHaveTextContent(
+      `The live AI service for this demo is unavailable until ${formatTime(until).slice(0, 5)} ${zoneLabel(until)}.`,
+    );
+    expect(within(note).getByRole('link', { name: 'how to install' })).toHaveAttribute('href', INSTALL_URL);
+    // The notice stands in for the budget's line
+    expect(within(dialog).queryByText(/spent on live runs/)).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Convene' })).toBeDisabled();
+    expect(await axeViolations(dialog)).toEqual([]);
+  });
+
+  it('reads a 409 live_unavailable with its live object as the notice, with the time it gives', async () => {
+    withBudget({ dailyUsd: 15, spentTodayUsd: 4.2, exhausted: false });
+    const until = new Date(Date.now() + 200 * 60_000).toISOString();
+    server.use(
+      http.post('/api/shutter/cases/:id/board', () =>
+        HttpResponse.json(
+          {
+            error: 'live_unavailable',
+            detail: "The model provider refused Shutter's key (provider_auth)",
+            live: { available: false, reason: 'provider_auth', until, detail: 'refused' },
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderCase('C-000008');
+    await userEvent.click(await screen.findByRole('button', { name: 'Convene the board' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Convene' }));
+    expect(await within(dialog).findByRole('status')).toHaveTextContent(
+      `The live AI service for this demo is unavailable until ${formatTime(until).slice(0, 5)} ${zoneLabel(until)}.`,
+    );
+    expect(within(dialog).queryByText(/live_unavailable|provider_auth/)).not.toBeInTheDocument();
+  });
+
+  it("says the public demo's budget is used up until its next reset, from the budget alone", async () => {
+    const resets = new Date(Date.now() + 40 * 60_000).toISOString();
+    server.use(
+      http.get('/api/shutter/settings', () =>
+        HttpResponse.json({
+          ...fixtures.settings,
+          live: { enabled: true },
+          budget: { dailyUsd: 2, spentTodayUsd: 2.05, exhausted: true, resetsAt: resets },
+        }),
+      ),
+    );
+    renderCase('C-000008');
+    await userEvent.click(await screen.findByRole('button', { name: 'Convene the board' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Convene the board on C-000008' });
+    expect(await within(dialog).findByRole('note')).toHaveTextContent(
+      `The live AI budget for this demo is used up until ${formatTime(resets).slice(0, 5)} ${zoneLabel(resets)}, when the demo resets.`,
+    );
+    expect(within(dialog).getByRole('button', { name: 'Convene' })).toBeDisabled();
   });
 
   it('shows in the trial disabled, with its reason, and never as if a run started', async () => {

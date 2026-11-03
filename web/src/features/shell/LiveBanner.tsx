@@ -1,12 +1,15 @@
-import { Group, Text, Tooltip } from '@mantine/core';
+import { Anchor, Group, Stack, Text, Tooltip } from '@mantine/core';
 import { IconBroadcast } from '@tabler/icons-react';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router';
-import { useCan, useLiveStatus } from '@/api/hooks';
+import { useCan, useLiveStatus, useSettings } from '@/api/hooks';
 import type { LiveStatus } from '@/api/types';
-import { TRIAL } from '@/env/mode';
+import { TRIAL, trialHref } from '@/env/mode';
 import type { StormRefusal } from '@/features/storm/view';
+import { budgetNoteLine } from '@/lib/budget';
 import { formatAge, formatTime, parseTime, zoneLabel } from '@/lib/format';
+import { HOSPITAL_NAME, TRIAL_BOARD_CASE } from '@/lib/hospital';
+import { liveUnavailable } from '@/lib/liveAgents';
 import { isStormShown, STORM_IN_TRIAL } from '@/lib/storm';
 import { useNow } from '@/lib/useNow';
 import { HINT_EVENTS } from '@/theme';
@@ -22,6 +25,10 @@ const StormNotice = lazy(() =>
   import('@/features/storm/BreakTheFeed').then((m) => ({ default: m.StormNotice })),
 );
 const StormStrip = lazy(() => import('@/features/storm/StormStrip').then((m) => ({ default: m.StormStrip })));
+/** The notice that the live agents cannot run, in its own chunk too: a banner draws it only at the cap or an outage. */
+const LiveUnavailableNotice = lazy(() =>
+  import('@/components/LiveUnavailableNotice').then((m) => ({ default: m.LiveUnavailableNotice })),
+);
 
 /** "a new failure every 7 minutes", "every minute", or the unnumbered form when the server gave no interval. */
 function cadence(every: number | undefined): string {
@@ -52,13 +59,17 @@ function usePulse(at: string | undefined): number {
  * The hospital feed's banner, on every page while `GET /settings` says `live.enabled` (the public demo's live
  * hospital): how often a new failure arrives, the story that played last (its title on hover or focus) and the one due
  * next. A neutral band with a broadcast mark, never an information tone. In a trial page it is the recorded feed
- * replayed, and says so: "Hospital feed (replayed)", so the trial never says "live" of itself. Nothing is rendered
+ * replayed, and says so: "Mikolaj's Fictional Hospital, replayed", so the trial never says "live" of itself. Nothing is rendered
  * for any other instance.
  *
  * "Break the feed" (after-restyle B7): for a user who operates, a live banner offers the storm (StormButton), and
  * while one plays or has just finished it carries the storm's strip, on every page but Incidents, which shows the strip
  * in its own place (so it is neither drawn nor announced twice). A refusal stands under the line as a calm notice. A
  * trial page has no demo hospital to break: its banner says where the storm plays instead.
+ *
+ * The live budget: a short line under the feed's, figure first, says what the author pays for the live agents
+ * (`budgetNoteLine`), and while the live agents cannot run (the budget used up, the provider refusing the key) the
+ * notice under it says so plainly, until when, and where to install Shutter with one's own key. Neither is in the trial.
  */
 export function LiveBanner() {
   const live = useLiveStatus();
@@ -67,8 +78,11 @@ export function LiveBanner() {
   const can = useCan();
   const { pathname } = useLocation();
   const [refusal, setRefusal] = useState<StormRefusal | null>(null);
+  const settings = useSettings().data;
   if (!live) return null;
-  const name = TRIAL ? 'Hospital feed (replayed)' : 'Live hospital';
+  const note = TRIAL ? null : budgetNoteLine(settings);
+  const unavailable = TRIAL ? null : liveUnavailable(settings);
+  const name = `${HOSPITAL_NAME}, ${TRIAL ? 'replayed' : 'live'}`;
   const last = live.last_played;
   const next = nextDue(live, now);
   const storm = !TRIAL && live.storm && isStormShown(live.storm, now) ? live.storm : null;
@@ -93,30 +107,47 @@ export function LiveBanner() {
         <Group gap="xs" wrap="nowrap" align="flex-start" style={{ minWidth: 0, flex: '1 1 20rem' }}>
           <IconBroadcast size={18} aria-hidden style={{ flex: 'none', marginTop: 2 }} />
           <span className="live-dot" aria-hidden key={pulse} data-pulse={pulse > 0 || undefined} />
-          <Text size="sm" data-testid="live-line">
-            {name}: {cadence(live.every_minutes)}.
-            {last?.scenario ? (
-              <>
-                {' '}
-                Last:{' '}
-                {last.title ? (
-                  <Tooltip label={last.title} withArrow events={HINT_EVENTS}>
-                    <span className="live-story" tabIndex={0}>
-                      {last.scenario}
-                    </span>
-                  </Tooltip>
-                ) : (
-                  last.scenario
-                )}
-                {last.at ? `, ${formatAge(last.at, now)}` : ''}.
-              </>
+          <Stack gap={0} style={{ minWidth: 0, flex: '1 1 auto' }}>
+            <Text size="sm" data-testid="live-line">
+              {name}: {cadence(live.every_minutes)}.
+              {last?.scenario ? (
+                <>
+                  {' '}
+                  Last:{' '}
+                  {last.title ? (
+                    <Tooltip label={last.title} withArrow events={HINT_EVENTS}>
+                      <span className="live-story" tabIndex={0}>
+                        {last.scenario}
+                      </span>
+                    </Tooltip>
+                  ) : (
+                    last.scenario
+                  )}
+                  {last.at ? `, ${formatAge(last.at, now)}` : ''}.
+                </>
+              ) : null}
+              {next ? ` ${next}` : ''}
+            </Text>
+            {note ? (
+              <Text size="xs" className="live-budget-line" data-testid="live-budget-line">
+                {note}
+              </Text>
             ) : null}
-            {next ? ` ${next}` : ''}
-          </Text>
+            {!TRIAL && !can.liveAgents ? (
+              // The live hospital's own stories are settled by the site's policy, with no board; a visitor without the
+              // live agents sees the board decide in the trial's recording of S8, at no cost
+              <Text size="xs" data-testid="live-board-link">
+                <Anchor href={trialHref(`#/cases/${TRIAL_BOARD_CASE}`)} size="xs">
+                  See the board decide: S8 in the trial
+                </Anchor>
+              </Text>
+            ) : null}
+          </Stack>
         </Group>
         {action}
       </Group>
       <Suspense fallback={null}>
+        {unavailable ? <LiveUnavailableNotice state={unavailable} className="live-unavailable" /> : null}
         {refusal && !TRIAL ? <StormNotice refusal={refusal} onClose={() => setRefusal(null)} /> : null}
         {storm && pathname !== '/incidents' ? <StormStrip storm={storm} /> : null}
       </Suspense>

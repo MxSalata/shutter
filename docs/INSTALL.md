@@ -26,8 +26,8 @@ the productions a hospital already runs; the README's `docker compose up` is the
 The package `iris-shutter` (the repository root, published on IPM) is the whole of Shutter for an InterSystems IRIS AI
 Hub build: the core, the demo receiver's classes, and the live agents with their tools, policies, schemas and knowledge
 bases. Its manifest requires IRIS 2026.3 or later with Interoperability (the organisers' line: the agents need the `%AI`
-package, which build 154 of the early access has and 2026.2 has not), so `zpm "install iris-shutter"` on build 154 installs
-everything and an earlier version refuses it. The core alone, for a plain IRIS for Health Community 2026.2 that replays
+package, which the early access builds 2026.3.0AI.154.0 and 2027.1.0AI.109.0 have and 2026.2 has not), so
+`zpm "install iris-shutter"` on either installs everything and an earlier version refuses it. The core alone, for a plain IRIS for Health Community 2026.2 that replays
 recorded agent runs, is the module `iris-shutter-core` in the repository's `core/` folder: loaded by path
 (`zpm "load <repository>/core"`), never published; the image build loads one or the other by what the base image has
 (`WITH_AIHUB`). Both manifests run `Shutter.Setup.InstallStatus(root, demo, production)`, and the full package then
@@ -47,8 +47,8 @@ path work, and the board replays recordings.
 `Shutter_Approve` and `Shutter_Intake`, the roles `Shutter_Operator`, `Shutter_Approver`, `Shutter_WebApp` and
 `Shutter_Forwarder`, the Workflow role "Shutter Approvers", the seeds, the web applications `/api/shutter` and
 `/shutter`, the daily task "Shutter retention", the default settings, and `Shutter.Production`, started as the
-auto-start production. The operator, approver and forwarder roles are granted SQL SELECT on Shutter's schemas
-(`Shutter_Store`; for the first two also `Shutter_Index`, `Shutter_Msg`, `Shutter_Bridge` and `Ens_Config`): the API
+auto-start production. The operator, approver, demo, judge and forwarder roles are granted SQL SELECT on Shutter's schemas
+(`Shutter_Store`; all but the forwarder also `Shutter_Index`, `Shutter_Msg`, `Shutter_Bridge` and `Ens_Config`): the API
 reads without privilege checks, but a cached query that has to be compiled again in the caller's process is checked
 as the caller. Once the demo hospital is installed, the operator and approver roles also read its databases. With `demo=1` it also creates the demo users, the demo receiver's resource, role, user and
 `/downstream/api`, the `DownstreamAPI` credential and the feed and demo items.

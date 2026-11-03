@@ -1,4 +1,18 @@
-import { Button, Code, CopyButton, Group, List, Paper, SimpleGrid, Stack, Text, Title } from '@mantine/core';
+import {
+  Box,
+  Button,
+  Code,
+  Collapse,
+  CopyButton,
+  Group,
+  List,
+  Paper,
+  SimpleGrid,
+  Stack,
+  Text,
+  Title,
+  UnstyledButton,
+} from '@mantine/core';
 import {
   IconCheck,
   IconChevronDown,
@@ -9,7 +23,7 @@ import {
   IconUserQuestion,
   type Icon,
 } from '@tabler/icons-react';
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { CheckStrip } from '@/components/CheckStrip';
 import { Digest } from '@/components/Digest';
 import { KeyValueList } from '@/components/KeyValueList';
@@ -19,11 +33,16 @@ import { Timestamp } from '@/components/Timestamp';
 import { humanize } from '@/lib/format';
 import { caseOutcome, gateOutcome, verification, writes, type CaseOutcome } from '@/lib/status';
 import { CATEGORY_TEXT } from '@/lib/categories';
+import { SHOW_NEXT_ACTION } from '@/lib/events';
+import { useGuideTarget } from '@/lib/guideDock';
+import { usePrefersReducedMotion } from '@/lib/motion';
 import { TONE_COLOURS, TONE_ICONS, toneText, type Tone } from '@/lib/tone';
 import { Reinvestigate } from './Closure';
 import { checksOf } from './derive';
 import { NextActionPrecedents } from './Precedents';
+import { bandKind, bandStartsOpen, rememberBand } from './outcomeBand';
 import {
+  actionHead,
   actionHeadline,
   evidenceSummary,
   failedTitle,
@@ -64,6 +83,7 @@ function StoryCard({
   tone,
   style,
   className,
+  id,
   children,
 }: {
   label: string;
@@ -72,15 +92,19 @@ function StoryCard({
   tone?: Tone;
   style?: CSSProperties;
   className?: string;
+  /** The card's id; its heading is `<id>-title`, focusable from script (the case's action button moves focus there). */
+  id?: string;
   children?: ReactNode;
 }) {
   return (
+    // One size for the three: the same padding and type, and as tall as the tallest in their row (the grid stretches them)
     <Paper
       withBorder
       p="sm"
       radius="md"
+      id={id}
       style={{ minWidth: 0, ...style }}
-      className={className}
+      className={['story-card', className].filter(Boolean).join(' ')}
       data-tone={tone}
     >
       <Stack gap={6}>
@@ -91,6 +115,8 @@ function StoryCard({
             fz="xs"
             fw={700}
             tt="uppercase"
+            id={id ? `${id}-title` : undefined}
+            tabIndex={id ? -1 : undefined}
             // The label keeps the body's text colour: a tone's text colour on its own tint falls short of 4.5:1 in
             // some appearances, and the icon beside it already carries the tone
             style={{
@@ -101,7 +127,7 @@ function StoryCard({
             {label}
           </Title>
         </Group>
-        <Text fw={700} lh={1.35}>
+        <Text fw={700} size="md" lh={1.35}>
           {title}
         </Text>
         {children}
@@ -114,12 +140,18 @@ function StoryCard({
 const VERIFIER_OUTCOMES = ['verified', 'unresolved', 'not_committed', 'failed'];
 
 /**
- * The top of the case, as one band in the outcome's tone: the outcome in a sentence (24 px, the case list's long
- * label), then three cards, what happened (the failure and what the evidence says), what Shutter did (the action it
- * took, since the band says what came of it) and what needs you now (the next action, in its tone when someone has to
- * act; short when nothing is pending); then the decision receipt as a band of labelled facts, one plain caption each,
- * with the versions, keys and times one click away (open in Technical). Every line is put together from the case's
- * structured facts. The receipt copies as JSON.
+ * The top of the case, as one band in the outcome's tone: its heading, "Outcome", is the band's disclosure, with the
+ * outcome in a sentence beside it (20 px, the case list's long label), so a closed band still says it. Open, it shows
+ * three cards of one size, what happened (the failure and what the evidence says), what Shutter did (the action it took,
+ * since the band says what came of it) and what needs you now (the next action, in its tone when someone has to act,
+ * kept short: a long action's rest, why it waits and any correction steps sit behind its details); then the decision
+ * receipt as a band of labelled facts, one plain caption each, with the versions, keys and times one click away (closed
+ * in both modes, to keep the band short). Every line is put together from the case's structured facts. The receipt
+ * copies as JSON.
+ *
+ * The band starts open on a case a person may still act on and closed on a closed one, and remembers a reader's choice
+ * in this browser (`outcomeBand.ts`); it opens while the guide points at it or at the receipt, and when the case's
+ * action button asks for "What needs you now".
  */
 export function DecisionCard({
   facts,
@@ -153,17 +185,57 @@ export function DecisionCard({
   const b = facts.blocked;
   const stopped = c.state === 'blocked' || c.state === 'escalated' || c.state === 'failed';
   const [why, setWhy] = useState(false);
+  const correction = correctionStepsOf(facts.plan);
+  // A long next action heads its card in a few words; the rest of it waits behind the card's details
+  const { head: action, rest: actionRest } = actionHead(next.action);
+  const more = !!actionRest || !!correction;
   const hasWhy =
     next.kind === 'person' &&
-    !!(
-      b?.title ||
-      b?.code ||
-      b?.text ||
-      next.blocking ||
-      b?.prerequisite ||
-      next.lookAgain ||
-      b?.checks?.length
-    );
+    (more ||
+      !!(
+        b?.title ||
+        b?.code ||
+        b?.text ||
+        next.blocking ||
+        b?.prerequisite ||
+        next.lookAgain ||
+        b?.checks?.length
+      ));
+  // The band's disclosure: the kind of case is read once, so a case that closes while the page is open (the trial's
+  // replay after an approval) keeps its band as it was
+  const [kind] = useState(() => bandKind(c));
+  const toured = useGuideTarget();
+  const tourShows = (t: string | null) => t === 'case-outcome' || t === 'case-receipt';
+  const [open, setOpen] = useState(() => bandStartsOpen(kind) || tourShows(toured));
+  const [seenTour, setSeenTour] = useState(toured);
+  if (seenTour !== toured) {
+    setSeenTour(toured);
+    if (tourShows(toured)) setOpen(true);
+  }
+  const toggle = () => {
+    setOpen(!open);
+    rememberBand(kind, !open);
+  };
+  const reduced = usePrefersReducedMotion();
+  // The case's action button: open the band, the card's details where it has some, then the card in view and focused
+  useEffect(() => {
+    const show = () => {
+      const opening = !open;
+      setOpen(true);
+      if (hasWhy) setWhy(true);
+      window.setTimeout(
+        () => {
+          document
+            .getElementById('next-action')
+            ?.scrollIntoView?.({ block: 'start', behavior: reduced ? 'auto' : 'smooth' });
+          document.getElementById('next-action-title')?.focus({ preventScroll: true });
+        },
+        opening && !reduced ? 200 : 0,
+      );
+    };
+    window.addEventListener(SHOW_NEXT_ACTION, show);
+    return () => window.removeEventListener(SHOW_NEXT_ACTION, show);
+  }, [open, hasWhy, reduced]);
   const tone: Tone =
     next.kind === 'none'
       ? 'neutral'
@@ -183,7 +255,6 @@ export function DecisionCard({
   const colour = TONE_COLOURS[tone];
   const receiver = caseReceiver(c, facts.snapshot);
   const category = receiver.category ? CATEGORY_TEXT[receiver.category] : undefined;
-  const correction = correctionStepsOf(facts.plan);
   // The third card is drawn in its tone only when someone has to act; its icon and words say the same without colour
   const marked = next.kind !== 'none';
   const caption = writesCaption(r);
@@ -197,304 +268,339 @@ export function DecisionCard({
       data-tour="case-outcome"
       className="hero-band outcome-band"
       data-tone={verdict.tone}
-      p={{ base: 'md', sm: 'lg' }}
+      data-open={open}
+      p={{ base: 'sm', sm: 'md' }}
       radius="md"
-      mb="lg"
+      mb="md"
     >
-      <Stack gap="md">
-        <Stack gap={6}>
-          <Title order={2} id="outcome-title" tabIndex={-1}>
-            Outcome
-          </Title>
-          {/* The outcome in words, not a heading (the cards' headings follow); its icon only repeats it */}
-          <Group
-            key={fading ? verdict.label : undefined}
-            gap="sm"
-            wrap="nowrap"
-            align="flex-start"
-            style={fading ? { animation: 'trial-fade var(--motion-base) var(--motion-ease) 1' } : undefined}
+      {/* The heading is the band's disclosure; the outcome beside it stays in view when the band is closed */}
+      <Group gap="xs" wrap="wrap" align="center" style={{ rowGap: 4 }}>
+        <Title order={2} id="outcome-title" fz="lg" lh={1.3}>
+          <UnstyledButton
+            className="outcome-toggle"
+            aria-expanded={open}
+            aria-controls="outcome-body"
+            onClick={toggle}
           >
-            <OutcomeIcon
-              size={28}
-              stroke={1.8}
+            <IconChevronDown
+              size={18}
               aria-hidden
-              style={{ color: toneText(verdict.tone), flex: 'none' }}
+              style={{
+                transform: open ? 'rotate(180deg)' : undefined,
+                transition: 'transform 150ms',
+                flex: 'none',
+              }}
             />
-            <Text className="hero-statement" data-testid="outcome-line" maw="68ch">
-              {verdict.label}
-            </Text>
-          </Group>
-        </Stack>
-        {/* By the width the band has, not the window's: beside Ask about this case the page's column is narrower.
-            Each card is as tall as its words: a short card stays short. */}
-        <SimpleGrid
-          type="container"
-          cols={{ base: 1, '700px': 3 }}
-          spacing="sm"
-          style={{ alignItems: 'start' }}
+            Outcome
+          </UnstyledButton>
+        </Title>
+        {/* The outcome in words, not a heading (the cards' headings follow); its icon only repeats it */}
+        <Group
+          key={fading ? verdict.label : undefined}
+          gap={8}
+          wrap="nowrap"
+          align="flex-start"
+          style={{
+            minWidth: 0,
+            ...(fading ? { animation: 'trial-fade var(--motion-base) var(--motion-ease) 1' } : {}),
+          }}
         >
-          <StoryCard label="What happened" title={failedTitle(c)}>
-            <Text size="sm">{evidenceSummary(facts.snapshot)}</Text>
-          </StoryCard>
-          <StoryCard label="What Shutter did" title={actionHeadline(facts)}>
-            {/* The receiver the case is about, and its category as the evidence recorded it */}
-            <Group gap={6} wrap="wrap" data-testid="case-receiver">
-              <Text size="sm">At {receiver.name}</Text>
-              {category ? (
-                <StatusBadge
-                  tone="neutral"
-                  icon={null}
-                  label={category.label}
-                  hint={`${category.gist}. ${category.overtaken}`}
-                />
-              ) : null}
-            </Group>
-            {/* The category's meaning in words, not only in the badge's tooltip, which touch screens never show */}
-            {category ? (
-              <Text size="sm" c="dimmed" data-testid="case-receiver-gist">
-                {`${category.gist}.`}
-              </Text>
-            ) : null}
-            <Text size="sm">{outcomeReason(facts)}</Text>
-            {round > 1 ? (
-              <Text size="sm">
-                {`Round ${round}: the receiver changed after the approval, so the approval was revoked and the case was planned again on fresh evidence. The audit trail keeps every round.`}
-              </Text>
-            ) : null}
-          </StoryCard>
-          <StoryCard
-            label="What needs you now"
-            title={next.action}
-            icon={NextIcon}
-            tone={tone}
-            className={marked ? 'tone-tint' : undefined}
-            style={
-              marked
-                ? {
-                    background: `var(--mantine-color-${colour}-light)`,
-                    borderColor: `var(--mantine-color-${colour}-outline)`,
-                    borderWidth: 2,
-                  }
-                : undefined
-            }
-          >
-            {/* What (the title) and who; why, the reason's code, what must hold and when to look again behind Why? */}
-            {next.kind === 'person' ? (
-              <KeyValueList
-                labelWidth={96}
-                rows={[
-                  ['Who', next.role],
-                  ['Escalation', next.escalate ? next.handoff : ''],
-                ]}
-              />
-            ) : null}
-            {hasWhy || (c.state === 'awaiting_approval' && onReview) ? (
-              <Group gap="xs">
-                {c.state === 'awaiting_approval' && onReview ? (
-                  // A light button on the tinted card falls short of 4.5:1 in dark mode: the default surface keeps it.
-                  // On a phone it takes the card's width, as the one thing to do.
-                  <Button size="xs" variant="default" onClick={onReview} w={{ base: '100%', sm: 'auto' }}>
-                    Review the plan and decide
-                  </Button>
-                ) : null}
-                {hasWhy ? (
-                  <Button
-                    size="xs"
-                    variant="default"
-                    onClick={() => setWhy((w) => !w)}
-                    aria-expanded={why}
-                    aria-controls="next-action-why"
-                    leftSection={
-                      <IconChevronDown
-                        size={14}
-                        aria-hidden
-                        style={{
-                          transform: why ? 'rotate(180deg)' : undefined,
-                          transition: 'transform 150ms',
-                        }}
-                      />
-                    }
-                  >
-                    Why?
-                  </Button>
-                ) : null}
-              </Group>
-            ) : null}
-            {/* What approvers decided before on these conditions here, under the button: what happened, not what to do */}
-            {c.state === 'awaiting_approval' ? (
-              <NextActionPrecedents caseId={c.caseId} snapshot={facts.snapshot} onSee={onSeePrecedents} />
-            ) : null}
-            {hasWhy && why ? (
-              <Stack id="next-action-why" gap="xs">
-                <KeyValueList
-                  labelWidth={96}
-                  rows={[
-                    ['Reason', b?.title ?? ''],
-                    ['Why', b?.text || next.blocking],
-                    ['Reason code', b?.code ? <Code key="c">{b.code}</Code> : ''],
-                    ['Why it waits', b?.text && b.prerequisite ? b.prerequisite : ''],
-                    ['Look again when', next.lookAgain],
-                  ]}
-                />
-                {b?.checks?.length ? (
-                  <List size="sm" spacing={2}>
-                    {b.checks.map((ch) => (
-                      <List.Item key={ch.check}>
-                        {humanize(ch.check)}: {ch.reason_code}, {ch.detail}
-                      </List.Item>
-                    ))}
-                  </List>
-                ) : null}
-              </Stack>
-            ) : (
-              <div id="next-action-why" hidden />
-            )}
-            {correction ? (
-              <Stack gap={4} data-testid="correction-steps">
-                <Title order={4} fz="sm">
-                  {`Correcting the history at ${correction.receiver || receiver.name}`}
-                </Title>
-                <List type="ordered" size="sm" spacing={4}>
-                  {correction.steps.map((step, i) => (
-                    <List.Item key={i}>{step}</List.Item>
-                  ))}
-                </List>
-              </Stack>
-            ) : null}
-            {/* A withheld case (a merge or a cancel Shutter never sends) has nothing new to find: the team closes it */}
-            {stopped && c.failureKind !== 'withheld' ? <Reinvestigate c={c} /> : null}
-          </StoryCard>
-        </SimpleGrid>
-        <Paper
-          className="receipt-band"
-          p="md"
-          radius="md"
-          component="section"
-          aria-labelledby="receipt-title"
-          data-tour="case-receipt"
-        >
+          <OutcomeIcon
+            size={22}
+            stroke={1.8}
+            aria-hidden
+            style={{ color: toneText(verdict.tone), flex: 'none', marginTop: 2 }}
+          />
+          <Text className="outcome-statement" data-testid="outcome-line" maw="68ch">
+            {verdict.label}
+          </Text>
+        </Group>
+      </Group>
+      <Collapse in={open} transitionDuration={150}>
+        <Box id="outcome-body" pt="sm" inert={!open || undefined}>
           <Stack gap="sm">
-            <Group justify="space-between" align="center" wrap="wrap" gap="xs">
-              <Title order={3} id="receipt-title">
-                Decision receipt
-              </Title>
-              <CopyButton value={JSON.stringify(r, null, 2)} timeout={1500}>
-                {({ copied, copy }) => (
-                  <Button
-                    size="xs"
-                    variant="default"
-                    leftSection={
-                      copied ? <IconCheck size={14} aria-hidden /> : <IconCopy size={14} aria-hidden />
-                    }
-                    onClick={copy}
-                    data-tour-action="copy-receipt"
-                  >
-                    {copied ? 'Copied' : 'Copy receipt as JSON'}
-                  </Button>
-                )}
-              </CopyButton>
-            </Group>
+            {/* By the width the band has, not the window's: beside Ask about this case the page's column is narrower.
+                The three cards are one size: in a row, each as tall as the tallest; once the reader opens the third's
+                details, each keeps its own height, so the other two do not stretch to the long text. */}
             <SimpleGrid
-              component="dl"
-              className="receipt-facts"
               type="container"
-              cols={{ base: 1, '500px': 3, '900px': 5 }}
-              spacing="md"
-              verticalSpacing="sm"
-              m={0}
+              cols={{ base: 1, '700px': 3 }}
+              spacing="sm"
+              style={{ alignItems: why ? 'start' : 'stretch' }}
             >
-              <Fact label="Proposal">
-                <Text size="md" fw={700}>
-                  {proposal}
-                </Text>
-              </Fact>
-              <Fact label="Gate">
-                {gate && gateStatus ? (
-                  <>
+              <StoryCard label="What happened" title={failedTitle(c)}>
+                <Text size="sm">{evidenceSummary(facts.snapshot)}</Text>
+              </StoryCard>
+              <StoryCard label="What Shutter did" title={actionHeadline(facts)}>
+                {/* The receiver the case is about, and its category as the evidence recorded it */}
+                <Group gap={6} wrap="wrap" data-testid="case-receiver">
+                  <Text size="sm">At {receiver.name}</Text>
+                  {category ? (
                     <StatusBadge
-                      {...gateStatus}
-                      // Its scope beside a plan that writes nothing, so a green check is not read as leave to write
-                      label={
-                        gate.outcome === 'pass' && writesNothing
-                          ? 'Passed: the plan writes nothing'
-                          : (GATE_LABELS[gate.outcome] ?? gateStatus.label)
-                      }
-                      size="md"
-                      w="fit-content"
+                      tone="neutral"
+                      icon={null}
+                      label={category.label}
+                      hint={`${category.gist}. ${category.overtaken}`}
                     />
-                    <CheckStrip checks={checks} />
-                  </>
-                ) : (
-                  <Text size="sm">{facts.plan === undefined ? 'Unknown' : 'Not checked yet'}</Text>
-                )}
-              </Fact>
-              <Fact label="Released by">
-                {release ? <StatusBadge {...release} size="md" w="fit-content" /> : null}
-                <Text size="sm">{r.decidedBy}</Text>
-              </Fact>
-              <Fact label="Writes">
-                {facts.attempts === undefined ? (
-                  <Text size="sm">Unknown</Text>
-                ) : (
-                  <>
-                    <StatusBadge {...writes(r.writes)} size="md" w="fit-content" />
-                    {/* The badge says 0 writes; the words add only what it does not say */}
-                    {caption ? <Text size="sm">{caption}</Text> : null}
-                  </>
-                )}
-              </Fact>
-              <Fact label="Verification">
-                {r.verificationState ? (
-                  <StatusBadge {...verification(r.verificationState)} size="md" w="fit-content" />
-                ) : (
-                  // No verification state yet: the words stand alone, so the fact is never empty
-                  <Text size="sm">
-                    {r.verification || (stopped || c.state === 'resolved' ? 'Unknown' : 'Not verified yet')}
+                  ) : null}
+                </Group>
+                {/* The category's meaning in words, not only in the badge's tooltip, which touch screens never show */}
+                {category ? (
+                  <Text size="sm" c="dimmed" data-testid="case-receiver-gist">
+                    {`${category.gist}.`}
                   </Text>
+                ) : null}
+                <Text size="sm">{outcomeReason(facts)}</Text>
+                {round > 1 ? (
+                  <Text size="sm">
+                    {`Round ${round}: the receiver changed after the approval, so the approval was revoked and the case was planned again on fresh evidence. The audit trail keeps every round.`}
+                  </Text>
+                ) : null}
+              </StoryCard>
+              <StoryCard
+                id="next-action"
+                label="What needs you now"
+                title={action}
+                icon={NextIcon}
+                tone={tone}
+                className={marked ? 'tone-tint' : undefined}
+                style={{
+                  scrollMarginTop: 'calc(var(--shutter-header-h) + 3.5rem)',
+                  ...(marked
+                    ? {
+                        background: `var(--mantine-color-${colour}-light)`,
+                        borderColor: `var(--mantine-color-${colour}-outline)`,
+                        borderWidth: 2,
+                      }
+                    : {}),
+                }}
+              >
+                {/* What (the title) and who; the rest of a long action, why, the reason's code, what must hold, when to
+                    look again and any steps that correct a receiver's history behind the details */}
+                {next.kind === 'person' ? (
+                  <KeyValueList
+                    labelWidth={96}
+                    rows={[
+                      ['Who', next.role],
+                      ['Escalation', next.escalate ? next.handoff : ''],
+                    ]}
+                  />
+                ) : null}
+                {hasWhy || (c.state === 'awaiting_approval' && onReview) ? (
+                  <Group gap="xs">
+                    {c.state === 'awaiting_approval' && onReview ? (
+                      // A light button on the tinted card falls short of 4.5:1 in dark mode: the default surface keeps
+                      // it. On a phone it takes the card's width, as the one thing to do.
+                      <Button size="xs" variant="default" onClick={onReview} w={{ base: '100%', sm: 'auto' }}>
+                        Review the plan and decide
+                      </Button>
+                    ) : null}
+                    {hasWhy ? (
+                      <Button
+                        size="xs"
+                        variant="default"
+                        onClick={() => setWhy((w) => !w)}
+                        aria-expanded={why}
+                        aria-controls="next-action-why"
+                        leftSection={
+                          <IconChevronDown
+                            size={14}
+                            aria-hidden
+                            style={{
+                              transform: why ? 'rotate(180deg)' : undefined,
+                              transition: 'transform 150ms',
+                            }}
+                          />
+                        }
+                      >
+                        {more ? 'Why, and what to do' : 'Why?'}
+                      </Button>
+                    ) : null}
+                  </Group>
+                ) : null}
+                {/* What approvers decided before on these conditions here, under the button: what happened, not what to do */}
+                {c.state === 'awaiting_approval' ? (
+                  <NextActionPrecedents caseId={c.caseId} snapshot={facts.snapshot} onSee={onSeePrecedents} />
+                ) : null}
+                {hasWhy && why ? (
+                  <Stack id="next-action-why" gap="xs">
+                    {actionRest ? (
+                      <Text size="sm" data-testid="next-action-rest">
+                        {actionRest}
+                      </Text>
+                    ) : null}
+                    <KeyValueList
+                      labelWidth={96}
+                      rows={[
+                        ['Reason', b?.title ?? ''],
+                        ['Why', b?.text || next.blocking],
+                        ['Reason code', b?.code ? <Code key="c">{b.code}</Code> : ''],
+                        ['Why it waits', b?.text && b.prerequisite ? b.prerequisite : ''],
+                        ['Look again when', next.lookAgain],
+                      ]}
+                    />
+                    {b?.checks?.length ? (
+                      <List size="sm" spacing={2}>
+                        {b.checks.map((ch) => (
+                          <List.Item key={ch.check}>
+                            {humanize(ch.check)}: {ch.reason_code}, {ch.detail}
+                          </List.Item>
+                        ))}
+                      </List>
+                    ) : null}
+                    {correction ? (
+                      <Stack gap={4} data-testid="correction-steps">
+                        <Title order={4} fz="sm">
+                          {`Correcting the history at ${correction.receiver || receiver.name}`}
+                        </Title>
+                        <List type="ordered" size="sm" spacing={4}>
+                          {correction.steps.map((step, i) => (
+                            <List.Item key={i}>{step}</List.Item>
+                          ))}
+                        </List>
+                      </Stack>
+                    ) : null}
+                  </Stack>
+                ) : (
+                  <div id="next-action-why" hidden />
                 )}
-              </Fact>
+                {/* A withheld case (a merge or a cancel Shutter never sends) has nothing new to find: the team closes it */}
+                {stopped && c.failureKind !== 'withheld' ? <Reinvestigate c={c} /> : null}
+              </StoryCard>
             </SimpleGrid>
-            {/* The record's exact terms, for the engineer: in Technical open, in Plain a click away */}
-            <TechDetail label="Versions, keys and times" kind="data">
-              <KeyValueList
-                labelWidth={150}
-                rows={[
-                  ['Proposal', proposal !== r.action ? r.action : ''],
-                  [
-                    'Plan',
-                    r.planVersion !== null
-                      ? `v${r.planVersion}${r.catalogueEntry ? `, catalogue entry ${r.catalogueEntry}` : ''}`
-                      : '',
-                  ],
-                  [
-                    'Gate',
-                    gate && gateStatus
-                      ? `${gateStatus.label}, at ${gate.stage}; policy ${gate.policyVersion}`
-                      : '',
-                  ],
-                  ['Gate checked', gate?.at ? <Timestamp key="g" iso={gate.at} /> : ''],
-                  ['Released', r.decidedAt ? <Timestamp key="d" iso={r.decidedAt} /> : ''],
-                  ['Earlier approval', r.earlierApproval],
-                  ['Writes', writesDetail(r)],
-                  ['Verification', verifierSummary],
-                  [
-                    'Plan digest',
-                    r.planDigest ? <Digest key="p" value={r.planDigest} label="plan digest" /> : '',
-                  ],
-                  [
-                    'Snapshot digest',
-                    r.snapshotDigest ? (
-                      <Digest key="s" value={r.snapshotDigest} label="snapshot digest" />
+            <Paper
+              className="receipt-band"
+              p="sm"
+              radius="md"
+              component="section"
+              aria-labelledby="receipt-title"
+              data-tour="case-receipt"
+            >
+              <Stack gap="sm">
+                <Group justify="space-between" align="center" wrap="wrap" gap="xs">
+                  <Title order={3} id="receipt-title">
+                    Decision receipt
+                  </Title>
+                  <CopyButton value={JSON.stringify(r, null, 2)} timeout={1500}>
+                    {({ copied, copy }) => (
+                      <Button
+                        size="xs"
+                        variant="default"
+                        leftSection={
+                          copied ? <IconCheck size={14} aria-hidden /> : <IconCopy size={14} aria-hidden />
+                        }
+                        onClick={copy}
+                        data-tour-action="copy-receipt"
+                      >
+                        {copied ? 'Copied' : 'Copy receipt as JSON'}
+                      </Button>
+                    )}
+                  </CopyButton>
+                </Group>
+                <SimpleGrid
+                  component="dl"
+                  className="receipt-facts"
+                  type="container"
+                  cols={{ base: 1, '500px': 3, '900px': 5 }}
+                  spacing="md"
+                  verticalSpacing="sm"
+                  m={0}
+                >
+                  <Fact label="Proposal">
+                    <Text size="md" fw={700}>
+                      {proposal}
+                    </Text>
+                  </Fact>
+                  <Fact label="Gate">
+                    {gate && gateStatus ? (
+                      <>
+                        <StatusBadge
+                          {...gateStatus}
+                          // Its scope beside a plan that writes nothing, so a green check is not read as leave to write
+                          label={
+                            gate.outcome === 'pass' && writesNothing
+                              ? 'Passed: the plan writes nothing'
+                              : (GATE_LABELS[gate.outcome] ?? gateStatus.label)
+                          }
+                          size="md"
+                          w="fit-content"
+                        />
+                        <CheckStrip checks={checks} />
+                      </>
                     ) : (
-                      ''
-                    ),
-                  ],
-                ]}
-              />
-            </TechDetail>
+                      <Text size="sm">{facts.plan === undefined ? 'Unknown' : 'Not checked yet'}</Text>
+                    )}
+                  </Fact>
+                  <Fact label="Released by">
+                    {release ? <StatusBadge {...release} size="md" w="fit-content" /> : null}
+                    <Text size="sm">{r.decidedBy}</Text>
+                  </Fact>
+                  <Fact label="Writes">
+                    {facts.attempts === undefined ? (
+                      <Text size="sm">Unknown</Text>
+                    ) : (
+                      <>
+                        <StatusBadge {...writes(r.writes)} size="md" w="fit-content" />
+                        {/* The badge says 0 writes; the words add only what it does not say */}
+                        {caption ? <Text size="sm">{caption}</Text> : null}
+                      </>
+                    )}
+                  </Fact>
+                  <Fact label="Verification">
+                    {r.verificationState ? (
+                      <StatusBadge {...verification(r.verificationState)} size="md" w="fit-content" />
+                    ) : (
+                      // No verification state yet: the words stand alone, so the fact is never empty
+                      <Text size="sm">
+                        {r.verification ||
+                          (stopped || c.state === 'resolved' ? 'Unknown' : 'Not verified yet')}
+                      </Text>
+                    )}
+                  </Fact>
+                </SimpleGrid>
+                {/* The record's exact terms, for the engineer: a click away in both modes, so the band stays short */}
+                <TechDetail label="Versions, keys and times" kind="data" defaultOpen={false}>
+                  <KeyValueList
+                    labelWidth={150}
+                    rows={[
+                      ['Proposal', proposal !== r.action ? r.action : ''],
+                      [
+                        'Plan',
+                        r.planVersion !== null
+                          ? `v${r.planVersion}${r.catalogueEntry ? `, catalogue entry ${r.catalogueEntry}` : ''}`
+                          : '',
+                      ],
+                      [
+                        'Gate',
+                        gate && gateStatus
+                          ? `${gateStatus.label}, at ${gate.stage}; policy ${gate.policyVersion}`
+                          : '',
+                      ],
+                      ['Gate checked', gate?.at ? <Timestamp key="g" iso={gate.at} /> : ''],
+                      ['Released', r.decidedAt ? <Timestamp key="d" iso={r.decidedAt} /> : ''],
+                      ['Earlier approval', r.earlierApproval],
+                      ['Writes', writesDetail(r)],
+                      ['Verification', verifierSummary],
+                      [
+                        'Plan digest',
+                        r.planDigest ? <Digest key="p" value={r.planDigest} label="plan digest" /> : '',
+                      ],
+                      [
+                        'Snapshot digest',
+                        r.snapshotDigest ? (
+                          <Digest key="s" value={r.snapshotDigest} label="snapshot digest" />
+                        ) : (
+                          ''
+                        ),
+                      ],
+                    ]}
+                  />
+                </TechDetail>
+              </Stack>
+            </Paper>
           </Stack>
-        </Paper>
-      </Stack>
+        </Box>
+      </Collapse>
     </Paper>
   );
 }

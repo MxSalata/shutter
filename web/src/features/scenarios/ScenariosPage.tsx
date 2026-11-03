@@ -446,7 +446,7 @@ function ScenarioRow({
 }
 
 /**
- * The induction prompt (the owner's questionnaire): an approver sees it until the site's answers are saved. It leads
+ * The induction prompt (the site profile's questionnaire): an approver sees it until the site's answers are saved. It leads
  * the page on an instance; `below` places it under the scenarios, where the demo keeps it.
  */
 function InductionPrompt({ below = false }: { below?: boolean }) {
@@ -687,7 +687,7 @@ export default function ScenariosPage() {
             ? 'Running a scenario needs the operator role'
             : busy || pending;
 
-  // The induction prompt leads the page on an instance, as the owner's questionnaire is designed; the demo, whose
+  // The induction prompt leads the page on an instance, as the site profile's questionnaire is designed; the demo, whose
   // profile is a recording nobody answers, keeps it below the fold, under the scenarios, so the guided path comes first.
   const induction = can.configure ? <InductionPrompt below={TRIAL} /> : null;
   return (

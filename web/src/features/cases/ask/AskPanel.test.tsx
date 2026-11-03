@@ -857,3 +857,116 @@ describe('WhatIfCard', () => {
     expect(screen.queryByRole('link', { name: 'Open in Site profile' })).not.toBeInTheDocument();
   });
 });
+
+describe('Ask while the live agents cannot run', () => {
+  /** A live instance with a model key, for someone who may ask in their own words; `live` laid over it. */
+  const liveSettings = (live?: Record<string, unknown>, budget?: Record<string, unknown>) =>
+    http.get(`${BASE}/settings`, () =>
+      HttpResponse.json({
+        ...fixtures.settings,
+        providerConfigured: true,
+        mock: false,
+        ...(live ? { live: { enabled: true, every_minutes: 7, ...live } } : {}),
+        ...(budget ? { budget: { ...fixtures.settings.budget, ...budget } } : {}),
+      }),
+    );
+  const refusedWith = (status: number, body: Record<string, unknown>) =>
+    http.post(`${BASE}/cases/:id/questions`, () => HttpResponse.json(body, { status }));
+
+  beforeEach(() => {
+    demo.value = false;
+  });
+
+  it('reads a 409 live_unavailable as the notice, not as a fault', async () => {
+    server.use(
+      liveSettings(),
+      refusedWith(409, {
+        error: 'live_unavailable',
+        detail: "The model provider refused Shutter's key (provider_auth)",
+        live: { available: false, reason: 'provider_auth', until: null },
+      }),
+    );
+    renderCase('C-000008');
+    const p = await panel();
+    await userEvent.type(await within(p).findByRole('textbox', { name: 'Your own question' }), 'Why?');
+    await userEvent.click(within(p).getByRole('button', { name: 'Ask' }));
+    const status = await within(p).findByRole('status');
+    expect(layer1Words(status).join(' ')).toBe(
+      'The live AI service for this demo is unavailable for now. Open cases, recorded runs and the trial still work. To run the live agents yourself, install Shutter with your own API key: how to install',
+    );
+    expect(within(status).getByRole('link', { name: 'how to install' })).toHaveAttribute(
+      'href',
+      'https://github.com/MxSalata/shutter#try-it',
+    );
+    expect(within(p).queryByText('The question was not asked')).not.toBeInTheDocument();
+    expect(layer1Words(p).join(' ')).not.toMatch(/live_unavailable|provider_auth/);
+  });
+
+  it('reads a 409 budget_exhausted the same way', async () => {
+    server.use(
+      liveSettings(),
+      refusedWith(409, { error: 'budget_exhausted', detail: "The day's model budget of 2.00 USD is spent" }),
+    );
+    renderCase('C-000008');
+    const p = await panel();
+    await userEvent.type(await within(p).findByRole('textbox', { name: 'Your own question' }), 'Why?');
+    await userEvent.click(within(p).getByRole('button', { name: 'Ask' }));
+    expect(await within(p).findByRole('status')).toHaveTextContent(
+      'The live AI budget for this demo is used up until 00:00 UTC.',
+    );
+    expect(within(p).queryByText(/budget_exhausted/)).not.toBeInTheDocument();
+  });
+
+  it('says so above the box while live.agents says they cannot run, and holds the question back', async () => {
+    server.use(liveSettings({ agents: { available: false, reason: 'budget', until: null } }));
+    renderCase('C-000008');
+    const p = await panel();
+    const box = await within(p).findByRole('textbox', { name: 'Your own question' });
+    expect(await within(p).findByRole('note')).toHaveTextContent(
+      "The live AI budget for this demo is used up until the demo's next reset, within the hour.",
+    );
+    await userEvent.type(box, 'Why?');
+    expect(within(p).getByRole('button', { name: 'Ask' })).toBeDisabled();
+  });
+
+  it("words a question the budget refused, in the turn, with the server's text for Technical", async () => {
+    const failed: CaseQuestion = {
+      questionId: 'Q-000120',
+      caseId: 'C-000008',
+      conversation: 'c1',
+      turn: 1,
+      tier: 'explain',
+      source: 'free',
+      question: 'Who should I call?',
+      state: 'failed',
+      askedBy: 'judge',
+      askedAt: '2026-11-02T19:10:00Z',
+      answeredAt: null,
+      error:
+        "The agent answered budget_exhausted: Your share of the day's model budget, 1.00 USD, is spent (1.02 USD since 2026-11-02T00:00:00Z); the run was not sent.",
+      mode: 'live',
+      model: null,
+      costUsd: 0,
+      runs: 1,
+      recordKey: null,
+      ensMessageId: null,
+      answer: null,
+    };
+    server.use(
+      liveSettings(),
+      http.get(`${BASE}/cases/:id/questions`, () => HttpResponse.json({ items: [failed], total: 1 })),
+    );
+    renderCase('C-000008');
+    const p = await panel();
+    const turn = await within(p).findByRole('article', { name: 'Who should I call?' });
+    expect(within(turn).getByTestId('live-unavailable')).toHaveTextContent(
+      'Your share of the live budget is used up until 00:00 UTC.',
+    );
+    expect(turn).not.toHaveTextContent(/No answer|budget_exhausted/);
+    await userEvent.keyboard('{Escape}');
+    useAppearance.setState({ detail: 'technical' });
+    await userEvent.click(screen.getByRole('button', { name: 'Ask about this case' }));
+    const again = await within(await panel()).findByRole('article', { name: 'Who should I call?' });
+    expect(within(again).getByTestId('live-unavailable-code')).toHaveTextContent('budget_exhausted');
+  });
+});

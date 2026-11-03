@@ -1,8 +1,8 @@
+import { HOSPITAL_NAME } from '@/lib/hospital';
 import type { JournalCounts } from './journal';
 
 /** The banner's two sentences: whose data it is, and that nothing leaves (DESIGN.md 1.3, 7.1). */
-export const TRIAL_WORDS =
-  'A demo hospital with made-up patients, recorded. Nothing you do here reaches a hospital system or IRIS.';
+export const TRIAL_WORDS = `${HOSPITAL_NAME}: a demo hospital with made-up patients, recorded. Nothing you do here reaches a hospital system or IRIS.`;
 /** The one-line form's words, once the welcome has closed. */
 export const TRIAL_WORDS_SHORT = 'Made-up patients; nothing leaves this browser';
 

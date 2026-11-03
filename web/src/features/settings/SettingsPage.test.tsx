@@ -179,13 +179,37 @@ describe('the four tiles, the real cost first (N22)', () => {
     expect(tiles.map((t) => t.label)).not.toContain('Spent here');
   });
 
-  it("takes the attention tone, in words, when the day's cap is used up", async () => {
+  it("takes the attention tone, in words, when the day's cap is used up, and says how to run the agents oneself", async () => {
     renderSettings(spending(15.1, false, true));
     const tiles = await tileTexts();
     const spent = tiles.find((t) => t.label === 'Spent on real model runs')!;
     expect(spent.tone).toBe('attention');
-    expect(spent.caption).toContain("Today's $15.00 is spent: live runs wait for the reset at 00:00 UTC");
+    expect(spent.caption).toContain(
+      'The live AI budget for this demo is used up until 00:00 UTC.To run the live agents yourself, install Shutter with your own API key: how to install',
+    );
     expect(spent.caption).toContain('Budget used up');
+    const tile = screen.getByText('Spent on real model runs').closest('.stat-tile') as HTMLElement;
+    expect(within(tile).getByRole('link', { name: 'how to install' })).toHaveAttribute(
+      'href',
+      'https://github.com/MxSalata/shutter#try-it',
+    );
+  });
+
+  it('says the live agents are unavailable on the tile while the provider refuses the key (live.agents)', async () => {
+    const s = spending(4.2);
+    renderSettings({
+      ...s,
+      live: {
+        enabled: false,
+        agents: { available: false, reason: 'provider_auth', until: null, detail: 'refused' },
+      },
+    });
+    const tiles = await tileTexts();
+    const spent = tiles.find((t) => t.label === 'Spent on real model runs')!;
+    expect(spent.tone).toBe('attention');
+    expect(spent.caption).toContain('Live agents unavailable');
+    expect(spent.caption).toContain('The live AI service for this demo is unavailable for now.');
+    expect(spent.caption).not.toContain('refused');
   });
 
   it('says "per reset" and "since the demo last reset" on the public demo, which resets every hour, never "today"', async () => {
@@ -208,7 +232,7 @@ describe('the four tiles, the real cost first (N22)', () => {
     const spent = tiles.find((t) => t.label === 'Spent on real model runs')!;
     expect(spent.tone).toBe('attention');
     expect(spent.caption).toContain(
-      "The $15.00 per reset is spent: live runs wait for the demo's next reset (every hour)",
+      "The live AI budget for this demo is used up until the demo's next reset, within the hour.",
     );
     expect(layer1Words(document.body).join(' ')).not.toMatch(/today/i);
   });
