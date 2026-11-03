@@ -56,8 +56,8 @@ Method TestHardenPortalAndRestore()
 }
 
 /// The production's start applies the hardening when the environment asks for it (SHUTTER_DEMO_PORTAL=1, through
-/// ApplyRuntime's portal argument): the portal is hardened, the time is recorded and the Doctor reports it; any other value
-/// leaves the portal alone. Put back as TestHardenPortalAndRestore does.
+/// ApplyRuntime's portal argument): the portal is hardened, the time is recorded (an earlier start's errors cleared) and the
+/// Doctor reports it; any other value leaves the portal alone. Put back as TestHardenPortalAndRestore does.
 Method TestApplyRuntimeHardens()
 {
     If '$SYSTEM.Security.Check("%Admin_Secure", "USE") { Do $$$AssertSkipped("no %Admin_Secure here: nothing to try") Quit }
@@ -67,11 +67,14 @@ Method TestApplyRuntimeHardens()
     Set it = before.apps.%GetIterator()
     While it.%GetNext(, .a) { If a.exists Set exists = exists + 1 }
     If exists = 0 { Do $$$AssertSkipped("this instance has no portal application for the namespaces: nothing to harden") Quit }
-    Set roleWas = before."trace_role", recordWas = $GET(^Shutter.Config("portalHardened"))
+    Set roleWas = before."trace_role", recordWas = $GET(^Shutter.Config("portalHardened")), errorsWere = $GET(^Shutter.Config("portalHardeningErrors"))
+    // An earlier start that failed: no stamp, its errors recorded.
     Kill ^Shutter.Config("portalHardened")
+    Set ^Shutter.Config("portalHardeningErrors") = "role: an earlier start's failure"
     // Any value but 1 leaves the portal and the record alone.
     Set applied = ##class(Shutter.Setup).ApplyRuntime("", "", "", "", "", "", 0, "", "", "", "", "0")
     Do $$$AssertTrue('applied.%IsDefined("portal") && '$DATA(^Shutter.Config("portalHardened")), "0 leaves the portal alone: " _ applied.%ToJSON())
+    Do $$$AssertEquals($GET(^Shutter.Config("portalHardeningErrors")), "role: an earlier start's failure", "and the earlier errors as they were")
     Set applied = ##class(Shutter.Setup).ApplyRuntime("", "", "", "", "", "", 0, "", "", "", "", "1")
     Do $$$AssertTrue('applied.%IsDefined("errors"), "the environment applies the hardening without error: " _ applied.%ToJSON())
     Do $$$AssertTrue($ISOBJECT(applied.portal) && applied.portal.hardened, "and says so: " _ applied.%ToJSON())
@@ -80,9 +83,11 @@ Method TestApplyRuntimeHardens()
     Set at = $GET(^Shutter.Config("portalHardened"))
     Do $$$AssertTrue(at ?4N1"-"2N1"-"2N1"T"2N1":"2N1":"2N1"Z", "the time is recorded: " _ at)
     Do $$$AssertEquals(applied.portal.at, at, "and returned")
+    Do $$$AssertEquals($DATA(^Shutter.Config("portalHardeningErrors")), 0, "the earlier start's errors are cleared")
     Set doctor = ##class(Shutter.Util.Json).Parse(##class(Shutter.Setup).Doctor(), .sc)
     Do $$$AssertEquals(doctor."portal_hardened", 1, "the Doctor reports it")
     Do $$$AssertEquals(doctor."portal_hardened_at", at, "with the time")
+    Do $$$AssertEquals(doctor."portal_hardening_errors", "", "and no errors")
     // Put it back: the applications' MatchRoles and resource as the state read them before, the role's resources, the
     // SELECT grants and the record.
     New $NAMESPACE
@@ -101,11 +106,34 @@ Method TestApplyRuntimeHardens()
     Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
     For n = $NAMESPACE, hospital { If n '= "" Do $$$AssertStatusOK(##class(Shutter.Setup).TraceSelectGrant(n, 0, .count, .problem), "the SELECT grants taken away again in " _ n _ " (" _ count _ "): " _ problem) }
     If recordWas = "" { Kill ^Shutter.Config("portalHardened") } Else { Set ^Shutter.Config("portalHardened") = recordWas }
+    If errorsWere = "" { Kill ^Shutter.Config("portalHardeningErrors") } Else { Set ^Shutter.Config("portalHardeningErrors") = errorsWere }
     Set restored = ##class(Shutter.Util.Json).Parse(##class(Shutter.Setup).PortalState(), .sc)
     Do $$$AssertEquals(restored."trace_role", roleWas, "the role's resources as before")
     Do $$$AssertEquals(restored.hardened, before.hardened, "and the state as before")
     Set doctor = ##class(Shutter.Util.Json).Parse(##class(Shutter.Setup).Doctor(), .sc)
     Do $$$AssertEquals(doctor."portal_hardened", recordWas '= "", "and the Doctor's record as before")
+}
+
+/// A start whose hardening fails leaves no stamp (the delta sweep of 3 Nov 2026): the record of an earlier success is
+/// cleared before the attempt, the errors are kept beside it and the Doctor reports both, so a health page read after a
+/// failed start never claims a hardened portal with the old time. The failure comes from Shutter.Test.FakeSetup, whose
+/// HardenPortal refuses as the real one does without %Admin_Secure; the portal itself is not touched.
+Method TestFailedHardeningLeavesNoStamp()
+{
+    Set recordWas = $GET(^Shutter.Config("portalHardened")), errorsWere = $GET(^Shutter.Config("portalHardeningErrors"))
+    Set ^Shutter.Config("portalHardened") = "2026-11-03T00:00:00Z"
+    Kill ^Shutter.Config("portalHardeningErrors")
+    Set applied = ##class(Shutter.Test.FakeSetup).ApplyRuntime("", "", "", "", "", "", 0, "", "", "", "", "1")
+    Do $$$AssertTrue('applied.%IsDefined("portal"), "a failed hardening is not reported as one: " _ applied.%ToJSON())
+    Do $$$AssertTrue($ISOBJECT(applied.errors) && (applied.errors.%ToJSON() [ "portal: %Admin_Secure is required"), "the failure is returned: " _ applied.%ToJSON())
+    Do $$$AssertEquals($DATA(^Shutter.Config("portalHardened")), 0, "the earlier success's stamp is cleared")
+    Do $$$AssertEquals($GET(^Shutter.Config("portalHardeningErrors")), "%Admin_Secure is required", "and the errors are recorded")
+    Set doctor = ##class(Shutter.Util.Json).Parse(##class(Shutter.Setup).Doctor(), .sc)
+    Do $$$AssertEquals(doctor."portal_hardened", 0, "the Doctor no longer claims a hardened portal")
+    Do $$$AssertEquals(doctor."portal_hardened_at", "", "nor the old time")
+    Do $$$AssertEquals(doctor."portal_hardening_errors", "%Admin_Secure is required", "and shows the errors")
+    If recordWas = "" { Kill ^Shutter.Config("portalHardened") } Else { Set ^Shutter.Config("portalHardened") = recordWas }
+    If errorsWere = "" { Kill ^Shutter.Config("portalHardeningErrors") } Else { Set ^Shutter.Config("portalHardeningErrors") = errorsWere }
 }
 
 }
