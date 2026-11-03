@@ -146,7 +146,7 @@ test.describe('the shell', () => {
     const button = trial.getByRole('button', { name: "What's different?" });
     await button.focus();
     await page.keyboard.press('Enter');
-    const dropdown = page.getByRole('dialog', { name: "What's different?" });
+    const dropdown = page.getByRole('dialog', { name: 'The trial environment' });
     await expect(dropdown).toBeVisible();
     await expect(dropdown).toContainText('Resets when you reload or leave.');
     await page.keyboard.press('Escape');
