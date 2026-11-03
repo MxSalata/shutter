@@ -317,14 +317,15 @@ ClassMethod ConfigureProviderTimeout(seconds As %String) As %Integer
 
 /// The container's environment applied to a running instance (v1.34): the model budget (SHUTTER_DAILY_BUDGET_USD,
 /// SHUTTER_JUDGE_BUDGET_USD), the public demo's logins (SHUTTER_PUBLIC_DEMO_PASSWORD, SHUTTER_TRACE_PASSWORD,
-/// SHUTTER_JUDGE_PASSWORD) and the live hospital (SHUTTER_LIVE). Shutter.Production's OnStart calls it, so what .env says
+/// SHUTTER_JUDGE_PASSWORD), the live hospital (SHUTTER_LIVE) and the public demo's portal (SHUTTER_DEMO_PORTAL, v1.39: 1
+/// hardens the Management Portal at every start, HardenPortal). Shutter.Production's OnStart calls it, so what .env says
 /// reaches an instance started with `docker compose up` without a build argument (and a changed cap or password takes effect
 /// on the next start); SELECT Shutter.Setup_ApplyEnvironment() applies it by hand. A variable that is empty or unset leaves
 /// its setting as it is (the install's own reading, or what an approver set since). Returns JSON: what was applied, and
 /// an error when one step failed (the others still run).
 ClassMethod ApplyEnvironment(wait As %Integer = 0) As %String [ SqlProc ]
 {
-    Set out = ..ApplyRuntime($SYSTEM.Util.GetEnviron("SHUTTER_DAILY_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_TRACE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_LIVE"), wait, $SYSTEM.Util.GetEnviron("SHUTTER_PROVIDER_TIMEOUT_SECONDS"), $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_PERIOD"), $SYSTEM.Util.GetEnviron("SHUTTER_LIVE_SCENARIOS"))
+    Set out = ..ApplyRuntime($SYSTEM.Util.GetEnviron("SHUTTER_DAILY_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_TRACE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_LIVE"), wait, $SYSTEM.Util.GetEnviron("SHUTTER_PROVIDER_TIMEOUT_SECONDS"), $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_PERIOD"), $SYSTEM.Util.GetEnviron("SHUTTER_LIVE_SCENARIOS"), $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_PORTAL"))
     // The credential checks' cache, from this privileged process (v1.38): the anonymous health report only reads it.
     Set out.credentials = ..RefreshCredentialCache(1)
     Quit out.%ToJSON()
@@ -332,8 +333,10 @@ ClassMethod ApplyEnvironment(wait As %Integer = 0) As %String [ SqlProc ]
 
 /// ApplyEnvironment's work on values, so a test can give them: each applied when not empty. live is "1" for on, any other
 /// non-empty value for off; wait is how many seconds the live hospital's item may be left to a background job while the
-/// hospital's production is still starting (the production's own start passes 120; by hand, 0 applies it at once).
-ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %String, tracePw As %String, judgePw As %String, live As %String, wait As %Integer = 0, providerTimeout As %String = "", demoUsd As %String = "", demoPeriod As %String = "", liveScenarios As %String = "") As %DynamicObject
+/// hospital's production is still starting (the production's own start passes 120; by hand, 0 applies it at once). portal is
+/// "1" to harden the Management Portal (HardenPortal) and record it as ^Shutter.Config("portalHardened"), the time; any
+/// other value leaves the portal as it is. Never a reading of the demo flag: a local demo keeps the portal as IRIS made it.
+ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %String, tracePw As %String, judgePw As %String, live As %String, wait As %Integer = 0, providerTimeout As %String = "", demoUsd As %String = "", demoPeriod As %String = "", liveScenarios As %String = "", portal As %String = "") As %DynamicObject
 {
     Set out = {}, errors = []
     Set ns = $NAMESPACE
@@ -379,6 +382,25 @@ ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %
         }
     } Catch ex {
         Do errors.%Push("live: " _ ex.DisplayString())
+    }
+    Try {
+        // The public demo's portal (v1.39): the hardening lives in IRISSYS, which no volume keeps, so a recreated container
+        // would come back with the portal open to the demo users; applied again at every start when the environment asks.
+        If $ZSTRIP(portal, "<>W") = "1" {
+            Set hardened = ##class(Shutter.Util.Json).Parse(..HardenPortal(), .sc)
+            If $$$ISERR(sc) || '$ISOBJECT(hardened) {
+                Do errors.%Push("portal: " _ $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "no answer"))
+            } ElseIf hardened.%IsDefined("error") {
+                Do errors.%Push("portal: " _ hardened.error)
+            } ElseIf hardened.%IsDefined("errors") {
+                Do errors.%Push("portal: " _ hardened.errors.%ToJSON())
+            } Else {
+                Set ^Shutter.Config("portalHardened") = ##class(Shutter.Util.Time).NowUTC()
+                Set out.portal = {"hardened": true, "at": (^Shutter.Config("portalHardened"))}
+            }
+        }
+    } Catch ex {
+        Do errors.%Push("portal: " _ ex.DisplayString())
     }
     If errors.%Size() > 0 Set out.errors = errors
     Quit out
@@ -1568,8 +1590,10 @@ ClassMethod EnsureTask(name As %String, ns As %String, class As %String, descrip
 }
 
 /// Empty Shutter's own tables (cases and everything attached to them, their escalation emails and the .eml files of
-/// those rows included, recordings excepted) on a demo instance. Refused elsewhere. Returns the number of tables
-/// emptied or the error.
+/// those rows included, the precedents and board leads that name them, recordings excepted) on a demo instance, reset
+/// the counters so the next case is C-000001 again, and stamp ^Shutter.Config("resetAt") with the time of the purge, as a
+/// scenario reset does, so nothing from before it is read as this instance's history. Refused elsewhere. Returns the
+/// number of tables emptied or the error.
 ClassMethod PurgeStore() As %String [ SqlProc ]
 {
     If '$SYSTEM.Security.Check("Shutter_Scenarios", "USE") Quit "Shutter_Scenarios is required"
@@ -1579,7 +1603,7 @@ ClassMethod PurgeStore() As %String [ SqlProc ]
     // another instance's files.
     Set emails = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Seq, Result FROM Shutter_Store.Escalation WHERE Transport = 'file'")
     While emails.%Next() { Do ##class(Shutter.Store.Escalation).RemoveFile(emails.%Get("Result"), emails.%Get("Seq")) }
-    For cls = "Shutter.Store.CaseToken", "Shutter.Store.ChainItem", "Shutter.Store.Chain", "Shutter.Store.IncidentEvent", "Shutter.Store.Incident", "Shutter.Store.Verification", "Shutter.Store.ExecutionAttempt", "Shutter.Store.Approval", "Shutter.Store.Rehearsal", "Shutter.Store.GateDecision", "Shutter.Store.Plan", "Shutter.Store.Finding", "Shutter.Store.CaseQuestion", "Shutter.Store.AgentRun", "Shutter.Store.SnapshotItem", "Shutter.Store.Snapshot", "Shutter.Store.CaseEvent", "Shutter.Store.Escalation", "Shutter.Store.Case", "Shutter.Store.ReviewAnnotation", "Shutter.Store.Review", "Shutter.Store.Idempotency", "Shutter.Bridge.ToolCall" {
+    For cls = "Shutter.Store.CaseToken", "Shutter.Store.ChainItem", "Shutter.Store.Chain", "Shutter.Store.IncidentEvent", "Shutter.Store.Incident", "Shutter.Store.Verification", "Shutter.Store.ExecutionAttempt", "Shutter.Store.Approval", "Shutter.Store.Rehearsal", "Shutter.Store.GateDecision", "Shutter.Store.Plan", "Shutter.Store.Finding", "Shutter.Store.CaseQuestion", "Shutter.Store.AgentRun", "Shutter.Store.SnapshotItem", "Shutter.Store.Snapshot", "Shutter.Store.CaseEvent", "Shutter.Store.Escalation", "Shutter.Store.Case", "Shutter.Store.Precedent", "Shutter.Store.BoardLead", "Shutter.Store.ReviewAnnotation", "Shutter.Store.Review", "Shutter.Store.Idempotency", "Shutter.Bridge.ToolCall" {
         Set sc = $CLASSMETHOD(cls, "%KillExtent")
         If $$$ISERR(sc) Quit
         Set n = n + 1
@@ -1596,6 +1620,9 @@ ClassMethod PurgeStore() As %String [ SqlProc ]
     // Worklist rows whose task is gone (a task deleted by hand) would show as broken entries in the inbox.
     Do ##class(%SQL.Statement).%ExecDirectNoPriv(, "DELETE FROM EnsLib_Workflow.Worklist WHERE Task NOT IN (SELECT ID FROM EnsLib_Workflow.TaskResponse)")
     Kill ^Shutter.Counter, ^Shutter.Scenarios
+    // The counters start again, so a new case may carry a purged case's id: the reset stamp keeps a lead begun before
+    // the purge from being followed, and the evidence collector from reading older message-store events.
+    Set ^Shutter.Config("resetAt") = ##class(Shutter.Util.Time).NowUTC()
     Quit n
 }
 
@@ -1731,6 +1758,10 @@ ClassMethod Doctor(refresh As %Boolean = 0) As %String [ SqlProc ]
     Set r.credentials = checks, r."credentials_state" = cstate
     Do r.%Set("credentials_ok", allOk, "boolean")
     Set r."credentials_checked_at" = $GET(^Shutter.Health("credentials", "iso"))
+    // The public demo's portal (v1.39): whether the production's start hardened it (SHUTTER_DEMO_PORTAL), and when; the
+    // record alone, since reading the portal's own state (PortalState) needs %Admin_Secure.
+    Do r.%Set("portal_hardened", $GET(^Shutter.Config("portalHardened")) '= "", "boolean")
+    Set r."portal_hardened_at" = $GET(^Shutter.Config("portalHardened"))
     // The pieces of the builds since 25 Oct (CONTRACTS 12, v1.31), so a fresh install and an upgrade show the same: every item
     // of INSTALLITEMS in the production and enabled, the gate's policy version, the catalogue's entries, the records namespace
     // of a demo install, the index's adapter, the questions.

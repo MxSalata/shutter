@@ -4,7 +4,10 @@ Class Shutter.Test.Run
 
 /// Loads and runs the test classes under <var>repo</var><code>tests/unit/Shutter</code> (the repository as the container
 /// mounts it) with the unit test manager, keeping them loaded afterwards. Returns JSON: the (last) result index, how
-/// many test methods passed and failed, and the names of the failures.
+/// many test methods passed, failed and were skipped, the names of the failures, and the skipped methods with their
+/// classes. A skipped method is one that called $$$AssertSkipped (what it needs is not on this instance: the aihub
+/// module's classes on the core edition, for one); the manager records it with the status 2, apart from a pass (1) and
+/// a failure (0), so the three counts add up to the methods run.
 ClassMethod Triggers(repo As %String = "/home/irisowner/dev/") As %String [ SqlProc ]
 {
     // Called over HTTP, the suite can outlast the web gateway's 60-second response timeout: ask it to wait (as the
@@ -38,13 +41,17 @@ ClassMethod Triggers(repo As %String = "/home/irisowner/dev/") As %String [ SqlP
         Quit {"error": ("no result was recorded: " _ $SYSTEM.Status.GetErrorText(sc))}.%ToJSON()
     }
     // Every result recorded since the call began: one, or one per class run by hand.
-    Set passed = 0, failed = 0, failures = [], r = before
+    Set passed = 0, failed = 0, skipped = 0, failures = [], skips = [], r = before
     For {
         Set r = $ORDER(^UnitTest.Result(r))
         Quit:r=""
-        Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT Name, Status FROM %UnitTest_Result.TestMethod WHERE TestCase %STARTSWITH ?", r _ "||")
+        Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT TestCase, Name, Status FROM %UnitTest_Result.TestMethod WHERE TestCase %STARTSWITH ?", r _ "||")
         While rs.%Next() {
-            If rs.%Get("Status") {
+            Set status = rs.%Get("Status")
+            If status = 2 {
+                Set skipped = skipped + 1
+                Do skips.%Push($PIECE(rs.%Get("TestCase"), "||", 3) _ ":" _ rs.%Get("Name"))
+            } ElseIf status {
                 Set passed = passed + 1
             } Else {
                 Set failed = failed + 1
@@ -52,7 +59,7 @@ ClassMethod Triggers(repo As %String = "/home/irisowner/dev/") As %String [ SqlP
             }
         }
     }
-    Quit {"run": (run), "passed": (passed), "failed": (failed), "failures": (failures)}.%ToJSON()
+    Quit {"run": (run), "passed": (passed), "failed": (failed), "skipped": (skipped), "failures": (failures), "skips": (skips)}.%ToJSON()
 }
 
 }

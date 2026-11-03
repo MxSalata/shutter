@@ -52,7 +52,8 @@ ClassMethod Candidates(Output waiting As %Integer, Output held As %Integer)
 }
 
 /// One sweep: the candidates, and when there are any a run row around the two checks. Never an error for the adapter:
-/// a check that fails ends the run as failed, with the error on the row and a warning in the event log.
+/// a check that throws ends the run as failed, with the error on the row (the counts as far as the checks got) and a
+/// warning in the event log; since v1.39 the checks throw their errors instead of answering a partial count.
 Method Sweep() As %Status
 {
     Set ^Shutter.Release("last_sweep_at") = ##class(Shutter.Util.Time).NowUTC()
@@ -63,8 +64,7 @@ Method Sweep() As %Status
     If $$$ISERR(sc) { $$$LOGWARNING("A release run could not be opened: " _ $SYSTEM.Status.GetErrorText(sc)) Quit $$$OK }
     Set error = "", wc = 0, wr = 0, hc = 0, hr = 0
     Try {
-        Set wr = ##class(Shutter.Util.ResendGuard).ReleaseDeliveredWaits($THIS, ..WorkflowTarget, .wc)
-        Set hr = ##class(Shutter.Util.Schemas).ReleaseHeld($THIS, ..WorkflowTarget, .hc)
+        Do ..Checks(.wc, .wr, .hc, .hr)
     } Catch ex {
         Set error = ex.DisplayString()
     }
@@ -75,6 +75,15 @@ Method Sweep() As %Status
     Set ^Shutter.Release("last_run_id") = run.%Id()
     Do ##class(Shutter.Store.ReleaseRun).Prune(..KeepRuns)
     Quit $$$OK
+}
+
+/// The two checks of a run, in order, each sending its releases from this host: the delivered waits
+/// (Shutter.Util.ResendGuard), then the held cases (Shutter.Util.Schemas). The counts are written as the checks go, so
+/// a check that throws leaves them as far as it got, and Sweep records the error on the run.
+Method Checks(Output waitingChecked As %Integer, Output waitingReleased As %Integer, Output heldChecked As %Integer, Output heldReleased As %Integer)
+{
+    Set waitingReleased = ##class(Shutter.Util.ResendGuard).ReleaseDeliveredWaits($THIS, ..WorkflowTarget, .waitingChecked)
+    Set heldReleased = ##class(Shutter.Util.Schemas).ReleaseHeld($THIS, ..WorkflowTarget, .heldChecked)
 }
 
 /// The releaser's state, for GET /index and the Doctor: when it started and last swept, how many sweeps, the last run

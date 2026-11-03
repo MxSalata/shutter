@@ -317,7 +317,7 @@ scenarios every `EveryMinutes` with fresh synthetic patients at present times an
 receivers, so the errors are real, and between stories writes one ordinary message a minute (an admission to a free bed, a
 transfer, a demographic update or a discharge that frees the bed), so the feed looks like a working hospital. It writes HL7
 files into the hospital's own inbound folder (`^Hospital.Config("dir","in")`), where PAS In reads them: the path a real
-hospital has. It never resets anything, and the scenario runner's Run and Reset are not involved.
+hospital has. It never resets anything; the scenario runner's Reset (and so every Run) clears the feed's bed map (v1.39), so the ordinary feed admits fresh patients after the receiver forgot the old ones, except while a story is playing (`^Hospital.Live("playing")`, a mark older than 30 minutes counting as a dead job); the player records the receivers a story faulted (`^Hospital.Live("faulted", name)`) before applying them and turns them off at the story's end and at its next job's start, so a story cut off by a restart leaves no fault behind (a storm's own outage is left to run to `receiverDownUntil`).
 
 - **On and off.** The hospital install sets `^Hospital.Config("live")` from `SHUTTER_LIVE=1` and enables the item, and every
   start of Shutter's production applies the container's `SHUTTER_LIVE` the same way (`Setup.ApplyEnvironment`, 12: through
@@ -1378,7 +1378,10 @@ demo items, switched off on a site install with the others.
   texts N days|kept)` or `retention exists`. The Doctor reports `escalation_days`. The demo's `PurgeStore` removes the
   `.eml` files of the rows it drops, never the folder. Since v1.22 it also empties the production review's two stores,
   `Shutter.Store.Review` and `Shutter.Store.ReviewAnnotation` (13.4), and the review counter goes with the other counters
-  it clears, so the next review is `PR-000001` again.
+  it clears, so the next review is `PR-000001` again. Since v1.39 it also empties `Shutter.Store.Precedent` and `Shutter.Store.BoardLead`,
+  since the case counter starts again at `C-000001` and their rows would name cases that never existed, and sets
+  `^Shutter.Config("resetAt")` to the time of the purge, as a scenario reset does, so nothing from before it is read as
+  this instance's history.
 - **The aihub module's install** (v1.21) fails when the environment carries a provider key (`ANTHROPIC_API_KEY`) and the
   provider could not be configured from it, so a live edition is never built on a key that does not work; the image
   build has no key and is unaffected.
@@ -1428,7 +1431,7 @@ survives a restart that does not name it. The install reads the same variables (
 cap), so the image's build arguments stay the two the installer alone reads, with the demo password as a build secret
 (INSTALL.md section 3). The call returns JSON
 naming what was applied, with `errors` when a step failed, and the event log carries it; `SELECT Shutter.Setup_ApplyEnvironment()`
-runs it by hand. `ApplyRuntime(...)` is the same on given values, for the tests. At every start (v1.39) the production checks that the wallet secret and the Config Store entry still exist, not only the key's digest, and writes them again from `ANTHROPIC_API_KEY` when either is missing (`Shutter.Setup.ProviderNeedsRewrite`; a container recreated on the same volume loses both, since they live in IRISSYS while the record lives in the volume); the Doctor reports `provider`, `wallet_secret` and `provider_config`, each true, false or null where the edition has no such class.
+runs it by hand. `ApplyRuntime(...)` is the same on given values, for the tests. At every start (v1.39) the production checks that the wallet secret and the Config Store entry still exist, not only the key's digest, and writes them again from `ANTHROPIC_API_KEY` when either is missing (`Shutter.Setup.ProviderNeedsRewrite`; a container recreated on the same volume loses both, since they live in IRISSYS while the record lives in the volume); the Doctor reports `provider`, `wallet_secret` and `provider_config`, each true, false or null where the edition has no such class. `SHUTTER_DEMO_PORTAL` is read with them (v1.39): `1` applies `HardenPortal` (14.5's read-only portal) at every start of the production, since that hardening lives in IRISSYS and a recreated container would come back with the portal open, and records the time as `^Shutter.Config("portalHardened")`; the Doctor reports `portal_hardened` and `portal_hardened_at` from that record. Never from the demo flag alone: a local demo keeps the portal as IRIS made it.
 
 **Prevent failures** (v1.34; decided on 1 Nov 2026: an interface deployed without its schema would read every field from the
 wrong place, so Shutter "would actually stop an incident waiting to happen until the schema is imported"). With the site
@@ -1727,6 +1730,11 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   and its `409 stale_version` is written down (5).
   The provider key is written again at a start whose wallet secret or Config Store entry is gone, not only when the
   digest changed (12); the Doctor reports both.
+  Also from the sweep: the scenario runner's reset clears the live hospital's bed map unless a story plays, and a story cut
+  off leaves no fault behind (4.4); `heldSchema` is cleared with NULL, not `''` (which stored a null character); the Case
+  Releaser's two checks throw their errors so the run row records them; the unit runner reports skipped methods (`skipped`,
+  `skips`); `SHUTTER_DEMO_PORTAL` hardens the portal at every start and the Doctor says so (12); the demo's `PurgeStore`
+  empties the precedents and board leads too and stamps `resetAt` (12).
 - v1.38, 2 and 3 Nov 2026 (the demo rehearsal's storm, whose cases all convened boards): a watched production's failures run in the
   site's watched mode, policy by default, whatever mode the scenarios run in (6.3, 11); a case the alert intake opened
   takes the production's own report of the failure when it arrives before the evidence is collected, so the catalogue

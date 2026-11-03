@@ -1,9 +1,14 @@
 /// The Case Releaser's run rows (Shutter.Store.ReleaseRun; CONTRACTS 8.1, v1.35): begin and end, the interrupt at start,
-/// the status, the candidates, and the keep count. The rows this test writes are deleted at the end.
+/// the status, the candidates, the keep count, and a sweep whose check throws. The rows and the case this test writes are
+/// deleted at the end.
 Class Shutter.Test.Releaser Extends %UnitTest.TestCase
 {
 
+Parameter KEY = "PAS^HOSP^MRN-UT10^ENC-UT10^admit^2026-11-01T12:00:00Z";
+
 Property Ids As %String [ MultiDimensional ];
+
+Property CaseRowId As %String;
 
 Method OnAfterAllTests() As %Status
 {
@@ -11,6 +16,11 @@ Method OnAfterAllTests() As %Status
     For {
         Set id = $ORDER(..Ids(id)) Quit:id=""
         Do ##class(Shutter.Store.ReleaseRun).%DeleteId(id)
+    }
+    If ..CaseRowId '= "" {
+        Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.CaseEvent WHERE ""Case"" = ?", ..CaseRowId)
+        Kill ^Shutter.Counter("event", ..CaseRowId)
+        If ##class(Shutter.Store.Case).%ExistsId(..CaseRowId) Do ##class(Shutter.Store.Case).%DeleteId(..CaseRowId)
     }
     Quit $$$OK
 }
@@ -77,6 +87,59 @@ Method TestStatusAndCandidates()
     Do $$$AssertEquals(s.candidates.waiting _ "|" _ s.candidates.held, waiting _ "|" _ held, "with the same candidates")
     Do $$$AssertTrue((s.%GetTypeOf("last_run") = "object") || (s.%GetTypeOf("last_run") = "null"), "the last run is a row or null")
     Do $$$AssertEquals(##class(Shutter.Store.ReleaseRun).Prune(1000000), 0, "keeping a million rows deletes nothing")
+}
+
+/// A sweep whose check throws ends its run failed, with the error's text on the row, and answers the adapter ok; a sweep
+/// whose checks run ends its run done. The sweep needs a candidate to open a run, so a case held for a schema that is not
+/// loaded is opened first; the production's own Case Releaser may sweep it too, so the rows are found by this job.
+Method TestACheckThatThrowsFailsTheRun()
+{
+    Set op = {"operation_key": (..#KEY), "encounter_id": "ENC-UT10", "patient_id": "MRN-UT10", "patient_id_authority": "HOSP", "event": "admit", "ward": "WARD-A", "bed": null, "event_time": "2026-11-01T12:00:00Z", "source_system": "PAS", "source_message_id": "UT10", "payload_digest": "sha256:ut10"}
+    Set sc = ##class(Shutter.Store.Case).Open(op, "unreadable", "Held: the schema MYSITE_2.5.1 is not loaded here", "", "", "policy", .case, .opened, "", "MYSITE_2.5.1")
+    Do $$$AssertStatusOK(sc, "a held case opens, the sweep's candidate")
+    Set ..CaseRowId = case.%Id()
+    Set case.State = "blocked"
+    Do $$$AssertStatusOK(case.%Save(), "saved as blocked")
+    Do ##class(Shutter.Operation.Releaser).Candidates(.waiting, .held)
+    Do $$$AssertTrue(held >= 1, "the sweep has a candidate: " _ held _ " held")
+    Set host = ##class(Shutter.Test.FakeReleaser).%New("Case Releaser (unit test)")
+    Set host.ThrowInChecks = "the lookup threw (unit test)"
+    Set edge = ..LastRunId()
+    Do $$$AssertStatusOK(host.Sweep(), "the sweep answers ok to the adapter")
+    Set run = ..RunByThisJobAfter(edge)
+    Do $$$AssertTrue($ISOBJECT(run), "the sweep wrote a run row")
+    Quit:'$ISOBJECT(run)
+    Do ..Keep(run)
+    Do $$$AssertEquals(run.State, "failed", "the run failed")
+    Do $$$AssertTrue(run.Error [ "the lookup threw (unit test)", "with the error's text: " _ run.Error)
+    Do $$$AssertNotEquals(run.EndedAt, "", "and an end time")
+    Set host.ThrowInChecks = ""
+    Set edge = ..LastRunId()
+    Do $$$AssertStatusOK(host.Sweep(), "a sweep whose checks run")
+    Set run = ..RunByThisJobAfter(edge)
+    Do $$$AssertTrue($ISOBJECT(run), "wrote a run row")
+    Quit:'$ISOBJECT(run)
+    Do ..Keep(run)
+    Do $$$AssertEquals(run.State _ "|" _ run.Error, "done|", "that ended done")
+    Do $$$AssertTrue((run.HeldChecked >= 1) && (run.HeldReleased = 0), "it looked at the held case and left it held, since its schema is still missing: " _ run.HeldChecked _ " checked")
+    Do $$$AssertEquals(host.Sent.Count(), 0, "and sent nothing")
+}
+
+/// The newest run row's id, or 0.
+Method LastRunId() As %Integer
+{
+    Set id = 0
+    &sql(SELECT TOP 1 ID INTO :id FROM Shutter_Store.ReleaseRun ORDER BY ID DESC)
+    Quit $SELECT(SQLCODE = 0: +id, 1: 0)
+}
+
+/// The newest run row this job wrote after the given id, or "".
+Method RunByThisJobAfter(edge As %Integer) As Shutter.Store.ReleaseRun
+{
+    Set id = "", job = $JOB
+    &sql(SELECT TOP 1 ID INTO :id FROM Shutter_Store.ReleaseRun WHERE Job = :job AND ID > :edge ORDER BY ID DESC)
+    If (SQLCODE '= 0) || (id = "") Quit ""
+    Quit ##class(Shutter.Store.ReleaseRun).%OpenId(id)
 }
 
 }

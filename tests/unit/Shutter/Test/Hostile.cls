@@ -1,7 +1,7 @@
 /// A table of hostile and malformed agent outputs against the schema checks (Shutter.Schema.Findings and Plan; CONTRACTS 6.6,
 /// v1.35): each row says whether the check must refuse it. The checks never throw, always answer an array of problems, and
 /// accept ordinary Unicode. The schema classes belong to the aihub module, so on an instance without them the table is
-/// skipped with a note; it runs on the AI Hub build.
+/// reported as skipped ($$$AssertSkipped, which the runner counts apart from the passes); it runs on the AI Hub build.
 Class Shutter.Test.Hostile Extends %UnitTest.TestCase
 {
 
@@ -42,8 +42,7 @@ ClassMethod Rows() As %DynamicArray
 Method TestTheTable()
 {
     If '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Schema.Findings") {
-        Do $$$LogMessage("The aihub module is not on this instance: the hostile-output table is skipped (it runs on the AI Hub build)")
-        Do $$$AssertTrue(1, "skipped here")
+        Do $$$AssertSkipped("The aihub module is not on this instance: the hostile-output table is skipped (it runs on the AI Hub build)")
         Quit
     }
     Set rows = ..Rows(), it = rows.%GetIterator(), n = 0
