@@ -188,7 +188,7 @@ function renderFrame(path = '/cases') {
   return { router, client, unmount: view.unmount };
 }
 
-const banner = () => screen.findByRole('region', { name: 'Live hospital' });
+const banner = () => screen.findByRole('region', { name: "Mikolaj's Fictional Hospital, live" });
 const button = async () => within(await banner()).findByRole('button', { name: BREAK_THE_FEED });
 /** The banner's line has drawn and /me has answered: a missing button is then missing for good. */
 const settled = async () => {
@@ -225,7 +225,7 @@ describe('Break the feed: who sees it', () => {
     mode.trial = true;
     settingsWith({ ...LIVE, storm: STATES.sending });
     renderFrame();
-    const feed = await screen.findByRole('region', { name: 'Hospital feed (replayed)' });
+    const feed = await screen.findByRole('region', { name: "Mikolaj's Fictional Hospital, replayed" });
     expect(await within(feed).findByText(STORM_IN_TRIAL)).toBeVisible();
     expect(within(feed).queryByRole('button')).not.toBeInTheDocument();
     // No address to the demo in the app yet, so no link
@@ -243,7 +243,7 @@ describe('Break the feed: who sees it', () => {
       agents: { available: false, reason: 'provider_auth', until: null },
     });
     renderFrame();
-    const feed = await screen.findByRole('region', { name: 'Hospital feed (replayed)' });
+    const feed = await screen.findByRole('region', { name: "Mikolaj's Fictional Hospital, replayed" });
     expect(await within(feed).findByText(STORM_IN_TRIAL)).toBeVisible();
     expect(within(feed).queryByTestId('live-budget-line')).not.toBeInTheDocument();
     expect(within(feed).queryByTestId('live-unavailable')).not.toBeInTheDocument();

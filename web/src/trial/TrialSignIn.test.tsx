@@ -96,8 +96,10 @@ describe("the trial's sign-in page", () => {
     // The tab keeps the role for its reloads
     expect(sessionStorage.getItem('shutter:trial:as')).toBe('demo');
     // In the trial the feed is the recording replayed, never "live"
-    const feed = await screen.findByRole('region', { name: 'Hospital feed (replayed)' });
-    expect(feed).toHaveTextContent(/^Hospital feed \(replayed\): a new failure every 7 minutes\. Last: S2, /);
+    const feed = await screen.findByRole('region', { name: "Mikolaj's Fictional Hospital, replayed" });
+    expect(feed).toHaveTextContent(
+      /^Mikolaj's Fictional Hospital, replayed: a new failure every 7 minutes\. Last: S2, /,
+    );
     expect(feed.textContent).not.toMatch(/\blive\b/i);
   });
 

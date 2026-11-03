@@ -46,6 +46,7 @@ import type { CaseDetail, PlanView } from '@/api/types';
 import { TechDetail } from '@/components/TechDetail';
 import { ENV } from '@/env/mode';
 import { REPLAY_DONE } from '@/lib/events';
+import { HOSPITAL_NAME } from '@/lib/hospital';
 import { guideCard, guideTarget, useGuideDock } from '@/lib/guideDock';
 import { useLeaveTrial } from '@/trial/leave';
 import { onRoute, positionOf, stepsIn, welcomeDue, type GuidePosition } from './controller';
@@ -144,8 +145,8 @@ function Welcome({ initial }: { initial: GuideScope }) {
         when it is safe to.
       </Text>
       <Text fz={15}>
-        A demo hospital with made-up patients, recorded. Approve, run, save or escalate: each replays the
-        recording, and nothing leaves this browser.
+        {HOSPITAL_NAME}: a demo hospital with made-up patients, recorded. Approve, run, save or escalate: each
+        replays the recording, and nothing leaves this browser.
       </Text>
       <Radio.Group value={scope} onChange={(v) => setScope(v as GuideScope)} label="Choose a tour">
         <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm" mt="xs">

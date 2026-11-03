@@ -18,7 +18,7 @@ test.describe('the live hospital, as the public role sees it', () => {
     await signIn(page, AS_DEMO);
     // In the trial the feed is the recording replayed, and says so
     await expect(banner(page).getByTestId('live-line')).toContainText(
-      /^Hospital feed \(replayed\): a new failure every 7 minutes\. Last: S2, \d+ (s|min) ago\. Next: S8 at \d\d:\d\d (GMT|BST|UTC)\.$/,
+      /^Mikolaj's Fictional Hospital, replayed: a new failure every 7 minutes\. Last: S2, \d+ (s|min) ago\. Next: S8 at \d\d:\d\d (GMT|BST|UTC)\.$/,
     );
     // The trial has no demo hospital to break: the banner says where the storm plays, and offers no button
     await expect(banner(page)).toContainText('Break the feed plays on the public demo.');
