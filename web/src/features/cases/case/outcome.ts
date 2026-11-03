@@ -15,6 +15,7 @@ import { APPROVALS, caseState, gateOutcome, PROVENANCE, type OutcomeCase } from 
 import type { Status } from '@/lib/tone';
 import { checksOf } from './derive';
 import { approvalsByPlan, type SafetyReceipt } from './receipt';
+import { investigationRuns } from './runClock';
 import { encounterTimeline } from './timeline';
 
 /**
@@ -524,7 +525,7 @@ export function releaseStatus(f: CaseFacts): Status | undefined {
 export function provenanceOf(mode: string, runs: AgentRun[] | null | undefined): Status {
   if (mode === 'rules') return PROVENANCE.rules;
   if (runs === undefined) return { tone: 'neutral', label: 'Unknown' };
-  const list = runs ?? [];
+  const list = investigationRuns(runs);
   if (!list.length)
     return {
       ...PROVENANCE.rules,
