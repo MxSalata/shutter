@@ -325,6 +325,8 @@ ClassMethod ConfigureProviderTimeout(seconds As %String) As %Integer
 ClassMethod ApplyEnvironment(wait As %Integer = 0) As %String [ SqlProc ]
 {
     Set out = ..ApplyRuntime($SYSTEM.Util.GetEnviron("SHUTTER_DAILY_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_TRACE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_LIVE"), wait, $SYSTEM.Util.GetEnviron("SHUTTER_PROVIDER_TIMEOUT_SECONDS"), $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_PERIOD"), $SYSTEM.Util.GetEnviron("SHUTTER_LIVE_SCENARIOS"))
+    // The credential checks' cache, from this privileged process (v1.38): the anonymous health report only reads it.
+    Set out.credentials = ..RefreshCredentialCache(1)
     Quit out.%ToJSON()
 }
 
@@ -386,16 +388,27 @@ ClassMethod ApplyRuntime(dailyUsd As %String, judgeUsd As %String, publicPw As %
 /// kept the data volume while the users got a new password left ShutterIntake and DownstreamAPI with the old one, so every
 /// forward and delivery answered 401 and no case opened). Each credential the install makes, DownstreamAPI here on a demo
 /// install and the demo hospital's DownstreamAPI and ShutterIntake, is tried by a login as the user and password it stores,
-/// in a short background job of this instance (no web request, no CSP session, no licence held: a check every 15 s from the
-/// compose healthcheck would otherwise sign in three times each): {namespace, name, user, status, ok, detail}, ok false when
-/// the login is refused or the credential is missing. The result is kept in ^Shutter.Health("credentials") for ten
-/// minutes (CACHESECONDS); refresh recomputes it now. The Doctor carries the list as credentials, with credentials_ok and
-/// credentials_checked_at; GET /health?refresh=1 recomputes for an operator.
-ClassMethod CredentialChecks(refresh As %Boolean = 0) As %DynamicArray
+/// in a short background job of this instance (no web request, no CSP session, no licence held): {namespace, name, user,
+/// status, ok, detail}, ok false when the login is refused or the credential is missing.
+///
+/// The result lives in ^Shutter.Health("credentials") for ten minutes (CACHESECONDS), and only a process that may write
+/// the database computes it: the production's start (ApplyEnvironment) and the Case Releaser's sweep, which recomputes it
+/// when stale. A request that cannot write (the hardened demo's anonymous GET /health runs as UnknownUser, with no roles,
+/// and a write there answered <PROTECT> on 3 Nov 2026) only reads: the cache as it stands, stale or not, or nothing when
+/// there is none yet. state says which: fresh, refreshed, stale or unchecked. refresh recomputes now when the caller may.
+/// The Doctor carries the list as credentials, with credentials_ok, credentials_state and credentials_checked_at; GET
+/// /health?refresh=1 recomputes for an operator who may write.
+ClassMethod CredentialChecks(refresh As %Boolean = 0, Output state As %String, canWrite As %Integer = -1) As %DynamicArray
 {
+    Set state = "unchecked"
     Set at = $GET(^Shutter.Health("credentials", "at")), now = ##class(Shutter.Util.Time).EpochSeconds()
-    If 'refresh && (at '= "") && ((now - at) < ..#CACHESECONDS) {
-        Try { Return ##class(%DynamicArray).%FromJSON($GET(^Shutter.Health("credentials", "json"), "[]")) } Catch ex {}
+    Set cached = "", fresh = (at '= "") && ((now - at) < ..#CACHESECONDS)
+    If at '= "" Try { Set cached = ##class(%DynamicArray).%FromJSON($GET(^Shutter.Health("credentials", "json"), "[]")) } Catch ex { Set cached = "" }
+    If canWrite = -1 Set canWrite = ..CanWriteHealth()
+    If $ISOBJECT(cached) && fresh && ('refresh || 'canWrite) Set state = "fresh" Quit cached
+    If 'canWrite {
+        If $ISOBJECT(cached) Set state = "stale" Quit cached
+        Quit []
     }
     Set out = []
     If $GET(^Shutter.Config("demo")) Do out.%Push(..CredentialCheck($NAMESPACE, "DownstreamAPI"))
@@ -404,9 +417,38 @@ ClassMethod CredentialChecks(refresh As %Boolean = 0) As %DynamicArray
         Do out.%Push(..CredentialCheck(hospital, "DownstreamAPI"))
         Do out.%Push(..CredentialCheck(hospital, "ShutterIntake"))
     }
-    Set ^Shutter.Health("credentials", "json") = out.%ToJSON(), ^Shutter.Health("credentials", "at") = ##class(Shutter.Util.Time).EpochSeconds()
-    Set ^Shutter.Health("credentials", "iso") = ##class(Shutter.Util.Time).NowUTC()
+    Try {
+        Set ^Shutter.Health("credentials", "json") = out.%ToJSON(), ^Shutter.Health("credentials", "at") = ##class(Shutter.Util.Time).EpochSeconds()
+        Set ^Shutter.Health("credentials", "iso") = ##class(Shutter.Util.Time).NowUTC()
+        Set state = "refreshed"
+    } Catch ex {
+        // A process that passed the probe but cannot write after all: the result is served, not kept.
+        Set state = "uncached"
+    }
     Quit out
+}
+
+/// Whether this process may write the health cache: a probe write in ^Shutter.Health, since a request may run as a user
+/// with no roles (a read of the security tables would be refused the same way).
+ClassMethod CanWriteHealth() As %Boolean
+{
+    Try {
+        Set ^Shutter.Health("probe", $JOB) = 1
+        Kill ^Shutter.Health("probe", $JOB)
+        Return 1
+    } Catch ex {
+        Return 0
+    }
+    Quit 0
+}
+
+/// Keeps the credential checks' cache fresh from a process that may write: the production's start and the Case
+/// Releaser's sweep call it; it recomputes only when the cache is older than CACHESECONDS, and never throws.
+ClassMethod RefreshCredentialCache(force As %Boolean = 0) As %String
+{
+    Set state = ""
+    Try { Do ..CredentialChecks(force, .state) } Catch ex { Set state = "error: " _ ex.DisplayString() }
+    Quit state
 }
 
 /// How long the credential checks' result is kept, in seconds.
@@ -1441,11 +1483,16 @@ ClassMethod Doctor(refresh As %Boolean = 0) As %String [ SqlProc ]
     // The cases still in a working state, and the quiet minutes after which an approver may abandon one (CONTRACTS 5, 12).
     &sql(SELECT COUNT(*) INTO :working FROM Shutter_Store."Case" WHERE State NOT IN ('resolved', 'blocked', 'escalated', 'failed'))
     Set r."working_cases" = +working, r."abandon_after_minutes" = ##class(Shutter.Store.Case).AbandonAfterMinutes()
-    // The stored credentials against the users they name (v1.38): a login each, cached ten minutes; refresh recomputes.
-    Set checks = ..CredentialChecks(refresh), allOk = 1
-    Set r.credentials = checks
-    Set cit = checks.%GetIterator()
-    While cit.%GetNext(, .check) { If 'check.ok Set allOk = 0 }
+    // The stored credentials against the users they name (v1.38): the cache, which the production keeps fresh; a caller
+    // that may write may refresh it. Never a reason for the Doctor to fail: a request with no roles only reads.
+    Try {
+        Set checks = ..CredentialChecks(refresh, .cstate), allOk = 1
+        Set cit = checks.%GetIterator()
+        While cit.%GetNext(, .check) { If 'check.ok Set allOk = 0 }
+    } Catch ex {
+        Set checks = [], allOk = 1, cstate = "error: " _ ex.DisplayString()
+    }
+    Set r.credentials = checks, r."credentials_state" = cstate
     Do r.%Set("credentials_ok", allOk, "boolean")
     Set r."credentials_checked_at" = $GET(^Shutter.Health("credentials", "iso"))
     // The pieces of the builds since 25 Oct (CONTRACTS 12, v1.31), so a fresh install and an upgrade show the same: every item

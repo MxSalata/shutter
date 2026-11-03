@@ -49,16 +49,40 @@ Method TestCredentialsAreTried()
 Method TestCredentialChecksAreCached()
 {
     Set keep = $GET(^Shutter.Health("credentials", "json")), keepAt = $GET(^Shutter.Health("credentials", "at")), keepIso = $GET(^Shutter.Health("credentials", "iso"))
-    Set fresh = ##class(Shutter.Setup).CredentialChecks(1)
-    Do $$$AssertNotEquals($GET(^Shutter.Health("credentials", "at")), "", "a refresh writes the cache with its time")
+    Set fresh = ##class(Shutter.Setup).CredentialChecks(1, .state)
+    Do $$$AssertEquals(state, "refreshed", "a refresh by a process that may write recomputes and keeps the result")
+    Do $$$AssertNotEquals($GET(^Shutter.Health("credentials", "at")), "", "with its time")
     Set ^Shutter.Health("credentials", "json") = "[{""name"":""marker""}]"
-    Set cached = ##class(Shutter.Setup).CredentialChecks()
-    Do $$$AssertEquals(cached.%Size() _ "|" _ cached.%Get(0).name, "1|marker", "within ten minutes the cache is answered, no login made")
+    Set cached = ##class(Shutter.Setup).CredentialChecks(0, .state)
+    Do $$$AssertEquals(state _ "|" _ cached.%Size() _ "|" _ cached.%Get(0).name, "fresh|1|marker", "within ten minutes the cache is answered, no login made")
     Set ^Shutter.Health("credentials", "at") = ##class(Shutter.Util.Time).EpochSeconds() - 601
-    Set again = ##class(Shutter.Setup).CredentialChecks()
-    Do $$$AssertNotEquals($SELECT(again.%Size() > 0: again.%Get(0).name, 1: ""), "marker", "after ten minutes the checks run again")
-    Set forced = ##class(Shutter.Setup).CredentialChecks(1)
-    Do $$$AssertEquals(forced.%Size(), fresh.%Size(), "a refresh runs them whatever the cache's age")
+    Set again = ##class(Shutter.Setup).CredentialChecks(0, .state)
+    Do $$$AssertEquals(state, "refreshed", "after ten minutes the checks run again")
+    Do $$$AssertNotEquals($SELECT(again.%Size() > 0: again.%Get(0).name, 1: ""), "marker", "and the marker is gone")
+    Do $$$AssertEquals(##class(Shutter.Setup).RefreshCredentialCache(), "fresh", "the sweep's refresh leaves a fresh cache alone")
+    Kill ^Shutter.Health("credentials")
+    If keepAt '= "" Set ^Shutter.Health("credentials", "json") = keep, ^Shutter.Health("credentials", "at") = keepAt, ^Shutter.Health("credentials", "iso") = keepIso
+}
+
+/// A request that cannot write the database (the hardened demo's anonymous health report runs as UnknownUser with no
+/// roles, 3 Nov 2026) only reads the cache: fresh or stale as it stands, nothing when there is none, and never a login
+/// job or a write. The Doctor then still answers.
+Method TestAReadOnlyCallerOnlyReads()
+{
+    Set keep = $GET(^Shutter.Health("credentials", "json")), keepAt = $GET(^Shutter.Health("credentials", "at")), keepIso = $GET(^Shutter.Health("credentials", "iso"))
+    Kill ^Shutter.Health("credentials")
+    Set none = ##class(Shutter.Setup).CredentialChecks(0, .state, 0)
+    Do $$$AssertEquals(state _ "|" _ none.%Size(), "unchecked|0", "no cache and no right to write: nothing, marked unchecked")
+    Do $$$AssertEquals($DATA(^Shutter.Health("credentials")), 0, "and nothing was written")
+    Set none = ##class(Shutter.Setup).CredentialChecks(1, .state, 0)
+    Do $$$AssertEquals(state _ "|" _ none.%Size(), "unchecked|0", "a refresh asked for by such a caller is ignored")
+    Set ^Shutter.Health("credentials", "json") = "[{""name"":""marker"",""ok"":true}]", ^Shutter.Health("credentials", "at") = ##class(Shutter.Util.Time).EpochSeconds() - 601, ^Shutter.Health("credentials", "iso") = "2026-11-03T00:00:00Z"
+    Set old = ##class(Shutter.Setup).CredentialChecks(0, .state, 0)
+    Do $$$AssertEquals(state _ "|" _ old.%Get(0).name, "stale|marker", "a stale cache is served as it stands, marked stale")
+    Set ^Shutter.Health("credentials", "at") = ##class(Shutter.Util.Time).EpochSeconds()
+    Set cur = ##class(Shutter.Setup).CredentialChecks(1, .state, 0)
+    Do $$$AssertEquals(state _ "|" _ cur.%Get(0).name, "fresh|marker", "a fresh one as fresh, whatever refresh says")
+    Do $$$AssertEquals(##class(Shutter.Setup).CanWriteHealth(), 1, "this test's process may write (the probe)")
     Kill ^Shutter.Health("credentials")
     If keepAt '= "" Set ^Shutter.Health("credentials", "json") = keep, ^Shutter.Health("credentials", "at") = keepAt, ^Shutter.Health("credentials", "iso") = keepIso
 }
