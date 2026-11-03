@@ -52,6 +52,8 @@ Other settings are in `.env.example`: the published ports, the agents' mode and 
 
 ### Limits not listed in the README
 
+- The shipped site profile is a demo: it releases the single cases the catalogue settles at tier 2 without asking a person. A real site first answers the profile's induction questions.
+- Order communications and results systems are declared but not modelled; a case for one escalates before any model runs.
 - A06 and A07 (a change of patient class) are delivered as an update with no location, although an A06 can carry a new location in PV1-3.
 - Closed cases are kept (the record is the product); only the escalation emails' text and `.eml` files go, 90 days after the case closed (`SHUTTER_ESCALATION_DAYS`), and a site that wants closed cases removed switches the case purge on in the Task Manager.
 - A case left in a working state by a restart in the middle of a scenario is noted when the production starts (an error-kind event on the case saying so, with the way out), and once nothing of its workflow has moved for 15 minutes an approver can abandon it (`POST /cases/{id}/abandon`, or "Abandon the case" on the case page): the case fails with disposition `abandoned` and can be reinvestigated. Nothing abandons a case by itself, and a case that is merely waiting (a message in flight, an approval task open) is refused with 409 `busy`.
