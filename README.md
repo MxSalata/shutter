@@ -10,7 +10,14 @@
 
 *Why I built it:* real testing of an integration only happens in production, where a receiver behaves in a way nobody foresaw, a message arrives out of order, or someone fixes something by hand. Shutter is a safety net for those cases, made for a clinical setting, where a wrong write has a patient on the other end. *Mikolaj Salata ([MxSalata](https://community.intersystems.com/user/mxsalata))*
 
-Instead of a **Resend** in the Message Viewer, Shutter makes each failed delivery a case. The board, four AI Hub agents (three specialists and a coordinator), reads the case's sealed evidence, one snapshot of the message and the receiver's state fixed by its digest, and proposes a plan. The gate, a set of deterministic checks, decides whether the plan may write; a person or the site's written policy releases it; and one conditional write follows, proven from the receiver's history. The AI board proposes; the gate disposes.
+Instead of a **Resend** in the Message Viewer, Shutter makes each failed delivery a case:
+
+- **The board**, four AI Hub agents (three specialists and a coordinator), reads the case's sealed evidence (one snapshot of the message and the receiver's state, fixed by its digest) and proposes a plan.
+- **The gate**, a set of deterministic checks, decides whether the plan may write.
+- **A person, or the site's written policy,** releases it.
+- **One conditional write** follows, proven from the receiver's history.
+
+The AI board proposes; the gate disposes.
 
 **S8 shows why the agents are there.** Two systems move one patient in the same minute. Rules alone pass every check and write WARD-B over the bed manager's WARD-C; the board sees the evidence cannot say which move is current and escalates. On Shutter's own scenarios, of the 11 single cases the board is convened for, it gets all 11 right; rules alone get 4 ([comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md); [what that does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)).
 
@@ -31,7 +38,7 @@ Instead of a **Resend** in the Message Viewer, Shutter makes each failed deliver
 
 ## Where the agents sit
 
-The three specialists (conformance, encounter and impact) and the coordinator are business operations in the production. The case workflow calls the specialists in parallel, then the coordinator, who writes the plan. A pass takes 24 to 47 seconds and costs 0.34 to 0.50 USD, most passes 0.34 to 0.44: four agents read the evidence through typed tools on a frontier model, `claude-opus-5-5`, a setting of each board item. With `ANTHROPIC_API_KEY` in `.env` they run live; without a key they replay recorded live runs at no cost. The agents hold no write tool: their tools read the sealed evidence and submit a finding, a plan or an answer, and only the gate's checked, released plan is ever written. Its cases, evidence and plans are also read-only MCP tools through IRIS's own MCP gateway, identifiers tokenised, each tool call audited under the caller's IRIS user ([CONTRACTS.md](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#15-the-publisher-v135)).
+The three specialists (conformance, encounter and impact) and the coordinator are business operations in the production. The case workflow calls the specialists in parallel, then the coordinator, who writes the plan. A pass takes 24 to 47 seconds and costs 0.34 to 0.50 USD across the 25 recorded passes (22 of them 0.34 to 0.44): four agents read the evidence through typed tools on a frontier model, `claude-opus-5-5`, a setting of each board item. With `ANTHROPIC_API_KEY` in `.env` they run live; without a key they replay recorded live runs at no cost. The agents hold no write tool: their tools read the sealed evidence and submit a finding, a plan or an answer, and only the gate's checked, released plan is ever written. Its cases, evidence and plans are also read-only MCP tools through IRIS's own MCP gateway, identifiers tokenised, each tool call audited under the caller's IRIS user ([CONTRACTS.md](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#15-the-publisher-v135)).
 
 | The contest's task | In Shutter |
 | --- | --- |
@@ -45,11 +52,19 @@ The three specialists (conformance, encounter and impact) and the coordinator ar
 
 ## Try it
 
-**Fastest, with no key and no cost:** the trial in the browser (the quick tour: 9 steps, about 4 minutes), then the replay edition on your machine, `./install.sh --replay`, built and healthy in 2 min 4 s from a fresh copy once the 6 GB public image is pulled. With the AI Hub file, a fresh clone was healthy in 3 min 21 s on build 109 ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md)). Both on a 12-thread VM.
+| Way to try it | You need | What you see | Time |
+| --- | --- | --- | --- |
+| **The trial** in the browser [link at submission] | Nothing to install | The demo hospital's recorded runs; every action replays the recording, and nothing leaves the browser | The quick tour [link at submission, `?trial=tour`]: 9 steps, about 4 minutes. The engineers' tour [link at submission, `?trial=engineer`]: 6 steps, about 3 minutes, with Detail on Technical |
+| **The online demo** [link at submission] | A browser and the sign-ins below | A live hospital: a new failure every 7 minutes, recovered under the site's written policy | The four steps below |
+| **The replay edition** on your machine, `./install.sh --replay` | Docker; no key, no Early Access file | Your own instance, the board replaying its recorded live runs at no cost | Healthy in 2 min 4 s from a fresh copy once the 6 GB public image is pulled |
+| **The AI Hub edition** on your machine, `./install.sh --image-file ...` | Docker and the build 109 file from the Early Access portal; `ANTHROPIC_API_KEY` for live agents | Your own instance, with live agents or, without a key, their recorded runs | Healthy in 3 min 21 s from a fresh clone on build 109 ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md)) |
 
-**In the browser, nothing to install:** the trial [link at submission] opens signed in on the demo hospital's recorded runs. Every action replays the recording, and nothing leaves the browser. Two tours start from an address: the quick tour [link at submission, `?trial=tour`], 9 steps in about 4 minutes, and the engineers' tour [link at submission, `?trial=engineer`], 6 steps in about 3 minutes with Detail on Technical.
+Both install times are from a 12-thread VM.
 
-**Online demo:** [link at submission]: Mikolaj's Fictional Hospital, live, with made-up patients. A new failure arrives every 7 minutes and Shutter recovers it under the site's written policy. Sign in as `demo` / `shutter`. The Management Portal's Visual Trace, read only: `demo-trace` / `Shutter-Demo-IRIS-Portal`. The portal's address (`/csp/`) may first ask for your email address and send a one-time code to it; then that sign-in. The demo runs on AI Hub build `2026.3.0AI.154.0`; on your machine, use `2027.1.0AI.109.0` (below). The board runs live for the judges' account, within a model budget of 15 USD a day; everyone can see its recorded runs in the trial.
+**The online demo** is Mikolaj's Fictional Hospital, live, with made-up patients. The demo runs on AI Hub build `2026.3.0AI.154.0`; on your machine, use `2027.1.0AI.109.0` (below). The board runs live for the judges' account, within a model budget of 15 USD a day; everyone can see its recorded runs in the trial. Its sign-ins:
+
+- The web app: `demo` / `shutter`.
+- The Management Portal's Visual Trace, read only: `demo-trace` / `Shutter-Demo-IRIS-Portal`. The portal's address (`/csp/`) may first ask for your email address and send a one-time code to it; then that sign-in.
 
 **On your machine:** Docker, then one command. `install.sh` checks Docker, Compose, memory, disk, the port and the image first and changes nothing until every check passes; then it builds, starts and waits until Shutter is healthy. On Windows, run it in Git Bash or a WSL 2 shell; from PowerShell, use the [Run details](https://github.com/MxSalata/shutter#run-details) commands.
 
@@ -72,28 +87,30 @@ Shutter is ready after 10 s:
   the portal:    http://localhost:52773/csp/sys/UtilHome.csp  (_SYSTEM / SYS, namespace SHUTTER)
 ```
 
-- **Builds:** Shutter is verified on the AI Hub Community builds `2027.1.0AI.109.0`, the one the [Early Access portal](https://evaluation.intersystems.com/Eval/early-access/AIHub) offers since 2 November 2026, and `2026.3.0AI.154.0`, the contest's first ([receipt on 109](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md), [receipt on 154](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)). `install.sh` loads and tags either, from the file or already loaded; judges, please use 109.
+- **Builds:** judges, please use the AI Hub Community build `2027.1.0AI.109.0`, the one the [Early Access portal](https://evaluation.intersystems.com/Eval/early-access/AIHub) offers since 2 November 2026. Shutter is also verified on `2026.3.0AI.154.0`, the contest's first ([receipt on 109](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md), [receipt on 154](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)). `install.sh` loads and tags either, from the file or already loaded.
 - For live agents, set `ANTHROPIC_API_KEY` in `.env`; without a key the board replays its recorded live runs. The live board uses Anthropic's API only, so with another provider's key it replays too. The case page's board panel marks each run Live or Replay, and so does each `AgentResponse` in the Visual Trace (`Mode`). The replay edition is the same without live agents or knowledge search.
-- The first build takes 2 to 15 minutes. Allow Docker at least 5 GB of memory and about 25 GB of free disk. Then open http://localhost:52773/shutter/index.html.
+- The first build takes about 2 to 4 minutes on a 12-thread machine with 11 GB of memory, and up to about 15 on 8 cores and 5 GB, the minimum; `install.sh` gives up after 25. Allow Docker at least 5 GB of memory and about 25 GB of free disk. Then open http://localhost:52773/shutter/index.html.
 - **Sign-ins on your machine:** the web app as `approver` / `shutter` (approves) or `operator` / `shutter`; the Management Portal as `_SYSTEM` / `SYS`, namespace `SHUTTER`.
 
 ### On the online demo, first
 
-1. Press **Break the feed** on the hospital's banner. Its bed manager goes down for a minute and eight movements for four new patients fail; a strip follows Shutter grouping them into one incident and, once the bed manager is back, releasing them in order. In the demo's rehearsal on 3 November 2026 that came to **one incident waiting for one approval, and no model call**; on the build before, each of the eight cases convened a board of its own. Unlike a Resend of each message, each item goes in event order at the version the previous one's verified receipt reports, stopping at the first surprise. Step 4 shows the agents decide.
-2. Open a case that **waits for approval** and **Approve** it: one conditional write, then "Verified" from the receiver's history.
-3. On any case, **In IRIS: Message trace** opens its session in the Visual Trace (`demo-trace`).
-4. **See the agents decide.** The hospital's own stories are settled by its policy, with no board. With the judges' account, **Convene the board** on an escalated or blocked case: the board investigates it again, live, on fresh evidence. Without it, **See the board decide**, under the banner, opens S8's recorded board in the trial.
+1. Press **Break the feed** on the hospital's banner. Its bed manager goes down for a minute and eight movements for four new patients fail; a strip follows Shutter grouping them into one incident and, once the bed manager is back, releasing them in order. Unlike a Resend of each message, each item goes in event order at the version the previous one's verified receipt reports, stopping at the first surprise. In the demo's rehearsal on 3 November 2026 it ended as **one incident waiting for one approval**, with no model call: this outage needed no agent to plan its chains. Step 4 shows the agents decide.
+2. Open a case that **waits for approval** and press **Approve plan**: one conditional write, then "Verified" from the receiver's history.
+3. On any case, **In IRIS: Message trace** opens its session in the Visual Trace (sign in as `demo-trace` / `Shutter-Demo-IRIS-Portal`).
+4. **See the agents decide.** The failures the hospital makes every 7 minutes are settled by its written policy, with no board. With the judges' account, **Convene the board** on an escalated or blocked case: the board investigates it again, live, on fresh evidence. Without it, **See the board decide**, under the banner, opens S8's recorded board in the trial.
 
 ### On your machine or in the trial, first
 
-1. In **Scenarios**, run **S2** in **Board** mode. About 20 seconds later (a minute live) its case waits for approval. **Approve** it: one conditional write, then "Verified".
+The mode chooses who proposes the plan; the gate, the rehearsal and the release are the same in every mode. **Board**: three specialist agents review the evidence in parallel, then a coordinator agent proposes one plan. **Site policy**: the scenario catalogue and the site's profile settle the cases they know, and the board takes the rest. **Single investigator**: one generalist agent proposes the plan (not in the trial). **Rules only**: no agents; the message is resent unchanged unless the gate objects, the baseline to compare with.
+
+1. In **Scenarios**, run **S2** in **Board** mode. About 20 seconds later (a minute live) its case waits for approval. Press **Approve plan**: one conditional write, then "Verified".
 2. Run **S8** in **Rules only** and approve (in the trial its recorded case is already approved and written): WARD-B overwrites the bed manager's WARD-C. In **Board** it escalates, writing nothing. The case page sets the two side by side.
 
 ## What to look at
 
 ![The Scenarios page: six steps and three scenarios to try first](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/scenarios-start.png)
 
-- **S2, a transfer that never arrived.** The gate passes the board's resend, the receiver's dry run says it would apply, and the approval waits as a Workflow task. "Acknowledged" is never "Verified". The web app's Approve completes that same `EnsLib.Workflow` task as the signed-in approver; from the IRIS Workflow inbox, paste the plan's digest into the task's `PlanDigest` field.
+- **S2, a transfer that never arrived.** The gate passes the board's resend, the receiver's dry run says it would apply, and the approval waits as a Workflow task. "Acknowledged" is never "Verified". The web app's **Approve plan** completes that same `EnsLib.Workflow` task as the signed-in approver; from the IRIS Workflow inbox, copy **Plan digest** from the case page's plan and paste it into the task's `PlanDigest` field.
 
 ![S2's approval waits as a task in the IRIS Workflow inbox, for the role Shutter Approvers](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/workflow-inbox-s2.png)
 
@@ -106,7 +123,7 @@ Shutter is ready after 10 s:
 
 ![Incident I-000001 from S11: eight failed deliveries to Downstream Out, six chains, five released by the site's policy and one by the board, all verified at the receiver in 1 min 42 s](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/incident-s11.png)
 
-All 26 scenarios, step by step, and where each part of the task shows: [docs/readme/scenarios.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/scenarios.md).
+All 26 scenarios (S1 to S25 without S14, with S23 in three parts), step by step, and where each part of the task shows: [docs/readme/scenarios.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/scenarios.md).
 
 ## How it works
 
@@ -169,14 +186,14 @@ The idea asks whether Interoperability could do the job of a tracing tool such a
    ![One board member's run as an AgentResponse in the Visual Trace: model, mode, tokens, iterations and tool calls](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/trace-agentresponse.png)
 
 4. In the Management Portal's SQL page (namespace `SHUTTER`), run the second query below with that session number: every tool call of the pass, in order, with its duration, whether it was allowed, and the board member that made it.
-5. On the case page, **When each agent worked** draws the same rows as a timeline, and the Costs page sums them by case.
+5. On the case page, **When each agent worked** draws the same rows as a timeline, and the **Settings and costs** page sums them by case.
 
 | A tracing tool records | In Shutter |
 | --- | --- |
 | A trace (one end-to-end run) | The case's session in the Visual Trace, one lane per step and agent |
 | A generation (one model call) | One `AgentRequest` and `AgentResponse` pair per run, with model, tokens, cost and duration, kept as an `AgentRun` |
 | Tool calls and retrieval | Each tool call, knowledge searches and refused calls included, as a `ToolCall` row and in the trace's log (`%AI.Policy.Audit`) |
-| Cost | The Costs page and `GET /costs`, by case, review and question |
+| Cost | The **Settings and costs** page and `GET /costs`, by case, review and question |
 | The prompt's version | The agent class's configuration version, in the request and each recording's key |
 | Replay | Recordings keyed by encounter, event, member and configuration version, replayed by CI on every push |
 | Spans and timing | Each run's start to the millisecond, its model and tool time, and each tool call's time and duration |
@@ -216,7 +233,7 @@ What I found building Shutter, measured on build `2026.3.0AI.154.0`; the longer 
 - **The approval boundary, attacked over HTTP:** an approval naming another plan or a stale version (409), an operator's approval (403), one approval sent twice (one write), the receiver changed after approval (S20, no write), and a resend of a delivery the receiver already holds (S3, no write).
 - **Privacy, and a question that tries to act:** [evaluation.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md#what-the-agents-see-and-a-question-that-tries-to-act).
 - **The web app:** 1265 component and 652 browser tests (`npm test`, `npm run test:e2e`), axe-core on 67 screens and states in 5 appearances.
-- **The AI Hub module:** CI can't download an Early Access build, so it builds the core on the public image. The AI Hub module is proven by fresh clones installed with `install.sh` on builds 109 and 154 (each Doctor clean, the Second Parser running), every scenario on 109, 29 plays across the three modes ([receipt on 109](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md), [receipt on 154](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)), the board recorded live on build 154 on 25 October and 1 November 2026 (100 agent runs, 10.00 USD at list prices), which CI replays on every push, and run live on build 109 on 3 November (S2, four runs, 0.42 USD).
+- **The AI Hub module:** CI can't download an Early Access build, so it builds the core on the public image. The AI Hub module is proven by fresh clones installed with `install.sh` on builds 109 and 154 (each Doctor clean, the Second Parser running), every scenario on 109, 29 plays across three modes (15 in Board, 12 in Site policy, 2 in Rules only) ([receipt on 109](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md), [receipt on 154](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)), the board recorded live on build 154 on 25 October and 1 November 2026 (100 agent runs, 10.00 USD at list prices), which CI replays on every push, and run live on build 109 on 3 November (S2, four runs, 0.42 USD).
 
 ## Limits, plainly
 
@@ -240,18 +257,21 @@ docker compose ps          # again until it says healthy
 curl http://localhost:52773/api/shutter/health
 ```
 
-For build 154, use its file and the tag `irishealth-community:2026.3.0AI.154.0`, and set `SHUTTER_IMAGE` to it. If `docker image load` prints another name, tag that one. The health report says `"ok":true` once the production runs. Recording the board live for every scenario that convenes it cost 10.00 USD at list prices ([evaluation](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md): 100 agent runs). The replay edition: in `.env`, set `SHUTTER_IMAGE=containers.intersystems.com/intersystems/irishealth-community:2026.2`, then `docker compose up -d --build`. To switch editions, run `docker compose down -v` first: it removes the instance's data.
+- **Build 154:** use its file and the tag `irishealth-community:2026.3.0AI.154.0`, and set `SHUTTER_IMAGE` to it. If `docker image load` prints another name, tag that one.
+- **Healthy:** the health report says `"ok":true` once the production runs.
+- **The replay edition:** in `.env`, set `SHUTTER_IMAGE=containers.intersystems.com/intersystems/irishealth-community:2026.2`, then `docker compose up -d --build`.
+- **Switching editions:** run `docker compose down -v` first. It removes the instance's data.
 
-**Open it:** the web application and the Management Portal at http://localhost:52773/csp/sys/UtilHome.csp, with the sign-ins under [Try it](https://github.com/MxSalata/shutter#try-it) (production `Shutter.Production`; the demo hospital's is `Hospital.Production` in `HOSPITAL`). Ports are published on `127.0.0.1` only. More in [docs/readme/running.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md) and, for a hospital's own IRIS for Health, [docs/INSTALL.md](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md).
+**Open it:** the web app at http://localhost:52773/shutter/index.html and the Management Portal at http://localhost:52773/csp/sys/UtilHome.csp, with the sign-ins under [Try it](https://github.com/MxSalata/shutter#try-it) (production `Shutter.Production`; the demo hospital's is `Hospital.Production` in `HOSPITAL`). Ports are published on `127.0.0.1` only. More in [docs/readme/running.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md) and, for a hospital's own IRIS for Health, [docs/INSTALL.md](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md).
 
 ## Troubleshooting
 
 - **`install.sh` stops at a check.** It prints `[fix]` with what to do for each one, and changes nothing until every check passes. A port in use: set `SHUTTER_WEB_PORT` in `.env`.
 - **Not healthy after 25 minutes.** `install.sh` prints the last 30 lines of the log and the health address; `curl http://localhost:52773/api/shutter/health` is the report to read.
-- **The Doctor.** In the Management Portal's SQL page (namespace `SHUTTER`), `SELECT Shutter.Setup_Doctor()`: `missing_items` and `disabled_items` should be `[]`, `production_state` `running`, `board_members` 5, `recordings` more than 0 and `second_parser` `probe: ok` ([the values on build 109](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md)).
+- **The Doctor.** In the Management Portal's SQL page (namespace `SHUTTER`), `SELECT Shutter.Setup_Doctor()`: `missing_items` and `disabled_items` should be `[]`, `production_state` `running`, `board_members` 5 (the board's four and the single investigator), `recordings` more than 0 (174 on build 109: every recording, not only the board's 100 runs) and `second_parser` `probe: ok` ([the values on build 109](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md)).
 - **"License limit exceeded" or "Service Unavailable".** The Community licence's 8 units are used up, usually by calls to the API without a session cookie; restarting the container (`docker compose restart`) frees them.
 - **On the first start,** `ERROR #5002 ... Sharding` and "Error trading CSP licenses" come from the IRIS image and are harmless.
-- **`install.sh` says the AI Hub image is too small.** The load was cut short; load the file again (a complete load is about 5.4 GB of content).
+- **`install.sh` says the AI Hub image is too small.** The load was cut short; load the file again (a complete load is about 5.4 GB of content, from the 5.5 GB file).
 
 ## About the contest
 
