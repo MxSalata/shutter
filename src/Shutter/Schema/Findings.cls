@@ -18,7 +18,8 @@ Property Violations As list Of %String(%JSONFIELDNAME = "violations", MAXLEN = 1
 /// What could not be established from the evidence.
 Property Unknowns As list Of %String(%JSONFIELDNAME = "unknowns", MAXLEN = 1000);
 
-/// Snapshot item kinds or identifiers the findings rest on (message, validation, ward_state, receipt, timeline, route, error).
+/// Keys of the evidence the findings rest on (operation, failure, message, validation, ward_state, receipt, timeline, route),
+/// or keys one level down in it.
 Property EvidenceRefs As list Of %String(%JSONFIELDNAME = "evidence_refs", MAXLEN = 200);
 
 /// The dispositions a finding or a plan may carry.
