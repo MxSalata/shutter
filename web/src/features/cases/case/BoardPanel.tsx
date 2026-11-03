@@ -33,6 +33,7 @@ import { PROVENANCE } from '@/lib/status';
 import { useTechnical } from '@/stores/appearance';
 import { describeEntry } from './derive';
 import { showEvidence } from './evidenceLinks';
+import { investigationRuns } from './runClock';
 import { RunTimeline } from './RunTimeline';
 import { NotYet, Section } from './Section';
 
@@ -613,7 +614,8 @@ export function BoardPanel({
   receiver?: string;
 }) {
   const runs = useRuns(caseId, open);
-  const list = runs.data ?? [];
+  // The investigation's runs alone: a question's runs (Ask about this case) sit on the case too
+  const list = investigationRuns(runs.data);
   const specialists = list.filter((r) => r.role === 'specialist');
   const coordinator = list.filter((r) => r.role === 'coordinator').at(-1);
   const generalist = list.filter((r) => r.role === 'generalist').at(-1);

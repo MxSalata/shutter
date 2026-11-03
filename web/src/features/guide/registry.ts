@@ -275,7 +275,7 @@ export const CHAPTERS: GuideChapter[] = [
       {
         id: 'ask',
         title: 'Ask about this case',
-        say: 'Pick one of the suggested questions: the trial has their recorded answers. Explain answers quickly; Ask the board puts it to the agents.',
+        say: 'Pick a suggested question: the trial has its recorded answer. "Explain" is one agent, quick; "Ask the board" puts it to all four.',
         place: { scenario: 'S8', mode: 'board' },
         target: 'case-ask',
         tryIt: { action: 'ask-open', text: 'Try it: open Ask, pick a question' },
@@ -569,6 +569,15 @@ export const SCOPE_OVERLINE: Record<GuideScope, string> = {
   quick: 'Trial tour',
   all: 'Every screen',
   engineer: "Engineers' tour",
+};
+
+/** The finish card's one sentence on what the route showed: each route its own, since their steps differ. */
+export const SCOPE_FINISH: Record<GuideScope, string> = {
+  quick:
+    'You saw a transfer delivered and verified, a fix held back for a person, and the gate stopping one.',
+  all: 'You saw a transfer delivered and verified, a fix held back for a person, the gate stopping one, and every screen on the way.',
+  engineer:
+    "You saw the decision receipt as JSON, the gate's reason codes, what each agent cited, S8 beside its rules-only run, the message trace in IRIS, and where simple rules went wrong.",
 };
 
 export function chapterById(id: string | null | undefined): GuideChapter | undefined {

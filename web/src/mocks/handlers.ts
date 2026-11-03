@@ -514,6 +514,27 @@ function filesOf(scenario: string): string[] {
   return steps.flatMap((step) => ('file' in step && step.file ? [String(step.file)] : []));
 }
 
+/** How long a run plays, from its start: its files go out spread over it, then the run is done. */
+const RUN_MS = 8_000;
+
+/**
+ * Where a running run has got to, from the clock: a file every RUN_MS / n milliseconds, the step naming the next one,
+ * and done with every file once the whole time has passed.
+ */
+function advanced(r: ScenarioRun): ScenarioRun {
+  const files = filesOf(r.scenario);
+  const elapsed = Date.now() - Date.parse(r.startedAt);
+  if (elapsed >= RUN_MS)
+    return { ...r, state: 'done', finishedAt: new Date().toISOString(), step: undefined, files };
+  const delivered = Math.min(files.length, Math.floor(elapsed / (RUN_MS / Math.max(files.length, 1))));
+  const next = files[delivered];
+  return {
+    ...r,
+    files: files.slice(0, delivered),
+    step: next ? `delivering ${next}` : 'waiting for the case',
+  };
+}
+
 /** The scenario's latest recorded case in the mode it was last played in (the board's until then), else any. */
 function latestCase(scenario: string) {
   const mode = played[scenario] ?? 'board';
@@ -652,14 +673,7 @@ export const handlers = [
 
   http.get(`${BASE}/scenarios`, () => {
     if (!session) return signedOut();
-    if (run?.state === 'running' && Date.now() - Date.parse(run.startedAt) > 8_000)
-      run = {
-        ...run,
-        state: 'done',
-        finishedAt: new Date().toISOString(),
-        step: undefined,
-        files: filesOf(run.scenario),
-      };
+    if (run?.state === 'running') run = advanced(run);
     return HttpResponse.json({
       scenarios: fixtures.scenarios.map((s) => ({
         ...s,
@@ -692,7 +706,7 @@ export const handlers = [
       state: 'running',
       files: [],
       timeouts: [],
-      step: 'delivering the first file',
+      step: `delivering ${filesOf(String(params.id))[0] ?? 'the first file'}`,
     };
     await delay(300);
     return HttpResponse.json(

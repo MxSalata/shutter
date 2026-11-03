@@ -79,7 +79,7 @@ describe('IncidentPage in the trial', () => {
     const dialog = await screen.findByRole('dialog', { name: /^Approve the release of \d+ chains?$/ });
     expect(
       within(dialog).getByText(
-        'Go ahead. You will see the recorded chain go out in order. Nothing leaves this browser.',
+        'Go ahead. You will see the recorded chain go out in order. Nothing leaves this browser, and a reload starts the recording afresh.',
       ),
     ).toBeInTheDocument();
     expect(within(dialog).getByText('Trial only')).toBeInTheDocument();

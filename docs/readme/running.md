@@ -6,7 +6,7 @@ The README's Try it and Run details sections have the commands. This page keeps 
 
 - On Windows, run `install.sh` in Git Bash or a WSL 2 shell (Docker Desktop's WSL integration); from PowerShell, use the README's Run details commands.
 - ARM64 machines (Apple silicon) need the `irishealth_arm64-community` file of the same build; Shutter has not been tried on ARM64.
-- The first `up` builds the image: about 10 to 15 minutes, most of it in the install step (measured at 14.5 minutes on 8 cores and 5 GB of memory). The replay edition builds in about 8 minutes.
+- The first `up` builds the image: about 10 to 15 minutes, most of it in the install step (measured at 14.5 minutes on 8 cores and 5 GB of memory). The replay edition builds in about 8 minutes on that machine; on a 12-thread VM with 11 GB of memory it built and was healthy in 2 minutes 4 seconds from a fresh copy, with `--no-cache` and the public image already pulled (3 November 2026; the 6 GB image download comes first on a new machine).
 - The ports are published on `127.0.0.1` only, because the demo's passwords are well known; from another machine, use an SSH tunnel (`ssh -L 52773:localhost:52773 <the Docker host>`). `SHUTTER_WEB_PORT` and `SHUTTER_SUPERSERVER_PORT` in `.env` change the ports.
 
 ### Users
@@ -49,6 +49,23 @@ What you make stays: the cases, approvals, incidents, the site profile and Shutt
 Other settings are in `.env.example`: the published ports, the agents' mode and model, and the installer's demo password and message purge.
 
 **Spend, in full.** A storm of one kind convenes one board: the cases with the same failure signature within ten minutes follow its lead, each through its own gate and approval. `BoardsPerMinute` (6) spreads the others out, a token budget limits each run, and `SHUTTER_DAILY_BUDGET_USD` caps a day's live spend, after which cases take the rules path: set it on any instance with a key.
+
+### The knowledge in IRIS vector tables
+
+`Shutter.Knowledge.Library.TableFor(collection)` names each collection's vector table `Shutter_Knowledge.<collection>`; `%AI.RAG.VectorStore.IRIS` (384 dimensions, model `AllMiniLML6V2`) creates it with the columns `id` (the chunk's digest), `text`, `vector`, `metadata` and `source` (the Markdown file), and a `<collection>_Config` table beside it. On build `2027.1.0AI.109.0` (3 November 2026): `contracts` 26 chunks, `lifecycle` 17, `effects` 11, `playbooks` 20, `review` 57 and `explain` 76.
+
+In the Management Portal's SQL page (namespace `SHUTTER`), the interface contract's chunks nearest its own rule WIC-3.1 ("Only a receipt proves that an operation was committed"), by cosine similarity of the stored embeddings:
+
+```sql
+SELECT TOP 3 b.id, SUBSTRING(b.text, 1, 120) AS chunk, ROUND(VECTOR_COSINE(b.vector, a.vector), 3) AS similarity
+FROM Shutter_Knowledge.contracts a, Shutter_Knowledge.contracts b
+WHERE a.text LIKE 'WIC-3.1.%' AND b.id <> a.id
+ORDER BY similarity DESC
+```
+
+On build 109 the first is WIC-5.2, the receipts route (0.747), then WIC-2.5, the dry run (0.690). Across collections, `FROM Shutter_Knowledge.contracts a, Shutter_Knowledge.playbooks b` finds the recovery playbook's RP-3.1, "The receipt decides whether a movement was committed" (0.663).
+
+The query compares stored embeddings. A fresh phrase can't be embedded from SQL on this build: `%AI.RAG.Embedding.FastEmbed` embeds only inside AI Hub's own bridge (its `EmbedBatch` throws "use the Rust bridge directly", AI Hub bug report #8), and `%AI.RAG.KnowledgeBase` has no search of its own. So a phrase search is the agents' tool (`search_contracts` and the other five, `TopK` 4), which the Visual Trace shows as a tool call of a run.
 
 ### Limits not listed in the README
 

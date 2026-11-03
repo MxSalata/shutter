@@ -266,6 +266,20 @@ describe('the Agents section', () => {
     expect(within(agents).getAllByText('Replay').length).toBeGreaterThan(1);
   });
 
+  it("names the mode a watched production's forwarded failures run in, when the server sends it", async () => {
+    renderSettings({ ...settings(false), mode: 'board', watchedMode: 'policy' });
+    const agents = await screen.findByRole('region', { name: 'Agents' });
+    expect(within(agents).getByText('Investigation mode for new cases: Board')).toBeInTheDocument();
+    expect(within(agents).getByText('· Forwarded failures: Policy')).toBeInTheDocument();
+  });
+
+  it('says nothing of forwarded failures on a server that does not send the watched mode', async () => {
+    renderSettings(settings(false));
+    const agents = await screen.findByRole('region', { name: 'Agents' });
+    expect(within(agents).getByText('Investigation mode for new cases: Board')).toBeInTheDocument();
+    expect(within(agents).queryByText(/Forwarded failures/)).not.toBeInTheDocument();
+  });
+
   it('lists each item with its board member, the runner apart, and how it answers', async () => {
     renderSettings();
     const table = await screen.findByRole('table', { name: 'Production items that run an agent' });

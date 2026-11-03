@@ -174,7 +174,8 @@ test.describe('the guide', () => {
     const guide = page.getByRole('region', { name: 'Guide' });
     await expect(guide).toContainText('Step 1 of 9');
     for (const button of await guide.getByRole('button', { name: /^(Back|More|Next)$/ }).all())
-      expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      // A sub-pixel layout can measure 43.99997: a 44 px target to the hundredth of a pixel
+      expect(Math.round((await button.boundingBox())!.height * 100) / 100).toBeGreaterThanOrEqual(44);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
     await go(page, '/scenarios');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);

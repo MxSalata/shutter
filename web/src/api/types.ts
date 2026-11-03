@@ -186,6 +186,20 @@ export interface CaseSummary {
   sourceProduction?: string;
   sourceRoute?: string;
   originHeaderId?: string;
+  /** The bed within the ward (PV1-3) for an admission or a transfer, else null (CONTRACTS 11, v1.28). */
+  bed?: string | null;
+  /** The case this one waits on while the gate holds its write with WAITING_FOR_OCCUPANT_CASE (CONTRACTS 6.5, v1.28). */
+  waitsOn?: string | null;
+  /** The control id of the newer message it waits for under NEWER_MESSAGE_PENDING (CONTRACTS 6.5, v1.29). */
+  waitsOnMessage?: string | null;
+  /** The schema category whose absence holds the message, kind `unreadable` (CONTRACTS 11, v1.34); "" otherwise. */
+  heldSchema?: string;
+  /** Until when the receiver asked not to retry, its Retry-After on the failed delivery (CONTRACTS 1.1, v1.35). */
+  retryAfterUntil?: string;
+  /** The case whose board this one follows while that board runs, one board per failure signature (CONTRACTS 6.6, v1.35). */
+  followsCase?: string;
+  /** The failure signature this case led or followed a board for (CONTRACTS 6.6, v1.35). */
+  leadSignature?: string;
 }
 
 export interface CaseList {
@@ -887,6 +901,11 @@ export interface Settings {
   agentMode?: string;
   providerConfigured?: boolean;
   mode: Mode;
+  /**
+   * The mode a watched production's forwarded failures run in (CONTRACTS 6.3 and 11, v1.38): policy unless the site
+   * set another, whatever mode the scenarios run in. Absent from an older server.
+   */
+  watchedMode?: Mode;
   scenario: string;
   resetAt: string;
   demo: boolean;
@@ -948,8 +967,8 @@ export interface LiveAgents {
 }
 
 /**
- * `GET /settings` `live.budgetNote`: what the author pays for the live agents, as the demo's build sets it (not yet sent
- * by the server). Absent: the banner reads the instance's own cap.
+ * `GET /settings` `live.budgetNote`: what the author pays for the live agents, as the demo's build sets it (CONTRACTS 9,
+ * v1.37). Absent: the banner reads the instance's own cap.
  */
 export interface LiveBudgetNote {
   amountUsd: number;
@@ -1062,6 +1081,8 @@ export interface Costs {
     mockRuns?: number;
     /** Production reviews whose agent answered, in any mode (CONTRACTS 13); spentUsd includes their live runs. */
     reviewRuns?: number;
+    /** The runs that answered a question about a case (CONTRACTS 14.2), counted in the rows above too. */
+    questionRuns?: number;
   };
   byModel: {
     model: string;
@@ -1084,6 +1105,8 @@ export interface Costs {
     costUsd: number;
     startedAt: string;
   }[];
+  /** The questions' agent runs by question (CONTRACTS 14.2): a replay costs nothing. */
+  byQuestion?: { questionId: string; caseId: string; runs: number; replayedRuns?: number; costUsd: number }[];
 }
 
 // ---- the production review (CONTRACTS 13) ----

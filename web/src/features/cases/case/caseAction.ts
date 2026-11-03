@@ -1,5 +1,5 @@
 import { resolveCan } from '@/api/can';
-import type { Me } from '@/api/types';
+import type { CaseDetail, Escalation, Me } from '@/api/types';
 import { caseState } from '@/lib/status';
 import { nextAction, type CaseFacts } from './outcome';
 
@@ -41,6 +41,14 @@ const notYours = (label: string, why = ''): CaseAction => ({
   name: `No action for you: ${why || lowerFirst(label)}`,
 });
 
+/**
+ * Whether a stopped case can be marked handled by the team: once an escalation email went out, or at once for a
+ * withheld case (a merge or a cancel Shutter never sends), where reinvestigating could find nothing new. The
+ * Escalations panel offers the button and the action button names it on this one rule.
+ */
+export const closableByHand = (c: Pick<CaseDetail, 'failureKind'>, escalations: Escalation[]): boolean =>
+  c.failureKind === 'withheld' || escalations.some((e) => e.state === 'sent');
+
 export interface ActionContext {
   /** The signed-in user, once read; undefined while not read. */
   me: Me | null | undefined;
@@ -56,7 +64,8 @@ export interface ActionContext {
 /**
  * The case's action for this user:
  * - waiting for approval: an approver decides on the plan ("Decide on the resend"); anyone else waits for one;
- * - stopped (blocked, escalated, failed): an operator marks it handled once the escalation went out, escalates it
+ * - stopped (blocked, escalated, failed): an operator marks it handled once the escalation went out (at once for a
+ *   withheld case), escalates it
  *   when that is the next step, reinvestigates a failed one (not in the trial), and otherwise decides the next step
  *   "What needs you now" names; a user who cannot operate waits for an operator, and a site with the two-person rule
  *   leaves closing to an approver;
@@ -76,9 +85,9 @@ export function caseActionOf(f: CaseFacts, ctx: ActionContext): CaseAction {
     );
   }
   if (!can.operate) return notYours('Waiting for an operator');
-  // Once the email to the team went out, the team corrects the systems and the case is marked handled, as the
-  // escalations' panel offers it; a site with the two-person rule leaves that to an approver
-  if ((f.escalations ?? []).some((e) => e.state === 'sent')) {
+  // Once the email to the team went out (or at once for a withheld case) the team corrects the systems and the case
+  // is marked handled, as the escalations' panel offers it; a site with the two-person rule leaves that to an approver
+  if (closableByHand(c, f.escalations ?? [])) {
     const mayClose = !!ctx.me?.approver || ctx.closeNeedsApprover === false;
     return mayClose
       ? yours('Mark as handled')

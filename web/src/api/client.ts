@@ -51,14 +51,20 @@ export async function request<T>(method: Method, path: string, options: RequestO
   }
   const text = await response.text();
   let data: unknown = null;
+  let json = true;
   if (text) {
     try {
       data = JSON.parse(text);
     } catch {
       data = text;
+      json = false;
     }
   }
   if (!response.ok) throw new ApiError({ status: response.status, method, path, body: data });
+  // Every API answer is JSON (an empty body is null: a 204). A 2xx with text (a gate's sign-in page, a proxy's
+  // maintenance page, answered as 200) is not the API's, and a page reading it as data would fail on it: it is
+  // reported as a 502 with the page's title, so the error alert says what came back.
+  if (!json) throw new ApiError({ status: 502, method, path, body: data });
   return data as T;
 }
 

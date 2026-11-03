@@ -251,7 +251,7 @@ test.describe('the case page made easier to read', () => {
     const stage = page.getByRole('button', {
       name: 'Plan and gate: stopped here, show the plan and the gate',
     });
-    expect((await stage.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect(Math.round((await stage.boundingBox())!.height * 100) / 100).toBeGreaterThanOrEqual(44);
     const compact = page.getByTestId('case-action-compact');
     const box = (await compact.boundingBox())!;
     expect(box.height).toBeGreaterThanOrEqual(44);

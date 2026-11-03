@@ -1,6 +1,6 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -118,6 +118,45 @@ describe('the trial banner', () => {
     enterTrialPage();
     expect(bannerForm.get()).toBe('compact');
     expect(document.title).toBe('Shutter (trial)');
+  });
+
+  it("lists under Works here only what the role may do: the public demo's role cannot run or configure", async () => {
+    resetMock('demo');
+    await renderShell(true);
+    await userEvent.click(screen.getByRole('button', { name: "What's different?" }));
+    const popover = await screen.findByRole('dialog', { name: 'The trial environment' });
+    expect(await within(popover).findByText('Approve or reject a plan')).toBeInTheDocument();
+    expect(within(popover).getByText('Switch role')).toBeInTheDocument();
+    expect(within(popover).queryByText('Run a scenario')).not.toBeInTheDocument();
+    expect(within(popover).queryByText('Save the site profile')).not.toBeInTheDocument();
+  });
+
+  it('lists running a scenario and saving the site profile for the approver, who may', async () => {
+    await renderShell(true);
+    await userEvent.click(screen.getByRole('button', { name: "What's different?" }));
+    const popover = await screen.findByRole('dialog', { name: 'The trial environment' });
+    expect(await within(popover).findByText('Run a scenario')).toBeInTheDocument();
+    expect(within(popover).getByText('Save the site profile')).toBeInTheDocument();
+    expect(within(popover).getByText('Approve or reject a plan')).toBeInTheDocument();
+  });
+
+  it("opens What's different? from the keyboard and closes it on Escape, focus back on the button", async () => {
+    await renderShell(true);
+    const banner = screen.getByRole('region', { name: 'Trial environment' });
+    // The full form's words say so too, for a judge who never opens the popover
+    expect(TRIAL_WORDS).toContain('A reload starts the recording afresh.');
+    const button = within(banner).getByRole('button', { name: "What's different?" });
+    button.focus();
+    await userEvent.keyboard('{Enter}');
+    const dropdown = await screen.findByRole('dialog', { name: 'The trial environment' });
+    expect(dropdown).toHaveTextContent('Resets when you reload or leave.');
+    // Focus is inside the dropdown, so Escape reaches it
+    await waitFor(() => expect(dropdown.contains(document.activeElement)).toBe(true));
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'The trial environment' })).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(button).toHaveFocus());
   });
 
   it('counts what was answered in the browser, and nothing sent to IRIS', () => {

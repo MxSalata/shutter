@@ -306,6 +306,35 @@ describe('the guide', () => {
     await waitFor(() => expect(announced()).toHaveTextContent('That is the tour.'));
   });
 
+  it("offers a reader who cannot run scenarios S20's case to see instead of Run S20", async () => {
+    resetMock('demo');
+    at('evaluation/headline');
+    const router = renderApp();
+    const guide = await card();
+    await userEvent.click(within(guide).getByRole('button', { name: 'Finish' }));
+    const finish = await screen.findByRole('heading', { name: 'That is the tour.' });
+    const region = finish.closest('[role="region"]') as HTMLElement;
+    expect(within(region).queryByRole('button', { name: 'Run S20 yourself' })).not.toBeInTheDocument();
+    await userEvent.click(within(region).getByRole('button', { name: 'See the gate stop a fix' }));
+    // S20's newest rules case, as the guide's own steps find it
+    await waitFor(() => expect(router.state.location.pathname).toBe('/cases/C-000053'));
+    expect(useGuide.getState().phase).toBe('closed');
+  });
+
+  it("closes the engineers' tour with what that route showed", async () => {
+    at('evaluation/rules-differs', { scope: 'engineer' });
+    renderApp();
+    const guide = await card();
+    expect(guide).toHaveTextContent('Step 6 of 6');
+    await userEvent.click(within(guide).getByRole('button', { name: 'Finish' }));
+    const finish = await screen.findByRole('heading', { name: 'That is the tour.' });
+    const region = finish.closest('[role="region"]') as HTMLElement;
+    expect(region).toHaveTextContent(
+      "You saw the decision receipt as JSON, the gate's reason codes, what each agent cited, S8 beside its rules-only run, the message trace in IRIS, and where simple rules went wrong.",
+    );
+    expect(region).not.toHaveTextContent('transfer delivered and verified');
+  });
+
   it("starts the engineers' tour with Technical on", async () => {
     useAppearance.setState({ detail: 'plain' });
     act(() => useGuide.getState().begin('engineer'));
