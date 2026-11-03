@@ -132,6 +132,14 @@ Property ForceBoard As %Boolean [ InitialExpression = 0 ];
 
 Property ConvenedBy As %String(MAXLEN = 100);
 
+/// Who reopened the case (v1.39): the person whose share the reopened case's runs count against; "" for a case the feed
+/// opened, whose runs are the feed's own ("system").
+Property ReopenedBy As %String(MAXLEN = 100);
+
+/// Whether the reopened case's agents may run live (v1.39): false for a reopener without Shutter_LiveAgents, or while the
+/// provider refuses the key; then every agent request carries ModeOverride replay, as a question's does (14).
+Property LiveAllowed As %Boolean [ InitialExpression = 1 ];
+
 Parameter SETTINGS = "EvidenceTarget:Targets,GateTarget:Targets,WardTarget:Targets,ApprovalTarget:Targets,VerifyTarget:Targets,IncidentTarget:Targets,ApprovalValidSeconds:Approval,ApprovalWaitSeconds:Approval,SettleSeconds:Timing,BoardTimeoutSeconds:Timing,BoardsPerMinute:Timing,MaxRefreshes:Timing";
 
 Method OnRequest(request As %Library.Persistent, Output response As %Library.Persistent) As %Status
@@ -405,16 +413,18 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
             Do case.Note("note", "Released on the chain's own path (" _ ..ChainDecides _ " decides)", "system")
         }
     } ElseIf ..Mode = "policy" {
-        // In policy mode the catalogue's match settles the easy cases (CONTRACTS 6.3); the rest go to the board.
+        // In policy mode the catalogue's match settles the easy cases (CONTRACTS 6.3); the rest go to the board. A judge's
+        // forced board (v1.34; v1.39) comes before the person path: the catalogue's "person" is the decision the board
+        // was asked to take again on fresh evidence, so the case convenes it instead of escalating again.
         If decision = "policy" Quit ..PolicyPath(case, summary, cat)
-        If decision = "person" Quit ..PersonByCatalogue(case, cat)
-        Do case.Note("note", "Catalogue: " _ $SELECT(decision = "": "no result", 1: decision) _ "; the board decides", "system")
+        If (decision = "person") && '..ForceBoard Quit ..PersonByCatalogue(case, cat)
+        Do case.Note("note", "Catalogue: " _ $SELECT(decision = "": "no result", 1: decision) _ "; the board decides" _ $SELECT(..ForceBoard && (decision = "person"): " (convened by " _ ..ConvenedBy _ " on the catalogue's person decision)", 1: ""), "system")
     }
     // One board per failure signature (v1.35): a case whose signature has a board running, or decided within the window,
     // follows it instead of convening its own; the first case of a signature leads.
     Set lead = ..LeadFor(case, summary, .signature)
     If $ISOBJECT(lead) Quit ..Follow(case, lead, signature)
-    Set sc = ..ConveneBoard(case, result.SummaryJSON, "", "", .convened)
+    Set sc = ..ConveneBoard(case, result.SummaryJSON, $SELECT(..ForceBoard: ..ConvenedBy, 1: ""), "", .convened)
     Quit:($$$ISERR(sc) || 'convened) sc
     Quit ..AfterConvene(case, result.SummaryJSON)
 }
@@ -692,9 +702,23 @@ ClassMethod BuildAgentRequest(case As Shutter.Store.Case, m As Shutter.Store.Boa
 Method AgentRequestFor(case As Shutter.Store.Case, m As Shutter.Store.BoardMember, summaryJSON As %String, findingsJSON As %String, Output sc As %Status) As Shutter.Bridge.Msg.AgentRequest
 {
     Set req = ..BuildAgentRequest(case, m, summaryJSON, findingsJSON, ..Replans, .sc)
-    // Who asked, for the budget's share (v1.34): a judge who convened the board, else the feed itself.
-    If $ISOBJECT(req) Set req.RequestedBy = $SELECT(..ForceBoard && (..ConvenedBy '= ""): ..ConvenedBy, 1: "system")
+    If $ISOBJECT(req) Do ..StampRequester(req)
     Quit req
+}
+
+/// Who asked, for the budget's share (v1.34, v1.39): a judge who convened the board, else the person who reopened the
+/// case, else the feed itself ("system", no share); and whether the run may go live: a reopener without the live agents
+/// gets recordings only (ModeOverride replay), as a question's runs do (14).
+Method StampRequester(req As Shutter.Bridge.Msg.AgentRequest)
+{
+    Do ..Stamp(req, ..ForceBoard, ..ConvenedBy, ..ReopenedBy, ..LiveAllowed)
+}
+
+/// The rule itself, a class method so a test can apply it without a running process.
+ClassMethod Stamp(req As Shutter.Bridge.Msg.AgentRequest, forceBoard As %Boolean = 0, convenedBy As %String = "", reopenedBy As %String = "", liveAllowed As %Boolean = 1)
+{
+    Set req.RequestedBy = $SELECT(forceBoard && (convenedBy '= ""): convenedBy, reopenedBy '= "": reopenedBy, 1: "system")
+    If 'liveAllowed Set req.ModeOverride = "replay"
 }
 
 /// The model view of the case could not be built (Shutter.Util.ModelView.Learn): nothing was sent to a model, and a
@@ -968,6 +992,10 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
     Set profile = ##class(Shutter.Store.SiteProfile).Current()
     Do case.Note("note", "Catalogue " _ entry _ " (" _ title _ ") matched alone: " _ outcome _ ". Site policy for tier " _ tier _ ", " _ kind _ ": " _ ..Policy _ " (profile v" _ $CLASSMETHOD(json, "Str", profile, "version", 0) _ ")", "system")
     If (..Policy = "board") || ..ForceBoard {
+        // A forced board's plan is a board's plan (v1.39): a person approves it, and the site policy the entry would have
+        // had (automatic on this tier, say) does not release it, which the dispatch gate would then block as plan_origin;
+        // the entry and outcome stay for the notes.
+        If ..ForceBoard Set ..Policy = ""
         Set sc = ..ConveneBoard(case, summary.%ToJSON(), $SELECT(..ForceBoard: ..ConvenedBy, 1: "site policy"), "board", .convened)
         Quit:($$$ISERR(sc) || 'convened) sc
         Quit ..AfterConvene(case, summary.%ToJSON())
@@ -1462,6 +1490,7 @@ Method OnReinvestigate(request As Shutter.Msg.Reinvestigate, Output response As 
     }
     Set ..CaseId = case.CaseId, ..Mode = case.Mode, ..Reopened = 1
     Set ..ForceBoard = request.ForceBoard, ..ConvenedBy = $SELECT(request.ForceBoard: request.RequestedBy, 1: "")
+    Set ..ReopenedBy = request.RequestedBy, ..LiveAllowed = request.LiveAllowed
     Set case.WorkflowSessionId = ..%SessionId, case.ClosedAt = ""
     // A wait on another case ends with the reopening; the fresh gate sets it again if the bed is still held (v1.28).
     Set case.WaitsOnCase = "", case.WaitsOnMessage = ""
@@ -1976,6 +2005,12 @@ Storage Default
 </Value>
 <Value name="43">
 <Value>ConvenedBy</Value>
+</Value>
+<Value name="48">
+<Value>ReopenedBy</Value>
+</Value>
+<Value name="49">
+<Value>LiveAllowed</Value>
 </Value>
 <Value name="44">
 <Value>BoardsPerMinute</Value>

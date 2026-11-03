@@ -961,6 +961,15 @@ ClassMethod CaseReinvestigate(caseId As %String) As %Status
     If 'case.IsClosed() || (case.State = "resolved") Quit ..Fail("409 Conflict", "wrong_state", "The case is " _ case.State _ "; only a blocked, escalated or failed case can be reopened")
     Set msg = ##class(Shutter.Msg.Reinvestigate).%New()
     Set msg.CaseId = caseId, msg.RequestedBy = ..User(), msg.Reason = $EXTRACT(##class(Shutter.Util.Json).Str(body, "reason"), 1, 2000)
+    // Who may spend the model budget (v1.39): the reopened case's runs count against the requester's share, and without
+    // the live agents, or while the provider refuses the key, they answer from recordings only (a board with none takes
+    // the rules path), as a question does (14). Before this every reopening ran live as "system", on nobody's share.
+    Set liveAllowed = $SYSTEM.Security.Check("Shutter_LiveAgents", "USE")
+    If liveAllowed {
+        Set avail = ##class(Shutter.Util.LiveAgents).Availability(..User())
+        If 'avail.available && (avail.reason = "provider_auth") Set liveAllowed = 0
+    }
+    Set msg.LiveAllowed = liveAllowed
     Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
     If $$$ISERR(sc) || '$ISOBJECT(service) Quit ..Fail("503 Service Unavailable", "no_service", "The API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
     Set service.Target = "Case Workflow", service.Async = 1
@@ -968,6 +977,7 @@ ClassMethod CaseReinvestigate(caseId As %String) As %Status
     If $$$ISERR(sc) Quit ..Fail("503 Service Unavailable", "not_queued", "The case could not be reopened: " _ $SYSTEM.Status.GetErrorText(sc))
     Set reply = {}
     Set reply.caseId = caseId, reply.state = "reopening", reply.requestedBy = ..User()
+    Do reply.%Set("liveAgents", liveAllowed, "boolean")
     Set text = reply.%ToJSON()
     Do ..Remember(bodyText, "202 Accepted", text)
     Set %response.Status = "202 Accepted"
@@ -1659,7 +1669,7 @@ ClassMethod SchemasGet() As %Status
     Quit ..Json(##class(Shutter.Util.Schemas).Report())
 }
 
-/// Import a site's schema XML from a path on this server (Shutter_Approve): {path} -> 200 {ok, category, loaded}; 400 for a
+/// Import a site's schema XML from a path on this server (Shutter_Configure): {path} -> 200 {ok, category, loaded}; 400 for a
 /// body without a path; 422 import_failed with the importer's words (a file that is not there, not .xml, or not a schema).
 ClassMethod SchemasImport() As %Status
 {
@@ -1725,7 +1735,9 @@ ClassMethod ProductionReviews() As %Status
 /// switch. The request goes through the API service to the Case Review item, which opens the review and answers at once
 /// with its id while the sweep goes on: 202 {reviewId, state, requestedBy}; 409 wrong_state while a review of the same
 /// production is still sweeping or ranking; 503 no_service when the production is not running. Shutter_Operate: the
-/// review reads only, and a live agent run spends model credit as a scenario run does.
+/// review reads only; its agent part takes Shutter_LiveAgents and spends the caller's share as a question does (v1.39),
+/// and without it (or while the provider refuses the key) the agent is skipped and the 202 says agent false, never a
+/// 403, since the web app and the README's example send no agent field.
 ClassMethod ProductionReviewStart() As %Status
 {
     If '..Allow("Shutter_Operate", 1) Quit $$$OK
@@ -1740,6 +1752,14 @@ ClassMethod ProductionReviewStart() As %Status
     Set days = ##class(Shutter.Util.Json).Str(body, "windowDays", 7)
     If (days = "") || (days '= +days) || (+days '= (+days \ 1)) || (+days < 1) || (+days > 90) Quit ..Fail("400 Bad Request", "bad_request", "windowDays must be a whole number of days from 1 to 90")
     Set agent = ##class(Shutter.Util.Json).Bool(body, "agent", 1)
+    If agent {
+        Set liveAllowed = $SYSTEM.Security.Check("Shutter_LiveAgents", "USE")
+        If liveAllowed {
+            Set avail = ##class(Shutter.Util.LiveAgents).Availability(..User())
+            If 'avail.available && (avail.reason = "provider_auth") Set liveAllowed = 0
+        }
+        If 'liveAllowed Set agent = 0
+    }
     Set known = 0
     Try {
         Set known = ##class(Shutter.Review.Sweep).IsTarget(ns, prod)
@@ -1771,6 +1791,7 @@ ClassMethod ProductionReviewStart() As %Status
     }
     Set reply = {}
     Set reply.reviewId = started.ReviewId, reply.state = started.State, reply.requestedBy = ..User()
+    Do reply.%Set("agent", agent, "boolean")
     Set text = reply.%ToJSON()
     Do ..Remember(bodyText, "202 Accepted", text)
     Set %response.Status = "202 Accepted"
@@ -1788,7 +1809,7 @@ ClassMethod ProductionReviewGet(id As %String) As %Status
     Quit ..Json(r.ToObject(1))
 }
 
-/// Annotate a finding (Shutter_Approve): {findingId, status (intended|accepted_risk|false_positive), reason, expiresAt?,
+/// Annotate a finding (Shutter_Configure): {findingId, status (intended|accepted_risk|false_positive), reason, expiresAt?,
 /// owner?}. The annotation binds the finding's code, item, setting and effective value, so every later review's matching
 /// finding carries the status until the value changes, the annotation expires or it is revoked. 201 the annotation; 404
 /// not_found for an unknown review or finding id; 400 bad_request for a status outside the three or a missing reason.
@@ -1823,7 +1844,7 @@ ClassMethod ProductionReviewAnnotate(id As %String) As %Status
     Quit $$$OK
 }
 
-/// Revoke an annotation (Shutter_Approve): the finding reopens as new at the next read; the row is kept for the record.
+/// Revoke an annotation (Shutter_Configure): the finding reopens as new at the next read; the row is kept for the record.
 /// 204; 404 not_found for an unknown id. Revoking twice is a 204 too.
 ClassMethod ProductionReviewAnnotationDelete(annotationId As %String) As %Status
 {

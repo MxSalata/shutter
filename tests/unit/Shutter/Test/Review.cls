@@ -527,4 +527,19 @@ ClassMethod Codes(findings As %DynamicArray) As %String
     Quit out
 }
 
+/// The review's agent request carries the requester, for the budget's share (v1.39): the person who started the review,
+/// else the feed's own "system".
+Method TestAgentRequestCarriesTheRequester()
+{
+    Set r = ##class(Shutter.Store.Review).%New()
+    Set r.ReviewId = "PR-TEST", r.Namespace = "SHUTTER", r.Production = "Shutter.Production"
+    Set result = {"fingerprint": "sha256:0123456789abcdef", "productionState": "Running", "findings": [], "window": {}, "summary": {}, "caseAggregates": {}}
+    Set req = ##class(Shutter.Process.Review).BuildAgentRequest(r, result, 3, 60000, "demo")
+    Do $$$AssertTrue($ISOBJECT(req), "the request is built")
+    Do $$$AssertEquals(req.RequestedBy, "demo", "the requester is the person who started the review")
+    Do $$$AssertEquals(req.Role, "review", "the role is the review's")
+    Set req = ##class(Shutter.Process.Review).BuildAgentRequest(r, result, 3, 60000)
+    Do $$$AssertEquals(req.RequestedBy, "system", "nobody named means the feed's own run")
+}
+
 }
