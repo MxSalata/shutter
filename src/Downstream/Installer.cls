@@ -1,9 +1,11 @@
 /// What the downstream system needs outside its own tables: the <code>Downstream_API</code> resource and role (the
-/// web application <code>/downstream/api</code> requires the resource), and the demo flag that allows a reset.
+/// web application <code>/downstream/api</code> requires the resource), the <code>Downstream_Admin</code> resource
+/// (the demo controls in <class>Downstream.API</class> require it too, and no role of the production's holds it), and
+/// the demo flag that allows a reset.
 Class Downstream.Installer
 {
 
-/// Creates the resource and the role when missing, removes the names from before the rename (the
+/// Creates the resources and the role when missing, removes the names from before the rename (the
 /// <code>Wards_API</code> role and resource) when they exist, and marks the instance as a demo when <var>demo</var>
 /// is true, and builds the bed index. Safe to run again.
 ClassMethod Install(demo As %Boolean = 1) As %Status
@@ -14,6 +16,11 @@ ClassMethod Install(demo As %Boolean = 1) As %Status
         Set $NAMESPACE = "%SYS"
         If '##class(Security.Resources).Exists("Downstream_API") {
             Set sc = ##class(Security.Resources).Create("Downstream_API", "The demo bed-management system's REST API (the downstream system)", "")
+        }
+        // The controls' resource (faults, reset, the capability switch) is granted to no role here: an administrator
+        // holds it through %All, and a site gives a role of its own both resources when a person is to use them.
+        If $$$ISOK(sc), '##class(Security.Resources).Exists("Downstream_Admin") {
+            Set sc = ##class(Security.Resources).Create("Downstream_Admin", "The demo bed-management system's controls: faults, reset and the capability switch", "")
         }
         If $$$ISOK(sc), '##class(Security.Roles).Exists("Downstream_API") {
             Set sc = ##class(Security.Roles).Create("Downstream_API", "Calls the downstream system's REST API", "Downstream_API:U")
