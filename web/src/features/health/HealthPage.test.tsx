@@ -99,6 +99,69 @@ describe('HealthPage on a live system', () => {
     ).toBeInTheDocument();
   });
 
+  it('is not ready when a stored credential no longer signs in, with the checks in their own open group', async () => {
+    renderHealth({
+      ...REPORT,
+      interoperability: true,
+      credentials_ok: false,
+      credentials_state: 'stale',
+      credentials_checked_at: '2026-11-03T10:00:00Z',
+      credentials: [
+        {
+          namespace: 'SHUTTER',
+          name: 'DownstreamAPI',
+          user: 'downstream-api',
+          status: 'refused',
+          detail: 'downstream-api does not sign in with the stored password',
+          ok: false,
+        },
+        {
+          namespace: 'HOSPITAL',
+          name: 'ShutterIntake',
+          user: 'forwarder',
+          status: 'ok',
+          detail: 'forwarder signs in with the stored password',
+          ok: true,
+        },
+      ],
+    });
+    const hero = await screen.findByRole('region', { name: 'Not ready' });
+    expect(within(hero).getByRole('heading', { level: 2 })).toHaveTextContent(
+      'Not ready: 1 core check fails.',
+    );
+    const checks = within(hero).getByRole('list', { name: 'Core checks' });
+    expect(checks).toHaveTextContent('Stored credentials sign in: fails');
+    expect(checks).toHaveTextContent('GET /health?refresh=1');
+    const group = screen.getByRole('region', { name: 'Stored credentials' });
+    expect(group).toHaveTextContent('0 of 1 pass');
+    expect(
+      within(group).getByRole('rowheader', { name: 'Stored credentials sign in' }).closest('tr'),
+    ).toHaveTextContent('No');
+    const refused = within(group).getByText('SHUTTER DownstreamAPI: refused');
+    expect(refused.closest('[data-tech-detail="closed"]')).toBeNull();
+    expect(refused.closest('tr')).toHaveAttribute('data-tone', 'blocking');
+    expect(group).toHaveTextContent('HOSPITAL ShutterIntake: ok');
+    expect(group).toHaveTextContent('downstream-api does not sign in with the stored password');
+    expect(group).toHaveTextContent('stale');
+    // The checks are no longer among the fields no group names
+    expect(screen.queryByRole('region', { name: 'Other' })).toBeNull();
+  });
+
+  it('shows an install item missing from the production in the Production group, not behind Other', async () => {
+    renderHealth({ ...REPORT, interoperability: true, missing_items: ['Scenario Player'], edition: 'core' });
+    await screen.findByRole('region', { name: 'Ready' });
+    const production = screen.getByRole('region', { name: 'Production' });
+    expect(production).toHaveTextContent('2 of 2 pass, 1 to fix');
+    const missing = within(production).getByRole('rowheader', { name: 'Missing items' }).closest('tr')!;
+    expect(missing).toHaveAttribute('data-tone', 'blocking');
+    expect(missing).toHaveTextContent('Scenario Player');
+    expect(missing).toHaveTextContent('Run the install again: these items are missing from the production.');
+    expect(within(production).getByRole('rowheader', { name: 'Edition' }).closest('tr')).toHaveTextContent(
+      'core',
+    );
+    expect(screen.queryByRole('region', { name: 'Other' })).toBeNull();
+  });
+
   it('words the model budget per reset on the public demo and by the day elsewhere, in the Other group', async () => {
     const budget = { dailyUsd: 5, spentTodayUsd: 1.5, exhausted: false };
     const view = renderHealth({ ...REPORT, budget });
