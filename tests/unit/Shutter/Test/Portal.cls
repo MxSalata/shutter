@@ -55,4 +55,57 @@ Method TestHardenPortalAndRestore()
     Do $$$AssertEquals(restored.hardened, before.hardened, "and the state as before")
 }
 
+/// The production's start applies the hardening when the environment asks for it (SHUTTER_DEMO_PORTAL=1, through
+/// ApplyRuntime's portal argument): the portal is hardened, the time is recorded and the Doctor reports it; any other value
+/// leaves the portal alone. Put back as TestHardenPortalAndRestore does.
+Method TestApplyRuntimeHardens()
+{
+    If '$SYSTEM.Security.Check("%Admin_Secure", "USE") { Do $$$AssertTrue(1, "no %Admin_Secure here: nothing to try") Quit }
+    Set before = ##class(Shutter.Util.Json).Parse(##class(Shutter.Setup).PortalState(), .sc)
+    Do $$$AssertStatusOK(sc, "the state reads: " _ before.%ToJSON())
+    Set exists = 0
+    Set it = before.apps.%GetIterator()
+    While it.%GetNext(, .a) { If a.exists Set exists = exists + 1 }
+    If exists = 0 { Do $$$AssertTrue(1, "this instance has no portal application for the namespaces: nothing to harden") Quit }
+    Set roleWas = before."trace_role", recordWas = $GET(^Shutter.Config("portalHardened"))
+    Kill ^Shutter.Config("portalHardened")
+    // Any value but 1 leaves the portal and the record alone.
+    Set applied = ##class(Shutter.Setup).ApplyRuntime("", "", "", "", "", "", 0, "", "", "", "", "0")
+    Do $$$AssertTrue('applied.%IsDefined("portal") && '$DATA(^Shutter.Config("portalHardened")), "0 leaves the portal alone: " _ applied.%ToJSON())
+    Set applied = ##class(Shutter.Setup).ApplyRuntime("", "", "", "", "", "", 0, "", "", "", "", "1")
+    Do $$$AssertTrue('applied.%IsDefined("errors"), "the environment applies the hardening without error: " _ applied.%ToJSON())
+    Do $$$AssertTrue($ISOBJECT(applied.portal) && applied.portal.hardened, "and says so: " _ applied.%ToJSON())
+    Set after = ##class(Shutter.Util.Json).Parse(##class(Shutter.Setup).PortalState(), .sc)
+    Do $$$AssertEquals(after.hardened, 1, "the portal is hardened: " _ after.%ToJSON())
+    Set at = $GET(^Shutter.Config("portalHardened"))
+    Do $$$AssertTrue(at ?4N1"-"2N1"-"2N1"T"2N1":"2N1":"2N1"Z", "the time is recorded: " _ at)
+    Do $$$AssertEquals(applied.portal.at, at, "and returned")
+    Set doctor = ##class(Shutter.Util.Json).Parse(##class(Shutter.Setup).Doctor(), .sc)
+    Do $$$AssertEquals(doctor."portal_hardened", 1, "the Doctor reports it")
+    Do $$$AssertEquals(doctor."portal_hardened_at", at, "with the time")
+    // Put it back: the applications' MatchRoles and resource as the state read them before, the role's resources, the
+    // SELECT grants and the record.
+    New $NAMESPACE
+    Set $NAMESPACE = "%SYS"
+    Set it = before.apps.%GetIterator()
+    While it.%GetNext(, .a) {
+        Continue:'a.exists
+        Kill props
+        Set props("MatchRoles") = a."match_roles", props("Resource") = a.resource
+        Do $$$AssertStatusOK(##class(Security.Applications).Modify(a.name, .props), a.name _ " put back")
+    }
+    Kill props
+    Set props("Resources") = roleWas
+    Do $$$AssertStatusOK(##class(Security.Roles).Modify("Shutter_Trace", .props), "the role put back")
+    Set $NAMESPACE = "SHUTTER"
+    Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
+    For n = $NAMESPACE, hospital { If n '= "" Do $$$AssertStatusOK(##class(Shutter.Setup).TraceSelectGrant(n, 0, .count, .problem), "the SELECT grants taken away again in " _ n _ " (" _ count _ "): " _ problem) }
+    If recordWas = "" { Kill ^Shutter.Config("portalHardened") } Else { Set ^Shutter.Config("portalHardened") = recordWas }
+    Set restored = ##class(Shutter.Util.Json).Parse(##class(Shutter.Setup).PortalState(), .sc)
+    Do $$$AssertEquals(restored."trace_role", roleWas, "the role's resources as before")
+    Do $$$AssertEquals(restored.hardened, before.hardened, "and the state as before")
+    Set doctor = ##class(Shutter.Util.Json).Parse(##class(Shutter.Setup).Doctor(), .sc)
+    Do $$$AssertEquals(doctor."portal_hardened", recordWas '= "", "and the Doctor's record as before")
+}
+
 }

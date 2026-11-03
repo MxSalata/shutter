@@ -52,6 +52,8 @@ services:
       - SHUTTER_LIVE_SCENARIOS=${SHUTTER_LIVE_SCENARIOS:-}
       - SHUTTER_PUBLIC_DEMO_PASSWORD=${SHUTTER_PUBLIC_DEMO_PASSWORD:-}
       - SHUTTER_TRACE_PASSWORD=${SHUTTER_TRACE_PASSWORD:-}
+      # 1 hardens the Management Portal at every start of the production (a public demo); empty leaves it as IRIS made it.
+      - SHUTTER_DEMO_PORTAL=${SHUTTER_DEMO_PORTAL:-}
       - SHUTTER_JUDGE_PASSWORD=${SHUTTER_JUDGE_PASSWORD:-}
     volumes:
       # The HL7 folders (drop files into in/ to feed Shutter's production by hand, or into hospital/in/ to feed the
