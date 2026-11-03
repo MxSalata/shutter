@@ -119,6 +119,13 @@ const LABELS: Record<string, string> = {
 /** What to do when a stored credential no longer signs in (a rebuild that kept the data volume, a changed password). */
 const CREDENTIALS_TODO =
   'A stored credential no longer signs in: run the install again (or Shutter.Setup.RefreshCredentialCache(1)), then GET /health?refresh=1 as an operator who may write, and reload.';
+/** What to do when the Doctor's credential check threw instead of answering (credentials_state "error: ..."). */
+const CREDENTIALS_ERROR_TODO =
+  'The credential check could not run, so nothing is known about the stored credentials: read the error in the Credential check row, then GET /health?refresh=1 as an operator who may write, and reload.';
+
+/** Whether the Doctor's credential check threw: it then answers credentials_ok true with the error as the state. */
+const credentialCheckFailed = (report: Report) =>
+  typeof report.credentials_state === 'string' && report.credentials_state.startsWith('error');
 
 /** What to do about the install items the Doctor found missing, disabled, or on the wrong image. */
 const MISSING_ITEMS_TODO = 'Run the install again: these items are missing from the production.';
@@ -136,9 +143,9 @@ interface CoreDef {
   demoOnly?: boolean;
   /** A check a report before v1.38 does not carry: core only when the report sends its key, never "not reported". */
   since138?: boolean;
-  passes?: (v: unknown) => boolean;
+  passes?: (v: unknown, report: Report) => boolean;
   /** What to do when it fails. */
-  todo: (v: unknown) => string;
+  todo: (v: unknown, report: Report) => string;
 }
 
 /** The core checks, in the order the verdict lists them. */
@@ -185,7 +192,9 @@ const CORE: readonly CoreDef[] = [
     key: 'credentials_ok',
     label: 'Stored credentials sign in',
     since138: true,
-    todo: () => CREDENTIALS_TODO,
+    // A check that threw says nothing about the credentials, whatever credentials_ok says
+    passes: (v, report) => v === true && !credentialCheckFailed(report),
+    todo: (_v, report) => (credentialCheckFailed(report) ? CREDENTIALS_ERROR_TODO : CREDENTIALS_TODO),
   },
 ];
 
@@ -235,12 +244,12 @@ export function verdictOf(report: Report): Verdict {
   const results: CoreResult[] = defs
     .filter((c) => sent(report[c.key]))
     .map((c) => {
-      const passed = c.passes ? c.passes(report[c.key]) : report[c.key] === true;
+      const passed = c.passes ? c.passes(report[c.key], report) : report[c.key] === true;
       return {
         key: c.key,
         label: c.label,
         passed,
-        todo: passed ? undefined : c.todo(report[c.key]),
+        todo: passed ? undefined : c.todo(report[c.key], report),
         group: groupOf(c.key),
       };
     });
@@ -334,7 +343,20 @@ const NOT_VISIBLE_NOTES: Record<string, string> = {
 };
 const NOT_IN_EDITION = 'Not in this edition';
 const NOT_IN_EDITION_NOTE =
-  'The replay edition has no wallet and no Config Store: its agents replay recorded runs, so there is no provider key to hold.';
+  'The replay edition has no wallet and no Config Store: its agents replay recorded runs, so there is no provider to configure and no provider key to hold.';
+
+/**
+ * The provider is the name the install recorded, "" until ConfigureProvider has run: on the AI Hub edition that is a
+ * setting (no key was given, so the agents replay recordings), and in the replay edition it is the edition.
+ */
+const NOT_CONFIGURED = 'Not configured';
+const NOT_CONFIGURED_NOTE =
+  'No model provider is recorded. The install configures one from ANTHROPIC_API_KEY when it is set; until then the agents replay recorded runs.';
+
+/** The credential check threw instead of answering: the state carries the error, and the check says nothing. */
+const CHECK_FAILED = 'Check did not run';
+const CHECK_FAILED_NOTE =
+  'The Doctor could not run the credential check, so this report says nothing about whether the stored credentials sign in. The state is the error it met.';
 
 const NO_PURGE_NOTE =
   'Nothing deletes old messages. An installation makes the task when SHUTTER_MESSAGE_PURGE asks for it.';
@@ -344,12 +366,36 @@ const NO_PURGE_NOTE =
  * with what to do; another yes is positive; another no is neutral, with the reason chip where the trial's recording
  * lacked the piece, and attention for a missing message purge task on a live installation; a value the report did not
  * send is attention ("Not reported"); an install item missing from the production or an edition that is broken is
- * blocking with what to do, a disabled item attention, and a stored credential that does not sign in blocking; a name,
- * a path or a number has no mark.
+ * blocking with what to do, a disabled item attention, and a stored credential that does not sign in blocking; a provider
+ * the install has not configured is neutral, and a credential check that threw is attention; a name, a path or a number
+ * has no mark.
  */
 export function rowInfo(key: string, value: unknown, report: Report, trial: boolean): RowInfo {
   // The API mimic's switch is "" when it is off: a setting, not a missing value
   if (key === 'mock_config' && value === '') return { mark: 'none', tone: null, missing: false };
+  // The provider is "" until the install has configured one: not configured, or not in the replay edition
+  if (key === 'provider' && value === '')
+    return report.ai_hub_present === true
+      ? {
+          mark: 'dash',
+          tone: 'neutral',
+          missing: false,
+          reason: { chip: NOT_CONFIGURED, note: NOT_CONFIGURED_NOTE, tone: 'neutral' },
+        }
+      : {
+          mark: 'dash',
+          tone: 'neutral',
+          missing: false,
+          reason: { chip: NOT_IN_EDITION, note: NOT_IN_EDITION_NOTE, tone: 'neutral' },
+        };
+  // A credential check that threw is attention: its state is the error, not a word
+  if (key === 'credentials_state' && credentialCheckFailed(report))
+    return {
+      mark: 'dash',
+      tone: 'attention',
+      missing: false,
+      reason: { chip: CHECK_FAILED, note: CHECK_FAILED_NOTE, tone: 'attention' },
+    };
   // A null for the provider's pieces is the Doctor's own answer: this reader may not look, or the edition has none
   if (PROVIDER_PIECES.has(key) && value === null) {
     return report.ai_hub_present === true
@@ -369,10 +415,10 @@ export function rowInfo(key: string, value: unknown, report: Report, trial: bool
   if (!sent(value)) return { mark: 'dash', tone: 'attention', missing: true };
   const core = coreFor(report).find((c) => c.key === key);
   if (core) {
-    const passed = core.passes ? core.passes(value) : value === true;
+    const passed = core.passes ? core.passes(value, report) : value === true;
     return passed
       ? { mark: 'check', tone: 'positive', missing: false }
-      : { mark: 'x', tone: 'blocking', missing: false, todo: core.todo(value) };
+      : { mark: 'x', tone: 'blocking', missing: false, todo: core.todo(value, report) };
   }
   if (typeof value === 'boolean') {
     if (value) return { mark: 'check', tone: 'positive', missing: false };

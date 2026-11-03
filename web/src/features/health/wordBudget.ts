@@ -4,10 +4,12 @@
  * Technical.
  *
  * The page spec asks for 120 words (today 366). Its own layout adds up to more: the header and lead (15), the verdict
- * with its seven core checks, the chips and the agents badge (56), the group links (19) and the trial note (18) come to
- * 108 before any group. The page measured 298 words in Plain and 440 in Technical on 2 November 2026, and this ceiling
- * keeps that from growing. What the page spends on is the five groups' 23 rows with their labels, values and counts
- * (about 180, the Agents group's sentence and the two "What the dashes mean" buttons among them); what it saves is the
+ * with its seven core checks on the trial's recording (a v1.38 report has eight, the stored credentials among them), the
+ * chips and the agents badge (56), the group links (19) and the trial note (18) come to 108 before any group. The page
+ * measured 298 words in Plain and 440 in Technical on 2 November 2026, and this ceiling keeps that from growing. What the
+ * page spends on is the five groups' 29 rows, the default board's among them (the recording has none of the Stored credentials
+ * group's keys; its edition, missing items and disabled items moved into Production on 3 November), with their labels, values and counts (about 180,
+ * the Agents group's sentence and the two "What the dashes mean" buttons among them); what it saves is the
  * 98-word provenance paragraph, the 34-word note, the rows' 12-pixel explanations and the licence's four lines, which
  * are one click away.
  */
