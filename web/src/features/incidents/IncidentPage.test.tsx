@@ -513,6 +513,10 @@ describe('IncidentPage', () => {
     renderAt('/incidents/I-000001');
     const approval = await screen.findByRole('region', { name: 'Approval' });
     expect(await within(approval).findByRole('button', { name: /Approve/ })).toBeDisabled();
+    // The reason is written under the buttons, where a keyboard or a screen reader reaches it without a hover
+    expect(
+      within(approval).getByText('Deciding needs the approver role: sign in as approver'),
+    ).toBeInTheDocument();
   });
 
   it('says plainly when there is no such incident', async () => {

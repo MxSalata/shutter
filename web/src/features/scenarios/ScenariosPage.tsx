@@ -42,6 +42,7 @@ import { OutcomeBadge } from '@/components/OutcomeBadge';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { DispositionBadge, StateBadge } from '@/components/StateBadge';
 import { StatusBadge } from '@/components/StatusBadge';
+import { TechDetail } from '@/components/TechDetail';
 import { StackTable } from '@/components/StackTable';
 import { caseOutcome, caseState, proposedWrites, writes } from '@/lib/status';
 import { describeError } from '@/lib/errors';
@@ -93,7 +94,11 @@ const definedFor = (s: Scenario, mode: Mode) => !s.expected?.modes || s.expected
 /** Why nothing can be played on a site install: the server switches the Scenario Player off (CONTRACTS 12). */
 const PLAYER_OFF = 'The Scenario Player is switched off on a site install, which has no demo';
 
-function RunBanner({ run }: { run: ScenarioRun }) {
+/**
+ * The run's state above the list; once done, where to look: on an instance the production carries on from the files,
+ * in the trial the scenario's case is the recorded one, already in its final state.
+ */
+function RunBanner({ run, latest }: { run: ScenarioRun; latest: string | undefined }) {
   if (run.state === 'queued')
     return (
       <Alert
@@ -128,8 +133,13 @@ function RunBanner({ run }: { run: ScenarioRun }) {
       >
         <Text size="sm">
           Delivered {run.files.join(', ') || 'no files'}.
-          {run.timeouts.length ? ` The case did not reach ${run.timeouts.join(', ')} in time.` : ''} The
-          production does the rest: follow the case below.
+          {run.timeouts.length ? ` The case did not reach ${run.timeouts.join(', ')} in time.` : ''}{' '}
+          {byEnv({
+            live: 'The production does the rest: follow the case below.',
+            trial: latest
+              ? `Its case is ${latest}, replayed from the recording, so it is already in its final state: open it from the row below.`
+              : 'Its case is replayed from the recording: open it from the row below.',
+          })}
         </Text>
       </Alert>
     );
@@ -203,12 +213,12 @@ function ExpectedOutcome({ s, mode }: { s: Scenario; mode: Mode }) {
   return (
     <Stack gap={4}>
       <Group gap={6}>
-        <DispositionBadge disposition={e.disposition ?? ''} />
+        <DispositionBadge disposition={e.disposition ?? ''} focusable={false} />
         {e.acceptable
           ?.filter((a) => a !== e.disposition)
           .map((a) => (
             <Tooltip key={a} label="Also an acceptable answer" events={HINT_EVENTS}>
-              <Badge variant="dot" color="gray" style={{ textTransform: 'none' }} tabIndex={0}>
+              <Badge variant="dot" color="gray" style={{ textTransform: 'none' }}>
                 or {humanize(a)}
               </Badge>
             </Tooltip>
@@ -225,7 +235,7 @@ function ExpectedOutcome({ s, mode }: { s: Scenario; mode: Mode }) {
             maw={260}
             events={HINT_EVENTS}
           >
-            <CodeChip tabIndex={0}>{e.blocked_by}</CodeChip>
+            <CodeChip>{e.blocked_by}</CodeChip>
           </Tooltip>
         </Group>
       ) : null}
@@ -276,8 +286,12 @@ function LatestCase({ s, found }: { s: Scenario; found: CaseSummary | undefined 
         >
           {s.latestCase.caseId}
         </Anchor>
-        {found ? <OutcomeBadge c={found} scenario={s} /> : <StateBadge state={s.latestCase.state} />}
-        {found && !differs ? <ExpectedMark c={found} scenario={s} /> : null}
+        {found ? (
+          <OutcomeBadge c={found} scenario={s} focusable={false} />
+        ) : (
+          <StateBadge state={s.latestCase.state} focusable={false} />
+        )}
+        {found && !differs ? <ExpectedMark c={found} scenario={s} focusable={false} /> : null}
       </Group>
       {/* One failure at several receivers opens a case at each: the latest is one of them */}
       {s.expected.by_receiver ? (
@@ -425,20 +439,28 @@ function ScenarioRow({
           className="stack-line"
           style={{ verticalAlign: 'top' }}
         >
-          <Tooltip label={why || `Play ${s.id} in ${humanize(mode)} mode`} multiline maw={260}>
-            <span>
-              <Button
-                size="xs"
-                leftSection={<IconPlayerPlay size={14} />}
-                disabled={!!why}
-                loading={starting}
-                onClick={onRun}
-                aria-label={`Run ${s.id}`}
-              >
-                Run
-              </Button>
-            </span>
-          </Tooltip>
+          <Stack gap={4} align="flex-start">
+            <Tooltip label={why || `Play ${s.id} in ${humanize(mode)} mode`} multiline maw={260}>
+              <span>
+                <Button
+                  size="xs"
+                  leftSection={<IconPlayerPlay size={14} />}
+                  disabled={!!why}
+                  loading={starting}
+                  onClick={onRun}
+                  aria-label={`Run ${s.id}`}
+                >
+                  Run
+                </Button>
+              </span>
+            </Tooltip>
+            {/* The reason, in words a keyboard or a screen reader reaches; a row not in the mode says it above */}
+            {why && defined ? (
+              <Text size="xs" c="dimmed" maw={160}>
+                {why}
+              </Text>
+            ) : null}
+          </Stack>
         </StackTable.Td>
       ) : null}
     </StackTable.Tr>
@@ -616,6 +638,15 @@ function AllScenarios({
             ))}
           </Group>
         </Chip.Group>
+        {/* What the badges say in short, written out once: none of them is a tab stop in this list */}
+        <TechDetail label="How to read this list" kind="explain">
+          <Text size="sm" maw="68ch">
+            What should happen is the end the scenario expects: its action, &quot;or&quot; another answer the
+            evaluation also accepts, and Stops on the reason code the gate or the dispatch should stop on.
+            Latest case is the newest case the scenario opened, with its outcome in short: As expected when
+            the outcome matches what the scenario expects, Not as expected when it differs.
+          </Text>
+        </TechDetail>
         <Table.ScrollContainer minWidth={760} className="stack-scroll">
           <StackTable className="stack-table stack-cards" verticalSpacing="sm">
             <StackTable.Thead>
@@ -654,6 +685,8 @@ export default function ScenariosPage() {
   const playerOff = useHealth().data?.demo === false;
   const current = scenarios.data?.run ?? null;
   const busy = isPlaying(current) ? `A run of ${current?.scenario} is still playing` : '';
+  /** Why Reset is disabled now, or "". */
+  const resetWhy = playerOff ? PLAYER_OFF : !canRun ? 'Resetting needs the operator role' : busy;
 
   const start = (s: Scenario, m: Mode = mode) =>
     run.mutate(
@@ -700,42 +733,43 @@ export default function ScenariosPage() {
         lead={byEnv(SCENARIOS_LEAD)}
         actions={
           hidden ? undefined : (
-            <Tooltip
-              label={
-                playerOff
-                  ? PLAYER_OFF
-                  : !canRun
-                    ? 'Resetting needs the operator role'
-                    : busy || 'Clear the downstream system, the folders and the running scenario'
-              }
-            >
-              <span>
-                <Button
-                  variant="default"
-                  leftSection={<IconRefresh size={16} />}
-                  disabled={playerOff || !canRun || !!busy}
-                  loading={reset.isPending}
-                  onClick={() =>
-                    reset.mutate(undefined, {
-                      onSuccess: () =>
-                        notifications.show({
-                          color: 'blue',
-                          title: 'Reset',
-                          message: 'The downstream system and the folders are clear.',
-                        }),
-                      onError: (e) =>
-                        notifications.show({
-                          color: 'red',
-                          title: 'Reset failed',
-                          message: describeError(e),
-                        }),
-                    })
-                  }
-                >
-                  Reset
-                </Button>
-              </span>
-            </Tooltip>
+            <Stack gap={4} align="flex-end">
+              <Tooltip
+                label={resetWhy || 'Clear the downstream system, the folders and the running scenario'}
+              >
+                <span>
+                  <Button
+                    variant="default"
+                    leftSection={<IconRefresh size={16} />}
+                    disabled={!!resetWhy}
+                    loading={reset.isPending}
+                    onClick={() =>
+                      reset.mutate(undefined, {
+                        onSuccess: () =>
+                          notifications.show({
+                            color: 'blue',
+                            title: 'Reset',
+                            message: 'The downstream system and the folders are clear.',
+                          }),
+                        onError: (e) =>
+                          notifications.show({
+                            color: 'red',
+                            title: 'Reset failed',
+                            message: describeError(e),
+                          }),
+                      })
+                    }
+                  >
+                    Reset
+                  </Button>
+                </span>
+              </Tooltip>
+              {resetWhy ? (
+                <Text size="xs" c="dimmed" ta="right">
+                  {resetWhy}
+                </Text>
+              ) : null}
+            </Stack>
           )
         }
       />
@@ -746,7 +780,12 @@ export default function ScenariosPage() {
             The public demo plays its stories by itself, so there is nothing to run or reset here.
           </Text>
         ) : null}
-        {current ? <RunBanner run={current} /> : null}
+        {current ? (
+          <RunBanner
+            run={current}
+            latest={scenarios.data?.scenarios.find((s) => s.id === current.scenario)?.latestCase?.caseId}
+          />
+        ) : null}
         {/* Always rendered, loading or not, so the guide's first step has its target */}
         <TryFirst
           scenarios={scenarios.data?.scenarios}
