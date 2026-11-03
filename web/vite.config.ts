@@ -117,7 +117,7 @@ function evaluationProof(): Plugin {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const irisUrl = env.VITE_IRIS_URL || 'http://192.168.0.10:52775';
+  const irisUrl = env.VITE_IRIS_URL || 'http://localhost:52773';
   const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as {
     version: string;
   };
