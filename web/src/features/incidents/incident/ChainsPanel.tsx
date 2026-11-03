@@ -142,34 +142,41 @@ function ChainCard({
           </Text>
         ) : null}
         {ownApproval ? (
-          <Group gap="sm">
-            <Tooltip label={why || 'Approve the release of this chain alone'} disabled={!why}>
-              <span>
-                <Button
-                  size="xs"
-                  leftSection={<IconCheck size={14} />}
-                  disabled={!!why}
-                  onClick={() => onDecide('approve', chain)}
-                >
-                  Approve this chain
-                </Button>
-              </span>
-            </Tooltip>
-            <Tooltip label={why || 'Reject this chain: its cases go to a person'} disabled={!why}>
-              <span>
-                <Button
-                  size="xs"
-                  color="red"
-                  variant="light"
-                  leftSection={<IconX size={14} />}
-                  disabled={!!why}
-                  onClick={() => onDecide('reject', chain)}
-                >
-                  Reject this chain
-                </Button>
-              </span>
-            </Tooltip>
-          </Group>
+          <Stack gap={4}>
+            <Group gap="sm">
+              <Tooltip label={why || 'Approve the release of this chain alone'} disabled={!why}>
+                <span>
+                  <Button
+                    size="xs"
+                    leftSection={<IconCheck size={14} />}
+                    disabled={!!why}
+                    onClick={() => onDecide('approve', chain)}
+                  >
+                    Approve this chain
+                  </Button>
+                </span>
+              </Tooltip>
+              <Tooltip label={why || 'Reject this chain: its cases go to a person'} disabled={!why}>
+                <span>
+                  <Button
+                    size="xs"
+                    color="red"
+                    variant="light"
+                    leftSection={<IconX size={14} />}
+                    disabled={!!why}
+                    onClick={() => onDecide('reject', chain)}
+                  >
+                    Reject this chain
+                  </Button>
+                </span>
+              </Tooltip>
+            </Group>
+            {why ? (
+              <Text size="xs" c="dimmed">
+                {why}
+              </Text>
+            ) : null}
+          </Stack>
         ) : null}
         {/* Two or three operations run side by side with an arrow between them on a laptop; the rest stack */}
         <ol

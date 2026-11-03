@@ -58,32 +58,42 @@ export function IncidentApprovalPanel({
             ]}
           />
           {waiting ? (
-            <Group gap="sm">
-              <Tooltip label={why || "Approve the release of the incident's policy chains"} disabled={!why}>
-                <span>
-                  <Button
-                    leftSection={<IconCheck size={16} />}
-                    disabled={!!why}
-                    onClick={() => onDecide('approve')}
-                  >
-                    Approve release
-                  </Button>
-                </span>
-              </Tooltip>
-              <Tooltip label={why || 'Reject the release: nothing is sent for these chains'} disabled={!why}>
-                <span>
-                  <Button
-                    color="red"
-                    variant="light"
-                    leftSection={<IconX size={16} />}
-                    disabled={!!why}
-                    onClick={() => onDecide('reject')}
-                  >
-                    Reject release
-                  </Button>
-                </span>
-              </Tooltip>
-            </Group>
+            <Stack gap={4}>
+              <Group gap="sm">
+                <Tooltip label={why || "Approve the release of the incident's policy chains"} disabled={!why}>
+                  <span>
+                    <Button
+                      leftSection={<IconCheck size={16} />}
+                      disabled={!!why}
+                      onClick={() => onDecide('approve')}
+                    >
+                      Approve release
+                    </Button>
+                  </span>
+                </Tooltip>
+                <Tooltip
+                  label={why || 'Reject the release: nothing is sent for these chains'}
+                  disabled={!why}
+                >
+                  <span>
+                    <Button
+                      color="red"
+                      variant="light"
+                      leftSection={<IconX size={16} />}
+                      disabled={!!why}
+                      onClick={() => onDecide('reject')}
+                    >
+                      Reject release
+                    </Button>
+                  </span>
+                </Tooltip>
+              </Group>
+              {why ? (
+                <Text size="xs" c="dimmed">
+                  {why}
+                </Text>
+              ) : null}
+            </Stack>
           ) : null}
         </Stack>
       ) : null}

@@ -307,6 +307,11 @@ export function TryFirst({
                         </span>
                       </Tooltip>
                     )}
+                    {!demo && reason ? (
+                      <Text size="xs" c="dimmed">
+                        {reason}
+                      </Text>
+                    ) : null}
                     {latest ? (
                       <Group gap={8} wrap="wrap">
                         <Anchor

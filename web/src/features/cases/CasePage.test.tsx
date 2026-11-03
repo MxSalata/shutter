@@ -1147,7 +1147,7 @@ describe('the case page in the trial', () => {
     await userEvent.click(await within(approval).findByRole('button', { name: 'Approve plan' }));
     const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
     expect(within(dialog).getByTestId('confirm-consequence')).toHaveTextContent(
-      'Go ahead. You will see what happened next in the recording: the fix goes out and the receiving system confirms it. Nothing leaves this browser.',
+      'Go ahead. You will see what happened next in the recording: the fix goes out and the receiving system confirms it. Nothing leaves this browser, and a reload starts the recording afresh.',
     );
     expect(within(dialog).getByText('Trial only')).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve this plan' }));
