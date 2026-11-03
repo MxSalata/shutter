@@ -391,7 +391,7 @@ The API as built is `src/Shutter/API/Dispatch.cls` (its UrlMap lists the routes;
 one is signed in, 403 `forbidden` (detail "This needs <resource>") without the resource, and 403 `csrf` for a change
 without `X-Requested-With`. The installer's roles hold them: `Shutter_Operator` has `Shutter_Operate`,
 `Shutter_Approver` has `Shutter_Operate` and `Shutter_Approve`, `Shutter_Forwarder` has `Shutter_Intake`. The three
-also hold SQL SELECT on Shutter's schemas (`docs/INSTALL.md`), so a cached query the API has to compile again in the
+also hold SQL SELECT on Shutter's schemas (`docs/INSTALL.md`; since v1.39 the public demo's `Shutter_Demo` and `Shutter_Judge` hold it too, since they read the same routes), so a cached query the API has to compile again in the
 caller's process passes; the operator and the approver read the watched hospital's databases too.
 
 | Resource | Routes |
