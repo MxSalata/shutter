@@ -113,6 +113,44 @@ Method TestCapability()
     Do ..RunRows("capability")
 }
 
+/// A receiver entry with no capabilities endpoint that declares no features vouches for nothing: the route the evidence
+/// collector builds records its capabilities as unread, and the gate answers unknown, never CONNECTOR_CAPABLE on the
+/// defaults. An entry that declares its features still passes, and every receiver the stored profile names declares them.
+Method TestCapabilityUndeclared()
+{
+    Set recs = ##class(Shutter.Store.SiteProfile).Current().%Get("receivers")
+    Set n = 0, iter = recs.%GetIterator()
+    While iter.%GetNext(.i, .r) {
+        Set n = n + 1
+        Do $$$AssertTrue($ISOBJECT(r.%Get("features")), r.name _ " declares its features")
+    }
+    Do $$$AssertTrue(n > 0, "the profile names receivers")
+    Set api = {"base": "/wardb/api", "state": "/encounters/{encounter}", "receipt": "", "capabilities": "", "operations": "/operations"}
+    Do recs.%Push({"name": "UT Ward B", "tier": 2, "api": (api)})
+    Do recs.%Push({"name": "UT Ward C", "tier": 2, "api": (api), "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}})
+    Do ..ChangeProfile({"receivers": (recs)})
+    Set evidence = ##class(Shutter.Operation.Evidence).%New("Shutter Evidence (unit test)")
+    // No endpoint, no features: unread, and the gate holds.
+    Set route = evidence.Route("UT Ward B")
+    Do $$$AssertEquals(route."capabilities_http_status", 0, "an entry with no endpoint and no features: the capabilities are unread")
+    Do $$$AssertEquals(route."capabilities_source", "not declared by the site profile", "and the route says so")
+    Do $$$AssertNotTrue(route.%IsDefined("conditional_writes"), "no flag is assumed")
+    Do $$$AssertEquals(route.%GetTypeOf("capabilities"), "null", "the capabilities are null")
+    Do $$$AssertTrue(route.note [ "declares no features", "the note says why: " _ route.note)
+    Set run = ..Run({"name": "an undeclared receiver", "summary": {"route": (route)}})
+    Do $$$AssertEquals(..Found(run.checks, "capability", "CAPABILITIES_UNREADABLE"), "unknown", "the gate answers unknown (" _ ..Codes(run.checks, "capability") _ ")")
+    Do $$$AssertEquals(run.response.Outcome, "unknown", "and the plan is not released")
+    Do ..OnAfterOneTest()
+    // No endpoint, declared features: the declaration stands.
+    Do ..ChangeProfile({"receivers": (recs)})
+    Set route = evidence.Route("UT Ward C")
+    Do $$$AssertEquals(route."capabilities_http_status", 200, "an entry that declares its features reads as 200")
+    Do $$$AssertEquals(route."capabilities_source", "declared by the site profile", "from the profile")
+    Do $$$AssertTrue(route."conditional_writes" && route.receipts && route."dry_run", "with the declared flags")
+    Set run = ..Run({"name": "a declared receiver", "summary": {"route": (route)}})
+    Do $$$AssertEquals(..Found(run.checks, "capability", "CONNECTOR_CAPABLE"), "pass", "the gate passes it (" _ ..Codes(run.checks, "capability") _ ")")
+}
+
 Method TestCatalogue()
 {
     Do ..RunRows("catalogue")
