@@ -56,6 +56,7 @@ git clone https://github.com/MxSalata/shutter.git && cd shutter
 1. Press **Break the feed** on the hospital's banner. Its bed manager goes down for a minute and eight movements for four new patients fail; a strip follows Shutter grouping them into one incident and, once the bed manager is back, releasing them in order. In the demo's rehearsal on 3 November 2026 that took **one incident, one approval and no model call**; on the build before, each of the eight cases convened a board of its own.
 2. Open a case that **waits for approval** and **Approve** it: one conditional write, then "Verified" from the receiver's history.
 3. On any case, **In IRIS: Message trace** opens its session in the Visual Trace (`demo-trace`).
+4. The hospital's own stories are settled by its policy, with no board. **See the board decide**, under the banner, opens S8's recorded board in the trial.
 
 ### On your machine or in the trial, first
 
