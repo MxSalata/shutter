@@ -519,6 +519,148 @@ ClassMethod LoginJob(user As %String, password As %String, key As %String)
     Set ^Shutter.Health("login", key) = ok _ "|" _ why
 }
 
+/// The demo's Management Portal, read only (v1.38; the demo portal review of 3 Nov 2026). The portal web applications of
+/// Shutter's and the demo hospital's namespaces (/csp/healthshare/<namespace>, as IRIS for Health makes them) add roles to
+/// every user who signs in (MatchRoles: %HS_DB_<namespace>, with the data database read and write, and the HealthShare
+/// databases) and require no resource, so demo-trace can write what the portal's pages save (saved searches, the Event
+/// Log's defaults, the Visual Trace's settings), the Production Monitor can switch items off, and demo and judge can sign
+/// in to the portal too. For a public demo only (the demo's harden script calls it; a local install keeps the portal as
+/// IRIS made it, since an approver following the "In IRIS" links relies on those roles): the applications' MatchRoles are
+/// cleared and each requires the resource Shutter_Portal, which Shutter_Trace alone holds; Shutter_Trace keeps its
+/// Interoperability resources and reads the HealthShare databases and both namespaces' code and data databases, writing
+/// none. Needs %Admin_Secure. Returns JSON: the applications changed, the role's resources, errors. PortalState shows it.
+ClassMethod HardenPortal(hospital As %String = "") As %String [ SqlProc ]
+{
+    If '$SYSTEM.Security.Check("%Admin_Secure", "USE") Quit {"error": "%Admin_Secure is required"}.%ToJSON()
+    If (hospital = "") || (hospital = $CHAR(0)) Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
+    Set ns = $NAMESPACE, out = {}, errors = [], apps = []
+    Set reads = ..PortalReads(ns, hospital)
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = "%SYS"
+        If '##class(Security.Resources).Exists("Shutter_Portal") {
+            Set sc = ##class(Security.Resources).Create("Shutter_Portal", "Shutter public demo: the Management Portal's pages, for demo-trace alone", "")
+            If $$$ISERR(sc) Do errors.%Push("resource: " _ $SYSTEM.Status.GetErrorText(sc))
+        }
+        // The trace role: its own resources kept, every database resource replaced by the reads, the portal resource added.
+        Set sc = ##class(Security.Roles).Get("Shutter_Trace", .rp)
+        If $$$ISERR(sc) {
+            Do errors.%Push("role: " _ $SYSTEM.Status.GetErrorText(sc))
+        } Else {
+            Set kept = ""
+            For i = 1:1:$LENGTH($GET(rp("Resources")), ",") {
+                Set r = $PIECE(rp("Resources"), ",", i)
+                Continue:r=""
+                Continue:$EXTRACT(r, 1, 4)="%DB_"
+                Continue:$PIECE(r, ":", 1)="Shutter_Portal"
+                Set kept = kept _ $SELECT(kept = "": "", 1: ",") _ r
+            }
+            Set resources = kept _ $SELECT(kept = "": "", 1: ",") _ reads _ ",Shutter_Portal:U"
+            Kill props
+            Set props("Resources") = resources
+            Set sc = ##class(Security.Roles).Modify("Shutter_Trace", .props)
+            If $$$ISERR(sc) Do errors.%Push("role: " _ $SYSTEM.Status.GetErrorText(sc))
+            Set out.role = resources
+        }
+        For app = ..PortalApp(ns), ..PortalApp(hospital) {
+            Continue:app=""
+            Continue:'##class(Security.Applications).Exists(app)
+            Kill ap
+            Do ##class(Security.Applications).Get(app, .ap)
+            Set a = {}
+            Set a.name = app, a."match_roles_were" = $GET(ap("MatchRoles")), a."resource_was" = $GET(ap("Resource"))
+            Kill props
+            Set props("MatchRoles") = "", props("Resource") = "Shutter_Portal"
+            Set sc = ##class(Security.Applications).Modify(app, .props)
+            If $$$ISERR(sc) Do errors.%Push(app _ ": " _ $SYSTEM.Status.GetErrorText(sc))
+            Do apps.%Push(a)
+        }
+    } Catch ex {
+        Do errors.%Push(ex.DisplayString())
+    }
+    Set out.apps = apps
+    If errors.%Size() > 0 Set out.errors = errors
+    Quit out.%ToJSON()
+}
+
+/// The portal web application of a namespace, as IRIS for Health names it; "" for no namespace.
+ClassMethod PortalApp(ns As %String) As %String
+{
+    If (ns = "") || (ns = $CHAR(0)) Quit ""
+    Quit "/csp/healthshare/" _ $ZCONVERT(ns, "L")
+}
+
+/// The read resources the portal's pages need: the HealthShare databases that exist here and both namespaces' code and
+/// data databases, each :R.
+ClassMethod PortalReads(ns As %String, hospital As %String = "") As %String
+{
+    Set list = ""
+    For r = "%DB_HSLIB", "%DB_HSSYS", "%DB_HSCUSTOM" { If ..ResourceExists(r) Set list = list _ $SELECT(list = "": "", 1: ",") _ r _ ":R" }
+    For n = ns, hospital {
+        Continue:(n="")||(n=$CHAR(0))
+        For code = 0, 1 {
+            Set r = ..DatabaseResource(n, code)
+            If (r '= "") && (r '= "%DB_%DEFAULT") && '$FIND(list, r _ ":") Set list = list _ $SELECT(list = "": "", 1: ",") _ r _ ":R"
+        }
+    }
+    Quit list
+}
+
+/// Whether a security resource exists (asked in %SYS).
+ClassMethod ResourceExists(name As %String) As %Boolean
+{
+    Set exists = 0
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = "%SYS"
+        Set exists = ''##class(Security.Resources).Exists(name)
+    } Catch ex {
+    }
+    Quit exists
+}
+
+/// The portal's state for the demo's checks: each namespace's portal application (exists, MatchRoles, the required
+/// resource), the trace role's resources, and hardened (every existing application cleared and gated, the role writing
+/// no database). Needs %Admin_Secure to read the security tables; otherwise it says so.
+ClassMethod PortalState(hospital As %String = "") As %String [ SqlProc ]
+{
+    If '$SYSTEM.Security.Check("%Admin_Secure", "USE") Quit {"error": "%Admin_Secure is required"}.%ToJSON()
+    If (hospital = "") || (hospital = $CHAR(0)) Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
+    Set ns = $NAMESPACE, out = {}, apps = [], hardened = 1, any = 0
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = "%SYS"
+        For app = ..PortalApp(ns), ..PortalApp(hospital) {
+            Continue:app=""
+            Set a = {}
+            Set a.name = app
+            Do a.%Set("exists", ''##class(Security.Applications).Exists(app), "boolean")
+            If a.exists {
+                Kill ap
+                Do ##class(Security.Applications).Get(app, .ap)
+                Set a."match_roles" = $GET(ap("MatchRoles")), a.resource = $GET(ap("Resource")), any = 1
+                If (a."match_roles" '= "") || (a.resource '= "Shutter_Portal") Set hardened = 0
+            }
+            Do apps.%Push(a)
+        }
+        Set sc = ##class(Security.Roles).Get("Shutter_Trace", .rp)
+        Set out."trace_role" = $SELECT($$$ISOK(sc): $GET(rp("Resources")), 1: "")
+        If $$$ISERR(sc) Set hardened = 0
+        If $$$ISOK(sc) {
+            For i = 1:1:$LENGTH($GET(rp("Resources")), ",") {
+                Set r = $PIECE(rp("Resources"), ",", i)
+                If ($EXTRACT(r, 1, 4) = "%DB_") && ($PIECE(r, ":", 2) [ "W") Set hardened = 0
+            }
+            If '$FIND($GET(rp("Resources")), "Shutter_Portal:U") Set hardened = 0
+        }
+    } Catch ex {
+        Set out.error = ex.DisplayString(), hardened = 0
+    }
+    Set out.apps = apps
+    Do out.%Set("hardened", hardened && any, "boolean")
+    Quit out.%ToJSON()
+}
+
 /// The live hospital's rotation from the build (SHUTTER_LIVE_SCENARIOS, v1.38): the scenario ids, comma-separated, each
 /// an S and a number with an optional letter (S23a), in the order to play; "default" or no valid id clears the override, and
 /// the player's own Scenarios setting applies again. Written as ^Hospital.Config("liveScenarios") in the hospital's

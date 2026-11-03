@@ -1713,12 +1713,14 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
 
 ## Changes
 
-- v1.38, 2 Nov 2026 (the demo rehearsal's storm, whose cases all convened boards): a watched production's failures run in the
+- v1.38, 2 and 3 Nov 2026 (the demo rehearsal's storm, whose cases all convened boards): a watched production's failures run in the
   site's watched mode, policy by default, whatever mode the scenarios run in (6.3, 11); a case the alert intake opened
   takes the production's own report of the failure when it arrives before the evidence is collected, so the catalogue
   reads the connector's answer (11); the alert's time in the failure text is read as the engine's UTC timestamp (11);
-  two words put right: the rehearsal check blocks at dispatch, the only stage that sends it (6.5), and a deferred board waits
-  60 to 89 s (6.6); the live hospital's rotation drops S11 and takes `SHUTTER_LIVE_SCENARIOS` (4.4); the demo users'
+  the tool catalogue pinned at a run's start, `Shutter.Bridge.Catalogue`: what the framework discovered must be exactly the
+  agent's evidence tools, its terminal tool and its attached collections' search tools, or the run ends with the status
+  `catalogue_mismatch` before any model call (9); two words put right: the rehearsal check blocks at dispatch, the only
+  stage that sends it (6.5), and a deferred board waits 60 to 89 s (6.6); the live hospital's rotation drops S11 and takes `SHUTTER_LIVE_SCENARIOS` (4.4); the demo users'
   password reaches the image build as a BuildKit secret, never a build argument, and CI proves it is in neither the build
   log nor the image's history (12, 13); the Doctor tries the stored credentials (DownstreamAPI here, the demo hospital's
   DownstreamAPI and ShutterIntake) against their users by a login in a background job, never a web request; the

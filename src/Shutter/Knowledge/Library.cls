@@ -90,9 +90,9 @@ ClassMethod BuildAll(dir As %String) As %String [ SqlProc ]
 
 /// Attach a collection ("all" for every one) to an agent as search tools. Returns how many were
 /// attached; <var>problems</var> lists what could not be.
-ClassMethod Attach(agent, collection As %String = "all", Output problems As %String) As %Integer
+ClassMethod Attach(agent, collection As %String = "all", Output problems As %String, Output attached As %String) As %Integer
 {
-    Set problems = "", n = 0
+    Set problems = "", n = 0, attached = ""
     Set list = $SELECT((collection = "all") || (collection = ""): ..#COLLECTIONS, 1: collection)
     For i = 1:1:$LENGTH(list, ",") {
         Set coll = $PIECE(list, ",", i)
@@ -102,7 +102,7 @@ ClassMethod Attach(agent, collection As %String = "all", Output problems As %Str
         If '$ISOBJECT(kb) Set problems = problems _ $LISTBUILD(coll _ ": " _ err) Continue
         Try {
             $$$ThrowOnError(kb.AddToAgent(agent))
-            Set n = n + 1
+            Set n = n + 1, attached = attached _ $SELECT(attached = "": "", 1: ",") _ coll
         } Catch ex {
             Set problems = problems _ $LISTBUILD(coll _ ": " _ ex.DisplayString())
         }
