@@ -144,7 +144,7 @@ For a receiver that takes them (1.1, v1.14): `cancel_admit` and `cancel_transfer
 
 ### 1.5 Faults, for the demos
 
-`POST /downstream/api/faults` `{"mode": "off" | "fail_before_accept" | "commit_drop_response" | "misleading_duplicate_error" | "receipt_lookup_unavailable" | "delay_response", "operation_key": "…", "seconds": n}`. With `operation_key` the fault applies to that key only; without it, to every operation until `off`. Returns 200 `{"mode": …, "operation_key": …}`. `GET /downstream/api/faults` returns the current setting.
+`POST /downstream/api/faults` `{"mode": "off" | "fail_before_accept" | "commit_drop_response" | "misleading_duplicate_error" | "receipt_lookup_unavailable" | "delay_response", "operation_key": "…", "seconds": n}`. With `operation_key` the fault applies to that key only; without it, to every operation until `off`. Returns 200 `{"mode": …, "operation_key": …}`. `GET /downstream/api/faults` returns the current setting. `POST /downstream/api/faults` also requires the resource `Downstream_Admin` (v1.39), which the downstream system's installer creates beside `Downstream_API` and grants to no role of Shutter's: a caller with `Downstream_API` alone, the production's client among them, is answered 403 `{"error": "forbidden", "detail": "This needs Downstream_Admin"}` and nothing changes; `GET /downstream/api/faults` needs only the web application's resource.
 
 - `fail_before_accept`: 503 before any validation or write.
 - `commit_drop_response`: the operation is committed, then the response is a 504 with no body.
@@ -157,7 +157,7 @@ The canonical payload is the JSON object with exactly these keys in this order, 
 
 ### 1.7 Reset
 
-`POST /downstream/api/reset` clears encounters, events, receipts and faults. 403 `{"error": "not_a_demo_instance"}` unless the installer has marked the instance as a demo (`^Downstream.Config("demo") = 1`). The web application's password authentication applies.
+`POST /downstream/api/reset` clears encounters, events, receipts and faults. 403 `{"error": "not_a_demo_instance"}` unless the installer has marked the instance as a demo (`^Downstream.Config("demo") = 1`). It also requires `Downstream_Admin` (v1.39), checked first: a caller without it is answered 403 `{"error": "forbidden"}` whether or not the instance is a demo, so the production's client credentials cannot reset the receiver; the scenario runner and the live player reset in process through `Downstream.Service` and never pass here. The web application's password authentication applies.
 
 ### 1.8 Capabilities (v1.4)
 
@@ -178,7 +178,7 @@ The canonical payload is the JSON object with exactly these keys in this order, 
 
 The gate's capability check requires `conditional_writes`, `receipts` and `dry_run` for a write (v1.21): a receiver that reports no dry run blocks every resend with `DRY_RUN_UNSUPPORTED` (a receiver without conditional writes answers `CONNECTOR_INCAPABLE`, which comes first and alone); reconcile and superseded stay open. The connector is the second line: it refuses to send a dry run to a receiver whose site profile entry declares `dry_run: false` (outcome `refused`, reason `dry_run_unsupported`, nothing sent), and the case then blocks at the rehearsal as for any refusal.
 
-- `POST /downstream/api/capabilities` `{"conditional_writes": false}` is the demo switch (demo instances only, like the reset): afterwards any operation that carries `expected_version` is refused with 422 `{"error": "unsupported_precondition"}`, and the read says `"conditional_writes": false`. `{"conditional_writes": true}` restores it; the reset restores it too.
+- `POST /downstream/api/capabilities` `{"conditional_writes": false}` is the demo switch (demo instances only, like the reset, and with `Downstream_Admin`, v1.39): afterwards any operation that carries `expected_version` is refused with 422 `{"error": "unsupported_precondition"}`, and the read says `"conditional_writes": false`. `{"conditional_writes": true}` restores it; the reset restores it too.
 - `epoch` is an integer that increments at every reset. It appears here, in every encounter read (`"epoch"` beside `"version"`) and in every receipt. An approval binds the epoch it was given, so an approval from before a reset cannot authorise a dispatch after it even when the version numbers happen to match.
 - `last_contract_check` is whatever the downstream system recorded last (the HTTP check writes it); null when never run.
 - `POST /downstream/api/capabilities` also takes `last_contract_check` as `{"at": "<ISO 8601 UTC>", "result": "<text>"}`, both fields required (v1.5): the test tools write it after a contract check. Any other field is refused with 422 `{"error": "invalid_request"}`, and nothing changes when any part of a request is refused. On an instance that is not a demo the POST answers 403 `{"error": "not_a_demo_instance"}`.
@@ -189,7 +189,7 @@ Fault mode `receipt_lookup_unavailable`, with an `operation_key`: `GET /downstre
 
 ### 1.10 Roles and credentials
 
-The web application `/downstream/api` requires password authentication and the role `Downstream_API` (created by the downstream system's installer; the demo users and the production's credentials get it). The production reaches it through an `EnsLib.HTTP.OutboundAdapter` with the Ens credentials entry `DownstreamAPI`.
+The web application `/downstream/api` requires password authentication and the resource `Downstream_API` (the role of the same name carries it, created by the downstream system's installer; the production's credentials hold it, the demo users operator, approver and demo do not, corrected v1.39); the demo controls take `Downstream_Admin` as well (1.5, 1.7, 1.8), which no role of Shutter's holds, so an administrator (%All) or a role a site gives both resources calls them. The production reaches it through an `EnsLib.HTTP.OutboundAdapter` with the Ens credentials entry `DownstreamAPI`.
 
 ## 2. The operation key and the HL7 mapping
 
@@ -1741,6 +1741,8 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   capabilities endpoint nor declared features reads as capabilities unread, `CAPABILITIES_UNREADABLE` (6.4).
   A first index walk with no header inside the back-fill window starts at the newest header (8.1); a scenario run the
   API service could not take leaves no queued record behind (4).
+  An impossible date reads as no time on every path (the time rules); the receiver's demo controls (faults, reset, the
+  capability switch) take the new resource `Downstream_Admin`, granted to no role of Shutter's (1.5, 1.7, 1.8).
 - v1.38, 2 and 3 Nov 2026 (the demo rehearsal's storm, whose cases all convened boards): a watched production's failures run in the
   site's watched mode, policy by default, whatever mode the scenarios run in (6.3, 11); a case the alert intake opened
   takes the production's own report of the failure when it arrives before the evidence is collected, so the catalogue
@@ -1948,7 +1950,7 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   `2026-10-19.2`); timestamps without an offset are read in the site profile's `feed.time_zone` (`UTC`,
   `Europe/London` or a fixed offset; UTC when the profile does not say), the message section records
   `times_without_offset`, `times_with_offset`, `feed_time_zone` and `event_time_had_offset` (whether the key's own
-  field carried one), and the case gets a note, once, when a message's times carried no offset.
+  field carried one), and the case gets a note, once, when a message's times carried no offset. A date that does not exist (30 February, month 13, 24:00:00) reads as no time on every path, the UTC one, the zone one and the own-offset one alike, and `SecondsBetween` answers "" for it rather than an error (v1.39).
 - v1.10, 19 Oct 2026: from the review of the day's code. New gate codes: `CLOSED_BY_CATALOGUE` (a pass of the ordering
   check: the plan says superseded and the history shows no later event, but the matched entry's outcome on this
   evidence is none, so the case closes with nothing to send; the verifier accepts the same closure when the receiver
