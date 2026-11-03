@@ -375,6 +375,11 @@ export function rowInfo(key: string, value: unknown, report: Report, trial: bool
   if (key === 'mock_config' && value === '') return { mark: 'none', tone: null, missing: false };
   // No time when the portal was never hardened, the case on any instance but the public demo: not a missing value
   if (key === 'portal_hardened_at' && value === '') return { mark: 'none', tone: null, missing: false };
+  // The latest start's hardening errors: "" when it succeeded or was never asked for; a failed hardening is attention
+  if (key === 'portal_hardening_errors')
+    return value === ''
+      ? { mark: 'none', tone: null, missing: false }
+      : { mark: 'dash', tone: 'attention', missing: false };
   // The provider is "" until the install has configured one: not configured, or not in the replay edition
   if (key === 'provider' && value === '')
     return report.ai_hub_present === true
