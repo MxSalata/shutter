@@ -727,7 +727,7 @@ ClassMethod BuildAgentRequest(case As Shutter.Store.Case, m As Shutter.Store.Boa
     } ElseIf m.Role = "generalist" {
         Set req.Goal = "Investigate case " _ case.CaseId _ " from every angle: conformance, the encounter's integrity, downstream impact. Propose exactly one plan and submit it with SubmitPlan."
     } Else {
-        Set req.Goal = "Review case " _ case.CaseId _ " as the " _ m.Name _ " specialist: " _ m.Perspective _ " Cite the evidence you used by its identifiers, say what is unknown, and submit your findings with SubmitFindings."
+        Set req.Goal = "Review case " _ case.CaseId _ " as the " _ m.Name _ " specialist: " _ m.Perspective _ " Name the evidence keys you used in evidence_refs, say what is unknown, and submit your findings with SubmitFindings."
     }
     Quit req
 }
