@@ -214,7 +214,7 @@ Shape A:
 7. Replay a known failure in a test environment: a case opens in SHUTTER, the evidence shows the message and the
    receiver's state, and the escalation draft names the right team.
 8. Switch the investigation mode to `policy` for the easy chains once the catalogue's entries are reviewed; watch the
-   first weeks on the Costs page and the Doctor report.
+   first weeks on the Settings and costs page and in the Doctor report (`SELECT Shutter.Setup_Doctor()`).
 
 Shape B: section 4 in place of steps 1, 2 and 6; the rest as above.
 
