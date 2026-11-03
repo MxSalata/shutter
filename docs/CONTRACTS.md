@@ -1739,6 +1739,8 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   The prompts name the evidence keys and the earlier names stay citable (6.1); an alert's reason code reads as no
   answer of the receiver's, so the status and the outcome decide the match (11); a receiver entry with neither a
   capabilities endpoint nor declared features reads as capabilities unread, `CAPABILITIES_UNREADABLE` (6.4).
+  A first index walk with no header inside the back-fill window starts at the newest header (8.1); a scenario run the
+  API service could not take leaves no queued record behind (4).
 - v1.38, 2 and 3 Nov 2026 (the demo rehearsal's storm, whose cases all convened boards): a watched production's failures run in the
   site's watched mode, policy by default, whatever mode the scenarios run in (6.3, 11); a case the alert intake opened
   takes the production's own report of the failure when it arrives before the evidence is collected, so the catalogue
