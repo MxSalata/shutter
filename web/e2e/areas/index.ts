@@ -4,6 +4,7 @@ import { area as caseEvidence } from './case-evidence';
 import { area as cases } from './cases';
 import { area as evaluation } from './evaluation';
 import { area as health } from './health';
+import { area as home } from './home';
 import { area as incidents } from './incidents';
 import { area as library } from './library';
 import { area as reviews } from './reviews';
@@ -21,6 +22,7 @@ import { area as siteProfile } from './site-profile';
 export const areas: Area[] = [
   shell,
   signIn,
+  home,
   scenarios,
   cases,
   case_,

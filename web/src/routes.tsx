@@ -9,6 +9,7 @@ import { TRIAL } from './env/mode';
 const LoginPage = TRIAL
   ? lazy(() => import('./trial/TrialSignIn'))
   : lazy(() => import('./features/auth/LoginPage'));
+const HomePage = lazy(() => import('./features/home/HomePage'));
 const ScenariosPage = lazy(() => import('./features/scenarios/ScenariosPage'));
 const CasesPage = lazy(() => import('./features/cases/CasesPage'));
 const CasePage = lazy(() => import('./features/cases/CasePage'));
@@ -40,7 +41,8 @@ export const routes: RouteObject[] = [
             // sits under AppLayout, since one on AppLayout's own route would replace the shell with the error.
             errorElement: <RouteError />,
             children: [
-              { index: true, element: <Navigate to="/scenarios" replace /> },
+              { index: true, element: <Navigate to="/home" replace /> },
+              { path: 'home', element: <HomePage /> },
               { path: 'scenarios', element: <ScenariosPage /> },
               { path: 'cases', element: <CasesPage /> },
               { path: 'cases/:caseId', element: <CasePage /> },

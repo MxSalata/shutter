@@ -49,13 +49,13 @@ describe('the addresses of the trial and of the live system', () => {
 
   it('keep the path and the page, and add or drop only the query', () => {
     window.history.replaceState(null, '', '/shutter/?as=demo#/cases/C-000002');
-    expect(trialHref()).toBe('/shutter/?trial#/scenarios');
+    expect(trialHref()).toBe('/shutter/?trial#/home');
     expect(trialHref('#/cases/C-000002')).toBe('/shutter/?trial#/cases/C-000002');
     expect(trialHref('/evaluation', { tour: true })).toBe('/shutter/?trial=tour#/evaluation');
     expect(trialHref('#/scenarios', { tour: 'engineer', as: 'operator' })).toBe(
       '/shutter/?trial=engineer&as=operator#/scenarios',
     );
-    expect(liveHref()).toBe('/shutter/#/scenarios');
+    expect(liveHref()).toBe('/shutter/#/home');
     expect(liveHref('#/cases')).toBe('/shutter/#/cases');
   });
 

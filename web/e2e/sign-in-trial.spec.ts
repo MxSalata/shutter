@@ -61,7 +61,7 @@ test.describe('the live sign-in page of a demo install, on a laptop', () => {
     );
     await expect(card.getByRole('link', { name: 'Open the trial' })).toHaveAttribute(
       'href',
-      /\?trial#\/scenarios$/,
+      /\?trial#\/home$/,
     );
     // The proof sits on the left and the form on the right, side by side
     const proof = await page.getByRole('region', { name: /^When an HL7 transfer fails/ }).boundingBox();

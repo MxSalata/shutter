@@ -40,11 +40,11 @@ function renderSignIn() {
     [
       { path: '/login', element: <TrialSignIn /> },
       {
-        path: '/scenarios',
+        path: '/home',
         element: (
           <>
             <LiveBanner />
-            <h1>Scenarios</h1>
+            <h1>Home</h1>
           </>
         ),
       },
@@ -84,7 +84,7 @@ describe("the trial's sign-in page", () => {
     const client = renderSignIn();
     expect(screen.getByText(/sees the replayed hospital feed/)).toBeInTheDocument();
     await userEvent.click(await screen.findByRole('button', { name: 'Continue as online demo role' }));
-    expect(await screen.findByRole('heading', { name: 'Scenarios' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument();
     await waitFor(() => expect(client.getQueryData<Me>(keys.me)?.username).toBe('demo'));
     expect(client.getQueryData<Me>(keys.me)?.can).toEqual({
       operate: true,

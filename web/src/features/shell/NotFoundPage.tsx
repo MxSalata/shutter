@@ -6,8 +6,8 @@ export default function NotFoundPage() {
     <Stack gap="sm" py="xl">
       <Title order={2}>Not found</Title>
       <Text c="dimmed">There is no page at this address.</Text>
-      <Button component={Link} to="/scenarios" variant="light" w="fit-content">
-        Go to the scenarios
+      <Button component={Link} to="/home" variant="light" w="fit-content">
+        Go to Home
       </Button>
     </Stack>
   );

@@ -108,7 +108,7 @@ const currentPath = () => (typeof window === 'undefined' ? '/' : window.location
  * starting role), and the page to open.
  */
 export function trialHref(
-  hash = '#/scenarios',
+  hash = '#/home',
   opts: { tour?: boolean | 'quick' | 'engineer'; as?: TrialRole } = {},
 ): string {
   const tour =
@@ -118,6 +118,6 @@ export function trialHref(
 }
 
 /** The live app at this address: the path without its query, and the page to open. */
-export function liveHref(hash = '#/scenarios'): string {
+export function liveHref(hash = '#/home'): string {
   return `${currentPath()}${hash.startsWith('#') ? hash : `#${hash}`}`;
 }
