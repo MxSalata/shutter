@@ -43,6 +43,7 @@
       <Resource Name="Shutter.Process.PKG"/>
       <Resource Name="Shutter.Production.CLS"/>
       <Resource Name="Shutter.Review.PKG"/>
+      <Resource Name="Shutter.Portal.PKG"/>
       <Resource Name="Shutter.Scenarios.PKG"/>
       <Resource Name="Shutter.Service.PKG"/>
       <Resource Name="Shutter.Setup.CLS"/>
