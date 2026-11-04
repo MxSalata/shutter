@@ -67,7 +67,7 @@ export function ScenariosHero({ demo = false }: { demo?: boolean }) {
         </Text>
         <Text size="md" maw="68ch">
           {demo
-            ? "Each scenario plays a known failure. Here the site's written policy proposes the fix, with no agent: watch the gate check, a person or the policy release and the receiver verify."
+            ? "Each scenario plays a known failure. Here the site's written policy proposes the fix, with no agent: watch the gate check, a person or the policy release and the receiver verify. To see the board of IRIS AI Hub agents decide, open S8's recording from the link under the banner."
             : 'Each scenario plays a known failure. Watch a board of IRIS AI Hub agents investigate, the gate check, a person release and the receiver verify.'}
         </Text>
         <TechDetail label="What a scenario does" kind="explain">
@@ -79,7 +79,9 @@ export function ScenariosHero({ demo = false }: { demo?: boolean }) {
           </Text>
         </TechDetail>
         <Box component="ol" className="step-strip" aria-label="What happens to every case">
-          {STEPS.map((step, i) => {
+          {STEPS.map((name, i) => {
+            // The hospital's stories have no board where the user may not run scenarios
+            const step = demo && name === 'Board plan' ? 'Plan' : name;
             const gate = step === 'Gate checks';
             return (
               <li key={step} data-gate={gate || undefined}>

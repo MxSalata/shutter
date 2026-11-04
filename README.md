@@ -19,7 +19,7 @@ Instead of a **Resend** in the Message Viewer, Shutter makes each failed deliver
 
 The AI board proposes; the gate disposes.
 
-**S8 shows why the agents are there.** Two systems move one patient in the same minute. In **Rules only**, every check passes and WARD-B is written over the bed manager's WARD-C; the board sees the evidence cannot say which move is current and escalates. On Shutter's own scenarios, of the 11 single cases the board is convened for, it gets all 11 right; Rules only gets 4; across all 24 scored recorded passes, the board's decision matches the expected outcome ([comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md); [what that does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)).
+**Scenario S8 shows why the agents are there.** Two systems move one patient in the same minute. In **Rules only** mode (no agents: the message is resent unless the gate objects), every check passes and WARD-B is written over the bed manager's WARD-C; the board sees the evidence cannot say which move is current and escalates. On Shutter's own scenarios, of the 11 single cases the board is convened for, it gets all 11 right; Rules only gets 4; across all 24 scored recorded passes, the board's decision matches the expected outcome ([comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md); [what that does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)).
 
 ![S8 in plain terms: the bed manager has the patient in Ward C; Rules only moves them back to Ward B, the board leaves them in Ward C and asks a person](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-plain.png)
 
@@ -38,16 +38,19 @@ The AI board proposes; the gate disposes.
 
 **Terms used below:**
 
-- **Case:** one failed delivery and everything decided about it.
+- **Case:** one failed or withheld delivery and everything decided about it.
+- **Receiver:** the system the failed message was going to; in the demo, a bed manager, called the downstream system in the code and the item `Downstream Out`.
 - **Catalogue:** the failures Shutter knows and the safe outcome of each.
 - **Incident and chain:** many failures to one receiver, grouped; a chain is one encounter's messages, in event order.
+- **Rehearsal:** the receiver's dry run of the exact write, with nothing kept.
 - **Verified:** read from the receiver's history, never from an acknowledgement.
+- **PAS:** the patient administration system, the hospital's source of admissions and transfers.
 
 ## Where the agents sit
 
 The three specialists (conformance, encounter and impact) and the coordinator are business operations in the production. The case workflow calls the specialists in parallel, then the coordinator, who writes the plan.
 
-- **A pass** takes 24 to 47 seconds and costs 0.34 to 0.50 USD across the 25 recorded passes (22 of them 0.34 to 0.44): four agents read the evidence through typed tools on a frontier model, `claude-opus-5-5`, a setting of each board item.
+- **A pass** takes 24 to 47 seconds and costs 0.34 to 0.50 USD across the 25 recorded passes (22 of them 0.34 to 0.44): four agents read the evidence through typed tools on a frontier model, `claude-opus-5-5`, a setting of each board item. In **Site policy** mode the catalogue settles the cases it knows with no model call, so a site pays for a board only on the rest.
 - **Live or Replay:** with `ANTHROPIC_API_KEY` in `.env` they run live; without a key they replay recorded live runs at no cost.
 - **No write tool:** their tools read the sealed evidence and submit a finding, a plan or an answer; only the gate's checked, released plan is ever written.
 
@@ -71,6 +74,8 @@ The three specialists (conformance, encounter and impact) and the coordinator ar
 | **The AI Hub edition** on your machine, `./install.sh --image-file ...` | Docker and the build 109 file from the Early Access portal; `ANTHROPIC_API_KEY` for live agents | Your own instance, with live agents or, without a key, their recorded runs | Healthy in 3 min 21 s from a fresh clone on build 109 ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md)) |
 
 Both install times are from a 12-thread VM.
+
+**In a hospital's own IRIS for Health:** Shutter installs without the demo, beside the productions it watches or inside one ([docs/INSTALL.md](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md)). Failures reach it through a forwarder, or through the production's alerts with no change to the hospital's own code. A receiver with no API still gets a case, the board's diagnosis and a drafted escalation email, never a resend, and a production review needs nothing configured.
 
 **The online demo** is my fictional hospital, live, with made-up patients. The demo runs on AI Hub build `2026.3.0AI.154.0`; on your machine, use `2027.1.0AI.109.0` (below). The board runs live for the judges' account, within a model budget of 15 USD a day; everyone can see its recorded runs in the trial. Its sign-ins:
 
@@ -101,35 +106,35 @@ Shutter is ready after 10 s:
 - **Builds:** judges, please use the AI Hub Community build `2027.1.0AI.109.0`, the one the [Early Access portal](https://evaluation.intersystems.com/Eval/early-access/AIHub) offers since 2 November 2026. Shutter is also verified on `2026.3.0AI.154.0`, the contest's first ([receipt on 109](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md), [receipt on 154](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)). `install.sh` loads and tags either, from the file or already loaded.
 - For live agents, set `ANTHROPIC_API_KEY` in `.env`; without a key the board replays its recorded live runs. The live board uses Anthropic's API only, so with another provider's key it replays too. The case page's board panel marks each run Live or Replay, and so does each `AgentResponse` in the Visual Trace (`Mode`). The replay edition is the same without live agents or knowledge search.
 - The first build takes about 2 to 4 minutes on a 12-thread machine with 11 GB of memory, and up to about 15 on 8 cores and 5 GB, the minimum; `install.sh` gives up after 25. Allow Docker at least 5 GB of memory and about 25 GB of free disk. Then open http://localhost:52773/shutter/index.html.
-- **Sign-ins on your machine:** the web app as `approver` / `shutter` (approves) or `operator` / `shutter`; the Management Portal as `_SYSTEM` / `SYS`, namespace `SHUTTER`.
+- **Sign-ins on your machine:** the web app as `approver` / `shutter` (approves) or `operator` / `shutter`; the Management Portal as `_SYSTEM` / `SYS`, namespace `SHUTTER`, or as `approver` / `shutter` for the Workflow inbox.
 
 ### On the online demo, first
 
-1. Press **Break the feed** on the hospital's banner. Its bed manager goes down for a minute and eight movements for four new patients fail; a strip follows Shutter grouping them into one incident and, once the bed manager is back, releasing them in order. Unlike a Resend of each message, each item goes in event order at the version the previous one's verified receipt reports, stopping at the first surprise. In the demo's rehearsal on 3 November 2026 it ended as **one incident waiting for one approval**, with no model call: this outage needed no agent to plan its chains. Step 4 shows the agents decide.
+1. Press **Break the feed** on the hospital's banner. Its bed manager goes down for a minute and eight movements for four new patients fail; a strip follows Shutter grouping them into one incident and, once the bed manager is back, releasing them in order. Unlike a Resend of each message, each item goes in event order at the version the previous one's verified receipt reports, stopping at the first surprise. In the demo's rehearsal on 3 November 2026 it ended as **one incident waiting for one approval**, with no model call: this outage needed no agent to plan its chains. On **Incidents**, **Approve release** sends them in order. If you came to see the agents decide, go to step 4 first.
 2. Open a case that **waits for approval** and press **Approve plan**: one conditional write, then "Verified" from the receiver's history.
 3. On any case, **In IRIS: Message trace** opens its session in the Visual Trace (sign in as `demo-trace` / `Shutter-Demo-IRIS-Portal`).
 4. **See the agents decide.** The failures the hospital makes every 7 minutes are settled by its written policy, with no board. With the judges' account, **Convene the board** on a blocked, escalated or failed case: the board investigates it again, live, on fresh evidence. Without it, **See the board decide**, under the banner, opens S8's recorded board in the trial.
 
 ### On your machine or in the trial, first
 
-The mode chooses who proposes the plan; the gate, the rehearsal and the release are the same in every mode. **Board**: three specialist agents review the evidence in parallel, then a coordinator agent proposes one plan. **Site policy**: the scenario catalogue and the site's profile settle the cases they know, the cases the catalogue sends straight to a person (S13, S21) are escalated with no board, and the board takes the rest. **Single investigator**: one generalist agent proposes the plan (not in the trial). **Rules only**: no agents; the message is resent unchanged unless the gate objects, the baseline to compare with.
+The mode chooses who proposes the plan; the gate and the rehearsal are the same in every mode, and nothing is written until a person or the site's written policy releases it. **Board**: three specialist agents review the evidence in parallel, then a coordinator agent proposes one plan. **Site policy**: the scenario catalogue and the site's profile settle the cases they know, the cases the catalogue sends straight to a person (such as S13 and S21) are escalated with no board, and the board takes the rest. **Single investigator**: one generalist agent proposes the plan (not in the trial). **Rules only**: no agents; the message is resent unchanged unless the gate objects, the baseline to compare with.
 
-1. In **Scenarios**, run **S2** in **Board** mode. About 20 seconds later (a minute live) its case waits for approval. Press **Approve plan**: one conditional write, then "Verified".
+1. If a "New here?" prompt offers the trial, choose **Not now**, and leave the site profile notice for later: the shipped profile serves every scenario. In **Scenarios**, run **S2** in **Board** mode. About 20 seconds later (a minute live) its case waits for approval. Press **Approve plan**: one conditional write, then "Verified".
 2. Run **S8** in **Rules only** and approve (in the trial its recorded case is already approved and written): WARD-B overwrites the bed manager's WARD-C. In **Board** it escalates, writing nothing. The case page sets the two side by side.
 
 **Try to break it,** on your machine, with S2's case waiting for approval:
 
-- Sign in as `operator` / `shutter`: **Approve plan** is refused ("Deciding needs the approver role"), and the API answers 403.
-- Approve the plan from two tabs: one write; the second approval is refused with a 409.
-- In the IRIS Workflow inbox, complete the task with `PlanDigest` empty or wrong: the case blocks and nothing is dispatched ("The approval carried no plan digest, so it binds nothing"). Reinvestigate to recover.
+- Sign in as `operator` / `shutter`: **Approve plan** is disabled ("Deciding needs the approver role"), and the API answers 403.
+- Open the **Approve plan** dialog in two tabs and confirm in each: one write; the second answers 409 ("The case is resolved, not awaiting approval").
+- Sign in to the Management Portal as `approver` / `shutter`, the role's member (`_SYSTEM` is not one, so its inbox is empty), and open the Workflow inbox at http://localhost:52773/csp/healthshare/shutter/_DeepSee.UserPortal.Workflow.zen. Select the task, press **Accept**, then **Approve** with `PlanDigest` empty or wrong: the case blocks and nothing is dispatched ("The approval carried no plan digest, so it binds nothing", or "named another plan digest"). **Reinvestigate** recovers it; the digest in the new task's message then approves it: one write, verified.
 
 ## What to look at
 
 ![The Scenarios page: six steps and three scenarios to try first](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/scenarios-start.png)
 
-- **S2, a transfer that never arrived.** The gate passes the board's resend, the receiver's dry run says it would apply, and the approval waits as a Workflow task. "Acknowledged" is never "Verified". The web app's **Approve plan** completes that same `EnsLib.Workflow` task as the signed-in approver; from the IRIS Workflow inbox, copy the plan digest from the task's message (it is **Plan digest** on the case page too) into the task's `PlanDigest` field.
+- **S2, a transfer that never arrived.** The gate passes the board's resend, the receiver's dry run says it would apply, and the approval waits as a Workflow task. "Acknowledged" is never "Verified". The web app's **Approve plan** completes that same `EnsLib.Workflow` task as the signed-in approver; from the IRIS Workflow inbox, signed in to the portal as `approver`, press **Accept**, then copy the plan digest from the task's message (it is **Plan digest** on the case page too) into the task's `PlanDigest` field.
 
-![S2's approval waits as a task in the IRIS Workflow inbox, for the role Shutter Approvers](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/workflow-inbox-s2.png)
+![S2's approval as a task in the IRIS Workflow inbox for approver, in the role Shutter Approvers, accepted, with the plan digest in its message and Approve and Reject beside it](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/workflow-inbox-s2.png)
 
 - **S8, the case a gate cannot catch.** The plan records the conformance specialist's dissent and why it was overruled. The case page sets Rules only and the board side by side:
 
@@ -138,7 +143,7 @@ The mode chooses who proposes the plan; the gate, the rehearsal and the release 
 - **S20, a nurse moves the patient by hand** while S2's resend awaits approval. The approval is bound to the receiver's version, so nothing is sent (`APPROVAL_RECEIVER_CHANGED`) and her entry stands: the binding alone stops it, so S20 plays in Rules only mode.
 - **Beside the cases:** Ask about this case (agents that cannot write), a read-only review of a production, precedents, each agent's timeline and the evaluation.
 
-![Incident I-000001 from S11: eight failed deliveries to Downstream Out, six chains, five released by the site's policy and one by the board, all verified at the receiver in 1 min 42 s](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/incident-s11.png)
+![Incident I-000001 from S11: eight failed deliveries to Downstream Out, six chains, five released by the site's policy and one by an approval, all verified at the receiver in 1 min 42 s](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/incident-s11.png)
 
 All 26 scenarios (S1 to S25 without S14, with S23 in three parts), step by step, and where each part of the task shows: [docs/readme/scenarios.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/scenarios.md).
 
@@ -168,7 +173,7 @@ The case and incident workflows are written in ObjectScript rather than BPL, by 
 | `%AI.Policy.Authorization` holds each run to its own case; `%AI.Policy.Audit` writes each tool call to the trace's log | [Policy](https://github.com/MxSalata/shutter/tree/main/src/Shutter/Bridge/Policy) |
 | RAG on `%AI.RAG.VectorStore.IRIS` with FastEmbed: the interface contract, encounter lifecycle, operation effects, member playbooks and review rules | [Library.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Knowledge/Library.cls) |
 | The provider key in the IRIS wallet, named in the Config Store as `secret://Shutter.Anthropic#key` (`AI.LLM.Shutter`) | [Setup.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Setup.cls) |
-| Who may run an agent live: only holders of `Shutter_LiveAgents`, each live run charged to its requester within the day's budget | [Dispatch.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/API/Dispatch.cls), [Budget.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Util/Budget.cls) |
+| Who may ask for a live run: only holders of `Shutter_LiveAgents`, each charged to its requester within the day's budget; a failure from the feed runs as `system`, under the day's budget alone | [Dispatch.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/API/Dispatch.cls), [Budget.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Util/Budget.cls) |
 | Token accounting: sessions with prompt caching; tokens and cost per run | [AIHub.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Bridge/Runner/AIHub.cls) |
 | `Model`, `ProviderConfig`, `TokenBudget` and `MaxIterations` as settings of each board item | [Agent.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Bridge/Operation/Agent.cls) |
 | The tool catalogue, pinned: before any model call a run checks that `%Discover` names exactly its declared tools, and any other catalogue ends it as `catalogue_mismatch` | [Catalogue.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Bridge/Catalogue.cls) |
@@ -212,13 +217,13 @@ The idea asks whether Interoperability could do the job of a tracing tool such a
 
 **Follow one decision, step by step,** on your own instance (the replay edition is enough: no key, no cost) or in the online demo's Visual Trace:
 
-1. Open http://localhost:52773/shutter/index.html as `operator` / `shutter`. In **Scenarios**, run **S8** in **Board** mode.
-2. On S8's case page, **In IRIS: Message trace (session N)** opens the case's session in the Management Portal's Visual Trace. Each production item has its own lane: `Case Workflow`, `Evidence Collector`, then `Agent Conformance`, `Agent Encounter` and `Agent Impact` in parallel, then `Agent Coordinator` and the `Gate`.
+1. Open http://localhost:52773/shutter/index.html as `approver` / `shutter`, who may read the traces (`operator` may not). In **Scenarios**, run **S8** in **Board** mode.
+2. On S8's case page, **In IRIS: Message trace (session N)** opens the case's session in the Management Portal's Visual Trace (sign in there as `approver` / `shutter` too). Each production item has its own lane: `Case Workflow`, `Evidence Collector`, then `Agent Conformance`, `Agent Encounter` and `Agent Impact` in parallel, then `Agent Coordinator` and the `Gate`.
 3. Click an `AgentResponse` arrow. Its contents are the generation: `Model`, `Mode` (live or replay), `PromptTokens`, `CompletionTokens`, `CacheReadTokens`, `Iterations`, `ToolCalls`, `DurationMs` split into `LlmMs` and `ToolMs`, and `ConfigVersion`, the prompt's version.
 
    ![One board member's run as an AgentResponse in the Visual Trace: model, mode, tokens, iterations and tool calls](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/trace-agentresponse.png)
 
-4. In the Management Portal's SQL page (namespace `SHUTTER`), run the query below with that session number: every tool call of the pass, in order, with its duration, whether it was allowed, and the board member that made it.
+4. In the Management Portal's SQL page (namespace `SHUTTER`), run the query below with that session number: every tool call of the pass, in order, with its duration, whether it succeeded, whether it was refused, and the board member that made it.
 5. On the case page, **When each agent worked** draws the same rows as a timeline, and the **Settings and costs** page sums them by case.
 
 | A tracing tool records | In Shutter |
@@ -233,7 +238,7 @@ The idea asks whether Interoperability could do the job of a tracing tool such a
 
 ```sql
 -- One session's tool calls in order, with the board member that made each (? is the session number)
-SELECT t.Seq, %EXACT(t.Name) AS Tool, t.DurationMs, t.Ok, %EXACT(h.TargetConfigName) AS Member
+SELECT t.Seq, %EXACT(t.Name) AS Tool, t.DurationMs, t.Ok, t.Denied, %EXACT(h.TargetConfigName) AS Member
 FROM Shutter_Bridge.ToolCall t JOIN Ens.MessageHeader h ON h.ID = t.RunKey
 WHERE h.SessionId = ?
 ORDER BY h.ID, t.Seq
@@ -256,7 +261,7 @@ Tokens and cost by board member, model and mode, in SQL: [docs/readme/running.md
 ## Limits, plainly
 
 - Without an API key the agents replay recorded runs. A case with no recording, such as one from your own HL7 file, takes the rules path: the gate alone decides and a resend waits for a person.
-- The receiver is a demo bed-management system built for the scenarios. Shutter resends only to a receiver whose API the site profile describes; any other, a plain MLLP receiver included, gets the board's diagnosis and an escalation, never a resend: an ACK says a message arrived, not what the receiver now holds.
+- The receiver is a demo bed-management system built for the scenarios. Shutter resends only to a receiver whose API (state, receipt, capabilities and operations paths) the site profile describes; any other, a plain MLLP receiver included, gets the board's diagnosis and an escalation, never a resend: an ACK says a message arrived, not what the receiver now holds.
 - No local-model profile, on purpose: the board works through typed tool calls, which a frontier model makes reliably on evidence this detailed. A site's own model behind an API would be a provider in the Config Store; that is untested.
 - The evaluation is one recording per board member and case, with one model: it can't show how often a repeat run agrees, and the catalogue was written alongside these scenarios. The injected instruction (S4) reaches the agents only as a flag, so S4 shows they notice it, not that they would resist the text.
 - Spend: a storm of one kind convenes one board, which the other cases with its failure signature follow, each through its own gate and approval; `SHUTTER_DAILY_BUDGET_USD` caps a day's live spend, after which cases take the rules path ([more](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md#more-about-running-it)). The online demo's instance resets every hour; its live spend is capped at 5 USD an hour, 2 USD of it per judge, and 15 USD a day.

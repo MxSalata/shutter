@@ -500,7 +500,7 @@ export const CHAPTERS: GuideChapter[] = [
       {
         id: 'summary',
         title: 'Who releases each fix',
-        say: "For each tier, this map shows who releases a fix: the site's written policy, a person, or the board of agents, always after the gate.",
+        say: "For each tier, this map shows who releases a fix: the site's written policy or a person, always after the gate.",
         place: { page: '/site-profile' },
         target: 'site-summary',
         scopes: A,
