@@ -45,7 +45,7 @@ function renderTrial(detail: DetailLevel = 'plain') {
 /** Waits for every part of the page that loads: the rows, the guided path, S8's cited entry. */
 async function loaded() {
   await screen.findByRole('button', { name: 'Run S2' });
-  await screen.findByRole('region', { name: 'Start here' });
+  await screen.findByRole('region', { name: 'Then follow this path' });
   await screen.findByText('citing catalogue entry E7,', { exact: false });
   const s5 = (await screen.findByRole('button', { name: 'Run S5' })).closest('tr')!;
   await within(s5).findByText('Delivered, verified');
@@ -64,7 +64,7 @@ describe('ScenariosPage in the trial', () => {
 
   it('lists the guided path as numbered steps, each a title, one sentence and its links, the rest behind More', async () => {
     renderTrial();
-    const card = await screen.findByRole('region', { name: 'Start here' });
+    const card = await screen.findByRole('region', { name: 'Then follow this path' });
     const steps = within(card).getAllByRole('listitem');
     expect(steps).toHaveLength(6);
     for (const [i, step] of steps.entries())

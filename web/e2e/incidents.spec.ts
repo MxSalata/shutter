@@ -14,7 +14,7 @@ test.describe('the guided path', () => {
   test('leads to the outage incident', async ({ page }) => {
     await signIn(page);
     await page
-      .getByRole('region', { name: 'Start here' })
+      .getByRole('region', { name: 'Then follow this path' })
       .getByRole('link', { name: 'Incident I-000001', exact: true })
       .click();
     await expect(page.getByRole('heading', { name: 'Incident I-000001', exact: true })).toBeVisible();

@@ -60,7 +60,7 @@ test.describe('the page at 1280 px @scenarios', () => {
     page,
   }) => {
     await go(page, '/scenarios');
-    const card = page.getByRole('region', { name: 'Start here' });
+    const card = page.getByRole('region', { name: 'Then follow this path' });
     await expect(card.getByRole('listitem')).toHaveCount(6);
     for (const name of [
       'Case C-000002',

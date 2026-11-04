@@ -168,7 +168,7 @@ function Pair({ rulesId, boardId, caseId }: { rulesId: string; boardId: string; 
 
 /**
  * S8 played by rules alone and by the board, side by side: what each did at the receiver, and the evidence both read.
- * On an S8 case's page; `?show=compare` (the demo's Start here) scrolls to it.
+ * On an S8 case's page; `?show=compare` (the demo's path through the recorded cases) scrolls to it.
  */
 export function S8Compare({ caseId, focus }: { caseId: string; focus: boolean }) {
   const cases = useCases({ scenario: 'S8', limit: 50 });

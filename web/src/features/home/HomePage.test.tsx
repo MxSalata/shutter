@@ -69,14 +69,14 @@ describe('HomePage', () => {
     renderHome();
     const start = await screen.findByRole('link', { name: 'Open the scenarios' });
     expect(start).toHaveAttribute('href', '/scenarios');
-    expect(screen.getByText(/Start with S8/)).toBeInTheDocument();
+    expect(screen.getByText(/Start with S2, then S8/)).toBeInTheDocument();
   });
 
   it('starts the public demo, who cannot run scenarios, at the cases', async () => {
     renderHome({ ...ALL, configure: false, scenarios: false });
     const start = await screen.findByRole('link', { name: 'Open the cases' });
     expect(start).toHaveAttribute('href', '/cases');
-    expect(screen.queryByText(/Start with S8/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Start with S2, then S8/)).not.toBeInTheDocument();
   });
 
   it('counts the cases that need a person, in words', async () => {
