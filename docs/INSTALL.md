@@ -148,8 +148,12 @@ Shutter stores, so a case's timeline shows what the intake brought. An index of 
 readable from SHUTTER, is not in this version.
 
 **3.4 The receivers.** Each system Shutter should recover is a receiver entry in the site profile: its name (the
-production item that delivers to it), tier, what it takes (cancels, merges) and its API paths. Without API paths there
-is no receipt lookup and no resend: the gate blocks any write and the case is escalated to the team the profile names.
+production item that delivers to it), tier, what it takes (cancels, merges) and its API paths. For a system with no API,
+such as a plain MLLP receiver, declare its `features` all false and leave `api` out. There is then no read-back, no
+receipt lookup and no resend: the gate blocks any write, and the case holds the evidence and the reason nothing was
+sent. Nothing goes out by itself: a person reads the case on the Cases page, and its page drafts the email for the team
+that owns the system. `tests/e2e/plain_receiver_check.py` plays this on a stock `EnsLib.HL7.Operation.TCPOperation`,
+down and answering AE.
 
 **3.5 Security and operations.** Only holders of `Shutter_Forwarder` can open cases; the web application keeps its
 roles. Escalation mail goes through the `Escalation Mail` operation's `SMTPServer` setting; unset, it writes `.eml`

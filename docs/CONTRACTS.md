@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.39, 3 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.40, 4 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -685,9 +685,12 @@ reads it through `Shutter.Store.SiteProfile`.
   `receipt`, `capabilities` and `operations` endpoints, with the placeholders `{encounter}` and `{key}`) and
   `features` (what the site declares it can do: `conditional_writes`, `receipts`, `history`, `dry_run`). The evidence
   collector, the verifier and the connector read their paths from the entry named by the case's receiver (the
-  production item that delivered to it), so a second receiver is configuration, not code. A path left empty means the
-  receiver has no such endpoint: no receipt lookup, and the capabilities are the declared features, which the route
-  item records as `capabilities_source`. An entry with neither a capabilities endpoint nor declared features reads as capabilities unread (`capabilities_source` "not declared by the site profile", status 0), and the gate answers `CAPABILITIES_UNREADABLE` (v1.39). An entry without `api` takes the downstream system's paths. `dry_run: false` in a receiver's declared features, or in
+  production item that delivered to it), so a second receiver is configuration, not code. Given an `api`, its `state`
+  and `operations` paths are required; a `receipt` or `capabilities` path left empty means the receiver has no such
+  endpoint: no receipt lookup, and the capabilities are the declared features, which the route item records as
+  `capabilities_source`. An entry with `features` and no `api` is a receiver with no API of its own, such as a plain
+  MLLP system (v1.40): it has no paths, so nothing is read in its place, and with its features declared false the gate
+  blocks any write. An entry with neither reads the default paths, as a profile from before v1.8 does. An entry with neither a capabilities endpoint nor declared features reads as capabilities unread (`capabilities_source` "not declared by the site profile", status 0), and the gate answers `CAPABILITIES_UNREADABLE` (v1.39). An entry without `api` takes the downstream system's paths. `dry_run: false` in a receiver's declared features, or in
   its capability profile, means the gate offers no resend to it (`DRY_RUN_UNSUPPORTED`) and the connector refuses to send
   a dry run to it (v1.21). Declare all four flags: for a receiver with no capabilities endpoint the route takes the
   declared features, and a flag left out reads as false there (the connector alone reads an absent flag as true, so the
@@ -1722,6 +1725,11 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
 
 ## Changes
 
+- v1.40, 4 Nov 2026 (a stock TCP operation tried as a receiver, and the README's walk-through followed as written): an entry with
+  `features` and no `api` is a receiver with no API of its own and has no paths (6.4); it read the demo receiver in its place
+  and believed that receiver's capabilities. `Shutter_Approver` carries `%Ens_EventLog` (E2), since the Visual Trace's event
+  diamonds refused the user the README signs in. A replayed run writes one trace line naming its tool calls.
+
 - v1.39, 3 Nov 2026 (the sweep of 3 Nov: the public demo's user could spend the model budget): the agent part of
   `POST /production-reviews` takes `Shutter_LiveAgents` and is skipped without it, or while the provider refuses the key (the
   202 says `agent` false, the review ranks by its baseline with `agentState` `skipped`); the review's run carries the
@@ -1992,8 +2000,8 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   patient identifier is the PID-3 repetition typed MR, else the first. In replay mode a case with no recording for
   any member takes the rules path instead of escalating, so the gate still judges.
   Roles (E2): the installer creates each role or brings it to its definition; `Shutter_Approver` carries `%EnsRole_Monitor`
-  with the message trace, header and content viewing resources, never `%EnsRole_Operator`, so an approver reads traces
-  and the Workflow inbox and approves, and cannot start, stop or purge the production; `Setup.EnsureSecurity` applies
+  with the message trace, header, content and event log viewing resources, never `%EnsRole_Operator`, so an approver
+  reads traces, their events and the Workflow inbox and approves, and cannot start, stop or purge the production; `Setup.EnsureSecurity` applies
   the definitions to an existing instance.
   The image's namespace has two databases: the code in `${MGRDIR}SHUTTER` (the image) and the data in
   `${MGRDIR}shutter/db/SHUTTERDATA` (the `shutter-mgr` volume), so a recreated container keeps its cases and a rebuilt
