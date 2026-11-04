@@ -336,6 +336,11 @@ describe('ScenariosPage, as each role has it', () => {
     renderScenarios();
     expect(await screen.findByRole('region', { name: 'Every scenario' })).toBeInTheDocument();
     expect(await screen.findByText(/The online demo plays its stories by itself/)).toBeInTheDocument();
+    // Its hospital's stories are the written policy's: the opening names no board there
+    expect(
+      screen.getByText(/Here the site's written policy proposes the fix, with no agent/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/a board of IRIS AI Hub agents/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Run / })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Reset' })).not.toBeInTheDocument();
     // No Play column, no mode to choose; the modes are described and the cards still open their cases

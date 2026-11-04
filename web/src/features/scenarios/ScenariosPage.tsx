@@ -774,7 +774,7 @@ export default function ScenariosPage() {
         }
       />
       <Stack gap="lg">
-        <ScenariosHero />
+        <ScenariosHero demo={hidden} />
         {hidden ? (
           <Text size="md">
             The online demo plays its stories by itself, so there is nothing to run or reset here.
