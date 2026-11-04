@@ -70,10 +70,10 @@ describe('investigatedBy', () => {
   });
 
   it('names the catalogue entry the site policy settled a case with', () => {
-    expect(at('policy', { planCreatedBy: 'policy:E2' })).toEqual({ who: 'Site policy', entry: 'E2' });
+    expect(at('policy', { planCreatedBy: 'policy:E2' })).toEqual({ who: 'Site policy (no agents)', entry: 'E2' });
     // A withheld merge is the policy's whatever the mode
     expect(at('board', { planCreatedBy: 'policy:E14', failureKind: 'withheld' })).toEqual({
-      who: 'Site policy',
+      who: 'Site policy (no agents)',
       entry: 'E14',
     });
   });
@@ -120,7 +120,7 @@ describe('investigatedBy', () => {
         <InvestigatedBy c={{ ...base, mode: 'policy', planCreatedBy: 'policy:E2' }} />
       </MantineProvider>,
     );
-    expect(screen.getByText('Site policy')).toBeInTheDocument();
+    expect(screen.getByText('Site policy (no agents)')).toBeInTheDocument();
     expect(screen.getByText('entry E2')).toBeInTheDocument();
   });
 });
