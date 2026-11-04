@@ -83,6 +83,22 @@ describe('LoginPage', () => {
     expect(screen.queryByRole('button', { name: 'Demo users' })).not.toBeInTheDocument();
   });
 
+  it("names the online demo's account outside the disclosure on a demo instance", async () => {
+    await renderDemoLogin();
+    const line = screen.getByText(/On the online demo, sign in as/);
+    expect(line).toHaveTextContent('On the online demo, sign in as demo / shutter.');
+    expect(screen.getByRole('button', { name: 'Demo users' })).toHaveAttribute('aria-expanded', 'false');
+    expect(line.closest('[data-tech-detail]')).toBeNull();
+    expect(screen.getByText(/They are for your own instance/)).toBeInTheDocument();
+  });
+
+  it('names no online demo account on a site install', async () => {
+    const { client } = renderLogin(false);
+    expect(await screen.findByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+    await waitFor(() => expect(client.getQueryState(keys.health)?.status).toBe('success'));
+    expect(screen.queryByText(/On the online demo, sign in as/)).not.toBeInTheDocument();
+  });
+
   it('keeps the demo users in a disclosure, closed until it is opened', async () => {
     renderLogin(true);
     const toggle = await screen.findByRole('button', { name: 'Demo users' });
@@ -348,7 +364,7 @@ describe('LoginPage, how much it says', () => {
   // the purpose line, three tiles with the comparison's bars, the provenance line, the form and the trial card)
   // comes to more than that, so the budget here is what that copy needs, to stop it growing; each element keeps the
   // limit DESIGN.md 1.4 gives it, checked in the last test.
-  const PLAIN_BUDGET = 160;
+  const PLAIN_BUDGET = 170;
   const TECHNICAL_BUDGET = Math.round(PLAIN_BUDGET * 1.5);
 
   it('stays within its budget in Plain, on a laptop and on a phone', async () => {
