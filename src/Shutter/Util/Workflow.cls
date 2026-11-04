@@ -61,7 +61,7 @@ ClassMethod Decide(caseId As %String, action As %String = "Approve", digest As %
     If '$SYSTEM.Security.Check("Shutter_Approve", "USE") Quit ..ErrorJSON("forbidden", "Shutter_Approve is required to decide a task")
     Set action = $SELECT($ZCONVERT(action, "L") = "reject": "Reject", 1: "Approve")
     If (action = "Approve") && (digest = "") Quit ..ErrorJSON("no_digest", "an approval names the plan digest it binds")
-    Set task = ..OpenTaskFor(caseId)
+    Set task = ..WaitForTask(caseId, ..#TASKWAIT)
     If '$ISOBJECT(task) Quit ..ErrorJSON("no_task", "no open approval task for " _ caseId)
     If '..IsMember(task.%RoleName, user) Quit ..ErrorJSON("not_in_role", user _ " is not a member of the Workflow role " _ task.%RoleName)
     Set assigned = $SELECT($ISOBJECT(task.%TaskStatus): task.%TaskStatus.AssignedTo, 1: "")
@@ -77,6 +77,25 @@ ClassMethod Decide(caseId As %String, action As %String = "Approve", digest As %
     Set r = {}
     Set r."task_id" = task.%Id(), r.action = action, r.user = user, r."case_id" = caseId
     Quit r.%ToJSON()
+}
+
+/// How long Decide waits for a task on its way, in seconds.
+Parameter TASKWAIT = 5;
+
+/// The case's open task, waiting briefly for one that isn't there yet. The workflow sets a case to awaiting approval and
+/// then sends its task, so a decision can arrive before the Workflow operation has saved it: the API's approver polls the
+/// case and answers as soon as it awaits approval (CI, 4 Nov 2026, on a run with no change to this code: "no open approval
+/// task"). A task already there costs no wait, and a case with no task coming still gets no_task, later.
+ClassMethod WaitForTask(caseId As %String, seconds As %Numeric = 5) As EnsLib.Workflow.TaskResponse
+{
+    Set until = $ZHOROLOG + seconds
+    While 1 {
+        Set task = ..OpenTaskFor(caseId)
+        If $ISOBJECT(task) Return task
+        If $ZHOROLOG > until Return ""
+        Hang 0.05
+    }
+    Quit ""
 }
 
 /// How long Assign waits for the engine's distribution to reach the user, in seconds.
