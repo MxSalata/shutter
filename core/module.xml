@@ -35,6 +35,7 @@
       <Resource Name="Shutter.Bridge.ToolCall.CLS"/>
       <Resource Name="Shutter.Catalogue.PKG"/>
       <Resource Name="Shutter.Index.PKG"/>
+      <Resource Name="Shutter.Installer.CLS"/>
       <Resource Name="Shutter.Intake.PKG"/>
       <Resource Name="Shutter.Knowledge.Text.CLS"/>
       <Resource Name="Shutter.Msg.PKG"/>

@@ -1325,7 +1325,7 @@ copy of the message.
   alert's forward with the case already open (`opened` false), so a failure reaches Shutter once as a case and twice in the
   message trace. `PAS to Downstream` stays out of `Receivers`. The production review's `NO_ALERT_CONSUMER` (13) names the
   item.
-- **The demo hospital** (shape A as a judge sees it): the image also creates the namespace `HOSPITAL` (`Installer.cls`;
+- **The demo hospital** (shape A as a judge sees it): the image also creates the namespace `HOSPITAL` (`src/Shutter/Installer.cls`;
   `SELECT Shutter.Installer_RunHospital('SHUTTER')` on an instance that has Shutter) with the packages `Shutter.Intake`,
   `Shutter.Util`, `Shutter.Msg`, `Shutter.Store` and `Hospital` mapped from Shutter's code database, and
   `Hospital.Setup.Install('SHUTTER')`, run there, makes its folders (`<mgr>/shutter/hospital/in`, `archive`, `work`),
@@ -1339,6 +1339,13 @@ copy of the message.
   in Shutter's namespace names it); the case in Shutter then names the source.
 
 ## 12. The install (v1.15)
+
+**A demo load on a plain instance** (a person's `zpm`, with no image build before it): `Shutter.Setup.InstallStatus` makes
+`RECORDS` and `HOSPITAL` when they are missing (`Installer.EnsureDemoNamespaces`, before the roles read them) and installs
+the hospital once Shutter's production has started (`InstallDemoHospital`; an image build leaves that to `iris.script`).
+Every call to `Ens.Director` there runs outside IPM's transaction (`LeaveTransaction`): a lock released inside a transaction
+stays held until the commit, and the production's start would wait 30 seconds for it and fail. The level is restored for
+IPM's own commit. `scripts/stock-install-check.sh` runs this path.
 
 **The demo records system** (v1.25): `Shutter.Installer`'s manifest makes a third namespace, `RECORDS`, with the demo
 receiver package (`Downstream`) mapped from Shutter's code database and its own data database, so the same code serves

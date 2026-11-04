@@ -118,6 +118,12 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         Set ^Shutter.Config("version") = ..#VERSION
         If $GET(^Shutter.Config("mode")) = "" Set ^Shutter.Config("mode") = "board"
         Set sc = ..CreateFolders() Quit:$$$ISERR(sc)
+        // The demo's records and hospital namespaces, before CreateSecurity reads them: an image's installer has made
+        // them, a load on a stock instance has not. Making a namespace is not something IPM's transaction could undo.
+        If demo && ('##class(Shutter.Installer).NamespaceExists("RECORDS") || '##class(Shutter.Installer).NamespaceExists("HOSPITAL")) {
+            Do ..LeaveTransaction()
+            Set sc = ##class(Shutter.Installer).EnsureDemoNamespaces(ns) Quit:$$$ISERR(sc)
+        }
         Set sc = ..CreateSecurity(ns, demo) Quit:$$$ISERR(sc)
         Set sc = ..GrantSqlPrivileges(ns) Quit:$$$ISERR(sc)
         Set sc = ..RemoveOldReceiverNames() Quit:$$$ISERR(sc)
@@ -159,11 +165,28 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         If $EXTRACT(synced, 1, 5) = "ERROR" Set sc = $$$ERROR($$$GeneralError, synced) Quit
         // A site runs the production with no feed of its own: the demo's items are switched off.
         If 'demo Set sc = ..DisableDemoItems() Quit:$$$ISERR(sc)
+        If demo Set sc = ..InstallDemoHospital(ns) Quit:$$$ISERR(sc)
     } Catch ex {
         Set sc = ex.AsStatus()
     }
     While $TLEVEL < tlevel { TSTART }
     Quit sc
+}
+
+/// The demo hospital's production, in its namespace, once Shutter's classes are compiled and mapped there. An image
+/// build leaves it to iris.script (SHUTTER_BUILD=1), which runs it after the load; a load on a stock instance has no such
+/// script. Running it again is safe (Hospital.Setup).
+ClassMethod InstallDemoHospital(ns As %String) As %Status [ Private ]
+{
+    If $SYSTEM.Util.GetEnviron("SHUTTER_BUILD") = "1" Quit $$$OK
+    If $ZCONVERT(ns, "U") = "HOSPITAL" Quit $$$OK
+    If '##class(%Dictionary.CompiledClass).%ExistsId("Hospital.Setup") Quit $$$OK
+    If '##class(Shutter.Installer).NamespaceExists("HOSPITAL") Quit $$$OK
+    Do ..LeaveTransaction()
+    New $NAMESPACE
+    Set $NAMESPACE = "HOSPITAL"
+    Set r = ##class(Hospital.Setup).Install(ns)
+    Quit $SELECT(r = "ok": $$$OK, 1: $$$ERROR($$$GeneralError, "The demo hospital: " _ r))
 }
 
 /// The inbound, archive and work folders under the manager directory.
@@ -251,7 +274,10 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     Quit:$$$ISERR(sc) sc
     // Every caller of the API web application gets read access to the namespace's databases, so
     // that the sign-in route can run for an anonymous session; data routes still check resources.
-    Set sc = ..EnsureRole("Shutter_WebApp", "Shutter web application: read the namespace's databases (granted to every caller by the web application)", db _ ":R" _ codeRead, "")
+    // Embedded Python asks for this resource on the AI Hub builds (2026.2 has none): without it a web caller reads only
+    // UTC, Europe/London and fixed offsets (Time.PythonZones), though the production, with all rights, reads every zone.
+    Set python = $SELECT(##class(Security.Resources).Exists("%Service_EmbeddedPython"): ",%Service_EmbeddedPython:U", 1: "")
+    Set sc = ..EnsureRole("Shutter_WebApp", "Shutter web application: read the namespace's databases (granted to every caller by the web application)", db _ ":R" _ codeRead _ python, "")
     Quit:$$$ISERR(sc) sc
     // The forwarder in a watched production opens cases through POST /api/shutter/intake and nothing else (CONTRACTS
     // 11): the intake resource and the databases, so only the watched productions' credential can open cases.
@@ -1282,6 +1308,16 @@ ClassMethod SyncSecondParser(production As %String = "Shutter.Production") As %S
     Quit out
 }
 
+/// Commits the transaction IPM runs the install in, before the first call to Ens.Director. A lock released inside a
+/// transaction stays held until the commit, so GetProductionStatus leaves this process holding ^Ens.Runtime("ConfigItem"),
+/// and StartProduction then waits its 30 seconds and fails with ErrCanNotAcquireRuntimeLock: a load on a stock instance
+/// stopped there. An image build never reaches this (SHUTTER_BUILD=1 starts nothing). InstallStatus restores the level
+/// it was called at, so IPM's own commit still has a transaction to close.
+ClassMethod LeaveTransaction() [ Private ]
+{
+    While $TLEVEL { TCOMMIT }
+}
+
 ClassMethod StartProduction() As %Status
 {
     Set sc = $$$OK
@@ -1300,6 +1336,7 @@ ClassMethod StartProduction() As %Status
         // While an image is built (SHUTTER_BUILD=1) the instance stops right after: the production
         // starts with the container instead, so nothing is started here.
         If $SYSTEM.Util.GetEnviron("SHUTTER_BUILD") = "1" Quit
+        Do ..LeaveTransaction()
         Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)
         Quit:$$$ISERR(sc)
         If state = 1 {
@@ -1465,6 +1502,7 @@ ClassMethod AddItemsTo(production As %String, Output added As %Integer) As %Stat
             }
         }
         Set sc = ..ApplyDefaultSettings(production) Quit:$$$ISERR(sc)
+        Do ..LeaveTransaction()
         Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state) Quit:$$$ISERR(sc)
         If (state = 1) && (name = production) Set sc = ##class(Ens.Director).UpdateProduction()
     } Catch ex {

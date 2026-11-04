@@ -45,6 +45,10 @@ the productions a hospital already runs; the README's `docker compose up` is the
   by default `<data directory>/ipm/iris-shutter/<version>/`), and `/shutter` serves `www/` from there. It needs IPM 0.10.4 or
   later: 0.10.0 to 0.10.3 delete the extracted module when the install ends, so the install refuses them and says so; a load
   from a folder works on any IPM.
+- **On a plain instance** a load goes into the namespace you run it in (`USER` by default), and the demo install makes the
+  rest itself: the `RECORDS` and `HOSPITAL` namespaces, the records system's web application and the hospital's production.
+  It doesn't build the Second Parser's jar (below), so that item stays disabled and S25 is decided without its second
+  opinion. `scripts/stock-install-check.sh` runs this path; CI runs it on 2026.2 with the core.
 
 `Install` creates, in the current namespace, the folders under `<mgr>/shutter/`, the resources `Shutter_Operate`,
 `Shutter_Approve` and `Shutter_Intake`, the roles `Shutter_Operator`, `Shutter_Approver`, `Shutter_WebApp` and
@@ -101,7 +105,7 @@ says so. Nothing else depends on it.
 
 ## 3. Shape A: Shutter in its own namespace
 
-**3.1 The namespace.** Create it with `Installer.cls` as the image does (two databases, Interoperability on) or with
+**3.1 The namespace.** Create it with `src/Shutter/Installer.cls` as the image does (two databases, Interoperability on) or with
 `SELECT Shutter.Setup_CreateNamespace('SHUTTER')`, its data database on storage the trust backs up. Load the module
 with `-Ddemo=0`: `Shutter.Production` starts with its feed, records and scenario items disabled (the six named in section
 1), so it has no feed of its own until the intake route or the site's own items bring it one.
