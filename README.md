@@ -19,7 +19,7 @@ Instead of a **Resend** in the Message Viewer, Shutter makes each failed deliver
 
 The AI board proposes; the gate disposes.
 
-**Scenario S8 shows why the agents are there.** Two systems move one patient in the same minute. In **Rules only** mode (no agents: the message is resent unless the gate objects), every check passes and WARD-B is written over the bed manager's WARD-C; the board sees the evidence cannot say which move is current and escalates. On Shutter's own scenarios, of the 11 single cases the board is convened for, it gets all 11 right; Rules only gets 4; across all 24 scored recorded passes, the board's decision matches the expected outcome ([comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md); [what that does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)).
+**Scenario S8 shows why the agents are there.** Two systems move one patient in the same minute. In **Rules only** mode (no agents: the message is resent unless the gate objects), every check passes and WARD-B is written over the bed manager's WARD-C; the board sees the evidence cannot say which move is current and escalates. On Shutter's own scenarios, of the 11 single cases the board is convened for, it gets all 11 right; Rules only gets 4; across all 24 scored recorded passes, the board's decision matches the expected outcome ([comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md); [what that does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)). Rules only is the floor, a plain resend. The scenario catalogue, written from these failures, settles 8 of the 10 it plays with no agent (**Site policy**); it sends S4 and S8 to the board, and S8 is why.
 
 ![S8 in plain terms: the bed manager has the patient in Ward C; Rules only moves them back to Ward B, the board leaves them in Ward C and asks a person](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-plain.png)
 
@@ -189,9 +189,9 @@ What I found building Shutter, measured on build `2026.3.0AI.154.0`; the longer 
 - **Hard:** a provider must be named `@{config:<Name>}`, and a fresh Config Store needs `%ConfigStore.DescriptorManager.RebuildRegistry()` before `AI.LLM` has a descriptor.
 - **Hard:** `%LogExecution` must be declared `As %Status`, which the guide doesn't show; the image has no IPM, so the build installs it; when two properties of a tool's argument share one schema class, the rest reach the model as a bare `object`, so the description spells out their fields; the Community licence's 8 units run out under cookie-less HTTP bursts, so scripts keep one cookie.
 - **Interoperability, worked well:** every agent run and approval is a production message and each tool call is in the trace's log, so the Visual Trace and the Message Viewer already show a case end to end; `FailureTimeout` 0 makes a feed fail forward, so no later message waits behind a failed one.
-- **Interoperability, hard:** a production sends its alerts to the one item named `Ens.Alert`, so the alert intake has to take that name and pass every alert on to the site's own consumer; a Workflow task's form fields are filled by the approver, so the plan's digest starts empty and an inbox approval must paste it, or it binds nothing.
+- **Interoperability, hard:** a production sends its alerts to the one item named `Ens.Alert`, so the alert intake either takes that name and passes every alert on to the site's own consumer, or sits as a target of the site's alert router; a Workflow task's form can be filled by the process, but a filled digest would always match, so Shutter leaves it empty and an inbox approval must paste it, or it binds nothing.
 - **AI Hub, would like to see:** `Run()` calling `OnIterationStart` and `OnIterationComplete` ([#12](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/12)), so a token budget can stop a run between turns rather than after it.
-- **Interoperability, would like to see:** a Workflow task whose form fields the process that creates it can fill, so an approval in the inbox binds the plan's digest without a paste; and alerts that can go to more than the one item named `Ens.Alert`, so a watcher need not take that name.
+- **Interoperability, would like to see:** a production setting that names more than one alert target, so a watcher can hear every alert without changing the site's `Ens.Alert` item, which today must be the watcher itself or route to it.
 
 ## Technology bonuses
 
@@ -223,14 +223,18 @@ The idea asks whether Interoperability could do the job of a tracing tool such a
 
    ![One board member's run as an AgentResponse in the Visual Trace: model, mode, tokens, iterations and tool calls](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/trace-agentresponse.png)
 
+   The diamond above each response, in the member's lane, is an event: in replay it lists the run's tool calls with their durations.
+
+   ![An event diamond in a member's lane of the Visual Trace, opened: the recorded tool calls of one run](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/trace-tool-calls.png)
+
 4. In the Management Portal's SQL page (namespace `SHUTTER`), run the query below with that session number: every tool call of the pass, in order, with its duration, whether it succeeded, whether it was refused, and the board member that made it.
 5. On the case page, **When each agent worked** draws the same rows as a timeline, and the **Settings and costs** page sums them by case.
 
-| A tracing tool records | In Shutter |
+| Langfuse records | In Shutter |
 | --- | --- |
 | A trace (one end-to-end run) | The case's session in the Visual Trace, one lane per step and agent |
-| A generation (one model call) | One `AgentRequest` and `AgentResponse` pair per run, with model, tokens, cost and duration, kept as an `AgentRun` |
-| Tool calls and retrieval | Each tool call, knowledge searches and refused calls included, as a `ToolCall` row and in the trace's log (`%AI.Policy.Audit`) |
+| A generation (one model call) | One `AgentRequest` and `AgentResponse` pair per run, with the model, the duration and the tokens summed over the run's model turns (`Iterations`), and its cost on the `AgentRun`; Langfuse shows each call separately |
+| Tool calls and retrieval | Each tool call, knowledge searches and refused calls included, as a `ToolCall` row and in the trace's log (`%AI.Policy.Audit`; in replay, one line per run) |
 | Cost | The **Settings and costs** page and `GET /costs`, by case, review and question |
 | The prompt's version | The agent class's configuration version, in the request and each recording's key |
 | Replay | Recordings keyed by encounter, event, member and configuration version, replayed by CI on every push |
@@ -248,7 +252,7 @@ Tokens and cost by board member, model and mode, in SQL: [docs/readme/running.md
 
 ## How it is tested
 
-- **On a real IRIS, every push to `main` that changes code:** the full install on IRIS for Health Community 2026.2, the receiver's 37 contract tests, 251 unit tests (test methods in `tests/unit`; 8 more run only on an AI Hub build) and 26 scenarios end to end through the REST API, one through the demo hospital's production.
+- **On a real IRIS, every push to `main` that changes code:** the full install on IRIS for Health Community 2026.2, the receiver's 37 contract tests, 252 unit tests (test methods in `tests/unit`; 8 more run only on an AI Hub build) and 26 scenarios end to end through the REST API, one through the demo hospital's production.
 - **The approval boundary, attacked over HTTP:** an approval naming another plan or a stale version (409), an operator's approval (403), one approval sent twice (one write), a Workflow inbox approval with an empty or another digest (blocked, no write), the receiver changed after approval (S20, no write), and a resend of a delivery the receiver already holds (S3, no write).
 - **Privacy, and a question that tries to act:** [evaluation.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md#what-the-agents-see-and-a-question-that-tries-to-act).
 - **The web app:** 1280 component and 655 browser tests (`npm test`, `npm run test:e2e`), axe-core on 67 screens and states in 5 appearances.
@@ -261,7 +265,7 @@ Tokens and cost by board member, model and mode, in SQL: [docs/readme/running.md
 ## Limits, plainly
 
 - Without an API key the agents replay recorded runs. A case with no recording, such as one from your own HL7 file, takes the rules path: the gate alone decides and a resend waits for a person.
-- The receiver is a demo bed-management system built for the scenarios. Shutter resends only to a receiver whose API (state, receipt, capabilities and operations paths) the site profile describes; any other, a plain MLLP receiver included, gets the board's diagnosis and an escalation, never a resend: an ACK says a message arrived, not what the receiver now holds.
+- The receiver is a demo bed-management system built for the scenarios. Shutter resends only to a receiver whose API (state, receipt, capabilities and operations paths) the site profile describes. A plain MLLP receiver gets no resend, because an ACK says a message arrived, not what the receiver now holds: a NACK or a lost connection on a stock `EnsLib.HL7.Operation.TCPOperation` with `AlertOnError` on opens a case through the alert intake, and a person gets the evidence and the reason nothing was sent (`tests/e2e/plain_receiver_check.py`).
 - No local-model profile, on purpose: the board works through typed tool calls, which a frontier model makes reliably on evidence this detailed. A site's own model behind an API would be a provider in the Config Store; that is untested.
 - The evaluation is one recording per board member and case, with one model: it can't show how often a repeat run agrees, and the catalogue was written alongside these scenarios. The injected instruction (S4) reaches the agents only as a flag, so S4 shows they notice it, not that they would resist the text.
 - Spend: a storm of one kind convenes one board, which the other cases with its failure signature follow, each through its own gate and approval; `SHUTTER_DAILY_BUDGET_USD` caps a day's live spend, after which cases take the rules path ([more](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md#more-about-running-it)). The online demo's instance resets every hour; its live spend is capped at 5 USD an hour, 2 USD of it per judge, and 15 USD a day.
