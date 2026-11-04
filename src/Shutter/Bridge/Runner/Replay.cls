@@ -1,3 +1,5 @@
+Include Ensemble
+
 /// Replays a recorded run: no model call, no key needed. Serves judges without an API key,
 /// continuous integration and a dependable demo. The response says Mode = replay so that nothing
 /// downstream can mistake it for a live result.
@@ -36,7 +38,7 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
 /// milliseconds ("" leaves them at now), once: a run that has rows already is left alone. Returns how many were written.
 ClassMethod ReplayToolCalls(runKey As %String, toolCallsJSON As %String, shift As %String = "") As %Integer
 {
-    Set n = 0
+    Set n = 0, line = ""
     If (runKey = "") || ($ZSTRIP(toolCallsJSON, "<>W") = "") Quit 0
     If ##class(Shutter.Bridge.ToolCall).HasRows(runKey) Quit 0
     Set calls = ##class(Shutter.Util.Json).Parse(toolCallsJSON, .psc)
@@ -49,8 +51,14 @@ ClassMethod ReplayToolCalls(runKey As %String, toolCallsJSON As %String, shift A
         Set args = c.%Get("arguments")
         If $ISOBJECT(args) Set args = args.%ToJSON()
         Set sc = ##class(Shutter.Bridge.ToolCall).Append(runKey, $CLASSMETHOD(json, "Str", c, "name"), $GET(args), +$CLASSMETHOD(json, "Str", c, "durationMs", 0), $CLASSMETHOD(json, "Bool", c, "ok", 1), $CLASSMETHOD(json, "Str", c, "resultPreview"), $CLASSMETHOD(json, "Str", c, "error"), $CLASSMETHOD(json, "Bool", c, "denied", 0), at)
-        If $$$ISOK(sc) Set n = n + 1
+        If $$$ISOK(sc) {
+            Set n = n + 1
+            Set line = line _ $SELECT(line = "": "", 1: ", ") _ $CLASSMETHOD(json, "Str", c, "name") _ " " _ $SELECT($CLASSMETHOD(json, "Bool", c, "denied", 0): "denied", $CLASSMETHOD(json, "Bool", c, "ok", 1): "ok", 1: "failed") _ " " _ (+$CLASSMETHOD(json, "Str", c, "durationMs", 0)) _ " ms"
+        }
     }
+    // One line for the run, not one per call: the Visual Trace counts events as items, so a line per call pushes the
+    // AgentResponse arrows off the page it opens on, and a recorded call's arguments name the recording's own case.
+    If line '= "" $$$TRACE("Recorded tool calls (" _ n _ "): " _ line)
     Quit n
 }
 

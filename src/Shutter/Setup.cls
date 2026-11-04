@@ -256,7 +256,7 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     // What an approver and the public demo's role share (v1.34): reading, approving, the traces; the approver adds the site's
     // writes (Shutter_Configure) and the demo controls (Shutter_Scenarios), which the demo role never holds.
     Set approverRes = "Shutter_Operate:U,Shutter_Approve:U," _ db _ ":RW" _ codeRead _ watchRead _ ",%Ens_MessageTrace:U,%Ens_MessageHeader:U,%Ens_MessageContent:U"
-    Set sc = ..EnsureRole("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals, the site's settings and the Workflow inbox", approverRes _ ",Shutter_Configure:U,Shutter_Scenarios:U,Shutter_LiveAgents:U", "Shutter_Operator,%EnsRole_Monitor")
+    Set sc = ..EnsureRole("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals, the site's settings and the Workflow inbox", approverRes _ ",%Ens_EventLog:U,Shutter_Configure:U,Shutter_Scenarios:U,Shutter_LiveAgents:U", "Shutter_Operator,%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc
     Set sc = ..EnsureRole("Shutter_Demo", "Shutter public demo: reads everything, reinvestigates, approves and asks; cannot run or reset scenarios, save the site profile or the library, or import a schema", approverRes _ ",%Ens_Portal:U", "%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc
