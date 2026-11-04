@@ -143,7 +143,9 @@ export const CHAPTERS: GuideChapter[] = [
       {
         id: 'expected',
         title: 'What should happen, and what did',
-        say: 'Each row says how its scenario should end. Latest case shows how it really ended, in colour. Open one to see why.',
+        say: 'A scenario is a known failure we replay; a case is one run. Latest case shows how it ended, in colour and words. Open one.',
+        detail:
+          'Each row says how its scenario should end. Latest case is the case it opened and how that really ended. Open one to see why.',
         place: { page: '/scenarios' },
         target: 'scenarios-list',
         scopes: A,
