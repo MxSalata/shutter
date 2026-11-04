@@ -112,6 +112,10 @@ describe('the live hospital banner', () => {
     resetMock('demo');
     renderFrame();
     const link = within(await banner()).getByRole('link', { name: 'See the board decide: S8 in the trial' });
+    // Why the live cases show no board comes first
+    expect(screen.getByTestId('live-board-link')).toHaveTextContent(
+      "The hospital's own failures are settled by its written policy, with no agent. See the board decide: S8 in the trial",
+    );
     expect(link.getAttribute('href')).toMatch(new RegExp(`\\?trial#/cases/${TRIAL_BOARD_CASE}$`));
     // The case the link opens is the trial's recorded S8 in Board mode, the board escalating
     const recorded = (

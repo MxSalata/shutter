@@ -137,6 +137,7 @@ export function LiveBanner() {
               // The live hospital's own stories are settled by the site's policy, with no board; a visitor without the
               // live agents sees the board decide in the trial's recording of S8, at no cost
               <Text size="xs" data-testid="live-board-link">
+                The hospital&apos;s own failures are settled by its written policy, with no agent.{' '}
                 <Anchor href={trialHref(`#/cases/${TRIAL_BOARD_CASE}`)} size="xs">
                   See the board decide: S8 in the trial
                 </Anchor>
