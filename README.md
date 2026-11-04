@@ -19,9 +19,9 @@ Instead of a **Resend** in the Message Viewer, Shutter makes each failed deliver
 
 The AI board proposes; the gate disposes.
 
-**S8 shows why the agents are there.** Two systems move one patient in the same minute. Rules alone pass every check and write WARD-B over the bed manager's WARD-C; the board sees the evidence cannot say which move is current and escalates. On Shutter's own scenarios, of the 11 single cases the board is convened for, it gets all 11 right; rules alone get 4; across all 24 scored recorded passes, the board's decision matches the expected outcome ([comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md); [what that does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)).
+**S8 shows why the agents are there.** Two systems move one patient in the same minute. In **Rules only**, every check passes and WARD-B is written over the bed manager's WARD-C; the board sees the evidence cannot say which move is current and escalates. On Shutter's own scenarios, of the 11 single cases the board is convened for, it gets all 11 right; Rules only gets 4; across all 24 scored recorded passes, the board's decision matches the expected outcome ([comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md); [what that does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)).
 
-![S8 in plain terms: the bed manager has the patient in Ward C; rules alone move them back to Ward B, the board leaves them in Ward C and asks a person](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-plain.png)
+![S8 in plain terms: the bed manager has the patient in Ward C; Rules only moves them back to Ward B, the board leaves them in Ward C and asks a person](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-plain.png)
 
 **What can happen to a failed delivery:**
 
@@ -131,9 +131,9 @@ The mode chooses who proposes the plan; the gate, the rehearsal and the release 
 
 ![S2's approval waits as a task in the IRIS Workflow inbox, for the role Shutter Approvers](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/workflow-inbox-s2.png)
 
-- **S8, the case a gate cannot catch.** The plan records the conformance specialist's dissent and why it was overruled. The case page sets rules alone and the board side by side:
+- **S8, the case a gate cannot catch.** The plan records the conformance specialist's dissent and why it was overruled. The case page sets Rules only and the board side by side:
 
-![S8 played twice: rules alone overwrite WARD-C; the board escalates and writes nothing](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-rules-and-board.png)
+![S8 played twice: Rules only overwrites WARD-C; the board escalates and writes nothing](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-rules-and-board.png)
 
 - **S20, a nurse moves the patient by hand** while S2's resend awaits approval. The approval is bound to the receiver's version, so nothing is sent (`APPROVAL_RECEIVER_CHANGED`) and her entry stands: the binding alone stops it, so S20 plays in Rules only mode.
 - **Beside the cases:** Ask about this case (agents that cannot write), a read-only review of a production, precedents, each agent's timeline and the evaluation.
@@ -246,7 +246,7 @@ Tokens and cost by board member, model and mode, in SQL: [docs/readme/running.md
 - **On a real IRIS, every push to `main` that changes code:** the full install on IRIS for Health Community 2026.2, the receiver's 37 contract tests, 251 unit tests (test methods in `tests/unit`; 8 more run only on an AI Hub build) and 26 scenarios end to end through the REST API, one through the demo hospital's production.
 - **The approval boundary, attacked over HTTP:** an approval naming another plan or a stale version (409), an operator's approval (403), one approval sent twice (one write), the receiver changed after approval (S20, no write), and a resend of a delivery the receiver already holds (S3, no write).
 - **Privacy, and a question that tries to act:** [evaluation.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md#what-the-agents-see-and-a-question-that-tries-to-act).
-- **The web app:** 1276 component and 653 browser tests (`npm test`, `npm run test:e2e`), axe-core on 67 screens and states in 5 appearances.
+- **The web app:** 1280 component and 655 browser tests (`npm test`, `npm run test:e2e`), axe-core on 67 screens and states in 5 appearances.
 - **The AI Hub module:** CI can't download an Early Access build, so it builds the core on the public image. The AI Hub module is proven by:
   - fresh clones installed with `install.sh` on builds 109 and 154, each Doctor clean, the Second Parser running ([receipt on 109](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md), [receipt on 154](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md));
   - every scenario on 109, 29 plays across three modes (15 in Board, 12 in Site policy, 2 in Rules only);

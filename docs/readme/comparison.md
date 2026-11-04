@@ -1,4 +1,4 @@
-# Comparison: the board of specialists and rules alone
+# Comparison: the board of specialists and Rules only
 
 Played with `tests/e2e/scenario_check.py --approve`, which plays each scenario through the REST API, approves any plan
 that waits for approval (as a person who approves whatever is proposed would), and compares the case's outcome and the
@@ -33,13 +33,13 @@ receiving system's final state with the scenario's expected outcome (`fixtures/s
 ## What it shows
 
 - **The board gets 11 of the 11 single cases it is convened for (S1 to S10 and S13), with live agents as in replay.**
-  Rules alone get 4 of those 11, the plain resends (S2, S4, S5, S9). S15 and S16 are withheld by rule before either
-  the board or rules alone: no plan of either kind is made, and both end escalated as expected.
-- **Where rules alone are wrong, the gate usually stops them.** In S1, S3, S6, S7, S10 and S13 the resend is blocked by
+  Rules only gets 4 of those 11, the plain resends (S2, S4, S5, S9). S15 and S16 are withheld by rule before either
+  the board or Rules only: no plan of either kind is made, and both end escalated as expected.
+- **Where Rules only is wrong, the gate usually stops it.** In S1, S3, S6, S7, S10 and S13 the resend is blocked by
   a check (a later event, an existing receipt, a discharge, a changed receiver, a receiver that can't take a conditional
   write, an event time before the admission), so nothing wrong reaches the receiver, but the case stops for a person.
 - **S8 is the case a gate can't catch.** Two systems moved the same patient at the same time, 09:20. No event is
-  later than the other, so every mechanical check passes; rules alone resend, the approval goes through, and the
+  later than the other, so every mechanical check passes; Rules only resends, the approval goes through, and the
   write moves the patient to Ward B over the bed manager's placement in Ward C. The board sees that the evidence
   can't decide which movement is current and escalates to a person.
 - **S15 and S16 are what Shutter must never send by itself.** A merge (ADT^A40) changes which record a patient's
