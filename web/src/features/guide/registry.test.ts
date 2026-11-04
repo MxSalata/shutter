@@ -1,7 +1,16 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CHAPTERS, enabled, pathOf, RANKED_REVIEW_RECORDED, SCOPES, stepAt, tourMinutes } from './registry';
+import {
+  CHAPTERS,
+  enabled,
+  modesSay,
+  pathOf,
+  RANKED_REVIEW_RECORDED,
+  SCOPES,
+  stepAt,
+  tourMinutes,
+} from './registry';
 
 /** Every source file of the app, read once: the guide's targets must be attributes the screens really carry. */
 function sources(dir: string): string {
@@ -103,6 +112,13 @@ describe('the guide registry', () => {
       for (const a of [s.tryIt, s.chip].filter((x) => !!x))
         expect(words(a.text), `${path} ${a.action}`).toBeLessThanOrEqual(8);
     }
+  });
+
+  it('names the modes the page offers, with no single investigator on the trial', () => {
+    expect(modesSay(false)).toMatch(/Board \(agents\), Site policy, Single investigator or Rules only \(no agents\)/);
+    expect(modesSay(true)).toMatch(/Board \(agents\), Site policy or Rules only \(no agents\)/);
+    expect(modesSay(true)).not.toMatch(/Single investigator/);
+    for (const trial of [false, true]) expect(words(modesSay(trial))).toBeLessThanOrEqual(25);
   });
 
   it('names the two depths of Ask on the quick tour as the panel does, each in its own quotes', () => {
