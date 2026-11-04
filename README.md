@@ -60,7 +60,7 @@ The three specialists (conformance, encounter and impact) and the coordinator ar
 | As one step in a production | `Shutter.Process.CaseWorkflow` in `Shutter.Production`; in S19 the failure comes from a hospital's own production |
 | At run time | The board is convened when a delivery fails, on that failure's sealed evidence |
 | A person in the loop | An `EnsLib.Workflow` task for the role "Shutter Approvers", bound to the plan's digest |
-| Seeing what the agent did | Each board member's lane in the Visual Trace, its `AgentResponse` (model, tokens, time, tool calls) the [walk-through](https://github.com/MxSalata/shutter#tracing-ai-agents-with-interoperability-dpi-i-689) and [what one S8 agent was sent and did](https://github.com/MxSalata/shutter/blob/main/docs/readme/s8-what-the-agents-saw.md) |
+| Seeing what the agent did | Each board member's lane in the Visual Trace, its `AgentResponse` (model, tokens, time, tool calls) the [walk-through](https://github.com/MxSalata/shutter#tracing-ai-agents-with-interoperability-dpi-i-689) and [what one S8 agent was sent and did](https://github.com/MxSalata/shutter/blob/main/docs/readme/s8-what-the-agents-saw.md); in the trial, **Show the recording** on each member's card |
 
 ![The Visual Trace of S8 in board mode: the case workflow, the evidence, each board member's lane, then the gate](https://raw.githubusercontent.com/MxSalata/shutter/main/web/public/s8-visual-trace.png)
 
@@ -260,7 +260,7 @@ Tokens and cost by board member, model and mode, in SQL: [docs/readme/running.md
 - **On a real IRIS, every push to `main` that changes code:** the full install on IRIS for Health Community 2026.2, the receiver's 37 contract tests, 257 unit tests (test methods in `tests/unit`; 8 more run only on an AI Hub build) and 26 scenarios end to end through the REST API, one through the demo hospital's production.
 - **The approval boundary, attacked over HTTP:** an approval naming another plan or a stale version (409), an operator's approval (403), one approval sent twice (one write), a Workflow inbox approval with an empty or another digest (blocked, no write), the receiver changed after approval (S20, no write), and a resend of a delivery the receiver already holds (S3, no write).
 - **Privacy, and a question that tries to act:** [evaluation.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md#what-the-agents-see-and-a-question-that-tries-to-act).
-- **The web app:** 1295 component and 677 browser tests (`npm test`, `npm run test:e2e`), axe-core on 69 screens and states in 5 appearances.
+- **The web app:** 1315 component and 696 browser tests, axe-core on 69 screens and states in 5 appearances.
 - **The AI Hub module:** CI can't download an Early Access build, so it builds the core on the public image. The AI Hub module is proven by:
   - fresh clones installed with `install.sh` on builds 109 and 154, each Doctor clean, the Second Parser running ([receipt on 109](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md), [receipt on 154](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md));
   - every scenario on 109, 29 plays across three modes (15 in Board, 12 in Site policy, 2 in Rules only);
@@ -294,7 +294,7 @@ curl http://localhost:52773/api/shutter/health
 - **The replay edition:** in `.env`, set `SHUTTER_IMAGE=containers.intersystems.com/intersystems/irishealth-community:2026.2`, then `docker compose up -d --build`.
 - **Switching editions:** run `docker compose down -v` first (it removes the instance's data), then remove `.env` or change `SHUTTER_IMAGE` and `SHUTTER_WITH_AIHUB` in it: `install.sh` refuses an `.env` set up for the other edition.
 
-**Open it:** the web app at http://localhost:52773/shutter/index.html and the Management Portal at http://localhost:52773/csp/sys/UtilHome.csp, with the sign-ins under [Try it](https://github.com/MxSalata/shutter#try-it) (production `Shutter.Production`; the demo hospital's is `Hospital.Production` in `HOSPITAL`). Ports are published on `127.0.0.1` only. More in [docs/readme/running.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md) and, for a hospital's own IRIS for Health, [docs/INSTALL.md](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md).
+**Open it:** the web app at http://localhost:52773/shutter/index.html and the Management Portal at http://localhost:52773/csp/sys/UtilHome.csp, with the sign-ins under [Try it](https://github.com/MxSalata/shutter#try-it) (production `Shutter.Production`; the demo hospital's is `Hospital.Production` in `HOSPITAL`). More in [docs/readme/running.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md) and, for a hospital's own IRIS for Health, [docs/INSTALL.md](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md).
 
 ## Troubleshooting
 
