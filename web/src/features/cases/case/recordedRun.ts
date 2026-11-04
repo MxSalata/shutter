@@ -45,8 +45,8 @@ export interface RunStory {
   /** The encounter and patient as the model received them. */
   encounter: string;
   patient: string;
-  /** The catalogue's matches in the evidence, each with its preferred outcome. */
-  matches: { id: string; title: string; preferred: string }[];
+  /** The catalogue's matches in the evidence, each with its preferred outcome and the catalogue's reason for it. */
+  matches: { id: string; title: string; preferred: string; why: string }[];
   turns: ModelTurn[];
   /** The closing message, after its last tool call. */
   lastMessage: string;
@@ -98,6 +98,11 @@ export async function findRecording(
   return found.length === 1 ? found[0] : null;
 }
 
+/** The coordinator's run of this run's own pass, by the snapshot both read: a case with two passes keeps two plans. */
+export function planOf(runs: AgentRun[], run: Pick<AgentRun, 'snapshotId'>): AgentRun | undefined {
+  return runs.find((r) => r.role === 'coordinator' && String(r.snapshotId) === String(run.snapshotId));
+}
+
 const EVIDENCE = /<evidence-[^>]*>\s*([\s\S]*?)\s*<\/evidence-[^>]*>/;
 
 /** A recording's transcript, read for the panel: arguments and results indented, nothing rewritten or left out. */
@@ -132,6 +137,7 @@ export function storyOf(record: RunRecord): RunStory {
       id: String(m.id ?? ''),
       title: String(m.title ?? ''),
       preferred: String(asObject(m.preferred)?.outcome ?? ''),
+      why: String(asObject(m.preferred)?.why ?? ''),
     })),
     turns: said
       .filter((m) => m !== closing)

@@ -3,7 +3,7 @@ import page from '../../../../../docs/readme/s8-what-the-agents-saw.md?raw';
 import type { AgentRun } from '@/api/types';
 import fixtures from '@/mocks/fixtures.json';
 import { asObject } from '@/lib/json';
-import { findRecording, storyOf } from './recordedRun';
+import { findRecording, planOf, storyOf } from './recordedRun';
 
 const cases = fixtures.cases as unknown as Record<
   string,
@@ -53,7 +53,10 @@ describe('the recording behind a board run', () => {
       expect(story.encounter, where).toBe('ENC-T1');
       expect(story.patient, where).toBe('MRN-T1');
       expect(story.matches.length, where).toBeGreaterThan(0);
-      for (const m of story.matches) expect(m.preferred, where).not.toBe('');
+      for (const m of story.matches) {
+        expect(m.preferred, where).not.toBe('');
+        expect(m.why, where).not.toBe('');
+      }
       const calls = story.turns.flatMap((t) => t.calls);
       expect(calls.length, where).toBe(run.toolCallCount);
       for (const c of calls) expect(c.result, `${where} ${c.name}`).not.toBe('');
@@ -67,6 +70,36 @@ describe('the recording behind a board run', () => {
       const shown = (asObject(run.result)?.disagreements ?? []) as { member: string }[];
       expect(storyOf(found!.record).dissents.map((d) => d.member)).toEqual(shown.map((d) => d.member));
     }
+  });
+
+  it("finds each run's plan in its own pass: the first coordinator not before it, on the same snapshot", () => {
+    for (const { runs } of Object.values(cases)) {
+      const coordinators = (runs ?? []).filter((r) => r.role === 'coordinator');
+      for (const run of runs ?? []) {
+        const plan = coordinators.find((c) => Number(c.id) >= Number(run.id));
+        expect(plan, `run ${run.id}`).toBeDefined();
+        expect(planOf(runs!, run), `run ${run.id}`).toBe(plan);
+      }
+    }
+  });
+
+  it("keeps S7's dissent to its second pass", async () => {
+    const runs = cases['C-000007'].runs!;
+    const specialists = runs.filter((r) => r.role === 'specialist');
+    expect(specialists).toHaveLength(6);
+    const plans = await Promise.all(specialists.map((r) => findRecording('S7', planOf(runs, r)!)));
+    expect(plans.map((p) => p!.file)).toEqual([
+      ...Array<string>(3).fill('scenario-S7-ENC-1007-transfer-coordinator-1.json'),
+      ...Array<string>(3).fill('scenario-S7-ENC-1007-transfer-coordinator-1-round2.json'),
+    ]);
+    expect(plans.map((p) => storyOf(p!.record).dissents.map((d) => d.member))).toEqual([
+      [],
+      [],
+      [],
+      ['conformance'],
+      ['conformance'],
+      ['conformance'],
+    ]);
   });
 
   it("tells S8's Encounter Integrity in full: the query, ELS-2.5, and the ward the preview stopped short of", async () => {
