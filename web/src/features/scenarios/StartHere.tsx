@@ -126,7 +126,7 @@ export function StartHere() {
             your browser.
           </Text>
         </Stack>
-        <Stack component="ol" gap="md" m={0} p={0} style={{ listStyle: 'none' }}>
+        <Stack component="ol" gap="md" m={0} p={0} style={{ listStyle: 'none' }} className="start-here-steps">
           {steps.map((s, i) => (
             <Box component="li" key={s.title}>
               <Group gap="sm" wrap="nowrap" align="flex-start">

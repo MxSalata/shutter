@@ -2,6 +2,7 @@ import {
   Alert,
   Anchor,
   Badge,
+  Box,
   Button,
   Card,
   Chip,
@@ -38,6 +39,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { CodeChip } from '@/components/CodeChip';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { ExpectedMark } from '@/components/ExpectedMark';
+import { IdentityBadge } from '@/components/IdentityBadge';
 import { OutcomeBadge } from '@/components/OutcomeBadge';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { DispositionBadge, StateBadge } from '@/components/StateBadge';
@@ -218,15 +220,15 @@ function ExpectedOutcome({ s, mode }: { s: Scenario; mode: Mode }) {
           ?.filter((a) => a !== e.disposition)
           .map((a) => (
             <Tooltip key={a} label="Also an acceptable answer" events={HINT_EVENTS}>
-              <Badge variant="dot" color="gray" style={{ textTransform: 'none' }}>
-                or {humanize(a)}
-              </Badge>
+              <Box component="span" display="inline-flex">
+                <IdentityBadge hue="gray">or {humanize(a)}</IdentityBadge>
+              </Box>
             </Tooltip>
           ))}
         {incident ? <WritesBadge n={incidentWrites} inAll /> : <WritesBadge n={e.write ? 1 : 0} />}
       </Group>
       {e.blocked_by ? (
-        <Group gap={6} wrap="nowrap" align="center">
+        <Group gap={6} wrap="wrap" align="center">
           <IconShieldX size={16} aria-hidden style={{ flex: 'none' }} />
           <Text size="sm">Stops on</Text>
           <Tooltip
@@ -379,25 +381,25 @@ function ScenarioRow({
       data-defined={defined ? undefined : 'false'}
       data-tone={latestTone(s, found)}
     >
-      <StackTable.Th
-        scope="row"
-        style={{ verticalAlign: 'top', fontWeight: 'inherit', flex: '1 1 100%' }}
-        maw={440}
-      >
-        <Stack gap={4} style={{ minWidth: 0 }}>
-          <Group gap={8} wrap="nowrap" align="baseline">
+      <StackTable.Th scope="row" style={{ verticalAlign: 'top', fontWeight: 'inherit', flex: '1 1 100%' }}>
+        <Box className="scenario-cell">
+          <Group gap={8} wrap="nowrap" align="baseline" className="scenario-title">
             <Text span fz={13} fw={600} className="mono" miw={34} style={{ flex: 'none' }}>
               {s.id}
             </Text>
-            <Text span size="sm" fw={600}>
+            <Text span size="md" fw={650}>
               {s.title}
             </Text>
           </Group>
-          <Text size="sm">{first}</Text>
+          <Text size="sm" c="dimmed">
+            {first}
+          </Text>
           {rest ? (
-            <MoreAbout about={s.id}>
-              <Text size="sm">{rest}</Text>
-            </MoreAbout>
+            <Box className="scenario-more">
+              <MoreAbout about={s.id}>
+                <Text size="sm">{rest}</Text>
+              </MoreAbout>
+            </Box>
           ) : null}
           {events ? (
             <Group gap={6} wrap="nowrap" align="baseline">
@@ -413,14 +415,13 @@ function ScenarioRow({
               <Text size="sm">Its modes: {modes.join(', ')}.</Text>
             </Stack>
           ) : null}
-        </Stack>
+        </Box>
       </StackTable.Th>
       <StackTable.Td
         data-label="What should happen"
         data-label-hidden
         className="stack-line"
         style={{ verticalAlign: 'top' }}
-        miw={230}
       >
         <ExpectedOutcome s={s} mode={mode} />
       </StackTable.Td>
@@ -436,7 +437,7 @@ function ScenarioRow({
         <StackTable.Td
           data-label="Play"
           data-label-hidden
-          className="stack-line"
+          className="stack-line scenario-run"
           style={{ verticalAlign: 'top' }}
         >
           <Stack gap={4} align="flex-start">
@@ -444,6 +445,7 @@ function ScenarioRow({
               <span>
                 <Button
                   size="xs"
+                  variant="light"
                   leftSection={<IconPlayerPlay size={14} />}
                   disabled={!!why}
                   loading={starting}
@@ -509,7 +511,7 @@ function RunModes({
   scenarios: Scenario[] | undefined;
 }) {
   return (
-    <Card padding="md" data-tour="scenarios-mode">
+    <Box data-tour="scenarios-mode">
       <Radio.Group
         value={mode}
         onChange={(v) => onChange(v as Mode)}
@@ -520,9 +522,9 @@ function RunModes({
           </Text>
         }
         description={`Every Run button below uses it. ${MODES_INTRO}`}
-        styles={{ description: { fontSize: 'var(--mantine-font-size-md)' } }}
+        styles={{ description: { fontSize: 'var(--mantine-font-size-sm)' } }}
       >
-        <SimpleGrid cols={{ base: 1, sm: 2, lg: MODES.length }} spacing="sm" mt="sm">
+        <SimpleGrid cols={{ base: 1, sm: 2, md: MODES.length }} spacing="sm" mt="sm">
           {MODES.map((m) => {
             const n = scenarios?.filter((s) => definedFor(s, m.value)).length;
             return (
@@ -530,15 +532,14 @@ function RunModes({
                 key={m.value}
                 value={m.value}
                 radius="md"
-                p="sm"
-                h="100%"
+                p="xs"
                 className="mode-card"
                 aria-labelledby={`mode-${m.value}-label`}
                 aria-describedby={`mode-${m.value}-hint${scenarios ? ` mode-${m.value}-count` : ''}`}
               >
                 <Group gap="xs" wrap="nowrap" align="flex-start">
                   <Radio.Indicator mt={2} />
-                  <Stack gap={6} style={{ minWidth: 0 }}>
+                  <Stack gap={4} style={{ minWidth: 0 }}>
                     <Group gap={6} align="baseline">
                       <Text size="md" fw={700} id={`mode-${m.value}-label`}>
                         <ModeName mode={m.value}>{m.label}</ModeName>
@@ -549,9 +550,7 @@ function RunModes({
                         </Text>
                       ) : null}
                     </Group>
-                    <Text size="sm" id={`mode-${m.value}-hint`}>
-                      {m.hint}
-                    </Text>
+                    <VisuallyHidden id={`mode-${m.value}-hint`}>{m.hint}</VisuallyHidden>
                     {scenarios && n !== undefined ? (
                       <PlaysBadge id={`mode-${m.value}-count`} n={n} of={scenarios.length} />
                     ) : null}
@@ -561,8 +560,12 @@ function RunModes({
             );
           })}
         </SimpleGrid>
+        {/* The chosen mode's hint for the eye; a screen reader has each mode's own from its radio */}
+        <Text size="sm" mt="xs" aria-hidden>
+          {MODES.find((m) => m.value === mode)?.hint}
+        </Text>
       </Radio.Group>
-    </Card>
+    </Box>
   );
 }
 
@@ -647,8 +650,8 @@ function AllScenarios({
             the outcome matches what the scenario expects, Not as expected when it differs.
           </Text>
         </TechDetail>
-        <Table.ScrollContainer minWidth={760} className="stack-scroll">
-          <StackTable className="stack-table stack-cards" verticalSpacing="sm">
+        <Table.ScrollContainer minWidth={690} className="stack-scroll">
+          <StackTable className="stack-table stack-cards scenario-list" verticalSpacing="xs">
             <StackTable.Thead>
               <StackTable.Tr>
                 <StackTable.Th>Scenario</StackTable.Th>
@@ -780,12 +783,6 @@ export default function ScenariosPage() {
             The online demo plays its stories by itself, so there is nothing to run or reset here.
           </Text>
         ) : null}
-        {current ? (
-          <RunBanner
-            run={current}
-            latest={scenarios.data?.scenarios.find((s) => s.id === current.scenario)?.latestCase?.caseId}
-          />
-        ) : null}
         {/* Always rendered, loading or not, so the guide's first step has its target */}
         <TryFirst
           scenarios={scenarios.data?.scenarios}
@@ -795,8 +792,12 @@ export default function ScenariosPage() {
           onRun={start}
           demo={hidden}
         />
-        {/* The demo's guided path through the recorded cases, past the first three */}
-        {TRIAL ? <StartHere /> : null}
+        {current ? (
+          <RunBanner
+            run={current}
+            latest={scenarios.data?.scenarios.find((s) => s.id === current.scenario)?.latestCase?.caseId}
+          />
+        ) : null}
         {playerOff ? (
           <Alert color="gray" variant="light" title="The Scenario Player is switched off">
             <Text size="sm">
@@ -839,6 +840,8 @@ export default function ScenariosPage() {
             )}
           />
         ) : null}
+        {/* The demo's guided path through the recorded cases, past the first three */}
+        {TRIAL ? <StartHere /> : null}
         {TRIAL ? induction : null}
       </Stack>
     </>

@@ -52,58 +52,58 @@ export function ModeName({ mode, children }: { mode: Mode; children?: React.Reac
 const STEPS = ['Open case', 'Evidence', 'Board plan', 'Gate checks', 'Release', 'Verify'];
 
 /**
- * The page's opening: the one sentence, what a scenario is, the six steps every case goes through, and the proof. The
- * steps' numbers are in the brand's light colour, since blue means running; the gate's step carries its shield. Where
- * the user may not run scenarios (`demo`, the online demo's roles), the hospital's stories are settled by its written
- * policy, so the words say that and name no board.
+ * The page's opening: the proof in view, and behind "What a scenario does" the one sentence, what a scenario is, and the
+ * six steps every case goes through. The steps' numbers are in the brand's light colour, since blue means running; the
+ * gate's step carries its shield and the heavier words. Where the user may not run scenarios (`demo`, the online demo's
+ * roles), the hospital's stories are settled by its written policy, so the words say that and name no board.
  */
 export function ScenariosHero({ demo = false }: { demo?: boolean }) {
   return (
-    <Card padding="lg" component="section" aria-labelledby="scenarios-headline">
-      <Stack gap="sm">
-        <Text id="scenarios-headline" component="h2" fz={{ base: 22, sm: 26 }} fw={600} lh={1.25} m={0}>
-          When an <Term term="hl7-transfer">HL7 transfer</Term> fails, Shutter works out what is true and
-          fixes it only when it is safe.
-        </Text>
-        <Text size="md" maw="68ch">
-          {demo
-            ? "Each scenario plays a known failure. Here the site's written policy proposes the fix, with no agent: watch the gate check, a person or the policy release and the receiver verify. To see the board of IRIS AI Hub agents decide, open S8's recording from the link under the banner."
-            : 'Each scenario plays a known failure. Watch a board of IRIS AI Hub agents investigate, the gate check, a person release and the receiver verify.'}
-        </Text>
-        <TechDetail label="What a scenario does" kind="explain">
+    <Stack gap="xs" component="section" aria-labelledby="scenarios-headline">
+      <ProofLine />
+      <TechDetail label="What a scenario does" kind="explain">
+        <Stack gap="sm">
+          <Text id="scenarios-headline" component="h2" fz="lg" fw={600} m={0}>
+            When an <Term term="hl7-transfer">HL7 transfer</Term> fails, Shutter works out what is true and
+            fixes it only when it is safe.
+          </Text>
+          <Text size="md" maw="68ch">
+            {demo
+              ? "Each scenario plays a known failure. Here the site's written policy proposes the fix, with no agent: watch the gate check, a person or the policy release and the receiver verify. To see the board of IRIS AI Hub agents decide, open S8's recording from the link under the banner."
+              : 'Each scenario plays a known failure. Watch a board of IRIS AI Hub agents investigate, the gate check, a person release and the receiver verify.'}
+          </Text>
           <Text size="sm" maw="68ch">
             Each scenario plays a known failure into the production: HL7 ADT files into its inbound folder and
             faults on the downstream system. Shutter opens a case, investigates, checks the plan at the gate,
             has a person or the site&apos;s written policy release it, and verifies the result at the
             receiver.
           </Text>
-        </TechDetail>
-        <Box component="ol" className="step-strip" aria-label="What happens to every case">
-          {STEPS.map((name, i) => {
-            // The hospital's stories have no board where the user may not run scenarios
-            const step = demo && name === 'Board plan' ? 'Plan' : name;
-            const gate = step === 'Gate checks';
-            return (
-              <li key={step} data-gate={gate || undefined}>
-                <ThemeIcon size={24} radius="xl" variant="light" aria-hidden>
-                  <Text span size="sm" fw={700}>
-                    {i + 1}
+          <Box component="ol" className="step-strip" aria-label="What happens to every case">
+            {STEPS.map((name, i) => {
+              // The hospital's stories have no board where the user may not run scenarios
+              const step = demo && name === 'Board plan' ? 'Plan' : name;
+              const gate = step === 'Gate checks';
+              return (
+                <li key={step}>
+                  <ThemeIcon size={24} radius="xl" variant="light" aria-hidden>
+                    <Text span size="sm" fw={700}>
+                      {i + 1}
+                    </Text>
+                  </ThemeIcon>
+                  <Text span size="sm" fw={gate ? 700 : 400}>
+                    {step}
                   </Text>
-                </ThemeIcon>
-                <Text span size="sm" fw={600}>
-                  {step}
-                </Text>
-                {gate ? <IconShieldCheck size={16} aria-hidden /> : null}
-              </li>
-            );
-          })}
-        </Box>
-        <Text size="sm" c="dimmed">
-          Nothing is written unless the gate passes the plan; an unknown blocks a write too.
-        </Text>
-        <ProofLine />
-      </Stack>
-    </Card>
+                  {gate ? <IconShieldCheck size={16} aria-hidden /> : null}
+                </li>
+              );
+            })}
+          </Box>
+          <Text size="sm" c="dimmed">
+            Nothing is written unless the gate passes the plan; an unknown blocks a write too.
+          </Text>
+        </Stack>
+      </TechDetail>
+    </Stack>
   );
 }
 
@@ -262,12 +262,17 @@ export function TryFirst({
             : `None of ${ids} is among this install's scenarios.`}
         </Text>
       ) : (
-        <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
+        <SimpleGrid
+          cols={{ base: 1, md: 3 }}
+          spacing="md"
+          verticalSpacing={{ base: 'md', md: 0 }}
+          className="first-grid"
+        >
           {first.map(({ s, mode, title, see, more, inMode, latest }) => {
             const reason = why(s, mode);
             const modeName = MODE_NAMES[mode];
             return (
-              <Card key={s.id} padding="md" data-first={s.id}>
+              <Card key={s.id} padding="md" data-first={s.id} className="first-card">
                 <Stack gap="sm" style={{ flex: 1 }}>
                   <Stack gap={4}>
                     <Text component="div" className="overline">
@@ -295,7 +300,7 @@ export function TryFirst({
                     ) : null}
                   </Stack>
                   {/* The action row sits at the card's foot, so the three Run buttons line up */}
-                  <Stack gap="xs" mt="auto" align="flex-start">
+                  <Stack gap="xs" align="flex-start" className="first-actions">
                     {demo ? null : (
                       <Tooltip label={reason || `Play ${s.id} in ${modeName} mode`} multiline maw={260}>
                         <span>

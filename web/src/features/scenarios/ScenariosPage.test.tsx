@@ -106,8 +106,9 @@ describe('ScenariosPage', () => {
     expect(within(list).getByText(`${listed.length} in all.`, { exact: false })).toBeInTheDocument();
   });
 
-  it('opens with the one sentence and the six steps every case goes through', async () => {
+  it('keeps the one sentence and the six steps every case goes through behind What a scenario does', async () => {
     renderScenarios();
+    await userEvent.click(await screen.findByRole('button', { name: 'What a scenario does' }));
     expect(
       await screen.findByRole('heading', {
         name: 'When an HL7 transfer fails, Shutter works out what is true and fixes it only when it is safe.',
@@ -677,6 +678,7 @@ describe('ScenariosPage, its rows and its proof', () => {
 
   it("wraps the headline's HL7 transfer and the proof's Rules only in their definitions", async () => {
     renderScenarios();
+    await userEvent.click(await screen.findByRole('button', { name: 'What a scenario does' }));
     const heading = await screen.findByRole('heading', { name: /^When an HL7 transfer fails/ });
     expect(within(heading).getByText('HL7 transfer')).toHaveAccessibleDescription(
       'A message telling another hospital system that a patient moved ward.',
