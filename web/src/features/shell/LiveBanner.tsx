@@ -6,7 +6,7 @@ import { useCan, useLiveStatus, useSettings } from '@/api/hooks';
 import type { LiveStatus } from '@/api/types';
 import { TRIAL, trialHref } from '@/env/mode';
 import type { StormRefusal } from '@/features/storm/view';
-import { budgetNoteLine } from '@/lib/budget';
+import { budgetNoteLine, resetsHourly } from '@/lib/budget';
 import { formatAge, formatTime, parseTime, zoneLabel } from '@/lib/format';
 import { HOSPITAL_NAME, TRIAL_BOARD_CASE } from '@/lib/hospital';
 import { liveUnavailable } from '@/lib/liveAgents';
@@ -70,6 +70,9 @@ function usePulse(at: string | undefined): number {
  * The live budget: a short line under the feed's, figure first, says what the author pays for the live agents
  * (`budgetNoteLine`), and while the live agents cannot run (the budget used up, the provider refusing the key) the
  * notice under it says so plainly, until when, and where to install Shutter with one's own key. Neither is in the trial.
+ *
+ * The hourly reset: the public demo goes back to its frozen image on the hour, so a line under those says so. A trial
+ * page never resets (its recording answers `live.enabled` too), so it never shows it.
  */
 export function LiveBanner() {
   const live = useLiveStatus();
@@ -131,6 +134,12 @@ export function LiveBanner() {
             {note ? (
               <Text size="xs" className="live-budget-line" data-testid="live-budget-line">
                 {note}
+              </Text>
+            ) : null}
+            {!TRIAL && resetsHourly(settings) ? (
+              // The instance goes back to its frozen image on the hour; no figure, since the first live reset sets it
+              <Text size="xs" data-testid="live-reset-line">
+                The demo resets on the hour: it is down for a few minutes, and anything you did is gone.
               </Text>
             ) : null}
             {!TRIAL && !can.liveAgents ? (

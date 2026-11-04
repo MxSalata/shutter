@@ -187,6 +187,7 @@ test.describe(`the live budget on the public demo, against a v1.37 server ${area
     await page.goto('./#/cases');
     const line = banner(page).getByTestId('live-budget-line');
     await expect(line).toBeVisible();
+    await expect(banner(page).getByTestId('live-reset-line')).toBeVisible();
     // Measured at Arial's metrics, near a phone's own font: a runner's default font can be wider than any phone's
     await page.addStyleTag({
       content: '* { font-family: "Liberation Sans", Arial, sans-serif !important; }',
