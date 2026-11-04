@@ -79,6 +79,7 @@ Earlier the same afternoon, on the same VM, commit `24123aa` built on build 109 
 - On the board, with the recorded runs: S1 to S10, S13, S15, S16, S21 and S25, all 15 as expected.
 - In Site policy mode: S11 and S12 (incidents, every chain verified), S17, S18, S19, S21, S22 (both receivers), S23a to S23c, S24 and S25, all 12 as expected.
 - In Rules only mode: S20 (the nurse's entry stands, no write) and S21, both as expected.
+- For the README's Site policy count, on 4 November 2026, again on build 109 with no key (`scenario_check.py --modes policy --approve`): S1, S2, S3, S4, S5, S6, S8, S9, S10 and S13, all 10 as expected. S1, S2, S3, S5, S6, S9, S10 and S13 ran no agent; S4 and S8 went to the board, four runs each. S7 has no such mode.
 - `lineage_check.py`: 47 cases, every write after the gate and a rehearsal, every resolved resend verified; `eventlog_check.py`: no runtime errors.
 
 With no key in `.env`, the board replayed its live runs recorded on build 154.
