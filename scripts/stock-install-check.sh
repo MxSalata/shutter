@@ -6,23 +6,25 @@
 # starts the plain image, installs the pinned IPM from vendor/ipm, loads the module, checks /shutter answers and the
 # production runs, plays scenarios on it, and plays a plain MLLP receiver beside the demo's.
 #
-#   scripts/stock-install-check.sh IMAGE MODULE [--archive FILE] [--write-archive FILE] [SCENARIO...]
+#   scripts/stock-install-check.sh IMAGE MODULE [--archive FILE] [--write-archive FILE] [--no-demo] [SCENARIO...]
 #
 # IMAGE is a plain IRIS for Health image. MODULE is the module's folder in the repository: "." for the whole package
 # (2026.3 or later) or "core" for the core alone (2026.2). --archive loads a package archive instead of the folder, the
-# form the registry serves; --write-archive also writes one with `zpm package`. The scenarios default to S2.
+# form the registry serves; --write-archive also writes one with `zpm package`. --no-demo loads with -Ddemo=0, as a site does,
+# and stops after the checks of the install, since the scenarios need the demo. The scenarios default to S2.
 # CTR names the container (default shutter-stock-check); KEEP=1 leaves it running. Run from the repository's root.
 set -euo pipefail
 
-image=${1:?usage: stock-install-check.sh IMAGE MODULE [--archive FILE] [--write-archive FILE] [SCENARIO...]}
-module=${2:?usage: stock-install-check.sh IMAGE MODULE [--archive FILE] [--write-archive FILE] [SCENARIO...]}
+image=${1:?usage: stock-install-check.sh IMAGE MODULE [--archive FILE] [--write-archive FILE] [--no-demo] [SCENARIO...]}
+module=${2:?usage: stock-install-check.sh IMAGE MODULE [--archive FILE] [--write-archive FILE] [--no-demo] [SCENARIO...]}
 shift 2
-archive='' write_archive=''
+archive='' write_archive='' load_args=''
 scenarios=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --archive) archive=$2; shift 2 ;;
     --write-archive) write_archive=$2; shift 2 ;;
+    --no-demo) load_args=' -Ddemo=0'; shift ;;
     *) scenarios+=("$1"); shift ;;
   esac
 done
@@ -64,7 +66,7 @@ else
 fi
 
 start=$SECONDS
-out=$(printf '%s\n' "Set sc = ##class(%IPM.Main).Shell(\"load $target -v\") Write !,\"RESULT: \",\$SELECT(sc: \"ok\", 1: \$SYSTEM.Status.GetErrorText(sc)),!" 'Halt' | session USER)
+out=$(printf '%s\n' "Set sc = ##class(%IPM.Main).Shell(\"load $target -v$load_args\") Write !,\"RESULT: \",\$SELECT(sc: \"ok\", 1: \$SYSTEM.Status.GetErrorText(sc)),!" 'Halt' | session USER)
 echo "$out" | grep -q '^RESULT: ok' || { echo "$out" | tail -40; echo "the load failed on a stock instance"; exit 1; }
 echo "loaded $target in USER in $((SECONDS - start)) s"
 
@@ -74,6 +76,14 @@ state=$(printf '%s\n' 'Set sc = ##class(Ens.Director).GetProductionStatus(.n, .s
 [ "$state" = 'RESULT: Shutter.Production 1' ] || { echo "the production is not running: $state"; exit 1; }
 echo "/shutter answers and Shutter.Production runs"
 
+# Anyone may ask whether the instance is up: the sign-in page does, and INSTALL.md tells a site to.
+health_answers() {
+  curl -s -m 20 "$url/api/shutter/health" | python3 -c 'import json, sys; sys.exit(0 if json.load(sys.stdin).get("ok") is True else 1)' \
+    || { echo "GET /health, signed out, $1:"; curl -s -m 20 "$url/api/shutter/health" | head -c 400; echo; exit 1; }
+}
+health_answers 'after the load'
+echo "GET /health answers a caller who is not signed in"
+
 if [ -n "$write_archive" ]; then
   name=$(sed -n 's:.*<Name>\(iris-[a-z-]*\)</Name>.*:\1:p' "$module/module.xml" | head -1)
   out=$(printf '%s\n' "Set sc = ##class(%IPM.Main).Shell(\"$name package -only -path /tmp/pkg\") Write !,\"RESULT: \",\$SELECT(sc: \"ok\", 1: \$SYSTEM.Status.GetErrorText(sc)),!" 'Halt' | session USER)
@@ -82,9 +92,15 @@ if [ -n "$write_archive" ]; then
   echo "wrote $write_archive"
 fi
 
+if [ -n "$load_args" ]; then
+  echo "no demo: the install's checks passed"
+  exit 0
+fi
+
 # scenario_check reads the demo receivers as _SYSTEM, whose stock password has expired; the app itself does not need it.
 printf '%s\n' 'Do ##class(Security.Users).UnExpireUserPasswords("*")' 'Halt' | session %SYS > /dev/null
 python3 tests/e2e/scenario_check.py --url "$url" --approve "${scenarios[@]}"
 
 # A receiver with no API, on a stock TCP operation in the demo hospital. It changes the instance, so it comes last.
 python3 tests/e2e/plain_receiver_check.py --ctr "$ctr" --url "$url"
+health_answers 'after a save of the site profile'

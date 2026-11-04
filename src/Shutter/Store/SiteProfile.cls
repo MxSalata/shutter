@@ -337,7 +337,7 @@ ClassMethod FeedTimeZone() As %String
     Set feed = ..Current().%Get("feed")
     Set zone = $SELECT($ISOBJECT(feed): ##class(Shutter.Util.Json).Str(feed, "time_zone"), 1: "")
     If zone = "" Set zone = "UTC"
-    Set ^Shutter.Config("feedZone") = zone
+    Try { Set ^Shutter.Config("feedZone") = zone } Catch ex { }
     Quit zone
 }
 
@@ -350,7 +350,9 @@ ClassMethod PreventFailures() As %Boolean
     If cached '= "" Quit +cached
     Set feed = ..Current().%Get("feed")
     Set on = $ISOBJECT(feed) && (feed.%GetTypeOf("prevent_failures") = "boolean") && feed.%Get("prevent_failures")
-    Set ^Shutter.Config("preventFailures") = ''on
+    // GET /health reaches this for anyone through the Doctor, and a caller who cannot write answered <PROTECT> here whenever
+    // the cache was empty: on a fresh install with no demo, and after every save of the profile. The answer needs no cache.
+    Try { Set ^Shutter.Config("preventFailures") = ''on } Catch ex { }
     Quit ''on
 }
 
