@@ -4069,6 +4069,11 @@
   },
   "specialist_differs": 15,
   "specialist_differs_listed": 15,
+  "plans_with_a_catalogue_outcome": 25,
+  "plans_taking_the_preferred_outcome": 24,
+  "plans_taking_another_outcome": [
+   "S22"
+  ],
   "incident_passes": 2,
   "incident_plans_cite_matched_entry": 2,
   "incident_writes": [

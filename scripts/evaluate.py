@@ -11,7 +11,7 @@ the production review's recordings, which no board decided, and the suggested qu
 (fixtures/scenarios.json), the catalogue (knowledge/catalogue/catalogue.json), the seeded model prices
 (Shutter.Store.ModelPrice's Seed, read from its source) and the played outcomes in docs/readme/comparison.md.
 --check builds both files in memory and compares them with the committed ones (exit 1 on a difference), like
-build-catalogue.py --check. Standard library only.
+build-catalogue.py --check, and does the same for agent_page.py's page. Standard library only.
 """
 import argparse
 import datetime
@@ -21,6 +21,8 @@ import json
 import os
 import re
 import sys
+
+import agent_page
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RECORDS = os.path.join(ROOT, "fixtures", "records")
@@ -405,6 +407,11 @@ def build():
     outweighed = [(p, n) for p in scored for n in SPECIALISTS if (p["members"].get(n) or {}).get("matches_expected") is False]
     totals["specialist_differs"] = len(outweighed)
     totals["specialist_differs_listed"] = sum(1 for p, n in outweighed if n in p["disagreements_listed"])
+    # The catalogue's preferred outcome reaches every agent in its evidence: how often the coordinator's plan took it
+    outcomes = [(r["scenario"], str((r.get("result") or {}).get("outcome") or "")) for r in runs if r["member"] == "coordinator"]
+    totals["plans_with_a_catalogue_outcome"] = sum(1 for _, o in outcomes if o)
+    totals["plans_taking_the_preferred_outcome"] = sum(1 for _, o in outcomes if o == "preferred")
+    totals["plans_taking_another_outcome"] = sorted({sid for sid, o in outcomes if o and o != "preferred"})
     incident = [p for p in scored if p["incident"]]
     totals["incident_passes"] = len(incident)
     totals["incident_plans_cite_matched_entry"] = sum(1 for p in incident if p.get("plan_cites_matched_entry"))
@@ -502,6 +509,13 @@ def render(ev):
       + (f" The {plural(t['incident_passes'], 'incident case')} are scored against the catalogue entry the matcher found "
          "in each case's own evidence, not the entry the plan cites; the plans cite that entry in "
          f"{t['incident_plans_cite_matched_entry']} of {t['incident_passes']}." if t["incident_passes"] else ""))
+    others = t["plans_taking_another_outcome"]
+    w("- **The catalogue reaches the agents.** Each agent's evidence carries the catalogue's matching entry and its "
+      f"preferred outcome. The coordinator took that outcome in {t['plans_taking_the_preferred_outcome']} of "
+      f"{t['plans_with_a_catalogue_outcome']} recorded plans, S8 included"
+      + (f"; in {', '.join(others)} it took the alternative" if others else "")
+      + ". So these runs show agents applying written policy to evidence and keeping their dissent, not reaching the "
+      "answer unaided.")
     sm = t["specialist_matches"]
     w("- **Each specialist's own view:** a specialist decides from its own view only (conformance: is the message "
       "acceptable; encounter: does the movement still hold; impact: can the write be made safely), so its disposition is "
@@ -871,6 +885,8 @@ def main():
     if args.check:
         stale = [rel(p) for p, text in outputs
                  if not os.path.exists(p) or open(p, encoding="utf-8").read() != text]
+        if not agent_page.write_or_check(True):
+            stale.append(rel(agent_page.OUT))
         if stale:
             print(f"{', '.join(stale)} out of date: run scripts/evaluate.py")
             return 1
@@ -881,6 +897,8 @@ def main():
         with open(path, "w", encoding="utf-8") as f:
             f.write(text)
         print(f"wrote {rel(path)}")
+    agent_page.write_or_check(False)
+    print(f"wrote {rel(agent_page.OUT)}")
     return 0
 
 
