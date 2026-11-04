@@ -14,9 +14,9 @@ const AS_DEMO = { as: 'demo' } as const;
 test.beforeEach(({ page }) => skipWelcome(page));
 
 test.describe('the guided path', () => {
-  test('leads from the Start here card to the held S2 case and its approval', async ({ page }) => {
+  test('leads from the path card to the held S2 case and its approval', async ({ page }) => {
     await signIn(page);
-    const card = page.getByRole('region', { name: 'Start here' });
+    const card = page.getByRole('region', { name: 'Then follow this path' });
     await expect(card).toBeVisible();
     for (const name of [
       'Case C-000002',
@@ -41,7 +41,7 @@ test.describe('the guided path', () => {
   test('opens the S8 comparison from the guide, behind why the board matters', async ({ page }) => {
     await signIn(page);
     await page
-      .getByRole('region', { name: 'Start here' })
+      .getByRole('region', { name: 'Then follow this path' })
       .getByRole('link', { name: 'Rules and board side by side' })
       .first()
       .click();

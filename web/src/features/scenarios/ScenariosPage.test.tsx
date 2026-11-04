@@ -222,7 +222,7 @@ describe('ScenariosPage', () => {
   it('shows no guided path outside the demo: an instance has its own cases', async () => {
     renderScenarios();
     expect(await screen.findByRole('button', { name: 'Run S2' })).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Start here' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Then follow this path' })).not.toBeInTheDocument();
   });
 
   it('leads with the induction prompt on an instance running the shipped profile', async () => {

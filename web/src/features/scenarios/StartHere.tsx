@@ -119,7 +119,7 @@ export function StartHere() {
       <Stack gap="sm">
         <Stack gap={2}>
           <Title order={2} id="start-here-title">
-            Start here
+            Then follow this path
           </Title>
           <Text size="md" c="dimmed" maw="68ch">
             A short path through the recorded cases. Approve, escalate and close replay here; nothing leaves

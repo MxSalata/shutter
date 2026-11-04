@@ -54,7 +54,7 @@ export default function HomePage() {
 
 /**
  * The way in for someone new. The public demo's role cannot run scenarios, since its hospital plays them by itself, so it
- * starts from the cases already there; everyone else starts from S8, the case the agents are there for.
+ * starts from the cases already there; everyone else starts from S2, which shows the whole path, and then S8, the case the agents are there for.
  */
 function FirstStep() {
   const can = useCan();
@@ -68,7 +68,7 @@ function FirstStep() {
         <Text maw="68ch">
           {hidden
             ? "This hospital's failures are already in Cases. Open one to see the evidence, the plan and who decided."
-            : 'Scenarios replay known failures, so you can follow one from the failed message to the verified fix. Start with S8, where a plain resend would move a patient back to the wrong ward.'}
+            : 'Scenarios replay known failures, so you can follow one from the failed message to the verified fix. Start with S2, then S8, where a plain resend would move a patient back to the wrong ward.'}
         </Text>
         <Group gap="xs">
           <Button component={Link} to={hidden ? '/cases' : '/scenarios'} mih={44}>
