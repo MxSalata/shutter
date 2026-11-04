@@ -8,9 +8,9 @@ import { useTechnical } from '@/stores/appearance';
 import { proofParts } from './scenarioText';
 
 /**
- * The proof under the hero, from the board's evaluation (lib/proof.ts), never typed: the board's proposals on the
- * scored passes, then the comparison played end to end, each on its own base, and the way to the evaluation. Technical
- * names the two bases. A sentence whose figures the evaluation cannot give is left out.
+ * The proof that leads the Scenarios page, from the board's evaluation (lib/proof.ts), never typed: the board's
+ * proposals on the scored passes, then the comparison played end to end, each on its own base, and the way to the
+ * evaluation. Technical names the two bases. A sentence whose figures the evaluation cannot give is left out.
  */
 export function ProofLine({ proof = PROOF }: { proof?: Pick<Proof, 'board' | 'played'> }) {
   const technical = useTechnical();
@@ -27,8 +27,8 @@ export function ProofLine({ proof = PROOF }: { proof?: Pick<Proof, 'board' | 'pl
         {parts.tested && p ? ' ' : null}
         {p ? (
           <>
-            Played end to end on {p.of} {p.ofThem ? 'of them' : 'recorded failures'}: the board {p.board},{' '}
-            <Term term="simple-rules">Rules only</Term> {p.rules}.
+            Played end to end on {p.of} {p.ofThem ? 'of them' : 'recorded failures'}: the{' '}
+            <Term term="board">board</Term> {p.board}, <Term term="simple-rules">Rules only</Term> {p.rules}.
           </>
         ) : null}
         {technical && parts.bases ? ` ${parts.bases}` : null}{' '}

@@ -1284,6 +1284,16 @@ body {
     gap: var(--mantine-spacing-md) var(--mantine-spacing-xl);
   }
 }
+.mode-card {
+  display: flex;
+  align-items: flex-start;
+}
+.mode-card > * {
+  width: 100%;
+}
+.mode-card[data-checked] {
+  border-color: var(--mantine-primary-color-filled);
+}
 .mode-card .mantine-Badge-root {
   --badge-radius: var(--mantine-radius-md);
   height: auto;
@@ -1335,6 +1345,22 @@ body {
   grid-column: 2;
   grid-row: 1;
   margin-top: -2px;
+}
+/* Below about 1100 px "More" would squeeze the title, so it goes back on its own line under the summary. */
+@media (min-width: 36em) and (max-width: 68.74em) {
+  .scenario-cell > .scenario-title {
+    grid-column: 1 / -1;
+  }
+  .scenario-more .tech-detail-toggle {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    margin-top: 0;
+    justify-self: start;
+  }
+}
+/* The light tint is translucent over a hovered row, so the words keep the text colour to hold their contrast. */
+.scenario-run .mantine-Button-root:not([data-disabled]) {
+  color: var(--mantine-color-text);
 }
 @media (max-width: 35.99em) {
   .scenario-list tbody th {
