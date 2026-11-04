@@ -5,13 +5,15 @@ import { Link } from 'react-router';
 import { scenariosHidden } from '@/api/can';
 import { useCan, useHealth } from '@/api/hooks';
 import { PageHeader } from '@/components/PageHeader';
+import { Term } from '@/components/Term';
 import { TRIAL, trialHref } from '@/env/mode';
 import { hueVar } from '@/lib/hues';
 import { SECTIONS, useNeedAPerson, type SectionItem } from '@/features/shell/sections';
 
 /**
- * Where the app opens: where to start, what needs a person now, and what each section is for. It only points: every fact
- * here is a section's own, and the sections come from the list the navigation is drawn from.
+ * Where the app opens: what Shutter does, where to start, what needs a person now, and what each section is for. It only
+ * points: every fact here is a section's own, and the sections come from the list the navigation is drawn from. The lead is
+ * Scenarios' sentence, because its fold starts closed and this is the first thing anyone reads.
  */
 export default function HomePage() {
   return (
@@ -20,7 +22,12 @@ export default function HomePage() {
         title="Home"
         icon={IconHome2}
         hue="cyan"
-        lead="Where to start, what needs a person now, and what each part of Shutter is for."
+        lead={
+          <>
+            When an <Term term="hl7-transfer">HL7 transfer</Term> fails, Shutter works out what is true and
+            fixes it only when it is safe.
+          </>
+        }
       />
       <FirstStep />
       {SECTIONS.map(({ group, about, items }) => (
