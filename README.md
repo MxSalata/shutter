@@ -158,6 +158,8 @@ All 26 scenarios (S1 to S25 without S14, with S23 in three parts), step by step,
 5. **Release.** A person approves the exact plan, bound to its digest, the evidence, the gate's policy and the receiver's version. In Site policy mode, the site's written profile releases the cases its catalogue settles instead.
 6. **One conditional write, then verification.** A dry run, a fresh read, a second gate, one write at the expected version, then a check of the receiver's committed history. A write whose answer was lost is read again, not resent.
 
+**Sign-in stays inside IRIS.** Shutter keeps no users or passwords of its own. A person signs in as an IRIS user and IRIS checks the password; what they may do comes from IRIS roles and resources, checked by the API on the server; the approver of record is that signed-in user; and the provider's key sits in the IRIS wallet. A hospital has no second user store to run or secure.
+
 The case and incident workflows are written in ObjectScript rather than BPL, by choice: they wait on a board answering in parallel, timeouts, re-plans and approvals that expire, they are unit-tested and versioned with the gate, and every step is still a production message, so the Visual Trace above shows each case step by step.
 
 **The two productions, item by item.** The demo hospital's own production (namespace `HOSPITAL`) hands its failed deliveries to Shutter's (namespace `SHUTTER`); Shutter's feed, recovery, board and verification are all production items.
