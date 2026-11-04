@@ -115,7 +115,9 @@ describe('the guide registry', () => {
   });
 
   it('names the modes the page offers, with no single investigator on the trial', () => {
-    expect(modesSay(false)).toMatch(/Board \(agents\), Site policy, Single investigator or Rules only \(no agents\)/);
+    expect(modesSay(false)).toMatch(
+      /Board \(agents\), Site policy, Single investigator or Rules only \(no agents\)/,
+    );
     expect(modesSay(true)).toMatch(/Board \(agents\), Site policy or Rules only \(no agents\)/);
     expect(modesSay(true)).not.toMatch(/Single investigator/);
     for (const trial of [false, true]) expect(words(modesSay(trial))).toBeLessThanOrEqual(25);
@@ -125,6 +127,12 @@ describe('the guide registry', () => {
     const { step } = stepAt('s2/gate')!;
     expect(step.say).toMatch(/a reason code, a fixed name such as APPROVAL_RECEIVER_CHANGED/);
     expect(step.detail).toMatch(/An unknown answer blocks a write as surely as a failed one\.$/);
+  });
+
+  it('names the Workflow task on the approval step', () => {
+    expect(stepAt('s2/decision')!.step.detail).toMatch(
+      /The same approval is an EnsLib\.Workflow task in IRIS's Workflow inbox, for the role Shutter Approvers\.$/,
+    );
   });
 
   it('names the two depths of Ask on the quick tour as the panel does, each in its own quotes', () => {
