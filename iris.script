@@ -6,8 +6,8 @@
 // One statement per line: `iris session` reads its input a line at a time, so a block cannot span lines.
 Set fail = "Write !, ""BUILD FAILED: "", $SYSTEM.Status.GetErrorText(sc), ! Do $SYSTEM.Process.Terminate($JOB, 1)"
 zn "USER"
-Set sc = $SYSTEM.Status.Error(5001, "Installer.cls did not load")
-Set sc = $SYSTEM.OBJ.Load("/home/irisowner/dev/Installer.cls", "ck")
+Set sc = $SYSTEM.Status.Error(5001, "src/Shutter/Installer.cls did not load")
+Set sc = $SYSTEM.OBJ.Load("/home/irisowner/dev/src/Shutter/Installer.cls", "ck")
 If 'sc Xecute fail
 Set sc = $SYSTEM.Status.Error(5001, "the namespaces were not created"), vars("NAMESPACE") = "SHUTTER"
 Set sc = ##class(Shutter.Installer).setup(.vars)

@@ -96,6 +96,17 @@ ClassMethod RunRecords(shutterNs As %String = "SHUTTER") As %String [ SqlProc ]
     Quit $SELECT($$$ISOK(sc): "ok", 1: $SYSTEM.Status.GetErrorText(sc))
 }
 
+/// Makes the demo's two other namespaces when they are missing, for Shutter.Setup's demo install: a load on a stock
+/// instance has had no image build to make them first, so the records system would answer 404 and the hospital's
+/// scenarios would wait for a case that never comes. Setup's own steps then find them, as they do in an image.
+ClassMethod EnsureDemoNamespaces(shutterNs As %String) As %Status
+{
+    Set vars("NAMESPACE") = $ZCONVERT(shutterNs, "U"), sc = $$$OK
+    If '..NamespaceExists("RECORDS") Set sc = ..setupRecords(.vars)
+    If $$$ISOK(sc) && '..NamespaceExists("HOSPITAL") Set sc = ..setupHospital(.vars)
+    Quit sc
+}
+
 /// Whether a namespace exists, read in %SYS.
 ClassMethod NamespaceExists(ns As %String) As %Boolean
 {
@@ -143,7 +154,8 @@ ClassMethod RunHospital(shutterNs As %String = "SHUTTER") As %String [ SqlProc ]
 {
     If (shutterNs = "") || (shutterNs = $CHAR(0)) Set shutterNs = "SHUTTER"
     Set vars("NAMESPACE") = $ZCONVERT(shutterNs, "U")
-    Set sc = ..setupHospital(.vars)
+    // The manifest once: a demo install may have made it already (EnsureDemoNamespaces).
+    Set sc = $SELECT(..NamespaceExists("HOSPITAL"): $$$OK, 1: ..setupHospital(.vars))
     Quit $SELECT($$$ISOK(sc): "ok", 1: $SYSTEM.Status.GetErrorText(sc))
 }
 

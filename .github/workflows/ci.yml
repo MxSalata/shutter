@@ -300,7 +300,6 @@ jobs:
       # above, so they run in terminal sessions too.
       - name: The demo hospital's namespace and production
         run: |
-          python3 scripts/iris-load.py --url "$IRIS_URL" --ns SHUTTER Installer.cls
           out=$(printf '%s\n' 'Set r = ##class(Shutter.Installer).RunHospital("SHUTTER") Write !,"RESULT: ",r,!' 'Halt' \
             | docker exec -i "$CTR" iris session IRIS -U SHUTTER)
           echo "$out" | tail -20
@@ -777,6 +776,15 @@ jobs:
           python3 scripts/iris-sql.py --url "http://127.0.0.1:$port" --ns SHUTTER \
             "SELECT TOP 1 Text FROM Ens_Util.Log WHERE Text %STARTSWITH 'The environment was applied' ORDER BY ID DESC" \
             | tee /dev/stderr | grep -q 'The environment was applied'
+      # A person's zpm on a plain instance goes where the build above does not: its installer has made the namespaces
+      # first, and SHUTTER_BUILD=1 starts no production. A load that only worked there failed on a stock instance until
+      # 4 Nov. The core module is the one 2026.2 takes; the whole package goes the same way on the AI Hub builds, which CI
+      # can't pull. The instance has no build secret, so its demo users have the default password.
+      - name: A load on a stock instance, in USER, with S2 played on it
+        env:
+          CTR: ${{ env.CTR }}-stock
+          SHUTTER_PASSWORD: shutter
+        run: scripts/stock-install-check.sh "$IRIS_IMAGE" core S2
       - name: IRIS log
         if: always()
         run: docker logs "$CTR" 2>&1 | tail -100 || true

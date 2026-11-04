@@ -1,7 +1,7 @@
 /// Installs the demo hospital: a production of its own in the HOSPITAL namespace, not Shutter's, whose failed
 /// deliveries reach Shutter through the forwarder (docs/CONTRACTS.md, section 11). Runs in the HOSPITAL namespace
 /// after the iris-shutter module is loaded into Shutter's: the classes come through the namespace's package mappings
-/// (Installer.cls), so nothing is loaded or compiled here. Safe to run again.
+/// (Shutter.Installer), so nothing is loaded or compiled here. Safe to run again.
 Class Hospital.Setup Extends %RegisteredObject
 {
 
