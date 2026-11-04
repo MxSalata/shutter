@@ -128,13 +128,19 @@ ClassMethod LatestCases() As %DynamicArray
     Try {
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP ? CaseId, State, Headline, FailureText, EnsSessionId FROM Shutter_Store.""Case"" ORDER BY ID DESC", ..#LATEST)
         While (rs.%SQLCODE = 0) && rs.%Next() {
-            Set story = rs.%Get("Headline")
-            If story = "" Set story = rs.%Get("FailureText")
+            Set story = ..Story(rs.%Get("Headline"), rs.%Get("FailureText"))
             Do out.%Push({"caseId": (rs.%Get("CaseId")), "state": (rs.%Get("State")), "story": (story), "session": (rs.%Get("EnsSessionId"))})
         }
     } Catch ex {
     }
     Quit out
+}
+
+/// A case's line: its headline, or the failure when it has none yet. A gate's summary starts "Blocked:", which the
+/// workflow's headline has already said.
+ClassMethod Story(headline As %String, failure As %String) As %String
+{
+    Quit $REPLACE($SELECT(headline '= "": headline, 1: failure), "Blocked by the gate: Blocked:", "Blocked by the gate:")
 }
 
 /// Each agent that has run here, with when it last did.
@@ -252,7 +258,7 @@ ClassMethod AgentRows(agents As %DynamicArray) As %String
     If agents.%Size() = 0 Quit "<p class='none'>No agent has run on this instance yet.</p>"
     Set h = "", it = agents.%GetIterator()
     While it.%GetNext(, .a) {
-        Set at = $TRANSLATE($EXTRACT(a.lastAt, 12, 16), "T", " ")
+        Set at = $TRANSLATE($EXTRACT(a.lastAt, 1, 16), "T", " ")
         Set h = h _ "<div class='lane'><span class='dot' aria-hidden='true'></span><span>Agent " _ ..E($ZCONVERT(a.member, "W")) _ "</span><span class='num'>" _ $SELECT(at = "": "", 1: "last " _ ..E(at) _ " UTC") _ "</span></div>"
     }
     Quit h
