@@ -214,7 +214,7 @@ export const CHAPTERS: GuideChapter[] = [
         title: 'Your turn: approve the fix',
         say: 'The safety checks (the gate) passed, and a test run on the bed system worked. Now the fix waits for you.',
         detail:
-          "The gate checked the plan against the evidence; the rehearsal applied the exact write at the receiver and rolled it back. A person with the approver role releases it; on other cases, the site's written policy may.",
+          "The rehearsal applied the exact write and rolled it back. An approver releases it; on other cases, the site's written policy may. The same approval is an EnsLib.Workflow task in IRIS's Workflow inbox, for the role Shutter Approvers.",
         place: { scenario: 'S2', mode: 'board' },
         target: 'case-decision',
         open: 'decision',
