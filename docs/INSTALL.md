@@ -49,6 +49,8 @@ the productions a hospital already runs; the README's `docker compose up` is the
   rest itself: the `RECORDS` and `HOSPITAL` namespaces, the records system's web application and the hospital's production.
   It doesn't build the Second Parser's jar (below), so that item stays disabled and S25 is decided without its second
   opinion. `scripts/stock-install-check.sh` runs this path; CI runs it on 2026.2 with the core.
+- **`zpm "uninstall iris-shutter"` removes the classes only.** The productions, the web applications and the two demo
+  namespaces stay, so stop the production first, or remove the instance.
 
 `Install` creates, in the current namespace, the folders under `<mgr>/shutter/`, the resources `Shutter_Operate`,
 `Shutter_Approve` and `Shutter_Intake`, the roles `Shutter_Operator`, `Shutter_Approver`, `Shutter_WebApp` and
