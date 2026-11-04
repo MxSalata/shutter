@@ -131,7 +131,7 @@ function RunBanner({ run, latest }: { run: ScenarioRun; latest: string | undefin
       <Alert
         color="blue"
         variant="light"
-        title={`${run.scenario} played (${humanize(run.mode)}), ${formatAge(run.finishedAt)}`}
+        title={`${run.scenario} played (${humanize(run.mode)})${TRIAL ? '' : `, ${formatAge(run.finishedAt)}`}`}
       >
         <Text size="sm">
           Delivered {run.files.join(', ') || 'no files'}.
@@ -139,7 +139,7 @@ function RunBanner({ run, latest }: { run: ScenarioRun; latest: string | undefin
           {byEnv({
             live: 'The production does the rest: follow the case below.',
             trial: latest
-              ? `Its case is ${latest}, replayed from the recording, so it is already in its final state: open it from the row below.`
+              ? `Its case is ${latest}, replayed from the recording, as far as the recording goes: open it from the row below.`
               : 'Its case is replayed from the recording: open it from the row below.',
           })}
         </Text>

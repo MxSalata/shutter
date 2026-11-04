@@ -108,6 +108,6 @@ describe('HomePage', () => {
   it('stays within its word budget', async () => {
     const { container } = renderHome();
     await screen.findByRole('heading', { level: 1, name: 'Home' });
-    expect(layer1Words(container).length).toBeLessThanOrEqual(205);
+    expect(layer1Words(container).length).toBeLessThanOrEqual(210);
   });
 });

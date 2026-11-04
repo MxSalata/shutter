@@ -10,7 +10,7 @@ import {
   Text,
   VisuallyHidden,
 } from '@mantine/core';
-import { IconArrowsLeftRight, IconEqual } from '@tabler/icons-react';
+import { IconAlertTriangle, IconArrowsLeftRight, IconEqual } from '@tabler/icons-react';
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router';
 import { useAttempts, useCase, useCases, useClosure, usePlan, useScenarios, useSnapshot } from '@/api/hooks';
@@ -193,6 +193,26 @@ export function S8Compare({ caseId, focus }: { caseId: string; focus: boolean })
         {rules && board ? <Pair rulesId={rules.caseId} boardId={board.caseId} caseId={caseId} /> : null}
       </Section>
     </div>
+  );
+}
+
+/**
+ * What went wrong on the run by Rules only, said on the case itself: its verification is green and it asks for nothing,
+ * so without this a reader of S8 sees a success. Shown only for a run that wrote (a resolved resend), with or without the
+ * other run to compare it with. The wards are S8's own: its feed moves the patient to WARD-B and its bed manager to WARD-C.
+ */
+export function S8RulesNote({ c }: { c: CaseDetail }) {
+  if (c.scenario !== 'S8' || c.mode !== 'rules' || c.state !== 'resolved' || c.disposition !== 'resend')
+    return null;
+  return (
+    <Paper withBorder p="xs" mb="xs" data-testid="s8-rules-note">
+      <Group gap="xs" wrap="nowrap" align="flex-start">
+        <IconAlertTriangle size={18} aria-hidden style={{ flexShrink: 0 }} />
+        <Text size="sm" fw={600}>
+          Wrote WARD-B over the bed manager's WARD-C. Every check passed; only the board caught it.
+        </Text>
+      </Group>
+    </Paper>
   );
 }
 

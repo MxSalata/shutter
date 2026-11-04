@@ -12,7 +12,7 @@ const S8_BOARD: Screenshot = {
   src: `${import.meta.env.BASE_URL}s8-visual-trace.png`,
   alt: 'The Visual Trace of an S8 case in board mode',
   caption:
-    "The Visual Trace of an S8 case in board mode, taken on a test instance on 25 October 2026 (session 20873): the failed delivery to Downstream Out, the case workflow, the evidence collector, the three specialists and the coordinator, each in its own lane, then the gate. The demo's recording has its own session numbers.",
+    "The Visual Trace of an S8 case in board mode, taken on a test instance on 25 October 2026 (session 20873): the failed delivery to Downstream Out, the case workflow, the evidence collector, the three specialists and the coordinator, each in its own lane, then the gate. The demo's recording has its own session numbers. A replay: recorded agents answer within milliseconds, in turn. Live, S8's specialists started together and took 12 to 16 seconds each.",
 };
 
 /** The portal's picture for a case's Visual Trace, when there is one for its scenario and mode. */

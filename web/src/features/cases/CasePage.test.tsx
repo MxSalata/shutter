@@ -420,6 +420,19 @@ describe('CasePage', () => {
     ).toBeVisible();
   });
 
+  it("says on the rules-only S8 case what went wrong, and leaves it off the board's", async () => {
+    renderCase('C-000021');
+    expect(await screen.findByTestId('s8-rules-note')).toHaveTextContent(
+      "Wrote WARD-B over the bed manager's WARD-C. Every check passed; only the board caught it.",
+    );
+  });
+
+  it("says nothing of the kind on the board's S8 case", async () => {
+    renderCase('C-000008');
+    await outcome();
+    expect(screen.queryByTestId('s8-rules-note')).not.toBeInTheDocument();
+  });
+
   it('links an S8 board case to its rules-only run near the top, and opens the side by side from there', async () => {
     renderCase('C-000008');
     const strip = await screen.findByRole('region', { name: 'Same failure, two runs' });

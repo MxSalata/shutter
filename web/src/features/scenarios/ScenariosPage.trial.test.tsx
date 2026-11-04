@@ -94,7 +94,7 @@ describe('ScenariosPage in the trial', () => {
     expect(screen.queryByText(/The case appears in a few seconds/)).not.toBeInTheDocument();
   });
 
-  it('says, once a run is done, that its case is the recorded one, already in its final state', async () => {
+  it("says, once a run is done, that its case is the recorded one, with no age, since its times are a recording's", async () => {
     renderTrial();
     const first = await screen.findByRole('region', { name: 'Try these three first' });
     fireEvent.click(await within(first).findByRole('button', { name: 'Run S8 in Board mode' }));
@@ -102,10 +102,10 @@ describe('ScenariosPage in the trial', () => {
     const realNow = Date.now;
     Date.now = () => realNow() + 9_000;
     try {
-      const done = await screen.findByText(/^S8 played \(Board\)/, {}, { timeout: 10_000 });
+      const done = await screen.findByText(/^S8 played \(Board\)$/, {}, { timeout: 10_000 });
       const alert = done.closest('[role="alert"]')!;
       expect(alert).toHaveTextContent(
-        /Its case is C-\d{6}, replayed from the recording, so it is already in its final state: open it from the row below\./,
+        /Its case is C-\d{6}, replayed from the recording, as far as the recording goes: open it from the row below\./,
       );
       expect(alert).not.toHaveTextContent('The production does the rest');
     } finally {

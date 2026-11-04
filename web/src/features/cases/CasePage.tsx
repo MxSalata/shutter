@@ -30,7 +30,7 @@ import { BoardPanel } from './case/BoardPanel';
 import { DecisionCard } from './case/DecisionCard';
 import { PortalLinks } from './case/PortalLinks';
 import { PrecedentsSection } from './case/Precedents';
-import { CounterpartStrip } from './case/S8Compare';
+import { CounterpartStrip, S8RulesNote } from './case/S8Compare';
 import { SHOW_EVIDENCE } from './case/evidenceLinks';
 import { rounds } from './case/derive';
 import { nextAction, outcomeCaseOf, provenanceOf, recordedApprovalTime } from './case/outcome';
@@ -295,6 +295,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
         onStage={showStage}
         investigation={boardOnTop ? 'the board' : undefined}
       />
+      <S8RulesNote c={c} />
       <CounterpartStrip c={c} onCompare={() => openStep('compare', 's8-compare')} />
       {/* Said once the replay has played: the approval the receipt shows is the recording's, and yours is noted */}
       {played ? (
