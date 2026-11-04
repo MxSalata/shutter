@@ -56,6 +56,15 @@ describe('HomePage', () => {
     }
   });
 
+  it('opens by saying what Shutter does', async () => {
+    renderHome();
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Home' });
+    const page = heading.closest('main') ?? document.body;
+    expect(page.textContent).toMatch(
+      /fails, Shutter works out what is true and fixes it only when it is safe\./,
+    );
+  });
+
   it('starts someone new at the scenarios', async () => {
     renderHome();
     const start = await screen.findByRole('link', { name: 'Open the scenarios' });
