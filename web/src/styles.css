@@ -1238,13 +1238,13 @@ body {
 }
 
 /*
- * The Scenarios page's six steps: a numbered strip that wraps on a phone. The gate's step carries a shield and a
- * heavier border, so it stands out without a colour of its own.
+ * The Scenarios page's six steps: a numbered row that wraps on a phone. No borders, so they cannot read as buttons; the
+ * gate's step carries a shield and heavier words, so it stands out without a colour of its own.
  */
 .step-strip {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--mantine-spacing-xs);
+  gap: var(--mantine-spacing-xs) var(--mantine-spacing-md);
   list-style: none;
   margin: 0;
   padding: 0;
@@ -1253,13 +1253,102 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px 4px 4px;
-  border: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
-  border-radius: var(--mantine-radius-xl);
 }
-.step-strip li[data-gate] {
-  border-width: 2px;
-  border-color: var(--mantine-color-text);
+
+/*
+ * The Scenarios page. From a laptop the three starters share rows, so their overlines and Run buttons line up; a browser
+ * without subgrid keeps the Run buttons at the cards' feet. A row's "More" sits at the right end of the title line, and
+ * what it opens below the summary: the disclosure's box gives way so its button and content are the cell's grid items.
+ */
+.first-actions {
+  margin-top: auto;
+}
+@media (min-width: 62em) {
+  @supports (grid-template-rows: subgrid) {
+    .first-card {
+      display: grid;
+      grid-row: span 3;
+      grid-template-rows: subgrid;
+      row-gap: var(--mantine-spacing-sm);
+    }
+    .first-card > .mantine-Stack-root {
+      display: contents;
+    }
+    .first-actions {
+      margin-top: 0;
+    }
+  }
+  .start-here-steps {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--mantine-spacing-md) var(--mantine-spacing-xl);
+  }
+}
+.mode-card .mantine-Badge-root {
+  --badge-radius: var(--mantine-radius-md);
+  height: auto;
+  min-height: var(--badge-height);
+  max-width: 100%;
+}
+.mode-card .mantine-Badge-label {
+  white-space: normal;
+}
+.scenario-list thead th {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mantine-color-dimmed);
+}
+.scenario-list thead th:nth-child(1) {
+  width: 42%;
+}
+.scenario-list thead th:nth-child(2) {
+  width: 30%;
+}
+.scenario-list thead th:nth-child(3) {
+  width: 18%;
+}
+.scenario-list thead th:nth-child(4) {
+  width: 10%;
+}
+.scenario-cell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px var(--mantine-spacing-xs);
+  align-items: start;
+}
+.scenario-cell > * {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+.scenario-cell > .scenario-title {
+  grid-column: 1;
+}
+.scenario-more,
+.scenario-more > div {
+  display: contents;
+}
+.scenario-more > div > * {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+.scenario-more .tech-detail-toggle {
+  grid-column: 2;
+  grid-row: 1;
+  margin-top: -2px;
+}
+@media (max-width: 35.99em) {
+  .scenario-list tbody th {
+    padding: 2px 0;
+  }
+  .scenario-run .mantine-Stack-root {
+    align-items: stretch;
+  }
+  .scenario-run .mantine-Stack-root > span {
+    display: block;
+  }
+  .scenario-run .mantine-Button-root {
+    width: 100%;
+  }
 }
 
 /* The tone legend is a plain list. A badge keeps its width when its meaning wraps on a narrow screen. */
