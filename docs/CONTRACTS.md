@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.40, 4 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.41, 4 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -1723,8 +1723,29 @@ The AI Hub build only: the core edition has no `%AI.MCP.Service`, and the Doctor
   (2 Nov 2026): eleven tools listed, `ListCases`, `GetCase` and `Health` answered, the forwarder refused. The install does
   not start the sidecar: a site's MCP client configuration does (`docs/INSTALL.md`).
 
+## 16. The demo's portal page (v1.41)
+
+`Shutter.Portal.Guide`, a `%CSP.Page` in the Management Portal's own web application of the namespace
+(`/csp/healthshare/shutter/Shutter.Portal.Guide.cls` on the public demo), is the demo's way into IRIS: what is running, the
+board's case in the Visual Trace, the latest cases, and links to the portal's pages the demo leaves open.
+
+- **Who gets it.** A demo instance only (`^Shutter.Config("demo")`), and a holder of `Shutter_Portal` or `Shutter_Operate`;
+  anyone else 404. It reads Shutter's tables through `%ExecDirectNoPriv`, fixed queries and no more than the app's public
+  sign-in can read, since `demo-trace` holds no SQL privilege on them; so a site's portal users, whose cases hold real
+  messages, never reach it.
+- **What it does.** `GET` and `HEAD` only, 405 otherwise. No broker, script or form: inline CSS and SVG, a plain meta refresh
+  every 30 seconds, `Cache-Control: no-store` and a Content-Security-Policy that allows nothing else. Everything from a case
+  is escaped, since it began in a message.
+- **What it reads.** The productions' state from `^Ens.Runtime` in each namespace, never `Ens.Director.GetProductionStatus`,
+  which takes the runtime lock. Messages and errors in the last hour and the messages queued, through the tables' indices.
+  The newest escalated S8 case the agents ran on, by query, since its number changes with each build; the agents' last
+  runs. A figure it can't read leaves its tile out, and with no S8 case the box says so.
+- **Sessions.** A request with no session behind it ends the one it opened, so a caller that keeps no cookie can't use up
+  the licence units; a visitor already in a portal session keeps it.
+
 ## Changes
 
+- v1.41, 4 Nov 2026 (the choice of a page drawn by IRIS over the static guide): the demo's portal page (section 16).
 - v1.40, 4 Nov 2026 (a stock TCP operation tried as a receiver, and the README's walk-through followed as written): an entry with
   `features` and no `api` is a receiver with no API of its own and has no paths (6.4); it read the demo receiver in its place
   and believed that receiver's capabilities. `Shutter_Approver` carries `%Ens_EventLog` (E2), since the Visual Trace's event
