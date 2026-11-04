@@ -102,12 +102,18 @@ export default function LoginPage() {
                   </Button>
                   {/* The demo users and their password only on a demo instance (the server's flag). */}
                   {demo ? (
-                    <TechDetail label="Demo users" kind="explain">
-                      The demo installs two users: <b>operator</b> runs scenarios, reads cases, escalates them
-                      and marks them handled; <b>approver</b> can also approve or reject plans and change the
-                      site profile and the agent library. Their password is the installer&apos;s (
-                      <code>shutter</code> unless it was changed).
-                    </TechDetail>
+                    <>
+                      <Text size="sm">
+                        On the online demo, sign in as <b>demo</b> / <code>shutter</code>.
+                      </Text>
+                      <TechDetail label="Demo users" kind="explain">
+                        The demo installs two users: <b>operator</b> runs scenarios, reads cases, escalates
+                        them and marks them handled; <b>approver</b> can also approve or reject plans and
+                        change the site profile and the agent library. Their password is the installer&apos;s
+                        (<code>shutter</code> unless it was changed). They are for your own instance: the
+                        online demo keeps them private.
+                      </TechDetail>
+                    </>
                   ) : null}
                 </Stack>
               </form>
