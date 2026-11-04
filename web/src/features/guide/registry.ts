@@ -1,4 +1,5 @@
 import type { Mode } from '@/api/types';
+import { TRIAL } from '@/env/mode';
 import type { StoryStep } from '@/features/cases/case/CaseStory';
 import { PROOF } from '@/lib/proof';
 
@@ -107,6 +108,14 @@ function costSay(): string {
   return `Costs come from list prices and the tokens used: estimates, not invoices.${range}`;
 }
 
+/** The mode step's words, naming the modes the page offers: the trial has no single investigator (ScenariosPage). */
+export function modesSay(trial: boolean): string {
+  const modes = trial
+    ? 'Board (agents), Site policy or Rules only (no agents)'
+    : 'Board (agents), Site policy, Single investigator or Rules only (no agents)';
+  return `Choose who proposes fixes: ${modes}. Every fix needs a person, or the site's written policy.`;
+}
+
 export const CHAPTERS: GuideChapter[] = [
   {
     id: 'scenarios',
@@ -124,7 +133,9 @@ export const CHAPTERS: GuideChapter[] = [
       {
         id: 'mode',
         title: 'Who makes the plan',
-        say: "Choose who proposes the fix. In every mode, every fix passes the safety checks, then a person, or the site's written policy, releases it.",
+        say: modesSay(TRIAL),
+        detail:
+          "In every mode, every fix passes the safety checks, then a person, or the site's written policy, releases it. Rules only is the baseline.",
         place: { page: '/scenarios' },
         target: 'scenarios-mode',
         scopes: A,
