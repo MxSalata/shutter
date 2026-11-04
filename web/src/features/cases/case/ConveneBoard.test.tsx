@@ -125,7 +125,7 @@ describe('Convene the board', () => {
     withBudget({ dailyUsd: 15, spentTodayUsd: 4.2, exhausted: false });
     renderCase('C-000014');
     expect(
-      await screen.findByText('No board to convene: a rules case is decided by the rules alone.'),
+      await screen.findByText('No board to convene: a Rules only case is decided by its rules, with no agents.'),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Convene the board' })).not.toBeInTheDocument();
   });
@@ -270,7 +270,7 @@ describe('Convene the board', () => {
     env.trial = true;
     renderCase('C-000014');
     expect(
-      await screen.findByText('No board to convene: a rules case is decided by the rules alone.'),
+      await screen.findByText('No board to convene: a Rules only case is decided by its rules, with no agents.'),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Convene the board' })).not.toBeInTheDocument();
   });

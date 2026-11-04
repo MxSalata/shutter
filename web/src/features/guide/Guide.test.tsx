@@ -330,7 +330,7 @@ describe('the guide', () => {
     const finish = await screen.findByRole('heading', { name: 'That is the tour.' });
     const region = finish.closest('[role="region"]') as HTMLElement;
     expect(region).toHaveTextContent(
-      "You saw the decision receipt as JSON, the gate's reason codes, what each agent cited, S8 beside its rules-only run, the message trace in IRIS, and where simple rules went wrong.",
+      "You saw the decision receipt as JSON, the gate's reason codes, what each agent cited, S8 beside its Rules only run, the message trace in IRIS, and where Rules only went wrong.",
     );
     expect(region).not.toHaveTextContent('transfer delivered and verified');
   });

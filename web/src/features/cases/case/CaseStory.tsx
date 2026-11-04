@@ -186,7 +186,7 @@ export function CaseStory({
         <Step
           value="compare"
           title="Why the board matters"
-          summary="Rules alone and the board on the same failure, side by side."
+          summary="Rules only and the board on the same failure, side by side."
         >
           <S8Compare caseId={c.caseId} focus={compareFocus} />
         </Step>

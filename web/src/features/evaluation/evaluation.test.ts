@@ -79,9 +79,9 @@ describe('the played outcomes', () => {
 
   it("says how a scored pass ended when played, and nothing for one that wasn't or isn't scored", () => {
     const s1 = data.passes.find((p) => p.scenario === 'S1')!;
-    expect(playedLine(s1)).toBe('Played by the board: as expected; by rules alone: not as expected');
+    expect(playedLine(s1)).toBe('Played by the board: as expected; by Rules only: not as expected');
     const s2 = data.passes.find((p) => p.scenario === 'S2')!;
-    expect(playedLine(s2)).toBe('Played by the board: as expected; by rules alone: as expected');
+    expect(playedLine(s2)).toBe('Played by the board: as expected; by Rules only: as expected');
     const unscored = data.passes.find((p) => p.scenario === 'S7' && !p.scored)!;
     expect(playedLine(unscored)).toBe('');
     const incident = data.passes.find((p) => p.scenario === 'S11')!;

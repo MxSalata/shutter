@@ -39,11 +39,11 @@ test.describe('the per-scenario table @evaluation', () => {
   test('opens filtered by the address', async ({ page }) => {
     await go(page, '/evaluation?show=rules-differs');
     await expect(table(page).getByText('7 passes shown')).toBeVisible();
-    await expect(table(page).getByRole('radio', { name: 'Rules alone not as expected' })).toBeChecked();
+    await expect(table(page).getByRole('radio', { name: 'Rules only not as expected' })).toBeChecked();
     // The 7 passes, the header row and the Total row
     await expect(table(page).getByRole('row')).toHaveCount(9);
     await expect(table(page).getByRole('row', { name: /^S8 / })).toContainText(
-      'Rules alone: wrote, not as expected',
+      'Rules only: wrote, not as expected',
     );
   });
 

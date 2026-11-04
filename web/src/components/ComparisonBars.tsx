@@ -4,7 +4,7 @@ import { hueVar, type Hue } from '@/lib/hues';
 import { HINT_EVENTS } from '@/theme';
 
 export interface ComparisonBar {
-  /** Who, in words: "The board", "Simple rules". */
+  /** Who, in words: "The board", "Rules only". */
   label: string;
   value: number;
   /** The actor's identity hue (the board violet); gray for the baseline, never a status colour. */

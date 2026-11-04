@@ -56,13 +56,13 @@ describe('hl7Events', () => {
 describe('recordedLine', () => {
   it('says what the comparison recorded, by the split of rules alone', () => {
     expect(recordedLine({ board: 'as-expected', rules: 'stopped' })).toBe(
-      'Recorded: board as expected; simple rules stopped by the gate',
+      'Recorded: board as expected; Rules only stopped by the gate',
     );
     expect(recordedLine({ board: 'as-expected', rules: 'wrote-wrongly' })).toBe(
-      'Recorded: board as expected; simple rules wrote, not as expected',
+      'Recorded: board as expected; Rules only wrote, not as expected',
     );
     expect(recordedLine({ board: 'as-expected', rules: 'as-expected' })).toBe(
-      'Recorded: board as expected; simple rules as expected',
+      'Recorded: board as expected; Rules only as expected',
     );
     expect(recordedLine({ board: 'differs', rules: 'not-played' })).toBe('Recorded: board not as expected');
     expect(recordedLine(null)).toBeNull();
@@ -70,10 +70,10 @@ describe('recordedLine', () => {
 
   it("reads the evaluation's own results for the scenarios it played", () => {
     for (const id of ['S1', 'S3', 'S6', 'S7', 'S10', 'S13'])
-      expect(recordedLine(playedFor(id))).toMatch(/simple rules stopped by the gate$/);
-    expect(recordedLine(playedFor('S8'))).toMatch(/simple rules wrote, not as expected$/);
+      expect(recordedLine(playedFor(id))).toMatch(/Rules only stopped by the gate$/);
+    expect(recordedLine(playedFor('S8'))).toMatch(/Rules only wrote, not as expected$/);
     for (const id of ['S2', 'S4', 'S5', 'S9'])
-      expect(recordedLine(playedFor(id))).toMatch(/simple rules as expected$/);
+      expect(recordedLine(playedFor(id))).toMatch(/Rules only as expected$/);
     expect(recordedLine(playedFor('S20'))).toBeNull();
   });
 });

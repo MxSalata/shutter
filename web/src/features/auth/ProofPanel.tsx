@@ -44,7 +44,7 @@ export function ProofPanel({ figures, proof = PROOF }: { figures: boolean; proof
   const phoneLine = [
     board && `Recorded failures: the board ${board.matched} of ${board.scored}.`,
     played &&
-      `On the same ${plural(played.of, 'failure')}: the board ${played.board}, simple rules ${played.rules}.`,
+      `On the same ${plural(played.of, 'failure')}: the board ${played.board}, Rules only ${played.rules}.`,
   ].filter((s): s is string => !!s);
 
   const recorded = proof.runs
@@ -113,10 +113,10 @@ export function ProofPanel({ figures, proof = PROOF }: { figures: boolean; proof
                 <StatTile label="Head to head" figure={`${played.board} against ${played.rules}`}>
                   <ComparisonBars
                     of={played.of}
-                    caption={`the board against simple rules (no agents), on the same ${plural(played.of, 'failure')}`}
+                    caption={`the board against Rules only (no agents), on the same ${plural(played.of, 'failure')}`}
                     bars={[
                       { label: 'The board', value: played.board, hue: 'violet' },
-                      { label: 'Simple rules', value: played.rules, hue: 'gray' },
+                      { label: 'Rules only', value: played.rules, hue: 'gray' },
                     ]}
                   />
                   {technical ? (

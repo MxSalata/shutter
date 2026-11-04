@@ -92,9 +92,9 @@ export const GLOSSARY = {
     standard: true,
   },
   'simple-rules': {
-    term: 'Simple rules (no agents)',
+    term: 'Rules only (no agents)',
     definition:
-      'The Rules only mode, shown as "Rules alone" in tables: resend the failed message unchanged and let the gate decide.',
+      'The baseline mode, with no agents: resend the failed message unchanged and let the gate decide.',
   },
   'message-trace': {
     term: 'Message trace (Visual Trace)',

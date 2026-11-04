@@ -113,7 +113,7 @@ describe('EvaluationPage', () => {
     expect(hero).toHaveAttribute('data-tour', 'evaluation-headline');
     expect(within(hero).getByRole('heading', { name: 'The board against the expected outcome', level: 2 }));
     expect(visible(hero.querySelector('.hero-statement'))).toBe(
-      'On the same 11 failures, played end to end: the board 11, simple rules 4. The gate stopped 6 of their 7 misses.',
+      'On the same 11 failures, played end to end: the board 11, Rules only 4. The gate stopped 6 of its 7 misses.',
     );
     expect(
       within(hero).getByText(
@@ -127,7 +127,7 @@ describe('EvaluationPage', () => {
     );
   });
 
-  it('sets simple rules beside the board on one base, apart from the proposed action', () => {
+  it('sets Rules only beside the board on one base, apart from the proposed action', () => {
     renderPage();
     const hero = headline();
     expect(
@@ -147,13 +147,13 @@ describe('EvaluationPage', () => {
       within(hero).getByRole('img', { name: 'The board: 11 of 11 failures ended as expected' }),
     ).toBeInTheDocument();
     expect(
-      within(hero).getByRole('img', { name: 'Simple rules: 4 of 11 failures ended as expected' }),
+      within(hero).getByRole('img', { name: 'Rules only: 4 of 11 failures ended as expected' }),
     ).toBeInTheDocument();
     expect(within(hero).getByText('Ended as expected, of the same 11 failures')).toBeInTheDocument();
     // The comparison's long form, as the info button's description
     const info = within(played).getByRole('button', { name: 'How the comparison was played' });
     expect(info).toHaveAccessibleDescription(
-      '4 of 11 scored passes played end to end with rules alone, no agents, ended as expected; played the same way, the board ended as expected in 11 of the same 11',
+      '4 of 11 scored passes played end to end in Rules only mode, no agents, ended as expected; played the same way, the board ended as expected in 11 of the same 11',
     );
     expect(
       within(hero).getByRole('button', { name: '6 stopped by the gate, nothing written' }),
@@ -195,11 +195,11 @@ describe('EvaluationPage', () => {
     expect(within(hero).getByRole('button', { name: 'What is not yet measured' })).toBeInTheDocument();
   });
 
-  it('says so when no scored pass was played with rules alone', () => {
+  it('says so when no scored pass was played in Rules only mode', () => {
     renderPage({ ...recorded, passes: recorded.passes.map((p) => ({ ...p, played: {} })) });
     const hero = headline();
     expect(within(hero).getByText('Not played')).toBeInTheDocument();
-    expect(within(hero).getByText('no scored pass was played with rules alone')).toBeInTheDocument();
+    expect(within(hero).getByText('no scored pass was played in Rules only mode')).toBeInTheDocument();
     // The statement falls back on the board's own figure; no sentence about a comparison it cannot make
     expect(visible(hero.querySelector('.hero-statement'))).toBe(
       'The board chose the expected action in 24 of 24 recorded failures.',
@@ -222,7 +222,7 @@ describe('EvaluationPage', () => {
     renderPage(older);
     const hero = headline();
     expect(visible(hero.querySelector('.hero-statement'))).toBe(
-      'On the same 11 failures, played end to end: the board 11, simple rules 4.',
+      'On the same 11 failures, played end to end: the board 11, Rules only 4.',
     );
     expect(hero).not.toHaveTextContent('The seventh');
     expect(hero).not.toHaveTextContent('stopped by the gate');
@@ -233,9 +233,9 @@ describe('EvaluationPage', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Why a board' })).not.toHaveTextContent('The gate alone');
-    // Rules alone's misses are still marked, without saying how they ended
+    // Rules only's misses are still marked, without saying how they ended
     const s1 = within(table()).getByText('S1').closest('tr')!;
-    expect(s1).toHaveTextContent('Rules alone: not as expected');
+    expect(s1).toHaveTextContent('Rules only: not as expected');
   });
 
   it('shows who proposed the expected action on one base, and which misses the gate catches alone', async () => {
@@ -269,7 +269,7 @@ describe('EvaluationPage', () => {
     renderPage(undefined, { path: '/evaluation?show=rules-differs' });
     const region = table();
     expect(region).toHaveAttribute('data-tour', 'evaluation-table');
-    expect(within(region).getByRole('radio', { name: 'Rules alone not as expected' })).toBeChecked();
+    expect(within(region).getByRole('radio', { name: 'Rules only not as expected' })).toBeChecked();
     expect(within(region).getByText('7 passes shown')).toHaveAttribute('aria-live', 'polite');
     expect(shownPasses()).toEqual(['S1', 'S3', 'S6', 'S7 pass 2', 'S8', 'S10', 'S13']);
   });
@@ -394,14 +394,14 @@ describe('EvaluationPage', () => {
     expect(cells[5]).toHaveTextContent('E7 · board');
     expect(cells[5]).toHaveTextContent('With the majority');
     expect(cells[6]).toHaveTextContent('Board: as expected');
-    expect(cells[6]).toHaveTextContent('Rules alone: wrote, not as expected');
+    expect(cells[6]).toHaveTextContent('Rules only: wrote, not as expected');
     expect(cells[7]).toHaveTextContent('$0.37 · 30.9 s');
     // Rules alone missed it; the board did not: the row's edge says worth seeing, not refused
     expect(row).toHaveAttribute('data-tone', 'info');
     const s1 = within(region).getByText('S1').closest('tr')!;
-    expect(s1).toHaveTextContent('Rules alone: stopped by the gate');
+    expect(s1).toHaveTextContent('Rules only: stopped by the gate');
     expect(within(region).getByText('S2').closest('tr')).not.toHaveAttribute('data-tone');
-    expect(within(region).getByText('S2').closest('tr')).toHaveTextContent('Rules alone: as expected');
+    expect(within(region).getByText('S2').closest('tr')).toHaveTextContent('Rules only: as expected');
     const unscored = within(region).getByText('S7 pass 1').closest('tr')!;
     expect(unscored).toHaveTextContent('Not scored: planned again after the change');
     expect(within(region).getByText('S11 ENC-1103 transfer').closest('tr')).toHaveTextContent(

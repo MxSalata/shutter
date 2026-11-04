@@ -83,7 +83,7 @@ function proofSay(): string {
   if (!b || !p)
     return "These figures come from runs recorded with the real agents. Each compares the board's choice with the expected action.";
   const every = b.matched === b.scored ? 'every time' : `${b.matched} times`;
-  return `On ${b.scored} recorded failures the board chose the expected action ${every}. Played end to end on ${p.of}, the board got ${p.board}, simple rules ${p.rules}.`;
+  return `On ${b.scored} recorded failures the board chose the expected action ${every}. Played end to end on ${p.of}, the board got ${p.board}, Rules only ${p.rules}.`;
 }
 
 /** "From 100 runs recorded with the real agents on IRIS AI Hub, 25 Oct to 1 Nov 2026." and what a match means. */
@@ -265,8 +265,8 @@ export const CHAPTERS: GuideChapter[] = [
       },
       {
         id: 'compare',
-        title: 'Simple rules got it wrong',
-        say: "With no agents, simple rules sent the transfer again and overwrote the bed manager's ward. Every safety check passed. Compare the two side by side.",
+        title: 'Rules only got it wrong',
+        say: "With no agents, Rules only sent the transfer again and overwrote the bed manager's ward. Every safety check passed. Compare the two side by side.",
         place: { scenario: 'S8', mode: 'board' },
         target: 'case-compare',
         open: 'compare',
@@ -294,13 +294,13 @@ export const CHAPTERS: GuideChapter[] = [
   },
   {
     id: 's8-rules',
-    title: 'Simple rules on the same failure',
+    title: 'Rules only on the same failure',
     code: 'S8',
     group: 'Operate',
     steps: [
       {
         id: 'written',
-        title: 'The fix simple rules sent',
+        title: 'The fix Rules only sent',
         say: "With no agents, the rules sent the transfer again unchanged. Here is the update and the bed system's answer.",
         place: { scenario: 'S8', mode: 'rules' },
         target: 'case-written',
@@ -446,8 +446,8 @@ export const CHAPTERS: GuideChapter[] = [
       },
       {
         id: 'rules-differs',
-        title: 'Where simple rules went wrong',
-        say: 'The per-scenario table, filtered to where rules alone did not end as expected. Six were stopped by the gate; one, S8, wrote.',
+        title: 'Where Rules only went wrong',
+        say: 'The per-scenario table, filtered to where Rules only did not end as expected. Six were stopped by the gate; one, S8, wrote.',
         place: { page: '/evaluation?show=rules-differs' },
         target: 'evaluation-table',
         scopes: E,
@@ -577,7 +577,7 @@ export const SCOPE_FINISH: Record<GuideScope, string> = {
     'You saw a transfer delivered and verified, a fix held back for a person, and the gate stopping one.',
   all: 'You saw a transfer delivered and verified, a fix held back for a person, the gate stopping one, and every screen on the way.',
   engineer:
-    "You saw the decision receipt as JSON, the gate's reason codes, what each agent cited, S8 beside its rules-only run, the message trace in IRIS, and where simple rules went wrong.",
+    "You saw the decision receipt as JSON, the gate's reason codes, what each agent cited, S8 beside its Rules only run, the message trace in IRIS, and where Rules only went wrong.",
 };
 
 export function chapterById(id: string | null | undefined): GuideChapter | undefined {

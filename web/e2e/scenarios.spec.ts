@@ -81,7 +81,7 @@ test.describe('the page at 1280 px @scenarios', () => {
     await expect(s5.getByText('As expected', { exact: true })).toBeVisible();
     await expect(s5).toHaveAttribute('data-tone', 'positive');
     await expect(list.locator('tr[data-scenario="S1"]')).toContainText(
-      'Recorded: board as expected; simple rules stopped by the gate',
+      'Recorded: board as expected; Rules only stopped by the gate',
     );
   });
 

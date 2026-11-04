@@ -49,7 +49,7 @@ test.describe('the live sign-in page of a demo install, on a laptop', () => {
     // The board's own figure, and the comparison on its own base as two bars
     await expect(page.getByText('24 of 24', { exact: true })).toBeVisible();
     await expect(page.getByRole('img', { name: 'The board: 11 of 11' })).toBeVisible();
-    await expect(page.getByRole('img', { name: 'Simple rules: 4 of 11' })).toBeVisible();
+    await expect(page.getByRole('img', { name: 'Rules only: 4 of 11' })).toBeVisible();
     await expect(page.getByText(/recorded with the real agents on IRIS AI Hub/)).toBeVisible();
     // The phone's one line is for the phone
     await expect(page.getByText('Recorded failures: the board 24 of 24')).toBeHidden();
@@ -83,7 +83,7 @@ test.describe('the live sign-in page of a demo install, on a phone', () => {
     await openLive(page);
     await expect(
       page.getByText(
-        'Recorded failures: the board 24 of 24. On the same 11 failures: the board 11, simple rules 4.',
+        'Recorded failures: the board 24 of 24. On the same 11 failures: the board 11, Rules only 4.',
       ),
     ).toBeVisible();
     await expect(page.getByText('24 of 24', { exact: true })).toBeHidden();

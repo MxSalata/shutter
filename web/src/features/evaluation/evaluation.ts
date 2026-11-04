@@ -168,7 +168,7 @@ export function playedLine(p: EvaluationPass): string {
     st === 'as expected' ? 'as expected' : st === 'differs' ? 'not as expected' : '';
   const board = words(p.played?.board_live?.status);
   const rules = words(p.played?.rules?.status);
-  return [board ? `Played by the board: ${board}` : '', rules ? `by rules alone: ${rules}` : '']
+  return [board ? `Played by the board: ${board}` : '', rules ? `by Rules only: ${rules}` : '']
     .filter(Boolean)
     .join('; ');
 }
@@ -236,10 +236,10 @@ export interface PassFilters {
 /** The Show filters by their address form, each with its chip's words. */
 export const SHOW_LABELS: Record<string, string> = {
   all: 'All',
-  'rules-differs': 'Rules alone not as expected',
+  'rules-differs': 'Rules only not as expected',
   'not-unanimous': 'Not unanimous',
-  'rules-stopped': 'Rules alone stopped by the gate',
-  'rules-wrote': 'Rules alone wrote, not as expected',
+  'rules-stopped': 'Rules only stopped by the gate',
+  'rules-wrote': 'Rules only wrote, not as expected',
   unanimous: 'Unanimous',
   'with-the-majority': 'With the majority',
   'with-a-minority': 'With a minority',

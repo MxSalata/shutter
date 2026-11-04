@@ -44,7 +44,7 @@ const STEPS: Step[] = [
     scenario: 'S8',
     mode: 'rules',
     title: "S8 in Rules only mode: the resend that overwrote the bed manager's placement",
-    text: 'Two systems moved the same patient at exactly the same recorded time, and rules alone pass every check.',
+    text: 'Two systems moved the same patient at exactly the same recorded time, and a Rules only plan passes every check.',
     more: "The approved resend writes WARD-B over the bed manager's WARD-C.",
   },
   {
