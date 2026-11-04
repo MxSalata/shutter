@@ -27,7 +27,8 @@ export function resolveCan(me: Me | null | undefined): Can {
 export const readOnlyDemo = (can: Can): boolean => can.approve && !can.configure;
 
 /** The note that stands where Save would be on the online demo. */
-export const DEMO_READ_ONLY = "On the online demo you can approve or reject plans; a site's approver saves changes here";
+export const DEMO_READ_ONLY =
+  "On the online demo you can approve or reject plans; a site's approver saves changes here";
 
 /**
  * The scenario controls are not offered: the user operates the site but may not run scenarios, as on the public demo,

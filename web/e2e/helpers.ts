@@ -64,7 +64,8 @@ export const banner = (page: Page) =>
   page.getByRole('region', { name: /^Mikolaj's Fictional Hospital, (live|replayed)$/ });
 
 /** The note that stands where Save would be for the public demo's role. */
-export const READ_ONLY = /On the online demo you can approve or reject plans; a site's approver saves changes here/;
+export const READ_ONLY =
+  /On the online demo you can approve or reject plans; a site's approver saves changes here/;
 
 /** One screen that the accessibility and layout runs check. */
 export interface Screen {

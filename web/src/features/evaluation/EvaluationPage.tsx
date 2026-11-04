@@ -831,9 +831,9 @@ function PassesTable({
               plan&apos;s action, the catalogue entry it cites with who that entry says decides (policy: the
               catalogue alone may settle it in site-policy mode; board: it needs the board&apos;s judgement;
               person: only a person may act), and the dots of the specialists that proposed it; how the
-              scenario ended when played end to end by the board and in Rules only mode; and the cost and time of
-              the pass. In a scored pass, &quot;outweighed&quot; marks a view the plan set aside for another,
-              and &quot;Not as expected&quot; a plan that is not the expected outcome.
+              scenario ended when played end to end by the board and in Rules only mode; and the cost and time
+              of the pass. In a scored pass, &quot;outweighed&quot; marks a view the plan set aside for
+              another, and &quot;Not as expected&quot; a plan that is not the expected outcome.
             </Text>
           </TechDetail>
         </Stack>
