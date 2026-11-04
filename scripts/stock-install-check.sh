@@ -4,7 +4,7 @@
 # Neither the image build nor install.sh goes this way: the image's installer has made the namespaces before the load,
 # and SHUTTER_BUILD=1 starts no production, so an install that only works there can look green everywhere else. This
 # starts the plain image, installs the pinned IPM from vendor/ipm, loads the module, checks /shutter answers and the
-# production runs, and plays scenarios on it.
+# production runs, plays scenarios on it, and plays a plain MLLP receiver beside the demo's.
 #
 #   scripts/stock-install-check.sh IMAGE MODULE [--archive FILE] [--write-archive FILE] [SCENARIO...]
 #
@@ -85,3 +85,6 @@ fi
 # scenario_check reads the demo receivers as _SYSTEM, whose stock password has expired; the app itself does not need it.
 printf '%s\n' 'Do ##class(Security.Users).UnExpireUserPasswords("*")' 'Halt' | session %SYS > /dev/null
 python3 tests/e2e/scenario_check.py --url "$url" --approve "${scenarios[@]}"
+
+# A receiver with no API, on a stock TCP operation in the demo hospital. It changes the instance, so it comes last.
+python3 tests/e2e/plain_receiver_check.py --ctr "$ctr" --url "$url"

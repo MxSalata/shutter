@@ -113,6 +113,28 @@ Method TestCapability()
     Do ..RunRows("capability")
 }
 
+/// A receiver with declared features and no api, such as a plain MLLP system, has no paths: nothing is read in its place, the
+/// declared capabilities stand and the gate blocks a resend. An entry with both keeps its paths.
+Method TestReceiverWithNoApi()
+{
+    Set sp = "Shutter.Store.SiteProfile"
+    Set recs = ##class(Shutter.Store.SiteProfile).Current().%Get("receivers")
+    Do recs.%Push({"name": "UT Plain", "system": "a plain MLLP system", "tier": 2, "features": {"conditional_writes": false, "receipts": false, "history": false, "dry_run": false}})
+    Do ..ChangeProfile({"receivers": (recs)})
+    For kind = "state", "receipt", "capabilities", "operations" {
+        Do $$$AssertEquals($CLASSMETHOD(sp, "ReceiverPath", "UT Plain", kind, "ENC-UT", "KEY-UT"), "", "no " _ kind _ " path")
+    }
+    Do $$$AssertEquals($CLASSMETHOD(sp, "ReceiverLabel", "UT Plain"), "a plain MLLP system", "its label names no API")
+    Set demo = $PARAMETER("Shutter.Production", "RECEIVER")
+    Do $$$AssertTrue($CLASSMETHOD(sp, "ReceiverPath", demo, "state", "ENC-UT") [ "/encounters/ENC-UT", "an entry with an api keeps its paths")
+    Do $$$AssertEquals($CLASSMETHOD(sp, "ReceiverPath", "UT Not In The Profile", "state", "ENC-UT"), $CLASSMETHOD(sp, "ReceiverPath", demo, "state", "ENC-UT"), "and a name the profile does not hold still reads the defaults, which the gate refuses by name")
+    Set route = ##class(Shutter.Operation.Evidence).%New("Shutter Evidence (unit test)").Route("UT Plain")
+    Do $$$AssertEquals(route."capabilities_source", "declared by the site profile", "the capabilities are the declared ones")
+    Do $$$AssertNotTrue(route."conditional_writes", "with conditional writes false")
+    Set run = ..Run({"name": "a receiver with no api", "summary": {"route": (route)}})
+    Do $$$AssertEquals(..Found(run.checks, "capability", "CONNECTOR_INCAPABLE"), "block", "the gate blocks a resend (" _ ..Codes(run.checks, "capability") _ ")")
+}
+
 /// A receiver entry with no capabilities endpoint that declares no features vouches for nothing: the route the evidence
 /// collector builds records its capabilities as unread, and the gate answers unknown, never CONNECTOR_CAPABLE on the
 /// defaults. An entry that declares its features still passes, and every receiver the stored profile names declares them.

@@ -445,12 +445,21 @@ ClassMethod DefaultApi() As %DynamicObject
     Quit {"base": "/downstream/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "/capabilities", "operations": "/operations"}
 }
 
+/// Declared features and no api: a receiver with no API of its own, such as a plain MLLP system. It has no paths: falling back
+/// to the defaults would read the demo receiver in its place and believe its capabilities over the declared ones. An entry
+/// with neither reads as a profile from before v1.8 does, on the defaults.
+ClassMethod HasNoApi(entry) As %Boolean [ Private ]
+{
+    Quit $ISOBJECT(entry) && '$ISOBJECT(entry.%Get("api")) && $ISOBJECT(entry.%Get("features"))
+}
+
 /// One of a receiver's paths (state, receipt, capabilities, operations), with the receiver's base in front and the
 /// placeholders {encounter} and {key} filled in, URL-encoded. An empty path (the receiver has no such endpoint)
 /// stays empty: the caller then uses what the profile declares instead.
 ClassMethod ReceiverPath(name As %String, kind As %String, encounter As %String = "", key As %String = "") As %String
 {
     Set r = ..Receiver(name), defaults = ..DefaultApi()
+    If ..HasNoApi(r) Quit ""
     Set api = $SELECT($ISOBJECT(r) && $ISOBJECT(r.%Get("api")): r.%Get("api"), 1: defaults)
     Set base = $SELECT(api.%IsDefined("base"): ##class(Shutter.Util.Json).Str(api, "base"), 1: ##class(Shutter.Util.Json).Str(defaults, "base"))
     Set path = $SELECT(api.%IsDefined(kind): ##class(Shutter.Util.Json).Str(api, kind), 1: ##class(Shutter.Util.Json).Str(defaults, kind))
@@ -519,6 +528,7 @@ ClassMethod ReceiverLabel(name As %String) As %String
 {
     Set r = ..Receiver(name)
     Set system = $SELECT($ISOBJECT(r): ##class(Shutter.Util.Json).Str(r, "system"), 1: "")
+    If ..HasNoApi(r) Quit $SELECT(system = "": name, 1: system)
     Set base = ##class(Shutter.Util.Json).Str($SELECT($ISOBJECT(r) && $ISOBJECT(r.%Get("api")): r.%Get("api"), 1: ..DefaultApi()), "base", "/downstream/api")
     Quit $SELECT(system = "": name, 1: system) _ " (" _ base _ ")"
 }
