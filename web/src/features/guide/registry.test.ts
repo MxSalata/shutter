@@ -121,6 +121,12 @@ describe('the guide registry', () => {
     for (const trial of [false, true]) expect(words(modesSay(trial))).toBeLessThanOrEqual(25);
   });
 
+  it("says what a reason code is on the engineers' gate step, and that an unknown blocks", () => {
+    const { step } = stepAt('s2/gate')!;
+    expect(step.say).toMatch(/a reason code, a fixed name such as APPROVAL_RECEIVER_CHANGED/);
+    expect(step.detail).toMatch(/An unknown answer blocks a write as surely as a failed one\.$/);
+  });
+
   it('names the two depths of Ask on the quick tour as the panel does, each in its own quotes', () => {
     const say = stepAt('s8/ask')!.step.say;
     expect(say).toMatch(/"Explain" is one agent, quick; "Ask the board" puts it to all four\.$/);

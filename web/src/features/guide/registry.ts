@@ -223,7 +223,9 @@ export const CHAPTERS: GuideChapter[] = [
       {
         id: 'gate',
         title: 'Plain question, then reason code',
-        say: 'Each gate row asks a plain question beside its reason code. An unknown answer blocks a write as surely as a failed one.',
+        say: 'Each gate row asks a plain question and shows a reason code, a fixed name such as APPROVAL_RECEIVER_CHANGED that logs and tests refer to.',
+        detail:
+          'The gate is a list of mechanical checks. An unknown answer blocks a write as surely as a failed one.',
         place: { scenario: 'S2', mode: 'board' },
         target: 'case-decision',
         open: 'decision',
