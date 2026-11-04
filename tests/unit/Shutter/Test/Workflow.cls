@@ -71,6 +71,36 @@ Method TestDecideWithoutATaskChangesNothing()
     Do $$$AssertEquals(..TaskCount("UT-WF-NONE"), 0, "and no task row appeared")
 }
 
+/// The workflow sets a case to awaiting approval and then sends its task, so a decision can arrive first. The wait finds a
+/// task saved during it, runs out when none comes, and costs nothing when the task is already there.
+Method TestDecisionWaitsForATaskOnItsWay()
+{
+    Set role = ..#ROLE
+    Do ..RemoveRole()
+    Do $$$AssertStatusOK(##class(EnsLib.Workflow.RoleDefinition).CreateRole(role), "a role of the test's own is made")
+    Set start = $ZHOROLOG
+    Do $$$AssertTrue('$ISOBJECT(##class(Shutter.Util.Workflow).WaitForTask("UT-WF-4", 0.2)), "no task comes, so the wait finds none")
+    Do $$$AssertTrue(($ZHOROLOG - start) >= 0.2, "having waited")
+    Job ##class(Shutter.Test.Workflow).SaveTaskLater(role, "UT-WF-5", 0.3)
+    Set task = ##class(Shutter.Util.Workflow).WaitForTask("UT-WF-5", 10)
+    If $$$AssertTrue($ISOBJECT(task), "a task saved during the wait is found") Do ..DeleteTask(task)
+    Set task = ..SavedTask(role, "UT-WF-6")
+    If '$$$AssertTrue($ISOBJECT(task), "a task already there") Do ..RemoveRole() Quit
+    Set start = $ZHOROLOG
+    Set found = ##class(Shutter.Util.Workflow).WaitForTask("UT-WF-6", 10)
+    Do $$$AssertEquals($SELECT($ISOBJECT(found): found.%Id(), 1: ""), task.%Id(), "is found")
+    Do $$$AssertTrue(($ZHOROLOG - start) < 5, "without waiting the wait out")
+    Do ..DeleteTask(task)
+    Do ..RemoveRole()
+}
+
+/// Saves a task after a moment, as the Workflow operation does once the workflow has sent it.
+ClassMethod SaveTaskLater(role As %String, caseId As %String, seconds As %Numeric)
+{
+    Hang seconds
+    Do ..SavedTask(role, caseId)
+}
+
 /// The case's approval task starts with an empty PlanDigest form value and carries the digest in its text, with the
 /// instruction to paste it.
 Method TestCaseTaskCarriesNoDigestValue()
