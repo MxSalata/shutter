@@ -436,6 +436,11 @@ jobs:
       - name: What the approval boundary refuses
         if: matrix.shard == 'checks'
         run: python3 tests/e2e/boundary_check.py --url "$IRIS_URL"
+      # The approval through the Workflow inbox, whose form starts empty: an empty or another digest blocks the case with
+      # nothing written, a reinvestigation recovers it, and the plan's digest writes once, verified.
+      - name: What the Workflow inbox's approval binds
+        if: matrix.shard == 'checks'
+        run: python3 tests/e2e/inbox_check.py --url "$IRIS_URL"
       # The production review of both productions, read-only: the demo's findings, the fingerprint stable across two
       # runs, an approver's annotation seen by a fresh review and revoked, and the agent's part with no recording. It runs
       # after the scenarios, whose failed deliveries are the window's errors.
