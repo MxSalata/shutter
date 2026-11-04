@@ -10,20 +10,23 @@ import { axeViolations } from '@/test/axe';
 import { theme } from '@/theme';
 import { BoardPanel } from './BoardPanel';
 
-/** Whether the page is the trial, and whether a recording fails to load: set per test. */
-const env = vi.hoisted(() => ({ trial: true, recordingFails: false }));
+/** Whether a recording, or only the plan's, fails to load, and the files read: set per test. */
+const env = vi.hoisted(() => ({ recordingFails: false, planFails: false, read: [] as string[] }));
 vi.mock('@/env/mode', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/env/mode')>()),
-  get TRIAL() {
-    return env.trial;
-  },
+  TRIAL: true,
 }));
 vi.mock('./recordedRun', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./recordedRun')>();
   return {
     ...actual,
-    findRecording: (...args: Parameters<typeof actual.findRecording>) =>
-      env.recordingFails ? Promise.reject(new Error('chunk failed')) : actual.findRecording(...args),
+    findRecording: async (...args: Parameters<typeof actual.findRecording>) => {
+      if (env.recordingFails || (env.planFails && args[1].memberCode === 'coordinator'))
+        throw new Error('chunk failed');
+      const found = await actual.findRecording(...args);
+      if (found) env.read.push(found.file);
+      return found;
+    },
   };
 });
 
@@ -47,31 +50,25 @@ function renderBoard(caseId = 'C-000008') {
 /** Opens a member's recording and waits for it. */
 async function openRecording(member: string) {
   const card = await screen.findByRole('region', { name: member });
-  await userEvent.click(within(card).getByRole('button', { name: 'Show the recording' }));
+  await userEvent.click(await within(card).findByRole('button', { name: 'Show the recording' }));
   return card;
 }
 
 describe('what a board member was sent and did', () => {
   beforeEach(() => {
     resetMock('approver');
-    env.trial = true;
     env.recordingFails = false;
-  });
-
-  it('has no control and loads nothing on a live page', async () => {
-    env.trial = false;
-    renderBoard();
-    await screen.findByRole('region', { name: 'Coordinator' });
-    expect(screen.getAllByRole('button', { name: 'Show the finding' })).toHaveLength(3);
-    expect(screen.queryByRole('button', { name: 'Show the recording' })).toBeNull();
-    expect(screen.queryByTestId('run-recording')).toBeNull();
+    env.planFails = false;
+    env.read = [];
   });
 
   it("offers one button on each specialist's card and the coordinator's, closed", async () => {
     renderBoard();
     await screen.findByRole('region', { name: 'Coordinator' });
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: 'Show the recording' })).toHaveLength(4),
+    );
     const buttons = screen.getAllByRole('button', { name: 'Show the recording' });
-    expect(buttons).toHaveLength(4);
     for (const b of buttons) expect(b).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByTestId('run-recording')).toBeNull();
   });
@@ -91,7 +88,9 @@ describe('what a board member was sent and did', () => {
     expect(within(panel).getByTestId('recording-limits')).toHaveTextContent(
       'This is what it read and called, not its reasoning. Its 15,356 tokens in and 895 out are for the whole run, not per call.',
     );
-    expect(within(panel).getByTestId('recording-limits')).toHaveTextContent('(ENC-T1, MRN-T1)');
+    expect(within(panel).getByTestId('recording-limits')).toHaveTextContent(
+      'The encounter and patient appear as per-case stand-ins (ENC-T1, MRN-T1), not their real ids, as the model received them.',
+    );
     expect(within(panel).getByTestId('recording-last-message')).toHaveTextContent(
       /^I recommended escalating case C-000112/,
     );
@@ -113,6 +112,48 @@ describe('what a board member was sent and did', () => {
     const line = await within(card).findByTestId('recording-catalogue');
     await waitFor(() => expect(line).toHaveTextContent('as advice'));
     expect(within(line).queryByText(/kept .* dissent/)).toBeNull();
+  });
+
+  it("reads the dissent from the run's own pass: none on S7's first round, Conformance's on its second", async () => {
+    renderBoard('C-000007');
+    const [first, second] = await screen.findAllByRole('region', { name: 'Conformance' });
+    await userEvent.click(await within(first).findByRole('button', { name: 'Show the recording' }));
+    const line = await within(first).findByTestId('recording-catalogue');
+    await waitFor(() => expect(env.read).toContain('scenario-S7-ENC-1007-transfer-coordinator-1.json'));
+    expect(env.read).not.toContain('scenario-S7-ENC-1007-transfer-coordinator-1-round2.json');
+    expect(within(line).queryByText(/kept .* dissent/)).toBeNull();
+    await userEvent.click(within(second).getByRole('button', { name: 'Show the recording' }));
+    await within(second).findByText(/The coordinator kept Conformance's dissent: resend \(0\.85\)/);
+    expect(within(line).queryByText(/kept .* dissent/)).toBeNull();
+  });
+
+  it("gives the catalogue's own reason after its preferred outcome, so none is not read as no outcome", async () => {
+    renderBoard('C-000001');
+    const none = await within(await openRecording('Encounter Integrity')).findByTestId('recording-catalogue');
+    expect(none).toHaveTextContent(
+      'E1 Superseded by a later transfer: none. A later transfer was applied for the encounter',
+    );
+  });
+
+  it('says so quietly when only the plan cannot be read, and keeps the rest of the panel', async () => {
+    env.planFails = true;
+    renderBoard();
+    const card = await openRecording('Encounter Integrity');
+    const line = await within(card).findByTestId('recording-plan-unavailable');
+    expect(line).toHaveTextContent('any dissent it kept is missing from this panel');
+    expect(within(line).getByRole('link', { name: /public recordings/ })).toHaveAttribute(
+      'href',
+      'https://github.com/MxSalata/shutter/tree/main/fixtures/records',
+    );
+    expect(within(card).getByTestId('recording-catalogue')).toHaveTextContent('E7');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('adds no such line when the plan was read', async () => {
+    renderBoard();
+    const card = await openRecording('Encounter Integrity');
+    await within(card).findByText(/The coordinator kept Conformance's dissent/);
+    expect(within(card).queryByTestId('recording-plan-unavailable')).toBeNull();
   });
 
   it("opens each part from closed, GetWardState's result whole", async () => {

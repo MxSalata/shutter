@@ -272,7 +272,7 @@ export const CHAPTERS: GuideChapter[] = [
       {
         id: 'evidence-cited',
         title: 'What each agent cited',
-        say: 'The two transfers carry the same event time. Each Evidence section names the agents and the plan that cited it. Board cards show their recordings.',
+        say: "The two transfers carry the same event time. Each Evidence section names the agents and the plan that cited it. Summary's board cards show recordings.",
         place: { scenario: 'S8', mode: 'board' },
         target: 'case-evidence-tab',
         tab: 'evidence',

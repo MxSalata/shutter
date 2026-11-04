@@ -1,7 +1,6 @@
 import {
   Accordion,
   Badge,
-  Button,
   Group,
   List,
   SimpleGrid,
@@ -10,7 +9,7 @@ import {
   Tooltip,
   VisuallyHidden,
 } from '@mantine/core';
-import { IconChevronDown, IconMessageExclamation, IconUsers } from '@tabler/icons-react';
+import { IconMessageExclamation, IconUsers } from '@tabler/icons-react';
 import { type ComponentType, Fragment, lazy, Suspense, useState } from 'react';
 import { useRuns, useSettings } from '@/api/hooks';
 import type { AgentRun, Mode } from '@/api/types';
@@ -34,7 +33,8 @@ import { PROVENANCE } from '@/lib/status';
 import { useTechnical } from '@/stores/appearance';
 import { describeEntry } from './derive';
 import { showEvidence } from './evidenceLinks';
-import { RecordingUnavailable } from './RecordingUnavailable';
+import { MoreToggle } from './MoreToggle';
+import type { RecordingToggleProps } from './RecordingToggle';
 import { investigationRuns } from './runClock';
 import { RunTimeline } from './RunTimeline';
 import { NotYet, Section } from './Section';
@@ -317,82 +317,22 @@ function dispositionOf(run: AgentRun): string {
   return String(result.disposition ?? run.finding?.disposition ?? '');
 }
 
-/** A toggle for the rest of a card, the finding in full or the run, named for the card it sits in. */
-function MoreToggle({
-  open,
-  onToggle,
-  controls,
-  describedBy,
-  label,
-}: {
-  open: boolean;
-  onToggle: () => void;
-  controls: string;
-  describedBy: string;
-  label: string;
-}) {
-  return (
-    <Group>
-      <Button
-        size="compact-xs"
-        variant="subtle"
-        onClick={onToggle}
-        aria-expanded={open}
-        aria-controls={controls}
-        aria-describedby={describedBy}
-        leftSection={
-          <IconChevronDown
-            size={14}
-            aria-hidden
-            style={{ transform: open ? 'rotate(180deg)' : undefined, transition: 'transform 150ms' }}
-          />
-        }
-      >
-        {open ? `Hide ${label}` : `Show ${label}`}
-      </Button>
-    </Group>
-  );
-}
+/**
+ * Trial pages only: the toggle for what this member was sent and did, with the recording under it, in a chunk of its
+ * own. A live page has none of its words or code, and if the chunk cannot load the card is simply without the toggle.
+ */
+const LazyRecordingToggle = TRIAL
+  ? lazy<ComponentType<RecordingToggleProps>>(() =>
+      import('./RecordingToggle').catch(() => ({ default: () => null })),
+    )
+  : null;
 
-/** A run's recording: its chunk, and the recording's own, load in a trial page when this opens, and never in a live one. */
-const RunRecording = lazy<ComponentType<{ caseId: string; run: AgentRun }>>(() =>
-  import('./RunRecording').catch(() => ({ default: RecordingUnavailable })),
-);
-
-/** Trial pages only: the toggle for what this member was sent and did, and the recording under it, in the card. */
-function RecordingToggle({
-  caseId,
-  run,
-  open,
-  onToggle,
-  describedBy,
-}: {
-  caseId: string;
-  run: AgentRun;
-  open: boolean;
-  onToggle: () => void;
-  describedBy: string;
-}) {
-  if (!TRIAL) return null;
-  const id = `${describedBy}-recording`;
-  return (
-    <>
-      <MoreToggle
-        open={open}
-        onToggle={onToggle}
-        controls={id}
-        describedBy={describedBy}
-        label="the recording"
-      />
-      <div id={id} hidden={!open}>
-        {open ? (
-          <Suspense fallback={null}>
-            <RunRecording caseId={caseId} run={run} />
-          </Suspense>
-        ) : null}
-      </div>
-    </>
-  );
+function RecordingToggle(props: RecordingToggleProps) {
+  return LazyRecordingToggle ? (
+    <Suspense fallback={null}>
+      <LazyRecordingToggle {...props} />
+    </Suspense>
+  ) : null;
 }
 
 /** The border of a card that dissented: two pixels in the attention tone, beside the badge that says it in words. */
@@ -808,7 +748,8 @@ export function BoardPanel({
           type="container"
           cols={{ base: 1, '540px': 2, '760px': 3 }}
           spacing="sm"
-          style={{ alignItems: 'start' }}
+          // An opened card takes a row of its own; the cards after it close the gap it leaves
+          style={{ alignItems: 'start', gridAutoFlow: 'dense' }}
         >
           {specialists.map((r) => (
             <SpecialistCard

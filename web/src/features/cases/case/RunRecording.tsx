@@ -8,9 +8,9 @@ import { CodeChip } from '@/components/CodeChip';
 import { TechDetail } from '@/components/TechDetail';
 import { formatInt, humanize, plural } from '@/lib/format';
 import { recordingUrl } from './recordingLinks';
-import { RecordingUnavailable } from './RecordingUnavailable';
+import { PlanUnavailable, RecordingReading, RecordingUnavailable } from './RecordingUnavailable';
 import { investigationRuns } from './runClock';
-import { findRecording, storyOf, type RunStory } from './recordedRun';
+import { findRecording, planOf, storyOf, type RunStory } from './recordedRun';
 
 /** The recording behind a run, read once: a recording never changes while the page is open. */
 function useRecording(scenario: string | undefined, run: AgentRun | undefined) {
@@ -76,15 +76,9 @@ export default function RunRecording({ caseId, run }: { caseId: string; run: Age
   const scenario = useCase(caseId).data?.scenario;
   const runs = investigationRuns(useRuns(caseId, true).data);
   const recording = useRecording(scenario, run);
-  // Who dissented is on the coordinator's own recording
-  const plan = useRecording(scenario, runs.filter((r) => r.role === 'coordinator').at(-1));
-  if (recording.isPending) {
-    return (
-      <Text size="sm" c="dimmed">
-        Reading the recording
-      </Text>
-    );
-  }
+  // Who dissented is on the recording of the coordinator of this run's own pass
+  const plan = useRecording(scenario, planOf(runs, run));
+  if (recording.isPending) return <RecordingReading />;
   if (!recording.data) return <RecordingUnavailable />;
   const { file, record } = recording.data;
   const story = storyOf(record);
@@ -106,7 +100,7 @@ export default function RunRecording({ caseId, run }: { caseId: string; run: Age
           </Anchor>
         </Text>
         <Text size="sm" maw="68ch" data-testid="recording-limits">
-          {`This is what it read and called, not its reasoning. Its ${formatInt(story.tokensIn)} tokens in and ${formatInt(story.tokensOut)} out are for the whole run, not per call. The encounter and patient appear as tokens (${story.encounter}, ${story.patient}), as the model received them.`}
+          {`This is what it read and called, not its reasoning. Its ${formatInt(story.tokensIn)} tokens in and ${formatInt(story.tokensOut)} out are for the whole run, not per call. The encounter and patient appear as per-case stand-ins (${story.encounter}, ${story.patient}), not their real ids, as the model received them.`}
         </Text>
         {story.matches.length ? (
           <Stack gap={4} maw="68ch" data-testid="recording-catalogue">
@@ -114,11 +108,10 @@ export default function RunRecording({ caseId, run }: { caseId: string; run: Age
               The request includes the catalogue&apos;s match and its preferred outcome, as advice:{' '}
               {story.matches.map((m, i) => (
                 <span key={m.id}>
-                  {i ? '; ' : ''}
-                  <CodeChip>{m.id}</CodeChip> {m.title}: <CodeChip>{m.preferred}</CodeChip>
+                  {i ? ' ' : ''}
+                  <CodeChip>{m.id}</CodeChip> {m.title}: <CodeChip>{m.preferred}</CodeChip>. {m.why}
                 </span>
               ))}
-              .
             </Text>
             {dissents.map((d) => (
               <Text size="sm" key={d.member}>
@@ -127,6 +120,7 @@ export default function RunRecording({ caseId, run }: { caseId: string; run: Age
             ))}
           </Stack>
         ) : null}
+        {plan.isError || plan.data === null ? <PlanUnavailable /> : null}
         <TechDetail kind="explain" label="Its instructions">
           <Recorded text={story.instructions} />
         </TechDetail>
