@@ -2,7 +2,7 @@
 
 CI builds Shutter's core on the public IRIS for Health image, because the AI Hub build comes only from InterSystems' Early Access portal. This page is the record of the step CI cannot take: a fresh clone installed on build 154 with `install.sh`, then checked. It is made again for each release.
 
-**When and what:** 2 November 2026, 17:05 UTC, commit `3417354`, on a Linux VM with 12 threads and 12 GB of memory (Docker 29.1.3, Compose 2.40.3) that was running another build at the same time, with `irishealth-community:2026.3.0AI.154.0` already loaded. No `.env` was there before the run. The build installs the one IPM package, `iris-shutter` (the core and the agents, for IRIS 2026.3 and later); `zpm "list"` shows `iris-shutter 0.1.0` alone.
+**When and what:** 2 November 2026, 17:05 UTC, commit `b8cfca6`, on a Linux VM with 12 threads and 12 GB of memory (Docker 29.1.3, Compose 2.40.3) that was running another build at the same time, with `irishealth-community:2026.3.0AI.154.0` already loaded. No `.env` was there before the run. The build installs the one IPM package, `iris-shutter` (the core and the agents, for IRIS 2026.3 and later); `zpm "list"` shows `iris-shutter 0.1.0` alone.
 
 ## The install
 
