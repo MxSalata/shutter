@@ -325,7 +325,7 @@ describe('LoginPage, the way into the trial', () => {
   it('names no trial user and offers none: the trial has its own sign-in page', async () => {
     renderLogin(true);
     await screen.findByText(/The demo installs two users/);
-    for (const name of ['Public demo role', 'Judge', 'Choose who you are in the trial'])
+    for (const name of ['Online demo role', 'Judge', 'Choose who you are in the trial'])
       expect(screen.queryByText(name)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Continue/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/Try the demo/)).not.toBeInTheDocument();

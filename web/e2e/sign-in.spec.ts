@@ -16,7 +16,7 @@ test.describe("the trial's sign-in page", () => {
     await signIn(page);
     await signOutOfTrial(page);
     await expect(page.getByText("No password: these are the trial's own roles.")).toBeVisible();
-    for (const role of ['approver', 'operator', 'public demo role', 'judge'])
+    for (const role of ['approver', 'operator', 'online demo role', 'judge'])
       await expect(page.getByRole('button', { name: `Continue as ${role}` })).toBeVisible();
     await expect(page.getByLabel(/Password/)).toHaveCount(0);
     // The demo build has no live system at its address to go back to

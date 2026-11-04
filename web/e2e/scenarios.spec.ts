@@ -17,7 +17,7 @@ test.beforeEach(({ page }) => skipWelcome(page));
 test.describe('the live hospital, as the public role sees it @scenarios', () => {
   test('offers no Run and no Reset, and says the demo plays its stories by itself', async ({ page }) => {
     await signIn(page, AS_DEMO);
-    await expect(page.getByText(/The public demo plays its stories by itself/)).toBeVisible();
+    await expect(page.getByText(/The online demo plays its stories by itself/)).toBeVisible();
     await expect(page.getByRole('region', { name: 'Every scenario' })).toBeVisible();
     await expect(page.getByRole('button', { name: /^Run / })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Reset' })).toHaveCount(0);

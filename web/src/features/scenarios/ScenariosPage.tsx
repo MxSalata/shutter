@@ -777,7 +777,7 @@ export default function ScenariosPage() {
         <ScenariosHero />
         {hidden ? (
           <Text size="md">
-            The public demo plays its stories by itself, so there is nothing to run or reset here.
+            The online demo plays its stories by itself, so there is nothing to run or reset here.
           </Text>
         ) : null}
         {current ? (

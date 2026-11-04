@@ -589,7 +589,7 @@ describe("SiteProfilePage, as the public demo's role reads it", () => {
   it('keeps the answers for reading and puts a note where Save would be', async () => {
     renderPage();
     expect(await screen.findByTestId('demo-read-only')).toHaveTextContent(
-      "The public demo is read-only: a site's approver saves changes here",
+      "On the online demo you can approve or reject plans; a site's approver saves changes here",
     );
     expect((await inReceiver1()).getByRole('radio', { name: /2, operations/ })).toBeDisabled();
     expect(saves()).not.toBeInTheDocument();
@@ -604,11 +604,11 @@ describe("SiteProfilePage, as the public demo's role reads it", () => {
     const card = await screen.findByRole('region', { name: 'A suggested change from case C-000008' });
     expect(within(card).getByText('BEDMGR')).toBeInTheDocument();
     expect(within(card).queryByRole('button', { name: 'Review and save…' })).not.toBeInTheDocument();
-    expect(within(card).getByText(/The public demo is read-only/)).toBeInTheDocument();
+    expect(within(card).getByText(/On the online demo you can approve or reject plans/)).toBeInTheDocument();
     await userEvent.click(within(card).getByRole('button', { name: 'Review the change…' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/Authoritative source: from .* to BEDMGR/)).toBeInTheDocument();
-    expect(within(dialog).getByTestId('demo-read-only')).toHaveTextContent('The public demo is read-only');
+    expect(within(dialog).getByTestId('demo-read-only')).toHaveTextContent('On the online demo you can approve or reject plans');
     expect(within(dialog).queryByRole('button', { name: /Save version/ })).not.toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());

@@ -11,7 +11,7 @@ import { parseTime } from './format';
  * What a trial page's banner says instead of the button: the storm needs the demo hospital, which the trial has not. Not
  * "live demo": a trial page says "live" only in "live system" (DESIGN.md 1.3, N7; e2e/trial.spec.ts checks the banner).
  */
-export const STORM_IN_TRIAL = 'Break the feed plays on the public demo.';
+export const STORM_IN_TRIAL = 'Break the feed plays on the online demo.';
 
 /** The states in which a storm has ended. */
 const ENDED = new Set(['done', 'failed']);

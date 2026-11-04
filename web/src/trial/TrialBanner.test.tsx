@@ -164,8 +164,16 @@ describe('the trial banner', () => {
     journal.add('GET', '/api/shutter/me', 200);
     journal.add('POST', '/api/shutter/cases/C-000002/approvals', 202);
     expect(journalLine(journal.counts())).toBe(
-      'Answered in this browser: 2 reads, 1 action. Sent to IRIS: none. Refused by the browser: 0.',
+      "Answered in this browser: 2 reads, 1 action. Sent to IRIS: none. Network calls blocked by the page's security policy: 0.",
     );
+  });
+
+  it("names what each count is: the page's security policy, and the trial's guard on calls to IRIS", () => {
+    journal.violation();
+    journal.refuse();
+    const line = journalLine(journal.counts());
+    expect(line).toContain("Network calls blocked by the page's security policy: 1.");
+    expect(line).toContain("Calls to IRIS blocked by the trial's guard: 1.");
   });
 });
 
