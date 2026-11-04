@@ -608,7 +608,9 @@ describe("SiteProfilePage, as the public demo's role reads it", () => {
     await userEvent.click(within(card).getByRole('button', { name: 'Review the change…' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/Authoritative source: from .* to BEDMGR/)).toBeInTheDocument();
-    expect(within(dialog).getByTestId('demo-read-only')).toHaveTextContent('On the online demo you can approve or reject plans');
+    expect(within(dialog).getByTestId('demo-read-only')).toHaveTextContent(
+      'On the online demo you can approve or reject plans',
+    );
     expect(within(dialog).queryByRole('button', { name: /Save version/ })).not.toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
