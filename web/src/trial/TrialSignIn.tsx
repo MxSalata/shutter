@@ -19,7 +19,7 @@ export default function TrialSignIn() {
   const signIn = useSignIn();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: string } | null)?.from || '/scenarios';
+  const from = (location.state as { from?: string } | null)?.from || '/home';
   if (me.data) return <Navigate to={from} replace />;
   const choose = (role: TrialRole) =>
     signIn.mutate(trialUser(role), {

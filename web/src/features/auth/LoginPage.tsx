@@ -32,7 +32,7 @@ export default function LoginPage() {
   const signIn = useSignIn();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: string } | null)?.from || '/scenarios';
+  const from = (location.state as { from?: string } | null)?.from || '/home';
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 

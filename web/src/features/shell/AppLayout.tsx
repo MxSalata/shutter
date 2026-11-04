@@ -15,21 +15,13 @@ import {
 import { useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 import { useDisclosure } from '@mantine/hooks';
 import {
-  IconBooks,
-  IconBuildingHospital,
-  IconChartBar,
-  IconClipboardSearch,
   IconContrast,
+  IconHome2,
   IconDeviceDesktop,
-  IconFlask2,
-  IconHeartbeat,
-  IconListDetails,
   IconLogout,
   IconCode,
   IconMoon,
   IconPalette,
-  IconSettings,
-  IconStack2,
   IconSun,
   IconUserCircle,
 } from '@tabler/icons-react';
@@ -42,15 +34,16 @@ import {
   useLocation,
   useNavigate,
 } from 'react-router';
-import { useCases, useMe, useSignOut, useSiteProfile } from '@/api/hooks';
+import { useMe, useSignOut, useSiteProfile } from '@/api/hooks';
 import { displayZone, setDisplayZone } from '@/lib/format';
 import { APP_NAME } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { DetailSwitch } from '@/components/DetailSwitch';
 import { useAppearance, useDetail, type ContrastSetting, type PaletteSetting } from '@/stores/appearance';
-import { hueVar, type Hue } from '@/lib/hues';
+import { hueVar } from '@/lib/hues';
 import { useResolvedContrast } from './useApplyAppearance';
+import { SECTIONS, useNeedAPerson } from './sections';
 import { MAIN_ID, SkipLink } from './SkipLink';
 import { ENV } from '@/env/mode';
 import { LiveHelpMenu } from '@/features/guide/LiveHelpMenu';
@@ -59,58 +52,13 @@ import { trialChrome } from '@/trial/slot';
 import { bannerForm } from '@/trial/visit';
 import { LiveBanner } from './LiveBanner';
 
-/** The navigation's hues: each section's identity (DESIGN.md 2.5), never a status colour. */
-export type NavHue = Exclude<Hue, 'gray'>;
-
-/**
- * The navigation in three groups, by what a visit is for: running and following the recovery, the results that show
- * whether it works, and configuring it. Short labels only; each page's introduction says what it is. Each entry's icon
- * carries its section's hue, the same on its page's header.
- */
-const NAV: {
-  group: 'Operate' | 'Results' | 'Configure';
-  items: { to: string; label: string; icon: typeof IconFlask2; hue: NavHue; count?: true }[];
-}[] = [
-  {
-    group: 'Operate',
-    items: [
-      { to: '/scenarios', label: 'Scenarios', icon: IconFlask2, hue: 'cyan' },
-      { to: '/cases', label: 'Cases', icon: IconListDetails, hue: 'indigo', count: true },
-      { to: '/incidents', label: 'Incidents', icon: IconStack2, hue: 'pink' },
-      { to: '/reviews', label: 'Production review', icon: IconClipboardSearch, hue: 'violet' },
-    ],
-  },
-  {
-    group: 'Results',
-    items: [
-      { to: '/evaluation', label: 'Evaluation', icon: IconChartBar, hue: 'teal' },
-      { to: '/health', label: 'Health', icon: IconHeartbeat, hue: 'indigo' },
-    ],
-  },
-  {
-    group: 'Configure',
-    items: [
-      { to: '/site-profile', label: 'Site profile', icon: IconBuildingHospital, hue: 'teal' },
-      { to: '/library', label: 'Agent library', icon: IconBooks, hue: 'violet' },
-      { to: '/settings', label: 'Settings and costs', icon: IconSettings, hue: 'cyan' },
-    ],
-  },
-];
-
-/** The cases that need a person: waiting for an approval, escalated or blocked, as the Cases page's tiles count them. */
-const NEED_A_PERSON = ['awaiting_approval', 'escalated', 'blocked'] as const;
-
 /**
  * The count beside Cases: how many cases need a person, from the same queries as the Cases page's tiles. Nothing at
  * 0 or while any of them is still loading, so it never shows a partial sum.
  */
 export function NavCount() {
-  const a = useCases({ state: NEED_A_PERSON[0], limit: 1 });
-  const b = useCases({ state: NEED_A_PERSON[1], limit: 1 });
-  const c = useCases({ state: NEED_A_PERSON[2], limit: 1 });
-  if (!a.data || !b.data || !c.data) return null;
-  const n = a.data.total + b.data.total + c.data.total;
-  if (n <= 0) return null;
+  const n = useNeedAPerson();
+  if (!n) return null;
   return (
     <Badge
       size="sm"
@@ -327,7 +275,7 @@ export function AppLayout() {
         <Group h={56} px="md" justify="space-between" wrap="nowrap">
           <Group gap="sm" wrap="nowrap">
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" aria-label="Menu" />
-            <UnstyledButton component={Link} to="/scenarios" aria-label={`${APP_NAME}: home`}>
+            <UnstyledButton component={Link} to="/home" aria-label={`${APP_NAME}: home`}>
               <Group gap={8} wrap="nowrap">
                 <BrandMark size={28} />
                 {/* On a phone in the trial the pill stands beside the mark and the name gives way, so the row fits */}
@@ -352,7 +300,17 @@ export function AppLayout() {
         </Group>
       </AppShell.Header>
       <AppShell.Navbar p="xs" aria-label="Main">
-        {NAV.map(({ group, items }) => (
+        <NavLink
+          component={RouterNavLink}
+          to="/home"
+          label="Home"
+          active={isActive(pathname, '/home')}
+          className="nav-link"
+          style={{ '--nav-icon': hueVar('cyan') } as CSSProperties}
+          leftSection={<IconHome2 size={18} stroke={1.6} className="nav-icon" aria-hidden />}
+          onClick={close}
+        />
+        {SECTIONS.map(({ group, items }) => (
           <div key={group} role="group" aria-labelledby={`nav-${group}`} className="nav-group">
             <Text id={`nav-${group}`} className="nav-group-label" tt="uppercase" px="sm" pt="sm" pb={4}>
               {group}

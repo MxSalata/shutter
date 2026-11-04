@@ -21,8 +21,8 @@ export function RouteError() {
           <Button variant="light" onClick={() => window.location.reload()}>
             Reload
           </Button>
-          <Button component={Link} to="/scenarios" variant="subtle">
-            Go to the scenarios
+          <Button component={Link} to="/home" variant="subtle">
+            Go to Home
           </Button>
         </Group>
       </Stack>

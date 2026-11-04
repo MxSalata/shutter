@@ -37,6 +37,21 @@ test.describe('the live hospital, as the public role sees it', () => {
 });
 
 test.describe('the shell', () => {
+  test('opens on Home, whose links reach every section', async ({ page }) => {
+    await page.goto('./?trial#/');
+    await expect(page.getByRole('heading', { name: 'Home', exact: true, level: 1 })).toBeVisible();
+    await expect(page).toHaveURL(/#\/home$/);
+    const nav = page.getByRole('navigation', { name: 'Main' });
+    await expect(nav.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
+    await page
+      .getByRole('main')
+      .getByRole('link', { name: /^Cases/ })
+      .click();
+    await expect(page.getByRole('heading', { name: 'Cases', exact: true, level: 1 })).toBeVisible();
+    await page.getByRole('link', { name: 'Shutter: home' }).click();
+    await expect(page.getByRole('heading', { name: 'Home', exact: true, level: 1 })).toBeVisible();
+  });
+
   test('groups the navigation as Operate, Results and Configure, each icon in its hue', async ({ page }) => {
     await signIn(page);
     const nav = page.getByRole('navigation', { name: 'Main' });
@@ -45,6 +60,7 @@ test.describe('the shell', () => {
       .locator('.nav-link')
       .evaluateAll((links) => links.map((a) => (a as HTMLElement).style.getPropertyValue('--nav-icon')));
     expect(hues).toEqual([
+      'var(--shutter-hue-cyan)',
       'var(--shutter-hue-cyan)',
       'var(--shutter-hue-indigo)',
       'var(--shutter-hue-pink)',

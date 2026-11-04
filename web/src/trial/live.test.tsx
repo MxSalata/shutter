@@ -63,7 +63,7 @@ describe('the live first-run prompt', () => {
     );
     expect(screen.getByRole('link', { name: 'Open the trial' })).toHaveAttribute(
       'href',
-      '/shutter/?trial#/scenarios',
+      '/shutter/?trial#/home',
     );
     await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
     expect(localStorage.getItem(LIVE_WELCOME_KEY)).not.toBeNull();

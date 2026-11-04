@@ -99,10 +99,7 @@ describe('the shell', () => {
     const main = await screen.findByRole('main');
     expect(within(main).getByRole('heading', { name: 'This page failed' })).toBeInTheDocument();
     expect(within(main).getByText('a recorded case with an unexpected shape')).toBeInTheDocument();
-    expect(within(main).getByRole('link', { name: 'Go to the scenarios' })).toHaveAttribute(
-      'href',
-      '/scenarios',
-    );
+    expect(within(main).getByRole('link', { name: 'Go to Home' })).toHaveAttribute('href', '/home');
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
     expect(screen.getByRole('banner')).toBeInTheDocument();
     silenced.mockRestore();

@@ -33,7 +33,7 @@ function renderLogin(demo: boolean, detail: DetailLevel = 'plain') {
   const router = createMemoryRouter(
     [
       { path: '/login', element: <LoginPage /> },
-      { path: '/scenarios', element: <h1>Scenarios</h1> },
+      { path: '/home', element: <h1>Home</h1> },
     ],
     { initialEntries: ['/login'] },
   );
@@ -117,12 +117,12 @@ describe('LoginPage', () => {
     expect(screen.getByLabelText(/Password/)).toHaveAttribute('autocomplete', 'current-password');
   });
 
-  it('signs in with the form and goes on to Scenarios', async () => {
+  it('signs in with the form and goes on to Home', async () => {
     const { client } = renderLogin(true);
     await userEvent.type(await screen.findByLabelText(/User name/), 'approver');
     await userEvent.type(screen.getByLabelText(/Password/), 'shutter');
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-    expect(await screen.findByRole('heading', { name: 'Scenarios' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument();
     await waitFor(() =>
       expect(client.getQueryData<{ username: string }>(keys.me)?.username).toBe('approver'),
     );
@@ -331,7 +331,7 @@ describe('LoginPage, the way into the trial', () => {
     const tour = within(card).getByRole('link', { name: 'Take the guided tour of the trial' });
     const open = within(card).getByRole('link', { name: 'Open the trial' });
     expect(tour.getAttribute('href')).toMatch(/\?trial=tour#\/scenarios$/);
-    expect(open.getAttribute('href')).toMatch(/\?trial#\/scenarios$/);
+    expect(open.getAttribute('href')).toMatch(/\?trial#\/home$/);
     expect(card.querySelector('input')).toBeNull();
     expect(within(card).getByText('No sign-in required')).toBeInTheDocument();
     // The words on the link are "Take the guided tour"; "of the trial" is only for those who do not see the card
