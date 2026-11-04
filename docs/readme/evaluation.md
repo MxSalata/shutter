@@ -16,7 +16,7 @@ A *pass* is one board decision on one case: the three specialists in parallel (c
 
 ## Per case: the board against the expected outcome
 
-Each specialist's cell is its disposition and confidence; the plan's is the coordinator's disposition. **Bold** marks a disposition that differs from the expected one: for a specialist, its own view's answer where the plan followed another view. *Entry* is the catalogue entry the plan cites, with the entry's `decides` field (policy: the catalogue alone may settle it in site-policy mode; board: it needs the board's judgement; person: only a person may act). *Played* is the case's outcome when the scenario was played end to end with the live board and with rules alone (`docs/readme/comparison.md`): it includes the gate and the downstream system's final state, which the recordings alone don't show.
+Each specialist's cell is its disposition and confidence; the plan's is the coordinator's disposition. **Bold** marks a disposition that differs from the expected one: for a specialist, its own view's answer where the plan followed another view. *Entry* is the catalogue entry the plan cites, with the entry's `decides` field (policy: the catalogue alone may settle it in site-policy mode; board: it needs the board's judgement; person: only a person may act). *Played* is the case's outcome when the scenario was played end to end with the live board and with Rules only (`docs/readme/comparison.md`): it includes the gate and the downstream system's final state, which the recordings alone don't show.
 
 | Case | Expected | Conformance | Encounter | Impact | Plan | Entry | Agreement | Played, board live | Played, rules only |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |

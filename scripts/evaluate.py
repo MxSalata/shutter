@@ -549,7 +549,7 @@ def render(ev):
       "followed another view. *Entry* is the catalogue entry the plan cites, with the "
       "entry's `decides` field (policy: the catalogue alone may settle it in site-policy mode; board: it needs the board's "
       "judgement; person: only a person may act). *Played* is the case's outcome when the scenario was played end to "
-      f"end with the live board and with rules alone (`{src['comparison']}`): it includes the gate and the downstream "
+      f"end with the live board and with Rules only (`{src['comparison']}`): it includes the gate and the downstream "
       "system's final state, which the recordings alone don't show.")
     w("")
     w("| Case | Expected | Conformance | Encounter | Impact | Plan | Entry | Agreement | Played, board live | Played, rules only |")
