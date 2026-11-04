@@ -2003,6 +2003,8 @@ body {
 .guide-card {
   position: relative;
   border-top: 4px solid var(--shutter-trial-accent);
+  /* A reason code is one long word: it breaks rather than leaves the card on a phone */
+  overflow-wrap: anywhere;
 }
 .guide-overline {
   font-size: 0.8125rem;
