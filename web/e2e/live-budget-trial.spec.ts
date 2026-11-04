@@ -42,7 +42,12 @@ function settings(live: Record<string, unknown>, budget: Record<string, unknown>
 }
 
 /** The stand-in for a v1.37 server, signed in as a judge; the board's press answers as `board` says. */
-async function stubServer(page: Page, s: unknown, board?: { status: number; body: unknown }) {
+async function stubServer(
+  page: Page,
+  s: unknown,
+  board?: { status: number; body: unknown },
+  me: unknown = ME,
+) {
   const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, json: body });
   await page.route('**/api/shutter/**', async (route) => {
     const request = route.request();
@@ -54,7 +59,7 @@ async function stubServer(page: Page, s: unknown, board?: { status: number; body
       return json(route, { error: 'not_found', detail: 'Not on the stub' }, 404);
     switch (path) {
       case '/me':
-        return json(route, ME);
+        return json(route, me);
       case '/health':
         return json(route, { ok: true, demo: true, version: 'stub', checks: [] });
       case '/settings':
@@ -194,6 +199,26 @@ test.describe(`the live budget on the public demo, against a v1.37 server ${area
     expect(lines).toBe(1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await shot(page, 'banner-phone-light', banner(page));
+  });
+
+  test("says why the live cases show no board, within a phone's width, to a user without the live agents", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 360, height: 780 });
+    await stubServer(page, settings({}, { dailyUsd: 2, spentTodayUsd: 0.4 }), undefined, {
+      ...ME,
+      username: 'demo',
+      can: { ...ME.can, liveAgents: false },
+    });
+    await page.goto('./#/cases');
+    const line = banner(page).getByTestId('live-board-link');
+    await expect(line).toContainText(
+      "The hospital's own failures are settled by its written policy, with no agent. See the board decide: S8 in the trial",
+    );
+    const bannerBox = (await banner(page).boundingBox())!;
+    const lineBox = (await line.boundingBox())!;
+    expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(bannerBox.x + bannerBox.width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 
   test("says it in the board's dialog, where Convene cannot be pressed, and for a refused press", async ({

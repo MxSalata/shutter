@@ -319,6 +319,25 @@ test.describe('the tour with Ask open', () => {
   });
 });
 
+test.describe("the engineers' gate step on a phone", () => {
+  test.use({ viewport: { width: 360, height: 780 } });
+
+  test('breaks the long reason code rather than leave the card', async ({ page }) => {
+    await startAt(page, 's2/gate', 'engineer');
+    await signIn(page);
+    await page.getByRole('button', { name: 'Resume tour' }).click();
+    await page.getByRole('menuitem', { name: 'Resume the tour' }).click();
+    const guide = page.getByRole('region', { name: 'Guide' });
+    await expect(guide).toContainText('APPROVAL_RECEIVER_CHANGED');
+    const { scroll, client } = await guide.evaluate((el) => ({
+      scroll: el.scrollWidth,
+      client: el.clientWidth,
+    }));
+    expect(scroll).toBeLessThanOrEqual(client);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  });
+});
+
 /**
  * The other routes' dialogs: a step whose try-it opens a dialog (the message trace's screenshot on the engineers' tour,
  * Start a review on every screen) shows it over the card while it is open, and closes back to the card, whose Next
