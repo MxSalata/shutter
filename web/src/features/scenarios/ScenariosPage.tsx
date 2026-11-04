@@ -510,6 +510,7 @@ function RunModes({
   onChange: (m: Mode) => void;
   scenarios: Scenario[] | undefined;
 }) {
+  const chosen = MODES.find((m) => m.value === mode);
   return (
     <Box data-tour="scenarios-mode">
       <Radio.Group
@@ -561,9 +562,11 @@ function RunModes({
           })}
         </SimpleGrid>
         {/* The chosen mode's hint for the eye; a screen reader has each mode's own from its radio */}
-        <Text size="sm" mt="xs" aria-hidden>
-          {MODES.find((m) => m.value === mode)?.hint}
-        </Text>
+        {chosen ? (
+          <Text size="sm" mt="xs" aria-hidden data-mode-hint>
+            <ModeName mode={chosen.value}>{chosen.label}:</ModeName> {chosen.hint}
+          </Text>
+        ) : null}
       </Radio.Group>
     </Box>
   );
@@ -783,6 +786,12 @@ export default function ScenariosPage() {
             The online demo plays its stories by itself, so there is nothing to run or reset here.
           </Text>
         ) : null}
+        {current ? (
+          <RunBanner
+            run={current}
+            latest={scenarios.data?.scenarios.find((s) => s.id === current.scenario)?.latestCase?.caseId}
+          />
+        ) : null}
         {/* Always rendered, loading or not, so the guide's first step has its target */}
         <TryFirst
           scenarios={scenarios.data?.scenarios}
@@ -792,12 +801,6 @@ export default function ScenariosPage() {
           onRun={start}
           demo={hidden}
         />
-        {current ? (
-          <RunBanner
-            run={current}
-            latest={scenarios.data?.scenarios.find((s) => s.id === current.scenario)?.latestCase?.caseId}
-          />
-        ) : null}
         {playerOff ? (
           <Alert color="gray" variant="light" title="The Scenario Player is switched off">
             <Text size="sm">

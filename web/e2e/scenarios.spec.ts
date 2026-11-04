@@ -47,6 +47,15 @@ test.describe('the page at 1280 px @scenarios', () => {
     expect(Math.max(...tops) - Math.min(...tops)).toBeLessThanOrEqual(1);
   });
 
+  test('names the opening region by its sentence alone while its fold is closed', async ({ page }) => {
+    await go(page, '/scenarios');
+    await expect(page.getByRole('button', { name: 'What a scenario does' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    await expect(page.getByRole('region', { name: /^When an HL7 transfer fails/ })).toBeVisible();
+  });
+
   test('leads through the guided path by its links, each step a sentence with the rest behind More', async ({
     page,
   }) => {

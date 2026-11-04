@@ -185,6 +185,20 @@ describe('ScenariosPage', () => {
     ).toBeInTheDocument();
   });
 
+  it("shows the chosen mode's name and hint under the choice, and changes them with the choice", async () => {
+    renderScenarios();
+    const rules = await screen.findByRole('radio', { name: 'Rules only' });
+    const hint = document.querySelector<HTMLElement>('[data-mode-hint]')!;
+    expect(hint).toHaveTextContent(
+      'Board: Three specialist agents review the evidence in parallel; a coordinator agent proposes one plan.',
+    );
+    await userEvent.click(rules);
+    expect(hint).toHaveTextContent(
+      'Rules only: No agents: resend unchanged unless the gate objects. The baseline to compare with.',
+    );
+    expect(hint).not.toHaveTextContent('Three specialist agents');
+  });
+
   it('counts the scenarios each mode plays, and the list by outcome, from the list itself', async () => {
     renderScenarios();
     const rules = await screen.findByRole('radio', { name: 'Rules only' });
