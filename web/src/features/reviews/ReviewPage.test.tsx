@@ -712,7 +712,7 @@ describe('ReviewPage', () => {
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
     expect(await screen.findByTestId('demo-read-only')).toHaveTextContent(
-      "The public demo is read-only: a site's approver saves changes here",
+      "On the online demo you can approve or reject plans; a site's approver saves changes here",
     );
     expect(within(row('F10')).getByText('Intended')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Annotate|Remove the annotation/ })).not.toBeInTheDocument();

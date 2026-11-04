@@ -108,7 +108,7 @@ describe('LibraryPage', () => {
     resetMock('demo');
     renderPage();
     expect(await screen.findByTestId('demo-read-only')).toHaveTextContent(
-      "The public demo is read-only: a site's approver saves changes here",
+      "On the online demo you can approve or reject plans; a site's approver saves changes here",
     );
     expect(screen.getAllByText(coordinator.name).length).toBeGreaterThan(0);
     expect(screen.queryByRole('switch')).not.toBeInTheDocument();

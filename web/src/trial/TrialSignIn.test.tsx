@@ -73,7 +73,7 @@ describe("the trial's sign-in page", () => {
       await screen.findByRole('heading', { name: 'Choose who you are in the trial', level: 1 }),
     ).toBeVisible();
     expect(screen.getByText("No password: these are the trial's own roles.")).toBeInTheDocument();
-    for (const name of ['approver', 'operator', 'public demo role', 'judge'])
+    for (const name of ['approver', 'operator', 'online demo role', 'judge'])
       expect(screen.getByRole('button', { name: `Continue as ${name}` })).toBeInTheDocument();
     expect(screen.queryByLabelText(/Password/)).not.toBeInTheDocument();
     expect(document.querySelector('input[type="password"]')).toBeNull();
@@ -83,7 +83,7 @@ describe("the trial's sign-in page", () => {
   it("signs the public demo's role in, which cannot configure or run, and sees the replayed hospital feed", async () => {
     const client = renderSignIn();
     expect(screen.getByText(/sees the replayed hospital feed/)).toBeInTheDocument();
-    await userEvent.click(await screen.findByRole('button', { name: 'Continue as public demo role' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Continue as online demo role' }));
     expect(await screen.findByRole('heading', { name: 'Scenarios' })).toBeInTheDocument();
     await waitFor(() => expect(client.getQueryData<Me>(keys.me)?.username).toBe('demo'));
     expect(client.getQueryData<Me>(keys.me)?.can).toEqual({

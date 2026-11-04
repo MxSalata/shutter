@@ -15,8 +15,8 @@ export const TRIAL_ONLY_WORDS =
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** "Answered in this browser: 48 reads, 3 actions. Sent to IRIS: none. Refused by the browser: 0." */
+/** "Answered in this browser: 48 reads, 3 actions. Sent to IRIS: none. Network calls blocked by the page's security policy: 0." */
 export function journalLine(c: JournalCounts): string {
-  const refused = c.refused ? ` Refused by the trial's guard: ${c.refused}.` : '';
-  return `Answered in this browser: ${plural(c.reads, 'read', 'reads')}, ${plural(c.actions, 'action', 'actions')}. Sent to IRIS: none. Refused by the browser: ${c.violations}.${refused}`;
+  const refused = c.refused ? ` Calls to IRIS blocked by the trial's guard: ${c.refused}.` : '';
+  return `Answered in this browser: ${plural(c.reads, 'read', 'reads')}, ${plural(c.actions, 'action', 'actions')}. Sent to IRIS: none. Network calls blocked by the page's security policy: ${c.violations}.${refused}`;
 }

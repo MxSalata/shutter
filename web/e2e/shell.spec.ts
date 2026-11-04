@@ -21,7 +21,7 @@ test.describe('the live hospital, as the public role sees it', () => {
       /^Mikolaj's Fictional Hospital, replayed: a new failure every 7 minutes\. Last: S2, \d+ (s|min) ago\. Next: S8 at \d\d:\d\d (GMT|BST|UTC)\.$/,
     );
     // The trial has no demo hospital to break: the banner says where the storm plays, and offers no button
-    await expect(banner(page)).toContainText('Break the feed plays on the public demo.');
+    await expect(banner(page)).toContainText('Break the feed plays on the online demo.');
     await expect(banner(page).getByRole('button')).toHaveCount(0);
     for (const [path, heading] of [
       ['/cases', 'Cases'],

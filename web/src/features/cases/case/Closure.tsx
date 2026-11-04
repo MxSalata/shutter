@@ -115,9 +115,9 @@ export function ClosureRecord({ c }: { c: CaseDetail }) {
       <Stack gap="xs">
         <KeyValueList
           rows={[
-            ['Disposition', humanize(cl.disposition)],
+            ['What Shutter decided', humanize(cl.disposition)],
             ['Outcome', cl.outcome],
-            ['Gate policy', cl.policyVersion],
+            ['Gate policy version', cl.policyVersion],
             ['Closed', <Timestamp key="c" iso={cl.closedAt} />],
             ['People and systems', asArray(cl.actors).map(text).join(', ')],
           ]}

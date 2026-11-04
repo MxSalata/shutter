@@ -335,7 +335,7 @@ describe('ScenariosPage, as each role has it', () => {
     resetMock('demo');
     renderScenarios();
     expect(await screen.findByRole('region', { name: 'Every scenario' })).toBeInTheDocument();
-    expect(await screen.findByText(/The public demo plays its stories by itself/)).toBeInTheDocument();
+    expect(await screen.findByText(/The online demo plays its stories by itself/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Run / })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Reset' })).not.toBeInTheDocument();
     // No Play column, no mode to choose; the modes are described and the cards still open their cases
