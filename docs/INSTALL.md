@@ -25,25 +25,26 @@ the productions a hospital already runs; the README's `docker compose up` is the
 
 ## 2. What an install creates
 
-The package `iris-shutter` (the repository root, published on IPM) is the whole of Shutter for an InterSystems IRIS AI
-Hub build: the core, the demo receiver's classes, and the live agents with their tools, policies, schemas and knowledge
-bases. Its manifest requires IRIS 2026.3 or later with Interoperability (the organisers' line: the agents need the `%AI`
-package, which the early access builds 2026.3.0AI.154.0 and 2027.1.0AI.109.0 have and 2026.2 has not), so
-`zpm "install iris-shutter"` on either installs everything and an earlier version refuses it. The core alone, for a plain IRIS for Health Community 2026.2 that replays
-recorded agent runs, is the module `iris-shutter-core` in the repository's `core/` folder: loaded by path
-(`zpm "load <repository>/core"`), never published; the image build loads one or the other by what the base image has
-(`WITH_AIHUB`). Both manifests run `Shutter.Setup.InstallStatus(root, demo, production)`, and the full package then
-`Shutter.Setup.InstallAIHubStatus(root)` (the provider configuration, the knowledge bases, the agent mode, the publisher's
-web application); the IPM parameter `demo` defaults to 1, and
-`zpm "load /path/to/module -Ddemo=0"` installs without the demo; the parameter `production` (empty by default) names a
-production of the site's own to install Shutter's items into instead (section 4), as in
-`zpm "load /path/to/module -Ddemo=0 -Dproduction=Your.Production"`. A failed install stops the load. A packaged install (an
-archive made by `zpm "package"`, the form the registry serves) carries the `knowledge/`, `fixtures/` and `www/` folders
-the install reads; IPM keeps the extracted module in its module root (its ModuleRoot setting, by default
-`<data directory>/ipm/iris-shutter/<version>/`), and `/shutter` serves `www/` from there. A packaged install needs IPM
-0.10.4 or later: 0.10.0 to 0.10.3 delete the extracted module when the install ends, so the install refuses them and
-says so; a load from a folder works on any IPM. Without the agents (the core module) the gate, the catalogue and the policy
-path work, and the board replays recordings.
+- **The package.** `iris-shutter` (the repository root, published on IPM) is the whole of Shutter for an InterSystems IRIS AI
+  Hub build: the core, the demo receiver's classes, and the live agents with their tools, policies, schemas and knowledge
+  bases. Its manifest requires IRIS 2026.3 or later with Interoperability (the organisers' line: the agents need the `%AI`
+  package, which the early access builds 2026.3.0AI.154.0 and 2027.1.0AI.109.0 have and 2026.2 has not), so
+  `zpm "install iris-shutter"` on either installs everything and an earlier version refuses it.
+- **The core alone,** for a plain IRIS for Health Community 2026.2 that replays recorded agent runs, is the module
+  `iris-shutter-core` in the repository's `core/` folder: loaded by path (`zpm "load <repository>/core"`), never published;
+  the image build loads one or the other by what the base image has (`WITH_AIHUB`). Without the agents the gate, the
+  catalogue and the policy path work, and the board replays recordings.
+- **What the manifests run.** Both run `Shutter.Setup.InstallStatus(root, demo, production)`, and the full package then
+  `Shutter.Setup.InstallAIHubStatus(root)` (the provider configuration, the knowledge bases, the agent mode, the publisher's
+  web application). A failed install stops the load.
+- **The parameters.** `demo` defaults to 1, and `zpm "load /path/to/module -Ddemo=0"` installs without the demo; `production`
+  (empty by default) names a production of the site's own to install Shutter's items into instead (section 4), as in
+  `zpm "load /path/to/module -Ddemo=0 -Dproduction=Your.Production"`.
+- **A packaged install** (an archive made by `zpm "package"`, the form the registry serves) carries the `knowledge/`,
+  `fixtures/` and `www/` folders the install reads; IPM keeps the extracted module in its module root (its ModuleRoot setting,
+  by default `<data directory>/ipm/iris-shutter/<version>/`), and `/shutter` serves `www/` from there. It needs IPM 0.10.4 or
+  later: 0.10.0 to 0.10.3 delete the extracted module when the install ends, so the install refuses them and says so; a load
+  from a folder works on any IPM.
 
 `Install` creates, in the current namespace, the folders under `<mgr>/shutter/`, the resources `Shutter_Operate`,
 `Shutter_Approve` and `Shutter_Intake`, the roles `Shutter_Operator`, `Shutter_Approver`, `Shutter_WebApp` and
@@ -203,7 +204,7 @@ Shape A:
    by hand answers yes to "Closing a case by hand needs an approver" in the site profile
    (`approvers.close_needs_approver`). Shutter checks the role of whoever closes the case, not that a second person
    does: an approver may escalate and close the same case. An approver who decides in the Management Portal's Workflow
-   inbox pastes the plan digest from the task's message into its `PlanDigest` field (the field starts empty, and an
+   inbox pastes the plan digest from the task's message (it is **Plan digest** on the case page too) into its `PlanDigest` field (the field starts empty, and an
    approval without it, or with another digest, blocks the case; the recovery is a reinvestigation); the web
    application sends it for them. Whoever approves must hold `Shutter_Approve` and be a member of the Workflow role
    "Shutter Approvers": a holder outside the role is refused (403).
