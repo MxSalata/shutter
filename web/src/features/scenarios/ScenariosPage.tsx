@@ -86,7 +86,7 @@ const modeLabel = (mode: Mode) => ALL_MODES.find((m) => m.value === mode)?.label
 
 /** What every mode keeps, said once above the modes. */
 const MODES_INTRO =
-  'The mode chooses who proposes the plan; the gate, the rehearsal and the release are the same in every mode.';
+  "The mode chooses who proposes the plan; the gate and the rehearsal are the same in every mode, and a person or the site's policy releases it.";
 
 /** Whether the scenario is defined for the mode: one that names its modes isn't for the others. */
 const definedFor = (s: Scenario, mode: Mode) => !s.expected?.modes || s.expected.modes.includes(mode);
