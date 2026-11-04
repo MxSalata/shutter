@@ -90,7 +90,7 @@ function AtReceiver({ c }: { c: CaseSummary }) {
 export function investigatedBy(c: CaseSummary): { who: string; entry?: string } {
   const by = c.planCreatedBy ?? '';
   if (by.startsWith('run:')) return { who: c.mode === 'single' ? 'Single investigator' : 'Board' };
-  if (by.startsWith('policy:')) return { who: 'Site policy', entry: by.slice('policy:'.length) };
+  if (by.startsWith('policy:')) return { who: 'Site policy (no agents)', entry: by.slice('policy:'.length) };
   if (by === 'rules') return { who: 'Rules only' };
   if (by === 'withheld') return { who: 'Withheld: a person decides' };
   if (by) return { who: '-' };
@@ -108,7 +108,7 @@ export function investigatedBy(c: CaseSummary): { who: string; entry?: string } 
 /** The identity hue of the ways a plan is made; any other answer (not yet, withheld, unknown) is plain text. */
 const WHO_HUE: Record<string, Hue> = {
   Board: 'violet',
-  'Site policy': 'teal',
+  'Site policy (no agents)': 'teal',
   'Single investigator': 'gray',
   'Rules only': 'gray',
 };
