@@ -53,9 +53,11 @@ const STEPS = ['Open case', 'Evidence', 'Board plan', 'Gate checks', 'Release', 
 
 /**
  * The page's opening: the one sentence, what a scenario is, the six steps every case goes through, and the proof. The
- * steps' numbers are in the brand's light colour, since blue means running; the gate's step carries its shield.
+ * steps' numbers are in the brand's light colour, since blue means running; the gate's step carries its shield. Where
+ * the user may not run scenarios (`demo`, the online demo's roles), the hospital's stories are settled by its written
+ * policy, so the words say that and name no board.
  */
-export function ScenariosHero() {
+export function ScenariosHero({ demo = false }: { demo?: boolean }) {
   return (
     <Card padding="lg" component="section" aria-labelledby="scenarios-headline">
       <Stack gap="sm">
@@ -64,7 +66,9 @@ export function ScenariosHero() {
           fixes it only when it is safe.
         </Text>
         <Text size="md" maw="68ch">
-          Each scenario plays a known failure. Watch Shutter investigate, check, release and verify.
+          {demo
+            ? "Each scenario plays a known failure. Here the site's written policy proposes the fix, with no agent: watch the gate check, a person or the policy release and the receiver verify."
+            : 'Each scenario plays a known failure. Watch a board of IRIS AI Hub agents investigate, the gate check, a person release and the receiver verify.'}
         </Text>
         <TechDetail label="What a scenario does" kind="explain">
           <Text size="sm" maw="68ch">
