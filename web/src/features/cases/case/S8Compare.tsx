@@ -101,7 +101,7 @@ function Pair({ rulesId, boardId, caseId }: { rulesId: string; boardId: string; 
   return (
     <Stack gap="sm">
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="sm">
-        <SideCard side={rules.side} title="Rules alone" current={rulesId === caseId} />
+        <SideCard side={rules.side} title="Rules only" current={rulesId === caseId} />
         <SideCard side={board.side} title="The board" current={boardId === caseId} />
       </SimpleGrid>
       {rows.length ? (
@@ -110,7 +110,7 @@ function Pair({ rulesId, boardId, caseId }: { rulesId: string; boardId: string; 
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Evidence</Table.Th>
-                <Table.Th>{`Rules alone (${rulesId})`}</Table.Th>
+                <Table.Th>{`Rules only (${rulesId})`}</Table.Th>
                 <Table.Th>{`The board (${boardId})`}</Table.Th>
                 <Table.Th>Same</Table.Th>
               </Table.Tr>
@@ -183,8 +183,8 @@ export function S8Compare({ caseId, focus }: { caseId: string; focus: boolean })
     <div ref={ref}>
       <Section
         id="s8-compare"
-        title="S8 side by side: rules alone and the board"
-        note="The same failure played twice. Two systems moved the patient in the same minute; rules alone pass every check and resend, the board sees that the evidence can't decide which movement is current."
+        title="S8 side by side: Rules only and the board"
+        note="The same failure played twice. Two systems moved the patient in the same minute; Rules only passes every check and resends, the board sees that the evidence can't decide which movement is current."
       >
         {cases.isError ? <ErrorAlert error={cases.error} title="The S8 cases could not be listed" /> : null}
         {ready && missing.length ? (
@@ -210,8 +210,8 @@ export function CounterpartStrip({ c, onCompare }: { c: CaseDetail; onCompare: (
   if (!mine || !rules || !board) return null;
   const other = c.mode === 'board' ? rules : board;
   if (other.caseId === c.caseId) return null;
-  const thisRun = c.mode === 'board' ? "the board's run" : 'the run by rules alone';
-  const otherRun = c.mode === 'board' ? 'Rules alone' : 'The board';
+  const thisRun = c.mode === 'board' ? "the board's run" : 'the run by Rules only';
+  const otherRun = c.mode === 'board' ? 'Rules only' : 'The board';
   const played = playedFor('S8');
   const marks = [playedMark('board', played?.board), playedMark('rules', played?.rules, rules.ward)].filter(
     (m) => m !== null,

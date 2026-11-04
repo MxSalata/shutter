@@ -145,7 +145,7 @@ describe('the guide registry', () => {
 
   it('reads the proof and the costs from the evaluation, never typed', () => {
     expect(stepAt('evaluation/headline')!.step.say).toBe(
-      'On 24 recorded failures the board chose the expected action every time. Played end to end on 11, the board got 11, simple rules 4.',
+      'On 24 recorded failures the board chose the expected action every time. Played end to end on 11, the board got 11, Rules only 4.',
     );
     expect(stepAt('settings/costs')!.step.say).toMatch(/cost \$0\.34 to \$0\.50\.$/);
   });

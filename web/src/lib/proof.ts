@@ -3,7 +3,7 @@ import slice from '../../../docs/readme/evaluation.json?proof';
 /**
  * The proof's figures, computed from the board's evaluation (docs/readme/evaluation.json, written by
  * scripts/evaluate.py from the runs recorded with the real agents), never typed: the board's proposals (24 of 24),
- * the comparison played end to end on one base (the board 11, simple rules 4, of the same 11 failures), rules alone's
+ * the comparison played end to end on one base (the board 11, Rules only 4, of the same 11 failures), rules alone's
  * misses split into the ones the gate stopped and the one that wrote, who the cited entries say decides, the cost of a
  * pass, and where and when the runs were recorded. The pages read this module, not the document: it imports a small
  * slice (`?proof`, vite.config.ts), so a page that shows a figure does not carry the whole evaluation.
@@ -69,9 +69,9 @@ export interface Proof {
   board: { matched: number; scored: number; passes: number; cases: number; notScored: number } | null;
   /** The specialists alone, each against the same scored passes: who proposed the expected action. */
   specialists: { conformance: number; encounter: number; impact: number } | null;
-  /** Played end to end on the same failures (the single cases the board was convened for): the board, simple rules. */
+  /** Played end to end on the same failures (the single cases the board was convened for): the board, Rules only. */
   played: { of: number; board: number; rules: number; scenarios: string[] } | null;
-  /** Simple rules' misses among those: stopped by the gate with nothing written, and written wrongly. */
+  /** Rules only's misses among those: stopped by the gate with nothing written, and written wrongly. */
   rulesMisses: { total: number; stopped: string[]; wrote: string[] } | null;
   /** Who the entry the plan cited says decides, over the scored passes: the site's policy, the board, a person. */
   entryDecides: { policy: number; board: number; person: number; of: number } | null;
@@ -101,7 +101,7 @@ export function boardResult(p: ProofPlayed | undefined): PlayedResult {
   return 'not-played';
 }
 
-/** Simple rules' played result: a miss split by whether the gate stopped it or it wrote. */
+/** Rules only's played result: a miss split by whether the gate stopped it or it wrote. */
 export function rulesResult(p: ProofPlayed | undefined): PlayedResult {
   if (p?.status === 'as expected') return 'as-expected';
   if (p?.status !== 'differs') return 'not-played';
@@ -111,7 +111,7 @@ export function rulesResult(p: ProofPlayed | undefined): PlayedResult {
 }
 
 /**
- * How one pass ended when it was played end to end, for the board (its live run) and for simple rules: per pass, as
+ * How one pass ended when it was played end to end, for the board (its live run) and for Rules only: per pass, as
  * the evaluation's table shows every scored pass, where `playedBy` keeps one row per scenario.
  */
 export function playedResult(played: ProofPass['played']): { board: PlayedResult; rules: PlayedResult } {
@@ -202,7 +202,7 @@ export function proofFrom(src: ProofSource): Proof {
 /** The proof's figures from the evaluation in this build. */
 export const PROOF: Proof = proofFrom(slice);
 
-/** How a scenario ended when the comparison played it, by the board and by simple rules; null if it was not played. */
+/** How a scenario ended when the comparison played it, by the board and by Rules only; null if it was not played. */
 export function playedFor(id: string): { board: PlayedResult; rules: PlayedResult } | null {
   return PROOF.playedBy[id] ?? null;
 }

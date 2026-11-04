@@ -28,7 +28,7 @@ export function ProofLine({ proof = PROOF }: { proof?: Pick<Proof, 'board' | 'pl
         {p ? (
           <>
             Played end to end on {p.of} {p.ofThem ? 'of them' : 'recorded failures'}: the board {p.board},{' '}
-            <Term term="simple-rules">simple rules</Term> {p.rules}.
+            <Term term="simple-rules">Rules only</Term> {p.rules}.
           </>
         ) : null}
         {technical && parts.bases ? ` ${parts.bases}` : null}{' '}

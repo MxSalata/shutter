@@ -43,15 +43,15 @@ const BOARD_WORDS: Partial<Record<PlayedResult, string>> = {
 };
 
 const RULES_WORDS: Partial<Record<PlayedResult, string>> = {
-  'as-expected': 'simple rules as expected',
-  stopped: 'simple rules stopped by the gate',
-  'wrote-wrongly': 'simple rules wrote, not as expected',
-  differs: 'simple rules not as expected',
+  'as-expected': 'Rules only as expected',
+  stopped: 'Rules only stopped by the gate',
+  'wrote-wrongly': 'Rules only wrote, not as expected',
+  differs: 'Rules only not as expected',
 };
 
 /**
  * What the evaluation recorded when the comparison played the scenario end to end (lib/proof.ts playedFor): "Recorded:
- * board as expected; simple rules stopped by the gate". Null for a scenario the comparison did not play.
+ * board as expected; Rules only stopped by the gate". Null for a scenario the comparison did not play.
  */
 export function recordedLine(played: { board: PlayedResult; rules: PlayedResult } | null): string | null {
   if (!played) return null;
@@ -63,7 +63,7 @@ export function recordedLine(played: { board: PlayedResult; rules: PlayedResult 
 export interface ProofParts {
   /** "Tested on 24 recorded failures, the board chose the expected action every time." */
   tested: string | null;
-  /** Played end to end on the same failures: how many, the board's and simple rules' expected outcomes. */
+  /** Played end to end on the same failures: how many, the board's and Rules only's expected outcomes. */
   played: { of: number; board: number; rules: number; ofThem: boolean } | null;
   /** The bases in an engineer's words, for Technical. */
   bases: string | null;

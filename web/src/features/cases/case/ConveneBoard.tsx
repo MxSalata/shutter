@@ -22,7 +22,7 @@ const REOPENABLE: string[] = ['blocked', 'escalated', 'failed'];
 const BOARD_MODES: string[] = ['board', 'policy'];
 /** Why the board is not offered on a case of another mode, said where the button would stand. */
 const NO_BOARD: Record<string, string> = {
-  rules: 'No board to convene: a rules case is decided by the rules alone.',
+  rules: 'No board to convene: a Rules only case is decided by its rules, with no agents.',
   single: 'No board to convene: a single-agent case is decided by its one agent.',
 };
 

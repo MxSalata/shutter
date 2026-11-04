@@ -193,22 +193,22 @@ describe('LoginPage, the proof on a demo install', () => {
     expect(tile).toHaveTextContent('As expected');
   });
 
-  it('draws the board against simple rules as two bars on the same failures, never a lone 4 of 11', async () => {
+  it('draws the board against Rules only as two bars on the same failures, never a lone 4 of 11', async () => {
     const { container } = await renderDemoLogin();
     const played = PROOF.played!;
     expect(
       screen.getByRole('img', { name: `The board: ${played.board} of ${played.of}` }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('img', { name: `Simple rules: ${played.rules} of ${played.of}` }),
+      screen.getByRole('img', { name: `Rules only: ${played.rules} of ${played.of}` }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole('figure', {
-        name: `the board against simple rules (no agents), on the same ${played.of} failures`,
+        name: `the board against Rules only (no agents), on the same ${played.of} failures`,
       }),
     ).toBeInTheDocument();
     expect(screen.getByText(`${played.board} against ${played.rules}`)).toBeInTheDocument();
-    // The visible text never gives simple rules' score as a figure of its own
+    // The visible text never gives Rules only's score as a figure of its own
     expect(container.textContent).not.toContain(`${played.rules} of ${played.of}`);
   });
 
@@ -267,7 +267,7 @@ describe('LoginPage, the proof on a demo install', () => {
     const { container } = await renderDemoLogin();
     const line = container.querySelector('p[data-viewport="phone"]');
     expect(line).toHaveTextContent(
-      'Recorded failures: the board 24 of 24. On the same 11 failures: the board 11, simple rules 4.',
+      'Recorded failures: the board 24 of 24. On the same 11 failures: the board 11, Rules only 4.',
     );
     expect(
       within(line as HTMLElement).getByRole('link', { name: 'Evaluation in the trial' }),

@@ -397,7 +397,7 @@ describe('CasePage', () => {
     renderCase('C-000021');
     const why = await openStep('Why the board matters');
     expect(why).toHaveAttribute('aria-expanded', 'true');
-    const compare = await screen.findByRole('region', { name: 'S8 side by side: rules alone and the board' });
+    const compare = await screen.findByRole('region', { name: 'S8 side by side: Rules only and the board' });
     expect(await within(compare).findByText('Wrote WARD-B over WARD-C: version 2 to 3')).toBeInTheDocument();
     expect(within(compare).getByText('Escalate, citing E7; no write')).toBeInTheDocument();
     expect(within(compare).getByRole('link', { name: 'C-000008' })).toHaveAttribute(
@@ -416,14 +416,14 @@ describe('CasePage', () => {
       'true',
     );
     expect(
-      await screen.findByRole('region', { name: 'S8 side by side: rules alone and the board' }),
+      await screen.findByRole('region', { name: 'S8 side by side: Rules only and the board' }),
     ).toBeVisible();
   });
 
   it('links an S8 board case to its rules-only run near the top, and opens the side by side from there', async () => {
     renderCase('C-000008');
     const strip = await screen.findByRole('region', { name: 'Same failure, two runs' });
-    expect(within(strip).getByText(/this is the board's run\. Rules alone played it as/)).toBeInTheDocument();
+    expect(within(strip).getByText(/this is the board's run\. Rules only played it as/)).toBeInTheDocument();
     expect(within(strip).getByRole('link', { name: 'C-000021' })).toHaveAttribute('href', '/cases/C-000021');
     expect(strip.compareDocumentPosition(await outcome()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await userEvent.click(within(strip).getByRole('button', { name: 'Compare the two runs' }));
@@ -433,7 +433,7 @@ describe('CasePage', () => {
     );
     await waitFor(() =>
       expect(
-        screen.getByRole('heading', { name: 'S8 side by side: rules alone and the board' }),
+        screen.getByRole('heading', { name: 'S8 side by side: Rules only and the board' }),
       ).toHaveFocus(),
     );
   });

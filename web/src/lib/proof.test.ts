@@ -10,7 +10,7 @@ describe("the proof's figures, from the board's evaluation", () => {
     expect(PROOF.specialists).toEqual({ conformance: 13, encounter: 21, impact: 23 });
   });
 
-  it('compares the board and simple rules on one base: the same 11 failures, 11 against 4', () => {
+  it('compares the board and Rules only on one base: the same 11 failures, 11 against 4', () => {
     expect(PROOF.played).toEqual({
       of: 11,
       board: 11,
@@ -19,7 +19,7 @@ describe("the proof's figures, from the board's evaluation", () => {
     });
   });
 
-  it("splits simple rules' 7 misses into 6 the gate stopped with nothing written and S8, which wrote", () => {
+  it("splits Rules only's 7 misses into 6 the gate stopped with nothing written and S8, which wrote", () => {
     expect(PROOF.rulesMisses).toEqual({
       total: 7,
       stopped: ['S1', 'S3', 'S6', 'S7', 'S10', 'S13'],

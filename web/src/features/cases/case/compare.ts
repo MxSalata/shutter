@@ -159,7 +159,7 @@ export function evidenceRows(rules: EvidenceFacts | null, board: EvidenceFacts |
 
 /**
  * How the evaluation scored one mode's play of a scenario (lib/proof.ts playedFor), as the compare strip marks it:
- * "Board: as expected", "Rules alone: differs, wrote WARD-B", "Rules alone: stopped by the gate, nothing written".
+ * "Board: as expected", "Rules only: differs, wrote WARD-B", "Rules only: stopped by the gate, nothing written".
  * The tone is the evaluation result's: as expected positive, a wrong write or another outcome blocking, a stop by
  * the gate neutral. Null for a scenario the mode did not play.
  */
@@ -168,7 +168,7 @@ export function playedMark(
   result: PlayedResult | null | undefined,
   ward?: string,
 ): { label: string; tone: Tone } | null {
-  const name = who === 'board' ? 'Board' : 'Rules alone';
+  const name = who === 'board' ? 'Board' : 'Rules only';
   switch (result) {
     case 'as-expected':
       return { label: `${name}: as expected`, tone: 'positive' };

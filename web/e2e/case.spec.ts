@@ -54,7 +54,7 @@ test.describe('the guided path', () => {
       'true',
     );
     await expect(
-      page.getByRole('region', { name: 'S8 side by side: rules alone and the board' }),
+      page.getByRole('region', { name: 'S8 side by side: Rules only and the board' }),
     ).toBeVisible();
   });
 

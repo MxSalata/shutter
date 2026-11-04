@@ -164,11 +164,11 @@ const BOARD_MARKS: Partial<Record<PlayedResult, { tone: Tone; label: string }>> 
   'not-played': { tone: 'neutral', label: 'Board: not played' },
 };
 const RULES_MARKS: Record<PlayedResult, { tone: Tone; label: string }> = {
-  'as-expected': { tone: 'positive', label: 'Rules alone: as expected' },
-  stopped: { tone: 'neutral', label: 'Rules alone: stopped by the gate' },
-  'wrote-wrongly': { tone: 'blocking', label: 'Rules alone: wrote, not as expected' },
-  differs: { tone: 'blocking', label: 'Rules alone: not as expected' },
-  'not-played': { tone: 'neutral', label: 'Rules alone: not played' },
+  'as-expected': { tone: 'positive', label: 'Rules only: as expected' },
+  stopped: { tone: 'neutral', label: 'Rules only: stopped by the gate' },
+  'wrote-wrongly': { tone: 'blocking', label: 'Rules only: wrote, not as expected' },
+  differs: { tone: 'blocking', label: 'Rules only: not as expected' },
+  'not-played': { tone: 'neutral', label: 'Rules only: not played' },
 };
 
 /**
@@ -289,10 +289,10 @@ function heroStatement(proof: Proof): ReactNode {
     return (
       <>
         {`On the same ${pl.of} failures, played end to end: the board ${pl.board}, `}
-        <Term term="simple-rules">simple rules</Term>
+        <Term term="simple-rules">Rules only</Term>
         {` ${pl.rules}.`}
         {misses && misses.total && misses.stopped.length
-          ? ` The gate stopped ${misses.stopped.length} of their ${misses.total} misses.`
+          ? ` The gate stopped ${misses.stopped.length} of its ${misses.total} misses.`
           : ''}
       </>
     );
@@ -346,7 +346,7 @@ function Headline({
       ? `From ${plural(proof.runs, 'run')} recorded with the real agents${on ? ` on IRIS AI Hub (build ${on.build})` : ''}, ${range}; CI replays them on every push.`
       : 'No runs have been recorded with the real agents yet.';
   const rulesCaption = pl
-    ? `${pl.rules} of ${pl.of} scored passes played end to end with rules alone, no agents, ended as expected; played the same way, the board ended as expected in ${pl.board} of the same ${pl.of}`
+    ? `${pl.rules} of ${pl.of} scored passes played end to end in Rules only mode, no agents, ended as expected; played the same way, the board ended as expected in ${pl.board} of the same ${pl.of}`
     : '';
   const unscored = t.passes - t.scored_passes;
   const decides = proof.entryDecides;
@@ -415,7 +415,7 @@ function Headline({
           }
           labelOrder={3}
           figure={pl ? undefined : 'Not played'}
-          caption={pl ? undefined : 'no scored pass was played with rules alone'}
+          caption={pl ? undefined : 'no scored pass was played in Rules only mode'}
         >
           {pl ? (
             <Stack gap="xs">
@@ -428,10 +428,10 @@ function Headline({
                     hint: `The board: ${pl.board} of ${pl.of} failures ended as expected`,
                   },
                   {
-                    label: 'Simple rules',
+                    label: 'Rules only',
                     value: pl.rules,
                     hue: 'gray',
-                    hint: `Simple rules: ${pl.rules} of ${pl.of} failures ended as expected`,
+                    hint: `Rules only: ${pl.rules} of ${pl.of} failures ended as expected`,
                   },
                 ]}
                 of={pl.of}
@@ -831,7 +831,7 @@ function PassesTable({
               plan&apos;s action, the catalogue entry it cites with who that entry says decides (policy: the
               catalogue alone may settle it in site-policy mode; board: it needs the board&apos;s judgement;
               person: only a person may act), and the dots of the specialists that proposed it; how the
-              scenario ended when played end to end by the board and by rules alone; and the cost and time of
+              scenario ended when played end to end by the board and in Rules only mode; and the cost and time of
               the pass. In a scored pass, &quot;outweighed&quot; marks a view the plan set aside for another,
               and &quot;Not as expected&quot; a plan that is not the expected outcome.
             </Text>
@@ -1000,7 +1000,7 @@ export default function EvaluationPage({
         icon={IconChartBar}
         hue="teal"
         lead={`How the board decides, measured on runs recorded with the real agents${range ? `, ${range}` : ''}.`}
-        details="How the board decides: the action it proposed against each scenario's expected outcome and against rules alone, every member's own view and confidence, how far they agreed, and what each pass cost in tokens, money and time."
+        details="How the board decides: the action it proposed against each scenario's expected outcome and against Rules only, every member's own view and confidence, how far they agreed, and what each pass cost in tokens, money and time."
       />
       <Stack gap="md">
         <Headline data={data} proof={proof} filters={filters} toggle={toggle} caseOf={caseOf} />

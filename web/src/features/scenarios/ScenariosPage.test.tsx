@@ -591,14 +591,14 @@ describe('ScenariosPage, its rows and its proof', () => {
     renderScenarios();
     for (const id of PROOF.rulesMisses!.stopped)
       expect(
-        within(await card(id)).getByText('Recorded: board as expected; simple rules stopped by the gate'),
+        within(await card(id)).getByText('Recorded: board as expected; Rules only stopped by the gate'),
       ).toBeInTheDocument();
     expect(PROOF.rulesMisses!.wrote).toEqual(['S8']);
     expect(
-      within(await card('S8')).getByText('Recorded: board as expected; simple rules wrote, not as expected'),
+      within(await card('S8')).getByText('Recorded: board as expected; Rules only wrote, not as expected'),
     ).toBeInTheDocument();
     expect(
-      within(await card('S2')).getByText('Recorded: board as expected; simple rules as expected'),
+      within(await card('S2')).getByText('Recorded: board as expected; Rules only as expected'),
     ).toBeInTheDocument();
     // A scenario the comparison did not play says nothing of it
     expect(within(await card('S15')).queryByText(/^Recorded:/)).not.toBeInTheDocument();
@@ -641,7 +641,7 @@ describe('ScenariosPage, its rows and its proof', () => {
     const line = (await screen.findByText(/^Tested on/)).closest<HTMLElement>('[data-proof-line]')!;
     // The words a reader sees (the definitions the terms carry for screen readers aside)
     expect(visibleText(line)).toContain(
-      `Tested on ${board.scored} recorded failures, the board chose the expected action every time. Played end to end on ${played.of} of them: the board ${played.board}, simple rules ${played.rules}.`,
+      `Tested on ${board.scored} recorded failures, the board chose the expected action every time. Played end to end on ${played.of} of them: the board ${played.board}, Rules only ${played.rules}.`,
     );
     expect(within(line).getByRole('link', { name: 'See the evaluation' })).toHaveAttribute(
       'href',
@@ -670,14 +670,14 @@ describe('ScenariosPage, its rows and its proof', () => {
     expect(count).toHaveClass('mantine-Badge-root');
   });
 
-  it("wraps the headline's HL7 transfer and the proof's simple rules in their definitions", async () => {
+  it("wraps the headline's HL7 transfer and the proof's Rules only in their definitions", async () => {
     renderScenarios();
     const heading = await screen.findByRole('heading', { name: /^When an HL7 transfer fails/ });
     expect(within(heading).getByText('HL7 transfer')).toHaveAccessibleDescription(
       'A message telling another hospital system that a patient moved ward.',
     );
     const line = (await screen.findByText(/^Tested on/)).closest<HTMLElement>('[data-proof-line]')!;
-    expect(within(line).getByText('simple rules')).toHaveAttribute('aria-describedby');
+    expect(within(line).getByText('Rules only')).toHaveAttribute('aria-describedby');
   });
 
   /** Waits for every part of the page that loads: the rows, their latest cases' outcomes, S8's cited entry. */

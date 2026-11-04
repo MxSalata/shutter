@@ -74,14 +74,14 @@ describe('playedMark', () => {
     const s8 = playedFor('S8');
     expect(playedMark('board', s8?.board)).toEqual({ label: 'Board: as expected', tone: 'positive' });
     expect(playedMark('rules', s8?.rules, 'WARD-B')).toEqual({
-      label: 'Rules alone: differs, wrote WARD-B',
+      label: 'Rules only: differs, wrote WARD-B',
       tone: 'blocking',
     });
   });
 
   it('marks a stop by the gate neutral, and nothing for a mode that did not play', () => {
     expect(playedMark('rules', 'stopped')).toEqual({
-      label: 'Rules alone: stopped by the gate, nothing written',
+      label: 'Rules only: stopped by the gate, nothing written',
       tone: 'neutral',
     });
     expect(playedMark('board', 'not-played')).toBeNull();
