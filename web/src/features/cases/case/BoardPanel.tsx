@@ -11,7 +11,7 @@ import {
   VisuallyHidden,
 } from '@mantine/core';
 import { IconChevronDown, IconMessageExclamation, IconUsers } from '@tabler/icons-react';
-import { Fragment, useState } from 'react';
+import { type ComponentType, Fragment, lazy, Suspense, useState } from 'react';
 import { useRuns, useSettings } from '@/api/hooks';
 import type { AgentRun, Mode } from '@/api/types';
 import { AgreementDots } from '@/components/AgreementDots';
@@ -24,6 +24,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { JsonBlock } from '@/components/JsonBlock';
 import { TechDetail } from '@/components/TechDetail';
 import { Term } from '@/components/Term';
+import { TRIAL } from '@/env/mode';
 import { costAtPrice } from '@/lib/cost';
 import { catalogueEntriesOf, EVIDENCE_REFS, evidenceSection } from '@/lib/evidenceRefs';
 import { asArray, asObject } from '@/lib/json';
@@ -33,6 +34,7 @@ import { PROVENANCE } from '@/lib/status';
 import { useTechnical } from '@/stores/appearance';
 import { describeEntry } from './derive';
 import { showEvidence } from './evidenceLinks';
+import { RecordingUnavailable } from './RecordingUnavailable';
 import { investigationRuns } from './runClock';
 import { RunTimeline } from './RunTimeline';
 import { NotYet, Section } from './Section';
@@ -352,6 +354,47 @@ function MoreToggle({
   );
 }
 
+/** A run's recording: its chunk, and the recording's own, load in a trial page when this opens, and never in a live one. */
+const RunRecording = lazy<ComponentType<{ caseId: string; run: AgentRun }>>(() =>
+  import('./RunRecording').catch(() => ({ default: RecordingUnavailable })),
+);
+
+/** Trial pages only: the toggle for what this member was sent and did, and the recording under it, in the card. */
+function RecordingToggle({
+  caseId,
+  run,
+  open,
+  onToggle,
+  describedBy,
+}: {
+  caseId: string;
+  run: AgentRun;
+  open: boolean;
+  onToggle: () => void;
+  describedBy: string;
+}) {
+  if (!TRIAL) return null;
+  const id = `${describedBy}-recording`;
+  return (
+    <>
+      <MoreToggle
+        open={open}
+        onToggle={onToggle}
+        controls={id}
+        describedBy={describedBy}
+        label="the recording"
+      />
+      <div id={id} hidden={!open}>
+        {open ? (
+          <Suspense fallback={null}>
+            <RunRecording caseId={caseId} run={run} />
+          </Suspense>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
 /** The border of a card that dissented: two pixels in the attention tone, beside the badge that says it in words. */
 const DISSENT_BORDER = {
   borderLeftColor: 'var(--mantine-color-yellow-outline)',
@@ -371,6 +414,7 @@ const nameOf = (run: AgentRun) => run.member?.name ?? humanize(run.memberCode);
  * not hidden.
  */
 function SpecialistCard({
+  caseId,
   run,
   portalBase,
   dissent,
@@ -378,6 +422,7 @@ function SpecialistCard({
   receiver,
   defineConfidence,
 }: {
+  caseId: string;
   run: AgentRun;
   portalBase: string;
   dissent: boolean;
@@ -388,6 +433,7 @@ function SpecialistCard({
   defineConfidence: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
   const result = resultOf(run);
   const key = String(run.id ?? run.memberCode);
   const name = nameOf(run);
@@ -403,7 +449,12 @@ function SpecialistCard({
         dissent ? <StatusBadge tone="attention" label="Dissent" icon={IconMessageExclamation} /> : undefined
       }
       meta={<RunLine run={run} portalBase={portalBase} />}
-      style={{ minWidth: 0, ...(dissent ? DISSENT_BORDER : {}) }}
+      // A recording is read at the board's full width, not in a third of it
+      style={{
+        minWidth: 0,
+        ...(dissent ? DISSENT_BORDER : {}),
+        ...(recording ? { gridColumn: '1 / -1' } : {}),
+      }}
     >
       <Group gap="xs" wrap="wrap">
         <DispositionBadge disposition={dispositionOf(run)} proposed />
@@ -435,6 +486,13 @@ function SpecialistCard({
       ) : (
         <div id={`agent-${key}-finding`} hidden />
       )}
+      <RecordingToggle
+        caseId={caseId}
+        run={run}
+        open={recording}
+        onToggle={() => setRecording((o) => !o)}
+        describedBy={`agent-${key}`}
+      />
     </MemberCard>
   );
 }
@@ -445,12 +503,14 @@ function SpecialistCard({
  * cited; what must still hold before a write (with the operation keys as codes) in a data detail; its run on demand.
  */
 function CoordinatorCard({
+  caseId,
   run,
   result,
   kept,
   portalBase,
   receiver,
 }: {
+  caseId: string;
   run: AgentRun;
   result: Record<string, unknown>;
   /** Each dissent kept: the specialist's name and the coordinator's reason for keeping it. */
@@ -459,6 +519,7 @@ function CoordinatorCard({
   receiver?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
   const key = String(run.id ?? 'coordinator');
   const preconditions = asArray(result.preconditions).map(describeEntry);
   return (
@@ -559,6 +620,13 @@ function CoordinatorCard({
       ) : (
         <div id={`agent-${key}-run`} hidden />
       )}
+      <RecordingToggle
+        caseId={caseId}
+        run={run}
+        open={recording}
+        onToggle={() => setRecording((o) => !o)}
+        describedBy={`agent-${key}`}
+      />
     </MemberCard>
   );
 }
@@ -745,6 +813,7 @@ export function BoardPanel({
           {specialists.map((r) => (
             <SpecialistCard
               key={String(r.id ?? r.memberCode)}
+              caseId={caseId}
               run={r}
               portalBase={portalBase}
               dissent={dissents(r)}
@@ -759,6 +828,7 @@ export function BoardPanel({
       {board ? <RunTimeline runs={list} /> : null}
       {coordinator ? (
         <CoordinatorCard
+          caseId={caseId}
           run={coordinator}
           result={coordinatorResult}
           kept={keptReasons}
