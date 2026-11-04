@@ -23,6 +23,8 @@ test.describe('the live hospital, as the public role sees it', () => {
     // The trial has no demo hospital to break: the banner says where the storm plays, and offers no button
     await expect(banner(page)).toContainText('Break the feed plays on the online demo.');
     await expect(banner(page).getByRole('button')).toHaveCount(0);
+    // A recording never resets on the hour, though it answers `live.enabled` like the demo
+    await expect(banner(page).getByTestId('live-reset-line')).toHaveCount(0);
     for (const [path, heading] of [
       ['/cases', 'Cases'],
       ['/library', 'Agent library'],

@@ -259,6 +259,14 @@ describe('the live budget on the banner', () => {
     expect(await budgetLine()).not.toHaveTextContent('so far');
   });
 
+  it('says the demo resets on the hour and that what a visitor did goes with it', async () => {
+    liveWith({}, { dailyUsd: 2, spentTodayUsd: 0.4 });
+    renderFrame();
+    expect(await within(await banner()).findByTestId('live-reset-line')).toHaveTextContent(
+      'The demo resets on the hour: it is down for a few minutes, and anything you did is gone.',
+    );
+  });
+
   it('says nothing about the budget when neither gives a positive figure', async () => {
     liveWith({ budgetNote: { amountUsd: 0, period: 'day' } }, { dailyUsd: 0 });
     renderFrame();
