@@ -751,23 +751,22 @@ ClassMethod CaseBlockedReason(caseId As %String) As %Status
     Set case = ..CaseOr404(caseId)
     If '$ISOBJECT(case) Quit $$$OK
     If '$LISTFIND($LISTBUILD("blocked", "escalated"), case.State) Quit ..Fail("404 Not Found", "not_blocked", "The case is " _ case.State)
-    Set id = case.%Id(), did = ""
-    &sql(SELECT TOP 1 ID INTO :did FROM Shutter_Store.GateDecision WHERE "Case" = :id AND Outcome <> 'pass' ORDER BY ID DESC)
+    Set id = case.%Id(), did = "", text = ""
+    &sql(SELECT TOP 1 Text INTO :text FROM Shutter_Store.CaseEvent WHERE "Case" = :id AND ToState IN ('blocked','escalated') ORDER BY Seq DESC)
     Set failing = [], code = ""
-    If (SQLCODE = 0) && (did '= "") {
-        Set d = ##class(Shutter.Store.GateDecision).%OpenId(did)
-        Set checks = ##class(Shutter.Util.Json).Parse(d.ChecksJSON, .psc)
-        If $ISOBJECT(checks) {
-            Set iter = checks.%GetIterator()
-            While iter.%GetNext(.i, .c) { If c.result '= "pass" { Do failing.%Push(c) If code = "" Set code = c."reason_code" } }
+    // What stopped the case after the gate had passed it says so itself: a failing gate decision from an earlier round is not why.
+    If '..StoppedAfterTheGate(text) {
+        &sql(SELECT TOP 1 ID INTO :did FROM Shutter_Store.GateDecision WHERE "Case" = :id AND Outcome <> 'pass' ORDER BY ID DESC)
+        If (SQLCODE = 0) && (did '= "") {
+            Set d = ##class(Shutter.Store.GateDecision).%OpenId(did)
+            Set checks = ##class(Shutter.Util.Json).Parse(d.ChecksJSON, .psc)
+            If $ISOBJECT(checks) {
+                Set iter = checks.%GetIterator()
+                While iter.%GetNext(.i, .c) { If c.result '= "pass" { Do failing.%Push(c) If code = "" Set code = c."reason_code" } }
+            }
         }
     }
-    If code = "" {
-        Set text = ""
-        &sql(SELECT TOP 1 Text INTO :text FROM Shutter_Store.CaseEvent WHERE "Case" = :id AND ToState IN ('blocked','escalated') ORDER BY Seq DESC)
-        // A write whose answer was lost (Verify.Judge): not committed, or unknown after the last read, before the generic person clause.
-        Set code = $SELECT(text [ "Rejected by": "REJECTED_BY_APPROVER", text [ "rehearsal": "REHEARSAL_WOULD_NOT_APPLY", text [ "refused": "DISPATCH_REFUSED", text [ "Not committed:": "WRITE_NOT_COMMITTED", (text [ "Not verified (unknown)") || (text [ "outcome of the resend is unknown"): "WRITE_OUTCOME_UNKNOWN", text [ "person": "ESCALATED", case.State = "escalated": "ESCALATED", 1: "BLOCKED")
-    }
+    If code = "" Set code = ..ReasonFromEvent(text, case.State)
     Set o = {}
     Set o.code = code
     Set r = ##class(Shutter.Store.BlockReason).ByCode(code)
@@ -775,6 +774,19 @@ ClassMethod CaseBlockedReason(caseId As %String) As %Status
     Set o.failingChecks = failing
     Set o.state = case.State, o.headline = case.Headline
     Quit ..Json(o)
+}
+
+/// A write whose answer was lost (Verify.Judge: not committed, or unknown after the last read), or a rehearsal nobody answered.
+ClassMethod StoppedAfterTheGate(text As %String) As %Boolean
+{
+    Quit (text [ "Not committed:") || (text [ "Not verified (unknown)") || (text [ "outcome of the resend is unknown") || (text [ "no usable answer")
+}
+
+/// The reason code of a stopped case no failing gate check names, from the words of the event that stopped it. A rehearsal
+/// that got no usable answer showed nothing about the action, so it is no refusal, whatever the word rehearsal suggests.
+ClassMethod ReasonFromEvent(text As %String, state As %String) As %String
+{
+    Quit $SELECT(text [ "Rejected by": "REJECTED_BY_APPROVER", text [ "no usable answer": "BLOCKED", text [ "rehearsal": "REHEARSAL_WOULD_NOT_APPLY", text [ "refused": "DISPATCH_REFUSED", text [ "Not committed:": "WRITE_NOT_COMMITTED", (text [ "Not verified (unknown)") || (text [ "outcome of the resend is unknown"): "WRITE_OUTCOME_UNKNOWN", text [ "person": "ESCALATED", state = "escalated": "ESCALATED", 1: "BLOCKED")
 }
 
 // ---- library, settings, costs ----
