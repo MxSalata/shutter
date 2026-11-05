@@ -66,6 +66,7 @@ test.describe(`the way to the page inside IRIS ${area.tag}`, () => {
     await expect(navLink(page)).toHaveAttribute('href', HREF);
     await expect(navLink(page)).toHaveAttribute('target', '_blank');
     await expect(homeCard(page)).toHaveAttribute('href', HREF);
+    await expect(homeCard(page)).toHaveAccessibleName(/opens in a new tab/);
     await expect(homeCard(page)).toContainText('Visual Trace');
     await expect(homeCard(page)).toContainText('Cloudflare sign-in first');
     // Said once: the page's words carry the sign-in only on the card
