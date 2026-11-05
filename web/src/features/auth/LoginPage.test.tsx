@@ -21,8 +21,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
-const HEADLINE =
-  'Shutter fixes a failed HL7 transfer only when it can show the fix is safe.';
+const HEADLINE = 'Shutter fixes a failed HL7 transfer only when it can show the fix is safe.';
 const PURPOSE =
   'When a patient movement fails to reach another system, Shutter finds out why and writes a fix only when it is safe to.';
 

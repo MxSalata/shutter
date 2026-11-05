@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { audit, choosePastel, MODES } from './axe';
 import { skipWelcome } from './guide';
 import { go, signIn } from './helpers';
 
@@ -35,6 +36,66 @@ test.describe('the live hospital, as the public role sees it @scenarios', () => 
       await expect(run).toBeDisabled();
   });
 });
+
+for (const { colorScheme, contrast, palette } of MODES)
+  test.describe(`the public role's greyed-out controls, ${palette} ${colorScheme}, contrast ${contrast} @scenarios`, () => {
+    test.use({ colorScheme, contrast });
+    if (palette === 'pastel') test.beforeEach(({ page }) => choosePastel(page));
+
+    test('pass the accessibility check, with the small diagrams', async ({ page }) => {
+      await signIn(page, AS_DEMO);
+      await expect(
+        page.getByRole('region', { name: 'Every scenario' }).getByRole('img').first(),
+      ).toBeVisible();
+      await expect(page.getByRole('status')).toHaveCount(0);
+      expect(await audit(page)).toEqual([]);
+    });
+  });
+
+for (const width of [360, 1280, 1920])
+  test.describe(`the small diagrams at ${width} px @scenarios`, () => {
+    test.use({ viewport: { width, height: 900 } });
+
+    for (const opened of [{}, AS_DEMO, { detail: 'technical' as const }])
+      test(`stay small, keep their words inside their marks, and never scroll the page sideways, as ${JSON.stringify(opened)}`, async ({
+        page,
+      }) => {
+        await signIn(page, opened);
+        const list = page.getByRole('region', { name: 'Every scenario' });
+        await expect(list.locator('.scenario-diagram')).toHaveCount(26);
+        const found = await page.evaluate(() =>
+          [...document.querySelectorAll<SVGSVGElement>('.scenario-diagram')].flatMap((svg) => {
+            const bad: string[] = [];
+            const box = svg.getBoundingClientRect();
+            if (box.height > 44 || box.width > 296) bad.push(`${box.width}x${box.height}`);
+            if (box.right > window.innerWidth) bad.push('past the window');
+            if (!svg.getAttribute('aria-label')?.includes('It should end: ')) bad.push('no label');
+            for (const g of svg.querySelectorAll('g')) {
+              const [rect, text] = [g.querySelector(':scope > rect'), g.querySelector(':scope > text')] as [
+                SVGGraphicsElement | null,
+                SVGGraphicsElement | null,
+              ];
+              if (!rect || !text) continue;
+              const [r, t] = [rect.getBBox(), text.getBBox()];
+              const room = g.querySelector('.diagram-cross') ? 12 : 0;
+              if (t.x < r.x + 1 || t.x + t.width > r.x + r.width - room - 1)
+                bad.push(`${text.textContent} overflows`);
+            }
+            const limit = Number(svg.getAttribute('width'));
+            const captions = [...svg.querySelectorAll<SVGGraphicsElement>('.diagram-caption')].map((c) =>
+              c.getBBox(),
+            );
+            captions.forEach((c, i) => {
+              if (c.x < 0 || c.x + c.width > limit) bad.push('caption out');
+              if (i && c.x < captions[i - 1].x + captions[i - 1].width) bad.push('captions overlap');
+            });
+            return bad.length ? [`${svg.getAttribute('aria-label')?.slice(0, 12)}: ${bad.join(', ')}`] : [];
+          }),
+        );
+        expect(found).toEqual([]);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+      });
+  });
 
 test.describe('the page at 1280 px @scenarios', () => {
   test.use({ viewport: { width: 1280, height: 900 } });

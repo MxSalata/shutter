@@ -54,6 +54,7 @@ import type { Tone } from '@/lib/tone';
 import { useTechnical } from '@/stores/appearance';
 import { HINT_EVENTS } from '@/theme';
 import { MoreAbout } from './MoreAbout';
+import { ScenarioDiagram } from './ScenarioDiagram';
 import { StartHere } from './StartHere';
 import { ModeName, ScenariosHero, TryFirst } from './TryFirst';
 import { hl7Events, recordedLine, SCENARIOS_LEAD, splitSummary } from './scenarioText';
@@ -405,9 +406,10 @@ function ScenarioRow({
               {s.title}
             </Text>
           </Group>
-          <Text size="sm" c="dimmed">
+          <Text size="sm" c="dimmed" className="scenario-summary">
             {first}
           </Text>
+          <ScenarioDiagram scenario={s} mode={mode} />
           {rest ? (
             <Box className="scenario-more">
               <MoreAbout about={s.id}>
@@ -677,10 +679,12 @@ function AllScenarios({
         {/* What the badges say in short, written out once: none of them is a tab stop in this list */}
         <TechDetail label="How to read this list" kind="explain">
           <Text size="sm" maw="68ch">
-            What should happen is the end the scenario expects: its action, &quot;or&quot; another answer the
-            evaluation also accepts, and Stops on the reason code the gate or the dispatch should stop on.
-            Latest case is the newest case the scenario opened, with its outcome in short: As expected when
-            the outcome matches what the scenario expects, Not as expected when it differs.
+            The small diagram draws what the scenario plays and, last, the end it expects in this mode, as
+            What should happen does; a recorded run can differ, and its latest case says so. What should
+            happen is the end the scenario expects: its action, &quot;or&quot; another answer the evaluation
+            also accepts, and Stops on the reason code the gate or the dispatch should stop on. Latest case is
+            the newest case the scenario opened, with its outcome in short: As expected when the outcome
+            matches what the scenario expects, Not as expected when it differs.
           </Text>
         </TechDetail>
         <Table.ScrollContainer minWidth={690} className="stack-scroll">
