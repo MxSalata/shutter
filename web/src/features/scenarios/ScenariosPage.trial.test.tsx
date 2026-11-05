@@ -151,8 +151,14 @@ describe('ScenariosPage in the trial', () => {
       const done = await screen.findByText(/^S8 played \(Board\)$/, {}, { timeout: 10_000 });
       const alert = done.closest('[role="alert"]')!;
       expect(alert).toHaveTextContent(
-        /Its case is C-\d{6}, replayed from the recording, as far as the recording goes: open it from the row below\./,
+        /Its case is C-\d{6}, replayed from the recording, as far as the recording goes\./,
       );
+      // Its case is a link from here, wherever on the page the Run was pressed
+      expect(within(alert as HTMLElement).getByRole('link', { name: /^C-\d{6}$/ })).toHaveAttribute(
+        'href',
+        expect.stringMatching(/^\/cases\/C-\d{6}$/),
+      );
+      expect(alert).not.toHaveTextContent('below');
       expect(alert).not.toHaveTextContent('The production does the rest');
     } finally {
       Date.now = realNow;
