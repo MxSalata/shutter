@@ -31,4 +31,11 @@ Method TestTheBuildsListIsNormalisedAndCleared()
     If had Set ^|hospital|Hospital.Config("liveScenarios") = keep
 }
 
+/// The live hospital's guard: a namespace with no API service registered is not listening, and asking never throws.
+Method TestShutterListening()
+{
+    Do $$$AssertNotTrue(##class(Hospital.LivePlayer).ShutterListening("SHUTTERNOSUCHNS"), "no such namespace")
+    Do $$$AssertNotTrue(##class(Hospital.LivePlayer).ShutterListening("%SYS"), "a namespace with no production")
+}
+
 }

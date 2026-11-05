@@ -97,6 +97,13 @@ Method OnProcessInput(pInput As %RegisteredObject, Output pOutput As %Registered
 {
     Set pOutput = ""
     If '$GET(^Hospital.Config("live")) Quit $$$OK
+    // Shutter's production starts beside this one, and on the first start with SHUTTER_LIVE its OnStart switches this item
+    // on before its own items are up. A story played then fails, Shutter's intake answers 503 and logs the service as not
+    // registered, and that failure never becomes a case. So nothing plays until Shutter can hear it.
+    If '..ShutterListening(..ShutterNamespace) {
+        $$$TRACE("Waiting for Shutter's production to take messages")
+        Quit $$$OK
+    }
     Set now = ##class(Shutter.Util.Time).EpochSeconds()
     // The storm first (v1.35): a press is picked up within one call, and nothing else plays under it; the rotation and the
     // ordinary feed wait until it is done.
@@ -124,6 +131,20 @@ Method OnProcessInput(pInput As %RegisteredObject, Output pOutput As %Registered
     }
     Do ..WriteStatus()
     Quit $$$OK
+}
+
+/// Whether Shutter's API service is registered in its namespace: what Ens.Director.CreateBusinessService reads before it
+/// logs ErrBusinessDispatchNameNotRegistered, and what the intake needs to take a failure.
+ClassMethod ShutterListening(shutterNs As %String = "SHUTTER") As %Boolean
+{
+    Set listening = 0
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = shutterNs
+        Set listening = ($GET($$$DispatchNameToConfigName("Shutter API")) '= "")
+    } Catch ex {
+    }
+    Quit listening
 }
 
 /// The storm's state ("" when none has ever been pressed) and its record.
