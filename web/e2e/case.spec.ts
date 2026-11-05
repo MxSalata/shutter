@@ -231,8 +231,10 @@ test.describe('the case page made easier to read', () => {
   test('takes the reader from the action button to "What needs you now", opening the band', async ({
     page,
   }) => {
-    await signIn(page);
-    await go(page, '/cases/C-000002');
+    // The operator: the approver's and an escalation's buttons go to their own controls
+    await page.goto('./?as=operator#/scenarios');
+    await expect(page.getByRole('heading', { name: 'Scenarios', exact: true })).toBeVisible();
+    await page.goto('./?as=operator#/cases/C-000002');
     const band = page.getByRole('region', { name: 'Outcome' });
     // Close the band first, as a reader may have
     await band.getByRole('button', { name: 'Outcome', exact: true }).click();
@@ -241,7 +243,7 @@ test.describe('the case page made easier to read', () => {
       'false',
     );
     await expect(band.getByTestId('outcome-line')).toHaveText('Waiting for approval');
-    await page.getByRole('button', { name: 'Needs you: decide on the resend' }).first().click();
+    await page.getByRole('button', { name: 'No action for you: waiting for an approver' }).first().click();
     await expect(band.getByRole('button', { name: 'Outcome', exact: true })).toHaveAttribute(
       'aria-expanded',
       'true',
@@ -267,8 +269,37 @@ test.describe('the case page made easier to read', () => {
     await expect(compact).toBeInViewport();
     await expect(compact).toHaveAccessibleName('Needs you: escalate to a team');
     await compact.click();
-    await expect(page.getByRole('heading', { name: 'What needs you now' })).toBeFocused();
-    await expect(page.getByRole('heading', { name: 'What needs you now' })).toBeInViewport();
+    // It reaches the control it names: the panel's button, not a card that describes it
+    const heading = page.getByRole('heading', { name: 'Escalations' });
+    await expect(heading).toBeFocused();
+    await expect(heading).toBeInViewport();
+    await expect(page.getByRole('button', { name: /^Escalate to the/ })).toBeInViewport();
+  });
+
+  test('keeps the approve dialog in its own words while it closes', async ({ page }) => {
+    await signIn(page);
+    await go(page, '/cases/C-000002');
+    await page.getByRole('button', { name: 'Approve plan' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Approve plan v1' });
+    await expect(dialog).toBeVisible();
+    // Watches the whole closing animation for what a screenshot could miss between frames
+    await page.evaluate(() => {
+      new MutationObserver(() => {
+        if (document.body.textContent?.includes('Reject this plan'))
+          (window as unknown as { flashed: boolean }).flashed = true;
+      }).observe(document.body, { subtree: true, childList: true, characterData: true });
+    });
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toBeHidden();
+    expect(await page.evaluate(() => (window as unknown as { flashed?: boolean }).flashed)).toBeUndefined();
+  });
+
+  test('takes the approver from the action button to Approve and Reject', async ({ page }) => {
+    await signIn(page);
+    await go(page, '/cases/C-000002');
+    await page.getByTestId('case-action').click();
+    await expect(page.getByRole('heading', { name: 'Approval', exact: true })).toBeFocused();
+    await expect(page.getByRole('button', { name: 'Approve plan' })).toBeInViewport();
   });
 
   test('opens a closed case with its band closed, the outcome still said', async ({ page }) => {

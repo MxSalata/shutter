@@ -16,19 +16,25 @@ export interface CaseAction {
   short: string;
   /** The accessible name, the state in a sentence, the label inside it: "Needs you: decide on the resend". */
   name: string;
-  /** Where it goes instead of "What needs you now": the side by side of a scenario's two runs. */
-  compare?: boolean;
+  /**
+   * Where the button goes when the action is done somewhere else than "What needs you now": the side by side of a
+   * scenario's two runs, the Approval section with its Approve and Reject, or the Escalations panel.
+   */
+  goes?: ActionPlace;
   /** Nothing is pending, but the outcome isn't what the scenario expects: never drawn as all clear. */
   differs?: boolean;
 }
 
+export type ActionPlace = 'compare' | 'approval' | 'escalations';
+
 const lowerFirst = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
 
-const yours = (label: string): CaseAction => ({
+const yours = (label: string, goes?: ActionPlace): CaseAction => ({
   needsYou: true,
   label,
   short: 'Needs you',
   name: `Needs you: ${lowerFirst(label)}`,
+  ...(goes ? { goes } : {}),
 });
 
 const nothing = (why = ''): CaseAction => ({
@@ -49,7 +55,7 @@ const notExpected = (scenario: string): CaseAction =>
         label: 'Compare the two runs',
         short: 'Compare',
         name: 'Not the expected outcome: compare the two runs',
-        compare: true,
+        goes: 'compare',
         differs: true,
       }
     : {
@@ -112,6 +118,7 @@ export function caseActionOf(f: CaseFacts, ctx: ActionContext): CaseAction {
     if (!can.approve) return notYours('Waiting for an approver');
     return yours(
       f.plan?.plan && f.plan.plan.disposition !== 'resend' ? 'Decide on the plan' : 'Decide on the resend',
+      'approval',
     );
   }
   if (!can.operate) return notYours('Waiting for an operator');
@@ -120,10 +127,10 @@ export function caseActionOf(f: CaseFacts, ctx: ActionContext): CaseAction {
   if (closableByHand(c, f.escalations ?? [])) {
     const mayClose = !!ctx.me?.approver || ctx.closeNeedsApprover === false;
     return mayClose
-      ? yours('Mark as handled')
+      ? yours('Mark as handled', 'escalations')
       : notYours('Waiting for an approver', 'waiting for an approver to mark it handled');
   }
-  if (next.escalate) return yours('Escalate to a team');
+  if (next.escalate) return yours('Escalate to a team', 'escalations');
   if (c.state === 'failed')
     return ctx.trial
       ? notYours('Reinvestigate', 'reinvestigate needs a real model, not in the trial')

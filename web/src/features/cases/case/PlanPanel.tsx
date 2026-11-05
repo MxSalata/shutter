@@ -34,6 +34,7 @@ const CHECK_QUESTIONS: Record<string, string> = {
   evidence: 'Is the evidence recent enough to act on?',
   capability: 'Does the receiver take conditional writes and keep receipts?',
   catalogue: 'Does an entry of the scenario catalogue match the evidence?',
+  rehearsal: "Did the receiver's dry run say this would apply?",
 };
 
 function GateTable({ d }: { d: GateDecision }) {

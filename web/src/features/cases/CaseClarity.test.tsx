@@ -226,13 +226,28 @@ describe("the case's action", () => {
     await waitFor(() => expect(document.activeElement).toHaveAccessibleName('What needs you now'));
   });
 
-  it("opens the card's details and focuses its heading on a blocked case", async () => {
+  it('takes the reader to the Escalations panel when escalating is the action', async () => {
     renderCase('C-000064');
     const action = await screen.findByTestId('case-action');
     await waitFor(() => expect(action).toHaveAccessibleName('Needs you: escalate to a team'));
     await userEvent.click(action);
-    const why = await within(await band()).findByRole('button', { name: 'Why, and what to do' });
-    await waitFor(() => expect(why).toHaveAttribute('aria-expanded', 'true'));
+    await waitFor(() => expect(document.activeElement?.id).toBe('escalations-title'));
+  });
+
+  it('takes the approver to the Approval section, where Approve and Reject are', async () => {
+    renderCase('C-000002');
+    const action = await screen.findByTestId('case-action');
+    await waitFor(() => expect(action).toHaveAccessibleName('Needs you: decide on the resend'));
+    await userEvent.click(action);
+    await waitFor(() => expect(document.activeElement?.id).toBe('approval-title'));
+  });
+
+  it("still opens the card's details for a reader whose action has no place of its own", async () => {
+    resetMock('operator');
+    renderCase('C-000002');
+    const action = await screen.findByTestId('case-action');
+    await waitFor(() => expect(action).toHaveAccessibleName('No action for you: waiting for an approver'));
+    await userEvent.click(action);
     await waitFor(() => expect(document.activeElement?.id).toBe('next-action-title'));
   });
 

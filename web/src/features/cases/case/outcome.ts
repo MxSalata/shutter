@@ -63,10 +63,13 @@ export function sameTimeSystems(snapshot: Snapshot | null | undefined): string[]
   return [...new Set(rows.map((r) => r.system).filter(Boolean))];
 }
 
+/** S8's second source in words, where the page says who moved the patient. */
+const glossSystem = (system: string) => (system === 'BEDMGR' ? 'the bed manager (BEDMGR)' : system);
+
 function sameTimeFact(snapshot: Snapshot | null | undefined): string {
   const systems = sameTimeSystems(snapshot);
   if (systems.length < 2) return '';
-  return `${systems.join(' and ')} moved the encounter at the same event time, so which movement is current can't be told from the times`;
+  return `${systems.map(glossSystem).join(' and ')} moved the encounter at the same event time, so the times can't say which movement is current`;
 }
 
 /** The latest gate decision, or undefined before the gate has checked a plan. */
@@ -240,7 +243,7 @@ export function outcomeReason(f: CaseFacts): string {
       ]);
     case 'awaiting_approval':
       return sentence([
-        'the plan passed the gate and waits for a person with the approver role to release or reject it',
+        'the plan passed the gate and waits for a person with the approver role to approve or reject it',
         sameTime,
       ]);
     default:
@@ -383,7 +386,7 @@ export function evidenceSummary(snapshot: Snapshot | null | undefined): string {
     const b = asObject(ward.body) ?? {};
     parts.push(
       status === 200
-        ? `the receiver holds the encounter ${humanize(str(b.state)).toLowerCase()}${b.ward ? ` in ${str(b.ward)}` : ''} at version ${str(b.version)}`
+        ? `when Shutter looked, the receiver held the encounter ${humanize(str(b.state)).toLowerCase()}${b.ward ? ` in ${str(b.ward)}` : ''} at version ${str(b.version)}`
         : status === 404
           ? 'the receiver has no such encounter'
           : "the receiver's state is unknown",

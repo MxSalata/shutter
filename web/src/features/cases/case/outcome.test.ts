@@ -92,7 +92,7 @@ describe('the outcome sentence', () => {
     expect(outcomeOf(f).label).toBe('Escalated: a person decides');
     expect(actionHeadline(f)).toBe('Asked a person to decide; sent nothing');
     expect(outcomeReason(f)).toBe(
-      "Handed to a person; PAS and BEDMGR moved the encounter at the same event time, so which movement is current can't be told from the times.",
+      "Handed to a person; PAS and the bed manager (BEDMGR) moved the encounter at the same event time, so the times can't say which movement is current.",
     );
     const next = nextAction(f);
     expect(next).toMatchObject({ kind: 'person', role: 'Operator' });
@@ -262,7 +262,7 @@ describe("the story steps' summaries", () => {
 
   it('says what the receiver holds and that it has no receipt', () => {
     expect(evidenceSummary(factsOf('C-000008').snapshot)).toBe(
-      'The receiver holds the encounter admitted in WARD-C at version 2; no receipt for this operation; PAS and BEDMGR have the same event time.',
+      'When Shutter looked, the receiver held the encounter admitted in WARD-C at version 2; no receipt for this operation; PAS and BEDMGR have the same event time.',
     );
     expect(evidenceSummary(null)).toBe('No evidence yet.');
   });

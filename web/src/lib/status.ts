@@ -137,7 +137,7 @@ export const disposition = (d: string): Status =>
   DISPOSITIONS[d] ?? s('neutral', humanize(d), undefined, IconListDetails);
 
 /** One gate check, in four states: a check a plan that writes nothing does not need is not counted as passed. */
-export type CheckState = 'passed' | 'blocked' | 'unknown' | 'not_applicable';
+export type CheckState = 'passed' | 'blocked' | 'unknown' | 'not_applicable' | 'later';
 
 export const CHECK_STATES: Record<CheckState, Status> = {
   passed: s('positive', 'Passed', 'The check passed', IconShieldCheck),
@@ -151,7 +151,13 @@ export const CHECK_STATES: Record<CheckState, Status> = {
   not_applicable: s(
     'neutral',
     'Not applicable',
-    'Not checked here: the plan writes nothing, the check belongs to a later stage, or there is nothing to check against',
+    'Not checked here: the plan writes nothing, or there is nothing to check against',
+    IconMinus,
+  ),
+  later: s(
+    'neutral',
+    'Checked later',
+    'Not checked at this stage: it is checked before any write',
     IconMinus,
   ),
 };
@@ -162,16 +168,21 @@ export const CHECK_STATES: Record<CheckState, Status> = {
  */
 export const NOT_APPLICABLE_CODES = ['NOT_APPLICABLE', 'NOT_YET_REQUIRED', 'NOT_CONFIGURED', 'NO_ENCOUNTER'];
 
+/** A check that belongs to a later stage: on a case waiting for authorization, "not applicable" would misread. */
+const LATER_CODE = 'NOT_YET_REQUIRED';
+
 export function checkState(c: { result: string; reason_code?: string }): CheckState {
   if (c.result === 'block') return 'blocked';
-  if (c.result === 'pass')
+  if (c.result === 'pass') {
+    if (c.reason_code === LATER_CODE) return 'later';
     return NOT_APPLICABLE_CODES.includes(c.reason_code ?? '') ? 'not_applicable' : 'passed';
+  }
   return 'unknown';
 }
 
 /** "6 passed, 3 not applicable": the checks of a decision by state, the empty states left out. */
 export function checkCounts(checks: { result: string; reason_code?: string }[]): string {
-  const order: CheckState[] = ['passed', 'blocked', 'unknown', 'not_applicable'];
+  const order: CheckState[] = ['passed', 'blocked', 'unknown', 'later', 'not_applicable'];
   const states = checks.map(checkState);
   return order
     .map((k) => [k, states.filter((x) => x === k).length] as const)
@@ -184,8 +195,11 @@ export function checkCounts(checks: { result: string; reason_code?: string }[]):
 export function gateOutcome(outcome: string, checks: { result: string; reason_code?: string }[]): Status {
   const states = checks.map(checkState);
   const n = (k: CheckState) => states.filter((x) => x === k).length;
-  const applicable = states.length - n('not_applicable');
-  const na = n('not_applicable') ? `; ${n('not_applicable')} not applicable` : '';
+  const applicable = states.length - n('not_applicable') - n('later');
+  const na = [
+    n('not_applicable') ? `; ${n('not_applicable')} not applicable` : '',
+    n('later') ? `; ${n('later')} checked later` : '',
+  ].join('');
   if (outcome === 'pass')
     return s(
       'positive',

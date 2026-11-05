@@ -265,7 +265,7 @@ test.describe(`the live case page against a v1.35 server ${area.tag}`, () => {
       .getByRole('button', { name: 'Outcome', exact: true })
       .click();
     await action.click();
-    await expect(page.getByRole('heading', { name: 'What needs you now' })).toBeFocused();
+    await expect(page.getByRole('heading', { name: 'Approval', exact: true })).toBeFocused();
     // The strip's Evidence stage opens the Evidence tab
     await page.getByRole('button', { name: 'Evidence: done, show the evidence' }).click();
     await expect(page.getByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');

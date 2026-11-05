@@ -65,10 +65,12 @@ export function Lifecycle({
   const handedOver = c.state === 'escalated';
   const stopColour = handedOver ? 'yellow' : 'red';
   const waiting = c.state === 'awaiting_approval';
+  // "Not yet" would promise a stage a stopped case won't reach unless a person sends it on
+  const halted = ['blocked', 'escalated', 'failed'].includes(c.state);
   const words: Record<PhaseStatus, string> = {
     done: 'done',
     current: waiting ? 'waiting for approval' : 'in progress',
-    pending: 'not yet',
+    pending: halted ? 'not reached' : 'not yet',
     skipped: 'not needed',
     stopped: handedOver ? 'handed to a person here' : 'stopped here',
   };

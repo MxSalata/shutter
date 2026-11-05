@@ -183,7 +183,7 @@ export function CaseStory({
         <ClosureRecord c={c} />
       </Step>
       {c.scenario === 'S8' ? (
-        <Step value="compare" title="Why the board matters" summary="Rules only and the board, side by side.">
+        <Step value="compare" title="Why the board matters" summary="The two runs, compared.">
           <S8Compare caseId={c.caseId} focus={compareFocus} />
         </Step>
       ) : null}
