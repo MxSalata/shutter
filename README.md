@@ -75,7 +75,7 @@ The three specialists (conformance, encounter and impact) and the coordinator ar
 | **The replay edition** on your machine, `./install.sh --replay` | Docker; no key, no Early Access file | Your own instance, the board replaying its recorded live runs at no cost | Healthy in 2 to 8 min once the 6 GB public image is pulled |
 | **The AI Hub edition** on your machine, `./install.sh --image-file ...` | Docker and the build 109 file from the Early Access portal; `ANTHROPIC_API_KEY` for live agents | Your own instance, with live agents or, without a key, their recorded runs | Healthy in 3 to 15 min on build 109 ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md)) |
 
-**In a hospital's own IRIS for Health:** Shutter installs without the demo, beside the productions it watches or inside one ([docs/INSTALL.md](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md)). Failures reach it through a forwarder, or through the production's alerts with no change to the hospital's own code. A receiver with no API still gets a case, the board's diagnosis and a drafted escalation email, never a resend, and a production review needs nothing configured.
+**In a hospital's own IRIS for Health:** Shutter installs without the demo, beside the productions it watches or inside one ([docs/INSTALL.md](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md); [several namespaces](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#9-several-namespaces)). Failures reach it through a forwarder, or through the production's alerts with no change to the hospital's own code. A receiver with no API still gets a case, the board's diagnosis and a drafted escalation email, never a resend, and a production review needs nothing configured.
 
 **The online demo** is my fictional hospital, live, with made-up patients. The demo runs on AI Hub build `2026.3.0AI.154.0`; on your machine, use `2027.1.0AI.109.0` (below). The board runs live for the judges' account, within a model budget of 15 USD a day; everyone can see its recorded runs in the trial. Its sign-ins:
 
@@ -257,7 +257,7 @@ Tokens and cost by board member, model and mode, in SQL: [docs/readme/running.md
 
 ## How it is tested
 
-- **On a real IRIS, every push to `main` that changes code:** the full install on IRIS for Health Community 2026.2, the receiver's 37 contract tests, 267 unit tests (test methods in `tests/unit`; 8 more run only on an AI Hub build) and 26 scenarios end to end through the REST API, one through the demo hospital's production.
+- **On a real IRIS, every push to `main` that changes code:** the full install on IRIS for Health Community 2026.2, the receiver's 37 contract tests, 285 unit tests (test methods in `tests/unit`; 8 more run only on an AI Hub build) and 26 scenarios end to end through the REST API, one through the demo hospital's production.
 - **The approval boundary, attacked over HTTP:** an approval naming another plan or a stale version (409), an operator's approval (403), one approval sent twice (one write), a Workflow inbox approval with an empty or another digest (blocked, no write), the receiver changed after approval (S20, no write), and a resend of a delivery the receiver already holds (S3, no write).
 - **Privacy, and a question that tries to act:** [evaluation.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md#what-the-agents-see-and-a-question-that-tries-to-act).
 - **The web app:** 1375 component and 732 browser tests, axe-core on 69 screens and states in 5 appearances.
@@ -269,6 +269,7 @@ Tokens and cost by board member, model and mode, in SQL: [docs/readme/running.md
 
 ## Limits, plainly
 
+- Orders, results and documents get a case and a drafted email, never a resend.
 - Without an API key the agents replay recorded runs. A case with no recording, such as one from your own HL7 file, takes the rules path: the gate alone decides and a resend waits for a person.
 - The receiver is a demo bed-management system built for the scenarios. Shutter resends only to a receiver whose API (state, receipt, capabilities and operations paths) the site profile describes. A plain MLLP receiver gets no resend, because an ACK says a message arrived, not what the receiver now holds: a NACK or a lost connection on a stock `EnsLib.HL7.Operation.TCPOperation` with `AlertOnError` on opens a case through the alert intake, and a person gets the evidence and the reason nothing was sent (`tests/e2e/plain_receiver_check.py`).
 - No local-model profile, on purpose: the board works through typed tool calls, which a frontier model makes reliably on evidence this detailed. A site's own model behind an API would be a provider in the Config Store; that is untested.
