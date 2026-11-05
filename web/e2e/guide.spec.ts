@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { GUIDE_KEY } from './guide';
+import { GUIDE_KEY, skipWelcome } from './guide';
 import { go, signIn } from './helpers';
 
 /**
@@ -117,6 +117,52 @@ test.describe('the guide', () => {
     ).toBeChecked();
     // The address no longer opens the welcome on a reload
     await expect(page).toHaveURL(/\?trial#\//);
+  });
+
+  test("the Tour menu's items put focus inside what they open, and closing it brings focus back to Tour", async ({
+    page,
+  }) => {
+    await skipWelcome(page);
+    await page.goto('./?trial#/scenarios');
+    const tour = page.getByRole('button', { name: 'Tour', exact: true });
+    for (const [item, dialog] of [
+      ['Choose a chapter', 'Choose a chapter'],
+      ['Restart the tour', 'Welcome to the Shutter trial'],
+    ]) {
+      await tour.click();
+      await page.getByRole('menuitem', { name: item }).click();
+      const opened = page.getByRole('dialog', { name: dialog });
+      await expect(opened).toBeVisible();
+      // Past the moment a closing menu gives focus back
+      await page.waitForTimeout(300);
+      expect(
+        await opened.evaluate((d) => d.contains(document.activeElement)),
+        `${item}: focus is inside the dialog`,
+      ).toBe(true);
+      await page.keyboard.press('Escape');
+      await expect(opened).toHaveCount(0);
+      await expect(tour).toBeFocused();
+    }
+    // Closed with Escape, with nothing chosen, the menu itself still gives focus back
+    await tour.click();
+    await expect(page.getByRole('menuitem', { name: 'Choose a chapter' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(tour).toBeFocused();
+  });
+
+  test("the card's More menu puts focus inside the chapters too", async ({ page }) => {
+    await startAt(page, 'scenarios/start');
+    await page.goto('./?trial#/scenarios');
+    await page.getByRole('button', { name: 'Resume tour' }).click();
+    await page.getByRole('menuitem', { name: 'Resume the tour' }).click();
+    const guide = page.getByRole('region', { name: 'Guide' });
+    await expect(guide.getByRole('heading', { level: 2 })).toBeFocused();
+    await guide.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('menuitem', { name: 'Choose a chapter' }).click();
+    const opened = page.getByRole('dialog', { name: 'Choose a chapter' });
+    await expect(opened).toBeVisible();
+    await page.waitForTimeout(300);
+    expect(await opened.evaluate((d) => d.contains(document.activeElement))).toBe(true);
   });
 
   test("opens a chapter from Help, and stays away after Don't show again", async ({ page }) => {

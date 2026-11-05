@@ -155,8 +155,8 @@ test.describe('where the tour scrolls to', () => {
   });
 
   /** Resumes a stored step of the quick tour from the Tour menu. */
-  async function resumeAt(page: Page, at: string, n: number) {
-    await page.setViewportSize({ width: 1280, height: 800 });
+  async function resumeAt(page: Page, at: string, n: number, width = 1280, height = 800) {
+    await page.setViewportSize({ width, height });
     await page.addInitScript(
       ([key, value]) => localStorage.setItem(key, value),
       [GUIDE_KEY, JSON.stringify({ version: 2, scope: 'quick', at, completed: [], dismissed: true })],
@@ -180,6 +180,79 @@ test.describe('where the tour scrolls to', () => {
     await expect(page.locator('[data-tour-action="ask-open"]')).toBeFocused();
     await atRest(page);
     expect((await measure(page)).cardTop).toBe(before.cardTop);
+  });
+
+  /** The S2 decision step's Try it, by hand: the chip, the real button, the confirm. */
+  async function approveByHand(page: Page, width = 1280, height = 800) {
+    const guide = await resumeAt(page, 's2/decision', 3, width, height);
+    await expect(page.locator('[data-guide-card]')).toBeVisible();
+    await guide.getByRole('button', { name: 'Try it: press Approve plan' }).click();
+    await expect(page.getByTestId('guide-try-pointer')).toBeVisible();
+    const control = page.locator('[data-tour-action="approve-plan"]');
+    await expect(control).toBeFocused();
+    await control.click();
+    // Pressed, the pointer has done its work: nothing floats over the dialog
+    await expect(page.getByTestId('guide-try-pointer')).toHaveCount(0);
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: /^Approve this plan/ })
+      .click();
+    return guide;
+  }
+
+  /** The reader who approved by hand stands on the verified step, as one who pressed Next would, with no pointer. */
+  async function expectLandedOnVerified(page: Page, guide: ReturnType<Page['getByRole']>) {
+    // The replay plays first, and only then the tour moves on
+    await expect(page.getByTestId('replay-note')).toBeVisible({ timeout: 15_000 });
+    await expect(guide).toContainText('Step 4 of 9');
+    await expect(guide.getByRole('heading', { name: 'Checked at the bed system' })).toBeFocused();
+    // Approved by the reader's own hand: the card does not claim it was done for them
+    await expect(guide).not.toContainText('Approved for you');
+    await atRest(page);
+    const m = await measure(page);
+    checkStep(m, 'the verified step after an approval by hand');
+    expect(m.cardTop, "the card is on the screen, not left a screen's height below it").toBeLessThan(
+      m.height / 2,
+    );
+    await expect(page.getByTestId('guide-try-pointer')).toHaveCount(0);
+    await expect(page.locator('[data-tour-try]')).toHaveCount(0);
+  }
+
+  test('an approval by hand on the Try it step goes on to the verified step, and drops the pointer', async ({
+    page,
+  }) => {
+    const guide = await approveByHand(page);
+    await expectLandedOnVerified(page, guide);
+    // One step on, not two: the tour stays there
+    await page.waitForTimeout(1000);
+    await expect(guide).toContainText('Step 4 of 9');
+  });
+
+  test('an approval by hand on a wide screen does too', async ({ page }) => {
+    const guide = await approveByHand(page, 1920, 1080);
+    await expectLandedOnVerified(page, guide);
+  });
+
+  test.describe('an approval by hand with reduced motion', () => {
+    test.use({ reducedMotion: 'reduce' });
+    test('goes on to the verified step too', async ({ page }) => {
+      const guide = await approveByHand(page);
+      await expectLandedOnVerified(page, guide);
+    });
+  });
+
+  test('cancelling the approval leaves the step where it was, and the chip brings the pointer back', async ({
+    page,
+  }) => {
+    const guide = await resumeAt(page, 's2/decision', 3);
+    await guide.getByRole('button', { name: 'Try it: press Approve plan' }).click();
+    const control = page.locator('[data-tour-action="approve-plan"]');
+    await control.click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+    await expect(guide).toContainText('Step 3 of 9');
+    await expect(page.getByTestId('guide-try-pointer')).toHaveCount(0);
+    await guide.getByRole('button', { name: 'Try it: press Approve plan' }).click();
+    await expect(page.getByTestId('guide-try-pointer')).toBeVisible();
   });
 
   test("leaves the page where the reader's own scroll put it, even while the card is landing", async ({

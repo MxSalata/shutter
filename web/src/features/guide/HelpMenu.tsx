@@ -4,6 +4,7 @@ import { HeaderHelpButton } from '@/components/HeaderHelpButton';
 import { ENV } from '@/env/mode';
 import { LeaveTrialItem, TRIAL_ONLY_ID, TrialOnlyNote } from '@/trial/LeaveTrial';
 import { positionOf } from './controller';
+import { useMenuHandOver } from './reveal';
 import { useGuide } from './store';
 
 /** The button's word in the trial: "Resume tour" while a tour left part way waits on this device, else "Tour". */
@@ -24,15 +25,20 @@ export function TrialHelpMenu() {
   const pos = positionOf(progress);
   const started = !!pos || progress.completed.length > 0 || progress.dismissed;
   const noteId = `${TRIAL_ONLY_ID}-help`;
+  const { menu, handOver } = useMenuHandOver();
   return (
-    <Menu shadow="md" width={260} position="bottom-end" withinPortal>
+    <Menu shadow="md" width={260} position="bottom-end" withinPortal {...menu}>
       <Menu.Target>
         <HeaderHelpButton label={tourLabel(phase, !!pos)} />
       </Menu.Target>
       <Menu.Dropdown aria-describedby={ENV.canLeave ? undefined : noteId}>
         <Menu.Label>The tour</Menu.Label>
         {pos ? (
-          <Menu.Item className="guide-control" leftSection={<IconPlayerPlay size={16} />} onClick={resume}>
+          <Menu.Item
+            className="guide-control"
+            leftSection={<IconPlayerPlay size={16} />}
+            onClick={handOver(resume)}
+          >
             Resume the tour
           </Menu.Item>
         ) : null}
@@ -40,11 +46,15 @@ export function TrialHelpMenu() {
           className="guide-control"
           leftSection={started ? <IconRotate size={16} /> : <IconPlayerPlay size={16} />}
           // The welcome again, with its choice of tours; Start the tour there begins from the first step
-          onClick={openWelcome}
+          onClick={handOver(openWelcome)}
         >
           {started ? 'Restart the tour' : 'Start the tour'}
         </Menu.Item>
-        <Menu.Item className="guide-control" leftSection={<IconList size={16} />} onClick={openChapters}>
+        <Menu.Item
+          className="guide-control"
+          leftSection={<IconList size={16} />}
+          onClick={handOver(openChapters)}
+        >
           Choose a chapter
         </Menu.Item>
         <Menu.Divider />
