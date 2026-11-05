@@ -841,6 +841,8 @@ ack_levels()
 
 # ---- taking a namespace off ----
 step("Taking the namespaces back off")
+r = raw("OnboardRemove", "PATHOLOGY", '{"credential": true')
+check("a removal whose options do not parse refuses, and PATHOLOGY stays on", r.get("ok") is False and value("SHUTTER", '$DATA(^Shutter.Config("onboard","PATHOLOGY"))') != "0", r)
 jobs_before = jobs("PATHOLOGY")
 r = remove("PATHOLOGY")
 print(json.dumps(r, indent=1)[:1800])
