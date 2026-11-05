@@ -42,7 +42,7 @@ import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router';
 import { api, newIdempotencyKey, seg } from '@/api/client';
 import { keys, useCan } from '@/api/hooks';
-import type { Can, CaseDetail, PlanView } from '@/api/types';
+import type { CaseDetail, PlanView } from '@/api/types';
 import { TechDetail } from '@/components/TechDetail';
 import { ENV } from '@/env/mode';
 import { REPLAY_DONE } from '@/lib/events';
@@ -60,6 +60,7 @@ import {
   stepAt,
   stepForRole,
   tourMinutes,
+  welcomeActions,
   type ChapterGroup,
   type GuideScope,
 } from './registry';
@@ -134,18 +135,6 @@ const SCOPE_WORDS: Record<GuideScope, () => string> = {
   engineer: () =>
     `${SCOPES.engineer.length} steps, about ${tourMinutes('engineer')} min, technical detail on: the receipt, the gate's codes, what each agent cited, the message trace.`,
 };
-
-/** What this role can do in the trial, in words: the welcome promises nothing the role's controls grey out. */
-export function welcomeActions(can: Can): string {
-  const verbs = [
-    can.approve && 'approve',
-    can.scenarios && 'run',
-    can.configure && 'save',
-    'escalate',
-  ].filter((v): v is string => !!v);
-  const said = verbs.length > 1 ? `${verbs.slice(0, -1).join(', ')} or ${verbs.at(-1)}` : verbs[0];
-  return said.charAt(0).toUpperCase() + said.slice(1);
-}
 
 function Welcome({ initial }: { initial: GuideScope }) {
   const can = useCan();
