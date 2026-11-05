@@ -242,7 +242,19 @@ describe("the case's action", () => {
     await waitFor(() => expect(document.activeElement?.id).toBe('approval-title'));
   });
 
-  it("still opens the card's details for a reader whose action has no place of its own", async () => {
+  it("opens the card's details for an action that has no place of its own", async () => {
+    resetMock('operator');
+    renderCase('C-000014');
+    const action = await screen.findByTestId('case-action');
+    await waitFor(() => expect(action).toHaveAccessibleName('Needs you: decide the next step'));
+    const why = await screen.findByRole('button', { name: /^Why/ });
+    expect(why).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(action);
+    await waitFor(() => expect(document.activeElement?.id).toBe('next-action-title'));
+    expect(why).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('goes to the card for a reader who only waits for someone else', async () => {
     resetMock('operator');
     renderCase('C-000002');
     const action = await screen.findByTestId('case-action');
