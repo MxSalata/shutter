@@ -32,6 +32,8 @@ Shutter is ready after 10 s:
 real	3m21.343s
 ```
 
+`install.sh` then counted from after the build. It now counts from the first install step, so this run would say about 3 min 21 s.
+
 The build log says "AI Hub is in this image: loading the full package (the core and the live agents)", and the AI Hub install reports the descriptor registry, six knowledge bases (contracts, lifecycle, effects, playbooks, review, explain) and the publisher's `/mcp/shutter`.
 
 ## The Doctor
