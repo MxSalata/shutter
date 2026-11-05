@@ -306,7 +306,12 @@ function CaseBody({ c }: { c: CaseDetail }) {
         investigation={boardOnTop ? 'the board' : undefined}
       />
       <S8RulesNote c={c} />
-      <CounterpartStrip c={c} writesSent={facts.receipt.writes} onCompare={showCompare} />
+      <CounterpartStrip
+        c={c}
+        writesSent={facts.receipt.writes}
+        boardSat={boardOnTop}
+        onCompare={showCompare}
+      />
       {/* Said once the replay has played: the approval the receipt shows is the recording's, and yours is noted */}
       {played ? (
         <Text

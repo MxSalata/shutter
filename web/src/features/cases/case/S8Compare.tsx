@@ -340,32 +340,36 @@ export function S8RulesNote({ c }: { c: CaseDetail }) {
  * linked, with its outcome against S8's expectation (rules alone's write reads "Not as expected"), how the evaluation
  * scored each mode's play of S8 ("Board: as expected", "Rules alone: differs, wrote WARD-B"), and a button to the side
  * by side. A board run that sent nothing also says what that kept from happening, since its own page shows only a
- * case waiting for a person; that holds with no other run to link, as on the online demo. The wards are S8's own.
+ * case waiting for a person; that holds with no other run to link, and on a site policy case the policy left to the
+ * board, which is what the online demo's S8 case is. The wards are S8's own.
  */
 export function CounterpartStrip({
   c,
   writesSent,
+  boardSat = false,
   onCompare,
 }: {
   c: CaseDetail;
   /** The writes this case sent, from its attempts. */
   writesSent: number;
+  /** A site policy case whose runs show the board sat, read as the board's run. */
+  boardSat?: boolean;
   onCompare: () => void;
 }) {
-  const mine = c.scenario === 'S8' && (c.mode === 'rules' || c.mode === 'board');
+  const mine = c.scenario === 'S8' && (c.mode === 'rules' || c.mode === 'board' || boardSat);
   const hidden = scenariosHidden(useCan());
   const cases = useCases({ scenario: 'S8', limit: 50 }, mine);
   const scenario = useScenarios().data?.scenarios.find((s) => s.id === 'S8');
   const { rules, board } = s8Pair(cases.data?.items ?? []);
   if (!mine) return null;
   const stakes =
-    c.mode === 'board' && c.state === 'escalated' && writesSent === 0
+    c.mode !== 'rules' && c.state === 'escalated' && writesSent === 0
       ? "A resend here writes WARD-B over the bed manager's WARD-C with every check passed. The board sent nothing."
       : '';
-  const other = rules && board ? (c.mode === 'board' ? rules : board) : undefined;
+  const other = rules && board ? (c.mode === 'rules' ? board : rules) : undefined;
   const counterpart = other && other.caseId !== c.caseId ? other : undefined;
   if (!counterpart && !stakes) return null;
-  const otherRun = c.mode === 'board' ? 'Rules only' : 'The board';
+  const otherRun = c.mode === 'rules' ? 'The board' : 'Rules only';
   const played = playedFor('S8');
   const marks = counterpart
     ? [playedMark('board', played?.board), playedMark('rules', played?.rules, rules?.ward)].filter(
