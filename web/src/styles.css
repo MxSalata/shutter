@@ -1665,6 +1665,16 @@ body {
   outline: 2px solid var(--mantine-color-text);
   outline-offset: 1px;
 }
+/* Keyboard focus, in the primary colour and further out than the chosen tile's outline, which stays as an inner ring
+   when the chosen tile has the focus */
+.home-card:focus-visible,
+.stat-tile:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 3px;
+}
+.stat-tile[aria-pressed='true']:focus-visible {
+  box-shadow: 0 0 0 1px var(--mantine-color-text);
+}
 .stat-figure {
   font-size: 1.75rem;
   line-height: 1.1;
