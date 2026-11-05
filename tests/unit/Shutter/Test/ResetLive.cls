@@ -1,7 +1,8 @@
 /// The scenario runner's reset and the live hospital (CONTRACTS 4 and 4.4): the reset clears the live feed's bed map in the
 /// hospital's namespace unless a story is playing, and a story cut off mid-play leaves no fault on the receiver, since
 /// the player records the receivers it faulted and the next job's OnInit turns them off. The hospital's globals and the
-/// receiver's fault are put back as they were. Both tests need the hospital namespace recorded in this one.
+/// receiver's fault are put back as they were, with the resetAt, mode and scenario the real Reset changes; the receivers it
+/// resets are not. Both tests need the hospital namespace recorded in this one.
 Class Shutter.Test.ResetLive Extends %UnitTest.TestCase
 {
 
@@ -11,6 +12,8 @@ Property Saved As %String [ MultiDimensional ];
 
 Property SavedFault As %String [ MultiDimensional ];
 
+Property SavedConfig As %String [ MultiDimensional ];
+
 Method OnBeforeAllTests() As %Status
 {
     Set ..Hospital = $GET(^Shutter.Config("hospitalNamespace"))
@@ -19,6 +22,7 @@ Method OnBeforeAllTests() As %Status
         For node = "adm", "bed", "turn", "playing", "faulted", "storm" { Merge ..Saved(node) = ^|h|Hospital.Live(node) }
     }
     Merge ..SavedFault = ^Downstream.Config("fault")
+    For node = "resetAt", "mode", "scenario" { Merge ..SavedConfig(node) = ^Shutter.Config(node) }
     Quit $$$OK
 }
 
@@ -30,6 +34,7 @@ Method OnAfterAllTests() As %Status
     }
     Kill ^Downstream.Config("fault")
     Merge ^Downstream.Config("fault") = ..SavedFault
+    For node = "resetAt", "mode", "scenario" { Kill ^Shutter.Config(node) Merge ^Shutter.Config(node) = ..SavedConfig(node) }
     Quit $$$OK
 }
 
@@ -74,9 +79,10 @@ Method TestResetClearsTheBedMap()
 
 /// A hospital the caller can't touch costs the bed map only: Reset goes on to the folders, the mode and resetAt (before
 /// v1.42 it stopped with a 500, the receiver already reset). A namespace that doesn't exist fails as a protected one does.
+/// This calls the real Reset, so it resets the receivers; OnAfterAllTests puts back resetAt, the mode and the scenario.
 Method TestAMapItCannotTouchLeavesTheResetWhole()
 {
-    Set saved = $GET(^Shutter.Config("hospitalNamespace")), before = $GET(^Shutter.Config("resetAt"))
+    Set saved = $GET(^Shutter.Config("hospitalNamespace"))
     Set ^Shutter.Config("hospitalNamespace") = "SHUTTERNOSUCHNS"
     Set live = "", answer = ""
     Try {
