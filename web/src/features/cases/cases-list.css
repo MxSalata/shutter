@@ -14,13 +14,21 @@
   gap: 4px;
 }
 
-/* Each group's tiles are the same width, so a fourth closed outcome takes its room from the row as a whole */
+/* Each group's tiles are the same width, so a fourth closed outcome takes its room from the row as a whole; the two
+   groups end level, however their labels wrap */
 .cases-tile-groups {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--mantine-spacing-md);
 }
-@media (min-width: 75em) {
+.cases-tile-groups > section {
+  display: flex;
+  flex-direction: column;
+}
+.cases-tile-groups .cases-tiles {
+  flex: 1;
+}
+@media (min-width: 77em) {
   .cases-tile-groups {
     grid-template-columns: 1fr 1fr;
   }
