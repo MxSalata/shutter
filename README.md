@@ -82,7 +82,7 @@ The three specialists (conformance, encounter and impact) and the coordinator ar
 - The web app: `demo` / `shutter`.
 - The Management Portal's Visual Trace, read only, as `demo-trace` / `Shutter-Demo-IRIS-Portal`: the portal's address (`/csp/`) first asks you to sign in with GitHub or an emailed one-time code, then signs you in as that user.
 
-**On your machine:** Docker, then one command. `install.sh` checks Docker, Compose, memory, disk, the port and the image first and changes nothing until every check passes; then it builds, starts and waits until Shutter is healthy. On Windows, run it in Git Bash or a WSL 2 shell; from PowerShell, use the [Run details](https://github.com/MxSalata/shutter#run-details) commands. On Apple silicon, pass `--image-file` the `irishealth_arm64-community` file of the same build (the replay edition's public image has an ARM64 build too); Shutter has not been run on ARM64 yet.
+**On your machine:** Docker, then one command: `install.sh` checks Docker, Compose, memory, disk, the ports and the image and changes nothing until every check passes ([on Windows or Apple silicon](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md#notes-on-the-install)).
 
 ```sh
 git clone https://github.com/MxSalata/shutter.git && cd shutter
@@ -115,7 +115,7 @@ The mode chooses who proposes the plan; the gate and the rehearsal are the same 
 1. In the trial, choose **Explore on my own** on the welcome; on your machine, if a prompt offers the trial, choose **Not now**, and leave the site profile notice for later: the shipped profile serves every scenario. In **Scenarios**, run **S2** in **Board** mode. About 20 seconds later (a minute live) its case waits for approval. There, **Decide on the resend**, **Review the plan and decide**, **Approve plan**, **Approve this plan**: one conditional write, then "Verified".
 2. Run **S8** in **Rules only** and approve (in the trial its recorded case is already approved and written): WARD-B overwrites the bed manager's WARD-C. In **Board** it escalates, writing nothing. The case page sets the two side by side. In the trial, **In IRIS: Message trace** on C-000008 opens a recorded screenshot.
 
-**Try to break it,** with S2's case waiting for approval. The first also works in the trial (under your name, **Switch trial role**); the rest need your machine:
+**Try to break it,** with S2's case waiting for approval: run S2 again for each; in the trial, reload. The first also works in the trial (under your name, **Switch trial role**); the rest need your machine:
 
 - Sign in as `operator` / `shutter`: **Approve plan** is disabled ("Deciding needs the approver role"), and the API answers 403.
 - Open the **Approve plan** dialog in two tabs and confirm in each: one write; the second answers 409 ("The case is resolved, not awaiting approval").
