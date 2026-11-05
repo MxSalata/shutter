@@ -1,12 +1,18 @@
 import { MantineProvider } from '@mantine/core';
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { CaseDetail } from '@/api/types';
 import fixtures from '@/mocks/fixtures.json';
 import { renderUi } from '@/test/render';
 import { theme } from '@/theme';
 import { CaseHeader } from './CaseHeader';
+
+// The IRIS row asks the settings whether this is the online demo, which isn't what these tests are about
+vi.mock('@/api/hooks', async (original) => ({
+  ...(await original<typeof import('@/api/hooks')>()),
+  useSettings: () => ({ data: undefined }),
+}));
 
 const base = { caseId: 'C-000123', state: 'resolved', event: 'transfer', ward: 'WARD-B' } as CaseDetail;
 

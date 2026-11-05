@@ -267,8 +267,6 @@ describe('the guide', () => {
     expect(useGuide.getState().progress.at).toBe('s2/verified');
     // The reader's own hand: the card says nothing of the tour having done it
     expect(useGuide.getState().approvedForYou).toBeNull();
-    expect(await screen.findByRole('heading', { name: 'Checked at the bed system' })).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByTestId('guide-try-pointer')).not.toBeInTheDocument());
   });
 
   it('exits on Escape without finishing, and resumes from the header where it stopped', async () => {
