@@ -44,7 +44,6 @@ Method TestSqlFormsAnswerJson()
     Do $$$AssertEquals(##class(Shutter.Util.Onboard).NS(" pathology "_$CHAR(0)), "PATHOLOGY", "a namespace's name is trimmed and upper case")
 }
 
-/// A name another namespace holds is taken; one a person put in the profile with no namespace is that person's to use.
 /// The plan's line on what a completed message proves, from the settings that apply (measured in the e2e).
 Method TestCompletedProves()
 {
@@ -58,6 +57,7 @@ Method TestCompletedProves()
     Do $$$AssertTrue($CLASSMETHOD(o, "CompletedProves", 1, ":*=S") [ "neither AA nor CA completes", "nothing positive completes")
 }
 
+/// A name another namespace holds is taken, and so is one a person gave an API with no namespace.
 Method TestReceiverNameTakenElsewhere()
 {
     Set onb = "Shutter.Util.Onboard"
@@ -66,6 +66,8 @@ Method TestReceiverNameTakenElsewhere()
     Do $$$AssertEquals($CLASSMETHOD(onb, "TakenElsewhere", "OTHERNS", "Onboard Unit Out"), 1, "taken by another namespace")
     Do $$$AssertEquals($CLASSMETHOD(onb, "TakenElsewhere", ..#NS, "Onboard Unit Out"), 0, "not by its own")
     Kill ^Shutter.Config("onboard", ..#NS)
+    Set shipped = $PARAMETER("Shutter.Production", "RECEIVER")
+    Do $$$AssertEquals($CLASSMETHOD(onb, "TakenElsewhere", "OTHERNS", shipped), 1, "an entry with an API and no namespace is nobody's to share")
 }
 
 Method TestReportedReceiver()
