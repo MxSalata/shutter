@@ -978,8 +978,8 @@ ClassMethod CaseReinvestigate(caseId As %String) As %Status
     Set msg = ##class(Shutter.Msg.Reinvestigate).%New()
     Set msg.CaseId = caseId, msg.RequestedBy = ..User(), msg.Reason = $EXTRACT(##class(Shutter.Util.Json).Str(body, "reason"), 1, 2000)
     // Who may spend the model budget (v1.39): the reopened case's runs count against the requester's share, and without
-    // the live agents, or while the provider refuses the key, they answer from recordings only (a board with none takes
-    // the rules path), as a question does (14). Before this every reopening ran live as "system", on nobody's share.
+    // the live agents, or while the provider refuses the key, they answer from recordings only (a board with none leaves
+    // the case escalated for a person), as a question does (14). Before this every reopening ran live as "system", on nobody's share.
     Set liveAllowed = $SYSTEM.Security.Check("Shutter_LiveAgents", "USE")
     If liveAllowed {
         Set avail = ##class(Shutter.Util.LiveAgents).Availability(..User())

@@ -172,6 +172,35 @@ Method TestLeaderFailureFinishesTheLead()
     Do $$$AssertEquals(wf.TellFollowers("C-TEST-LEAD-A", after), 0, "nobody was waiting, so nobody is told")
 }
 
+/// A case reopened by someone without the live agents, whose board has no recording: it stays with a person and says why,
+/// and no plan is made, since the plain resend would replace the board's stop with a plan nobody on the board looked at.
+Method TestReopenedWithNoLiveAgentsAndNoRecording()
+{
+    Set c = ..SavedCase("C-TEST-LEAD-R")
+    Set snap = ##class(Shutter.Store.Snapshot).Begin(c)
+    Do $$$AssertStatusOK(snap.%Save(), "a snapshot")
+    Do $$$AssertStatusOK(c.SetSnapshot(snap), "the case's current one")
+    For member = "conformance", "encounter" {
+        Set run = ##class(Shutter.Store.AgentRun).%New()
+        Do run.CaseSetObjectId(c.%Id())
+        Set run.Snapshot = snap, run.Status = "no_record"
+        Do $$$AssertStatusOK(run.%Save(), member _ " has no recording")
+    }
+    Set wf = ..Instance()
+    Set wf.CaseId = "C-TEST-LEAD-R", wf.Reopened = 1, wf.LiveAllowed = 0
+    Do $$$AssertStatusOK(wf.AfterBoard(c), "the board's end is handled")
+    Set after = ##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-R")
+    Do $$$AssertEquals(after.State, "escalated", "it stays with a person")
+    Do $$$AssertTrue(after.Headline [ "without the live agents", "the headline says why: " _ after.Headline)
+    Set id = after.%Id(), n = 1, text = ""
+    &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.Plan WHERE "Case" = :id)
+    Do $$$AssertEquals(+n, 0, "no plan is made")
+    &sql(SELECT TOP 1 Text INTO :text FROM Shutter_Store.CaseEvent WHERE "Case" = :id AND ToState = 'escalated' ORDER BY Seq DESC)
+    Do $$$AssertTrue(text [ "no board member has a recording", "the audit trail says why: " _ text)
+    Do $$$AssertEquals(##class(Shutter.API.Dispatch).ReasonFromEvent(text, "escalated"), "ESCALATED", "the reason it shows")
+    Do ##class(Shutter.Store.Case).PurgeCase(id)
+}
+
 /// A leader an approver abandons: the fresh instance that abandons it never knew the lead, so it finds the lead by the
 /// case id, finishes it as failed and tells the followers; a lead already ended, or a case that leads nothing, is left
 /// as it is.

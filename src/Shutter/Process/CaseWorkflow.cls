@@ -827,6 +827,13 @@ Method AfterBoard(case As Shutter.Store.Case) As %Status
 {
     Set all = ##class(Shutter.Store.Finding).ForSnapshot(case.CurrentSnapshot)
     If all.%Size() = 0 {
+        // A reopening by someone without the live agents, with no recording to replay: nobody on the board has looked at
+        // the fresh evidence, so the plain resend would only replace the board's stop with a plan nobody asked for.
+        If ..Reopened && '..LiveAllowed && ..AllNoRecord(case) {
+            Do ..LeadFinish(case, "failed", "", "the reopening has no live agents and no recording")
+            Set case.Headline = "Escalated: reopened without the live agents, and no recording to replay"
+            Quit case.Transition("escalated", "Reopened without the live agents, and no board member has a recording for this case, so nobody has looked at the fresh evidence and nothing is planned. A person must look, or someone with the live agents reinvestigates", "system")
+        }
         // In replay mode a case outside the fixtures has no recording for anyone: the rules path plans the plain
         // resend and the gate judges it, instead of an escalation that says only "no findings" (B10).
         If ..AllNoRecord(case) {
