@@ -104,10 +104,13 @@ test.describe('the page at 1280 px @scenarios', () => {
 
   test('Back from a case returns to the run mode and the filter', async ({ page }) => {
     await go(page, '/scenarios');
+    // One after the other with no wait, on a machine slowed four times: the second choice keeps the first
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
     await page.getByRole('radio', { name: /^Rules only/ }).click();
-    await expect(page).toHaveURL(/mode=rules$/);
     await page.getByText(/^Escalate \d+$/).click();
     await expect(page).toHaveURL(/mode=rules&outcome=escalate$/);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     const list = page.getByRole('region', { name: 'Every scenario' });
     // Its header and the eight that should escalate in Rules only
     await expect(list.getByRole('row')).toHaveCount(9);

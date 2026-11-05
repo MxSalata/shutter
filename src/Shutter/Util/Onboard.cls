@@ -351,7 +351,7 @@ ClassMethod Plan(ns As %String, options As %DynamicObject = "") As %DynamicObjec
         For i = 1:1:$LISTLENGTH(listed) {
             Set one = $LIST(listed, i)
             If ..TakenElsewhere(ns, one) && (prefix = "") Set prefix = ns
-            If ..WrittenByHand(one) Do plan.warnings.%Push("The site profile's " _ one _ " has an API and names no namespace, so it may be another system: this namespace's " _ one _ " is reported as " _ ##class(Shutter.Intake.Forwarder).ReportedReceiver(one, ns) _ ", a draft that nothing is written to. If they are one system, add ""namespace"": """ _ ns _ """ to that entry and plan again")
+            If ..WrittenByHand(one) Do plan.warnings.%Push("The site profile's " _ one _ " has an API and names no namespace, so it may be another system: this namespace's " _ one _ " is reported as " _ ##class(Shutter.Intake.Forwarder).ReportedReceiver(one, ns) _ ", a draft that nothing is written to. If they are one system, add ""namespace"": """ _ ns _ """ to that entry before the apply: once applied, the name stays until the namespace is taken off")
         }
     }
     Set plan."receiver_prefix" = prefix
@@ -377,6 +377,7 @@ ClassMethod Plan(ns As %String, options As %DynamicObject = "") As %DynamicObjec
             Set o.proves = "A connector of the site's own: what completes here is its code's choice, so read it"
         }
         Do plan.operations.%Push(o)
+        If $ISOBJECT(forwarder) && ..WrittenByHand(reported) && $DATA(^Shutter.Config("onboard", ns, "items", forwarder.item)) && '$DATA(^Shutter.Config("onboard", ns, "receivers", name)) Do plan.warnings.%Push("The site profile's " _ reported _ " has an API and names no namespace, and this namespace's " _ name _ " would report under that name, so its failures could be written there. Take the namespace off and apply it again to give it a prefix, or add ""namespace"": """ _ ns _ """ to that entry if they are one system")
         If $ISOBJECT(forwarder) && ..ReportedElsewhere(ns, reported) Do plan.warnings.%Push(name _ " is reported under the name another namespace's receiver has, so their cases and their profile entry would be pooled. Rename the item in one of them")
         If 'item."alert_on_error" Set noAlert = noAlert _ $LISTBUILD(name)
         If item."failure_timeout" = "-1" Do plan.warnings.%Push(name _ " retries forever (FailureTimeout -1, whether set on the item or the class's default): a case opens on its first failure, even a short outage, and stays open, and the engine goes on and delivers when the system returns. Check the message trace before anyone corrects by hand")
@@ -426,7 +427,10 @@ ClassMethod Plan(ns As %String, options As %DynamicObject = "") As %DynamicObjec
         Do plan.schemas.%Push(s)
     }
     Set forwarderName = $SELECT($ISOBJECT(forwarder): forwarder.item, 1: ..#FORWARDER)
-    If '$ISOBJECT(forwarder) {
+    If '$ISOBJECT(forwarder) && (listed = "") && (wanted '= "") {
+        // A forwarder fixes the names its receivers report under, so it waits until the option has chosen them.
+        Do plan.warnings.%Push("The option receivers chose no item in " _ read.production _ ", so this plan adds no forwarder. Correct the option and plan again")
+    } ElseIf '$ISOBJECT(forwarder) {
         Set host = $CLASSMETHOD(json, "Str", options, "shutter_host", "127.0.0.1"), port = $CLASSMETHOD(json, "Str", options, "shutter_port", ..WebPort())
         Set ssl = $CLASSMETHOD(json, "Str", options, "ssl_config")
         If (ssl = "") && '$LISTFIND($LISTBUILD("127.0.0.1", "localhost", "::1"), $ZCONVERT(host, "L")) Do plan.warnings.%Push("With no ssl_config the forwarder sends its sign-in to " _ host _ " in clear: name an SSL configuration")

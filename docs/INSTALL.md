@@ -145,7 +145,7 @@ receiver's item name, the outcome and the receiver's answer; the class documents
 
 The alert intake needs no change to the hospital's own code. `Shutter.Intake.AlertProcess`, added as the watched
 production's `Ens.Alert` item (the name the engine sends its alerts to), receives every alert an item raises and passes
-it first to `PassTo`, the site's own alert consumer renamed, so Shutter adds to the production's alerting and never
+it first to `PassTo`, the site's own alert consumer renamed (all but the consumer's own alerts, which would loop), so Shutter adds to the production's alerting and never
 replaces it. For an alert from one of its `Receivers` whose session holds an HL7 message, it hands that message to the
 forwarder (`docs/CONTRACTS.md`, section 11).
 

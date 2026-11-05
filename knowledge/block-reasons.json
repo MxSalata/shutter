@@ -534,7 +534,7 @@
       "next_action": "Check the receiver's history and receipts for the operation key; reinvestigate the case when the receiver's state is known. Never resend blind.",
       "owner": "Integration team",
       "reevaluate_when": "The receiver can be read again, or its team confirms what it applied",
-      "text": "The write's answer was lost, and the reads that followed could not settle whether the receiver applied it: a lookup failed, the receiver no longer knows the encounter, or the budget of reads ran out. Nothing is established either way, so nothing is resent until a person has checked at the receiver."
+      "text": "The write's answer was lost, or the write call itself failed, and nothing since has settled whether the receiver applied it: a lookup failed, the receiver no longer knows the encounter, or the budget of reads ran out. Nothing is established either way, so nothing is resent until a person has checked at the receiver."
     },
     {
       "code": "WAITING_FOR_OCCUPANT_CASE",
