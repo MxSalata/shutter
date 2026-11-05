@@ -22,7 +22,11 @@ export function notModelled(c: {
 }
 
 /** The kind whose words fit the case: for a message Shutter does not model, the one that says what the receiver did. */
-export function failureKindInWords(c: { failureKind?: string; failureText?: unknown; failureOutcome?: unknown }): string {
+export function failureKindInWords(c: {
+  failureKind?: string;
+  failureText?: unknown;
+  failureOutcome?: unknown;
+}): string {
   const what = notModelled(c);
   if (what === 'unknown') return 'uncertain_outcome';
   if (what === 'refused') return 'rejected';
