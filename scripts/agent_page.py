@@ -66,8 +66,8 @@ def page():
     w.append("# What an S8 agent was sent and did")
     w.append("")
     w.append(
-        f"One board member's whole run on S8, the case in the README where a plain resend would move a patient back to the "
-        f"wrong ward: **{NAMES['encounter']}**, recorded live on {record['recordedAt'][:10]} as case {case} with "
+        f"One board member's whole run on S8, the case in the README where a plain resend would write over the bed "
+        f"manager's ward with every check passed: **{NAMES['encounter']}**, recorded live on {record['recordedAt'][:10]} as case {case} with "
         f"`{record['model']}`. It took {response['duration_ms'] / 1000:.1f} seconds, {response['prompt_tokens']:,} tokens in "
         f"and {response['completion_tokens']:,} out, and {response['tool_calls']} tool calls."
     )

@@ -1,6 +1,6 @@
 # What an S8 agent was sent and did
 
-One board member's whole run on S8, the case in the README where a plain resend would move a patient back to the wrong ward: **Encounter Integrity**, recorded live on 2026-10-25 as case C-000112 with `claude-opus-5-5`. It took 11.6 seconds, 15,356 tokens in and 895 out, and 4 tool calls.
+One board member's whole run on S8, the case in the README where a plain resend would write over the bed manager's ward with every check passed: **Encounter Integrity**, recorded live on 2026-10-25 as case C-000112 with `claude-opus-5-5`. It took 11.6 seconds, 15,356 tokens in and 895 out, and 4 tool calls.
 
 `scripts/agent_page.py` writes this page from the public file [scenario-S8-ENC-1008-transfer-encounter-1.json](https://github.com/MxSalata/shutter/blob/main/fixtures/records/scenario-S8-ENC-1008-transfer-encounter-1.json). No model was called to make it, and `scripts/evaluate.py --check` fails if the two differ. The patients are made up, and the encounter and patient appear as tokens (`ENC-T1`, `MRN-T1`), as the model received them.
 
