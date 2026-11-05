@@ -92,7 +92,7 @@ describe('ScenariosPage', () => {
 
   it('offers every mode outside the demo', async () => {
     renderScenarios();
-    expect(await screen.findByRole('radio', { name: 'Single investigator' })).toBeInTheDocument();
+    expect(await screen.findByRole('radio', { name: 'Single investigator' })).toBeEnabled();
   });
 
   it('lists every scenario under a heading of its own, each row headed by its scenario', async () => {

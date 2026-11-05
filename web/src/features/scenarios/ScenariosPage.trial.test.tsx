@@ -2,6 +2,7 @@ import { MantineProvider } from '@mantine/core';
 import { Notifications, notifications } from '@mantine/notifications';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/mocks/node';
@@ -60,6 +61,29 @@ describe('ScenariosPage in the trial', () => {
     expect(await screen.findByText(SCENARIOS_LEAD.trial)).toBeInTheDocument();
     expect(screen.queryByText(SCENARIOS_LEAD.live)).not.toBeInTheDocument();
     expect(SCENARIOS_LEAD.trial).not.toMatch(/production/);
+  });
+
+  it("shows all four modes, Single investigator can't be chosen and says why, and the arrow keys walk past it", async () => {
+    renderTrial();
+    const single = await screen.findByRole('radio', { name: 'Single investigator' });
+    expect(single).toBeDisabled();
+    expect(single).toHaveAccessibleDescription(expect.stringContaining('Not in the trial: no recording'));
+    expect(screen.getAllByRole('radio')).toHaveLength(4);
+    const policy = screen.getByRole('radio', { name: 'Site policy' });
+    await userEvent.click(policy);
+    expect(policy).toBeChecked();
+    await userEvent.keyboard('{ArrowRight}');
+    expect(screen.getByRole('radio', { name: 'Rules only' })).toBeChecked();
+    expect(single).not.toBeChecked();
+  });
+
+  it("describes all four modes to a role that can't choose, and says the trial has no recording of one", async () => {
+    resetMock('judge');
+    renderTrial();
+    const modes = await screen.findByRole('region', { name: 'Investigation modes' });
+    for (const name of ['Board', 'Site policy', 'Single investigator', 'Rules only'])
+      expect(within(modes).getByText(name)).toBeInTheDocument();
+    expect(within(modes).getByText('Not in the trial: no recording.')).toBeInTheDocument();
   });
 
   it('lists the guided path as numbered steps, each a title, one sentence and its links, the rest behind More', async () => {

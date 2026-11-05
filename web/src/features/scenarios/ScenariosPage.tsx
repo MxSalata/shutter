@@ -81,8 +81,13 @@ const ALL_MODES: { value: Mode; label: string; hint: string }[] = [
   },
 ];
 
-/** The demo leaves out the single investigator: its runs were never recorded, so it has nothing to replay. */
-const MODES = TRIAL ? ALL_MODES.filter((m) => m.value !== 'single') : ALL_MODES;
+/** The trial cannot play the single investigator: its runs were never recorded, so it has nothing to replay. */
+const notRecorded = (mode: Mode) => TRIAL && mode === 'single';
+
+const NOT_RECORDED = 'Not in the trial: no recording';
+
+/** The modes that can be played here. All four are always shown; the one that can't says so and can't be chosen. */
+const MODES = ALL_MODES.filter((m) => !notRecorded(m.value));
 
 const modeLabel = (mode: Mode) => ALL_MODES.find((m) => m.value === mode)?.label ?? humanize(mode);
 
@@ -534,9 +539,10 @@ function RunModes({
         description={`Every Run button below uses it. ${MODES_INTRO}`}
         styles={{ description: { fontSize: 'var(--mantine-font-size-sm)' } }}
       >
-        <SimpleGrid cols={{ base: 1, sm: 2, md: MODES.length }} spacing="sm" mt="sm">
-          {MODES.map((m) => {
+        <SimpleGrid cols={{ base: 1, sm: 2, md: ALL_MODES.length }} spacing="sm" mt="sm">
+          {ALL_MODES.map((m) => {
             const n = scenarios?.filter((s) => definedFor(s, m.value)).length;
+            const out = notRecorded(m.value);
             return (
               <Radio.Card
                 key={m.value}
@@ -544,11 +550,14 @@ function RunModes({
                 radius="md"
                 p="xs"
                 className="mode-card"
+                disabled={out}
+                // Mantine's arrow keys walk the radios of one name and would stop dead on a disabled one
+                name={out ? 'run-mode-not-recorded' : undefined}
                 aria-labelledby={`mode-${m.value}-label`}
-                aria-describedby={`mode-${m.value}-hint${scenarios ? ` mode-${m.value}-count` : ''}`}
+                aria-describedby={`mode-${m.value}-hint${scenarios || out ? ` mode-${m.value}-count` : ''}`}
               >
                 <Group gap="xs" wrap="nowrap" align="flex-start">
-                  <Radio.Indicator mt={2} />
+                  <Radio.Indicator mt={2} disabled={out} />
                   <Stack gap={4} style={{ minWidth: 0 }}>
                     <Group gap={6} align="baseline">
                       <Text size="md" fw={700} id={`mode-${m.value}-label`}>
@@ -561,7 +570,17 @@ function RunModes({
                       ) : null}
                     </Group>
                     <VisuallyHidden id={`mode-${m.value}-hint`}>{m.hint}</VisuallyHidden>
-                    {scenarios && n !== undefined ? (
+                    {out ? (
+                      <Badge
+                        id={`mode-${m.value}-count`}
+                        variant="light"
+                        color="gray"
+                        size="sm"
+                        style={{ textTransform: 'none' }}
+                      >
+                        {NOT_RECORDED}
+                      </Badge>
+                    ) : scenarios && n !== undefined ? (
                       <PlaysBadge id={`mode-${m.value}-count`} n={n} of={scenarios.length} />
                     ) : null}
                   </Stack>
@@ -595,13 +614,18 @@ function ModesExplained() {
         <Text size="md" c="dimmed" maw="68ch">
           {MODES_INTRO}
         </Text>
-        <SimpleGrid cols={{ base: 1, sm: 2, lg: MODES.length }} spacing="sm">
-          {MODES.map((m) => (
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: ALL_MODES.length }} spacing="sm">
+          {ALL_MODES.map((m) => (
             <Stack key={m.value} gap={4}>
               <Text size="md" fw={700}>
                 <ModeName mode={m.value}>{m.label}</ModeName>
               </Text>
               <Text size="sm">{m.hint}</Text>
+              {notRecorded(m.value) ? (
+                <Text size="sm" c="dimmed">
+                  {NOT_RECORDED}.
+                </Text>
+              ) : null}
             </Stack>
           ))}
         </SimpleGrid>
