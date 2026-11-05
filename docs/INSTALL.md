@@ -171,7 +171,7 @@ the recipients and who sent it. A case the workflow left in a working state (aft
 work) is noted when the production starts, and an approver abandons it with `POST /cases/{id}/abandon` once nothing of
 its workflow has moved for `abandonAfterMinutes` (15 by default; 409 `busy` while something has).
 
-**3.6 The production review.** `POST /api/shutter/production-reviews` (an operator's; CONTRACTS 13) runs on request
+**3.6 The production review.** `POST /api/shutter/production-reviews` (an operator's; CONTRACTS 13; an empty body reviews Shutter's own production, so name `namespace` and `production` for a site's) runs on request
 only, never at the production's start, in the Doctor or on a timer: one read-only pass over a production's effective
 settings, event log errors and failed messages over a window of 1 to 90 days, tied to the cases Shutter opened for it.
 It runs in a production job (the Case Review item), so it reads the production, the watched namespace and the message
@@ -432,7 +432,7 @@ SELECT Shutter.Setup_OnboardTest('PATHOLOGY')
 ```
 
 It posts a made-up ORU, with no patient, using that namespace's forwarder settings and its stored credential, and answers the
-case id. The case says `ONBOARDING TEST` and its receiver is `Onboarding test`, which no profile names. An ORU has no recovery,
+case id. The case says it could not be mapped, `onboarding_test`, its draft says `ONBOARDING TEST`, and its receiver is `Onboarding test`, which no profile names. An ORU has no recovery,
 so it escalates with no model called and nothing sent. Mark it handled. A failed test says what to check:
 
 | Answer | Meaning |
@@ -460,8 +460,8 @@ The web application is at `/shutter/index.html`; `/shutter` and `/shutter/` answ
 (`current_state`, `history_of_record` or `orders_results`), tier and team, and remove `draft` when you save. Use the name the
 draft has: in a second namespace every item is reported with its prefix (`DOCUMENTS Results Out`), including those that clash with
 nothing, so a team's `receivers` must say that. A namespace already wired keeps its names when another comes on after it, and the
-plan warns if an operation added later takes a name another namespace reports. Through the API, `GET /api/shutter/site-profile`, change its `profile`, and
-`PUT` the whole of it back with the header `X-Requested-With: Shutter`; a part alone answers 400. A receiver with no API stays declared as it is, and its failures escalate to its team.
+plan warns if an operation added later takes a name another namespace reports. Through the API, `GET /api/shutter/site-profile`, change the `profile` inside the reply, and
+`PUT` that inner object, all of it, back with the header `X-Requested-With: Shutter`; a part alone, or the outer reply, answers 400. A receiver with no API stays declared as it is, and its failures escalate to its team. `Shutter_Approver` may save the profile, policy included, so `approval` is a setting an approver can change; `GET /api/shutter/site-profile/history` keeps each version and who saved it.
 
 **Giving a receiver its API.** Only a receiver with state, receipt, capabilities and operations paths can be recovered. Add
 them in the profile, then, since Shutter writes through a connector item of that receiver's name in its own production:
