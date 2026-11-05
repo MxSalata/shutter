@@ -96,7 +96,17 @@ ClassMethod Read(ns As %String, production As %String = "", credential As %Strin
                 If 'dsc Set alertOn = ""
             }
             Do r.%Set("alert_on_error", ''alertOn, "boolean")
-            Set r."failure_timeout" = $GET(s("FailureTimeout"))
+            // The value that applies: the item's own, else the default settings, else the class's.
+            Set timeout = $GET(s("FailureTimeout"))
+            If timeout = "" {
+                Set dsc = ##class(Ens.Config.DefaultSettings).%GetSetting(chosen, item.Name, cls, "Host", "FailureTimeout", .timeout)
+                If 'dsc Set timeout = ""
+            }
+            If (timeout = "") && exists {
+                Set compiled = ##class(%Dictionary.CompiledProperty).%OpenId(cls _ "||FailureTimeout", 0)
+                If $ISOBJECT(compiled) Set timeout = $TRANSLATE(compiled.InitialExpression, $CHAR(34))
+            }
+            Set r."failure_timeout" = timeout
             If cls = "Shutter.Intake.Forwarder" {
                 Set f = {"item": (item.Name), "server": ($GET(s("HTTPServer"))), "port": ($GET(s("HTTPPort"))), "ssl": ($GET(s("SSLConfig"))), "credential": ($GET(s("Credentials"))), "path": ($GET(s("IntakePath"), "/api/shutter/intake")), "prefix": ($GET(s("ReceiverPrefix")))}
                 Do f.%Set("enabled", ''item.Enabled, "boolean")
@@ -135,6 +145,13 @@ ClassMethod Read(ns As %String, production As %String = "", credential As %Strin
                     If $ISOBJECT(reply) Set last.error = reply.Error, last."case" = reply.CaseId
                 }
                 Set out."last_forward" = last
+            }
+            // Refused forwards over three days, since the last forward alone is overwritten by the next good one.
+            Try {
+                Set since = $ZDATETIME($ZTIMESTAMP - 3, 3, 1)
+                Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT COUNT(*) AS N, MAX(h.TimeCreated) AS T FROM Ens.MessageHeader h, Shutter_Intake.Forwarded f WHERE h.SourceConfigName = ? AND h.MessageBodyClassName = 'Shutter.Intake.Forwarded' AND f.ID = h.MessageBodyId AND f.Error IS NOT NULL AND f.Error <> '' AND h.TimeCreated >= ?", out.forwarder.item, since)
+                If rs.%Next() Set out."refused_72h" = +rs.%Get("N"), out."last_refused" = rs.%Get("T")
+            } Catch ex2 {
             }
         }
         // Default settings keyed to the name Ens.Alert stay with that name when the site's own item is renamed.
@@ -264,7 +281,7 @@ ClassMethod Plan(ns As %String, options As %DynamicObject = "") As %DynamicObjec
         }
         Do plan.operations.%Push(o)
         If 'item."alert_on_error" Set noAlert = noAlert _ $LISTBUILD(name)
-        If item."failure_timeout" = "-1" Do plan.warnings.%Push(name _ " retries forever (FailureTimeout -1): a case opens on its first failure and stays escalated, and the engine goes on and delivers when the system returns. Check the message trace before anyone corrects by hand")
+        If item."failure_timeout" = "-1" Do plan.warnings.%Push(name _ " retries forever (FailureTimeout -1, whether set on the item or the class's default): a case opens on its first failure, even a short outage, and stays open, and the engine goes on and delivers when the system returns. Check the message trace before anyone corrects by hand")
     }
     // 3. What is wired already.
     Set mapped = ..Mappings(ns), classes = read.classes
@@ -576,7 +593,12 @@ ClassMethod EnsureForwarderUser(user As %String, password As %String, Output mad
             Quit
         }
         Set sc = ##class(Security.Users).Create(user, "Shutter_Forwarder", password, "Shutter's forwarder", "", "", "", 0, 1)
-        If $$$ISOK(sc) Set made = 1
+        If $$$ISOK(sc) {
+            Set made = 1
+            // A service sign-in: an expired password would turn every forward into a refused one, with no case.
+            Set props("PasswordNeverExpires") = 1
+            Set sc = ##class(Security.Users).Modify(user, .props)
+        }
     } Catch ex {
         Set sc = ex.AsStatus()
     }
@@ -725,7 +747,7 @@ ClassMethod Remove(ns As %String, options As %DynamicObject = "") As %DynamicObj
             If (messages = 0) || ##class(Shutter.Util.Json).Bool(options, "unmap", 0) {
                 Set sc = ..UnmapPackage(ns, pkg)
                 If $$$ISERR(sc) Do out.kept.%Push("The mapping of " _ pkg _ ": " _ $SYSTEM.Status.GetErrorText(sc)) Continue
-                Do out.removed.%Push("The mapping of " _ pkg)
+                Do out.removed.%Push("The mapping of " _ pkg _ $SELECT(messages > 0: ", with " _ messages _ " messages of Shutter's classes still in " _ ns _ ", which were not purged first as advised", 1: ""))
             } Else {
                 Do out.kept.%Push("The mapping of " _ pkg _ ": " _ messages _ " messages of Shutter's classes are still in " _ ns _ ", and its purge must open them. Pass {""unmap"": true} after they are purged")
             }
@@ -743,6 +765,7 @@ ClassMethod Remove(ns As %String, options As %DynamicObject = "") As %DynamicObj
         Merge kept = ^Shutter.Config("onboard", ns, "mappings")
         If (messages = 0) || ##class(Shutter.Util.Json).Bool(options, "unmap", 0) Kill kept
         Kill ^Shutter.Config("onboard", ns)
+        Set ^Shutter.Config("onboardRemoved", ns) = $ZDATETIME($ZTIMESTAMP, 3, 1)
         Kill ^Shutter.Health("credentials")
         If $DATA(kept) Merge ^Shutter.Config("onboardKept", ns, "mappings") = kept
         Do out.%Set("ok", 1, "boolean")
@@ -960,6 +983,7 @@ ClassMethod Watched() As %DynamicArray
         Set last = read."last_forward"
         Set w."last_forward" = $SELECT($ISOBJECT(last): last.at, 1: "")
         Set w."last_forward_error" = $SELECT($ISOBJECT(last): last.error, 1: "")
+        Set w."refused_72h" = read."refused_72h", w."last_refused" = read."last_refused"
         Set caseId = "", opened = ""
         &sql(SELECT TOP 1 CaseId, OpenedAt INTO :caseId, :opened FROM Shutter_Store."Case" WHERE SourceNamespace = :ns ORDER BY ID DESC)
         If SQLCODE '= 0 Set caseId = "", opened = ""
@@ -975,14 +999,28 @@ ClassMethod Watched() As %DynamicArray
             }
         }
         Set w."schemas_missing" = missing
+        // HL7 operations added since the last apply: their failures reach the site's consumer and open no case.
+        Set unwatched = []
+        If $ISOBJECT(a) && a."is_shutter" && (a.receivers '= "") {
+            Set it = read.items.%GetIterator()
+            While it.%GetNext(, .item) {
+                If (item.kind = "hl7_operation") && '##class(Shutter.Intake.AlertProcess).Takes(item.name, a.receivers) Do unwatched.%Push(item.name)
+            }
+        }
+        Set w."operations_unwatched" = unwatched
+        Do w.%Set("removed", (seen(ns) '= 1) && $DATA(^Shutter.Config("onboardRemoved", ns)), "boolean")
         If read.error '= "" Do w.problems.%Push(read.error)
-        If read.exists && (read.error = "") {
+        If w.removed {
+            // Taken off on purpose: its cases stay, and nothing about it is a problem now.
+        } ElseIf read.exists && (read.error = "") {
             If 'w.forwarder Do w.problems.%Push("No forwarder item in " _ read.production)
             If 'w.classes Do w.problems.%Push("The forwarder's classes do not all resolve in " _ ns)
             If w.forwarder && 'w.credential Do w.problems.%Push("No credential " _ read."credential_name" _ " in " _ ns)
             If read.state '= "running" Do w.problems.%Push("The production " _ read.production _ " is " _ read.state)
             If missing.%Size() > 0 Do w.problems.%Push("Schemas missing in Shutter: " _ missing.%ToJSON())
             If w."last_forward_error" '= "" Do w.problems.%Push("The last forward was refused: " _ $EXTRACT(w."last_forward_error", 1, 200))
+            If w."refused_72h" > 0 Do w.problems.%Push(w."refused_72h" _ " forwards refused in the last 72 hours, the last at " _ w."last_refused" _ ": those failures have no case. Search the event log for: Shutter did not take")
+            If unwatched.%Size() > 0 Do w.problems.%Push("HL7 operations the alert intake does not hear, so their failures open no case: " _ unwatched.%ToJSON() _ ". Run the plan and the apply again")
         }
         Do w.%Set("ok", w.problems.%Size() = 0, "boolean")
         Do out.%Push(w)

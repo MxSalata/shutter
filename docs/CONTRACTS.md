@@ -1322,10 +1322,10 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   `Receiver` the alerting item, `FailureKind` from the alert's words (`uncertain_outcome` for a timeout, no response or
   an uncertain answer; `rejected` for a reject, a refusal, a NACK or an HTTP 4xx; else `delivery_failed`),
   `FailureOutcome` to match (`uncertain`, `rejected`, `error`), `FailureHttpStatus` when the text names one ("HTTP 503"),
-  `FailureReasonCode` `alert`, `FailureText` "Alert from <item> at <time> UTC: <text>". One forward per session (v1.39): the session is pending while the forward is out (`^Shutter.AlertIntake("pending")`, ten minutes at most) and seen (`^Shutter.AlertIntake("seen")`, kept a day) only once Shutter has taken the message, so a connector's retries alert the site each time but reach Shutter once, while a forward Shutter refused or that failed is built again from the session's next alert.
-  An alert whose session has no HL7 message, or from an item outside `Receivers`, is passed on only; both sends are
+  `FailureReasonCode` `alert`, `FailureText` "Alert from <item> at <time> UTC: <text>". One forward per session and alerting item (v1.39; the item since onboarding, so a message routed to two receivers that both fail gives two): the pair is pending while the forward is out (`^Shutter.AlertIntake("pending", session, item)`, ten minutes at most) and seen (`^Shutter.AlertIntake("seen", session, item)`, kept a day) only once Shutter has taken the message, so a connector's retries alert the site each time but reach Shutter once, while a forward Shutter refused or that failed is built again from that item's next alert.
+  An alert whose session has no HL7 message, from an item outside `Receivers`, or from the forwarder itself is passed on only; both sends are
   asynchronous, so the feed never waits. The forwarder's refusal is a warning in the event log, as for the sending
-  process. The demo hospital's production carries the item with `Receivers` `Downstream Out`, and its connector raises an alert
+  process, and an `Ens.AlertRequest` to the production's `Ens.Alert`, so the site's own consumer hears of a failure that has no case. The demo hospital's production carries the item with `Receivers` `Downstream Out`, and its connector raises an alert
   for a delivery the ward system could not take or did not answer (`unavailable`, `uncertain`), as a real connector's
   would, so the alert path plays in the demo; its process forwards the same failure (above), and the intake answers the
   alert's forward with the case already open (`opened` false), so a failure reaches Shutter once as a case and twice in the
@@ -1385,8 +1385,8 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   types the copy under it in memory and validates. The category is listed in the Doctor's `missing` from
   `^Shutter.Config("schemaNamed", category)` until an import clears it. A held forward (kind `unreadable`) keeps its own path above.
 - **The Doctor** adds `watched_namespaces` (each namespace onboarded or named by a case, read there: `{namespace, onboarded, exists, production,
-  production_state, forwarder, alert_intake, pass_to, classes, credential, last_forward, last_forward_error, last_case, last_case_at,
-  schemas_missing, problems, ok}`) and `receivers_without_item`; `credentials` tries each onboarded namespace's forwarder credential and each
+  production_state, forwarder, alert_intake, pass_to, classes, credential, last_forward, last_forward_error, refused_72h, last_refused,
+  last_case, last_case_at, schemas_missing, operations_unwatched, removed, problems, ok}`; `failure_timeout` in the plan's reading is the effective value: the item's, the default settings', else the class's; a namespace taken off is recorded under `^Shutter.Config("onboardRemoved", namespace)` and reads `removed` with no problems) and `receivers_without_item`; `credentials` tries each onboarded namespace's forwarder credential and each
   connector item's; `hl7_schemas.needed` adds the watched namespaces' missing categories. `AlertProcess.Classify` reads a TCP connect
   timeout (`ErrOutConnectExpired`) as `delivery_failed`: nothing was sent.
 

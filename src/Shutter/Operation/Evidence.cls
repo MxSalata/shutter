@@ -370,7 +370,7 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
         If 'schemaKnown {
             Do validation.%Set("parsed", 0, "boolean")
             Set validation.error = "unknown schema: the category " _ $SELECT(validation."schema_category" = "": "(none)", 1: validation."schema_category") _ " is not loaded in this namespace, so the message could not be validated"
-            Set validation."schema_fix" = "Import the schema with SELECT Shutter.Setup_ImportSchema('<path>') or POST /settings/schemas, then reinvestigate the case"
+            Set validation."schema_fix" = "Import the schema with Write ##class(Shutter.Util.Schemas).ImportFrom(""<source namespace>"",""<category>""), or from a file with SELECT Shutter.Setup_ImportSchema('<path>') (it replaces a same-named category whole) or POST /settings/schemas, then reinvestigate the case"
         }
         Set validation.note = "Structural validation against the " _ msg.DocTypeCategory _ " schema (document type and segment structure); profile rules are the conformance review's job"
         // The version note: the route's category is the site's choice, and IRIS never picks it from MSH-12, so a

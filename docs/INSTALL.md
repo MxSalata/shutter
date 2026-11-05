@@ -412,8 +412,8 @@ the apply sets the forwarder's `ReceiverPrefix` to the namespace, so DOCUMENTS' 
 Do ##class(Shutter.Setup).OnboardCredential("PATHOLOGY")
 ```
 
-It asks for the password with the echo off, creates the user `shutter-fwd` with only the role `Shutter_Forwarder` when that
-user does not exist, stores the credential `ShutterIntake` in that namespace, and prints no password. For a user that exists
+It asks for the password with the echo off, creates the user `shutter-fwd` with only the role `Shutter_Forwarder` and a password that does not expire (a lapsed one would turn
+every forward into a refused one) when that user does not exist, stores the credential `ShutterIntake` in that namespace, and prints no password. For a user that exists
 it first checks that the password signs in, and stores nothing if not, so one forwarder user can serve every namespace. It is
 not an SQL procedure, so no password passes through a statement. In a script, pass the user and password as the second and
 third arguments.
@@ -440,11 +440,20 @@ test environment (section 5, step 7).
 
 **9.5 Check it.** `SELECT Shutter.Setup_Doctor()` has `watched_namespaces`, one entry per namespace onboarded or named by a
 case: `production`, `production_state`, `forwarder`, `alert_intake`, `pass_to`, `classes`, `credential`, `last_forward`,
-`last_forward_error`, `last_case`, `schemas_missing`, `problems` in words and `ok`. `credentials` tries each namespace's stored
+`last_forward_error`, `refused_72h`, `last_refused`, `last_case`, `schemas_missing`, `operations_unwatched`, `removed`, `problems`
+in words and `ok`. `last_forward_error` is the last forward only, and the next good one clears it; `refused_72h` counts every refused
+forward over three days, so a daily read still sees a lost failure. `operations_unwatched` lists HL7 operations added since the last
+apply, whose failures reach the site's consumer and open no case: run the plan and the apply again. A namespace taken off reads
+`removed` and has no problems. `credentials` tries each namespace's stored
 sign-in. `hl7_schemas.missing` includes what a watched namespace's services name.
 
-**9.6 Fill in the receivers.** In the app's site profile (an approver's), review each draft: its system, category, tier and
-team, and remove `draft` when you save. A receiver with no API stays declared as it is, and its failures escalate to its team.
+The web application is at `/shutter/index.html`; `/shutter` and `/shutter/` answer 404.
+
+**9.6 Fill in the receivers.** In the app's site profile (an approver's), review each draft: its system, category
+(`current_state`, `history_of_record` or `orders_results`), tier and team, and remove `draft` when you save. Use the name the
+draft has: in a second namespace every item is reported with its prefix (`DOCUMENTS DMS Out`), including those that clash with
+nothing, so a team's `receivers` must say that. Through the API, `GET /api/shutter/site-profile`, change its `profile`, and
+`PUT` the whole of it back with the header `X-Requested-With: Shutter`; a part alone answers 400. A receiver with no API stays declared as it is, and its failures escalate to its team.
 
 **Giving a receiver its API.** Only a receiver with state, receipt, capabilities and operations paths can be recovered. Add
 them in the profile, then, since Shutter writes through a connector item of that receiver's name in its own production:
@@ -469,8 +478,10 @@ SELECT Shutter.Setup_OnboardRemove('PATHOLOGY', '{"unmap": true, "credential": t
 It removes what the apply added: the two items, and the site's item gets the name `Ens.Alert` back, `AlertOnError` goes back,
 and the drafts still marked `draft` leave the profile. The production is updated, not stopped. It answers `removed` and `kept`.
 Kept: Shutter's cases and the imported schemas; an entry a person edited; the credential and the user, unless `credential`; and
-the mappings while that namespace still holds messages of Shutter's classes, since its own purge must open them (`unmap` takes
-them anyway, once those are purged).
+the mappings while that namespace still holds messages of Shutter's classes, since its own purge must open them. Purge first, then
+run it again with `unmap`. `unmap` does not refuse if you have not: it takes the mappings anyway and says how many messages were
+left. Those messages' bodies then stay for good: with 12 left, the purge answered no error, removed every header, and left 12 rows in
+`^Ens.MessageBodyD` whose class no longer resolves.
 
 **On another instance.** A watched namespace on a separate instance cannot take a mapping, and these calls read only their own
 instance. Load `src/Shutter/Intake/` (Forward, Forwarded, Forwarder, AlertProcess) and `src/Shutter/Util/Json.cls`, `Schemas.cls` and
@@ -478,18 +489,37 @@ instance. Load `src/Shutter/Intake/` (Forward, Forwarded, Forwarder, AlertProces
 partial load compiles and starts, and fails only on the first forward. Not supported yet: a production review of another instance,
 and releasing a held case from it (`KnownIn` reads only this instance).
 
+**9.8 Rarer things you may see.**
+
+| What you see | What it means | What to do |
+| --- | --- | --- |
+| `ZPM "version"` then `<SYNTAX>` | No IPM in this namespace | Load `vendor/ipm/zpm-0.10.10.xml` there |
+| `<CLASS DOES NOT EXIST>getProductionItems+51^Ens.Director.1 *Shutter.Intake.AlertProcess` | Items added by hand with no mapping | Use the apply |
+| Event log: `HTTP 413 from Shutter ... too_large` | Over 2 MB. No case | No way round it yet |
+| `ErrNoCredentials ... 'DownstreamAPI'`, gate `RECEIVER_UNREADABLE` | A site install has no such credential | `SetCredential`, then reinvestigate |
+| Page says "Round 2: the receiver changed after the approval" with no approval given | Wrong words after a reinvestigation | Ignore them |
+| "Source message" link: `ERROR #5809` | The link's URL form is wrong, and it opens Shutter's copy | Add `HeaderClass=Ens.MessageHeader&` to the URL |
+| `Second Parser ... ClassNotFoundException` | As far as I can tell, its jar is not built | `pex/build.sh`, or leave it. Nothing else depends on it |
+| `ErrInNoConnectionPort`, or `#6030 'From' property` from `Site Alerts` | Stock service noise, or your own mail settings | Not Shutter's |
+
 ## 10. What a watched namespace does not get
 
 Say these plainly to whoever owns the feed.
 
 - **Non-ADT messages have no recovery.** Orders, results and documents open a case and escalate; a person corrects them. They do
   not group: 5 failed results are 5 cases, and an outage is one case per message, not an incident.
-- **An MLLP operation retrying forever (`FailureTimeout` -1).** The alert opens a case on the first failure, and the engine goes on
+- **An MLLP operation retrying forever (`FailureTimeout` -1, the stock TCP operation's default, which the plan now warns of whether
+  the item sets it or inherits it).** The alert opens a case on the first failure, even in a short outage, and the engine goes on
   retrying. When the system returns the messages go through, and the case still reads escalated with a draft asking a team to correct
   them by hand, and shows no later messages. Read the message trace before anyone re-enters an order by hand.
 - **A forward is never retried.** While `Shutter.Production` is stopped, or on a wrong password, a failure that reaches the forwarder
-  is a warning in that namespace's event log (and `last_forward_error` in the Doctor), and no case. Restoring the service does not
-  bring it back.
+  is a warning in that namespace's event log, an alert to the site's own consumer, and `refused_72h` in the Doctor, and no case.
+  Restoring the service does not bring it back.
+- **A hard dependency on Shutter's database.** After the apply the production needs it. With that database dismounted, a failing
+  operation's job terminated with `<PROTECT>`, the site's alert consumer received nothing, and the production would not start until it
+  was mounted again. Before a failover, a restore or moving it, take the namespace off or plan for it.
+- **A message sent to two receivers** gives one forward per receiver that fails, each quoting the session's first HL7 message, the
+  service's: with a DTL on the route, the case holds what the service received, not what the operation sent.
 - **Nothing over 2 MB, and nothing that is not HL7.** The intake answers 413 or 400, so a large MDM with its document inline, or a FHIR
   body, is a warning in the event log and no case. A smaller MDM's document is kept whole in the case's snapshot: a governance
   question for the trust.
