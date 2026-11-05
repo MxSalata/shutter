@@ -258,6 +258,20 @@ ClassMethod TakenElsewhere(ns As %String, item As %String) As %Boolean
     Quit (from '= "") && (from '= ns)
 }
 
+/// Whether another namespace onboarded here already reports a receiver under this very name.
+ClassMethod ReportedElsewhere(ns As %String, reported As %String) As %Boolean
+{
+    Set other = "", found = 0
+    For {
+        Set other = $ORDER(^Shutter.Config("onboard", other)) Quit:other=""
+        Continue:other=ns
+        Set item = ""
+        For { Set item = $ORDER(^Shutter.Config("onboard", other, "receivers", item), 1, name) Quit:item=""  If name = reported Set found = 1 Quit }
+        Quit:found
+    }
+    Quit found
+}
+
 /// One plain line on what a completed message proves at an HL7 operation, from the settings that apply (measured on a stock TCP
 /// operation; docs/INSTALL.md 9.9): getReply is 1, 0, or "" when the adapter has no such setting.
 ClassMethod CompletedProves(getReply As %String, actions As %String) As %String
@@ -311,9 +325,10 @@ ClassMethod Plan(ns As %String, options As %DynamicObject = "") As %DynamicObjec
             Do plan."other_operations".%Push({"name": (item.name), "class": (item.class)})
         }
     }
-    // 2. The names they will be reported under. A namespace wired already keeps its prefix.
+    // 2. The names they will be reported under. A namespace wired already keeps the names it has, none included: its teams,
+    // its profile entries and its open cases use them, and another namespace coming on later must not rename them.
     Set prefix = $SELECT($ISOBJECT(forwarder): forwarder.prefix, 1: "")
-    For i = 1:1:$LISTLENGTH(listed) { If ..TakenElsewhere(ns, $LIST(listed, i)) && (prefix = "") Set prefix = ns }
+    If '$ISOBJECT(forwarder) { For i = 1:1:$LISTLENGTH(listed) { If ..TakenElsewhere(ns, $LIST(listed, i)) && (prefix = "") Set prefix = ns } }
     Set plan."receiver_prefix" = prefix
     Set noAlert = ""
     For i = 1:1:$LISTLENGTH(listed) {
@@ -337,6 +352,7 @@ ClassMethod Plan(ns As %String, options As %DynamicObject = "") As %DynamicObjec
             Set o.proves = "A connector of the site's own: what completes here is its code's choice, so read it"
         }
         Do plan.operations.%Push(o)
+        If $ISOBJECT(forwarder) && ..ReportedElsewhere(ns, reported) Do plan.warnings.%Push(name _ " is reported under the name another namespace's receiver has, so their cases and their profile entry would be pooled. Rename the item in one of them")
         If 'item."alert_on_error" Set noAlert = noAlert _ $LISTBUILD(name)
         If item."failure_timeout" = "-1" Do plan.warnings.%Push(name _ " retries forever (FailureTimeout -1, whether set on the item or the class's default): a case opens on its first failure, even a short outage, and stays open, and the engine goes on and delivers when the system returns. Check the message trace before anyone corrects by hand")
     }
@@ -389,8 +405,6 @@ ClassMethod Plan(ns As %String, options As %DynamicObject = "") As %DynamicObjec
         Set host = $CLASSMETHOD(json, "Str", options, "shutter_host", "127.0.0.1"), port = $CLASSMETHOD(json, "Str", options, "shutter_port", ..WebPort())
         Set ssl = $CLASSMETHOD(json, "Str", options, "ssl_config")
         Do actions.%Push({"do": "add_forwarder", "item": (forwarderName), "server": (host), "port": (port), "ssl": (ssl), "credential": (credential), "prefix": (prefix), "says": ("Add the item " _ forwarderName _ " (Shutter.Intake.Forwarder) to " _ read.production _ ", posting to " _ host _ ":" _ port _ " with the credential " _ credential _ $SELECT(prefix '= "": ", reporting its receivers as """ _ prefix _ " <item>""", 1: ""))})
-    } ElseIf forwarder.prefix '= prefix {
-        Do actions.%Push({"do": "set_prefix", "item": (forwarderName), "prefix": (prefix), "says": ("Report the receivers of " _ ns _ " as """ _ prefix _ " <item>"": another namespace has an item of the same name")})
     }
     // The alert intake, with the site's own consumer kept as PassTo.
     Set receivers = $LISTTOSTRING(listed, ",")
@@ -563,8 +577,8 @@ ClassMethod EditProduction(ns As %String, production As %String, actions As %Dyn
                 If a.do = "rename_alert" {
                     Set found.Name = a.to
                 } Else {
-                    Set settingName = $CASE(a.do, "set_alert_receivers": "Receivers", "set_prefix": "ReceiverPrefix", "set_alert_on_error": "AlertOnError")
-                    Set value = $CASE(a.do, "set_alert_receivers": a.receivers, "set_prefix": a.prefix, "set_alert_on_error": "1")
+                    Set settingName = $CASE(a.do, "set_alert_receivers": "Receivers", "set_alert_on_error": "AlertOnError")
+                    Set value = $CASE(a.do, "set_alert_receivers": a.receivers, "set_alert_on_error": "1")
                     Set one = ""
                     For j = 1:1:found.Settings.Count() { If found.Settings.GetAt(j).Name = settingName Set one = found.Settings.GetAt(j) Quit }
                     If '$ISOBJECT(one) { Set one = ##class(Ens.Config.Setting).%New(), one.Target = "Host", one.Name = settingName Do found.Settings.Insert(one) }
@@ -628,8 +642,9 @@ ClassMethod Credential(ns As %String, user As %String = "shutter-fwd", password 
         Do out.%Set("user_created", ''made, "boolean")
         Set sc = ..StoreCredential(ns, credential, user, password)
         If $$$ISERR(sc) Set out.error = $SYSTEM.Status.GetErrorText(sc) Quit
-        If made Set ^Shutter.Config("onboard", ns, "madeUser") = user
-        Set ^Shutter.Config("onboard", ns, "madeCredential") = credential
+        // Kept apart from the namespace's record: a removal without {"credential": true} and a later apply leave both in place.
+        If made Set ^Shutter.Config("onboardMade", "user", user) = 1
+        Set ^Shutter.Config("onboardMade", "credential", ns) = credential
         Kill ^Shutter.Health("credentials")
         Do out.%Set("ok", 1, "boolean")
     } Catch ex {
@@ -746,7 +761,9 @@ ClassMethod Test(ns As %String) As %DynamicObject
 /// Takes a namespace back off: the items Apply added go, a renamed Ens.Alert gets its name back, AlertOnError goes back,
 /// the drafts still marked draft leave the profile, and the running production is updated, never stopped. Stays, and the
 /// answer says so: the cases (a record), the schemas in Shutter (cases read by them), entries a person edited, and the
-/// credential and the user unless {"credential": true}. A mapping goes only when no message of Shutter's classes is left
+/// credential and the user unless {"credential": true}. That takes this namespace's credential, and the user only when the
+/// credential step made it and no other namespace onboarded here signs in with it, so the last one's removal takes it and
+/// no earlier one breaks a neighbour. A mapping goes only when no message of Shutter's classes is left
 /// in that namespace, since the site's purge must be able to open them, unless {"unmap": true}.
 ClassMethod Remove(ns As %String, options As %DynamicObject = "") As %DynamicObject
 {
@@ -760,6 +777,12 @@ ClassMethod Remove(ns As %String, options As %DynamicObject = "") As %DynamicObj
         Merge ^Shutter.Config("onboard", ns, "mappings") = ^Shutter.Config("onboardKept", ns, "mappings")
         Set ^Shutter.Config("onboard", ns, "remap") = 1
         Kill ^Shutter.Config("onboardKept", ns)
+    }
+    // A namespace taken off earlier may still hold the credential it was told to keep.
+    If '$DATA(^Shutter.Config("onboard", ns)) && ##class(Shutter.Util.Json).Bool(options, "credential", 0) && ($GET(^Shutter.Config("onboardMade", "credential", ns)) '= "") {
+        Do ..TakeCredential(ns, out)
+        Do out.%Set("ok", 1, "boolean")
+        Quit out
     }
     If '$DATA(^Shutter.Config("onboard", ns)) Set out.error = ns _ " was not onboarded here: nothing to take off" Quit out
     Try {
@@ -810,10 +833,7 @@ ClassMethod Remove(ns As %String, options As %DynamicObject = "") As %DynamicObj
             }
         }
         If ##class(Shutter.Util.Json).Bool(options, "credential", 0) {
-            Set credential = $GET(^Shutter.Config("onboard", ns, "madeCredential"))
-            If credential '= "" { Set sc = ..DropCredential(ns, credential) Do out.removed.%Push("The credential " _ credential _ " in " _ ns) }
-            Set user = $GET(^Shutter.Config("onboard", ns, "madeUser"))
-            If user '= "" { Set sc = ..DropUser(user) Do out.removed.%Push("The user " _ user) }
+            Do ..TakeCredential(ns, out)
         } Else {
             Do out.kept.%Push("The credential and the user, unless {""credential"": true}")
         }
@@ -830,6 +850,59 @@ ClassMethod Remove(ns As %String, options As %DynamicObject = "") As %DynamicObj
         Set out.error = ex.DisplayString()
     }
     Quit out
+}
+
+/// Takes the credential the credential step stored in a namespace, then its user unless that user is still needed or was
+/// not the step's to take. Says each in the answer's removed or kept.
+ClassMethod TakeCredential(ns As %String, out As %DynamicObject)
+{
+    Set credential = $GET(^Shutter.Config("onboardMade", "credential", ns))
+    If credential = "" Do out.kept.%Push("No credential: the credential step stored none in " _ ns) Quit
+    Set user = ..CredentialUser(ns, credential)
+    Set sc = ..DropCredential(ns, credential)
+    If $$$ISERR(sc) Do out.kept.%Push("The credential " _ credential _ " in " _ ns _ ": " _ $SYSTEM.Status.GetErrorText(sc)) Quit
+    Kill ^Shutter.Config("onboardMade", "credential", ns)
+    Do out.removed.%Push("The credential " _ credential _ " in " _ ns)
+    Quit:(user = "")||'..UserExists(user)
+    Set holders = "", other = ""
+    For {
+        Set other = $ORDER(^Shutter.Config("onboard", other)) Quit:other=""
+        Continue:other=ns
+        If ..CredentialUser(other, $GET(^Shutter.Config("onboard", other, "credential"), ..#CREDENTIAL)) = user Set holders = holders _ $LISTBUILD(other)
+    }
+    If holders '= "" Do out.kept.%Push("The user " _ user _ ": " _ $LISTTOSTRING(holders, ", ") _ " still signs in with it. It goes with the last of them to come off with {""credential"": true}") Quit
+    If '$DATA(^Shutter.Config("onboardMade", "user", user)) Do out.kept.%Push("The user " _ user _ ": it was there before the credential step, so it is yours to remove") Quit
+    Set sc = ..DropUser(user)
+    If $$$ISERR(sc) Do out.kept.%Push("The user " _ user _ ": " _ $SYSTEM.Status.GetErrorText(sc)) Quit
+    Kill ^Shutter.Config("onboardMade", "user", user)
+    Do out.removed.%Push("The user " _ user)
+    Set other = ""
+    For {
+        Set other = $ORDER(^Shutter.Config("onboardMade", "credential", other)) Quit:other=""
+        Do out.kept.%Push("The credential " _ $GET(^Shutter.Config("onboardMade", "credential", other)) _ " in " _ other _ ", from an earlier removal, names that user no more: pass {""credential"": true} for " _ other)
+    }
+}
+
+ClassMethod UserExists(user As %String) As %Boolean
+{
+    New $NAMESPACE
+    Set $NAMESPACE = "%SYS"
+    Quit ##class(Security.Users).Exists(user)
+}
+
+/// The user a stored credential names in a namespace, or "".
+ClassMethod CredentialUser(ns As %String, credential As %String) As %String
+{
+    Set user = ""
+    New $NAMESPACE
+    Try {
+        Set $NAMESPACE = ns
+        Set cred = ##class(Ens.Config.Credentials).%OpenId(credential, 0)
+        If $ISOBJECT(cred) Set user = cred.Username
+    } Catch ex {
+        Set user = ""
+    }
+    Quit user
 }
 
 /// The reverse of EditProduction. messages counts the Shutter bodies left in the namespace.
