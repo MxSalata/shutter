@@ -170,6 +170,10 @@ describe('ScenariosPage', () => {
     expect(
       await within(first).findByText(`citing catalogue entry ${entry},`, { exact: false }),
     ).toBeInTheDocument();
+    // Why it matters, on the card: the wrong write would pass every check
+    expect(
+      within(first).getByText(/^A resend would write over the bed manager's ward with every check passed\./),
+    ).toBeInTheDocument();
   });
 
   it("keeps the guide's first target while the scenarios load, and when they cannot be read", async () => {

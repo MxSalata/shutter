@@ -292,7 +292,7 @@ function heroStatement(proof: Proof): ReactNode {
         <Term term="simple-rules">Rules only</Term>
         {` ${pl.rules}.`}
         {misses && misses.total && misses.stopped.length
-          ? ` The gate stopped ${misses.stopped.length} of its ${misses.total} misses.`
+          ? ` Of Rules only's ${misses.total} misses, the gate stopped ${misses.stopped.length}.`
           : ''}
       </>
     );
@@ -308,7 +308,7 @@ function heroSecond(proof: Proof): string {
   if (!misses?.wrote.length) return '';
   // "The seventh": the one miss the gate did not stop, after the six it did
   if (misses.wrote.length === 1 && misses.total > 1 && misses.stopped.length === misses.total - 1)
-    return `The ${ordinal(misses.total)}, ${misses.wrote[0]}, wrote the wrong ward with every check passed. Only the board caught it.`;
+    return `The ${ordinal(misses.total)}, ${misses.wrote[0]}, would write over the bed manager's ward with every check passed. Only the board caught it.`;
   return `${andList(misses.wrote)} wrote with every check passed. Only the board caught ${misses.wrote.length === 1 ? 'it' : 'them'}.`;
 }
 
@@ -469,7 +469,11 @@ function Headline({
           caption="at list prices"
         >
           {proof.totalUsd !== null && proof.runs ? (
-            <Text size="sm">{`${formatUsd(proof.totalUsd)} for ${plural(proof.runs, 'run')}`}</Text>
+            <Text size="sm">
+              {proof.board?.passes
+                ? `${formatUsd(proof.totalUsd)} for ${proof.board.passes} passes (${plural(proof.runs, 'run')})`
+                : `${formatUsd(proof.totalUsd)} for ${plural(proof.runs, 'run')}`}
+            </Text>
           ) : null}
           <TechDetail kind="data" label="Tokens and model">
             <Stack gap={0}>

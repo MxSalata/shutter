@@ -93,7 +93,7 @@ function FirstStep() {
             ? 'A failed delivery your productions forward becomes a case. Open one to see the evidence, the plan and who decided.'
             : hidden
               ? "This hospital's failures are already in Cases. Open one to see the evidence, the plan and who decided."
-              : 'Scenarios replay known failures: AI Hub agents propose a plan, and a deterministic gate decides whether it may write. Start with S2, then S8, where a plain resend would move a patient back to the wrong ward.'}
+              : "Scenarios replay known failures: AI Hub agents propose a plan, and a deterministic gate decides whether it may write. Start with S2, then S8, where a plain resend would write over the bed manager's ward with every check passed."}
         </Text>
         <Group gap="xs">
           <Button component={Link} to={hidden ? '/cases' : '/scenarios'} mih={44}>
