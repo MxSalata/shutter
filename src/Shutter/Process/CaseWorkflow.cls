@@ -1370,7 +1370,7 @@ Method OnRehearsal(case As Shutter.Store.Case, sent As Shutter.Msg.WardOperation
     Do case.Note("artifact", "Rehearsal: " _ result.Outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "") _ $SELECT(rolledBack: ", rolled back by the receiver", 1: ""), "system", "rehearsal:" _ r.%Id())
     If result.Outcome '= "would_apply" {
         Set case.Headline = "Rehearsal failed: " _ result.Outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "")
-        Quit case.Transition("blocked", "The rehearsal shows the action would not apply: " _ result.Outcome _ $SELECT(result.Error '= "": ", " _ result.Error, 1: ""), "system", "rehearsal:" _ r.%Id())
+        Quit case.Transition("blocked", $SELECT(result.Outcome = "would_not_apply": "The rehearsal shows the action would not apply: ", 1: "The rehearsal got no usable answer, so it shows nothing about the action: ") _ result.Outcome _ $SELECT(result.Error '= "": ", " _ result.Error, 1: ""), "system", "rehearsal:" _ r.%Id())
     }
     If ..Policy = "automatic" Quit ..ReleaseByPolicy(case, plan, r)
     If ..Policy = "incident" Quit ..ReleaseByIncident(case, plan, r)
@@ -1809,7 +1809,7 @@ Method OnExecute(case As Shutter.Store.Case, result As Shutter.Msg.WardResult) A
     Set sc = ##class(Shutter.Store.ExecutionAttempt).Create(case, plan, approval, $SELECT($ISOBJECT(approval): approval.Rehearsal, 1: ""), result.HttpStatus, outcome, result.ResponseObject(), result.Error, .attempt)
     Quit:$$$ISERR(sc) sc
     Set ..AttemptId = attempt.%Id()
-    Do case.Note("execution", "Dispatch: " _ outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "") _ ", HTTP " _ result.HttpStatus, "system", "attempt:" _ attempt.%Id())
+    Do case.Note("execution", "Dispatch: " _ outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "") _ $SELECT(+result.HttpStatus: ", HTTP " _ result.HttpStatus, 1: ", no HTTP answer"), "system", "attempt:" _ attempt.%Id())
     If (outcome = "applied") || (outcome = "already_committed") || (outcome = "uncertain") {
         Set sc = case.Transition("verifying", $SELECT(outcome = "uncertain": "The receiver did not answer; reconciling by operation key, reading again until a receipt, the history or the settle window settles it", 1: "The receiver acknowledged; verifying the effect"), "system", "attempt:" _ attempt.%Id())
         Quit:$$$ISERR(sc) sc

@@ -70,7 +70,7 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     // The same words as Shutter's own feed: an uncertain answer, no answer or an error, else a refusal.
     Set kind = $CASE(result.Outcome, "uncertain": "uncertain_outcome", "unavailable": "delivery_failed", "error": "delivery_failed", : "rejected")
     Set outcome = $SELECT(kind = "rejected": "rejected", 1: result.Outcome)
-    Set text = "Delivery " _ result.Outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "") _ $SELECT(result.HttpStatus '= "": ", HTTP " _ result.HttpStatus, 1: "") _ $SELECT(result.Error '= "": ": " _ result.Error, 1: "")
+    Set text = "Delivery " _ result.Outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "") _ $SELECT(+result.HttpStatus: ", HTTP " _ result.HttpStatus, 1: "") _ $SELECT(result.Error '= "": ": " _ result.Error, 1: "")
     Set sent = ..HandToShutter(kind, text, outcome, result.HttpStatus, result.ReasonCode)
     Quit $$$ERROR($$$GeneralError, text _ $SELECT(sent '= "": ". Handed to Shutter", 1: ". Shutter could not be told"))
 }

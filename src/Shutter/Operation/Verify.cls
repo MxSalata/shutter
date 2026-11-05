@@ -17,10 +17,11 @@ Property Adapter As EnsLib.HTTP.OutboundAdapter;
 /// The receiver whose paths are read when the case names none.
 Property Receiver As %String(MAXLEN = 128) [ InitialExpression = {$PARAMETER("Shutter.Production", "RECEIVER")} ];
 
-/// How long after a write whose answer was lost a missing receipt stays unknown rather than not committed: the
-/// connector's response timeout plus the receiver's own wait for the encounter's lock, rounded up (the demo's 15 and
-/// 10 s). A receiver that can take longer to commit after a lost answer needs a larger value.
-Property UncertainSettleSeconds As %Integer [ InitialExpression = 30 ];
+/// How long after a write whose answer was lost a missing receipt stays unknown rather than not committed, counted from
+/// the attempt, which is recorded when the connector gives up. The last read comes at about 70 s (CaseWorkflow.OnVerify),
+/// so this window is what that read judges by; a window of 30 s called a write not committed while a slow receiver still
+/// held it. A receiver that can commit later still needs a larger value: past the last read, the verdict is then unknown.
+Property UncertainSettleSeconds As %Integer [ InitialExpression = 60 ];
 
 Parameter SETTINGS = "Receiver:Verify,UncertainSettleSeconds:Verify";
 

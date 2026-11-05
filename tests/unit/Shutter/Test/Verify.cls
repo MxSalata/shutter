@@ -152,6 +152,15 @@ Method RunRows(group As %String)
     Do $$$AssertTrue(n > 0, "the table has rows for " _ group)
 }
 
+/// The default window: long enough that a write the receiver commits a minute after the connector gave up is not called
+/// not committed, and short enough that the last read, at 10 + 20 + 40 s, can still settle it.
+Method TestDefaultSettleWindow()
+{
+    Set window = +##class(%Dictionary.PropertyDefinition).%OpenId("Shutter.Operation.Verify||UncertainSettleSeconds").InitialExpression
+    Do $$$AssertEquals(window, 60, "the default settle window")
+    Do $$$AssertTrue(window <= (10 + 20 + 40), "the last read comes after it")
+}
+
 /// Judge on the base context with the row's patch: {outcome, text, detail}.
 ClassMethod Judge(row As %DynamicObject) As %DynamicObject
 {
@@ -240,6 +249,9 @@ XData Rows [ MimeType = application/json ]
   {"group": "uncertain", "name": "the settle window is the verifier's setting",
    "ctx": {"attempt": {"at": "2026-10-19T09:09:15Z"}, "settle_seconds": 60},
    "outcome": "unresolved", "verdict": "unknown", "retry": true, "contains": ["45 s after a write whose answer was lost"]},
+  {"group": "uncertain", "name": "with that window, the case's last read, at about 70 s, judges",
+   "ctx": {"attempt": {"at": "2026-10-19T09:08:50Z"}, "settle_seconds": 60},
+   "outcome": "not_committed", "verdict": "not_committed", "retry": false, "contains": ["Not committed: 70 s after"]},
   {"group": "uncertain", "name": "a resend with no attempt recorded",
    "ctx": {"attempt": null},
    "outcome": "unresolved", "verdict": "unknown", "retry": false, "contains": ["No attempt is recorded"]},

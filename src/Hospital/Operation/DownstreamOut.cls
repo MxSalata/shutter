@@ -58,7 +58,7 @@ Method OnWardOperation(request As Shutter.Msg.WardOperation, Output response As 
 
 /// Map the HTTP status, the adapter's status and the body to an outcome: the same reading of the ward system's
 /// answers as Shutter's connector, copied so that this namespace needs no Shutter.Operation package.
-Method Classify(response As Shutter.Msg.WardResult, sc As %Status, parsed As %DynamicObject) [ Private ]
+ClassMethod Classify(response As Shutter.Msg.WardResult, sc As %Status, parsed As %DynamicObject)
 {
     Set status = response.HttpStatus
     Set errorCode = ##class(Shutter.Util.Json).Str(parsed, "error")
@@ -78,8 +78,9 @@ Method Classify(response As Shutter.Msg.WardResult, sc As %Status, parsed As %Dy
     If (epoch = "") && $ISOBJECT(before) Set epoch = ##class(Shutter.Util.Json).Str(before, "epoch")
     If (epoch = "") && $ISOBJECT(parsed.%Get("receipt")) Set epoch = ##class(Shutter.Util.Json).Str(parsed.%Get("receipt"), "epoch")
     If epoch '= "" Set response.Epoch = epoch
-    If status = "" {
-        // No HTTP response at all: a refused connection never sent anything; anything else is unknown.
+    If +status = 0 {
+        // No HTTP response at all (this item stores +StatusCode, so that reads 0, never empty): a refused connection never
+        // sent anything; anything else is unknown.
         Set msg = $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "no response")
         Set response.Error = msg
         // The status codes first: 6059 is a socket that never opened, so nothing was sent; the wording of the
