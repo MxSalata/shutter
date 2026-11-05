@@ -15,7 +15,17 @@ import { theme } from '@/theme';
 import CasePage from '../CasePage';
 import recordedAnswers from '@/mocks/recorded-questions.json';
 import type { CaseQuestion, WhatIfFact } from '@/api/types';
-import { SAMPLE_LABEL, TRIAL_NO_ANSWER, answerParts, answersBadge, provenanceText } from './labels';
+import { HELD_CASES } from '@/mocks/hold';
+import { DEMO_CASES } from '@/mocks/questions';
+import {
+  SAMPLE_LABEL,
+  TRIAL_ASK_CASES,
+  TRIAL_NO_ANSWER,
+  answerParts,
+  answersBadge,
+  heldAnswersNote,
+  provenanceText,
+} from './labels';
 import { WhatIfCard } from './WhatIfCard';
 import { layer1Words } from '@/test/words';
 import { useAppearance } from '@/stores/appearance';
@@ -495,7 +505,56 @@ describe('Ask about this case', () => {
     },
   );
 
-  it('shows a scenario with no suggested questions plainly, and a card that says no setting changes the outcome', async () => {
+  it('in the trial, on a case with no recordings, links the six that have them and claims nothing about its entry', async () => {
+    // C-000021's own page says the evidence matched E7, which the mock's What-if facts do not know
+    renderCase('C-000021');
+    const p = await panel();
+    const line = await within(within(p).getByRole('tabpanel')).findByTestId('ask-recorded-cases');
+    expect(
+      within(line)
+        .getAllByRole('link')
+        .map((a) => a.textContent),
+    ).toEqual(TRIAL_ASK_CASES);
+    expect(within(line).getByRole('link', { name: 'C-000008' })).toHaveAttribute(
+      'href',
+      '/cases/C-000008?ask=1',
+    );
+    expect(p).not.toHaveTextContent(/no catalogue entry/);
+    expect(p).not.toHaveTextContent(/no suggested questions/);
+    expect(p).not.toHaveTextContent(/No setting changes this outcome/);
+    expect(within(p).queryByRole('region', { name: /^What if/ })).not.toBeInTheDocument();
+  });
+
+  it('holds the list of recorded cases and the held case to the recordings', () => {
+    expect([...TRIAL_ASK_CASES].sort()).toEqual(Object.keys(DEMO_CASES).sort());
+    expect(HELD_CASES.map((id) => heldAnswersNote(id, 'awaiting_approval', true))).not.toContain(null);
+  });
+
+  it('says the answers came after an approval that has not happened here, while the case is held', async () => {
+    renderCase('C-000002');
+    const p = await panel();
+    const thread = await within(p).findByRole('region', { name: 'Example conversation' });
+    expect(
+      await within(thread).findByText(
+        'Recorded after this case was approved in the recording; here it waits for you.',
+      ),
+    ).toBeInTheDocument();
+    expect(heldAnswersNote('C-000002', 'awaiting_approval', false)).toMatch(/waits for an approver\.$/);
+    expect(heldAnswersNote('C-000002', 'blocked', true)).toMatch(/here it was rejected\.$/);
+    // Approved here, the page replays what the answers explain; other cases' answers are as recorded
+    expect(heldAnswersNote('C-000002', 'resolved', true)).toBeNull();
+    expect(heldAnswersNote('C-000053', 'blocked', true)).toBeNull();
+  });
+
+  it('says nothing of a hold on a recorded case that was not held', async () => {
+    renderCase('C-000008');
+    const p = await panel();
+    await within(p).findByRole('region', { name: 'Example conversation' });
+    expect(p).not.toHaveTextContent(/waits for/);
+  });
+
+  it('shows a scenario with no suggested questions plainly on a live page, and a card that says no setting changes the outcome', async () => {
+    demo.value = false;
     renderCase('C-000009');
     const p = await panel();
     expect(

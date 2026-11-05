@@ -1,5 +1,6 @@
 import {
   Alert,
+  Anchor,
   Badge,
   Box,
   Button,
@@ -14,10 +15,12 @@ import {
   VisuallyHidden,
 } from '@mantine/core';
 import { IconCheck, IconEye, IconLock, IconMessageQuestion } from '@tabler/icons-react';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router';
 import {
   isAnswering,
   useAskQuestion,
+  useCase,
   useCaseQuestions,
   useMe,
   useSettings,
@@ -36,9 +39,11 @@ import { showEvidence } from '../case/evidenceLinks';
 import {
   MEMBER_NAMES,
   TIERS,
+  TRIAL_ASK_CASES,
   TRIAL_NO_ANSWER,
   answerParts,
   answersBadge,
+  heldAnswersNote,
   provenanceText,
   tierLabel,
 } from './labels';
@@ -320,6 +325,30 @@ function FreeText({
   );
 }
 
+/** In the trial, on a case with no recorded questions: which cases have them, each a link that opens its panel. */
+function RecordedCases() {
+  return (
+    <Text size="sm" data-testid="ask-recorded-cases">
+      The trial has recorded questions on six cases:{' '}
+      {TRIAL_ASK_CASES.map((id, i) => (
+        <Fragment key={id}>
+          {i ? (i === TRIAL_ASK_CASES.length - 1 ? ' and ' : ', ') : ''}
+          <Anchor
+            component={Link}
+            to={`/cases/${id}?ask=1`}
+            inherit
+            underline="always"
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            {id}
+          </Anchor>
+        </Fragment>
+      ))}
+      .
+    </Text>
+  );
+}
+
 /**
  * Ask about this case: the read-only panel beside the case. Two tiers as tabs, each with the scenario's suggested
  * questions; the conversation shown (the recorded example first); the box for a question in one's own words, locked
@@ -330,9 +359,14 @@ export function AskPanel({ caseId }: { caseId: string }) {
   const suggested = useSuggestedQuestions(caseId);
   const questions = useCaseQuestions(caseId);
   const ask = useAskQuestion(caseId);
-  const canAsk = !!useMe().data?.operator;
+  const me = useMe().data;
+  const canAsk = !!me?.operator;
+  const state = useCase(caseId).data?.state;
   const [tier, setTier] = useState<QuestionTier>('explain');
   const conversations = suggested.data?.conversations ?? [];
+  // The trial's recordings cover six cases; on the others it has no questions and no What-if card to show
+  const unrecorded = TRIAL && suggested.isSuccess && !conversations.length;
+  const held = TRIAL ? heldAnswersNote(caseId, state, !!me?.approver) : null;
   const asked = questions.data?.items ?? [];
   const [chosen, setChosen] = useState<string>();
   // The example conversation is shown first: the scenario's first one, else the first asked here
@@ -443,6 +477,8 @@ export function AskPanel({ caseId }: { caseId: string }) {
                 />
               ) : suggested.isPending ? (
                 <Loader size="xs" aria-label="Loading the suggested questions" />
+              ) : unrecorded ? (
+                <RecordedCases />
               ) : chips(t.value).length ? (
                 <Group gap="sm" role="group" aria-labelledby={`ask-chips-${t.value}`}>
                   {chips(t.value).map(({ conversation, t: turn }) => {
@@ -481,7 +517,7 @@ export function AskPanel({ caseId }: { caseId: string }) {
                     : "This case's scenario has no suggested questions yet."}
                 </Text>
               )}
-              {!canAsk ? (
+              {!canAsk && !unrecorded ? (
                 <Text size="xs" c="dimmed">
                   Asking needs the operator role; the answers already given are shown.
                 </Text>
@@ -519,6 +555,7 @@ export function AskPanel({ caseId }: { caseId: string }) {
                   {!access.open && !access.trial ? ' With an API key you can ask your own questions.' : ''}
                 </Text>
               ) : null}
+              {held ? <Text size="sm">{held}</Text> : null}
             </Stack>
             {thread.map((q) => (
               <Turn key={q.questionId} q={q} />
@@ -533,7 +570,10 @@ export function AskPanel({ caseId }: { caseId: string }) {
         conversation={shown && thread.length ? shown : undefined}
         onAsked={onAsked}
       />
-      <WhatIfCard caseId={caseId} named={namedFact(thread)} />
+      {/* In the trial, only once the recordings are known to cover this case, so its card never flashes on another */}
+      {TRIAL && (!suggested.isSuccess || unrecorded) ? null : (
+        <WhatIfCard caseId={caseId} named={namedFact(thread)} />
+      )}
     </Stack>
   );
 }
