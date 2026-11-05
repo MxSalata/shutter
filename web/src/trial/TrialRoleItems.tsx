@@ -25,16 +25,19 @@ export function TrialRoleItems() {
               current ? <IconCheck size={16} aria-hidden /> : <IconUserCircle size={16} aria-hidden />
             }
             aria-label={`${r.name}${current ? ' (current trial role)' : ''}`}
-            disabled={current}
-            onClick={() =>
+            // Marked, not disabled: with the approver current, every item before Sign out was disabled and the arrow
+            // keys found nothing to move to. Pressing it just closes the menu.
+            aria-current={current ? 'true' : undefined}
+            onClick={() => {
+              if (current) return;
               signIn.mutate(trialUser(r.role), {
                 onSuccess: async () => {
                   rememberTrialRole(r.role);
                   // What each page may show depends on the role: read everything again as the new one
                   await client.invalidateQueries();
                 },
-              })
-            }
+              });
+            }}
           >
             {r.name}
           </Menu.Item>
