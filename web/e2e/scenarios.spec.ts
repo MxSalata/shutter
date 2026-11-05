@@ -16,11 +16,11 @@ const AS_DEMO = { as: 'demo' } as const;
 test.beforeEach(({ page }) => skipWelcome(page));
 
 test.describe('the live hospital, as the public role sees it @scenarios', () => {
-  test('greys out Run and Reset, and says once that this hospital plays its stories by itself', async ({
+  test("greys out Run and Reset, and says once that the online demo's hospital plays its stories by itself", async ({
     page,
   }) => {
     await signIn(page, AS_DEMO);
-    await expect(page.getByText(/This hospital plays its stories by itself/)).toHaveCount(1);
+    await expect(page.getByText(/hospital plays its stories by itself/)).toHaveCount(1);
     const list = page.getByRole('region', { name: 'Every scenario' });
     await expect(list).toBeVisible();
     const runs = list.getByRole('button', { name: /^Run / });

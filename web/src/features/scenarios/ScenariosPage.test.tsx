@@ -339,6 +339,31 @@ describe('ScenariosPage', () => {
     expect(screen.queryByRole('radio', { name: 'Board' })).not.toBeInTheDocument();
     // No row is marked for a mode when there is no mode to play in
     expect(screen.queryByText(/^Not in .+ mode$/)).not.toBeInTheDocument();
+    // Nothing to try and nothing to play into: the list stands as reference, under the notice
+    expect(screen.queryByRole('region', { name: 'Try these three first' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Three to look at first' })).not.toBeInTheDocument();
+    expect(screen.queryByText('You will see')).not.toBeInTheDocument();
+    expect(screen.getByText(SCENARIOS_LEAD.lookOnly)).toBeInTheDocument();
+    expect(screen.queryByText(SCENARIOS_LEAD.live)).not.toBeInTheDocument();
+  });
+
+  it('says nothing of a demo hospital to a site user who operates but may not run scenarios', async () => {
+    server.use(
+      http.get('/api/shutter/health', () => HttpResponse.json({ ok: true, demo: false })),
+      http.get('/api/shutter/me', () =>
+        HttpResponse.json({
+          username: 'x',
+          operator: true,
+          approver: false,
+          can: { operate: true, approve: false, configure: false, scenarios: false },
+        }),
+      ),
+    );
+    renderScenarios();
+    expect(await screen.findByText('The Scenario Player is switched off')).toBeInTheDocument();
+    await screen.findByRole('button', { name: 'Run S2' });
+    expect(screen.queryByText(/plays its stories by itself/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/the hospital plays one every few minutes/)).not.toBeInTheDocument();
   });
 });
 
@@ -369,9 +394,21 @@ describe('ScenariosPage, as each role has it', () => {
     // The reason is said once, not under 29 buttons
     expect(screen.queryByText(/Running a scenario needs/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Resetting needs/)).not.toBeInTheDocument();
-    // No mode to choose; the modes are described and the cards still open their cases
-    expect(screen.queryByRole('radio', { name: 'Board' })).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Investigation modes' })).toBeInTheDocument();
+    // The modes read the list, starting where the hospital plays, and the cards still open their cases
+    expect(screen.getByRole('radiogroup', { name: 'Investigation modes' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /Site policy/ })).toBeChecked();
+    expect(within(list).getByText(/Filter by what should happen in Site policy mode/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: /^Board/ }));
+    expect(within(list).getByText(/Filter by what should happen in Board mode/)).toBeInTheDocument();
+    for (const run of within(list).getAllByRole('button', { name: /^Run S\d+[a-z]?$/ }))
+      expect(run).toBeDisabled();
+    await userEvent.click(screen.getByRole('radio', { name: /Site policy/ }));
+    // The way to the board's recording is a link, not a pointer to one that may not be there
+    // (It sits behind "What a scenario does", so it is out of the accessibility tree until that opens.)
+    expect(screen.getByRole('link', { name: "S8's recording in the trial", hidden: true })).toHaveAttribute(
+      'href',
+      expect.stringMatching(/\?trial#\/cases\/C-000008$/),
+    );
     const first = screen.getByRole('region', { name: 'Three to look at first' });
     expect(await within(first).findByRole('link', { name: /the latest S2 case/ })).toBeInTheDocument();
     for (const name of ['Run S2 in Site policy mode', 'Run S23a in Site policy mode'])

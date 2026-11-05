@@ -80,10 +80,32 @@ describe('ScenariosPage in the trial', () => {
   it("describes all four modes to a role that can't choose, and says the trial has no recording of one", async () => {
     resetMock('judge');
     renderTrial();
-    const modes = await screen.findByRole('region', { name: 'Investigation modes' });
+    const modes = await screen.findByRole('radiogroup', { name: 'Investigation modes' });
     for (const name of ['Board', 'Site policy', 'Single investigator', 'Rules only'])
       expect(within(modes).getByText(name)).toBeInTheDocument();
-    expect(within(modes).getByText('Not in the trial: no recording.')).toBeInTheDocument();
+    expect(within(modes).getByText('Not in the trial: no recording')).toBeInTheDocument();
+    expect(within(modes).getByRole('radio', { name: 'Site policy' })).toBeChecked();
+    // What it is, in view: the line under the cards speaks only for the chosen mode, and this one can't be chosen
+    expect(within(modes).getByText(/One generalist agent looks at everything/)).toBeVisible();
+  });
+
+  it("says where the online demo's words apply, and how to get a role that can run one", async () => {
+    resetMock('judge');
+    renderTrial();
+    const first = await screen.findByRole('region', { name: 'Three to look at first' });
+    expect(
+      within(first).getByText("Recorded; the online demo's hospital plays these in Site policy mode."),
+    ).toBeInTheDocument();
+    expect(first).not.toHaveTextContent(/no board is convened/);
+    expect(
+      screen.getByText(/switch to Operator or Approver in the menu at the top right/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/which the trial and your own instance offer/)).not.toBeInTheDocument();
+    expect(screen.getByText(/On the online demo the site's written policy/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: "S8's recording", hidden: true })).toHaveAttribute(
+      'href',
+      '/cases/C-000008',
+    );
   });
 
   it('lists the guided path as numbered steps, each a title, one sentence and its links, the rest behind More', async () => {

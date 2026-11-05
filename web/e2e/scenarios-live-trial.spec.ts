@@ -54,7 +54,7 @@ for (const width of [1280, 360])
       for (const run of await first.getByRole('button', { name: /^Run / }).all())
         await expect(run).toBeDisabled();
       await expect(page.getByRole('button', { name: 'Reset' })).toBeDisabled();
-      const modes = page.getByRole('region', { name: 'Investigation modes' });
+      const modes = page.getByRole('radiogroup', { name: 'Investigation modes' });
       await expect(modes.getByText('Single investigator')).toBeVisible();
       await expect(modes.getByText(/Not in the trial/)).toHaveCount(0);
       await expect(page.getByRole('heading', { name: /^Try/ })).toHaveCount(0);
