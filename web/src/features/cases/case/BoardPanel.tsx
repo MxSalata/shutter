@@ -383,7 +383,8 @@ function SpecialistCard({
   const key = String(run.id ?? run.memberCode);
   const name = nameOf(run);
   const confidence = Number(result.confidence ?? run.finding?.confidence);
-  const shown = Number.isFinite(confidence) && confidence > 0;
+  // A run with no answer can still hold a result (over its budget, kept for inspection only): no confidence to report
+  const shown = answered(run) && Number.isFinite(confidence) && confidence > 0;
   const own = 'own confidence';
   return (
     <MemberCard
@@ -638,14 +639,17 @@ function keptDissent(run: AgentRun, coordinator: AgentRun | undefined): string |
   return said ? `Proposed ${said.charAt(0).toLowerCase()}${said.slice(1)}` : undefined;
 }
 
-/** A specialist dissents from its own sitting's plan: the coordinator kept its disagreement, or it proposed another. */
+/**
+ * A specialist dissents from its own sitting's plan: the coordinator kept its disagreement, or it answered with another.
+ * A result kept from a run with no answer proposes nothing, so it differs from no plan.
+ */
 function dissentsFrom(run: AgentRun, coordinator: AgentRun | undefined): boolean {
   if (!coordinator) return false;
   const result = asObject(coordinator.result) ?? {};
   const kept = asArray(result.disagreements).some(
     (d) => String(asObject(d)?.member ?? '') === run.memberCode,
   );
-  return kept || (!!dispositionOf(run) && dispositionOf(run) !== String(result.disposition ?? ''));
+  return kept || (answered(run) && dispositionOf(run) !== String(result.disposition ?? ''));
 }
 
 /**
@@ -760,10 +764,10 @@ export function BoardPanel({
       : agreement.word
         ? 'The coordinator kept no disagreements.'
         : `${views === 0 ? 'No specialist' : plural(views, 'specialist')} answered; the coordinator kept no disagreements.`;
-  // The page's first confidence carries its definition
+  // The page's first confidence shown carries its definition
   const firstConfident = rounds
     .flatMap((r) => r.specialists)
-    .find((r) => Number(resultOf(r).confidence ?? r.finding?.confidence) > 0);
+    .find((r) => answered(r) && Number(resultOf(r).confidence ?? r.finding?.confidence) > 0);
   return (
     <Section
       id="board"
