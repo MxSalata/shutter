@@ -92,7 +92,10 @@ ClassMethod Classify(response As Shutter.Msg.WardResult, sc As %Status, parsed A
         } ElseIf (lower [ "refused") || (lower [ "unable to connect") || (lower [ "connect failed") || (lower [ "no route") || (lower [ "unable to open tcp/ip socket") {
             Set response.Outcome = "unavailable"
         } Else {
+            // A person reads this: the sentence says what it means, and the adapter's words stay beside it for whoever looks
+            // into the connection.
             Set response.Outcome = "uncertain"
+            Set response.Error = "The ward system did not answer; the operation may have been applied (" _ msg _ ")"
         }
         Quit
     }

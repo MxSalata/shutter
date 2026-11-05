@@ -507,7 +507,8 @@ ClassMethod Item(summary As %DynamicObject, kind As %String) As %DynamicObject [
         // "Delivery uncertain, HTTP 504: …": the reason code in parentheses, the status after "HTTP ".
         Set o = {}
         Set text = ##class(Shutter.Util.Json).Str(failure, "text")
-        Set o."reason_code" = $SELECT(text [ "(": $PIECE($PIECE(text, "(", 2), ")", 1), 1: "")
+        // Only a parenthesis ahead of the first colon holds a reason code: one after it is in the connector's own words.
+        Set o."reason_code" = $SELECT((text [ "(") && ($PIECE(text, "(", 1) '[ ":"): $PIECE($PIECE(text, "(", 2), ")", 1), 1: "")
         Set o."http_status" = +$PIECE($PIECE(text, "HTTP ", 2), ":", 1)
         If (o."reason_code" = "") && (text [ "uncertain") Set o."reason_code" = "timeout"
         Quit o
