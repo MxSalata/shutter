@@ -867,7 +867,7 @@ function Profile({
           params.delete(FACT_PARAM);
           return params;
         },
-        { replace: true },
+        { replace: true, preventScrollReset: true },
       );
   };
 
