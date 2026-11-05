@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """A resend whose answer never came: the receiver applies it after Shutter's connector has given up.
 
-    python3 tests/e2e/lost_answer_check.py [--url http://localhost:52773] [--seconds 60] [--mode rules]
+    python3 tests/e2e/lost_answer_check.py [--url http://localhost:52773] [--seconds 50] [--mode rules]
 
 Plays S2 until its plan waits for approval, makes the demo receiver hold that one operation for --seconds (the connector
 gives up at 15 s, and the receiver then applies it, CONTRACTS 1.5), and approves. The product's central promise is on the
 line: a write nobody answered must never read as nothing sent. So the check asks for one write attempt recorded as
 uncertain, no verification that says not committed before the receiver's write landed, the case resolved as verified and
 never blocked, no event that says the write was refused, and the receiver holding the transfer exactly once. With
---seconds at 60 the write lands 45 s after the attempt is recorded, past the read at 30 s, so the settle window is on
-trial too (CONTRACTS 1.3 and 5.1).
+--seconds at 50 the write lands 35 s after the attempt is recorded, past the read at 30 s, so the settle window is on
+trial too (CONTRACTS 1.3 and 5.1). The default is 50 because a hold of 60 s can tie with the web gateway's own timeout
+of 60 s: one run in four at 60 s never wrote, and five in five at 50 s did.
 
 Signs in as the demo users `operator` and `approver` (password from SHUTTER_PASSWORD, default "shutter"); the receiver
 is read and faulted through its API (--downstream-user and --downstream-password, default _SYSTEM / SYS). It plays a
@@ -54,7 +55,7 @@ def set_fault(args, body):
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--url", default="http://localhost:52773")
-    p.add_argument("--seconds", type=int, default=60, help="how long the receiver holds the write, above 15")
+    p.add_argument("--seconds", type=int, default=50, help="how long the receiver holds the write, above 15")
     p.add_argument("--mode", default="rules", help="the mode S2 is played in; rules needs no recordings")
     p.add_argument("--timeout", type=int, default=300, help="seconds to wait for each step")
     p.add_argument("--downstream-user", default="_SYSTEM")
