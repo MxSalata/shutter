@@ -77,6 +77,7 @@ export default function HealthPage() {
             {TRIAL ? (
               <Text size="sm" c="dimmed" maw="68ch">
                 This is the report of the instance the trial was recorded on. Parts it did not have say so.
+                Its counts are that instance's whole store, more than this trial's cases or Evaluation's runs.
               </Text>
             ) : null}
           </Stack>
