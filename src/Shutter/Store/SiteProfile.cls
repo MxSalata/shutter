@@ -447,6 +447,13 @@ ClassMethod DefaultApi() As %DynamicObject
     Quit {"base": "/downstream/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "/capabilities", "operations": "/operations"}
 }
 
+/// Whether this is a site's install, not the demo: a receiver a site's profile does not name is unknown there, never the
+/// demo's (v1.42).
+ClassMethod SiteInstall() As %Boolean
+{
+    Quit $GET(^Shutter.Config("demo"), 1) = 0
+}
+
 /// Declared features and no api: a receiver with no API of its own, such as a plain MLLP system. It has no paths: falling back
 /// to the defaults would read the demo receiver in its place and believe its capabilities over the declared ones. An entry
 /// with neither reads as a profile from before v1.8 does, on the defaults.
@@ -462,6 +469,8 @@ ClassMethod ReceiverPath(name As %String, kind As %String, encounter As %String 
 {
     Set r = ..Receiver(name), defaults = ..DefaultApi()
     If ..HasNoApi(r) Quit ""
+    // A site's receiver the profile does not name (v1.42) has no API: the defaults are the demo receiver's.
+    If '$ISOBJECT(r) && ..SiteInstall() Quit ""
     Set api = $SELECT($ISOBJECT(r) && $ISOBJECT(r.%Get("api")): r.%Get("api"), 1: defaults)
     Set base = $SELECT(api.%IsDefined("base"): ##class(Shutter.Util.Json).Str(api, "base"), 1: ##class(Shutter.Util.Json).Str(defaults, "base"))
     Set path = $SELECT(api.%IsDefined(kind): ##class(Shutter.Util.Json).Str(api, kind), 1: ##class(Shutter.Util.Json).Str(defaults, kind))
@@ -478,6 +487,7 @@ ClassMethod ReceiverFeatures(name As %String) As %DynamicObject
 {
     Set r = ..Receiver(name)
     If $ISOBJECT(r) && $ISOBJECT(r.%Get("features")) Quit r.%Get("features")
+    If '$ISOBJECT(r) && ..SiteInstall() Quit {"conditional_writes": false, "receipts": false, "history": false, "dry_run": false}
     Quit {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}
 }
 

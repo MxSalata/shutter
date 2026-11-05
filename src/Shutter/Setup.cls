@@ -99,6 +99,9 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         While $TLEVEL < tlevel { TSTART }
         Quit sc
     }
+    // A namespace running a production of the site's: Shutter's own production would stop it (v1.42).
+    Set problem = ..LiveNamespaceProblem()
+    If problem '= "" Quit $$$ERROR($$$GeneralError, problem)
     Set sc = $$$OK
     Try {
         Set ns = $NAMESPACE
@@ -165,12 +168,25 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         If $EXTRACT(synced, 1, 5) = "ERROR" Set sc = $$$ERROR($$$GeneralError, synced) Quit
         // A site runs the production with no feed of its own: the demo's items are switched off.
         If 'demo Set sc = ..DisableDemoItems() Quit:$$$ISERR(sc)
+        // The compile above rewrote the definition from the package: the receivers' connector items go back (v1.42).
+        If 'demo Set sc = ##class(Shutter.Util.Onboard).RestoreReceiverItems() Quit:$$$ISERR(sc)
         If demo Set sc = ..InstallDemoHospital(ns) Quit:$$$ISERR(sc)
     } Catch ex {
         Set sc = ex.AsStatus()
     }
     While $TLEVEL < tlevel { TSTART }
     Quit sc
+}
+
+/// Why this namespace must not take Shutter's own production: another production runs here, and starting Shutter's would
+/// stop it. "" when nothing stands in the way. Upgrades pass: there the running production is Shutter's.
+ClassMethod LiveNamespaceProblem(running As %String = "", state As %String = "") As %String
+{
+    If (running = "") && (state = "") {
+        Try { Do ##class(Ens.Director).GetProductionStatus(.running, .state) } Catch ex { Set running = "", state = "" }
+    }
+    If (running = "") || (running = "Shutter.Production") || (+state '= 1) Quit ""
+    Quit "This namespace runs the production " _ running _ ", and installing Shutter here would stop it. Create a namespace for Shutter (SELECT Shutter.Setup_CreateNamespace('SHUTTER')) and load there, or name this production to put Shutter's items inside it (-Dproduction=" _ running _ ")"
 }
 
 /// The demo hospital's production, in its namespace, once Shutter's classes are compiled and mapped there. An image
@@ -482,6 +498,20 @@ ClassMethod CredentialChecks(refresh As %Boolean = 0, Output state As %String, c
     If hospital '= "" {
         Do out.%Push(..CredentialCheck(hospital, "DownstreamAPI"))
         Do out.%Push(..CredentialCheck(hospital, "ShutterIntake"))
+    }
+    // Each onboarded namespace's forwarder (v1.42), and the credential a receiver's connector item names.
+    Set onboarded = ""
+    For {
+        Set onboarded = $ORDER(^Shutter.Config("onboard", onboarded)) Quit:onboarded=""
+        Continue:onboarded=hospital
+        Do out.%Push(..CredentialCheck(onboarded, $GET(^Shutter.Config("onboard", onboarded, "credential"), "ShutterIntake")))
+    }
+    Set item = ""
+    For {
+        Set item = $ORDER(^Shutter.Config("receiverItems", item), 1, was) Quit:item=""
+        Continue:$DATA(checked($LIST(was, 3)))
+        Set checked($LIST(was, 3)) = 1
+        Do out.%Push(..CredentialCheck($NAMESPACE, $LIST(was, 3)))
     }
     Try {
         Set ^Shutter.Health("credentials", "json") = out.%ToJSON(), ^Shutter.Health("credentials", "at") = ##class(Shutter.Util.Time).EpochSeconds()
@@ -1844,6 +1874,9 @@ ClassMethod Doctor(refresh As %Boolean = 0) As %String [ SqlProc ]
     Set r.questions = +questions
     // The HL7 schemas this namespace holds against those the production's services and the recent messages name (v1.32).
     Set r."hl7_schemas" = ##class(Shutter.Util.Schemas).Report()
+    // Each watched namespace, read there (v1.42), and the receivers whose connector item a site has yet to add.
+    Set r."watched_namespaces" = ##class(Shutter.Util.Onboard).Watched()
+    Set r."receivers_without_item" = ##class(Shutter.Util.Onboard).ReceiversWithoutItem()
     // The hold for a schema not loaded (v1.34, "prevent failures"): the profile's setting and the held cases by category.
     Do r.%Set("prevent_failures", ##class(Shutter.Store.SiteProfile).PreventFailures(), "boolean")
     Set r."held_messages" = ##class(Shutter.Util.Schemas).Held()
@@ -2014,6 +2047,53 @@ ClassMethod ImportSchema(path As %String) As %String [ SqlProc ]
     If $$$ISERR(sc) Set out.error = $SYSTEM.Status.GetErrorText(sc)
     Set out.loaded = ##class(Shutter.Util.Schemas).Categories()
     Quit out.%ToJSON()
+}
+
+// ---- onboarding a namespace (Shutter.Util.Onboard; INSTALL 9, CONTRACTS 11.1) ----
+
+/// What onboarding a namespace would do, changing nothing: JSON. options is a JSON object or empty (Shutter.Util.Onboard.Plan).
+ClassMethod OnboardPlan(ns As %String, options As %String = "") As %String [ SqlProc ]
+{
+    Quit ##class(Shutter.Util.Onboard).Plan(ns, ##class(Shutter.Util.Onboard).Options(options)).%ToJSON()
+}
+
+/// Carries out that plan and answers what changed. Idempotent; never stops a production. Needs %Admin_Manage.
+ClassMethod OnboardApply(ns As %String, options As %String = "") As %String [ SqlProc ]
+{
+    Quit ##class(Shutter.Util.Onboard).Apply(ns, ##class(Shutter.Util.Onboard).Options(options)).%ToJSON()
+}
+
+/// A marked test failure through the namespace's forwarder settings: a case opens, and nothing goes to a receiver.
+ClassMethod OnboardTest(ns As %String) As %String [ SqlProc ]
+{
+    Quit ##class(Shutter.Util.Onboard).Test(ns).%ToJSON()
+}
+
+/// Takes off what the apply added, and says what stays. Needs %Admin_Manage.
+ClassMethod OnboardRemove(ns As %String, options As %String = "") As %String [ SqlProc ]
+{
+    Quit ##class(Shutter.Util.Onboard).Remove(ns, ##class(Shutter.Util.Onboard).Options(options)).%ToJSON()
+}
+
+/// A connector item for a receiver the site profile gives an API, kept across upgrades. Needs %Admin_Manage.
+ClassMethod OnboardReceiverItem(name As %String, host As %String = "", port As %String = "", credential As %String = "", ssl As %String = "") As %String [ SqlProc ]
+{
+    If '$SYSTEM.Security.Check("%Admin_Manage", "USE") Quit "{""ok"":false,""error"":""This changes Shutter's production: it needs %Admin_Manage""}"
+    Quit ##class(Shutter.Util.Onboard).ReceiverItem(name, host, port, credential, ssl).%ToJSON()
+}
+
+/// The forwarder's sign-in for a namespace, in a terminal: with no password it asks for one with the echo off, and it never
+/// prints it. Not an SQL procedure, so no password passes through a statement. Makes the user when it does not exist.
+ClassMethod OnboardCredential(ns As %String, user As %String = "shutter-fwd", password As %String = "", credential As %String = "")
+{
+    If password = "" {
+        Write "Password for ", user, ": "
+        Use $PRINCIPAL:(:"+S")
+        Read password
+        Use $PRINCIPAL:(:"-S")
+        Write !
+    }
+    Write ##class(Shutter.Util.Onboard).Credential(ns, user, password, credential).%ToJSON(), !
 }
 
 // ---- the aihub module ----

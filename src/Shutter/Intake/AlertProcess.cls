@@ -149,7 +149,7 @@ ClassMethod Classify(text As %String) As %String
 {
     Set t = $ZCONVERT(text, "L")
     // A connection that never opened: nothing was sent, so nothing was refused by the receiver.
-    If (t [ "connection refused") || (t [ "connect failed") || (t [ "unable to connect") || (t [ "no route") || (t [ "unable to open tcp") Quit "delivery_failed"
+    If (t [ "connection refused") || (t [ "connect failed") || (t [ "unable to connect") || (t [ "no route") || (t [ "unable to open tcp") || (t [ "connect timeout") || (t [ "errouttconnectexpired") || (t [ "erroutconnectexpired") Quit "delivery_failed"
     If (t [ "timeout") || (t [ "timed out") || (t [ "no response") || (t [ "did not answer") || (t [ "did not respond") || (t [ "uncertain") Quit "uncertain_outcome"
     If (t [ "reject") || (t [ "refused by") || (t [ "nack") || $MATCH(t, ".*\b(ae|ar)\b.*") Quit "rejected"
     If $EXTRACT(..HttpStatusIn(text), 1) = "4" Quit "rejected"

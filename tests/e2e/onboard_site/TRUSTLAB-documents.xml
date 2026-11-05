@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Category name="TRUSTLAB" base="2.5.1" description="The documents team's own local variant, with the same name and another Z segment">
+<MessageType name='ORU_R01' structure='ORU_R01' returntype='base:ACK_R01'/>
+<MessageStructure name='ORU_R01' definition='base:MSH~base:PID~[~base:PV1~]~base:ORC~base:OBR~{~base:OBX~}~ZDC'/>
+<SegmentStructure name='ZDC' description='Document extras'>
+<SegmentSubStructure piece='1' description='DocumentClass' datatype='base:ST' symbol='' length='10' required='R' ifrepeating='0'/>
+</SegmentStructure>
+</Category>

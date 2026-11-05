@@ -77,6 +77,21 @@ ClassMethod Needed(recent As %Integer = 500) As %DynamicArray
         }
     } Catch ex {
     }
+    // The watched namespaces' services (v1.42): what a forward will name, read in each namespace, by the name Shutter holds
+    // it under. A category a forward named and this namespace lacked (the intake's note) stands until it is loaded.
+    Try {
+        Set watched = ##class(Shutter.Util.Onboard).Watched(), wi = watched.%GetIterator()
+        While wi.%GetNext(, .w) {
+            Set mi = w."schemas_missing".%GetIterator()
+            While mi.%GetNext(, .cat) { Do ..Note(.out, .seen, cat, "a service of " _ w.production _ " in " _ w.namespace) }
+        }
+        Set cat = ""
+        For {
+            Set cat = $ORDER(^Shutter.Config("schemaNamed", cat), 1, from) Quit:cat=""
+            Do ..Note(.out, .seen, cat, "a message forwarded from " _ from)
+        }
+    } Catch ex {
+    }
     // Missing first, then by name.
     Set sorted = []
     For pass = 0, 1 {
@@ -126,6 +141,7 @@ ClassMethod Import(path As %String, Output category As %String) As %Status
     Set sc = ##class(EnsLib.HL7.SchemaXML).Import(path, .category)
     If $$$ISERR(sc) Quit sc
     Do ..Changed()
+    Kill ^Shutter.Config("schemaNamed", category)
     Try { Do ##class(Ens.Util.Log).LogInfo($CLASSNAME(), "Import", "HL7 schema category " _ category _ " imported from " _ path) } Catch {}
     Quit $$$OK
 }
@@ -135,6 +151,91 @@ ClassMethod Changed()
 {
     If $INCREMENT(^Shutter.Config("schemaEpoch"))
     Kill ^||Shutter.SchemaKnown
+}
+
+/// The name a source namespace's category has here: the alias it was imported under when that name held something else
+/// (v1.42), else its own.
+ClassMethod LocalName(namespace As %String, category As %String) As %String
+{
+    Set alias = ..Alias(namespace, category)
+    Quit $SELECT(alias '= "": alias, 1: category)
+}
+
+/// The alias of a source namespace's category, or "".
+ClassMethod Alias(namespace As %String, category As %String) As %String
+{
+    If (namespace = "") || (category = "") Quit ""
+    Quit $GET(^Shutter.Config("schemaAlias", namespace, category))
+}
+
+/// A digest of a category's definition as a namespace holds it, by IRIS's own export; "" when it cannot be exported. Two
+/// namespaces' categories with one digest are one schema.
+ClassMethod Fingerprint(namespace As %String, category As %String) As %String
+{
+    Set digest = "", file = ##class(%File).TempFilename("xml")
+    New $NAMESPACE
+    Try {
+        If namespace '= "" Set $NAMESPACE = namespace
+        Set sc = ##class(EnsLib.HL7.SchemaXML).Export(category, file)
+        If $$$ISOK(sc) {
+            Set stream = ##class(%Stream.FileCharacter).%New()
+            Do stream.LinkToFile(file)
+            Set digest = $SYSTEM.Encryption.Base64Encode($SYSTEM.Encryption.SHA1HashStream(stream))
+            Kill stream
+        }
+    } Catch ex {
+        Set digest = ""
+    }
+    Do ##class(%File).Delete(file)
+    Quit digest
+}
+
+/// What a source namespace's custom category needs here (v1.42): none (the same schema is loaded under the name it has
+/// here), import (the name is free), or import_as with the alias to import it under, since IRIS's importer replaces a
+/// category of that name whole and with no warning, and the schema loaded there serves another namespace.
+ClassMethod ImportNeeded(namespace As %String, category As %String, Output as As %String) As %String
+{
+    Set as = ..Alias(namespace, category)
+    If as '= "" Quit $SELECT(..Known(as): "none", 1: "import_as")
+    If '..Known(category) Set as = category Quit "import"
+    If ..Fingerprint(namespace, category) = ..Fingerprint("", category) Quit "none"
+    Set as = $TRANSLATE(namespace, "%") _ "_" _ category
+    Quit "import_as"
+}
+
+/// IRIS's export of a category, run in the namespace that holds it; the caller stays where it is.
+ClassMethod ExportFrom(namespace As %String, category As %String, file As %String) As %Status
+{
+    New $NAMESPACE
+    Try {
+        Set $NAMESPACE = namespace
+        Set sc = ##class(EnsLib.HL7.SchemaXML).Export(category, file)
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    Quit sc
+}
+
+/// Imports a source namespace's category here, under the name as (empty: its own), by IRIS's own export and import; an
+/// alias is recorded, so the intake reads that namespace's forwards under it. The source namespace is not changed.
+ClassMethod ImportFrom(namespace As %String, category As %String, as As %String = "") As %Status
+{
+    If $SYSTEM.Security.Check("%Admin_Manage", "USE") = 0 Quit $$$ERROR($$$GeneralError, "Importing a schema from another namespace needs %Admin_Manage")
+    Set file = ##class(%File).TempFilename("xml")
+    Set sc = ..ExportFrom(namespace, category, file)
+    If $$$ISERR(sc) Do ##class(%File).Delete(file) Quit sc
+    If (as = "") || (as = category) {
+        Set sc = ##class(EnsLib.HL7.SchemaXML).Import(file, .got)
+    } Else {
+        Set sc = ##class(EnsLib.HL7.SchemaXML).Import(file, .got, as)
+        If $$$ISOK(sc) Set ^Shutter.Config("schemaAlias", namespace, category) = as
+    }
+    Do ##class(%File).Delete(file)
+    If $$$ISERR(sc) Quit sc
+    Kill ^Shutter.Config("schemaNamed", category)
+    Do ..Changed()
+    Try { Do ##class(Ens.Util.Log).LogInfo($CLASSNAME(), "ImportFrom", "HL7 schema category " _ category _ " imported from " _ namespace _ " as " _ $SELECT(as = "": category, 1: as)) } Catch {}
+    Quit $$$OK
 }
 
 /// Whether a category is loaded in another namespace (a watched production's, for a message held there): read there each
@@ -154,6 +255,32 @@ ClassMethod KnownIn(namespace As %String, category As %String) As %Boolean
         Set known = 0
     }
     Quit known
+}
+
+/// The key in a stored message's UserValues for the category its forward named and this namespace lacked (v1.42); the
+/// message goes when it is purged, and so does this.
+Parameter NAMEDKEY = "ShutterNamedCategory";
+
+Parameter NAMEDFROM = "ShutterNamedFrom";
+
+/// Notes on a forwarded message's stored copy the category its forward named when this namespace lacks it (under the name
+/// it has here); answers whether it did. The copy itself stays typed as the intake's fallback typed it.
+ClassMethod NamedUnloaded(message As EnsLib.HL7.Message, category As %String, namespace As %String = "") As %Boolean
+{
+    Set category = $ZSTRIP(category, "<>W")
+    If category = "" Quit 0
+    If ..Known(..LocalName(namespace, category)) Quit 0
+    Do message.UserValues.SetAt(category, ..#NAMEDKEY)
+    Do message.UserValues.SetAt(namespace, ..#NAMEDFROM)
+    Quit 1
+}
+
+/// The category a stored message's forward named and that was not loaded when it came, under the name it has here, or "".
+ClassMethod NamedCategory(message As EnsLib.HL7.Message) As %String
+{
+    Set category = message.UserValues.GetAt(..#NAMEDKEY)
+    If category = "" Quit ""
+    Quit ..LocalName(message.UserValues.GetAt(..#NAMEDFROM), category)
 }
 
 /// The schema category a message is read under: its document type's category when the route set one; else the

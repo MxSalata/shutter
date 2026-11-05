@@ -107,10 +107,16 @@ says so. Nothing else depends on it.
 
 ## 3. Shape A: Shutter in its own namespace
 
-**3.1 The namespace.** Create it with `src/Shutter/Installer.cls` as the image does (two databases, Interoperability on) or with
-`SELECT Shutter.Setup_CreateNamespace('SHUTTER')`, its data database on storage the trust backs up. Load the module
-with `-Ddemo=0`: `Shutter.Production` starts with its feed, records and scenario items disabled (the six named in section
-1), so it has no feed of its own until the intake route or the site's own items bring it one.
+**3.1 The namespace.** Before the module is loaded nothing of Shutter's is on the instance, so load the one class that makes
+a namespace first, from any namespace, and make it there (`$SYSTEM.OBJ.Load("<module>/src/Shutter/Setup.cls", "ck")`, then
+`Write ##class(Shutter.Setup).CreateNamespace("SHUTTER")`): its database goes under `<mgr>/shutter/`; a site that wants the
+data on storage the trust backs up makes the namespace and its database in the Management Portal instead, with
+Interoperability on. `src/Shutter/Installer.cls`, as the image uses it, also makes the demo's namespaces, so it is not for a
+site. IPM (`zpm`) is per namespace and a stock image has none: load `vendor/ipm/zpm-0.10.10.xml` in the new namespace with
+`$SYSTEM.OBJ.Load`. Load the module with `-Ddemo=0`: `Shutter.Production` starts with its feed, records and scenario items
+disabled (the six named in section 1), so it has no feed of its own until the intake route or the site's own items bring it
+one. **Load only in the namespace made for Shutter.** A load in a namespace running another production is refused and says
+so, since starting `Shutter.Production` there would stop it; name that production (`-Dproduction=...`) for shape B.
 
 **3.2 The hook.** A failure reaches Shutter through `POST /api/shutter/intake`. The caller signs in with HTTP Basic
 authentication as a user holding `Shutter_Forwarder` (the resource `Shutter_Intake`), sends the header
@@ -134,7 +140,7 @@ message, so the evidence, the model view and the index work as in the demo, and 
 
 The forwarder, `Shutter.Intake.Forwarder`, is a business operation for the watched production: its adapter settings
 name Shutter's server, port, URL (`/api/shutter/intake`), SSL configuration and the credential of a user holding
-`Shutter_Forwarder`. The hospital's HL7 process calls it on a failed delivery with the failed message's header id, the
+`Shutter_Forwarder`. Section 9 adds it, the alert intake and everything they need for you. The hospital's HL7 process calls it on a failed delivery with the failed message's header id, the
 receiver's item name, the outcome and the receiver's answer; the class documents the call.
 
 The alert intake needs no change to the hospital's own code. `Shutter.Intake.AlertProcess`, added as the watched
@@ -152,7 +158,9 @@ production item that delivers to it), tier, what it takes (cancels, merges) and 
 such as a plain MLLP receiver, declare its `features` all false and leave `api` out. There is then no read-back, no
 receipt lookup and no resend: the gate blocks any write, and the case holds the evidence and the reason nothing was
 sent. Nothing goes out by itself: a person reads the case on the Cases page, and its page drafts the email for the team
-that owns the system. `tests/e2e/plain_receiver_check.py` plays this on a stock `EnsLib.HL7.Operation.TCPOperation`,
+that owns the system. A receiver you do give an API needs a connector of its name in Shutter's production and the credential
+it signs in with (section 9, "Giving a receiver its API"). On a site install a receiver the profile does not name at all
+reads as one with no API: nothing is resent to it. `tests/e2e/plain_receiver_check.py` plays this on a stock `EnsLib.HL7.Operation.TCPOperation`,
 down and answering AE.
 
 **3.5 Security and operations.** Only holders of `Shutter_Forwarder` can open cases; the web application keeps its
@@ -204,8 +212,9 @@ trust's HL7 services.
 Shape A:
 
 1. On the integration server, create the SHUTTER namespace with its data database on backed-up storage.
-2. On an AI Hub build, `zpm "install iris-shutter"` with `-Ddemo=0` (the provider key in the environment); on a plain
-   2026.2, `zpm "load <repository>/core -Ddemo=0"`. Check `/api/shutter/health`.
+2. On an AI Hub build, `zpm "install iris-shutter"` with `-Ddemo=0`, or `zpm "load <repository> -Ddemo=0"` by path (the provider
+   key in the environment); on a plain 2026.2, `zpm "load <repository>/core -Ddemo=0"`. IPM goes in that namespace first (3.1).
+   Check `/api/shutter/health`.
 3. Map the trust's users to `Shutter_Operator` and `Shutter_Approver`; add the approvers to the Workflow role; create
    the forwarder's user with `Shutter_Forwarder`. An operator escalates a case (the escalation is the sign-off),
    marks it handled once the team has corrected the systems and starts a production review (3.6); an approver also
@@ -225,8 +234,8 @@ Shape A:
    shipped `example.nhs.uk` with the trust's; a profile saved before this rule that names teams and no domains sends
    nothing until an approver saves the list), the feed's time zone, `merges: forbidden`.
 5. Set the `Escalation Mail` operation's SMTP server.
-6. In each watched production, add `Shutter.Intake.Forwarder` with Shutter's address and credential, and call it from
-   the process that delivers to each receiver on a failed delivery. With the site profile's "prevent failures" on (section
+6. Onboard each watched namespace (section 9), which adds the forwarder and the alert intake. If your own process delivers
+   and you want it to report failures itself, call the forwarder from it on a failed delivery. With the site profile's "prevent failures" on (section
    7): where a routing engine routes the feed, set its `Validation` (`dm`) and its `BadMessageHandler` to the forwarder
    item, and the forwarder's `HeldReceiver` to the receiver it feeds, so a message the engine cannot read against its
    schema reaches Shutter as a held case instead of sitting in a bad-message queue; where your own process delivers, have
@@ -272,16 +281,22 @@ source system's IRIS. Shutter validates each message against the category its ro
 category has to be loaded in Shutter's namespace too.
 
 - **See what is missing.** `SELECT Shutter.Setup_Doctor()` has an `hl7_schemas` section: `loaded` (the categories this
-  namespace holds), `needed` (every `MessageSchemaCategory` your productions' items name, and the categories of the newest
-  messages in the store, each with where it came from and whether it is known) and `missing`. The same answers
+  namespace holds), `needed` (every `MessageSchemaCategory` your productions' items name, the categories of the newest
+  messages in the store, what the services of each watched namespace name that Shutter lacks, and any category a forward
+  named that was not loaded, each with where it came from and whether it is known) and `missing`. The same answers
   `GET /api/shutter/settings/schemas`.
+- **From a watched namespace on this instance,** the apply of section 9 imports what its services name, and it never
+  replaces a schema: a category of that name holding something else here is imported under an alias, and that namespace's
+  forwards are read by the alias. By hand: `Do ##class(Shutter.Util.Schemas).ImportFrom("PATHOLOGY", "TRUSTLAB")`.
 - **Load it.** Export the schema from the source system's Management Portal (Interoperability, Interoperate, HL7 v2.x,
   HL7 v2.x Schema Structures, Export) or write it, copy the `.xml` onto Shutter's server, and run
   `SELECT Shutter.Setup_ImportSchema('/path/to/schema.xml')` as an approver, or `POST /api/shutter/settings/schemas`
-  with `{"path": "/path/to/schema.xml"}`. It is IRIS's own importer (`EnsLib.HL7.SchemaXML`): nothing else changes.
+  with `{"path": "/path/to/schema.xml"}`. It is IRIS's own importer (`EnsLib.HL7.SchemaXML`): nothing else changes, except
+  that a category of the same name is replaced whole and with no warning, so check the name first.
 - **What a case says meanwhile.** A message whose category is not loaded is not called invalid: its evidence says
   `unknown schema` with the category and the fix, and the gate blocks any write with `SCHEMA_UNKNOWN`. Once the schema is
-  loaded, reinvestigate the case from its page; the fresh evidence validates the message and the case goes on.
+  loaded, reinvestigate the case from its page; the fresh evidence reads the message under that category and the case goes
+  on. A forwarded message keeps the category it named, and is read as 2.5.1 only for its identity until then.
 - **Prevent failures.** An interface deployed without its schema does not fail loudly: IRIS still reads the message by
   position, so every field can come from the wrong place and the receiver gets a silent stream of wrong data. Answer yes to
   the site profile's last induction question ("Should Shutter hold the feed when a message arrives whose HL7 schema is not
@@ -326,6 +341,165 @@ has. Images built before 1 November 2026 kept the SHUTTER data database at the i
 installer's `DATADIR` was a name `%Installer` reserves); on such an instance the cases live in the container and go with it,
 so take what you need from it before replacing it, or copy `/usr/irissys/IRIS.DAT` out, create the database under
 `mgr/shutter/db/SHUTTERDATA` and mount it there.
+
+## 9. Onboarding several namespaces
+
+A trust's integration engine is often several namespaces: order communications and the LIMS in one, documents in another,
+the PAS feed in a third. Shutter sits in its own namespace (shape A) and each of those is onboarded on its own, in minutes,
+with its production running throughout. `tests/e2e/onboard_check.py` plays this whole section on a stock instance, on three
+namespaces with stock classes.
+
+**What you get per namespace.** A failed delivery in that namespace opens a case in Shutter, with where it came from. What
+happens next depends on the receiver: ADT to a receiver whose API you describe can be recovered; **every other message type
+(ORM, ORU, OML, MDM and the rest) and every receiver with no API escalates with its evidence, and nothing is resent.** A
+Pathology or Documents namespace gets a durable case and a drafted email per failure, not a recovery (section 10).
+
+**Each step is an SQL call or a terminal line, in Shutter's namespace, as a user holding `%Admin_Manage`** (`_SYSTEM`, or a
+terminal session on the server). Options are one JSON object. Answers are JSON.
+
+**9.1 Read the plan: this changes nothing.**
+
+```sql
+SELECT Shutter.Setup_OnboardPlan('PATHOLOGY')
+```
+
+It answers the running production; its HL7 services, routers and operations; each schema category the services name, whether
+that namespace and Shutter have it and what would be done; what is wired already; and:
+
+- `actions`: exactly what the apply would do, one line each, in the order it would do them;
+- `todo`: what only a person can do;
+- `warnings`: what you should look at first (two items named `Ens.Alert`, a category not even loaded in that namespace).
+
+Options, for this call and the apply alike: `production` (when several exist and none runs), `shutter_host` and `shutter_port`
+(the forwarder's target: 127.0.0.1 and this instance's web server port by default; on a licensed instance give the Web
+Gateway's), `ssl_config`, `credential` (default `ShutterIntake`), `receivers` (a comma-separated list of items in place of
+the namespace's stock HL7 operations, for a site whose connector is its own class; `other_operations` in the plan lists those)
+and `alert_on_error` (below).
+
+**9.2 Apply it.**
+
+```sql
+SELECT Shutter.Setup_OnboardApply('PATHOLOGY')
+SELECT Shutter.Setup_OnboardApply('DOCUMENTS', '{"alert_on_error": true}')
+```
+
+It does what the plan listed and nothing else, answers `changed`, and run again answers "Nothing to do". It never stops a
+production: a running one is updated, and only the items it changes restart. In order:
+
+1. Maps `Shutter.Intake` and `Shutter.Util` into that namespace from Shutter's code database, unless the classes already
+   resolve there.
+2. Imports each custom category the services name into Shutter's namespace, by IRIS's own export and import. The same schema
+   already there needs nothing. **A different one of the same name is imported as `<NAMESPACE>_<CATEGORY>`**, since IRIS's
+   importer would replace the other namespace's whole; that namespace's forwards are then read by the alias.
+3. Adds the item `Shutter Forwarder`, naming the credential and never holding a password.
+4. Renames the site's own `Ens.Alert`, if it has one, to `Site Alerts`, and adds `Shutter.Intake.AlertProcess` as `Ens.Alert`
+   with `PassTo` set to it, so every alert still reaches it first, and `Receivers` set to the HL7 operations. Two items named
+   `Ens.Alert` compile and start, and the engine silently uses one: the plan warns, and adds none until you have renamed one.
+5. Turns `AlertOnError` on for those operations **only if you passed `alert_on_error`**: it is your item's setting, and the
+   alert intake hears nothing from an operation with it off. `todo` names the ones affected.
+6. Drafts a site profile entry for each operation: tier 3, no API, every feature false, marked `draft`, in one new version of
+   the profile. **Nothing can be resent to a draft**: the gate blocks any write and the case escalates. An entry that already
+   exists is never touched.
+
+**The same name in two namespaces.** Shutter's site profile has one list of receivers, and a case is matched on its operation
+and its receiver, so two namespaces' `Results Out` under one name would pool their cases and incidents. When a name is taken,
+the apply sets the forwarder's `ReceiverPrefix` to the namespace, so DOCUMENTS' item is reported and listed as
+`DOCUMENTS Results Out`. The item in your production keeps its name. To see it, read `reported_as` in the plan.
+
+**9.3 Give the forwarder its sign-in.** In a terminal, in Shutter's namespace:
+
+```
+Do ##class(Shutter.Setup).OnboardCredential("PATHOLOGY")
+```
+
+It asks for the password with the echo off, creates the user `shutter-fwd` with only the role `Shutter_Forwarder` when that
+user does not exist, stores the credential `ShutterIntake` in that namespace, and prints no password. For a user that exists
+it first checks that the password signs in, and stores nothing if not, so one forwarder user can serve every namespace. It is
+not an SQL procedure, so no password passes through a statement. In a script, pass the user and password as the second and
+third arguments.
+
+**9.4 Send a test failure.**
+
+```sql
+SELECT Shutter.Setup_OnboardTest('PATHOLOGY')
+```
+
+It posts a made-up ORU, with no patient, using that namespace's forwarder settings and its stored credential, and answers the
+case id. The case says `ONBOARDING TEST` and its receiver is `Onboarding test`, which no profile names. An ORU has no recovery,
+so it escalates with no model called and nothing sent. Mark it handled. A failed test says what to check:
+
+| Answer | Meaning |
+| --- | --- |
+| `http_status` 404 | The sign-in was refused: IRIS answers a refused password this way on a REST application, not with 401. Check the credential and the user's password. |
+| 403 | The user signed in and lacks `Shutter_Forwarder`. |
+| 503 | `Shutter.Production` is not running. |
+| empty, with an error | No answer: check `HTTPServer` and `HTTPPort` on `Shutter Forwarder`. |
+
+The test proves the address, the password and the role. It does not prove the alert path: for that, fail a real delivery in a
+test environment (section 5, step 7).
+
+**9.5 Check it.** `SELECT Shutter.Setup_Doctor()` has `watched_namespaces`, one entry per namespace onboarded or named by a
+case: `production`, `production_state`, `forwarder`, `alert_intake`, `pass_to`, `classes`, `credential`, `last_forward`,
+`last_forward_error`, `last_case`, `schemas_missing`, `problems` in words and `ok`. `credentials` tries each namespace's stored
+sign-in. `hl7_schemas.missing` includes what a watched namespace's services name.
+
+**9.6 Fill in the receivers.** In the app's site profile (an approver's), review each draft: its system, category, tier and
+team, and remove `draft` when you save. A receiver with no API stays declared as it is, and its failures escalate to its team.
+
+**Giving a receiver its API.** Only a receiver with state, receipt, capabilities and operations paths can be recovered. Add
+them in the profile, then, since Shutter writes through a connector item of that receiver's name in its own production:
+
+```sql
+SELECT Shutter.Setup_OnboardReceiverItem('Bed Mgmt Out', 'beds.example-trust.nhs.uk', '443', 'DownstreamAPI', 'MySSLConfig')
+```
+
+The Doctor's `receivers_without_item` lists any receiver that needs this; a case for one otherwise fails with "not registered to
+run". The item is recorded, so a load or an upgrade puts it back. Set the credential in Shutter's namespace
+(`Do ##class(Ens.Config.Credentials).SetCredential("DownstreamAPI", "<user>", "<password>", 1)`), which on a site install does
+not exist until you do. **One limit stands:** Evidence Collector and Verifier call one server, so every receiver with an API must
+answer on the same host and port in this version; the call warns when a second one differs.
+
+**9.7 Take a namespace off.**
+
+```sql
+SELECT Shutter.Setup_OnboardRemove('PATHOLOGY')
+SELECT Shutter.Setup_OnboardRemove('PATHOLOGY', '{"unmap": true, "credential": true}')
+```
+
+It removes what the apply added: the two items, and the site's item gets the name `Ens.Alert` back, `AlertOnError` goes back,
+and the drafts still marked `draft` leave the profile. The production is updated, not stopped. It answers `removed` and `kept`.
+Kept: Shutter's cases and the imported schemas; an entry a person edited; the credential and the user, unless `credential`; and
+the mappings while that namespace still holds messages of Shutter's classes, since its own purge must open them (`unmap` takes
+them anyway, once those are purged).
+
+**On another instance.** A watched namespace on a separate instance cannot take a mapping, and these calls read only their own
+instance. Load `src/Shutter/Intake/` (Forward, Forwarded, Forwarder, AlertProcess) and `src/Shutter/Util/Json.cls`, `Schemas.cls` and
+`Time.cls` there, add the items by hand with `HTTPServer` naming Shutter's host, and create the user on Shutter's instance. A
+partial load compiles and starts, and fails only on the first forward. Not supported yet: a production review of another instance,
+and releasing a held case from it (`KnownIn` reads only this instance).
+
+## 10. What a watched namespace does not get
+
+Say these plainly to whoever owns the feed.
+
+- **Non-ADT messages have no recovery.** Orders, results and documents open a case and escalate; a person corrects them. They do
+  not group: 5 failed results are 5 cases, and an outage is one case per message, not an incident.
+- **An MLLP operation retrying forever (`FailureTimeout` -1).** The alert opens a case on the first failure, and the engine goes on
+  retrying. When the system returns the messages go through, and the case still reads escalated with a draft asking a team to correct
+  them by hand, and shows no later messages. Read the message trace before anyone re-enters an order by hand.
+- **A forward is never retried.** While `Shutter.Production` is stopped, or on a wrong password, a failure that reaches the forwarder
+  is a warning in that namespace's event log (and `last_forward_error` in the Doctor), and no case. Restoring the service does not
+  bring it back.
+- **Nothing over 2 MB, and nothing that is not HL7.** The intake answers 413 or 400, so a large MDM with its document inline, or a FHIR
+  body, is a warning in the event log and no case. A smaller MDM's document is kept whole in the case's snapshot: a governance
+  question for the trust.
+- **The prevent-failures route (section 7) through a stock routing engine** can name the wrong reason: the engine holds the message, but
+  the case reads as a schema failure of the standard the message itself names, because the header's source is the router. Use
+  it through a process that checks the category, as the demo hospital's does, or test it first with your feed.
+- **Same-instance only:** the links on a case open Shutter's copy of the message, not the source namespace's; `originHeaderId` on the
+  case gives its header id there.
+- **The cross-namespace timeline** reads Shutter's own connector table only: on a site's stock production it finds no earlier or later
+  messages.
 
 ## The publisher: Shutter's read-only tools for an MCP client
 
