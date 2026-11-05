@@ -9,7 +9,7 @@ const MARK_TOP = 1;
 const MARK_HEIGHT = 20;
 const MARK_MIDDLE = MARK_TOP + MARK_HEIGHT / 2;
 const CAPTION_BASE = 34;
-const JOIN = 4;
+const JOIN = 8;
 const ARROW = 10;
 
 /** The width words take, a little over the system font's, since an SVG can't lay out text by itself; a browser test measures it. */
@@ -95,6 +95,7 @@ function Caption({
 
 function placeNode(node: DiagramNode, technical: boolean, i: number): Placed {
   const key = `${i}`;
+  const first = i === 0;
   switch (node.kind) {
     case 'fault':
     case 'person': {
@@ -105,7 +106,15 @@ function placeNode(node: DiagramNode, technical: boolean, i: number): Placed {
         draw: (x) => (
           <>
             {/* A caption can be wider than its mark: the line carries on to the mark, so the story stays joined */}
-            <line className="diagram-join" x1={x} x2={x + width / 2 - 8} y1={MARK_MIDDLE} y2={MARK_MIDDLE} />
+            {first ? null : (
+              <line
+                className="diagram-join"
+                x1={x}
+                x2={x + width / 2 - 8}
+                y1={MARK_MIDDLE}
+                y2={MARK_MIDDLE}
+              />
+            )}
             <line
               className="diagram-join"
               x1={x + width / 2 + 8}
@@ -120,15 +129,16 @@ function placeNode(node: DiagramNode, technical: boolean, i: number): Placed {
       };
     }
     case 'messages': {
-      const text = `${node.total} msgs`;
+      // Not a failed mark: most of a long story arrives, and the caption says how many did not
+      const text = `${node.total} sent`;
       const caption = `${node.failed} fail`;
-      const width = Math.max(markWidth(text) + 14, captionWidth(caption));
+      const width = Math.max(markWidth(text), captionWidth(caption));
       return {
         key,
         width,
         draw: (x) => (
           <>
-            <Mark x={x} width={width} text={text} className="diagram-mark diagram-failed" cross />
+            <Mark x={x} width={width} text={text} className="diagram-mark" />
             <Caption x={x} width={width} text={caption} className="diagram-caption-failed" />
           </>
         ),
@@ -137,7 +147,7 @@ function placeNode(node: DiagramNode, technical: boolean, i: number): Placed {
     case 'message': {
       const name = technical ? node.event : node.plain;
       const text = node.count > 1 ? `${name} ×${node.count}` : name;
-      const failed = node.mark === 'fails';
+      const failed = node.mark === 'fails' || node.mark === 'refused';
       const caption =
         node.aside === 'source' ? 'bed manager' : node.aside === 'encounter' ? 'other visit' : node.mark;
       const width = Math.max(markWidth(text) + (failed ? 14 : 0), captionWidth(caption));

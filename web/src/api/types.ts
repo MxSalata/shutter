@@ -74,6 +74,8 @@ export interface ScenarioStep {
 }
 
 export interface ScenarioExpected {
+  /** Its other fields describe the case of `failed_operation_key`; the story opens other cases too. */
+  case_by_key?: boolean;
   /** Absent when the expectations are per receiver (by_receiver). */
   disposition?: string;
   acceptable?: string[];

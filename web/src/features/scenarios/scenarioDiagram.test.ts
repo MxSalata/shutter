@@ -30,6 +30,15 @@ function expectedWrites(e: ScenarioExpected): number {
   return e.write ? 1 : 0;
 }
 
+/** The deliveries that fail with no fault on: the receiver is up and said no. */
+function refusedSteps(s: Scenario) {
+  let on = false;
+  return s.steps.filter((step) => {
+    if (step.fault) on = step.fault !== 'off';
+    return step.expect === 'delivery_fails' && !on;
+  });
+}
+
 describe('scenarioDiagram', () => {
   it('covers all 26 scenarios', () => {
     expect(scenarios).toHaveLength(26);
@@ -53,7 +62,7 @@ describe('scenarioDiagram', () => {
         else expect(end.kind, at).toBe('none');
         if (writes) {
           expect(end.label, at).toBe(`${writes} write${writes === 1 ? '' : 's'}`);
-          expect(end.caption, at).toBe('conditional');
+          expect(end.caption, at).toBe(e.case_by_key && !e.incident ? 'this case' : 'conditional');
           expect(end.words, at).toMatch(/conditional/);
         } else expect(end.words, at).toMatch(/nothing written/);
       }
@@ -78,6 +87,7 @@ describe('scenarioDiagram', () => {
       const sent = s.steps.filter((step) => step.file);
       const failed = sent.filter((step) => step.expect === 'delivery_fails').length;
       const withheld = sent.filter((step) => step.expect === 'withheld').length;
+      const refused = refusedSteps(s).length;
       const counted = nodes.find((n) => n.kind === 'messages');
       if (counted?.kind === 'messages') {
         expect(counted.total, s.id).toBe(sent.length);
@@ -87,9 +97,12 @@ describe('scenarioDiagram', () => {
       const drawn = messages(nodes);
       const count = (mark?: string) =>
         drawn.reduce((n, m) => n + (m.kind === 'message' && m.mark === mark ? m.count : 0), 0);
-      expect(count('fails'), s.id).toBe(failed);
+      expect(count('fails'), s.id).toBe(failed - refused);
+      expect(count('refused'), s.id).toBe(refused);
       expect(count('withheld'), s.id).toBe(withheld);
-      expect(count(undefined) + count('fails') + count('withheld'), s.id).toBe(sent.length);
+      expect(count(undefined) + count('fails') + count('refused') + count('withheld'), s.id).toBe(
+        sent.length,
+      );
     }
     expect(diagram('S2', 'board', true).nodes.map((n) => (n.kind === 'message' ? n.event : n.kind))).toEqual([
       'A01',
@@ -174,6 +187,60 @@ describe('scenarioDiagram', () => {
     for (const s of scenarios)
       for (const n of messages(diagram(s.id).nodes))
         expect(n.kind === 'message' && n.plain, s.id).not.toMatch(/^A\d\d$/);
+  });
+
+  it("draws S23a's second move as refused by a receiver that is up, apart from the failure while it was down", () => {
+    const moves = messages(diagram('S23a').nodes);
+    expect(moves.at(-2)).toMatchObject({ plain: 'Move', mark: 'fails', count: 1 });
+    expect(moves.at(-1)).toMatchObject({ plain: 'Move', mark: 'refused', count: 1 });
+    expect(diagram('S23a').label).toMatch(/move is refused by the receiver/);
+    expect(diagram('S23b').nodes.at(-1)).toMatchObject({ mark: 'refused' });
+    expect(diagram('S23b').nodes.some((n) => n.kind === 'fault')).toBe(false);
+    // Only those two are refusals, and the fixtures say so: a change there changes this list
+    expect(scenarios.filter((s) => refusedSteps(s).length).map((s) => s.id)).toEqual(['S23a', 'S23b']);
+  });
+
+  it('merges no two messages across the receiver coming back', () => {
+    const steps = [
+      { fault: 'fail_before_accept' },
+      { file: 'X-01-A02.hl7', expect: 'delivery_fails' },
+      { fault: 'off' },
+      { file: 'X-02-A02.hl7' },
+      { file: 'X-03-A02.hl7' },
+    ] as Scenario['steps'];
+    const drawn = scenarioDiagram({ ...byId('S2'), steps }, 'board')!;
+    expect(messages(drawn.nodes).map((n) => n.kind === 'message' && n.count)).toEqual([1, 2]);
+  });
+
+  it("captions a write that counts one failure's case as this case's, not the story's", () => {
+    expect(endOf(byId('S23a'), 'policy')).toMatchObject({ label: '1 write', caption: 'this case' });
+    expect(endOf(byId('S23a'), 'policy').words).toBe('one conditional write in this case');
+    expect(endOf(byId('S2'), 'board').caption).toBe('conditional');
+  });
+
+  it('says why a case ends with nothing written, a superseded or a reconcile one by that word', () => {
+    const ending = (word: string) =>
+      scenarios.filter(
+        (s) =>
+          !s.expected.by_mode &&
+          !s.expected.blocked_by &&
+          !s.expected.write &&
+          s.expected.disposition === word,
+      );
+    for (const word of ['superseded', 'reconcile']) {
+      expect(ending(word).length, word).toBeGreaterThan(0);
+      for (const s of ending(word)) {
+        const end = endOf(s, modesOf(s)[0]);
+        expect(end.caption, s.id).toBe(word);
+        expect(end.words, s.id).toMatch(new RegExp(`, ${word}`));
+      }
+    }
+  });
+
+  it('reads as a sentence where a message has an aside', () => {
+    expect(diagram('S8').label).toMatch(/from another source, the bed manager, is delivered/);
+    const encounter = scenarios.find((s) => s.expected.other_encounter)!;
+    expect(diagram(encounter.id).label).toMatch(/, for another encounter, is delivered/);
   });
 
   it('draws nothing for a list that carries no steps, as an older server may send', () => {

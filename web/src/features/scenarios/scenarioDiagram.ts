@@ -15,7 +15,8 @@ export type DiagramNode =
       plain: string;
       /** How many in a row. */
       count: number;
-      mark?: 'fails' | 'withheld';
+      /** A delivery fails while a fault is on; one that fails with the receiver up was refused by it. */
+      mark?: 'fails' | 'refused' | 'withheld';
       /** A message from another source, or about another encounter, with the words under it. */
       aside?: 'source' | 'encounter';
     }
@@ -97,20 +98,35 @@ function nodesOf(s: Pick<Scenario, 'summary' | 'steps' | 'expected'>): DiagramNo
   const nodes: DiagramNode[] = [];
   const otherSource = otherSourceAfterFailure(s);
   let failedYet = false;
+  let faultOn = false;
+  // The receiver coming back ends that stretch of the story, so nothing merges across it
+  let fresh = false;
   for (const step of steps) {
     if (step.file) {
       const event = eventOf(step) ?? 'HL7';
       const mark =
-        step.expect === 'delivery_fails' ? 'fails' : step.expect === 'withheld' ? 'withheld' : undefined;
+        step.expect === 'delivery_fails'
+          ? faultOn
+            ? 'fails'
+            : 'refused'
+          : step.expect === 'withheld'
+            ? 'withheld'
+            : undefined;
       const aside =
         step.expect === 'indexed' && s.expected?.other_encounter
           ? 'encounter'
           : otherSource && failedYet && !mark
             ? 'source'
             : undefined;
-      if (mark === 'fails') failedYet = true;
+      if (mark === 'fails' || mark === 'refused') failedYet = true;
       const last = nodes[nodes.length - 1];
-      if (last?.kind === 'message' && last.event === event && last.mark === mark && last.aside === aside)
+      if (
+        !fresh &&
+        last?.kind === 'message' &&
+        last.event === event &&
+        last.mark === mark &&
+        last.aside === aside
+      )
         last.count += 1;
       else
         nodes.push({
@@ -121,7 +137,12 @@ function nodesOf(s: Pick<Scenario, 'summary' | 'steps' | 'expected'>): DiagramNo
           ...(mark ? { mark } : {}),
           ...(aside ? { aside } : {}),
         });
-    } else if (step.fault && step.fault !== 'off') {
+      fresh = false;
+    } else if (step.fault === 'off') {
+      faultOn = false;
+      fresh = true;
+    } else if (step.fault) {
+      faultOn = true;
       const known = FAULTS[step.fault] ?? { caption: 'fault', words: 'the receiver misbehaves' };
       const receivers = step.receivers?.length ?? 0;
       nodes.push(
@@ -153,12 +174,12 @@ function nodesOf(s: Pick<Scenario, 'summary' | 'steps' | 'expected'>): DiagramNo
 const humanWord = (disposition: string | undefined) =>
   disposition === 'superseded' || disposition === 'reconcile' ? disposition : undefined;
 
-const writesEnd = (n: number, inAll: boolean): DiagramEnd => ({
+const writesEnd = (n: number, inAll: boolean, oneCase = false): DiagramEnd => ({
   kind: n === 1 ? 'write' : 'writes',
   writes: n,
   label: `${n} write${n === 1 ? '' : 's'}`,
-  caption: 'conditional',
-  words: `${n === 1 ? 'one conditional write' : `${n} conditional writes`}${inAll ? ' in all' : ''}`,
+  caption: oneCase ? 'this case' : 'conditional',
+  words: `${n === 1 ? 'one conditional write' : `${n} conditional writes`}${inAll ? ' in all' : ''}${oneCase ? ' in this case' : ''}`,
 });
 
 /** The end the scenario expects in the mode, by the same fields the row's "What should happen" reads. */
@@ -194,7 +215,8 @@ export function endOf(s: Pick<Scenario, 'expected'>, mode: Mode): DiagramEnd {
     );
   }
   const stopped = !!e.blocked_by;
-  if (e.write) return writesEnd(1, false);
+  // A scenario whose expected names one failure's case has other cases too: the count is that case's, not the story's
+  if (e.write) return writesEnd(1, false, !!e.case_by_key);
   if (e.disposition === 'escalate')
     return {
       kind: 'person',
@@ -221,12 +243,18 @@ function wordsOf(node: DiagramNode, technical: boolean): string {
       const name = technical ? node.event : node.plain.toLowerCase();
       const many = node.count > 1 ? `${node.count} × ` : '';
       const sent =
-        node.mark === 'fails' ? 'fails' : node.mark === 'withheld' ? 'is withheld' : 'is delivered';
+        node.mark === 'fails'
+          ? 'fails'
+          : node.mark === 'refused'
+            ? 'is refused by the receiver'
+            : node.mark === 'withheld'
+              ? 'is withheld'
+              : 'is delivered';
       const aside =
         node.aside === 'source'
-          ? ', from another source, the bed manager'
+          ? ', from another source, the bed manager,'
           : node.aside === 'encounter'
-            ? ', for another encounter'
+            ? ', for another encounter,'
             : '';
       return `${many}${name}${aside} ${node.count > 1 ? sent.replace('fails', 'fail').replace('is ', 'are ') : sent}`;
     }
