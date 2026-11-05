@@ -28,13 +28,15 @@ import { costAtPrice } from '@/lib/cost';
 import { catalogueEntriesOf, EVIDENCE_REFS, evidenceSection } from '@/lib/evidenceRefs';
 import { asArray, asObject } from '@/lib/json';
 import { formatDuration, formatInt, formatUsd, humanize, plural } from '@/lib/format';
-import { SPECIALISTS } from '@/lib/hues';
+import { memberIdentity, SPECIALISTS } from '@/lib/hues';
 import { PROVENANCE } from '@/lib/status';
 import { useTechnical } from '@/stores/appearance';
 import { describeEntry } from './derive';
 import { showEvidence } from './evidenceLinks';
 import { MoreToggle } from './MoreToggle';
 import type { RecordingToggleProps } from './RecordingToggle';
+import { agreementOf, answered, boardRounds, dispositionOf, latestRound, resultOf } from './boardRounds';
+import type { BoardRound } from './boardRounds';
 import { investigationRuns } from './runClock';
 import { RunTimeline } from './RunTimeline';
 import { NotYet, Section } from './Section';
@@ -194,9 +196,6 @@ function RunLine({ run, portalBase }: { run: AgentRun; portalBase: string }) {
   );
 }
 
-/** A finding's structured result, from the run or the stored finding. */
-const resultOf = (run: AgentRun) => asObject(run.finding?.findings) ?? asObject(run.result) ?? {};
-
 /** A cited section's chip, in a word or two; the section's own title is on the Evidence tab it opens. */
 const CHIPS: Record<string, string> = {
   message: 'HL7 message',
@@ -311,12 +310,6 @@ function FindingDetail({ run }: { run: AgentRun }) {
   );
 }
 
-/** A finding's disposition, from its structured result or the stored finding. */
-function dispositionOf(run: AgentRun): string {
-  const result = resultOf(run);
-  return String(result.disposition ?? run.finding?.disposition ?? '');
-}
-
 /**
  * Trial pages only: the toggle for what this member was sent and did, with the recording under it, in a chunk of its
  * own. A live page has none of its words or code, and if the chunk cannot load the card is simply without the toggle.
@@ -347,6 +340,15 @@ const DISSENT_BORDER = {
 /** The card's name, as its heading's words, with the id its region and toggles are named by. */
 const nameOf = (run: AgentRun) => run.member?.name ?? humanize(run.memberCode);
 
+/** Which sitting a card belongs to, on a case whose board sat more than once. */
+function RoundMark({ id, round }: { id: string; round?: number }) {
+  return round ? (
+    <Text component="span" className="overline" id={id}>
+      {`Round ${round}`}
+    </Text>
+  ) : null;
+}
+
 /**
  * A specialist agent as a card, in its member's hue: its name, what it proposed, its own confidence (its own report,
  * never the gate's), the run's facts in one line, what it cited, and the finding in full on demand. A specialist that
@@ -361,6 +363,7 @@ function SpecialistCard({
   kept,
   receiver,
   defineConfidence,
+  round,
 }: {
   caseId: string;
   run: AgentRun;
@@ -371,6 +374,8 @@ function SpecialistCard({
   receiver?: string;
   /** The page's first confidence: its words carry their definition. */
   defineConfidence: boolean;
+  /** The sitting's number, when the board sat more than once. */
+  round?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -385,8 +390,12 @@ function SpecialistCard({
       member={run.memberCode}
       name={name}
       titleId={`agent-${key}`}
+      {...(round ? { 'aria-labelledby': `agent-${key} agent-${key}-round` } : {})}
       badge={
-        dissent ? <StatusBadge tone="attention" label="Dissent" icon={IconMessageExclamation} /> : undefined
+        <>
+          <RoundMark id={`agent-${key}-round`} round={round} />
+          {dissent ? <StatusBadge tone="attention" label="Dissent" icon={IconMessageExclamation} /> : null}
+        </>
       }
       meta={<RunLine run={run} portalBase={portalBase} />}
       // A recording is read at the board's full width, not in a third of it
@@ -396,9 +405,15 @@ function SpecialistCard({
         ...(recording ? { gridColumn: '1 / -1' } : {}),
       }}
     >
-      <Group gap="xs" wrap="wrap">
-        <DispositionBadge disposition={dispositionOf(run)} proposed />
-      </Group>
+      {answered(run) ? (
+        <Group gap="xs" wrap="wrap">
+          <DispositionBadge disposition={dispositionOf(run)} proposed />
+        </Group>
+      ) : (
+        <Text size="sm" c="dimmed">
+          No answer from this agent.
+        </Text>
+      )}
       {shown ? (
         <Text size="sm" data-testid="own-confidence">
           {'Its '}
@@ -447,16 +462,22 @@ function CoordinatorCard({
   run,
   result,
   kept,
+  noDissent,
   portalBase,
   receiver,
+  round,
 }: {
   caseId: string;
   run: AgentRun;
   result: Record<string, unknown>;
   /** Each dissent kept: the specialist's name and the coordinator's reason for keeping it. */
   kept: { name: string; why: string }[];
+  /** What to say when it kept none: that the specialists agreed only when three did. */
+  noDissent: string;
   portalBase: string;
   receiver?: string;
+  /** The sitting's number, when the board sat more than once. */
+  round?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -467,10 +488,14 @@ function CoordinatorCard({
       member="coordinator"
       name="Coordinator"
       titleId={`agent-${key}`}
+      {...(round ? { 'aria-labelledby': `agent-${key} agent-${key}-round` } : {})}
       badge={
-        <Text component="span" className="overline">
-          Proposes the plan
-        </Text>
+        <>
+          <RoundMark id={`agent-${key}-round`} round={round} />
+          <Text component="span" className="overline">
+            Proposes the plan
+          </Text>
+        </>
       }
       meta={<RunLine run={run} portalBase={portalBase} />}
       style={{ minWidth: 0 }}
@@ -520,7 +545,7 @@ function CoordinatorCard({
         ))
       ) : (
         <Text size="sm" c="dimmed">
-          No disagreements to keep: the specialists agreed.
+          {noDissent}
         </Text>
       )}
       {/* The disagreements are the dissents kept above; the preconditions are in their own detail below */}
@@ -598,10 +623,62 @@ function FindingCard({
   );
 }
 
-/** How far the specialists agreed with the plan, in the evaluation's words. */
-function agreementOf(agreed: number, of: number): string {
-  if (of !== 3) return '';
-  return ['against all three', 'with a minority', 'with the majority', 'unanimous'][agreed];
+/** The recorded text puts a confidence after the disposition, "resend (confidence 0.8): why", "resend (0.8): why" or
+ * "resend (0.7). Why.", or the reason itself in brackets, "resend (why)". Keep the disposition and the reason, never
+ * the figure. */
+function keptDissent(run: AgentRun, coordinator: AgentRun | undefined): string | undefined {
+  const d = asArray(asObject(coordinator?.result)?.disagreements)
+    .map((x) => asObject(x) ?? {})
+    .find((x) => String(x.member ?? '') === run.memberCode);
+  const said = String(d?.said ?? '')
+    .trim()
+    .replace(/^([a-z_]+)\s*\((?:confidence\s*)?[0-9.]+%?\)\s*[:.]?\s*(?=\S)/i, '$1: ')
+    .replace(/^([a-z_]+)\s*\((?:confidence\s*)?[0-9.]+%?\)\s*$/i, '$1')
+    .replace(/^([a-z_]+)\s*\(([^()]+)\)$/i, '$1: $2');
+  return said ? `Proposed ${said.charAt(0).toLowerCase()}${said.slice(1)}` : undefined;
+}
+
+/** A specialist dissents from its own sitting's plan: the coordinator kept its disagreement, or it proposed another. */
+function dissentsFrom(run: AgentRun, coordinator: AgentRun | undefined): boolean {
+  if (!coordinator) return false;
+  const result = asObject(coordinator.result) ?? {};
+  const kept = asArray(result.disagreements).some(
+    (d) => String(asObject(d)?.member ?? '') === run.memberCode,
+  );
+  return kept || (!!dispositionOf(run) && dispositionOf(run) !== String(result.disposition ?? ''));
+}
+
+/**
+ * The line above a sitting's cards on a case whose board sat more than once: which sitting, the plan it reached and
+ * what came of it. A later snapshot is the fact behind "collected again"; why it was needed is on the Audit trail.
+ */
+function RoundLine({
+  id,
+  round,
+  of,
+  latest,
+}: {
+  id: string;
+  round: BoardRound;
+  of: number;
+  latest: boolean;
+}) {
+  const plan = String(asObject(round.coordinator?.result)?.disposition ?? '');
+  return (
+    <Group gap="xs" wrap="wrap" align="center">
+      <Text size="sm" fw={600} id={id}>
+        {`Round ${round.number} of ${of}`}
+      </Text>
+      {plan ? <DispositionBadge disposition={plan} proposed /> : null}
+      <Text size="sm" c="dimmed">
+        {!plan
+          ? 'No plan yet from this round.'
+          : latest
+            ? 'The coordinator below proposed this plan.'
+            : 'Then Shutter collected the evidence again.'}
+      </Text>
+    </Group>
+  );
 }
 
 export function BoardPanel({
@@ -624,8 +701,12 @@ export function BoardPanel({
   const runs = useRuns(caseId, open);
   // The investigation's runs alone: a question's runs (Ask about this case) sit on the case too
   const list = investigationRuns(runs.data);
-  const specialists = list.filter((r) => r.role === 'specialist');
-  const coordinator = list.filter((r) => r.role === 'coordinator').at(-1);
+  // Each sitting of the board on its own: a case the receiver moved under goes back to the board on new evidence
+  const rounds = boardRounds(list);
+  const latest = latestRound(rounds);
+  const specialists = latest?.specialists ?? [];
+  const coordinator = latest?.coordinator;
+  const several = rounds.length > 1;
   const generalist = list.filter((r) => r.role === 'generalist').at(-1);
   // A withheld merge or cancel convenes no board in any mode, and the section says only that.
   const notConvened = withheld && list.length === 0;
@@ -641,7 +722,8 @@ export function BoardPanel({
           ? 'Investigation: site policy'
           : 'The board';
   const board = !notConvened && !settledByPolicy && mode !== 'rules' && mode !== 'single';
-  const count = specialists.length || 3;
+  // The members that sat, once each, whichever of them answered; before any has run, the library decides how many
+  const count = specialists.length;
   const note = notConvened
     ? 'Not convened: a withheld merge or cancel goes to the team that corrects it by hand, whatever the mode.'
     : mode === 'rules'
@@ -650,30 +732,13 @@ export function BoardPanel({
         ? 'One generalist agent reads the whole snapshot and proposes the plan itself.'
         : settledByPolicy
           ? "The scenario catalogue matched the case and the site's profile says who decides it. A case it leaves to the board shows the board's findings here."
-          : `${NUMBERS[count] ?? count} specialist agents read the same evidence in parallel; a coordinator agent proposes one plan.`;
+          : count === 1
+            ? 'One specialist agent reads the evidence; a coordinator agent proposes the plan.'
+            : `${count ? `${NUMBERS[count] ?? count} specialist` : 'Specialist'} agents read the same evidence in parallel; a coordinator agent proposes one plan.`;
   const coordinatorResult = asObject(coordinator?.result) ?? {};
   const disagreements = asArray(coordinatorResult.disagreements);
   const dissent = disagreements.length;
   const planned = String(coordinatorResult.disposition ?? '');
-  // A specialist dissents when the coordinator kept its disagreement, or when it proposed another disposition
-  const dissenters = new Set(disagreements.map((d) => String(asObject(d)?.member ?? '')));
-  const dissents = (r: AgentRun) =>
-    !!coordinator && (dissenters.has(r.memberCode) || (!!dispositionOf(r) && dispositionOf(r) !== planned));
-  // The dissent's reason as the coordinator recorded it, without the specialist's self-reported confidence
-  const keptDissent = (r: AgentRun) => {
-    const d = disagreements
-      .map((x) => asObject(x) ?? {})
-      .find((x) => String(x.member ?? '') === r.memberCode);
-    // The recorded text puts a confidence after the disposition, "resend (confidence 0.8): why",
-    // "resend (0.8): why" or "resend (0.7). Why.", or the reason itself in brackets, "resend (why)". Keep the
-    // disposition and the reason, never the figure.
-    const said = String(d?.said ?? '')
-      .trim()
-      .replace(/^([a-z_]+)\s*\((?:confidence\s*)?[0-9.]+%?\)\s*[:.]?\s*(?=\S)/i, '$1: ')
-      .replace(/^([a-z_]+)\s*\((?:confidence\s*)?[0-9.]+%?\)\s*$/i, '$1')
-      .replace(/^([a-z_]+)\s*\(([^()]+)\)$/i, '$1: $2');
-    return said ? `Proposed ${said.charAt(0).toLowerCase()}${said.slice(1)}` : undefined;
-  };
   // Each dissent the coordinator kept, by the specialist's name, with its recorded reason for keeping it
   const keptReasons = disagreements
     .map((x) => asObject(x) ?? {})
@@ -682,17 +747,23 @@ export function BoardPanel({
       const run = specialists.find((r) => r.memberCode === member);
       return {
         name: run?.member?.name ?? humanize(member),
-        why: String(d.why_kept ?? '') || (run ? (keptDissent(run) ?? '') : ''),
+        why: String(d.why_kept ?? '') || (run ? (keptDissent(run, coordinator) ?? '') : ''),
       };
     });
-  // The specialists' agreement with the plan, a dot each in member order; three specialists have the evaluation's words
-  const proposed = Object.fromEntries(
-    SPECIALISTS.map((m) => [m, specialists.some((r) => r.memberCode === m && dispositionOf(r) === planned)]),
-  );
-  const agreed = specialists.filter((r) => dispositionOf(r) === planned).length;
-  const agreement = agreementOf(agreed, specialists.length);
+  // The specialists' agreement with the plan, a dot each in member order; only three views have the evaluation's words
+  const agreement = agreementOf(latest, planned);
+  const views = agreement.answered.length;
+  const missing = SPECIALISTS.filter((m) => !agreement.answered.some((r) => r.memberCode === m));
+  const noDissent =
+    agreement.word === 'unanimous'
+      ? 'No disagreements to keep: the specialists agreed.'
+      : agreement.word
+        ? 'The coordinator kept no disagreements.'
+        : `${views === 0 ? 'No specialist' : plural(views, 'specialist')} answered; the coordinator kept no disagreements.`;
   // The page's first confidence carries its definition
-  const firstConfident = specialists.find((r) => Number(resultOf(r).confidence ?? r.finding?.confidence) > 0);
+  const firstConfident = rounds
+    .flatMap((r) => r.specialists)
+    .find((r) => Number(resultOf(r).confidence ?? r.finding?.confidence) > 0);
   return (
     <Section
       id="board"
@@ -702,7 +773,20 @@ export function BoardPanel({
       aside={
         coordinator ? (
           <Group gap="sm" wrap="wrap">
-            {agreement ? <AgreementDots proposed={proposed} agreement={agreement} /> : null}
+            {agreement.word ? (
+              <AgreementDots proposed={agreement.proposed} agreement={agreement.word} />
+            ) : (
+              <StatusBadge
+                tone="neutral"
+                label={`${views === 0 ? 'No specialist' : plural(views, 'specialist')} answered`}
+                hint={`${
+                  missing.length
+                    ? `No answer from ${missing.map((m) => memberIdentity(m).name).join(', ')}: switched off in the library, or its run gave none. `
+                    : ''
+                }Agreement is counted when three answer.`}
+                icon={IconUsers}
+              />
+            )}
             {dissent ? (
               <StatusBadge
                 tone="attention"
@@ -710,14 +794,7 @@ export function BoardPanel({
                 hint="A specialist disagreed with the plan; the coordinator kept the disagreement in it. Dissent is not an error."
                 icon={IconMessageExclamation}
               />
-            ) : agreement ? null : (
-              <StatusBadge
-                tone="neutral"
-                label="Unanimous"
-                hint="The specialists agreed; agreement is not a safety check, the gate is"
-                icon={IconUsers}
-              />
-            )}
+            ) : null}
           </Group>
         ) : null
       }
@@ -743,28 +820,46 @@ export function BoardPanel({
       ) : null}
       {/* The specialists side by side, by the width the board has (beside Ask it is narrower, and no card falls
           under 240 px), then the coordinator that weighed them, full width */}
-      {specialists.length ? (
-        <SimpleGrid
-          type="container"
-          cols={{ base: 1, '540px': 2, '760px': 3 }}
-          spacing="sm"
-          // An opened card takes a row of its own; the cards after it close the gap it leaves
-          style={{ alignItems: 'start', gridAutoFlow: 'dense' }}
-        >
-          {specialists.map((r) => (
-            <SpecialistCard
-              key={String(r.id ?? r.memberCode)}
-              caseId={caseId}
-              run={r}
-              portalBase={portalBase}
-              dissent={dissents(r)}
-              kept={keptDissent(r)}
-              receiver={receiver}
-              defineConfidence={r === firstConfident}
-            />
-          ))}
-        </SimpleGrid>
-      ) : null}
+      {rounds.map((round) =>
+        round.specialists.length ? (
+          <Stack
+            key={round.number}
+            gap="xs"
+            role={several ? 'group' : undefined}
+            aria-labelledby={several ? `board-round-${round.number}` : undefined}
+          >
+            {several ? (
+              <RoundLine
+                id={`board-round-${round.number}`}
+                round={round}
+                of={rounds.length}
+                latest={round === latest}
+              />
+            ) : null}
+            <SimpleGrid
+              type="container"
+              cols={{ base: 1, '540px': 2, '760px': 3 }}
+              spacing="sm"
+              // An opened card takes a row of its own; the cards after it close the gap it leaves
+              style={{ alignItems: 'start', gridAutoFlow: 'dense' }}
+            >
+              {round.specialists.map((r) => (
+                <SpecialistCard
+                  key={String(r.id ?? r.memberCode)}
+                  caseId={caseId}
+                  run={r}
+                  portalBase={portalBase}
+                  dissent={dissentsFrom(r, round.coordinator)}
+                  kept={keptDissent(r, round.coordinator)}
+                  receiver={receiver}
+                  defineConfidence={r === firstConfident}
+                  round={several ? round.number : undefined}
+                />
+              ))}
+            </SimpleGrid>
+          </Stack>
+        ) : null,
+      )}
       {/* When each agent worked: the pass's runs on one time axis, between the specialists and the coordinator */}
       {board ? <RunTimeline runs={list} /> : null}
       {coordinator ? (
@@ -773,8 +868,10 @@ export function BoardPanel({
           run={coordinator}
           result={coordinatorResult}
           kept={keptReasons}
+          noDissent={noDissent}
           portalBase={portalBase}
           receiver={receiver}
+          round={several ? latest?.number : undefined}
         />
       ) : null}
       {generalist ? <FindingCard run={generalist} portalBase={portalBase} receiver={receiver} /> : null}
