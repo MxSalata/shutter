@@ -981,7 +981,8 @@ export default function EvaluationPage({
       if (v) next.set(k, v);
       else next.delete(k);
     }
-    setParams(next, { replace: true });
+    // A filter stays on the page, and the router's move to the top would stop the scroll a mark starts
+    setParams(next, { replace: true, preventScrollReset: true });
   };
   // A mark or an agreement row turns its filter on and brings the table into view, or turns it off where it is
   const toggle = (show: string) => {
