@@ -9,7 +9,9 @@ const MARK_TOP = 1;
 const MARK_HEIGHT = 20;
 const MARK_MIDDLE = MARK_TOP + MARK_HEIGHT / 2;
 const CAPTION_BASE = 34;
-const JOIN = 8;
+const JOIN = 4;
+/** Two boxes side by side need more of a line than a box beside a bolt, or they read as one. */
+const MESSAGES_JOIN = 7;
 const ARROW = 10;
 
 /** The width words take, a little over the system font's, since an SVG can't lay out text by itself; a browser test measures it. */
@@ -219,17 +221,19 @@ export function ScenarioDiagram({ scenario, mode }: { scenario: Scenario; mode: 
     drawn.push(<g key={part.key}>{part.draw(x)}</g>);
     x += part.width;
     if (i < parts.length - 1) {
+      const join =
+        diagram.nodes[i].kind === 'message' && diagram.nodes[i + 1].kind === 'message' ? MESSAGES_JOIN : JOIN;
       drawn.push(
         <line
           key={`${part.key}-join`}
           className="diagram-join"
           x1={x + 1}
-          x2={x + JOIN - 1}
+          x2={x + join - 1}
           y1={MARK_MIDDLE}
           y2={MARK_MIDDLE}
         />,
       );
-      x += JOIN;
+      x += join;
     }
   });
   drawn.push(
