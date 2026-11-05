@@ -617,7 +617,10 @@ XData Rows [ MimeType = application/json ]
    "expect": [["identity", "block", "UNKNOWN_ENCOUNTER"], ["state_transition", "unknown", "RECEIVER_UNREADABLE"], ["concurrency", "unknown", "RECEIVER_UNREADABLE"]]},
   {"group": "identity", "name": "the receiver's state could not be read",
    "summary": {"ward_state_http_status": 503, "ward_state": null},
-   "expect": [["identity", "unknown", "RECEIVER_UNREADABLE"], ["state_transition", "unknown", "RECEIVER_UNREADABLE"], ["concurrency", "unknown", "RECEIVER_UNREADABLE"]], "outcome": "unknown"},
+   "expect": [["identity", "unknown", "RECEIVER_UNREADABLE"], ["state_transition", "unknown", "RECEIVER_UNREADABLE"], ["concurrency", "unknown", "RECEIVER_UNREADABLE"]], "contains": [["identity", "RECEIVER_UNREADABLE", "could not be read (HTTP 503)"]], "outcome": "unknown"},
+  {"group": "identity", "name": "the receiver gave no answer to the read",
+   "summary": {"ward_state_http_status": 0, "ward_state": null},
+   "expect": [["identity", "unknown", "RECEIVER_UNREADABLE"]], "contains": [["identity", "RECEIVER_UNREADABLE", "could not be read (no answer)"]], "outcome": "unknown"},
 
   {"group": "conformance", "name": "the message does not parse",
    "summary": {"validation": {"parsed": false, "error": "MSH-9 is empty"}},
@@ -817,7 +820,10 @@ XData Rows [ MimeType = application/json ]
    "expect": [["effect", "pass", "RECEIPT_NOT_AVAILABLE"]]},
   {"group": "effect", "name": "the receipt lookup failed",
    "summary": {"receipt_http_status": 500},
-   "expect": [["effect", "unknown", "RECEIPT_UNREADABLE"]], "outcome": "unknown"},
+   "expect": [["effect", "unknown", "RECEIPT_UNREADABLE"]], "contains": [["effect", "RECEIPT_UNREADABLE", "lookup failed (HTTP 500)"]], "outcome": "unknown"},
+  {"group": "effect", "name": "the receipt lookup got no answer",
+   "summary": {"receipt_http_status": 0},
+   "expect": [["effect", "unknown", "RECEIPT_UNREADABLE"]], "contains": [["effect", "RECEIPT_UNREADABLE", "lookup failed (no answer)"]], "outcome": "unknown"},
 
   {"group": "authorization", "name": "at approval, with no approval",
    "request": {"stage": "approval"},

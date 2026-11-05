@@ -41,7 +41,7 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     } ElseIf wardStatus = 404 {
         Do ..Check(checks, "identity", "block", "UNKNOWN_ENCOUNTER", "The receiver does not know encounter " _ case.EncounterId)
     } Else {
-        Do ..Check(checks, "identity", "unknown", "RECEIVER_UNREADABLE", "The receiver's state could not be read (HTTP " _ wardStatus _ ")")
+        Do ..Check(checks, "identity", "unknown", "RECEIVER_UNREADABLE", "The receiver's state could not be read (" _ $SELECT(wardStatus: "HTTP " _ wardStatus, 1: "no answer") _ ")")
     }
 
     // Conformance: the message parsed against its schema.
@@ -185,7 +185,7 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
             Do ..Check(checks, "effect", "pass", "RECEIPT_NOT_AVAILABLE", "The receiver has no receipt endpoint; its capabilities decide whether a write may go")
         }
     } Else {
-        Do ..Check(checks, "effect", "unknown", "RECEIPT_UNREADABLE", "The receipt lookup failed (HTTP " _ receiptStatus _ ")")
+        Do ..Check(checks, "effect", "unknown", "RECEIPT_UNREADABLE", "The receipt lookup failed (" _ $SELECT(receiptStatus: "HTTP " _ receiptStatus, 1: "no answer") _ ")")
     }
 
     // Authorization: at approval and dispatch, a valid approval for exactly this plan. The rehearsal check below reads

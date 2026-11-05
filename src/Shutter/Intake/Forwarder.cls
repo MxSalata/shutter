@@ -123,10 +123,15 @@ Method Send(request As Shutter.Intake.Forward, msg As EnsLib.HL7.Message, header
         $$$TRACE("Shutter case " _ response.CaseId _ $SELECT(response.Opened: " opened", 1: " updated") _ ", state " _ response.State)
         Quit $$$OK
     }
-    If status = "" {
-        Quit ..Refused(response, "No answer from Shutter at " _ ..IntakePath _ ": " _ $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "no response"))
-    }
-    Quit ..Refused(response, "HTTP " _ status _ " from Shutter: " _ $SELECT(answer '= "": $EXTRACT(answer, 1, 2000), 1: "empty body"))
+    Quit ..Refused(response, ..RefusalWords(status, sc, answer, ..IntakePath))
+}
+
+/// Why a forward did not open a case. A request nobody answered reads 0 here, since status is +StatusCode, and an empty
+/// status when there was no response object at all; both keep the adapter's reason.
+ClassMethod RefusalWords(status As %String, sc As %Status, answer As %String, path As %String) As %String
+{
+    If +status = 0 Quit "No answer from Shutter at " _ path _ ": " _ $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "no response")
+    Quit "HTTP " _ status _ " from Shutter: " _ $SELECT(answer '= "": $EXTRACT(answer, 1, 2000), 1: "empty body")
 }
 
 /// The HL7 message behind a header id, or "" with the problem said. The body must be an EnsLib.HL7.Message or a

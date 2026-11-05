@@ -1371,7 +1371,7 @@ Method OnRehearsal(case As Shutter.Store.Case, sent As Shutter.Msg.WardOperation
     Do case.Note("artifact", "Rehearsal: " _ result.Outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "") _ $SELECT(rolledBack: ", rolled back by the receiver", 1: ""), "system", "rehearsal:" _ r.%Id())
     If result.Outcome '= "would_apply" {
         Set case.Headline = "Rehearsal failed: " _ result.Outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "")
-        Quit case.Transition("blocked", $SELECT(result.Outcome = "would_not_apply": "The rehearsal shows the action would not apply: ", 1: "The rehearsal got no usable answer, so it shows nothing about the action: ") _ result.Outcome _ $SELECT(result.Error '= "": ", " _ result.Error, 1: ""), "system", "rehearsal:" _ r.%Id())
+        Quit case.Transition("blocked", ..RehearsalFailureWords(result.Outcome, result.HttpStatus) _ result.Outcome _ $SELECT(result.Error '= "": ", " _ result.Error, 1: ""), "system", "rehearsal:" _ r.%Id())
     }
     If ..Policy = "automatic" Quit ..ReleaseByPolicy(case, plan, r)
     If ..Policy = "incident" Quit ..ReleaseByIncident(case, plan, r)
@@ -1386,6 +1386,21 @@ Method OnRehearsal(case As Shutter.Store.Case, sent As Shutter.Msg.WardOperation
         Set sc = ..SendRequestAsync("Ens.Alarm", alarm, 1, "approval:timeout:" _ ..Round, "The approval wait")
     }
     Quit sc
+}
+
+/// What the two lookups of a verification got: the connectors store a request nobody answered as status 0, and -1 marks a
+/// receiver with no receipt endpoint; neither is an HTTP status a person should read.
+ClassMethod UnreadableWords(encounterStatus As %String, receiptStatus As %String) As %String
+{
+    Quit "encounter " _ $SELECT(+encounterStatus: "HTTP " _ encounterStatus, 1: "no answer") _ ", receipt " _ $SELECT(+receiptStatus = -1: "not kept by this receiver", +receiptStatus: "HTTP " _ receiptStatus, 1: "no answer")
+}
+
+/// How the audit trail opens a failed rehearsal. A 409 or 422 to a dry run is the receiver's real answer, so it shows the
+/// action would not apply; a refusal with no status is the connector's own (the profile declares no dry run, nothing sent).
+ClassMethod RehearsalFailureWords(outcome As %String, httpStatus As %String) As %String
+{
+    If (outcome = "would_not_apply") || (outcome = "version_conflict") || ((outcome = "refused") && +httpStatus) Quit "The rehearsal shows the action would not apply: "
+    Quit "The rehearsal got no usable answer, so it shows nothing about the action: "
 }
 
 /// The approval task got no answer within the wait (v1.35): if the case still waits for this round's plan, the task is
@@ -1873,7 +1888,7 @@ Method OnVerify(case As Shutter.Store.Case, result As Shutter.Msg.VerifyResult) 
     If retry && (..Refreshes < ..MaxRefreshes) {
         Set ..Refreshes = ..Refreshes + 1
         Set wait = 10 * (2 ** (..Refreshes - 1))
-        Set why = $SELECT(unreadable: "could not read the receiver (encounter HTTP " _ es _ ", receipt HTTP " _ rs _ ")", 1: "established nothing yet (" _ result.Summary _ ")")
+        Set why = $SELECT(unreadable: "could not read the receiver (" _ ..UnreadableWords(es, rs) _ ")", 1: "established nothing yet (" _ result.Summary _ ")")
         Do case.Note("note", "The verification " _ why _ "; verifying again in " _ wait _ " s (" _ ..Refreshes _ " of " _ ..MaxRefreshes _ ")", "system", "verification:" _ result.VerificationId)
         Set alarm = ##class(Ens.AlarmRequest).%New()
         Set alarm.Timeout = wait
