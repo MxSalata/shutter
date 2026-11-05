@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import type { Can } from '@/api/types';
 import {
   CHAPTERS,
   enabled,
@@ -9,6 +10,7 @@ import {
   RANKED_REVIEW_RECORDED,
   SCOPES,
   stepAt,
+  stepForRole,
   tourMinutes,
 } from './registry';
 
@@ -114,13 +116,50 @@ describe('the guide registry', () => {
     }
   });
 
+  it('keeps the words a role reads instead to the same budgets', () => {
+    for (const { s, path } of STEPS)
+      for (const v of [s.lookOnly, s.noApprove].filter((x) => !!x)) {
+        expect(words(v.say), `${path} say`).toBeLessThanOrEqual(25);
+        if (v.title) expect(words(v.title), `${path} title`).toBeLessThanOrEqual(6);
+        if (v.detail) expect(words(v.detail), `${path} detail`).toBeLessThanOrEqual(40);
+      }
+  });
+
+  it("tells each role only what it can do on the tour's S2 and Scenarios steps", () => {
+    const can = (over: Partial<Can>): Can => ({
+      operate: true,
+      approve: true,
+      configure: true,
+      scenarios: true,
+      liveAgents: false,
+      ...over,
+    });
+    const operator = can({ approve: false, configure: false });
+    const demo = can({ configure: false, scenarios: false });
+    const decision = stepAt('s2/decision')!.step;
+    expect(stepForRole(decision, can({})).tryIt?.action).toBe('approve-plan');
+    expect(stepForRole(decision, demo).tryIt?.action).toBe('approve-plan');
+    expect(stepForRole(decision, operator).tryIt).toBeUndefined();
+    expect(stepForRole(decision, operator).title).toBe('An approver decides here');
+    const verified = stepAt('s2/verified')!.step;
+    expect(stepForRole(verified, can({})).say).toMatch(/That is verified: it landed/);
+    expect(stepForRole(verified, operator).say).toMatch(/^Not approved, so nothing is written yet/);
+    expect(stepForRole(stepAt('scenarios/start')!.step, can({})).say).toMatch(/Start with these three/);
+    expect(stepForRole(stepAt('scenarios/start')!.step, demo).say).toMatch(/follows S2, S8 and S20/);
+    expect(stepForRole(stepAt('scenarios/mode')!.step, demo).say).not.toMatch(/Choose/);
+  });
+
   it('names the modes the page offers, with no single investigator on the trial', () => {
-    expect(modesSay(false)).toMatch(
-      /Board \(agents\), Site policy, Single investigator or Rules only \(no agents\)/,
+    expect(modesSay(false)).toMatch(/Board, Site policy, Single investigator or Rules only\./);
+    expect(modesSay(true)).toMatch(
+      /Board, Site policy, Single investigator \(not recorded\) or Rules only\./,
     );
-    expect(modesSay(true)).toMatch(/Board \(agents\), Site policy or Rules only \(no agents\)/);
-    expect(modesSay(true)).not.toMatch(/Single investigator/);
-    for (const trial of [false, true]) expect(words(modesSay(trial))).toBeLessThanOrEqual(25);
+    for (const trial of [false, true]) {
+      expect(modesSay(trial)).toMatch(/^Choose/);
+      // Who can't run one has nothing to choose for a run
+      expect(modesSay(trial, false)).not.toMatch(/Choose/);
+      for (const canRun of [false, true]) expect(words(modesSay(trial, canRun))).toBeLessThanOrEqual(25);
+    }
   });
 
   it("says what a reason code is on the engineers' gate step, and that an unknown blocks", () => {

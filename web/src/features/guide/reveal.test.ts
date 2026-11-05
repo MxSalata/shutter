@@ -66,6 +66,35 @@ describe('landOn and bringIntoFreePart', () => {
     Reflect.deleteProperty(document.documentElement, 'scrollHeight');
   });
 
+  it("aims again when the page's own loading moves it back just after an instant landing, not once it has settled", () => {
+    vi.useFakeTimers();
+    let y = 0;
+    const top = 1000;
+    Object.defineProperty(window, 'scrollY', { configurable: true, get: () => y });
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation((o) => {
+      y = (o as ScrollToOptions).top ?? 0;
+    });
+    Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 5000 });
+    const el = box(document.body, 'host', 0, 10);
+    el.getBoundingClientRect = () => ({ top: top - y, bottom: top - y + 10, height: 10 }) as DOMRect;
+    const stop = landOn(el, true);
+    expect(y).toBe(984);
+    vi.advanceTimersByTime(60);
+    y = 0;
+    vi.advanceTimersByTime(60);
+    expect(y).toBe(984);
+    // Past that time a move away is someone else's, and stays
+    vi.advanceTimersByTime(1100);
+    y = 300;
+    vi.advanceTimersByTime(200);
+    expect(y).toBe(300);
+    stop();
+    vi.useRealTimers();
+    scrollTo.mockRestore();
+    Reflect.deleteProperty(window, 'scrollY');
+    Reflect.deleteProperty(document.documentElement, 'scrollHeight');
+  });
+
   it('leaves a control that is already in the free part where it is', () => {
     const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     box(document.body, 'mantine-AppShell-header', 0, 88);

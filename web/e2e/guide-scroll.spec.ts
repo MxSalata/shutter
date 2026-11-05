@@ -118,6 +118,20 @@ test.describe('where the tour scrolls to', () => {
     });
   }
 
+  test.describe('with reduced motion', () => {
+    test.use({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
+    test('step 1 stays where it landed, under what stays at the top, as the page finishes loading', async ({
+      page,
+    }) => {
+      await startTour(page, 'quick');
+      const guide = page.getByRole('region', { name: 'Guide' });
+      await expect(guide).toContainText('Step 1 of 9');
+      await atRest(page);
+      const m = await measure(page);
+      checkStep(m, 'step 1 with reduced motion');
+    });
+  });
+
   test('a larger text size in the browser grows the header, and the card and the tab bar stay under it', async ({
     page,
   }) => {

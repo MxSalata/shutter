@@ -42,7 +42,7 @@ import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router';
 import { api, newIdempotencyKey, seg } from '@/api/client';
 import { keys, useCan } from '@/api/hooks';
-import type { CaseDetail, PlanView } from '@/api/types';
+import type { Can, CaseDetail, PlanView } from '@/api/types';
 import { TechDetail } from '@/components/TechDetail';
 import { ENV } from '@/env/mode';
 import { REPLAY_DONE } from '@/lib/events';
@@ -58,6 +58,7 @@ import {
   SCOPE_OVERLINE,
   SCOPES,
   stepAt,
+  stepForRole,
   tourMinutes,
   type ChapterGroup,
   type GuideScope,
@@ -94,10 +95,10 @@ function GuideButton({
 const tryControl = (action: string) => document.querySelector<HTMLElement>(`[data-tour-action="${action}"]`);
 const visible = (el: HTMLElement | null): el is HTMLElement =>
   !!el && el.isConnected && (typeof el.checkVisibility !== 'function' || el.checkVisibility());
-/** A control that is there to try: on the page, and not already open (Ask about this case, once pressed). */
+/** A control that is there to try: on the page, not greyed out for this role, and not already open (Ask about this case, once pressed). */
 const toTry = (action: string) => {
   const el = tryControl(action);
-  return visible(el) && el.getAttribute('aria-expanded') !== 'true';
+  return visible(el) && !el.matches(':disabled') && el.getAttribute('aria-expanded') !== 'true';
 };
 
 /**
@@ -134,7 +135,20 @@ const SCOPE_WORDS: Record<GuideScope, () => string> = {
     `${SCOPES.engineer.length} steps, about ${tourMinutes('engineer')} min, technical detail on: the receipt, the gate's codes, what each agent cited, the message trace.`,
 };
 
+/** What this role can do in the trial, in words: the welcome promises nothing the role's controls grey out. */
+export function welcomeActions(can: Can): string {
+  const verbs = [
+    can.approve && 'approve',
+    can.scenarios && 'run',
+    can.configure && 'save',
+    'escalate',
+  ].filter((v): v is string => !!v);
+  const said = verbs.length > 1 ? `${verbs.slice(0, -1).join(', ')} or ${verbs.at(-1)}` : verbs[0];
+  return said.charAt(0).toUpperCase() + said.slice(1);
+}
+
 function Welcome({ initial }: { initial: GuideScope }) {
+  const can = useCan();
   const begin = useGuide((s) => s.begin);
   const notNow = useGuide((s) => s.notNow);
   const dontShowAgain = useGuide((s) => s.dontShowAgain);
@@ -146,8 +160,8 @@ function Welcome({ initial }: { initial: GuideScope }) {
         when it is safe to.
       </Text>
       <Text fz={15}>
-        {HOSPITAL_NAME}: a demo hospital with made-up patients, recorded. Approve, run, save or escalate: each
-        replays the recording, and nothing leaves this browser. A reload starts the recording afresh.
+        {HOSPITAL_NAME}: a demo hospital with made-up patients, recorded. {welcomeActions(can)}: each replays
+        the recording, and nothing leaves this browser. A reload starts the recording afresh.
       </Text>
       <Radio.Group value={scope} onChange={(v) => setScope(v as GuideScope)} label="Choose a tour">
         <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm" mt="xs">
@@ -405,20 +419,22 @@ function StepCard({
   const client = useQueryClient();
   const reduced = useReducedMotion() ?? false;
   const [busy, setBusy] = useState(false);
-  const { step } = pos;
+  const step = stepForRole(pos.step, useCan());
+  const tryAction = step.tryIt?.action;
+  const chipAction = step.chip?.action;
   const [present, setPresent] = useState<{ tryIt: boolean; chip: boolean }>({ tryIt: false, chip: false });
 
   // The chips show only while their control is on the page and not already open: the try-it never leads nowhere
   useEffect(() => {
     const look = () =>
       setPresent({
-        tryIt: !!step.tryIt && toTry(step.tryIt.action),
-        chip: !!step.chip && toTry(step.chip.action),
+        tryIt: !!tryAction && toTry(tryAction),
+        chip: !!chipAction && toTry(chipAction),
       });
     look();
     const timer = window.setInterval(look, 500);
     return () => window.clearInterval(timer);
-  }, [step]);
+  }, [tryAction, chipAction]);
 
   const onNext = async () => {
     // Next without trying on the S2 decision: the tour never lands on an unverified case, so it approves for you
@@ -569,7 +585,7 @@ function StepHost({ pos }: { pos: GuidePosition }) {
   const path = place.data && 'path' in place.data ? place.data.path : undefined;
   // A safeguard only: in the trial every place of the quick tour resolves (guide.spec.ts checks it)
   const notFound = absent || (!!place.data && 'missing' in place.data);
-  const { ring, trying } = useStepMotion(target, pos.step.tryIt?.action, reduced);
+  const { ring, trying } = useStepMotion(target, stepForRole(pos.step, useCan()).tryIt?.action, reduced);
   // Read when the card is placed, not a reason to place it again
   const reducedNow = useRef(reduced);
   useEffect(() => {
@@ -907,6 +923,7 @@ function Pointing({ action }: { action: string }) {
 
 /** One polite announcement per step change, short: the step, never the page's content. */
 function useAnnouncement(phase: GuidePhase, pos: GuidePosition | undefined, approved: boolean) {
+  const can = useCan();
   const [message, setMessage] = useState('');
   const key = pos ? pos.path : '';
   const [before, setBefore] = useState({ phase, key });
@@ -914,7 +931,7 @@ function useAnnouncement(phase: GuidePhase, pos: GuidePosition | undefined, appr
     setBefore({ phase, key });
     if (phase === 'step' && pos)
       setMessage(
-        `${approved ? 'Approved for you, in the trial. ' : ''}Step ${pos.n} of ${pos.m}, ${sentence(pos.chapter.title)}. ${pos.step.title}.`,
+        `${approved ? 'Approved for you, in the trial. ' : ''}Step ${pos.n} of ${pos.m}, ${sentence(pos.chapter.title)}. ${stepForRole(pos.step, can).title}.`,
       );
     else if (phase === 'finished') setMessage('That is the tour.');
     else if (phase === 'closed' && before.phase === 'step')
