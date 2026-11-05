@@ -22,7 +22,7 @@ echo "docker $*" >> "$FAKE_DOCKER_LOG"
 case "$1 $2" in
   "info --format")
     case "$3" in
-      *MemTotal*) echo 17179869184 ;;
+      *MemTotal*) echo "${FAKE_MEMORY:-17179869184}" ;;
       *DockerRootDir*) echo / ;;
       *Architecture*) echo x86_64 ;;
     esac ;;
@@ -39,7 +39,7 @@ case "$1 $2" in
     if [ -n "${FAKE_COMPOSE_UP_ERROR:-}" ]; then echo "$FAKE_COMPOSE_UP_ERROR"; exit 1; fi
     sleep "${FAKE_BUILD_SECONDS:-0}"
     echo built; touch compose-up ;;
-  "inspect --format") echo healthy ;;
+  "inspect --format") echo "${FAKE_HEALTH:-healthy}" ;;
   "image inspect")
     [ -z "${FAKE_NO_IMAGE:-}" ] || exit 1
     case "$*" in *--format*Size*) echo 5400000000 ;; *--format*Architecture*) echo amd64 ;; esac ;;
@@ -167,6 +167,13 @@ def main():
     check("already running", run.code == 0 and "already running and healthy" in run.out, "says so", run)
     check("already running", f"http://localhost:{live}/shutter/index.html" in run.out, "gives the port it listens on", run)
     check("already running", not run.built and run.dotenv is None, "changes nothing", run)
+    # An install can take the disk below the build's figure, and a Shutter holds its own ports: neither is something to fix
+    run = Run(["--replay"], env=dict(ports, FAKE_MEMORY="1073741824", FAKE_LIVE_PORT=str(web)), hold=[web, sup], running=True)
+    check("already running, short of room", run.code == 0 and "already running and healthy" in run.out, "says so", run)
+    check("already running, short of room", "[fix]" not in run.out, "has nothing to fix", run)
+    run = Run(["--replay"], env=dict(ports, FAKE_MEMORY="1073741824", FAKE_HEALTH="starting"), hold=[web, sup], running=True)
+    refuses("not healthy, short of room", run, "1 thing(s) to fix first", "first build needs")
+    check("not healthy, short of room", "already in use" not in run.out, "doesn't call its own ports taken", run)
     run = Run(["--replay"], env=ports, running=True)
     check("already running, no answer", run.code == 0 and f"http://localhost:{web}/shutter/index.html" in run.out, "falls back to the port it was given", run)
 

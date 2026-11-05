@@ -62,6 +62,22 @@ setting() {
   sed -n "s/^$1=//p" "$file" | tail -1
 }
 
+# The container's own healthcheck (docker-compose.yml: wget against the health route inside the container), so the host
+# needs neither curl nor wget: healthy, unhealthy, starting, or empty when the container is not there. The status is read
+# from the engine (docker inspect), not from docker compose ps --format, whose Go templates older Compose versions reject.
+shutter_id() { docker compose ps -q shutter 2> /dev/null | head -1 || true; }
+healthy() {
+  id=$(shutter_id)
+  [ -n "$id" ] && [ "$(docker inspect --format '{{.State.Health.Status}}' "$id" 2> /dev/null)" = healthy ]
+}
+
+# The shell's value comes first, because docker compose itself prefers the shell to .env; a value set but empty also
+# beats .env there, and then the compose file's default applies.
+port=${SHUTTER_WEB_PORT-$(setting SHUTTER_WEB_PORT)}; port=${port:-52773}
+superserver_port=${SHUTTER_SUPERSERVER_PORT-$(setting SHUTTER_SUPERSERVER_PORT)}; superserver_port=${superserver_port:-1972}
+health_url="http://localhost:${port}/api/shutter/health"
+
+shutter_up=""
 echo "Checking (nothing is changed yet):"
 
 # 1. Docker and Compose
@@ -77,6 +93,19 @@ else
     fail "Docker Compose v2 is missing (the \"docker compose\" command)." "Install the Compose plugin (Docker Desktop includes it), then run ./install.sh again."
   else
     ok "Docker Compose $compose"
+    # Before the memory and disk checks, which are for a build: the install itself can take the disk below their figure,
+    # and a running Shutter holds its own ports.
+    if docker compose ps --status running --services 2> /dev/null | grep -qx shutter; then
+      shutter_up=yes
+      if healthy; then
+        # Where it really listens: a port from the shell or an edited .env moves nothing until the container is created again
+        live=$(docker compose port shutter 52773 2> /dev/null | sed 's/.*://' | head -1 || true)
+        echo
+        echo "Shutter is already running and healthy: http://localhost:${live:-$port}/shutter/index.html (approver / shutter)."
+        echo "Nothing was changed."
+        exit 0
+      fi
+    fi
   fi
 
   # 2. Memory and disk available to Docker
@@ -105,15 +134,6 @@ else
     note "Docker's disk is inside its own VM here, so its free space can't be read: allow about ${MIN_DISK_GB} GB"
   fi
 fi
-
-# The container's own healthcheck (docker-compose.yml: wget against the health route inside the container), so the host
-# needs neither curl nor wget: healthy, unhealthy, starting, or empty when the container is not there. The status is read
-# from the engine (docker inspect), not from docker compose ps --format, whose Go templates older Compose versions reject.
-shutter_id() { docker compose ps -q shutter 2> /dev/null | head -1 || true; }
-healthy() {
-  id=$(shutter_id)
-  [ -n "$id" ] && [ "$(docker inspect --format '{{.State.Health.Status}}' "$id" 2> /dev/null)" = healthy ]
-}
 
 # A port docker compose would publish must be free. A connection that succeeds means something holds it. Another IRIS on
 # 1972 is the usual case, and without this check it would surface only after the whole build, as a failed "compose up".
@@ -153,22 +173,8 @@ check_port() {
   fi
 }
 
-# 3. Already running?
-# The shell's value comes first, because docker compose itself prefers the shell to .env; a value set but empty also
-# beats .env there, and then the compose file's default applies.
-port=${SHUTTER_WEB_PORT-$(setting SHUTTER_WEB_PORT)}; port=${port:-52773}
-superserver_port=${SHUTTER_SUPERSERVER_PORT-$(setting SHUTTER_SUPERSERVER_PORT)}; superserver_port=${superserver_port:-1972}
-health_url="http://localhost:${port}/api/shutter/health"
-if [ "$problems" -eq 0 ] && docker compose ps --status running --services 2> /dev/null | grep -qx shutter; then
-  if healthy; then
-    # Where it really listens: a port from the shell or an edited .env moves nothing until the container is created again
-    live=$(docker compose port shutter 52773 2> /dev/null | sed 's/.*://' | head -1 || true)
-    port=${live:-$port}
-    echo
-    echo "Shutter is already running and healthy: http://localhost:${port}/shutter/index.html (approver / shutter)."
-    echo "Nothing was changed."
-    exit 0
-  fi
+# 3. The ports
+if [ -n "$shutter_up" ]; then
   note "Shutter's container is running but not healthy yet; it will be built and started again"
 elif [ "$port" = "$superserver_port" ]; then
   fail "SHUTTER_WEB_PORT and SHUTTER_SUPERSERVER_PORT are both ${port}." "Give them different ports, then run $rerun again."
