@@ -99,7 +99,14 @@ export function MemberLibraryCard({
             />
           )}
         </Group>
-        {changedInTrial ? <Text size="sm">Changed in the trial only.</Text> : null}
+        {changedInTrial ? (
+          <div>
+            <Text size="sm">Changed in the trial only.</Text>
+            <Text size="sm" c="dimmed">
+              This card changes; the recorded runs stay as they were.
+            </Text>
+          </div>
+        ) : null}
         <TechDetail label="Technical detail" kind="data">
           <dl className="library-detail">
             <Fact label="Class">{`${m.agentClass} · v${m.configVersion}`}</Fact>

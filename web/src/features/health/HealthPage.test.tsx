@@ -244,7 +244,7 @@ describe('HealthPage in the trial', () => {
     expect(hero).not.toHaveTextContent(/not needed/i);
     expect(
       screen.getByText(
-        'This is the report of the instance the trial was recorded on. Parts it did not have say so.',
+        "This is the report of the instance the trial was recorded on. Parts it did not have say so. Its counts are that instance's whole store, more than this trial's cases or Evaluation's runs.",
       ),
     ).toBeInTheDocument();
   });
