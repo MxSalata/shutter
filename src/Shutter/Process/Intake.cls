@@ -38,8 +38,14 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     If 'request.%IsA("Shutter.Msg.ExternalIntake") Quit $$$ERROR($$$GeneralError, "Case Intake expects an external intake, got " _ $CLASSNAME(request))
     // 1. Shutter's own copy of the message: parsed under the named category and sent to the store item, so it has a
     // message header in this namespace. The header of that send is the case's source header.
-    Set msg = ..ParseMessage(request.MessageText, request.SchemaCategory, .sc)
+    // A category imported under an alias (two namespaces, one name, different schemas; v1.42) is read under that alias.
+    Set msg = ..ParseMessage(request.MessageText, ##class(Shutter.Util.Schemas).LocalName(request.SourceNamespace, request.SchemaCategory), .sc)
     If $$$ISERR(sc) Quit sc
+    // A category not loaded here (v1.42): the copy reads as 2.5.1 for its identity, and says what it named, so its evidence
+    // says "unknown schema" and, once the schema is loaded, reads it under that schema. A held message has its own path.
+    If (request.FailureKind '= "unreadable") && ##class(Shutter.Util.Schemas).NamedUnloaded(msg, request.SchemaCategory, request.SourceNamespace) {
+        Set ^Shutter.Config("schemaNamed", request.SchemaCategory) = request.SourceNamespace
+    }
     Set sc = msg.%Save()
     If $$$ISERR(sc) Quit sc
     Set sc = ..SendRequestSync(..StoreTarget, msg, .stored, ..WaitSeconds)
@@ -56,9 +62,18 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     Set op = ##class(Shutter.Util.OperationKey).FromHL7(msg, .osc)
     If $$$ISERR(osc) || '$ISOBJECT(op) {
         Set op = ##class(Shutter.Util.OperationKey).Unmapped(msg, headerId)
-        If kind '= "unreadable" {
+        If request.FailureReasonCode = "onboarding_test" {
+            // The test forward (Shutter.Util.Onboard.Test) says what it is, and nothing is put in front of those words.
             Set kind = "unmappable"
-            Set text = "The message could not be mapped to an operation for the downstream system: " _ $SYSTEM.Status.GetErrorText(osc) _ $SELECT(text '= "": ". The source reported: " _ text, 1: "")
+        } ElseIf kind '= "unreadable" {
+            Set kind = "unmappable"
+            // An order, a result or a document (v1.42) is not a malformed ADT: Shutter does not model it, and the words say so.
+            Set structure = $PIECE(msg.Name, "_", 1)
+            If (structure '= "") && (structure '= "ADT") {
+                Set text = "This message is " _ structure _ ", not ADT: Shutter resends only ADT, so a person corrects it" _ $SELECT(text '= "": ". The source reported: " _ text, 1: "")
+            } Else {
+                Set text = "The message could not be mapped to an operation for the downstream system: " _ $SYSTEM.Status.GetErrorText(osc) _ $SELECT(text '= "": ". The source reported: " _ text, 1: "")
+            }
         }
     }
     // 3. The case, through the case workflow, synchronously: its CaseStarted is this process's answer.

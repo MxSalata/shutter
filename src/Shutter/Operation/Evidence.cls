@@ -344,11 +344,23 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
             Set heldType = ##class(EnsLib.HL7.Schema).ResolveSchemaTypeToDocType(heldCategory, msg.Name, .hsc)
             If $$$ISOK(hsc) && (heldType '= "") Do msg.PokeDocType(heldType)
         }
+        // A forward that named a category not loaded when it came (v1.42) is read by that category from then on: once the
+        // schema is loaded a copy from its text is typed under it (the stored copy's segment map is 2.5.1's, and it stays as it
+        // arrived), in memory only; until then the verdict below is "unknown schema".
+        Set namedCategory = ##class(Shutter.Util.Schemas).NamedCategory(msg)
+        If (namedCategory '= "") && ##class(Shutter.Util.Schemas).Known(namedCategory) {
+            Set namedType = ##class(EnsLib.HL7.Schema).ResolveSchemaTypeToDocType(namedCategory, msg.Name, .nsc)
+            Set namedCopy = $SELECT($$$ISOK(nsc) && (namedType '= ""): ##class(EnsLib.HL7.Message).ImportFromString(msg.OutputToString(), .csc), 1: "")
+            If $ISOBJECT(namedCopy) {
+                Do namedCopy.PokeDocType(namedType)
+                Set msg = namedCopy
+            }
+        }
         // "dm": the document type must be known and the segment structure must match the schema.
         Set sc = msg.Validate("dm")
         Do validation.%Set("parsed", $$$ISOK(sc), "boolean")
         Set validation."doc_type" = msg.DocType
-        Set validation."schema_category" = $SELECT(msg.DocTypeCategory '= "": msg.DocTypeCategory, 1: heldCategory)
+        Set validation."schema_category" = $SELECT(namedCategory '= "": namedCategory, msg.DocTypeCategory '= "": msg.DocTypeCategory, 1: heldCategory)
         Set validation.spec = "dm"
         If $$$ISERR(sc) Set validation.error = $SYSTEM.Status.GetErrorText(sc)
         // A category this namespace does not hold (v1.32: a forwarded message named its source's own schema) cannot be

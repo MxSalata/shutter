@@ -8,7 +8,7 @@
 /// kind (delivery_failed, rejected, uncertain_outcome or unmappable), its text, and the connector's outcome, HTTP
 /// status and reason code. Hospital.Process.PASToDownstream is the worked example. The item's adapter settings name
 /// Shutter's instance: HTTPServer, HTTPPort, SSLConfig and Credentials (a user holding the Shutter_Forwarder role);
-/// Shutter.Util is the one other package the namespace needs.
+/// Shutter.Util is the one other package the namespace needs (Shutter.Setup.OnboardApply maps both).
 /// Since v1.34 ("prevent failures") the item is also an HL7 service's BadMessageHandler: a message the service refused
 /// before routing it arrives as itself and is forwarded as a failure of kind unreadable, reason schema_unknown when its
 /// schema category is not loaded in this namespace (Shutter holds the case and releases it once the schema is imported
@@ -41,7 +41,12 @@ Property SchemaCategory As %String(MAXLEN = 64);
 /// connector item.
 Property HeldReceiver As %String(MAXLEN = 128);
 
-Parameter SETTINGS = "IntakePath:Shutter,SourceProduction:Shutter,SourceNamespace:Shutter,SchemaCategory:Shutter,HeldReceiver:Shutter";
+/// Put in front of every receiver's name, with a space (v1.42), as the site profile names it: for a namespace whose item has the name of
+/// another namespace's, since one name would pool their cases and incidents and give them one profile entry. Onboarding
+/// sets it when a name is taken. Empty: the item's own name.
+Property ReceiverPrefix As %String(MAXLEN = 64);
+
+Parameter SETTINGS = "IntakePath:Shutter,SourceProduction:Shutter,SourceNamespace:Shutter,SchemaCategory:Shutter,HeldReceiver:Shutter,ReceiverPrefix:Shutter";
 
 Method OnForward(request As Shutter.Intake.Forward, Output response As Shutter.Intake.Forwarded) As %Status
 {
@@ -163,7 +168,7 @@ Method IntakeBody(request As Shutter.Intake.Forward, namespace As %String, produ
     Set source.route = route
     Set source."header_id" = request.HeaderId
     Set body.source = source
-    Set body.receiver = request.Receiver
+    Set body.receiver = ..ReportedReceiver(request.Receiver, ..ReceiverPrefix)
     Set failure = {}
     Set failure.kind = request.FailureKind
     Set failure.text = request.FailureText
@@ -174,6 +179,14 @@ Method IntakeBody(request As Shutter.Intake.Forward, namespace As %String, produ
     Set body.message = text
     Set body."schema_category" = category
     Quit body
+}
+
+/// The receiver as the site profile names it: the prefix and a space in front of the item's name, an empty name left empty (Shutter's
+/// connector item then).
+ClassMethod ReportedReceiver(receiver As %String, prefix As %String = "") As %String
+{
+    If (receiver = "") || (prefix = "") Quit receiver
+    Quit prefix _ " " _ receiver
 }
 
 /// The namespace reported as the source: the setting, else the one this item runs in.

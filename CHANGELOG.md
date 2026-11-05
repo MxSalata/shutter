@@ -97,6 +97,11 @@ Interoperability production, with a board of IRIS AI Hub agents.
   `unknown schema`, blocked `SCHEMA_UNKNOWN` until the schema is there. With the site profile's `feed.prevent_failures`
   such a message is held as a case of kind `unreadable` instead of delivered, and the index's check releases it once the
   schema is imported (catalogue entry E18).
+- **Onboarding a hospital's namespaces:** a plan that changes nothing (`Shutter.Setup_OnboardPlan`), an apply that does what it
+  listed and never stops a production, a marked test failure per namespace, the Doctor's `watched_namespaces`, and a removal;
+  an item or a schema category named alike in two namespaces stays apart (`docs/INSTALL.md`, section 9). A forward naming a
+  category not loaded here is reported as such and repaired once it is loaded, and a load in a namespace running another
+  production is refused.
 - **The index walk is an adapter of Shutter's own** (`Shutter.Index.Adapter`, handing batches of message headers to
   the HL7 Index item), and **any IANA time zone** for the feed through Embedded Python's `zoneinfo`
   (`Shutter.Util.Time.PyOffset`), beside the native rules for UTC, Europe/London and fixed offsets.

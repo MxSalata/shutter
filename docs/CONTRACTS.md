@@ -1241,8 +1241,8 @@ bound to the digest of the text the person read.
 ## 11. The case intake from another production (v1.15)
 
 Shutter can open a case for a delivery that failed in a production it does not own (the install document's shape A,
-`docs/INSTALL.md`). Nothing is mapped across namespaces for it: the intake is self-contained, and Shutter keeps its own
-copy of the message.
+`docs/INSTALL.md`). The intake is self-contained and Shutter keeps its own copy of the message; the watched namespace
+needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder and the alert intake (11.1 maps them).
 
 - `POST /api/shutter/intake`, resource `Shutter_Intake` (the role `Shutter_Forwarder` carries it, and only it: the
   forwarder's user can call no other route; the demo user is `forwarder`, password `shutter`, the `SHUTTER_DEMO_PASSWORD`
@@ -1286,8 +1286,10 @@ copy of the message.
   retry). Settings: `IntakePath` (default `/api/shutter/intake`), `SourceProduction` (default the running production's
   name), `SourceNamespace` (default the namespace), `SchemaCategory` (default the message's own category, else 2.5.1);
   the adapter's server, port, credentials (HTTP Basic as the forwarder's user) and SSL configuration are the site's.
-  The sending production's process calls it on a failed delivery with the failure as its connector reported it; the
-  package `Shutter.Intake` (with `Shutter.Util` and `Shutter.Msg`) is mapped into that namespace.
+  `ReceiverPrefix` (v1.42; default empty) goes in front of every receiver's name in the body, so that a namespace's item of
+  the same name as another namespace's is another receiver. The sending production's process calls it on a failed delivery
+  with the failure as its connector reported it; the packages `Shutter.Intake` and `Shutter.Util` are mapped into that
+  namespace (the demo hospital also maps `Shutter.Msg`, `Shutter.Store` and `Hospital` for its own process).
 - **A refused message, held** (v1.34, "prevent failures"; section 12). The forwarder is also an HL7 service's
   `BadMessageHandler`: a message the service refused before routing it (its `Validation`, say `dm`) arrives as an
   `EnsLib.HL7.Message` and is forwarded (`Shutter.Intake.Forwarder.ForwardFor`) with kind `unreadable`, reason
@@ -1342,7 +1344,59 @@ copy of the message.
   compiling the mapped class there once. A scenario drops files into the hospital's folder (`^Shutter.Config("hospitalIn")`
   in Shutter's namespace names it); the case in Shutter then names the source.
 
+### 11.1 Onboarding a namespace (v1.42)
+
+`Shutter.Util.Onboard`, through `Shutter.Setup`, in Shutter's namespace. Reads and answers JSON; the steps for a person are
+`docs/INSTALL.md`, section 9.
+
+- `SELECT Shutter.Setup_OnboardPlan(namespace, options)` changes nothing: `{namespace, production, production_state, productions,
+  services, routers, operations: [{name, class, reported_as, alert_on_error, in_profile, has_api, draft}], other_operations,
+  schemas: [{category, named_by, in_namespace, standard, in_shutter, shutter_name, action}], wired, receiver_prefix, actions: [{do,
+  says, ...}], todo, warnings, error}`. `do` is `map_package`, `import_schema`, `add_forwarder`, `set_prefix`, `rename_alert`,
+  `add_alert_intake`, `set_alert_receivers`, `set_alert_on_error` or `draft_receiver`. Options: `production`, `shutter_host`,
+  `shutter_port`, `ssl_config`, `credential`, `receivers`, `alert_on_error`. Reading a namespace (`Onboard.Read`) calls only Ens, %SQL,
+  %Dictionary and %SYS classes while it is there, as `ProductionReader` does, since no Shutter class resolves there yet.
+- `SELECT Shutter.Setup_OnboardApply(namespace, options)` (`%Admin_Manage`) runs that plan's `actions` and no others: `{ok, changed,
+  unchanged, todo, warnings, error}`; a second run changes nothing. It never stops a production: `Ens.Director.UpdateProduction(30, 0)`
+  on a running one. What it did is kept under `^Shutter.Config("onboard", namespace)` (the production at the root; `mappings`, `schemas`,
+  `items`, `renamed`, `alertOnError`, `receivers`, `drafted`, `credential`).
+- A draft receiver's entry: `{name, system, tier: 3, features: all false, draft: true, namespace, item}` and no `api`, so 6.4's rule for a
+  receiver with no API holds and the gate blocks any write. Validation ignores `draft`, `namespace` and `item`; a person removes `draft`
+  on saving. Its name is the item's, or `ReceiverPrefix` and the item's when another namespace holds the name (`Onboard.TakenElsewhere`).
+- `Do ##class(Shutter.Setup).OnboardCredential(namespace, user, password, credential)` makes the user with `Shutter_Forwarder` when it does
+  not exist (one that exists must sign in with that password and hold the role), stores the credential in that namespace, and prints no password; with no
+  password it asks with the echo off. Not an SQL procedure.
+- `SELECT Shutter.Setup_OnboardTest(namespace)` posts, with the forwarder's settings and credential, an ORU^R01 with MSH-11 `T` and no
+  patient, `failure.reason_code` `onboarding_test` (`Process.Intake` keeps its text as it came), receiver and route `Onboarding test`,
+  and answers `{ok, case, http_status, advice, error}`. An ORU's key is `UNMAPPED^<header>`, so the gate blocks `UNMAPPABLE` and no model runs.
+- `SELECT Shutter.Setup_OnboardRemove(namespace, options)` (`%Admin_Manage`) undoes the record: `{ok, removed, kept, error}`. Options:
+  `unmap` (take the mappings although messages of Shutter's classes are left in that namespace; otherwise they stay, recorded under
+  `^Shutter.Config("onboardKept", namespace)`, and a later call takes them) and `credential`.
+- `SELECT Shutter.Setup_OnboardReceiverItem(name, host, port, credential, ssl)` (`%Admin_Manage`) adds a `Shutter.Operation.Ward` item of the
+  receiver's name to Shutter's production for a receiver the profile gives an `api`, records it under `^Shutter.Config("receiverItems")`, and
+  a site install puts it back after compiling the production (`RestoreReceiverItems`). Refused for a receiver with no `api`.
+- **Schemas.** `Schemas.ImportNeeded(namespace, category, .as)` answers `none` (one digest of IRIS's export, or its alias is loaded),
+  `import`, or `import_as` with `<NAMESPACE>_<CATEGORY>`; `ImportFrom` exports there and imports here, recording an alias under
+  `^Shutter.Config("schemaAlias", namespace, category)`, which `Process.Intake` follows (`LocalName`), so a forwarder keeps naming its own
+  category and a held case's `heldSchema` keeps the source's name.
+- **A category not loaded when the forward comes** (v1.42; it read as 2.5.1 with no sign of the category, `schema_known` true): the stored copy stays
+  typed 2.5.1 for its identity, and notes the named category in the message's `UserValues` (`Schemas.NamedUnloaded`). The evidence
+  reports `schema_category` that name and `schema_known` false, so the gate blocks `SCHEMA_UNKNOWN`; once it is loaded, a reinvestigation
+  types the copy under it in memory and validates. The category is listed in the Doctor's `missing` from
+  `^Shutter.Config("schemaNamed", category)` until an import clears it. A held forward (kind `unreadable`) keeps its own path above.
+- **The Doctor** adds `watched_namespaces` (each namespace onboarded or named by a case, read there: `{namespace, onboarded, exists, production,
+  production_state, forwarder, alert_intake, pass_to, classes, credential, last_forward, last_forward_error, last_case, last_case_at,
+  schemas_missing, problems, ok}`) and `receivers_without_item`; `credentials` tries each onboarded namespace's forwarder credential and each
+  connector item's; `hl7_schemas.needed` adds the watched namespaces' missing categories. `AlertProcess.Classify` reads a TCP connect
+  timeout (`ErrOutConnectExpired`) as `delivery_failed`: nothing was sent.
+
 ## 12. The install (v1.15)
+
+**A namespace running another production refuses the install** (v1.42): with no `production` named, `InstallStatus` fails at
+once with `Setup.LiveNamespaceProblem`'s words when a production other than `Shutter.Production` is running there, since
+`StartProduction` would stop it. **On a site install a receiver the profile does not name has no API** (v1.42):
+`SiteProfile.ReceiverPath` answers empty and `ReceiverFeatures` all false (6.4), where a demo still falls back to its own receiver's
+paths.
 
 **A demo load on a plain instance** (a person's `zpm`, with no image build before it): `Shutter.Setup.InstallStatus` makes
 `RECORDS` and `HOSPITAL` when they are missing (`Installer.EnsureDemoNamespaces`, before the roles read them) and installs
@@ -1747,6 +1801,10 @@ board's case in the Visual Trace, the latest cases, and links to the portal's pa
 ## Changes
 
 - v1.42, 5 Nov 2026 (a real instance's failure paths, reviewed on 5 Nov): a request the receiver never answered is classified as no answer, which the connector's +StatusCode had made unreachable. A write timed out reads `uncertain` and goes to verification instead of `error`, refused and "nothing changed" (1.3, 5.1); only a socket that never opened is `unavailable`; a preflight read that got no answer is `unavailable`; a feed delivery timed out opens as `uncertain_outcome` rather than `delivery_failed`, at Shutter's connector and the demo hospital's. The audit line and the failure text no longer name HTTP 0. `UncertainSettleSeconds` is 60 s, so not committed is said at the last read, about 70 s after the attempt, and no longer at 30 s while a slow receiver may still commit (1.3, 5.1). A rehearsal with no usable answer no longer says the action would not apply; the receiver's own refusal of it (a 409 or 422) still does. A request nobody answered that may have been applied says so, with the adapter's words in brackets after it, and the catalogue reads a reason code only from a parenthesis ahead of the failure text's first colon. The audit trail, the gate's details and the forwarder's log say "no answer" where a status would read 0. `Shutter_Operator` and `Shutter_Approver` write the hospital's data database and the records system's, so Reset works for them and reaches every demo receiver; `ResetLive` answers `not cleared` rather than failing the reset halfway (4). An approval wait that runs out names `system` on its audit event, and a coordinator refused for the day's budget leaves the headline "No plan: the day's model budget is spent" (5). The live hospital holds its stories until Shutter's API service is registered, so a story at the first start is no longer lost (4.4).
+- v1.42, 5 Nov 2026 (a request for a hospital's several namespaces, and a run of the install on three of them): onboarding a
+  namespace (11.1); a forward naming a category not loaded here says so and can be repaired; a same-named category is imported under an
+  alias; `ReceiverPrefix`; a site's unnamed receiver has no API; a namespace running another production refuses the install (12); the Doctor
+  reports each watched namespace.
 - v1.41, 4 Nov 2026 (the choice of a page drawn by IRIS over the static guide): the demo's portal page (section 16).
 - v1.40, 4 Nov 2026 (a stock TCP operation tried as a receiver, and the README's walk-through followed as written): an entry with
   `features` and no `api` is a receiver with no API of its own and has no paths (6.4); it read the demo receiver in its place

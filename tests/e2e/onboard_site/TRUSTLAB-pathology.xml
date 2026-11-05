@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Category name="TRUSTLAB" base="2.5.1" description="The pathology department's local variant of 2.5.1, with its Z segment">
+<MessageType name='ORU_R01' structure='ORU_R01' returntype='base:ACK_R01'/>
+<MessageStructure name='ORU_R01' definition='base:MSH~base:PID~[~base:PV1~]~base:ORC~base:OBR~{~base:OBX~}~ZLB'/>
+<SegmentStructure name='ZLB' description='Lab extras'>
+<SegmentSubStructure piece='1' description='AnalyserCode' datatype='base:ST' symbol='' length='10' required='R' ifrepeating='0'/>
+<SegmentSubStructure piece='2' description='BenchId' datatype='base:ST' symbol='' length='10' required='O' ifrepeating='0'/>
+</SegmentStructure>
+</Category>
