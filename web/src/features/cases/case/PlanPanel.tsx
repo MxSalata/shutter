@@ -292,8 +292,18 @@ export function RehearsalPanel({
         r ? (
           <StatusBadge
             tone={r.wouldApply ? 'positive' : 'blocking'}
-            label={r.wouldApply ? 'Would apply' : `Would not apply${r.reason ? `: ${r.reason}` : ''}`}
-            hint="The dry run checks the action against the receiver; it was rolled back"
+            label={
+              r.wouldApply
+                ? 'Would apply'
+                : !r.httpStatus
+                  ? 'No answer'
+                  : `Would not apply${r.reason ? `: ${r.reason}` : ''}`
+            }
+            hint={
+              r.httpStatus
+                ? 'The dry run checks the action against the receiver; it was rolled back'
+                : 'The receiver did not answer the dry run, so it shows nothing either way'
+            }
             icon={r.wouldApply ? IconCircleCheck : IconCircleX}
           />
         ) : null
@@ -313,9 +323,12 @@ export function RehearsalPanel({
             ['Epoch', response.epoch !== undefined ? String(response.epoch) : ''],
             [
               `${capitalReceiverNoun(receiver)} answered`,
-              `HTTP ${r.httpStatus}${r.reason ? `, ${r.reason}` : ''}`,
+              // No answer shows nothing either way: not that it would fail, and not that anything rolled back
+              r.httpStatus ? `HTTP ${r.httpStatus}${r.reason ? `, ${r.reason}` : ''}` : 'No answer',
             ],
-            ['Rolled back', 'Yes: nothing was committed and no receipt was stored'],
+            ...(r.httpStatus
+              ? [['Rolled back', 'Yes: nothing was committed and no receipt was stored'] as [string, string]]
+              : []),
             ['When', <Timestamp key="t" iso={r.at} />],
           ]}
         />
