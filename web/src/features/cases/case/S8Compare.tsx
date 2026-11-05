@@ -422,7 +422,7 @@ export function CounterpartStrip({
         {marks.length ? (
           <Group gap={6} wrap="wrap" data-testid="played-marks">
             <Text size="xs" c="dimmed">
-              In the evaluation:
+              Evaluated:
             </Text>
             {marks.map((m) => (
               <StatusBadge key={m.label} tone={m.tone} label={m.label} variant="outline" />

@@ -18,7 +18,7 @@ import { Lifecycle, REPLAYED_STAGES, type StageKey } from './case/Lifecycle';
 import { FailureMap } from './case/FailureMap';
 import { failureMapOf } from './case/failureMap';
 import { CaseActionButton } from './case/CaseActionButton';
-import { caseActionOf } from './case/caseAction';
+import { caseActionOf, type ActionPlace } from './case/caseAction';
 import { closeNeedsApprover } from '../site-profile/profile';
 import { EvidencePanel } from './case/EvidencePanel';
 import { revealSection } from './case/revealSection';
@@ -267,6 +267,14 @@ function CaseBody({ c }: { c: CaseDetail }) {
     notAsExpected: verdict.key === 'not-as-expected',
   });
   const showCompare = () => openStep('compare', 's8-compare');
+  const goToAction = (place: ActionPlace) => {
+    if (place === 'compare') showCompare();
+    else if (place === 'approval') openStep('decision', 'approval');
+    else {
+      setTab('summary');
+      reveal('escalations');
+    }
+  };
   return (
     <AskSurface caseId={c.caseId} open={asking} onClose={closeAsk}>
       <CaseHeader
@@ -279,7 +287,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
         actions={
           <>
             <ConveneBoard c={c} />
-            <CaseActionButton action={action} onCompare={showCompare} />
+            <CaseActionButton action={action} onGo={goToAction} />
             <AskButton
               ref={askButton}
               open={asking}
@@ -343,7 +351,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
                 Audit trail
               </Tabs.Tab>
             </Tabs.List>
-            <CaseActionButton action={action} compact onCompare={showCompare} />
+            <CaseActionButton action={action} compact onGo={goToAction} />
           </div>
           <Tabs.Panel value="summary" pt="md" {...PANEL}>
             <Stack gap="md">

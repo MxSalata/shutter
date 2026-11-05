@@ -76,6 +76,7 @@ describe("the case's action for its reader", () => {
         label: 'Decide on the resend',
         short: 'Needs you',
         name: 'Needs you: decide on the resend',
+        goes: 'approval',
       });
     expect(caseActionOf(f, { me: ME.operator })).toEqual({
       needsYou: false,
@@ -96,12 +97,14 @@ describe("the case's action for its reader", () => {
     expect(caseActionOf(f, { me: ME.operator })).toMatchObject({
       needsYou: true,
       label: 'Escalate to a team',
+      goes: 'escalations',
     });
     const after = factsOf('C-000008', { escalations: [sent] });
     expect(caseActionOf(after, { me: ME.approver })).toMatchObject({
       needsYou: true,
       label: 'Mark as handled',
       name: 'Needs you: mark as handled',
+      goes: 'escalations',
     });
     // With the two-person rule an operator waits for an approver to close it; without it, the operator closes it
     expect(caseActionOf(after, { me: ME.operator, closeNeedsApprover: true })).toEqual({
@@ -186,7 +189,7 @@ describe("the case's action for its reader", () => {
       label: 'Compare the two runs',
       short: 'Compare',
       name: 'Not the expected outcome: compare the two runs',
-      compare: true,
+      goes: 'compare',
       differs: true,
     });
     // Another scenario has no second run to compare with
@@ -196,7 +199,7 @@ describe("the case's action for its reader", () => {
       { me: ME.approver, notAsExpected: true },
     );
     expect(other).toMatchObject({ label: 'See what differs', differs: true });
-    expect(other.compare).toBeUndefined();
+    expect(other.goes).toBeUndefined();
     // Without the scenario's word the same case keeps the plain answer
     expect(caseActionOf(factsOf('C-000021'), { me: ME.approver }).label).toBe('No action needed');
   });

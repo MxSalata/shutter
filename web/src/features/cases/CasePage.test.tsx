@@ -324,7 +324,7 @@ describe('CasePage', () => {
     expect(await within(top).findByText('Asked a person to decide; sent nothing')).toBeInTheDocument();
     expect(
       await within(top).findByText(
-        /^Handed to a person; PAS and BEDMGR moved the encounter at the same event time/,
+        /^Handed to a person; PAS and the bed manager \(BEDMGR\) moved the encounter at the same event time/,
       ),
     ).toBeInTheDocument();
     expect(await within(top).findByText('Escalate: no write to the receiver')).toBeInTheDocument();
@@ -352,7 +352,7 @@ describe('CasePage', () => {
     expect(within(top).getByText('Transfer was not delivered')).toBeInTheDocument();
     expect(
       within(top).getByText(
-        'The receiver holds the encounter admitted in WARD-C at version 2; no receipt for this operation; PAS and BEDMGR have the same event time.',
+        'When Shutter looked, the receiver held the encounter admitted in WARD-C at version 2; no receipt for this operation; PAS and BEDMGR have the same event time.',
       ),
     ).toBeInTheDocument();
     expect(
@@ -747,6 +747,34 @@ describe('CasePage', () => {
     const top = await outcome();
     const fact = await within(top).findByText('Verification', { selector: 'dt' });
     await waitFor(() => expect(fact.nextElementSibling).toHaveTextContent('Not verified yet'));
+  });
+
+  it('tells a trial reader without the role to switch in the user menu, not to sign in', async () => {
+    env.trial = true;
+    resetMock('operator');
+    renderCase('C-000002');
+    await openStep('Gate and decision');
+    const approval = await screen.findByRole('region', { name: 'Approval' });
+    expect(
+      await within(approval).findByText(/needs the approver role: switch to Approver in the user menu/),
+    ).toBeInTheDocument();
+    expect(within(approval).queryByText(/sign in as approver/)).not.toBeInTheDocument();
+    env.trial = false;
+  });
+
+  it("says a stopped case's remaining stages were not reached, not that they are still to come", async () => {
+    renderCase('C-000008');
+    const progress = await screen.findByLabelText("The case's progress");
+    expect((await within(progress).findAllByText('not reached')).length).toBeGreaterThan(0);
+    expect(within(progress).queryByText('not yet')).not.toBeInTheDocument();
+  });
+
+  it('says a check of a later stage is checked later, on a case waiting for that authorization', async () => {
+    renderCase('C-000002');
+    await openStep('Gate and decision');
+    const gate = await screen.findByRole('region', { name: 'The gate' });
+    expect((await within(gate).findAllByText('Checked later')).length).toBeGreaterThan(0);
+    expect(within(gate).getAllByText(/\b2 checked later/).length).toBeGreaterThan(0);
   });
 
   it('names every stage of the progress in words: done, waiting for approval and not yet', async () => {

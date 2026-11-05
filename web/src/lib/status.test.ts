@@ -35,7 +35,7 @@ describe('status', () => {
   it('tells a passed check from one that does not apply, and an unknown from a block', () => {
     expect(checkState(check('pass', 'VERSION_MATCHES'))).toBe('passed');
     expect(checkState(check('pass', 'NOT_APPLICABLE'))).toBe('not_applicable');
-    expect(checkState(check('pass', 'NOT_YET_REQUIRED'))).toBe('not_applicable');
+    expect(checkState(check('pass', 'NOT_YET_REQUIRED'))).toBe('later');
     expect(checkState(check('block', 'SUPERSEDED_BY_LATER_EVENT'))).toBe('blocked');
     expect(checkState(check('unknown', ''))).toBe('unknown');
   });
@@ -48,7 +48,8 @@ describe('status', () => {
       'NOT_CONFIGURED',
       'NO_ENCOUNTER',
     ]);
-    for (const code of NOT_APPLICABLE_CODES) expect(checkState(check('pass', code))).toBe('not_applicable');
+    for (const code of NOT_APPLICABLE_CODES)
+      expect(checkState(check('pass', code))).toBe(code === 'NOT_YET_REQUIRED' ? 'later' : 'not_applicable');
     expect(checkState(check('pass', 'NEW_ENCOUNTER'))).toBe('passed');
   });
 
@@ -64,7 +65,7 @@ describe('status', () => {
       tone: 'positive',
       label: 'Passed 2 of 2 applicable checks',
     });
-    expect(checkCounts(checks)).toBe('2 passed, 3 not applicable');
+    expect(checkCounts(checks)).toBe('2 passed, 1 checked later, 2 not applicable');
     expect(gateOutcome('block', [check('block', 'X'), check('unknown', '')])).toMatchObject({
       tone: 'blocking',
       label: 'Blocked',
