@@ -239,6 +239,24 @@ Shape A:
 
 Shape B: section 4 in place of steps 1, 2 and 6; the rest as above.
 
+**To try step 2 on a stock instance first** (Docker, a clone of this repository, nothing of the hospital's): this loads the core on a plain IRIS for Health, in `USER`, with no demo, and ends with the health report saying `"ok":true`.
+
+```sh
+docker run -d --name shutter-site -p 127.0.0.1:52773:52773 \
+  containers.intersystems.com/intersystems/irishealth-community:2026.2 --check-caps false --ISCAgent false
+until docker exec shutter-site iris qlist IRIS 2> /dev/null | grep -q '\^running'; do sleep 5; done; sleep 5
+git archive HEAD | docker exec -i -u root shutter-site sh -c \
+  'mkdir -p /home/irisowner/pkg && tar -xf - -C /home/irisowner/pkg && chown -R irisowner:irisowner /home/irisowner/pkg'
+docker exec -i shutter-site iris session IRIS -U USER << 'EOF'
+Do $SYSTEM.OBJ.Load("/home/irisowner/pkg/vendor/ipm/zpm-0.10.10.xml", "ck")
+Do ##class(%IPM.Main).Shell("load /home/irisowner/pkg/core -Ddemo=0")
+Halt
+EOF
+curl http://localhost:52773/api/shutter/health
+```
+
+The web application is then at http://localhost:52773/shutter/index.html; it has no demo users, so step 3 comes first. `docker rm -f shutter-site` removes it all. `scripts/stock-install-check.sh containers.intersystems.com/intersystems/irishealth-community:2026.2 core --no-demo` does the same and checks that the production runs.
+
 ## 6. What stays the same in both shapes
 
 The case, the evidence, the matcher and the catalogue, the gate, approvals and incidents, the escalation by email, the
