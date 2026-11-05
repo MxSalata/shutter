@@ -72,7 +72,7 @@ export const CASE_STATES: Record<string, Status> = {
   awaiting_approval: s(
     'attention',
     'Waiting for approval',
-    'A person with the approver role must release or reject the plan',
+    'A person with the approver role must approve or reject the plan',
     IconUserQuestion,
   ),
   approved: s(
@@ -303,7 +303,7 @@ export const APPROVALS: Record<string, Status> = {
   awaiting: s(
     'attention',
     'Waiting for approval',
-    'A person with the approver role must release or reject the plan',
+    'A person with the approver role must approve or reject the plan',
     IconUserQuestion,
   ),
   approved: s('info', 'Approved', 'Released by a person; the gate checks again at dispatch', IconUserCheck),
