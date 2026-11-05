@@ -25,6 +25,15 @@ describe('DetailSwitch', () => {
     expect(screen.getByRole('status')).toHaveTextContent('technical');
     expect(container.querySelector('[aria-live="polite"]')).toHaveTextContent('Technical detail on');
     // The phone's button names the current level
-    expect(screen.getByRole('button', { name: 'Detail: Technical' })).toBeInTheDocument();
+    // and shows it: filled in Technical, plain in Plain
+    expect(screen.getByRole('button', { name: 'Detail: Technical' })).toHaveAttribute(
+      'data-variant',
+      'light',
+    );
+    useAppearance.setState({ detail: 'plain' });
+    expect(await screen.findByRole('button', { name: 'Detail: Plain' })).toHaveAttribute(
+      'data-variant',
+      'subtle',
+    );
   });
 });
