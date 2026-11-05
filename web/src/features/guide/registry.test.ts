@@ -152,6 +152,13 @@ describe('the guide registry', () => {
     expect(stepForRole(decision, can({}), 'awaiting_approval').tryIt?.action).toBe('approve-plan');
     expect(stepForRole(decision, can({}), 'blocked').tryIt).toBeUndefined();
     expect(stepForRole(decision, can({}), 'blocked').title).toBe('The plan was rejected here');
+    // Approved, by Back or by a chapter, and for a role that can't approve too: nothing waits, and there is nothing to try
+    for (const role of [can({}), operator]) {
+      const approved = stepForRole(decision, role, 'resolved');
+      expect(approved.title).toBe('The fix was approved here');
+      expect(approved.say).not.toMatch(/waits for you|waits for an approver/);
+      expect(approved.tryIt).toBeUndefined();
+    }
     expect(stepForRole(stepAt('scenarios/start')!.step, can({})).say).toMatch(/Start with these three/);
     expect(stepForRole(stepAt('scenarios/start')!.step, demo).say).toMatch(/follows S2, S8 and S20/);
     expect(stepForRole(stepAt('scenarios/mode')!.step, demo).say).not.toMatch(/Choose/);

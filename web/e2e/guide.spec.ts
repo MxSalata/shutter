@@ -87,6 +87,12 @@ test.describe('the guide', () => {
         await expect(page.getByRole('region', { name: 'Outcome' }).getByTestId('outcome-line')).toHaveText(
           'Delivered: verified at the receiver',
         );
+        // Back to the decision: it no longer says the fix waits, and Next there approves nothing more
+        await guide.getByRole('button', { name: 'Back' }).click();
+        await expect(guide.getByRole('heading', { name: 'The fix was approved here' })).toBeVisible();
+        await expect(guide).not.toContainText('waits for you');
+        await guide.getByRole('button', { name: 'Next' }).click();
+        await expect(guide).toContainText('Step 4 of 9');
       }
       await guide.getByRole('button', { name: n === 9 ? 'Finish' : 'Next' }).click();
     }

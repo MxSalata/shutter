@@ -276,6 +276,10 @@ export const CHAPTERS: GuideChapter[] = [
             title: 'The plan was rejected here',
             say: 'The safety checks (the gate) passed and a test run worked, but the plan was rejected, so the fix was never sent.',
           },
+          resolved: {
+            title: 'The fix was approved here',
+            say: 'The safety checks (the gate) passed and a test run worked. An approver released the fix, so it no longer waits.',
+          },
         },
         scopes: Q,
         introduces: ['gate'],
