@@ -102,6 +102,9 @@ Interoperability production, with a board of IRIS AI Hub agents.
   an item or a schema category named alike in two namespaces stays apart (`docs/INSTALL.md`, section 9). A forward naming a
   category not loaded here is reported as such and repaired once it is loaded, and a load in a namespace running another
   production is refused.
+  A message routed to two receivers opens a case for each that fails. The plan warns of retry-forever whether the item sets it or
+  inherits it, a refused forward also raises an alert to the site's consumer, and the Doctor counts refused forwards over 72 hours and
+  lists HL7 operations added since the last apply.
 - **The index walk is an adapter of Shutter's own** (`Shutter.Index.Adapter`, handing batches of message headers to
   the HL7 Index item), and **any IANA time zone** for the feed through Embedded Python's `zoneinfo`
   (`Shutter.Util.Time.PyOffset`), beside the native rules for UTC, Europe/London and fixed offsets.

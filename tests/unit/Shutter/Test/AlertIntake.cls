@@ -88,7 +88,9 @@ Method TestSeenOnce()
     Do $$$AssertNotTrue($CLASSMETHOD(ap, "Seen", 999999991), "not seen yet")
     Do $CLASSMETHOD(ap, "MarkSeen", 999999991, "Downstream Out")
     Do $$$AssertTrue($CLASSMETHOD(ap, "Seen", 999999991), "seen once marked")
-    Do $$$AssertEquals($LISTGET(^Shutter.AlertIntake("seen", 999999991), 1), "Downstream Out", "with the item")
+    Do $$$AssertTrue($CLASSMETHOD(ap, "Seen", 999999991, "Downstream Out"), "at that item")
+    // A message routed to two receivers: the second one's failure is its own forward.
+    Do $$$AssertNotTrue($CLASSMETHOD(ap, "Seen", 999999991, "Records Out"), "not at another item")
     // An entry older than a day is dropped by the next mark.
     Set ^Shutter.AlertIntake("seen", 999999990) = $LISTBUILD("old", 0)
     Do $CLASSMETHOD(ap, "MarkSeen", 999999992, "Downstream Out")

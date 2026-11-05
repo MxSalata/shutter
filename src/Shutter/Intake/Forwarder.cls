@@ -205,11 +205,17 @@ Method ReportedProduction() As %String [ Private ]
     Quit $GET(name)
 }
 
-/// Shutter took nothing: the reason goes into the response and the event log; the message itself is not failed.
+/// Shutter took nothing: the reason goes into the response and the event log, and an alert goes to the production's
+/// Ens.Alert item, so the site's own consumer hears of a failure that now has no case; the message itself is not failed.
 Method Refused(response As Shutter.Intake.Forwarded, reason As %String) As %Status [ Private ]
 {
     Set response.Error = reason
     $$$LOGWARNING("Shutter did not take the failure: " _ reason)
+    Try {
+        Do ..SendAlert(##class(Ens.AlertRequest).%New($LISTBUILD(..%ConfigName, "Shutter did not take a failed delivery, so it has no case: " _ $EXTRACT(reason, 1, 300))))
+    } Catch ex {
+        $$$LOGWARNING("The alert about it could not be raised: " _ ex.DisplayString())
+    }
     Quit $$$OK
 }
 

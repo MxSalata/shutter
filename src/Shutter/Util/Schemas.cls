@@ -125,7 +125,7 @@ ClassMethod Report() As %DynamicObject
     Set ni = r.needed.%GetIterator()
     While ni.%GetNext(, .n) { If 'n.known Do missing.%Push(n.category) }
     Set r.missing = missing
-    Set r.fix = $SELECT(missing.%Size() = 0: "", 1: "Import the site's schema XML (exported from the source system's IRIS, or written for it) with SELECT Shutter.Setup_ImportSchema('<path on this server>') or POST /settings/schemas, then reinvestigate the cases that say unknown schema")
+    Set r.fix = $SELECT(missing.%Size() = 0: "", 1: "Import the category from its namespace with Write ##class(Shutter.Util.Schemas).ImportFrom(""<namespace>"",""<category>""), or the site's schema XML with SELECT Shutter.Setup_ImportSchema('<path on this server>') (it replaces a same-named category whole) or POST /settings/schemas, then reinvestigate the cases that say unknown schema")
     Quit r
 }
 
