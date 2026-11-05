@@ -47,6 +47,32 @@ describe('the shell', () => {
     localStorage.setItem(LIVE_WELCOME_KEY, 'seen');
   });
 
+  it('links to the page inside IRIS on a demo instance, in a new tab, apart from the sections', async () => {
+    server.use(http.get('/api/shutter/health', () => HttpResponse.json({ ok: true, demo: true })));
+    renderFrame();
+    const nav = await screen.findByRole('navigation', { name: 'Main' });
+    const link = await within(nav).findByRole('link', { name: 'Shutter in IRIS (opens in a new tab)' });
+    expect(link).toHaveAttribute('href', '/csp/healthshare/shutter/Shutter.Portal.Guide.cls');
+    expect(link).toHaveAttribute('target', '_blank');
+    for (const group of within(nav).getAllByRole('group')) expect(group).not.toContainElement(link);
+  });
+
+  it('has no link to it on a site install, where the page answers 404, or before the instance has said', async () => {
+    let answered = false;
+    server.use(
+      http.get('/api/shutter/health', () => {
+        answered = true;
+        return HttpResponse.json({ ok: true, demo: false });
+      }),
+    );
+    renderFrame();
+    const nav = await screen.findByRole('navigation', { name: 'Main' });
+    expect(within(nav).queryByRole('link', { name: /Shutter in IRIS/ })).not.toBeInTheDocument();
+    await vi.waitFor(() => expect(answered).toBe(true));
+    await within(nav).findByRole('link', { name: 'Cases' });
+    expect(within(nav).queryByRole('link', { name: /Shutter in IRIS/ })).not.toBeInTheDocument();
+  });
+
   it('groups the navigation as Operate, Results and Configure, each icon in its section hue', async () => {
     renderFrame();
     const nav = await screen.findByRole('navigation', { name: 'Main' });

@@ -6,10 +6,12 @@ import {
   IconFlask2,
   IconHeartbeat,
   IconListDetails,
+  IconServer2,
   IconSettings,
   IconStack2,
 } from '@tabler/icons-react';
-import { useCases } from '@/api/hooks';
+import { useCases, useHealth } from '@/api/hooks';
+import { TRIAL } from '@/env/mode';
 import type { Hue } from '@/lib/hues';
 
 /** The navigation's hues: each section's identity (DESIGN.md 2.5), never a status colour. */
@@ -49,7 +51,7 @@ export const SECTIONS: SectionGroup[] = [
         label: 'Scenarios',
         icon: IconFlask2,
         hue: 'cyan',
-        about: 'Known failures replayed, to show what Shutter does and who decides.',
+        about: 'Known failures replayed: what Shutter does and who decides.',
       },
       {
         to: '/cases',
@@ -57,7 +59,7 @@ export const SECTIONS: SectionGroup[] = [
         icon: IconListDetails,
         hue: 'indigo',
         count: true,
-        about: 'Each failed delivery: what happened, the plan, who decided and what was written.',
+        about: 'Each failed delivery: what happened, who decided, what was written.',
       },
       {
         to: '/incidents',
@@ -71,7 +73,7 @@ export const SECTIONS: SectionGroup[] = [
         label: 'Production review',
         icon: IconClipboardSearch,
         hue: 'violet',
-        about: "A read-only check of a production's settings and recent errors, tied to the cases.",
+        about: "A read-only check of a production's settings and recent errors.",
       },
     ],
   },
@@ -84,14 +86,14 @@ export const SECTIONS: SectionGroup[] = [
         label: 'Evaluation',
         icon: IconChartBar,
         hue: 'teal',
-        about: 'How the board decides, measured on runs recorded with the real agents.',
+        about: 'How the board decides, measured on recorded runs.',
       },
       {
         to: '/health',
         label: 'Health',
         icon: IconHeartbeat,
         hue: 'indigo',
-        about: 'The installation checks itself: its message engine, web pages, agents and licence.',
+        about: 'The installation checks itself: engine, web pages, agents, licence.',
       },
     ],
   },
@@ -104,21 +106,21 @@ export const SECTIONS: SectionGroup[] = [
         label: 'Site profile',
         icon: IconBuildingHospital,
         hue: 'teal',
-        about: "This hospital's answers: they decide what Shutter may do at each receiver.",
+        about: "This hospital's answers decide what Shutter may do at each receiver.",
       },
       {
         to: '/library',
         label: 'Agent library',
         icon: IconBooks,
         hue: 'violet',
-        about: 'What each agent on the board is told, and the questions it answers.',
+        about: 'What each agent is told, and the questions it answers.',
       },
       {
         to: '/settings',
         label: 'Settings and costs',
         icon: IconSettings,
         hue: 'cyan',
-        about: 'How the agents answer, the prices used for costs, and what was spent.',
+        about: 'How the agents answer, the prices, and what was spent.',
       },
     ],
   },
@@ -134,4 +136,22 @@ export function useNeedAPerson(): number | null {
   const c = useCases({ state: NEED_A_PERSON[2], limit: 1 });
   if (!a.data || !b.data || !c.data) return null;
   return a.data.total + b.data.total + c.data.total;
+}
+
+/**
+ * The demo's page inside IRIS (CONTRACTS 16). Not a section of the app: it opens in a new tab, in the Management Portal's
+ * own web application, so it stands apart from the list above, in the navigation and on Home.
+ */
+export const PORTAL_PAGE = {
+  href: '/csp/healthshare/shutter/Shutter.Portal.Guide.cls',
+  label: 'Shutter in IRIS',
+  icon: IconServer2,
+  hue: 'violet',
+  about: "What is running, and the board's case in the Visual Trace.",
+} as const;
+
+/** The portal page answers only on a demo instance, a 404 on a site install, and the trial has no IRIS behind it. */
+export function usePortalPage(): boolean {
+  const demo = useHealth().data?.demo === true;
+  return demo && !TRIAL;
 }

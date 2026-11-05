@@ -18,6 +18,7 @@ import {
   IconContrast,
   IconHome2,
   IconDeviceDesktop,
+  IconExternalLink,
   IconLogout,
   IconCode,
   IconMoon,
@@ -43,7 +44,7 @@ import { DetailSwitch } from '@/components/DetailSwitch';
 import { useAppearance, useDetail, type ContrastSetting, type PaletteSetting } from '@/stores/appearance';
 import { hueVar } from '@/lib/hues';
 import { useResolvedContrast } from './useApplyAppearance';
-import { SECTIONS, useNeedAPerson } from './sections';
+import { PORTAL_PAGE, SECTIONS, useNeedAPerson, usePortalPage } from './sections';
 import { MAIN_ID, SkipLink } from './SkipLink';
 import { ENV } from '@/env/mode';
 import { LiveHelpMenu } from '@/features/guide/LiveHelpMenu';
@@ -237,6 +238,30 @@ function UserMenu() {
   );
 }
 
+/** The way to the demo's page inside IRIS: leaves the app, so it opens a new tab and says so. */
+function PortalNavLink({ onClick }: { onClick: () => void }) {
+  const shown = usePortalPage();
+  if (!shown) return null;
+  const I = PORTAL_PAGE.icon;
+  return (
+    <div className="nav-group">
+      <NavLink
+        component="a"
+        href={PORTAL_PAGE.href}
+        target="_blank"
+        rel="noreferrer"
+        label={PORTAL_PAGE.label}
+        aria-label={`${PORTAL_PAGE.label} (opens in a new tab)`}
+        className="nav-link"
+        style={{ '--nav-icon': hueVar(PORTAL_PAGE.hue) } as CSSProperties}
+        leftSection={<I size={18} stroke={1.6} className="nav-icon" aria-hidden />}
+        rightSection={<IconExternalLink size={14} aria-hidden />}
+        onClick={onClick}
+      />
+    </div>
+  );
+}
+
 /** Whether a navigation entry is the current page's section: its page, or a page under it (a case under Cases). */
 const isActive = (pathname: string, to: string) => pathname === to || pathname.startsWith(`${to}/`);
 
@@ -331,6 +356,7 @@ export function AppLayout() {
             ))}
           </div>
         ))}
+        <PortalNavLink onClick={close} />
       </AppShell.Navbar>
       {/* The skip link's target: focusable by script only, so it is no tab stop of its own. */}
       <AppShell.Main id={MAIN_ID} tabIndex={-1} style={{ outline: 'none' }}>
