@@ -22,7 +22,7 @@ import CasesPage, {
   InvestigatedBy,
   investigatedBy,
   proposalNote,
-  whatFailed,
+  whatHappened,
 } from './CasesPage';
 
 // The list's tag on its own: the page's filters (two Selects) take tens of seconds to render under jsdom, and so
@@ -161,7 +161,7 @@ describe('CasesTable', () => {
       'Outcome',
       'Proposed action',
       'At the receiver',
-      'What failed',
+      'What happened',
       'Scenario',
       'Investigated by',
     ]);
@@ -174,7 +174,7 @@ describe('CasesTable', () => {
       'Outcome',
       'Proposed action',
       'At the receiver',
-      'What failed',
+      'What happened',
       'Scenario',
       'Investigated by',
     ]);
@@ -264,9 +264,9 @@ const summaries = Object.values(recording.cases as unknown as Record<string, { s
 );
 const scenarioOf = (c: CaseSummary) => scenarios.find((s) => s.id === c.scenario);
 
-describe('whatFailed', () => {
+describe('whatHappened', () => {
   const at = (headline: string) =>
-    whatFailed({ headline, event: 'transfer', ward: 'WARD-B', encounterId: 'ENC-1' });
+    whatHappened({ headline, event: 'transfer', ward: 'WARD-B', encounterId: 'ENC-1' });
 
   it('gives the first sentence in full and keeps the rest for the disclosure', () => {
     const w = at(
@@ -297,8 +297,29 @@ describe('whatFailed', () => {
     expect(at('')).toEqual({ first: 'Transfer to WARD-B for ENC-1', rest: '' });
   });
 
+  it("stops an escalation the server cut at its catalogue entry's title, and keeps the cut text for the disclosure", () => {
+    expect(
+      at(
+        'Escalated to a person. Catalogue E17, Two patients are allocated to one bed: The receiver refused the movement because another encounter holds the destination bed, and no movement out of the bed is known for it (or it…',
+      ),
+    ).toEqual({
+      first: 'Escalated to a person. Catalogue E17, Two patients are allocated to one bed.',
+      rest: 'The receiver refused the movement because another encounter holds the destination bed, and no movement out of the bed is known for it (or it…',
+    });
+    // One the server did not cut reads whole
+    const whole =
+      'Escalated to a person. Catalogue E14, A patient merge: A merge changes which record a patient belongs to, and only the PAS team may decide it.';
+    expect(at(whole).first).toBe(whole);
+  });
+
+  it('leaves no first line ending mid-clause on an escalation of the recorded hospital', () => {
+    for (const c of summaries)
+      if (c.state === 'escalated' && /Catalogue E/.test(c.headline ?? ''))
+        expect(whatHappened(c).first).not.toMatch(/…$/);
+  });
+
   it('leaves no first sentence cut with an ellipsis of the page', () => {
-    for (const c of summaries) expect(whatFailed(c).first).not.toMatch(/\.\.\.$/);
+    for (const c of summaries) expect(whatHappened(c).first).not.toMatch(/\.\.\.$/);
   });
 });
 
@@ -313,6 +334,9 @@ describe('the closed outcomes', () => {
     expect(counts.delivered).toBeGreaterThan(20);
     expect(counts.nothing).toBeGreaterThan(5);
     expect(counts['by-hand']).toBe(0);
+    // S8's wrong write has its own tile: every closed case is in one
+    expect(casesOfGroup(summaries, 'unexpected', scenarioOf).map((c) => c.caseId)).toEqual(['C-000021']);
+    expect(counts.unexpected).toBe(1);
   });
 
   it('put a hand fix and an abandoned case in "By hand", and both kinds of nothing to send in one', () => {
@@ -324,7 +348,12 @@ describe('the closed outcomes', () => {
       { ...base, caseId: 'd', disposition: 'superseded', writes: 0, verification: '' },
       { ...base, caseId: 'e', disposition: 'resend', writes: 1, verification: 'verified' },
     ] as CaseSummary[];
-    expect(closedCounts(items, () => undefined)).toEqual({ delivered: 1, nothing: 2, 'by-hand': 2 });
+    expect(closedCounts(items, () => undefined)).toEqual({
+      unexpected: 0,
+      delivered: 1,
+      nothing: 2,
+      'by-hand': 2,
+    });
   });
 });
 

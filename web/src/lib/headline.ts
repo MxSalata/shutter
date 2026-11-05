@@ -57,3 +57,13 @@ export function clampHeadline(headline: string | undefined | null): string {
   }
   return headline;
 }
+
+/**
+ * An escalation whose text the server cut, split where it can be read whole: "Escalated to a person. Catalogue E17, Two
+ * patients are allocated to one bed." and the rest, still marked as cut. Undefined for any other headline.
+ */
+export function cutEscalation(text: string): { first: string; rest: string } | undefined {
+  const m = /^(Escalated to a person\. Catalogue E\d+, [^:]+): (.+…)$/s.exec(text);
+  if (!m) return undefined;
+  return { first: `${m[1]}.`, rest: m[2].charAt(0).toUpperCase() + m[2].slice(1) };
+}
