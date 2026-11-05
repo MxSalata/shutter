@@ -1,7 +1,7 @@
 import { Anchor, Container, Stack, Tabs, Text, VisuallyHidden } from '@mantine/core';
 import { IconFileSearch, IconHistory, IconListDetails, IconPlayerPlay } from '@tabler/icons-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router';
 import {
   isOpen,
@@ -89,6 +89,9 @@ const PANEL = {
   style: { scrollMarginTop: 'calc(var(--shutter-header-h) + 3.5rem)' },
 };
 
+/** A change of the address that stays on this page: the reader's place stays too, where the router would go to the top. */
+const STAY = { replace: true, preventScrollReset: true };
+
 function CaseBody({ c }: { c: CaseDetail }) {
   const [search, setSearch] = useSearchParams();
   const me = useMe().data;
@@ -148,34 +151,41 @@ function CaseBody({ c }: { c: CaseDetail }) {
   const tab: Tab = asked && TABS.includes(asked) ? asked : 'summary';
   const setTab = useCallback(
     (next: string | null) =>
-      setSearch(
-        (prev) => {
-          const params = new URLSearchParams(prev);
-          // The story step a link opened has been shown: a later tab change must not open it again
-          params.delete('open');
-          if (!next || next === 'summary') params.delete('tab');
-          else params.set('tab', next);
-          return params;
-        },
-        { replace: true },
-      ),
+      setSearch((prev) => {
+        const params = new URLSearchParams(prev);
+        // The story step a link opened has been shown: a later tab change must not open it again
+        params.delete('open');
+        if (!next || next === 'summary') params.delete('tab');
+        else params.set('tab', next);
+        return params;
+      }, STAY),
     [setSearch],
   );
+  // With the bar stuck under the header the old tab was read far down, and the new one would open at that depth: it
+  // starts just under the bar instead, which stays where it is under the reader's finger
+  const tabsRoot = useRef<HTMLDivElement>(null);
+  const tabWas = useRef(tab);
+  useLayoutEffect(() => {
+    if (tabWas.current === tab) return;
+    tabWas.current = tab;
+    const root = tabsRoot.current;
+    const bar = root?.querySelector('.sticky-tabs');
+    if (!root || !bar) return;
+    const past = bar.getBoundingClientRect().top - root.getBoundingClientRect().top;
+    if (past > 0) window.scrollBy({ top: -past, behavior: 'instant' });
+  }, [tab]);
   const compare = search.get('show') === 'compare';
   // Ask about this case, kept in the address (`?ask=1`) so a link opens it; closing it returns focus to its button
   const asking = search.get('ask') === '1';
   const askButton = useRef<HTMLButtonElement>(null);
   const setAsking = useCallback(
     (on: boolean) =>
-      setSearch(
-        (prev) => {
-          const params = new URLSearchParams(prev);
-          if (on) params.set('ask', '1');
-          else params.delete('ask');
-          return params;
-        },
-        { replace: true },
-      ),
+      setSearch((prev) => {
+        const params = new URLSearchParams(prev);
+        if (on) params.set('ask', '1');
+        else params.delete('ask');
+        return params;
+      }, STAY),
     [setSearch],
   );
   const closeAsk = useCallback(() => {
@@ -356,7 +366,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
       />
       {placing ? <PageSkeleton label="Loading the investigation…" /> : null}
       {placing ? null : (
-        <Tabs value={tab} onChange={setTab} keepMounted={false}>
+        <Tabs ref={tabsRoot} value={tab} onChange={setTab} keepMounted={false}>
           {/* The tabs stay under the header while the page scrolls, so Evidence is a click away from anywhere, and the
               case's action with them, compact */}
           <div className="sticky-tabs case-tab-bar">

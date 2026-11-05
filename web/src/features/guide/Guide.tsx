@@ -565,7 +565,13 @@ function StepHost({ pos }: { pos: GuidePosition }) {
   const location = useLocation();
   const here = location.pathname + withoutAsk(location.search);
   // The same address again still counts: the case page reopens its story step on every visit
-  const go = useEffectEvent((to: string) => navigate(to, { replace: here === to }));
+  // A step on the page already showing scrolls from where the last one left it, not by way of the page's top
+  const go = useEffectEvent((to: string) =>
+    navigate(to, {
+      replace: here === to,
+      preventScrollReset: to.split('?')[0] === location.pathname,
+    }),
+  );
   const reduced = useReducedMotion() ?? false;
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [target, setTarget] = useState<HTMLElement | null>(null);
