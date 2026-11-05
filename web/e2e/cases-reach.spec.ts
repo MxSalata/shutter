@@ -165,6 +165,30 @@ test.describe('at a desktop width', () => {
     expect((await outlineOf(tile)).colour).not.toBe(ring.colour);
   });
 
+  test('the two groups of tiles end level, and no tile icon crosses its edge at any width', async ({
+    page,
+  }) => {
+    await go(page, '/cases');
+    await expect(page.getByRole('button', { name: /^1 Not as expected/ })).toBeVisible();
+    for (const width of [768, 992, 1200, 1232, 1280, 1366, 1440, 1920]) {
+      await page.setViewportSize({ width, height: 800 });
+      const { over, bottoms } = await page.evaluate(() => ({
+        over: [...document.querySelectorAll('.cases-tiles .stat-tile')].flatMap((tile) => {
+          const edge = tile.getBoundingClientRect().right;
+          const icon = tile.querySelector('.tile-icon');
+          return icon && icon.getBoundingClientRect().right > edge + 0.5 ? [tile.textContent] : [];
+        }),
+        bottoms: [...document.querySelectorAll('.cases-tile-groups > section')].map(
+          (s) => s.getBoundingClientRect().bottom,
+        ),
+      }));
+      expect(over, `no icon over its tile's edge at ${width}`).toEqual([]);
+      // Side by side they end level; stacked, the second ends lower
+      const side = width >= 1232;
+      if (side) expect(Math.abs(bottoms[0] - bottoms[1]), `groups level at ${width}`).toBeLessThan(1);
+    }
+  });
+
   test("the rules-only S8 case has a Closed tile of its own, so the tiles add up to the list's", async ({
     page,
   }) => {

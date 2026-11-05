@@ -451,7 +451,7 @@ function TileGroup({ title, four, children }: { title: string; four?: boolean; c
       <Text id={id} className="overline" mb={6}>
         {title}
       </Text>
-      <SimpleGrid cols={four ? { base: 2, sm: 4 } : 3} spacing="xs" className="cases-tiles">
+      <SimpleGrid cols={four ? { base: 2, md: 4 } : 3} spacing="xs" className="cases-tiles">
         {children}
       </SimpleGrid>
     </section>
