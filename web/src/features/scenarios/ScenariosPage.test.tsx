@@ -346,24 +346,44 @@ describe('ScenariosPage, as each role has it', () => {
   const asServer = (me: object) =>
     server.use(http.get('/api/shutter/me', () => HttpResponse.json({ username: 'x', ...me })));
 
-  it("hides Run and Reset from the public demo's role, and says the demo plays its stories by itself", async () => {
+  it("greys out Run and Reset for the public demo's role, and says once why", async () => {
     resetMock('demo');
     renderScenarios();
-    expect(await screen.findByRole('region', { name: 'Every scenario' })).toBeInTheDocument();
-    expect(await screen.findByText(/The online demo plays its stories by itself/)).toBeInTheDocument();
+    const list = await screen.findByRole('region', { name: 'Every scenario' });
+    const why = await screen.findByText(
+      'This hospital plays its stories by itself, so running one needs the operator or approver role, which the trial and your own instance offer.',
+    );
     // Its hospital's stories are the written policy's: the opening names no board there
     expect(
       screen.getByText(/Here the site's written policy proposes the fix, with no agent/),
     ).toBeInTheDocument();
     expect(screen.queryByText(/a board of IRIS AI Hub agents/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^Run / })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Reset' })).not.toBeInTheDocument();
-    // No Play column, no mode to choose; the modes are described and the cards still open their cases
-    expect(screen.queryByRole('columnheader', { name: 'Play' })).not.toBeInTheDocument();
+    const runs = await within(list).findAllByRole('button', { name: /^Run S\d+[a-z]?$/ });
+    expect(runs).toHaveLength(listed.length);
+    for (const run of runs) {
+      expect(run).toBeDisabled();
+      expect(run).toHaveAttribute('aria-describedby', why.id);
+    }
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
+    expect(screen.getByRole('columnheader', { name: 'Play' })).toBeInTheDocument();
+    // The reason is said once, not under 29 buttons
+    expect(screen.queryByText(/Running a scenario needs/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Resetting needs/)).not.toBeInTheDocument();
+    // No mode to choose; the modes are described and the cards still open their cases
     expect(screen.queryByRole('radio', { name: 'Board' })).not.toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Investigation modes' })).toBeInTheDocument();
-    const first = screen.getByRole('region', { name: 'Try these three first' });
+    const first = screen.getByRole('region', { name: 'Three to look at first' });
     expect(await within(first).findByRole('link', { name: /the latest S2 case/ })).toBeInTheDocument();
+    for (const name of ['Run S2 in Site policy mode', 'Run S23a in Site policy mode'])
+      expect(within(first).getByRole('button', { name })).toBeDisabled();
+    expect(within(first).getAllByRole('button', { name: /^Run / })).toHaveLength(3);
+    for (const run of within(first).getAllByRole('button', { name: /^Run / })) expect(run).toBeDisabled();
+    // Nothing tells this role to try or play anything
+    expect(screen.queryByText(SCENARIOS_LEAD.live)).not.toBeInTheDocument();
+    expect(screen.getByText(SCENARIOS_LEAD.lookOnly)).toBeInTheDocument();
+    const words = document.body.textContent ?? '';
+    expect(words).not.toMatch(/\bTry\b/);
+    expect(words).not.toMatch(/You will see/);
     // Nobody is asked to answer the induction questions in a read-only demo
     expect(screen.queryByText('Shutter is running on the shipped site profile')).not.toBeInTheDocument();
   });
@@ -371,15 +391,13 @@ describe('ScenariosPage, as each role has it', () => {
   it('gives the public demo its own three, in the mode its hospital plays them, each with the case it has', async () => {
     resetMock('demo');
     renderScenarios();
-    const first = await screen.findByRole('region', { name: 'Try these three first' });
+    const first = await screen.findByRole('region', { name: 'Three to look at first' });
     // S2 and S23a have a Site policy case in the recording; S15 has none, so its card shows its latest case under
     // that case's own mode, never a mode it was not played in
     const s2 = await within(first).findByRole('link', {
       name: 'Open C-000028, the latest S2 case in Site policy mode',
     });
-    expect(
-      within(first).getByText("The demo's hospital plays these by itself, in Site policy mode."),
-    ).toBeInTheDocument();
+    expect(within(first).getByText('The hospital plays these in Site policy mode.')).toBeInTheDocument();
     expect(s2).toHaveAttribute('href', '/cases/C-000028');
     const s23a = within(first).getByRole('link', {
       name: 'Open C-000058, the latest S23a case in Site policy mode',
@@ -387,11 +405,10 @@ describe('ScenariosPage, as each role has it', () => {
     expect(s23a).toHaveAttribute('href', '/cases/C-000058');
     const s15 = within(first).getByRole('link', { name: 'Open C-000012, the latest S15 case in Board mode' });
     expect(s15).toHaveAttribute('href', '/cases/C-000012');
-    expect(within(first).getAllByText('You will see')).toHaveLength(3);
+    expect(within(first).getAllByText('What it shows')).toHaveLength(3);
     expect(within(s15.closest('[data-first]')!).getByText('Board')).toBeInTheDocument();
     expect(within(first).queryByText(/Not played since the last reset/)).not.toBeInTheDocument();
     expect(within(first).queryByText(/none in .* mode among the newest cases/)).not.toBeInTheDocument();
-    expect(within(first).queryByRole('button', { name: /^Run / })).not.toBeInTheDocument();
     expect(within(first).queryByText(/S8|S20/)).not.toBeInTheDocument();
     // The catalogue entry S2's plan cites comes from the case, not from the page
     const cases = recording.cases as unknown as Record<
@@ -405,7 +422,7 @@ describe('ScenariosPage, as each role has it', () => {
     ).toBeInTheDocument();
   });
 
-  it('shows the demo only the cards whose scenario has a case, under the mode of the case it links', async () => {
+  it('keeps a card whose scenario has no case yet, saying so where the link would be', async () => {
     resetMock('demo');
     server.use(
       http.get('/api/shutter/cases', () =>
@@ -413,7 +430,7 @@ describe('ScenariosPage, as each role has it', () => {
       ),
     );
     renderScenarios();
-    const first = await screen.findByRole('region', { name: 'Try these three first' });
+    const first = await screen.findByRole('region', { name: 'Three to look at first' });
     expect(
       await within(first).findByRole('link', {
         name: 'Open C-000028, the latest S2 case in Site policy mode',
@@ -423,22 +440,27 @@ describe('ScenariosPage, as each role has it', () => {
       within(first).getByRole('link', { name: 'Open C-000025, the latest S15 case in Rules only mode' }),
     ).toBeInTheDocument();
     expect(within(first).getAllByRole('link', { name: /^Open C-/ })).toHaveLength(2);
-    expect(within(first).queryByText(/S23a/)).not.toBeInTheDocument();
+    const s23a = first.querySelector<HTMLElement>('[data-first="S23a"]')!;
+    expect(within(s23a).getByText('One case waits for another')).toBeInTheDocument();
+    expect(within(s23a).getByText('Site policy')).toBeInTheDocument();
+    expect(
+      within(s23a).getByText('No case yet: the hospital plays one every few minutes.'),
+    ).toBeInTheDocument();
     expect(within(first).queryByText(/Not played since the last reset/)).not.toBeInTheDocument();
     expect(within(first).queryByText(/none in .* mode/)).not.toBeInTheDocument();
-    expect(within(first).queryByRole('button', { name: /^Run / })).not.toBeInTheDocument();
   });
 
-  it('tells the demo its hospital is still to play the three when none has a case yet', async () => {
+  it('shows the three cards on a fresh demo, before its hospital has played any of them', async () => {
     resetMock('demo');
     server.use(http.get('/api/shutter/cases', () => HttpResponse.json({ items: [], total: 0 })));
     renderScenarios();
-    const first = await screen.findByRole('region', { name: 'Try these three first' });
+    const first = await screen.findByRole('region', { name: 'Three to look at first' });
     expect(
-      await within(first).findByText(
-        "None of S2, S23a, S15 has a case among the newest yet: the demo's hospital plays one every few minutes.",
-      ),
-    ).toBeInTheDocument();
+      await within(first).findAllByText('No case yet: the hospital plays one every few minutes.'),
+    ).toHaveLength(3);
+    for (const id of ['S2', 'S23a', 'S15'])
+      expect(first.querySelector(`[data-first="${id}"] h3`)).not.toBeNull();
+    expect(within(first).getAllByText('What it shows')).toHaveLength(3);
     expect(within(first).queryByRole('link', { name: /^Open C-/ })).not.toBeInTheDocument();
     expect(within(first).queryByText(/Not played since the last reset/)).not.toBeInTheDocument();
   });
@@ -454,7 +476,7 @@ describe('ScenariosPage, as each role has it', () => {
     expect(def('S15')).toMatchObject({ disposition: 'escalate', write: false, blocked_by: 'MERGE_WITHHELD' });
     resetMock('demo');
     renderScenarios();
-    const first = await screen.findByRole('region', { name: 'Try these three first' });
+    const first = await screen.findByRole('region', { name: 'Three to look at first' });
     expect(
       await within(first).findByText(/holds the one conditional resend for a person/),
     ).toBeInTheDocument();
@@ -498,12 +520,14 @@ describe('ScenariosPage, as each role has it', () => {
     expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
     expect(screen.queryByText(/plays its stories by itself/)).not.toBeInTheDocument();
     // The reason is written under the buttons, not only in a tooltip a disabled button cannot open
-    expect(screen.getAllByText('Running a scenario needs the operator role').length).toBeGreaterThan(0);
-    expect(screen.getByText('Resetting needs the operator role')).toBeInTheDocument();
+    expect(
+      screen.getAllByText('Running a scenario needs the operator or approver role').length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText('Resetting needs the operator or approver role')).toBeInTheDocument();
     const first = screen.getByRole('region', { name: 'Try these three first' });
-    expect(within(first).getAllByText('Running a scenario needs the operator role').length).toBeGreaterThan(
-      0,
-    );
+    expect(
+      within(first).getAllByText('Running a scenario needs the operator or approver role').length,
+    ).toBeGreaterThan(0);
   });
 
   it('says why Run is disabled while another scenario plays, under the button', async () => {
@@ -693,7 +717,7 @@ describe('ScenariosPage, its rows and its proof', () => {
   it("wraps the headline's HL7 transfer and the proof's Rules only in their definitions", async () => {
     renderScenarios();
     await userEvent.click(await screen.findByRole('button', { name: 'What a scenario does' }));
-    const heading = await screen.findByRole('heading', { name: /^When an HL7 transfer fails/ });
+    const heading = await screen.findByRole('heading', { name: /^Shutter fixes a failed HL7 transfer/ });
     expect(within(heading).getByText('HL7 transfer')).toHaveAccessibleDescription(
       'A message telling another hospital system that a patient moved ward.',
     );

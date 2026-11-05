@@ -3,7 +3,7 @@ import { skipWelcome } from './guide';
 import { go, signIn } from './helpers';
 
 /**
- * The Scenarios page: no Run and no Reset for the live hospital's public role; the three starters' Run buttons in one
+ * The Scenarios page: Run and Reset greyed out for the live hospital's public role; the three starters' Run buttons in one
  * line; the guided path's links; each row's latest case by outcome; and on a phone each description toggle named after
  * its scenario, and the rows as compact cards that never scroll sideways.
  */
@@ -15,17 +15,24 @@ const AS_DEMO = { as: 'demo' } as const;
 test.beforeEach(({ page }) => skipWelcome(page));
 
 test.describe('the live hospital, as the public role sees it @scenarios', () => {
-  test('offers no Run and no Reset, and says the demo plays its stories by itself', async ({ page }) => {
+  test('greys out Run and Reset, and says once that this hospital plays its stories by itself', async ({
+    page,
+  }) => {
     await signIn(page, AS_DEMO);
-    await expect(page.getByText(/The online demo plays its stories by itself/)).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Every scenario' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Run / })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Reset' })).toHaveCount(0);
-    await expect(page.getByRole('columnheader', { name: 'Play' })).toHaveCount(0);
+    await expect(page.getByText(/This hospital plays its stories by itself/)).toHaveCount(1);
+    const list = page.getByRole('region', { name: 'Every scenario' });
+    await expect(list).toBeVisible();
+    const runs = list.getByRole('button', { name: /^Run / });
+    await expect(runs.first()).toBeVisible();
+    expect(await runs.count()).toBeGreaterThan(20);
+    for (const run of await runs.all()) await expect(run).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Reset' })).toBeDisabled();
+    await expect(page.getByRole('columnheader', { name: 'Play' })).toBeVisible();
     // The three first cases still open their cases
-    await expect(
-      page.getByRole('region', { name: 'Try these three first' }).getByRole('link', { name: /^Open C-/ }),
-    ).toHaveCount(3);
+    const first = page.getByRole('region', { name: 'Three to look at first' });
+    await expect(first.getByRole('link', { name: /^Open C-/ })).toHaveCount(3);
+    for (const run of await first.getByRole('button', { name: /^Run / }).all())
+      await expect(run).toBeDisabled();
   });
 });
 
