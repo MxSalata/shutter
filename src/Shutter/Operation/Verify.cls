@@ -177,7 +177,7 @@ ClassMethod Judge(ctx As %DynamicObject, Output text As %String, Output detail A
                     Set text = "No receipt yet, " _ elapsed _ " s after a write whose answer was lost; the write may still be in flight, so nothing is established", retry = 1
                 } Else {
                     Set outcome = "not_committed", verdict = "not_committed"
-                    Set text = "Not committed: " _ elapsed _ " s after the write the receiver holds no receipt for the operation, its history does not show it, and the encounter is " _ $SELECT(expected '= "": "still at version " _ expected _ ", the version the write was conditional on", 1: "at version " _ version) _ "; nothing was applied"
+                    Set text = "Not committed: by the last read, " _ elapsed _ " s after the write, the receiver holds no receipt for the operation, its history does not show it, and the encounter is " _ $SELECT(expected '= "": "still at version " _ expected _ ", the version the write was conditional on", 1: "at version " _ version) _ ". Nothing shows it was applied; a slower receiver can still commit it"
                 }
             } Else {
                 Set text = "No attempt is recorded for the resend, and the receiver holds no receipt for the operation; a person must check"
