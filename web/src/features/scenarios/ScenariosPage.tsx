@@ -150,10 +150,32 @@ function RunBanner({ run, latest }: { run: ScenarioRun; latest: string | undefin
           Delivered {run.files.join(', ') || 'no files'}.
           {run.timeouts.length ? ` The case did not reach ${run.timeouts.join(', ')} in time.` : ''}{' '}
           {byEnv({
-            live: 'The production does the rest: follow the case below.',
-            trial: latest
-              ? `Its case is ${latest}, replayed from the recording, as far as the recording goes: open it from the row below.`
-              : 'Its case is replayed from the recording: open it from the row below.',
+            live: (
+              <>
+                The production does the rest: follow it in{' '}
+                <Anchor component={Link} to="/cases" inherit>
+                  Cases
+                </Anchor>
+                .
+              </>
+            ),
+            trial: latest ? (
+              <>
+                Its case is{' '}
+                <Anchor component={Link} to={`/cases/${encodeURIComponent(latest)}`} inherit>
+                  {latest}
+                </Anchor>
+                , replayed from the recording, as far as the recording goes.
+              </>
+            ) : (
+              <>
+                Its case is replayed from the recording: find it in{' '}
+                <Anchor component={Link} to="/cases" inherit>
+                  Cases
+                </Anchor>
+                .
+              </>
+            ),
           })}
         </Text>
       </Alert>
