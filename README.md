@@ -1,6 +1,6 @@
 # Shutter: AI Hub agents for failed HL7 deliveries
 
-**When a hospital's HL7 delivery fails, the usual fix is Resend, and if another system has moved the patient since, that resend writes over the bed manager's ward with every check passed. Shutter's IRIS AI Hub agents decide how to put the failure right; a deterministic gate decides whether anything is written.**
+**When a hospital's HL7 delivery fails, the usual fix is Resend, and when two systems move a patient at the same moment, that resend writes over the bed manager's ward with every check passed. Shutter's IRIS AI Hub agents decide how to put the failure right; a deterministic gate decides whether anything is written.**
 
 [![CI](https://github.com/MxSalata/shutter/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MxSalata/shutter/actions/workflows/ci.yml) [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](https://github.com/MxSalata/shutter/blob/main/LICENSE)
 
@@ -19,7 +19,7 @@ Instead of a **Resend** in the Message Viewer, Shutter makes each failed deliver
 
 The AI board proposes; the gate disposes.
 
-**Scenario S8 shows why the agents are there.** Two systems move one patient in the same minute. In **Rules only** mode (no agents: the message is resent unless the gate objects), every check passes and WARD-B is written over the bed manager's WARD-C; the board sees the evidence cannot say which move is current and escalates. On Shutter's own scenarios, of the 11 single cases the board is convened for, it gets all 11 right; Rules only gets 4; across all 24 scored recorded passes, the board's decision matches the expected outcome ([comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md); [what that does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)). Rules only is the floor, a plain resend. The scenario catalogue, written from these failures, settles 8 of those 11 with no agent (**Site policy**); it sends S4 and S8 to the board, and S7 has no such mode.
+**Scenario S8 shows why the agents are there.** Two systems move one patient at the same moment. In **Rules only** mode (no agents: the message is resent unless the gate objects), every check passes and WARD-B is written over the bed manager's WARD-C; the board sees the evidence cannot say which move is current and escalates. On Shutter's own scenarios, of the 11 single cases the board is convened for, it gets all 11 right; Rules only gets 4; across all 24 scored recorded passes, the board's decision matches the expected outcome ([comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md); [what that does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)). Rules only is the floor: a plain resend, still behind the gate. The scenario catalogue, written from these failures, settles 8 of those 11 with no agent (**Site policy**); it sends S4 and S8 to the board, and S7 has no such mode.
 
 ![S8 in plain terms: the bed manager has the patient in Ward C; Rules only writes Ward B over it with every check passed; the board leaves them in Ward C and asks a person](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-plain.png)
 
@@ -30,7 +30,7 @@ The AI board proposes; the gate disposes.
 | Resend | S2: a transfer that never arrived | One conditional write once a person or the site's written policy releases it, verified from the receiver's history |
 | Superseded | S1: a later transfer has already moved the patient | Nothing; the closure is checked against the receiver's history |
 | Reconcile | S3: the receiver holds the message; only its acknowledgement was lost | Nothing; the receipt is checked |
-| Escalate | S8: two moves in one minute | Nothing; a person decides |
+| Escalate | S8: two moves at one moment | Nothing; a person decides |
 | Withheld | S15: a patient merge, for the PAS team | Nothing; no agent runs |
 | An incident | S11: an outage, eight failures to one receiver | One chain per patient encounter, released in event order by the site's policy or an approval, each item verified, stopping at the first surprise |
 
@@ -71,13 +71,13 @@ The three specialists (conformance, encounter and impact) and the coordinator ar
 | Way to try it | You need | What you see | Time |
 | --- | --- | --- | --- |
 | **The trial** in the browser [link at submission] | Nothing to install; a PC or a phone | The demo hospital's recorded runs; every action replays the recording, and nothing leaves the browser | The quick tour [link at submission, `?trial=tour`]: 9 steps, about 4 minutes. The engineers' tour [link at submission, `?trial=engineer`]: 6 steps, about 3 minutes, with Detail on Technical |
-| **The online demo** [link at submission] | A browser and the sign-ins below | A live hospital: a new failure every 7 minutes, recovered under the site's written policy | The four steps below |
+| **The online demo** [link at submission] | A browser and the sign-ins below | A live hospital: a new failure every 7 minutes, decided under the site's written policy; any resend waits for you | The four steps below |
 | **The replay edition** on your machine, `./install.sh --replay` | Docker; no key, no Early Access file | Your own instance, the board replaying its recorded live runs at no cost | Healthy in 2 to 8 min once the 6 GB public image is pulled |
 | **The AI Hub edition** on your machine, `./install.sh --image-file ...` | Docker and the build 109 file from the Early Access portal; `ANTHROPIC_API_KEY` for live agents | Your own instance, with live agents or, without a key, their recorded runs | Healthy in 3 to 15 min on build 109 ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md)) |
 
 **In a hospital's own IRIS for Health:** Shutter installs without the demo, beside the productions it watches or inside one ([docs/INSTALL.md](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md); [several namespaces](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#9-onboarding-several-namespaces)). Failures reach it through a forwarder, or through the production's alerts with no change to the hospital's own code. A receiver with no API still gets a case, the board's diagnosis and a drafted escalation email, never a resend, and a production review needs nothing configured.
 
-**The online demo** is my fictional hospital, live, with made-up patients. The demo runs on AI Hub build `2026.3.0AI.154.0`; on your machine, use `2027.1.0AI.109.0` (below). The board runs live for the judges' account, within a model budget of 15 USD a day; everyone can see its recorded runs in the trial. Its sign-ins:
+**The online demo** is my fictional hospital, live, with made-up patients. The demo runs on AI Hub build `2026.3.0AI.154.0`; on your machine, use `2027.1.0AI.109.0` (below). The board runs live for the judges' account, whose sign-in the organisers pass to the judges, within a model budget of 15 USD a day; everyone can see its recorded runs in the trial. Its sign-ins:
 
 - The web app: `demo` / `shutter`.
 - The Management Portal's Visual Trace, read only, as `demo-trace` / `Shutter-Demo-IRIS-Portal`: the portal's address (`/csp/`) first asks you to sign in with GitHub or an emailed one-time code, then signs you in as that user.
@@ -110,7 +110,7 @@ Shutter is ready after 3 min 21 s:
 
 ### On your machine or in the trial, first
 
-The mode chooses who proposes the plan; the gate and the rehearsal are the same in every mode, and nothing is written until a person or the site's written policy releases it. **Board**: three specialist agents review the evidence in parallel, then a coordinator agent proposes one plan. **Site policy**: the scenario catalogue and the site's profile settle the cases they know, the cases the catalogue sends straight to a person (such as S13 and S21) are escalated with no board, and the board takes the rest. **Single investigator**: one generalist agent proposes the plan (not in the trial). **Rules only**: no agents; the message is resent unchanged unless the gate objects, the baseline to compare with.
+The mode chooses who proposes the plan; the gate and the rehearsal are the same in every mode, and nothing is written until a person or the site's written policy releases it. **Board**: three specialist agents review the evidence in parallel, then a coordinator agent proposes one plan. **Site policy**: the scenario catalogue and the site's profile settle the cases they know, the cases the catalogue sends straight to a person (such as S13 and S21) are escalated with no board, and the board takes the rest. **Single investigator**: one generalist agent proposes the plan (with live agents only: no run of it is recorded, so without a key a case takes the rules path, and the trial greys it). **Rules only**: no agents; the message is resent unchanged unless the gate objects, the baseline to compare with.
 
 1. In the trial, choose **Explore on my own** on the welcome; on your machine, if a prompt offers the trial, choose **Not now**, and leave the site profile notice for later: the shipped profile serves every scenario. In **Scenarios**, run **S2** in **Board** mode. About 20 seconds later (a minute live) its case waits for approval. There, **Decide on the resend**, **Review the plan and decide**, **Approve plan**, **Approve this plan**: one conditional write, then "Verified".
 2. Run **S8** in **Rules only** and approve (in the trial its recorded case is already approved and written): WARD-B overwrites the bed manager's WARD-C. In **Board** it escalates, writing nothing. The case page sets the two side by side. In the trial, **In IRIS: Message trace** on C-000008 opens a recorded screenshot.
@@ -213,7 +213,7 @@ What I found building Shutter, measured on build `2026.3.0AI.154.0`; the longer 
 | Community Opportunity idea [DPI-I-689](https://ideas.intersystems.com/ideas/DPI-I-689) | Interoperability as the traceability tool for AI agents: the walk-through below. For a hospital: an integration team audits an agent with the Visual Trace and SQL it already knows |
 | AI Hub bug reports | [#11](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/11): `%AI.Agent.Run()` takes three arguments, not four; [#12](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/12): `Run()` never calls `OnIterationStart` or `OnIterationComplete` |
 | Embedded Python bug reports | [#26](https://github.com/intersystems-community/python-bugreports/issues/26): signal 11 after catching an SQL error in a Python SQL function under dynamic SQL; [#27](https://github.com/intersystems-community/python-bugreports/issues/27): defaults pasted into the Python source |
-| Online demo | The live hospital, [link at submission]: a new failure every 7 minutes, recovered under the site's written policy; the sign-ins are under [Try it](https://github.com/MxSalata/shutter#try-it). The trial on GitHub Pages is its offline companion, recorded runs only |
+| Online demo | The live hospital, [link at submission]: a new failure every 7 minutes, decided under the site's written policy; any resend waits for you; the sign-ins are under [Try it](https://github.com/MxSalata/shutter#try-it). The trial on GitHub Pages is its offline companion, recorded runs only |
 | YouTube video | [link at submission] |
 | Developer Community articles | [link at submission] |
 

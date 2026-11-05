@@ -180,7 +180,7 @@ def gate_codes(case_id):
 
 def hl7(kind, control, seg_extra=""):
     now = time.strftime("%Y%m%d%H%M%S", time.gmtime(time.time() - 120))
-    pid = f"PID|1||MRN{control}^^^HOSP^MR~9434765919^^^NHS^NH||SYNTH^{control}||19751120|F"
+    pid = f"PID|1||MRN{control}^^^HOSP^MR~9997001001^^^NHS^NH||SYNTH^{control}||19751120|F"
     pv1 = f"PV1|1|I|WARD-A^BAY1^{control[-2:]}^HOSP||||||||||||||||ENC-{control}|||||||||||||||||||||||||{now}"
     if kind == "orm":
         return [f"MSH|^~\\&|ICE|HOSP|LIMS|HOSP|{now}||ORM^O01^ORM_O01|{control}|P|2.5.1", pid, pv1, f"ORC|NW|{control}||||||||{now}", f"OBR|1|{control}||FBC^Full blood count^L|||{now}"]
