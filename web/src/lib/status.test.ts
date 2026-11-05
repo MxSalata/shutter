@@ -109,7 +109,19 @@ describe('the case outcome, the first rule that matches', () => {
         'Escalated: a person decides',
         'Escalated',
       ],
-      [{ state: 'blocked', disposition: 'resend' }, 'blocking', 'Blocked: nothing sent', 'Blocked'],
+      [
+        { state: 'blocked', disposition: 'resend', writes: 0 },
+        'blocking',
+        'Blocked: nothing sent',
+        'Blocked',
+      ],
+      [{ state: 'blocked', disposition: 'resend' }, 'blocking', 'Blocked', 'Blocked'],
+      [
+        { state: 'blocked', disposition: 'resend', writes: 1 },
+        'blocking',
+        'Blocked: an earlier write went out',
+        'Blocked',
+      ],
       [{ state: 'failed', disposition: '' }, 'blocking', 'Failed', 'Failed'],
       [{ state: 'rehearsing', disposition: 'resend' }, 'info', 'Rehearsing', 'Rehearsing'],
       [

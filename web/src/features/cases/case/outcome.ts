@@ -14,7 +14,7 @@ import { asArray, asObject } from '@/lib/json';
 import { APPROVALS, caseState, gateOutcome, PROVENANCE, type OutcomeCase } from '@/lib/status';
 import type { Status } from '@/lib/tone';
 import { checksOf, failureKindInWords } from './derive';
-import { approvalsByPlan, type SafetyReceipt } from './receipt';
+import { approvalsByPlan, WRITE_OUTCOMES, type SafetyReceipt } from './receipt';
 import { investigationRuns } from './runClock';
 import { encounterTimeline } from './timeline';
 
@@ -129,10 +129,30 @@ const rehearsed = (f: CaseFacts) => f.plan?.rehearsal?.wouldApply === true;
 const times = (n: number) => (n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`);
 
 /**
+ * The writes of a case that stopped after sending one. A write whose answer was lost may have landed, and may still land,
+ * and one the receiver acknowledged was sent whatever the verifier then found, so neither reads as nothing sent.
+ */
+function stoppedWrites(f: CaseFacts, event: string): string {
+  const sent = f.receipt.writes;
+  const last = [...(f.attempts ?? [])]
+    .reverse()
+    .find((x) => WRITE_OUTCOMES.includes(str(x.attempt?.outcome)));
+  const answer =
+    str(last?.attempt?.outcome) === 'uncertain'
+      ? sent === 1
+        ? 'and the answer was lost'
+        : 'and the last answer was lost'
+      : sent === 1
+        ? 'and the receiver acknowledged it'
+        : 'and the receiver acknowledged the last';
+  return `Sent the ${event} again, ${times(sent)}, ${answer}`;
+}
+
+/**
  * What Shutter did, leading with the action, since the outcome band above it says what came of it: "Sent the transfer
  * again, once, after a test run", "Asked a person to decide; sent nothing", "Sent nothing: a later event already moved
- * the patient on". Built from the disposition, the writes and whether the rehearsal passed; a write count not read yet
- * is never guessed.
+ * the patient on", "Sent the transfer again, once, and the answer was lost; a person decides". Built from the
+ * disposition, the writes and whether the rehearsal passed; a write count not read yet is never guessed.
  */
 export function actionHeadline(f: CaseFacts): string {
   const { c, receipt } = f;
@@ -151,17 +171,23 @@ export function actionHeadline(f: CaseFacts): string {
       if (disposition === 'reconcile') return 'Sent nothing: the receiver already has it';
       return 'Closed the case; sent nothing';
     case 'escalated':
-      return 'Asked a person to decide; sent nothing';
+      if (unknown) return 'Asked a person to decide; what it sent is not read yet';
+      return sent > 0
+        ? `${stoppedWrites(f, event)}; a person decides`
+        : 'Asked a person to decide; sent nothing';
     case 'blocked': {
       const rejected = (f.approvals?.approvals ?? []).some((a) => a.decision === 'rejected' && !a.revoked);
-      return rejected
-        ? 'Sent nothing: a person rejected the plan'
+      const why = rejected
+        ? 'a person rejected the plan'
         : gateStopped(f)
-          ? 'Sent nothing: the gate stopped the plan'
-          : 'Sent nothing: the case was stopped';
+          ? 'the gate stopped the plan'
+          : 'the case was stopped';
+      if (unknown) return `Stopped: ${why}; what it sent is not read yet`;
+      return sent > 0 ? `${stoppedWrites(f, event)}; then ${why}` : `Sent nothing: ${why}`;
     }
     case 'failed':
-      return unknown || sent === 0
+      if (unknown) return 'Stopped when the workflow failed; what it sent is not read yet';
+      return sent === 0
         ? 'Stopped when the workflow failed; sent nothing'
         : `${sentAgain}; then the workflow failed`;
     case 'awaiting_approval':

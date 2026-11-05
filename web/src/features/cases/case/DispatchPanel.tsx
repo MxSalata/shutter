@@ -9,7 +9,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
 import { attempt, caseState, verification } from '@/lib/status';
 import { asObject } from '@/lib/json';
-import { STOPPED_STATES } from './receipt';
+import { STOPPED_STATES, WRITE_OUTCOMES } from './receipt';
 import { NotYet, Section } from './Section';
 import { receiverNoun } from './receiver';
 
@@ -156,6 +156,10 @@ export function VerificationPanel({ caseId, open, write, planned, byHand, state 
   const attempts = useAttempts(caseId, open);
   const list = (attempts.data ?? []).filter((x) => x.verification);
   const sent = (attempts.data ?? []).some((x) => x.attempt);
+  // A case stopped with a write and no verification, as a write call that errored: nothing is coming to verify it
+  const unverified =
+    STOPPED_STATES.includes(state) &&
+    (attempts.data ?? []).some((x) => WRITE_OUTCOMES.includes(String(x.attempt?.outcome)));
   return (
     <Section
       id="verification"
@@ -165,7 +169,7 @@ export function VerificationPanel({ caseId, open, write, planned, byHand, state 
       {attempts.isError ? <ErrorAlert error={attempts.error} title="The attempts could not be read" /> : null}
       {attempts.isSuccess && list.length === 0 ? (
         sent ? (
-          <StatusBadge {...verification('pending')} w="fit-content" />
+          <StatusBadge {...verification(unverified ? 'unresolved' : 'pending')} w="fit-content" />
         ) : (
           <NoWrite write={write} planned={planned} byHand={byHand} state={state} />
         )

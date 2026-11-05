@@ -102,6 +102,15 @@ describe('the outcome sentence', () => {
     expect(nextAction(factsOf('C-000053')).escalate).toBe(false);
   });
 
+  it('never guesses that nothing was sent while the attempts are not read', () => {
+    for (const state of ['escalated', 'blocked', 'failed'] as const) {
+      const f = factsOf('C-000008', { attempts: undefined });
+      const sentence = actionHeadline({ ...f, c: { ...f.c, state } });
+      expect(sentence).toContain('what it sent is not read yet');
+      expect(sentence).not.toMatch(/sent nothing/i);
+    }
+  });
+
   it('asks for a reinvestigation of a failed case, and nothing of an abandoned one, which was given up on purpose', () => {
     const f = factsOf('C-000008');
     const failed = { ...f, c: { ...f.c, state: 'failed' as const } };

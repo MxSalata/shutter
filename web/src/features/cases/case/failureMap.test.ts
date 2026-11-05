@@ -130,7 +130,7 @@ describe('the map of where a case failed', () => {
     expect(m.iris.trouble).toBe("Its schema couldn't read the message");
     expect(m.hop.label).toBe('Not delivered');
     expect(m.shutter).toMatchObject({ code: 'PARSE_FAILED' });
-    expect(m.shutter.outcome.label).toBe('Blocked: nothing sent');
+    expect(m.shutter.outcome.label).toBe('Blocked');
     expect(m.sentence).toContain("in IRIS, its schema couldn't read the message; not delivered");
   });
 

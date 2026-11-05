@@ -317,6 +317,81 @@ describe('CasePage', () => {
     ).toBeInTheDocument();
   });
 
+  describe('a case that sent a write and lost the answer, or stopped after one', () => {
+    const write = fixtures.cases['C-000002'].attempts[0].attempt;
+    const lost = { ...write, outcome: 'uncertain', httpStatus: 0, receipt: null };
+    const judged = (outcome: string, summary: string) => ({
+      ...fixtures.cases['C-000002'].attempts[0].verification,
+      outcome,
+      summary,
+    });
+    const cases: [string, string, unknown[], string, string][] = [
+      [
+        'escalated, not committed',
+        'escalated',
+        [{ attempt: lost, verification: judged('not_committed', 'Not committed') }],
+        'Sent the transfer again, once, and the answer was lost; a person decides',
+        '1 write',
+      ],
+      [
+        'escalated, outcome unknown',
+        'escalated',
+        [{ attempt: lost, verification: judged('unresolved', 'No receipt yet') }],
+        'Sent the transfer again, once, and the answer was lost; a person decides',
+        '1 write',
+      ],
+      [
+        'escalated, the write call errored, so no verifier ran',
+        'escalated',
+        [{ attempt: { ...lost, error: 'the item is not running' }, verification: null }],
+        'Sent the transfer again, once, and the answer was lost; a person decides',
+        '1 write',
+      ],
+      [
+        'escalated, acknowledged, and the verifier failed',
+        'escalated',
+        [{ attempt: write, verification: judged('failed', 'No receipt') }],
+        'Sent the transfer again, once, and the receiver acknowledged it; a person decides',
+        '1 write',
+      ],
+      [
+        'blocked after an earlier lost answer',
+        'blocked',
+        [{ attempt: lost, verification: judged('not_committed', 'Not committed') }],
+        'Sent the transfer again, once, and the answer was lost; then the case was stopped',
+        'Blocked: an earlier write went out',
+      ],
+    ];
+    it.each(cases)('%s: never reads as nothing sent', async (_, state, attempts, did, also) => {
+      const x = fixtures.cases['C-000008'];
+      server.use(
+        http.get('/api/shutter/cases/C-000008', () => HttpResponse.json({ ...x.detail, state })),
+        http.get('/api/shutter/cases/C-000008/attempts', () => HttpResponse.json(attempts)),
+      );
+      renderCase('C-000008');
+      const top = await outcome();
+      expect(await within(top).findByText(did)).toBeInTheDocument();
+      await waitFor(() => expect(top).toHaveTextContent(also));
+      expect(document.body).not.toHaveTextContent(
+        /sent nothing|nothing sent|nothing was sent|nothing written/i,
+      );
+    });
+
+    it('says what a stopped write call leaves unknown, not that a verification is coming', async () => {
+      const x = fixtures.cases['C-000008'];
+      server.use(
+        http.get('/api/shutter/cases/C-000008', () => HttpResponse.json({ ...x.detail, state: 'escalated' })),
+        http.get('/api/shutter/cases/C-000008/attempts', () =>
+          HttpResponse.json([{ attempt: lost, verification: null }]),
+        ),
+      );
+      renderCase('C-000008');
+      const top = await outcome();
+      await waitFor(() => expect(top).toHaveTextContent('Not established'));
+      expect(document.body).not.toHaveTextContent('Verification pending');
+    });
+  });
+
   it('leads with an outcome that says an escalated case wrote nothing, and copies the receipt as JSON', async () => {
     renderCase('C-000008');
     const top = await outcome();
