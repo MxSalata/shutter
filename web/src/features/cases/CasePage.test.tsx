@@ -449,6 +449,30 @@ describe('CasePage', () => {
     expect(running.style.borderTop).toBe('');
   });
 
+  it('shows a fact that really differs above the fold, and stops saying the facts read the same', async () => {
+    const { snapshot } = fixtures.cases['C-000008'];
+    const moved = structuredClone(snapshot) as unknown as { summary: { ward_state: { ward: string } } };
+    moved.summary.ward_state.ward = 'WARD-D';
+    server.use(http.get('/api/shutter/cases/C-000008/snapshot', () => HttpResponse.json(moved)));
+    renderCase('C-000008', '?show=compare');
+    const differs = await screen.findByTestId('compare-differs');
+    expect(within(differs).getByText('The receiver when observed')).toBeInTheDocument();
+    expect(within(differs).queryByText('Snapshot digest')).not.toBeInTheDocument();
+    const compare = screen.getByRole('region', { name: 'S8 side by side: Rules only and the board' });
+    expect(within(compare).getByText('Both runs read these the same')).toBeInTheDocument();
+    expect(within(compare).queryByText(/The facts a decision rests on/)).not.toBeInTheDocument();
+  });
+
+  it('names each row of the evidence, and only the fold has a Same column', async () => {
+    renderCase('C-000008', '?show=compare');
+    const compare = await screen.findByRole('region', { name: 'S8 side by side: Rules only and the board' });
+    await within(compare).findByText('Both runs read the same evidence');
+    expect(within(compare).getByRole('rowheader', { name: 'The failed delivery' })).toBeInTheDocument();
+    expect(within(compare).queryByTestId('compare-differs')).not.toBeInTheDocument();
+    expect(within(compare).getByText(/The facts a decision rests on read the same/)).toBeInTheDocument();
+    expect(within(compare).getAllByRole('columnheader', { name: 'Same', hidden: true })).toHaveLength(1);
+  });
+
   it('keeps the rows that differ, a time and two digests, a click away in Plain', async () => {
     renderCase('C-000008', '?show=compare');
     const toggle = await screen.findByRole('button', { name: 'Times and digests, which differ on each run' });

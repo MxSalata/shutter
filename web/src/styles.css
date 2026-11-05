@@ -785,6 +785,13 @@ body {
     border: 0;
     padding: 2px 0;
   }
+  /* A row's name kept as a header cell for screen readers, stacked like the cells under it */
+  .stack-table th.stack-row-head {
+    display: block;
+    width: 100% !important;
+    border: 0;
+    padding: 2px 0;
+  }
   .stack-table td[data-label]::before {
     content: attr(data-label);
     display: block;

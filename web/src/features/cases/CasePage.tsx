@@ -3,7 +3,16 @@ import { IconFileSearch, IconHistory, IconListDetails, IconPlayerPlay } from '@t
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router';
-import { isOpen, keys, useCase, useCaseEvents, useCases, useMe, useScenarios, useSiteProfile } from '@/api/hooks';
+import {
+  isOpen,
+  keys,
+  useCase,
+  useCaseEvents,
+  useCases,
+  useMe,
+  useScenarios,
+  useSiteProfile,
+} from '@/api/hooks';
 import type { CaseDetail } from '@/api/types';
 import { TRIAL } from '@/env/mode';
 import { ApiSource } from '@/components/ApiSource';
