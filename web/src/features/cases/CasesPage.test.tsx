@@ -276,7 +276,7 @@ describe('whatHappened', () => {
     expect(w.rest).toBe('Catalogue E16, The destination bed is held by a patient who is leaving.');
   });
 
-  it('takes the next sentence with one of under six words, so the cell says what failed', () => {
+  it('takes the next sentence with one of under six words, so the cell says what happened', () => {
     expect(
       at('Valid message. Do not resend: a later event moved the encounter on. Catalogue E1, Superseded.'),
     ).toEqual({
@@ -571,6 +571,27 @@ describe('the page', () => {
     await userEvent.click(tile);
     expect(await screen.findByText('Showing the newest 100 cases with this outcome')).toBeVisible();
     expect(await screen.findByText('100 cases')).toBeVisible();
+  });
+
+  it('hides the Not as expected tile at nought, as on a hospital that never played S8 by rules alone', async () => {
+    const rest = summaries.filter((c) => c.caseId !== 'C-000021');
+    server.use(
+      http.get('/api/shutter/cases', ({ request }) => {
+        const q = new URL(request.url).searchParams;
+        const state = q.get('state');
+        const rows = rest.filter((c) => !state || c.state === state);
+        const offset = Number(q.get('offset') ?? 0);
+        return HttpResponse.json({
+          items: rows.slice(offset, offset + Number(q.get('limit') ?? 25)),
+          total: rows.length,
+        });
+      }),
+    );
+    const { container } = renderPage();
+    const closed = await screen.findByRole('region', { name: 'Closed' });
+    await within(closed).findByRole('button', { name: /Delivered, verified Show these$/ });
+    expect(within(closed).queryByRole('button', { name: /Not as expected/ })).not.toBeInTheDocument();
+    expect(container.querySelector('.cases-tile-groups')).toHaveAttribute('data-closed', '3');
   });
 
   it('keeps its words above the table within the budget, and Technical within one and a half times the Plain page', async () => {

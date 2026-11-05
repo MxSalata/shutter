@@ -110,7 +110,7 @@ test.describe('the Technical detail', () => {
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('reads each case as a compact card: its id and outcome, then what failed', async ({ page }) => {
+  test('reads each case as a compact card: its id and outcome, then what happened', async ({ page }) => {
     await signIn(page);
     await go(page, '/cases');
     const card = row(page, 'C-000058');
