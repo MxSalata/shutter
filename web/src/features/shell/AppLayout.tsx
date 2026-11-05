@@ -128,7 +128,7 @@ function AppearanceMenu() {
             onClick={() => choose(t.value)}
             // The menu focuses its first item on opening, and focus looks like the selection: start on the current one
             data-autofocus={current === t.value || undefined}
-            aria-label={`${t.label}${current === t.value ? ' (current theme)' : ''}`}
+            aria-label={`${t.value === 'auto' ? 'System theme' : t.label}${current === t.value ? ' (current theme)' : ''}`}
             rightSection={current === t.value ? '●' : undefined}
           >
             {t.label}
@@ -141,7 +141,7 @@ function AppearanceMenu() {
             key={c.value}
             leftSection={<IconContrast size={16} />}
             onClick={() => setContrast(c.value)}
-            aria-label={`${c.label}${contrast === c.value ? ' (current contrast)' : ''}`}
+            aria-label={`${c.value === 'auto' ? 'System contrast' : c.label}${contrast === c.value ? ' (current contrast)' : ''}`}
             rightSection={contrast === c.value ? '●' : undefined}
           >
             {c.label}

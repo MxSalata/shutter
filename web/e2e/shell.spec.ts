@@ -90,6 +90,9 @@ test.describe('the shell', () => {
     await page.getByRole('button', { name: 'Appearance' }).click();
     await expect(page.getByRole('menuitem', { name: /^Pastel/ })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: /^Technical|^Plain words/ })).toHaveCount(0);
+    // Each System says which: a screen reader hears no group
+    await expect(page.getByRole('menuitem', { name: /^System theme/ })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /^System contrast/ })).toBeVisible();
     await page.keyboard.press('Escape');
     await page.goto('./?detail=plain#/scenarios');
     await expect(
