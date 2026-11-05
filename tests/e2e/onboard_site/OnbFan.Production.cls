@@ -31,7 +31,9 @@ XData ProductionDefinition
     <Setting Target="Adapter" Name="Port">7313</Setting>
     <Setting Target="Host" Name="AlertOnError">1</Setting>
   </Item>
-  <Item Name="Ens.Alert" ClassName="OnbSite.AlertLog" PoolSize="1" Enabled="true"/>
+  <Item Name="Ens.Alert" ClassName="OnbSite.AlertLog" PoolSize="1" Enabled="true">
+    <Setting Target="Host" Name="AlertOnError">1</Setting>
+  </Item>
 </Production>
 }
 }

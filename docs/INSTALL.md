@@ -400,8 +400,10 @@ production: a running one is updated, and only the items it changes restart. In 
    importer would replace the other namespace's whole; that namespace's forwards are then read by the alias.
 3. Adds the item `Shutter Forwarder`, naming the credential and never holding a password.
 4. Renames the site's own `Ens.Alert`, if it has one, to `Site Alerts`, and adds `Shutter.Intake.AlertProcess` as `Ens.Alert`
-   with `PassTo` set to it, so every alert still reaches it first, and `Receivers` set to the HL7 operations. Two items named
-   `Ens.Alert` compile and start, and the engine silently uses one: the plan warns, and adds none until you have renamed one.
+   with `PassTo` set to it, so every alert still reaches it first, and `Receivers` set to the HL7 operations. An alert that item
+   raises about itself is not passed back to it, or a failing consumer would alert itself without end: it stays in the event log,
+   as it did under the name `Ens.Alert`. Two items named `Ens.Alert` compile and start, and the engine silently uses one: the plan
+   warns, and adds none until you have renamed one. The same goes for an item already named `Site Alerts`.
 5. Turns `AlertOnError` on for those operations **only if you passed `alert_on_error`**: it is your item's setting, and the
    alert intake hears nothing from an operation with it off. `todo` names the ones affected.
 6. Drafts a site profile entry for each operation: tier 3, no API, every feature false, marked `draft`, in one new version of

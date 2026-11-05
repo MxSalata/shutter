@@ -1,5 +1,6 @@
 /// The rig's stand-in for a hospital's own alert consumer: it counts what it is given, so the check can see that every
-/// alert still reaches it once Shutter's alert intake holds the name Ens.Alert.
+/// alert still reaches it once Shutter's alert intake holds the name Ens.Alert. With ^OnbSite.AlertFail set its work fails,
+/// as a site's does when its mail server is down.
 Class OnbSite.AlertLog Extends Ens.BusinessOperation
 {
 
@@ -9,7 +10,7 @@ Method OnAlert(request As Ens.AlertRequest, Output response As Ens.Response) As 
 {
     Set ^OnbSite.Alerts = $GET(^OnbSite.Alerts) + 1
     Set ^OnbSite.Alerts(^OnbSite.Alerts) = request.SourceConfigName _ " | " _ $EXTRACT(request.AlertText, 1, 160)
-    Quit $$$OK
+    Quit $SELECT($GET(^OnbSite.AlertFail): $$$ERROR($$$GeneralError, "SMTP is down"), 1: $$$OK)
 }
 
 XData MessageMap
