@@ -2132,7 +2132,8 @@ body {
 .trial-banner-long {
   display: none;
 }
-@media (min-width: 80em) {
+/* The long form needs 1440 px beside the banner's name and buttons, Leave trial among them: below that it would stop mid-word */
+@media (min-width: 90em) {
   .trial-banner-long {
     display: inline;
   }
