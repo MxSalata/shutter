@@ -201,3 +201,23 @@ test.describe('the shell', () => {
     expect(`${Math.round(h.header)}px`).toBe(h.token);
   });
 });
+
+for (const width of [1280, 1920])
+  test.describe(`Home's lead at ${width} px`, () => {
+    test.use({ viewport: { width, height: 800 } });
+
+    test('stays on one line, and a long lead elsewhere keeps its measure', async ({ page }) => {
+      await page.goto('./#/home');
+      const lead = page.getByText('only when it can show the fix is safe.');
+      await expect(lead).toBeVisible();
+      const lines = await lead.evaluate(
+        (el) => el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight),
+      );
+      expect(Math.round(lines)).toBe(1);
+      expect(await lead.evaluate((el) => getComputedStyle(el).maxWidth)).toBe('none');
+      await page.goto('./#/scenarios');
+      const other = page.getByText('Known message failures to play');
+      await expect(other).toBeVisible();
+      expect(await other.evaluate((el) => getComputedStyle(el).maxWidth)).not.toBe('none');
+    });
+  });

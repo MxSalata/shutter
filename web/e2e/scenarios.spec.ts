@@ -53,7 +53,7 @@ test.describe('the page at 1280 px @scenarios', () => {
       'aria-expanded',
       'false',
     );
-    await expect(page.getByRole('region', { name: /^When an HL7 transfer fails/ })).toBeVisible();
+    await expect(page.getByRole('region', { name: /^Shutter fixes a failed HL7 transfer/ })).toBeVisible();
   });
 
   test('leads through the guided path by its links, each step a sentence with the rest behind More', async ({

@@ -22,6 +22,7 @@ export function PageHeader({
   hue,
   status,
   lead,
+  leadMaw = '68ch',
   details,
   detailsLabel = 'Technical detail',
   detailsKind = 'explain',
@@ -39,6 +40,8 @@ export function PageHeader({
   /** The page's status badges, beside the title. */
   status?: ReactNode;
   lead?: ReactNode;
+  /** The lead's measure: 68ch keeps a long lead readable on a wide screen; `none` lets a short one stay on one line. */
+  leadMaw?: string;
   /** The second layer under the lead, in a TechDetail. */
   details?: ReactNode;
   detailsLabel?: ReactNode;
@@ -83,7 +86,7 @@ export function PageHeader({
         {actions ? <Group gap="xs">{actions}</Group> : null}
       </Group>
       {lead ? (
-        <Text size="lg" maw="68ch">
+        <Text size="lg" maw={leadMaw}>
           {lead}
         </Text>
       ) : null}
