@@ -482,7 +482,9 @@ The Doctor's `receivers_without_item` lists any receiver that needs this; a case
 run". The item is recorded, so a load or an upgrade puts it back. Set the credential in Shutter's namespace
 (`Do ##class(Ens.Config.Credentials).SetCredential("DownstreamAPI", "<user>", "<password>", 1)`), which on a site install does
 not exist until you do. **One limit stands:** Evidence Collector and Verifier call one server, so every receiver with an API must
-answer on the same host and port in this version; the call warns when a second one differs.
+answer on the same host and port in this version; the call warns when a second one differs. Called again for an item whose settings
+differ, it changes nothing and answers an error naming both hosts: change the item in the production first, then repeat the call with
+the same values, so that a load or an upgrade keeps them.
 
 **9.7 Take a namespace off.**
 

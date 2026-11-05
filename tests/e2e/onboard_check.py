@@ -767,6 +767,30 @@ session("SHUTTER", f'Do ##class(Ens.Config.Credentials).SetCredential("Downstrea
 item = obj("SHUTTER", '##class(Shutter.Setup).OnboardReceiverItem("Bed Mgmt Out","127.0.0.1","52773","DownstreamAPI")')
 check("the connector item is added", item["ok"] and item["added"] == 1 and item["credential"], item)
 check("and the Doctor is content", doctor()["receivers_without_item"] == [])
+moved = obj("SHUTTER", '##class(Shutter.Setup).OnboardReceiverItem("Bed Mgmt Out","203.0.113.9","443","DownstreamAPI")')
+check("called again with another host, it refuses and names both", moved["ok"] is False and "127.0.0.1" in moved["error"] and "203.0.113.9" in moved["error"], moved)
+check("and the record and the readers stay", value("SHUTTER", '$LIST(^Shutter.Config("receiverItems","Bed Mgmt Out"),1)_"|"_^Shutter.Config("downstreamHost")') == "127.0.0.1|127.0.0.1")
+same = obj("SHUTTER", '##class(Shutter.Setup).OnboardReceiverItem("Bed Mgmt Out","127.0.0.1","52773","DownstreamAPI")')
+check("called again with the same values, it has nothing to do", same["ok"] and same["added"] == 0, same)
+
+
+def profile_edit(change):
+    code, prof = api("GET", "/site-profile")
+    body = prof["profile"]
+    change(body)
+    body["expectedVersion"] = prof["version"]
+    return api("PUT", "/site-profile", body)[0]
+
+
+step("FANOUT has an item named as a hand-written receiver with an API, which may be another system")
+by_hand = {"name": "Fan One", "system": "a system wired by hand", "category": "current_state", "tier": 2, "applies": "arrival_order", "resend_timestamp": "original", "cancels": False, "merges": False, "api": {"base": "/beds/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "/capabilities", "operations": "/operations"}, "features": {"conditional_writes": True, "receipts": True, "history": True, "dry_run": True}}
+check("the entry is saved", profile_edit(lambda b: b["receivers"].append(by_hand)) == 200)
+p = plan("FANOUT")
+check("the item gets a prefix and a draft, and the plan names both", p["receiver_prefix"] == "FANOUT" and any(o["name"] == "Fan One" and o["reported_as"] == "FANOUT Fan One" and not o["in_profile"] for o in p["operations"]) and any("Fan One" in w and "FANOUT Fan One" in w for w in p["warnings"]), p)
+check("the entry is given the namespace", profile_edit(lambda b: next(r for r in b["receivers"] if r["name"] == "Fan One").update(namespace="FANOUT")) == 200)
+p = plan("FANOUT")
+check("then it is this namespace's, with no prefix and no such warning", p["receiver_prefix"] == "" and any(o["name"] == "Fan One" and o["reported_as"] == "Fan One" and o["has_api"] for o in p["operations"]) and not any("names no namespace" in w for w in p["warnings"]), p)
+check("the entry is taken out again", profile_edit(lambda b: b.update(receivers=[r for r in b["receivers"] if r["name"] != "Fan One"])) == 200)
 time.sleep(2)
 print(send(7121, hl7("a01", "A0b" + tag), "a01b"))
 hit = wait_case(lambda c: c.get("sourceNamespace") == "PAS" and c.get("receiver") == "Bed Mgmt Out" and "A0b" not in "" and c.get("state") == "waiting_approval" or (c.get("sourceNamespace") == "PAS" and c.get("state") in ("awaiting_approval", "waiting")), 60)
