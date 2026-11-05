@@ -171,6 +171,8 @@ export interface EvidenceRow {
   rules: string;
   board: string;
   same: boolean;
+  /** A time or digest of the run itself, which differs on any two runs and says nothing about the decision. */
+  ownToRun: boolean;
 }
 
 const LABELS: [keyof EvidenceFacts, string][] = [
@@ -184,6 +186,8 @@ const LABELS: [keyof EvidenceFacts, string][] = [
   ['materialDigest', 'Material digest'],
 ];
 
+const OWN_TO_RUN: (keyof EvidenceFacts)[] = ['takenAt', 'snapshotDigest', 'materialDigest'];
+
 /** The two sides' evidence, fact by fact, and whether each fact reads the same. */
 export function evidenceRows(rules: EvidenceFacts | null, board: EvidenceFacts | null): EvidenceRow[] {
   if (!rules || !board) return [];
@@ -192,6 +196,7 @@ export function evidenceRows(rules: EvidenceFacts | null, board: EvidenceFacts |
     rules: k === 'takenAt' ? formatZoned(rules[k]) : rules[k],
     board: k === 'takenAt' ? formatZoned(board[k]) : board[k],
     same: rules[k] === board[k],
+    ownToRun: OWN_TO_RUN.includes(k),
   }));
 }
 

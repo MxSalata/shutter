@@ -106,6 +106,11 @@ describe('evidenceRows', () => {
     expect(row('Snapshot digest').same).toBe(false);
     expect(row('Material digest').same).toBe(false);
     expect(row('Evidence taken').same).toBe(false);
+    expect(rows.filter((r) => r.ownToRun).map((r) => r.label)).toEqual([
+      'Evidence taken',
+      'Snapshot digest',
+      'Material digest',
+    ]);
   });
 
   it('is empty until both sides have evidence', () => {

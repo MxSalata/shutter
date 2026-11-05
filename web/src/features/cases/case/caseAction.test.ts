@@ -184,7 +184,9 @@ describe("the case's action for its reader", () => {
   });
 
   it("offers S8's two runs, never all clear, on a closed case its scenario doesn't expect", () => {
-    expect(caseActionOf(factsOf('C-000021'), { me: ME.approver, notAsExpected: true, comparable: true })).toEqual({
+    expect(
+      caseActionOf(factsOf('C-000021'), { me: ME.approver, notAsExpected: true, comparable: true }),
+    ).toEqual({
       needsYou: false,
       label: 'Compare the two runs',
       short: 'Compare',

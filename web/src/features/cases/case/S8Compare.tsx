@@ -1,16 +1,5 @@
-import {
-  Anchor,
-  Button,
-  Card,
-  Group,
-  Paper,
-  SimpleGrid,
-  Stack,
-  Table,
-  Text,
-  VisuallyHidden,
-} from '@mantine/core';
-import { IconAlertTriangle, IconArrowsLeftRight, IconEqual } from '@tabler/icons-react';
+import { Anchor, Button, Card, Group, Paper, SimpleGrid, Stack, Table, Text } from '@mantine/core';
+import { IconAlertTriangle, IconArrowsLeftRight } from '@tabler/icons-react';
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router';
 import { scenariosHidden } from '@/api/can';
@@ -161,15 +150,20 @@ function SideCard({
   );
 }
 
-/** The evidence fact by fact; on a phone each fact is a block, its two readings under their run's name. */
+/**
+ * The evidence fact by fact; on a phone each fact is a block, its two readings under their run's name. `same` says the
+ * rows all read the same, as the heading above them says, so no column repeats it.
+ */
 function EvidenceTable({
   rows,
   rulesId,
   boardId,
+  same = false,
 }: {
   rows: EvidenceRow[];
   rulesId: string;
   boardId: string;
+  same?: boolean;
 }) {
   const rulesHead = `Rules only (${rulesId})`;
   const boardHead = `The board (${boardId})`;
@@ -181,35 +175,30 @@ function EvidenceTable({
             <StackTable.Th w="22%">Evidence</StackTable.Th>
             <StackTable.Th>{rulesHead}</StackTable.Th>
             <StackTable.Th>{boardHead}</StackTable.Th>
-            <StackTable.Th w={56}>Same</StackTable.Th>
+            {same ? null : <StackTable.Th w={56}>Same</StackTable.Th>}
           </StackTable.Tr>
         </StackTable.Thead>
         <StackTable.Tbody>
           {rows.map((r) => (
             <StackTable.Tr key={r.label}>
-              <StackTable.Td>
+              <StackTable.Th scope="row" className="stack-row-head">
                 <Text size="sm" c="dimmed" fw={500}>
                   {r.label}
                 </Text>
-              </StackTable.Td>
+              </StackTable.Th>
               <StackTable.Td data-label={rulesHead}>
                 <span className="mono-wrap">{r.rules}</span>
               </StackTable.Td>
               <StackTable.Td data-label={boardHead}>
                 <span className="mono-wrap">{r.board}</span>
               </StackTable.Td>
-              <StackTable.Td data-label="Same">
-                {r.same ? (
-                  <>
-                    <IconEqual size={16} color="var(--shutter-muted)" aria-hidden />
-                    <VisuallyHidden>the same</VisuallyHidden>
-                  </>
-                ) : (
+              {same ? null : (
+                <StackTable.Td data-label="Same">
                   <Text size="xs" c="dimmed">
                     differs
                   </Text>
-                )}
-              </StackTable.Td>
+                </StackTable.Td>
+              )}
             </StackTable.Tr>
           ))}
         </StackTable.Tbody>
@@ -229,7 +218,9 @@ function Pair({ rulesId, boardId, caseId }: { rulesId: string; boardId: string; 
   if (!rules.side || !board.side || scenarios.isPending) return <NotYet>Reading the two cases…</NotYet>;
   const rows = evidenceRows(rules.side.evidence, board.side.evidence);
   const same = rows.filter((r) => r.same);
-  const apart = rows.filter((r) => !r.same);
+  // A time or a digest differs on any two runs; any other fact that differs is news, and stays in view
+  const apart = rows.filter((r) => !r.same && r.ownToRun);
+  const differs = rows.filter((r) => !r.same && !r.ownToRun);
   const trace = board.detail?.links?.visualTrace;
   return (
     <Stack gap="sm">
@@ -240,12 +231,20 @@ function Pair({ rulesId, boardId, caseId }: { rulesId: string; boardId: string; 
       {same.length ? (
         <Stack gap={4}>
           <Text size="sm" fw={600}>
-            Both runs read the same evidence
+            {differs.length ? 'Both runs read these the same' : 'Both runs read the same evidence'}
           </Text>
-          <EvidenceTable rows={same} rulesId={rulesId} boardId={boardId} />
+          <EvidenceTable rows={same} rulesId={rulesId} boardId={boardId} same />
         </Stack>
       ) : null}
-      {/* Only a time and two digests differ, each run's own: they say nothing about the decision, so they stay a click away */}
+      {differs.length ? (
+        <Stack gap={4} data-testid="compare-differs">
+          <Text size="sm" fw={600}>
+            The two runs read these differently
+          </Text>
+          <EvidenceTable rows={differs} rulesId={rulesId} boardId={boardId} />
+        </Stack>
+      ) : null}
+      {/* A time and two digests, each run's own: they say nothing about the decision, so they stay a click away */}
       {apart.length ? (
         <TechDetail label="Times and digests, which differ on each run" kind="data">
           <Stack gap="xs">
@@ -253,7 +252,7 @@ function Pair({ rulesId, boardId, caseId }: { rulesId: string; boardId: string; 
             <Text size="xs" c="dimmed">
               The digests differ because each case's evidence was collected on its own run of the scenario, at
               its own time: the receiver's epoch, the times the operations applied and the message ids are
-              that run's. The facts a decision rests on read the same.
+              that run's.{differs.length ? '' : ' The facts a decision rests on read the same.'}
             </Text>
           </Stack>
         </TechDetail>
