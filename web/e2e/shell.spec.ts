@@ -86,6 +86,11 @@ test.describe('the shell', () => {
     await expect(detail.getByRole('radio', { name: 'Plain' })).toBeChecked();
     await detail.getByText('Technical').click();
     await expect(detail.getByRole('radio', { name: 'Technical' })).toBeChecked();
+    // One place to choose it: the Appearance menu holds the theme and the contrast, not the Detail switch again
+    await page.getByRole('button', { name: 'Appearance' }).click();
+    await expect(page.getByRole('menuitem', { name: /^Pastel/ })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /^Technical|^Plain words/ })).toHaveCount(0);
+    await page.keyboard.press('Escape');
     await page.goto('./?detail=plain#/scenarios');
     await expect(
       page.getByRole('radiogroup', { name: 'Detail' }).getByRole('radio', { name: 'Plain' }),
