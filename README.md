@@ -72,8 +72,8 @@ The three specialists (conformance, encounter and impact) and the coordinator ar
 | --- | --- | --- | --- |
 | **The trial** in the browser [link at submission] | Nothing to install; a PC or a phone | The demo hospital's recorded runs; every action replays the recording, and nothing leaves the browser | The quick tour [link at submission, `?trial=tour`]: 9 steps, about 4 minutes. The engineers' tour [link at submission, `?trial=engineer`]: 6 steps, about 3 minutes, with Detail on Technical |
 | **The online demo** [link at submission] | A browser and the sign-ins below | A live hospital: a new failure every 7 minutes, recovered under the site's written policy | The four steps below |
-| **The replay edition** on your machine, `./install.sh --replay` | Docker; no key, no Early Access file | Your own instance, the board replaying its recorded live runs at no cost | Healthy in 2 min 4 s from a fresh copy once the 6 GB public image is pulled |
-| **The AI Hub edition** on your machine, `./install.sh --image-file ...` | Docker and the build 109 file from the Early Access portal; `ANTHROPIC_API_KEY` for live agents | Your own instance, with live agents or, without a key, their recorded runs | Healthy in 3 min 21 s from a fresh clone on build 109 ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md)) |
+| **The replay edition** on your machine, `./install.sh --replay` | Docker; no key, no Early Access file | Your own instance, the board replaying its recorded live runs at no cost | Healthy in 2 to 8 min once the 6 GB public image is pulled |
+| **The AI Hub edition** on your machine, `./install.sh --image-file ...` | Docker and the build 109 file from the Early Access portal; `ANTHROPIC_API_KEY` for live agents | Your own instance, with live agents or, without a key, their recorded runs | Healthy in 3 to 15 min on build 109 ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md)) |
 
 **In a hospital's own IRIS for Health:** Shutter installs without the demo, beside the productions it watches or inside one ([docs/INSTALL.md](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md)). Failures reach it through a forwarder, or through the production's alerts with no change to the hospital's own code. A receiver with no API still gets a case, the board's diagnosis and a drafted escalation email, never a resend, and a production review needs nothing configured.
 
@@ -97,7 +97,7 @@ git clone https://github.com/MxSalata/shutter.git && cd shutter
 It ends with what to open:
 
 ```text
-Shutter is ready after 10 s:
+Shutter is ready after 3 min 21 s:
   the web app:   http://localhost:52773/shutter/index.html  (approver / shutter, or operator / shutter)
   first steps:   Scenarios, run S2 in Board mode, then approve its case (the README's "On your machine or in the trial, first")
   the portal:    http://localhost:52773/csp/sys/UtilHome.csp  (_SYSTEM / SYS, namespace SHUTTER)
@@ -298,7 +298,7 @@ curl http://localhost:52773/api/shutter/health
 
 ## Troubleshooting
 
-- **`install.sh` stops at a check.** It prints `[fix]` with what to do for each one, and changes nothing until every check passes. A port in use: set `SHUTTER_WEB_PORT` in `.env`.
+- **`install.sh` stops at a check.** It prints `[fix]` with what to do for each one, and changes nothing until every check passes. A port in use: `SHUTTER_WEB_PORT` is the web app's, `SHUTTER_SUPERSERVER_PORT` is 1972, IRIS's own; with no `.env` yet, `SHUTTER_SUPERSERVER_PORT=1973 ./install.sh --replay` keeps it in the `.env` it creates, and otherwise set it in `.env`.
 - **Not healthy after 25 minutes.** `install.sh` prints the last 30 lines of the log and the health address; `curl http://localhost:52773/api/shutter/health` is the report to read.
 - **The Doctor.** In the Management Portal's SQL page (namespace `SHUTTER`), `SELECT Shutter.Setup_Doctor()`: `missing_items` and `disabled_items` should be `[]`, `production_state` `running`, `board_members` 5 (the board's four and the single investigator), `recordings` more than 0 (174 on build 109: every recording, not only the board's 100 runs) and `second_parser` `probe: ok` ([the values on build 109](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md)).
 - **"License limit exceeded" or "Service Unavailable".** The Community licence's 8 units are used up, usually by calls to the API without a session cookie; restarting the container (`docker compose restart`) frees them.

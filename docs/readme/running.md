@@ -7,7 +7,7 @@ The README's Try it and Run details sections have the commands. This page keeps 
 - On Windows, run `install.sh` in Git Bash or a WSL 2 shell (Docker Desktop's WSL integration); from PowerShell, use the [README's Run details](https://github.com/MxSalata/shutter#run-details) commands.
 - On Apple silicon, pass `--image-file` the `irishealth_arm64-community` file of the same build (the replay edition's public image has an ARM64 build too); Shutter has not been run on ARM64 yet.
 - The first `up` builds the image in 2 to 15 minutes, depending on the machine: 14.5 minutes on 8 cores and 5 GB of memory, most of it in the install step. The replay edition builds in about 8 minutes on that machine; on a 12-thread VM with 11 GB of memory it built and was healthy in 2 minutes 4 seconds from a fresh copy, with `--no-cache` and the public image already pulled (3 November 2026; the 6 GB image download comes first on a new machine).
-- The ports are published on `127.0.0.1` only, because the demo's passwords are well known; from another machine, use an SSH tunnel (`ssh -L 52773:localhost:52773 <the Docker host>`). `SHUTTER_WEB_PORT` and `SHUTTER_SUPERSERVER_PORT` in `.env` change the ports.
+- The ports are published on `127.0.0.1` only, because the demo's passwords are well known; from another machine, use an SSH tunnel (`ssh -L 52773:localhost:52773 <the Docker host>`). `SHUTTER_WEB_PORT` and `SHUTTER_SUPERSERVER_PORT` in `.env` change the ports; with no `.env` yet, set them before the command (`SHUTTER_SUPERSERVER_PORT=1973 ./install.sh --replay`) and `install.sh` keeps them in the `.env` it creates. `install.sh` checks both before it changes anything, and `docker compose` takes a value in the shell over `.env`'s.
 
 ### Users
 
