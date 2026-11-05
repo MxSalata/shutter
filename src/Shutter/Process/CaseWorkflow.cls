@@ -832,7 +832,7 @@ Method AfterBoard(case As Shutter.Store.Case) As %Status
         If ..Reopened && '..LiveAllowed && ..AllNoRecord(case) {
             Do ..LeadFinish(case, "failed", "", "the reopening has no live agents and no recording")
             Set case.Headline = "Escalated: reopened without the live agents, and no recording to replay"
-            Quit case.Transition("escalated", "Reopened without the live agents, and no board member has a recording for this case, so nobody has looked at the fresh evidence and nothing is planned. A person must look, or someone with the live agents reinvestigates", "system")
+            Quit case.Transition("escalated", "Reopened without the live agents, and no board member has a recording for this case, so nobody has looked at the fresh evidence and nothing is planned. A person must look, or reinvestigate with the live agents when they can run", "system")
         }
         // In replay mode a case outside the fixtures has no recording for anyone: the rules path plans the plain
         // resend and the gate judges it, instead of an escalation that says only "no findings" (B10).

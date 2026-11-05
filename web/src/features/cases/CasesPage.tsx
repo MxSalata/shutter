@@ -21,7 +21,8 @@ import {
   type Icon as TablerIcon,
 } from '@tabler/icons-react';
 import { useId, useMemo, type ReactNode } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link } from 'react-router';
+import { useListParams } from '@/lib/listParams';
 import { useCases, useScenarios, type CaseFilters } from '@/api/hooks';
 import type { CaseSummary, Scenario } from '@/api/types';
 import { ApiSource } from '@/components/ApiSource';
@@ -467,7 +468,7 @@ function requestOf(filters: CaseFilters): string {
 
 export default function CasesPage() {
   // The filter and the page live in the address, so Back from a case returns to this list and not the first page of all
-  const [params, setParams] = useSearchParams();
+  const [params, change] = useListParams();
   const asked = params.get('state');
   const state = asked && (CASE_STATE_NAMES as readonly string[]).includes(asked) ? asked : null;
   // A closed outcome chosen from the Closed tiles: the list then shows those cases among the newest 100
@@ -475,19 +476,19 @@ export default function CasesPage() {
   // A link from the Scenarios page names its scenario (S22: one case per receiver)
   const scenario = params.get('scenario');
   const page = Math.max(1, Math.floor(Number(params.get('page'))) || 1);
-  // One write for all of them: a second in the same event would start again from the address before the first
+  // One write for all of them
   const setList = (patch: {
     state?: string | null;
     outcome?: string | null;
     scenario?: string | null;
     page?: number;
   }) => {
-    const next = new URLSearchParams(params);
-    for (const [k, v] of Object.entries(patch)) {
-      if (v && !(k === 'page' && v === 1)) next.set(k, String(v));
-      else next.delete(k);
-    }
-    setParams(next, { replace: true, preventScrollReset: true });
+    change((next) => {
+      for (const [k, v] of Object.entries(patch)) {
+        if (v && !(k === 'page' && v === 1)) next.set(k, String(v));
+        else next.delete(k);
+      }
+    });
   };
   const filters: CaseFilters = {
     state: state ?? undefined,

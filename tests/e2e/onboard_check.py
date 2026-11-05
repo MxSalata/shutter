@@ -560,6 +560,7 @@ for bad in ('{"production":"NoSuch"', "{'production':'NoSuch'}", "plain words"):
     check(f"the plan, the apply and the removal refuse: {bad}", all(a.get("ok") is False and "not a JSON object" in a["error"] for a in answers), answers)
 check("and nothing changed", value("PATHOLOGY", '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Intake.Forwarder")') == "0" and value("SHUTTER", '$DATA(^Shutter.Config("onboard","PATHOLOGY"))') == "0")
 p = plan("PATHOLOGY", {"receivers": "LIMS Oot"})
+check("and no forwarder is added, since it would fix the names before the receivers are known", not any(a["do"] == "add_forwarder" for a in p["actions"]), p["actions"])
 check("a name that matches no item is said, and no intake with an empty list is added", p["operations"] == [] and any("LIMS Oot" in w for w in p["warnings"]) and not any(a["do"] in ("add_alert_intake", "rename_alert") for a in p["actions"]), p)
 p = plan("PATHOLOGY", {"receivers": "LIMS Out,Nosuch Out"})
 check("one that matches and one that does not: the second is said, the first is wired", any("Nosuch Out" in w for w in p["warnings"]) and [a["receivers"] for a in p["actions"] if a["do"] == "add_alert_intake"] == ["LIMS Out"], p)

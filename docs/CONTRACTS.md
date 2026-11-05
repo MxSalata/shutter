@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.45, 5 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.46, 5 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -1822,6 +1822,7 @@ board's case in the Visual Trace, the latest cases, and links to the portal's pa
 
 ## Changes
 
+- v1.46, 5 Nov 2026 (a review of this version): `not_committed` says "by the last read" and that a slower receiver can still commit the write (5.1); a write call that answers with an error records its attempt as `uncertain`, and reads as `WRITE_OUTCOME_UNKNOWN`; `GET /cases/{id}/blocked-reason` reads a rehearsal with no usable answer as `BLOCKED`, and a lost write's reason is no longer hidden by an earlier round's gate decision; a reinvestigation without `Shutter_LiveAgents`, or while the provider refuses the key, whose board has no recording leaves the case escalated, with the reason, instead of taking the rules path. Onboarding: an alert the site's own consumer raised is not passed back to it (11); options that are not a JSON object answer `{ok: false, error}` in the plan, the apply and the removal; a `receivers` name matching no item is a warning, and with no item chosen the plan has no `add_alert_intake`; a profile entry with an `api` and no `namespace` counts as taken, with a warning; `OnboardReceiverItem` refuses, naming both, an item that exists with other settings (11.1); a `receivers` option that chooses no item adds no forwarder. The web app keeps the Cases filter and page and the Scenarios mode and filter in the address.
 - v1.45, 5 Nov 2026 (measured on a stock operation): a case for an order, a result or a document keeps `failureKind` `unmappable`,
   E12 and its escalation, and nothing is sent; its failure text, headline, plan and gate detail stop saying the message could not
   be mapped, and say what the receiver did from `failureOutcome`, since the message may be sound. No API field changes.

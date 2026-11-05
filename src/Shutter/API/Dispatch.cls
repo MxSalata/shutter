@@ -779,14 +779,14 @@ ClassMethod CaseBlockedReason(caseId As %String) As %Status
 /// A write whose answer was lost (Verify.Judge: not committed, or unknown after the last read), or a rehearsal nobody answered.
 ClassMethod StoppedAfterTheGate(text As %String) As %Boolean
 {
-    Quit (text [ "Not committed:") || (text [ "Not verified (unknown)") || (text [ "outcome of the resend is unknown") || (text [ "no usable answer")
+    Quit (text [ "Not committed:") || (text [ "Not verified (unknown)") || (text [ "outcome of the resend is unknown") || (text [ "no usable answer") || (text [ "Error from the write call")
 }
 
 /// The reason code of a stopped case no failing gate check names, from the words of the event that stopped it. A rehearsal
 /// that got no usable answer showed nothing about the action, so it is no refusal, whatever the word rehearsal suggests.
 ClassMethod ReasonFromEvent(text As %String, state As %String) As %String
 {
-    Quit $SELECT(text [ "Rejected by": "REJECTED_BY_APPROVER", text [ "no usable answer": "BLOCKED", text [ "rehearsal": "REHEARSAL_WOULD_NOT_APPLY", text [ "refused": "DISPATCH_REFUSED", text [ "Not committed:": "WRITE_NOT_COMMITTED", (text [ "Not verified (unknown)") || (text [ "outcome of the resend is unknown"): "WRITE_OUTCOME_UNKNOWN", text [ "person": "ESCALATED", state = "escalated": "ESCALATED", 1: "BLOCKED")
+    Quit $SELECT(text [ "Error from the write call": "WRITE_OUTCOME_UNKNOWN", text [ "Rejected by": "REJECTED_BY_APPROVER", text [ "no usable answer": "BLOCKED", text [ "rehearsal": "REHEARSAL_WOULD_NOT_APPLY", text [ "refused": "DISPATCH_REFUSED", text [ "Not committed:": "WRITE_NOT_COMMITTED", (text [ "Not verified (unknown)") || (text [ "outcome of the resend is unknown"): "WRITE_OUTCOME_UNKNOWN", text [ "person": "ESCALATED", state = "escalated": "ESCALATED", 1: "BLOCKED")
 }
 
 // ---- library, settings, costs ----

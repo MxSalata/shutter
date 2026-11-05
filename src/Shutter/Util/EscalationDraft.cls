@@ -56,7 +56,7 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
         Set b = b _ "A message to " _ label _ " failed. Shutter resends only ADT, so it has sent nothing for this message, and the message itself may be sound. Before anyone re-enters it, check the source's Message Viewer: an operation that retries delivers it by itself once the receiver is back." _ nl _ nl
     } ElseIf ..LatestAttemptOutcome(case) = "uncertain" {
         // A write nobody answered may have been applied, and a conditional write can still land while the version stands.
-        Set b = b _ "Shutter sent a write to " _ label _ " and got no answer, so it may have been applied, and it may still land: the write is conditional on the version below, and a slower receiver can commit it late. Before anyone corrects this by hand, check " _ label _ " for the operation key below; Shutter has sent nothing more for this message." _ nl _ nl
+        Set b = b _ "Shutter sent a write to " _ label _ " and got no answer, so it may have been applied, and it can still land while the receiver stays at the version below, since a slower receiver can commit it late. Before anyone corrects this by hand, check " _ label _ " for the operation key below; Shutter has sent nothing more for this message." _ nl _ nl
     } Else {
         Set b = b _ "Shutter could not safely recover a failed message to " _ label _ ". Please compare the systems and correct them by hand; Shutter has sent nothing more for this message." _ nl _ nl
     }
@@ -214,17 +214,21 @@ ClassMethod Lists(list As %DynamicArray, value As %String) As %Boolean [ Private
 /// The block reason the case page shows, and the gate's failing checks (as GET /cases/:id/blocked-reason).
 ClassMethod Reason(case As Shutter.Store.Case, Output failing As %DynamicArray) As Shutter.Store.BlockReason
 {
-    Set failing = [], code = "", id = case.%Id(), did = ""
-    &sql(SELECT TOP 1 ID INTO :did FROM Shutter_Store.GateDecision WHERE "Case" = :id AND Outcome <> 'pass' ORDER BY ID DESC)
-    If (SQLCODE = 0) && (did '= "") {
-        Set d = ##class(Shutter.Store.GateDecision).%OpenId(did)
-        Set checks = ##class(Shutter.Util.Json).Parse(d.ChecksJSON, .psc)
-        If $ISOBJECT(checks) {
-            Set it = checks.%GetIterator()
-            While it.%GetNext(, .c) { If c.result '= "pass" { Do failing.%Push(c) If code = "" Set code = c."reason_code" } }
+    Set failing = [], code = "", id = case.%Id(), did = "", text = ""
+    &sql(SELECT TOP 1 Text INTO :text FROM Shutter_Store.CaseEvent WHERE "Case" = :id AND ToState IN ('blocked','escalated') ORDER BY Seq DESC)
+    // As the case's own reason reads it: what stopped the case after the gate had passed it says so itself.
+    If '##class(Shutter.API.Dispatch).StoppedAfterTheGate(text) {
+        &sql(SELECT TOP 1 ID INTO :did FROM Shutter_Store.GateDecision WHERE "Case" = :id AND Outcome <> 'pass' ORDER BY ID DESC)
+        If (SQLCODE = 0) && (did '= "") {
+            Set d = ##class(Shutter.Store.GateDecision).%OpenId(did)
+            Set checks = ##class(Shutter.Util.Json).Parse(d.ChecksJSON, .psc)
+            If $ISOBJECT(checks) {
+                Set it = checks.%GetIterator()
+                While it.%GetNext(, .c) { If c.result '= "pass" { Do failing.%Push(c) If code = "" Set code = c."reason_code" } }
+            }
         }
     }
-    If code = "" Set code = $SELECT(case.State = "escalated": "ESCALATED", case.State = "failed": "", 1: "BLOCKED")
+    If code = "" Set code = $SELECT(case.State = "failed": "", 1: ##class(Shutter.API.Dispatch).ReasonFromEvent(text, case.State))
     Quit $SELECT(code = "": "", 1: ##class(Shutter.Store.BlockReason).ByCode(code))
 }
 
