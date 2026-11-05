@@ -41,8 +41,8 @@ import {
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router';
 import { api, newIdempotencyKey, seg } from '@/api/client';
-import { keys, useCan } from '@/api/hooks';
-import type { CaseDetail, PlanView } from '@/api/types';
+import { keys, useCan, useCase } from '@/api/hooks';
+import type { CaseDetail, CaseState, PlanView } from '@/api/types';
 import { TechDetail } from '@/components/TechDetail';
 import { ENV } from '@/env/mode';
 import { REPLAY_DONE } from '@/lib/events';
@@ -63,6 +63,7 @@ import {
   welcomeActions,
   type ChapterGroup,
   type GuideScope,
+  type GuideStep,
 } from './registry';
 import { bringIntoFreePart, focusFrom, landOn, pageHeading, useMenuHandOver, waitForTarget } from './reveal';
 import { useGuide, type GuidePhase } from './store';
@@ -364,6 +365,13 @@ const caseInPath = (path: string | undefined) => {
   return id ? decodeURIComponent(id) : undefined;
 };
 
+/** The state of the case a step's words depend on; for any other step, none, and nothing more is read. */
+function useStepCaseState(step: GuideStep | undefined): CaseState | undefined {
+  const place = usePlace(step);
+  const id = caseInPath(place.data && 'path' in place.data ? place.data.path : undefined);
+  return useCase(id ?? '', !!id && !!step?.whenCase).data?.state;
+}
+
 /**
  * The case page's replay after a trial approval, awaited by the step after it, for at most 3 seconds. Set only for an
  * approval the tour made: an approval the reader made by hand has no step waiting for it.
@@ -434,7 +442,7 @@ function StepCard({
   const client = useQueryClient();
   const reduced = useReducedMotion() ?? false;
   const [busy, setBusy] = useState(false);
-  const step = stepForRole(pos.step, useCan());
+  const step = stepForRole(pos.step, useCan(), useStepCaseState(pos.step));
   const tryAction = step.tryIt?.action;
   const chipAction = step.chip?.action;
   const [present, setPresent] = useState<{ tryIt: boolean; chip: boolean }>({ tryIt: false, chip: false });
@@ -606,7 +614,8 @@ function StepHost({ pos }: { pos: GuidePosition }) {
   const path = place.data && 'path' in place.data ? place.data.path : undefined;
   // A safeguard only: in the trial every place of the quick tour resolves (guide.spec.ts checks it)
   const notFound = absent || (!!place.data && 'missing' in place.data);
-  const tryAction = stepForRole(pos.step, useCan()).tryIt?.action;
+  const caseState = useStepCaseState(pos.step);
+  const tryAction = stepForRole(pos.step, useCan(), caseState).tryIt?.action;
   const { ring, trying } = useStepMotion(target, tryAction, reduced);
   // Read when the card is placed, not a reason to place it again
   const reducedNow = useRef(reduced);
@@ -628,6 +637,16 @@ function StepHost({ pos }: { pos: GuidePosition }) {
     window.addEventListener(REPLAY_DONE, played);
     return () => window.removeEventListener(REPLAY_DONE, played);
   }, [tryAction, path]);
+
+  // Reject plan pressed by hand on this step: the page has closed up around the decision, so the tour goes on to what it
+  // means and lands there, as it does after the replay of an approval. Arriving on a case rejected earlier stays put
+  const rejectStep = pos.step.tryIt?.action === 'approve-plan';
+  const stateBefore = useRef(caseState);
+  useEffect(() => {
+    const before = stateBefore.current;
+    stateBefore.current = caseState;
+    if (rejectStep && before === 'awaiting_approval' && caseState === 'blocked') useGuide.getState().next();
+  }, [rejectStep, caseState]);
 
   // The page learns what the step points at before the step looks for it, so a folded section can open for it
   useEffect(() => {
@@ -957,6 +976,7 @@ function Pointing({ action }: { action: string }) {
 /** One polite announcement per step change, short: the step, never the page's content. */
 function useAnnouncement(phase: GuidePhase, pos: GuidePosition | undefined, approved: boolean) {
   const can = useCan();
+  const caseState = useStepCaseState(pos?.step);
   const [message, setMessage] = useState('');
   const key = pos ? pos.path : '';
   const [before, setBefore] = useState({ phase, key });
@@ -964,7 +984,7 @@ function useAnnouncement(phase: GuidePhase, pos: GuidePosition | undefined, appr
     setBefore({ phase, key });
     if (phase === 'step' && pos)
       setMessage(
-        `${approved ? 'Approved for you, in the trial. ' : ''}Step ${pos.n} of ${pos.m}, ${sentence(pos.chapter.title)}. ${stepForRole(pos.step, can).title}.`,
+        `${approved ? 'Approved for you, in the trial. ' : ''}Step ${pos.n} of ${pos.m}, ${sentence(pos.chapter.title)}. ${stepForRole(pos.step, can, caseState).title}.`,
       );
     else if (phase === 'finished') setMessage('That is the tour.');
     else if (phase === 'closed' && before.phase === 'step')

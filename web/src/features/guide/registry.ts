@@ -1,5 +1,5 @@
 import { scenariosHidden } from '@/api/can';
-import type { Can, Mode } from '@/api/types';
+import type { Can, CaseState, Mode } from '@/api/types';
 import { TRIAL } from '@/env/mode';
 import type { StoryStep } from '@/features/cases/case/CaseStory';
 import { PROOF } from '@/lib/proof';
@@ -56,18 +56,29 @@ export interface GuideStep {
   lookOnly?: RoleWords;
   /** The words instead, for a role that may not approve (a site's operator): the step's try-it goes with them. */
   noApprove?: RoleWords;
+  /** The words instead, while the step's case stands in one of these states: what the step says happened did not. */
+  whenCase?: Partial<Record<CaseState, RoleWords>>;
 }
 
 /** What a role that can't do what a step assumes reads instead, within the same word budgets. */
 export type RoleWords = Pick<GuideStep, 'say'> & Partial<Pick<GuideStep, 'title' | 'detail'>>;
 
-/** The step as this role reads it: nothing tells someone to do what their role can't, or that it happened when it did not. */
-export function stepForRole(step: GuideStep, can: Can): GuideStep {
+/**
+ * The step as this role reads it, over the case as it stands: nothing tells someone to do what their role can't, or that
+ * it happened when it did not.
+ */
+export function stepForRole(step: GuideStep, can: Can, caseState?: CaseState): GuideStep {
+  const asItStands = caseState && step.whenCase?.[caseState];
+  if (asItStands) return { ...step, ...asItStands, tryIt: undefined };
   if (!can.approve && step.noApprove) {
     return { ...step, ...step.noApprove, tryIt: undefined };
   }
   return scenariosHidden(can) && step.lookOnly ? { ...step, ...step.lookOnly } : step;
 }
+
+/** S2's verified step while its plan still waits, whoever reads it: a chapter or Resume can land there before any decision. */
+const NOT_YET_APPROVED =
+  "Not approved, so nothing is written yet. Once an approver releases it, Shutter reads the bed system's own history to check the transfer landed.";
 
 export type ChapterGroup = 'Operate' | 'Results' | 'Configure';
 
@@ -260,6 +271,12 @@ export const CHAPTERS: GuideChapter[] = [
           title: 'An approver decides here',
           say: "The safety checks (the gate) passed and a test run worked. Your role can't approve, so the fix waits for an approver.",
         },
+        whenCase: {
+          blocked: {
+            title: 'The plan was rejected here',
+            say: 'The safety checks (the gate) passed and a test run worked, but the plan was rejected, so the fix was never sent.',
+          },
+        },
         scopes: Q,
         introduces: ['gate'],
       },
@@ -280,7 +297,14 @@ export const CHAPTERS: GuideChapter[] = [
         say: "Shutter reads the bed system's own history and finds the transfer to WARD-B there. That is verified: it landed.",
         noApprove: {
           title: 'What would be checked',
-          say: "Not approved, so nothing is written yet. Once an approver releases it, Shutter reads the bed system's own history to check the transfer landed.",
+          say: NOT_YET_APPROVED,
+        },
+        whenCase: {
+          awaiting_approval: { title: 'What would be checked', say: NOT_YET_APPROVED },
+          blocked: {
+            title: 'Rejected, so nothing written',
+            say: 'The plan was rejected, so nothing was written. The bed system still holds the patient in the old ward.',
+          },
         },
         place: { scenario: 'S2', mode: 'board' },
         target: 'case-verified',
