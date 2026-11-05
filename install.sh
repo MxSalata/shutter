@@ -117,21 +117,36 @@ healthy() {
 
 # A port docker compose would publish must be free. A connection that succeeds means something holds it. Another IRIS on
 # 1972 is the usual case, and without this check it would surface only after the whole build, as a failed "compose up".
+not_a_port() {
+  case "$1" in ''|*[!0-9]*) return 0 ;; esac
+  [ "${#1}" -gt 5 ] || [ "$1" -lt 1 ] || [ "$1" -gt 65535 ]
+}
+port_taken() { (exec 3<> "/dev/tcp/127.0.0.1/${1}") 2> /dev/null; }
+
+# Both ports have to be right in the same command: naming one at a time, each [fix] was refused for the other port, and
+# the next run forgot the port the first [fix] had chosen.
+one_port_command() {
+  local name=$1 value=$2 default=$3
+  if not_a_port "$value" || port_taken "$value"; then printf '%s=<free port> ' "$name"
+  elif [ "$value" != "$default" ]; then printf '%s=%s ' "$name" "$value"
+  fi
+}
+both_ports_command=""
 check_port() {
   local name=$1 value=$2 what=$3
-  case "$value" in
-    ''|*[!0-9]*) fail "$name is \"$value\", which is not a port number." "Give it a number from 1 to 65535, then run $rerun again."; return ;;
-  esac
-  if [ "${#value}" -gt 5 ] || [ "$value" -lt 1 ] || [ "$value" -gt 65535 ]; then
+  if not_a_port "$value"; then
     fail "$name is \"$value\", which is not a port number." "Give it a number from 1 to 65535, then run $rerun again."
-  elif (exec 3<> "/dev/tcp/127.0.0.1/${value}") 2> /dev/null; then
+  elif port_taken "$value"; then
     if [ -f .env ]; then
       fail "Port ${value} ($what) is already in use by something else." \
         "Stop what uses it, or set $name to a free port in .env, then run $rerun again."
+    elif [ -n "$both_ports_command" ]; then
+      fail "Port ${value} ($what) is already in use by something else." "Stop what uses it, or choose a free port in the command above."
     else
+      both_ports_command="$(one_port_command SHUTTER_WEB_PORT "$port" 52773)$(one_port_command SHUTTER_SUPERSERVER_PORT "$superserver_port" 1972)$rerun"
       fail "Port ${value} ($what) is already in use by something else." \
-        "Stop what uses it, or choose a free port: $name=<free port> $rerun" \
-        "That command keeps the port in the .env it creates."
+        "Stop what uses it, or choose a free port: $both_ports_command" \
+        "That command keeps its ports in the .env it creates."
     fi
   else
     ok "Port ${value} ($what) is free"
@@ -146,6 +161,9 @@ superserver_port=${SHUTTER_SUPERSERVER_PORT-$(setting SHUTTER_SUPERSERVER_PORT)}
 health_url="http://localhost:${port}/api/shutter/health"
 if [ "$problems" -eq 0 ] && docker compose ps --status running --services 2> /dev/null | grep -qx shutter; then
   if healthy; then
+    # Where it really listens: a port from the shell or an edited .env moves nothing until the container is created again
+    live=$(docker compose port shutter 52773 2> /dev/null | sed 's/.*://' | head -1 || true)
+    port=${live:-$port}
     echo
     echo "Shutter is already running and healthy: http://localhost:${port}/shutter/index.html (approver / shutter)."
     echo "Nothing was changed."
@@ -314,7 +332,7 @@ if docker compose up -d --build > install-build.log 2>&1; then
 else
   echo
   # A port taken after the check, or one a connection can't see: the build itself was fine, so don't send them to the network
-  port_clash=$(grep -E 'port is already allocated|address already in use|ports are not available' install-build.log | tail -1 || true)
+  port_clash=$(grep -iE 'port is already allocated|address already in use|ports are not available' install-build.log | tail -1 || true)
   if [ -n "$port_clash" ]; then
     echo "The image is built, but the container could not take its port:"
     echo "$port_clash" | sed 's/^/    /'

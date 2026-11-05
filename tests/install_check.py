@@ -33,6 +33,8 @@ case "$1 $2" in
     if [ -f compose-up ]; then
       case "$*" in *-q*) echo fake-id ;; *) echo shutter ;; esac
     fi ;;
+  "compose port")
+    if [ -f compose-up ] && [ -n "${FAKE_LIVE_PORT:-}" ]; then echo "127.0.0.1:$FAKE_LIVE_PORT"; fi ;;
   "compose up")
     if [ -n "${FAKE_COMPOSE_UP_ERROR:-}" ]; then echo "$FAKE_COMPOSE_UP_ERROR"; exit 1; fi
     sleep "${FAKE_BUILD_SECONDS:-0}"
@@ -54,7 +56,7 @@ def free_port():
 
 
 class Run:
-    def __init__(self, args=(), env=None, hold=(), dotenv=None):
+    def __init__(self, args=(), env=None, hold=(), dotenv=None, running=False):
         self.folder = tempfile.mkdtemp(prefix="install-check-")
         try:
             for name in ("install.sh", ".env.example"):
@@ -68,6 +70,8 @@ class Run:
             if dotenv is not None:
                 with open(os.path.join(self.folder, ".env"), "w") as f:
                     f.write(dotenv)
+            if running:
+                open(os.path.join(self.folder, "compose-up"), "w").close()
             full = dict(os.environ, PATH=fake + os.pathsep + os.environ["PATH"], FAKE_DOCKER_LOG=os.path.join(self.folder, "docker.log"))
             for name in ("SHUTTER_WEB_PORT", "SHUTTER_SUPERSERVER_PORT"):
                 full.pop(name, None)
@@ -131,15 +135,40 @@ def main():
     # The two ports, one at a time and together
     run = Run(["--replay"], env=ports, hold=[sup])
     refuses("superserver busy", run, f"Port {sup} (IRIS's superserver) is already in use",
-            f"SHUTTER_SUPERSERVER_PORT=<free port> ./install.sh --replay")
+            f"SHUTTER_WEB_PORT={web} SHUTTER_SUPERSERVER_PORT=<free port> ./install.sh --replay")
     check("superserver busy", "The build failed" not in run.out, "doesn't call it a failed build", run)
     check("superserver busy", f"Port {web} (the web app) is free" in run.out, "still reports the web port", run)
 
     run = Run(["--replay"], env=ports, hold=[web])
-    refuses("web busy", run, f"Port {web} (the web app) is already in use", "SHUTTER_WEB_PORT=<free port> ./install.sh --replay")
+    refuses("web busy", run, f"Port {web} (the web app) is already in use",
+            f"SHUTTER_WEB_PORT=<free port> SHUTTER_SUPERSERVER_PORT={sup} ./install.sh --replay")
 
+    # A command for one port at a time would be refused for the other, and the next [fix] would forget the first choice
     run = Run(["--replay"], env=ports, hold=[web, sup])
-    refuses("both busy", run, "2 thing(s) to fix first")
+    both = "SHUTTER_WEB_PORT=<free port> SHUTTER_SUPERSERVER_PORT=<free port> ./install.sh --replay"
+    refuses("both busy", run, "2 thing(s) to fix first", f"Port {web} (the web app)", f"Port {sup} (IRIS's superserver)", both)
+    commands = [line for line in run.out.splitlines() if "<free port>" in line]
+    check("both busy", len(commands) == 1 and both in commands[0], "gives one command, naming both", run)
+
+    # One busy at its default: the other port, also at its default, needs no mention
+    run = Run(["--replay"], env={"SHUTTER_SUPERSERVER_PORT": str(sup), "SHUTTER_WEB_PORT": "52773"}, hold=[sup])
+    if "Port 52773 (the web app) is free" in run.out:
+        refuses("one busy, other at default", run, ": SHUTTER_SUPERSERVER_PORT=<free port> ./install.sh --replay")
+    else:
+        print("skip  one busy, other at default: this machine already uses 52773")
+
+    # A port that is not a number can't go in the command as it is
+    run = Run(["--replay"], env=dict(ports, SHUTTER_WEB_PORT="80a"), hold=[sup])
+    refuses("bad port and a busy one", run, "SHUTTER_WEB_PORT=<free port> SHUTTER_SUPERSERVER_PORT=<free port> ./install.sh --replay")
+
+    # A Shutter that is already up is reported where it listens, not at a port the shell asked for and nothing has applied
+    live = free_port()
+    run = Run(["--replay"], env={"SHUTTER_WEB_PORT": str(free_port()), "FAKE_LIVE_PORT": str(live)}, running=True)
+    check("already running", run.code == 0 and "already running and healthy" in run.out, "says so", run)
+    check("already running", f"http://localhost:{live}/shutter/index.html" in run.out, "gives the port it listens on", run)
+    check("already running", not run.built and run.dotenv is None, "changes nothing", run)
+    run = Run(["--replay"], env=ports, running=True)
+    check("already running, no answer", run.code == 0 and f"http://localhost:{web}/shutter/index.html" in run.out, "falls back to the port it was given", run)
 
     # With a port busy the [fix] used to send people to .env, which --replay then refused as the AI Hub edition's
     run = Run(["--replay"], env=ports)
@@ -174,6 +203,9 @@ def main():
     run = Run(["--replay"], env=dict(ports, FAKE_COMPOSE_UP_ERROR="Error: driver failed: Bind for 127.0.0.1:1972 failed: port is already allocated"))
     check("port taken later", run.code == 1 and "could not take its port" in run.out and "port is already allocated" in run.out, "names the port", run)
     check("port taken later", "Maven Central" not in run.out and "The build failed" not in run.out, "doesn't blame the network", run)
+    run = Run(["--replay"], env=dict(ports, FAKE_COMPOSE_UP_ERROR="Error response from daemon: Ports are not available: exposing port TCP 127.0.0.1:1972"))
+    check("port taken later, capitalised", run.code == 1 and "could not take its port" in run.out and "Ports are not available" in run.out, "names the port", run)
+    check("port taken later, capitalised", "Maven Central" not in run.out and "The build failed" not in run.out, "doesn't blame the network", run)
     run = Run(["--replay"], env=dict(ports, FAKE_COMPOSE_UP_ERROR="ERROR: failed to solve: network unreachable"))
     check("a real build failure", run.code == 1 and "The build failed" in run.out and "Maven Central" in run.out, "still reads as a build failure", run)
 
