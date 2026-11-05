@@ -49,6 +49,11 @@ const CLEARANCE_PX = 16;
 /** How long the page is watched after a step's card is placed: panels open and recorded parts arrive in that time. */
 const SETTLE_MS = 4000;
 const TICK_MS = 50;
+/**
+ * A page move this soon after the card is placed is the page itself: a chunk arriving resets the scroll just after an
+ * instant landing. A reader's move in that time is caught by READER_MOVES.
+ */
+const PAGE_OWN_MOVE_MS = 1000;
 
 /**
  * Where the free part of the screen starts for this element, measured: under the header, and under a sticky bar whose
@@ -72,7 +77,7 @@ const READER_MOVES = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const;
  * aiming there while the page settles. A smooth scroll fixes where it stops when it starts, and limits that to the page's
  * height then: the card about to be drawn adds height, a story step opening moves everything below it, and a tab lays
  * out after the address changes. So the aim is measured again on every tick and the scroll sent again when it has
- * moved. It stops at its time limit, when the reader moves, or when something else moves the page after it has arrived.
+ * moved. It stops at its time limit, when the reader moves, or when something else moves the page once it has settled.
  * Returns the function that stops it. `window.scrollTo` cannot shift the page sideways, as `scrollIntoView` can.
  */
 export function landOn(el: HTMLElement, reduced: boolean): () => void {
@@ -92,8 +97,9 @@ export function landOn(el: HTMLElement, reduced: boolean): () => void {
     const wanted = Math.max(0, Math.min(aim, end));
     const aimMoved = goal === null || Math.abs(wanted - goal) > 1;
     const off = Math.abs(y - wanted) > 1;
-    if (!aimMoved && arrived && off) return stop();
-    if (aimMoved || (off && y === lastY)) {
+    const movedAway = !aimMoved && arrived && off;
+    if (movedAway && Date.now() - started > PAGE_OWN_MOVE_MS) return stop();
+    if (aimMoved || movedAway || (off && y === lastY)) {
       goal = wanted;
       arrived = false;
       window.scrollTo({ top: wanted, behavior: reduced ? 'auto' : 'smooth' });

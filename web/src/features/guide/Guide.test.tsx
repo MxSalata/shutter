@@ -15,7 +15,7 @@ import CasePage from '@/features/cases/CasePage';
 import EvaluationPage from '@/features/evaluation/EvaluationPage';
 import ScenariosPage from '@/features/scenarios/ScenariosPage';
 import { INITIAL, type GuideProgress } from './controller';
-import { APPROVED_FOR_YOU, Guide } from './Guide';
+import { APPROVED_FOR_YOU, Guide, welcomeActions } from './Guide';
 import { TrialHelpMenu } from './HelpMenu';
 import { forgetProgress, GUIDE_KEY, saveProgress } from './storage';
 import { useGuide } from './store';
@@ -66,6 +66,15 @@ function renderApp(path = '/start') {
   );
   return router;
 }
+
+describe('the welcome, by role', () => {
+  const can = { operate: true, approve: true, configure: true, scenarios: true, liveAgents: false };
+  it('promises only what the role can do', () => {
+    expect(welcomeActions(can)).toBe('Approve, run, save or escalate');
+    expect(welcomeActions({ ...can, approve: false, configure: false })).toBe('Run or escalate');
+    expect(welcomeActions({ ...can, configure: false, scenarios: false })).toBe('Approve or escalate');
+  });
+});
 
 const stored = () => JSON.parse(localStorage.getItem(GUIDE_KEY) ?? 'null');
 const welcome = () => screen.findByRole('dialog', { name: 'Welcome to the Shutter trial' });
@@ -196,6 +205,24 @@ describe('the guide', () => {
     await waitFor(() =>
       expect(announced()).toHaveTextContent(/^Approved for you, in the trial\. Step 4 of 9/),
     );
+  });
+
+  it('tells an operator an approver decides, offers no approval on the way, and never says it landed', async () => {
+    resetMock('operator');
+    const approve = vi.spyOn(api, 'post');
+    at('s2/decision');
+    renderApp();
+    const guide = await card();
+    await within(guide).findByRole('heading', { name: 'An approver decides here' });
+    expect(within(guide).queryByRole('button', { name: /^Try it/ })).not.toBeInTheDocument();
+    await userEvent.click(within(guide).getByRole('button', { name: 'Next' }));
+    const heading = await screen.findByRole('heading', { name: 'What would be checked' });
+    const nextCard = heading.closest('[role="region"]')!;
+    expect(nextCard).toHaveTextContent(/Not approved, so nothing is written yet/);
+    expect(nextCard).not.toHaveTextContent(/it landed\./);
+    expect(approve).not.toHaveBeenCalled();
+    approve.mockRestore();
+    resetMock('approver');
   });
 
   it('points at the control a step invites the reader to try, at rest under reduced motion', async () => {

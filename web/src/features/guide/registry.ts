@@ -1,4 +1,5 @@
-import type { Mode } from '@/api/types';
+import { scenariosHidden } from '@/api/can';
+import type { Can, Mode } from '@/api/types';
 import { TRIAL } from '@/env/mode';
 import type { StoryStep } from '@/features/cases/case/CaseStory';
 import { PROOF } from '@/lib/proof';
@@ -51,6 +52,21 @@ export interface GuideStep {
   scopes: GuideScope[];
   /** The words this step explains first (the first-use rule of the quick tour). */
   introduces?: string[];
+  /** The words instead, for a role that may not run scenarios (the public demo's). */
+  lookOnly?: RoleWords;
+  /** The words instead, for a role that may not approve (a site's operator): the step's try-it goes with them. */
+  noApprove?: RoleWords;
+}
+
+/** What a role that can't do what a step assumes reads instead, within the same word budgets. */
+export type RoleWords = Pick<GuideStep, 'say'> & Partial<Pick<GuideStep, 'title' | 'detail'>>;
+
+/** The step as this role reads it: nothing tells someone to do what their role can't, or that it happened when it did not. */
+export function stepForRole(step: GuideStep, can: Can): GuideStep {
+  if (!can.approve && step.noApprove) {
+    return { ...step, ...step.noApprove, tryIt: undefined };
+  }
+  return scenariosHidden(can) && step.lookOnly ? { ...step, ...step.lookOnly } : step;
 }
 
 export type ChapterGroup = 'Operate' | 'Results' | 'Configure';
@@ -108,12 +124,15 @@ function costSay(): string {
   return `Costs come from list prices and the tokens used: estimates, not invoices.${range}`;
 }
 
-/** The mode step's words, naming the modes the page offers: the trial has no single investigator (ScenariosPage). */
-export function modesSay(trial: boolean): string {
-  const modes = trial
-    ? 'Board (agents), Site policy or Rules only (no agents)'
-    : 'Board (agents), Site policy, Single investigator or Rules only (no agents)';
-  return `Choose who proposes fixes: ${modes}. Every fix needs a person, or the site's written policy.`;
+/**
+ * The mode step's words, naming the four modes the page shows; the trial has no recording of the single investigator
+ * (ScenariosPage). `canRun`: a role that can't run a scenario picks a mode only to read the list in it.
+ */
+export function modesSay(trial: boolean, canRun = true): string {
+  const single = trial ? 'Single investigator (not recorded)' : 'Single investigator';
+  if (!canRun)
+    return `Four modes propose fixes: Board, Site policy, ${single} or Rules only (no agents). Pick one to read the list.`;
+  return `Choose who proposes fixes: Board, Site policy, ${single} or Rules only. Every fix needs a person, or the site's written policy.`;
 }
 
 export const CHAPTERS: GuideChapter[] = [
@@ -126,6 +145,9 @@ export const CHAPTERS: GuideChapter[] = [
         id: 'start',
         title: 'Three stories to start with',
         say: 'Each scenario replays a known message failure. Start with these three: a transfer delivered, a fix held back, and one the safety checks stopped.',
+        lookOnly: {
+          say: "Each scenario replays a known failure. The cards show three of the online hospital's stories; this tour then follows S2, S8 and S20.",
+        },
         place: { page: '/scenarios' },
         target: 'scenarios',
         scopes: Q,
@@ -134,6 +156,7 @@ export const CHAPTERS: GuideChapter[] = [
         id: 'mode',
         title: 'Who makes the plan',
         say: modesSay(TRIAL),
+        lookOnly: { say: modesSay(TRIAL, false) },
         detail:
           "In every mode, every fix passes the safety checks, then a person, or the site's written policy, releases it. Rules only is the baseline.",
         place: { page: '/scenarios' },
@@ -219,6 +242,10 @@ export const CHAPTERS: GuideChapter[] = [
         target: 'case-decision',
         open: 'decision',
         tryIt: { action: 'approve-plan', text: 'Try it: press Approve plan' },
+        noApprove: {
+          title: 'An approver decides here',
+          say: "The safety checks (the gate) passed and a test run worked. Your role can't approve, so the fix waits for an approver.",
+        },
         scopes: Q,
         introduces: ['gate'],
       },
@@ -237,6 +264,10 @@ export const CHAPTERS: GuideChapter[] = [
         id: 'verified',
         title: 'Checked at the bed system',
         say: "Shutter reads the bed system's own history and finds the transfer to WARD-B there. That is verified: it landed.",
+        noApprove: {
+          title: 'What would be checked',
+          say: "Not approved, so nothing is written yet. Once an approver releases it, Shutter reads the bed system's own history to check the transfer landed.",
+        },
         place: { scenario: 'S2', mode: 'board' },
         target: 'case-verified',
         open: 'verified',
