@@ -91,6 +91,8 @@ export interface Evaluation {
     recorded_from: string;
     recorded_to: string;
     scored_passes: number;
+    plans_with_a_catalogue_outcome?: number;
+    plans_taking_the_preferred_outcome?: number;
     board_matches: number;
     specialist_matches: Record<string, number>;
     agreement: Record<string, number>;

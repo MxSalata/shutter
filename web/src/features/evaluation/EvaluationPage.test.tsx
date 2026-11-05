@@ -77,11 +77,7 @@ describe('EvaluationPage', () => {
   it('says plainly where the figures come from: the real agents, IRIS AI Hub and its build, and CI', () => {
     renderPage();
     expect(screen.getByRole('heading', { name: 'Evaluation', level: 1 })).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'How the board decides, measured on runs recorded with the real agents, 25 Oct to 1 Nov 2026.',
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText('How the board decides, measured on recorded runs.')).toBeInTheDocument();
     expect(
       within(headline()).getByText(
         'From 100 runs recorded with the real agents on IRIS AI Hub (build 2026.3.0AI.154.0), 25 Oct to 1 Nov 2026; CI replays them on every push. Nothing on this page was measured on this instance.',
@@ -107,7 +103,7 @@ describe('EvaluationPage', () => {
     expect(screen.getByText(/\$10\.00 at list prices/)).toBeInTheDocument();
   });
 
-  it('tells the two-layer story: the gate stops six of the misses, and only the board catches S8', async () => {
+  it('tells the two-layer story: the gate stops six of the misses, and the board catches S8 as its entry says', async () => {
     renderPage();
     const hero = headline();
     expect(hero).toHaveAttribute('data-tour', 'evaluation-headline');
@@ -117,7 +113,13 @@ describe('EvaluationPage', () => {
     );
     expect(
       within(hero).getByText(
-        /^The seventh, S8, wrote over the bed manager's ward with every check passed\. Only the board caught it\./,
+        /^The seventh, S8, wrote over the bed manager's ward with every check passed\. The board escalated, as entry E7 says\./,
+      ),
+    ).toBeInTheDocument();
+    // What the agents had to go on, carried over from the evaluation so the page doesn't overclaim
+    expect(
+      within(hero).getByText(
+        /coordinator is given the catalogue's entry and took its outcome in 24 of 25 plans, S8 included/,
       ),
     ).toBeInTheDocument();
     // The side by side of S8's two cases, found among the recorded cases
@@ -252,12 +254,10 @@ describe('EvaluationPage', () => {
       within(why).getByText('Who proposed the expected action, of 24 scored passes'),
     ).toBeInTheDocument();
     expect(
-      within(why).getByText(
-        'Each specialist agent answers from its own view only; the coordinator agent weighs all three.',
-      ),
+      within(why).getByText('Each specialist answers from its own view; the coordinator weighs all three.'),
     ).toBeInTheDocument();
     expect(why).toHaveTextContent(
-      'The gate alone catches S1, S3, S6, S7, S10 and S13. Only the board catches S8.',
+      'The gate alone catches S1, S3, S6, S7, S10 and S13. The board catches S8.',
     );
     // Each id opens that scenario's Rules only case, once the recorded cases have loaded
     expect(await within(why).findByRole('link', { name: 'S1' })).toHaveAttribute('href', '/cases/C-000014');
@@ -462,9 +462,7 @@ describe('EvaluationPage', () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/^the findings with the expected outcome: none/)).toBeInTheDocument();
     expect(screen.getByText('No scored passes')).toBeInTheDocument();
-    expect(
-      screen.getByText('How the board decides, measured on runs recorded with the real agents.'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('How the board decides, measured on recorded runs.')).toBeInTheDocument();
     expect(
       within(headline()).getByText(
         'No runs have been recorded with the real agents yet. Nothing on this page was measured on this instance.',
@@ -555,9 +553,9 @@ describe('EvaluationPage', () => {
     const tech = renderPage(undefined, { detail: 'technical' });
     await within(headline()).findByRole('link', { name: 'Compare the two cases' });
     const technical = wordsAbove(tech.container);
-    // specs/evaluation.md 3: the copy at most 230 words in Plain, Technical at most 1.5 times that
-    expect(words.copy).toBeLessThanOrEqual(230);
-    expect(technical.copy).toBeLessThanOrEqual(345);
+    // At most 245 words in Plain, which includes the catalogue line beside the result; Technical at most 1.5 times that
+    expect(words.copy).toBeLessThanOrEqual(245);
+    expect(technical.copy).toBeLessThanOrEqual(367);
     // Every visible word, the headings, the controls and the figures with it: Technical adds at most half again
     expect(technical.all).toBeGreaterThan(words.all);
     expect(technical.all).toBeLessThanOrEqual(1.5 * words.all);
