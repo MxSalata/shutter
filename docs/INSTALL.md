@@ -383,7 +383,8 @@ Options, for this call and the apply alike: `production` (when several exist and
 (the forwarder's target: 127.0.0.1 and this instance's web server port by default; on a licensed instance give the Web
 Gateway's), `ssl_config`, `credential` (default `ShutterIntake`), `receivers` (a comma-separated list of items in place of
 the namespace's stock HL7 operations, for a site whose connector is its own class; `other_operations` in the plan lists those)
-and `alert_on_error` (below).
+and `alert_on_error` (below). A name in `receivers` that matches no item is a warning. If no item is chosen at all, the plan warns and
+adds no alert intake, because an intake with an empty list would take every item's alerts.
 
 **9.2 Apply it.**
 
