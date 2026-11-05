@@ -9,6 +9,7 @@
 #
 # Then it builds and starts the container (the whole build log goes to install-build.log) and waits until the container
 # reports healthy (2 to 15 minutes the first time). A Shutter that is already running and healthy is left as it is.
+# Another port: SHUTTER_WEB_PORT=8080 SHUTTER_SUPERSERVER_PORT=1973 ./install.sh (kept in the .env it creates).
 # Works with bash 3.2 (macOS) too.
 set -euo pipefail
 
@@ -23,7 +24,7 @@ MIN_DISK_GB=25
 edition=aihub
 image_file=""
 
-usage() { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --replay) edition=replay ;;
@@ -34,6 +35,11 @@ while [ $# -gt 0 ]; do
   shift
 done
 cd "$(dirname "$0")"
+
+# The same command, for a [fix] to quote
+rerun=./install.sh
+[ "$edition" = replay ] && rerun="$rerun --replay"
+[ -n "$image_file" ] && rerun="$rerun --image-file $image_file"
 
 problems=0
 fail() { problems=$((problems + 1)); printf '  [fix] %s\n' "$1"; shift; for line in "$@"; do printf '        %s\n' "$line"; done; }
@@ -109,8 +115,34 @@ healthy() {
   [ -n "$id" ] && [ "$(docker inspect --format '{{.State.Health.Status}}' "$id" 2> /dev/null)" = healthy ]
 }
 
+# A port docker compose would publish must be free. A connection that succeeds means something holds it. Another IRIS on
+# 1972 is the usual case, and without this check it would surface only after the whole build, as a failed "compose up".
+check_port() {
+  local name=$1 value=$2 what=$3
+  case "$value" in
+    ''|*[!0-9]*) fail "$name is \"$value\", which is not a port number." "Give it a number from 1 to 65535, then run $rerun again."; return ;;
+  esac
+  if [ "${#value}" -gt 5 ] || [ "$value" -lt 1 ] || [ "$value" -gt 65535 ]; then
+    fail "$name is \"$value\", which is not a port number." "Give it a number from 1 to 65535, then run $rerun again."
+  elif (exec 3<> "/dev/tcp/127.0.0.1/${value}") 2> /dev/null; then
+    if [ -f .env ]; then
+      fail "Port ${value} ($what) is already in use by something else." \
+        "Stop what uses it, or set $name to a free port in .env, then run $rerun again."
+    else
+      fail "Port ${value} ($what) is already in use by something else." \
+        "Stop what uses it, or choose a free port: $name=<free port> $rerun" \
+        "The port is kept in the .env that creates."
+    fi
+  else
+    ok "Port ${value} ($what) is free"
+  fi
+}
+
 # 3. Already running?
-port=$(setting SHUTTER_WEB_PORT); port=${port:-52773}
+# The shell's value comes first, because docker compose itself prefers the shell to .env; a value set but empty also
+# beats .env there, and then the compose file's default applies.
+port=${SHUTTER_WEB_PORT-$(setting SHUTTER_WEB_PORT)}; port=${port:-52773}
+superserver_port=${SHUTTER_SUPERSERVER_PORT-$(setting SHUTTER_SUPERSERVER_PORT)}; superserver_port=${superserver_port:-1972}
 health_url="http://localhost:${port}/api/shutter/health"
 if [ "$problems" -eq 0 ] && docker compose ps --status running --services 2> /dev/null | grep -qx shutter; then
   if healthy; then
@@ -120,11 +152,11 @@ if [ "$problems" -eq 0 ] && docker compose ps --status running --services 2> /de
     exit 0
   fi
   note "Shutter's container is running but not healthy yet; it will be built and started again"
-elif (exec 3<> "/dev/tcp/127.0.0.1/${port}") 2> /dev/null; then
-  fail "Port ${port} is already in use by something else." \
-    "Stop what uses it, or set SHUTTER_WEB_PORT to a free port in .env, then run ./install.sh again."
+elif [ "$port" = "$superserver_port" ]; then
+  fail "SHUTTER_WEB_PORT and SHUTTER_SUPERSERVER_PORT are both ${port}." "Give them different ports, then run $rerun again."
 else
-  ok "Port ${port} is free"
+  check_port SHUTTER_WEB_PORT "$port" "the web app"
+  check_port SHUTTER_SUPERSERVER_PORT "$superserver_port" "IRIS's superserver"
 fi
 
 # 4. The image: .env's when there is one; else the build of --image-file's name; else a verified build already loaded
@@ -221,6 +253,10 @@ if [ -f .env ]; then
       "If an instance ran before, run docker compose down -v first: it removes that instance's data. Then remove .env (or set SHUTTER_IMAGE=${AIHUB_IMAGE} and SHUTTER_WITH_AIHUB=auto in it) and run $again again."
   else
     ok ".env is there and is kept as it is"
+    # Compose takes the shell's value over .env's for this run only, so a later plain "docker compose up" would move the port
+    env_port=$(setting SHUTTER_WEB_PORT); env_superserver=$(setting SHUTTER_SUPERSERVER_PORT)
+    [ "$port" = "${env_port:-52773}" ] || note "SHUTTER_WEB_PORT=$port from your shell is used for this run; .env says ${env_port:-52773}, so change it there to keep it"
+    [ "$superserver_port" = "${env_superserver:-1972}" ] || note "SHUTTER_SUPERSERVER_PORT=$superserver_port from your shell is used for this run; .env says ${env_superserver:-1972}, so change it there to keep it"
   fi
 elif [ ! -f .env.example ]; then
   fail ".env.example is missing: this is not a complete copy of the repository." "Clone it again: git clone https://github.com/MxSalata/shutter.git"
@@ -239,6 +275,13 @@ fi
 
 echo
 echo "Every check passed. Installing:"
+# The time a person waits, the image's load and build included: counted from here it was the seconds after the build,
+# and a first install reported "ready after 10 s".
+start=$(date +%s)
+elapsed() {
+  local s=$(( $(date +%s) - start ))
+  if [ "$s" -lt 60 ]; then echo "$s s"; else echo "$((s / 60)) min $((s % 60)) s"; fi
+}
 if [ -n "$plan_load" ]; then
   echo "  loading the AI Hub image (a few minutes)"
   out=$(docker image load -i "$plan_load")
@@ -260,6 +303,9 @@ if [ -n "$plan_env" ]; then
     sed -i.bak -e "s|^SHUTTER_IMAGE=.*|SHUTTER_IMAGE=$image|" .env
     rm -f .env.bak
   fi
+  # A port chosen in the shell has to outlast this run: the next ./install.sh or docker compose up reads it from here
+  sed -i.bak -e "s|^SHUTTER_WEB_PORT=.*|SHUTTER_WEB_PORT=$port|" -e "s|^SHUTTER_SUPERSERVER_PORT=.*|SHUTTER_SUPERSERVER_PORT=$superserver_port|" .env
+  rm -f .env.bak
   echo "  created .env"
 fi
 echo "  building and starting (2 to 15 minutes the first time; the whole log goes to install-build.log)"
@@ -267,6 +313,16 @@ if docker compose up -d --build > install-build.log 2>&1; then
   tail -5 install-build.log | sed 's/^/    /'
 else
   echo
+  # A port taken after the check, or one a connection can't see: the build itself was fine, so don't send them to the network
+  port_clash=$(grep -E 'port is already allocated|address already in use|ports are not available' install-build.log | tail -1 || true)
+  if [ -n "$port_clash" ]; then
+    echo "The image is built, but the container could not take its port:"
+    echo "$port_clash" | sed 's/^/    /'
+    echo
+    fail "Shutter was not started: a port it publishes (${port} or ${superserver_port}) is taken." \
+      "Stop what uses it, or set SHUTTER_WEB_PORT or SHUTTER_SUPERSERVER_PORT to a free port in .env, then run $rerun again."
+    exit 1
+  fi
   echo "The build failed. The whole log is in install-build.log; its last lines:"
   tail -30 install-build.log | sed 's/^/    /'
   # The lines that name the reason: iris.script's BUILD FAILED, the Second Parser's build, BuildKit's ERROR
@@ -280,12 +336,12 @@ else
   exit 1
 fi
 
-start=$(date +%s)
-deadline=$((start + 25 * 60))
+# The 25 minutes are the wait for healthy alone, so a slow image download can't use them up.
+deadline=$(( $(date +%s) + 25 * 60 ))
 while :; do
   if healthy; then
     echo
-    echo "Shutter is ready after $(( $(date +%s) - start )) s:"
+    echo "Shutter is ready after $(elapsed):"
     echo "  the web app:   http://localhost:${port}/shutter/index.html  (approver / shutter, or operator / shutter)"
     echo "  first steps:   Scenarios, run S2 in Board mode, then approve its case (the README's \"On your machine or in the trial, first\")"
     echo "  the portal:    http://localhost:${port}/csp/sys/UtilHome.csp  (_SYSTEM / SYS, namespace SHUTTER)"
@@ -300,6 +356,6 @@ while :; do
   fi
   id=$(shutter_id); state=""
   [ -n "$id" ] && state=$(docker inspect --format '{{.State.Status}}' "$id" 2> /dev/null || true)
-  printf '  waiting: %s s, container %s\n' "$(( $(date +%s) - start ))" "${state:-starting}"
+  printf '  waiting: %s, container %s\n' "$(elapsed)" "${state:-starting}"
   sleep 10
 done
