@@ -1,8 +1,8 @@
 import { Anchor, Group, Stack, Text, Tooltip } from '@mantine/core';
 import { IconBroadcast } from '@tabler/icons-react';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { useLocation } from 'react-router';
-import { useCan, useLiveStatus, useSettings } from '@/api/hooks';
+import { Link, useLocation } from 'react-router';
+import { useCan, useCases, useLiveStatus, useSettings } from '@/api/hooks';
 import type { LiveStatus } from '@/api/types';
 import { TRIAL, trialHref } from '@/env/mode';
 import type { StormRefusal } from '@/features/storm/view';
@@ -82,6 +82,11 @@ export function LiveBanner() {
   const { pathname } = useLocation();
   const [refusal, setRefusal] = useState<StormRefusal | null>(null);
   const settings = useSettings().data;
+  // Only for the line below, which only a live banner's visitor without the live agents reads
+  const noBoard = !!live && !TRIAL && !can.liveAgents;
+  const boardCase = useCases({ scenario: 'S8', limit: 100 }, noBoard).data?.items.find(
+    (c) => c.scenario === 'S8',
+  );
   if (!live) return null;
   const note = TRIAL ? null : budgetNoteLine(settings);
   const unavailable = TRIAL ? null : liveUnavailable(settings);
@@ -142,9 +147,19 @@ export function LiveBanner() {
                 The demo resets on the hour: it is down for a few minutes, and anything you did is gone.
               </Text>
             ) : null}
-            {!TRIAL && !can.liveAgents ? (
-              // The live hospital's own stories are settled by the site's policy, with no board; a visitor without the
-              // live agents sees the board decide in the trial's recording of S8, at no cost
+            {noBoard && boardCase ? (
+              // The hospital's rotation is settled by its policy, but the instance's S8 case went to the real board,
+              // and its page shows it: saying "no agent" over that case would be wrong
+              <Text size="xs" data-testid="live-board-link">
+                Most of this hospital&apos;s failures are settled by its written policy, with no agent. One
+                went to the live board:{' '}
+                <Anchor component={Link} to={`/cases/${encodeURIComponent(boardCase.caseId)}`} size="xs">
+                  {boardCase.caseId}
+                </Anchor>
+              </Text>
+            ) : noBoard ? (
+              // With no such case here, a visitor without the live agents sees the board decide in the trial's
+              // recording of S8, at no cost
               <Text size="xs" data-testid="live-board-link">
                 The hospital&apos;s own failures are settled by its written policy, with no agent.{' '}
                 <Anchor href={trialHref(`#/cases/${TRIAL_BOARD_CASE}`)} size="xs">

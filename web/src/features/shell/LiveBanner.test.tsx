@@ -108,8 +108,26 @@ describe('the live hospital banner', () => {
     );
   });
 
+  it("names the instance's own S8 case when there is one: it went to the live board", async () => {
+    resetMock('demo');
+    server.use(
+      http.get('*/cases', () =>
+        HttpResponse.json({ items: [{ caseId: 'C-000002', scenario: 'S8', mode: 'policy' }], total: 1 }),
+      ),
+    );
+    renderFrame();
+    await banner();
+    const says = await screen.findByText(/One went to the live board/);
+    expect(says).toHaveTextContent(
+      "Most of this hospital's failures are settled by its written policy, with no agent. One went to the live board: C-000002",
+    );
+    expect(within(says).getByRole('link', { name: 'C-000002' })).toHaveAttribute('href', '/cases/C-000002');
+  });
+
   it("links the public demo's role to the board deciding S8 in the trial, which costs nothing", async () => {
     resetMock('demo');
+    // This instance has played no S8 yet
+    server.use(http.get('*/cases', () => HttpResponse.json({ items: [], total: 0 })));
     renderFrame();
     const link = within(await banner()).getByRole('link', { name: 'See the board decide: S8 in the trial' });
     // Why the live cases show no board comes first
@@ -244,7 +262,7 @@ describe('the live budget on the banner', () => {
     liveWith({}, { dailyUsd: 2, spentTodayUsd: 0.4, exhausted: false });
     renderFrame();
     expect(await budgetLine()).toHaveTextContent(
-      /^\$2 an hour, paid by the author, runs the live agents \(so far: \$0\.40\)\.$/,
+      /^\$2 an hour from the author runs the judges' live agents \(so far: \$0\.40\)\.$/,
     );
     expect(within(await banner()).queryByRole('note')).not.toBeInTheDocument();
     expect(within(await banner()).getByTestId('live-line')).toHaveTextContent(
@@ -255,7 +273,9 @@ describe('the live budget on the banner', () => {
   it("says the demo build's own figure alone when the server sends it", async () => {
     liveWith({ budgetNote: { amountUsd: 15, period: 'day' } }, { dailyUsd: 2, spentTodayUsd: 0.4 });
     renderFrame();
-    expect(await budgetLine()).toHaveTextContent(/^\$15 a day, paid by the author, runs the live agents\.$/);
+    expect(await budgetLine()).toHaveTextContent(
+      /^\$15 a day from the author runs the judges' live agents\.$/,
+    );
     expect(await budgetLine()).not.toHaveTextContent('so far');
   });
 
@@ -285,7 +305,7 @@ describe('the live budget on the banner', () => {
     expect(within(n).getByRole('link', { name: 'how to install' })).toHaveAttribute('href', INSTALL_URL);
     // The line stays: the notice follows it
     expect(await budgetLine()).toHaveTextContent(
-      '$2 an hour, paid by the author, runs the live agents (so far: $2.05).',
+      "$2 an hour from the author runs the judges' live agents (so far: $2.05).",
     );
     // Plain words: the code is for Technical
     expect(await banner()).not.toHaveTextContent(/budget_exhausted|exhausted/);

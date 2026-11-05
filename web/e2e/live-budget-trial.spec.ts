@@ -132,7 +132,7 @@ test.describe(`the live budget on the public demo, against a v1.37 server ${area
     await page.goto('./#/cases');
     await expect(page.getByRole('heading', { name: 'Cases', exact: true })).toBeVisible();
     await expect(banner(page).getByTestId('live-budget-line')).toHaveText(
-      '$2 an hour, paid by the author, runs the live agents (so far: $2.04).',
+      "$2 an hour from the author runs the judges' live agents (so far: $2.04).",
     );
     const note = banner(page).getByRole('note');
     await expect(note).toBeVisible();
@@ -163,7 +163,7 @@ test.describe(`the live budget on the public demo, against a v1.37 server ${area
     );
     await page.goto('./#/cases');
     await expect(banner(page).getByTestId('live-budget-line')).toHaveText(
-      '$15 a day, paid by the author, runs the live agents.',
+      "$15 a day from the author runs the judges' live agents.",
     );
     expect(await said(page, 'live-unavailable')).toMatch(
       /^The live AI service for this demo is unavailable until \d\d:\d\d (GMT|BST)\. Open cases/,
@@ -213,13 +213,28 @@ test.describe(`the live budget on the public demo, against a v1.37 server ${area
     });
     await page.goto('./#/cases');
     const line = banner(page).getByTestId('live-board-link');
-    await expect(line).toContainText(
-      "The hospital's own failures are settled by its written policy, with no agent. See the board decide: S8 in the trial",
+    // The instance's own S8 case went to the live board, so the banner names it, not "with no agent" over its badges
+    await expect(line).toHaveText(
+      `Most of this hospital's failures are settled by its written policy, with no agent. One went to the live board: ${CASE}`,
     );
+    await expect(line.getByRole('link', { name: CASE })).toHaveAttribute('href', `#/cases/${CASE}`);
     const bannerBox = (await banner(page).boundingBox())!;
     const lineBox = (await line.boundingBox())!;
     expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(bannerBox.x + bannerBox.width);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  test("keeps the trial's link while the instance has no S8 case", async ({ page }) => {
+    await stubServer(page, settings({}, { dailyUsd: 2, spentTodayUsd: 0.4 }), undefined, {
+      ...ME,
+      username: 'demo',
+      can: { ...ME.can, liveAgents: false },
+    });
+    await page.route(/\/api\/shutter\/cases\?/, (route) => route.fulfill({ json: { items: [], total: 0 } }));
+    await page.goto('./#/cases');
+    await expect(banner(page).getByTestId('live-board-link')).toHaveText(
+      "The hospital's own failures are settled by its written policy, with no agent. See the board decide: S8 in the trial",
+    );
   });
 
   test("says it in the board's dialog, where Convene cannot be pressed, and for a refused press", async ({

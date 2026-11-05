@@ -51,15 +51,15 @@ export function budgetSpent(b: Budget | undefined): boolean {
 const figure = (n: number) => (Number.isInteger(n) ? `$${n}` : formatUsd(n));
 
 /**
- * The live banner's line about what the author pays for the live agents, figure first: `live.budgetNote` when the server
- * sends it (the demo build's own figure, said alone: the hourly reset makes the instance's spend undercount a daily
- * figure), else the instance's own cap, per hour on the public demo (`resetsHourly`) and per day elsewhere, with what was
+ * The live banner's line about what the author pays for the live agents, which only the judges' account runs, figure
+ * first, short enough for one line on a phone: `live.budgetNote` when the server sends it (the demo build's own figure,
+ * said alone: the hourly reset makes the instance's spend undercount a daily figure), else the instance's own cap, per hour on the public demo (`resetsHourly`) and per day elsewhere, with what was
  * spent against it so far. Null when neither gives a positive figure.
  */
 export function budgetNoteLine(s: Settings | undefined): string | null {
   const note = s?.live?.budgetNote;
   const lead = (amount: number, period: 'day' | 'hour') =>
-    `${figure(amount)} ${period === 'hour' ? 'an hour' : 'a day'}, paid by the author, runs the live agents`;
+    `${figure(amount)} ${period === 'hour' ? 'an hour' : 'a day'} from the author runs the judges' live agents`;
   if (note && Number(note.amountUsd) > 0 && (note.period === 'day' || note.period === 'hour'))
     return `${lead(Number(note.amountUsd), note.period)}.`;
   const b = s?.budget;
