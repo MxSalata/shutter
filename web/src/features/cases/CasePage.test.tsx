@@ -457,9 +457,12 @@ describe('CasePage', () => {
   });
 
   describe('on a site that does not play Rules only, as the online demo', () => {
+    // The demo's S8 case is a site policy case the policy left to the board: no case of it is in board mode
     const demoOnly = () => {
-      const board = fixtures.cases['C-000008'].summary;
+      const { detail, summary } = fixtures.cases['C-000008'];
+      const board = { ...summary, mode: 'policy' };
       server.use(
+        http.get('/api/shutter/cases/C-000008', () => HttpResponse.json({ ...detail, mode: 'policy' })),
         http.get('/api/shutter/me', () =>
           HttpResponse.json({
             username: 'demo',
@@ -491,10 +494,22 @@ describe('CasePage', () => {
       demoOnly();
       renderCase('C-000008');
       const strip = await screen.findByRole('region', { name: 'What a resend would do' });
-      expect(within(strip).getByTestId('s8-stakes')).toHaveTextContent('The board sent nothing.');
+      expect(within(strip).getByTestId('s8-stakes')).toHaveTextContent(
+        "A resend here writes WARD-B over the bed manager's WARD-C with every check passed. The board sent nothing.",
+      );
       expect(
         await within(strip).findByRole('link', { name: 'See the two side by side in the trial' }),
       ).toBeInTheDocument();
+    });
+
+    it("says nothing of the board's stakes on a site policy case the board did not sit on", async () => {
+      demoOnly();
+      const runs = fixtures.cases['C-000008'].runs.filter((r) => r.role !== 'coordinator');
+      server.use(http.get('/api/shutter/cases/C-000008/runs', () => HttpResponse.json(runs)));
+      renderCase('C-000008');
+      await screen.findByTestId('case-action');
+      await screen.findByRole('tab', { name: /Summary/ });
+      expect(screen.queryByTestId('s8-stakes')).not.toBeInTheDocument();
     });
   });
 
