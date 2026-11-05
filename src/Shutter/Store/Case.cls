@@ -740,6 +740,12 @@ ClassMethod NextId() As %String [ Private ]
 /// clause is left out when the key's encounter piece is the literal "-" (no visit number).
 ClassMethod DescribeFailure(case As Shutter.Store.Case) As %String
 {
+    // An order, a result or a document (v1.45): the message may be sound, so the words say what the receiver did.
+    If case.NotModelled() {
+        Set to = $SELECT(case.Receiver '= "": case.Receiver, 1: "the receiver")
+        Set how = $CASE(case.FailureOutcome, "uncertain": "may have reached " _ to _ ", which did not answer", "rejected": "was refused by " _ to, "error": "was not delivered to " _ to, : "failed at " _ to)
+        Quit "The " _ case.Event _ " message of " _ $REPLACE($PIECE(case.EventTime, "Z", 1), "T", " ") _ $SELECT(case.EncounterId = "-": "", 1: " for encounter " _ case.EncounterId) _ " " _ how
+    }
     Set what = $CASE(case.Event, "admit": "admission", "transfer": "transfer to " _ case.Ward _ $SELECT(case.Bed '= "": " bed " _ case.Bed, 1: ""), "discharge": "discharge", "update": "update", "merge": $SELECT(case.PriorPatientId '= "": "merge of " _ case.PriorPatientId _ " into " _ case.PatientId, 1: "merge into " _ case.PatientId), "cancel_admit": "cancellation of the admission", "cancel_transfer": "cancellation of the transfer" _ $SELECT(case.Ward '= "": " to " _ case.Ward, 1: ""), "cancel_discharge": "cancellation of the discharge", "register": "registration", "preadmit": "pre-admission", "person_add": "person record", "person_update": "person update", "": "message", : case.Event _ " message")
     Set when = $REPLACE($PIECE(case.EventTime, "Z", 1), "T", " ")
     Set how = $CASE(case.FailureKind, "delivery_failed": "was not delivered", "uncertain_outcome": "has an uncertain outcome", "rejected": "was rejected", "unmappable": "could not be mapped to an operation for the downstream system", "withheld": $SELECT(case.Event = "merge": "was withheld by the site's policy", 1: "was withheld: the receiver cannot reverse it"), "unreadable": "could not be read against an HL7 schema where it arrived", : "failed")
@@ -747,6 +753,13 @@ ClassMethod DescribeFailure(case As Shutter.Store.Case) As %String
     Set joiner = $SELECT((case.Event = "merge") || ($EXTRACT(case.Event, 1, 7) = "cancel_"): " at ", 1: " of ")
     Set where = $SELECT(case.EncounterId = "-": "", 1: " for encounter " _ case.EncounterId)
     Quit "The " _ what _ joiner _ when _ where _ " " _ how
+}
+
+/// Whether the case is for a message Shutter does not model: an order, a result or a document (v1.42). Its kind says
+/// unmappable because there is no operation to resend; the message itself may be sound, so nothing here may blame it.
+Method NotModelled() As %Boolean
+{
+    Quit ($EXTRACT(..FailureText, 1, 16) = "This message is ") && ($PIECE(..FailureText, ":", 1) [ ", not ADT")
 }
 
 /// The case's events, oldest first, as a dynamic array.

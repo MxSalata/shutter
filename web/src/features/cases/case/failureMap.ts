@@ -2,6 +2,7 @@ import type { CaseDetail, Snapshot } from '@/api/types';
 import { humanize } from '@/lib/format';
 import type { CaseOutcome } from '@/lib/status';
 import type { Tone } from '@/lib/tone';
+import { notModelled } from './derive';
 import { evidenceOf } from './message';
 import { SYSTEMS } from './outcome';
 
@@ -89,6 +90,16 @@ function answerOf(c: CaseDetail): string {
 function hopOf(c: CaseDetail): FailureMap['hop'] {
   const answer = answerOf(c);
   const code = str(c.failureReasonCode);
+  // An order, a result or a document: "Not sent" would be false when the receiver refused it or never answered
+  switch (notModelled(c)) {
+    case 'not_delivered':
+      return { label: 'Not delivered', answer: '', code: '', tone: 'blocking', broken: true };
+    case 'refused':
+      return { label: 'Refused', answer: '', code: '', tone: 'blocking', broken: true };
+    case 'unknown':
+      return { label: 'Answer lost: outcome unknown', answer: '', code: '', tone: 'attention', broken: true };
+    default:
+  }
   switch (c.failureKind) {
     case 'delivery_failed':
       return { label: 'Not delivered', answer, code: '', tone: 'blocking', broken: true };
@@ -118,7 +129,7 @@ function hopOf(c: CaseDetail): FailureMap['hop'] {
 /** Why IRIS itself could not take the message on, in words: held unread, unmapped, or not read by the schema. */
 function troubleOf(c: CaseDetail, snapshot: Snapshot | null | undefined): string {
   if (c.failureKind === 'unreadable') return "Couldn't read the message: its HL7 schema is not loaded here";
-  if (c.failureKind === 'unmappable') return "Couldn't map the message to an operation";
+  if (c.failureKind === 'unmappable' && !notModelled(c)) return "Couldn't map the message to an operation";
   const validation = evidenceOf(snapshot, 'validation');
   if (validation && validation.parsed === false) return "Its schema couldn't read the message";
   return '';

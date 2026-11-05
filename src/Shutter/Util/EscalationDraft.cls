@@ -49,6 +49,9 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     Set b = "To " _ $SELECT(teamName '= "": teamName, 1: "the team") _ "," _ nl _ nl
     If case.FailureKind = "withheld" {
         Set b = b _ "Shutter withheld a message to " _ label _ " that it never sends by itself (" _ case.FailureText _ "). Please apply or decline it by hand in the systems concerned; Shutter has sent nothing for this message." _ nl _ nl
+    } ElseIf case.NotModelled() {
+        // An order, a result or a document (v1.45): "correct them by hand" is the wrong request while the queue may still deliver it.
+        Set b = b _ "A message to " _ label _ " failed. Shutter resends only ADT, so it has sent nothing for this message, and the message itself may be sound. Before anyone re-enters it, check the source's Message Viewer: an operation that retries delivers it by itself once the receiver is back." _ nl _ nl
     } Else {
         Set b = b _ "Shutter could not safely recover a failed message to " _ label _ ". Please compare the systems and correct them by hand; Shutter has sent nothing more for this message." _ nl _ nl
     }

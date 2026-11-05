@@ -13,7 +13,7 @@ import { displayZone, humanize } from '@/lib/format';
 import { asArray, asObject } from '@/lib/json';
 import { APPROVALS, caseState, gateOutcome, PROVENANCE, type OutcomeCase } from '@/lib/status';
 import type { Status } from '@/lib/tone';
-import { checksOf } from './derive';
+import { checksOf, failureKindInWords } from './derive';
 import { approvalsByPlan, type SafetyReceipt } from './receipt';
 import { investigationRuns } from './runClock';
 import { encounterTimeline } from './timeline';
@@ -337,12 +337,17 @@ const FAILURES: Record<string, string> = {
   withheld: 'was withheld, never sent',
 };
 
+/** How a delivery failed in a few words; a message Shutter does not model by what the receiver did with it. */
+function failedHow(c: CaseDetail): string {
+  return FAILURES[failureKindInWords(c)] ?? (humanize(c.failureKind).toLowerCase() || 'failed');
+}
+
 /** "PAS transfer to WARD-B was not delivered: HTTP 503, ward_unavailable." */
 export function failedSummary(
   c: CaseDetail,
   what = `${c.sourceSystem ? `${c.sourceSystem} ` : ''}${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`,
 ): string {
-  const how = FAILURES[c.failureKind] ?? (humanize(c.failureKind).toLowerCase() || 'failed');
+  const how = failedHow(c);
   const detail = [c.failureHttpStatus ? `HTTP ${str(c.failureHttpStatus)}` : '', str(c.failureReasonCode)]
     .filter(Boolean)
     .join(', ');
@@ -351,7 +356,7 @@ export function failedSummary(
 
 /** What failed in a few words, the event and how it failed: "Transfer was not delivered". */
 export function failedTitle(c: CaseDetail): string {
-  const how = FAILURES[c.failureKind] ?? (humanize(c.failureKind).toLowerCase() || 'failed');
+  const how = failedHow(c);
   return `${humanize(c.event) || 'The operation'} ${how}`;
 }
 

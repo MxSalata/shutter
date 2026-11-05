@@ -7,6 +7,30 @@ import { formatTime, humanize } from '@/lib/format';
 const str = (v: unknown) => (v === undefined || v === null ? '' : String(v));
 
 /**
+ * What a receiver did with a message Shutter does not model, an order, a result or a document (CONTRACTS v1.45). Its kind
+ * says unmappable because there is no operation to resend, and the message itself may be sound, so the words come from
+ * the receiver's outcome. Null for every other case.
+ */
+export function notModelled(c: {
+  failureText?: unknown;
+  failureOutcome?: unknown;
+}): 'not_delivered' | 'unknown' | 'refused' | null {
+  if (!/^This message is [^ ,]+, not ADT:/.test(str(c.failureText))) return null;
+  const outcome = str(c.failureOutcome);
+  if (outcome === 'uncertain') return 'unknown';
+  return outcome === 'rejected' ? 'refused' : 'not_delivered';
+}
+
+/** The kind whose words fit the case: for a message Shutter does not model, the one that says what the receiver did. */
+export function failureKindInWords(c: { failureKind?: string; failureText?: unknown; failureOutcome?: unknown }): string {
+  const what = notModelled(c);
+  if (what === 'unknown') return 'uncertain_outcome';
+  if (what === 'refused') return 'rejected';
+  if (what === 'not_delivered') return 'delivery_failed';
+  return c.failureKind ?? '';
+}
+
+/**
  * Where a forwarded case's message came from, as the case and its `source` evidence name it: "HOSPITAL /
  * Hospital.Production, route PAS In, message header 4243". Empty for a case the feed in Shutter's own production opened.
  */

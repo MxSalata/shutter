@@ -47,7 +47,7 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     // Conformance: the message parsed against its schema.
     Set parsed = ##class(Shutter.Util.Json).Bool(validation, "parsed")
     // A message Shutter could not map to an operation has nothing to resend: the conformance check blocks it.
-    If (case.FailureKind = "unmappable") || ($EXTRACT(case.OperationKey, 1, 9) = "UNMAPPED^") Do ..Check(checks, "conformance", "block", "UNMAPPABLE", "The message could not be mapped to an operation for the downstream system: " _ $EXTRACT(case.FailureText, 1, 300))
+    If (case.FailureKind = "unmappable") || ($EXTRACT(case.OperationKey, 1, 9) = "UNMAPPED^") Do ..Check(checks, "conformance", "block", "UNMAPPABLE", $SELECT(case.NotModelled(): "There is no operation to resend. ", 1: "The message could not be mapped to an operation for the downstream system: ") _ $EXTRACT(case.FailureText, 1, 300))
     // A message held where it was read, in a watched production whose namespace lacks its schema (v1.34): blocked by name
     // until the schema is imported there, when the index's check releases the case; Shutter's own copy may well validate.
     If (case.FailureKind = "unreadable") && (case.HeldSchema '= "") && (case.SourceNamespace '= "") && $ISOBJECT(validation) && ##class(Shutter.Util.Json).Bool(validation, "schema_known", 1) && '##class(Shutter.Util.Schemas).KnownIn(case.SourceNamespace, case.HeldSchema) {

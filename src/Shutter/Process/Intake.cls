@@ -70,7 +70,7 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
             // An order, a result or a document (v1.42) is not a malformed ADT: Shutter does not model it, and the words say so.
             Set structure = $PIECE(msg.Name, "_", 1)
             If (structure '= "") && (structure '= "ADT") {
-                Set text = "This message is " _ structure _ ", not ADT: Shutter resends only ADT, so a person corrects it" _ $SELECT(text '= "": ". The source reported: " _ text, 1: "")
+                Set text = "This message is " _ structure _ ", not ADT: Shutter resends only ADT, so it sends nothing and a person decides" _ $SELECT(text '= "": ". The source reported: " _ text, 1: "")
             } Else {
                 Set text = "The message could not be mapped to an operation for the downstream system: " _ $SYSTEM.Status.GetErrorText(osc) _ $SELECT(text '= "": ". The source reported: " _ text, 1: "")
             }

@@ -110,6 +110,28 @@ Method TestSchemaLocalName()
     Do $$$AssertEquals(as, "ONBNOSUCH", "with that name")
 }
 
+/// An order, a result or a document that failed says what the receiver did, and never blames the message or a mapping; an
+/// ADT message that really could not be mapped keeps those words.
+Method TestAFailedOrderSaysWhatTheReceiverDid()
+{
+    Set c = ##class(Shutter.Store.Case).%New()
+    Set c.FailureKind = "unmappable", c.Event = "R01", c.EventTime = "2026-11-05T10:00:00Z", c.EncounterId = "ENC-1", c.Receiver = "Results Out"
+    Set c.FailureText = "This message is ORU, not ADT: Shutter resends only ADT, so it sends nothing and a person decides. The source reported: Alert"
+    Do $$$AssertTrue(c.NotModelled(), "the words mark it")
+    Set d = "Shutter.Store.Case"
+    Do $$$AssertTrue($CLASSMETHOD(d, "DescribeFailure", c) [ "failed at Results Out", "before the outcome is known it claims only that it failed")
+    Set c.FailureOutcome = "error"
+    Do $$$AssertTrue($CLASSMETHOD(d, "DescribeFailure", c) [ "was not delivered to Results Out", "a connection that never opened")
+    Set c.FailureOutcome = "uncertain"
+    Do $$$AssertTrue($CLASSMETHOD(d, "DescribeFailure", c) [ "may have reached Results Out", "a receiver that did not answer may hold it")
+    Set c.FailureOutcome = "rejected"
+    Do $$$AssertTrue($CLASSMETHOD(d, "DescribeFailure", c) [ "was refused by Results Out", "a refusal")
+    Do $$$AssertFalse($CLASSMETHOD(d, "DescribeFailure", c) [ "mapped", "and no talk of a mapping")
+    Set c.FailureText = "The message could not be mapped to an operation for the downstream system: no visit number"
+    Do $$$AssertFalse(c.NotModelled(), "an ADT that could not be mapped is not this")
+    Do $$$AssertTrue($CLASSMETHOD(d, "DescribeFailure", c) [ "could not be mapped", "and keeps its words")
+}
+
 /// A forward naming a category not loaded here says so on the stored copy, and the evidence reads that word; a loaded one
 /// leaves no note.
 Method TestAForwardNamingAnUnloadedCategory()
