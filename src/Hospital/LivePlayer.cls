@@ -506,7 +506,9 @@ Method WriteStatus()
     If lastAt > 0 {
         Set due = lastAt + (..EveryMinutes * 60)
         Set s.next = {}
-        Set s.next.scenario = $GET(^Hospital.Live("next")), s.next.at = $ZDATE(due \ 86400, 3) _ "T" _ $ZTIME(due # 86400, 1) _ "Z"
+        // From the list as it stands, as PlayNext will read it: one stored at the last play goes stale when the list changes.
+        Set list = ..ScenarioList()
+        Set s.next.scenario = $SELECT(list = "": $GET(^Hospital.Live("next")), 1: $LIST(list, 1 + (n # $LISTLENGTH(list)))), s.next.at = $ZDATE(due \ 86400, 3) _ "T" _ $ZTIME(due # 86400, 1) _ "Z"
     }
     Set s."last_ordinary" = $GET(^Hospital.Live("last_ordinary"))
     // The storm (v1.35), when one has ever been pressed: Shutter's LiveStatus adds the incident and the case counts.
