@@ -14,8 +14,37 @@
   gap: 4px;
 }
 
+/* Each group's tiles are the same width, so a fourth closed outcome takes its room from the row as a whole */
+.cases-tile-groups {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--mantine-spacing-md);
+}
+@media (min-width: 75em) {
+  .cases-tile-groups {
+    grid-template-columns: 1fr 1fr;
+  }
+  .cases-tile-groups[data-closed='4'] {
+    grid-template-columns: 3fr 4fr;
+  }
+}
+
 @media (max-width: 35.99em) {
-  /* The six tiles are two rows of three, with their words and their figures: the tone icon gives way on a phone */
+  /* A tap anywhere on a case's card opens it: the id's link covers the card, and what is a control of its own in the
+     card (More about, the incident's link, the forwarded tag) stands above that */
+  .cases-table tr.case-row {
+    position: relative;
+  }
+  .cases-table a.case-open::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+  .cases-table tr.case-row :is(a:not(.case-open), button, [tabindex='0']) {
+    position: relative;
+    z-index: 1;
+  }
+  /* The tiles keep their words and their figures: the tone icon gives way on a phone */
   .cases-tiles .stat-tile {
     padding: 10px 10px 8px !important;
   }

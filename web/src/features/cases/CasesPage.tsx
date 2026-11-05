@@ -16,6 +16,7 @@ import {
   IconCircleCheck,
   IconCircleMinus,
   IconListDetails,
+  IconTargetOff,
   IconTool,
   type Icon as TablerIcon,
 } from '@tabler/icons-react';
@@ -39,7 +40,7 @@ import { TechDetail } from '@/components/TechDetail';
 import { Timestamp } from '@/components/Timestamp';
 import { ToneLegend } from '@/components/ToneLegend';
 import { humanize, plural } from '@/lib/format';
-import { clampHeadline } from '@/lib/headline';
+import { clampHeadline, cutEscalation } from '@/lib/headline';
 import type { Hue } from '@/lib/hues';
 import {
   caseOutcome,
@@ -160,11 +161,12 @@ export function proposalNote(c: Pick<CaseSummary, 'state' | 'disposition'>): str
 const wordCount = (s: string) => s.split(/\s+/).filter(Boolean).length;
 
 /**
- * What failed, in sentences: the headline's first sentence in full (a sentence of under six words, such as "Valid
+ * What happened, in sentences: the headline's first sentence in full (a sentence of under six words, such as "Valid
  * message." or "Escalated to a person.", takes the next one with it), and the rest for the "More about" disclosure.
- * Never cut with an ellipsis. A case with no headline reads what the summary's own fields say.
+ * Never cut with an ellipsis: an escalation the server cut stops at its catalogue entry's title, and the rest holds the
+ * cut text. A case with no headline reads what the summary's own fields say.
  */
-export function whatFailed(c: Pick<CaseSummary, 'headline' | 'event' | 'ward' | 'encounterId'>): {
+export function whatHappened(c: Pick<CaseSummary, 'headline' | 'event' | 'ward' | 'encounterId'>): {
   first: string;
   rest: string;
 } {
@@ -174,6 +176,8 @@ export function whatFailed(c: Pick<CaseSummary, 'headline' | 'event' | 'ward' | 
       first: `${humanize(c.event)}${c.ward ? ` to ${c.ward}` : ''} for ${c.encounterId}`,
       rest: '',
     };
+  const entry = cutEscalation(text);
+  if (entry) return entry;
   const sentences = text.split(/(?<=[.!?])\s+(?=[A-Z0-9(])/);
   let first = sentences[0];
   let used = 1;
@@ -181,10 +185,10 @@ export function whatFailed(c: Pick<CaseSummary, 'headline' | 'event' | 'ward' | 
   return { first, rest: sentences.slice(used).join(' ') };
 }
 
-/** The cell of what failed: the first sentence, the failure's codes in Technical, and the rest behind its own button. */
-function WhatFailed({ c }: { c: CaseSummary }) {
+/** The cell of what happened: the first sentence, the failure's codes in Technical, and the rest behind its own button. */
+function WhatHappened({ c }: { c: CaseSummary }) {
   const technical = useTechnical();
-  const { first, rest } = whatFailed(c);
+  const { first, rest } = whatHappened(c);
   const entry = c.planCreatedBy?.startsWith('policy:') ? c.planCreatedBy.slice('policy:'.length) : '';
   return (
     <Stack gap={4} align="flex-start">
@@ -220,7 +224,7 @@ function WhatFailed({ c }: { c: CaseSummary }) {
 }
 
 /**
- * The list's cases; on a phone each case is a compact card: its id and outcome, what failed, then one line of facts.
+ * The list's cases; on a phone each case is a compact card: its id and outcome, what happened, then one line of facts.
  * `scenarios` are the cases' scenarios, for the outcome that compares a case with what its scenario expects.
  */
 export function CasesTable({
@@ -240,7 +244,7 @@ export function CasesTable({
             <StackTable.Th>Outcome</StackTable.Th>
             <StackTable.Th>Proposed action</StackTable.Th>
             <StackTable.Th>At the receiver</StackTable.Th>
-            <StackTable.Th>What failed</StackTable.Th>
+            <StackTable.Th>What happened</StackTable.Th>
             <StackTable.Th>Scenario</StackTable.Th>
             <StackTable.Th>Investigated by</StackTable.Th>
           </StackTable.Tr>
@@ -258,6 +262,7 @@ export function CasesTable({
                       to={`/cases/${encodeURIComponent(c.caseId)}`}
                       fw={600}
                       size="sm"
+                      className="case-open"
                       style={{ whiteSpace: 'nowrap' }}
                     >
                       {c.caseId}
@@ -281,12 +286,12 @@ export function CasesTable({
                   <AtReceiver c={c} />
                 </StackTable.Td>
                 <StackTable.Td
-                  data-label="What failed"
+                  data-label="What happened"
                   data-label-hidden
                   maw={420}
                   className="stack-line case-line"
                 >
-                  <WhatFailed c={c} />
+                  <WhatHappened c={c} />
                 </StackTable.Td>
                 <StackTable.Td data-label="Scenario" data-label-hidden className="case-meta">
                   <Text size="sm">{c.scenario || 'none'}</Text>
@@ -345,16 +350,24 @@ export function AttentionTile({
 }
 
 /**
- * The three closed outcomes the tiles count: a delivery the verifier confirmed, a case with nothing to send (verified
+ * The closed outcomes the tiles count: a case that ended otherwise than its scenario expects (shown only when there is
+ * one, as a tile of nought would say nothing), a delivery the verifier confirmed, a case with nothing to send (verified
  * or not, since both say the receiver needed nothing), and a case a person handled or gave up.
  */
 export const CLOSED_GROUPS: {
-  id: 'delivered' | 'nothing' | 'by-hand';
+  id: 'unexpected' | 'delivered' | 'nothing' | 'by-hand';
   label: string;
   tone: Tone;
   icon: TablerIcon;
   keys: CaseOutcomeKey[];
 }[] = [
+  {
+    id: 'unexpected',
+    label: 'Not as expected',
+    tone: 'blocking',
+    icon: IconTargetOff,
+    keys: ['not-as-expected'],
+  },
   {
     id: 'delivered',
     label: 'Delivered, verified',
@@ -396,6 +409,7 @@ export function closedCounts(
   scenarioOf: (c: CaseSummary) => ExpectedScenario | undefined,
 ): Record<ClosedGroupId, number> {
   return {
+    unexpected: casesOfGroup(items, 'unexpected', scenarioOf).length,
     delivered: casesOfGroup(items, 'delivered', scenarioOf).length,
     nothing: casesOfGroup(items, 'nothing', scenarioOf).length,
     'by-hand': casesOfGroup(items, 'by-hand', scenarioOf).length,
@@ -430,14 +444,14 @@ export function ClosedTile({
 }
 
 /** A labelled group of tiles. */
-function TileGroup({ title, children }: { title: string; children: ReactNode }) {
+function TileGroup({ title, four, children }: { title: string; four?: boolean; children: ReactNode }) {
   const id = useId();
   return (
     <section aria-labelledby={id}>
       <Text id={id} className="overline" mb={6}>
         {title}
       </Text>
-      <SimpleGrid cols={3} spacing="xs" className="cases-tiles">
+      <SimpleGrid cols={four ? { base: 2, sm: 4 } : 3} spacing="xs" className="cases-tiles">
         {children}
       </SimpleGrid>
     </section>
@@ -478,6 +492,10 @@ export default function CasesPage() {
       newestItems && !scenarios.isPending ? closedCounts(newestItems, (c) => byId.get(c.scenario)) : null,
     [newestItems, scenarios.isPending, byId],
   );
+  // A chosen tile stays, or the filter on show could not be turned off where it was turned on
+  const closedShown = CLOSED_GROUPS.filter(
+    (g) => g.id !== 'unexpected' || outcome === g.id || (counts?.unexpected ?? 0) > 0,
+  );
   // More cases than the read holds: the Closed tiles count the newest ones only, and say so
   const overBase = (newest.data?.total ?? 0) > NEWEST;
 
@@ -503,10 +521,10 @@ export default function CasesPage() {
         title="Cases"
         icon={IconListDetails}
         hue="indigo"
-        lead="Every failed delivery Shutter opened, newest first. Cases that need a person come first."
+        lead="Every failed delivery, newest first. The tiles show which need a person."
       />
       <Stack gap="md">
-        <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
+        <div className="cases-tile-groups" data-closed={closedShown.length}>
           <TileGroup title="Needs a person">
             {ATTENTION.map((a) => (
               <AttentionTile
@@ -517,8 +535,8 @@ export default function CasesPage() {
               />
             ))}
           </TileGroup>
-          <TileGroup title={overBase ? 'Closed, in the newest 100' : 'Closed'}>
-            {CLOSED_GROUPS.map((g) => (
+          <TileGroup title={overBase ? 'Closed, in the newest 100' : 'Closed'} four={closedShown.length > 3}>
+            {closedShown.map((g) => (
               <ClosedTile
                 key={g.id}
                 group={g}
@@ -528,7 +546,7 @@ export default function CasesPage() {
               />
             ))}
           </TileGroup>
-        </SimpleGrid>
+        </div>
         <Stack gap={6} className="cases-legend">
           <ToneLegend />
           <TechDetail label="How to read this list" kind="explain">
