@@ -996,10 +996,13 @@ function Profile({
         {shipped ? (
           <StatusNotice tone="info" title="Shutter is running on the shipped answers">
             <Stack gap="xs">
-              <Text size="md">
-                They are defaults, not this site&apos;s choices. Check the questions below, then confirm or
-                change them and save.
-                {editable ? '' : ' An approver answers them.'}
+              <Text size="md" data-testid={reading && !dirty ? 'demo-read-only' : undefined}>
+                They are defaults, not this site&apos;s choices.{' '}
+                {editable
+                  ? 'Check the questions below, then confirm or change them and save.'
+                  : reading
+                    ? `${DEMO_READ_ONLY}.`
+                    : 'An approver answers them.'}
               </Text>
               {editable && !dirty ? (
                 <>
@@ -1055,7 +1058,7 @@ function Profile({
             <PageIndexNav />
           </Group>
         </Box>
-        {reading && !dirty ? (
+        {reading && !dirty && !shipped ? (
           <Text size="sm" c="dimmed" data-testid="demo-read-only">
             {DEMO_READ_ONLY}.
           </Text>
