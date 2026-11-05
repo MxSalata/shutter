@@ -1,6 +1,6 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -383,7 +383,9 @@ describe('CasePage', () => {
       await within(top).findByText('1 acknowledged; conditional on version 2, epoch 132'),
     ).toBeInTheDocument();
     expect(within(top).getByText(/^Verified: Committed and current/)).toBeInTheDocument();
-    expect(within(top).getByText('No pending action')).toBeInTheDocument();
+    expect(
+      within(top).getByText("This run wrote what the scenario says it shouldn't: see the board's run"),
+    ).toBeInTheDocument();
     // Rules alone's S8 write, verified and still not what S8 expects
     await outcomeLine('Not the expected outcome: S8 expects escalate');
     expect(top).toHaveAttribute('data-tone', 'blocking');
@@ -407,6 +409,93 @@ describe('CasePage', () => {
     expect(within(compare).getAllByText('WARD-C at version 2')).toHaveLength(2);
     expect(within(compare).getAllByText('differs').length).toBeGreaterThanOrEqual(2);
     expect(within(compare).getByText(/The digests differ because/)).toBeInTheDocument();
+  });
+
+  it('says on each side how it ended for the patient, and marks which side was wrong', async () => {
+    renderCase('C-000008', '?show=compare');
+    const rules = await screen.findByTestId('compare-rules');
+    expect(within(rules).getByTestId('compare-patient')).toHaveTextContent(
+      "Patient ends in WARD-B, over the bed manager's WARD-C",
+    );
+    expect(await within(rules).findByText('Not as expected')).toBeInTheDocument();
+    expect(within(rules).queryByText('Resolved')).not.toBeInTheDocument();
+    const board = screen.getByTestId('compare-board');
+    expect(within(board).getByTestId('compare-patient')).toHaveTextContent(
+      'Patient stays in WARD-C; a person decides',
+    );
+    expect(await within(board).findByText('As expected')).toBeInTheDocument();
+  });
+
+  it('keeps the rows that differ, a time and two digests, a click away in Plain', async () => {
+    renderCase('C-000008', '?show=compare');
+    const toggle = await screen.findByRole('button', { name: 'Times and digests, which differ on each run' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const compare = screen.getByRole('region', { name: 'S8 side by side: Rules only and the board' });
+    await waitFor(() => expect(within(compare).getByText('Snapshot digest')).toBeVisible());
+  });
+
+  it("names the stakes on the board's S8 case, and the top button of the rules case goes to the two runs", async () => {
+    renderCase('C-000008');
+    expect(await screen.findByTestId('s8-stakes')).toHaveTextContent(
+      "A resend here writes WARD-B over the bed manager's WARD-C with every check passed. The board sent nothing.",
+    );
+    cleanup();
+    renderCase('C-000021');
+    const action = await screen.findByTestId('case-action');
+    await waitFor(() =>
+      expect(action).toHaveAccessibleName('Not the expected outcome: compare the two runs'),
+    );
+    expect(screen.queryByTestId('s8-stakes')).not.toBeInTheDocument();
+    await userEvent.click(action);
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: 'S8 side by side: Rules only and the board' }),
+      ).toHaveFocus(),
+    );
+  });
+
+  describe('on a site that does not play Rules only, as the online demo', () => {
+    const demoOnly = () => {
+      const board = fixtures.cases['C-000008'].summary;
+      server.use(
+        http.get('/api/shutter/me', () =>
+          HttpResponse.json({
+            username: 'demo',
+            operator: true,
+            approver: true,
+            can: { operate: true, approve: true, configure: false, scenarios: false, liveAgents: false },
+          }),
+        ),
+        http.get('/api/shutter/cases', () =>
+          HttpResponse.json({ items: [board], total: 1, limit: 50, offset: 0 }),
+        ),
+      );
+    };
+
+    it('sends the reader to the trial instead of promising a run that never comes', async () => {
+      demoOnly();
+      renderCase('C-000008', '?show=compare');
+      const compare = await screen.findByRole('region', {
+        name: 'S8 side by side: Rules only and the board',
+      });
+      expect(await within(compare).findByText(/Rules only isn't played on this demo/)).toBeInTheDocument();
+      expect(within(compare).queryByText(/has not been played/)).not.toBeInTheDocument();
+      expect(
+        within(compare).getByRole('link', { name: 'See the two side by side in the trial' }),
+      ).toHaveAttribute('href', expect.stringMatching(/\?trial#\/cases\/C-000008\?show=compare$/));
+    });
+
+    it('still names the stakes near the top, with no other run to link', async () => {
+      demoOnly();
+      renderCase('C-000008');
+      const strip = await screen.findByRole('region', { name: 'What a resend would do' });
+      expect(within(strip).getByTestId('s8-stakes')).toHaveTextContent('The board sent nothing.');
+      expect(
+        await within(strip).findByRole('link', { name: 'See the two side by side in the trial' }),
+      ).toBeInTheDocument();
+    });
   });
 
   it('opens the side by side when the link asks for it', async () => {
@@ -436,7 +525,7 @@ describe('CasePage', () => {
   it('links an S8 board case to its rules-only run near the top, and opens the side by side from there', async () => {
     renderCase('C-000008');
     const strip = await screen.findByRole('region', { name: 'Same failure, two runs' });
-    expect(within(strip).getByText(/this is the board's run\. Rules only played it as/)).toBeInTheDocument();
+    expect(within(strip).getByText('Rules only played it as')).toBeInTheDocument();
     expect(within(strip).getByRole('link', { name: 'C-000021' })).toHaveAttribute('href', '/cases/C-000021');
     expect(strip.compareDocumentPosition(await outcome()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await userEvent.click(within(strip).getByRole('button', { name: 'Compare the two runs' }));

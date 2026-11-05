@@ -13,18 +13,34 @@ import {
 import { IconAlertTriangle, IconArrowsLeftRight, IconEqual } from '@tabler/icons-react';
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router';
-import { useAttempts, useCase, useCases, useClosure, usePlan, useScenarios, useSnapshot } from '@/api/hooks';
+import { scenariosHidden } from '@/api/can';
+import {
+  useAttempts,
+  useCan,
+  useCase,
+  useCases,
+  useClosure,
+  usePlan,
+  useScenarios,
+  useSnapshot,
+} from '@/api/hooks';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { ExpectedMark } from '@/components/ExpectedMark';
 import { OutcomeBadge } from '@/components/OutcomeBadge';
 import { PortalLink } from '@/components/PortalLink';
-import { DispositionBadge, StateBadge } from '@/components/StateBadge';
+import { StackTable } from '@/components/StackTable';
+import { DispositionBadge } from '@/components/StateBadge';
 import { StatusBadge } from '@/components/StatusBadge';
+import { TechDetail } from '@/components/TechDetail';
+import { trialHref } from '@/env/mode';
 import { humanize } from '@/lib/format';
+import { TRIAL_BOARD_CASE } from '@/lib/hospital';
 import { playedFor } from '@/lib/proof';
-import { writes } from '@/lib/status';
+import { caseOutcome, expectationOf, writes, type ExpectedScenario } from '@/lib/status';
 import { traceScreenshot } from '@/lib/screenshots';
+import { TONE_COLOURS, toneText, type Tone } from '@/lib/tone';
 import type { CaseDetail } from '@/api/types';
-import { compareSide, evidenceRows, playedMark, s8Pair, type CompareSide } from './compare';
+import { compareSide, evidenceRows, playedMark, s8Pair, type CompareSide, type EvidenceRow } from './compare';
 import { NotYet, Section } from './Section';
 
 /** One case of the pair, read the way its own page reads it. */
@@ -49,9 +65,32 @@ function useSide(caseId: string): { side?: CompareSide; detail?: CaseDetail; err
   };
 }
 
-function SideCard({ side, title, current }: { side: CompareSide; title: string; current: boolean }) {
+/** Which side of the pair did what the scenario asks: the edge of its card, so the two can be told apart at a glance. */
+const EDGES: Record<string, Tone> = { 'as-expected': 'positive', differs: 'blocking' };
+
+function SideCard({
+  side,
+  title,
+  current,
+  scenario,
+}: {
+  side: CompareSide;
+  title: string;
+  current: boolean;
+  scenario?: ExpectedScenario | null;
+}) {
+  const verdict = caseOutcome(side.outcome, scenario);
+  const wrong = verdict.key === 'not-as-expected';
+  const edge = EDGES[expectationOf(side.outcome, scenario).kind];
+  const VerdictIcon = verdict.icon;
+  const written = writes(side.writes);
   return (
-    <Card padding="sm" withBorder>
+    <Card
+      padding="sm"
+      withBorder
+      data-testid={`compare-${side.mode}`}
+      style={edge ? { borderTop: `4px solid var(--mantine-color-${TONE_COLOURS[edge]}-filled)` } : undefined}
+    >
       <Stack gap={6}>
         <Group gap="xs" wrap="wrap">
           <Text size="sm" fw={600}>
@@ -67,10 +106,34 @@ function SideCard({ side, title, current }: { side: CompareSide; title: string; 
             </Anchor>
           )}
         </Group>
+        {/* How it ended for the patient comes first: the versions and receipts below only prove it */}
+        {side.patient ? (
+          <Group gap={8} wrap="nowrap" align="flex-start">
+            {VerdictIcon ? (
+              <VerdictIcon
+                size={20}
+                aria-hidden
+                style={{ color: toneText(edge ?? verdict.tone), flex: 'none', marginTop: 2 }}
+              />
+            ) : null}
+            <Text
+              fw={700}
+              lh={1.35}
+              data-testid="compare-patient"
+              style={{ color: toneText(edge ?? verdict.tone) }}
+            >
+              {side.patient}
+            </Text>
+          </Group>
+        ) : null}
         <Group gap={6}>
-          <StateBadge state={side.state} />
-          <DispositionBadge disposition={side.disposition} />
-          <StatusBadge {...writes(side.writes)} />
+          <OutcomeBadge c={side.outcome} scenario={scenario} />
+          {/* The outcome already says Not as expected; an escalated case's proposal to escalate would only repeat it */}
+          {wrong ? null : <ExpectedMark c={side.outcome} scenario={scenario} />}
+          {side.state === 'escalated' && side.disposition === 'escalate' ? null : (
+            <DispositionBadge disposition={side.disposition} />
+          )}
+          <StatusBadge {...written} tone={wrong && side.writes ? 'blocking' : written.tone} />
         </Group>
         <Text size="sm" fw={500}>
           {side.result}
@@ -80,9 +143,13 @@ function SideCard({ side, title, current }: { side: CompareSide; title: string; 
             {side.verification}
           </Text>
         ) : null}
+        {/* Green words under a wrong write are the point of S8, so they are explained where they are read */}
+        {wrong && side.outcome.verification === 'verified' ? (
+          <Text size="sm">Every check passed: verified means the write landed, not that it was right.</Text>
+        ) : null}
         {side.dissent ? (
           <Text size="sm" c="dimmed">
-            {`Dissent kept in the plan: ${side.dissent}`}
+            {`Dissent kept in the plan, and overruled: ${side.dissent}`}
           </Text>
         ) : null}
       </Stack>
@@ -90,64 +157,103 @@ function SideCard({ side, title, current }: { side: CompareSide; title: string; 
   );
 }
 
+/** The evidence fact by fact; on a phone each fact is a block, its two readings under their run's name. */
+function EvidenceTable({
+  rows,
+  rulesId,
+  boardId,
+}: {
+  rows: EvidenceRow[];
+  rulesId: string;
+  boardId: string;
+}) {
+  const rulesHead = `Rules only (${rulesId})`;
+  const boardHead = `The board (${boardId})`;
+  return (
+    <Table.ScrollContainer minWidth={560} className="stack-scroll">
+      <StackTable verticalSpacing={4} fz="sm" className="stack-table">
+        <StackTable.Thead>
+          <StackTable.Tr>
+            <StackTable.Th w="22%">Evidence</StackTable.Th>
+            <StackTable.Th>{rulesHead}</StackTable.Th>
+            <StackTable.Th>{boardHead}</StackTable.Th>
+            <StackTable.Th w={56}>Same</StackTable.Th>
+          </StackTable.Tr>
+        </StackTable.Thead>
+        <StackTable.Tbody>
+          {rows.map((r) => (
+            <StackTable.Tr key={r.label}>
+              <StackTable.Td>
+                <Text size="sm" c="dimmed" fw={500}>
+                  {r.label}
+                </Text>
+              </StackTable.Td>
+              <StackTable.Td data-label={rulesHead}>
+                <span className="mono-wrap">{r.rules}</span>
+              </StackTable.Td>
+              <StackTable.Td data-label={boardHead}>
+                <span className="mono-wrap">{r.board}</span>
+              </StackTable.Td>
+              <StackTable.Td data-label="Same">
+                {r.same ? (
+                  <>
+                    <IconEqual size={16} color="var(--shutter-muted)" aria-hidden />
+                    <VisuallyHidden>the same</VisuallyHidden>
+                  </>
+                ) : (
+                  <Text size="xs" c="dimmed">
+                    differs
+                  </Text>
+                )}
+              </StackTable.Td>
+            </StackTable.Tr>
+          ))}
+        </StackTable.Tbody>
+      </StackTable>
+    </Table.ScrollContainer>
+  );
+}
+
 function Pair({ rulesId, boardId, caseId }: { rulesId: string; boardId: string; caseId: string }) {
   const rules = useSide(rulesId);
   const board = useSide(boardId);
+  const scenarios = useScenarios();
+  const scenario = scenarios.data?.scenarios.find((s) => s.id === 'S8');
   const error = rules.error ?? board.error;
   if (error) return <ErrorAlert error={error} title="The two S8 cases could not be read" />;
-  if (!rules.side || !board.side) return <NotYet>Reading the two cases…</NotYet>;
+  // Until the scenario is read, a wrong write would show as delivered and verified
+  if (!rules.side || !board.side || scenarios.isPending) return <NotYet>Reading the two cases…</NotYet>;
   const rows = evidenceRows(rules.side.evidence, board.side.evidence);
+  const same = rows.filter((r) => r.same);
+  const apart = rows.filter((r) => !r.same);
   const trace = board.detail?.links?.visualTrace;
   return (
     <Stack gap="sm">
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="sm">
-        <SideCard side={rules.side} title="Rules only" current={rulesId === caseId} />
-        <SideCard side={board.side} title="The board" current={boardId === caseId} />
+        <SideCard side={rules.side} title="Rules only" current={rulesId === caseId} scenario={scenario} />
+        <SideCard side={board.side} title="The board" current={boardId === caseId} scenario={scenario} />
       </SimpleGrid>
-      {rows.length ? (
-        <Table.ScrollContainer minWidth={560}>
-          <Table verticalSpacing={4} fz="sm">
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Evidence</Table.Th>
-                <Table.Th>{`Rules only (${rulesId})`}</Table.Th>
-                <Table.Th>{`The board (${boardId})`}</Table.Th>
-                <Table.Th>Same</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {rows.map((r) => (
-                <Table.Tr key={r.label}>
-                  <Table.Th scope="row" fw="normal">
-                    <Text size="sm" c="dimmed">
-                      {r.label}
-                    </Text>
-                  </Table.Th>
-                  <Table.Td className="mono-wrap">{r.rules}</Table.Td>
-                  <Table.Td className="mono-wrap">{r.board}</Table.Td>
-                  <Table.Td>
-                    {r.same ? (
-                      <>
-                        <IconEqual size={16} color="var(--shutter-muted)" aria-hidden />
-                        <VisuallyHidden>the same</VisuallyHidden>
-                      </>
-                    ) : (
-                      <Text size="xs" c="dimmed">
-                        differs
-                      </Text>
-                    )}
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Table.ScrollContainer>
+      {same.length ? (
+        <Stack gap={4}>
+          <Text size="sm" fw={600}>
+            Both runs read the same evidence
+          </Text>
+          <EvidenceTable rows={same} rulesId={rulesId} boardId={boardId} />
+        </Stack>
       ) : null}
-      <Text size="xs" c="dimmed">
-        The digests differ because each case's evidence was collected on its own run of the scenario, at its
-        own time: the receiver's epoch, the times the operations applied and the message ids are that run's.
-        The facts a decision rests on read the same.
-      </Text>
+      {/* Only a time and two digests differ, each run's own: they say nothing about the decision, so they stay a click away */}
+      {apart.length ? (
+        <TechDetail label="Times and digests, which differ on each run" kind="data">
+          <Stack gap="xs">
+            <EvidenceTable rows={apart} rulesId={rulesId} boardId={boardId} />
+            <Text size="xs" c="dimmed">
+              The digests differ because each case's evidence was collected on its own run of the scenario, at
+              its own time: the receiver's epoch, the times the operations applied and the message ids are
+              that run's. The facts a decision rests on read the same.
+            </Text>
+          </Stack>
+        </TechDetail>
+      ) : null}
       {trace ? (
         <Group gap={6}>
           <Text size="sm" c="dimmed">
@@ -166,11 +272,15 @@ function Pair({ rulesId, boardId, caseId }: { rulesId: string; boardId: string; 
   );
 }
 
+/** The recorded pair in the trial, for a site that doesn't play Rules only: opened on the board's case, side by side. */
+const TRIAL_COMPARE = trialHref(`#/cases/${TRIAL_BOARD_CASE}?show=compare`);
+
 /**
  * S8 played by rules alone and by the board, side by side: what each did at the receiver, and the evidence both read.
  * On an S8 case's page; `?show=compare` (the demo's path through the recorded cases) scrolls to it.
  */
 export function S8Compare({ caseId, focus }: { caseId: string; focus: boolean }) {
+  const hidden = scenariosHidden(useCan());
   const cases = useCases({ scenario: 'S8', limit: 50 });
   const { rules, board } = s8Pair(cases.data?.items ?? []);
   const ref = useRef<HTMLDivElement>(null);
@@ -184,10 +294,19 @@ export function S8Compare({ caseId, focus }: { caseId: string; focus: boolean })
       <Section
         id="s8-compare"
         title="S8 side by side: Rules only and the board"
-        note="The same failure played twice. Two systems moved the patient in the same minute; Rules only passes every check and resends, the board sees that the evidence can't decide which movement is current."
+        note="The same failure played twice. Two systems moved the patient in the same minute: Rules only writes over the bed manager's ward with every check passed; the board sees the evidence can't decide which movement is current."
       >
         {cases.isError ? <ErrorAlert error={cases.error} title="The S8 cases could not be listed" /> : null}
-        {ready && missing.length ? (
+        {/* The online demo's visitor can't run a scenario, so "not played yet" would promise what never comes */}
+        {ready && missing.length && hidden ? (
+          <NotYet>
+            {"Rules only isn't played on this demo. "}
+            <Anchor href={TRIAL_COMPARE} size="sm">
+              See the two side by side in the trial
+            </Anchor>
+          </NotYet>
+        ) : null}
+        {ready && missing.length && !hidden ? (
           <NotYet>{`S8 has not been played in ${missing.map((m) => humanize(m).toLowerCase()).join(' or ')} mode here yet.`}</NotYet>
         ) : null}
         {rules && board ? <Pair rulesId={rules.caseId} boardId={board.caseId} caseId={caseId} /> : null}
@@ -220,45 +339,85 @@ export function S8RulesNote({ c }: { c: CaseDetail }) {
  * A compact strip near the top of an S8 case played by rules alone or by the board: the same failure's other run,
  * linked, with its outcome against S8's expectation (rules alone's write reads "Not as expected"), how the evaluation
  * scored each mode's play of S8 ("Board: as expected", "Rules alone: differs, wrote WARD-B"), and a button to the side
- * by side. Shown only when both runs exist.
+ * by side. A board run that sent nothing also says what that kept from happening, since its own page shows only a
+ * case waiting for a person; that holds with no other run to link, as on the online demo. The wards are S8's own.
  */
-export function CounterpartStrip({ c, onCompare }: { c: CaseDetail; onCompare: () => void }) {
+export function CounterpartStrip({
+  c,
+  writesSent,
+  onCompare,
+}: {
+  c: CaseDetail;
+  /** The writes this case sent, from its attempts. */
+  writesSent: number;
+  onCompare: () => void;
+}) {
   const mine = c.scenario === 'S8' && (c.mode === 'rules' || c.mode === 'board');
+  const hidden = scenariosHidden(useCan());
   const cases = useCases({ scenario: 'S8', limit: 50 }, mine);
   const scenario = useScenarios().data?.scenarios.find((s) => s.id === 'S8');
   const { rules, board } = s8Pair(cases.data?.items ?? []);
-  if (!mine || !rules || !board) return null;
-  const other = c.mode === 'board' ? rules : board;
-  if (other.caseId === c.caseId) return null;
-  const thisRun = c.mode === 'board' ? "the board's run" : 'the run by Rules only';
+  if (!mine) return null;
+  const stakes =
+    c.mode === 'board' && c.state === 'escalated' && writesSent === 0
+      ? "A resend here writes WARD-B over the bed manager's WARD-C with every check passed. The board sent nothing."
+      : '';
+  const other = rules && board ? (c.mode === 'board' ? rules : board) : undefined;
+  const counterpart = other && other.caseId !== c.caseId ? other : undefined;
+  if (!counterpart && !stakes) return null;
   const otherRun = c.mode === 'board' ? 'Rules only' : 'The board';
   const played = playedFor('S8');
-  const marks = [playedMark('board', played?.board), playedMark('rules', played?.rules, rules.ward)].filter(
-    (m) => m !== null,
-  );
+  const marks = counterpart
+    ? [playedMark('board', played?.board), playedMark('rules', played?.rules, rules?.ward)].filter(
+        (m) => m !== null,
+      )
+    : [];
   return (
-    <Paper withBorder p="xs" mb="md" component="section" aria-label="Same failure, two runs">
+    <Paper
+      withBorder
+      p="xs"
+      mb="md"
+      component="section"
+      aria-label={counterpart ? 'Same failure, two runs' : 'What a resend would do'}
+    >
       <Stack gap={6}>
-        <Group gap="sm" wrap="wrap" justify="space-between">
-          <Group gap={6} wrap="wrap">
-            <Text size="sm" fw={600}>
-              Same failure, two runs:
-            </Text>
-            <Text size="sm">{`this is ${thisRun}. ${otherRun} played it as`}</Text>
-            <Anchor component={Link} to={`/cases/${encodeURIComponent(other.caseId)}`} size="sm" fw={600}>
-              {other.caseId}
-            </Anchor>
-            <OutcomeBadge c={other} scenario={scenario} />
+        {counterpart ? (
+          <Group gap="sm" wrap="wrap" justify="space-between">
+            <Group gap={6} wrap="wrap">
+              <Text size="sm" fw={600}>
+                Same failure, two runs:
+              </Text>
+              <Text size="sm">{`${otherRun} played it as`}</Text>
+              <Anchor
+                component={Link}
+                to={`/cases/${encodeURIComponent(counterpart.caseId)}`}
+                size="sm"
+                fw={600}
+              >
+                {counterpart.caseId}
+              </Anchor>
+              <OutcomeBadge c={counterpart} scenario={scenario} />
+            </Group>
+            <Button
+              size="xs"
+              variant="default"
+              leftSection={<IconArrowsLeftRight size={14} aria-hidden />}
+              onClick={onCompare}
+            >
+              Compare the two runs
+            </Button>
           </Group>
-          <Button
-            size="xs"
-            variant="default"
-            leftSection={<IconArrowsLeftRight size={14} aria-hidden />}
-            onClick={onCompare}
-          >
-            Compare the two runs
-          </Button>
-        </Group>
+        ) : null}
+        {stakes ? (
+          <Text size="sm" fw={600} data-testid="s8-stakes">
+            {stakes}
+          </Text>
+        ) : null}
+        {!counterpart && hidden ? (
+          <Anchor href={TRIAL_COMPARE} size="sm">
+            See the two side by side in the trial
+          </Anchor>
+        ) : null}
         {/* The evaluation's marks for S8 in each mode, from its recorded passes */}
         {marks.length ? (
           <Group gap={6} wrap="wrap" data-testid="played-marks">

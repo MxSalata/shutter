@@ -14,6 +14,7 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import {
+  IconArrowsLeftRight,
   IconCheck,
   IconChevronDown,
   IconCircleCheck,
@@ -160,6 +161,7 @@ export function DecisionCard({
   outcome,
   fading = false,
   onSeePrecedents,
+  onCompare,
 }: {
   facts: CaseFacts;
   /** The case's round of evidence and planning: a re-plan after the receiver changed starts another. */
@@ -172,6 +174,8 @@ export function DecisionCard({
   fading?: boolean;
   /** Opens the precedents' list in the Audit trail. */
   onSeePrecedents?: () => void;
+  /** Opens the side by side of S8's two runs. */
+  onCompare?: () => void;
 }) {
   const { c, receipt: r } = facts;
   const verdict = outcome ?? caseOutcome(outcomeCaseOf(facts));
@@ -188,6 +192,9 @@ export function DecisionCard({
   const correction = correctionStepsOf(facts.plan);
   // A long next action heads its card in a few words; the rest of it waits behind the card's details
   const { head: action, rest: actionRest } = actionHead(next.action);
+  // A closed case with an outcome its scenario doesn't expect has nothing pending, and saying only that reads as all clear
+  const notExpected = verdict.key === 'not-as-expected' && next.kind === 'none';
+  const s8Wrong = notExpected && c.scenario === 'S8' && r.writes > 0;
   const more = !!actionRest || !!correction;
   const hasWhy =
     next.kind === 'person' &&
@@ -244,8 +251,9 @@ export function DecisionCard({
         : c.state === 'blocked' || c.state === 'failed'
           ? 'blocking'
           : 'attention';
-  const NextIcon =
-    next.kind === 'none'
+  const NextIcon = notExpected
+    ? OutcomeIcon
+    : next.kind === 'none'
       ? IconCircleCheck
       : next.kind === 'shutter'
         ? IconProgress
@@ -360,7 +368,13 @@ export function DecisionCard({
               <StoryCard
                 id="next-action"
                 label="What needs you now"
-                title={action}
+                title={
+                  s8Wrong
+                    ? "This run wrote what the scenario says it shouldn't: see the board's run"
+                    : notExpected
+                      ? `Nothing is pending, but this isn't what ${c.scenario} expects`
+                      : action
+                }
                 icon={NextIcon}
                 tone={tone}
                 className={marked ? 'tone-tint' : undefined}
@@ -375,6 +389,18 @@ export function DecisionCard({
                     : {}),
                 }}
               >
+                {s8Wrong && onCompare ? (
+                  <Group gap="xs">
+                    <Button
+                      size="xs"
+                      variant="default"
+                      leftSection={<IconArrowsLeftRight size={14} aria-hidden />}
+                      onClick={onCompare}
+                    >
+                      Compare the two runs
+                    </Button>
+                  </Group>
+                ) : null}
                 {/* What (the title) and who; the rest of a long action, why, the reason's code, what must hold, when to
                     look again and any steps that correct a receiver's history behind the details */}
                 {next.kind === 'person' ? (

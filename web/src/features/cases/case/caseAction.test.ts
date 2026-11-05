@@ -179,4 +179,25 @@ describe("the case's action for its reader", () => {
       );
     }
   });
+
+  it("offers S8's two runs, never all clear, on a closed case its scenario doesn't expect", () => {
+    expect(caseActionOf(factsOf('C-000021'), { me: ME.approver, notAsExpected: true })).toEqual({
+      needsYou: false,
+      label: 'Compare the two runs',
+      short: 'Compare',
+      name: 'Not the expected outcome: compare the two runs',
+      compare: true,
+      differs: true,
+    });
+    // Another scenario has no second run to compare with
+    const f = factsOf('C-000021');
+    const other = caseActionOf(
+      { ...f, c: { ...f.c, scenario: 'S3' } },
+      { me: ME.approver, notAsExpected: true },
+    );
+    expect(other).toMatchObject({ label: 'See what differs', differs: true });
+    expect(other.compare).toBeUndefined();
+    // Without the scenario's word the same case keeps the plain answer
+    expect(caseActionOf(factsOf('C-000021'), { me: ME.approver }).label).toBe('No action needed');
+  });
 });
