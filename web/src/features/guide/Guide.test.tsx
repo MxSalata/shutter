@@ -217,7 +217,12 @@ describe('the guide', () => {
     await within(guide).findByRole('heading', { name: 'An approver decides here' });
     expect(within(guide).queryByRole('button', { name: /^Try it/ })).not.toBeInTheDocument();
     await userEvent.click(within(guide).getByRole('button', { name: 'Next' }));
-    const heading = await screen.findByRole('heading', { name: 'What would be checked' });
+    const heading = await screen.findByRole(
+      'heading',
+      { name: 'What would be checked' },
+      // The whole case page renders first, which is slow in jsdom
+      { timeout: 15_000 },
+    );
     const nextCard = heading.closest('[role="region"]')!;
     expect(nextCard).toHaveTextContent(/Not approved, so nothing is written yet/);
     expect(nextCard).not.toHaveTextContent(/it landed\./);
