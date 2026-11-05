@@ -42,8 +42,8 @@ receiving system's final state with the scenario's expected outcome (`fixtures/s
   later than the other, so every mechanical check passes; Rules only resends, the approval goes through, and the
   write moves the patient to Ward B over the bed manager's placement in Ward C. The board sees that the evidence
   can't decide which movement is current and escalates to a person.
-- **Site policy settles 8 of the 10 it plays with no agent.** S1, S2, S3, S5, S6, S9, S10 and S13 ran no agent; S4
-  and S8 went to the board, four runs each; all 10 ended as expected on build 109 (receipt-109.md). S7 has no such mode.
+- **Site policy settles 8 of those 11 with no agent.** S1, S2, S3, S5, S6, S9, S10 and S13 ran no agent; S4 and S8 went
+  to the board, four runs each; all 10 it plays ended as expected on build 109 (receipt-109.md). S7 has no such mode.
 - **S15 and S16 are what Shutter must never send by itself.** A merge (ADT^A40) changes which record a patient's
   history belongs to, and a cancel the downstream system can't take would be refused or misapplied: Shutter withholds
   both before any agent runs, the gate blocks every plan (`MERGE_WITHHELD`, `CANCEL_UNSUPPORTED`), and the case goes to
