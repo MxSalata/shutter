@@ -19,8 +19,8 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconFlask2, IconPlayerPlay, IconRefresh, IconShieldX } from '@tabler/icons-react';
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router';
+import { useMemo } from 'react';
+import { Link, useSearchParams } from 'react-router';
 import {
   isPlaying,
   useCan,
@@ -91,6 +91,9 @@ const NOT_RECORDED = 'Not in the trial: no recording';
 const MODES = ALL_MODES.filter((m) => !notRecorded(m.value));
 
 const modeLabel = (mode: Mode) => ALL_MODES.find((m) => m.value === mode)?.label ?? humanize(mode);
+
+/** A filter or a mode stays on the page: the address changes, Back keeps its place, and the page does not jump to its top. */
+const STAY = { replace: true, preventScrollReset: true };
 
 /** What every mode keeps, said once above the modes. */
 const MODES_INTRO =
@@ -649,7 +652,15 @@ function AllScenarios({
   mode: Mode;
   row: (s: Scenario) => React.ReactNode;
 }) {
-  const [outcome, setOutcome] = useState<string>('all');
+  // In the address with the run mode, so Back from a case returns to this list
+  const [params, setParams] = useSearchParams();
+  const outcome = params.get('outcome') ?? 'all';
+  const setOutcome = (next: string) => {
+    const changed = new URLSearchParams(params);
+    if (next === 'all') changed.delete('outcome');
+    else changed.set('outcome', next);
+    setParams(changed, STAY);
+  };
   const counts = new Map<Outcome, number>();
   for (const s of scenarios) counts.set(outcomeOf(s, mode), (counts.get(outcomeOf(s, mode)) ?? 0) + 1);
   const groups = ([...OUTCOMES, 'other'] as Outcome[]).filter((o) => counts.get(o));
@@ -728,8 +739,14 @@ export default function ScenariosPage() {
   const hidden = scenariosHidden(can) && !playerOff;
   // Where nobody here can run one, the list starts in the mode the hospital plays; the role can arrive after the first paint
   const defaultMode: Mode = hidden ? 'policy' : 'board';
-  const [picked, setMode] = useState<Mode | null>(null);
+  const [params, setParams] = useSearchParams();
+  const picked = MODES.find((m) => m.value === params.get('mode'))?.value;
   const mode = picked ?? defaultMode;
+  const setMode = (next: Mode) => {
+    const changed = new URLSearchParams(params);
+    changed.set('mode', next);
+    setParams(changed, STAY);
+  };
   const current = scenarios.data?.run ?? null;
   const busy = isPlaying(current) ? `A run of ${current?.scenario} is still playing` : '';
   /** Why Reset is disabled now, or "". */

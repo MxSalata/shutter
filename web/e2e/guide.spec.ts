@@ -165,6 +165,33 @@ test.describe('the guide', () => {
     expect(await opened.evaluate((d) => d.contains(document.activeElement))).toBe(true);
   });
 
+  test("the banner's full form, open with the welcome, never stops mid-word", async ({ page }) => {
+    await signIn(page);
+    const words = page.locator('.trial-banner-words');
+    for (const [width, long] of [
+      [1280, false],
+      [1439, false],
+      [1440, true],
+    ] as const) {
+      await page.setViewportSize({ width, height: 800 });
+      await expect(page.locator('.trial-banner-long')).toBeVisible({ visible: long });
+      expect(await words.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+    }
+  });
+
+  test('stays on its step when the reader filters the list the step is on', async ({ page }) => {
+    await signIn(page);
+    const welcome = page.getByRole('dialog', { name: 'Welcome to the Shutter trial' });
+    await welcome.getByRole('button', { name: 'Start the tour' }).click();
+    const guide = page.getByRole('region', { name: 'Guide' });
+    await expect(guide).toContainText('Step 1 of 9');
+    await page.getByRole('radio', { name: /^Rules only/ }).click();
+    await expect(page).toHaveURL(/#\/scenarios\?mode=rules$/);
+    await expect(guide).toContainText('Step 1 of 9');
+    await guide.getByRole('button', { name: 'Next' }).click();
+    await expect(guide).toContainText('Step 2 of 9');
+  });
+
   test("opens a chapter from Help, and stays away after Don't show again", async ({ page }) => {
     await signIn(page);
     const welcome = page.getByRole('dialog', { name: 'Welcome to the Shutter trial' });

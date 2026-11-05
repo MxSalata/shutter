@@ -54,6 +54,31 @@ test.describe('the outcome of each case', () => {
     await expect(row(page, 'C-000021')).toHaveAttribute('data-tone', 'blocking');
   });
 
+  test('Back from a case returns to the filter and the page the list was on', async ({ page }) => {
+    await signIn(page);
+    await go(page, '/cases');
+    await page.getByRole('button', { name: / Escalated / }).click();
+    await expect(page.getByText('15 cases', { exact: true })).toBeVisible();
+    const first = await caseRows(page).first().getByRole('link', { name: /^C-/ }).innerText();
+    await caseRows(page).first().getByRole('link', { name: /^C-/ }).click();
+    await expect(page).toHaveURL(new RegExp(`#/cases/${first}`));
+    await page.goBack();
+    await expect(page.getByText('15 cases', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: / Escalated / })).toHaveAttribute('aria-pressed', 'true');
+
+    // The filter off, and the second page: Back keeps that too, and each of these changes made no entry of its own
+    await page.getByRole('button', { name: / Escalated / }).click();
+    await page.getByRole('button', { name: 'Page 2' }).click();
+    await expect(page).toHaveURL(/#\/cases\?page=2$/);
+    const second = await caseRows(page).first().getByRole('link', { name: /^C-/ }).innerText();
+    expect(second).not.toBe('C-000064');
+    await caseRows(page).first().getByRole('link', { name: /^C-/ }).click();
+    await expect(page).toHaveURL(new RegExp(`#/cases/${second}`));
+    await page.goBack();
+    await expect(page).toHaveURL(/#\/cases\?page=2$/);
+    await expect(caseRows(page).first().getByRole('link', { name: /^C-/ })).toHaveText(second);
+  });
+
   test('counts the closed cases by outcome, and a tile filters the list to them', async ({ page }) => {
     await signIn(page);
     await go(page, '/cases');

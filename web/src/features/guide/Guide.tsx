@@ -103,14 +103,20 @@ const toTry = (action: string) => {
   return visible(el) && !el.matches(':disabled') && el.getAttribute('aria-expanded') !== 'true';
 };
 
+/** The filters a list keeps in its address: choosing one during a step leaves the reader on the step's page. */
+const LIST_FILTERS: Record<string, string[]> = {
+  '/cases': ['state', 'outcome', 'scenario', 'page'],
+  '/scenarios': ['mode', 'outcome'],
+};
+
 /**
- * The address's query without Ask's own `ask=1`: opening Ask about this case keeps the reader on the step's page, so
- * the card stays (in the dock beside Ask below 1440 px, lib/guideDock.ts).
+ * The address's query without Ask's own `ask=1` or a list's filters: opening Ask about this case keeps the reader on the
+ * step's page, so the card stays (in the dock beside Ask below 1440 px, lib/guideDock.ts).
  */
-function withoutAsk(search: string): string {
-  if (!search.includes('ask=')) return search;
+function withoutOwnParams(pathname: string, search: string): string {
+  if (!search) return search;
   const q = new URLSearchParams(search);
-  q.delete('ask');
+  for (const name of ['ask', ...(LIST_FILTERS[pathname] ?? [])]) q.delete(name);
   const rest = q.toString();
   return rest ? `?${rest}` : '';
 }
@@ -597,7 +603,7 @@ function StepHost({ pos }: { pos: GuidePosition }) {
   const place = usePlace(pos.step);
   const navigate = useNavigate();
   const location = useLocation();
-  const here = location.pathname + withoutAsk(location.search);
+  const here = location.pathname + withoutOwnParams(location.pathname, location.search);
   // The same address again still counts: the case page reopens its story step on every visit
   // A step on the page already showing scrolls from where the last one left it, not by way of the page's top
   const go = useEffectEvent((to: string) =>

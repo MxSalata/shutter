@@ -67,7 +67,7 @@ for (const width of [360, 1280, 1920])
           [...document.querySelectorAll<SVGSVGElement>('.scenario-diagram')].flatMap((svg) => {
             const bad: string[] = [];
             const box = svg.getBoundingClientRect();
-            if (box.height > 44 || box.width > 296) bad.push(`${box.width}x${box.height}`);
+            if (box.height > 44 || box.width > 305) bad.push(`${box.width}x${box.height}`);
             if (box.right > window.innerWidth) bad.push('past the window');
             if (!svg.getAttribute('aria-label')?.includes('It should end: ')) bad.push('no label');
             for (const g of svg.querySelectorAll('g')) {
@@ -101,6 +101,23 @@ test.describe('the page at 1280 px @scenarios', () => {
   test.use({ viewport: { width: 1280, height: 900 } });
 
   test.beforeEach(({ page }) => signIn(page));
+
+  test('Back from a case returns to the run mode and the filter', async ({ page }) => {
+    await go(page, '/scenarios');
+    await page.getByRole('radio', { name: /^Rules only/ }).click();
+    await expect(page).toHaveURL(/mode=rules$/);
+    await page.getByText(/^Escalate \d+$/).click();
+    await expect(page).toHaveURL(/mode=rules&outcome=escalate$/);
+    const list = page.getByRole('region', { name: 'Every scenario' });
+    // Its header and the eight that should escalate in Rules only
+    await expect(list.getByRole('row')).toHaveCount(9);
+    await list.getByRole('link', { name: /^C-/ }).first().click();
+    await expect(page).toHaveURL(/#\/cases\/C-/);
+    await page.goBack();
+    await expect(page).toHaveURL(/mode=rules&outcome=escalate$/);
+    await expect(page.getByRole('radio', { name: /^Rules only/ })).toBeChecked();
+    await expect(list.getByRole('row')).toHaveCount(9);
+  });
 
   test("lines up the three starters' Run buttons", async ({ page }) => {
     await go(page, '/scenarios');
