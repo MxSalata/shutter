@@ -1294,6 +1294,13 @@ body {
 .mode-card[data-checked] {
   border-color: var(--mantine-primary-color-filled);
 }
+/* The mode that can't be chosen: dashed and without a pointer as well as greyed, so it doesn't read as one more choice. */
+.mode-card:disabled {
+  cursor: not-allowed;
+  border-style: dashed;
+  background: transparent;
+  color: var(--shutter-muted);
+}
 .mode-card .mantine-Badge-root {
   --badge-radius: var(--mantine-radius-md);
   height: auto;
