@@ -635,24 +635,25 @@ function StepHost({ pos }: { pos: GuidePosition }) {
 
   // Approve plan pressed by hand on this step: once the replay has played, the tour goes on to what it shows, so the
   // reader isn't left on a card that still says it is their turn. Next's own approval moves on by itself
+  // Read from the step itself: the case resolves before the replay ends, and the words for that drop the try-it
+  const approveStep = pos.step.tryIt?.action === 'approve-plan';
   useEffect(() => {
-    if (tryAction !== 'approve-plan') return;
+    if (!approveStep) return;
     const played = (e: Event) => {
       if (!replay && (e as CustomEvent<string>).detail === caseInPath(path)) useGuide.getState().next();
     };
     window.addEventListener(REPLAY_DONE, played);
     return () => window.removeEventListener(REPLAY_DONE, played);
-  }, [tryAction, path]);
+  }, [approveStep, path]);
 
   // Reject plan pressed by hand on this step: the page has closed up around the decision, so the tour goes on to what it
   // means and lands there, as it does after the replay of an approval. Arriving on a case rejected earlier stays put
-  const rejectStep = pos.step.tryIt?.action === 'approve-plan';
   const stateBefore = useRef(caseState);
   useEffect(() => {
     const before = stateBefore.current;
     stateBefore.current = caseState;
-    if (rejectStep && before === 'awaiting_approval' && caseState === 'blocked') useGuide.getState().next();
-  }, [rejectStep, caseState]);
+    if (approveStep && before === 'awaiting_approval' && caseState === 'blocked') useGuide.getState().next();
+  }, [approveStep, caseState]);
 
   // The page learns what the step points at before the step looks for it, so a folded section can open for it
   useEffect(() => {
