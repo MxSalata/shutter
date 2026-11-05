@@ -11,7 +11,7 @@ const SAID: Record<DetailLevel, string> = { plain: 'Plain words', technical: 'Te
  * The header's Detail switch, "Plain | Technical", on every page, live and in the trial: Technical opens every
  * disclosure of data, shows the codes beside the words and UTC beside local times; Plain is the default. From a tablet
  * up it is a two-segment control (the group label "Detail" read by screen readers only); on a phone an icon button
- * named "Detail: Plain" or "Detail: Technical" with a menu of both. A change is announced politely.
+ * named "Detail: Plain" or "Detail: Technical", filled in Technical, with a menu of both. A change is announced politely.
  */
 export function DetailSwitch() {
   const detail = useDetail();
@@ -40,7 +40,11 @@ export function DetailSwitch() {
         <Menu position="bottom-end" withinPortal>
           <Menu.Target>
             <Tooltip label={`Detail: ${WORDS[detail]}`}>
-              <ActionIcon variant="subtle" size="lg" aria-label={`Detail: ${WORDS[detail]}`}>
+              <ActionIcon
+                variant={detail === 'technical' ? 'light' : 'subtle'}
+                size="lg"
+                aria-label={`Detail: ${WORDS[detail]}`}
+              >
                 <IconCode size={18} aria-hidden />
               </ActionIcon>
             </Tooltip>
