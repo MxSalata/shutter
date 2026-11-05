@@ -127,6 +127,12 @@ Method TestAFailedOrderSaysWhatTheReceiverDid()
     Set c.FailureOutcome = "rejected"
     Do $$$AssertTrue($CLASSMETHOD(d, "DescribeFailure", c) [ "was refused by Results Out", "a refusal")
     Do $$$AssertTrue('($CLASSMETHOD(d, "DescribeFailure", c) [ "mapped"), "and no talk of a mapping")
+    // A result with no PV1 has no encounter: no empty clause, in these words or in the others.
+    Set c.EncounterId = ""
+    Do $$$AssertNotTrue($CLASSMETHOD(d, "DescribeFailure", c) [ "for encounter", "no encounter, no clause: " _ $CLASSMETHOD(d, "DescribeFailure", c))
+    Set c.FailureText = "x", c.Event = "transfer"
+    Do $$$AssertNotTrue($CLASSMETHOD(d, "DescribeFailure", c) [ "for encounter", "nor here: " _ $CLASSMETHOD(d, "DescribeFailure", c))
+    Set c.EncounterId = "ENC-1", c.Event = "R01"
     Set c.FailureText = "The message could not be mapped to an operation for the downstream system: no visit number"
     Do $$$AssertTrue('c.NotModelled(), "an ADT that could not be mapped is not this")
     Do $$$AssertTrue($CLASSMETHOD(d, "DescribeFailure", c) [ "could not be mapped", "and keeps its words")

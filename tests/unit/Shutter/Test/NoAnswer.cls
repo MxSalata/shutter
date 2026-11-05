@@ -113,4 +113,73 @@ Method TestAReadNobodyAnswered()
     Do $$$AssertEquals(r.Outcome _ "|" _ r.EncounterVersion, "read|3", "an answer is read")
 }
 
+/// A saved case with a snapshot and a resend plan, under its own public id outside the case counter.
+Method SavedCase(caseId As %String, encounter As %String, Output plan As Shutter.Store.Plan) As Shutter.Store.Case
+{
+    Do ..Drop(caseId)
+    Set c = ##class(Shutter.Store.Case).%New()
+    Set c.CaseId = caseId, c.Receiver = "Downstream Out", c.OperationKey = "PAS^HOSP^MRN9005^ENC-9005^transfer^2026-10-15T08:20:00Z"
+    Set c.Event = "transfer", c.Ward = "WARD-B", c.EventTime = "2026-10-15T08:20:00Z", c.EncounterId = encounter, c.PatientId = "MRN9005"
+    Set c.FailureKind = "delivery_failed", c.FailureText = "x", c.State = "executing", c.Headline = "The transfer was not delivered"
+    Set c.OpenedAt = ##class(Shutter.Util.Time).NowUTC(), c.UpdatedAt = c.OpenedAt
+    Do $$$AssertStatusOK(c.%Save(), "the case " _ caseId _ " is saved")
+    Set snap = ##class(Shutter.Store.Snapshot).Begin(c)
+    Do $$$AssertStatusOK(snap.%Save(), "its snapshot")
+    Set action = {"type": "resend", "operation_key": (c.OperationKey), "expected_version": 1}
+    Do $$$AssertStatusOK(##class(Shutter.Store.Plan).Create(c, snap, {"disposition": "resend", "summary": "resend", "action": (action)}, "rules", .plan), "its plan")
+    Quit c
+}
+
+ClassMethod Drop(caseId As %String)
+{
+    Set c = ##class(Shutter.Store.Case).ByCaseId(caseId)
+    If $ISOBJECT(c) Do ##class(Shutter.Store.Case).PurgeCase(c.%Id())
+}
+
+/// A write call that answered with an error status never reaches OnExecute. Whether the receiver applied it is unknown, so the
+/// attempt is recorded as uncertain: without it the case read 0 writes, and "sent nothing", with the receiver perhaps holding it.
+/// The email says so, and says no answer rather than HTTP 0.
+Method TestAWriteCallThatErrored()
+{
+    Set id = "C-TEST-NOANSWER-A"
+    Set c = ..SavedCase(id, "ENC-9005", .plan)
+    Set wf = ##class(Shutter.Process.CaseWorkflow).%New("Case Workflow")
+    Set wf.CaseId = id, wf.PlanId = plan.%Id()
+    Do $$$AssertStatusOK(wf.OnError("", .response, "", $$$ERROR($$$GeneralError, "the item is not running"), "execute"), "the error is handled")
+    Set after = ##class(Shutter.Store.Case).ByCaseId(id)
+    Do $$$AssertEquals(after.State, "escalated", "a person decides")
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT Outcome, HttpStatus, Error FROM Shutter_Store.ExecutionAttempt WHERE ""Case"" = ?", after.%Id()), n = 0
+    While rs.%Next() { Set n = n + 1, outcome = rs.%Get("Outcome"), status = rs.%Get("HttpStatus"), error = rs.%Get("Error") }
+    Do $$$AssertEquals(n, 1, "one attempt is recorded")
+    Do $$$AssertEquals($GET(outcome) _ "|" _ $GET(status), "uncertain|0", "as a write that may have landed")
+    Do $$$AssertTrue($GET(error) [ "the item is not running", "with the error's words")
+    Do $$$AssertEquals(##class(Shutter.Util.EscalationDraft).LatestAttemptOutcome(after), "uncertain", "the latest attempt")
+    Do $$$AssertStatusOK(##class(Shutter.Util.EscalationDraft).Build(after, {"name": "the team"}, .subject, .body), "the email is drafted")
+    Do $$$AssertTrue(body [ "got no answer", "the email says the answer was lost")
+    Do $$$AssertTrue(body [ "it may still land", "and that it may still land")
+    Do $$$AssertTrue(body [ "Before anyone corrects this by hand", "and to check first")
+    Do $$$AssertTrue(body [ ": uncertain (no answer)", "the write reads no answer")
+    Do $$$AssertNotTrue(body [ "HTTP 0", "with no HTTP 0")
+    Do $$$AssertNotTrue(body [ "Nothing: Shutter sent no write", "and never that nothing was sent")
+    Do ..Drop(id)
+}
+
+/// A write the receiver answered keeps the old opening and its status, and a message with no encounter says so in the email.
+Method TestTheEmailOfOtherCases()
+{
+    Set id = "C-TEST-NOANSWER-B"
+    Set c = ..SavedCase(id, "", .plan)
+    Do $$$AssertEquals(##class(Shutter.Util.EscalationDraft).LatestAttemptOutcome(c), "", "no attempt yet")
+    Do $$$AssertStatusOK(##class(Shutter.Store.ExecutionAttempt).Create(c, plan, "", "", 201, "applied", "", "", .a), "an acknowledged write")
+    Do $$$AssertStatusOK(##class(Shutter.Util.EscalationDraft).Build(c, {"name": "the team"}, .subject, .body), "the email is drafted")
+    Do $$$AssertTrue(body [ "correct them by hand", "the old opening")
+    Do $$$AssertTrue(body [ ": applied (HTTP 201)", "the status stays")
+    Do $$$AssertTrue(subject [ "(no encounter)", "no encounter in the subject: " _ subject)
+    Do $$$AssertNotTrue(subject [ ", encounter ", "and no empty one")
+    Do $$$AssertTrue(body [ "none (a patient-level message)", "nor in the body")
+    Do $$$AssertEquals(##class(Shutter.Util.EscalationDraft).StatusWords(""), "no answer", "no status")
+    Do $$$AssertEquals(##class(Shutter.Util.EscalationDraft).StatusWords(503), "HTTP 503", "a status")
+    Do ..Drop(id)
+}
+
 }

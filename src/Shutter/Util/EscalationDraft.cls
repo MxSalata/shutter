@@ -43,7 +43,9 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     Set receiver = $SELECT(case.Receiver '= "": case.Receiver, 1: "the downstream system")
     Set label = ##class(Shutter.Store.SiteProfile).ReceiverLabel(receiver)
     Set ids = ..Identifiers(case)
-    Set subject = "Shutter " _ case.CaseId _ ": manual check needed, " _ receiver _ $SELECT(case.EncounterId = "-": ", patient " _ case.PatientId _ " (no encounter)", 1: ", encounter " _ case.EncounterId)
+    // A result with no PV1 has an empty encounter, a message with no visit number the literal "-".
+    Set noEncounter = (case.EncounterId = "-") || (case.EncounterId = "")
+    Set subject = "Shutter " _ case.CaseId _ ": manual check needed, " _ receiver _ $SELECT(noEncounter: ", patient " _ case.PatientId _ " (no encounter)", 1: ", encounter " _ case.EncounterId)
 
     Set teamName = $SELECT($ISOBJECT(team): $CLASSMETHOD(json, "Str", team, "name"), 1: "")
     Set b = "To " _ $SELECT(teamName '= "": teamName, 1: "the team") _ "," _ nl _ nl
@@ -52,6 +54,9 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     } ElseIf case.NotModelled() {
         // An order, a result or a document (v1.45): "correct them by hand" is the wrong request while the queue may still deliver it.
         Set b = b _ "A message to " _ label _ " failed. Shutter resends only ADT, so it has sent nothing for this message, and the message itself may be sound. Before anyone re-enters it, check the source's Message Viewer: an operation that retries delivers it by itself once the receiver is back." _ nl _ nl
+    } ElseIf ..LatestAttemptOutcome(case) = "uncertain" {
+        // A write nobody answered may have been applied, and a conditional write can still land while the version stands.
+        Set b = b _ "Shutter sent a write to " _ label _ " and got no answer, so it may have been applied, and it may still land: the write is conditional on the version below, and a slower receiver can commit it late. Before anyone corrects this by hand, check " _ label _ " for the operation key below; Shutter has sent nothing more for this message." _ nl _ nl
     } Else {
         Set b = b _ "Shutter could not safely recover a failed message to " _ label _ ". Please compare the systems and correct them by hand; Shutter has sent nothing more for this message." _ nl _ nl
     }
@@ -60,7 +65,7 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     Set b = b _ "  Hospital number: " _ ids.hospital _ nl
     If ids.nhs '= "" Set b = b _ "  NHS number: " _ ids.nhs _ nl
     If ids.dob '= "" Set b = b _ "  Date of birth: " _ ids.dob _ nl
-    Set b = b _ "  Encounter (visit number): " _ $SELECT(case.EncounterId = "-": "none (a patient-level message)", 1: case.EncounterId) _ nl _ nl
+    Set b = b _ "  Encounter (visit number): " _ $SELECT(noEncounter: "none (a patient-level message)", 1: case.EncounterId) _ nl _ nl
 
     Set b = b _ "THE EVENT" _ nl
     Set b = b _ "  " _ ..EventLine(case.Event, case.Ward, case.EventTime, case) _ nl
@@ -108,10 +113,10 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
             }
         }
     } Else {
-        If case.EncounterId = "-" {
+        If noEncounter {
             Set b = b _ "  Not applicable: the message names no encounter (a patient-level message)." _ nl
         } Else {
-            Set b = b _ "  Not known: the receiver's record of the encounter could not be read (HTTP " _ summary.%Get("ward_state_http_status") _ ")." _ nl
+            Set b = b _ "  Not known: the receiver's record of the encounter could not be read (" _ ..StatusWords(summary.%Get("ward_state_http_status")) _ ")." _ nl
         }
     }
     Set b = b _ nl
@@ -137,7 +142,7 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     Set b = b _ "  " _ ..Attempts(case) _ nl _ nl
 
     Set b = b _ "WHEN IT IS CORRECTED" _ nl
-    If (case.FailureKind = "withheld") || (case.EncounterId = "-") {
+    If (case.FailureKind = "withheld") || noEncounter {
         Set b = b _ "  Reply to this email with what was changed, or record it on the case, then mark the case as handled by the team on the case page: Shutter sent nothing for this message and will send nothing, and it cannot verify a merge or a cancellation against " _ receiver _ "." _ nl _ nl
     } Else {
         Set b = b _ "  Reply to this email with what was changed, or record it on the case, then choose Reinvestigate on the case page: Shutter reads " _ receiver _ " again and verifies the correction." _ nl _ nl
@@ -223,6 +228,20 @@ ClassMethod Reason(case As Shutter.Store.Case, Output failing As %DynamicArray) 
     Quit $SELECT(code = "": "", 1: ##class(Shutter.Store.BlockReason).ByCode(code))
 }
 
+/// An HTTP status in words: the connectors store a request nobody answered as 0, which is no status a person should read.
+ClassMethod StatusWords(httpStatus As %String) As %String
+{
+    Quit $SELECT(+httpStatus: "HTTP " _ httpStatus, 1: "no answer")
+}
+
+/// The outcome of the case's latest write attempt, or empty when it has none.
+ClassMethod LatestAttemptOutcome(case As Shutter.Store.Case) As %String
+{
+    Set id = case.%Id(), outcome = ""
+    &sql(SELECT TOP 1 Outcome INTO :outcome FROM Shutter_Store.ExecutionAttempt WHERE "Case" = :id ORDER BY ID DESC)
+    Quit $SELECT(SQLCODE = 0: outcome, 1: "")
+}
+
 /// What Shutter sent for the case: nothing, or each write with its outcome.
 ClassMethod Attempts(case As Shutter.Store.Case) As %String
 {
@@ -230,7 +249,7 @@ ClassMethod Attempts(case As Shutter.Store.Case) As %String
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ""At"" AS AttemptAt, Outcome, ExpectedVersion, HttpStatus FROM Shutter_Store.ExecutionAttempt WHERE ""Case"" = ? ORDER BY ID", case.%Id())
     While rs.%Next() {
         Set n = n + 1
-        Set out = out _ $SELECT(out = "": "", 1: "; ") _ "a write at " _ $TRANSLATE($EXTRACT(rs.%Get("AttemptAt"), 1, 16), "T", " ") _ " UTC expecting version " _ rs.%Get("ExpectedVersion") _ ": " _ rs.%Get("Outcome") _ " (HTTP " _ rs.%Get("HttpStatus") _ ")"
+        Set out = out _ $SELECT(out = "": "", 1: "; ") _ "a write at " _ $TRANSLATE($EXTRACT(rs.%Get("AttemptAt"), 1, 16), "T", " ") _ " UTC expecting version " _ rs.%Get("ExpectedVersion") _ ": " _ rs.%Get("Outcome") _ " (" _ ..StatusWords(rs.%Get("HttpStatus")) _ ")"
     }
     Quit $SELECT(n = 0: "Nothing: Shutter sent no write for this case.", 1: out _ ".")
 }
