@@ -12,7 +12,7 @@
   --shutter-header: var(--mantine-color-body);
   /* The header's height, which sticky parts and scrolled-to sections clear: 56 px live; the trial's banner adds to it
      (below). */
-  --shutter-header-h: 56px;
+  --shutter-header-h: 3.5rem;
   /* Motion: used only to point and to confirm. The reduced-motion rule below collapses all of it. */
   --motion-fast: 150ms;
   --motion-base: 220ms;
@@ -94,17 +94,18 @@
   --shutter-trial-on-surface: var(--mantine-color-text);
 }
 /* The header in a trial page holds the banner above its row: 96 px with the full banner, 88 px once it is one line,
-   92 px on a phone, where the banner is always one line. */
+   92 px on a phone, where the banner is always one line. In rem, as AppShell turns AppLayout's heights into rem: with a
+   larger text size in the browser the header grows, and the sticky parts must stop under it, not behind it. */
 :root[data-shutter-env='trial'] {
-  --shutter-header-h: 96px;
+  --shutter-header-h: 6rem;
 }
 :root[data-shutter-env='trial'][data-shutter-banner='compact'] {
-  --shutter-header-h: 88px;
+  --shutter-header-h: 5.5rem;
 }
 @media (max-width: 47.99em) {
   :root[data-shutter-env='trial'],
   :root[data-shutter-env='trial'][data-shutter-banner='compact'] {
-    --shutter-header-h: 92px;
+    --shutter-header-h: 5.75rem;
   }
 }
 
@@ -2124,14 +2125,17 @@ body {
 /*
  * The guide's card: inline, just before the section it is about, at most 720 px, with a 4 px edge in the trial's
  * colour along its top, a sentence-case overline, a 4 px progress bar (the words "Step 3 of 9" carry it for screen
- * readers) and a notch under it that points at the section. Scrolled to 16 px under the header.
+ * readers) and a notch under it that points at the section. Scrolled to 16 px under what stays at the top (reveal.ts).
  */
 .guide-host {
   grid-column: 1 / -1;
   flex: 0 0 auto;
   width: 100%;
   margin-bottom: var(--mantine-spacing-md);
-  scroll-margin-top: calc(var(--shutter-header-h) + 16px);
+}
+/* Just after the case's tab bar, as on the Evidence tab, where the panel itself is the section: a tab panel's own gap. */
+.sticky-tabs ~ .guide-host {
+  margin-top: var(--mantine-spacing-md);
 }
 .guide-host-floating {
   position: fixed;
@@ -2245,9 +2249,9 @@ body {
 }
 
 /*
- * Under the case page's sticky tab bar (36 px and its gap): a section, a cited evidence section or the guide's card
- * scrolled to stops below the bar as well as the header, so the bar never hides what was scrolled to or focused.
+ * Under the case page's sticky tab bar (36 px and its gap): a section or a cited evidence section scrolled to stops
+ * below the bar as well as the header, so the bar never hides what was scrolled to or focused.
  */
-.case-tab-panel :is([data-tour], section[id], .guide-host) {
+.case-tab-panel :is([data-tour], section[id]) {
   scroll-margin-top: calc(var(--shutter-header-h) + 3.5rem);
 }

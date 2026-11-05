@@ -196,9 +196,12 @@ test.describe('the shell', () => {
     // The header clears the banner: --shutter-header-h matches the header's height
     const h = await page.evaluate(() => ({
       header: document.querySelector('header')!.getBoundingClientRect().height,
-      token: getComputedStyle(document.documentElement).getPropertyValue('--shutter-header-h').trim(),
+      // In rem, as AppShell makes the header's own height, so the two stay equal at any text size
+      token:
+        parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--shutter-header-h')) *
+        parseFloat(getComputedStyle(document.documentElement).fontSize),
     }));
-    expect(`${Math.round(h.header)}px`).toBe(h.token);
+    expect(Math.round(h.header)).toBe(h.token);
   });
 });
 
