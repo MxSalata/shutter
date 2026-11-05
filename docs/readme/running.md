@@ -4,8 +4,8 @@ The README's Try it and Run details sections have the commands. This page keeps 
 
 ### Notes on the install
 
-- On Windows, run `install.sh` in Git Bash or a WSL 2 shell (Docker Desktop's WSL integration); from PowerShell, use the README's Run details commands.
-- ARM64 machines (Apple silicon) need the `irishealth_arm64-community` file of the same build; Shutter has not been tried on ARM64.
+- On Windows, run `install.sh` in Git Bash or a WSL 2 shell (Docker Desktop's WSL integration); from PowerShell, use the [README's Run details](https://github.com/MxSalata/shutter#run-details) commands.
+- On Apple silicon, pass `--image-file` the `irishealth_arm64-community` file of the same build (the replay edition's public image has an ARM64 build too); Shutter has not been run on ARM64 yet.
 - The first `up` builds the image in 2 to 15 minutes, depending on the machine: 14.5 minutes on 8 cores and 5 GB of memory, most of it in the install step. The replay edition builds in about 8 minutes on that machine; on a 12-thread VM with 11 GB of memory it built and was healthy in 2 minutes 4 seconds from a fresh copy, with `--no-cache` and the public image already pulled (3 November 2026; the 6 GB image download comes first on a new machine).
 - The ports are published on `127.0.0.1` only, because the demo's passwords are well known; from another machine, use an SSH tunnel (`ssh -L 52773:localhost:52773 <the Docker host>`). `SHUTTER_WEB_PORT` and `SHUTTER_SUPERSERVER_PORT` in `.env` change the ports.
 
@@ -16,7 +16,7 @@ The README's Try it and Run details sections have the commands. This page keeps 
 | `operator` | View cases and incidents, run scenarios, reinvestigate a case, draft and send escalations, mark a case handled by the team (unless the site profile keeps the two-person rule), and start a production review |
 | `approver` | Everything `operator` can, and approve or reject plans and incident releases, read the message traces and the Workflow inbox, save the site profile, change the agent library, mark a case handled where the site profile needs an approver for it, and mark a review's finding intended |
 
-Neither user starts, stops or purges the production. The ports are published on `127.0.0.1` only, because the demo's passwords are well known; from another machine, use an SSH tunnel (`ssh -L 52773:localhost:52773 <the Docker host>`). `SHUTTER_WEB_PORT` and `SHUTTER_SUPERSERVER_PORT` in `.env` change the ports.
+Neither user starts, stops or purges the production.
 
 To feed a message of your own, copy an HL7 file (one message, `.hl7`) into the production's inbound folder in the data volume: `docker cp my-message.hl7 shutter:/usr/irissys/mgr/shutter/in/`. Without a key, a failure it causes takes the rules path (see [Limits, plainly](https://github.com/MxSalata/shutter#limits-plainly)).
 
