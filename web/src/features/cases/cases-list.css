@@ -30,8 +30,9 @@
 }
 
 @media (max-width: 35.99em) {
-  /* A tap anywhere on a case's card opens it: the id's link covers the card, and what is a control of its own in the
-     card (More about, the incident's link, the forwarded tag) stands above that */
+  /* A tap anywhere on a case's card opens it: the id's link covers the card, and what is a control of its own (More
+     about and the text it opened, the incident's link) stands above that. A badge or a time is not: its tooltip is for a
+     pointer or the keyboard, and on a phone it would only leave a dead patch where a finger goes first */
   .cases-table tr.case-row {
     position: relative;
   }
@@ -40,7 +41,7 @@
     position: absolute;
     inset: 0;
   }
-  .cases-table tr.case-row :is(a:not(.case-open), button, [tabindex='0']) {
+  .cases-table tr.case-row :is(a:not(.case-open), button, [data-tech-detail='open']) {
     position: relative;
     z-index: 1;
   }
