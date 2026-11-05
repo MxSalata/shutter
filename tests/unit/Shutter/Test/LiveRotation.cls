@@ -36,6 +36,11 @@ Method TestShutterListening()
 {
     Do $$$AssertNotTrue(##class(Hospital.LivePlayer).ShutterListening("SHUTTERNOSUCHNS"), "no such namespace")
     Do $$$AssertNotTrue(##class(Hospital.LivePlayer).ShutterListening("%SYS"), "a namespace with no production")
+    // The yes matters as much: a guard that always says no would silence the demo's hospital with nothing else failing.
+    Do ##class(Ens.Director).GetProductionStatus(.production, .state)
+    If ($GET(production) = "Shutter.Production") && ($GET(state) = 1) {
+        Do $$$AssertTrue(##class(Hospital.LivePlayer).ShutterListening($NAMESPACE), "Shutter's production is running here")
+    }
 }
 
 }
