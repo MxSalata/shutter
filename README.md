@@ -1,6 +1,6 @@
 # Shutter: AI Hub agents for failed HL7 deliveries
 
-**When a hospital's HL7 delivery fails, the usual fix is Resend, and if the patient has moved since, that resend moves them back. Shutter's IRIS AI Hub agents decide how to put the failure right; a deterministic gate decides whether anything is written.**
+**When a hospital's HL7 delivery fails, the usual fix is Resend, and if another system has moved the patient since, that resend writes over the bed manager's ward with every check passed. Shutter's IRIS AI Hub agents decide how to put the failure right; a deterministic gate decides whether anything is written.**
 
 [![CI](https://github.com/MxSalata/shutter/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MxSalata/shutter/actions/workflows/ci.yml) [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](https://github.com/MxSalata/shutter/blob/main/LICENSE)
 
@@ -21,7 +21,7 @@ The AI board proposes; the gate disposes.
 
 **Scenario S8 shows why the agents are there.** Two systems move one patient in the same minute. In **Rules only** mode (no agents: the message is resent unless the gate objects), every check passes and WARD-B is written over the bed manager's WARD-C; the board sees the evidence cannot say which move is current and escalates. On Shutter's own scenarios, of the 11 single cases the board is convened for, it gets all 11 right; Rules only gets 4; across all 24 scored recorded passes, the board's decision matches the expected outcome ([comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md); [what that does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)). Rules only is the floor, a plain resend. The scenario catalogue, written from these failures, settles 8 of those 11 with no agent (**Site policy**); it sends S4 and S8 to the board, and S7 has no such mode.
 
-![S8 in plain terms: the bed manager has the patient in Ward C; Rules only moves them back to Ward B, the board leaves them in Ward C and asks a person](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-plain.png)
+![S8 in plain terms: the bed manager has the patient in Ward C; Rules only writes Ward B over it with every check passed; the board leaves them in Ward C and asks a person](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-plain.png)
 
 **What can happen to a failed delivery:**
 
