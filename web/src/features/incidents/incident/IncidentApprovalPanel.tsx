@@ -11,6 +11,7 @@ import { Timestamp } from '@/components/Timestamp';
 import { APPROVALS } from '@/lib/status';
 import { approvalSentence, describePolicy, tidy } from '../describe';
 import type { Decision } from './DecideModal';
+import { toBecomeApprover } from '@/env/copy';
 
 export function IncidentApprovalPanel({
   inc,
@@ -25,7 +26,7 @@ export function IncidentApprovalPanel({
   const waiting = covered.some((c) => c.state === 'awaiting_approval');
   const decision = inc.approvals.find((a) => a.scope === 'incident');
   const why = !resolveCan(me).approve
-    ? 'Deciding needs the approver role: sign in as approver'
+    ? `Deciding needs the approver role: ${toBecomeApprover()}`
     : !inc.planDigest
       ? 'There is no plan to decide on yet'
       : '';

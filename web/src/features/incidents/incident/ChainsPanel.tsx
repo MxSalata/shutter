@@ -14,6 +14,7 @@ import { HINT_EVENTS } from '@/theme';
 import { ChainStateBadge, KindBadge, OperationBadge } from '../badges';
 import { CHAIN_STATES, chainLine, describeChain, versions } from '../describe';
 import type { Decision } from './DecideModal';
+import { toBecomeApprover } from '@/env/copy';
 
 /** What the version step means, said once for every operation's "v1 → v2". */
 const VERSION_HINT =
@@ -100,7 +101,7 @@ function ChainCard({
 }) {
   const technical = useTechnical();
   const ownApproval = chain.state === 'awaiting_approval' && chain.policy === 'per_chain';
-  const why = !resolveCan(me).approve ? 'Deciding needs the approver role: sign in as approver' : '';
+  const why = !resolveCan(me).approve ? `Deciding needs the approver role: ${toBecomeApprover()}` : '';
   const entries = (chain.entries ?? '').split(',').filter(Boolean);
   return (
     <Card padding="sm" withBorder component="article" aria-label={`Chain ${chain.seq}, ${chain.encounterId}`}>

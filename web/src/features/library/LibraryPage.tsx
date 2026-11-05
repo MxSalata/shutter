@@ -16,6 +16,7 @@ import { describeError } from '@/lib/errors';
 import { BoardFlow } from './BoardFlow';
 import { groupMembers, libraryLead, onDefaultBoard } from './board';
 import { MemberLibraryCard, type LibraryField } from './MemberLibraryCard';
+import { toBecomeApprover } from '@/env/copy';
 
 export default function LibraryPage() {
   const me = useMe().data;
@@ -98,7 +99,7 @@ export default function LibraryPage() {
             <Text size="sm" c="dimmed" data-testid={reading ? 'demo-read-only' : undefined}>
               {reading
                 ? `${DEMO_READ_ONLY}.`
-                : 'Changing which agents sit on the board needs the approver role: sign in as approver.'}
+                : `Changing which agents sit on the board needs the approver role: ${toBecomeApprover()}.`}
             </Text>
           ) : null}
           <Stack component="section" gap="md" aria-labelledby="library-board-title">

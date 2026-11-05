@@ -16,3 +16,7 @@ export const NOT_IN_TRIAL = {
   /** Free-text questions in Ask about this case. */
   freeText: 'In the trial, pick a suggested question',
 } as const;
+
+/** What a reader without the approver role does about it. The trial has no sign-in of that kind: its roles are in the user menu. */
+export const toBecomeApprover = () =>
+  byEnv({ live: 'sign in as approver', trial: 'switch to Approver in the user menu' });

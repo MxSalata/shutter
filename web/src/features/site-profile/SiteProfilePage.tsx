@@ -31,7 +31,7 @@ import { StatusBadge, StatusNotice } from '@/components/StatusBadge';
 import { TechDetail } from '@/components/TechDetail';
 import { Term } from '@/components/Term';
 import { Timestamp } from '@/components/Timestamp';
-import { byEnv } from '@/env/copy';
+import { byEnv, toBecomeApprover } from '@/env/copy';
 import { TRIAL } from '@/env/mode';
 import { CATEGORIES, CATEGORY_TEXT, categoryOf, derivedPolicy } from '@/lib/categories';
 import { describeError, isApiError } from '@/lib/errors';
@@ -1062,7 +1062,7 @@ function Profile({
         ) : null}
         {!editable && !reading ? (
           <Text size="sm" c="dimmed">
-            Changing the answers needs the approver role: sign in as approver.
+            {`Changing the answers needs the approver role: ${toBecomeApprover()}.`}
           </Text>
         ) : null}
         {!dirty ? problemAlert : null}
