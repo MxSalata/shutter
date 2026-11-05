@@ -15,7 +15,7 @@ export type DiagramNode =
       plain: string;
       /** How many in a row. */
       count: number;
-      /** A delivery fails while a fault is on; one that fails with the receiver up was refused by it. */
+      /** A delivery fails while a fault covers it; one that fails with the receiver up was refused by it. */
       mark?: 'fails' | 'refused' | 'withheld';
       /** A message from another source, or about another encounter, with the words under it. */
       aside?: 'source' | 'encounter';
@@ -99,6 +99,9 @@ function nodesOf(s: Pick<Scenario, 'summary' | 'steps' | 'expected'>): DiagramNo
   const otherSource = otherSourceAfterFailure(s);
   let failedYet = false;
   let faultOn = false;
+  // A fault with an operation_key covers that key alone. A step carries no key and the app never reads the files, so
+  // the next failed delivery is the one it covers; a test checks that reading against every fixture's own patient
+  let faultOneKey = false;
   // The receiver coming back ends that stretch of the story, so nothing merges across it
   let fresh = false;
   for (const step of steps) {
@@ -119,6 +122,7 @@ function nodesOf(s: Pick<Scenario, 'summary' | 'steps' | 'expected'>): DiagramNo
             ? 'source'
             : undefined;
       if (mark === 'fails' || mark === 'refused') failedYet = true;
+      if (mark === 'fails' && faultOneKey) faultOn = false;
       const last = nodes[nodes.length - 1];
       if (
         !fresh &&
@@ -143,6 +147,7 @@ function nodesOf(s: Pick<Scenario, 'summary' | 'steps' | 'expected'>): DiagramNo
       fresh = true;
     } else if (step.fault) {
       faultOn = true;
+      faultOneKey = !!step.operation_key;
       const known = FAULTS[step.fault] ?? { caption: 'fault', words: 'the receiver misbehaves' };
       const receivers = step.receivers?.length ?? 0;
       nodes.push(
@@ -217,7 +222,8 @@ export function endOf(s: Pick<Scenario, 'expected'>, mode: Mode): DiagramEnd {
   const stopped = !!e.blocked_by;
   // A scenario whose expected names one failure's case has other cases too: the count is that case's, not the story's
   if (e.write) return writesEnd(1, false, !!e.case_by_key);
-  if (e.disposition === 'escalate')
+  // S23c proposes a resend, and the gate hands it to a person when the bed's occupant can't leave
+  if (e.disposition === 'escalate' || e.final_reason === 'OCCUPANT_CASE_FAILED')
     return {
       kind: 'person',
       writes: 0,

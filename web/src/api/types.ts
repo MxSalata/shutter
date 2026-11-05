@@ -84,6 +84,8 @@ export interface ScenarioExpected {
   final_ward: string | null;
   failed_operation_key: string;
   blocked_by?: string;
+  /** The reason code the case should end on, where it has one (S20, S23c, S25). */
+  final_reason?: string;
   injected_note?: string;
   other_encounter?: string;
   /** The modes the scenario is defined for, when not all of them: in another mode its card doesn't apply. */

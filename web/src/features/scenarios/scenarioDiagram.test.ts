@@ -30,12 +30,19 @@ function expectedWrites(e: ScenarioExpected): number {
   return e.write ? 1 : 0;
 }
 
-/** The deliveries that fail with no fault on: the receiver is up and said no. */
+/** An HL7 file as text: a fault with an operation_key covers the message that names its patient, and no other. */
+const fileOf = (file: string) => files[Object.keys(files).find((path) => path.endsWith(`/${file}`))!];
+
+/** The deliveries that fail with no fault covering them: the receiver is up and said no. */
 function refusedSteps(s: Scenario) {
   let on = false;
+  let key = '';
   return s.steps.filter((step) => {
-    if (step.fault) on = step.fault !== 'off';
-    return step.expect === 'delivery_fails' && !on;
+    if (step.fault) {
+      on = step.fault !== 'off';
+      key = step.operation_key?.split('^')[2] ?? '';
+    }
+    return step.expect === 'delivery_fails' && !(on && (!key || fileOf(step.file!).includes(key)));
   });
 }
 
@@ -58,7 +65,8 @@ describe('scenarioDiagram', () => {
         else if (e.by_receiver)
           // S22: nothing is written, and only one of its two receivers goes to a person
           expect(end.kind, at).toBe('none');
-        else if (e.disposition === 'escalate') expect(end.kind, at).toBe('person');
+        else if (e.disposition === 'escalate' || e.final_reason === 'OCCUPANT_CASE_FAILED')
+          expect(end.kind, at).toBe('person');
         else expect(end.kind, at).toBe('none');
         if (writes) {
           expect(end.label, at).toBe(`${writes} write${writes === 1 ? '' : 's'}`);
@@ -196,8 +204,22 @@ describe('scenarioDiagram', () => {
     expect(diagram('S23a').label).toMatch(/move is refused by the receiver/);
     expect(diagram('S23b').nodes.at(-1)).toMatchObject({ mark: 'refused' });
     expect(diagram('S23b').nodes.some((n) => n.kind === 'fault')).toBe(false);
-    // Only those two are refusals, and the fixtures say so: a change there changes this list
-    expect(scenarios.filter((s) => refusedSteps(s).length).map((s) => s.id)).toEqual(['S23a', 'S23b']);
+    // Only these three are refusals, and the fixtures say so: a change there changes this list
+    expect(scenarios.filter((s) => refusedSteps(s).length).map((s) => s.id)).toEqual([
+      'S23a',
+      'S23b',
+      'S23c',
+    ]);
+  });
+
+  it("marks only the patient a fault names as failing: S23c's second move is refused, and a person ends it", () => {
+    const moves = messages(diagram('S23c').nodes);
+    expect(moves.at(-2)).toMatchObject({ plain: 'Move', mark: 'fails', count: 1 });
+    expect(moves.at(-1)).toMatchObject({ plain: 'Move', mark: 'refused', count: 1 });
+    expect(diagram('S23c').label).toMatch(/move fails; move is refused by the receiver/);
+    for (const mode of ['board', 'policy'] as Mode[])
+      expect(endOf(byId('S23c'), mode)).toMatchObject({ kind: 'person', label: 'Person decides', writes: 0 });
+    expect(diagram('S23c').label).toMatch(/It should end: a person decides, nothing written\./);
   });
 
   it('merges no two messages across the receiver coming back', () => {
