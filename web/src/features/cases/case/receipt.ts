@@ -191,26 +191,32 @@ export function safetyReceipt({
   const writes = disposition === 'resend';
   // With no verification yet: one still to come after a write, or none to make (no Shutter write, a hand
   // correction, a case that stopped before its write went out)
+  // A case stopped with a write and no verification, as a write call that errored: nothing is coming to verify it
+  const unverifiedWrite = sent.length > 0 && STOPPED_STATES.includes(c.state);
   const verification = last
     ? `${humanize(last.outcome)}${last.summary ? `: ${last.summary}` : ''}`
-    : sent.length
-      ? 'Verification pending'
-      : c.disposition === 'handled_by_hand'
-        ? 'Not verified by Shutter: the team corrected it by hand'
-        : p && !writes
-          ? 'Not applicable: no Shutter write'
-          : STOPPED_STATES.includes(c.state)
-            ? `Not applicable: ${humanize(c.state).toLowerCase()} with nothing written`
-            : '';
+    : unverifiedWrite
+      ? 'Not established: whether the write landed is for a person to check'
+      : sent.length
+        ? 'Verification pending'
+        : c.disposition === 'handled_by_hand'
+          ? 'Not verified by Shutter: the team corrected it by hand'
+          : p && !writes
+            ? 'Not applicable: no Shutter write'
+            : STOPPED_STATES.includes(c.state)
+              ? `Not applicable: ${humanize(c.state).toLowerCase()} with nothing written`
+              : '';
   const verificationState = last
     ? last.outcome
-    : sent.length
-      ? 'pending'
-      : c.disposition === 'handled_by_hand'
-        ? 'by_hand'
-        : (p && !writes) || STOPPED_STATES.includes(c.state)
-          ? 'not_applicable'
-          : '';
+    : unverifiedWrite
+      ? 'unresolved'
+      : sent.length
+        ? 'pending'
+        : c.disposition === 'handled_by_hand'
+          ? 'by_hand'
+          : (p && !writes) || STOPPED_STATES.includes(c.state)
+            ? 'not_applicable'
+            : '';
   const target = `${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`;
   const action = !p
     ? 'No plan yet'

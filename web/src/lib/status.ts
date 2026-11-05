@@ -497,8 +497,15 @@ export function caseOutcome(c: OutcomeCase, scenario?: ExpectedScenario | null):
     );
   if (c.state === 'escalated')
     return o('escalated', 'attention', 'Escalated: a person decides', 'Escalated', IconUserQuestion);
+  // "Nothing sent" only when the writes were read: a case reopened after a lost answer can be blocked with its write held
   if (c.state === 'blocked')
-    return o('blocked', 'blocking', 'Blocked: nothing sent', 'Blocked', IconHandStop);
+    return o(
+      'blocked',
+      'blocking',
+      c.writes === 0 ? 'Blocked: nothing sent' : c.writes ? 'Blocked: an earlier write went out' : 'Blocked',
+      'Blocked',
+      IconHandStop,
+    );
   if (c.state === 'failed') return o('failed', 'blocking', 'Failed', 'Failed', IconAlertCircle);
   if (RUNNING_STATES.includes(c.state)) {
     const label = caseState(c.state).label;
