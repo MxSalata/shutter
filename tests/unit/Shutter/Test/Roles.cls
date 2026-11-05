@@ -48,6 +48,35 @@ Method TestResourcesAndRoles()
     Do $$$AssertTrue((trace [ "%Ens_MessageTrace:U") && (trace [ "%Ens_Portal:U") && '(trace [ "Shutter_"), "the trace role sees traces and nothing of Shutter's: " _ trace)
 }
 
+/// Reset clears the live feed's bed map in the hospital's data database (Scenarios.Runner.ResetLive), so the two roles
+/// that may press it write there, and in the demo records system's, which it resets too; the public demo's two roles, which
+/// never reset, only read the hospital's and don't touch the records system. Needs a hospital.
+Method TestWhoWritesTheHospital()
+{
+    Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
+    If (hospital = "") || ($ZCONVERT(hospital, "U") = $ZCONVERT($NAMESPACE, "U")) {
+        Do $$$AssertTrue(1, "no separate hospital namespace on this instance")
+        Quit
+    }
+    Set data = ##class(Shutter.Setup).DatabaseResource(hospital)
+    For role = "Shutter_Operator", "Shutter_Approver" {
+        Do $$$AssertTrue(..Resources(role) [ (data _ ":RW"), role _ " writes " _ data _ ", or Reset answers 500: " _ ..Resources(role))
+    }
+    For role = "Shutter_Demo", "Shutter_Judge" {
+        Do $$$AssertNotTrue(..Resources(role) [ (data _ ":RW"), role _ " does not write " _ data _ ": " _ ..Resources(role))
+        Do $$$AssertTrue(..Resources(role) [ (data _ ":R"), role _ " still reads it")
+    }
+    If ##class(Shutter.Installer).NamespaceExists("RECORDS") {
+        Set records = ##class(Shutter.Setup).DatabaseResource("RECORDS")
+        For role = "Shutter_Operator", "Shutter_Approver" {
+            Do $$$AssertTrue(..Resources(role) [ (records _ ":RW"), role _ " writes " _ records _ ": " _ ..Resources(role))
+        }
+        For role = "Shutter_Demo", "Shutter_Judge" {
+            Do $$$AssertNotTrue(..Resources(role) [ records, role _ " does not touch " _ records)
+        }
+    }
+}
+
 /// SELECT on a table for a role, as the SQL engine checks it when a stale cached query is compiled again in the
 /// caller's process (Shutter.Setup.GrantSqlPrivileges). Checked in this namespace, where the grants were made.
 ClassMethod CanSelect(role As %String, table As %String) As %Boolean

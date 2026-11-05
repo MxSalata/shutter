@@ -219,7 +219,8 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
 {
     Set sc = $$$OK
     // The watched hospital's namespace (Hospital.Setup records it): the operator and the approver read its databases, so
-    // GET /production-reviews/targets can list its productions and their state for them.
+    // GET /production-reviews/targets can list its productions and their state for them, and write its data database,
+    // since their Reset clears the live feed's bed map there. The demo's roles read it only: they never reset.
     Set hospital = $GET(^|ns|Shutter.Config("hospitalNamespace"))
     New $NAMESPACE
     Set $NAMESPACE = "%SYS"
@@ -235,28 +236,35 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     Set db = ..DatabaseResource(ns), code = ..DatabaseResource(ns, 1)
     Set codeRead = $SELECT((code '= "") && (code '= db): "," _ code _ ":R", 1: "")
     // The demo records system's databases (v1.25): the production's client of the receivers' APIs writes to it through
-    // /records/api, so its role takes that namespace's data read-write and its code read, as it has Shutter's.
+    // /records/api, so its role takes that namespace's data read-write and its code read, as it has Shutter's. The operator
+    // and the approver take them too (v1.42): their Reset resets that receiver in its own namespace.
     Set recordsRW = ""
     If ##class(Config.Namespaces).Exists("RECORDS") {
         Set rdb = ..DatabaseResource("RECORDS"), rcode = ..DatabaseResource("RECORDS", 1)
         If (rdb '= "") && (rdb '= db) Set recordsRW = recordsRW _ "," _ rdb _ ":RW"
         If (rcode '= "") && (rcode '= rdb) && (rcode '= db) && (rcode '= code) Set recordsRW = recordsRW _ "," _ rcode _ ":R"
     }
-    Set watchRead = ""
+    Set watchRead = "", watchReset = ""
     If (hospital '= "") && ($ZCONVERT(hospital, "U") '= $ZCONVERT(ns, "U")) && ##class(Config.Namespaces).Exists(hospital) {
-        For res = ..DatabaseResource(hospital), ..DatabaseResource(hospital, 1) {
-            If (res '= "") && (res '= db) && (res '= code) && (("," _ watchRead _ ",") '[ ("," _ res _ ":R,")) Set watchRead = watchRead _ "," _ res _ ":R"
+        Set hospitalData = ..DatabaseResource(hospital)
+        For res = hospitalData, ..DatabaseResource(hospital, 1) {
+            If (res '= "") && (res '= db) && (res '= code) && (("," _ watchRead _ ",") '[ ("," _ res _ ":R,")) {
+                Set watchRead = watchRead _ "," _ res _ ":R"
+                Set watchReset = watchReset _ "," _ res _ $SELECT(res = hospitalData: ":RW", 1: ":R")
+            }
         }
     }
     // Each role is created, or brought to this definition when it exists, so an upgraded instance is tightened too.
     // The approver monitors (traces, messages, the Workflow inbox) and approves; it never starts, stops or purges:
     // %EnsRole_Monitor with the message trace, header and content viewing resources, not %EnsRole_Operator (E2).
-    Set sc = ..EnsureRole("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U,Shutter_Scenarios:U,Shutter_LiveAgents:U,Shutter_Publish:U," _ db _ ":RW" _ codeRead _ watchRead _ ",%Ens_Portal:U", "")
+    Set sc = ..EnsureRole("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U,Shutter_Scenarios:U,Shutter_LiveAgents:U,Shutter_Publish:U," _ db _ ":RW" _ codeRead _ watchReset _ recordsRW _ ",%Ens_Portal:U", "")
     Quit:$$$ISERR(sc) sc
     // What an approver and the public demo's role share (v1.34): reading, approving, the traces; the approver adds the site's
     // writes (Shutter_Configure) and the demo controls (Shutter_Scenarios), which the demo role never holds.
-    Set approverRes = "Shutter_Operate:U,Shutter_Approve:U," _ db _ ":RW" _ codeRead _ watchRead _ ",%Ens_MessageTrace:U,%Ens_MessageHeader:U,%Ens_MessageContent:U"
-    Set sc = ..EnsureRole("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals, the site's settings and the Workflow inbox", approverRes _ ",%Ens_EventLog:U,Shutter_Configure:U,Shutter_Scenarios:U,Shutter_LiveAgents:U", "Shutter_Operator,%EnsRole_Monitor")
+    Set approverCore = "Shutter_Operate:U,Shutter_Approve:U," _ db _ ":RW" _ codeRead
+    Set traces = ",%Ens_MessageTrace:U,%Ens_MessageHeader:U,%Ens_MessageContent:U"
+    Set approverRes = approverCore _ watchRead _ traces
+    Set sc = ..EnsureRole("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals, the site's settings and the Workflow inbox", approverCore _ watchReset _ recordsRW _ traces _ ",%Ens_EventLog:U,Shutter_Configure:U,Shutter_Scenarios:U,Shutter_LiveAgents:U", "Shutter_Operator,%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc
     Set sc = ..EnsureRole("Shutter_Demo", "Shutter public demo: reads everything, reinvestigates, approves and asks; cannot run or reset scenarios, save the site profile or the library, or import a schema", approverRes _ ",%Ens_Portal:U", "%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc

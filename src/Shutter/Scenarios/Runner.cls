@@ -411,16 +411,26 @@ Parameter PLAYINGSTALESECONDS = 1800;
 /// hospital's namespace) would from now on fail its transfer, update or discharge as unknown_encounter and open a spurious
 /// case; with the map empty the feed admits fresh patients, and the turn counter starts again. Not while a story is
 /// playing (^Hospital.Live("playing"), set by Hospital.LivePlayer.Play, which reads its own patients without $GET): the
-/// map stays. Returns "cleared", "playing" or "none" (no hospital namespace recorded in
-/// ^Shutter.Config("hospitalNamespace")).
+/// map stays. Returns "cleared", "playing", "none" (no hospital namespace recorded in
+/// ^Shutter.Config("hospitalNamespace")) or "not cleared" (the map could not be touched: a role without write access to
+/// the hospital's data, say). Never an error: the receiver has already been reset by now, and the rest of the reset must
+/// still happen.
 ClassMethod ResetLive() As %String
 {
     Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
     If hospital = "" Quit "none"
-    Set playing = $GET(^|hospital|Hospital.Live("playing"))
-    If $LISTVALID(playing), playing '= "", (##class(Shutter.Util.Time).EpochSeconds() - +$LISTGET(playing, 2)) < ..#PLAYINGSTALESECONDS Quit "playing"
-    Kill ^|hospital|Hospital.Live("adm"), ^|hospital|Hospital.Live("bed"), ^|hospital|Hospital.Live("turn")
-    Quit "cleared"
+    Set result = "cleared"
+    Try {
+        Set playing = $GET(^|hospital|Hospital.Live("playing"))
+        If $LISTVALID(playing), playing '= "", (##class(Shutter.Util.Time).EpochSeconds() - +$LISTGET(playing, 2)) < ..#PLAYINGSTALESECONDS {
+            Set result = "playing"
+        } Else {
+            Kill ^|hospital|Hospital.Live("adm"), ^|hospital|Hospital.Live("bed"), ^|hospital|Hospital.Live("turn")
+        }
+    } Catch ex {
+        Set result = "not cleared"
+    }
+    Quit result
 }
 
 /// A call on the demo receiver package in the namespace a receiver runs in (its profile entry's demo.namespace, else this
