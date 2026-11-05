@@ -7,6 +7,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Escalation } from '@/api/types';
+import fixtures from '@/mocks/fixtures.json';
 import { recordedSiteProfile } from '@/mocks/profile';
 import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
@@ -74,6 +75,36 @@ describe('EscalationPanel', () => {
     expect(sent[1].body.to).toBe('bed.management@example.nhs.uk');
     expect(sent[2].body.bodyDigest).toEqual(expect.any(String));
     expect(await within(panel).findByText('Sent')).toBeInTheDocument();
+  });
+
+  it("asks about a failed order to check the source's Message Viewer, not to correct the systems by hand", async () => {
+    const detail = fixtures.cases['C-000008'].detail;
+    server.use(
+      http.get('/api/shutter/cases/C-000008', () =>
+        HttpResponse.json({
+          ...detail,
+          failureKind: 'unmappable',
+          failureText: 'This message is ORM^O01, not ADT: Shutter resends only ADT',
+          failureOutcome: 'error',
+        }),
+      ),
+    );
+    renderCase('C-000008');
+    const panel = await screen.findByRole('region', { name: 'Escalations' });
+    await within(panel).findByText(/check the source's Message Viewer before anyone re-enters it/);
+    await userEvent.click(await within(panel).findByRole('button', { name: /^Escalate to /i }));
+    const dialog = await screen.findByRole('dialog', { name: /^Escalate to / });
+    await within(dialog).findByText(/who check the source's Message Viewer before anyone re-enters it/);
+    expect(within(dialog).queryByText(/correct them by hand\.$/)).not.toBeInTheDocument();
+    expect(panel).not.toHaveTextContent('corrects the systems by hand');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Send' }));
+    await screen.findByText('Escalation 1 sent');
+    expect(
+      await within(panel).findByText(/When the team has checked the source's Message Viewer/),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).queryByText('When the team has corrected the systems by hand. Nothing is sent.'),
+    ).toBeNull();
   });
 
   it("checks the addresses against the site's allowed domains as they are typed", async () => {
