@@ -20,7 +20,6 @@ import {
   IconDeviceDesktop,
   IconExternalLink,
   IconLogout,
-  IconCode,
   IconMoon,
   IconPalette,
   IconSun,
@@ -41,7 +40,7 @@ import { APP_NAME } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { DetailSwitch } from '@/components/DetailSwitch';
-import { useAppearance, useDetail, type ContrastSetting, type PaletteSetting } from '@/stores/appearance';
+import { useAppearance, type ContrastSetting, type PaletteSetting } from '@/stores/appearance';
 import { hueVar } from '@/lib/hues';
 import { useResolvedContrast } from './useApplyAppearance';
 import { PORTAL_PAGE, SECTIONS, useNeedAPerson, usePortalPage } from './sections';
@@ -100,8 +99,6 @@ function AppearanceMenu() {
     const next: PaletteSetting = value === 'pastel' ? 'pastel' : 'default';
     if (next !== palette) setPalette(next);
   };
-  const detail = useDetail();
-  const setDetail = useAppearance((s) => s.setDetail);
   const contrasts: { value: ContrastSetting; label: string }[] = [
     { value: 'auto', label: 'System' },
     { value: 'normal', label: 'Normal' },
@@ -150,22 +147,6 @@ function AppearanceMenu() {
             {c.label}
           </Menu.Item>
         ))}
-        <Menu.Divider />
-        <Menu.Label>Detail</Menu.Label>
-        {(['plain', 'technical'] as const).map((d) => {
-          const label = d === 'plain' ? 'Plain words' : 'Technical';
-          return (
-            <Menu.Item
-              key={d}
-              leftSection={<IconCode size={16} />}
-              onClick={() => setDetail(d)}
-              aria-label={`${label}${detail === d ? ' (current detail)' : ''}`}
-              rightSection={detail === d ? '●' : undefined}
-            >
-              {label}
-            </Menu.Item>
-          );
-        })}
       </Menu.Dropdown>
     </Menu>
   );
