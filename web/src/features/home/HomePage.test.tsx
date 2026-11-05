@@ -91,6 +91,47 @@ describe('HomePage', () => {
     ).toBeInTheDocument();
   });
 
+  it('offers the public demo the case where the agents disagree and one to approve', async () => {
+    server.use(
+      http.get('/api/shutter/cases', ({ request }) => {
+        const q = new URL(request.url).searchParams;
+        if (q.get('scenario') === 'S8')
+          return HttpResponse.json({ items: [{ caseId: 'C-000002', scenario: 'S8' }], total: 1 });
+        return HttpResponse.json({
+          items: [
+            { caseId: 'C-000036', scenario: 'S23a' },
+            { caseId: 'C-000034', scenario: 'S2' },
+          ],
+          total: 2,
+        });
+      }),
+    );
+    renderHome({ ...ALL, configure: false, scenarios: false });
+    expect(await screen.findByRole('link', { name: 'See the agents disagree: C-000002' })).toHaveAttribute(
+      'href',
+      '/cases/C-000002',
+    );
+    // S2's waiting plan, the plainest, before the newer one that waits on another case
+    expect(await screen.findByRole('link', { name: 'Approve a fix yourself: C-000034' })).toHaveAttribute(
+      'href',
+      '/cases/C-000034',
+    );
+  });
+
+  it('offers the public demo no such links while the cases do not exist', async () => {
+    server.use(http.get('/api/shutter/cases', () => HttpResponse.json({ items: [], total: 0 })));
+    renderHome({ ...ALL, configure: false, scenarios: false });
+    await screen.findByRole('link', { name: 'Open the cases' });
+    await waitFor(() => expect(client!.isFetching()).toBe(0));
+    expect(screen.queryByTestId('home-cases-to-open')).not.toBeInTheDocument();
+  });
+
+  it('offers neither to someone who can run the scenarios', async () => {
+    renderHome();
+    await screen.findByRole('link', { name: 'Open the scenarios' });
+    expect(screen.queryByTestId('home-cases-to-open')).not.toBeInTheDocument();
+  });
+
   it('starts the public demo, who cannot run scenarios, at the cases', async () => {
     renderHome({ ...ALL, configure: false, scenarios: false });
     const start = await screen.findByRole('link', { name: 'Open the cases' });

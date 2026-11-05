@@ -1,5 +1,9 @@
 import { Group, Text } from '@mantine/core';
 import { Fragment } from 'react';
+import { useSettings } from '@/api/hooks';
+import { TRIAL } from '@/env/mode';
+import { resetsHourly } from '@/lib/budget';
+import { PORTAL_SIGN_IN } from '@/lib/hospital';
 import type { Screenshot } from '@/lib/screenshots';
 import { traceScreenshot } from '@/lib/screenshots';
 import { CodeChip } from './CodeChip';
@@ -27,7 +31,10 @@ export interface IrisLink {
  * case, at the cost of one quiet line for the newcomer.
  */
 export function IrisLinks({ links }: { links: IrisLink[] }) {
+  const settings = useSettings().data;
+  const onlineDemo = !TRIAL && resetsHourly(settings);
   if (!links.length) return null;
+  const firstNote = links.findIndex((l) => !l.screenshot);
   return (
     <Group gap={6} wrap="wrap" align="center" data-tour="case-iris" className="iris-links">
       <Text size="sm" fw={600} span>
@@ -41,7 +48,13 @@ export function IrisLinks({ links }: { links: IrisLink[] }) {
             </Text>
           ) : null}
           <Text size="sm" span>
-            <PortalLink href={l.href} what={l.what} screenshot={l.screenshot} tourAction={l.tourAction}>
+            <PortalLink
+              href={l.href}
+              what={l.what}
+              screenshot={l.screenshot}
+              tourAction={l.tourAction}
+              quiet={i !== firstNote}
+            >
               {l.label}
             </PortalLink>
             {l.number ? (
@@ -55,6 +68,11 @@ export function IrisLinks({ links }: { links: IrisLink[] }) {
           </Text>
         </Fragment>
       ))}
+      {onlineDemo ? (
+        <Text size="xs" c="dimmed" span data-testid="iris-sign-in">
+          Opens IRIS&apos;s Management Portal in a new tab; it first asks for {PORTAL_SIGN_IN}.
+        </Text>
+      ) : null}
     </Group>
   );
 }
@@ -83,7 +101,8 @@ export function caseIrisLinks(
       screenshot: traceScreenshot(c),
       tourAction: 'open-trace',
     });
-  if (c.links?.workflowTrace)
+  // A workflow that ran in the message's own session is the same trace: one link is enough
+  if (c.links?.workflowTrace && c.workflowSessionId !== c.ensSessionId)
     links.push({
       label: 'Workflow trace',
       number: c.workflowSessionId || undefined,

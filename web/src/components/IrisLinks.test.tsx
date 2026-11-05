@@ -7,7 +7,10 @@ import { caseIrisLinks, IrisLinks } from './IrisLinks';
 import { PortalLink } from './PortalLink';
 
 /** Whether the page is the trial: set per test. */
-const env = vi.hoisted(() => ({ trial: false }));
+const env = vi.hoisted(() => ({ trial: false, live: false }));
+vi.mock('@/api/hooks', () => ({
+  useSettings: () => ({ data: { live: { enabled: env.live } } }),
+}));
 vi.mock('@/env/mode', async (importOriginal) => {
   const mode = await importOriginal<typeof import('@/env/mode')>();
   return {
@@ -20,6 +23,7 @@ vi.mock('@/env/mode', async (importOriginal) => {
 
 beforeEach(() => {
   env.trial = false;
+  env.live = false;
 });
 
 const CASE = {
@@ -48,6 +52,37 @@ describe('IrisLinks', () => {
   });
 });
 
+describe('the sign-in the Management Portal asks for first', () => {
+  it('is said on the online demo, whose portal sits behind it', () => {
+    env.live = true;
+    renderUi(<IrisLinks links={caseIrisLinks(CASE, '/')} />);
+    expect(screen.getByTestId('iris-sign-in')).toHaveTextContent(
+      "Opens IRIS's Management Portal in a new tab; it first asks for GitHub or an emailed code.",
+    );
+  });
+
+  it('is not said anywhere else', () => {
+    renderUi(<IrisLinks links={caseIrisLinks(CASE, '/')} />);
+    expect(screen.queryByTestId('iris-sign-in')).not.toBeInTheDocument();
+  });
+});
+
+describe('the workflow trace', () => {
+  it("is left out when its session is the message's own", () => {
+    const same = { ...CASE, workflowSessionId: CASE.ensSessionId };
+    expect(caseIrisLinks(same, '/').map((l) => l.label)).not.toContain('Workflow trace');
+    expect(caseIrisLinks(CASE, '/').map((l) => l.label)).toContain('Workflow trace');
+  });
+});
+
+describe('needs a real install', () => {
+  it('is said once in a row of links the trial cannot open', () => {
+    env.trial = true;
+    renderUi(<IrisLinks links={caseIrisLinks(CASE, '/')} />);
+    expect(screen.getAllByText(/needs a real install/)).toHaveLength(1);
+  });
+});
+
 describe('PortalLink', () => {
   it('says in the trial what the link would open, calling the page the trial, never the demo', async () => {
     env.trial = true;
@@ -57,7 +92,7 @@ describe('PortalLink', () => {
       </PortalLink>,
     );
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
-    const note = screen.getByText('Message trace (on an instance)');
+    const note = screen.getByText('Message trace (needs a real install)');
     await userEvent.tab();
     expect(note).toHaveFocus();
     const tip = await screen.findByRole('tooltip');

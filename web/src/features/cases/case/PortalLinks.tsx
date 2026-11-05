@@ -44,12 +44,13 @@ export function PortalLinks({
             <PortalLink
               href={c.links.workflowTrace}
               what={`the trace of the case's workflow session ${c.workflowSessionId}`}
+              quiet={!!c.links?.visualTrace && !traceScreenshot(c)}
             >
               Workflow trace
             </PortalLink>
           </List.Item>
         ) : null}
-        {withMessage.map((r) => (
+        {withMessage.map((r, i) => (
           <List.Item key={String(r.id ?? r.ensMessageId)}>
             <PortalLink
               href={
@@ -57,6 +58,7 @@ export function PortalLinks({
                 `${portalBase}EnsPortal.MessageContents.zen?HeaderId=${encodeURIComponent(r.ensMessageId)}`
               }
               what={`message ${r.ensMessageId}, the agent's request and answer`}
+              quiet={i > 0 || !!c.links?.workflowTrace || (!!c.links?.visualTrace && !traceScreenshot(c))}
             >
               {`${r.member?.name ?? humanize(r.memberCode || r.role)}: its message`}
             </PortalLink>
