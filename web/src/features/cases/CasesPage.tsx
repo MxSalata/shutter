@@ -20,7 +20,7 @@ import {
   IconTool,
   type Icon as TablerIcon,
 } from '@tabler/icons-react';
-import { useId, useMemo, useState, type ReactNode } from 'react';
+import { useId, useMemo, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useCases, useScenarios, type CaseFilters } from '@/api/hooks';
 import type { CaseSummary, Scenario } from '@/api/types';
@@ -466,13 +466,29 @@ function requestOf(filters: CaseFilters): string {
 }
 
 export default function CasesPage() {
-  const [state, setState] = useState<string | null>(null);
+  // The filter and the page live in the address, so Back from a case returns to this list and not the first page of all
+  const [params, setParams] = useSearchParams();
+  const asked = params.get('state');
+  const state = asked && (CASE_STATE_NAMES as readonly string[]).includes(asked) ? asked : null;
   // A closed outcome chosen from the Closed tiles: the list then shows those cases among the newest 100
-  const [outcome, setOutcome] = useState<ClosedGroupId | null>(null);
+  const outcome = CLOSED_GROUPS.find((g) => g.id === params.get('outcome'))?.id ?? null;
   // A link from the Scenarios page names its scenario (S22: one case per receiver)
-  const [params] = useSearchParams();
-  const [scenario, setScenario] = useState<string | null>(params.get('scenario'));
-  const [page, setPage] = useState(1);
+  const scenario = params.get('scenario');
+  const page = Math.max(1, Math.floor(Number(params.get('page'))) || 1);
+  // One write for all of them: a second in the same event would start again from the address before the first
+  const setList = (patch: {
+    state?: string | null;
+    outcome?: string | null;
+    scenario?: string | null;
+    page?: number;
+  }) => {
+    const next = new URLSearchParams(params);
+    for (const [k, v] of Object.entries(patch)) {
+      if (v && !(k === 'page' && v === 1)) next.set(k, String(v));
+      else next.delete(k);
+    }
+    setParams(next, { replace: true, preventScrollReset: true });
+  };
   const filters: CaseFilters = {
     state: state ?? undefined,
     scenario: scenario ?? undefined,
@@ -505,13 +521,11 @@ export default function CasesPage() {
   const read = outcome ? newest : paged;
   const items = outcome ? matching?.slice((page - 1) * PAGE, page * PAGE) : paged.data?.items;
   const total = outcome ? (matching?.length ?? 0) : (paged.data?.total ?? 0);
-  const filtered = state !== null || outcome !== null || scenario !== null;
+  // A page past the end, from an old address, offers the way back as a filter does
+  const filtered = state !== null || outcome !== null || scenario !== null || page > 1;
 
-  const choose = (next: { state?: string | null; outcome?: ClosedGroupId | null }) => {
-    setState(next.state ?? null);
-    setOutcome(next.outcome ?? null);
-    setPage(1);
-  };
+  const choose = (next: { state?: string | null; outcome?: ClosedGroupId | null }) =>
+    setList({ state: next.state ?? null, outcome: next.outcome ?? null, page: 1 });
   const scenarioIds = scenarioList.map((s) => s.id);
   if (scenario && !scenarioIds.includes(scenario)) scenarioIds.push(scenario);
 
@@ -573,10 +587,7 @@ export default function CasesPage() {
             <NativeSelect
               label="Scenario"
               value={scenario ?? ''}
-              onChange={(e) => {
-                setScenario(e.currentTarget.value || null);
-                setPage(1);
-              }}
+              onChange={(e) => setList({ scenario: e.currentTarget.value || null, page: 1 })}
               data={[{ value: '', label: 'Any scenario' }, ...scenarioIds]}
               w={170}
             />
@@ -610,10 +621,7 @@ export default function CasesPage() {
                   <Button
                     size="xs"
                     variant="default"
-                    onClick={() => {
-                      choose({});
-                      setScenario(null);
-                    }}
+                    onClick={() => setList({ state: null, outcome: null, scenario: null, page: 1 })}
                   >
                     Show every case
                   </Button>
@@ -635,7 +643,7 @@ export default function CasesPage() {
               <Pagination
                 total={Math.ceil(total / PAGE)}
                 value={page}
-                onChange={setPage}
+                onChange={(n) => setList({ page: n })}
                 size="sm"
                 getControlProps={(control) => ({ 'aria-label': `${control} page` })}
                 getItemProps={(n) => ({ 'aria-label': `Page ${n}` })}
