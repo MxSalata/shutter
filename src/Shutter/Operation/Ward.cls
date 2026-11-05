@@ -65,7 +65,7 @@ Method OnWardOperation(request As Shutter.Msg.WardOperation, Output response As 
     }
     Set parsed = ##class(Shutter.Util.Json).Parse(text, .psc)
     If '$ISOBJECT(parsed) || $$$ISERR(psc) Set parsed = {}
-    Do ..Classify(request, response, sc, parsed)
+    Do ..Classify(response, sc, parsed)
     // A feed message delivered (answered, whatever the answer) releases the cases that waited for it (v1.29).
     If (request.Purpose = "normal") && (request.SourceMessageId '= "") Do ##class(Shutter.Store.Case).ReleaseWaitingOnMessage(request.SourceMessageId, response.Outcome)
     $$$TRACE("Outcome " _ response.Outcome _ $SELECT(response.ReasonCode '= "": " (" _ response.ReasonCode _ ")", 1: "") _ ", HTTP " _ response.HttpStatus _ ", " _ response.DurationMs _ " ms")
@@ -95,6 +95,15 @@ Method Read(request As Shutter.Msg.WardOperation, response As Shutter.Msg.WardRe
     }
     Set parsed = ##class(Shutter.Util.Json).Parse(text, .psc)
     If '$ISOBJECT(parsed) || $$$ISERR(psc) Set parsed = {}
+    Do ..ClassifyRead(response, sc, parsed, path)
+    $$$TRACE("Preflight: " _ response.Outcome _ ", version " _ response.EncounterVersion _ ", HTTP " _ response.HttpStatus)
+    Quit $$$OK
+}
+
+/// Map what a preflight read got to an outcome. A read that got no answer changes nothing at the receiver, so it is
+/// unavailable whether it was refused or timed out; the case reads again and then blocks with nothing dispatched.
+ClassMethod ClassifyRead(response As Shutter.Msg.WardResult, sc As %Status, parsed As %DynamicObject, path As %String)
+{
     If response.HttpStatus = 200 {
         Set response.Outcome = "read"
         Set response.EncounterVersion = ##class(Shutter.Util.Json).Str(parsed, "version")
@@ -107,15 +116,14 @@ Method Read(request As Shutter.Msg.WardOperation, response As Shutter.Msg.WardRe
     } ElseIf response.HttpStatus = 404 {
         Set response.Outcome = "error"
         Set response.Error = "HTTP 404 from " _ path _ ": not the downstream system's answer for an unknown encounter"
-    } ElseIf response.HttpStatus = "" {
+    } ElseIf +response.HttpStatus = 0 {
+        // The connector stores +StatusCode, so a request nobody answered reads 0 here, never empty.
         Set response.Outcome = "unavailable"
         Set response.Error = $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "no response")
     } Else {
         Set response.Outcome = "error"
         Set response.Error = "HTTP " _ response.HttpStatus
     }
-    $$$TRACE("Preflight: " _ response.Outcome _ ", version " _ response.EncounterVersion _ ", HTTP " _ response.HttpStatus)
-    Quit $$$OK
 }
 
 /// The receiver's Retry-After (v1.35) on a 503 or 429: kept on the result in seconds, for the case to honour before its
@@ -148,8 +156,9 @@ Method Path(kind As %String, encounter As %String = "") As %String
     Quit ##class(Shutter.Store.SiteProfile).ReceiverPath(..%ConfigName, kind, encounter)
 }
 
-/// Map the HTTP status, the adapter's status and the body to an outcome.
-Method Classify(request As Shutter.Msg.WardOperation, response As Shutter.Msg.WardResult, sc As %Status, parsed As %DynamicObject) [ Private ]
+/// Map the HTTP status, the adapter's status and the body to an outcome. A write nobody answered is uncertain unless the
+/// socket never opened: the receiver may have taken it and may still apply it, so it is never reported as refused.
+ClassMethod Classify(response As Shutter.Msg.WardResult, sc As %Status, parsed As %DynamicObject)
 {
     Set status = response.HttpStatus
     Set errorCode = ##class(Shutter.Util.Json).Str(parsed, "error")
@@ -169,8 +178,9 @@ Method Classify(request As Shutter.Msg.WardOperation, response As Shutter.Msg.Wa
     If (epoch = "") && $ISOBJECT(before) Set epoch = ##class(Shutter.Util.Json).Str(before, "epoch")
     If (epoch = "") && $ISOBJECT(parsed.%Get("receipt")) Set epoch = ##class(Shutter.Util.Json).Str(parsed.%Get("receipt"), "epoch")
     If epoch '= "" Set response.Epoch = epoch
-    If status = "" {
-        // No HTTP response at all: refused connections never sent anything; anything else is unknown.
+    If +status = 0 {
+        // No HTTP response at all (the connector stores +StatusCode, so that reads 0, never empty): refused connections
+        // never sent anything; anything else is unknown.
         Set msg = $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "no response")
         Set response.Error = msg
         // The status codes first (A12): 6059 is a socket that never opened, so nothing was sent; the wording of the
