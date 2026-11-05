@@ -413,7 +413,9 @@ production: a running one is updated, and only the items it changes restart. In 
 **The same name in two namespaces.** Shutter's site profile has one list of receivers, and a case is matched on its operation
 and its receiver, so two namespaces' `Results Out` under one name would pool their cases and incidents. When a name is taken,
 the apply sets the forwarder's `ReceiverPrefix` to the namespace, so DOCUMENTS' item is reported and listed as
-`DOCUMENTS Results Out`. The item in your production keeps its name. To see it, read `reported_as` in the plan.
+`DOCUMENTS Results Out`. The item in your production keeps its name. To see it, read `reported_as` in the plan. A name is also
+taken when the profile has an entry of that name with an API and no `namespace`, since a case could otherwise write to that other
+system: the plan warns and names both. If the entry really is this namespace's system, add `"namespace": "<NAMESPACE>"` to it first.
 
 **9.3 Give the forwarder its sign-in.** In a terminal, in Shutter's namespace:
 

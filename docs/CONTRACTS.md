@@ -1379,7 +1379,7 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   `items`, `renamed`, `alertOnError`, `receivers`, `drafted`, `credential`).
 - A draft receiver's entry: `{name, system, tier: 3, features: all false, draft: true, namespace, item}` and no `api`, so 6.4's rule for a
   receiver with no API holds and the gate blocks any write. Validation ignores `draft`, `namespace` and `item`; a person removes `draft`
-  on saving. Its name is the item's, or `ReceiverPrefix` and the item's when another namespace holds the name (`Onboard.TakenElsewhere`). The prefix is settled when the
+  on saving. Its name is the item's, or `ReceiverPrefix` and the item's when another namespace holds the name or the profile has that name with an `api` and no `namespace`, which the plan warns of (`Onboard.TakenElsewhere`). The prefix is settled when the
   forwarder is added: a wired namespace keeps its names, and the plan warns when an operation added later takes a name another reports.
 - `Do ##class(Shutter.Setup).OnboardCredential(namespace, user, password, credential)` makes the user with `Shutter_Forwarder` when it does
   not exist (one that exists must sign in with that password and hold the role), stores the credential in that namespace, and prints no password; with no

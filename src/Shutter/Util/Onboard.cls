@@ -252,10 +252,19 @@ ClassMethod TakenElsewhere(ns As %String, item As %String) As %Boolean
         If $DATA(^Shutter.Config("onboard", other, "receivers", item)) Quit
     }
     If other '= "" Quit 1
+    If ..WrittenByHand(item) Quit 1
     Set entry = ##class(Shutter.Store.SiteProfile).Receiver(item)
     If '$ISOBJECT(entry) Quit 0
     Set from = ##class(Shutter.Util.Json).Str(entry, "namespace")
     Quit (from '= "") && (from '= ns)
+}
+
+/// Whether a person wrote this name into the profile with an API and said for no namespace. Shutter can write to it, and
+/// nothing says it is this namespace's system, so an item of that name stays apart until the entry names the namespace.
+ClassMethod WrittenByHand(item As %String) As %Boolean
+{
+    Set entry = ##class(Shutter.Store.SiteProfile).Receiver(item)
+    Quit $ISOBJECT(entry) && $ISOBJECT(entry.%Get("api")) && (##class(Shutter.Util.Json).Str(entry, "namespace") = "")
 }
 
 /// Whether another namespace onboarded here already reports a receiver under this very name.
@@ -328,7 +337,13 @@ ClassMethod Plan(ns As %String, options As %DynamicObject = "") As %DynamicObjec
     // 2. The names they will be reported under. A namespace wired already keeps the names it has, none included: its teams,
     // its profile entries and its open cases use them, and another namespace coming on later must not rename them.
     Set prefix = $SELECT($ISOBJECT(forwarder): forwarder.prefix, 1: "")
-    If '$ISOBJECT(forwarder) { For i = 1:1:$LISTLENGTH(listed) { If ..TakenElsewhere(ns, $LIST(listed, i)) && (prefix = "") Set prefix = ns } }
+    If '$ISOBJECT(forwarder) {
+        For i = 1:1:$LISTLENGTH(listed) {
+            Set one = $LIST(listed, i)
+            If ..TakenElsewhere(ns, one) && (prefix = "") Set prefix = ns
+            If ..WrittenByHand(one) Do plan.warnings.%Push("The site profile's " _ one _ " has an API and names no namespace, so it may be another system: this namespace's " _ one _ " is reported as " _ ##class(Shutter.Intake.Forwarder).ReportedReceiver(one, ns) _ ", a draft that nothing is written to. If they are one system, add ""namespace"": """ _ ns _ """ to that entry and plan again")
+        }
+    }
     Set plan."receiver_prefix" = prefix
     Set noAlert = ""
     For i = 1:1:$LISTLENGTH(listed) {
