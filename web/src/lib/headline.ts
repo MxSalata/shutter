@@ -22,9 +22,20 @@ const OPENINGS = [
  */
 const GATE_HEADLINE = /^Blocked by the gate: Blocked: (.+?)(?: \(policy [^)]*\))?$/;
 
+/**
+ * A failed conformance check can mean a sound message whose schema is missing here (S25), so these say what happened,
+ * in the words of knowledge/block-reasons.json, rather than that the check failed.
+ */
+const SAID_BY_REASON: Record<string, string> = {
+  PARSE_FAILED: "the message couldn't be read or mapped to an operation",
+  SCHEMA_UNKNOWN: "the message's schema is not loaded here",
+};
+
 function gateHeadline(headline: string): string {
   const m = GATE_HEADLINE.exec(headline);
   if (!m) return '';
+  const said = SAID_BY_REASON[/^conformance ([A-Z_]+)$/.exec(m[1])?.[1] ?? ''];
+  if (said) return `Blocked by the gate: ${said}.`;
   const checks = m[1]
     .split(', ')
     .map((part) => /^([a-z_]+) [A-Z_]+$/.exec(part)?.[1])
