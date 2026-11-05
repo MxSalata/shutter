@@ -621,7 +621,7 @@ Say these plainly to whoever owns the feed.
 - **An MLLP operation retrying forever (`FailureTimeout` -1, the stock TCP operation's default, which the plan now warns of whether
   the item sets it or inherits it).** The alert opens a case on the first failure, even in a short outage, and the engine goes on
   retrying. When the system returns the messages go through by themselves, in order, and no alert says so: the case still reads
-  escalated and shows no later messages. Read the message trace before anyone re-enters an order by hand.
+  escalated and shows no later messages. Read the message trace before anyone re-enters an order by hand. At a receiver that also has an API, Shutter's own approved resend can duplicate it: the API write, then the engine's delivery when the listener returns (measured on 109, on ADT). Keep `FailureTimeout` 0 on such a receiver.
 - **`QueueCountAlert` reaches your own alert consumer but opens no case,** and a router's validation refusal, with `AlertOnError` off on
   the router, is only logged: no alert, no case, and its header reads Completed.
 - **A forward is never retried.** While `Shutter.Production` is stopped, or on a wrong password, a failure that reaches the forwarder
