@@ -940,6 +940,7 @@ Method OnCoordinator(case As Shutter.Store.Case, result As Shutter.Bridge.Msg.Ag
     Set ..CoordinatorPending = 0
     If (result.Status '= "ok") || (result.ResultJSON = "") {
         Do ..LeadFinish(case, "failed", "", "the coordinator produced no plan (" _ result.Status _ ")")
+        If result.Status = "budget_exhausted" Set case.Headline = "No plan: the day's model budget is spent"
         Quit case.Transition("escalated", "The coordinator produced no plan: " _ result.Status _ $SELECT(result.Error '= "": ", " _ result.Error, 1: ""), "system", "run:" _ run.%Id())
     }
     Set restored = ##class(Shutter.Util.ModelView).Restore(case, result.ResultJSON)
@@ -1395,7 +1396,7 @@ Method OnApprovalTimeout(case As Shutter.Store.Case, round As %Integer) As %Stat
     If round '= ..Round { $$$TRACE("An approval wait from round " _ round _ " ended; the case is in round " _ ..Round) Quit $$$OK }
     If case.State '= "awaiting_approval" { $$$TRACE("The approval wait ended; the case is " _ case.State _ ", so nothing is due") Quit $$$OK }
     Set wait = ..WaitWords(..ApprovalWaitSeconds)
-    Do ..CancelOpenTask(case, "", "no decision within " _ wait)
+    Do ..CancelOpenTask(case, "system", "no decision within " _ wait)
     Set case.Headline = "No approval within " _ wait _ "; a person must decide"
     Quit case.Transition("escalated", "The approval task got no answer within " _ wait _ "; it is cancelled, and the plan waits for a reinvestigation or a hand close", "system")
 }
@@ -1590,7 +1591,8 @@ Method OnAbandon(request As Shutter.Msg.CaseAbandon, Output response As %Library
 /// An approval task still open for a case just closed (it was closed by hand or abandoned while it waited for an
 /// approver) is completed as cancelled, so it leaves the inbox and the instance waiting on it ends: that instance finds
 /// the case closed and ignores the answer (OnResponse). The case is closed first, so the answer can never reach an open
-/// case. The engine records the actor as the person who closed it when the Workflow role lets it; the task's comment
+/// case. The engine records the actor as the person who closed it when the Workflow role lets it; the actor "system" (the
+/// approval wait ran out) is nobody's name, so no task is assigned to it, and the event says system. The task's comment
 /// and the case's approval event say why ("Cancelled: <why>"). Nothing here fails the caller: a refusal is logged and
 /// noted on the case.
 Method CancelOpenTask(case As Shutter.Store.Case, actor As %String, why As %String) As %Status
@@ -1599,7 +1601,7 @@ Method CancelOpenTask(case As Shutter.Store.Case, actor As %String, why As %Stri
     If '$ISOBJECT(task) Quit $$$OK
     Set who = $SELECT(actor = "": "a person", 1: actor)
     Set taskId = task.%Id()
-    If actor '= "" {
+    If (actor '= "") && (actor '= "system") {
         // The engine records who closed it; a refusal (the user is outside the Workflow role) changes nothing below.
         Set asc = ##class(EnsLib.Workflow.Engine).AssignTask(task, actor)
         If $$$ISERR(asc) { $$$TRACE("Approval task " _ taskId _ " was not assigned to " _ actor _ ": " _ $SYSTEM.Status.GetErrorText(asc)) }
