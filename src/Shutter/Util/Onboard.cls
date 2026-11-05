@@ -24,12 +24,16 @@ Parameter TESTREASON = "onboarding_test";
 
 Parameter TESTRECEIVER = "Onboarding test";
 
-/// The options a caller passes, as an object: a JSON string, or empty.
-ClassMethod Options(json As %String = "") As %DynamicObject
+/// The options a caller passes, as an object: a JSON string, or empty. Anything else sets refused to the whole answer to
+/// give, so a slip in the options never runs on the defaults.
+ClassMethod Options(json As %String = "", Output refused As %String) As %DynamicObject
 {
+    Set refused = ""
     If (json = "") || (json = $CHAR(0)) Quit {}
-    Try { Set o = ##class(%DynamicObject).%FromJSON(json) } Catch ex { Set o = {} }
-    Quit o
+    Try { Set o = ##class(%DynamicObject).%FromJSON(json) } Catch ex { Set o = "" }
+    If $ISOBJECT(o) && o.%IsA("%DynamicObject") Quit o
+    Set refused = {"ok": false, "error": "The options are not a JSON object, so nothing was read or changed. Check for curly or single quotes and a missing brace"}.%ToJSON()
+    Quit {}
 }
 
 /// A namespace's name as Shutter keeps it, or "" when an SQL caller passed nothing.

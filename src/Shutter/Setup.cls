@@ -2054,13 +2054,17 @@ ClassMethod ImportSchema(path As %String) As %String [ SqlProc ]
 /// What onboarding a namespace would do, changing nothing: JSON. options is a JSON object or empty (Shutter.Util.Onboard.Plan).
 ClassMethod OnboardPlan(ns As %String, options As %String = "") As %String [ SqlProc ]
 {
-    Quit ##class(Shutter.Util.Onboard).Plan(ns, ##class(Shutter.Util.Onboard).Options(options)).%ToJSON()
+    Set o = ##class(Shutter.Util.Onboard).Options(options, .refused)
+    If refused '= "" Quit refused
+    Quit ##class(Shutter.Util.Onboard).Plan(ns, o).%ToJSON()
 }
 
 /// Carries out that plan and answers what changed. Idempotent; never stops a production. Needs %Admin_Manage.
 ClassMethod OnboardApply(ns As %String, options As %String = "") As %String [ SqlProc ]
 {
-    Quit ##class(Shutter.Util.Onboard).Apply(ns, ##class(Shutter.Util.Onboard).Options(options)).%ToJSON()
+    Set o = ##class(Shutter.Util.Onboard).Options(options, .refused)
+    If refused '= "" Quit refused
+    Quit ##class(Shutter.Util.Onboard).Apply(ns, o).%ToJSON()
 }
 
 /// A marked test failure through the namespace's forwarder settings: a case opens, and nothing goes to a receiver.
@@ -2072,7 +2076,9 @@ ClassMethod OnboardTest(ns As %String) As %String [ SqlProc ]
 /// Takes off what the apply added, and says what stays. Needs %Admin_Manage.
 ClassMethod OnboardRemove(ns As %String, options As %String = "") As %String [ SqlProc ]
 {
-    Quit ##class(Shutter.Util.Onboard).Remove(ns, ##class(Shutter.Util.Onboard).Options(options)).%ToJSON()
+    Set o = ##class(Shutter.Util.Onboard).Options(options, .refused)
+    If refused '= "" Quit refused
+    Quit ##class(Shutter.Util.Onboard).Remove(ns, o).%ToJSON()
 }
 
 /// A connector item for a receiver the site profile gives an API, kept across upgrades. Needs %Admin_Manage.
