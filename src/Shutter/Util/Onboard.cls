@@ -322,8 +322,9 @@ ClassMethod Plan(ns As %String, options As %DynamicObject = "") As %DynamicObjec
     Quit:plan.error'="" plan
     // 1. The items, by what they are.
     Set forwarder = read.forwarder, alert = read.alert, wanted = $CLASSMETHOD(json, "Str", options, "receivers")
-    Set categories = "", it = read.items.%GetIterator(), listed = ""
+    Set categories = "", it = read.items.%GetIterator(), listed = "", siteAlertsTaken = 0
     While it.%GetNext(, .item) {
+        If item.name = ..#SITEALERTS Set siteAlertsTaken = 1
         If (item.kind = "hl7_service") {
             Do plan.services.%Push({"name": (item.name), "class": (item.class), "categories": (item.categories)})
             Set ci = item.categories.%GetIterator()
@@ -428,6 +429,7 @@ ClassMethod Plan(ns As %String, options As %DynamicObject = "") As %DynamicObjec
     If '$ISOBJECT(forwarder) {
         Set host = $CLASSMETHOD(json, "Str", options, "shutter_host", "127.0.0.1"), port = $CLASSMETHOD(json, "Str", options, "shutter_port", ..WebPort())
         Set ssl = $CLASSMETHOD(json, "Str", options, "ssl_config")
+        If (ssl = "") && '$LISTFIND($LISTBUILD("127.0.0.1", "localhost", "::1"), $ZCONVERT(host, "L")) Do plan.warnings.%Push("With no ssl_config the forwarder sends its sign-in to " _ host _ " in clear: name an SSL configuration")
         Do actions.%Push({"do": "add_forwarder", "item": (forwarderName), "server": (host), "port": (port), "ssl": (ssl), "credential": (credential), "prefix": (prefix), "says": ("Add the item " _ forwarderName _ " (Shutter.Intake.Forwarder) to " _ read.production _ ", posting to " _ host _ ":" _ port _ " with the credential " _ credential _ $SELECT(prefix '= "": ", reporting its receivers as """ _ prefix _ " <item>""", 1: ""))})
     }
     // The alert intake, with the site's own consumer kept as PassTo.
