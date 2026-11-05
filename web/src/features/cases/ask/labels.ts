@@ -70,6 +70,29 @@ export function answersBadge(asked: CaseQuestion[]): string | null {
 export const TRIAL_NO_ANSWER =
   'The trial has recorded answers only. Pick a suggested question; on a live system, any question goes to the board.';
 
+/**
+ * The trial's cases with recorded questions and a recorded What-if card. On any other case the trial has neither, and
+ * it says so rather than work one out: the mock knows no catalogue entry there, though the case's own page names one.
+ * A test holds this to the recordings. A live page never loads the recordings, so it is written out here.
+ */
+export const TRIAL_ASK_CASES = ['C-000001', 'C-000002', 'C-000008', 'C-000053', 'C-000054', 'C-000055'];
+
+/** The trial's case held at its approval (`HELD_CASES`, which a test holds this to). */
+const TRIAL_HELD_CASE = 'C-000002';
+
+/**
+ * How a recorded conversation stands against the held case on the page: its answers were recorded after the recorded
+ * approval and the resend that followed, which have not happened here until someone approves it. Once approved, the
+ * page replays them and the answers are true of it again.
+ */
+export function heldAnswersNote(caseId: string, state: string | undefined, approver: boolean): string | null {
+  if (caseId !== TRIAL_HELD_CASE) return null;
+  const recorded = 'Recorded after this case was approved in the recording; here ';
+  if (state === 'awaiting_approval') return `${recorded}it waits for ${approver ? 'you' : 'an approver'}.`;
+  if (state === 'blocked') return `${recorded}it was rejected.`;
+  return null;
+}
+
 /** The opening of an answer is at most this many words, a card body's budget; the rest waits behind a disclosure. */
 const LEAD_WORDS = 40;
 const wordCount = (text: string) => text.split(/\s+/).filter(Boolean).length;
