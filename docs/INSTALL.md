@@ -354,8 +354,10 @@ happens next depends on the receiver: ADT to a receiver whose API you describe c
 (ORM, ORU, OML, MDM and the rest) and every receiver with no API escalates with its evidence, and nothing is resent.** A
 Pathology or Documents namespace gets a durable case and a drafted email per failure, not a recovery (section 10).
 
-**Each step is an SQL call or a terminal line, in Shutter's namespace, as a user holding `%Admin_Manage`** (`_SYSTEM`, or a
-terminal session on the server). Options are one JSON object. Answers are JSON.
+**Each step is an SQL call or a terminal line, in Shutter's namespace, as a user who can reach `%SYS` and every namespace involved** (`_SYSTEM`, or a
+terminal session on the server). The apply and the removal check `%Admin_Manage`, and it is not enough alone: a role holding only that, with no database
+resources, got Access Denied. Options are one JSON object: any other text answers `ok: false` with an `error`, in the plan, the apply
+and the removal, and changes nothing. Answers are JSON.
 
 **Before you start, for each receiver: know what a green message means there.** A completed message does not always mean the
 message was processed. **A message accepted by a transport ACK and then lost downstream raises nothing in Shutter today.** Section 9.9 says
@@ -425,7 +427,8 @@ Do ##class(Shutter.Setup).OnboardCredential("PATHOLOGY")
 
 It asks for the password with the echo off, creates the user `shutter-fwd` with only the role `Shutter_Forwarder` and a password that does not expire (a lapsed one would turn
 every forward into a refused one) when that user does not exist, stores the credential `ShutterIntake` in that namespace, and prints no password. For a user that exists
-it first checks that the password signs in, and stores nothing if not, so one forwarder user can serve every namespace. It is
+it first checks that the password signs in, and stores nothing if not, so several namespaces can share one forwarder user. Sharing
+decides only what a changed password touches, not what the sign-in may do (section 3.5). It is
 not an SQL procedure, so no password passes through a statement. In a script, pass the user and password as the second and
 third arguments.
 

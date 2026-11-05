@@ -129,6 +129,12 @@ def remove(ns, options=None):
     return obj("SHUTTER", f'##class(Shutter.Setup).OnboardRemove("{ns}","{opt}")')
 
 
+def raw(proc, ns, options):
+    """A procedure given the options exactly as written, slips included."""
+    text = options.replace('"', '""')
+    return obj("SHUTTER", f'##class(Shutter.Setup).{proc}("{ns}","{text}")')
+
+
 def test_forward(ns):
     return obj("SHUTTER", f'##class(Shutter.Setup).OnboardTest("{ns}")')
 
@@ -547,6 +553,20 @@ check("nothing changed: the class", value("PATHOLOGY", '$SYSTEM.Encryption.Base6
 check("nothing changed: no mapping", value("PATHOLOGY", '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Intake.Forwarder")') == "0")
 check("nothing changed: no schema in Shutter", value("SHUTTER", '##class(Shutter.Util.Schemas).Known("TRUSTLAB")') == "0")
 check("nothing changed: no receiver in the profile", value("SHUTTER", '$ISOBJECT(##class(Shutter.Store.SiteProfile).Receiver("LIMS Out"))') == "0")
+
+step("Options that do not parse, and a receivers name that matches no item")
+for bad in ('{"production":"NoSuch"', "{'production':'NoSuch'}", "plain words"):
+    answers = [raw(proc, "PATHOLOGY", bad) for proc in ("OnboardPlan", "OnboardApply", "OnboardRemove")]
+    check(f"the plan, the apply and the removal refuse: {bad}", all(a.get("ok") is False and "not a JSON object" in a["error"] for a in answers), answers)
+check("and nothing changed", value("PATHOLOGY", '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Intake.Forwarder")') == "0" and value("SHUTTER", '$DATA(^Shutter.Config("onboard","PATHOLOGY"))') == "0")
+p = plan("PATHOLOGY", {"receivers": "LIMS Oot"})
+check("a name that matches no item is said, and no intake with an empty list is added", p["operations"] == [] and any("LIMS Oot" in w for w in p["warnings"]) and not any(a["do"] in ("add_alert_intake", "rename_alert") for a in p["actions"]), p)
+p = plan("PATHOLOGY", {"receivers": "LIMS Out,Nosuch Out"})
+check("one that matches and one that does not: the second is said, the first is wired", any("Nosuch Out" in w for w in p["warnings"]) and [a["receivers"] for a in p["actions"] if a["do"] == "add_alert_intake"] == ["LIMS Out"], p)
+p = plan("PATHOLOGY", {"shutter_host": "shutter.example"})
+check("a remote Shutter with no SSL configuration: it says the sign-in goes in clear", any("in clear" in w for w in p["warnings"]), p["warnings"])
+p = plan("PATHOLOGY", {"shutter_host": "shutter.example", "ssl_config": "Any"})
+check("and not with one", not any("in clear" in w for w in p["warnings"]), p["warnings"])
 
 # ---- the apply ----
 step("The apply wires PATHOLOGY without stopping it")

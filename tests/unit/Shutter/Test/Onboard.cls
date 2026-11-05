@@ -39,8 +39,16 @@ Method TestSqlFormsAnswerJson()
 {
     Set p = ##class(%DynamicObject).%FromJSON(##class(Shutter.Setup).OnboardPlan(..#NS, $CHAR(0)))
     Do $$$AssertEquals(p.namespace, ..#NS, "SQL's empty argument is no option")
-    Set o = ##class(Shutter.Util.Onboard).Options("not json")
-    Do $$$AssertEquals(o.%Size(), 0, "options that do not parse are none")
+    For bad = "not json", "{""production"":""X""", "{'production':'X'}", "{" _ $CHAR(8220) _ "production" _ $CHAR(8221) _ ":""X""}", "[1]" {
+        Do ##class(Shutter.Util.Onboard).Options(bad, .refused)
+        Do $$$AssertTrue(refused [ "not a JSON object", "options that are no JSON object are refused: " _ bad)
+    }
+    Do ##class(Shutter.Util.Onboard).Options("{""production"":""X""}", .refused)
+    Do $$$AssertEquals(refused, "", "a JSON object is not")
+    For one = ##class(Shutter.Setup).OnboardPlan(..#NS, "not json"), ##class(Shutter.Setup).OnboardApply(..#NS, "not json"), ##class(Shutter.Setup).OnboardRemove(..#NS, "not json") {
+        Set a = ##class(%DynamicObject).%FromJSON(one)
+        Do $$$AssertTrue('a.ok && (a.error [ "not a JSON object"), "each procedure answers so: " _ one)
+    }
     Do $$$AssertEquals(##class(Shutter.Util.Onboard).NS(" pathology "_$CHAR(0)), "PATHOLOGY", "a namespace's name is trimmed and upper case")
 }
 

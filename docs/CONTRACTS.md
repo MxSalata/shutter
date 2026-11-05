@@ -1365,7 +1365,9 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   schemas: [{category, named_by, in_namespace, standard, in_shutter, shutter_name, action}], wired, receiver_prefix, actions: [{do,
   says, ...}], todo, warnings, error}`. `do` is `map_package`, `import_schema`, `add_forwarder`, `rename_alert`,
   `add_alert_intake`, `set_alert_receivers`, `set_alert_on_error` or `draft_receiver`. Options: `production`, `shutter_host`,
-  `shutter_port`, `ssl_config`, `credential`, `receivers`, `alert_on_error`. Reading a namespace (`Onboard.Read`) calls only Ens, %SQL,
+  `shutter_port`, `ssl_config`, `credential`, `receivers`, `alert_on_error`. Options that are not a JSON object answer `{ok: false, error}` in
+  the plan, the apply and the removal, and change nothing. A `receivers` name that matches no item is a warning; with no item chosen the plan warns and
+  has no `add_alert_intake`, since an empty `Receivers` means any item. Reading a namespace (`Onboard.Read`) calls only Ens, %SQL,
   %Dictionary and %SYS classes while it is there, as `ProductionReader` does, since no Shutter class resolves there yet.
 - **What a completed message proves** (v1.43). Per operation, the values that apply, the item's, else the default settings', else the
   class's: `get_reply` (the adapter's `GetReply`; null when the adapter has no such setting), `reply_code_actions`, and
