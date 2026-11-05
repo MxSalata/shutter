@@ -302,14 +302,19 @@ function heroStatement(proof: Proof): ReactNode {
   return 'No board pass has been scored yet.';
 }
 
-/** The line under the hero statement: the miss that wrote, which only the board caught. */
-function heroSecond(proof: Proof): string {
+/** The catalogue entry a scenario's recorded plan cites, as the evaluation has it. */
+function entryOfScenario(data: Evaluation, scenario: string): string {
+  return data.passes.find((p) => p.scenario === scenario && p.catalogue_entry)?.catalogue_entry ?? '';
+}
+
+/** The line under the hero statement: the miss that wrote, which the board caught, and the entry it followed. */
+function heroSecond(proof: Proof, entryOf: (scenario: string) => string): string {
   const misses = proof.rulesMisses;
   if (!misses?.wrote.length) return '';
   // "The seventh": the one miss the gate did not stop, after the six it did
   if (misses.wrote.length === 1 && misses.total > 1 && misses.stopped.length === misses.total - 1)
-    return `The ${ordinal(misses.total)}, ${misses.wrote[0]}, wrote over the bed manager's ward with every check passed. Only the board caught it.`;
-  return `${andList(misses.wrote)} wrote with every check passed. Only the board caught ${misses.wrote.length === 1 ? 'it' : 'them'}.`;
+    return `The ${ordinal(misses.total)}, ${misses.wrote[0]}, wrote over the bed manager's ward with every check passed. The board escalated${entryOf(misses.wrote[0]) ? `, as entry ${entryOf(misses.wrote[0])} says` : ''}.`;
+  return `${andList(misses.wrote)} wrote with every check passed. The board caught ${misses.wrote.length === 1 ? 'it' : 'them'}.`;
 }
 
 /**
@@ -336,7 +341,7 @@ function Headline({
   const misses = proof.rulesMisses;
   const cost = proof.costPerPass;
   const allMatched = !!b && b.scored > 0 && b.matched === b.scored;
-  const second = heroSecond(proof);
+  const second = heroSecond(proof, (id) => entryOfScenario(data, id));
   // The case page's side by side of a scenario's two cases is S8's (S8Compare), opened on its board case
   const compare = misses?.wrote.includes('S8') ? caseOf('S8', 'board') : undefined;
   const range = dayRange(proof.recordedFrom, proof.recordedTo);
@@ -372,6 +377,11 @@ function Headline({
               Compare the two cases
             </Anchor>
           ) : null}
+        </Text>
+      ) : null}
+      {t.plans_with_a_catalogue_outcome ? (
+        <Text size="sm">
+          {`The coordinator is given the catalogue's entry and took its outcome in ${t.plans_taking_the_preferred_outcome ?? 0} of ${t.plans_with_a_catalogue_outcome} plans, S8 included: written policy applied to evidence, not answers reached unaided.`}
         </Text>
       ) : null}
 
@@ -634,7 +644,7 @@ function Sources({ data }: { data: Evaluation }) {
 
 /**
  * Why a board: who proposed the expected action of the scored passes (the board, then each specialist alone, on one
- * base), and which of rules alone's misses the gate stops by itself and which only the board catches.
+ * base), and which of rules alone's misses the gate stops by itself and which the board catches.
  */
 function WhyABoard({
   proof,
@@ -674,13 +684,11 @@ function WhyABoard({
           caption={`Who proposed the expected action, of ${base} scored passes`}
         />
       ) : null}
-      <Text size="sm">
-        Each specialist agent answers from its own view only; the coordinator agent weighs all three.
-      </Text>
+      <Text size="sm">Each specialist answers from its own view; the coordinator weighs all three.</Text>
       {misses && (misses.stopped.length || misses.wrote.length) ? (
         <Text size="sm">
           {misses.stopped.length ? <>The gate alone catches {ids(misses.stopped)}. </> : null}
-          {misses.wrote.length ? <>Only the board catches {ids(misses.wrote)}.</> : null}
+          {misses.wrote.length ? <>The board catches {ids(misses.wrote)}.</> : null}
         </Text>
       ) : null}
     </Section>
@@ -977,7 +985,6 @@ export default function EvaluationPage({
   const reduced = usePrefersReducedMotion();
   const caseOf = useScenarioCases();
   const shown = filterPasses(data.passes, filters);
-  const range = dayRange(proof.recordedFrom, proof.recordedTo);
 
   const set = (patch: Partial<Record<keyof PassFilters, string | null>>) => {
     const next = new URLSearchParams(params);
@@ -1004,7 +1011,7 @@ export default function EvaluationPage({
         title="Evaluation"
         icon={IconChartBar}
         hue="teal"
-        lead={`How the board decides, measured on runs recorded with the real agents${range ? `, ${range}` : ''}.`}
+        lead="How the board decides, measured on recorded runs."
         details="How the board decides: the action it proposed against each scenario's expected outcome and against Rules only, every member's own view and confidence, how far they agreed, and what each pass cost in tokens, money and time."
       />
       <Stack gap="md">
