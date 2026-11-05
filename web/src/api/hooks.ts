@@ -193,26 +193,41 @@ export interface CaseFilters {
 
 /** The cases list; `enabled` false leaves it unread, for a panel that needs it only for some cases. */
 export function useCases(filters: CaseFilters, enabled = true) {
-  const params = new URLSearchParams();
-  for (const [k, v] of Object.entries(filters)) if (v !== undefined && v !== '') params.set(k, String(v));
-  const query = params.toString();
   return useQuery({
-    queryKey: keys.cases(filters),
-    queryFn: () => api.get<CaseList>(`/cases${query ? `?${query}` : ''}`),
+    ...casesQuery(filters),
     refetchInterval: (q) => (q.state.data?.items.some((c) => isOpen(c.state)) ? LIVE * 2 : CALM),
     enabled,
   });
+}
+
+/**
+ * The cases list read once, not polled: for a link that only needs one case's id. These sit on every page or on Home for
+ * every visitor of the public instance, where polling them would add a request every few seconds to name the same case.
+ */
+export function useCasesOnce(filters: CaseFilters, enabled = true) {
+  return useQuery({ ...casesQuery(filters), enabled });
+}
+
+function casesQuery(filters: CaseFilters) {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(filters)) if (v !== undefined && v !== '') params.set(k, String(v));
+  const query = params.toString();
+  return {
+    queryKey: keys.cases(filters),
+    queryFn: () => api.get<CaseList>(`/cases${query ? `?${query}` : ''}`),
+  };
 }
 
 export function isOpen(state: CaseState | string | undefined): boolean {
   return !!state && !CLOSED_STATES.includes(state as CaseState);
 }
 
-export function useCase(caseId: string) {
+export function useCase(caseId: string, enabled = true) {
   return useQuery({
     queryKey: keys.case(caseId),
     queryFn: () => api.get<CaseDetail>(`/cases/${seg(caseId)}`),
     refetchInterval: (q) => (isOpen(q.state.data?.state) ? LIVE : false),
+    enabled,
   });
 }
 

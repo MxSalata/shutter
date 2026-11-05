@@ -97,13 +97,9 @@ describe('HomePage', () => {
         const q = new URL(request.url).searchParams;
         if (q.get('scenario') === 'S8')
           return HttpResponse.json({ items: [{ caseId: 'C-000002', scenario: 'S8' }], total: 1 });
-        return HttpResponse.json({
-          items: [
-            { caseId: 'C-000036', scenario: 'S23a' },
-            { caseId: 'C-000034', scenario: 'S2' },
-          ],
-          total: 2,
-        });
+        if (q.get('scenario') === 'S2')
+          return HttpResponse.json({ items: [{ caseId: 'C-000034', scenario: 'S2' }], total: 1 });
+        return HttpResponse.json({ items: [{ caseId: 'C-000036', scenario: 'S23a' }], total: 2 });
       }),
     );
     renderHome({ ...ALL, configure: false, scenarios: false });
@@ -116,6 +112,18 @@ describe('HomePage', () => {
       'href',
       '/cases/C-000034',
     );
+  });
+
+  it('offers another waiting plan when S2 has none', async () => {
+    server.use(
+      http.get('/api/shutter/cases', ({ request }) => {
+        const q = new URL(request.url).searchParams;
+        if (q.get('scenario')) return HttpResponse.json({ items: [], total: 0 });
+        return HttpResponse.json({ items: [{ caseId: 'C-000036', scenario: 'S23a' }], total: 1 });
+      }),
+    );
+    renderHome({ ...ALL, configure: false, scenarios: false });
+    expect(await screen.findByRole('link', { name: 'Approve a fix yourself: C-000036' })).toBeInTheDocument();
   });
 
   it('offers the public demo no such links while the cases do not exist', async () => {
