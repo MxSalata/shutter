@@ -182,4 +182,27 @@ Method TestTheEmailOfOtherCases()
     Do ..Drop(id)
 }
 
+/// The reason a stopped case shows, from the event that stopped it: a rehearsal nobody answered is no refusal, and what stopped
+/// a case after the gate passed it is not hidden by an earlier round's failing decision.
+Method TestTheReasonForAStoppedCase()
+{
+    Set d = "Shutter.API.Dispatch"
+    Set none = $CLASSMETHOD("Shutter.Process.CaseWorkflow", "RehearsalFailureWords", "unavailable", 0) _ "unavailable"
+    Set would = $CLASSMETHOD("Shutter.Process.CaseWorkflow", "RehearsalFailureWords", "would_not_apply", 200) _ "would_not_apply"
+    Do $$$AssertEquals($CLASSMETHOD(d, "ReasonFromEvent", none, "blocked"), "BLOCKED", "no usable answer shows nothing: " _ none)
+    Do $$$AssertEquals($CLASSMETHOD(d, "ReasonFromEvent", would, "blocked"), "REHEARSAL_WOULD_NOT_APPLY", "a refused dry run still reads so: " _ would)
+    Do $$$AssertEquals($CLASSMETHOD(d, "ReasonFromEvent", "Not verified (not_committed): Not committed: by the last read", "escalated"), "WRITE_NOT_COMMITTED", "not committed")
+    Do $$$AssertEquals($CLASSMETHOD(d, "ReasonFromEvent", "Not verified (unknown): x; a person must check", "escalated"), "WRITE_OUTCOME_UNKNOWN", "unknown")
+    Do $$$AssertEquals($CLASSMETHOD(d, "ReasonFromEvent", "Rejected by approver", "blocked"), "REJECTED_BY_APPROVER", "a rejection")
+    Do $$$AssertEquals($CLASSMETHOD(d, "ReasonFromEvent", "The conditional write was refused: refused", "blocked"), "DISPATCH_REFUSED", "a refused write")
+    Do $$$AssertEquals($CLASSMETHOD(d, "ReasonFromEvent", "A person must look", "escalated"), "ESCALATED", "a person")
+    Do $$$AssertEquals($CLASSMETHOD(d, "ReasonFromEvent", "", "blocked"), "BLOCKED", "no words")
+    For text = "Not verified (not_committed): Not committed: x", "Not verified (unknown): x", none {
+        Do $$$AssertTrue($CLASSMETHOD(d, "StoppedAfterTheGate", text), "the event names the reason: " _ text)
+    }
+    For text = "The gate did not pass the plan; a person must decide", "The gate did not pass the dispatch: x", would, "" {
+        Do $$$AssertNotTrue($CLASSMETHOD(d, "StoppedAfterTheGate", text), "the gate's decision names the reason: " _ text)
+    }
+}
+
 }
