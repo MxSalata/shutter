@@ -164,7 +164,11 @@ reads as one with no API: nothing is resent to it. `tests/e2e/plain_receiver_che
 down and answering AE.
 
 **3.5 Security and operations.** Only holders of `Shutter_Forwarder` can open cases; the web application keeps its
-roles. Escalation mail goes through the `Escalation Mail` operation's `SMTPServer` setting; unset, it writes `.eml`
+roles. **Give that password an integration credential's care.** A forwarder sign-in can open a case for any receiver,
+whichever namespace it is stored in: the source, the receiver and the failure in `POST /intake` are the caller's own word, and
+nothing looks them up. At a tier that releases by policy (section 9.6), that case can write to the receiver with no approval
+if the gate's checks pass, and those test the message against the receiver's state, not whether the message ever existed. One
+user per namespace does not close this, since nothing ties a user to a namespace. Escalation mail goes through the `Escalation Mail` operation's `SMTPServer` setting; unset, it writes `.eml`
 files under `<mgr>/shutter/out/mail`. The daily task "Shutter retention" removes the text of each escalation email
 and its `.eml` file `SHUTTER_ESCALATION_DAYS` days after the case closed (section 2); the row stays with its digest,
 the recipients and who sent it. A case the workflow left in a working state (after a container killed in the middle of its
@@ -471,6 +475,12 @@ nothing, so a team's `receivers` must say that. A namespace already wired keeps 
 plan warns if an operation added later takes a name another namespace reports. Through the API, `GET /api/shutter/site-profile`, change the `profile` inside the reply, and
 `PUT` that inner object, all of it, back with the header `X-Requested-With: Shutter`; a part alone, or the outer reply, answers 400. A receiver with no API stays declared as it is, and its failures escalate to its team. `Shutter_Approver` may save the profile, policy included, so `approval` is a setting an approver can change; `GET /api/shutter/site-profile/history` keeps each version and who saved it.
 
+**What a tier decides.** A receiver's tier is read with the profile's `policy`, by the shape of the failure. As shipped: tier 1 writes a
+single failed message or an ordered chain with no approval; tier 2 writes a single failed message with no approval and asks for one on an
+ordered chain; tier 3, a draft's tier, asks for approval on both. An interleaved failure goes to the board at every tier. So giving a
+receiver an API at tier 1 or 2 is what lets a case write to it with no person, through the gate's checks alone. For a person on every
+write, keep it at tier 3 or set that part of `policy` to `approval`.
+
 **Giving a receiver its API.** Only a receiver with state, receipt, capabilities and operations paths can be recovered. Add
 them in the profile, then, since Shutter writes through a connector item of that receiver's name in its own production:
 
@@ -602,6 +612,8 @@ what the service received (section 10). Only ACKs on an HL7 service were tried, 
 
 Say these plainly to whoever owns the feed.
 
+- **A forwarder sign-in can cause a write.** It can open a case for any receiver, and at a tier that releases by policy (9.6) that case can
+  write with no approval. A user per namespace does not close this (section 3.5), so that password deserves an integration credential's care.
 - **A message accepted by a transport ACK and then lost downstream raises nothing in Shutter today.** The engine completed it, so no alert comes and no case
   opens. The same goes for an operation with `GetReply` off, and for an application ACK that never arrives. A negative ACK on a feed of its own opens a case only with the process in 9.9.
 - **Non-ADT messages have no recovery.** Orders, results and documents open a case and escalate, and a person decides: the case says what the
