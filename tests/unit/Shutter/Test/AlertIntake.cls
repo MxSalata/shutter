@@ -122,7 +122,7 @@ Method TestRefusedForwardIsNotSeen()
     Do $$$AssertTrue($CLASSMETHOD(ap, "ForwardAnswered", 999999993, taken), "an answer without Error: taken")
     Do $$$AssertTrue($CLASSMETHOD(ap, "Seen", 999999993), "the session is seen once Shutter took the message")
     Do $$$AssertNotTrue($CLASSMETHOD(ap, "Pending", 999999993), "and no longer pending")
-    Do $$$AssertEquals($LISTGET(^Shutter.AlertIntake("seen", 999999993), 1), "Downstream Out", "with the item")
+    Do $$$AssertTrue($CLASSMETHOD(ap, "Seen", 999999993, "Downstream Out"), "with the item")
 }
 
 /// A pending mark no answer clears lapses after ten minutes, and the next mark drops it.
@@ -131,11 +131,11 @@ Method TestPendingLapses()
     Set ap = "Shutter.Intake.AlertProcess"
     Kill ^Shutter.AlertIntake("pending", 999999994), ^Shutter.AlertIntake("pending", 999999995)
     Set now = ##class(Shutter.Util.Time).EpochSeconds()
-    Set ^Shutter.AlertIntake("pending", 999999994) = $LISTBUILD("Downstream Out", now - 601)
+    Set ^Shutter.AlertIntake("pending", 999999994, "Downstream Out") = now - 601
     Do $$$AssertNotTrue($CLASSMETHOD(ap, "Pending", 999999994), "a mark older than ten minutes no longer holds the session")
-    Set ^Shutter.AlertIntake("pending", 999999994) = $LISTBUILD("Downstream Out", now - 599)
+    Set ^Shutter.AlertIntake("pending", 999999994, "Downstream Out") = now - 599
     Do $$$AssertTrue($CLASSMETHOD(ap, "Pending", 999999994), "a younger one does")
-    Set ^Shutter.AlertIntake("pending", 999999994) = $LISTBUILD("Downstream Out", now - 601)
+    Set ^Shutter.AlertIntake("pending", 999999994, "Downstream Out") = now - 601
     // The next mark drops the lapsed entries from the lowest session id up to the first young one, so a real session's
     // mark (a forward out at this moment) would stop the walk before this test's ids: the drop is checked only when
     // the test's entry comes first.
