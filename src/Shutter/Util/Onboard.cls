@@ -1037,13 +1037,20 @@ ClassMethod ReceiverItem(name As %String, host As %String = "", port As %String 
         If name = "" Set out.error = "No receiver named" Quit
         Set entry = ##class(Shutter.Store.SiteProfile).Receiver(name)
         If '$ISOBJECT(entry) || '$ISOBJECT(entry.%Get("api")) Set out.error = "The site profile has no API for " _ name _ ": a receiver with no API has no connector" Quit
+        Set differs = ..ItemDiffers(name, host, port, credential, ssl, .now)
+        If differs Set out.error = name _ "'s connector item calls " _ now _ ", and this call names " _ host _ ":" _ port _ " (credential " _ credential _ ", SSL " _ ssl _ "). Nothing was changed. To move it, change the item in the production, then make this call again with the same values, so that an upgrade keeps them" Quit
         Set other = "", first = $ORDER(^Shutter.Config("receiverItems", ""))
         If (first '= "") && (first '= name) {
             Set was = ^Shutter.Config("receiverItems", first)
             If ($LIST(was, 1) '= host) || (+$LIST(was, 2) '= +port) Do out.warnings.%Push("Evidence Collector and Verifier read one server, " _ $LIST(was, 1) _ ":" _ $LIST(was, 2) _ " (" _ first _ "): this receiver's state and receipts cannot be read on another until that changes, so its writes stay blocked")
         }
+        // The readers follow this receiver when it is the one they were set from, so a correction moves them too.
+        Set old = $GET(^Shutter.Config("receiverItems", name))
+        If (first = "") || ((old '= "") && ($LIST(old, 1) = $GET(^Shutter.Config("downstreamHost"))) && (+$LIST(old, 2) = +$GET(^Shutter.Config("downstreamPort")))) {
+            If (old '= "") && (($LIST(old, 1) '= host) || (+$LIST(old, 2) '= +port)) Do out.warnings.%Push("Evidence Collector and Verifier read " _ $LIST(old, 1) _ ":" _ $LIST(old, 2) _ " until their settings change or the next load")
+            Set ^Shutter.Config("downstreamHost") = host, ^Shutter.Config("downstreamPort") = port
+        }
         Set ^Shutter.Config("receiverItems", name) = $LISTBUILD(host, port, credential, ssl)
-        If first = "" Set ^Shutter.Config("downstreamHost") = host, ^Shutter.Config("downstreamPort") = port
         Set sc = ..RestoreReceiverItems(.added)
         If $$$ISERR(sc) Set out.error = $SYSTEM.Status.GetErrorText(sc) Quit
         Set out.added = added
@@ -1054,6 +1061,24 @@ ClassMethod ReceiverItem(name As %String, host As %String = "", port As %String 
         Set out.error = ex.DisplayString()
     }
     Quit out
+}
+
+/// Whether Shutter's production already has an item of this name with other settings: a call that names them would change
+/// nothing now and the item at the next load. now says what the item calls.
+ClassMethod ItemDiffers(name As %String, host As %String, port As %String, credential As %String, ssl As %String, Output now As %String) As %Boolean
+{
+    Set now = "", differs = 0
+    Set prod = ##class(Ens.Config.Production).%OpenId(##class(Shutter.Setup).ProductionName(), 0)
+    Quit:'$ISOBJECT(prod) 0
+    For i = 1:1:prod.Items.Count() {
+        Set item = prod.Items.GetAt(i)
+        Continue:item.Name'=name
+        For j = 1:1:item.Settings.Count() { Set one = item.Settings.GetAt(j), s(one.Name) = one.Value }
+        Set now = $GET(s("HTTPServer")) _ ":" _ $GET(s("HTTPPort")) _ " (credential " _ $GET(s("Credentials")) _ ", SSL " _ $GET(s("SSLConfig")) _ ")"
+        Set differs = ($GET(s("HTTPServer")) '= host) || (+$GET(s("HTTPPort")) '= +port) || ($GET(s("Credentials")) '= credential) || ($GET(s("SSLConfig")) '= ssl)
+        Quit
+    }
+    Quit differs
 }
 
 /// The recorded connector items put in Shutter's production when it lacks them. The install runs this on a site install.

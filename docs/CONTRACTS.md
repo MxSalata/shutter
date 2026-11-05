@@ -1396,7 +1396,7 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   step made it and no other namespace onboarded here signs in with it, else `kept` says why; a namespace already off may be called for this alone).
 - `SELECT Shutter.Setup_OnboardReceiverItem(name, host, port, credential, ssl)` (`%Admin_Manage`) adds a `Shutter.Operation.Ward` item of the
   receiver's name to Shutter's production for a receiver the profile gives an `api`, records it under `^Shutter.Config("receiverItems")`, and
-  a site install puts it back after compiling the production (`RestoreReceiverItems`). Refused for a receiver with no `api`.
+  a site install puts it back after compiling the production (`RestoreReceiverItems`). Refused for a receiver with no `api`, and, naming both, for an item that exists with other settings.
 - **Schemas.** `Schemas.ImportNeeded(namespace, category, .as)` answers `none` (one digest of IRIS's export, or its alias is loaded),
   `import`, or `import_as` with `<NAMESPACE>_<CATEGORY>`; `ImportFrom` exports there and imports here, recording an alias under
   `^Shutter.Config("schemaAlias", namespace, category)`, which `Process.Intake` follows (`LocalName`), so a forwarder keeps naming its own
