@@ -961,6 +961,10 @@ body {
   outline: 2px solid var(--mantine-primary-color-filled);
   outline-offset: 3px;
 }
+/* The filled shade is under 3:1 on a dark card: a lighter one, as links use there */
+:root[data-mantine-color-scheme='dark'] .lifecycle-step[data-stage]:focus-visible {
+  outline-color: var(--mantine-primary-color-3);
+}
 @media (max-width: 35.99em) {
   .lifecycle-step[data-stage] {
     min-height: 2.75rem;
@@ -1671,6 +1675,11 @@ body {
 .stat-tile:focus-visible {
   outline: 2px solid var(--mantine-primary-color-filled);
   outline-offset: 3px;
+}
+/* The filled shade is under 3:1 on a dark card: a lighter one, as links use there */
+:root[data-mantine-color-scheme='dark'] .home-card:focus-visible,
+:root[data-mantine-color-scheme='dark'] .stat-tile:focus-visible {
+  outline-color: var(--mantine-primary-color-3);
 }
 .stat-tile[aria-pressed='true']:focus-visible {
   box-shadow: 0 0 0 1px var(--mantine-color-text);

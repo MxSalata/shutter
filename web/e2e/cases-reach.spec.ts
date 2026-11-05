@@ -17,6 +17,57 @@ const outlineOf = (el: Locator) =>
     return { style: s.outlineStyle, width: parseFloat(s.outlineWidth), colour: s.outlineColor };
   });
 
+/** WCAG's contrast ratio of two `rgb()` colours. */
+function contrast(a: string, b: string) {
+  const luminance = (c: string) => {
+    const [r, g, b] = c
+      .match(/[\d.]+/g)!
+      .slice(0, 3)
+      .map((v) => {
+        const s = Number(v) / 255;
+        return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+      });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+test.describe('the focus ring in dark mode', () => {
+  test.use({ viewport: { width: 1280, height: 800 }, colorScheme: 'dark' });
+
+  test('stands out at 3:1 from what is around it, on a tile, a Home card and a lifecycle stage', async ({
+    page,
+  }) => {
+    const ringOn = async (el: Locator) => {
+      await expect(el).toBeVisible();
+      await el.focus();
+      await page.keyboard.press('Shift+Tab');
+      await page.keyboard.press('Tab');
+      await expect(el).toBeFocused();
+      return contrast(
+        (await outlineOf(el)).colour,
+        await page.evaluate(() => {
+          // The ring stands off the element, on what the element stands on: the nearest painted ancestor's colour
+          let e: Element | null = document.activeElement!.parentElement;
+          while (e) {
+            const c = getComputedStyle(e).backgroundColor;
+            if (c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent') return c;
+            e = e.parentElement;
+          }
+          return getComputedStyle(document.body).backgroundColor;
+        }),
+      );
+    };
+    await go(page, '/home');
+    expect(await ringOn(page.locator('.home-card').first())).toBeGreaterThanOrEqual(3);
+    await go(page, '/cases');
+    expect(await ringOn(page.getByRole('button', { name: / Escalated / }))).toBeGreaterThanOrEqual(3);
+    await go(page, '/cases/C-000008');
+    expect(await ringOn(page.locator('.lifecycle-step[data-stage]').first())).toBeGreaterThanOrEqual(3);
+  });
+});
+
 test.describe('a case on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
