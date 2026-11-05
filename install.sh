@@ -131,7 +131,7 @@ check_port() {
     else
       fail "Port ${value} ($what) is already in use by something else." \
         "Stop what uses it, or choose a free port: $name=<free port> $rerun" \
-        "The port is kept in the .env that creates."
+        "That command keeps the port in the .env it creates."
     fi
   else
     ok "Port ${value} ($what) is free"
