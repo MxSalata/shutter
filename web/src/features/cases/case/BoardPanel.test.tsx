@@ -105,6 +105,55 @@ describe('a board with a member missing', () => {
     expect(screen.queryByText(/the specialists agreed/)).not.toBeInTheDocument();
   });
 
+  it('with a run over its budget: the result it keeps is not a view, a dissent or a confidence', async () => {
+    // The server keeps an over-budget run's result for inspection but does not use it
+    withRuns((runs) =>
+      runs.map((r) =>
+        r.memberCode === 'impact'
+          ? {
+              ...r,
+              status: 'budget_exceeded',
+              result: { disposition: 'hold', confidence: 0.9 },
+              finding: {
+                disposition: 'hold',
+                confidence: 0.9,
+                findings: { disposition: 'hold', confidence: 0.9 },
+              },
+            }
+          : r,
+      ),
+    );
+    const card = await screen.findByRole('region', { name: 'Impact Analysis' });
+    expect(within(card).getByText('No answer from this agent.')).toBeInTheDocument();
+    expect(within(card).queryByText('Dissent')).not.toBeInTheDocument();
+    expect(within(card).queryByTestId('own-confidence')).not.toBeInTheDocument();
+    expect(screen.getByText('2 specialists answered')).toBeInTheDocument();
+  });
+
+  it('keeps a dissent the coordinator kept, from a member with no answer of its own', async () => {
+    withRuns((runs) =>
+      runs.map((r) => {
+        if (r.memberCode === 'impact') return { ...r, status: 'budget_exceeded' };
+        if (r.memberCode !== 'coordinator') return r;
+        const kept = { member: 'impact', said: 'hold: the receiver moved', why_kept: 'Worth keeping.' };
+        return { ...r, result: { ...(r.result as object), disagreements: [kept] } };
+      }),
+    );
+    const card = await screen.findByRole('region', { name: 'Impact Analysis' });
+    expect(within(card).getByText('Dissent')).toBeInTheDocument();
+  });
+
+  it('gives the definition of confidence to the first card that shows one', async () => {
+    // Conformance comes first in the recording; with no answer its card shows no confidence to define
+    withRuns((runs) =>
+      runs.map((r) => (r.memberCode === 'conformance' ? { ...r, status: 'budget_exceeded' } : r)),
+    );
+    const card = await screen.findByRole('region', { name: 'Encounter Integrity' });
+    expect(within(card).getByText('own confidence')).toHaveAccessibleDescription(
+      "The agent's own report. The gate does not use it.",
+    );
+  });
+
   it('says one specialist in the singular', async () => {
     withRuns((runs) => runs.filter((r) => r.memberCode === 'coordinator' || r.memberCode === 'conformance'));
     expect(await screen.findByText('1 specialist answered')).toBeInTheDocument();
