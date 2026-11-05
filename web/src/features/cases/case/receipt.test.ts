@@ -67,10 +67,27 @@ describe('safetyReceipt', () => {
     expect(p.decidedBy).toBe("Released by the site's written policy (Automatic by site policy v9)");
   });
 
-  it('reads a policy plan with no approval row from who made the plan, and counts an open case so far', () => {
+  it('leaves a policy plan that writes and waits for a person unreleased', () => {
+    // Plan by the site's policy, approval by a person: until then nobody has released it, so it can't name the policy
+    const base = fixtures.cases['C-000002'];
+    const c = { ...base.detail, planCreatedBy: 'policy:E2' } as unknown as CaseDetail;
+    const r = safetyReceipt({
+      c,
+      plan: base.plan as unknown as PlanView,
+      approvals: { approvals: [] } as unknown as ApprovalsView,
+      attempts: [],
+      closure: null,
+      snapshot: null,
+    });
+    expect(r.disposition).toBe('resend');
+    expect(r.decidedBy).toBe('Nobody yet');
+  });
+
+  it('reads a policy plan that writes nothing from who made the plan, and counts an open case so far', () => {
     const c = {
       ...fixtures.cases['C-000021'].detail,
       state: 'executing',
+      disposition: 'superseded',
       planCreatedBy: 'policy:E2',
     } as unknown as CaseDetail;
     const r = safetyReceipt({ c, plan: null, approvals: null, attempts: [], closure: null, snapshot: null });

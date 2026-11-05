@@ -120,7 +120,9 @@ function decider(
     return `${verb} by ${who}${revoked}`;
   }
   const by = c.planCreatedBy ?? plan?.plan?.createdBy ?? '';
-  if (by.startsWith('policy:')) return `The site's written policy, entry ${by.slice('policy:'.length)}`;
+  // A plan the policy wrote that writes nothing is settled by that; one that writes still waits for its release
+  if (by.startsWith('policy:') && !writes)
+    return `The site's written policy, entry ${by.slice('policy:'.length)}`;
   if (!writes) return 'No approval needed: the plan writes nothing';
   // Approvals not read (still loading, or the read failed): who released the write is not known
   if (approvals === undefined) return 'Unknown';
