@@ -346,7 +346,7 @@ so take what you need from it before replacing it, or copy `/usr/irissys/IRIS.DA
 
 A trust's integration engine is often several namespaces: order communications and the LIMS in one, documents in another,
 the PAS feed in a third. Shutter sits in its own namespace (shape A) and each of those is onboarded on its own, in minutes,
-with its production running throughout. `tests/e2e/onboard_check.py` plays this whole section on a stock instance, on three
+with its production running throughout. `tests/e2e/onboard_check.py` plays this whole section on a stock instance, on five
 namespaces with stock classes.
 
 **What you get per namespace.** A failed delivery in that namespace opens a case in Shutter, with where it came from. What
@@ -356,6 +356,11 @@ Pathology or Documents namespace gets a durable case and a drafted email per fai
 
 **Each step is an SQL call or a terminal line, in Shutter's namespace, as a user holding `%Admin_Manage`** (`_SYSTEM`, or a
 terminal session on the server). Options are one JSON object. Answers are JSON.
+
+**Before you start, for each receiver: know what a green message means there.** A completed message does not always mean the
+message was processed. **A message accepted by a transport ACK and then lost downstream raises nothing in Shutter today.** Section 9.9 says
+which level you get, what was measured on a stock operation, the settings, and how to bring in acknowledgements that arrive on a feed of
+their own.
 
 **9.1 Read the plan: this changes nothing.**
 
@@ -368,7 +373,9 @@ that namespace and Shutter have it and what would be done; what is wired already
 
 - `actions`: exactly what the apply would do, one line each, in the order it would do them;
 - `todo`: what only a person can do;
-- `warnings`: what you should look at first (two items named `Ens.Alert`, a category not even loaded in that namespace).
+- `warnings`: what you should look at first (two items named `Ens.Alert`, a category not even loaded in that namespace);
+- per item in `operations`: `get_reply`, `reply_code_actions`, `alert_on_error`, and `proves`, one plain line on what a completed
+  message proves there (9.9).
 
 Options, for this call and the apply alike: `production` (when several exist and none runs), `shutter_host` and `shutter_port`
 (the forwarder's target: 127.0.0.1 and this instance's web server port by default; on a licensed instance give the Web
@@ -484,7 +491,7 @@ left. Those messages' bodies then stay for good: with 12 left, the purge answere
 `^Ens.MessageBodyD` whose class no longer resolves.
 
 **On another instance.** A watched namespace on a separate instance cannot take a mapping, and these calls read only their own
-instance. Load `src/Shutter/Intake/` (Forward, Forwarded, Forwarder, AlertProcess) and `src/Shutter/Util/Json.cls`, `Schemas.cls` and
+instance. Load `src/Shutter/Intake/` (Forward, Forwarded, Forwarder, AlertProcess, AckMatch) and `src/Shutter/Util/Json.cls`, `Schemas.cls` and
 `Time.cls` there, add the items by hand with `HTTPServer` naming Shutter's host, and create the user on Shutter's instance. A
 partial load compiles and starts, and fails only on the first forward. Not supported yet: a production review of another instance,
 and releasing a held case from it (`KnownIn` reads only this instance).
@@ -502,10 +509,85 @@ and releasing a held case from it (`KnownIn` reads only this instance).
 | `Second Parser ... ClassNotFoundException` | As far as I can tell, its jar is not built | `pex/build.sh`, or leave it. Nothing else depends on it |
 | `ErrInNoConnectionPort`, or `#6030 'From' property` from `Site Alerts` | Stock service noise, or your own mail settings | Not Shutter's |
 
+**9.9 What a green message proves here.** Shutter hears of a delivery that failed as the engine sees it. A message the engine completed is
+not a failure, whatever happened after. For each receiver, find out which of these you have, and put it in the receiver's notes:
+
+| Level | What a completed message means | Where it shows |
+| --- | --- | --- |
+| None | It was written to the connection | `get_reply` false |
+| Transport or commit | The receiver's listener or its integration engine took it. Its application may still refuse it, or the engine may fail it further on | `MSA` `CA`, or `AA` from an engine that answers on receipt |
+| Application | The application itself accepted it | `AA` from the application, on the connection or on a feed of its own |
+| Read-back | Someone read it back from the receiver | Not an ACK: a receiver with an API, whose history Shutter reads after a write |
+
+The settings cannot tell the second level from the third: **ask the receiver's supplier what its positive ACK means**, and whether a later failure comes
+back, and where. An integration engine in front of an application commonly accepts for it. A stock IRIS TCP service does so too: with its defaults
+(`AckMode` Immed, `UseAckCommitCodes` on) it answered `CA` in every run here, even to messages whose delivery then failed.
+
+Settings to read: on the operation, `GetReply` (the TCP adapter's, default on), `ReplyCodeActions` (empty means the engine's default
+`:?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C`), `AlertOnError`, and `SaveReplies` to keep the replies. On a service, `AckMode`, `UseAckCommitCodes` and
+`IgnoreInboundAck`. The plan gives the first three per operation, each as the value that applies, and `proves`. A class of your own with its own
+`OnGetReplyAction` decides for itself, which the plan does not read. The production review reports `REPLY_CODES_LENIENT` (a negative code treated as
+sent) and `REPLY_CODES_SUSPEND_UNWATCHED` (a negative code suspends and nothing alerts).
+
+**What was measured.** `tests/e2e/onboard_check.py` sends one message to three stock TCP operations and a listener that answers by the message's
+control id, with `AlertOnError` on, `FailureTimeout` 0 and `ResponseTimeout` 3. The status is the message header's, on 2027.1 build 109 and on 2026.2:
+
+| The listener | Stock codes | `GetReply` off | `:AA=C,:CA=S,...` |
+| --- | --- | --- | --- |
+| AA | Completed | Completed | Completed |
+| CA | **Completed** | Completed | Suspended, alert |
+| AE or CE | Suspended, alert | **Completed** | Suspended, alert |
+| AR or CR | Error after the retry, alert | **Completed** | Error after the retry, alert |
+| A reply with no MSA | Suspended, alert | **Completed** | Suspended, alert |
+| No reply | Error, alert | **Completed** | Error, alert |
+| Closes with no reply | Error, alert | **Completed** | Error, alert |
+| CA, then AE on the same connection | **Completed** | Completed | Suspended, alert |
+
+- **`?A` means what it says: AA and CA read alike.** On the stock codes a commit ACK completes a message exactly as an application ACK does.
+- **An AE that follows a CA on one connection is lost.** The operation reads the first reply only, and before the next send it throws away the second
+  with one warning in the event log ("Discarding data found in buffer before HL7 send"). The message stays Completed and nothing alerts.
+- **`GetReply` off awaits nothing.** Every code reads as complete. It is worse than that after a dropped connection: when the listener closed the
+  connection, the next message read Completed and **never reached the listener**, and only the one after that failed on the write.
+- **Setting `:CA=S` does not make the engine wait for an application ACK.** It suspends every message a receiver answers with CA, and each raises an alert
+  and, once onboarded, opens a case. Use it only with a receiver that answers AA from its application on the connection.
+- **What opens a case.** Only what does not complete and raises an alert. An AE on the connection was suspended and its alert opened a case. Every
+  bold cell in the table raises nothing.
+
+**An application ACK on a feed of its own.** Some receivers answer the connection at once and send their AA, AE or AR later, as a message of their own, to a
+service in your namespace. The engine has completed the message by then, and stock IRIS does not relate one to the other. To bring the negative ones in,
+`tests/e2e/onboard_site/` has a worked example you can copy (`OnbAck.Production.cls`, `OnbAck.AckProcess.cls`):
+
+1. **The service for the feed:** a stock HL7 service with **`IgnoreInboundAck` off** and `AckMode` `Never`. Measured: with the stock `IgnoreInboundAck` on,
+   an AE on that service was dropped, no header reached its target, and no case opened.
+2. **A small process as its target,** naming in `Receiver` the item that delivered. On each message it calls
+   `##class(Shutter.Intake.AckMatch).ForwardFor(request, ..Receiver, .problem, .session)`. An answer goes to `Shutter Forwarder` with `SendRequestAsync`; a
+   `problem` goes to your alerts; and `OnResponse` tells `AlertProcess.ForwardAnswered`. It is about twenty lines. `AckMatch` comes with the mapping the apply
+   makes, so apply first.
+3. **Test it:** send a message, and send its AE to the feed.
+
+Measured, on a namespace onboarded as above, with a listener answering CA and an ORM sent through it:
+
+| On the feed | Result |
+| --- | --- |
+| Nothing at all | The message reads Completed. No case |
+| AA or CA | The process takes it and does nothing |
+| AE | A case on the receiver, with the service as its route, `originHeaderId` the header of the message the AE answered, and the text "The receiver's acknowledgement feed answered AE to the message ... sent to ...", with the receiver's words. An ORM escalates, as section 10 says |
+| AR for an ADT | A case of kind `rejected`, reason `ack_AR`. A draft receiver blocks any write |
+| The same AE again, or one for a message an AE on the connection already reported | No second case |
+| AR naming a control id not found | No case, and an alert to your consumer naming the control id |
+
+Limits of this route: it matches MSA-2 to the MSH-10 of what the operation sent, among the last 5000 messages to that item, newest first (`lookback`; IRIS has no index on it, so a
+larger one costs a read of each), so a receiver that answers with another id gets the alert above. A DTL on the route is fine for the match, and the case still holds
+what the service received (section 10). Only ACKs on an HL7 service were tried, and only on stock TCP services.
+
+**Not there: waiting for an ACK that never comes.** Nothing times out a message whose application ACK has not arrived. This is planned, not built.
+
 ## 10. What a watched namespace does not get
 
 Say these plainly to whoever owns the feed.
 
+- **A message accepted by a transport ACK and then lost downstream raises nothing in Shutter today.** The engine completed it, so no alert comes and no case
+  opens. The same goes for an operation with `GetReply` off, and for an application ACK that never arrives. A negative ACK on a feed of its own opens a case only with the process in 9.9.
 - **Non-ADT messages have no recovery.** Orders, results and documents open a case and escalate; a person corrects them. They do
   not group: 5 failed results are 5 cases, and an outage is one case per message, not an incident.
 - **An MLLP operation retrying forever (`FailureTimeout` -1, the stock TCP operation's default, which the plan now warns of whether

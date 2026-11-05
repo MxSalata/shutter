@@ -1,11 +1,12 @@
-# usage: mllp.py PORT FILE... : sends each file over MLLP and prints the ACK's MSA. Run inside the container.
-import socket, sys, time
+# usage: mllp.py PORT FILE... : sends each file over MLLP and prints the ACK's MSA. Run inside the container. MLLP_WAIT: seconds to wait for it.
+import os, socket, sys, time
+wait = float(os.environ.get('MLLP_WAIT', 20))
 port = int(sys.argv[1])
 for f in sys.argv[2:]:
     data = open(f, 'rb').read().replace(b'\n', b'\r')
     s = socket.create_connection(('127.0.0.1', port), timeout=20)
     s.sendall(b'\x0b' + data + b'\x1c\r')
-    s.settimeout(20)
+    s.settimeout(wait)
     buf = b''
     try:
         while b'\x1c\r' not in buf:

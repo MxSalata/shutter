@@ -107,6 +107,32 @@ ClassMethod Read(ns As %String, production As %String = "", credential As %Strin
                 If $ISOBJECT(compiled) Set timeout = $TRANSLATE(compiled.InitialExpression, $CHAR(34))
             }
             Set r."failure_timeout" = timeout
+            // An HL7 operation's acknowledgement settings, the value that applies, by the same order; an empty ReplyCodeActions is the engine's default.
+            If kind = "hl7_operation" {
+                Set actions = $GET(s("ReplyCodeActions")), from = "item"
+                If actions = "" {
+                    Set from = "default_settings"
+                    Set dsc = ##class(Ens.Config.DefaultSettings).%GetSetting(chosen, item.Name, cls, "Host", "ReplyCodeActions", .actions)
+                    If 'dsc Set actions = "", from = "class"
+                }
+                If actions = "" {
+                    Set from = "class"
+                    Set compiled = ##class(%Dictionary.CompiledProperty).%OpenId(cls _ "||ReplyCodeActions", 0)
+                    If $ISOBJECT(compiled) Set actions = $TRANSLATE(compiled.InitialExpression, $CHAR(34))
+                }
+                Set r."reply_code_actions" = actions, r."reply_code_actions_from" = from
+                Set adapter = $PARAMETER(cls, "ADAPTER")
+                Do r.%Set("get_reply", "", "null")
+                If (adapter '= "") && ##class(%Dictionary.CompiledProperty).%ExistsId(adapter _ "||GetReply") {
+                    Set reply = $GET(s("GetReply"))
+                    If reply = "" {
+                        Set dsc = ##class(Ens.Config.DefaultSettings).%GetSetting(chosen, item.Name, cls, "Adapter", "GetReply", .reply)
+                        If 'dsc Set reply = ""
+                    }
+                    If reply = "" Set reply = $TRANSLATE(##class(%Dictionary.CompiledProperty).%OpenId(adapter _ "||GetReply", 0).InitialExpression, $CHAR(34))
+                    Do r.%Set("get_reply", ''reply, "boolean")
+                }
+            }
             If cls = "Shutter.Intake.Forwarder" {
                 Set f = {"item": (item.Name), "server": ($GET(s("HTTPServer"))), "port": ($GET(s("HTTPPort"))), "ssl": ($GET(s("SSLConfig"))), "credential": ($GET(s("Credentials"))), "path": ($GET(s("IntakePath"), "/api/shutter/intake")), "prefix": ($GET(s("ReceiverPrefix")))}
                 Do f.%Set("enabled", ''item.Enabled, "boolean")
@@ -232,6 +258,26 @@ ClassMethod TakenElsewhere(ns As %String, item As %String) As %Boolean
     Quit (from '= "") && (from '= ns)
 }
 
+/// One plain line on what a completed message proves at an HL7 operation, from the settings that apply (measured on a stock TCP
+/// operation; docs/INSTALL.md 9.9): getReply is 1, 0, or "" when the adapter has no such setting.
+ClassMethod CompletedProves(getReply As %String, actions As %String) As %String
+{
+    If getReply = "" Quit "Not on the TCP adapter, so GetReply does not apply, and Shutter has measured nothing here: send a test message and see what comes back before relying on a completed message"
+    If 'getReply Quit "Nothing is awaited: a completed message proves only that it was written to the connection. ReplyCodeActions is never read, so even a NACK reads as complete"
+    Set sweep = "Shutter.Review.Sweep"
+    Set aa = $CLASSMETHOD(sweep, "ReplyAction", actions, "AA"), ca = $CLASSMETHOD(sweep, "ReplyAction", actions, "CA")
+    Set bad = ""
+    For code = "AE", "AR", "CE", "CR" {
+        Set action = $CLASSMETHOD(sweep, "ReplyAction", actions, code)
+        If $CLASSMETHOD(sweep, "IsLenient", action) Set bad = bad _ $SELECT(bad = "": "", 1: ", ") _ code _ "=" _ action
+    }
+    If bad '= "" Quit "A reply is awaited, but a negative code also counts as complete here (" _ bad _ "): a completed message does not prove the receiver accepted it"
+    Set aaOk = $CLASSMETHOD(sweep, "IsLenient", aa), caOk = $CLASSMETHOD(sweep, "IsLenient", ca)
+    If aaOk && caOk Quit "A reply is awaited, and any positive code counts as complete, so an accept or commit ACK reads the same as an application ACK: a completed message proves the receiver's listener answered, not that its application processed the message"
+    If aaOk Quit "A reply is awaited, and only AA completes (CA=" _ ca _ "): a completed message proves the receiver answered AA, which is an application ACK only if its engine does not answer AA on receipt, so ask"
+    Quit "A reply is awaited, and neither AA nor CA completes here (AA=" _ aa _ ", CA=" _ ca _ "): read these settings before relying on them"
+}
+
 /// The plan for a namespace, changing nothing: what is there, what is wired already, and in actions exactly what Apply
 /// would do, one entry each; todo is what only a person can do. Options: production, shutter_host, shutter_port, ssl_config,
 /// credential, receivers (a comma-separated list in place of the namespace's HL7 operations), alert_on_error (true: turn
@@ -278,6 +324,17 @@ ClassMethod Plan(ns As %String, options As %DynamicObject = "") As %DynamicObjec
         If $ISOBJECT(entry) {
             Do o.%Set("has_api", $ISOBJECT(entry.%Get("api")), "boolean")
             Do o.%Set("draft", ##class(Shutter.Util.Json).Bool(entry, "draft", 0), "boolean")
+        }
+        If item.kind = "hl7_operation" {
+            Do o.%Set("get_reply", item."get_reply", $SELECT(item."get_reply" = "": "null", 1: "boolean"))
+            Set actions = item."reply_code_actions", o."reply_code_actions_from" = item."reply_code_actions_from"
+            If actions = "" Set actions = ##class(Shutter.Review.Checks).#DOCUMENTEDREPLYCODEACTIONS, o."reply_code_actions_from" = "engine_default"
+            Set o."reply_code_actions" = actions
+            Set o.proves = ..CompletedProves(item."get_reply", actions)
+        } Else {
+            Do o.%Set("get_reply", "", "null")
+            Set o."reply_code_actions" = "", o."reply_code_actions_from" = ""
+            Set o.proves = "A connector of the site's own: what completes here is its code's choice, so read it"
         }
         Do plan.operations.%Push(o)
         If 'item."alert_on_error" Set noAlert = noAlert _ $LISTBUILD(name)

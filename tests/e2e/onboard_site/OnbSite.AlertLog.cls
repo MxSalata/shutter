@@ -8,6 +8,7 @@ Parameter INVOCATION = "Queue";
 Method OnAlert(request As Ens.AlertRequest, Output response As Ens.Response) As %Status
 {
     Set ^OnbSite.Alerts = $GET(^OnbSite.Alerts) + 1
+    Set ^OnbSite.Alerts(^OnbSite.Alerts) = request.SourceConfigName _ " | " _ $EXTRACT(request.AlertText, 1, 160)
     Quit $$$OK
 }
 
