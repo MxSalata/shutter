@@ -1,4 +1,15 @@
-import { Anchor, Badge, Button, Card, Group, SimpleGrid, Stack, Text, Title } from '@mantine/core';
+import {
+  Anchor,
+  Badge,
+  Button,
+  Card,
+  Group,
+  SimpleGrid,
+  Stack,
+  Text,
+  Title,
+  VisuallyHidden,
+} from '@mantine/core';
 import { IconExternalLink, IconHome2 } from '@tabler/icons-react';
 import type { CSSProperties } from 'react';
 import { Link } from 'react-router';
@@ -23,6 +34,7 @@ import {
  * from a laptop up, so it takes the page's width and not the measure a long lead needs.
  */
 export default function HomePage() {
+  const hidden = scenariosHidden(useCan());
   return (
     <Stack gap="lg">
       <PageHeader
@@ -39,14 +51,14 @@ export default function HomePage() {
       />
       <FirstStep />
       <PortalCard />
-      {SECTIONS.map(({ group, about, items }) => (
+      {SECTIONS.map(({ group, about, aboutLookOnly, items }) => (
         <Stack key={group} gap="xs" component="section" aria-labelledby={`home-${group}`}>
           <Group gap="xs" align="baseline" wrap="wrap">
             <Title order={2} id={`home-${group}`}>
               {group}
             </Title>
             <Text c="dimmed" size="sm">
-              {about}
+              {(hidden && aboutLookOnly) || about}
             </Text>
           </Group>
           {/* Three across only when they fill the row, so four sections make two rows of two and none stands alone */}
@@ -117,6 +129,7 @@ function PortalCard() {
         <Stack gap={4} style={{ minWidth: 0 }}>
           <Title order={2} size="h4">
             {PORTAL_PAGE.label} <IconExternalLink size={14} aria-hidden style={{ verticalAlign: 'middle' }} />
+            <VisuallyHidden>(opens in a new tab)</VisuallyHidden>
           </Title>
           <Text size="sm">{PORTAL_PAGE.about}</Text>
           <Text size="sm" c="dimmed">

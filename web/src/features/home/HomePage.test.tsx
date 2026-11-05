@@ -44,6 +44,12 @@ describe('HomePage', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
+  it('tells a role that may not run scenarios to follow the recovery, not to run it', async () => {
+    renderHome({ ...ALL, configure: false, scenarios: false });
+    expect(await screen.findByText('Follow the recovery and who decided.')).toBeInTheDocument();
+    expect(screen.queryByText('Run the recovery and follow it.')).not.toBeInTheDocument();
+  });
+
   it('links to every section of the navigation and says what it is for', async () => {
     renderHome();
     await screen.findByRole('heading', { level: 1, name: 'Home' });

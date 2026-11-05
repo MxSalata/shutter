@@ -32,6 +32,8 @@ export interface SectionGroup {
   group: 'Operate' | 'Results' | 'Configure';
   /** What a visit to the group is for, for the Home page. */
   about: string;
+  /** The same for a role that may not run scenarios, when the words above would tell it to. */
+  aboutLookOnly?: string;
   items: SectionItem[];
 }
 
@@ -45,6 +47,7 @@ export const SECTIONS: SectionGroup[] = [
   {
     group: 'Operate',
     about: 'Run the recovery and follow it.',
+    aboutLookOnly: 'Follow the recovery and who decided.',
     items: [
       {
         to: '/scenarios',
