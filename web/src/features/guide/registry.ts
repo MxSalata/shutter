@@ -135,6 +135,18 @@ export function modesSay(trial: boolean, canRun = true): string {
   return `Choose who proposes fixes: Board, Site policy, ${single} or Rules only. Every fix needs a person, or the site's written policy.`;
 }
 
+/** What this role can do in the trial, in words: the welcome promises nothing the role's controls grey out. */
+export function welcomeActions(can: Can): string {
+  const verbs = [
+    can.approve && 'approve',
+    can.scenarios && 'run',
+    can.configure && 'save',
+    'escalate',
+  ].filter((v): v is string => !!v);
+  const said = verbs.length > 1 ? `${verbs.slice(0, -1).join(', ')} or ${verbs.at(-1)}` : verbs[0];
+  return said.charAt(0).toUpperCase() + said.slice(1);
+}
+
 export const CHAPTERS: GuideChapter[] = [
   {
     id: 'scenarios',

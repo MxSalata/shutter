@@ -15,8 +15,9 @@ import CasePage from '@/features/cases/CasePage';
 import EvaluationPage from '@/features/evaluation/EvaluationPage';
 import ScenariosPage from '@/features/scenarios/ScenariosPage';
 import { INITIAL, type GuideProgress } from './controller';
-import { APPROVED_FOR_YOU, Guide, welcomeActions } from './Guide';
+import { APPROVED_FOR_YOU, Guide } from './Guide';
 import { TrialHelpMenu } from './HelpMenu';
+import { welcomeActions } from './registry';
 import { forgetProgress, GUIDE_KEY, saveProgress } from './storage';
 import { useGuide } from './store';
 
