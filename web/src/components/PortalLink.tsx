@@ -18,6 +18,7 @@ export function PortalLink({
   size = 'sm',
   screenshot,
   tourAction,
+  quiet = false,
 }: {
   href: string;
   children: React.ReactNode;
@@ -28,6 +29,8 @@ export function PortalLink({
   screenshot?: Screenshot;
   /** The guide's name for the control, when a step invites the reader to use it (`data-tour-action`). */
   tourAction?: string;
+  /** In the trial, leave out "(needs a real install)": a link beside it has said so already. */
+  quiet?: boolean;
 }) {
   const [shown, setShown] = useState(false);
   if (TRIAL && screenshot)
@@ -70,7 +73,8 @@ export function PortalLink({
           data-tour-action={tourAction}
         >
           <IconExternalLinkOff size={12} aria-hidden style={{ verticalAlign: 'middle', marginRight: 2 }} />
-          {children} (on an instance)
+          {children}
+          {quiet ? '' : ' (needs a real install)'}
         </Text>
       </Tooltip>
     );

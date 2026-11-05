@@ -14,10 +14,11 @@ import { IconExternalLink, IconHome2 } from '@tabler/icons-react';
 import type { CSSProperties } from 'react';
 import { Link } from 'react-router';
 import { scenariosHidden } from '@/api/can';
-import { useCan, useHealth } from '@/api/hooks';
+import { useCan, useCases, useHealth } from '@/api/hooks';
 import { PageHeader } from '@/components/PageHeader';
 import { Term } from '@/components/Term';
 import { TRIAL, trialHref } from '@/env/mode';
+import { PORTAL_SIGN_IN } from '@/lib/hospital';
 import { hueVar } from '@/lib/hues';
 import {
   PORTAL_PAGE,
@@ -105,8 +106,35 @@ function FirstStep() {
             </Anchor>
           ) : null}
         </Group>
+        {hidden && !playerOff ? <CasesToOpen /> : null}
       </Stack>
     </Card>
+  );
+}
+
+/**
+ * For the role that can't run scenarios, the two cases that show most, each only while it exists: S8, whose agents
+ * disagreed, and a plan waiting for approval, S2's by preference since it is the plainest.
+ */
+function CasesToOpen() {
+  const can = useCan();
+  const s8 = useCases({ scenario: 'S8', limit: 100 }).data?.items.find((c) => c.scenario === 'S8');
+  const held = useCases({ state: 'awaiting_approval', limit: 100 }, can.approve).data?.items;
+  const waiting = held?.find((c) => c.scenario === 'S2') ?? held?.[0];
+  if (!s8 && !waiting) return null;
+  return (
+    <Stack gap={4} data-testid="home-cases-to-open">
+      {s8 ? (
+        <Anchor component={Link} to={`/cases/${encodeURIComponent(s8.caseId)}`} size="sm">
+          See the agents disagree: {s8.caseId}
+        </Anchor>
+      ) : null}
+      {waiting ? (
+        <Anchor component={Link} to={`/cases/${encodeURIComponent(waiting.caseId)}`} size="sm">
+          Approve a fix yourself: {waiting.caseId}
+        </Anchor>
+      ) : null}
+    </Stack>
   );
 }
 
@@ -137,7 +165,7 @@ function PortalCard() {
           </Title>
           <Text size="sm">{PORTAL_PAGE.about}</Text>
           <Text size="sm" c="dimmed">
-            Online demo: Cloudflare sign-in first (GitHub or an emailed code).
+            Online demo: Cloudflare sign-in first ({PORTAL_SIGN_IN}).
           </Text>
         </Stack>
       </Group>
