@@ -22,7 +22,7 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
 const HEADLINE =
-  'When an HL7 transfer fails, Shutter works out what is true and fixes it only when it is safe.';
+  'Shutter fixes a failed HL7 transfer only when it can show the fix is safe.';
 const PURPOSE =
   'When a patient movement fails to reach another system, Shutter finds out why and writes a fix only when it is safe to.';
 

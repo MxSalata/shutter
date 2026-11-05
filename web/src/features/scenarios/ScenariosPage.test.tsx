@@ -111,7 +111,7 @@ describe('ScenariosPage', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'What a scenario does' }));
     expect(
       await screen.findByRole('heading', {
-        name: 'When an HL7 transfer fails, Shutter works out what is true and fixes it only when it is safe.',
+        name: 'Shutter fixes a failed HL7 transfer only when it can show the fix is safe.',
       }),
     ).toBeInTheDocument();
     const steps = screen.getByRole('list', { name: 'What happens to every case' });

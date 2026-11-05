@@ -71,8 +71,8 @@ export function ProofPanel({ figures, proof = PROOF }: { figures: boolean; proof
           {APP_TAGLINE}
         </Text>
         <Text component="h2" id={headline} className="hero-statement" m={0} maw="26em">
-          When an <Term term="hl7-transfer">HL7 transfer</Term> fails, Shutter works out what is true and
-          fixes it only when it is safe.
+          Shutter fixes a failed <Term term="hl7-transfer">HL7 transfer</Term> only when it can show the fix
+          is safe.
         </Text>
         <Text size="lg" m={0} maw="34em">
           When a patient movement fails to reach another system, Shutter finds out why and writes a fix only

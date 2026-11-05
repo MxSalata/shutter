@@ -60,9 +60,9 @@ describe('HomePage', () => {
     renderHome();
     const heading = await screen.findByRole('heading', { level: 1, name: 'Home' });
     const page = heading.closest('main') ?? document.body;
-    expect(page.textContent).toMatch(
-      /fails, Shutter works out what is true and fixes it only when it is safe\./,
-    );
+    // The term's definition sits inside the sentence's text, so the words are read either side of it
+    expect(page.textContent).toMatch(/Shutter fixes a failed HL7 transfer/);
+    expect(page.textContent).toMatch(/only when it can show the fix is safe\./);
   });
 
   it('starts someone new at the scenarios', async () => {

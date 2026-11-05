@@ -62,14 +62,14 @@ export function ScenariosHero({ demo = false }: { demo?: boolean }) {
     <Stack
       gap="xs"
       component="section"
-      aria-label="When an HL7 transfer fails, Shutter works out what is true and fixes it only when it is safe."
+      aria-label="Shutter fixes a failed HL7 transfer only when it can show the fix is safe."
     >
       <ProofLine />
       <TechDetail label="What a scenario does" kind="explain">
         <Stack gap="sm">
           <Text component="h2" fz="lg" fw={600} m={0}>
-            When an <Term term="hl7-transfer">HL7 transfer</Term> fails, Shutter works out what is true and
-            fixes it only when it is safe.
+            Shutter fixes a failed <Term term="hl7-transfer">HL7 transfer</Term> only when it can show the fix
+            is safe.
           </Text>
           <Text size="md" maw="68ch">
             {demo

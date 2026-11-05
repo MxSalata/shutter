@@ -13,7 +13,8 @@ import { SECTIONS, useNeedAPerson, type SectionItem } from '@/features/shell/sec
 /**
  * Where the app opens: what Shutter does, where to start, what needs a person now, and what each section is for. It only
  * points: every fact here is a section's own, and the sections come from the list the navigation is drawn from. The lead is
- * Scenarios' sentence, because its fold starts closed and this is the first thing anyone reads.
+ * Scenarios' sentence, because its fold starts closed and this is the first thing anyone reads; it is one short line
+ * from a laptop up, so it takes the page's width and not the measure a long lead needs.
  */
 export default function HomePage() {
   return (
@@ -22,10 +23,11 @@ export default function HomePage() {
         title="Home"
         icon={IconHome2}
         hue="cyan"
+        leadMaw="none"
         lead={
           <>
-            When an <Term term="hl7-transfer">HL7 transfer</Term> fails, Shutter works out what is true and
-            fixes it only when it is safe.
+            Shutter fixes a failed <Term term="hl7-transfer">HL7 transfer</Term> only when it can show the fix
+            is safe.
           </>
         }
       />
