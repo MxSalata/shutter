@@ -16,6 +16,10 @@ export interface CaseAction {
   short: string;
   /** The accessible name, the state in a sentence, the label inside it: "Needs you: decide on the resend". */
   name: string;
+  /** Where it goes instead of "What needs you now": the side by side of a scenario's two runs. */
+  compare?: boolean;
+  /** Nothing is pending, but the outcome isn't what the scenario expects: never drawn as all clear. */
+  differs?: boolean;
 }
 
 const lowerFirst = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
@@ -33,6 +37,28 @@ const nothing = (why = ''): CaseAction => ({
   short: 'No action',
   name: `No action needed on this case${why ? `: ${why}` : ''}`,
 });
+
+/**
+ * A closed case that came out other than its scenario expects has nothing pending, and "No action needed" would still
+ * read as all clear under a wrong write. S8 has its other run to compare with; another scenario shows the card's words.
+ */
+const notExpected = (scenario: string): CaseAction =>
+  scenario === 'S8'
+    ? {
+        needsYou: false,
+        label: 'Compare the two runs',
+        short: 'Compare',
+        name: 'Not the expected outcome: compare the two runs',
+        compare: true,
+        differs: true,
+      }
+    : {
+        needsYou: false,
+        label: 'See what differs',
+        short: 'Differs',
+        name: 'Not the expected outcome: see what differs',
+        differs: true,
+      };
 
 const notYours = (label: string, why = ''): CaseAction => ({
   needsYou: false,
@@ -59,6 +85,8 @@ export interface ActionContext {
   closeNeedsApprover?: boolean;
   /** The trial: a reinvestigation needs a real model and is not offered. */
   trial?: boolean;
+  /** The case closed with an outcome its scenario doesn't expect (lib/status.ts caseOutcome). */
+  notAsExpected?: boolean;
 }
 
 /**
@@ -69,11 +97,13 @@ export interface ActionContext {
  *   when that is the next step, reinvestigates a failed one (not in the trial), and otherwise decides the next step
  *   "What needs you now" names; a user who cannot operate waits for an operator, and a site with the two-person rule
  *   leaves closing to an approver;
+ * - closed other than its scenario expects: the way to see that;
  * - running, or closed: nothing is needed.
  */
 export function caseActionOf(f: CaseFacts, ctx: ActionContext): CaseAction {
   const { c } = f;
   const next = nextAction(f);
+  if (ctx.notAsExpected && next.kind === 'none') return notExpected(c.scenario);
   if (c.disposition === 'abandoned' || c.disposition === 'handled_by_hand' || next.kind === 'none')
     return nothing();
   if (next.kind === 'shutter') return nothing(`Shutter is ${caseState(c.state).label.toLowerCase()}`);

@@ -33,6 +33,13 @@ describe('compareSide', () => {
     expect(r.result).toBe('Wrote WARD-B over WARD-C: version 2 to 3');
     expect(r.writes).toBe(1);
     expect(r.verification).toMatch(/^Verified: /);
+    expect(r.patient).toBe("Patient ends in WARD-B, over the bed manager's WARD-C");
+    expect(r.outcome).toMatchObject({
+      state: 'resolved',
+      writes: 1,
+      verification: 'verified',
+      mode: 'rules',
+    });
   });
 
   it("says the board escalated citing E7, wrote nothing and kept the conformance member's dissent", () => {
@@ -40,6 +47,22 @@ describe('compareSide', () => {
     expect(b.result).toBe('Escalate, citing E7; no write');
     expect(b.writes).toBe(0);
     expect(b.dissent).toMatch(/^Conformance said resend/);
+    expect(b.patient).toBe('Patient stays in WARD-C; a person decides');
+  });
+
+  it('claims nothing about the patient when a write went out and none is confirmed', () => {
+    const x = fixtures.cases['C-000021'];
+    const attempt = x.attempts[0];
+    const unconfirmed = compareSide({
+      c: x.detail as unknown as CaseDetail,
+      plan: x.plan as unknown as PlanView,
+      attempts: [
+        { ...attempt, attempt: { ...attempt.attempt, outcome: 'uncertain', receipt: null } },
+      ] as unknown as AttemptView[],
+      closure: null,
+      snapshot: x.snapshot as unknown as Snapshot,
+    });
+    expect(unconfirmed.patient).toBe('');
   });
 });
 

@@ -264,7 +264,9 @@ function CaseBody({ c }: { c: CaseDetail }) {
     me,
     trial: TRIAL,
     closeNeedsApprover: site.isError ? false : site.data ? closeNeedsApprover(site.data.profile) : undefined,
+    notAsExpected: verdict.key === 'not-as-expected',
   });
+  const showCompare = () => openStep('compare', 's8-compare');
   return (
     <AskSurface caseId={c.caseId} open={asking} onClose={closeAsk}>
       <CaseHeader
@@ -277,7 +279,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
         actions={
           <>
             <ConveneBoard c={c} />
-            <CaseActionButton action={action} />
+            <CaseActionButton action={action} onCompare={showCompare} />
             <AskButton
               ref={askButton}
               open={asking}
@@ -296,7 +298,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
         investigation={boardOnTop ? 'the board' : undefined}
       />
       <S8RulesNote c={c} />
-      <CounterpartStrip c={c} onCompare={() => openStep('compare', 's8-compare')} />
+      <CounterpartStrip c={c} writesSent={facts.receipt.writes} onCompare={showCompare} />
       {/* Said once the replay has played: the approval the receipt shows is the recording's, and yours is noted */}
       {played ? (
         <Text
@@ -322,6 +324,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
         outcome={shown}
         fading={played}
         onSeePrecedents={seePrecedents}
+        onCompare={showCompare}
       />
       {placing ? <PageSkeleton label="Loading the investigation…" /> : null}
       {placing ? null : (
@@ -340,7 +343,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
                 Audit trail
               </Tabs.Tab>
             </Tabs.List>
-            <CaseActionButton action={action} compact />
+            <CaseActionButton action={action} compact onCompare={showCompare} />
           </div>
           <Tabs.Panel value="summary" pt="md" {...PANEL}>
             <Stack gap="md">

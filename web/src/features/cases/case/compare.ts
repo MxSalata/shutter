@@ -2,6 +2,7 @@ import type { AttemptView, CaseDetail, CaseSummary, Closure, PlanView, Snapshot 
 import { asArray, asObject } from '@/lib/json';
 import { displayZone, formatZoned, humanize } from '@/lib/format';
 import type { PlayedResult } from '@/lib/proof';
+import type { OutcomeCase } from '@/lib/status';
 import type { Tone } from '@/lib/tone';
 import { WRITE_OUTCOMES } from './receipt';
 import { encounterTimeline, type TimelineRow } from './timeline';
@@ -39,6 +40,10 @@ export interface CompareSide {
   state: string;
   disposition: string;
   catalogueEntry: string;
+  /** What the case's outcome is read from, with the writes and verification this side found. */
+  outcome: OutcomeCase;
+  /** How it ended for the patient, the card's headline; empty when the writes leave that unknown. */
+  patient: string;
   /** What happened at the receiver, in one line. */
   result: string;
   writes: number;
@@ -87,6 +92,20 @@ export function evidenceFacts(snapshot: Snapshot | null | undefined): EvidenceFa
   };
 }
 
+/**
+ * Where the run left the patient, so a reader doesn't have to work it out from versions and receipts. The ward the
+ * receiver held when observed is the bed manager's: on S8, the only scenario compared here, its transfer is what landed.
+ */
+function patientLine(written: string, before: string, sent: number): string {
+  if (written)
+    return before && before !== written
+      ? `Patient ends in ${written}, over the bed manager's ${before}`
+      : `Patient ends in ${written}`;
+  // A write went out and none is confirmed: where the patient is stays for the verifier to say
+  if (sent || !before) return '';
+  return `Patient stays in ${before}; a person decides`;
+}
+
 export function compareSide({
   c,
   plan,
@@ -119,6 +138,15 @@ export function compareSide({
     state: c.state,
     disposition: p?.disposition || c.disposition,
     catalogueEntry: str(p?.catalogueEntry),
+    outcome: {
+      state: c.state,
+      disposition: c.disposition,
+      receiver: c.receiver,
+      mode: c.mode,
+      writes: sent.length,
+      verification: str(verified?.outcome) || undefined,
+    },
+    patient: patientLine(str(written?.ward), str(before), sent.length),
     result,
     writes: sent.length,
     verification: verified ? `${humanize(verified.outcome)}: ${verified.summary}` : '',

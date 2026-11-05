@@ -58,6 +58,58 @@ test.describe('the guided path', () => {
     ).toBeVisible();
   });
 
+  test('says at a glance which of the two S8 runs was wrong, at every width', async ({ page }) => {
+    for (const width of [1920, 1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await go(page, '/cases/C-000008?show=compare');
+      const rules = page.getByTestId('compare-rules');
+      await expect(rules.getByTestId('compare-patient')).toHaveText(
+        "Patient ends in WARD-B, over the bed manager's WARD-C",
+      );
+      await expect(rules.getByText('Not as expected')).toBeVisible();
+      await expect(rules.getByText('Resolved', { exact: true })).toHaveCount(0);
+      const board = page.getByTestId('compare-board');
+      await expect(board.getByTestId('compare-patient')).toHaveText(
+        'Patient stays in WARD-C; a person decides',
+      );
+      await expect(board.getByText('As expected')).toBeVisible();
+      // The time and the digests wait behind their fold in Plain
+      await expect(
+        page.getByRole('region', { name: /^S8 side by side/ }).getByText('Snapshot digest'),
+      ).toBeHidden();
+      // The evidence reads on a phone: no column starts past the window's edge, and the page doesn't scroll sideways
+      const cell = page
+        .getByRole('region', { name: /^S8 side by side/ })
+        .getByRole('cell', { name: /WARD-C at version 2/ })
+        .last();
+      const box = (await cell.boundingBox())!;
+      expect(box.x + box.width).toBeLessThanOrEqual(width);
+      if (width === 390) expect(box.x).toBeLessThan(100);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    }
+  });
+
+  test('takes the top button of the wrong write to the two runs, not to "No action needed"', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await go(page, '/cases/C-000021');
+    const action = page.getByTestId('case-action');
+    await expect(action).toHaveText('Compare the two runs');
+    await expect(action).toHaveAccessibleName('Not the expected outcome: compare the two runs');
+    await action.click();
+    await expect(page.getByRole('heading', { name: /^S8 side by side/ })).toBeFocused();
+    await expect(page.getByRole('heading', { name: /^S8 side by side/ })).toBeInViewport();
+  });
+
+  test('keeps the pair for the demo role in the trial, where both runs are recorded', async ({ page }) => {
+    await signIn(page, { as: 'demo' });
+    await go(page, '/cases/C-000008?show=compare', { as: 'demo' });
+    // The note that sends a reader to the trial is for a live demo: here it would point at the page it is on
+    await expect(page.getByTestId('compare-rules')).toBeVisible();
+    await expect(page.getByText(/Rules only isn't played/)).toHaveCount(0);
+  });
+
   test('shows the same overtaken transfer closed at one receiver and sent for correction at the other', async ({
     page,
   }) => {
