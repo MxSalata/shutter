@@ -52,8 +52,8 @@ describe('LibraryPage in the trial', () => {
     await userEvent.click(sw);
     const card = within(screen.getByRole('article', { name: impact.name }));
     expect(await card.findByText('Changed in the trial only.')).toBeInTheDocument();
-    // Only its own card: nothing else on the page follows the switch, and the card says so
-    expect(card.getByText('This card changes; the recorded runs stay as they were.')).toBeInTheDocument();
+    // Under its own card only, and the recorded runs are not what it changes
+    expect(card.getByText('The recorded runs stay as they were.')).toBeInTheDocument();
     expect(screen.getAllByText('Changed in the trial only.')).toHaveLength(1);
     // The board's count follows the change
     expect(await screen.findByText('On the default board: 3 of 4')).toBeInTheDocument();
