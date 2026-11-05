@@ -479,6 +479,37 @@ describe('CasePage', () => {
     );
   });
 
+  it("offers no comparison from a wrong write on an install that hasn't played the board", async () => {
+    const rules = fixtures.cases['C-000021'].summary;
+    server.use(
+      http.get('/api/shutter/cases', () =>
+        HttpResponse.json({ items: [rules], total: 1, limit: 50, offset: 0 }),
+      ),
+    );
+    renderCase('C-000021');
+    const action = await screen.findByTestId('case-action');
+    await waitFor(() => expect(action).toHaveAccessibleName('Not the expected outcome: see what differs'));
+    const card = await screen.findByRole('heading', { name: 'What needs you now' });
+    const body = card.closest<HTMLElement>('.story-card')!;
+    expect(within(body).getByText("Nothing is pending, but this isn't what S8 expects")).toBeInTheDocument();
+    expect(within(body).queryByRole('button', { name: 'Compare the two runs' })).not.toBeInTheDocument();
+  });
+
+  it("says see the board's run on the run by Rules only, and not on a board run that wrote", async () => {
+    renderCase('C-000021');
+    expect(
+      await screen.findByText("This run wrote what the scenario says it shouldn't: see the board's run"),
+    ).toBeInTheDocument();
+    cleanup();
+    const x = fixtures.cases['C-000021'];
+    server.use(
+      http.get('/api/shutter/cases/C-000021', () => HttpResponse.json({ ...x.detail, mode: 'board' })),
+    );
+    renderCase('C-000021');
+    expect(await screen.findByText("Nothing is pending, but this isn't what S8 expects")).toBeInTheDocument();
+    expect(screen.queryByText(/see the board's run/)).not.toBeInTheDocument();
+  });
+
   describe('on a site that does not play Rules only, as the online demo', () => {
     // The demo's S8 case is a site policy case the policy left to the board: no case of it is in board mode
     const demoOnly = () => {

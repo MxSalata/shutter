@@ -162,6 +162,7 @@ export function DecisionCard({
   fading = false,
   onSeePrecedents,
   onCompare,
+  comparable = false,
 }: {
   facts: CaseFacts;
   /** The case's round of evidence and planning: a re-plan after the receiver changed starts another. */
@@ -176,6 +177,8 @@ export function DecisionCard({
   onSeePrecedents?: () => void;
   /** Opens the side by side of S8's two runs. */
   onCompare?: () => void;
+  /** Both of S8's runs are here to compare. */
+  comparable?: boolean;
 }) {
   const { c, receipt: r } = facts;
   const verdict = outcome ?? caseOutcome(outcomeCaseOf(facts));
@@ -194,7 +197,8 @@ export function DecisionCard({
   const { head: action, rest: actionRest } = actionHead(next.action);
   // A closed case with an outcome its scenario doesn't expect has nothing pending, and saying only that reads as all clear
   const notExpected = verdict.key === 'not-as-expected' && next.kind === 'none';
-  const s8Wrong = notExpected && c.scenario === 'S8' && r.writes > 0;
+  // "See the board's run" only from the run by Rules only, and only where the board's run exists to see
+  const s8Wrong = notExpected && c.scenario === 'S8' && c.mode === 'rules' && r.writes > 0 && comparable;
   const more = !!actionRest || !!correction;
   const hasWhy =
     next.kind === 'person' &&

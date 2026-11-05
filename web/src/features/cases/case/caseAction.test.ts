@@ -184,7 +184,7 @@ describe("the case's action for its reader", () => {
   });
 
   it("offers S8's two runs, never all clear, on a closed case its scenario doesn't expect", () => {
-    expect(caseActionOf(factsOf('C-000021'), { me: ME.approver, notAsExpected: true })).toEqual({
+    expect(caseActionOf(factsOf('C-000021'), { me: ME.approver, notAsExpected: true, comparable: true })).toEqual({
       needsYou: false,
       label: 'Compare the two runs',
       short: 'Compare',
@@ -192,11 +192,15 @@ describe("the case's action for its reader", () => {
       goes: 'compare',
       differs: true,
     });
+    // An install that played S8 only once has no second run to show
+    const alone = caseActionOf(factsOf('C-000021'), { me: ME.approver, notAsExpected: true });
+    expect(alone).toMatchObject({ label: 'See what differs', differs: true });
+    expect(alone.goes).toBeUndefined();
     // Another scenario has no second run to compare with
     const f = factsOf('C-000021');
     const other = caseActionOf(
       { ...f, c: { ...f.c, scenario: 'S3' } },
-      { me: ME.approver, notAsExpected: true },
+      { me: ME.approver, notAsExpected: true, comparable: true },
     );
     expect(other).toMatchObject({ label: 'See what differs', differs: true });
     expect(other.goes).toBeUndefined();

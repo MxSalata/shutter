@@ -3,7 +3,7 @@ import { IconFileSearch, IconHistory, IconListDetails, IconPlayerPlay } from '@t
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router';
-import { isOpen, keys, useCase, useCaseEvents, useMe, useScenarios, useSiteProfile } from '@/api/hooks';
+import { isOpen, keys, useCase, useCaseEvents, useCases, useMe, useScenarios, useSiteProfile } from '@/api/hooks';
 import type { CaseDetail } from '@/api/types';
 import { TRIAL } from '@/env/mode';
 import { ApiSource } from '@/components/ApiSource';
@@ -31,6 +31,7 @@ import { DecisionCard } from './case/DecisionCard';
 import { PortalLinks } from './case/PortalLinks';
 import { PrecedentsSection } from './case/Precedents';
 import { CounterpartStrip, S8RulesNote } from './case/S8Compare';
+import { s8Pair } from './case/compare';
 import { SHOW_EVIDENCE } from './case/evidenceLinks';
 import { rounds } from './case/derive';
 import { nextAction, outcomeCaseOf, provenanceOf, recordedApprovalTime } from './case/outcome';
@@ -260,11 +261,15 @@ function CaseBody({ c }: { c: CaseDetail }) {
   });
   // What the case needs from this reader, for the button at the top and its copy in the tab bar
   const site = useSiteProfile();
+  const s8Cases = useCases({ scenario: 'S8', limit: 50 }, c.scenario === 'S8');
+  const s8Runs = s8Pair(s8Cases.data?.items ?? []);
+  const comparable = !!s8Runs.rules && !!s8Runs.board;
   const action = caseActionOf(facts, {
     me,
     trial: TRIAL,
     closeNeedsApprover: site.isError ? false : site.data ? closeNeedsApprover(site.data.profile) : undefined,
     notAsExpected: verdict.key === 'not-as-expected',
+    comparable,
   });
   const showCompare = () => openStep('compare', 's8-compare');
   const goToAction = (place: ActionPlace) => {
@@ -338,6 +343,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
         fading={played}
         onSeePrecedents={seePrecedents}
         onCompare={showCompare}
+        comparable={comparable}
       />
       {placing ? <PageSkeleton label="Loading the investigation…" /> : null}
       {placing ? null : (
