@@ -126,9 +126,9 @@ Method TestAFailedOrderSaysWhatTheReceiverDid()
     Do $$$AssertTrue($CLASSMETHOD(d, "DescribeFailure", c) [ "may have reached Results Out", "a receiver that did not answer may hold it")
     Set c.FailureOutcome = "rejected"
     Do $$$AssertTrue($CLASSMETHOD(d, "DescribeFailure", c) [ "was refused by Results Out", "a refusal")
-    Do $$$AssertFalse($CLASSMETHOD(d, "DescribeFailure", c) [ "mapped", "and no talk of a mapping")
+    Do $$$AssertTrue('($CLASSMETHOD(d, "DescribeFailure", c) [ "mapped"), "and no talk of a mapping")
     Set c.FailureText = "The message could not be mapped to an operation for the downstream system: no visit number"
-    Do $$$AssertFalse(c.NotModelled(), "an ADT that could not be mapped is not this")
+    Do $$$AssertTrue('c.NotModelled(), "an ADT that could not be mapped is not this")
     Do $$$AssertTrue($CLASSMETHOD(d, "DescribeFailure", c) [ "could not be mapped", "and keeps its words")
 }
 
