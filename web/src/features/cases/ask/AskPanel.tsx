@@ -250,12 +250,15 @@ function FreeText({
   access,
   tier,
   conversation,
+  unrecorded,
   onAsked,
 }: {
   caseId: string;
   access: FreeTextAccess;
   tier: QuestionTier;
   conversation?: string;
+  /** In the trial, a case with no recorded questions: there is none here to pick, only the cases listed above. */
+  unrecorded: boolean;
   onAsked: (conversation: string, turn: number) => void;
 }) {
   const ask = useAskQuestion(caseId);
@@ -268,7 +271,9 @@ function FreeText({
         <Textarea
           label="Your own question"
           description={access.why}
-          placeholder="In the trial, pick a suggested question"
+          placeholder={
+            unrecorded ? 'In the trial, pick one of those cases' : 'In the trial, pick a suggested question'
+          }
           autosize
           minRows={2}
           disabled
@@ -568,6 +573,7 @@ export function AskPanel({ caseId }: { caseId: string }) {
         access={access}
         tier={tier}
         conversation={shown && thread.length ? shown : undefined}
+        unrecorded={unrecorded}
         onAsked={onAsked}
       />
       {/* In the trial, only once the recordings are known to cover this case, so its card never flashes on another */}

@@ -142,6 +142,18 @@ test.describe('Ask about this case, below 1440 px', tagged, () => {
     await expect(thread).toContainText(firstSentence('S8', 'Downstream Out', 'c2.1'));
   });
 
+  test('in the trial, on a case with no recordings, the box steers to the cases that have them', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await go(page, '/cases/C-000021?ask=1');
+    const drawer = page.getByRole('dialog', { name: 'Ask about this case' });
+    await expect(drawer.getByTestId('ask-recorded-cases').first()).toBeVisible();
+    const box = drawer.getByRole('textbox', { name: 'Your own question' });
+    await expect(box).toBeDisabled();
+    await expect(box).toHaveAttribute('placeholder', 'In the trial, pick one of those cases');
+  });
+
   test('a citation in an answer closes the drawer and lands on the cited evidence', async ({ page }) => {
     await signIn(page);
     await go(page, '/cases/C-000008?ask=1');
