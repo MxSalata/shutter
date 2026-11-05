@@ -43,6 +43,7 @@ import { addressesProblem, closeNeedsApprover, controlProblem } from '../../site
 import { formatZoned, humanize } from '@/lib/format';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { closableByHand } from './caseAction';
+import { notModelled } from './derive';
 import { receiverNoun, receiverTeam } from './receiver';
 import { Section } from './Section';
 
@@ -133,7 +134,10 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
           Shutter drafted this from its record of the case: the patient&apos;s identifiers and date of birth,
           the event, why it stopped, what {receiverNoun(c.receiver)} holds and the encounter&apos;s messages.
           No name, address or note text. Check it, change what you need, and send it to{' '}
-          {draft.teamName || recipient}, who compare the systems and correct them by hand.
+          {draft.teamName || recipient},{' '}
+          {notModelled(c)
+            ? "who check the source's Message Viewer before anyone re-enters it."
+            : 'who compare the systems and correct them by hand.'}
         </Text>
         <TextInput
           label="To"
@@ -227,7 +231,9 @@ function MarkHandled({ c }: { c: CaseDetail }) {
           Mark as handled by the team…
         </Button>
         <Text size="xs" c="dimmed">
-          When the team has corrected the systems by hand. Nothing is sent.
+          {notModelled(c)
+            ? "When the team has checked the source's Message Viewer, and re-entered the message only if it needed that. Nothing is sent."
+            : 'When the team has corrected the systems by hand. Nothing is sent.'}
         </Text>
       </Group>
       <ConfirmModal opened={opened} onClose={() => setOpened(false)} title={`Mark ${c.caseId} as handled`}>
@@ -305,7 +311,9 @@ export function EscalationPanel({
       title="Escalations"
       note={
         stopped
-          ? "Shutter can't recover this safely. Send it to the team that corrects the systems by hand."
+          ? notModelled(c)
+            ? "Shutter resends only ADT. Send it to the team, who check the source's Message Viewer before anyone re-enters it."
+            : "Shutter can't recover this safely. Send it to the team that corrects the systems by hand."
           : 'The emails sent before the team corrected the systems by hand and the case was closed.'
       }
     >
