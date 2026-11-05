@@ -117,7 +117,7 @@ describe('EvaluationPage', () => {
     );
     expect(
       within(hero).getByText(
-        /^The seventh, S8, would write over the bed manager's ward with every check passed\. Only the board caught it\./,
+        /^The seventh, S8, wrote over the bed manager's ward with every check passed\. Only the board caught it\./,
       ),
     ).toBeInTheDocument();
     // The side by side of S8's two cases, found among the recorded cases

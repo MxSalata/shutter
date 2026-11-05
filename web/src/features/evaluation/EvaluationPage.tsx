@@ -308,7 +308,7 @@ function heroSecond(proof: Proof): string {
   if (!misses?.wrote.length) return '';
   // "The seventh": the one miss the gate did not stop, after the six it did
   if (misses.wrote.length === 1 && misses.total > 1 && misses.stopped.length === misses.total - 1)
-    return `The ${ordinal(misses.total)}, ${misses.wrote[0]}, would write over the bed manager's ward with every check passed. Only the board caught it.`;
+    return `The ${ordinal(misses.total)}, ${misses.wrote[0]}, wrote over the bed manager's ward with every check passed. Only the board caught it.`;
   return `${andList(misses.wrote)} wrote with every check passed. Only the board caught ${misses.wrote.length === 1 ? 'it' : 'them'}.`;
 }
 
