@@ -338,6 +338,11 @@ ClassMethod Plan(ns As %String, options As %DynamicObject = "") As %DynamicObjec
             Do plan."other_operations".%Push({"name": (item.name), "class": (item.class)})
         }
     }
+    // A name in the option that matches no item is said, not dropped in silence.
+    For i = 1:1:$LENGTH(wanted, ",") {
+        Set one = $ZSTRIP($PIECE(wanted, ",", i), "<>W")
+        If (one '= "") && '$LISTFIND($LISTFROMSTRING($ZSTRIP($LISTTOSTRING(listed, ","), "*W")), $ZSTRIP(one, "*W")) Do plan.warnings.%Push("The option receivers names " _ one _ ", and no item in " _ read.production _ " can be chosen by that name: it is left out. Check the spelling")
+    }
     // 2. The names they will be reported under. A namespace wired already keeps the names it has, none included: its teams,
     // its profile entries and its open cases use them, and another namespace coming on later must not rename them.
     Set prefix = $SELECT($ISOBJECT(forwarder): forwarder.prefix, 1: "")
@@ -429,6 +434,11 @@ ClassMethod Plan(ns As %String, options As %DynamicObject = "") As %DynamicObjec
     Set receivers = $LISTTOSTRING(listed, ",")
     If +read.%Get("alert_items") > 1 {
         Do plan.warnings.%Push("Two items are named Ens.Alert in " _ read.production _ ": the engine uses one and ignores the other. Rename one before onboarding: this plan adds no alert intake")
+    } ElseIf (listed = "") && ('$ISOBJECT(alert) || 'alert."is_shutter") {
+        // An empty Receivers means every item, which nobody here chose.
+        Do plan.warnings.%Push("No item in " _ read.production _ " was chosen as a receiver, and an alert intake with an empty list would take every item's alerts: this plan adds none. Name the connectors in the option receivers")
+    } ElseIf siteAlertsTaken && $ISOBJECT(alert) && 'alert."is_shutter" {
+        Do plan.warnings.%Push("An item is named " _ ..#SITEALERTS _ " in " _ read.production _ ", the name the site's Ens.Alert would take: rename it before onboarding. This plan adds no alert intake")
     } ElseIf '$ISOBJECT(alert) {
         Do actions.%Push({"do": "add_alert_intake", "receivers": (receivers), "pass_to": "", "target": (forwarderName), "says": ("Add the item Ens.Alert (Shutter.Intake.AlertProcess) with the receivers " _ receivers)})
     } ElseIf 'alert."is_shutter" {
