@@ -525,6 +525,16 @@ describe('Ask about this case', () => {
     expect(within(p).queryByRole('region', { name: /^What if/ })).not.toBeInTheDocument();
   });
 
+  it('in the trial, on a case with no recordings, steers the disabled box to those cases, not to questions it lacks', async () => {
+    renderCase('C-000021');
+    const p = await panel();
+    await within(within(p).getByRole('tabpanel')).findByTestId('ask-recorded-cases');
+    const box = within(p).getByRole('textbox', { name: 'Your own question' });
+    expect(box).toBeDisabled();
+    expect(box).toHaveAttribute('placeholder', 'In the trial, pick one of those cases');
+    expect(box).toHaveAccessibleDescription('Needs a real model: not in the trial.');
+  });
+
   it('holds the list of recorded cases and the held case to the recordings', () => {
     expect([...TRIAL_ASK_CASES].sort()).toEqual(Object.keys(DEMO_CASES).sort());
     expect(HELD_CASES.map((id) => heldAnswersNote(id, 'awaiting_approval', true))).not.toContain(null);
