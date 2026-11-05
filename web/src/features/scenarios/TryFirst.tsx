@@ -15,6 +15,9 @@ import {
 import { IconPlayerPlay, IconShieldCheck } from '@tabler/icons-react';
 import { Link } from 'react-router';
 import { useCases, usePlan } from '@/api/hooks';
+import { TRIAL, trialHref } from '@/env/mode';
+import { byEnv } from '@/env/copy';
+import { TRIAL_BOARD_CASE } from '@/lib/hospital';
 import type { Mode, Scenario } from '@/api/types';
 import { OutcomeBadge } from '@/components/OutcomeBadge';
 import { StateBadge } from '@/components/StateBadge';
@@ -25,6 +28,19 @@ import { hueVar, MODE_IDENTITY } from '@/lib/hues';
 import { MoreAbout } from './MoreAbout';
 import { ScenarioDiagram } from './ScenarioDiagram';
 import { ProofLine } from './ProofLine';
+
+/** Where a role that sees no board can watch one decide: in the trial, S8's recording, wherever this page is. */
+function BoardRecording() {
+  return TRIAL ? (
+    <Anchor component={Link} to={`/cases/${TRIAL_BOARD_CASE}`} inherit>
+      S8&apos;s recording
+    </Anchor>
+  ) : (
+    <Anchor href={trialHref(`#/cases/${TRIAL_BOARD_CASE}`)} inherit>
+      S8&apos;s recording in the trial
+    </Anchor>
+  );
+}
 
 /** The modes by the names the Scenarios page gives them. */
 const MODE_NAMES: Record<Mode, string> = {
@@ -73,9 +89,18 @@ export function ScenariosHero({ demo = false }: { demo?: boolean }) {
             is safe.
           </Text>
           <Text size="md" maw="68ch">
-            {demo
-              ? "Here the site's written policy proposes the fix, with no agent: watch the gate check, a person or the policy release and the receiver verify. To see the board of IRIS AI Hub agents decide, open S8's recording from the link under the banner."
-              : 'Watch a board of IRIS AI Hub agents investigate, the gate check, a person release and the receiver verify.'}
+            {demo ? (
+              <>
+                {byEnv({
+                  live: "Here the site's written policy proposes the fix, with no agent:",
+                  trial: "On the online demo the site's written policy proposes the fix, with no agent:",
+                })}{' '}
+                watch the gate check, a person or the policy release and the receiver verify. To see the board
+                of IRIS AI Hub agents decide, open <BoardRecording />.
+              </>
+            ) : (
+              'Watch a board of IRIS AI Hub agents investigate, the gate check, a person release and the receiver verify.'
+            )}
           </Text>
           <Text size="sm" maw="68ch">
             Each scenario plays a known failure into the production: HL7 ADT files into its inbound folder and
@@ -183,7 +208,7 @@ const DEMO_FIRST: Featured[] = [
     mode: 'policy',
     title: 'The gate withholds a write',
     see: () =>
-      'A patient merge is never sent by default: the gate blocks every plan, no board is convened, and the case goes to the PAS team, whose email Shutter drafts.',
+      'A patient merge is never sent by default: the gate blocks every plan, in any mode, and the case goes to the PAS team, whose email Shutter drafts.',
     more: "The PAS merges an older record into the admitted patient (ADT^A40). A merge changes which record a patient's history belongs to, so the gate withholds it (MERGE_WITHHELD) and Escalate drafts the email to the team the site profile names for merges from the PAS; nothing is written.",
   },
 ];
@@ -248,7 +273,10 @@ export function TryFirst({
         </Title>
         <Text size="md" c="dimmed">
           {demo
-            ? 'The hospital plays these in Site policy mode.'
+            ? byEnv({
+                live: 'The hospital plays these in Site policy mode.',
+                trial: "Recorded; the online demo's hospital plays these in Site policy mode.",
+              })
             : 'Each one in the mode that shows what it is for.'}
         </Text>
       </Group>
@@ -347,7 +375,10 @@ export function TryFirst({
                       // Until the cases are read it isn't known that there is none
                       casesRead.isSuccess ? (
                         <Text size="sm" c="dimmed">
-                          No case yet: the hospital plays one every few minutes.
+                          {byEnv({
+                            live: 'No case yet: the hospital plays one every few minutes.',
+                            trial: "No recording of it here; the online demo's hospital plays it.",
+                          })}
                         </Text>
                       ) : null
                     ) : (

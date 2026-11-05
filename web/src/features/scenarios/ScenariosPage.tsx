@@ -516,15 +516,23 @@ function PlaysBadge({ id, n, of }: { id?: string; n: number; of: number }) {
   );
 }
 
-/** The run modes, once, as a choice of cards: who proposes the plan, and how many scenarios each mode plays. */
+/**
+ * The modes, once, as a choice of cards: who proposes the plan, and how many scenarios each mode plays. Where the user may
+ * not run scenarios (`lookOnly`) the choice stays, since it is how the list below reads in that mode, and starts where the
+ * hospital plays; only Run is greyed out.
+ */
 function RunModes({
   mode,
   onChange,
   scenarios,
+  lookOnly,
+  defaultMode,
 }: {
   mode: Mode;
   onChange: (m: Mode) => void;
   scenarios: Scenario[] | undefined;
+  lookOnly: boolean;
+  defaultMode: Mode;
 }) {
   const chosen = MODES.find((m) => m.value === mode);
   return (
@@ -535,10 +543,10 @@ function RunModes({
         name="run-mode"
         label={
           <Text span fw={650} fz="xl">
-            Run mode
+            {lookOnly ? 'Investigation modes' : 'Run mode'}
           </Text>
         }
-        description={`Every Run button below uses it. ${MODES_INTRO}`}
+        description={`${lookOnly ? 'Pick one to read the list below in it.' : 'Every Run button below uses it.'} ${MODES_INTRO}`}
         styles={{ description: { fontSize: 'var(--mantine-font-size-sm)' } }}
       >
         <SimpleGrid cols={{ base: 1, sm: 2, md: ALL_MODES.length }} spacing="sm" mt="sm">
@@ -565,13 +573,20 @@ function RunModes({
                       <Text size="md" fw={700} id={`mode-${m.value}-label`}>
                         <ModeName mode={m.value}>{m.label}</ModeName>
                       </Text>
-                      {m.value === 'board' ? (
+                      {m.value === defaultMode ? (
                         <Text span size="sm" c="dimmed">
                           default
                         </Text>
                       ) : null}
                     </Group>
-                    <VisuallyHidden id={`mode-${m.value}-hint`}>{m.hint}</VisuallyHidden>
+                    {/* The line under the cards speaks only for the chosen mode, which this one can never be */}
+                    {out ? (
+                      <Text id={`mode-${m.value}-hint`} size="sm">
+                        {m.hint}
+                      </Text>
+                    ) : (
+                      <VisuallyHidden id={`mode-${m.value}-hint`}>{m.hint}</VisuallyHidden>
+                    )}
                     {out ? (
                       <Badge
                         id={`mode-${m.value}-count`}
@@ -599,40 +614,6 @@ function RunModes({
         ) : null}
       </Radio.Group>
     </Box>
-  );
-}
-
-/**
- * The same modes where nobody may choose one (the public demo plays its stories by itself): described, not offered. The
- * card keeps the guide's `scenarios-mode` target.
- */
-function ModesExplained() {
-  return (
-    <Card padding="md" component="section" aria-labelledby="modes-explained-title" data-tour="scenarios-mode">
-      <Stack gap="xs">
-        <Title order={2} id="modes-explained-title">
-          Investigation modes
-        </Title>
-        <Text size="md" c="dimmed" maw="68ch">
-          {MODES_INTRO}
-        </Text>
-        <SimpleGrid cols={{ base: 1, sm: 2, lg: ALL_MODES.length }} spacing="sm">
-          {ALL_MODES.map((m) => (
-            <Stack key={m.value} gap={4}>
-              <Text size="md" fw={700}>
-                <ModeName mode={m.value}>{m.label}</ModeName>
-              </Text>
-              <Text size="sm">{m.hint}</Text>
-              {notRecorded(m.value) ? (
-                <Text size="sm" c="dimmed">
-                  {NOT_RECORDED}.
-                </Text>
-              ) : null}
-            </Stack>
-          ))}
-        </SimpleGrid>
-      </Stack>
-    </Card>
   );
 }
 
@@ -717,12 +698,16 @@ export default function ScenariosPage() {
   );
   const run = useRunScenario();
   const reset = useResetScenarios();
-  const [mode, setMode] = useState<Mode>('board');
   const canRun = can.scenarios;
-  // The public demo's role operates but may not run or reset: Run and Reset greyed out, its own three cards, a line saying why
-  const hidden = scenariosHidden(can);
   // Only a report that says so switches the runs off: an older server, or one not answering yet, keeps them.
   const playerOff = useHealth().data?.demo === false;
+  // The public demo's role operates but may not run or reset: Run and Reset greyed out, its own three cards, a line saying
+  // why. A site install has no demo hospital whichever role reads it, so its own notice speaks there.
+  const hidden = scenariosHidden(can) && !playerOff;
+  // Where nobody here can run one, the list starts in the mode the hospital plays; the role can arrive after the first paint
+  const defaultMode: Mode = hidden ? 'policy' : 'board';
+  const [picked, setMode] = useState<Mode | null>(null);
+  const mode = picked ?? defaultMode;
   const current = scenarios.data?.run ?? null;
   const busy = isPlaying(current) ? `A run of ${current?.scenario} is still playing` : '';
   /** Why Reset is disabled now, or "". */
@@ -772,7 +757,7 @@ export default function ScenariosPage() {
         title="Scenarios"
         icon={IconFlask2}
         hue="cyan"
-        lead={hidden ? SCENARIOS_LEAD.lookOnly : byEnv(SCENARIOS_LEAD)}
+        lead={hidden || playerOff ? SCENARIOS_LEAD.lookOnly : byEnv(SCENARIOS_LEAD)}
         actions={
           <Stack gap={4} align="flex-end">
             <Tooltip label={resetWhy || 'Clear the downstream system, the folders and the running scenario'}>
@@ -816,8 +801,11 @@ export default function ScenariosPage() {
         <ScenariosHero demo={hidden} />
         {hidden ? (
           <Text size="md" id={LOOK_ONLY_WHY} maw="68ch">
-            This hospital plays its stories by itself, so running one needs the operator or approver role,
-            which the trial and your own instance offer.
+            {byEnv({
+              live: 'This hospital plays its stories by itself, so running one needs the operator or approver role, which the trial and your own instance offer.',
+              trial:
+                "The online demo's hospital plays its stories by itself, so this role cannot run one. To run one, switch to Operator or Approver in the menu at the top right.",
+            })}
           </Text>
         ) : null}
         {current ? (
@@ -826,16 +814,19 @@ export default function ScenariosPage() {
             latest={scenarios.data?.scenarios.find((s) => s.id === current.scenario)?.latestCase?.caseId}
           />
         ) : null}
-        {/* Always rendered, loading or not, so the guide's first step has its target */}
-        <TryFirst
-          scenarios={scenarios.data?.scenarios}
-          failed={scenarios.isError}
-          why={whyNot}
-          starting={(s, m) => run.isPending && run.variables?.id === s.id && run.variables?.mode === m}
-          onRun={start}
-          demo={hidden}
-          whyId={LOOK_ONLY_WHY}
-        />
+        {/* Always rendered, loading or not, so the guide's first step has its target; a site install has nothing to try,
+            and the list below stands as its reference */}
+        {playerOff ? null : (
+          <TryFirst
+            scenarios={scenarios.data?.scenarios}
+            failed={scenarios.isError}
+            why={whyNot}
+            starting={(s, m) => run.isPending && run.variables?.id === s.id && run.variables?.mode === m}
+            onRun={start}
+            demo={hidden}
+            whyId={LOOK_ONLY_WHY}
+          />
+        )}
         {playerOff ? (
           <Alert color="gray" variant="light" title="The Scenario Player is switched off">
             <Text size="sm">
@@ -844,10 +835,14 @@ export default function ScenariosPage() {
               site adds and from the productions that forward their failed deliveries to Shutter.
             </Text>
           </Alert>
-        ) : hidden ? (
-          <ModesExplained />
         ) : (
-          <RunModes mode={mode} onChange={setMode} scenarios={scenarios.data?.scenarios} />
+          <RunModes
+            mode={mode}
+            onChange={setMode}
+            scenarios={scenarios.data?.scenarios}
+            lookOnly={hidden}
+            defaultMode={defaultMode}
+          />
         )}
         {scenarios.isPending ? <PageSkeleton label="Loading the scenarios…" /> : null}
         {scenarios.isError ? (
