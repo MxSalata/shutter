@@ -683,7 +683,8 @@ def scenarios():
     out.append(({
         "id": "S23a",
         "title": "The bed is held by a patient who is leaving",
-        "summary": "Two patients: one in Ward B bed 02, one in Ward A. The first patient's 09:20 transfer to Ward C fails "
+        "summary": "A transfer is refused because the bed's occupant hasn't left yet; another case is moving them. "
+                   "Two patients: one in Ward B bed 02, one in Ward A. The first patient's 09:20 transfer to Ward C fails "
                    "because the downstream system is down. At 09:30 the second patient's transfer into Ward B bed 02 is "
                    "refused: the bed is occupied. Shutter reads who holds the bed and finds them leaving in another case. "
                    "Here that case resends the first transfer within seconds, so when the second case reads its "
@@ -715,7 +716,8 @@ def scenarios():
     out.append(({
         "id": "S23b",
         "title": "Two patients for one bed",
-        "summary": "Two patients: one in Ward B bed 02, one in Ward A. At 09:30 the second patient's transfer into Ward B "
+        "summary": "A transfer is refused because the bed is occupied, and nothing says the occupant is leaving. "
+                   "Two patients: one in Ward B bed 02, one in Ward A. At 09:30 the second patient's transfer into Ward B "
                    "bed 02 is refused: the bed is occupied, and nothing says the first patient is leaving. A resend "
                    "would be refused again or double-book the bed, so the case goes to the bed manager with the "
                    "conflict laid out, and nothing is written.",
@@ -794,7 +796,8 @@ def scenarios():
     out.append(({
         "id": "S25",
         "title": "A message with the site's own segment",
-        "summary": "Admit to Ward A applied. The 09:20 transfer to Ward B fails because the downstream system is down, "
+        "summary": "A sound transfer carries a site segment this namespace's schema doesn't define, so IRIS can't check it. "
+                   "Admit to Ward A applied. The 09:20 transfer to Ward B fails because the downstream system is down, "
                    "and it carries the trust's own segment, ZZZ, which this namespace's schema doesn't define, so IRIS can't "
                    "read it to check it. A second, independent parser (HAPI, in Java, through PEX) reads it as a well-formed "
                    "transfer with a site segment. Nothing is resent: the case says the message is sound and the site's "
