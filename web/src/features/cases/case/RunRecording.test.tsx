@@ -116,7 +116,8 @@ describe('what a board member was sent and did', () => {
 
   it("reads the dissent from the run's own pass: none on S7's first round, Conformance's on its second", async () => {
     renderBoard('C-000007');
-    const [first, second] = await screen.findAllByRole('region', { name: 'Conformance' });
+    const first = await screen.findByRole('region', { name: 'Conformance Round 1' });
+    const second = screen.getByRole('region', { name: 'Conformance Round 2' });
     await userEvent.click(await within(first).findByRole('button', { name: 'Show the recording' }));
     const line = await within(first).findByTestId('recording-catalogue');
     await waitFor(() => expect(env.read).toContain('scenario-S7-ENC-1007-transfer-coordinator-1.json'));
