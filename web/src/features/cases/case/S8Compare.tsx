@@ -65,9 +65,6 @@ function useSide(caseId: string): { side?: CompareSide; detail?: CaseDetail; err
   };
 }
 
-/** Which side of the pair did what the scenario asks: the edge of its card, so the two can be told apart at a glance. */
-const EDGES: Record<string, Tone> = { 'as-expected': 'positive', differs: 'blocking' };
-
 function SideCard({
   side,
   title,
@@ -81,7 +78,14 @@ function SideCard({
 }) {
   const verdict = caseOutcome(side.outcome, scenario);
   const wrong = verdict.key === 'not-as-expected';
-  const edge = EDGES[expectationOf(side.outcome, scenario).kind];
+  // A person closing the case isn't the scenario's outcome, right or wrong: its expected disposition no longer applies
+  const closedByPerson = verdict.key === 'handled-by-hand' || verdict.key === 'abandoned';
+  // Which side did what the scenario asks: the edge of its card, so the two can be told apart at a glance
+  const edge: Tone | undefined = wrong
+    ? 'blocking'
+    : !closedByPerson && expectationOf(side.outcome, scenario).kind === 'as-expected'
+      ? 'positive'
+      : undefined;
   const VerdictIcon = verdict.icon;
   const written = writes(side.writes);
   return (
@@ -129,7 +133,7 @@ function SideCard({
         <Group gap={6}>
           <OutcomeBadge c={side.outcome} scenario={scenario} />
           {/* The outcome already says Not as expected; an escalated case's proposal to escalate would only repeat it */}
-          {wrong ? null : <ExpectedMark c={side.outcome} scenario={scenario} />}
+          {wrong || closedByPerson ? null : <ExpectedMark c={side.outcome} scenario={scenario} />}
           {side.state === 'escalated' && side.disposition === 'escalate' ? null : (
             <DispositionBadge disposition={side.disposition} />
           )}

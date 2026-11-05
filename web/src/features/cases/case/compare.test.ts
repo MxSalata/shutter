@@ -50,6 +50,27 @@ describe('compareSide', () => {
     expect(b.patient).toBe('Patient stays in WARD-C; a person decides');
   });
 
+  it('says a person decides only while one does, and what came of a case the team closed', () => {
+    const x = fixtures.cases['C-000008'];
+    const asIf = (change: Partial<CaseDetail>) =>
+      compareSide({
+        c: { ...(x.detail as unknown as CaseDetail), ...change },
+        plan: x.plan as unknown as PlanView,
+        attempts: x.attempts as unknown as AttemptView[],
+        closure: null,
+        snapshot: x.snapshot as unknown as Snapshot,
+      }).patient;
+    const stays = 'Patient stays in WARD-C; a person decides';
+    expect(asIf({ state: 'blocked' })).toBe(stays);
+    expect(asIf({ state: 'awaiting_approval' })).toBe(stays);
+    expect(asIf({ state: 'resolved', disposition: 'handled_by_hand' })).toBe(
+      'Shutter sent nothing; the team handled it by hand',
+    );
+    expect(asIf({ state: 'resolved', disposition: 'abandoned' })).toBe('');
+    expect(asIf({ state: 'investigating' })).toBe('');
+    expect(asIf({ state: 'failed' })).toBe('');
+  });
+
   it('claims nothing about the patient when a write went out and none is confirmed', () => {
     const x = fixtures.cases['C-000021'];
     const attempt = x.attempts[0];

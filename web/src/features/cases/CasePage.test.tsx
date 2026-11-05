@@ -426,6 +426,29 @@ describe('CasePage', () => {
     expect(await within(board).findByText('As expected')).toBeInTheDocument();
   });
 
+  it("doesn't mark the board's run wrong once a person has closed it, or while it is running", async () => {
+    const { detail } = fixtures.cases['C-000008'];
+    const asIf = (change: Record<string, string>) =>
+      server.use(http.get('/api/shutter/cases/C-000008', () => HttpResponse.json({ ...detail, ...change })));
+    asIf({ state: 'resolved', disposition: 'handled_by_hand' });
+    renderCase('C-000021', '?show=compare');
+    const handled = await screen.findByTestId('compare-board');
+    expect(within(handled).getByTestId('compare-patient')).toHaveTextContent(
+      'Shutter sent nothing; the team handled it by hand',
+    );
+    expect(await within(handled).findByText('Handled by hand')).toBeInTheDocument();
+    expect(within(handled).queryByText('Not as expected')).not.toBeInTheDocument();
+    expect(handled.style.borderTop).toBe('');
+    // The other side still reads wrong, under its red edge
+    expect(screen.getByTestId('compare-rules').style.borderTop).toContain('red');
+    cleanup();
+    asIf({ state: 'investigating' });
+    renderCase('C-000021', '?show=compare');
+    const running = await screen.findByTestId('compare-board');
+    expect(within(running).queryByTestId('compare-patient')).not.toBeInTheDocument();
+    expect(running.style.borderTop).toBe('');
+  });
+
   it('keeps the rows that differ, a time and two digests, a click away in Plain', async () => {
     renderCase('C-000008', '?show=compare');
     const toggle = await screen.findByRole('button', { name: 'Times and digests, which differ on each run' });
