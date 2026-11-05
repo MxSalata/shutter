@@ -122,7 +122,9 @@ describe('the case header status and IRIS row', () => {
     const trace = within(row).getByRole('link', { name: /^Message trace/ });
     expect(trace).toHaveAttribute('href', recorded.links!.visualTrace);
     expect(trace).toHaveAttribute('data-tour-action', 'open-trace');
-    expect(within(row).getByRole('link', { name: /^Workflow trace/ })).toBeInTheDocument();
+    // This case's workflow ran in the message's own session, so it is one trace and one link
+    expect(recorded.workflowSessionId).toBe(recorded.ensSessionId);
+    expect(within(row).queryByRole('link', { name: /^Workflow trace/ })).not.toBeInTheDocument();
     expect(within(row).getByRole('link', { name: /^Source message/ })).toHaveAttribute(
       'href',
       `/csp/shutter/EnsPortal.MessageContents.zen?HeaderId=${recorded.sourceHeaderId}`,
@@ -130,6 +132,12 @@ describe('the case header status and IRIS row', () => {
     expect(row).toHaveTextContent(recorded.sourceMessageId!);
     // The record's other facts stay behind Details
     expect(screen.getByRole('button', { name: 'Details' })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('shows the workflow trace too when the workflow ran in a session of its own', () => {
+    const { container } = renderUi(<CaseHeader c={{ ...recorded, workflowSessionId: '99999' }} />);
+    const row = container.querySelector('[data-tour="case-iris"]') as HTMLElement;
+    expect(within(row).getByRole('link', { name: /^Workflow trace/ })).toBeInTheDocument();
   });
 
   it("adds the expectation and the failure's code in Technical", () => {
