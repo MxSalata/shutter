@@ -1046,12 +1046,12 @@ ClassMethod ReceiverItem(name As %String, host As %String = "", port As %String 
             Set was = ^Shutter.Config("receiverItems", first)
             If ($LIST(was, 1) '= host) || (+$LIST(was, 2) '= +port) Do out.warnings.%Push("Evidence Collector and Verifier read one server, " _ $LIST(was, 1) _ ":" _ $LIST(was, 2) _ " (" _ first _ "): this receiver's state and receipts cannot be read on another until that changes, so its writes stay blocked")
         }
-        // The readers follow this receiver when it is the one they were set from, so a correction moves them too.
+        // The readers' record follows a correction only when this is the one receiver: with others, it would strand them.
         Set old = $GET(^Shutter.Config("receiverItems", name))
-        If (first = "") || ((old '= "") && ($LIST(old, 1) = $GET(^Shutter.Config("downstreamHost"))) && (+$LIST(old, 2) = +$GET(^Shutter.Config("downstreamPort")))) {
-            If (old '= "") && (($LIST(old, 1) '= host) || (+$LIST(old, 2) '= +port)) Do out.warnings.%Push("Evidence Collector and Verifier read " _ $LIST(old, 1) _ ":" _ $LIST(old, 2) _ " until their settings change or the next load")
-            Set ^Shutter.Config("downstreamHost") = host, ^Shutter.Config("downstreamPort") = port
-        }
+        Set moved = (old '= "") && (first = name) && (($LIST(old, 1) '= host) || (+$LIST(old, 2) '= +port))
+        Set only = (first = name) && ($ORDER(^Shutter.Config("receiverItems", name)) = "")
+        If moved Do out.warnings.%Push("Evidence Collector and Verifier read " _ $LIST(old, 1) _ ":" _ $LIST(old, 2) _ $SELECT(only: " until their settings change or the next load", 1: ": this receiver's writes stay blocked until they read the same server"))
+        If (first = "") || (moved && only) Set ^Shutter.Config("downstreamHost") = host, ^Shutter.Config("downstreamPort") = port
         Set ^Shutter.Config("receiverItems", name) = $LISTBUILD(host, port, credential, ssl)
         Set sc = ..RestoreReceiverItems(.added)
         If $$$ISERR(sc) Set out.error = $SYSTEM.Status.GetErrorText(sc) Quit
