@@ -72,6 +72,28 @@ Method TestResetClearsTheBedMap()
     Do $$$AssertEquals($DATA(^|h|Hospital.Live("adm")) + $DATA(^|h|Hospital.Live("bed")), 0, "and the map is gone")
 }
 
+/// A hospital the caller can't touch costs the bed map only: Reset goes on to the folders, the mode and resetAt (before
+/// v1.42 it stopped with a 500, the receiver already reset). A namespace that doesn't exist fails as a protected one does.
+Method TestAMapItCannotTouchLeavesTheResetWhole()
+{
+    Set saved = $GET(^Shutter.Config("hospitalNamespace")), before = $GET(^Shutter.Config("resetAt"))
+    Set ^Shutter.Config("hospitalNamespace") = "SHUTTERNOSUCHNS"
+    Set live = "", answer = ""
+    Try {
+        Set live = ##class(Shutter.Scenarios.Runner).ResetLive()
+        Set answer = ##class(%DynamicObject).%FromJSON(##class(Shutter.Scenarios.Runner).Reset())
+    } Catch ex {
+        Do $$$AssertTrue(0, "Reset threw: " _ ex.DisplayString())
+    }
+    If saved = "" { Kill ^Shutter.Config("hospitalNamespace") } Else { Set ^Shutter.Config("hospitalNamespace") = saved }
+    Do $$$AssertEquals(live, "not cleared", "ResetLive says so and does not throw")
+    If $ISOBJECT(answer) {
+        Do $$$AssertEquals(answer.live, "not cleared", "Reset's answer says so")
+        Do $$$AssertEquals(answer."reset_at", ^Shutter.Config("resetAt"), "and resetAt was still set")
+        Do $$$AssertEquals(answer.mode, "board", "and the mode went back")
+    }
+}
+
 Method TestAStoryCutOffLeavesNoFault()
 {
     Set h = ..Hospital

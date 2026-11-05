@@ -18,7 +18,9 @@ is 403 csrf without the X-Requested-With header; and, when SHUTTER_PUBLIC_DEMO_P
 instance has one only when its install was given it), that the demo starts a review with agent false and reinvestigates with
 liveAgents false, never spending the model budget (a `skip` line says so when the variable is unset). The profile is put
 back with the answers it had, saved from the API: from then on a change of the seed file no longer replaces it, as for any
-profile a person saved.
+profile a person saved. Last, Reset on the Scenarios page: the operator's and the approver's answer 200 with the mode back
+to board, a new resetAt, every demo receiver reset and the live feed's bed map not left behind, and it is 403 signed in as
+the demo user.
 
 It closes two cases that are escalated, blocked or failed, the newest first, so run it after the scenarios (CI runs it
 after them), and not on an instance someone else is using. Exit status 1 when a check fails. Standard library only.
@@ -376,6 +378,17 @@ def main():
             status, body = put_profile(saved)
             restored = {k: v for k, v in ((body or {}).get("profile") or {}).items() if k != "version"}
             check("the site profile is put back with its answers", status == 200 and restored == saved, f"{status} {body}")
+
+    # ---- Reset clears the bed map in the hospital's database, which the operator and the approver write ----
+    for name, session in (("operator", operator), ("approver", approver)):
+        status, body = session.call("POST", "/scenarios/reset", {})
+        check(f"{name}: POST /scenarios/reset: 200, whole",
+              status == 200 and (body or {}).get("mode") == "board" and bool((body or {}).get("resetAt"))
+              and (body or {}).get("live") in ("cleared", "none", "playing")
+              and not any("error" in (answer or {}) for answer in ((body or {}).get("receivers") or {}).values()), f"{status} {body}")
+    if demo_password:
+        status, body = Session(args.url).sign_in("demo", demo_password).call("POST", "/scenarios/reset", {})
+        check("demo: POST /scenarios/reset is 403 forbidden", status == 403 and error_of(body) == "forbidden", f"{status} {body}")
 
     print(f"{len(failures)} of {checks[0]} failed" if failures else f"all {checks[0]} checks passed")
     return 1 if failures else 0
