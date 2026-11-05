@@ -118,7 +118,7 @@ describe('the guide registry', () => {
 
   it('keeps the words a role reads instead to the same budgets', () => {
     for (const { s, path } of STEPS)
-      for (const v of [s.lookOnly, s.noApprove].filter((x) => !!x)) {
+      for (const v of [s.lookOnly, s.noApprove, ...Object.values(s.whenCase ?? {})].filter((x) => !!x)) {
         expect(words(v.say), `${path} say`).toBeLessThanOrEqual(25);
         if (v.title) expect(words(v.title), `${path} title`).toBeLessThanOrEqual(6);
         if (v.detail) expect(words(v.detail), `${path} detail`).toBeLessThanOrEqual(40);
@@ -144,6 +144,14 @@ describe('the guide registry', () => {
     const verified = stepAt('s2/verified')!.step;
     expect(stepForRole(verified, can({})).say).toMatch(/That is verified: it landed/);
     expect(stepForRole(verified, operator).say).toMatch(/^Not approved, so nothing is written yet/);
+    // Over the case as it stands: the tour never says a write landed that a person rejected or has not yet released
+    expect(stepForRole(verified, can({}), 'resolved').say).toMatch(/That is verified: it landed/);
+    expect(stepForRole(verified, can({}), 'awaiting_approval').say).toMatch(/^Not approved/);
+    expect(stepForRole(verified, can({}), 'blocked').title).toBe('Rejected, so nothing written');
+    expect(stepForRole(verified, can({}), 'blocked').say).not.toMatch(/verified|landed/);
+    expect(stepForRole(decision, can({}), 'awaiting_approval').tryIt?.action).toBe('approve-plan');
+    expect(stepForRole(decision, can({}), 'blocked').tryIt).toBeUndefined();
+    expect(stepForRole(decision, can({}), 'blocked').title).toBe('The plan was rejected here');
     expect(stepForRole(stepAt('scenarios/start')!.step, can({})).say).toMatch(/Start with these three/);
     expect(stepForRole(stepAt('scenarios/start')!.step, demo).say).toMatch(/follows S2, S8 and S20/);
     expect(stepForRole(stepAt('scenarios/mode')!.step, demo).say).not.toMatch(/Choose/);

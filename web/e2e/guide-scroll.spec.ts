@@ -241,6 +241,32 @@ test.describe('where the tour scrolls to', () => {
     });
   });
 
+  test('a rejection by hand on the Try it step goes on to say nothing was written, and lands the card', async ({
+    page,
+  }) => {
+    const guide = await resumeAt(page, 's2/decision', 3);
+    await expect(page.locator('[data-guide-card]')).toBeVisible();
+    await page.getByRole('button', { name: 'Reject plan' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Reject this plan' }).click();
+    await expect(guide).toContainText('Step 4 of 9');
+    await expect(guide.getByRole('heading', { name: 'Rejected, so nothing written' })).toBeFocused();
+    await expect(guide).toContainText('The plan was rejected, so nothing was written.');
+    await expect(guide).not.toContainText('it landed');
+    await expect(guide).not.toContainText('Approved for you');
+    await atRest(page);
+    const m = await measure(page);
+    checkStep(m, 'the step after a rejection by hand');
+    expect(m.cardTop, 'the card is on the screen, not left above it').toBeLessThan(m.height / 2);
+
+    // Back and Next again say the same, and approve nothing
+    await guide.getByRole('button', { name: 'Back' }).click();
+    await expect(guide.getByRole('heading', { name: 'The plan was rejected here' })).toBeVisible();
+    await expect(guide.getByRole('button', { name: /^Try it/ })).toHaveCount(0);
+    await guide.getByRole('button', { name: 'Next' }).click();
+    await expect(guide.getByRole('heading', { name: 'Rejected, so nothing written' })).toBeVisible();
+    await expect(guide).not.toContainText('Approved for you');
+  });
+
   test('cancelling the approval leaves the step where it was, and the chip brings the pointer back', async ({
     page,
   }) => {
