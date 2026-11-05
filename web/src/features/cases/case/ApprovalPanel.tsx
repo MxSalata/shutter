@@ -7,7 +7,7 @@ import { newIdempotencyKey } from '@/api/client';
 import { resolveCan } from '@/api/can';
 import type { ApprovalsView, CaseDetail, Me, PlanView } from '@/api/types';
 import { TRIAL } from '@/env/mode';
-import { byEnv } from '@/env/copy';
+import { byEnv, toBecomeApprover } from '@/env/copy';
 import { Digest } from '@/components/Digest';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { TechDetail } from '@/components/TechDetail';
@@ -115,13 +115,16 @@ export function ApprovalPanel({
 }) {
   const decide = useDecideApproval(c.caseId);
   const [decision, setDecision] = useState<'approve' | 'reject' | null>(null);
+  // The dialog keeps the last decision's words while it animates closed: approve must not flash as a red Reject
+  const [lastDecision, setLastDecision] = useState<'approve' | 'reject'>('approve');
+  if (decision && decision !== lastDecision) setLastDecision(decision);
   const [comment, setComment] = useState('');
   const [key, setKey] = useState('');
   const plan = view?.plan;
   const awaiting = c.state === 'awaiting_approval';
   const write = plan?.disposition === 'resend';
   const why = !resolveCan(me).approve
-    ? 'Deciding needs the approver role: sign in as approver'
+    ? `Deciding needs the approver role: ${toBecomeApprover()}`
     : !awaiting
       ? `The case is ${humanize(c.state).toLowerCase()}, not waiting for approval`
       : !plan
@@ -336,7 +339,7 @@ export function ApprovalPanel({
         opened={decision !== null}
         onClose={() => setDecision(null)}
         title={
-          decision === 'approve'
+          lastDecision === 'approve'
             ? `Approve plan v${plan?.version ?? ''}`
             : `Reject plan v${plan?.version ?? ''}`
         }
@@ -346,7 +349,7 @@ export function ApprovalPanel({
           <Stack gap="sm">
             {/* What the action does, first: for real on a live system, in this browser only in the trial */}
             <Text size="sm" fw={600} data-testid="confirm-consequence">
-              {decision === 'approve'
+              {lastDecision === 'approve'
                 ? byEnv({
                     live: `This sends the fix to ${receiverNoun(c.receiver)}, for real. The receiver is read again and the gate checks the dispatch.`,
                     trial:
@@ -358,7 +361,7 @@ export function ApprovalPanel({
                       'Nothing is sent. The case closes as blocked, in this browser only, until a reload starts the recording afresh.',
                   })}
             </Text>
-            {decision === 'approve' ? (
+            {lastDecision === 'approve' ? (
               <Text size="sm">
                 {`You approve exactly this: ${humanize(plan.actionType || 'resend').toLowerCase()} the ${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''} for ${c.encounterId}, conditional on receiver version ${String(plan.expectedVersion)}.`}
               </Text>
@@ -389,12 +392,12 @@ export function ApprovalPanel({
                 Cancel
               </Button>
               <Button
-                color={decision === 'approve' ? undefined : 'red'}
+                color={lastDecision === 'approve' ? undefined : 'red'}
                 loading={decide.isPending}
                 onClick={submit}
                 disabled={!!stale}
               >
-                {decision === 'approve' ? 'Approve this plan' : 'Reject this plan'}
+                {lastDecision === 'approve' ? 'Approve this plan' : 'Reject this plan'}
               </Button>
             </Group>
           </Stack>
