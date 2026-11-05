@@ -51,7 +51,7 @@ function GateTable({ d }: { d: GateDecision }) {
         <StackTable verticalSpacing={4} className="stack-table stack-cards">
           <StackTable.Thead>
             <StackTable.Tr>
-              <StackTable.Th w={150}>Check</StackTable.Th>
+              <StackTable.Th w="26%">Check</StackTable.Th>
               <StackTable.Th w={150}>Result</StackTable.Th>
               <StackTable.Th w={210}>Reason code</StackTable.Th>
               <StackTable.Th>Detail</StackTable.Th>
