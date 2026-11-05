@@ -64,7 +64,7 @@ import {
   type ChapterGroup,
   type GuideScope,
 } from './registry';
-import { bringIntoFreePart, focusFrom, landOn, pageHeading, waitForTarget } from './reveal';
+import { bringIntoFreePart, focusFrom, landOn, pageHeading, useMenuHandOver, waitForTarget } from './reveal';
 import { useGuide, type GuidePhase } from './store';
 
 /**
@@ -276,6 +276,8 @@ function useStepMotion(target: HTMLElement | null, action: string | undefined, r
       control.dataset.tourTry = motion === 'run' ? 'true' : 'rest';
       setTrying({ control, motion });
     };
+    // Once the reader has pressed the control, the pointer has done its work; the card's chip can bring it back
+    const pressed = () => setTrying(null);
     const consider = () => {
       if (done || !control || !inView) return;
       const since = Date.now() - started.current;
@@ -283,10 +285,19 @@ function useStepMotion(target: HTMLElement | null, action: string | undefined, r
       else if (since >= ENTRANCE_MS + RING_MS) start('run');
     };
     const find = window.setInterval(() => {
+      // A control the page has taken away (the approval went through, the tab changed) leaves nothing to point at
+      if (control && !control.isConnected) {
+        observer?.disconnect();
+        control = null;
+        done = false;
+        inView = typeof IntersectionObserver === 'undefined';
+        setTrying(null);
+      }
       if (!control) {
         const el = tryControl(action);
         if (!visible(el)) return;
         control = el;
+        control.addEventListener('click', pressed);
         if (typeof IntersectionObserver !== 'undefined') {
           observer = new IntersectionObserver(
             (entries) => {
@@ -304,14 +315,19 @@ function useStepMotion(target: HTMLElement | null, action: string | undefined, r
       if (!control) control = tryControl(action);
       if (!control) return;
       bringToHand(control, reduced);
-      if (!done) start(reduced ? 'rest' : 'run');
+      const motion = reduced ? 'rest' : 'run';
+      if (!done) start(motion);
+      else setTrying({ control, motion });
     };
     pressers.set(action, press);
     return () => {
       window.clearInterval(find);
       observer?.disconnect();
       pressers.delete(action);
-      if (control) delete control.dataset.tourTry;
+      if (control) {
+        control.removeEventListener('click', pressed);
+        delete control.dataset.tourTry;
+      }
       setTrying(null);
     };
   }, [target, action, reduced]);
@@ -342,7 +358,16 @@ async function approveForYou(caseId: string): Promise<boolean> {
   return true;
 }
 
-/** The case page's replay after a trial approval, awaited by the step after it, for at most 3 seconds. */
+/** The case's id in a step's address. */
+const caseInPath = (path: string | undefined) => {
+  const id = /^\/cases\/([^?]+)/.exec(path ?? '')?.[1];
+  return id ? decodeURIComponent(id) : undefined;
+};
+
+/**
+ * The case page's replay after a trial approval, awaited by the step after it, for at most 3 seconds. Set only for an
+ * approval the tour made: an approval the reader made by hand has no step waiting for it.
+ */
 let replay: Promise<void> | null = null;
 function awaitReplay() {
   replay = new Promise<void>((resolve) => {
@@ -362,8 +387,9 @@ function MoreMenu() {
   const skipChapter = useGuide((s) => s.skipChapter);
   const openChapters = useGuide((s) => s.openChapters);
   const exit = useGuide((s) => s.exit);
+  const { menu, handOver } = useMenuHandOver();
   return (
-    <Menu position="top" withinPortal shadow="md">
+    <Menu position="top" withinPortal shadow="md" {...menu}>
       <Menu.Target>
         <GuideButton variant="default" rightSection={<IconChevronDown size={16} aria-hidden />}>
           More
@@ -373,7 +399,7 @@ function MoreMenu() {
         <Menu.Item leftSection={<IconPlayerSkipForward size={16} aria-hidden />} onClick={skipChapter}>
           Skip chapter
         </Menu.Item>
-        <Menu.Item leftSection={<IconList size={16} aria-hidden />} onClick={openChapters}>
+        <Menu.Item leftSection={<IconList size={16} aria-hidden />} onClick={handOver(openChapters)}>
           Choose a chapter
         </Menu.Item>
         <Menu.Item leftSection={<IconX size={16} aria-hidden />} onClick={exit}>
@@ -427,13 +453,13 @@ function StepCard({
 
   const onNext = async () => {
     // Next without trying on the S2 decision: the tour never lands on an unverified case, so it approves for you
-    const caseId = /^\/cases\/([^?]+)/.exec(path ?? '')?.[1];
+    const caseId = caseInPath(path);
     if (step.tryIt?.action === 'approve-plan' && caseId) {
       setBusy(true);
       try {
         awaitReplay();
-        const approved = await approveForYou(decodeURIComponent(caseId));
-        await client.invalidateQueries({ queryKey: keys.case(decodeURIComponent(caseId)) });
+        const approved = await approveForYou(caseId);
+        await client.invalidateQueries({ queryKey: keys.case(caseId) });
         next(approved);
       } catch {
         next();
@@ -580,7 +606,8 @@ function StepHost({ pos }: { pos: GuidePosition }) {
   const path = place.data && 'path' in place.data ? place.data.path : undefined;
   // A safeguard only: in the trial every place of the quick tour resolves (guide.spec.ts checks it)
   const notFound = absent || (!!place.data && 'missing' in place.data);
-  const { ring, trying } = useStepMotion(target, stepForRole(pos.step, useCan()).tryIt?.action, reduced);
+  const tryAction = stepForRole(pos.step, useCan()).tryIt?.action;
+  const { ring, trying } = useStepMotion(target, tryAction, reduced);
   // Read when the card is placed, not a reason to place it again
   const reducedNow = useRef(reduced);
   useEffect(() => {
@@ -590,6 +617,17 @@ function StepHost({ pos }: { pos: GuidePosition }) {
   useEffect(() => {
     if (path) go(path);
   }, [path]);
+
+  // Approve plan pressed by hand on this step: once the replay has played, the tour goes on to what it shows, so the
+  // reader isn't left on a card that still says it is their turn. Next's own approval moves on by itself
+  useEffect(() => {
+    if (tryAction !== 'approve-plan') return;
+    const played = (e: Event) => {
+      if (!replay && (e as CustomEvent<string>).detail === caseInPath(path)) useGuide.getState().next();
+    };
+    window.addEventListener(REPLAY_DONE, played);
+    return () => window.removeEventListener(REPLAY_DONE, played);
+  }, [tryAction, path]);
 
   // The page learns what the step points at before the step looks for it, so a folded section can open for it
   useEffect(() => {

@@ -212,9 +212,14 @@ describe('the guide registry', () => {
     expect(tourMinutes('all')).toBeGreaterThan(tourMinutes('quick'));
   });
 
+  it('says what the pages say: a held case needs a person, and how many reviews are kept', () => {
+    expect(stepAt('cases/closed')!.step.say).toMatch(/Escalated and blocked cases still wait for a person/);
+    expect(stepAt('reviews/past')!.step.say).toMatch(/^The last 50 reviews of each production are kept/);
+  });
+
   it('reads the proof and the costs from the evaluation, never typed', () => {
     expect(stepAt('evaluation/headline')!.step.say).toBe(
-      'On 24 recorded failures the board chose the expected action every time. Played end to end on 11, the board got 11, Rules only 4.',
+      "The board matched all 24 recorded failures. Played through on 11: board 11, Rules only 4. Of Rules only's 7 misses, the gate stopped 6.",
     );
     expect(stepAt('settings/costs')!.step.say).toMatch(/cost \$0\.34 to \$0\.50\.$/);
   });

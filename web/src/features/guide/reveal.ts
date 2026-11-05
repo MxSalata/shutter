@@ -1,4 +1,5 @@
 import { VisuallyHidden } from '@mantine/core';
+import { useRef, useState } from 'react';
 
 /**
  * Finding and showing a step's section: the element with its `data-tour` attribute, once the page has rendered it,
@@ -122,4 +123,29 @@ export function bringIntoFreePart(el: HTMLElement, reduced: boolean): void {
   if (r.top >= free && r.bottom <= window.innerHeight) return;
   const top = window.scrollY + r.top - (free + window.innerHeight - r.height) / 2;
   window.scrollTo({ top: Math.max(0, top), behavior: reduced ? 'auto' : 'smooth' });
+}
+
+/**
+ * For a menu item that opens a dialog or a card: a menu gives focus back to its button a moment after it closes, by then
+ * behind what the item opened, where a keyboard reader would be stranded outside the dialog. So an item passed through
+ * `handOver` turns that off for this closing, and puts focus on the button itself first, which is where closing the
+ * dialog brings the reader back to. Closing the menu any other way still gives focus back.
+ */
+export function useMenuHandOver() {
+  const [handing, setHanding] = useState(false);
+  const button = useRef<HTMLElement | null>(null);
+  return {
+    menu: {
+      returnFocus: !handing,
+      onOpen: () => {
+        button.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        setHanding(false);
+      },
+    },
+    handOver: (open: () => void) => () => {
+      setHanding(true);
+      button.current?.focus({ preventScroll: true });
+      open();
+    },
+  };
 }

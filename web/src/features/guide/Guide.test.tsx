@@ -15,7 +15,7 @@ import CasePage from '@/features/cases/CasePage';
 import EvaluationPage from '@/features/evaluation/EvaluationPage';
 import ScenariosPage from '@/features/scenarios/ScenariosPage';
 import { INITIAL, type GuideProgress } from './controller';
-import { APPROVED_FOR_YOU, Guide } from './Guide';
+import { APPROVED_FOR_YOU, Guide, REPLAY_DONE } from './Guide';
 import { TrialHelpMenu } from './HelpMenu';
 import { welcomeActions } from './registry';
 import { forgetProgress, GUIDE_KEY, saveProgress } from './storage';
@@ -250,6 +250,27 @@ describe('the guide', () => {
     expect(control).toHaveFocus();
   });
 
+  it("moves on from the decision step when the replay of the reader's own approval has played, and only for its case", async () => {
+    preferReducedMotion();
+    at('s2/decision');
+    renderApp();
+    const guide = await card();
+    await within(guide).findByRole('button', { name: 'Try it: press Approve plan' });
+    const played = (detail: string) =>
+      act(() => {
+        window.dispatchEvent(new CustomEvent(REPLAY_DONE, { detail }));
+      });
+    played('C-000099');
+    expect(guide).toHaveTextContent('Step 3 of 9');
+    expect(useGuide.getState().progress.at).toBe('s2/decision');
+    played('C-000002');
+    expect(useGuide.getState().progress.at).toBe('s2/verified');
+    // The reader's own hand: the card says nothing of the tour having done it
+    expect(useGuide.getState().approvedForYou).toBeNull();
+    expect(await screen.findByRole('heading', { name: 'Checked at the bed system' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTestId('guide-try-pointer')).not.toBeInTheDocument());
+  });
+
   it('exits on Escape without finishing, and resumes from the header where it stopped', async () => {
     at('s2/receipt');
     renderApp();
@@ -331,7 +352,7 @@ describe('the guide', () => {
     const finish = await screen.findByRole('heading', { name: 'That is the tour.' });
     const region = finish.closest('[role="region"]') as HTMLElement;
     expect(region).toHaveTextContent(
-      'You saw a transfer delivered and verified, a fix held back for a person, and the gate stopping one.',
+      "You saw a transfer delivered and verified, a resend that would have overwritten the bed manager's ward held back for a person, and the gate stopping one.",
     );
     expect(within(region).getByRole('button', { name: 'Run S20 yourself' })).toBeInTheDocument();
     expect(within(region).getByRole('button', { name: 'Explore on my own' })).toBeInTheDocument();

@@ -99,8 +99,10 @@ function proofSay(): string {
   const p = PROOF.played;
   if (!b || !p)
     return "These figures come from runs recorded with the real agents. Each compares the board's choice with the expected action.";
-  const every = b.matched === b.scored ? 'every time' : `${b.matched} times`;
-  return `On ${b.scored} recorded failures the board chose the expected action ${every}. Played end to end on ${p.of}, the board got ${p.board}, Rules only ${p.rules}.`;
+  const matched = b.matched === b.scored ? `all ${b.scored}` : `${b.matched} of ${b.scored}`;
+  const m = PROOF.rulesMisses;
+  const stopped = m?.total ? ` Of Rules only's ${m.total} misses, the gate stopped ${m.stopped.length}.` : '';
+  return `The board matched ${matched} recorded failures. Played through on ${p.of}: board ${p.board}, Rules only ${p.rules}.${stopped}`;
 }
 
 /** "From 100 runs recorded with the real agents on IRIS AI Hub, 25 Oct to 1 Nov 2026." and what a match means. */
@@ -203,7 +205,7 @@ export const CHAPTERS: GuideChapter[] = [
       {
         id: 'closed',
         title: 'Closed does not mean sent',
-        say: 'A case can close with nothing sent: escalated, blocked, or corrected by hand. Its page says which, and what was verified.',
+        say: 'A closed case may have sent nothing: nothing was needed, or a person handled it. Escalated and blocked cases still wait for a person.',
         place: { page: '/cases' },
         target: 'cases-list',
         scopes: A,
@@ -450,7 +452,7 @@ export const CHAPTERS: GuideChapter[] = [
       {
         id: 'past',
         title: 'Past reviews',
-        say: 'Every review is kept. Open one to read what it found and why it matters.',
+        say: 'The last 50 reviews of each production are kept. Open one to read what it found and why it matters.',
         place: { page: '/reviews' },
         target: 'reviews-past',
         scopes: A,
@@ -632,8 +634,8 @@ export const SCOPE_OVERLINE: Record<GuideScope, string> = {
 /** The finish card's one sentence on what the route showed: each route its own, since their steps differ. */
 export const SCOPE_FINISH: Record<GuideScope, string> = {
   quick:
-    'You saw a transfer delivered and verified, a fix held back for a person, and the gate stopping one.',
-  all: 'You saw a transfer delivered and verified, a fix held back for a person, the gate stopping one, and every screen on the way.',
+    "You saw a transfer delivered and verified, a resend that would have overwritten the bed manager's ward held back for a person, and the gate stopping one.",
+  all: "You saw a transfer delivered and verified, a resend that would have overwritten the bed manager's ward held back for a person, the gate stopping one, and every screen on the way.",
   engineer:
     "You saw the decision receipt as JSON, the gate's reason codes, what each agent cited, S8 beside its Rules only run, the message trace in IRIS, and where Rules only went wrong.",
 };
