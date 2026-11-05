@@ -93,6 +93,13 @@ const MODES_INTRO =
 /** Whether the scenario is defined for the mode: one that names its modes isn't for the others. */
 const definedFor = (s: Scenario, mode: Mode) => !s.expected?.modes || s.expected.modes.includes(mode);
 
+/** Why someone who may not run scenarios finds Run and Reset greyed out: the server gives both roles the resource. */
+const RUN_NEEDS_ROLE = 'Running a scenario needs the operator or approver role';
+const RESET_NEEDS_ROLE = 'Resetting needs the operator or approver role';
+
+/** The element that says once why the public demo's Run and Reset are greyed out; they point to it. */
+const LOOK_ONLY_WHY = 'scenarios-look-only';
+
 /** Why nothing can be played on a site install: the server switches the Scenario Player off (CONTRACTS 12). */
 const PLAYER_OFF = 'The Scenario Player is switched off on a site install, which has no demo';
 
@@ -347,7 +354,7 @@ function ScenarioRow({
   busy,
   onRun,
   starting,
-  showPlay,
+  lookOnly,
 }: {
   s: Scenario;
   mode: Mode;
@@ -358,8 +365,8 @@ function ScenarioRow({
   busy: string;
   onRun: () => void;
   starting: boolean;
-  /** False where the user may not run scenarios: the row has no Play cell. */
-  showPlay: boolean;
+  /** The public demo's role: Run is greyed out, its reason said once at the top of the page. */
+  lookOnly: boolean;
 }) {
   const technical = useTechnical();
   // With the player switched off there is no mode to play in, so no row is marked for one.
@@ -367,11 +374,13 @@ function ScenarioRow({
   const modes = (s.expected?.modes ?? []).filter((m) => MODES.some((x) => x.value === m)).map(modeLabel);
   const why = playerOff
     ? PLAYER_OFF
-    : !defined
-      ? `${s.id} is not defined for ${modeLabel(mode)} mode: it would not end as its row says. Its modes: ${modes.join(', ')}.`
-      : !canRun
-        ? 'Running a scenario needs the operator role'
-        : busy;
+    : lookOnly
+      ? RUN_NEEDS_ROLE
+      : !defined
+        ? `${s.id} is not defined for ${modeLabel(mode)} mode: it would not end as its row says. Its modes: ${modes.join(', ')}.`
+        : !canRun
+          ? RUN_NEEDS_ROLE
+          : busy;
   const { first, rest } = splitSummary(s.summary);
   const events = technical ? hl7Events(s.steps ?? []) : '';
   return (
@@ -433,38 +442,38 @@ function ScenarioRow({
       >
         <LatestCase s={s} found={found} />
       </StackTable.Td>
-      {showPlay ? (
-        <StackTable.Td
-          data-label="Play"
-          data-label-hidden
-          className="stack-line scenario-run"
-          style={{ verticalAlign: 'top' }}
-        >
-          <Stack gap={4} align="flex-start">
-            <Tooltip label={why || `Play ${s.id} in ${humanize(mode)} mode`} multiline maw={260}>
-              <span>
-                <Button
-                  size="xs"
-                  variant="light"
-                  leftSection={<IconPlayerPlay size={14} />}
-                  disabled={!!why}
-                  loading={starting}
-                  onClick={onRun}
-                  aria-label={`Run ${s.id}`}
-                >
-                  Run
-                </Button>
-              </span>
-            </Tooltip>
-            {/* The reason, in words a keyboard or a screen reader reaches; a row not in the mode says it above */}
-            {why && defined ? (
-              <Text size="xs" c="dimmed" maw={160}>
-                {why}
-              </Text>
-            ) : null}
-          </Stack>
-        </StackTable.Td>
-      ) : null}
+      <StackTable.Td
+        data-label="Play"
+        data-label-hidden
+        className="stack-line scenario-run"
+        style={{ verticalAlign: 'top' }}
+      >
+        <Stack gap={4} align="flex-start">
+          <Tooltip label={why || `Play ${s.id} in ${humanize(mode)} mode`} multiline maw={260}>
+            <span>
+              <Button
+                size="xs"
+                variant="light"
+                leftSection={<IconPlayerPlay size={14} />}
+                disabled={!!why}
+                loading={starting}
+                onClick={onRun}
+                aria-label={`Run ${s.id}`}
+                aria-describedby={lookOnly ? LOOK_ONLY_WHY : undefined}
+              >
+                Run
+              </Button>
+            </span>
+          </Tooltip>
+          {/* The reason, in words a keyboard or a screen reader reaches; a row not in the mode says it above, and the
+              public demo's is said once at the top of the page */}
+          {why && defined && !lookOnly ? (
+            <Text size="xs" c="dimmed" maw={160}>
+              {why}
+            </Text>
+          ) : null}
+        </Stack>
+      </StackTable.Td>
     </StackTable.Tr>
   );
 }
@@ -606,13 +615,10 @@ function AllScenarios({
   scenarios,
   mode,
   row,
-  showPlay,
 }: {
   scenarios: Scenario[];
   mode: Mode;
   row: (s: Scenario) => React.ReactNode;
-  /** False where the user may not run scenarios: the list has no Play column. */
-  showPlay: boolean;
 }) {
   const [outcome, setOutcome] = useState<string>('all');
   const counts = new Map<Outcome, number>();
@@ -660,7 +666,7 @@ function AllScenarios({
                 <StackTable.Th>Scenario</StackTable.Th>
                 <StackTable.Th>What should happen</StackTable.Th>
                 <StackTable.Th>Latest case</StackTable.Th>
-                {showPlay ? <StackTable.Th>Play</StackTable.Th> : null}
+                <StackTable.Th>Play</StackTable.Th>
               </StackTable.Tr>
             </StackTable.Thead>
             <StackTable.Tbody>{shown.map(row)}</StackTable.Tbody>
@@ -685,14 +691,14 @@ export default function ScenariosPage() {
   const reset = useResetScenarios();
   const [mode, setMode] = useState<Mode>('board');
   const canRun = can.scenarios;
-  // The public demo's role operates but may not run or reset: no Run, no Reset, its own three cards, and a line saying why
+  // The public demo's role operates but may not run or reset: Run and Reset greyed out, its own three cards, a line saying why
   const hidden = scenariosHidden(can);
   // Only a report that says so switches the runs off: an older server, or one not answering yet, keeps them.
   const playerOff = useHealth().data?.demo === false;
   const current = scenarios.data?.run ?? null;
   const busy = isPlaying(current) ? `A run of ${current?.scenario} is still playing` : '';
   /** Why Reset is disabled now, or "". */
-  const resetWhy = playerOff ? PLAYER_OFF : !canRun ? 'Resetting needs the operator role' : busy;
+  const resetWhy = playerOff ? PLAYER_OFF : !canRun ? RESET_NEEDS_ROLE : busy;
 
   const start = (s: Scenario, m: Mode = mode) =>
     run.mutate(
@@ -718,13 +724,15 @@ export default function ScenariosPage() {
   const whyNot = (s: Scenario, m: Mode) =>
     playerOff
       ? PLAYER_OFF
-      : !definedFor(s, m)
-        ? `${s.id} is not defined for ${modeLabel(m)} mode`
-        : !MODES.some((x) => x.value === m)
-          ? `${modeLabel(m)} mode has no recordings here`
-          : !canRun
-            ? 'Running a scenario needs the operator role'
-            : busy || pending;
+      : hidden
+        ? RUN_NEEDS_ROLE
+        : !definedFor(s, m)
+          ? `${s.id} is not defined for ${modeLabel(m)} mode`
+          : !MODES.some((x) => x.value === m)
+            ? `${modeLabel(m)} mode has no recordings here`
+            : !canRun
+              ? RUN_NEEDS_ROLE
+              : busy || pending;
 
   // The induction prompt leads the page on an instance, as the site profile's questionnaire is designed; the demo, whose
   // profile is a recording nobody answers, keeps it below the fold, under the scenarios, so the guided path comes first.
@@ -736,54 +744,52 @@ export default function ScenariosPage() {
         title="Scenarios"
         icon={IconFlask2}
         hue="cyan"
-        lead={byEnv(SCENARIOS_LEAD)}
+        lead={hidden ? SCENARIOS_LEAD.lookOnly : byEnv(SCENARIOS_LEAD)}
         actions={
-          hidden ? undefined : (
-            <Stack gap={4} align="flex-end">
-              <Tooltip
-                label={resetWhy || 'Clear the downstream system, the folders and the running scenario'}
-              >
-                <span>
-                  <Button
-                    variant="default"
-                    leftSection={<IconRefresh size={16} />}
-                    disabled={!!resetWhy}
-                    loading={reset.isPending}
-                    onClick={() =>
-                      reset.mutate(undefined, {
-                        onSuccess: () =>
-                          notifications.show({
-                            color: 'blue',
-                            title: 'Reset',
-                            message: 'The downstream system and the folders are clear.',
-                          }),
-                        onError: (e) =>
-                          notifications.show({
-                            color: 'red',
-                            title: 'Reset failed',
-                            message: describeError(e),
-                          }),
-                      })
-                    }
-                  >
-                    Reset
-                  </Button>
-                </span>
-              </Tooltip>
-              {resetWhy ? (
-                <Text size="xs" c="dimmed" ta="right">
-                  {resetWhy}
-                </Text>
-              ) : null}
-            </Stack>
-          )
+          <Stack gap={4} align="flex-end">
+            <Tooltip label={resetWhy || 'Clear the downstream system, the folders and the running scenario'}>
+              <span>
+                <Button
+                  variant="default"
+                  leftSection={<IconRefresh size={16} />}
+                  aria-describedby={hidden ? LOOK_ONLY_WHY : undefined}
+                  disabled={!!resetWhy}
+                  loading={reset.isPending}
+                  onClick={() =>
+                    reset.mutate(undefined, {
+                      onSuccess: () =>
+                        notifications.show({
+                          color: 'blue',
+                          title: 'Reset',
+                          message: 'The downstream system and the folders are clear.',
+                        }),
+                      onError: (e) =>
+                        notifications.show({
+                          color: 'red',
+                          title: 'Reset failed',
+                          message: describeError(e),
+                        }),
+                    })
+                  }
+                >
+                  Reset
+                </Button>
+              </span>
+            </Tooltip>
+            {resetWhy && !hidden ? (
+              <Text size="xs" c="dimmed" ta="right">
+                {resetWhy}
+              </Text>
+            ) : null}
+          </Stack>
         }
       />
       <Stack gap="lg">
         <ScenariosHero demo={hidden} />
         {hidden ? (
-          <Text size="md">
-            The online demo plays its stories by itself, so there is nothing to run or reset here.
+          <Text size="md" id={LOOK_ONLY_WHY} maw="68ch">
+            This hospital plays its stories by itself, so running one needs the operator or approver role,
+            which the trial and your own instance offer.
           </Text>
         ) : null}
         {current ? (
@@ -800,6 +806,7 @@ export default function ScenariosPage() {
           starting={(s, m) => run.isPending && run.variables?.id === s.id && run.variables?.mode === m}
           onRun={start}
           demo={hidden}
+          whyId={LOOK_ONLY_WHY}
         />
         {playerOff ? (
           <Alert color="gray" variant="light" title="The Scenario Player is switched off">
@@ -826,14 +833,13 @@ export default function ScenariosPage() {
           <AllScenarios
             scenarios={scenarios.data.scenarios}
             mode={mode}
-            showPlay={!hidden}
             row={(s) => (
               <ScenarioRow
                 key={s.id}
                 s={s}
                 mode={mode}
                 found={s.latestCase ? byId.get(s.latestCase.caseId) : undefined}
-                showPlay={!hidden}
+                lookOnly={hidden}
                 canRun={canRun}
                 playerOff={playerOff}
                 busy={busy || pending}

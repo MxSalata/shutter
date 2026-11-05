@@ -5,6 +5,8 @@ import type { PlayedResult, Proof } from '@/lib/proof';
 export const SCENARIOS_LEAD = {
   live: 'Known HL7 failures to play into the production, and the case each one opened.',
   trial: 'Known message failures to play, and the case each one opened.',
+  /** Where the user may not run them, nothing here says to play them. */
+  lookOnly: 'Known HL7 failures, and the case each one opened.',
 };
 
 /**

@@ -158,8 +158,8 @@ const FIRST: Featured[] = [
  * The public demo's three: its hospital plays its rotation by itself, in Site policy mode (S8 is out of it and S20 never
  * in it), so the cards are three of the rotation's stories, in the mode they are played in: a recovery the written
  * policy holds for a person, a case that waits on another patient's case, and a write the gate withholds. A card shows
- * the scenario's latest case in that mode, else its latest case in any mode under that case's own mode, and is left out
- * while the scenario has no case at all: there is no Run to offer instead.
+ * the scenario's latest case in that mode, else its latest case in any mode under that case's own mode, and says so
+ * where the link would be while the scenario has no case yet: the card's text is true before the hospital plays it.
  */
 const DEMO_FIRST: Featured[] = [
   {
@@ -200,6 +200,7 @@ export function TryFirst({
   starting,
   onRun,
   demo = false,
+  whyId,
 }: {
   /** The scenarios, once read; the section and its heading render before that, as the guide's first target. */
   scenarios: Scenario[] | undefined;
@@ -210,11 +211,13 @@ export function TryFirst({
   onRun: (s: Scenario, mode: Mode) => void;
   /**
    * True on the public demo, whose user may not run scenarios: the cards are the demo's three (DEMO_FIRST), each with
-   * the case it has, and no Run buttons.
+   * the case it has, and their Run buttons are greyed out, the reason said once in the element `whyId` names.
    */
   demo?: boolean;
+  whyId?: string;
 }) {
-  const cases = useCases({ limit: 100 }).data?.items ?? [];
+  const casesRead = useCases({ limit: 100 });
+  const cases = casesRead.data?.items ?? [];
   const list = demo ? DEMO_FIRST : FIRST;
   const first = list
     .map((f) => ({ ...f, s: scenarios?.find((s) => s.id === f.id) }))
@@ -229,20 +232,22 @@ export function TryFirst({
             latest: inMode ?? (f.s.latestCase ? { ...f.s.latestCase, mode: undefined } : undefined),
           },
         ];
-      // The demo: the case in the mode, else the latest in any mode as the card's own; none, no card
+      // The demo: the case in the mode, else the latest in any mode as the card's own; none, the card in its own mode
       const found = inMode ?? caseOf(cases, f.s.id);
-      return found ? [{ ...f, mode: found.mode, inMode: found, latest: found }] : [];
+      return found
+        ? [{ ...f, mode: found.mode, inMode: found, latest: found }]
+        : [{ ...f, inMode: undefined, latest: undefined }];
     });
   const ids = list.map((f) => f.id).join(', ');
   return (
     <section aria-labelledby="try-first-title" data-tour="scenarios">
       <Group gap="xs" align="baseline" mb="sm" wrap="wrap">
         <Title order={2} id="try-first-title">
-          Try these three first
+          {demo ? 'Three to look at first' : 'Try these three first'}
         </Title>
         <Text size="md" c="dimmed">
           {demo
-            ? "The demo's hospital plays these by itself, in Site policy mode."
+            ? 'The hospital plays these in Site policy mode.'
             : 'Each one in the mode that shows what it is for.'}
         </Text>
       </Group>
@@ -261,9 +266,7 @@ export function TryFirst({
         )
       ) : !first.length ? (
         <Text size="sm" c="dimmed">
-          {demo
-            ? `None of ${ids} has a case among the newest yet: the demo's hospital plays one every few minutes.`
-            : `None of ${ids} is among this install's scenarios.`}
+          None of {ids} is among this install&apos;s scenarios.
         </Text>
       ) : (
         <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md" verticalSpacing={{ base: 'md', md: 0 }}>
@@ -286,7 +289,7 @@ export function TryFirst({
                     <Text size="sm">{s.title}</Text>
                   </Stack>
                   <Stack gap={4}>
-                    <Text className="overline">You will see</Text>
+                    <Text className="overline">{demo ? 'What it shows' : 'You will see'}</Text>
                     {inMode ? (
                       <SeeWithEntry caseId={inMode.caseId} see={see} />
                     ) : (
@@ -300,23 +303,22 @@ export function TryFirst({
                   </Stack>
                   {/* The action row sits at the card's foot, so the three Run buttons line up */}
                   <Stack gap="xs" align="flex-start" className="first-actions">
-                    {demo ? null : (
-                      <Tooltip label={reason || `Play ${s.id} in ${modeName} mode`} multiline maw={260}>
-                        <span>
-                          <Button
-                            size="sm"
-                            leftSection={<IconPlayerPlay size={16} />}
-                            disabled={!!reason}
-                            loading={starting(s, mode)}
-                            onClick={() => onRun(s, mode)}
-                            aria-label={`Run ${s.id} in ${modeName} mode`}
-                            data-tour-action={`run-${s.id}`}
-                          >
-                            Run {s.id}
-                          </Button>
-                        </span>
-                      </Tooltip>
-                    )}
+                    <Tooltip label={reason || `Play ${s.id} in ${modeName} mode`} multiline maw={260}>
+                      <span>
+                        <Button
+                          size="sm"
+                          leftSection={<IconPlayerPlay size={16} />}
+                          disabled={!!reason}
+                          loading={starting(s, mode)}
+                          onClick={() => onRun(s, mode)}
+                          aria-label={`Run ${s.id} in ${modeName} mode`}
+                          aria-describedby={demo ? whyId : undefined}
+                          data-tour-action={demo ? undefined : `run-${s.id}`}
+                        >
+                          Run {s.id}
+                        </Button>
+                      </span>
+                    </Tooltip>
                     {!demo && reason ? (
                       <Text size="xs" c="dimmed">
                         {reason}
@@ -339,6 +341,13 @@ export function TryFirst({
                           <StateBadge state={latest.state} />
                         )}
                       </Group>
+                    ) : demo ? (
+                      // Until the cases are read it isn't known that there is none
+                      casesRead.isSuccess ? (
+                        <Text size="sm" c="dimmed">
+                          No case yet: the hospital plays one every few minutes.
+                        </Text>
+                      ) : null
                     ) : (
                       <Text size="sm" c="dimmed">
                         Not played since the last reset

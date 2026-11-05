@@ -31,8 +31,8 @@ export const DEMO_READ_ONLY =
   "On the online demo you can approve or reject plans; a site's approver saves changes here";
 
 /**
- * The scenario controls are not offered: the user operates the site but may not run scenarios, as on the public demo,
- * which plays its stories by itself. A user who cannot operate at all keeps the disabled controls and their reasons, as
- * does a server that sends no `can` (it derives `scenarios` from `operate`, so this stays false).
+ * The page is for looking at: the user operates the site but may not run scenarios, as on the public demo, which plays
+ * its stories by itself, so its controls are greyed out with the reason said once. A user who cannot operate at all keeps
+ * a reason under each control, as does a server that sends no `can` (it derives `scenarios` from `operate`, so this stays false).
  */
 export const scenariosHidden = (can: Can): boolean => can.operate && !can.scenarios;
