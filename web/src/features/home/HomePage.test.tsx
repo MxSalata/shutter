@@ -1,10 +1,10 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { SECTIONS } from '@/features/shell/sections';
+import { PORTAL_PAGE, SECTIONS } from '@/features/shell/sections';
 import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
 import { layer1Words } from '@/test/words';
@@ -18,9 +18,11 @@ afterAll(() => server.close());
 const me = (can: Record<string, boolean>) => ({ username: 'someone', operator: true, approver: true, can });
 const ALL = { operate: true, approve: true, configure: true, scenarios: true, liveAgents: false };
 
+let client: QueryClient | undefined;
+
 function renderHome(can: Record<string, boolean> = ALL) {
   server.use(http.get('/api/shutter/me', () => HttpResponse.json(me(can))));
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter([{ path: '/home', element: <HomePage /> }], {
     initialEntries: ['/home'],
   });
@@ -105,9 +107,29 @@ describe('HomePage', () => {
     expect(await screen.findByText('Production not running')).toBeInTheDocument();
   });
 
-  it('stays within its word budget', async () => {
+  it('points to the page inside IRIS on a demo instance, saying what the online demo asks first', async () => {
+    server.use(http.get('/api/shutter/health', () => HttpResponse.json({ ok: true, demo: true })));
+    renderHome();
+    const link = await screen.findByRole('link', { name: /^Shutter in IRIS/ });
+    expect(link).toHaveAttribute('href', PORTAL_PAGE.href);
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveTextContent("What is running, and the board's case in the Visual Trace.");
+    expect(link).toHaveTextContent('Online demo: Cloudflare sign-in first (GitHub or an emailed code).');
+  });
+
+  it('does not point to it on a site install, where the page answers 404', async () => {
+    server.use(http.get('/api/shutter/health', () => HttpResponse.json({ ok: true, demo: false })));
+    renderHome();
+    await screen.findByRole('link', { name: 'Open the scenarios' });
+    await waitFor(() => expect(client?.isFetching()).toBe(0));
+    expect(screen.queryByRole('link', { name: /^Shutter in IRIS/ })).not.toBeInTheDocument();
+  });
+
+  it('stays within its word budget, the card to IRIS included', async () => {
+    server.use(http.get('/api/shutter/health', () => HttpResponse.json({ ok: true, demo: true })));
     const { container } = renderHome();
     await screen.findByRole('heading', { level: 1, name: 'Home' });
+    await screen.findByRole('link', { name: /^Shutter in IRIS/ });
     expect(layer1Words(container).length).toBeLessThanOrEqual(210);
   });
 });

@@ -1,5 +1,5 @@
 import { Anchor, Badge, Button, Card, Group, SimpleGrid, Stack, Text, Title } from '@mantine/core';
-import { IconHome2 } from '@tabler/icons-react';
+import { IconExternalLink, IconHome2 } from '@tabler/icons-react';
 import type { CSSProperties } from 'react';
 import { Link } from 'react-router';
 import { scenariosHidden } from '@/api/can';
@@ -8,7 +8,13 @@ import { PageHeader } from '@/components/PageHeader';
 import { Term } from '@/components/Term';
 import { TRIAL, trialHref } from '@/env/mode';
 import { hueVar } from '@/lib/hues';
-import { SECTIONS, useNeedAPerson, type SectionItem } from '@/features/shell/sections';
+import {
+  PORTAL_PAGE,
+  SECTIONS,
+  useNeedAPerson,
+  usePortalPage,
+  type SectionItem,
+} from '@/features/shell/sections';
 
 /**
  * Where the app opens: what Shutter does, where to start, what needs a person now, and what each section is for. It only
@@ -32,6 +38,7 @@ export default function HomePage() {
         }
       />
       <FirstStep />
+      <PortalCard />
       {SECTIONS.map(({ group, about, items }) => (
         <Stack key={group} gap="xs" component="section" aria-labelledby={`home-${group}`}>
           <Group gap="xs" align="baseline" wrap="wrap">
@@ -83,6 +90,40 @@ function FirstStep() {
           ) : null}
         </Group>
       </Stack>
+    </Card>
+  );
+}
+
+/** The demo's page inside IRIS, on an instance that has it, and the one place that says what the online demo asks first. */
+function PortalCard() {
+  const shown = usePortalPage();
+  if (!shown) return null;
+  const I = PORTAL_PAGE.icon;
+  return (
+    <Card
+      component="a"
+      href={PORTAL_PAGE.href}
+      target="_blank"
+      rel="noreferrer"
+      padding="md"
+      className="home-card"
+      data-testid="home-portal-card"
+      style={{ '--mark-hue': hueVar(PORTAL_PAGE.hue) } as CSSProperties}
+    >
+      <Group gap="sm" wrap="nowrap" align="flex-start">
+        <span className="identity-mark page-icon home-card-mark" aria-hidden>
+          <I size={20} stroke={1.8} />
+        </span>
+        <Stack gap={4} style={{ minWidth: 0 }}>
+          <Title order={2} size="h4">
+            {PORTAL_PAGE.label} <IconExternalLink size={14} aria-hidden style={{ verticalAlign: 'middle' }} />
+          </Title>
+          <Text size="sm">{PORTAL_PAGE.about}</Text>
+          <Text size="sm" c="dimmed">
+            Online demo: Cloudflare sign-in first (GitHub or an emailed code).
+          </Text>
+        </Stack>
+      </Group>
     </Card>
   );
 }
