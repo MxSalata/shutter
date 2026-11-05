@@ -84,7 +84,11 @@ describe('HomePage', () => {
     renderHome();
     const start = await screen.findByRole('link', { name: 'Open the scenarios' });
     expect(start).toHaveAttribute('href', '/scenarios');
-    expect(screen.getByText(/Start with S2, then S8/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Start with S2, then S8, where a plain resend would write over the bed manager's ward with every check passed\./,
+      ),
+    ).toBeInTheDocument();
   });
 
   it('starts the public demo, who cannot run scenarios, at the cases', async () => {

@@ -113,11 +113,11 @@ describe('EvaluationPage', () => {
     expect(hero).toHaveAttribute('data-tour', 'evaluation-headline');
     expect(within(hero).getByRole('heading', { name: 'The board against the expected outcome', level: 2 }));
     expect(visible(hero.querySelector('.hero-statement'))).toBe(
-      'On the same 11 failures, played end to end: the board 11, Rules only 4. The gate stopped 6 of its 7 misses.',
+      "On the same 11 failures, played end to end: the board 11, Rules only 4. Of Rules only's 7 misses, the gate stopped 6.",
     );
     expect(
       within(hero).getByText(
-        /^The seventh, S8, wrote the wrong ward with every check passed\. Only the board caught it\./,
+        /^The seventh, S8, would write over the bed manager's ward with every check passed\. Only the board caught it\./,
       ),
     ).toBeInTheDocument();
     // The side by side of S8's two cases, found among the recorded cases
@@ -174,7 +174,7 @@ describe('EvaluationPage', () => {
     expect(
       within(hero).getByText(`${usd(Math.min(...scored))} to ${usd(Math.max(...scored))}`),
     ).toBeInTheDocument();
-    expect(within(hero).getByText(/^\$10\.00 for 100 runs$/)).toBeInTheDocument();
+    expect(within(hero).getByText(/^\$10\.00 for 25 passes \(100 runs\)$/)).toBeInTheDocument();
     expect(within(hero).getByRole('heading', { name: 'Agreement', level: 3 })).toBeInTheDocument();
     for (const [how, n] of Object.entries(recorded.totals.agreement))
       expect(
@@ -204,7 +204,7 @@ describe('EvaluationPage', () => {
     expect(visible(hero.querySelector('.hero-statement'))).toBe(
       'The board chose the expected action in 24 of 24 recorded failures.',
     );
-    expect(hero).not.toHaveTextContent('The gate stopped');
+    expect(hero).not.toHaveTextContent('the gate stopped');
     expect(screen.getByRole('region', { name: 'Why a board' })).not.toHaveTextContent('The gate alone');
   });
 

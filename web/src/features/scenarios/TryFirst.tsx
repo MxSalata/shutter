@@ -168,7 +168,7 @@ const FIRST: Featured[] = [
     mode: 'board',
     title: 'The board withholds a write',
     see: (entry) =>
-      `The evidence cannot tell which movement is current, so the coordinator agent escalates to a person${entry ? `, citing catalogue entry ${entry},` : ''} and keeps the dissent.`,
+      `A resend would write over the bed manager's ward with every check passed. The evidence cannot tell which movement is current, so the coordinator agent escalates to a person${entry ? `, citing catalogue entry ${entry},` : ''} and keeps the dissent.`,
   },
   {
     id: 'S20',
