@@ -46,10 +46,11 @@ const nothing = (why = ''): CaseAction => ({
 
 /**
  * A closed case that came out other than its scenario expects has nothing pending, and "No action needed" would still
- * read as all clear under a wrong write. S8 has its other run to compare with; another scenario shows the card's words.
+ * read as all clear under a wrong write. S8 has its other run to compare with, once this install has played both;
+ * otherwise, as for another scenario, the button shows the card's words.
  */
-const notExpected = (scenario: string): CaseAction =>
-  scenario === 'S8'
+const notExpected = (scenario: string, comparable: boolean): CaseAction =>
+  scenario === 'S8' && comparable
     ? {
         needsYou: false,
         label: 'Compare the two runs',
@@ -93,6 +94,8 @@ export interface ActionContext {
   trial?: boolean;
   /** The case closed with an outcome its scenario doesn't expect (lib/status.ts caseOutcome). */
   notAsExpected?: boolean;
+  /** Both of S8's runs are here to compare; the side by side has nothing to show without them. */
+  comparable?: boolean;
 }
 
 /**
@@ -109,7 +112,7 @@ export interface ActionContext {
 export function caseActionOf(f: CaseFacts, ctx: ActionContext): CaseAction {
   const { c } = f;
   const next = nextAction(f);
-  if (ctx.notAsExpected && next.kind === 'none') return notExpected(c.scenario);
+  if (ctx.notAsExpected && next.kind === 'none') return notExpected(c.scenario, !!ctx.comparable);
   if (c.disposition === 'abandoned' || c.disposition === 'handled_by_hand' || next.kind === 'none')
     return nothing();
   if (next.kind === 'shutter') return nothing(`Shutter is ${caseState(c.state).label.toLowerCase()}`);
