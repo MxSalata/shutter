@@ -99,7 +99,8 @@ Interoperability production, with a board of IRIS AI Hub agents.
   schema is imported (catalogue entry E18).
 - **Onboarding a hospital's namespaces:** a plan that changes nothing (`Shutter.Setup_OnboardPlan`), an apply that does what it
   listed and never stops a production, a marked test failure per namespace, the Doctor's `watched_namespaces`, and a removal;
-  an item or a schema category named alike in two namespaces stays apart (`docs/INSTALL.md`, section 9). A forward naming a
+  an item or a schema category named alike in two namespaces stays apart, and a namespace keeps its receiver names when another
+  comes on after it; the forwarder's user goes with the last namespace's removal, never before (`docs/INSTALL.md`, section 9). A forward naming a
   category not loaded here is reported as such and repaired once it is loaded, and a load in a namespace running another
   production is refused.
   A message routed to two receivers opens a case for each that fails. The plan warns of retry-forever whether the item sets it or

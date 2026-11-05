@@ -1,6 +1,7 @@
 # Contracts between Shutter's parts
 
 Version 1.42, 5 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.44, 5 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -1362,7 +1363,7 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   services, routers, operations: [{name, class, reported_as, alert_on_error, get_reply, reply_code_actions, reply_code_actions_from,
   proves, in_profile, has_api, draft}], other_operations,
   schemas: [{category, named_by, in_namespace, standard, in_shutter, shutter_name, action}], wired, receiver_prefix, actions: [{do,
-  says, ...}], todo, warnings, error}`. `do` is `map_package`, `import_schema`, `add_forwarder`, `set_prefix`, `rename_alert`,
+  says, ...}], todo, warnings, error}`. `do` is `map_package`, `import_schema`, `add_forwarder`, `rename_alert`,
   `add_alert_intake`, `set_alert_receivers`, `set_alert_on_error` or `draft_receiver`. Options: `production`, `shutter_host`,
   `shutter_port`, `ssl_config`, `credential`, `receivers`, `alert_on_error`. Reading a namespace (`Onboard.Read`) calls only Ens, %SQL,
   %Dictionary and %SYS classes while it is there, as `ProductionReader` does, since no Shutter class resolves there yet.
@@ -1378,7 +1379,8 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   `items`, `renamed`, `alertOnError`, `receivers`, `drafted`, `credential`).
 - A draft receiver's entry: `{name, system, tier: 3, features: all false, draft: true, namespace, item}` and no `api`, so 6.4's rule for a
   receiver with no API holds and the gate blocks any write. Validation ignores `draft`, `namespace` and `item`; a person removes `draft`
-  on saving. Its name is the item's, or `ReceiverPrefix` and the item's when another namespace holds the name (`Onboard.TakenElsewhere`).
+  on saving. Its name is the item's, or `ReceiverPrefix` and the item's when another namespace holds the name (`Onboard.TakenElsewhere`). The prefix is settled when the
+  forwarder is added: a wired namespace keeps its names, and the plan warns when an operation added later takes a name another reports.
 - `Do ##class(Shutter.Setup).OnboardCredential(namespace, user, password, credential)` makes the user with `Shutter_Forwarder` when it does
   not exist (one that exists must sign in with that password and hold the role), stores the credential in that namespace, and prints no password; with no
   password it asks with the echo off. Not an SQL procedure.
@@ -1387,7 +1389,9 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   and answers `{ok, case, http_status, advice, error}`. An ORU's key is `UNMAPPED^<header>`, so the gate blocks `UNMAPPABLE` and no model runs.
 - `SELECT Shutter.Setup_OnboardRemove(namespace, options)` (`%Admin_Manage`) undoes the record: `{ok, removed, kept, error}`. Options:
   `unmap` (take the mappings although messages of Shutter's classes are left in that namespace; otherwise they stay, recorded under
-  `^Shutter.Config("onboardKept", namespace)`, and a later call takes them) and `credential`.
+  `^Shutter.Config("onboardKept", namespace)`, and a later call takes them) and `credential` (v1.44: the credential the credential step stored
+  there, recorded under `^Shutter.Config("onboardMade")` so a removal without it and a later apply do not lose the record; the user only when the
+  step made it and no other namespace onboarded here signs in with it, else `kept` says why; a namespace already off may be called for this alone).
 - `SELECT Shutter.Setup_OnboardReceiverItem(name, host, port, credential, ssl)` (`%Admin_Manage`) adds a `Shutter.Operation.Ward` item of the
   receiver's name to Shutter's production for a receiver the profile gives an `api`, records it under `^Shutter.Config("receiverItems")`, and
   a site install puts it back after compiling the production (`RestoreReceiverItems`). Refused for a receiver with no `api`.
@@ -1817,6 +1821,8 @@ board's case in the Visual Trace, the latest cases, and links to the portal's pa
 ## Changes
 
 - v1.42, 5 Nov 2026 (a real instance's failure paths, reviewed on 5 Nov): a request the receiver never answered is classified as no answer, which the connector's +StatusCode had made unreachable. A write timed out reads `uncertain` and goes to verification instead of `error`, refused and "nothing changed" (1.3, 5.1); only a socket that never opened is `unavailable`; a preflight read that got no answer is `unavailable`; a feed delivery timed out opens as `uncertain_outcome` rather than `delivery_failed`, at Shutter's connector and the demo hospital's. The audit line and the failure text no longer name HTTP 0. `UncertainSettleSeconds` is 60 s, so not committed is said at the last read, about 70 s after the attempt, and no longer at 30 s while a slow receiver may still commit (1.3, 5.1). A rehearsal with no usable answer no longer says the action would not apply; the receiver's own refusal of it (a 409 or 422) still does. A request nobody answered that may have been applied says so, with the adapter's words in brackets after it, and the catalogue reads a reason code only from a parenthesis ahead of the failure text's first colon. The audit trail, the gate's details and the forwarder's log say "no answer" where a status would read 0. `Shutter_Operator` and `Shutter_Approver` write the hospital's data database and the records system's, so Reset works for them and reaches every demo receiver; `ResetLive` answers `not cleared` rather than failing the reset halfway (4). An approval wait that runs out names `system` on its audit event, and a coordinator refused for the day's budget leaves the headline "No plan: the day's model budget is spent" (5). The live hospital holds its stories until Shutter's API service is registered, so a story at the first start is no longer lost (4.4).
+- v1.44, 5 Nov 2026 (a second cold run of the guide): a wired namespace keeps its receiver names when another comes on, so the action `set_prefix` is
+  gone and the plan warns of a later clash; `credential` on a removal no longer depends on which namespace made the user, and the last one takes it (11).
 - v1.43, 5 Nov 2026 (an integration lead's point that a transport ACK does not mean a message was processed): the plan reports each HL7
   operation's acknowledgement settings and what a completed message proves there (11.1); `Shutter.Intake.AckMatch` turns a negative
   application acknowledgement on its own feed into a forward (11).

@@ -458,8 +458,9 @@ The web application is at `/shutter/index.html`; `/shutter` and `/shutter/` answ
 
 **9.6 Fill in the receivers.** In the app's site profile (an approver's), review each draft: its system, category
 (`current_state`, `history_of_record` or `orders_results`), tier and team, and remove `draft` when you save. Use the name the
-draft has: in a second namespace every item is reported with its prefix (`DOCUMENTS DMS Out`), including those that clash with
-nothing, so a team's `receivers` must say that. Through the API, `GET /api/shutter/site-profile`, change its `profile`, and
+draft has: in a second namespace every item is reported with its prefix (`DOCUMENTS Results Out`), including those that clash with
+nothing, so a team's `receivers` must say that. A namespace already wired keeps its names when another comes on after it, and the
+plan warns if an operation added later takes a name another namespace reports. Through the API, `GET /api/shutter/site-profile`, change its `profile`, and
 `PUT` the whole of it back with the header `X-Requested-With: Shutter`; a part alone answers 400. A receiver with no API stays declared as it is, and its failures escalate to its team.
 
 **Giving a receiver its API.** Only a receiver with state, receipt, capabilities and operations paths can be recovered. Add
@@ -489,6 +490,11 @@ the mappings while that namespace still holds messages of Shutter's classes, sin
 run it again with `unmap`. `unmap` does not refuse if you have not: it takes the mappings anyway and says how many messages were
 left. Those messages' bodies then stay for good: with 12 left, the purge answered no error, removed every header, and left 12 rows in
 `^Ens.MessageBodyD` whose class no longer resolves.
+
+`credential` takes the credential the credential step stored in that namespace, also after an earlier removal that kept it. The user
+`shutter-fwd` is shared: it goes with the last namespace onboarded here that signs in with it, and the answer's `kept` names who still
+does until then. A user that was there before the credential step stays, and so does the user if you never pass `credential`: its password
+does not expire, so disable it by hand.
 
 **On another instance.** A watched namespace on a separate instance cannot take a mapping, and these calls read only their own
 instance. Load `src/Shutter/Intake/` (Forward, Forwarded, Forwarder, AlertProcess, AckMatch) and `src/Shutter/Util/Json.cls`, `Schemas.cls` and
