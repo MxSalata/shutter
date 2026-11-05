@@ -120,6 +120,28 @@ test.describe('at a laptop size', () => {
     expect(await scrollY(page)).toBe(y);
   });
 
+  for (const [width, height] of [
+    [1280, 800],
+    [390, 844],
+  ] as const)
+    test(`after the side by side link, tabs at ${width} wide do not scroll back down to it`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height });
+      await go(page, '/cases/C-000008?show=compare');
+      await expect(page.getByRole('region', { name: /^S8 side by side/ })).toBeVisible();
+      await atRest(page);
+      const summary = page.getByRole('tab', { name: 'Summary' });
+      await page.getByRole('tab', { name: 'Evidence' }).click();
+      await expect(page.getByRole('tabpanel', { name: 'Evidence' })).toBeVisible();
+      await atRest(page);
+      const y = await scrollY(page);
+      await summary.click();
+      await expect(page.getByRole('region', { name: /^S8 side by side/ })).toBeVisible();
+      await atRest(page);
+      expect(await scrollY(page)).toBeLessThanOrEqual(y);
+    });
+
   test('a stage of the lifecycle goes to its section, without going by the top of the page', async ({
     page,
   }) => {

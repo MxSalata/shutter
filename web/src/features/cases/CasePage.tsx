@@ -153,8 +153,9 @@ function CaseBody({ c }: { c: CaseDetail }) {
     (next: string | null) =>
       setSearch((prev) => {
         const params = new URLSearchParams(prev);
-        // The story step a link opened has been shown: a later tab change must not open it again
+        // What a link opened has been shown: a later tab change must not open it again, or scroll back down to it
         params.delete('open');
+        params.delete('show');
         if (!next || next === 'summary') params.delete('tab');
         else params.set('tab', next);
         return params;
