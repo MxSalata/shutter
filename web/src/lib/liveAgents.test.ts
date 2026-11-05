@@ -318,26 +318,26 @@ describe("a question's failure read from its error", () => {
 describe("the banner's line about the live budget", () => {
   it("says the demo build's own figure alone when the server sends it", () => {
     expect(budgetNoteLine(settings({ budget: spent, budgetNote: { amountUsd: 15, period: 'day' } }))).toBe(
-      '$15 a day, paid by the author, runs the live agents.',
+      "$15 a day from the author runs the judges' live agents.",
     );
     expect(budgetNoteLine(settings({ budgetNote: { amountUsd: 2.5, period: 'hour' } }))).toBe(
-      '$2.50 an hour, paid by the author, runs the live agents.',
+      "$2.50 an hour from the author runs the judges' live agents.",
     );
   });
 
   it("reads the instance's own cap otherwise, per hour on the public demo, with what was spent so far", () => {
     expect(
       budgetNoteLine(settings({ budget: { ...spent, spentTodayUsd: 0.4, exhausted: false }, hourly: true })),
-    ).toBe('$2 an hour, paid by the author, runs the live agents (so far: $0.40).');
+    ).toBe("$2 an hour from the author runs the judges' live agents (so far: $0.40).");
     expect(budgetNoteLine(settings({ budget: { ...spent, dailyUsd: 15, spentTodayUsd: 4.2 } }))).toBe(
-      '$15 a day, paid by the author, runs the live agents (so far: $4.20).',
+      "$15 a day from the author runs the judges' live agents (so far: $4.20).",
     );
     // A note with no positive figure is no note
     expect(
       budgetNoteLine(
         settings({ budget: { ...spent, spentTodayUsd: 0 }, budgetNote: { amountUsd: 0, period: 'day' } }),
       ),
-    ).toBe('$2 a day, paid by the author, runs the live agents (so far: $0.00).');
+    ).toBe("$2 a day from the author runs the judges' live agents (so far: $0.00).");
   });
 
   it('says nothing when neither gives a positive figure', () => {
