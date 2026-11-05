@@ -72,7 +72,7 @@ export { REPLAY_DONE };
 
 /**
  * A tab panel clears the header and the sticky tab bar when it is scrolled to, as `.case-tab-panel` makes the
- * sections, steps and guide cards inside it do.
+ * sections and steps inside it do.
  */
 const PANEL = {
   className: 'case-tab-panel',

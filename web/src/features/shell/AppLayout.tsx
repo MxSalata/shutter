@@ -256,7 +256,7 @@ export function AppLayout() {
   const profile = useSiteProfile().data?.profile;
   setDisplayZone(profile ? profile.feed?.time_zone || 'UTC' : undefined);
   // 56 px live; a trial page's banner adds 40 px, 32 px once it is one line, and 36 px on a phone (styles.css keeps
-  // --shutter-header-h, which sticky parts and scrolled-to sections clear, the same)
+  // --shutter-header-h, which sticky parts and scrolled-to sections clear, the same, in rem as AppShell turns these)
   const header = chrome ? { base: 92, sm: banner === 'compact' ? 88 : 96 } : 56;
   return (
     <AppShell

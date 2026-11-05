@@ -62,7 +62,7 @@ import {
   type ChapterGroup,
   type GuideScope,
 } from './registry';
-import { focusFrom, pageHeading, waitForTarget } from './reveal';
+import { bringIntoFreePart, focusFrom, landOn, pageHeading, waitForTarget } from './reveal';
 import { useGuide, type GuidePhase } from './store';
 
 /**
@@ -112,9 +112,9 @@ function withoutAsk(search: string): string {
   return rest ? `?${rest}` : '';
 }
 
-/** Scrolls a control to the middle of the screen and focuses it. */
+/** Brings a control into view and focuses it. */
 function bringToHand(el: HTMLElement, reduced: boolean) {
-  el.scrollIntoView?.({ block: 'center', behavior: reduced ? 'auto' : 'smooth' });
+  bringIntoFreePart(el, reduced);
   el.focus({ preventScroll: true });
 }
 
@@ -594,6 +594,7 @@ function StepHost({ pos }: { pos: GuidePosition }) {
     placed.current = true;
     let cancelled = false;
     let made: HTMLElement | null = null;
+    let stopLanding: (() => void) | null = null;
     void (async () => {
       const el = await waitForTarget(pos.step.target);
       // The step after an approval waits for the case page's replay to finish, for at most 3 seconds
@@ -615,11 +616,12 @@ function StepHost({ pos }: { pos: GuidePosition }) {
       el.insertAdjacentElement('beforebegin', made);
       setHost(made);
       setTarget(el);
-      made.scrollIntoView?.({ block: 'start', behavior: reducedNow.current ? 'auto' : 'smooth' });
+      stopLanding = landOn(made, reducedNow.current);
     })();
     // Leaving the page ends the step's showing; coming back by hand does not show it again
     return () => {
       cancelled = true;
+      stopLanding?.();
       made?.remove();
       if (!made) placed.current = false;
       setHost(null);
