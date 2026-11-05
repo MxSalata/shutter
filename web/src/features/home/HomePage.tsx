@@ -79,7 +79,9 @@ export default function HomePage() {
  */
 function FirstStep() {
   const can = useCan();
-  const hidden = scenariosHidden(can);
+  // A site install plays no scenarios for anyone (the Scenarios page says so): its way in is its own cases
+  const playerOff = useHealth().data?.demo === false;
+  const hidden = scenariosHidden(can) || playerOff;
   return (
     <Card padding="md" component="section" aria-labelledby="home-first-step" data-tour="home-first-step">
       <Stack gap="xs" align="flex-start">
@@ -87,9 +89,11 @@ function FirstStep() {
           New here?
         </Title>
         <Text maw="68ch">
-          {hidden
-            ? "This hospital's failures are already in Cases. Open one to see the evidence, the plan and who decided."
-            : 'Scenarios replay known failures: AI Hub agents propose a plan, and a deterministic gate decides whether it may write. Start with S2, then S8, where a plain resend would move a patient back to the wrong ward.'}
+          {playerOff
+            ? 'A failed delivery your productions forward becomes a case. Open one to see the evidence, the plan and who decided.'
+            : hidden
+              ? "This hospital's failures are already in Cases. Open one to see the evidence, the plan and who decided."
+              : 'Scenarios replay known failures: AI Hub agents propose a plan, and a deterministic gate decides whether it may write. Start with S2, then S8, where a plain resend would move a patient back to the wrong ward.'}
         </Text>
         <Group gap="xs">
           <Button component={Link} to={hidden ? '/cases' : '/scenarios'} mih={44}>

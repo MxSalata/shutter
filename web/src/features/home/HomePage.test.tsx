@@ -44,6 +44,13 @@ describe('HomePage', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
+  it('starts a site install from its cases, since it plays no scenarios', async () => {
+    server.use(http.get('/api/shutter/health', () => HttpResponse.json({ ok: true, demo: false })));
+    renderHome();
+    expect(await screen.findByRole('link', { name: 'Open the cases' })).toHaveAttribute('href', '/cases');
+    expect(screen.queryByText(/Start with S2/)).not.toBeInTheDocument();
+  });
+
   it('tells a role that may not run scenarios to follow the recovery, not to run it', async () => {
     renderHome({ ...ALL, configure: false, scenarios: false });
     expect(await screen.findByText('Follow the recovery and who decided.')).toBeInTheDocument();
