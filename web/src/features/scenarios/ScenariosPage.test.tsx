@@ -665,6 +665,28 @@ describe('ScenariosPage, its rows and its proof', () => {
     ).toHaveAttribute('data-tech-detail', 'open');
   });
 
+  it('draws a diagram in each row and on each card, in the mode the row is showing, with the same in words', async () => {
+    renderScenarios();
+    const s20 = within(await card('S20')).getByRole('img', { name: /^S20 in a diagram/ });
+    expect(s20).toHaveAccessibleName(
+      expect.stringContaining('a person changes the record at the receiver by hand'),
+    );
+    expect(s20).toHaveAccessibleName(expect.stringContaining('It should end: nothing written, superseded'));
+    const list = screen.getByRole('region', { name: 'Every scenario' });
+    expect(within(list).getAllByRole('img', { name: /in a diagram/ })).toHaveLength(listed.length);
+    const first = screen.getByRole('region', { name: 'Try these three first' });
+    expect(within(first).getAllByRole('img', { name: /in a diagram/ })).toHaveLength(3);
+    // S21 is stopped by the gate in Rules only, so its picture changes with the choice of mode
+    const s21 = () => within(screen.getByRole('button', { name: 'Run S21' }).closest('tr')!);
+    expect(s21().getByRole('img', { name: /in a diagram/ })).not.toHaveAccessibleName(
+      expect.stringContaining('EVENT_TIME_IMPLAUSIBLE'),
+    );
+    await userEvent.click(screen.getByRole('radio', { name: 'Rules only' }));
+    expect(s21().getByRole('img', { name: /in a diagram/ })).toHaveAccessibleName(
+      expect.stringContaining('EVENT_TIME_IMPLAUSIBLE'),
+    );
+  });
+
   it("shows the scenario's HL7 events as a code in Technical only", async () => {
     renderScenarios('technical');
     expect(within(await card('S2')).getByText('A01, A02 fails')).toBeInTheDocument();

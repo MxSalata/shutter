@@ -23,6 +23,7 @@ import { Term } from '@/components/Term';
 import { caseOf } from '@/features/guide/places';
 import { hueVar, MODE_IDENTITY } from '@/lib/hues';
 import { MoreAbout } from './MoreAbout';
+import { ScenarioDiagram } from './ScenarioDiagram';
 import { ProofLine } from './ProofLine';
 
 /** The modes by the names the Scenarios page gives them. */
@@ -287,6 +288,7 @@ export function TryFirst({
                       {title}
                     </Title>
                     <Text size="sm">{s.title}</Text>
+                    <ScenarioDiagram scenario={s} mode={mode} />
                   </Stack>
                   <Stack gap={4}>
                     <Text className="overline">{demo ? 'What it shows' : 'You will see'}</Text>
@@ -313,7 +315,7 @@ export function TryFirst({
                           onClick={() => onRun(s, mode)}
                           aria-label={`Run ${s.id} in ${modeName} mode`}
                           aria-describedby={demo ? whyId : undefined}
-                          data-tour-action={demo ? undefined : `run-${s.id}`}
+                          data-tour-action={`run-${s.id}`}
                         >
                           Run {s.id}
                         </Button>

@@ -67,6 +67,10 @@ export interface ScenarioStep {
   wait_for_state?: string;
   timeout?: number;
   capabilities?: Record<string, unknown>;
+  /** The receivers a fault applies to, when it is more than the one (S22). */
+  receivers?: string[];
+  /** A change made by hand in the receiver itself, not through the feed (S20). */
+  manual?: { encounter_id: string; event: string; ward: string; event_time: string };
 }
 
 export interface ScenarioExpected {

@@ -64,7 +64,9 @@ test.describe('the live sign-in page of a demo install, on a laptop', () => {
       /\?trial#\/home$/,
     );
     // The proof sits on the left and the form on the right, side by side
-    const proof = await page.getByRole('region', { name: /^When an HL7 transfer fails/ }).boundingBox();
+    const proof = await page
+      .getByRole('region', { name: /^Shutter fixes a failed HL7 transfer/ })
+      .boundingBox();
     const form = await page.getByRole('button', { name: /^Sign in$/ }).boundingBox();
     expect(proof!.x + proof!.width).toBeLessThanOrEqual(form!.x);
   });
