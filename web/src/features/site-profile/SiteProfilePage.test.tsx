@@ -597,6 +597,10 @@ describe("SiteProfilePage, as the public demo's role reads it", () => {
     expect(screen.queryByText(/a save lasts until the page is reloaded/)).not.toBeInTheDocument();
     // The shipped answers are listed, as for everyone
     expect(screen.getByText('Shutter is running on the shipped answers')).toBeInTheDocument();
+    // Beside that notice it says who saves, and never tells this role to do it
+    const notice = screen.getByText('Shutter is running on the shipped answers').closest('[role]')!;
+    expect(within(notice as HTMLElement).getByTestId('demo-read-only')).toBeInTheDocument();
+    expect(screen.queryByText(/confirm or change them and save/)).not.toBeInTheDocument();
   });
 
   it('keeps the pre-filled draft and its review for reading, with the note instead of Save', async () => {
