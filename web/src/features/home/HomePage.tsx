@@ -14,7 +14,7 @@ import { IconExternalLink, IconHome2 } from '@tabler/icons-react';
 import type { CSSProperties } from 'react';
 import { Link } from 'react-router';
 import { scenariosHidden } from '@/api/can';
-import { useCan, useCases, useHealth } from '@/api/hooks';
+import { useCan, useCasesOnce, useHealth } from '@/api/hooks';
 import { PageHeader } from '@/components/PageHeader';
 import { Term } from '@/components/Term';
 import { TRIAL, trialHref } from '@/env/mode';
@@ -118,9 +118,13 @@ function FirstStep() {
  */
 function CasesToOpen() {
   const can = useCan();
-  const s8 = useCases({ scenario: 'S8', limit: 100 }).data?.items.find((c) => c.scenario === 'S8');
-  const held = useCases({ state: 'awaiting_approval', limit: 100 }, can.approve).data?.items;
-  const waiting = held?.find((c) => c.scenario === 'S2') ?? held?.[0];
+  const s8 = useCasesOnce({ scenario: 'S8', limit: 100 }).data?.items.find((c) => c.scenario === 'S8');
+  const heldS2 = useCasesOnce({ state: 'awaiting_approval', scenario: 'S2', limit: 1 }, can.approve).data;
+  const heldAny = useCasesOnce(
+    { state: 'awaiting_approval', limit: 1 },
+    can.approve && heldS2?.items.length === 0,
+  ).data;
+  const waiting = heldS2?.items[0] ?? heldAny?.items[0];
   if (!s8 && !waiting) return null;
   return (
     <Stack gap={4} data-testid="home-cases-to-open">

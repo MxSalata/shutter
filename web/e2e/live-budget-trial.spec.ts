@@ -222,6 +222,69 @@ test.describe(`the live budget on the public demo, against a v1.37 server ${area
     const lineBox = (await line.boundingBox())!;
     expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(bannerBox.x + bannerBox.width);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    // The line's link is told apart from its sentence by more than colour, and nothing else is signed in as this role
+    expect(await audit(page)).toEqual([]);
+  });
+
+  const DEMO = { ...ME, username: 'demo', can: { ...ME.can, liveAgents: false } };
+
+  test('never says "no agent" over the S8 case while the instance is still answering', async ({ page }) => {
+    await stubServer(page, settings({}, { dailyUsd: 2, spentTodayUsd: 0.4 }), undefined, DEMO);
+    await page.route(/\/api\/shutter\/cases\?.*scenario=S8/, async (route) => {
+      await new Promise((r) => setTimeout(r, 1500));
+      await route.fallback();
+    });
+    // Every state of the line, from the first paint, since a sample between two looks could miss a short one
+    await page.addInitScript(() => {
+      const seen: string[] = [];
+      (window as unknown as { boardLines: string[] }).boardLines = seen;
+      new MutationObserver(() => {
+        const text = document.querySelector('[data-testid="live-board-link"]')?.textContent;
+        if (text && !seen.includes(text)) seen.push(text);
+      }).observe(document, { childList: true, subtree: true, characterData: true });
+    });
+    await page.goto('./#/cases');
+    await expect(banner(page).getByTestId('live-board-link')).toContainText('One went to the live board');
+    expect(await page.evaluate(() => (window as unknown as { boardLines: string[] }).boardLines)).toEqual([
+      `Most of this hospital's failures are settled by its written policy, with no agent. One went to the live board: ${CASE}`,
+    ]);
+  });
+
+  test('says neither line when the instance could not answer', async ({ page }) => {
+    await stubServer(page, settings({}, { dailyUsd: 2, spentTodayUsd: 0.4 }), undefined, DEMO);
+    await page.route(/\/api\/shutter\/cases\?.*scenario=S8/, (route) =>
+      route.fulfill({ status: 500, json: { error: 'internal', detail: 'Stand-in failure' } }),
+    );
+    await page.goto('./#/cases');
+    await expect(banner(page).getByTestId('live-line')).toBeVisible();
+    await page.waitForTimeout(1500);
+    await expect(banner(page).getByTestId('live-board-link')).toHaveCount(0);
+  });
+
+  test("reads Home's two case links and the banner's once, while the counts beside them keep polling", async ({
+    page,
+  }) => {
+    await page.clock.install();
+    await stubServer(page, settings({}, { dailyUsd: 2, spentTodayUsd: 0.4 }), undefined, {
+      ...DEMO,
+      can: { ...DEMO.can, scenarios: false },
+    });
+    const asked: string[] = [];
+    page.on('request', (r) => {
+      const url = new URL(r.url());
+      if (url.pathname.endsWith('/api/shutter/cases')) asked.push(url.search);
+    });
+    await page.goto('./#/');
+    await expect(page.getByTestId('home-cases-to-open')).toBeVisible();
+    const before = asked.length;
+    await page.clock.fastForward(60_000);
+    // Polling runs on the clock this test holds, so the counts prove the minute passed for the page
+    await expect.poll(() => asked.length).toBeGreaterThan(before);
+    const after = asked.length;
+    await page.clock.fastForward(60_000);
+    await expect.poll(() => asked.length).toBeGreaterThan(after);
+    expect(asked.filter((q) => q.includes('scenario=S8'))).toHaveLength(1);
+    expect(asked.filter((q) => q.includes('scenario=S2'))).toHaveLength(1);
   });
 
   test("keeps the trial's link while the instance has no S8 case", async ({ page }) => {
@@ -235,6 +298,7 @@ test.describe(`the live budget on the public demo, against a v1.37 server ${area
     await expect(banner(page).getByTestId('live-board-link')).toHaveText(
       "The hospital's own failures are settled by its written policy, with no agent. See the board decide: S8 in the trial",
     );
+    expect(await audit(page)).toEqual([]);
   });
 
   test("says it in the board's dialog, where Convene cannot be pressed, and for a refused press", async ({

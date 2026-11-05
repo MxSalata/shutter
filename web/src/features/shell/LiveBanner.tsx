@@ -2,7 +2,7 @@ import { Anchor, Group, Stack, Text, Tooltip } from '@mantine/core';
 import { IconBroadcast } from '@tabler/icons-react';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
-import { useCan, useCases, useLiveStatus, useSettings } from '@/api/hooks';
+import { useCan, useCasesOnce, useLiveStatus, useSettings } from '@/api/hooks';
 import type { LiveStatus } from '@/api/types';
 import { TRIAL, trialHref } from '@/env/mode';
 import type { StormRefusal } from '@/features/storm/view';
@@ -84,9 +84,8 @@ export function LiveBanner() {
   const settings = useSettings().data;
   // Only for the line below, which only a live banner's visitor without the live agents reads
   const noBoard = !!live && !TRIAL && !can.liveAgents;
-  const boardCase = useCases({ scenario: 'S8', limit: 100 }, noBoard).data?.items.find(
-    (c) => c.scenario === 'S8',
-  );
+  const s8Cases = useCasesOnce({ scenario: 'S8', limit: 100 }, noBoard).data?.items;
+  const boardCase = s8Cases?.find((c) => c.scenario === 'S8');
   if (!live) return null;
   const note = TRIAL ? null : budgetNoteLine(settings);
   const unavailable = TRIAL ? null : liveUnavailable(settings);
@@ -153,16 +152,22 @@ export function LiveBanner() {
               <Text size="xs" data-testid="live-board-link">
                 Most of this hospital&apos;s failures are settled by its written policy, with no agent. One
                 went to the live board:{' '}
-                <Anchor component={Link} to={`/cases/${encodeURIComponent(boardCase.caseId)}`} size="xs">
+                <Anchor
+                  component={Link}
+                  to={`/cases/${encodeURIComponent(boardCase.caseId)}`}
+                  size="xs"
+                  underline="always"
+                >
                   {boardCase.caseId}
                 </Anchor>
               </Text>
-            ) : noBoard ? (
-              // With no such case here, a visitor without the live agents sees the board decide in the trial's
+            ) : noBoard && s8Cases ? (
+              // Only once the instance has answered with no such case, so the line never says "no agent" over one that
+              // is still loading: a visitor without the live agents then sees the board decide in the trial's
               // recording of S8, at no cost
               <Text size="xs" data-testid="live-board-link">
                 The hospital&apos;s own failures are settled by its written policy, with no agent.{' '}
-                <Anchor href={trialHref(`#/cases/${TRIAL_BOARD_CASE}`)} size="xs">
+                <Anchor href={trialHref(`#/cases/${TRIAL_BOARD_CASE}`)} size="xs" underline="always">
                   See the board decide: S8 in the trial
                 </Anchor>
               </Text>
