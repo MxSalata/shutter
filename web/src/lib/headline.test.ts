@@ -75,6 +75,23 @@ describe('clampHeadline', () => {
     ).toBe('Blocked by the gate: the ordering and state transition checks failed.');
   });
 
+  it("says what stopped a message it couldn't read, never that a sound message failed a check", () => {
+    const stage = '(policy 2026-11-01.1, stage proposal)';
+    expect(clampHeadline(`Blocked by the gate: Blocked: conformance PARSE_FAILED ${stage}`)).toBe(
+      "Blocked by the gate: the message couldn't be read or mapped to an operation.",
+    );
+    expect(clampHeadline(`Blocked by the gate: Blocked: conformance SCHEMA_UNKNOWN ${stage}`)).toBe(
+      "Blocked by the gate: the message's schema is not loaded here.",
+    );
+    // Another conformance reason, and another check, keep the check's name
+    expect(clampHeadline(`Blocked by the gate: Blocked: conformance UNMAPPABLE ${stage}`)).toBe(
+      'Blocked by the gate: the conformance check failed.',
+    );
+    expect(clampHeadline(recorded('C-000064'))).toBe(
+      "Blocked by the gate: the message couldn't be read or mapped to an operation.",
+    );
+  });
+
   it('never leaves a recorded headline ending mid-word', () => {
     for (const c of Object.values(fixtures.cases)) {
       if (c.summary.headline.startsWith('Blocked by the gate: ')) continue;

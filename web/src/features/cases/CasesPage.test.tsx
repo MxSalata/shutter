@@ -293,7 +293,10 @@ describe('whatHappened', () => {
   it("reads the gate's headline as the checks that failed, and a summary with no headline as its own fields", () => {
     expect(
       at('Blocked by the gate: Blocked: conformance PARSE_FAILED (policy 2026-11-01.1, stage proposal)'),
-    ).toEqual({ first: 'Blocked by the gate: the conformance check failed.', rest: '' });
+    ).toEqual({
+      first: "Blocked by the gate: the message couldn't be read or mapped to an operation.",
+      rest: '',
+    });
     expect(at('')).toEqual({ first: 'Transfer to WARD-B for ENC-1', rest: '' });
   });
 
