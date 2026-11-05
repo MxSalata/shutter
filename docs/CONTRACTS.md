@@ -1331,6 +1331,15 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   alert's forward with the case already open (`opened` false), so a failure reaches Shutter once as a case and twice in the
   message trace. `PAS to Downstream` stays out of `Receivers`. The production review's `NO_ALERT_CONSUMER` (13) names the
   item.
+- **An application acknowledgement on its own feed** (v1.43). `Shutter.Intake.AckMatch.ForwardFor(ack, receiver, .problem, .session, lookback)`, called
+  by a site's process on the feed (`tests/e2e/onboard_site/OnbAck.AckProcess.cls`; the service needs `IgnoreInboundAck` 0 and `AckMode`
+  `Never`), reads MSA-1, MSA-2 and MSA-3 (else ERR-8) by position. AA and CA give no forward. AE, AR, CE and CR look among the last
+  `lookback` messages (default 5000) whose header targets `receiver` for the newest with that MSH-10 (`FindSent`), and give a `Forward`:
+  `HeaderId` and `Route` the session's first HL7 header's, `Receiver`, `FailureKind` and `FailureOutcome` `rejected`, `FailureReasonCode`
+  `ack_<code>`, `FailureText` the code, the control id, the receiver and the words. It shares the alert intake's pending and seen marks,
+  so one message at one receiver reaches Shutter once by either route (the process passes `session` as the completion key and calls
+  `AlertProcess.ForwardAnswered`). `problem` says why a code that needed a forward has none; the process raises it. Nothing waits for an
+  acknowledgement that never comes.
 - **The demo hospital** (shape A as a judge sees it): the image also creates the namespace `HOSPITAL` (`src/Shutter/Installer.cls`;
   `SELECT Shutter.Installer_RunHospital('SHUTTER')` on an instance that has Shutter) with the packages `Shutter.Intake`,
   `Shutter.Util`, `Shutter.Msg`, `Shutter.Store` and `Hospital` mapped from Shutter's code database, and
@@ -1350,12 +1359,19 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
 `docs/INSTALL.md`, section 9.
 
 - `SELECT Shutter.Setup_OnboardPlan(namespace, options)` changes nothing: `{namespace, production, production_state, productions,
-  services, routers, operations: [{name, class, reported_as, alert_on_error, in_profile, has_api, draft}], other_operations,
+  services, routers, operations: [{name, class, reported_as, alert_on_error, get_reply, reply_code_actions, reply_code_actions_from,
+  proves, in_profile, has_api, draft}], other_operations,
   schemas: [{category, named_by, in_namespace, standard, in_shutter, shutter_name, action}], wired, receiver_prefix, actions: [{do,
   says, ...}], todo, warnings, error}`. `do` is `map_package`, `import_schema`, `add_forwarder`, `set_prefix`, `rename_alert`,
   `add_alert_intake`, `set_alert_receivers`, `set_alert_on_error` or `draft_receiver`. Options: `production`, `shutter_host`,
   `shutter_port`, `ssl_config`, `credential`, `receivers`, `alert_on_error`. Reading a namespace (`Onboard.Read`) calls only Ens, %SQL,
   %Dictionary and %SYS classes while it is there, as `ProductionReader` does, since no Shutter class resolves there yet.
+- **What a completed message proves** (v1.43). Per operation, the values that apply, the item's, else the default settings', else the
+  class's: `get_reply` (the adapter's `GetReply`; null when the adapter has no such setting), `reply_code_actions`, and
+  `reply_code_actions_from` (`item`, `default_settings`, `class`, or `engine_default` when all of those are empty, which the engine reads as
+  `:?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C`). `proves` is one plain line from them (`Onboard.CompletedProves`, with the review's
+  `ReplyAction`). A class's own `OnGetReplyAction` is not read. `tests/e2e/onboard_check.py` measures the lines against a listener;
+  `docs/INSTALL.md` 9.9 has the table.
 - `SELECT Shutter.Setup_OnboardApply(namespace, options)` (`%Admin_Manage`) runs that plan's `actions` and no others: `{ok, changed,
   unchanged, todo, warnings, error}`; a second run changes nothing. It never stops a production: `Ens.Director.UpdateProduction(30, 0)`
   on a running one. What it did is kept under `^Shutter.Config("onboard", namespace)` (the production at the root; `mappings`, `schemas`,
@@ -1801,6 +1817,9 @@ board's case in the Visual Trace, the latest cases, and links to the portal's pa
 ## Changes
 
 - v1.42, 5 Nov 2026 (a real instance's failure paths, reviewed on 5 Nov): a request the receiver never answered is classified as no answer, which the connector's +StatusCode had made unreachable. A write timed out reads `uncertain` and goes to verification instead of `error`, refused and "nothing changed" (1.3, 5.1); only a socket that never opened is `unavailable`; a preflight read that got no answer is `unavailable`; a feed delivery timed out opens as `uncertain_outcome` rather than `delivery_failed`, at Shutter's connector and the demo hospital's. The audit line and the failure text no longer name HTTP 0. `UncertainSettleSeconds` is 60 s, so not committed is said at the last read, about 70 s after the attempt, and no longer at 30 s while a slow receiver may still commit (1.3, 5.1). A rehearsal with no usable answer no longer says the action would not apply; the receiver's own refusal of it (a 409 or 422) still does. A request nobody answered that may have been applied says so, with the adapter's words in brackets after it, and the catalogue reads a reason code only from a parenthesis ahead of the failure text's first colon. The audit trail, the gate's details and the forwarder's log say "no answer" where a status would read 0. `Shutter_Operator` and `Shutter_Approver` write the hospital's data database and the records system's, so Reset works for them and reaches every demo receiver; `ResetLive` answers `not cleared` rather than failing the reset halfway (4). An approval wait that runs out names `system` on its audit event, and a coordinator refused for the day's budget leaves the headline "No plan: the day's model budget is spent" (5). The live hospital holds its stories until Shutter's API service is registered, so a story at the first start is no longer lost (4.4).
+- v1.43, 5 Nov 2026 (an integration lead's point that a transport ACK does not mean a message was processed): the plan reports each HL7
+  operation's acknowledgement settings and what a completed message proves there (11.1); `Shutter.Intake.AckMatch` turns a negative
+  application acknowledgement on its own feed into a forward (11).
 - v1.42, 5 Nov 2026 (a request for a hospital's several namespaces, and a run of the install on three of them): onboarding a
   namespace (11.1); a forward naming a category not loaded here says so and can be repaired; a same-named category is imported under an
   alias; `ReceiverPrefix`; a site's unnamed receiver has no API; a namespace running another production refuses the install (12); the Doctor

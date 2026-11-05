@@ -45,6 +45,19 @@ Method TestSqlFormsAnswerJson()
 }
 
 /// A name another namespace holds is taken; one a person put in the profile with no namespace is that person's to use.
+/// The plan's line on what a completed message proves, from the settings that apply (measured in the e2e).
+Method TestCompletedProves()
+{
+    Set o = "Shutter.Util.Onboard", stock = ":?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C"
+    Do $$$AssertTrue($CLASSMETHOD(o, "CompletedProves", 1, stock) [ "any positive code counts as complete", "the stock codes: CA reads as AA")
+    Do $$$AssertTrue($CLASSMETHOD(o, "CompletedProves", 0, stock) [ "Nothing is awaited", "GetReply off, whatever the codes")
+    Do $$$AssertTrue($CLASSMETHOD(o, "CompletedProves", "", stock) [ "GetReply does not apply", "an adapter without the setting")
+    Do $$$AssertTrue($CLASSMETHOD(o, "CompletedProves", 1, ":AA=C,:CA=S,:?R=RF,:?E=S,:*=S") [ "only AA completes (CA=S)", "CA set not to complete")
+    Set lenient = $CLASSMETHOD(o, "CompletedProves", 1, ":?A=C,:?E=C,:?R=S")
+    Do $$$AssertTrue((lenient [ "negative code") && (lenient [ "AE=C") && (lenient [ "CE=C"), "a NACK that completes is named: " _ lenient)
+    Do $$$AssertTrue($CLASSMETHOD(o, "CompletedProves", 1, ":*=S") [ "neither AA nor CA completes", "nothing positive completes")
+}
+
 Method TestReceiverNameTakenElsewhere()
 {
     Set onb = "Shutter.Util.Onboard"

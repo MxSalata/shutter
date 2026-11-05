@@ -105,6 +105,9 @@ Interoperability production, with a board of IRIS AI Hub agents.
   A message routed to two receivers opens a case for each that fails. The plan warns of retry-forever whether the item sets it or
   inherits it, a refused forward also raises an alert to the site's consumer, and the Doctor counts refused forwards over 72 hours and
   lists HL7 operations added since the last apply.
+  The plan says, per HL7 operation, what a completed message proves there, as measured against a listener: on the stock codes CA reads as
+  AA. A negative application acknowledgement on a feed of its own can open a case, through a small process a site copies and
+  `Shutter.Intake.AckMatch`. A message taken by a transport ACK and then lost downstream raises nothing.
 - **The index walk is an adapter of Shutter's own** (`Shutter.Index.Adapter`, handing batches of message headers to
   the HL7 Index item), and **any IANA time zone** for the feed through Embedded Python's `zoneinfo`
   (`Shutter.Util.Time.PyOffset`), beside the native rules for UTC, Europe/London and fixed offsets.

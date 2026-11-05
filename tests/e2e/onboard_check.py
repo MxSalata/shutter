@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """The whole multi-namespace onboarding (docs/INSTALL.md section 9), played on a real instance, on stock classes.
 
-    python3 tests/e2e/onboard_check.py [--reuse] [--keep] [--port 52790] [--ctr onb-check] [--image IMAGE]
+    python3 tests/e2e/onboard_check.py [--reuse] [--keep] [--port 52790] [--ctr onb-check] [--image IMAGE] [--module core] [--only ack|fanout]
 
-Starts a stock IRIS for Health image, installs Shutter without the demo in its own namespace, gives the instance three hospital
-namespaces with their own productions already running (order comms and a LIMS, documents, a PAS), and onboards them with
+Starts a stock IRIS for Health image, installs Shutter without the demo in its own namespace, gives the instance hospital
+namespaces with their own productions already running (order comms and a LIMS, documents, a PAS, and two for the later sections), and onboards them with
 Shutter.Setup_OnboardPlan, _OnboardApply, OnboardCredential and _OnboardTest: the plan changes nothing; the apply wires the
 namespace and a second apply has nothing to do; no production stops; an item and a schema category named alike in two
 namespaces stay apart; the Doctor reports each namespace; failures open cases with nothing sent; a person fills in one
-receiver's API and a recovery reaches it; a reload keeps it; and _OnboardRemove takes the namespaces off again. It needs
+receiver's API and a recovery reaches it; a reload keeps it; a message routed to two receivers opens a case for each, and the
+Doctor keeps what a refused forward and a later operation leave behind; a reply of each code is sent to a listener to see what
+completes, and an application NACK on its own feed opens a case; and _OnboardRemove takes the namespaces off again. It needs
 Docker and no API key: no model is called. Run from the repository's root. --reuse keeps a running container and what it
-has (for repeating a later step while building it); --keep leaves the container. Exit status 1 when a check fails.
+has (for repeating a later step while building it); --keep leaves the container; --module loads that folder of the repository
+(core, on 2026.2); --only plays one of the last two sections and stops. Exit status 1 when a check fails.
 """
 import argparse
 import http.cookiejar
@@ -35,8 +38,11 @@ ap.add_argument("--keep", action="store_true")
 ap.add_argument("--port", type=int, default=52790)
 ap.add_argument("--ctr", default="onb-check")
 ap.add_argument("--image", default="irishealth-community:2027.1.0AI.109.0")
+ap.add_argument("--module", default="")
+ap.add_argument("--only", choices=["ack", "fanout"])
 args = ap.parse_args()
 CTR = args.ctr
+TARGET = f"{HOME}/pkg/{args.module}" if args.module else f"{HOME}/pkg"
 URL = f"http://127.0.0.1:{args.port}/api/shutter"
 failed = []
 passed = 0
@@ -187,11 +193,271 @@ def hl7(kind, control, seg_extra=""):
     raise ValueError(kind)
 
 
-def send(port, segs, name):
+def send(port, segs, name, wait=20):
     text = "\r".join(segs) + "\r"
     subprocess.run(["docker", "exec", "-i", CTR, "sh", "-c", f"cat > /tmp/onb_site/{name}.hl7"], input=text, text=True, check=True)
-    r = subprocess.run(["docker", "exec", CTR, "python3", "/tmp/onb_site/mllp.py", str(port), f"/tmp/onb_site/{name}.hl7"], capture_output=True, text=True, timeout=60)
+    r = subprocess.run(["docker", "exec", "-e", f"MLLP_WAIT={wait}", CTR, "python3", "/tmp/onb_site/mllp.py", str(port), f"/tmp/onb_site/{name}.hl7"], capture_output=True, text=True, timeout=60)
     return r.stdout.strip()
+
+
+def alert_log(ns, after=0):
+    """What the site's own consumer has been given since entry number after: {number: "item | words"}."""
+    out = session(ns, f'Set k={after} For {{ Set k=$ORDER(^OnbSite.Alerts(k),1,v) Quit:k=""  Write !,"<<<",k,"|",v,">>>",! }}')
+    return {int(a.split("|", 1)[0]): a.split("|", 1)[1] for a in re.findall(r"<<<(.*?)>>>", out)}
+
+
+def statuses(ns, targets, control):
+    """{target: (status, error words)} of the message with this control id, from its headers to those items."""
+    code = f"""Set rs=##class(%SQL.Statement).%ExecDirect(,"SELECT TOP 400 ID,TargetConfigName FROM Ens.MessageHeader WHERE MessageBodyClassName='EnsLib.HL7.Message' ORDER BY ID DESC") While rs.%Next() {{ Set h=##class(Ens.MessageHeader).%OpenId(rs.%Get("ID")),m=##class(EnsLib.HL7.Message).%OpenId(h.MessageBodyId) If $ISOBJECT(m),m.GetValueAt("1:10")="{control}" {{ Write !,"<<<",h.TargetConfigName,"|",##class(Ens.DataType.MessageStatus).LogicalToDisplay(h.Status),"|",$EXTRACT($SYSTEM.Status.GetErrorText(h.ErrorStatus),1,110),">>>",! }} }}"""
+    out = session(ns, code)
+    found = {}
+    for row in re.findall(r"<<<(.*?)>>>", out):
+        name, st, err = row.split("|", 2)
+        if name in targets:
+            found[name] = (st, err)
+    return found
+
+
+def settle_statuses(ns, targets, control, seconds=25):
+    """The statuses once every target's copy has stopped moving."""
+    end = time.time() + seconds
+    while True:
+        found = statuses(ns, targets, control)
+        if (len(found) == len(targets) and all(v[0] not in ("Created", "Queued", "Delivered", "") for v in found.values())) or time.time() > end:
+            return found
+        time.sleep(1)
+
+
+def ack_message(code, control, words=""):
+    now = time.strftime("%Y%m%d%H%M%S", time.gmtime())
+    return [f"MSH|^~\\&|APP|HOSP|OCS|HOSP|{now}||ACK|K{control}|P|2.5.1", f"MSA|{code}|{control}|{words}"]
+
+
+def ack_levels():
+    """What a completed message proves at a stock TCP operation, measured against a listener, and an application NACK on its own feed."""
+    step("ORDERS: the plan says what a completed message proves, per operation")
+    subprocess.run(["docker", "exec", CTR, "pkill", "-f", "ack_listener.py"], capture_output=True)
+    for port in (7231, 7232):
+        subprocess.Popen(["docker", "exec", CTR, "python3", "/tmp/onb_site/ack_listener.py", str(port), f"/tmp/onb_site/ack-{port}.log", "900"])
+    time.sleep(1)
+    p = plan("ORDERS")
+    ops = {o["name"]: o for o in p["operations"]}
+    for o in p["operations"]:
+        print(json.dumps({k: o.get(k) for k in ("name", "get_reply", "reply_code_actions", "reply_code_actions_from", "alert_on_error", "proves")}))
+    stock, off, strict = ops["Measure Stock Out"], ops["Measure Off Out"], ops["Measure Strict Out"]
+    check("a stock operation: a reply is awaited, the engine's default codes", stock["get_reply"] is True and stock["reply_code_actions"] == ":?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C" and stock["reply_code_actions_from"] == "engine_default" and stock["alert_on_error"] is True, stock)
+    check("and it says any positive code completes", "any positive code" in stock["proves"], stock["proves"])
+    check("GetReply off: it says nothing is awaited", off["get_reply"] is False and "Nothing is awaited" in off["proves"], off)
+    check("only AA completes: it says so, the item's own setting", strict["reply_code_actions_from"] == "item" and "only AA completes" in strict["proves"], strict)
+
+    step("The same message to three operations, by the code the listener answers: stock, GetReply off, and CA not completing")
+    targets = ("Measure Stock Out", "Measure Off Out", "Measure Strict Out")
+    tag = time.strftime("%H%M%S")
+    seen, sent = {}, []
+    last_alert = max(alert_log("ORDERS") or [0])
+    for kind in ("AA", "CA", "AE", "CE", "AR", "CR", "NM", "NR", "CL", "C2", "AA"):
+        control = f"{kind}-{tag}{len(seen)}"
+        sent.append(control)
+        send(7134, hl7("orm", control), "measure")
+        row = settle_statuses("ORDERS", targets, control)
+        fresh = alert_log("ORDERS", last_alert)
+        last_alert = max(list(fresh) + [last_alert])
+        raised = sorted(set(a.split(" | ")[0].replace("Measure ", "") for a in fresh.values()))
+        seen[kind if kind not in seen else kind + " after C2"] = row
+        print(f"  {kind}: " + "; ".join(f"{t.replace('Measure ', '')}={row.get(t, ('none', ''))[0]}" for t in targets) + f"; alerts from {raised}", flush=True)
+    done = lambda kind, t: seen[kind].get(t, ("none",))[0]
+    check("stock: AA completes", done("AA", targets[0]) == "Completed", seen["AA"])
+    check("stock: CA completes the same", done("CA", targets[0]) == "Completed", seen["CA"])
+    check("stock: AE and CE do not complete", done("AE", targets[0]) != "Completed" and done("CE", targets[0]) != "Completed", (seen["AE"], seen["CE"]))
+    check("stock: AR and CR do not complete", done("AR", targets[0]) != "Completed" and done("CR", targets[0]) != "Completed", (seen["AR"], seen["CR"]))
+    check("stock: a reply with no MSA does not complete", done("NM", targets[0]) != "Completed", seen["NM"])
+    check("stock: no reply does not complete", done("NR", targets[0]) != "Completed", seen["NR"])
+    check("stock: a CA followed by an AE on the connection completes on the first", done("C2", targets[0]) == "Completed", seen["C2"])
+    for kind in ("AA", "CA", "AE", "AR", "NM", "NR"):
+        check(f"GetReply off: {kind} reads as complete", done(kind, targets[1]) == "Completed", seen[kind])
+    c2 = next(k for k in sent if k.startswith("C2-"))
+    heard = subprocess.run(["docker", "exec", CTR, "grep", "-c", c2, "/tmp/onb_site/ack-7232.log"], capture_output=True, text=True).stdout.strip()
+    print(f"  the listener heard {c2} {heard} times, from three operations")
+    check("GetReply off: after the receiver closed the connection, the next message reads as complete and never reached it", done("C2", targets[1]) == "Completed" and heard == "2", (seen["C2"], heard))
+    check("GetReply off: the one after that fails on the write", done("AA after C2", targets[1]) == "Error", seen["AA after C2"])
+    discarded = session("ORDERS", """Set rs=##class(%SQL.Statement).%ExecDirect(,"SELECT Text FROM Ens_Util.Log WHERE ConfigName='Measure Stock Out' AND Text LIKE 'Discarding data found%' ORDER BY ID DESC") If rs.%Next() { Write !,"<<<",rs.%Get("Text"),">>>",! }""")
+    check("stock: the AE behind the CA is thrown away before the next send, with a warning", f"MSA|AE|{c2}" in discarded.replace("\r", ""), discarded[-300:])
+    check("stock: and the message stays complete", done("AA after C2", targets[0]) == "Completed", seen["AA after C2"])
+    check("CA set not to complete: AA completes", done("AA", targets[2]) == "Completed", seen["AA"])
+    check("CA set not to complete: CA does not", done("CA", targets[2]) != "Completed", seen["CA"])
+
+    step("The apply wires ORDERS, and a message a listener takes and its application later refuses")
+    a = apply_("ORDERS")
+    check("the apply is ok", a["ok"], a)
+    c = session("SHUTTER", f'Do ##class(Shutter.Setup).OnboardCredential("ORDERS","shutter-fwd","{PW}")')
+    check("the credential is stored", '"ok":true' in c, c[-300:])
+    time.sleep(2)
+
+    def order_cases():
+        code, r = api("GET", "/cases")
+        return [x["caseId"] for x in r.get("items", []) if x.get("sourceNamespace") == "ORDERS" and x.get("receiver") == "Order App Out"]
+
+    control = f"ASYNC{tag}"
+    print(send(7131, hl7("orm", control), "async"))
+    row = settle_statuses("ORDERS", ("Order App Out",), control)
+    check("the listener's commit ACK completes the message", row.get("Order App Out", ("",))[0] == "Completed", row)
+    time.sleep(6)
+    check("and Shutter has no case: no ACK has come, so nothing here is raised", order_cases() == [], order_cases())
+    count = lambda: int(re.findall(r"<<<(\d+)>>>", session("ORDERS", """Set rs=##class(%SQL.Statement).%ExecDirect(,"SELECT COUNT(*) AS N FROM Ens.MessageHeader WHERE TargetConfigName='App ACK Match' AND MessageBodyClassName='EnsLib.HL7.Message'") Do rs.%Next() Write !,"<<<",rs.%Get("N"),">>>",!"""))[-1])
+    n0 = count()
+    print("stock feed answers:", send(7133, ack_message("AE", control, "Not processed"), "stockfeed", 3))
+    time.sleep(5)
+    check("a stock service on the feed drops the AE: IgnoreInboundAck is on by default", count() == n0 and order_cases() == [], (count(), n0, order_cases()))
+    print("feed answers:", send(7132, ack_message("AA", control), "feedaa", 1))
+    time.sleep(5)
+    check("an AA on the feed reaches the process and does nothing", count() == n0 + 1 and order_cases() == [], (count(), order_cases()))
+    print("feed answers:", send(7132, ack_message("CA", control), "feedca", 1))
+    time.sleep(4)
+    check("a CA on the feed does nothing", order_cases() == [], order_cases())
+    print("feed answers:", send(7132, ack_message("AE", control, "Patient not known to the application"), "feedae", 1))
+    hit = wait_case(lambda x: x.get("sourceNamespace") == "ORDERS" and x.get("receiver") == "Order App Out", 30)
+    check("an AE on the feed opens a case on the receiver", bool(hit), order_cases())
+    if hit:
+        cid = hit[0]["caseId"]
+        c = settled(cid)
+        print(json.dumps({k: c.get(k) for k in ("caseId", "state", "failureKind", "failureReasonCode", "sourceNamespace", "sourceRoute", "originHeaderId", "failureText")})[:900])
+        check("it names the service and the original's header", c.get("sourceRoute") == "Orders In" and c.get("originHeaderId"), c)
+        origin = value("ORDERS", f'##class(EnsLib.HL7.Message).%OpenId(##class(Ens.MessageHeader).%OpenId("{c.get("originHeaderId")}").MessageBodyId).GetValueAt("1:10")')
+        check("and that header's message is the one the AE answered", origin == control, origin)
+        words = c.get("failureText") or ""
+        check("the text says AE, the control id and the receiver's words", "AE" in words and control in words and "Patient not known" in words, words)
+        check("it escalates, with nothing sent", c.get("state") in ("escalated", "blocked"), c.get("state"))
+    n = len(order_cases())
+    print("feed answers:", send(7132, ack_message("AE", control, "Again"), "feedae2", 1))
+    time.sleep(6)
+    check("a second AE for that message opens no second case", len(order_cases()) == n, order_cases())
+    last = max(alert_log("ORDERS") or [0])
+    print("feed answers:", send(7132, ack_message("AR", "NOSUCH" + tag, "Rejected"), "feednone", 1))
+    time.sleep(5)
+    fresh = alert_log("ORDERS", last)
+    check("an AR naming no message sent there opens nothing", len(order_cases()) == n, order_cases())
+    check("and raises an alert saying so", any("App ACK Match" in a and "NOSUCH" + tag in a for a in fresh.values()), fresh)
+    control = f"ADTAK{tag}"
+    print(send(7131, hl7("a01", control), "asyncadt"))
+    settle_statuses("ORDERS", ("Order App Out",), control)
+    print("feed answers:", send(7132, ack_message("AR", control, "Encounter closed"), "feedadt", 1))
+    end = time.time() + 30
+    while time.time() < end and len(order_cases()) == n:
+        time.sleep(2)
+    fresh_ids = [x for x in order_cases()]
+    check("an AR for an ADT opens a case too", len(fresh_ids) == n + 1, fresh_ids)
+    if len(fresh_ids) == n + 1:
+        adt = [settled(x) for x in fresh_ids]
+        adt = [x for x in adt if x.get("failureKind") == "rejected" and control in (x.get("failureText") or "")]
+        check("of the kind rejected, reason ack_AR, nothing resent to a draft", len(adt) == 1 and adt[0].get("state") in ("escalated", "blocked") and "RECEIVER_UNREADABLE" in gate_codes(adt[0]["caseId"]), [(x.get("failureKind"), x.get("state")) for x in adt])
+    # An AE on the connection itself: the operation suspends it and alerts, so the alert intake opens the case; the feed's AE for it adds nothing.
+    n = len(order_cases())
+    control = f"AE-{tag}"
+    print(send(7131, hl7("orm", control), "syncae"))
+    row = settle_statuses("ORDERS", ("Order App Out",), control)
+    check("an AE on the connection suspends the message", row.get("Order App Out", ("",))[0] == "Suspended", row)
+    end = time.time() + 30
+    while time.time() < end and len(order_cases()) == n:
+        time.sleep(2)
+    check("and the alert opens a case", len(order_cases()) == n + 1, order_cases())
+    time.sleep(3)
+    print("feed answers:", send(7132, ack_message("AE", control, "Again on the feed"), "feedsync", 1))
+    time.sleep(6)
+    check("the same message's AE on the feed opens no second case", len(order_cases()) == n + 1, order_cases())
+    subprocess.run(["docker", "exec", CTR, "pkill", "-f", "ack_listener.py"], capture_output=True)
+
+
+def fan_out():
+    """A message routed to two receivers, an inherited retry-forever, a refused forward, a later operation, and a namespace taken off."""
+    step("FANOUT: the plan warns of a retry-forever the operation inherits")
+    p = plan("FANOUT")
+    check("a stock operation with no FailureTimeout set gets the warning", any(w.startswith("Default Timeout Out retries forever") for w in p["warnings"]), p["warnings"])
+    check("and one with its own setting does not", not any(w.startswith("Fan One") for w in p["warnings"]), p["warnings"])
+    a = apply_("FANOUT")
+    check("the apply is ok", a["ok"], a)
+    c = session("SHUTTER", f'Do ##class(Shutter.Setup).OnboardCredential("FANOUT","shutter-fwd","{PW}")')
+    check("the credential is stored", '"ok":true' in c, c[-300:])
+    u = session("SHUTTER", 'Set $NAMESPACE="%SYS"\nSet sc=##class(Security.Users).Get("shutter-fwd",.p) Write !,"<<<",$GET(p("PasswordNeverExpires")),">>>",!')
+    check("the forwarder's password does not expire", "<<<1>>>" in u, u[-200:])
+
+    step("One order routed to two dead receivers opens a case for each")
+    tag = time.strftime("%H%M%S")
+
+    def from_app(app, kind, control, extra=""):
+        segs = hl7(kind, control)
+        segs[0] = segs[0].replace("|ICE|", f"|{app}|", 1).replace("|PAS|", f"|{app}|", 1)
+        if extra:
+            segs.append(f"OBX|1|ED|DOC||{extra}")
+        return segs
+
+    print(send(7301, from_app("FAN", "orm", "FAN" + tag), "fan1"))
+    both = wait_case(lambda x: x.get("sourceNamespace") == "FANOUT" and x.get("receiver") == "Fan One", 45), wait_case(lambda x: x.get("sourceNamespace") == "FANOUT" and x.get("receiver") == "Fan Two", 45)
+    check("a case for Fan One and one for Fan Two", bool(both[0]) and bool(both[1]) and both[0][0]["caseId"] != both[1][0]["caseId"], both)
+    fan_cases = lambda: [x["caseId"] for x in api("GET", "/cases")[1].get("items", []) if x.get("sourceNamespace") == "FANOUT"]
+    n = len(fan_cases())
+    time.sleep(8)
+    check("and no more than those", len(fan_cases()) == n and n == 2, fan_cases())
+    print(send(7301, from_app("PAS", "a01", "ONE" + tag), "fan2"))
+    end = time.time() + 40
+    while time.time() < end and len(fan_cases()) == n:
+        time.sleep(2)
+    time.sleep(6)
+    check("a message to one receiver opens one", len(fan_cases()) == n + 1, fan_cases())
+
+    step("An operation added after the apply is said, and a second apply takes it in")
+    session("FANOUT", """Set p=##class(Ens.Config.Production).%OpenId("OnbFan.Production")
+Set i=##class(Ens.Config.Item).%New(),i.Name="Late Out",i.ClassName="EnsLib.HL7.Operation.TCPOperation",i.Enabled=1,i.PoolSize=1
+Set a=##class(Ens.Config.Setting).%New(),a.Name="IPAddress",a.Target="Adapter",a.Value="127.0.0.1" Do i.Settings.Insert(a)
+Set a=##class(Ens.Config.Setting).%New(),a.Name="Port",a.Target="Adapter",a.Value="7314" Do i.Settings.Insert(a)
+Set a=##class(Ens.Config.Setting).%New(),a.Name="AlertOnError",a.Target="Host",a.Value="1" Do i.Settings.Insert(a)
+Set a=##class(Ens.Config.Setting).%New(),a.Name="FailureTimeout",a.Target="Host",a.Value="0" Do i.Settings.Insert(a)
+Do p.Items.Insert(i) Set sc=p.%Save() Set sc=p.SaveToClass()
+Set sc=##class(Ens.Director).UpdateProduction(30,0)""")
+    w = watched("FANOUT")
+    check("the Doctor lists it, as a problem", "Late Out" in (w.get("operations_unwatched") or []) and any("Late Out" in x for x in w["problems"]), w)
+    a = apply_("FANOUT")
+    check("the apply takes it in", a["ok"] and any("Late Out" in x for x in a["changed"]), a)
+    w = watched("FANOUT")
+    check("and the Doctor is clear of it", not w.get("operations_unwatched") and not any("Late Out" in x for x in w["problems"]), w)
+
+    step("A forward Shutter refuses: an alert to the site, and the Doctor remembers it past the next good one")
+    last = max(alert_log("FANOUT") or [0])
+    n = len(fan_cases())
+    print(send(7301, from_app("FAN", "orm", "BIG" + tag, "A" * (3 * 1024 * 1024)), "big"))
+    time.sleep(20)
+    fresh = alert_log("FANOUT", last)
+    check("a 3 MB order opens no case", len(fan_cases()) == n, fan_cases())
+    check("the site's consumer hears that Shutter did not take it", any(a.startswith("Shutter Forwarder | Shutter did not take a failed delivery") for a in fresh.values()), fresh)
+    w = watched("FANOUT")
+    print(json.dumps({k: w.get(k) for k in ("last_forward_error", "refused_72h", "last_refused", "problems", "ok")})[:700])
+    check("the Doctor reports the refusal", w.get("last_forward_error") and int(w.get("refused_72h") or 0) >= 1 and not w["ok"], w)
+    refused = int(w["refused_72h"])
+    print(send(7301, from_app("PAS", "orm", "GOOD" + tag), "good"))
+    time.sleep(15)
+    w = watched("FANOUT")
+    print(json.dumps({k: w.get(k) for k in ("last_forward_error", "refused_72h", "problems", "ok")})[:700])
+    check("the next good forward clears the last error, and the count stays", not w.get("last_forward_error") and int(w.get("refused_72h") or 0) == refused and not w["ok"], w)
+    settled_alerts = len(alert_log("FANOUT"))
+    time.sleep(8)
+    check("the refusal's alert does not loop", len(alert_log("FANOUT")) == settled_alerts, settled_alerts)
+
+    step("Taken off: the Doctor says removed, and has no problems")
+    r = remove("FANOUT")
+    check("the removal is ok", r["ok"], r)
+    r = remove("FANOUT", {"unmap": True})
+    check("unmap says how many messages were left", r["ok"] and any("message" in x for x in r["kept"] + r["removed"]), r)
+    w = watched("FANOUT")
+    print(json.dumps({k: w.get(k) for k in ("removed", "onboarded", "problems", "ok")}) if w else "not listed")
+    check("the Doctor reads removed, ok, no problems", w and w.get("removed") and w["problems"] == [] and w["ok"], w)
+
+
+def finish():
+    print(f"\n{passed} checks passed, {len(failed)} failed")
+    for f in failed:
+        print("  FAILED:", f)
+    if not args.keep:
+        subprocess.run(["docker", "rm", "-f", CTR], capture_output=True)
+    sys.exit(1 if failed else 0)
 
 
 # ---- the stock instance ----
@@ -210,11 +476,11 @@ if not args.reuse:
     out = session("USER", f'Set sc=$SYSTEM.OBJ.Load("{HOME}/pkg/src/Shutter/Setup.cls","ck") Write !,"[ns] ",##class(Shutter.Setup).CreateNamespace("SHUTTER"),"|",!')
     check("Setup.cls alone reaches CreateNamespace", "ok|" in out, out[-500:])
     start = time.time()
-    out = session("SHUTTER", f'Set sc=$SYSTEM.OBJ.Load("/tmp/zpm.xml","ck")\nSet sc=##class(%IPM.Main).Shell("load {HOME}/pkg -Ddemo=0") Write !,"RESULT: ",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),!', 500)
+    out = session("SHUTTER", f'Set sc=$SYSTEM.OBJ.Load("/tmp/zpm.xml","ck")\nSet sc=##class(%IPM.Main).Shell("load {TARGET} -Ddemo=0") Write !,"RESULT: ",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),!', 500)
     check(f"the load finishes in {int(time.time() - start)} s", "RESULT: ok" in out, out[-800:])
 
     step("The hospital's namespaces, already running their own productions")
-    for ns in ("PATHOLOGY", "DOCUMENTS", "PAS", "BEDS"):
+    for ns in ("PATHOLOGY", "DOCUMENTS", "PAS", "BEDS", "ORDERS", "FANOUT"):
         session("SHUTTER", f'Write ##class(Shutter.Setup).CreateNamespace("{ns}")')
     subprocess.run(["docker", "cp", SITE + "/.", f"{CTR}:/tmp/onb_site"], check=True)
     subprocess.run(["docker", "exec", "-u", "root", CTR, "chown", "-R", "irisowner:irisowner", "/tmp/onb_site"], check=True)
@@ -222,6 +488,8 @@ if not args.reuse:
         ("PATHOLOGY", ["OnbSite.AlertLog", "OnbPath.Rule", "OnbPath.Production"], "TRUSTLAB-pathology", "OnbPath.Production"),
         ("DOCUMENTS", ["OnbDocs.Rule", "OnbDocs.Production"], "TRUSTLAB-documents", "OnbDocs.Production"),
         ("PAS", ["OnbPas.Production"], None, "OnbPas.Production"),
+        ("ORDERS", ["OnbSite.AlertLog", "OnbAck.AckProcess", "OnbAck.Production"], None, "OnbAck.Production"),
+        ("FANOUT", ["OnbSite.AlertLog", "OnbFan.Rule", "OnbFan.Production"], None, "OnbFan.Production"),
     ):
         lines = []
         if schema:
@@ -240,6 +508,12 @@ Set e=##class(EnsLib.Workflow.RoleDefinition).AddUserToRole("Shutter Approvers",
 
 code, _ = api("POST", "/session", {"username": "appr1", "password": PW})
 check("the approver signs in", code in (200, 201), code)
+if args.only == "ack":
+    ack_levels()
+    finish()
+if args.only == "fanout":
+    fan_out()
+    finish()
 
 # ---- the plan ----
 step("The plan for PATHOLOGY changes nothing and says what would change")
@@ -486,13 +760,19 @@ out = session("DOCUMENTS", f'Set sc=$SYSTEM.OBJ.Load("{HOME}/pkg/src/Shutter/Set
 check("an install in DOCUMENTS refuses, and says why", "[guard] ERROR" in out and "would stop it" in out, out[-500:])
 check("and DOCUMENTS still runs", value("DOCUMENTS", '##class(Ens.Director).GetProductionStatus(.n,.s)_n_"|"_s').endswith("OnbDocs.Production|1"))
 jobs_before = jobs("PATHOLOGY")
-out = session("SHUTTER", f'Set sc=##class(%IPM.Main).Shell("load {HOME}/pkg -Ddemo=0") Write !,"RESULT: ",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),!', 500)
+out = session("SHUTTER", f'Set sc=##class(%IPM.Main).Shell("load {TARGET} -Ddemo=0") Write !,"RESULT: ",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),!', 500)
 check("the module loads again", "RESULT: ok" in out, out[-500:])
 d = doctor()
 check("the connector item came back by itself", d["receivers_without_item"] == [] and d["missing_items"] == [], (d["receivers_without_item"], d["missing_items"]))
 check("the mapped classes kept PATHOLOGY running", jobs("PATHOLOGY").get("OrderComms In") == jobs_before.get("OrderComms In"))
 w = {x["namespace"]: x for x in d["watched_namespaces"]}
 check("the Doctor still finds each namespace well", w["PATHOLOGY"]["ok"] and w["DOCUMENTS"]["ok"] and w["PAS"]["ok"], w)
+
+# ---- a message to two receivers, and what a refused forward leaves ----
+fan_out()
+
+# ---- what a completed message proves ----
+ack_levels()
 
 # ---- taking a namespace off ----
 step("Taking the namespaces back off")
@@ -520,9 +800,4 @@ check("its AlertOnError is back", next(i for i in item["items"] if i["name"] == 
 check("PATHOLOGY can be onboarded again", apply_("PATHOLOGY")["ok"])
 check("and comes off again", remove("PATHOLOGY", {"unmap": True})["ok"])
 
-print(f"\n{passed} checks passed, {len(failed)} failed")
-for f in failed:
-    print("  FAILED:", f)
-if not args.keep:
-    subprocess.run(["docker", "rm", "-f", CTR], capture_output=True)
-sys.exit(1 if failed else 0)
+finish()
