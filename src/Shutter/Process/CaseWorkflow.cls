@@ -326,7 +326,14 @@ Method OnError(request As %Library.Persistent, ByRef response As %Library.Persis
                 Quit
             }
             If pCompletionKey = "execute" {
-                // The write may or may not have been applied: that is for a person to establish, not a failure.
+                // The write may or may not have been applied: that is for a person to establish, not a failure. OnExecute
+                // never ran, so the attempt is recorded here, as uncertain: every surface counts it as a write that may have landed.
+                Set plan = ##class(Shutter.Store.Plan).%OpenId(..PlanId)
+                If $ISOBJECT(plan) {
+                    Set approval = ##class(Shutter.Store.Approval).%OpenId(..ApprovalId)
+                    Set sc = ##class(Shutter.Store.ExecutionAttempt).Create(case, plan, approval, $SELECT($ISOBJECT(approval): approval.Rehearsal, 1: ""), 0, "uncertain", "", text, .attempt)
+                    If $$$ISOK(sc) Set ..AttemptId = attempt.%Id()
+                }
                 Set case.Headline = "Escalated: the write's call failed and its outcome is unknown"
                 Do case.Transition("escalated", "Error from the write call: " _ text _ ". Whether the receiver applied the operation is unknown; a person must check", "system")
                 Quit

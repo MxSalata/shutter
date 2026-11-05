@@ -737,21 +737,21 @@ ClassMethod NextId() As %String [ Private ]
 /// A one-line description of the failure for the headline. The four movements keep their wording ("The transfer to
 /// WARD-B of 2026-10-15 09:20:00 for encounter ENC-1001 was not delivered"); a cancel reads "The cancellation of the
 /// transfer to WARD-B at ...", a merge "The merge of <prior patient id> into <patient id> at ...", and the encounter
-/// clause is left out when the key's encounter piece is the literal "-" (no visit number).
+/// clause is left out when the key's encounter piece is the literal "-" or empty (no visit number).
 ClassMethod DescribeFailure(case As Shutter.Store.Case) As %String
 {
     // An order, a result or a document (v1.45): the message may be sound, so the words say what the receiver did.
     If case.NotModelled() {
         Set to = $SELECT(case.Receiver '= "": case.Receiver, 1: "the receiver")
         Set how = $CASE(case.FailureOutcome, "uncertain": "may have reached " _ to _ ", which did not answer", "rejected": "was refused by " _ to, "error": "was not delivered to " _ to, : "failed at " _ to)
-        Quit "The " _ case.Event _ " message of " _ $REPLACE($PIECE(case.EventTime, "Z", 1), "T", " ") _ $SELECT(case.EncounterId = "-": "", 1: " for encounter " _ case.EncounterId) _ " " _ how
+        Quit "The " _ case.Event _ " message of " _ $REPLACE($PIECE(case.EventTime, "Z", 1), "T", " ") _ $SELECT((case.EncounterId = "-") || (case.EncounterId = ""): "", 1: " for encounter " _ case.EncounterId) _ " " _ how
     }
     Set what = $CASE(case.Event, "admit": "admission", "transfer": "transfer to " _ case.Ward _ $SELECT(case.Bed '= "": " bed " _ case.Bed, 1: ""), "discharge": "discharge", "update": "update", "merge": $SELECT(case.PriorPatientId '= "": "merge of " _ case.PriorPatientId _ " into " _ case.PatientId, 1: "merge into " _ case.PatientId), "cancel_admit": "cancellation of the admission", "cancel_transfer": "cancellation of the transfer" _ $SELECT(case.Ward '= "": " to " _ case.Ward, 1: ""), "cancel_discharge": "cancellation of the discharge", "register": "registration", "preadmit": "pre-admission", "person_add": "person record", "person_update": "person update", "": "message", : case.Event _ " message")
     Set when = $REPLACE($PIECE(case.EventTime, "Z", 1), "T", " ")
     Set how = $CASE(case.FailureKind, "delivery_failed": "was not delivered", "uncertain_outcome": "has an uncertain outcome", "rejected": "was rejected", "unmappable": "could not be mapped to an operation for the downstream system", "withheld": $SELECT(case.Event = "merge": "was withheld by the site's policy", 1: "was withheld: the receiver cannot reverse it"), "unreadable": "could not be read against an HL7 schema where it arrived", : "failed")
     // A cancel or a merge happens at its time; the movements keep "of".
     Set joiner = $SELECT((case.Event = "merge") || ($EXTRACT(case.Event, 1, 7) = "cancel_"): " at ", 1: " of ")
-    Set where = $SELECT(case.EncounterId = "-": "", 1: " for encounter " _ case.EncounterId)
+    Set where = $SELECT((case.EncounterId = "-") || (case.EncounterId = ""): "", 1: " for encounter " _ case.EncounterId)
     Quit "The " _ what _ joiner _ when _ where _ " " _ how
 }
 
