@@ -92,17 +92,27 @@ export function evidenceFacts(snapshot: Snapshot | null | undefined): EvidenceFa
   };
 }
 
+const WAITS_ON_A_PERSON: string[] = ['escalated', 'blocked', 'awaiting_approval'];
+
 /**
  * Where the run left the patient, so a reader doesn't have to work it out from versions and receipts. The ward the
  * receiver held when observed is the bed manager's: on S8, the only scenario compared here, its transfer is what landed.
  */
-function patientLine(written: string, before: string, sent: number): string {
+function patientLine(
+  c: Pick<CaseDetail, 'state' | 'disposition'>,
+  written: string,
+  before: string,
+  sent: number,
+): string {
   if (written)
     return before && before !== written
       ? `Patient ends in ${written}, over the bed manager's ${before}`
       : `Patient ends in ${written}`;
   // A write went out and none is confirmed: where the patient is stays for the verifier to say
-  if (sent || !before) return '';
+  if (sent) return '';
+  if (c.disposition === 'handled_by_hand') return 'Shutter sent nothing; the team handled it by hand';
+  // A run still going may yet write, and nobody decides an abandoned or failed one: only a stopped case waits on a person
+  if (c.disposition === 'abandoned' || !before || !WAITS_ON_A_PERSON.includes(c.state)) return '';
   return `Patient stays in ${before}; a person decides`;
 }
 
@@ -146,7 +156,7 @@ export function compareSide({
       writes: sent.length,
       verification: str(verified?.outcome) || undefined,
     },
-    patient: patientLine(str(written?.ward), str(before), sent.length),
+    patient: patientLine(c, str(written?.ward), str(before), sent.length),
     result,
     writes: sent.length,
     verification: verified ? `${humanize(verified.outcome)}: ${verified.summary}` : '',
