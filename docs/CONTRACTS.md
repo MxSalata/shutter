@@ -1314,7 +1314,8 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   logs can still hand Shutter the failure, with no change to its own code: `Shutter.Intake.AlertProcess`, added as the
   production's `Ens.Alert` item (the name the engine sends alerts to), receives every `Ens.AlertRequest` an item raises
   (`AlertOnError`, a queue alert, an inactivity alert). Every alert is first passed on to `PassTo`, the site's own alert
-  consumer renamed (an alert operation, an email), so Shutter adds to a production's alerting and never replaces it;
+  consumer renamed (an alert operation, an email), so Shutter adds to a production's alerting and never replaces it; an alert that
+  consumer raised itself is not, or its failure would alert it without end;
   with `PassTo` empty the alert ends here, as it would with no `Ens.Alert` item at all. Then, for an alert from one of its
   `Receivers` (the connector items, comma-separated; empty takes any item) whose session holds an HL7 message, it finds
   that message (the session's first header with an `EnsLib.HL7.Message` body: the receiving service's) and sends the

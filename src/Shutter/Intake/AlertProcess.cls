@@ -2,7 +2,8 @@
 /// delivering process does nothing on a failure beyond the error IRIS logs. Added as the item named "Ens.Alert" (the name
 /// the engine sends alerts to), it receives every Ens.AlertRequest an item raises (AlertOnError, a queue alert, an
 /// inactivity alert). Every alert is first passed on to PassTo, the site's own alert consumer renamed, so Shutter never
-/// silences a site's alerting. Then, for an alert from one of the Receivers (the connector items; empty takes any item)
+/// silences a site's alerting; only an alert that consumer raised itself is not, since its failure would turn into another
+/// alert to it without end, which the engine prevents while the item is named Ens.Alert. Then, for an alert from one of the Receivers (the connector items; empty takes any item)
 /// whose session holds an HL7 message, it finds that message (the session's first header with an EnsLib.HL7.Message
 /// body: the receiving service's), builds a Shutter.Intake.Forward for it with the failure read from the alert's words,
 /// and sends it to the forwarder, once per session and alerting item, so a message routed to two receivers that both fail
@@ -20,7 +21,7 @@ Class Shutter.Intake.AlertProcess Extends Ens.BusinessProcess
 Property ForwarderTarget As %String(MAXLEN = 128) [ InitialExpression = "Shutter Forwarder" ];
 
 /// The site's own alert consumer (an alert operation, an email), renamed so that this item can take the Ens.Alert name;
-/// every alert is passed on to it, before anything else. Empty: alerts end here.
+/// every alert but its own is passed on to it, before anything else. Empty: alerts end here.
 Property PassTo As %String(MAXLEN = 128);
 
 /// The items whose alerts hand a failed delivery to Shutter (comma-separated config names; the connectors). Empty: any item.
@@ -35,11 +36,6 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
         $$$TRACE("Not an alert (" _ $SELECT($ISOBJECT(request): $CLASSNAME(request), 1: "nothing") _ "): ignored")
         Quit $$$OK
     }
-    // The site's own consumer first: Shutter adds to a production's alerting, never replaces it.
-    If ..PassTo '= "" {
-        Set sc = ..SendRequestAsync(..PassTo, request, 0, "pass")
-        If $$$ISERR(sc) $$$LOGWARNING("The alert could not be passed on to " _ ..PassTo _ ": " _ $SYSTEM.Status.GetErrorText(sc))
-    }
     // An alert a host built by hand may name no source or session: its message header does.
     Set source = request.SourceConfigName, session = request.SessionId
     If $ISOBJECT(..%PrimaryRequestHeader) {
@@ -47,6 +43,11 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
         If session = "" Set session = ..%PrimaryRequestHeader.SessionId
     }
     If request.SourceConfigName = "" Set request.SourceConfigName = source
+    // The site's own consumer first: Shutter adds to a production's alerting, never replaces it. Its own alert stays in the event log.
+    If (..PassTo '= "") && (source '= ..PassTo) {
+        Set sc = ..SendRequestAsync(..PassTo, request, 0, "pass")
+        If $$$ISERR(sc) $$$LOGWARNING("The alert could not be passed on to " _ ..PassTo _ ": " _ $SYSTEM.Status.GetErrorText(sc))
+    }
     If source = ..ForwarderTarget {
         $$$TRACE("Alert from the forwarder itself: passed on only")
         Quit $$$OK
