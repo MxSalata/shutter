@@ -594,12 +594,14 @@ Say these plainly to whoever owns the feed.
 
 - **A message accepted by a transport ACK and then lost downstream raises nothing in Shutter today.** The engine completed it, so no alert comes and no case
   opens. The same goes for an operation with `GetReply` off, and for an application ACK that never arrives. A negative ACK on a feed of its own opens a case only with the process in 9.9.
-- **Non-ADT messages have no recovery.** Orders, results and documents open a case and escalate; a person corrects them. They do
-  not group: 5 failed results are 5 cases, and an outage is one case per message, not an incident.
+- **Non-ADT messages have no recovery.** Orders, results and documents open a case and escalate, and a person decides: the case says what the
+  receiver did, since the message may be sound. They do not group: 5 failed results are 5 cases, and an outage is one case per message, not an incident.
 - **An MLLP operation retrying forever (`FailureTimeout` -1, the stock TCP operation's default, which the plan now warns of whether
   the item sets it or inherits it).** The alert opens a case on the first failure, even in a short outage, and the engine goes on
-  retrying. When the system returns the messages go through, and the case still reads escalated with a draft asking a team to correct
-  them by hand, and shows no later messages. Read the message trace before anyone re-enters an order by hand.
+  retrying. When the system returns the messages go through by themselves, in order, and no alert says so: the case still reads
+  escalated and shows no later messages. Read the message trace before anyone re-enters an order by hand.
+- **`QueueCountAlert` reaches your own alert consumer but opens no case,** and a router's validation refusal, with `AlertOnError` off on
+  the router, is only logged: no alert, no case, and its header reads Completed.
 - **A forward is never retried.** While `Shutter.Production` is stopped, or on a wrong password, a failure that reaches the forwarder
   is a warning in that namespace's event log, an alert to the site's own consumer, and `refused_72h` in the Doctor, and no case.
   Restoring the service does not bring it back.

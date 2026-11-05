@@ -5,6 +5,7 @@ import { KeyValueList } from '@/components/KeyValueList';
 import { Timestamp } from '@/components/Timestamp';
 import { humanize } from '@/lib/format';
 import { useTechnical } from '@/stores/appearance';
+import { failureKindInWords } from './derive';
 import { receiverNoun } from './receiver';
 import { Section } from './Section';
 
@@ -41,7 +42,7 @@ export function FailurePanel({ c }: { c: CaseDetail }) {
     >
       <KeyValueList
         rows={[
-          ['Failure', kinds(noun)[c.failureKind] ?? humanize(c.failureKind)],
+          ['Failure', kinds(noun)[failureKindInWords(c)] ?? humanize(c.failureKind)],
           [
             `What ${noun} answered`,
             c.failureText || codes ? (

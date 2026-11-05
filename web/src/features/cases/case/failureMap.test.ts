@@ -13,6 +13,36 @@ const mapOf = (id: Id, more: { delivered?: boolean; code?: string } = {}) => {
   return failureMapOf(c, snapshot(id), caseOutcome({ state: c.state, disposition: c.disposition }), more);
 };
 
+describe('the map of an order, a result or a document that failed', () => {
+  const ofOutcome = (failureOutcome: string, words = 'ERROR <Ens>ErrOutConnectExpired') => ({
+    ...detail('C-000002'),
+    failureKind: 'unmappable',
+    failureOutcome,
+    failureHttpStatus: undefined,
+    failureText: `This message is ORU, not ADT: Shutter resends only ADT, so it sends nothing and a person decides. The source reported: ${words}`,
+  });
+  const map = (c: ReturnType<typeof ofOutcome>) =>
+    failureMapOf(c as unknown as CaseDetail, snapshot('C-000002'), caseOutcome({ state: 'escalated', disposition: 'escalate' }));
+
+  it('says a connection that never opened was not delivered, and blames neither the message nor the mapping', () => {
+    const m = map(ofOutcome('error'));
+    expect(m.hop).toMatchObject({ label: 'Not delivered', tone: 'blocking', broken: true });
+    expect(m.iris.trouble).toBe('');
+  });
+
+  it('never says "Not sent" for a receiver that refused it or took it and did not answer', () => {
+    expect(map(ofOutcome('rejected')).hop.label).toBe('Refused');
+    expect(map(ofOutcome('uncertain')).hop).toMatchObject({ label: 'Answer lost: outcome unknown', tone: 'attention' });
+  });
+
+  it("keeps the mapping's words for an ADT message that really could not be mapped", () => {
+    const c = { ...ofOutcome('error'), failureText: 'The message could not be mapped to an operation for the downstream system: no visit number' };
+    const m = map(c);
+    expect(m.iris.trouble).toBe("Couldn't map the message to an operation");
+    expect(m.hop.label).toBe('Not sent');
+  });
+});
+
 describe('the map of where a case failed', () => {
   it("draws S2's transfer from PAS through IRIS's route to the bed manager, broken at the delivery with its answer", () => {
     const c = { ...detail('C-000002'), state: 'awaiting_approval' as const };

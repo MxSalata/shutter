@@ -1158,6 +1158,8 @@ Method PersonByCatalogue(case As Shutter.Store.Case, cat As %DynamicObject) As %
     Set entry = $CLASSMETHOD(json, "Str", cat, "entry")
     Set m = cat.%Get("matches").%Get(0)
     Set title = $CLASSMETHOD(json, "Str", m, "title"), why = $CLASSMETHOD(json, "Str", m.%Get("preferred"), "why")
+    // An order, a result or a document (v1.45): the entry speaks of a mapping that failed, which isn't what happened here.
+    If case.NotModelled() Set why = "Shutter resends only ADT, so it has no operation to resend. The message itself may be sound." _ $SELECT(case.FailureOutcome = "uncertain": " The receiver did not answer, so it may hold the message already.", 1: "") _ " An operation that retries delivers it by itself once the receiver is back, so check the source's Message Viewer before anyone re-enters it."
     Set ..CatalogueEntry = entry, ..CatalogueOutcome = "preferred", ..Policy = "person"
     Do case.Note("note", "Catalogue " _ entry _ " (" _ title _ ") matched alone and asks for a person", "system")
     Set plan = {}

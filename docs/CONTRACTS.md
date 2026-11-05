@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.44, 5 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.45, 5 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -1819,6 +1819,9 @@ board's case in the Visual Trace, the latest cases, and links to the portal's pa
 
 ## Changes
 
+- v1.45, 5 Nov 2026 (measured on a stock operation): a case for an order, a result or a document keeps `failureKind` `unmappable`,
+  E12 and its escalation, and nothing is sent; its failure text, headline, plan and gate detail stop saying the message could not
+  be mapped, and say what the receiver did from `failureOutcome`, since the message may be sound. No API field changes.
 - v1.44, 5 Nov 2026 (a second cold run of the guide): a wired namespace keeps its receiver names when another comes on, so the action `set_prefix` is
   gone and the plan warns of a later clash; `credential` on a removal no longer depends on which namespace made the user, and the last one takes it (11).
 - v1.43, 5 Nov 2026 (an integration lead's point that a transport ACK does not mean a message was processed): the plan reports each HL7
