@@ -103,7 +103,7 @@ export function MemberLibraryCard({
           <div>
             <Text size="sm">Changed in the trial only.</Text>
             <Text size="sm" c="dimmed">
-              This card changes; the recorded runs stay as they were.
+              The recorded runs stay as they were.
             </Text>
           </div>
         ) : null}
