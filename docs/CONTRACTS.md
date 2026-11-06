@@ -495,6 +495,7 @@ conditions that matter; an unlisted condition is a wildcard. A listed condition 
 | `chain` | `single`, `ordered`, `interleaved` | section 7; a case outside an incident is `single` |
 | `receiver_category` | `current_state`, `history_of_record`, `orders_results` | the case's receiver's category in the site profile (6.4, v1.23); `current_state` when its entry names none |
 | `bed_conflict` | `none`, `occupant_leaving`, `occupant_left`, `occupant_staying`, `unknown` | who holds the bed a `bed_occupied` refusal (1.1) named, from the `bed_conflict` section the evidence adds for such a refusal (v1.28): `occupant_left` (the occupant's encounter is discharged or placed elsewhere now), `occupant_leaving` (a transfer or discharge of the occupant after `since` was sent and not applied: failed, uncertain or pending, in another case when one was opened), `occupant_staying` (they still hold the bed and no movement out is known), `unknown` (no occupant named, or they could not be read, or the refusal named no ward or bed to compare the read with, v1.35); `none` without such a refusal. The fact `occupant_case` names the case about the occupant's movement, or is empty |
+| `death_recorded` | `no`, `yes`, `cleared` | the failed message's PID-29 and PID-30, as the word the evidence's message section carries: `yes` when PID-30 says Y or PID-29 holds a time, `cleared` when either holds the HL7 null, `no` otherwise. The entry that names it (E19) answers alone, whatever else matches, and goes to a person in Board and Site policy mode; Rules only is unchanged. Only this message's own fields are read |
 
 **Flags read per receiver** (v1.23). An entry's `when` names a flag (`history_policy: correct`, `authoritative_source:
 other_source`). The matcher's facts carry `history_policy` and `receiver_category` for the case's receiver, from its site
@@ -1055,11 +1056,11 @@ separate, later tool.
   matcher's `later_applied` count only `applied` and `already_committed`, and outside a chain a later transfer of the
   feed's own whose failure the connector recorded (6.1, v1.16), so it supersedes nothing by itself; the receiver's
   history decides. The board sees it and can say so.
-- A scenario for a later movement on a route Shutter does not own, found only by the index, is planned; it is not in `fixtures/scenarios.json` yet.
 - Both keep to the case's patient and authority: a visit number can be reissued or numbered by two authorities, and another
   patient's message under it is no word on this patient's place, so it can't close the case. The deliveries (`Deliveries`,
   a bed's occupant) and the pending messages (6.5) still read the whole visit, so another patient's message in flight holds
   a write. A patient's later rows under another identifier after a merge the receiver hasn't taken aren't counted either.
+- A scenario for a later movement on a route Shutter does not own, found only by the index, is planned; it is not in `fixtures/scenarios.json` yet.
 - The index row's `Event` is the key's event word (v1.14: `register`, `preadmit`, `person_add`, `person_update`, the cancel words and `merge` included, 32 characters), so registrations, pre-admissions and person updates show between the movements; its `VisitNumber` is `-` for a mapped message with no PV1-19 (an unmappable message without one keeps an empty visit number), and the timeline and the index answer nothing for an encounter of `-` or empty.
 
 ### 8.3 The API

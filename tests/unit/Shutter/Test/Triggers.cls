@@ -131,6 +131,22 @@ Method TestUnreadableEventTimeDoesNotMap()
     Do $$$AssertNotTrue(op.%IsDefined("error"), "a time that reads still maps")
 }
 
+/// A death on a message, from PID-29 and PID-30: yes when either says so, cleared when either holds the HL7 null that deletes
+/// it, no otherwise. An explicit N says nothing about what came before, so it reads no.
+Method TestDeathRecorded()
+{
+    For row = $LISTBUILD("", "", "no"), $LISTBUILD("", "N", "no"), $LISTBUILD("", "Y", "yes"), $LISTBUILD("", "y", "yes"), $LISTBUILD("20261019090000", "", "yes"), $LISTBUILD("20261019090000", "N", "yes"), $LISTBUILD("""""", "", "cleared"), $LISTBUILD("", """""", "cleared"), $LISTBUILD("""""", """""", "cleared") {
+        Set text = ..Message("A08", "ADT_A01", ..#PID _ $TRANSLATE($JUSTIFY("", 21), " ", "|") _ $LIST(row, 1) _ "|" _ $LIST(row, 2) _ "<CR>" _ ..PV1("I", "WARD-A", "ENC-9001"))
+        Set msg = ##class(EnsLib.HL7.Message).ImportFromString($REPLACE(text, "<CR>", $CHAR(13)), .sc)
+        Do $$$AssertStatusOK(sc, "the message parses")
+        Do msg.PokeDocType("2.5.1:ADT_A01")
+        Do $$$AssertEquals(##class(Shutter.Util.OperationKey).DeathRecorded(msg), $LIST(row, 3), "PID-29 '" _ $LIST(row, 1) _ "', PID-30 '" _ $LIST(row, 2) _ "'")
+    }
+    Set msg = ##class(EnsLib.HL7.Message).ImportFromString($REPLACE(..Message("A02", "ADT_A02", ..#PID _ "<CR>" _ ..PV1("I", "WARD-A", "ENC-9001")), "<CR>", $CHAR(13)), .sc)
+    Do msg.PokeDocType("2.5.1:ADT_A02")
+    Do $$$AssertEquals(##class(Shutter.Util.OperationKey).DeathRecorded(msg), "no", "a PID that stops before them")
+}
+
 Method TestUnmappedTriggerSaysSo()
 {
     Set op = ..Op(..Message("A17", "ADT_A17", ..#PID _ "<CR>" _ ..PV1("I", "WARD-A", "ENC-9001")))

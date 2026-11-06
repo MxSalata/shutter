@@ -81,6 +81,9 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     Set msg = summary.%Get("message")
     Set notes = $SELECT($ISOBJECT(msg): msg.%Get("notes"), 1: "")
     Set c."free_text" = $SELECT($ISOBJECT(notes) && (notes.%Size() > 0): "yes", 1: "no")
+    // death_recorded: whether the message records a death or clears one (PID-29, PID-30), as the evidence read it
+    Set death = $SELECT($ISOBJECT(msg): $CLASSMETHOD(json, "Str", msg, "death_recorded"), 1: "")
+    Set c."death_recorded" = $SELECT((death = "yes") || (death = "cleared"): death, 1: "no")
     Set c.chain = $SELECT(chainKind = "": "single", 1: chainKind)
     // receiver_category (v1.23): what kind of system the case's receiver is, from its site profile entry
     Set c."receiver_category" = ##class(Shutter.Store.SiteProfile).ReceiverCategory(case.Receiver)
@@ -113,6 +116,9 @@ ClassMethod Match(conditions As %DynamicObject, facts As %DynamicObject = "") As
             If e.%IsDefined("prose") Set m.prose = e.prose
             Set m.preferred = e.%Get("preferred"), m.alternatives = e.%Get("alternatives")
             Do matches.%Push(m)
+            // A death on the message (E19) answers alone, whatever else matches: no resend or closure can follow it, and
+            // two matches would give it to the board.
+            If e.%Get("pattern").%IsDefined("death_recorded") Set matches = [(m)] Quit
         }
     }
     Set out.matches = matches
@@ -397,15 +403,15 @@ ClassMethod EventTimePlausibility(summary As %DynamicObject, case As Shutter.Sto
     }
     Set observed = $CLASSMETHOD(json, "Str", summary, "observed_at")
     If (sent '= "") && (t ]] sent) && ($ZABS(##class(Shutter.Util.Time).SecondsBetween(sent, t)) > 300) Quit "future"
+    // One clock stamps the event and MSH-7, so only the engine's own receive time shows a sender's clock running fast.
+    Set received = ..AsUTC($CLASSMETHOD(json, "Str", msg, "received_at"))
+    If (received '= "") && (t ]] received) && ($ZABS(##class(Shutter.Util.Time).SecondsBetween(received, t)) > 300) Quit "future"
     If (observed '= "") && (t ]] observed) && ($ZABS(##class(Shutter.Util.Time).SecondsBetween(observed, t)) > 300) Quit "future"
     If (recorded '= "") && ($ZABS(##class(Shutter.Util.Time).SecondsBetween(recorded, t)) > 86400) Quit "far_from_recorded"
     If msg.%IsDefined("event_time_had_offset") && '$CLASSMETHOD(json, "Bool", msg, "event_time_had_offset") && ##class(Shutter.Util.Time).NearClockChange($CLASSMETHOD(json, "Str", msg, "feed_time_zone"), t) Quit "clock_change"
     If '$ISOBJECT(later) Set later = ..Later(summary, case)
     Quit ..LaterTimeDoubt(summary, case, later)
 }
-    // One clock stamps the event and MSH-7, so only the engine's own receive time shows a sender's clock running fast.
-    Set received = ..AsUTC($CLASSMETHOD(json, "Str", msg, "received_at"))
-    If (received '= "") && (t ]] received) && ($ZABS(##class(Shutter.Util.Time).SecondsBetween(received, t)) > 300) Quit "future"
 
 /// later_event_future or plausible, for the later events' times. A later event whose time is not plausible is a doubt
 /// only when believing it would change the reading: when no plausible later transfer, discharge or cancel settles the
@@ -444,7 +450,7 @@ ClassMethod Facts(summary As %DynamicObject, case As Shutter.Store.Case) As %Dyn
     Set ward = summary.%Get("ward_state")
     Set history = $SELECT($ISOBJECT(ward): ward.%Get("history"), 1: "")
     If $ISOBJECT(history) {
-        Set source = $PIECE(case.OperationKey, "^", 1)
+        Set source = $PIECE(case.OperationKey, "^", 1), skew = ##class(Shutter.Store.SiteProfile).SourceSkewSeconds()
         Set iter = history.%GetIterator()
         While iter.%GetNext(.i, .h) {
             Continue:'..AtTheSameTime(h, case, skew)
@@ -478,7 +484,7 @@ ClassMethod SimultaneousSource(summary As %DynamicObject, case As Shutter.Store.
     Set ward = summary.%Get("ward_state")
     Set history = $SELECT($ISOBJECT(ward): ward.%Get("history"), 1: "")
     If '$ISOBJECT(history) Quit "no"
-    Set source = $PIECE(case.OperationKey, "^", 1)
+    Set source = $PIECE(case.OperationKey, "^", 1), skew = ##class(Shutter.Store.SiteProfile).SourceSkewSeconds()
     Set iter = history.%GetIterator()
     While iter.%GetNext(.i, .h) {
         Continue:'..AtTheSameTime(h, case, skew)
@@ -489,15 +495,6 @@ ClassMethod SimultaneousSource(summary As %DynamicObject, case As Shutter.Store.
     Quit "no"
 }
 
-/// The snapshot item of a kind from a summary's items, or "". The summary itself carries the downstream system's
-/// state, the receipt and the route; the error is read from the snapshot through the case.
-ClassMethod Item(summary As %DynamicObject, kind As %String) As %DynamicObject [ Private ]
-{
-    Set failure = summary.%Get("failure")
-    If (kind = "error") && $ISOBJECT(failure) {
-        // The failure carries the receiver's answer when the connector recorded one.
-        Set err = failure.%Get("error")
-        If $ISOBJECT(err) Quit err
 /// Whether a history row counts as at the failed event's own time: within skew seconds of it, either side, since two
 /// systems' clocks don't agree to the second and nothing then says which came first. A demographic update moves nobody,
 /// so it never counts. A time that cannot be read doesn't either, unless it is the same text.
@@ -511,6 +508,15 @@ ClassMethod AtTheSameTime(row As %DynamicObject, case As Shutter.Store.Case, ske
     Quit $ZABS(gap) <= skew
 }
 
+/// The snapshot item of a kind from a summary's items, or "". The summary itself carries the downstream system's
+/// state, the receipt and the route; the error is read from the snapshot through the case.
+ClassMethod Item(summary As %DynamicObject, kind As %String) As %DynamicObject [ Private ]
+{
+    Set failure = summary.%Get("failure")
+    If (kind = "error") && $ISOBJECT(failure) {
+        // The failure carries the receiver's answer when the connector recorded one.
+        Set err = failure.%Get("error")
+        If $ISOBJECT(err) Quit err
         // The connector's answer as the case recorded it, when the case carries it (C3).
         Set reasonCode = ##class(Shutter.Util.Json).Str(failure, "reason_code"), httpStatus = +##class(Shutter.Util.Json).Str(failure, "http_status")
         If (reasonCode '= "") || (httpStatus > 0) {

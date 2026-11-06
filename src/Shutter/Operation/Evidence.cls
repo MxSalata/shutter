@@ -288,6 +288,8 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
         Set info."patient_identifier" = pid _ "^^^" _ pidAuthority _ "^" _ pidType
         Set info."patient_name" = ##class(Shutter.Util.OperationKey).Value(msg, "PID", "5(1).1") _ ", " _ ##class(Shutter.Util.OperationKey).Value(msg, "PID", "5(1).2")
         Set info."patient_class" = ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "2")
+        // A word only (yes, cleared, no): the date of death stays in the message.
+        Set info."death_recorded" = ##class(Shutter.Util.OperationKey).DeathRecorded(msg)
         Set info."assigned_location" = ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.1") _ "^" _ ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.2") _ "^" _ ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.3") _ "^" _ ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.4")
         Set info."visit_number" = ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "19.1")
         Set info."admit_time" = ##class(Shutter.Util.Time).FromHL7(##class(Shutter.Util.OperationKey).Value(msg, "PV1", "44.1"), zone, .had)
