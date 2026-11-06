@@ -271,9 +271,16 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         Set capable = ##class(Shutter.Util.Json).Bool(route, "conditional_writes") && ##class(Shutter.Util.Json).Bool(route, "receipts")
         If 'capable {
             Do ..Check(checks, "capability", "block", "CONNECTOR_INCAPABLE", "The receiver reports no conditional writes: a resend cannot be made safe, so only investigation and reconciliation are open")
+        } ElseIf '##class(Shutter.Util.Json).Bool(route, "history") {
+            // A receiver with no readable history can hold a move made outside this feed, and nothing here would see it: every
+            // read says nothing is later, the resend goes over that move, and the verifier finds out only afterwards.
+            Do ..Check(checks, "capability", "block", "HISTORY_UNSUPPORTED", "The receiver offers no readable history: a move made outside this feed would not show, so a resend could overwrite it. A resend is not offered; investigation, reconciliation and escalation remain")
         } ElseIf '##class(Shutter.Util.Json).Bool(route, "dry_run") {
             // No dry run means the exact action cannot be rehearsed before it is written (v1.21): no resend to this receiver.
             Do ..Check(checks, "capability", "block", "DRY_RUN_UNSUPPORTED", "The receiver reports no dry run: the exact action cannot be rehearsed before it is written, so a resend is not offered; investigation, reconciliation and escalation remain")
+        } ElseIf (wardStatus = 200) && '($ISOBJECT(ward) && (ward.%GetTypeOf("history") = "array")) {
+            // It says it keeps a history, but this read holds none: nothing here can tell what moved, which is unknown, not "nothing later".
+            Do ..Check(checks, "capability", "unknown", "HISTORY_UNREADABLE", "The receiver says it keeps a history, but its read of this encounter holds none, so what moved since is unknown")
         } Else {
             Do ..Check(checks, "capability", "pass", "CONNECTOR_CAPABLE", "The receiver guarantees conditional writes, receipts and dry runs")
         }

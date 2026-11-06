@@ -173,6 +173,34 @@ Method TestCapabilityUndeclared()
     Do $$$AssertEquals(..Found(run.checks, "capability", "CONNECTOR_CAPABLE"), "pass", "the gate passes it (" _ ..Codes(run.checks, "capability") _ ")")
 }
 
+/// What a receiver offers on history reaches the route: the capabilities endpoint's word, else the entry's own declaration,
+/// which is how a site whose endpoint does not mention history says it has one. Nothing said by either is no history.
+Method TestHistoryOnTheRoute()
+{
+    Set e = "Shutter.Operation.Evidence", yes = {"features": {"history": true}}, no = {"features": {"history": false}}
+    Do $$$AssertEquals($CLASSMETHOD(e, "HistoryOffered", {"history": true}, ""), 1, "the endpoint says yes")
+    Do $$$AssertEquals($CLASSMETHOD(e, "HistoryOffered", {"history": false}, yes), 0, "the endpoint's no outranks the entry")
+    Do $$$AssertEquals($CLASSMETHOD(e, "HistoryOffered", {}, yes), 1, "the endpoint is silent and the entry declares it")
+    Do $$$AssertEquals($CLASSMETHOD(e, "HistoryOffered", {}, no), 0, "the endpoint is silent and the entry declares none")
+    Do $$$AssertEquals($CLASSMETHOD(e, "HistoryOffered", {}, {}), 0, "neither says")
+    Do $$$AssertEquals($CLASSMETHOD(e, "HistoryOffered", {}, ""), 0, "and no entry at all")
+    Set recs = ##class(Shutter.Store.SiteProfile).Current().%Get("receivers")
+    Set api = {"base": "/wardb/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "", "operations": "/operations"}
+    Do recs.%Push({"name": "UT No History", "tier": 2, "api": (api), "features": {"conditional_writes": true, "receipts": true, "history": false, "dry_run": true}})
+    Do recs.%Push({"name": "UT History", "tier": 2, "api": (api), "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}})
+    Do ..ChangeProfile({"receivers": (recs)})
+    Set evidence = ##class(Shutter.Operation.Evidence).%New("Shutter Evidence (unit test)")
+    Set route = evidence.Route("UT History")
+    Do $$$AssertEquals(route.%GetTypeOf("history"), "boolean", "the route carries history")
+    Do $$$AssertTrue(route.history, "as declared")
+    Set route = evidence.Route("UT No History")
+    Do $$$AssertEquals(route.%GetTypeOf("history"), "boolean", "the route says so when there is none")
+    Do $$$AssertNotTrue(route.history, "as declared")
+    Set run = ..Run({"name": "a receiver that declares no history, through the route", "summary": {"route": (route)}})
+    Do $$$AssertEquals(..Found(run.checks, "capability", "HISTORY_UNSUPPORTED"), "block", "the gate blocks the resend (" _ ..Codes(run.checks, "capability") _ ")")
+    Do $$$AssertEquals(run.response.Outcome, "block", "and the plan is not released")
+}
+
 Method TestCatalogue()
 {
     Do ..RunRows("catalogue")
@@ -437,7 +465,8 @@ Method NewRehearsal(case As Shutter.Store.Case, snap As Shutter.Store.Snapshot, 
 }
 
 /// The evidence of a transfer that can be resent: the receiver knows the encounter (admitted, version 3, the case's
-/// patient), holds no receipt, takes conditional writes, keeps receipts and runs dry runs; the message parses; nothing later.
+/// patient), holds no receipt, takes conditional writes, keeps receipts, offers a history and runs dry runs; the message
+/// parses; nothing later.
 ClassMethod BaseSummary() As %DynamicObject
 {
     Quit {
@@ -446,7 +475,7 @@ ClassMethod BaseSummary() As %DynamicObject
         "ward_state": {"patient_id": "MRN-UT1", "patient_id_authority": "HOSP", "state": "admitted", "ward": "WARD-A", "version": 3, "epoch": 1, "history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z", "ward": "WARD-A", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-18T08:00:00Z"}]},
         "receipt_http_status": 404,
         "validation": {"parsed": true},
-        "route": {"capabilities_http_status": 200, "conditional_writes": true, "receipts": true, "dry_run": true},
+        "route": {"capabilities_http_status": 200, "conditional_writes": true, "receipts": true, "history": true, "dry_run": true},
         "timeline": []
     }
 }
@@ -938,6 +967,30 @@ XData Rows [ MimeType = application/json ]
   {"group": "capability", "name": "a receiver without receipts",
    "summary": {"route": {"receipts": false}},
    "expect": [["capability", "block", "CONNECTOR_INCAPABLE"]]},
+  {"group": "capability", "name": "a receiver that declares no history",
+   "summary": {"route": {"history": false}},
+   "expect": [["capability", "block", "HISTORY_UNSUPPORTED"]], "absent": [["capability", "CONNECTOR_CAPABLE"]], "outcome": "block"},
+  {"group": "capability", "name": "a route that says nothing about history, as an older snapshot's",
+   "summary": {"route": {"history": null}},
+   "expect": [["capability", "block", "HISTORY_UNSUPPORTED"]], "outcome": "block"},
+  {"group": "capability", "name": "no conditional writes comes first and alone, whatever the history",
+   "summary": {"route": {"conditional_writes": false, "history": false}},
+   "expect": [["capability", "block", "CONNECTOR_INCAPABLE"]], "absent": [["capability", "HISTORY_UNSUPPORTED"]], "outcome": "block"},
+  {"group": "capability", "name": "a read with no history from a receiver that declares one",
+   "summary": {"ward_state": {"history": null}},
+   "expect": [["capability", "unknown", "HISTORY_UNREADABLE"]], "absent": [["capability", "CONNECTOR_CAPABLE"]], "outcome": "unknown"},
+  {"group": "capability", "name": "a read whose history is not an array",
+   "summary": {"ward_state": {"history": {"note": "see elsewhere"}}},
+   "expect": [["capability", "unknown", "HISTORY_UNREADABLE"]], "outcome": "unknown"},
+  {"group": "capability", "name": "an empty history is a history",
+   "summary": {"ward_state": {"history": []}},
+   "expect": [["capability", "pass", "CONNECTOR_CAPABLE"]]},
+  {"group": "capability", "name": "an admission the receiver does not know yet has no history to read",
+   "case": {"event": "admit"}, "summary": {"ward_state_http_status": 404, "ward_state": {"error": "unknown_encounter", "history": null}},
+   "expect": [["capability", "pass", "CONNECTOR_CAPABLE"]], "absent": [["capability", "HISTORY_UNREADABLE"]]},
+  {"group": "capability", "name": "closing a case needs no history",
+   "plan": {"disposition": "superseded", "action": {"type": "none"}}, "summary": {"route": {"history": false}},
+   "expect": [["capability", "pass", "NOT_APPLICABLE"]]},
   {"group": "capability", "name": "reconciling needs no write capability",
    "plan": {"disposition": "reconcile", "action": {"type": "reconcile"}}, "summary": {"receipt_http_status": 200, "route": {"conditional_writes": false}},
    "expect": [["capability", "pass", "NOT_APPLICABLE"]], "outcome": "pass"},
