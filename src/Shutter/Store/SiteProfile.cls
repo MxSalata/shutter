@@ -193,7 +193,12 @@ ClassMethod Validate(p As %DynamicObject) As %String
         If '$ISOBJECT(feed) Quit "feed: must be an object"
         Set fi = feed.%GetIterator()
         While fi.%GetNext(.k, .v) {
-            If '$LISTFIND($LISTBUILD("time_zone", "prevent_failures"), k) Return "feed." _ k _ ": unknown setting"
+            If '$LISTFIND($LISTBUILD("time_zone", "prevent_failures", "source_skew_seconds"), k) Return "feed." _ k _ ": unknown setting"
+            // How far apart two source systems' events still count as simultaneous, in whole seconds.
+            If k = "source_skew_seconds" {
+                If (feed.%GetTypeOf(k) '= "number") || (v '= (v \ 1)) || (v < 0) || (v > 3600) Return "feed.source_skew_seconds: must be a whole number of seconds from 0 to 3600"
+                Continue
+            }
             // Hold a message whose schema is not loaded here (v1.34, "prevent failures"): true or false.
             If k = "prevent_failures" {
                 If feed.%GetTypeOf(k) '= "boolean" Return "feed.prevent_failures: must be true or false"
@@ -339,6 +344,16 @@ ClassMethod FeedTimeZone() As %String
     If zone = "" Set zone = "UTC"
     Try { Set ^Shutter.Config("feedZone") = zone } Catch ex { }
     Quit zone
+}
+
+/// How far apart, in seconds, two source systems' events for an encounter still count as simultaneous (catalogue E7):
+/// feed.source_skew_seconds, or 300 when the profile doesn't say, the five minutes the time checks already allow a clock.
+/// A site that trusts its clocks can narrow it; 0 keeps the exact second.
+ClassMethod SourceSkewSeconds() As %Integer
+{
+    Set feed = ..Current().%Get("feed")
+    If $ISOBJECT(feed) && (feed.%GetTypeOf("source_skew_seconds") = "number") Quit +feed.%Get("source_skew_seconds")
+    Quit 300
 }
 
 /// Whether the site holds a message whose HL7 schema category is not loaded here instead of delivering what was read by

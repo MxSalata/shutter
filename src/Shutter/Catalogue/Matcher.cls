@@ -67,7 +67,7 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     } Else {
         Set c.transition = "unknown"
     }
-    // simultaneous_sources: an applied event for the encounter at the same time from another source
+    // simultaneous_sources: an applied movement for the encounter from another source, within the site's source_skew_seconds
     Set c."simultaneous_sources" = ..SimultaneousSource(summary, case)
     // conditional_writes, from the route's capability profile
     Set route = summary.%Get("route")
@@ -427,7 +427,7 @@ ClassMethod LaterTimeDoubt(summary As %DynamicObject, case As Shutter.Store.Case
 }
 
 /// Facts beside the conditions, for the alternatives' "when": other_source (the other source system of a
-/// simultaneous event, or "").
+/// simultaneous movement, or "").
 ClassMethod Facts(summary As %DynamicObject, case As Shutter.Store.Case) As %DynamicObject
 {
     Set f = {}
@@ -444,7 +444,7 @@ ClassMethod Facts(summary As %DynamicObject, case As Shutter.Store.Case) As %Dyn
         Set source = $PIECE(case.OperationKey, "^", 1)
         Set iter = history.%GetIterator()
         While iter.%GetNext(.i, .h) {
-            Continue:(##class(Shutter.Util.Json).Str(h, "event_time") '= case.EventTime)
+            Continue:'..AtTheSameTime(h, case, skew)
             Set key = ##class(Shutter.Util.Json).Str(h, "operation_key")
             Continue:(key = case.OperationKey)
             If $PIECE(key, "^", 1) '= source Set f."other_source" = $PIECE(key, "^", 1) Quit
@@ -468,8 +468,8 @@ ClassMethod WhenHolds(when As %String, facts As %DynamicObject) As %Boolean
     Quit ##class(Shutter.Store.SiteProfile).Flag(flag) = value
 }
 
-/// yes when the receiver applied an event for the encounter at the failed operation's own event time from
-/// another source system.
+/// yes when the receiver applied a movement for the encounter from another source system within the site's
+/// source_skew_seconds of the failed operation's own event time, either side of it.
 ClassMethod SimultaneousSource(summary As %DynamicObject, case As Shutter.Store.Case) As %String [ Private ]
 {
     Set ward = summary.%Get("ward_state")
@@ -478,7 +478,7 @@ ClassMethod SimultaneousSource(summary As %DynamicObject, case As Shutter.Store.
     Set source = $PIECE(case.OperationKey, "^", 1)
     Set iter = history.%GetIterator()
     While iter.%GetNext(.i, .h) {
-        Continue:(##class(Shutter.Util.Json).Str(h, "event_time") '= case.EventTime)
+        Continue:'..AtTheSameTime(h, case, skew)
         Set key = ##class(Shutter.Util.Json).Str(h, "operation_key")
         Continue:(key = case.OperationKey)
         If $PIECE(key, "^", 1) '= source Return "yes"
@@ -495,6 +495,19 @@ ClassMethod Item(summary As %DynamicObject, kind As %String) As %DynamicObject [
         // The failure carries the receiver's answer when the connector recorded one.
         Set err = failure.%Get("error")
         If $ISOBJECT(err) Quit err
+/// Whether a history row counts as at the failed event's own time: within skew seconds of it, either side, since two
+/// systems' clocks don't agree to the second and nothing then says which came first. A demographic update moves nobody,
+/// so it never counts. A time that cannot be read doesn't either, unless it is the same text.
+ClassMethod AtTheSameTime(row As %DynamicObject, case As Shutter.Store.Case, skew As %Integer) As %Boolean [ Private ]
+{
+    If ##class(Shutter.Util.Json).Str(row, "event") = "update" Quit 0
+    Set t = ##class(Shutter.Util.Json).Str(row, "event_time")
+    If t = case.EventTime Quit 1
+    Set gap = ..Behind(case.EventTime, t)
+    If gap = "" Quit 0
+    Quit $ZABS(gap) <= skew
+}
+
         // The connector's answer as the case recorded it, when the case carries it (C3).
         Set reasonCode = ##class(Shutter.Util.Json).Str(failure, "reason_code"), httpStatus = +##class(Shutter.Util.Json).Str(failure, "http_status")
         If (reasonCode '= "") || (httpStatus > 0) {

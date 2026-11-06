@@ -489,7 +489,7 @@ conditions that matter; an unlisted condition is a wildcard. A listed condition 
 | `encounter_state` | `admitted`, `discharged`, `not_found`, `unknown` | the downstream system's state; `not_found` when the receiver answers 404 (it does not know the encounter); `unknown` when the receiver can't be read |
 | `transition` | `allowed`, `invalid`, `unknown` | the failed event from the encounter's current state (1.4): a transfer after a discharge is `invalid` |
 | `patient_match` | `yes`, `no`, `unknown` | the message's PID-3 against the downstream system's patient for the encounter |
-| `simultaneous_sources` | `yes`, `no` | an applied event for the encounter from another source system with the same event time as the failed operation (S8) |
+| `simultaneous_sources` | `yes`, `no` | an applied movement for the encounter (any event but `update`, which moves nobody) from another source system, within the site profile's `feed.source_skew_seconds` of the failed operation's event time, either way (S8) |
 | `conditional_writes` | `yes`, `no`, `unknown` | the route's capability profile (1.8) |
 | `free_text` | `yes`, `no` | the message carries free text (an OBX note or an NTE) |
 | `chain` | `single`, `ordered`, `interleaved` | section 7; a case outside an incident is `single` |
@@ -653,7 +653,7 @@ reads it through `Shutter.Store.SiteProfile`.
                 "close_needs_approver": false},
   "incident": {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60},
   "model_content": {"free_text": false},
-  "feed": {"time_zone": "Europe/London", "prevent_failures": false}
+  "feed": {"time_zone": "Europe/London", "prevent_failures": false, "source_skew_seconds": 300}
 }
 ```
 
@@ -709,7 +709,7 @@ reads it through `Shutter.Store.SiteProfile`.
   profile row is stored) is `Europe/London`, a stored profile that does not answer keeps `UTC` (the reading before v1.11),
   and the shipped seed profile says `Europe/London` (v1.12), so the fixtures' times read as British Summer Time (09:20 on
   15 October is 08:20Z). Since v1.30 the zone may also be any IANA zone name this IRIS knows (`Europe/Paris`, `America/New_York`), read through Embedded Python's `zoneinfo` (`Shutter.Util.Time.PyOffset`, a method in Python; `KnownZone`, `PythonZones`); UTC, Europe/London and fixed offsets keep Shutter's own rules, and on an IRIS without Embedded Python or the IANA database such a zone is refused by the validator and read as UTC with a warning, as before. A zone outside these that reaches the reader anyway (the profile's check refuses one, so only a zone
-  set by hand in the namespace's cached `feedZone`, or one passed to the time probe) is read as `UTC` with a warning in the event log, once per job and zone, and the evidence's note says so (v1.16). A date that does not exist (30 February, month 13, 24:00:00) reads as no time on every path, the UTC one, the zone one and the own-offset one alike, and `SecondsBetween` answers "" for it rather than an error (v1.39). The questionnaire page asks for `teams` and `mail` (question 9: the mail domains first, since a team mailbox needs
+  set by hand in the namespace's cached `feedZone`, or one passed to the time probe) is read as `UTC` with a warning in the event log, once per job and zone, and the evidence's note says so (v1.16). A date that does not exist (30 February, month 13, 24:00:00) reads as no time on every path, the UTC one, the zone one and the own-offset one alike, and `SecondsBetween` answers "" for it rather than an error (v1.39). `feed.source_skew_seconds` is how far apart, in whole seconds from 0 to 3600, two source systems' events still count as simultaneous (`simultaneous_sources`, E7): 300 when the profile doesn't say, the five minutes the time checks already allow a clock, and 0 keeps the exact second. The questionnaire page asks for `teams` and `mail` (question 9: the mail domains first, since a team mailbox needs
   one; an empty or absent `mail.allowed_domains` allows no address, v1.21), `feed` (10) and `model_content` (11)
   since v1.12, and since v1.14 for `merges` (12), each receiver's `merges` beside its `cancels` (5) and each team's
   `sources` (9). The body may carry
