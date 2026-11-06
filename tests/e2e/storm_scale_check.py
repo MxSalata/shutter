@@ -4,6 +4,7 @@
     python3 tests/e2e/storm_scale_check.py --size S|M|L --ctr NAME --url http://127.0.0.1:PORT --out DIR
     python3 tests/e2e/storm_scale_check.py --size S --ctr NAME --boot --image IMAGE --port PORT --out DIR
     python3 tests/e2e/storm_scale_check.py --size S --plan-only
+    python3 tests/e2e/storm_scale_check.py --control 8 --ctr NAME --boot --image IMAGE --port PORT --out DIR
 
 Sizes: S 40 cases, M 200, L 1,000; half the patients' count in chains of two (an admission, then a transfer). One post at
 a time as the forwarder, with source.namespace set and no mode, so a watched production's default (policy) decides. L
@@ -682,8 +683,12 @@ def judge_final_state(result, plan, reads, whole_release):
             wrong.append(f"{encounter}: ward {held.get('ward')}, version {held.get('version')}")
     result.rule("count", "final state at the receiver: wards, versions and history counts", not wrong,
                 f"{len(reads)} encounters read through the receiver's API; " + ("; ".join(wrong[:12]) if wrong else "all as expected"))
-    result.rule("never", "no duplicate write: each encounter holds exactly the events sent", not [w for w in wrong if "events" in w or "twice" in w],
-                "; ".join(wrong[:6]) if wrong else "none extra")
+    # A missing event is the count above; only one more than was sent, or a key twice, is a duplicate.
+    extra = [f"{encounter}: {len(held.get('history') or [])} events" for encounter, held, _, _ in reads
+             if held and len(held.get("history") or []) > 2]
+    twice = [w for w in wrong if "twice" in w]
+    result.rule("never", "no duplicate write: no encounter holds more than the events sent", not extra and not twice,
+                "; ".join((extra + twice)[:6]) or "none extra")
 
 
 def judge_writes(result, sql, plan):
@@ -1046,9 +1051,19 @@ def storm(args, log, result):
     _, events, took, events_bytes = operator.call("GET", incident_path + "/events")
     events = events if isinstance(events, list) else []
     result.report("get_incident_events", {"seconds": took, "bytes": events_bytes, "count": len(events)})
+    result.report("incident_end", {"state": detail_end.get("state"), "summary": (detail_end.get("summary") or "")[:400],
+                                   "errors": [e.get("text", "")[-300:] for e in events if e.get("kind") == "error"]})
+    for name, body in (("incident-end.json", detail_end), ("incident-events.json", events)):
+        with open(os.path.join(folder, name), "w") as f:
+            json.dump(body, f, indent=1)
 
     cases, first_page = all_cases(operator)
     result.report("get_cases_first_page", first_page)
+    states = {}
+    for c in ids:
+        state = (cases or {}).get(c, {}).get("state")
+        states[state] = states.get(state, 0) + 1
+    result.report("case_states_at_end", states)
     unattached = [c for c in ids if not (cases or {}).get(c, {}).get("incidentId") and (cases or {}).get(c, {}).get("state") in NOT_YET_DECIDED]
     while unattached and (utc_now() - last_202).total_seconds() < 600:
         time.sleep(20)
@@ -1107,7 +1122,8 @@ def storm(args, log, result):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--size", required=True, choices=sorted(SIZES))
+    parser.add_argument("--size", choices=sorted(SIZES))
+    parser.add_argument("--control", type=int, metavar="CASES", help="a small even number of cases to prove the release path: a control, none of the three sizes")
     parser.add_argument("--ctr", help="the instance's container, this run's own name")
     parser.add_argument("--url", help="the instance's web port, for example http://127.0.0.1:52773")
     parser.add_argument("--out", help="a folder for the run's logs and result")
@@ -1119,13 +1135,20 @@ def main():
     parser.add_argument("--encounter-pace", type=float, default=1.0, help="seconds between the receiver's final reads")
     parser.add_argument("--plan-only", action="store_true", help="build and check the messages, send nothing")
     args = parser.parse_args()
+    if args.control:
+        if args.size or args.control % 2 or args.control < 6:
+            parser.error("--control takes an even number of cases, at least 6 (an incident opens at the 5th), and no --size")
+        SIZES["control"] = {"cases": args.control, "approval_limit": 300, "release_limit": 600, "give_up": 1200, "stop_at": None}
+        args.size = "control"
+    if not args.size:
+        parser.error("--size or --control is required")
     if args.plan_only:
         args.out = args.out or os.path.join(os.environ.get("TMPDIR", "/tmp"), f"storm-plan-{os.getpid()}")
     elif not (args.ctr and args.out and (args.url or args.port)):
         parser.error("--ctr, --out and --url (or --port) are required")
     if args.boot and not (args.image and args.port):
         parser.error("--boot needs --image and --port")
-    if args.board and args.size != "S":
+    if args.board and args.size not in ("S", "control"):
         parser.error("--board runs at size S only")
     args.url = (args.url or f"http://127.0.0.1:{args.port}").rstrip("/")
     return run(args)
