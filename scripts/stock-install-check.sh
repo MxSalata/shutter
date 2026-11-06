@@ -72,6 +72,10 @@ echo "loaded $target in USER in $((SECONDS - start)) s"
 
 code=$(curl -s -m 20 -o /dev/null -w '%{http_code}' "$url/shutter/index.html" || true)
 [ "$code" = 200 ] || { echo "/shutter answered HTTP $code"; exit 1; }
+for bare in /shutter /shutter/; do
+  to=$(curl -s -m 20 -o /dev/null -w '%{http_code} %{redirect_url}' "$url$bare" || true)
+  [ "$to" = "302 $url/shutter/index.html" ] || { echo "$bare answered: $to"; exit 1; }
+done
 state=$(printf '%s\n' 'Set sc = ##class(Ens.Director).GetProductionStatus(.n, .s) Write !,"RESULT: ",$GET(n)," ",$GET(s),!' 'Halt' | session USER | grep '^RESULT: ' || true)
 [ "$state" = 'RESULT: Shutter.Production 1' ] || { echo "the production is not running: $state"; exit 1; }
 echo "/shutter answers and Shutter.Production runs"
