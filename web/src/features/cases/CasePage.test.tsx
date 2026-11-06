@@ -412,7 +412,7 @@ describe('CasePage', () => {
       within(top).queryByRole('heading', { name: /Escalated: a person decides/ }),
     ).not.toBeInTheDocument();
     // The gate passed a plan that writes nothing, and says so beside the green check
-    expect(within(top).getByText('Passed: the plan writes nothing')).toBeInTheDocument();
+    expect(within(top).getByText('Passed: no write')).toBeInTheDocument();
     // Three cards first, each under its heading: what happened, what Shutter did and what needs you now, the last in
     // the attention tone since a person has to act; then the receipt as its own band
     const headings = within(top)
@@ -495,9 +495,7 @@ describe('CasePage', () => {
     expect(await within(rules).findByText('Not as expected')).toBeInTheDocument();
     expect(within(rules).queryByText('Resolved')).not.toBeInTheDocument();
     const board = screen.getByTestId('compare-board');
-    expect(within(board).getByTestId('compare-patient')).toHaveTextContent(
-      'No overwrite; a person decides',
-    );
+    expect(within(board).getByTestId('compare-patient')).toHaveTextContent('No overwrite; a person decides');
     expect(await within(board).findByText('As expected')).toBeInTheDocument();
   });
 
@@ -945,6 +943,30 @@ describe('CasePage', () => {
     expect(within(gate).getAllByText(/\b2 checked later/).length).toBeGreaterThan(0);
   });
 
+  it('says eligible for approval on the receipt, naming the checks still to come, not Passed', async () => {
+    renderCase('C-000002');
+    const top = await outcome();
+    expect(await within(top).findByText('Eligible for approval')).toBeInTheDocument();
+    expect(within(top).getByText('Checked at dispatch: authorization, rehearsal.')).toBeInTheDocument();
+    expect(within(top).queryByText('Passed')).not.toBeInTheDocument();
+  });
+
+  it('names the before and the after in the approval dialog, with the condition the write goes on', async () => {
+    renderCase('C-000002');
+    await openStep('Gate and decision');
+    const approval = await screen.findByRole('region', { name: 'Approval' });
+    await userEvent.click(await within(approval).findByRole('button', { name: 'Approve plan' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
+    expect(within(dialog).getByText('WARD-A at version 1')).toBeInTheDocument();
+    expect(within(dialog).getByText(/^read/)).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('WARD-B, only if the receiver is still at version 1 when it is read again'),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/^You approve exactly this: resend the transfer to WARD-B for ENC-1002\.$/),
+    ).toBeInTheDocument();
+  });
+
   it('names every stage of the progress in words: done, waiting for approval and not yet', async () => {
     renderCase('C-000002');
     const progress = await screen.findByLabelText("The case's progress");
@@ -1299,7 +1321,7 @@ describe('CasePage', () => {
     expect(within(receiver).getByText('At Downstream Out')).toBeInTheDocument();
     expect(await within(receiver).findByText('Current state')).toBeInTheDocument();
     expect(within(region).getByTestId('case-receiver-gist')).toHaveTextContent(
-      'This receiver keeps only the current placement.',
+      'This receiver keeps only current placement.',
     );
     expect(within(region).queryByTestId('correction-steps')).not.toBeInTheDocument();
   });
