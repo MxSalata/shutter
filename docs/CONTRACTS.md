@@ -291,7 +291,7 @@ system's case (category `history_of_record`) escalates with the correcting steps
 
 ## 4.1 Scenario steps that wait (v1.4)
 
-A step `{"wait_for_state": "awaiting_approval", "timeout": 120}` makes the runner wait until the newest case of the running scenario reaches that state (or the timeout passes, which the runner reports). The runner reads the case in the same namespace:
+A step `{"wait_for_state": "awaiting_approval", "timeout": 120}` makes the runner wait until the newest case of the running scenario reaches that state, or one of several separated by `|` (S26), or the timeout passes, which the runner reports. The runner reads the case in the same namespace:
 
 ```sql
 SELECT TOP 1 State FROM Shutter_Store."Case" WHERE Scenario = ? ORDER BY ID DESC
@@ -1047,7 +1047,7 @@ separate, later tool.
   matcher's `later_applied` count only `applied` and `already_committed`, and outside a chain a later transfer of the
   feed's own whose failure the connector recorded (6.1, v1.16), so it supersedes nothing by itself; the receiver's
   history decides. The board sees it and can say so.
-- S14 plays a later movement on a route Shutter does not own, found only by the index: the demo item `Other Route In` (`Shutter.Scenarios.Route`, Rules only and Site policy) sends it to `Case Intake Store`, so its header is walked and nothing reaches the receiver.
+- S14 plays a later movement on a route Shutter does not own, found only by the index: the demo item `Other Route In` (`Shutter.Scenarios.Route`, Rules only and Site policy) sends it to `Case Intake Store`, so its header is walked and nothing reaches the receiver. The item types the message under the category its MSH-12 names when that is loaded, as an inbound item's category would. A site's production never gets the item, nor the route in its `HL7 Index` (`Setup.SiteRoutes`).
 - The index row's `Event` is the key's event word (v1.14: `register`, `preadmit`, `person_add`, `person_update`, the cancel words and `merge` included, 32 characters), so registrations, pre-admissions and person updates show between the movements; its `VisitNumber` is `-` for a mapped message with no PV1-19 (an unmappable message without one keeps an empty visit number), and the timeline and the index answer nothing for an encounter of `-` or empty.
 
 ### 8.3 The API
