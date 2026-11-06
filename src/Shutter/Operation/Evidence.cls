@@ -80,7 +80,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
         Set status = 0, wardState = {"note": "Not applicable: the case names no encounter (the message carries no visit number)"}
     } Else {
         Set statePath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", case.EncounterId)
-        If statePath = "" { Set status = 0, wardState = {"error": "no state endpoint in the receiver's description"} } Else { Set wardState = ..WardGet(statePath, .status) }
+        If statePath = "" { Set status = 0, wardState = {"error": "no state endpoint in the receiver's description"} } Else { Set wardState = ..WardGet(statePath, .status) Do ##class(Shutter.Operation.Ward).TrustRead("state", .status, .wardState, "", ##class(Shutter.Store.SiteProfile).StrictAnswers(receiver)) }
     }
     Set wardItem = {}
     Set wardItem."http_status" = status
@@ -113,7 +113,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
         Set receiptPath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "receipt", "", case.OperationKey)
         Set receipt = $SELECT(receiptPath = "": {}, 1: ..WardGet(receiptPath, .rstatus))
         // -1: the receiver keeps no receipts (no receipt path in its description), as against 0 for no answer.
-        If receiptPath = "" Set rstatus = -1
+        If receiptPath = "" { Set rstatus = -1 } Else { Do ##class(Shutter.Operation.Ward).TrustRead("receipt", .rstatus, .receipt, case.OperationKey, ##class(Shutter.Store.SiteProfile).StrictAnswers(receiver)) }
     }
     Set receiptItem = {}
     Set receiptItem."http_status" = rstatus

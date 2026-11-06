@@ -49,6 +49,113 @@ ClassMethod Classified(class As %String, status As %Integer, body As %DynamicObj
     Quit r.Outcome
 }
 
+/// A 200 saying already committed, with no receipt in its body, on a first delivery, opened no case. A 200 is a
+/// delivery only with the receipt the contract promises (or applied true); a gateway's page is the same case.
+Method TestATwoHundredWithNoReceiptIsNoDelivery()
+{
+    For class = "Shutter.Operation.Ward", "Hospital.Operation.DownstreamOut" {
+        Do $$$AssertEquals(..Classified(class, 200, {"applied": false, "reason": "already_committed"}), "uncertain", class _ ": already committed, with no receipt")
+        Do $$$AssertEquals(..Classified(class, 200, {}), "uncertain", class _ ": a 200 with nothing the contract says, a gateway's page")
+        Do $$$AssertEquals(..Classified(class, 200, {"applied": false}), "uncertain", class _ ": not applied, with no receipt")
+        Do $$$AssertEquals(..Classified(class, 200, {"applied": false, "reason": "already_committed", "receipt": {"operation_key": (..#KEY)}}), "already_committed", class _ ": with the earlier receipt, as the contract says")
+        Do $$$AssertEquals(..Classified(class, 200, {"applied": true}), "applied", class _ ": applied, in its own words")
+        Do $$$AssertEquals(..Classified(class, 200, {"rehearsal": true, "would_apply": true}), "would_apply", class _ ": a rehearsal is not touched")
+    }
+    Set r = ##class(Shutter.Msg.WardResult).%New()
+    Set r.HttpStatus = 200
+    Do ##class(Shutter.Operation.Ward).Classify(r, $$$OK, {"applied": false, "reason": "already_committed"}, 0)
+    Do $$$AssertEquals(r.Outcome, "already_committed", "a site that reads this receiver on status alone keeps what it had")
+    Set r = ##class(Shutter.Msg.WardResult).%New()
+    Set r.HttpStatus = 200
+    Do ##class(Shutter.Operation.Ward).Classify(r, $$$OK, {})
+    Do $$$AssertTrue(r.Error [ "no receipt", "a person reads why: " _ r.Error)
+}
+
+/// The preflight read has always refused a 404 that is not the contract's; a 200 that is not an encounter too.
+Method TestAPreflightReadNeedsAVersion()
+{
+    Set r = ##class(Shutter.Msg.WardResult).%New()
+    Set r.HttpStatus = 200
+    Do ##class(Shutter.Operation.Ward).ClassifyRead(r, $$$OK, {}, "/x")
+    Do $$$AssertEquals(r.Outcome, "error", "a 200 with no version is not the receiver's encounter")
+    Set r = ##class(Shutter.Msg.WardResult).%New()
+    Set r.HttpStatus = 200
+    Do ##class(Shutter.Operation.Ward).ClassifyRead(r, $$$OK, {"version": 3, "state": "admitted"}, "/x")
+    Do $$$AssertEquals(r.Outcome, "read", "with a version it is")
+    Set r = ##class(Shutter.Msg.WardResult).%New()
+    Set r.HttpStatus = 200
+    Do ##class(Shutter.Operation.Ward).ClassifyRead(r, $$$OK, {}, "/x", 0)
+    Do $$$AssertEquals(r.Outcome, "read", "a site that reads this receiver on status alone keeps what it had")
+}
+
+/// The verifier on a case whose write's answer was lost, reading through the table: what it recorded of the two reads.
+Method Verified(receipt As %List, encounter As %List = "", Output response As Shutter.Msg.VerifyResult) As %DynamicObject
+{
+    Set c = ..SavedCase()
+    Set p = ..ResendPlan(c)
+    Do $$$AssertStatusOK(##class(Shutter.Store.ExecutionAttempt).Create(c, p, "", "", 0, "uncertain", {}, "", .a), "the attempt")
+    Set op = ##class(Shutter.Operation.Verify).%New("Shutter Verify (unit test)")
+    Set http = ##class(Shutter.Test.FakeHttp).%New()
+    Set http.Answers("/encounters/") = $SELECT(encounter = "": $LISTBUILD(200, ..#ENCOUNTER), 1: encounter)
+    Set http.Answers("/receipts/") = receipt
+    Set op.Adapter = http
+    Set request = ##class(Shutter.Msg.VerifyRequest).%New()
+    Set request.CaseId = c.CaseId, request.PlanId = p.%Id(), request.AttemptId = a.%Id()
+    Do $$$AssertStatusOK(op.OnVerifyRequest(request, .response), "the verification ran")
+    Set detail = ##class(%DynamicObject).%FromJSON(response.DetailJSON)
+    Do ..OnAfterOneTest("")
+    Quit detail
+}
+
+/// A 200 that is not this operation's receipt, and a 404 that is not the receiver's own, are not readings: the
+/// verifier says nothing was established, and does not say the receiver holds, or does not hold, a receipt.
+Method TestTheVerifierBelievesOnlyTheReceiversOwnAnswers()
+{
+    Set d = ..Verified($LISTBUILD(200, "<html>Sign in</html>"), , .r)
+    Do $$$AssertEquals(d."receipt_http_status", 0, "a sign-in page is no receipt")
+    Do $$$AssertEquals(r.Outcome, "unresolved", "nothing is established: " _ r.Summary)
+    Do $$$AssertNotTrue(r.Summary [ "A receipt exists", "and nothing says a receipt exists")
+    Set d = ..Verified($LISTBUILD(200, "{""operation_key"":""another key""}"), , .r)
+    Do $$$AssertEquals(d."receipt_http_status", 0, "another operation's receipt is no receipt for this one")
+    Set d = ..Verified($LISTBUILD(404, "<html>Not found</html>"), , .r)
+    Do $$$AssertEquals(d."receipt_http_status", 0, "a gateway's 404 is not the receiver saying no receipt")
+    Do $$$AssertEquals(r.Outcome, "unresolved", "so nothing is established")
+    Do $$$AssertTrue(''d.retry, "and it is read again")
+    Set d = ..Verified($LISTBUILD(404, "{""error"":""no_receipt""}"), , .r)
+    Do $$$AssertEquals(d."receipt_http_status", 404, "the contract's own 404 is a reading")
+    Set d = ..Verified($LISTBUILD(200, "{""operation_key"":""" _ ..#KEY _ """}"), , .r)
+    Do $$$AssertEquals(d."receipt_http_status", 200, "this operation's receipt is a reading")
+    Set d = ..Verified($LISTBUILD(404, "{""error"":""no_receipt""}"), $LISTBUILD(200, "<html>Sign in</html>"), .r)
+    Do $$$AssertEquals(d."encounter_http_status", 0, "a sign-in page is no encounter")
+    Set d = ..Verified($LISTBUILD(404, "{""error"":""no_receipt""}"), $LISTBUILD(404, "<html>Not found</html>"), .r)
+    Do $$$AssertEquals(d."encounter_http_status", 0, "a gateway's 404 is not the receiver saying it does not know the encounter")
+    Set d = ..Verified($LISTBUILD(404, "{""error"":""no_receipt""}"), $LISTBUILD(404, "{""error"":""unknown_encounter""}"), .r)
+    Do $$$AssertEquals(d."encounter_http_status", 404, "the contract's own 404 is a reading")
+}
+
+/// At the proposal: the snapshot the gate and the matcher read carries the same judgement, so a sign-in page on the
+/// receipt read is not E3's receipt present.
+Method TestTheEvidenceBelievesOnlyTheReceiversOwnAnswers()
+{
+    Set c = ..SavedCase(, "collecting")
+    Set op = ##class(Shutter.Operation.Evidence).%New("Shutter Evidence (unit test)")
+    Set op.SecondParserTarget = ""
+    Set http = ##class(Shutter.Test.FakeHttp).%New()
+    Set http.Answers("/encounters/") = $LISTBUILD(404, "")
+    Set http.Answers("/receipts/") = $LISTBUILD(200, "<html>Sign in</html>")
+    Set op.Adapter = http
+    Set request = ##class(Shutter.Msg.EvidenceRequest).%New()
+    Set request.CaseId = c.CaseId
+    Do $$$AssertStatusOK(op.OnEvidenceRequest(request, .response), "the evidence ran")
+    Do $$$AssertEquals(response.Error, "", "with no error")
+    Set summary = ##class(%DynamicObject).%FromJSON(response.SummaryJSON)
+    Do $$$AssertEquals(summary."receipt_http_status", 0, "a sign-in page is no receipt")
+    Do $$$AssertEquals(summary."ward_state_http_status", 0, "an empty 404 is not the receiver's answer for an encounter")
+    Do $$$AssertTrue(##class(Shutter.Util.Json).Str(summary.%Get("receipt"), "error") [ "HTTP 200", "and the reading says what came back")
+    Set conds = ##class(Shutter.Catalogue.Matcher).Conditions(c, summary)
+    Do $$$AssertEquals(conds.receipt, "unreadable", "the matcher reads it as unreadable")
+}
+
 /// A receiver's entry in the site profile may ask for its answers to be read on status alone, as before this check; the
 /// default is to check them.
 Method TestStrictAnswersIsTheSitesChoice()

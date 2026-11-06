@@ -42,9 +42,11 @@ Method OnVerifyRequest(request As Shutter.Msg.VerifyRequest, Output response As 
     Set plan = ##class(Shutter.Store.Plan).%OpenId(request.PlanId)
     Set attempt = ##class(Shutter.Store.ExecutionAttempt).%OpenId(request.AttemptId)
     Set receiver = $SELECT(case.Receiver '= "": case.Receiver, 1: ..Receiver)
-    If case.EncounterId = "-" { Set estatus = 404, encounter = {"note": "Not applicable: the case names no encounter"} } Else { Set encounter = ..Get(##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", case.EncounterId), .estatus) }
+    Set strict = ##class(Shutter.Store.SiteProfile).StrictAnswers(receiver)
+    If case.EncounterId = "-" { Set estatus = 404, encounter = {"note": "Not applicable: the case names no encounter"} } Else { Set encounter = ..Get(##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", case.EncounterId), .estatus) Do ##class(Shutter.Operation.Ward).TrustRead("state", .estatus, .encounter, "", strict) }
     Set receiptPath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "receipt", "", case.OperationKey)
     Set receipt = $SELECT(receiptPath = "": {}, 1: ..Get(receiptPath, .rstatus))
+    If receiptPath '= "" Do ##class(Shutter.Operation.Ward).TrustRead("receipt", .rstatus, .receipt, case.OperationKey, strict)
     // -1: the receiver keeps no receipts; the committed history alone then shows the effect.
     If receiptPath = "" Set rstatus = -1
     Set summary = $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.SummaryObject(), 1: "")

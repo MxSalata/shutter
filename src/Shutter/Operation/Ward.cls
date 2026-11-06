@@ -65,7 +65,7 @@ Method OnWardOperation(request As Shutter.Msg.WardOperation, Output response As 
     }
     Set parsed = ##class(Shutter.Util.Json).Parse(text, .psc)
     If '$ISOBJECT(parsed) || $$$ISERR(psc) Set parsed = {}
-    Do ..Classify(response, sc, parsed)
+    Do ..Classify(response, sc, parsed, ##class(Shutter.Store.SiteProfile).StrictAnswers(..%ConfigName))
     // A feed message delivered (answered, whatever the answer) releases the cases that waited for it (v1.29).
     If (request.Purpose = "normal") && (request.SourceMessageId '= "") Do ##class(Shutter.Store.Case).ReleaseWaitingOnMessage(request.SourceMessageId, response.Outcome)
     $$$TRACE("Outcome " _ response.Outcome _ $SELECT(response.ReasonCode '= "": " (" _ response.ReasonCode _ ")", 1: "") _ ", HTTP " _ response.HttpStatus _ ", " _ response.DurationMs _ " ms")
@@ -95,16 +95,19 @@ Method Read(request As Shutter.Msg.WardOperation, response As Shutter.Msg.WardRe
     }
     Set parsed = ##class(Shutter.Util.Json).Parse(text, .psc)
     If '$ISOBJECT(parsed) || $$$ISERR(psc) Set parsed = {}
-    Do ..ClassifyRead(response, sc, parsed, path)
+    Do ..ClassifyRead(response, sc, parsed, path, ##class(Shutter.Store.SiteProfile).StrictAnswers(..%ConfigName))
     $$$TRACE("Preflight: " _ response.Outcome _ ", version " _ response.EncounterVersion _ ", HTTP " _ response.HttpStatus)
     Quit $$$OK
 }
 
 /// Map what a preflight read got to an outcome. A read that got no answer changes nothing at the receiver, so it is
 /// unavailable whether it was refused or timed out; the case reads again and then blocks with nothing dispatched.
-ClassMethod ClassifyRead(response As Shutter.Msg.WardResult, sc As %Status, parsed As %DynamicObject, path As %String)
+ClassMethod ClassifyRead(response As Shutter.Msg.WardResult, sc As %Status, parsed As %DynamicObject, path As %String, strict As %Boolean = 1)
 {
-    If response.HttpStatus = 200 {
+    If (response.HttpStatus = 200) && strict && (##class(Shutter.Util.Json).Str(parsed, "version") = "") {
+        Set response.Outcome = "error"
+        Set response.Error = "HTTP 200 from " _ path _ " with no version: not the downstream system's answer for an encounter"
+    } ElseIf response.HttpStatus = 200 {
         Set response.Outcome = "read"
         Set response.EncounterVersion = ##class(Shutter.Util.Json).Str(parsed, "version")
         Set response.ReasonCode = ##class(Shutter.Util.Json).Str(parsed, "state")
@@ -124,6 +127,26 @@ ClassMethod ClassifyRead(response As Shutter.Msg.WardResult, sc As %Status, pars
         Set response.Outcome = "error"
         Set response.Error = "HTTP " _ response.HttpStatus
     }
+}
+
+/// Whether a read was the receiver's own answer, as the preflight's ClassifyRead has always asked of a 404: a 200
+/// only with the kind's own field (a version for an encounter; this operation's key for a receipt), a 404 only with the
+/// contract's own error (unknown_encounter; no_receipt). Anything else, such as a gateway's sign-in page or its own 404, says
+/// nothing about the receiver: the status becomes 0, which every reader takes as could not be read, and the body says what
+/// came back. A site whose receiver answers otherwise sets strict_answers false on its entry (SiteProfile.StrictAnswers).
+ClassMethod TrustRead(kind As %String, ByRef status As %Integer, ByRef body As %DynamicObject, key As %String = "", strict As %Boolean = 1)
+{
+    If 'strict || ((status '= 200) && (status '= 404)) Quit
+    Set json = "Shutter.Util.Json"
+    Set object = $ISOBJECT(body) && body.%IsA("%DynamicObject")
+    If status = 200 {
+        Set ok = object && $SELECT(kind = "receipt": $CLASSMETHOD(json, "Str", body, "operation_key") = key, 1: $CLASSMETHOD(json, "Str", body, "version") '= "")
+    } Else {
+        Set ok = object && ($CLASSMETHOD(json, "Str", body, "error") = $SELECT(kind = "receipt": "no_receipt", 1: "unknown_encounter"))
+    }
+    If ok Quit
+    Set body = {"error": ("HTTP " _ status _ " that is not the receiver's answer for " _ $SELECT(kind = "receipt": "this operation's receipt", 1: "an encounter")), "http_status": (status)}
+    Set status = 0
 }
 
 /// The receiver's Retry-After (v1.35) on a 503 or 429: kept on the result in seconds, for the case to honour before its
@@ -158,7 +181,7 @@ Method Path(kind As %String, encounter As %String = "") As %String
 
 /// Map the HTTP status, the adapter's status and the body to an outcome. A write nobody answered is uncertain unless the
 /// socket never opened: the receiver may have taken it and may still apply it, so it is never reported as refused.
-ClassMethod Classify(response As Shutter.Msg.WardResult, sc As %Status, parsed As %DynamicObject)
+ClassMethod Classify(response As Shutter.Msg.WardResult, sc As %Status, parsed As %DynamicObject, strict As %Boolean = 1)
 {
     Set status = response.HttpStatus
     Set errorCode = ##class(Shutter.Util.Json).Str(parsed, "error")
@@ -204,10 +227,15 @@ ClassMethod Classify(response As Shutter.Msg.WardResult, sc As %Status, parsed A
         If ##class(Shutter.Util.Json).Bool(parsed, "rehearsal") {
             Set response.Outcome = $SELECT(##class(Shutter.Util.Json).Bool(parsed, "would_apply"): "would_apply", 1: "would_not_apply")
             Set response.ReasonCode = ##class(Shutter.Util.Json).Str(parsed, "reason")
-        } ElseIf ##class(Shutter.Util.Json).Str(parsed, "reason") = "already_committed" {
-            Set response.Outcome = "already_committed"
+        } ElseIf ##class(Shutter.Util.Json).Bool(parsed, "applied") && (##class(Shutter.Util.Json).Str(parsed, "reason") '= "already_committed") {
+            Set response.Outcome = "applied"
+        } ElseIf strict && '$ISOBJECT(parsed.%Get("receipt")) {
+            // The contract's already_committed carries the earlier receipt (CONTRACTS 1.3). Without one this says nothing was
+            // filed, so nothing is delivered on its word: a gateway's page and a first delivery answered "already in" read the same.
+            Set response.Outcome = "uncertain"
+            Set response.Error = "HTTP 200 with no receipt and no sign it was applied; the operation may or may not have been applied"
         } Else {
-            Set response.Outcome = $SELECT(##class(Shutter.Util.Json).Bool(parsed, "applied"): "applied", 1: "already_committed")
+            Set response.Outcome = "already_committed"
         }
         Quit
     }
