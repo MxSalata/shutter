@@ -951,19 +951,22 @@ describe('CasePage', () => {
     expect(within(top).queryByText('Passed')).not.toBeInTheDocument();
   });
 
-  it('names the before and the after in the approval dialog, with the condition the write goes on', async () => {
+  it('names what the evidence read and the after in the approval dialog, with the condition the write goes on', async () => {
     renderCase('C-000002');
     await openStep('Gate and decision');
     const approval = await screen.findByRole('region', { name: 'Approval' });
     await userEvent.click(await within(approval).findByRole('button', { name: 'Approve plan' }));
     const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
-    expect(within(dialog).getByText('WARD-A at version 1')).toBeInTheDocument();
-    expect(within(dialog).getByText(/^read/)).toBeInTheDocument();
+    // Read when the case was investigated, so the row says so and carries its time: never a "before" that looks live
+    expect(within(dialog).queryByText('Before')).not.toBeInTheDocument();
+    const held = within(dialog).getByText('Held when read').closest('tr') as HTMLElement;
+    const time = held.querySelector('time[datetime="2026-11-02T14:16:40Z"]') as HTMLElement;
+    expect(time.parentElement?.textContent).toMatch(/^WARD-A at version 1 \(.+\)$/);
+    expect(within(dialog).getByText('After').closest('tr')).toHaveTextContent(/^After\s*WARD-B$/);
     expect(
-      within(dialog).getByText('WARD-B, only if the receiver is still at version 1 when it is read again'),
-    ).toBeInTheDocument();
-    expect(
-      within(dialog).getByText(/^You approve exactly this: resend the transfer to WARD-B for ENC-1002\.$/),
+      within(dialog).getByText(
+        /^You approve exactly this: resend the transfer to WARD-B for ENC-1002, conditional on receiver version 1\.$/,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -1183,6 +1186,7 @@ describe('CasePage', () => {
     const approval = await screen.findByRole('region', { name: 'Approval' });
     await userEvent.click(await within(approval).findByRole('button', { name: 'Reject plan' }));
     const dialog = await screen.findByRole('dialog', { name: 'Reject plan v1' });
+    expect(within(dialog).queryByText('Held when read')).not.toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Reject this plan' }));
     await outcomeLine('Blocked: nothing sent');
     expect(await within(approval).findByText('Rejected by approver')).toBeInTheDocument();

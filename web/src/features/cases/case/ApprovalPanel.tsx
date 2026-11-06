@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { usePreviewBlindResend, useDecideApproval } from '@/api/hooks';
 import { newIdempotencyKey } from '@/api/client';
 import { resolveCan } from '@/api/can';
-import type { ApprovalsView, CaseDetail, Me, PlanView, Snapshot } from '@/api/types';
+import type { ApprovalsView, CaseDetail, Me, PlanView } from '@/api/types';
 import { TRIAL } from '@/env/mode';
 import { byEnv, toBecomeApprover } from '@/env/copy';
 import { Digest } from '@/components/Digest';
@@ -19,7 +19,8 @@ import { APPROVALS } from '@/lib/status';
 import { describeError, isApiError } from '@/lib/errors';
 import { asObject } from '@/lib/json';
 import { humanize } from '@/lib/format';
-import { approvalChange } from './approvalChange';
+import type { ApprovalEvidence } from './approvalChange';
+import { ApprovalChangeRows } from './ApprovalChangeRows';
 import { approvalsByPlan, earlierApprovalText } from './receipt';
 import { NotYet, Section } from './Section';
 import { capitalReceiverNoun, receiverNoun } from './receiver';
@@ -115,7 +116,7 @@ export function ApprovalPanel({
   view: PlanView | null | undefined;
   approvals: ApprovalsView | null | undefined;
   /** The evidence, for what the receiver held when it was read. */
-  snapshot: Snapshot | null | undefined;
+  snapshot: ApprovalEvidence;
 }) {
   const decide = useDecideApproval(c.caseId);
   const [decision, setDecision] = useState<'approve' | 'reject' | null>(null);
@@ -142,7 +143,6 @@ export function ApprovalPanel({
   const underIncident = Boolean(latest?.incidentPlanDigest);
   const revoked = !latest && current.some((a) => a.revoked);
   const history = earlierApprovalText(earlier, view);
-  const change = approvalChange(c, plan?.expectedVersion, snapshot);
 
   const openDialog = (d: 'approve' | 'reject') => {
     setDecision(d);
@@ -369,30 +369,12 @@ export function ApprovalPanel({
             </Text>
             {lastDecision === 'approve' ? (
               <Text size="sm">
-                {`You approve exactly this: ${humanize(plan.actionType || 'resend').toLowerCase()} the ${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''} for ${c.encounterId}.`}
+                {`You approve exactly this: ${humanize(plan.actionType || 'resend').toLowerCase()} the ${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''} for ${c.encounterId}, conditional on receiver version ${String(plan.expectedVersion)}.`}
               </Text>
             ) : null}
+            {lastDecision === 'approve' ? <ApprovalChangeRows c={c} snapshot={snapshot} /> : null}
             <KeyValueList
               rows={[
-                [
-                  'Before',
-                  lastDecision === 'approve' ? (
-                    <Stack key="b" gap={0}>
-                      <Text size="sm">{change.before}</Text>
-                      {change.readAt ? (
-                        <Group gap={4} wrap="wrap">
-                          <Text size="xs" c="dimmed">
-                            read
-                          </Text>
-                          <Timestamp iso={change.readAt} size="xs" c="dimmed" />
-                        </Group>
-                      ) : null}
-                    </Stack>
-                  ) : (
-                    ''
-                  ),
-                ],
-                ['After', lastDecision === 'approve' ? change.after : ''],
                 ['Plan digest', <Digest key="p" value={plan.digest} label="plan digest" />],
                 ['Case version', String(c.version)],
               ]}
