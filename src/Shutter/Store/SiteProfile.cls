@@ -34,6 +34,7 @@ ClassMethod Default() As %DynamicObject
     Set p.incident = {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60}
     Set p."model_content" = {"free_text": false}
     Set p.feed = {"time_zone": "Europe/London", "prevent_failures": false}
+    Set p."further_messages" = {"in_patient_movement": "stop", "admission_not_found": "person"}
     Quit p
 }
 
@@ -113,7 +114,7 @@ ClassMethod Validate(p As %DynamicObject) As %String
     If '$ISOBJECT(p) Quit "the profile must be a JSON object"
     Set it = p.%GetIterator()
     While it.%GetNext(.key, .v) {
-        If '$LISTFIND($LISTBUILD("version", "receivers", "history_policy", "authoritative_source", "unconditional_resend", "merges", "policy", "approvers", "incident", "model_content", "teams", "mail", "feed"), key) Return key _ ": unknown field"
+        If '$LISTFIND($LISTBUILD("version", "receivers", "history_policy", "authoritative_source", "unconditional_resend", "merges", "policy", "approvers", "incident", "model_content", "teams", "mail", "feed", "further_messages"), key) Return key _ ": unknown field"
     }
     If p.%IsDefined("version") && ((p.%Get("version") '= +p.%Get("version")) || (p.%Get("version") < 0)) Quit "version: must be a whole number"
     Set rcv = p.%Get("receivers")
@@ -202,6 +203,21 @@ ClassMethod Validate(p As %DynamicObject) As %String
             // UTC, Europe/London and a fixed offset by Shutter's own rules; any other IANA zone when Embedded Python's zoneinfo knows it (v1.30).
             Set zoneOk = (feed.%GetTypeOf(k) = "string") && ($LISTFIND($LISTBUILD("UTC", "Europe/London"), v) || $MATCH(v, "^[+-](0[0-9]|1[0-4]):[0-5][0-9]$") || ##class(Shutter.Util.Time).PythonZoneKnown(v))
             If 'zoneOk Return "feed.time_zone: must be UTC, Europe/London, a fixed offset such as +01:00 (up to 14:00), or an IANA zone name this IRIS knows (for example Europe/Paris)"
+        }
+    }
+    // How rigid a site wants the check for further messages: a safe stop unless it says otherwise.
+    If p.%IsDefined("further_messages") {
+        Set fm = p.%Get("further_messages")
+        If '$ISOBJECT(fm) || fm.%IsA("%Library.DynamicArray") Quit "further_messages: must be an object"
+        Set fi = fm.%GetIterator()
+        While fi.%GetNext(.k, .v) {
+            If k = "in_patient_movement" {
+                If '$LISTFIND($LISTBUILD("stop", "show"), v) Return "further_messages.in_patient_movement: must be stop or show"
+            } ElseIf k = "admission_not_found" {
+                If '$LISTFIND($LISTBUILD("person", "policy"), v) Return "further_messages.admission_not_found: must be person or policy"
+            } Else {
+                Return "further_messages." _ k _ ": unknown setting"
+            }
         }
     }
     // What may leave IRIS for a model (T27): free text off unless the site says so.
@@ -339,6 +355,24 @@ ClassMethod FeedTimeZone() As %String
     If zone = "" Set zone = "UTC"
     Try { Set ^Shutter.Config("feedZone") = zone } Catch ex { }
     Quit zone
+}
+
+/// What a further in-patient movement for the patient on another visit does to a write: stop (the default) or show.
+ClassMethod FurtherMovement() As %String
+{
+    Quit ..FurtherSetting("in_patient_movement", "stop")
+}
+
+/// Who releases a failed admission the receiver answers 404 for: person (the default) or policy, the tier's own.
+ClassMethod AdmissionNotFound() As %String
+{
+    Quit ..FurtherSetting("admission_not_found", "person")
+}
+
+ClassMethod FurtherSetting(name As %String, default As %String) As %String [ Private ]
+{
+    Set fm = ..Current().%Get("further_messages")
+    Quit $SELECT($ISOBJECT(fm): ##class(Shutter.Util.Json).Str(fm, name, default), 1: default)
 }
 
 /// Whether the site holds a message whose HL7 schema category is not loaded here instead of delivering what was read by

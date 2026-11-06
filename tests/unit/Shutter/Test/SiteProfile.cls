@@ -29,6 +29,15 @@ Method TestMail()
     Do ..RunRows("mail")
 }
 
+/// A new strictness a site may loosen: both default to the safe stop, and a stored profile can say otherwise.
+Method TestFurtherMessages()
+{
+    Do ..RunRows("further")
+    Set p = ##class(Shutter.Store.SiteProfile).Default()
+    Do $$$AssertEquals(p."further_messages"."in_patient_movement", "stop", "another visit's movement stops by default")
+    Do $$$AssertEquals(p."further_messages"."admission_not_found", "person", "a lost admission waits for a person by default")
+}
+
 Method TestTeamsNeedADomain()
 {
     Do ..RunRows("teams")
@@ -169,6 +178,11 @@ ClassMethod Rows() As %DynamicArray
 XData Rows [ MimeType = application/json ]
 {
 [
+ {"group": "further", "name": "a site lets another visit's movement show", "patch": {"further_messages": {"in_patient_movement": "show"}}, "expect": ""},
+ {"group": "further", "name": "a site lets policy release a lost admission", "patch": {"further_messages": {"admission_not_found": "policy"}}, "expect": ""},
+ {"group": "further", "name": "an unknown word is refused", "patch": {"further_messages": {"in_patient_movement": "maybe"}}, "expect": "further_messages.in_patient_movement: must be stop or show"},
+ {"group": "further", "name": "an unknown word is refused for the admission too", "patch": {"further_messages": {"admission_not_found": "auto"}}, "expect": "further_messages.admission_not_found: must be person or policy"},
+ {"group": "further", "name": "a misspelt setting is refused", "patch": {"further_messages": {"in_patient": "stop"}}, "expect": "further_messages.in_patient: unknown setting"},
  {"group": "approvers", "name": "a misspelt switch is refused, not read as off", "patch": {"approvers": {"close_needs_aprover": true}}, "expect": "approvers.close_needs_aprover: unknown setting"},
  {"group": "approvers", "name": "the switch must be true or false", "patch": {"approvers": {"close_needs_approver": "yes"}}, "expect": "approvers.close_needs_approver: must be true or false"},
  {"group": "approvers", "name": "the role must be a string", "patch": {"approvers": {"role": 5}}, "expect": "approvers.role: must be a string"},
