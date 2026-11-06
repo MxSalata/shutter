@@ -301,6 +301,8 @@ CI reports what follows on [its run at the release commit](https://github.com/Mx
 
 ## Limits, plainly
 
+For a clinical safety officer: [the hazards, data flow, threats and what a site still owes](https://github.com/MxSalata/shutter/blob/main/docs/SAFETY.md).
+
 - Orders, results and documents up to 2 MB get a case and a drafted email, never a resend; larger gets an alert and no case.
 - Without an API key the agents replay recorded runs. A case with no recording, such as one from your own HL7 file, takes the rules path: the gate alone decides and a resend waits for a person.
 - The receiver is a demo bed-management system built for the scenarios. Shutter resends only to a receiver whose API (state, receipt, capabilities and operations paths) the site profile describes. A plain MLLP receiver gets no resend, because an ACK says a message arrived, not what the receiver now holds: a NACK or a lost connection on a stock `EnsLib.HL7.Operation.TCPOperation` with `AlertOnError` on opens a case through the alert intake, and a person gets the evidence and the reason nothing was sent (`tests/e2e/plain_receiver_check.py`).
