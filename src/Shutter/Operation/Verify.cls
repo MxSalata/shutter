@@ -62,7 +62,7 @@ Method OnVerifyRequest(request As Shutter.Msg.VerifyRequest, Output response As 
 /// What the verdict is judged on: the case and the plan (disposition, event, event_time, operation_key, encounter_id,
 /// catalogue_entry), the attempt when the plan wrote ({outcome, at, expected_version, http_status}, else null), the two
 /// reads (encounter_http_status and encounter, receipt_http_status and receipt), closed_by_catalogue (the gate's
-/// judgement of the plan's entry on the snapshot), the later events the matcher reads for the case (later: the
+/// judgement of the plan's entry on the snapshot), snapshot_version (the encounter's version in that snapshot), the later events the matcher reads for the case (later: the
 /// snapshot's timeline against the encounter as read now, with the snapshot's observation time and chain kind, so the
 /// verifier cites what the gate would and nothing the gate refused), the clock (now) and settle_seconds.
 ClassMethod Context(case As Shutter.Store.Case, plan As Shutter.Store.Plan, attempt As Shutter.Store.ExecutionAttempt, summary As %DynamicObject, estatus As %Integer, encounter As %DynamicObject, rstatus As %Integer, receipt As %DynamicObject, now As %String, settleSeconds As %Integer) As %DynamicObject
@@ -82,6 +82,9 @@ ClassMethod Context(case As Shutter.Store.Case, plan As Shutter.Store.Plan, atte
     Set ctx."encounter_http_status" = estatus, ctx.encounter = $SELECT($ISOBJECT(encounter): encounter, 1: {})
     Set ctx."receipt_http_status" = rstatus, ctx.receipt = $SELECT($ISOBJECT(receipt): receipt, 1: {})
     Do ctx.%Set("closed_by_catalogue", $ISOBJECT(plan) && $ISOBJECT(summary) && ##class(Shutter.Operation.Gate).ClosedByCatalogue(plan, summary), "boolean")
+    // The encounter's version as the snapshot read it: the closure above was judged on that, not on the read now.
+    Set seen = $SELECT($ISOBJECT(summary): summary.%Get("ward_state"), 1: "")
+    Set ctx."snapshot_version" = $SELECT($ISOBJECT(seen): $CLASSMETHOD(json, "Str", seen, "version"), 1: "")
     // The later events as the matcher and the gate read them (CONTRACTS 6.1): the snapshot's timeline, the receiver's
     // history as read now, the snapshot's observation time for the plausibility rule and the chain kind its match used.
     Set view = {}
@@ -204,6 +207,9 @@ ClassMethod Judge(ctx As %DynamicObject, Output text As %String, Output detail A
                 Set outcome = "verified", verdict = "not_committed"
                 Set text = "Nothing was resent; the receiver's history shows no later event, but the feed sent one after it: " _ ##class(Shutter.Catalogue.Matcher).Describe(ev) _ ". The receiver holds no receipt for the stale operation. Current state " _ where
                 Set detail."superseded_by" = ev
+            } ElseIf $CLASSMETHOD(json, "Bool", ctx, "closed_by_catalogue") && 'inHistory && ($CLASSMETHOD(json, "Str", ctx, "snapshot_version") '= "") && ($CLASSMETHOD(json, "Str", ctx, "snapshot_version") '= $CLASSMETHOD(json, "Str", encounter, "version")) {
+                // The entry was judged on the snapshot: an encounter that has moved since may no longer fit it.
+                Set text = "The receiver changed since the closure was judged: encounter version " _ $CLASSMETHOD(json, "Str", ctx, "snapshot_version") _ " in the evidence, version " _ $CLASSMETHOD(json, "Str", encounter, "version") _ " now. Current state " _ where _ "; a person decides"
             } ElseIf $CLASSMETHOD(json, "Bool", ctx, "closed_by_catalogue") && 'inHistory {
                 // The gate passed the closure on the catalogue entry's say-so (CLOSED_BY_CATALOGUE): the receiver holds
                 // neither a receipt nor the operation, which is what closing with nothing to send requires.
