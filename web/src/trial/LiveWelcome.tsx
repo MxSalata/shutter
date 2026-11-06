@@ -28,7 +28,7 @@ export function LiveWelcome() {
     setOpen(false);
   };
   return (
-    <Modal opened={open} onClose={close} title="New here?" centered>
+    <Modal opened={open} onClose={close} title="New here?" centered transitionProps={{ exitDuration: 0 }}>
       <Stack gap="md">
         <Text>
           Try Shutter in the trial environment first: a demo hospital with made-up patients, where each action
