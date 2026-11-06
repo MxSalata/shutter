@@ -247,6 +247,8 @@ ClassMethod Later(summary As %DynamicObject, case As Shutter.Store.Case, chainKi
                 Continue:'..AtOrAfter(t, $CLASSMETHOD(json, "Str", h, "operation_key"), case)
                 Set word = "cancelled"
             } Else {
+                // The time the message was sent with, when the receiver stored another (HistoryTime).
+                Set t = ..HistoryTime(h)
                 Continue:'(t ]] case.EventTime)
                 Set word = $SELECT($LISTFIND(words, e): e, 1: "update")
             }
@@ -255,6 +257,40 @@ ClassMethod Later(summary As %DynamicObject, case As Shutter.Store.Case, chainKi
         }
     }
     Quit out
+}
+
+/// A history entry's event time for ordering: what the receiver stored, unless the entry's operation key carries another,
+/// which is the time the message was sent with. A receiver that stamps arrival time would otherwise make an older
+/// movement it was resent read as later than a genuine failure, and E1 could close that one. A key with no time (a move
+/// entered by hand, another system's own key) leaves the stored time.
+ClassMethod HistoryTime(h As %DynamicObject) As %String
+{
+    Set stored = ##class(Shutter.Util.Json).Str(h, "event_time"), key = ##class(Shutter.Util.Json).Str(h, "operation_key")
+    If key = "" Quit stored
+    Set sent = $PIECE(key, "^", $LENGTH(key, "^"))
+    Quit $SELECT($MATCH(sent, "^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$"): sent, 1: stored)
+}
+
+/// A cancel recorded at or after the case's event, delivered or not, in the feed's timeline (a withheld one is there from the
+/// index) or the receiver's history, described, or "". A receipt for the key does not show the operation stands then: a person
+/// reversed it, or the message is a re-issue the receiver answers as already committed.
+ClassMethod CancelSince(summary As %DynamicObject, case As Shutter.Store.Case) As %String
+{
+    Set json = "Shutter.Util.Json", found = ""
+    Set ward = summary.%Get("ward_state")
+    Set lists(1) = summary.%Get("timeline"), lists(2) = $SELECT($ISOBJECT(ward): ward.%Get("history"), 1: "")
+    For n = 1, 2 {
+        Continue:'$ISOBJECT(lists(n))
+        Set iter = lists(n).%GetIterator()
+        While iter.%GetNext(.i, .ev) {
+            Continue:'$ISOBJECT(ev)
+            Set e = $CLASSMETHOD(json, "Str", ev, "event"), t = $CLASSMETHOD(json, "Str", ev, "event_time")
+            Continue:($EXTRACT(e, 1, 7) '= "cancel_")
+            Continue:'..AtOrAfter(t, $CLASSMETHOD(json, "Str", ev, "operation_key"), case)
+            Set found = e _ " at " _ t
+        }
+    }
+    Quit found
 }
 
 ClassMethod LaterEvent(word As %String, event As %String, ward As %String, time As %String, from As %String, delivered As %Boolean, plausible As %Boolean, key As %String = "") As %DynamicObject [ Private ]

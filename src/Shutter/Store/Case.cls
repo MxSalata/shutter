@@ -187,9 +187,13 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
             // The same key with other content (a corrected message resent with the same event time): the open case's plan
             // carries the first content, so it must not go out; a person decides (PAYLOAD_CHANGED).
             Set newDigest = ##class(Shutter.Util.Json).Str(op, "payload_digest"), oldDigest = case.PayloadDigest()
-            If (newDigest '= "") && (oldDigest '= "") && (newDigest '= oldDigest) && 'case.IsClosed() {
+            Set digestDiffers = (newDigest '= "") && (oldDigest '= "") && (newDigest '= oldDigest)
+            // The bed sits outside the digest (CONTRACTS 1.6), so a correction of the bed alone shows only here.
+            Set newBed = $EXTRACT(##class(Shutter.Util.Json).Str(op, "bed"), 1, 64)
+            Set bedDiffers = (op.%GetTypeOf("bed") '= "unassigned") && (newBed '= case.Bed)
+            If (digestDiffers || bedDiffers) && 'case.IsClosed() {
                 Set case.Headline = "Blocked: a further message for the same operation carries different content"
-                Quit case.Transition("blocked", "PAYLOAD_CHANGED: a further failure for the same operation key carries different content (payload digest " _ $EXTRACT(newDigest, 1, 19) _ " against " _ $EXTRACT(oldDigest, 1, 19) _ "); the plan would write the first content, so nothing is dispatched and a person must decide. " _ failureText, "system", "ens:" _ sourceHeaderId)
+                Quit case.Transition("blocked", "PAYLOAD_CHANGED: a further failure for the same operation key carries different content (" _ $SELECT(digestDiffers: "payload digest " _ $EXTRACT(newDigest, 1, 19) _ " against " _ $EXTRACT(oldDigest, 1, 19), 1: "bed " _ $SELECT(newBed = "": "none", 1: newBed) _ " against " _ $SELECT(case.Bed = "": "none", 1: case.Bed)) _ "); the plan would write the first content, so nothing is dispatched and a person must decide. " _ failureText, "system", "ens:" _ sourceHeaderId)
             }
             Set sc = case.Note("note", "A further failure for the same operation: " _ failureText, "system", "ens:" _ sourceHeaderId)
             Quit sc

@@ -607,6 +607,33 @@
       "owner": "Operator",
       "reevaluate_when": "The budget resets, the provider accepts the key, or a person reinvestigates",
       "text": "The scenario catalogue gives this case to the board or to a person, and no board member could answer. Nothing is planned and nothing is sent, because a plain resend would replace that decision with one nobody took."
+    },
+    {
+      "code": "RECEIPT_PAYLOAD_DIFFERS",
+      "title": "The receiver holds this key with other content",
+      "prerequisite": "A receipt whose payload digest and bed are the failed operation's own",
+      "next_action": "Compare the two at the receiver: this message and what its receipt holds. Correct the patient's location there if this message is the right one, then mark the case handled.",
+      "owner": "Integration team",
+      "reevaluate_when": "A person has compared the message with the receiver's record",
+      "text": "The receipt shows the operation key is taken, not that this message is what the receiver holds: another movement in the same second, or a corrected message, shares the key, and the bed sits outside the digest. The receiver refused or ignored this message, so closing the case as committed would drop it. Nothing is written."
+    },
+    {
+      "code": "RECEIPT_THEN_CANCELLED",
+      "title": "A cancel followed the receipt",
+      "prerequisite": "No cancel of this patient's visit recorded at or after the event",
+      "next_action": "Look at the cancel and at what the receiver holds now, and decide whether this movement should stand. A re-issue under the first message's event time cannot reach the receiver through its API: its key is taken. Correct it there if it is due, then mark the case handled.",
+      "owner": "Integration team",
+      "reevaluate_when": "A person has compared the movement with the receiver's record",
+      "text": "The receiver holds a receipt for this operation, but a cancel was recorded at or after its event, so the receipt does not show it stands. Closing the case as committed could leave the patient where the cancel put them. Nothing is written."
+    },
+    {
+      "code": "WRITE_NOT_RELEASED",
+      "title": "The receiver wrote during a rehearsal",
+      "prerequisite": "A receiver that honours dry_run: a rehearsal or a blind-resend preview that writes nothing",
+      "next_action": "Check the operation at the receiver, correct it there if it should not stand, and mark the case handled. Tell the receiver's team it does not honour dry_run, and take dry_run off its entry in the site profile until it does.",
+      "owner": "Integration team",
+      "reevaluate_when": "A person has checked the operation at the receiver",
+      "text": "The receiver applied a dry run, so the operation is in effect with no approval or policy behind it. It is on the record as an attempt, and the case does not close as a success, whatever the verifier reads."
     }
   ]
 }

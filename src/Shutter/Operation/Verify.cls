@@ -60,7 +60,8 @@ Method OnVerifyRequest(request As Shutter.Msg.VerifyRequest, Output response As 
 }
 
 /// What the verdict is judged on: the case and the plan (disposition, event, event_time, operation_key, encounter_id,
-/// catalogue_entry), the attempt when the plan wrote ({outcome, at, expected_version, http_status}, else null), the two
+/// catalogue_entry, the ward, bed and payload_digest the receipt and the history are compared with, and strict_answers,
+/// the receiver's entry in the site profile), the attempt when the plan wrote ({outcome, at, expected_version, http_status}, else null), the two
 /// reads (encounter_http_status and encounter, receipt_http_status and receipt), closed_by_catalogue (the gate's
 /// judgement of the plan's entry on the snapshot), the later events the matcher reads for the case (later: the
 /// snapshot's timeline against the encounter as read now, with the snapshot's observation time and chain kind, so the
@@ -74,6 +75,8 @@ ClassMethod Context(case As Shutter.Store.Case, plan As Shutter.Store.Plan, atte
     Set ctx."catalogue_entry" = $SELECT($ISOBJECT(plan): plan.CatalogueEntry, 1: "")
     If $ISOBJECT(attempt) {
         Set a = {}
+    Set ctx.ward = case.Ward, ctx.bed = case.Bed, ctx."payload_digest" = case.PayloadDigest()
+    Do ctx.%Set("strict_answers", ##class(Shutter.Store.SiteProfile).StrictAnswers(case.Receiver), "boolean")
         Set a.outcome = attempt.Outcome, a.at = attempt.At, a."expected_version" = attempt.ExpectedVersion, a."http_status" = attempt.HttpStatus
         Set ctx.attempt = a
     } Else {
@@ -127,10 +130,17 @@ ClassMethod Judge(ctx As %DynamicObject, Output text As %String, Output detail A
     If (estatus = 0) || (rstatus = 0) {
         Set text = "The receiver could not be read; nothing is established", retry = 1
     } ElseIf (disposition = "resend") || (disposition = "reconcile") {
+    // A site may read this receiver on status alone (SiteProfile.StrictAnswers); a context that does not say is checked.
+    Set strict = $SELECT(ctx.%IsDefined("strict_answers"): $CLASSMETHOD(json, "Bool", ctx, "strict_answers"), 1: 1)
         If (estatus '= 200) && (estatus '= 404) {
             Set text = "The receiver's encounter could not be read (HTTP " _ estatus _ "); nothing is established", retry = 1
         } ElseIf rstatus = 200 {
-            If inHistory {
+            Set differs = $SELECT(strict: ..ReceiptDiffers(receipt, ctx) _ ..HistoryDiffers(encounter, key, ctx), 1: "")
+            If differs '= "" {
+                // The key is taken, by a message with other content: what the receiver holds is not what the case is about.
+                Set outcome = "failed"
+                Set text = "The receiver holds this operation key with other content (" _ differs _ "); what it holds is not this case's message, and a person must check"
+            } ElseIf inHistory {
                 Set later = ..LaterThan(encounter, $CLASSMETHOD(json, "Str", ctx, "event_time"))
                 Set outcome = "verified", verdict = "committed"
                 If later '= "" {
@@ -142,11 +152,15 @@ ClassMethod Judge(ctx As %DynamicObject, Output text As %String, Output detail A
             } Else {
                 Set outcome = "failed"
                 Set text = "A receipt exists but the operation is missing from the committed history; the receiver contradicts itself, and a person must check"
+                Set text = text _ ..StoredTimeWords(encounter, key, ctx)
             }
         } ElseIf (rstatus = 404) || (rstatus = -1) {
-            If (rstatus = -1) && inHistory {
+            If (rstatus = -1) && inHistory && strict && (..HistoryDiffers(encounter, key, ctx) '= "") {
+                Set outcome = "failed"
+                Set text = "The receiver's history holds this operation key with other content (" _ ..HistoryDiffers(encounter, key, ctx) _ "); what it holds is not this case's message, and a person must check"
+            } ElseIf (rstatus = -1) && inHistory {
                 Set outcome = "verified", verdict = "committed"
-                Set text = "Committed: the operation is in the receiver's history (the receiver keeps no receipts). Current state " _ state _ ", version " _ $CLASSMETHOD(json, "Str", encounter, "version")
+                Set text = "Committed: the operation is in the receiver's history (the receiver keeps no receipts). Current state " _ state _ ", version " _ $CLASSMETHOD(json, "Str", encounter, "version") _ ..StoredTimeWords(encounter, key, ctx)
             } ElseIf inHistory {
                 Set outcome = "failed"
                 Set text = "The receiver's history shows the operation but it holds no receipt for it; the receiver contradicts itself, and a person must check"
@@ -297,9 +311,80 @@ ClassMethod LaterThan(encounter As %DynamicObject, eventTime As %String) As %Str
     Set found = ""
     Set history = encounter.%Get("history")
     If '$ISOBJECT(history) Quit ""
+/// How a receipt differs from an operation (an object with payload_digest, ward and bed), in words, or "" when it does not
+/// or there is nothing to compare: a receipt or an operation that names no digest, or no bed, says nothing about it. Bed
+/// sits outside the digest (CONTRACTS 1.6), so a correction of the bed alone shows only here. Read by the gate on a
+/// reconcile, the verifier on a committed operation, and the feed on an already_committed answer.
+ClassMethod ReceiptDiffers(receipt As %DynamicObject, op As %DynamicObject) As %String
+{
+    If '$ISOBJECT(receipt) || '$ISOBJECT(op) Quit ""
+    Set json = "Shutter.Util.Json", words = ""
+    Set held = $CLASSMETHOD(json, "Str", receipt, "payload_digest"), ours = $CLASSMETHOD(json, "Str", op, "payload_digest")
+    If (held '= "") && (ours '= "") && (held '= ours) {
+        Set heldWard = $CLASSMETHOD(json, "Str", receipt, "ward"), ourWard = $CLASSMETHOD(json, "Str", op, "ward")
+        Set words = $SELECT(heldWard '= ourWard: "ward " _ ..Named(heldWard) _ " against this message's " _ ..Named(ourWard), 1: "its payload digest differs")
+    }
+    If (receipt.%GetTypeOf("bed") '= "unassigned") && (op.%GetTypeOf("bed") '= "unassigned") {
+        Set held = $CLASSMETHOD(json, "Str", receipt, "bed"), ours = $CLASSMETHOD(json, "Str", op, "bed")
+        If held '= ours Set words = words _ $SELECT(words '= "": ", ", 1: "") _ "bed " _ ..Named(held) _ " against this message's " _ ..Named(ours)
+    }
+    Quit words
+}
+
+ClassMethod Named(value As %String) As %String [ Private ]
+{
+    Quit $SELECT(value = "": "none", 1: value)
+}
+
+/// The history's entry for the operation key, or "".
+ClassMethod HistoryEntry(encounter As %DynamicObject, key As %String) As %DynamicObject [ Private ]
+{
+    Set history = encounter.%Get("history")
+    If '$ISOBJECT(history) Quit ""
+    Set iter = history.%GetIterator()
+    While iter.%GetNext(.i, .h) { If $ISOBJECT(h) && (##class(Shutter.Util.Json).Str(h, "operation_key") = key) Return h }
+    Quit ""
+}
+
+/// How the history's entry for the key differs from the operation's ward, in words, or "". An admission or a transfer names
+/// a ward; anything else has none to compare.
+ClassMethod HistoryDiffers(encounter As %DynamicObject, key As %String, ctx As %DynamicObject) As %String [ Private ]
+{
+    Set json = "Shutter.Util.Json"
+    Set event = $CLASSMETHOD(json, "Str", ctx, "event")
+    If (event '= "transfer") && (event '= "admit") Quit ""
+    Set h = ..HistoryEntry(encounter, key)
+    If '$ISOBJECT(h) Quit ""
+    Set held = $CLASSMETHOD(json, "Str", h, "ward"), ours = $CLASSMETHOD(json, "Str", ctx, "ward")
+    If (held = "") || (ours = "") || (held = ours) Quit ""
+    Quit "its history has ward " _ held _ " against this message's " _ ours
+}
+
+/// A sentence when the history's entry for the key stores another event time than was sent (a receiver that stamps arrival
+/// time), else "". The ordering decisions use the key's time (Matcher.HistoryTime).
+ClassMethod StoredTimeWords(encounter As %DynamicObject, key As %String, ctx As %DynamicObject) As %String [ Private ]
+{
+    Set h = ..HistoryEntry(encounter, key)
+    If '$ISOBJECT(h) Quit ""
+    Set held = ##class(Shutter.Util.Json).Str(h, "event_time"), sent = ##class(Shutter.Util.Json).Str(ctx, "event_time")
+    If (held = "") || (sent = "") || (held = sent) Quit ""
+    Quit ". The receiver stored its event time as " _ held _ ", not " _ sent
+}
+
+/// Whether the history's entries carry operation keys, so that a version moved with this operation's key absent shows the
+/// move was something else. With neither keys nor receipts the move could be this write.
+ClassMethod HistoryNamesKeys(encounter As %DynamicObject) As %Boolean [ Private ]
+{
+    Set history = encounter.%Get("history")
+    If '$ISOBJECT(history) || (history.%Size() = 0) Quit 0
+    Set iter = history.%GetIterator()
+    While iter.%GetNext(.i, .h) { If '$ISOBJECT(h) || (##class(Shutter.Util.Json).Str(h, "operation_key") = "") Return 0 }
+    Quit 1
+}
+
     Set iter = history.%GetIterator()
     While iter.%GetNext(.i, .h) {
-        Set t = ##class(Shutter.Util.Json).Str(h, "event_time")
+        Set t = ##class(Shutter.Catalogue.Matcher).HistoryTime(h)
         If '(t ]] eventTime) Continue
         Set event = ##class(Shutter.Util.Json).Str(h, "event")
         If (event = "transfer") || (event = "discharge") Set found = event _ $SELECT(##class(Shutter.Util.Json).Str(h, "ward") '= "": " to " _ h.ward, 1: "") _ " at " _ t

@@ -128,6 +128,7 @@ ClassMethod Validate(p As %DynamicObject) As %String
         // The receiver's category (v1.23) and its own history policy, which the category derives when absent.
         If r.%IsDefined("category") && '$LISTFIND($LISTBUILD("current_state", "history_of_record", "orders_results"), r.%Get("category")) Return at _ ".category: must be current_state, history_of_record or orders_results"
         If r.%IsDefined("history_policy") && '$LISTFIND($LISTBUILD("current", "correct"), r.%Get("history_policy")) Return at _ ".history_policy: must be current or correct"
+        If r.%IsDefined("strict_answers") && (r.%GetTypeOf("strict_answers") '= "boolean") Return at _ ".strict_answers: must be true or false"
         // A demo receiver's namespace (v1.25): where the scenario runner resets it and sets its faults.
         If r.%IsDefined("demo") {
             Set demo = r.%Get("demo")
@@ -489,6 +490,18 @@ ClassMethod ReceiverFeatures(name As %String) As %DynamicObject
     If $ISOBJECT(r) && $ISOBJECT(r.%Get("features")) Quit r.%Get("features")
     If '$ISOBJECT(r) && ..SiteInstall() Quit {"conditional_writes": false, "receipts": false, "history": false, "dry_run": false}
     Quit {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}
+}
+
+/// Whether Shutter checks a receiver's answers against the contract (CONTRACTS 6.4), the default: a read counts only with the
+/// kind's own field or error, a 200 is a delivery only with its receipt or applied, and a receipt or history entry must hold
+/// the operation's own digest, ward and bed to close a case. A site whose receiver answers another way, and whose answers it
+/// has looked at, sets strict_answers false on its entry: the answers are then read on their status alone. Such a site's
+/// gateway page or corrected message can read as delivered or committed.
+ClassMethod StrictAnswers(name As %String) As %Boolean
+{
+    Set r = ..Receiver(name)
+    If '$ISOBJECT(r) || (r.%GetTypeOf("strict_answers") '= "boolean") Quit 1
+    Quit ''r.%Get("strict_answers")
 }
 
 /// The receiver's category (CONTRACTS 6.4, v1.23): current_state (a bed manager or whiteboard, where only the present

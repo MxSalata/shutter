@@ -141,6 +141,24 @@ ClassMethod ForVisit(visitNumber As %String, since As %String = "") As %DynamicA
     Quit out
 }
 
+/// A cancel in the index for this patient's visit at or after an event time, described, or "".
+ClassMethod CancelSince(visitNumber As %String, patientId As %String, authority As %String, eventTime As %String) As %String
+{
+    // A since is passed because SQL reads an empty one as null, which no row's time follows.
+    Set rows = ..ForVisit(visitNumber, "1900-01-01"), found = "", json = "Shutter.Util.Json"
+    Set iter = rows.%GetIterator()
+    While iter.%GetNext(.i, .row) {
+        Continue:($EXTRACT($CLASSMETHOD(json, "Str", row, "event"), 1, 7) '= "cancel_")
+        Continue:($CLASSMETHOD(json, "Str", row, "patient_id") '= patientId)
+        Set a = $CLASSMETHOD(json, "Str", row, "patient_id_authority")
+        Continue:((a '= "") && (authority '= "") && (a '= authority))
+        Set t = $CLASSMETHOD(json, "Str", row, "event_time")
+        Continue:((t = "") || (eventTime ]] t))
+        Set found = $CLASSMETHOD(json, "Str", row, "event") _ " at " _ t
+    }
+    Quit found
+}
+
 Method ToObject() As %DynamicObject
 {
     Set o = {}

@@ -163,7 +163,17 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     // Effect completeness: a receipt means the operation is already in effect.
     If receiptStatus = 200 {
         If plan.Disposition = "reconcile" {
-            Do ..Check(checks, "effect", "pass", "RECEIPT_FOUND", "The receiver holds a receipt for this operation; reconciling is right")
+            // A receipt shows the key is taken, not that this message is what the receiver holds: another movement in the same
+            // minute or a corrected message shares the key, and a cancel since means it no longer stands.
+            Set differs = $SELECT(##class(Shutter.Store.SiteProfile).StrictAnswers(case.Receiver): ##class(Shutter.Operation.Verify).ReceiptDiffers(receipt, summary.%Get("operation")), 1: "")
+            Set cancelled = ##class(Shutter.Catalogue.Matcher).CancelSince(summary, case)
+            If differs '= "" {
+                Do ..Check(checks, "effect", "block", "RECEIPT_PAYLOAD_DIFFERS", "The receiver holds this operation key with other content (" _ differs _ "); closing it as committed would drop this message, so a person decides")
+            } ElseIf cancelled '= "" {
+                Do ..Check(checks, "effect", "block", "RECEIPT_THEN_CANCELLED", "The receiver holds a receipt for this operation, but a cancel followed (" _ cancelled _ "), so the receipt does not show it stands; a person decides")
+            } Else {
+                Do ..Check(checks, "effect", "pass", "RECEIPT_FOUND", "The receiver holds a receipt for this operation; reconciling is right")
+            }
         } ElseIf isWrite {
             Do ..Check(checks, "effect", "block", "ALREADY_COMMITTED", "The receiver already committed this operation; a resend would be a duplicate")
         } Else {
