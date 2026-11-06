@@ -58,6 +58,7 @@ PATIENTS = {
     "S28": ("MRN1028", "ENC-1028", "SYNTH^LEO", "19960130", "M"),
     "S29": ("MRN1029", "ENC-1029", "SYNTH^MAE", "19831017", "F"),
     "S30": ("MRN1030", "ENC-1030", "SYNTH^NED", "19710408", "M"),
+    "S31": ("MRN1031", "ENC-1031", "SYNTH^OLA", "19890911", "F"),
     # S11, the outage burst: six patients in one scenario
     "S11-P1": ("MRN1101", "ENC-1101", "SYNTH^KAI", "19880404", "M"),
     "S11-P2": ("MRN1102", "ENC-1102", "SYNTH^LENA", "19790908", "F"),
@@ -394,6 +395,29 @@ def scenarios():
                      "case_by_key": True, "blocked_by": "FURTHER_MOVEMENT", "final_reason": "FURTHER_MOVEMENT",
                      "failed_operation_key": b[2]["operation_key"], "names": ["ENC-1027", "ENC-2027"],
                      "modes": ["policy", "rules"]},
+    }, [a, b, d]))
+
+    # S31: S27 in the demo hospital's own production: the new admission is read in the namespace the case came from
+    a = message("S31", 1, "A01", "0900", ward="WARD-A")
+    b = message("S31", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
+    d = message("S31", 3, "A01", "0930", ward="WARD-C", admit_time="0930", encounter="ENC-2031")
+    out.append(({
+        "id": "S31",
+        "title": "A new admission under a new visit number, in the hospital's own production",
+        "summary": "S27's story in the hospital's own production. Shutter's own index never sees the new admission: it is "
+                   "read in the namespace the case came from, and the resend stops and names both visits.",
+        "steps": [
+            {"file": a[0], "route": "hospital"},
+            {"fault": "fail_before_accept"},
+            {"file": b[0], "route": "hospital", "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+            {"file": d[0], "route": "hospital"},
+        ],
+        "expected": {"disposition": "resend", "write": False, "final_state": "admitted", "final_ward": "WARD-A",
+                     "case_by_key": True, "blocked_by": "FURTHER_MOVEMENT", "final_reason": "FURTHER_MOVEMENT",
+                     "failed_operation_key": b[2]["operation_key"], "names": ["ENC-1031", "ENC-2031"],
+                     "modes": ["policy"]},
     }, [a, b, d]))
 
     # S28: a day case. Resending the admission alone would put someone on a closed unit

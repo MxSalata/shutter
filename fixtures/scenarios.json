@@ -356,6 +356,52 @@
     }
   },
   {
+    "id": "S31",
+    "title": "A new admission under a new visit number, in the hospital's own production",
+    "summary": "S27's story in the hospital's own production. Shutter's own index never sees the new admission: it is read in the namespace the case came from, and the resend stops and names both visits.",
+    "steps": [
+      {
+        "file": "S31-01-A01.hl7",
+        "route": "hospital"
+      },
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S31-02-A02.hl7",
+        "route": "hospital",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      },
+      {
+        "file": "S31-03-A01.hl7",
+        "route": "hospital"
+      }
+    ],
+    "expected": {
+      "disposition": "resend",
+      "write": false,
+      "final_state": "admitted",
+      "final_ward": "WARD-A",
+      "case_by_key": true,
+      "blocked_by": "FURTHER_MOVEMENT",
+      "final_reason": "FURTHER_MOVEMENT",
+      "failed_operation_key": "PAS^HOSP^MRN1031^ENC-1031^transfer^2026-10-15T08:20:00Z",
+      "names": [
+        "ENC-1031",
+        "ENC-2031"
+      ],
+      "modes": [
+        "policy"
+      ]
+    }
+  },
+  {
     "id": "S28",
     "title": "A day case's admission and discharge both fail",
     "summary": "The 08:00 admission fails, and so does the 16:00 discharge. Resending the admission alone would admit someone who has gone home, so it stops and names the discharge for a person.",
