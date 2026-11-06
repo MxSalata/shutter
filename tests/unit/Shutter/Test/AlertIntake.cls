@@ -4,8 +4,23 @@
 Class Shutter.Test.AlertIntake Extends %UnitTest.TestCase
 {
 
+/// Headers and sessions this class's tests made, to clear afterwards.
+Property Made As %List;
+
+Property Sessions As %List;
+
 Method OnAfterAllTests() As %Status
 {
+    For i = 1:1:$LISTLENGTH(..Made) {
+        Set h = ##class(Ens.MessageHeader).%OpenId($LIST(..Made, i))
+        If $ISOBJECT(h) {
+            Do ##class(EnsLib.HL7.Message).%DeleteId(h.MessageBodyId)
+            Do ##class(Ens.MessageHeader).%DeleteId($LIST(..Made, i))
+        }
+    }
+    For i = 1:1:$LISTLENGTH(..Sessions) {
+        Kill ^Shutter.AlertIntake("several", $LIST(..Sessions, i))
+    }
     Kill ^Shutter.AlertIntake("seen", 999999991), ^Shutter.AlertIntake("seen", 999999992), ^Shutter.AlertIntake("seen", 999999993)
     Kill ^Shutter.AlertIntake("pending", 999999993), ^Shutter.AlertIntake("pending", 999999994), ^Shutter.AlertIntake("pending", 999999995)
     Quit $$$OK
@@ -81,6 +96,78 @@ Method TestForwardOnWordsItDoesNotKnow()
     Set alert.AlertText = "Response timeout after 15 seconds"
     Set f = $CLASSMETHOD(ap, "ForwardFromAlert", alert, header, "Downstream Out")
     Do $$$AssertEquals(f.FailureReasonCode, "alert", "words it knows keep the reason alert")
+}
+
+/// A saved HL7 message and its header, from the source to the target, in the session; the patient and control id are the test's.
+Method Sent(control As %String, source As %String, target As %String, session As %String, patient As %String = "MRN-UT-1", ward As %String = "WARD-A") As Ens.MessageHeader
+{
+    Set msg = ##class(EnsLib.HL7.Message).ImportFromString("MSH|^~\&|PAS|HOSP|BED|HOSP|20261105000000||ADT^A02|" _ control _ "|P|2.5.1" _ $CHAR(13) _ "PID|1||" _ patient _ "^^^HOSP^MR" _ $CHAR(13) _ "PV1|1|I|" _ ward _ $CHAR(13))
+    Do msg.%Save()
+    Quit ..HeaderFor(msg, source, target, session)
+}
+
+Method HeaderFor(msg As EnsLib.HL7.Message, source As %String, target As %String, session As %String) As Ens.MessageHeader
+{
+    Set h = ##class(Ens.MessageHeader).%New()
+    Set h.SessionId = session, h.SourceConfigName = source, h.TargetConfigName = target
+    Set h.MessageBodyClassName = $CLASSNAME(msg), h.MessageBodyId = msg.%Id()
+    Do h.%Save()
+    Set ..Made = ..Made _ $LISTBUILD(h.%Id()), ..Sessions = ..Sessions _ $LISTBUILD(session)
+    Quit h
+}
+
+/// The alerting item's own message beats the session's first (the transform's change stays); with none, the first stands.
+Method TestTheMessageTheItemWasSent()
+{
+    Set ap = "Shutter.Intake.AlertProcess", session = 999998000 + $RANDOM(900)
+    Set inbound = ..Sent("UTF1", "UT In", "UT Router", session, , "PAS-CODE")
+    Set sent = ..Sent("UTF1", "UT Router", "UT Out", session, , "WARD-C")
+    Set h = $CLASSMETHOD(ap, "HL7HeaderOfSession", session, .problem, "UT Out")
+    Do $$$AssertEquals($SELECT($ISOBJECT(h): h.%Id(), 1: ""), sent.%Id(), "the header the item was sent: " _ problem)
+    Set h = $CLASSMETHOD(ap, "HL7HeaderOfSession", session, .problem)
+    Do $$$AssertEquals($SELECT($ISOBJECT(h): h.%Id(), 1: ""), inbound.%Id(), "with no item, the session's first, as before")
+    Set h = $CLASSMETHOD(ap, "HL7HeaderOfSession", session, .problem, "UT Other Out")
+    Do $$$AssertEquals($SELECT($ISOBJECT(h): h.%Id(), 1: ""), inbound.%Id(), "an item sent no HL7 falls back to the session's first, as a connector taking a ward operation does")
+    Do $$$AssertEquals($CLASSMETHOD(ap, "RouteOfSession", session, sent), "UT In", "the route stays the service that received it")
+    Do $$$AssertEquals($CLASSMETHOD(ap, "SeveralInSession", session, "UT Out"), "", "one message to the item is not several")
+    Do $$$AssertEquals($CLASSMETHOD(ap, "SeveralInSession", session, "UT Other Out"), "", "nor is one patient's message and its transform")
+}
+
+/// Two different messages to one item in a session: the alert names neither, so no case is built on a guess, and the words name both.
+Method TestSeveralMessagesToOneItemOpenNoCase()
+{
+    Set ap = "Shutter.Intake.AlertProcess", session = 999998000 + $RANDOM(900)
+    Set inbound = ..Sent("UTG0", "UT In", "UT Router", session, "MRN-UT-1")
+    Set first = ..Sent("UTG1", "UT Router", "UT Out", session, "MRN-UT-1")
+    Set second = ..Sent("UTG2", "UT Router", "UT Out", session, "MRN-UT-2")
+    Set words = $CLASSMETHOD(ap, "SeveralInSession", session, "UT Out")
+    Do $$$AssertTrue((words [ "2 different") && (words [ "UT Out") && (words [ "UTG1") && (words [ "UTG2") && (words [ first.%Id()) && (words [ second.%Id()), "the words name the session's messages: " _ words)
+    Do $$$AssertNotTrue(words [ "MRN-UT", "by control id and header, with no patient identifier in an alert: " _ words)
+    Set h = $CLASSMETHOD(ap, "HL7HeaderOfSession", session, .problem, "UT Out")
+    Do $$$AssertNotTrue($ISOBJECT(h), "no header is picked")
+    Do $$$AssertTrue(problem '= "", "and the problem says why")
+    // The same body sent twice is one message.
+    Set again = ##class(EnsLib.HL7.Message).%OpenId(first.MessageBodyId)
+    Set session2 = session + 1000
+    Do ..HeaderFor(again, "UT Router", "UT Out", session2), ..HeaderFor(again, "UT Router", "UT Out", session2)
+    Do $$$AssertEquals($CLASSMETHOD(ap, "SeveralInSession", session2, "UT Out"), "", "one body sent twice is one message")
+    // Said once per session and item, kept a day with the other marks.
+    Do $$$AssertNotTrue($CLASSMETHOD(ap, "SaidSeveral", session, "UT Out"), "not said yet")
+    Do $CLASSMETHOD(ap, "MarkSaidSeveral", session, "UT Out")
+    Do $$$AssertTrue($CLASSMETHOD(ap, "SaidSeveral", session, "UT Out"), "said")
+    Do $$$AssertNotTrue($CLASSMETHOD(ap, "SaidSeveral", session, "UT Other Out"), "not for another item")
+}
+
+/// An item that took no HL7, in a session whose HL7 messages name two patients: the session's first could be the wrong patient.
+Method TestAnotherPatientStopsTheFallback()
+{
+    Set ap = "Shutter.Intake.AlertProcess", session = 999998000 + $RANDOM(900)
+    Do ..Sent("UTP1", "UT In", "UT Router", session, "MRN-UT-1"), ..Sent("UTP2", "UT In", "UT Router", session, "MRN-UT-2")
+    Set words = $CLASSMETHOD(ap, "SeveralInSession", session, "UT Out")
+    Do $$$AssertTrue((words [ "UTP1") && (words [ "UTP2"), "two patients in the session are said: " _ words)
+    Do $$$AssertNotTrue(words [ "MRN-UT", "with no patient identifier in an alert: " _ words)
+    Set h = $CLASSMETHOD(ap, "HL7HeaderOfSession", session, .problem, "UT Out")
+    Do $$$AssertNotTrue($ISOBJECT(h), "and no header is picked")
 }
 
 Method TestForwardFromAlert()

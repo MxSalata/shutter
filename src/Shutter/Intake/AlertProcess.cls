@@ -4,12 +4,16 @@
 /// inactivity alert). Every alert is first passed on to PassTo, the site's own alert consumer renamed, so Shutter never
 /// silences a site's alerting; only an alert that consumer raised itself is not, since its failure would turn into another
 /// alert to it without end, which the engine prevents while the item is named Ens.Alert. Then, for an alert from one of the Receivers (the connector items; empty takes any item)
-/// whose session holds an HL7 message, it finds that message (the session's first header with an EnsLib.HL7.Message
-/// body: the receiving service's), builds a Shutter.Intake.Forward for it with the failure read from the alert's words,
+/// whose session holds an HL7 message, it finds that message (the header the alerting item was sent, so a transform on the
+/// route is not lost; when the item takes no HL7, the session's first, the receiving service's), builds a
+/// Shutter.Intake.Forward for it with the failure read from the alert's words,
 /// and sends it to the forwarder, once per session and alerting item, so a message routed to two receivers that both fail
 /// gives two forwards: the pair is pending while the forward is out, and seen (for a day) only once Shutter has taken the
 /// message, so a forward Shutter refused or that failed is built again from the next alert; a pending mark that no answer
-/// clears (a forwarder job that died, a production stopped mid-call) lapses after ten minutes. The feed never waits: both sends are asynchronous. An alert whose session has no HL7 message, or
+/// clears (a forwarder job that died, a production stopped mid-call) lapses after ten minutes. The feed never waits: both sends are asynchronous.
+/// An alert does not say which message of its session failed, so a session that sent the item several different messages, or
+/// whose messages name more than one patient, opens no case on a guess: the alert's warning and a further alert to PassTo name
+/// the messages, once per session and item. An alert whose session has no HL7 message, or
 /// from an item outside Receivers, or from the forwarder itself (its alert that Shutter refused a forward), is passed on only.
 /// The demo hospital's production carries this item with Receivers "Downstream Out"; its own process already forwards
 /// its failures (Hospital.Process.PASToDownstream), so that process stays out of Receivers and a failure reaches Shutter
@@ -60,6 +64,11 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
         $$$TRACE("Alert from " _ source _ " carries no session: nothing to hand to Shutter")
         Quit $$$OK
     }
+    Set several = ..SeveralInSession(session, source)
+    If several '= "" {
+        Do ..SaySeveral(session, source, several)
+        Quit $$$OK
+    }
     If ..Seen(session, source) {
         $$$TRACE("Alert from " _ source _ " for session " _ session _ ": this failure was handed to Shutter already")
         Quit $$$OK
@@ -68,12 +77,13 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
         $$$TRACE("Alert from " _ source _ " for session " _ session _ ": its message is being handed to Shutter")
         Quit $$$OK
     }
-    Set header = ..HL7HeaderOfSession(session, .problem)
+    Set header = ..HL7HeaderOfSession(session, .problem, source)
     If '$ISOBJECT(header) {
         $$$TRACE("Alert from " _ source _ " for session " _ session _ ": " _ problem _ "; passed on only")
         Quit $$$OK
     }
     Set forward = ..ForwardFromAlert(request, header, source)
+    Set forward.Route = ..RouteOfSession(session, header)
     // The completion key carries the session and the item, so the answer (or the error) finds its pending mark.
     Set sc = ..SendRequestAsync(..ForwarderTarget, forward, 1, "forward:" _ session _ ":" _ source)
     If $$$ISERR(sc) {
@@ -81,6 +91,7 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
         Quit $$$OK
     }
     Do ..MarkPending(session, source)
+    Do ..MarkHanded(session, source, ..ControlOf(header))
     $$$TRACE("Alert from " _ source _ ": message header " _ header.%Id() _ " (" _ header.SourceConfigName _ ") handed to " _ ..ForwarderTarget _ " as " _ forward.FailureKind)
     Quit $$$OK
 }
@@ -123,12 +134,22 @@ ClassMethod Takes(source As %String, receivers As %String) As %Boolean
     Quit listed
 }
 
-/// The failed delivery's HL7 message: the session's first header whose body is an EnsLib.HL7.Message (the receiving
-/// service's). problem says why there is none.
-ClassMethod HL7HeaderOfSession(sessionId As %String, Output problem As %String) As Ens.MessageHeader
+/// The failed delivery's HL7 message: the header the item was sent, when it is one message; with no item, or when the item took no
+/// HL7 (a connector taking a ward operation), the session's first header whose body is an EnsLib.HL7.Message (the receiving
+/// service's). Several messages at the item, or several patients in the session, give no header. problem says why there is none.
+ClassMethod HL7HeaderOfSession(sessionId As %String, Output problem As %String, item As %String = "") As Ens.MessageHeader
 {
     Set problem = ""
     If sessionId = "" Set problem = "no session" Quit ""
+    If item '= "" {
+        Set several = ..SeveralInSession(sessionId, item)
+        If several '= "" Set problem = several Quit ""
+        Set sent = ..SentTo(sessionId, item)
+        If $LISTLENGTH(sent) = 1 {
+            Set header = ##class(Ens.MessageHeader).%OpenId($LIST(sent, 1))
+            If $ISOBJECT(header) Quit header
+        }
+    }
     Try {
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, MessageBodyClassName FROM Ens.MessageHeader WHERE SessionId = ? ORDER BY ID", sessionId)
         While rs.%Next() {
@@ -146,6 +167,123 @@ ClassMethod HL7HeaderOfSession(sessionId As %String, Output problem As %String) 
         Set problem = ex.DisplayString(), header = ""
     }
     Quit $GET(header)
+}
+
+/// The session's HL7 messages sent to the item, as a list of header ids, one per different body, oldest first. Empty when it cannot be read.
+ClassMethod SentTo(sessionId As %String, item As %String) As %List
+{
+    Set out = ""
+    Try {
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, MessageBodyId, MessageBodyClassName FROM Ens.MessageHeader WHERE SessionId = ? AND TargetConfigName = ? ORDER BY ID", sessionId, item)
+        While rs.%Next() {
+            Set cls = rs.%Get("MessageBodyClassName"), body = rs.%Get("MessageBodyId")
+            Continue:(cls="")||(body="")||$DATA(bodies(cls, body))
+            Continue:'..IsHL7(cls)
+            Set bodies(cls, body) = "", out = out _ $LISTBUILD(rs.%Get("ID"))
+        }
+    } Catch ex {
+        Set out = ""
+    }
+    Quit out
+}
+
+ClassMethod IsHL7(class As %String) As %Boolean
+{
+    Set is = 0
+    Try { Set is = $CLASSMETHOD(class, "%Extends", "EnsLib.HL7.Message") } Catch inner { Set is = 0 }
+    Quit is
+}
+
+/// The words to raise when an alert from the item cannot be tied to one message, or "" when it can: the session sent the item several
+/// different messages, or, when the item took no HL7, the session's messages name more than one patient, so the first may be
+/// another patient's. They name the messages by control id and header, which a person opens in the trace, and no patient identifier.
+ClassMethod SeveralInSession(sessionId As %String, item As %String) As %String
+{
+    Set sent = ..SentTo(sessionId, item)
+    If $LISTLENGTH(sent) > 1 {
+        Quit "Session " _ sessionId _ " sent " _ $LISTLENGTH(sent) _ " different HL7 messages to " _ item _ " (" _ ..Named(sent) _ "). The alert does not say which one failed, so Shutter opens no case from it: a case could name the wrong patient. Check each in the message trace"
+    }
+    If $LISTLENGTH(sent) = 1 Quit ""
+    Set patients = 0, seen = ""
+    Try {
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, MessageBodyId, MessageBodyClassName FROM Ens.MessageHeader WHERE SessionId = ? ORDER BY ID", sessionId)
+        While rs.%Next() {
+            Set cls = rs.%Get("MessageBodyClassName"), body = rs.%Get("MessageBodyId")
+            Continue:(cls="")||(body="")||$DATA(bodies(cls, body))
+            Continue:'..IsHL7(cls)
+            Set bodies(cls, body) = "", patient = ..PatientOf($CLASSMETHOD(cls, "%OpenId", body))
+            Continue:patient=""
+            If '$DATA(names(patient)) Set names(patient) = "", patients = patients + 1, seen = seen _ $LISTBUILD(rs.%Get("ID"))
+        }
+    } Catch ex {
+        Set patients = 0
+    }
+    If patients > 1 {
+        Quit "Session " _ sessionId _ " holds HL7 messages for " _ patients _ " patients (" _ ..Named(seen) _ "), and " _ item _ " was sent none of them as HL7. The alert does not say which one failed, so Shutter opens no case from it: a case could name the wrong patient. Check each in the message trace"
+    }
+    Quit ""
+}
+
+/// Headers as "control id in header n", up to ten of them, for the words above.
+ClassMethod Named(headers As %List) As %String
+{
+    Set out = ""
+    For i = 1:1:$LISTLENGTH(headers) {
+        If i > 10 Set out = out _ ", and " _ ($LISTLENGTH(headers) - 10) _ " more" Quit
+        Set h = ##class(Ens.MessageHeader).%OpenId($LIST(headers, i))
+        Set out = out _ $SELECT(out = "": "", 1: ", ") _ $SELECT($ISOBJECT(h): ..ControlOf(h), 1: "") _ " in header " _ $LIST(headers, i)
+    }
+    Quit out
+}
+
+/// The message's MSH-10, by position, so it needs no schema; "" when it cannot be read.
+ClassMethod ControlOf(header As Ens.MessageHeader) As %String
+{
+    Set control = ""
+    Try {
+        Set msg = $CLASSMETHOD(header.MessageBodyClassName, "%OpenId", header.MessageBodyId)
+        If $ISOBJECT(msg) Set control = msg.GetValueAt("1:10")
+    } Catch ex {
+        Set control = ""
+    }
+    Quit control
+}
+
+/// The patient the message names: PID-3's first repetition, read by position with no schema; "" when it names none.
+ClassMethod PatientOf(msg As EnsLib.HL7.Message) As %String
+{
+    If '$ISOBJECT(msg) Quit ""
+    Set patient = ""
+    For i = 2:1 {
+        Set seg = msg.GetSegmentAt(i)
+        Quit:'$ISOBJECT(seg)
+        If seg.GetValueAt(0) = "PID" Set patient = $ZSTRIP($PIECE($PIECE(seg.GetValueAt(3), "~", 1), "^", 1), "<>W") Quit
+    }
+    Quit patient
+}
+
+/// The service a session began at: the route a case names, whichever message it carries. The header given when the session has no HL7 first header.
+ClassMethod RouteOfSession(sessionId As %String, header As Ens.MessageHeader) As %String
+{
+    Set first = ..HL7HeaderOfSession(sessionId, .none)
+    Quit $SELECT($ISOBJECT(first): first.SourceConfigName, 1: header.SourceConfigName)
+}
+
+/// The site hears of it, once for a session and item: a warning here, and an alert to PassTo. This item takes the Ens.Alert name, so
+/// the engine's own SendAlert would come back here: it goes to the consumer directly.
+Method SaySeveral(sessionId As %String, item As %String, words As %String)
+{
+    If ..SaidSeveral(sessionId, item) {
+        $$$TRACE("Alert from " _ item _ " for session " _ sessionId _ ": several messages, said already")
+        Quit
+    }
+    Do ..MarkSaidSeveral(sessionId, item)
+    $$$LOGWARNING(words)
+    If ..PassTo = "" Quit
+    Set alert = ##class(Ens.AlertRequest).%New($LISTBUILD(item, $EXTRACT(words, 1, 2000)))
+    Set alert.SessionId = sessionId
+    Set sc = ..SendRequestAsync(..PassTo, alert, 0, "pass")
+    If $$$ISERR(sc) $$$LOGWARNING("The alert could not be passed on to " _ ..PassTo _ ": " _ $SYSTEM.Status.GetErrorText(sc))
 }
 
 /// The failure as the alert's words tell it: a receiver's AE or AR a rejection, ahead of the words for a connection; a connection
@@ -249,6 +387,32 @@ ClassMethod ForwardAnswered(sessionId As %String, forwarded As Shutter.Intake.Fo
         Quit:only'=""
     }
     Quit taken
+}
+
+/// Whether the several-messages alert was raised for this session and item (kept a day).
+ClassMethod SaidSeveral(sessionId As %String, item As %String) As %Boolean
+{
+    Quit $DATA(^Shutter.AlertIntake("several", sessionId, item)) > 0
+}
+
+ClassMethod MarkSaidSeveral(sessionId As %String, item As %String)
+{
+    Set now = ##class(Shutter.Util.Time).EpochSeconds()
+    Set ^Shutter.AlertIntake("several", sessionId, item) = now
+    Do ..DropOlder("several", now, 86400)
+}
+
+/// Whether this control id at this item is the message handed to Shutter for the session (kept a day): the acknowledgement feed reads it.
+ClassMethod Handed(sessionId As %String, item As %String, control As %String) As %Boolean
+{
+    Quit $DATA(^Shutter.AlertIntake("handed", sessionId, item _ "|" _ control)) > 0
+}
+
+ClassMethod MarkHanded(sessionId As %String, item As %String, control As %String)
+{
+    Set now = ##class(Shutter.Util.Time).EpochSeconds()
+    Set ^Shutter.AlertIntake("handed", sessionId, item _ "|" _ control) = now
+    Do ..DropOlder("handed", now, 86400)
 }
 
 /// Sessions are numbered upwards, so the oldest entries come first: drop the kind's entries older than the age, session by
