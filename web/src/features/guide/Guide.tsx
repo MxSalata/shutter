@@ -531,7 +531,9 @@ function StepCard({
         <Title order={2} fz={22} tabIndex={-1} ref={titleRef} className="guide-title">
           {step.title}
         </Title>
-        <Text fz={18}>{step.say}</Text>
+        <Text fz={18} className="guide-say">
+          {step.say}
+        </Text>
         {step.tryIt && present.tryIt ? (
           <div>
             <Button

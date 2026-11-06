@@ -1542,6 +1542,10 @@ body {
     width: 100%;
     border-left: 0;
   }
+  /* The step's words were read before Ask opened: on a phone they give way to Ask's suggested questions */
+  .guide-card[data-docked] .guide-say {
+    display: none;
+  }
 }
 .ask-readonly {
   background: var(--mantine-color-default-hover);
