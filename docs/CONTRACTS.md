@@ -1208,7 +1208,8 @@ left_alone: [{event, event_time, operation_key}], end: {ward, history}, checked_
 Only E1 and E6 are drawn. The first of these that holds draws nothing, with `reason_code` and a line that starts "No
 sequence:", and the eight steps stay: `not_e1_e6` (another entry, or a failed movement that isn't a transfer); `cancels_false`
 (the profile says false, or has no entry for the receiver: the seed says false for both demo receivers, so a shipped S22 draws
-none); `identifier_unreadable`; `merge_seen`; `feed_not_indexed` (a case forwarded from another namespace, or the index behind);
+none); `identifier_unreadable`; `merge_seen`; `forwarded_case` (a case forwarded from another namespace, whose feed isn't indexed here); `feed_not_indexed` (the index behind:
+not yet, not no, so its line starts "No sequence yet:", an approver is offered the read, and every read decides again);
 `pending_message`; `further_message`; `later_undelivered`; `later_not_movement` (a later admission, merge or cancel);
 `history_mismatch` (the receiver's rows and the feed's don't match one for one by operation key); `k_zero`; `time_in_doubt`;
 `history_mismatch` again (the receiver's current placement isn't the last movement of its history, so the first cancel wouldn't
@@ -1217,12 +1218,15 @@ character above ASCII: the copy may not match the bytes sent, and a cancel isn't
 `receipt_present`. A replay above ASCII doesn't stop it: its text is withheld with a line saying to resend it from the message
 store.
 
-`further_message` is the patient-level check (`Shutter.Index.Message.ForPatient`, which respects the identifier's authority and
-counts a row with none): any message for this patient since the reset, on any encounter, that the failed movement and the later
+`further_message` is the patient-level check (`Shutter.Index.Message.ForPatient`, asked for every identifier in the failed
+message's PID-3; it respects each identifier's authority, and a row or an identifier with no authority can't be told apart and
+counts): any message for this patient since the reset, on any encounter, that the failed movement and the later
 movements don't account for, with an event time at or after the failed one, received after the failed message or after the
 snapshot, or with no readable time. An earlier stay is not a further message. An update (A08) inside the span on the same
-encounter is listed under `left_alone` and doesn't stop the draft. The check can't see a change made by hand at the receiver or
-a message on a route the index doesn't cover; the draft says so.
+encounter is listed under `left_alone` and doesn't stop the draft. The check can't see a change made by hand at the receiver, a
+message on a route the index doesn't cover, or a message the index keeps under an identifier the failed message doesn't hold (the
+index keeps one per message: the repetition typed MR, else the first); there is no match on a name or a date of birth, because a
+different patient must not match. The draft says so.
 
 `GET /cases/{id}/correction-draft` (`Shutter_Approve`, an approver's, because this is raw HL7 with a name and an address; 401
 signed out, 403 `forbidden` naming the resource for an operator) gives the text. 404 `not_found`; 404 `no_plan`; 409
@@ -1233,8 +1237,9 @@ segments ended by a carriage return, as IRIS gives it. Every read runs the check
 `drawn` here wins over the plan's, which is the state at plan time. It never reads the receiver. A read with `drawn` true appends
 a `note` event to the case, "Correction draft read by <user>: <n> messages, digest <digest>", with no message text; a read
 with `drawn` false appends nothing. The email carries one line and none of the text: "A drafted sequence of <n> messages is on
-the case, for an approver to read on the case page; this email carries none of it." or "No message sequence was drafted: <the
-reason>."
+the case, for an approver to read on the case page; this email carries none of it." or, with `feed_not_indexed`, "No message sequence has been
+drafted yet: the index hadn't caught up with the feed when the plan was made. An approver can read it on the case page, which
+checks again on every read; this email carries none of it." or "No message sequence was drafted: <the reason>."
 
 A blocked, escalated or failed case can be handed to the people who correct systems by hand. The draft is built from
 the stored case without a model (`Shutter.Util.EscalationDraft`): the hospital number and NHS number, the date of birth,

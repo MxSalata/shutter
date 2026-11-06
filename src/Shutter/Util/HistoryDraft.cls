@@ -43,13 +43,18 @@ ClassMethod Gather(case As Shutter.Store.Case) As %DynamicObject
     Set since = $SELECT(resetAt = "": "2000-01-01 00:00:00", 1: $TRANSLATE($PIECE(resetAt, "Z", 1), "T", " "))
     Set rows = ##class(Shutter.Index.Message).ForPatient(case.PatientId, case.PatientIdAuthority, since)
     Set facts."patient_rows" = rows
-    // A merge case that names this patient as its prior side: the survivor's messages carry the other number.
-    Set merged = 0, pid = case.PatientId
-    If pid '= "" {
-        Set found = ""
-        &sql(SELECT TOP 1 ID INTO :found FROM Shutter_Store."Case" WHERE PriorPatientId = :pid)
-        If (SQLCODE = 0) && (found '= "") Set merged = 1
+    // The index keeps one identifier per message, so a message under another of the failed message's identifiers is asked for too.
+    Set failedText = "", ri = rows.%GetIterator()
+    While (failedText = "") && ri.%GetNext(, .r) { Set:(r."operation_key" = case.OperationKey) failedText = ..StoredText(r."message_body_id") }
+    Set others = ..Identifiers(failedText), oi = others.%GetIterator()
+    While oi.%GetNext(, .o) {
+        Continue:((o.id = case.PatientId) && (o.authority = case.PatientIdAuthority))
+        Set more = ##class(Shutter.Index.Message).ForPatient(o.id, o.authority, since), mi = more.%GetIterator()
+        While mi.%GetNext(, .r) { Do rows.%Push(r) }
     }
+    // A merge case that names this patient as its prior side: the survivor's messages carry the other number.
+    Set merged = ..NamedAsPrior(case.PatientId), oi = others.%GetIterator()
+    While oi.%GetNext(, .o) { Set:..NamedAsPrior(o.id) merged = 1 }
     Do facts.%Set("merge_case", merged, "boolean")
     Set bodies = {}, ri = rows.%GetIterator()
     While ri.%GetNext(, .r) {
@@ -59,6 +64,30 @@ ClassMethod Gather(case As Shutter.Store.Case) As %DynamicObject
     }
     Set facts.bodies = bodies
     Quit facts
+}
+
+/// Every identifier in a message's PID-3, as [{id, authority}], by the message's own separators. A repetition with no number
+/// is none.
+ClassMethod Identifiers(text As %String) As %DynamicArray
+{
+    Set out = [], field = ..Field(text, "PID", 3)
+    Set comp = $EXTRACT(text, 5), rep = $EXTRACT(text, 6), sub = $EXTRACT(text, 8)
+    If field = "" Quit out
+    For i = 1:1:$LENGTH(field, rep) {
+        Set one = $PIECE(field, rep, i), id = $PIECE(one, comp, 1)
+        Continue:(id = "")
+        Do out.%Push({"id": (id), "authority": ($PIECE($PIECE(one, comp, 4), sub, 1))})
+    }
+    Quit out
+}
+
+/// Whether a merge case names this number as its prior side.
+ClassMethod NamedAsPrior(pid As %String) As %Boolean [ Private ]
+{
+    If pid = "" Quit 0
+    Set found = ""
+    &sql(SELECT TOP 1 ID INTO :found FROM Shutter_Store."Case" WHERE PriorPatientId = :pid)
+    Quit (SQLCODE = 0) && (found '= "")
 }
 
 /// The stored message as IRIS gives it back, or "" when it cannot be read.
@@ -93,7 +122,9 @@ ClassMethod Decide(case As Shutter.Store.Case, summary As %DynamicObject, entry 
     Set ri = rows.%GetIterator()
     While ri.%GetNext(, .r) { Set:($CLASSMETHOD(json, "Str", r, "event") = "merge") merged = 1 }
     If merged Quit ..Stop(out, "merge_seen", "No sequence: a merge touches this patient, so which messages are theirs can't be settled by machine.")
-    If ((case.SourceNamespace '= "") && (case.SourceNamespace '= $NAMESPACE)) || '$CLASSMETHOD(json, "Bool", facts, "caught_up", 0) Quit ..Stop(out, "feed_not_indexed", "No sequence: the feed this message came on isn't fully indexed here, so further messages for this patient can't be ruled out.")
+    If (case.SourceNamespace '= "") && (case.SourceNamespace '= $NAMESPACE) Quit ..Stop(out, "forwarded_case", "No sequence: this case was forwarded from another namespace, whose feed isn't indexed here, so further messages for this patient can't be ruled out.")
+    // Not yet, not no: the index catches up in seconds, and every read decides again.
+    If '$CLASSMETHOD(json, "Bool", facts, "caught_up", 0) Quit ..Stop(out, "feed_not_indexed", "No sequence yet: the index hadn't caught up with the feed when this was checked, so further messages for this patient can't be ruled out yet. Every read checks again.")
     Set pending = facts.%Get("pending")
     If $ISOBJECT(pending) && (pending.%Size() > 0) {
         Set p = pending.%Get(0)
@@ -304,6 +335,7 @@ ClassMethod Draft(case As Shutter.Store.Case, summary As %DynamicObject, entry A
     Do out."cannot_know".%Push({"what": "Whether the beds are still free", "why": "A bed in this history may hold someone now; a bed taken stops the sequence half way.", "does": "Says check before starting."})
     Do out."cannot_know".%Push({"what": "Who else is fed by this receiver", "why": "Its subscribers see the patient move back and forward.", "does": "Names it."})
     Do out."cannot_know".%Push({"what": "Whether anything newer has happened", "why": "A draft is a reading at one moment.", "does": "The version line, and the redraw on every read."})
+    Do out."cannot_know".%Push({"what": "A message under another identifier", "why": "Further messages are looked for under every identifier in the failed message's PID-3. A message the index keeps under an identifier the failed message doesn't hold can't be matched, and Shutter doesn't match on a name or a date of birth, because a different patient must not match.", "does": "Says so here. The line about checking the receiver's own screen covers it."})
     Do out."cannot_know".%Push({"what": "A change made by hand at the receiver", "why": "It is invisible over HL7, and a message on a route the index doesn't cover is invisible too.", "does": "The line about checking the receiver's own screen."})
     Do out."cannot_know".%Push({"what": "What the source's time meant", "why": "Operation keys are in UTC, and the source's own text may be in local time.", "does": "Shows the source's own text, never a converted time."})
     Set li = seq."left_alone".%GetIterator()
@@ -334,6 +366,7 @@ ClassMethod EmailLine(correction As %DynamicObject) As %String
     Set seq = $SELECT($ISOBJECT(correction): correction.%Get("sequence"), 1: "")
     If '$ISOBJECT(seq) Quit ""
     If seq.%Get("drawn") Quit "A drafted sequence of " _ seq.count _ " messages is on the case, for an approver to read on the case page; this email carries none of it."
+    If seq.%Get("reason_code") = "feed_not_indexed" Quit "No message sequence has been drafted yet: the index hadn't caught up with the feed when the plan was made. An approver can read it on the case page, which checks again on every read; this email carries none of it."
     Set reason = seq.reason
     If $EXTRACT(reason, 1, 13) = "No sequence: " Set reason = $EXTRACT(reason, 14, *)
     If $EXTRACT(reason, *) = "." Set reason = $EXTRACT(reason, 1, * - 1)
