@@ -438,6 +438,17 @@ ClassMethod TakeInterop(out As %DynamicObject)
         If $$$ISERR(sc) Do out.errors.%Push("The credential " _ name _ ": " _ $SYSTEM.Status.GetErrorText(sc)) Continue
         Do out.removed.%Push("The credential " _ name)
     }
+    // The engine's note of the search table on HL7 messages, and of the production last open in the portal.
+    Set doc = ""
+    For {
+        Set doc = $ORDER(^Ens.DocClassMap(doc)) Quit:doc=""
+        Set table = ""
+        For { Set table = $ORDER(^Ens.DocClassMap(doc, "st", table)) Quit:table=""  Kill:..OwnBodyClass(table) ^Ens.DocClassMap(doc, "st", table) }
+    }
+    For name = "Shutter.Production", "Hospital.Production" {
+        Kill ^Ens.Configuration("csp", "Activity", name)
+        If $GET(^Ens.Configuration("csp", "LastProduction")) = name Kill ^Ens.Configuration("csp", "LastProduction")
+    }
     Set cat = ""
     For {
         Set cat = $ORDER(^Shutter.Config("uninstall", "schemas", cat)) Quit:cat=""

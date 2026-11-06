@@ -107,6 +107,7 @@ def snapshot(namespaces):
             'Set g="" For { Set g=$ORDER(^$GLOBAL(g)) Quit:g=""  Write !,"<<<global|' + ns + '|",g,">>>" }',
             rows(ns, "class", "SELECT Name FROM %Dictionary.ClassDefinition WHERE Name NOT %STARTSWITH '%' AND Name NOT %STARTSWITH 'Ens' AND Name NOT %STARTSWITH 'HS' AND Name NOT %STARTSWITH 'SYS' AND Name NOT %STARTSWITH 'CSP' AND Name NOT %STARTSWITH 'INFORMATION' AND Name NOT %STARTSWITH 'Hub'"),
             rows(ns, "production", "SELECT Name FROM Ens_Config.Production"),
+            rows(ns, "sql_table", "SELECT TABLE_SCHEMA||'.'||TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA %STARTSWITH 'Shutter' OR TABLE_SCHEMA %STARTSWITH 'Hospital' OR TABLE_SCHEMA %STARTSWITH 'Downstream'"),
             rows(ns, "item", "SELECT Production||'/'||Name||'/'||ClassName FROM Ens_Config.Item"),
             rows(ns, "default_setting", "SELECT ID FROM Ens_Config.DefaultSettings"),
             rows(ns, "credential", "SELECT ID FROM Ens_Config.Credentials"),
@@ -129,7 +130,7 @@ def snapshot(namespaces):
 def mention_scan(ns):
     """A line per global that holds the product's name anywhere, in a subscript or a value. No value is written."""
     return ('Set g="" For { Set g=$ORDER(^$GLOBAL(g)) Quit:g=""  Continue:($EXTRACT(g,1,2)="^%")&&(g\'="^%SYS")  Continue:g="^ROUTINE"  Continue:g="^rOBJ"  Continue:g="^rINDEX"  Continue:g="^rMAC"  '
-            'Set c=0,k=0,q=g Try { If $DATA(@q)#2,$GET(@q)["Shutter" { Set c=1 } For { Set q=$QUERY(@q) Quit:q=""  Set k=k+1 Quit:k>400000  If (q\'["""HistoryD"""),(q["Shutter")||($GET(@q)["Shutter") Set c=c+1 } } Catch e { Set c=-1 } If c Write !,"<<<mentions|' + ns + '|",g,">>>" }')
+            'Set c=0,k=0,q=g Try { If $DATA(@q)#2,$GET(@q)["Shutter" { Set c=1 } For { Set q=$QUERY(@q) Quit:q=""  Set k=k+1 Quit:k>400000  If (q\'["""HistoryD"""),(q\'["""NSMAPSUB"""),(q["Shutter")||($GET(@q)["Shutter") Set c=c+1 } } Catch e { Set c=-1 } If c Write !,"<<<mentions|' + ns + '|",g,">>>" }')
 
 
 def compare(before, after, allowed_new=(), allowed_gone=()):
@@ -138,8 +139,8 @@ def compare(before, after, allowed_new=(), allowed_gone=()):
     engine = [r"^global\|[^|]*\|\^(Ens\.|EnsHL7\.Segment|IRIS\.Temp|IRIS\.Metrics\.|CacheTemp|EnsLib\.)", r"^autostart\|[^|]*\|$"]
     # IRIS for Health sets these up once, the first time a namespace is enabled for Interoperability. They are the engine's.
     # The engine's own records of what ran, which keep a name as a log does: the event log, the audit log, its interface
-    # metrics, the SQL statement index, the source journal, its temporary globals and a package's name.
-    engine += [r"^mentions\|[^|]*\|\^(Ens\.Util\.LogD|IRIS\.AuditD|IRIS\.Metrics\.|IRIS\.Temp|rINDEXSQL|ISC\.Src\.Jrn|oddPKG)"]
+    # metrics, the SQL statement and catalogue indexes (no table shows: the sql_table rows), the source journal, its temporary globals and a package's name.
+    engine += [r"^mentions\|[^|]*\|\^(Ens\.Util\.LogD|IRIS\.AuditD|IRIS\.Metrics\.|IRIS\.Temp|rINDEXSQL|rINDEXEXT|ISC\.Src\.Jrn|oddPKG)"]
     engine += [r"^(database|namespace)\|%SYS\|FHIR_Validation_Server$", r"^resource\|%SYS\|%HS(Admin_|_BFC_|_FHIRServer_)", r"^role\|%SYS\|%HS_BFC_", r"^task\|%SYS\|FHIR Purge "]
     new = sorted(x for x in after - before if not any(re.search(p, x) for p in list(allowed_new) + engine))
     gone = sorted(x for x in before - after if not any(re.search(p, x) for p in list(allowed_gone) + engine))
