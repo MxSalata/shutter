@@ -531,7 +531,7 @@ Method TestReplayIsTheStoredText()
     Do $$$AssertTrue(row.label [ "Replay, unchanged", "and it says so")
     Do $$$AssertTrue(row.label [ "20261019100000", "with the source's own time")
     Do $$$AssertEquals(draft.header.%Size(), 9, "nine header lines")
-    Do $$$AssertEquals(draft."cannot_know".%Size(), 10, "ten things it can't know")
+    Do $$$AssertEquals(draft."cannot_know".%Size(), 11, "eleven things it can't know")
     Do $$$AssertTrue(draft.digest [ "sha256:", "a digest of what was read")
     Do $$$AssertTrue(draft.messages.%Get(0).label [ "Shutter's table", "a cancel says it is not a source message")
 }
