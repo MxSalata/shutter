@@ -160,6 +160,24 @@ describe('HomePage', () => {
     expect(await screen.findByText('2 need a person')).toBeInTheDocument();
   });
 
+  it('counts a failed case as needing a person, and not one a person gave up', async () => {
+    server.use(
+      http.get('/api/shutter/cases', ({ request }) => {
+        if (new URL(request.url).searchParams.get('state') !== 'failed')
+          return HttpResponse.json({ items: [], total: 0 });
+        return HttpResponse.json({
+          items: [
+            { caseId: 'C-1', state: 'failed', disposition: '' },
+            { caseId: 'C-2', state: 'failed', disposition: 'abandoned' },
+          ],
+          total: 2,
+        });
+      }),
+    );
+    renderHome();
+    expect(await screen.findByText('1 needs a person')).toBeInTheDocument();
+  });
+
   it('says nothing beside Cases when no case needs a person', async () => {
     server.use(http.get('/api/shutter/cases', () => HttpResponse.json({ items: [], total: 0 })));
     renderHome();

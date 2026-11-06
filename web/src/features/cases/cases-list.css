@@ -39,6 +39,12 @@
   .cases-tile-groups[data-closed='4'] {
     grid-template-columns: 3fr 4fr;
   }
+  .cases-tile-groups[data-need='4'] {
+    grid-template-columns: 4fr 3fr;
+  }
+  .cases-tile-groups[data-need='4'][data-closed='4'] {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (max-width: 35.99em) {

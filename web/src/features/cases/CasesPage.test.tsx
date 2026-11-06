@@ -501,6 +501,32 @@ describe('the page', () => {
     expect(within(need).getByRole('button', { name: /^9 Blocked Show these$/ })).toBeVisible();
   });
 
+  it('counts a failed case under Needs a person, and not one a person gave up', async () => {
+    server.use(
+      http.get('/api/shutter/cases', ({ request }) => {
+        if (new URL(request.url).searchParams.get('state') !== 'failed') return undefined;
+        return HttpResponse.json({
+          items: [
+            { caseId: 'C-1', state: 'failed', disposition: '' },
+            { caseId: 'C-2', state: 'failed', disposition: 'abandoned' },
+          ],
+          total: 2,
+        });
+      }),
+    );
+    renderPage();
+    const need = await screen.findByRole('region', { name: 'Needs a person' });
+    expect(await within(need).findByRole('button', { name: /^1 Failed Show these$/ })).toBeVisible();
+  });
+
+  it('shows no Failed tile while no case failed', async () => {
+    renderPage();
+    const need = await screen.findByRole('region', { name: 'Needs a person' });
+    await within(need).findByRole('button', { name: /^9 Blocked Show these$/ });
+    await screen.findByText('64 cases');
+    expect(within(need).queryByRole('button', { name: /Failed/ })).not.toBeInTheDocument();
+  });
+
   it('shows the list with an Outcome column, C-000021 as not what its scenario expects, and the count of cases', async () => {
     renderPage();
     const table = await screen.findByRole('table');

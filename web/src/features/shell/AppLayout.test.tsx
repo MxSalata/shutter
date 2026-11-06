@@ -138,6 +138,24 @@ describe('the shell', () => {
     expect(within(cases).getByText(/^\d+$/)).toBeInTheDocument();
   });
 
+  it('counts a failed case beside Cases, and not one a person gave up', async () => {
+    server.use(
+      http.get('/api/shutter/cases', ({ request }) => {
+        if (new URL(request.url).searchParams.get('state') !== 'failed')
+          return HttpResponse.json({ items: [], total: 0 });
+        return HttpResponse.json({
+          items: [
+            { caseId: 'C-1', state: 'failed', disposition: '' },
+            { caseId: 'C-2', state: 'failed', disposition: 'abandoned' },
+          ],
+          total: 2,
+        });
+      }),
+    );
+    renderFrame();
+    expect(await screen.findByRole('link', { name: 'Cases 1 case needs a person' })).toBeInTheDocument();
+  });
+
   it('shows no count when no case needs a person', async () => {
     server.use(http.get('/api/shutter/cases', () => HttpResponse.json({ items: [], total: 0 })));
     renderFrame();
