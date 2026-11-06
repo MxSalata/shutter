@@ -169,7 +169,8 @@ Method TestAForwardNamingAnUnloadedCategory()
 Method TestTestAdviceNamesWhatToCheck()
 {
     Set onb = "Shutter.Util.Onboard"
-    Do $$$AssertEquals($CLASSMETHOD(onb, "TestAdvice", 202), "", "taken: no advice")
+    Do $$$AssertEquals($CLASSMETHOD(onb, "TestAdvice", 202, , , "C-000001"), "", "taken: no advice")
+    Do $$$AssertTrue($CLASSMETHOD(onb, "TestAdvice", 202) [ "no case id", "a 202 that names no case took nothing, and something other than Shutter answered")
     Do $$$AssertTrue($CLASSMETHOD(onb, "TestAdvice", 404, "ShutterIntake", "shutter-fwd") [ "password", "404 is a refused sign-in on a REST application")
     Do $$$AssertTrue($CLASSMETHOD(onb, "TestAdvice", 403, "ShutterIntake", "shutter-fwd") [ "Shutter_Forwarder", "403 is the role")
     Do $$$AssertTrue($CLASSMETHOD(onb, "TestAdvice", 503) [ "not running", "503 is the production")
