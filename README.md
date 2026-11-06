@@ -144,7 +144,7 @@ The mode chooses who proposes the plan; the gate and the rehearsal are the same 
 
 ![S2 at phone size: the case waiting, the approve dialog, and the outcome verified at the receiver](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/phone-s2.png)
 
-- **S8, the case a gate cannot catch.** The plan records the conformance specialist's dissent and why it was overruled. The case page sets Rules only and the board side by side:
+- **S8, the case this gate doesn't catch.** The plan records the conformance specialist's dissent and why it was overruled. The case page sets Rules only and the board side by side:
 
 ![S8 played twice: Rules only overwrites WARD-C; the board escalates and writes nothing](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-rules-and-board.png)
 
