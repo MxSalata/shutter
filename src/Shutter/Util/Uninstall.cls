@@ -616,6 +616,9 @@ ClassMethod TakeGlobals(out As %DynamicObject)
         Set sc = $CLASSMETHOD(class, "%KillExtent")
         If $$$ISERR(sc) Do out.errors.%Push("The rows of " _ class _ ": " _ $SYSTEM.Status.GetErrorText(sc))
     }
+    // The extent manager's record of each class: removing a class leaves it, with every global the class named.
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Name FROM %Dictionary.CompiledClass WHERE Name %STARTSWITH 'Shutter.' OR Name %STARTSWITH 'Hospital.' OR Name %STARTSWITH 'Downstream.'")
+    While rs.%Next() { Do ##class(%ExtentMgr.Util).DeleteExtentDefinitionIfExists(rs.%GetData(1), "cls") }
     For i = 1:1:$LENGTH(..#GLOBALS, ",") {
         Set prefix = $PIECE(..#GLOBALS, ",", i)
         // $ORDER starts from a valid name, so the prefix without its dot.
