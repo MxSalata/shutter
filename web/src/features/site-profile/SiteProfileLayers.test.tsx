@@ -218,6 +218,14 @@ describe('the questions', () => {
     expect(screen.getByText(/Shutter checks the role of whoever closes the case/)).toBeInTheDocument();
   });
 
+  it('says what Automatic overwrites, beside the choice', async () => {
+    renderPage();
+    const section = (await screen.findByRole('heading', { name: 'Approvals' })).closest('section')!;
+    expect(section).toHaveTextContent(
+      "Automatic overwrites the receiver's record, such as a patient's placement, with no person looking. It is still gated, rehearsed and verified.",
+    );
+  });
+
   it('keeps the Approvals grid’s names and shortens its choices so a value is never cut', async () => {
     renderPage();
     const select = await screen.findByRole('combobox', { name: 'Tier 3, single failures' });
