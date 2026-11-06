@@ -12,6 +12,7 @@ model is called. Run from the repository's root. Exit status 1 when a check fail
 """
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -131,7 +132,8 @@ for _ in range(60):
         break
     time.sleep(5)
 time.sleep(10)
-archive = subprocess.run(["git", "archive", "HEAD"], capture_output=True, check=True).stdout
+# A folder with no history (a copy on a sandbox) goes as it is.
+archive = subprocess.run(["git", "archive", "HEAD"] if os.path.isdir(".git") or os.path.isfile(".git") else ["tar", "-cf", "-", "."], capture_output=True, check=True).stdout
 subprocess.run(["docker", "exec", "-i", "-u", "root", CTR, "sh", "-c", f"mkdir -p {HOME}/pkg && tar -xf - -C {HOME}/pkg && chown -R irisowner:irisowner {HOME}/pkg"], input=archive, check=True)
 check("no Shutter class here", value("USER", '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Setup")') == "0")
 
