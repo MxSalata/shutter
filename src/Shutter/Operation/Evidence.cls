@@ -269,6 +269,8 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
         Set info."sending_application" = msg.GetValueAt("MSH:3.1")
         Set info."sending_facility" = msg.GetValueAt("MSH:4.1")
         Set info."receiving_application" = msg.GetValueAt("MSH:5.1")
+        // When the engine received the message, by its own clock: the sender's clock stamps MSH-7 and the event alike.
+        Set info."received_at" = header.TimeCreated
         Set zone = ##class(Shutter.Store.SiteProfile).FeedTimeZone(), withOffset = 0, without = 0
         Set info."message_time" = ##class(Shutter.Util.Time).FromHL7(msg.GetValueAt("MSH:7.1"), zone, .had)
         If msg.GetValueAt("MSH:7.1") '= "" { If had { Set withOffset = withOffset + 1 } Else { Set without = without + 1 } }

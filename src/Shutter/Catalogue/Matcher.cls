@@ -403,6 +403,9 @@ ClassMethod EventTimePlausibility(summary As %DynamicObject, case As Shutter.Sto
     If '$ISOBJECT(later) Set later = ..Later(summary, case)
     Quit ..LaterTimeDoubt(summary, case, later)
 }
+    // One clock stamps the event and MSH-7, so only the engine's own receive time shows a sender's clock running fast.
+    Set received = ..AsUTC($CLASSMETHOD(json, "Str", msg, "received_at"))
+    If (received '= "") && (t ]] received) && ($ZABS(##class(Shutter.Util.Time).SecondsBetween(received, t)) > 300) Quit "future"
 
 /// later_event_future or plausible, for the later events' times. A later event whose time is not plausible is a doubt
 /// only when believing it would change the reading: when no plausible later transfer, discharge or cancel settles the
