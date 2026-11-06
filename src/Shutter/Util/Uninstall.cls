@@ -606,12 +606,15 @@ ClassMethod TakeGlobals(out As %DynamicObject)
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Name FROM %Dictionary.CompiledClass WHERE ClassType = 'persistent' AND (Name %STARTSWITH 'Shutter.' OR Name %STARTSWITH 'Hospital.' OR Name %STARTSWITH 'Downstream.')")
     While rs.%Next() {
         Set class = rs.%GetData(1)
-        Try { Do $CLASSMETHOD(class, "%KillExtent") } Catch ex { Do out.kept.%Push("The rows of " _ class _ ": " _ ex.DisplayString()) }
+        // A serial or generated class listed as persistent has no extent of its own to kill.
+        Continue:'##class(%Dictionary.CompiledMethod).%ExistsId(class _ "||%KillExtent")
+        Set sc = $CLASSMETHOD(class, "%KillExtent")
+        If $$$ISERR(sc) Do out.errors.%Push("The rows of " _ class _ ": " _ $SYSTEM.Status.GetErrorText(sc))
     }
     For i = 1:1:$LENGTH(..#GLOBALS, ",") {
         Set prefix = $PIECE(..#GLOBALS, ",", i)
-        // The first name at or after the prefix, without the dot that $ORDER would step past.
-        Set g = prefix
+        // $ORDER starts from a valid name, so the prefix without its dot.
+        Set g = $PIECE(prefix, ".", 1)
         For {
             Set g = $ORDER(^$GLOBAL(g)) Quit:g=""
             Quit:$EXTRACT(g, 1, $LENGTH(prefix))'=prefix
