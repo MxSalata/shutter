@@ -4002,6 +4002,31 @@
  ],
  "without_board": [
   {
+   "scenario": "S27",
+   "title": "A new admission under a new visit number",
+   "why": "played in policy and rules modes only"
+  },
+  {
+   "scenario": "S31",
+   "title": "A new admission under a new visit number, in the hospital's own production",
+   "why": "played in policy mode only"
+  },
+  {
+   "scenario": "S28",
+   "title": "A day case's admission and discharge both fail",
+   "why": "played in policy and rules modes only"
+  },
+  {
+   "scenario": "S29",
+   "title": "A failed transfer that is then withdrawn",
+   "why": "played in policy and rules modes only"
+  },
+  {
+   "scenario": "S30",
+   "title": "A lost admission, with nothing else known",
+   "why": "played in policy mode only"
+  },
+  {
    "scenario": "S12",
    "title": "A lost admission at the head of a chain",
    "why": "an incident whose chains the catalogue and the site's policy settle; the board decides none"
