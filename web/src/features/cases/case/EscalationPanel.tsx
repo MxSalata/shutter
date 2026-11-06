@@ -80,7 +80,15 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
   const busy = edit.isPending || send.isPending;
   const error = edit.error ?? send.error;
   // The site's rule for addresses, checked as they are typed; the server checks them again at the edit and the send
-  const domains = useSiteProfile().data?.profile.mail?.allowed_domains ?? [];
+  const profile = useSiteProfile().data?.profile;
+  const domains = profile?.mail?.allowed_domains ?? [];
+  // A team that lists neither the receiver nor, for a merge, the source: the draft fell back to the site's first team, or
+  // someone picked it. It carries patient identifiers, so the person is told to look.
+  const team = profile?.teams?.find((t) => t.id === draft.teamId);
+  const teamNotListed =
+    !!team &&
+    !team.receivers?.includes(c.receiver ?? '') &&
+    !(c.event === 'merge' && team.sources?.includes(c.sourceSystem));
   const toProblem = addressesProblem(to, domains);
   const ccProblem = addressesProblem(cc, domains);
   // The subject is one header line: no line break or other control character, as the server checks it
@@ -130,6 +138,12 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
             trial: 'Sending marks it as sent in the trial. No email leaves this browser.',
           })}
         </Text>
+        {teamNotListed ? (
+          <Text size="sm" fw={600} data-testid="team-not-listed">
+            {draft.teamName} does not list {c.receiver} in the site profile. Check it is the right team before
+            the patient&apos;s identifiers go to it.
+          </Text>
+        ) : null}
         <Text size="sm">
           Shutter drafted this from its record of the case: the patient&apos;s identifiers and date of birth,
           the event, why it stopped, what {receiverNoun(c.receiver)} holds and the encounter&apos;s messages.
@@ -405,7 +419,7 @@ export function EscalationPanel({
               value={teamId}
               onChange={(e) => setTeamId(e.currentTarget.value)}
               data={[
-                { value: '', label: recipient.charAt(0).toUpperCase() + recipient.slice(1) },
+                { value: '', label: 'Automatic: the team that lists this receiver, else the first team' },
                 ...teams.map((t) => ({ value: t.id, label: `${t.name} (${t.mailbox})` })),
               ]}
               w={{ base: '100%', xs: 300 }}
