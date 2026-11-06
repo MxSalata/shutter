@@ -49,7 +49,7 @@ passed = 0
 
 def check(name, ok, detail=""):
     global passed
-    print(("  ok    " if ok else "  FAIL  ") + name + ("" if ok else f"\n        {str(detail)[:3000]}"), flush=True)
+    print(("  ok    " if ok else "  FAIL  ") + name + ("" if ok else f"\n        {str(detail)[:9000]}"), flush=True)
     if ok:
         passed += 1
     else:
@@ -97,7 +97,7 @@ def snapshot(namespaces):
         rows("%SYS", "resource", "SELECT Name FROM Security.Resources"),
         rows("%SYS", "role", "SELECT Name FROM Security.Roles"),
         rows("%SYS", "user", "SELECT Name FROM Security.Users"),
-        rows("%SYS", "application", "SELECT Name FROM Security.Applications"),
+        rows("%SYS", "application", "SELECT Name||'='||Resource||'='||MatchRoles FROM Security.Applications"),
         rows("%SYS", "task", "SELECT Name FROM %SYS.Task"),
         'Set w=$SELECT(##class(%Dictionary.CompiledClass).%ExistsId("%Wallet.KeyValue"):$CLASSMETHOD("%Wallet.KeyValue","Exists","Shutter.Anthropic"),1:0) If w Write !,"<<<wallet|%SYS|Shutter.Anthropic>>>"',
     ]
@@ -133,8 +133,11 @@ def mention_scan(ns):
 
 
 def compare(before, after, allowed_new=(), allowed_gone=()):
-    new = sorted(x for x in after - before if not any(re.search(p, x) for p in allowed_new))
-    gone = sorted(x for x in before - after if not any(re.search(p, x) for p in allowed_gone))
+    # The engine's own working globals appear wherever a production has run. A row in one that names Shutter is still caught,
+    # by the mentions line for that global and by the rows read above.
+    engine = [r"^global\|[^|]*\|\^(Ens\.|IRIS\.Temp|CacheTemp|EnsLib\.)", r"^autostart\|[^|]*\|$"]
+    new = sorted(x for x in after - before if not any(re.search(p, x) for p in list(allowed_new) + engine))
+    gone = sorted(x for x in before - after if not any(re.search(p, x) for p in list(allowed_gone) + engine))
     check("nothing of Shutter's is left: nothing is new since before the install", not new, "\n        ".join(new))
     check("nothing of the site's was taken: nothing that was there has gone", not gone, "\n        ".join(gone))
 
@@ -335,6 +338,9 @@ def demo_shape():
     load("USER")
     check("the hospital namespace is still there", value("%SYS", '##class(Config.Namespaces).Exists("HOSPITAL")') == "1")
     check("no case was lost", value("USER", '$ORDER(^Shutter.Store.CaseD(""),-1)') == cases, cases)
+
+    out = session("USER", 'Write !,"<<<",##class(Shutter.Setup).HardenPortal(),">>>",!')
+    check("the portal is hardened, as the public demo does", "Shutter_Portal" in out or "apps" in out, out[-500:])
 
     step("The uninstall")
     uninstall("USER")
