@@ -4,6 +4,8 @@ Since 2 November 2026 InterSystems' Early Access portal offers the AI Hub build 
 
 **When and what:** 3 November 2026, 15:11 UTC, commit `dfd4066`, on a Linux VM with 12 threads and 11 GB of memory (Docker 29.1.3, Compose 2.40.3), starting with no `.env`, no Shutter image and the AI Hub image not loaded, only its file, `irishealth-community-2027.1.0AI.109.0-docker.tar.gz` (5.5 GB). IRIS reports `2027.1.0AI (Build 109U) Fri Oct 30 2026`. The build installs the one IPM package, `iris-shutter` (the core and the agents); `zpm "list"` shows `iris-shutter 0.1.0`.
 
+**Again on the release, commit `8afd1ab`, 6 November 2026, 19:24 UTC,** on the same VM, with the build cache emptied and the AI Hub image already loaded: `./install.sh` was ready after 2 minutes 56 seconds, and Health reads version 1.0.0. On the board with the recorded runs, S1 to S10, S13, S15, S16, S21 and S25, all 15 as expected; in Site policy mode, S11, S12, S17, S18, S19, S21, S22, S23a to S23c, S24 and S25, all 12 as expected; in Rules only mode, S20 and S21, both as expected. `lineage_check.py`: 47 cases, every write after the gate and a rehearsal, every resolved resend verified. `eventlog_check.py`: no runtime errors. `stock-install-check.sh` on a plain 109 image, through the package manager: S2 and the plain receiver check as documented. `onboard_check.py` on stock 109: 199 checks passed. The rest of this page was recorded on the earlier commits it names.
+
 ## The install
 
 ```text
