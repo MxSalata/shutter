@@ -9,6 +9,7 @@ import { Timestamp } from '@/components/Timestamp';
 import { checkCounts, CHECK_STATES, checkState, gateOutcome } from '@/lib/status';
 import { asArray, asObject } from '@/lib/json';
 import { checksOf } from './derive';
+import { planLeader } from './follows';
 import { humanize } from '@/lib/format';
 import { KeyValueList } from '@/components/KeyValueList';
 import { StackTable } from '@/components/StackTable';
@@ -174,7 +175,9 @@ export function PlanPanel({
                       ? 'the rules'
                       : p.createdBy?.startsWith('policy:')
                         ? `the site's policy for ${p.createdBy.slice('policy:'.length)}`
-                        : p.createdBy
+                        : planLeader(p.createdBy)
+                          ? `the board of case ${planLeader(p.createdBy)}`
+                          : p.createdBy
                 }`,
               ],
             ]}

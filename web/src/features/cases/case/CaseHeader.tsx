@@ -17,6 +17,7 @@ import { caseOutcome, caseState, type ExpectedScenario, type OutcomeCase } from 
 import type { Status } from '@/lib/tone';
 import { useDetail } from '@/stores/appearance';
 import { forwardedFrom } from './derive';
+import { followedBoard } from './follows';
 import { messageTypeLabel, messageTypeOf } from './message';
 import { headerSentence } from './outcome';
 
@@ -104,6 +105,7 @@ export function CaseHeader({
   const failure = failureCode(c);
   const iris = caseIrisLinks(c, portalBase);
   const message = messageTypeOf(snapshot);
+  const board = followedBoard(c);
   return (
     <PageHeader
       title={`Case ${c.caseId}`}
@@ -187,6 +189,18 @@ export function CaseHeader({
                       {place}
                     </Text>
                   ) : null}
+                </Stack>
+              </Meta>
+            ) : null}
+            {board ? (
+              <Meta label="Follows the board of">
+                <Stack gap={0}>
+                  <Anchor component={Link} to={`/cases/${encodeURIComponent(board.caseId)}`} size="sm">
+                    {board.caseId}
+                  </Anchor>
+                  <Text size="xs" c="dimmed">
+                    {board.note}
+                  </Text>
                 </Stack>
               </Meta>
             ) : null}
