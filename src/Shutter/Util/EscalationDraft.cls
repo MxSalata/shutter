@@ -96,6 +96,8 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     If $ISOBJECT(correction) && $ISOBJECT(correction.%Get("steps")) {
         Set b = b _ "CORRECTING THE HISTORY" _ nl
         Set b = b _ "  " _ ##class(Shutter.Util.HistoryCorrection).Headline(correction) _ "." _ nl
+        Set sequenceLine = ##class(Shutter.Util.HistoryDraft).EmailLine(correction)
+        If sequenceLine '= "" Set b = b _ "  " _ sequenceLine _ nl
         Set si = correction.%Get("steps").%GetIterator(), n = 0
         While si.%GetNext(, .step) { Set n = n + 1, b = b _ "  " _ n _ ". " _ step _ nl }
         Set b = b _ nl

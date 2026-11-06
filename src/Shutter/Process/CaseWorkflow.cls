@@ -996,7 +996,7 @@ Method AttachCorrectionSteps(case As Shutter.Store.Case, plan As %DynamicObject)
         }
         Quit:'$ISOBJECT(chosen)
         Quit:(##class(Shutter.Util.Json).Str(chosen, "outcome") '= "correct_history")
-        Set steps = ##class(Shutter.Util.HistoryCorrection).Steps(case, summary)
+        Set steps = ##class(Shutter.Util.HistoryCorrection).Steps(case, summary, entry)
         Set plan."correction_steps" = steps
         Do case.Note("artifact", "Correcting the history: " _ ##class(Shutter.Util.HistoryCorrection).Headline(steps), "system")
     } Catch ex {
@@ -1083,7 +1083,7 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
         // write it (a resend would move the patient back), so the case escalates with the correcting steps on its plan.
         Set plan.disposition = "escalate"
         Set action.type = "none"
-        Set steps = ##class(Shutter.Util.HistoryCorrection).Steps(case, summary)
+        Set steps = ##class(Shutter.Util.HistoryCorrection).Steps(case, summary, entry)
         Set plan."correction_steps" = steps
         Set plan.preconditions = [], plan.summary = "Catalogue " _ entry _ ", " _ title _ ": the receiver keeps the history of record, so the missing movement is corrected by its team; the steps are on the plan"
         Do case.Note("artifact", "Correcting the history: " _ ##class(Shutter.Util.HistoryCorrection).Headline(steps), "system")
