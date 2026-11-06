@@ -22,6 +22,23 @@ Method TestWatchedModeIsPolicyWhateverTheScenariosRunIn()
     If keepWatched Set ^Shutter.Config("watchedMode") = watched
 }
 
+/// The production's own report replaces words Classify could not read, as it replaces words it could.
+Method TestTheReportReplacesWordsNotRead()
+{
+    Set op = {"operation_key": "PAS^HOSP^MRN-UT-WU^ENC-UT-WU^admit^2026-11-02T19:00:00Z", "encounter_id": "ENC-UT-WU", "patient_id": "MRN-UT-WU", "patient_id_authority": "HOSP", "event": "admit", "ward": "WARD-A", "event_time": "2026-11-02T19:00:00Z", "source_system": "PAS", "source_message_id": "UT-WU", "payload_digest": "sha256:ut"}
+    Set sc = ##class(Shutter.Store.Case).Open(op, "uncertain_outcome", "Alert from Downstream Out: words nobody knows", "", "", "policy", .case, .opened, "Downstream Out")
+    If '$$$AssertStatusOK(sc, "a case as the alert intake opens it") Quit
+    Set case.FailureReasonCode = "alert_unread", case.FailureOutcome = "uncertain"
+    Do case.%Save()
+    Set report = ##class(Shutter.Msg.CaseIntake).%New()
+    Set report.FailureKind = "delivery_failed", report.FailureText = "Delivery unavailable (ward_unavailable), HTTP 503: The ward system is unavailable"
+    Set report.WardResultJSON = {"outcome": "unavailable", "reason_code": "ward_unavailable", "http_status": 503}.%ToJSON()
+    Set report.SourceHeaderId = "0"
+    Do $$$AssertEquals(##class(Shutter.Process.CaseWorkflow).TakeReport(case, report), 1, "the report is taken")
+    Do $$$AssertEquals(case.FailureReasonCode _ "|" _ case.FailureKind, "ward_unavailable|delivery_failed", "and its answer stands")
+    Do ##class(Shutter.Store.Case).%DeleteId(case.%Id())
+}
+
 Method TestTheProductionsReportReplacesTheAlertsWords()
 {
     Set op = {"operation_key": "PAS^HOSP^MRN-UT-WI^ENC-UT-WI^admit^2026-11-02T19:00:00Z", "encounter_id": "ENC-UT-WI", "patient_id": "MRN-UT-WI", "patient_id_authority": "HOSP", "event": "admit", "ward": "WARD-A", "event_time": "2026-11-02T19:00:00Z", "source_system": "PAS"}

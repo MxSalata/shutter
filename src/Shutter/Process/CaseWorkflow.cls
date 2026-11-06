@@ -896,19 +896,19 @@ Method AfterBoard(case As Shutter.Store.Case) As %Status
     Quit ..ArmTimeout("coordinator:timeout")
 }
 
-/// A case the alert intake opened (CONTRACTS 11: FailureReasonCode "alert", the failure read from the alert's words) takes
+/// A case the alert intake opened (CONTRACTS 11: FailureReasonCode "alert" or "alert_unread", the failure read from the alert's words) takes
 /// the production's own report of the same failure when that arrives second and the case is still detected or
 /// collecting (v1.38): the kind, text, outcome, reason code, HTTP status and Retry-After the connector answered, and the
 /// headline from them. After the evidence is collected the case keeps what its snapshot was built on. Returns 1 when the
 /// fields were taken.
 ClassMethod TakeReport(case As Shutter.Store.Case, request As Shutter.Msg.CaseIntake) As %Boolean
 {
-    If '$ISOBJECT(case) || (case.FailureReasonCode '= "alert") Quit 0
+    If '$ISOBJECT(case) || '$LISTFIND($LISTBUILD("alert", "alert_unread"), case.FailureReasonCode) Quit 0
     If '$LISTFIND($LISTBUILD("detected", "collecting"), case.State) Quit 0
     Set wr = ##class(Shutter.Util.Json).Parse(request.WardResultJSON, .wsc)
     If '$ISOBJECT(wr) Quit 0
     Set reason = ##class(Shutter.Util.Json).Str(wr, "reason_code")
-    If (reason = "") || (reason = "alert") Quit 0
+    If (reason = "") || (reason = "alert") || (reason = "alert_unread") Quit 0
     Set case.FailureKind = request.FailureKind, case.FailureText = $EXTRACT(request.FailureText, 1, 2000)
     Set case.FailureOutcome = ##class(Shutter.Util.Json).Str(wr, "outcome"), case.FailureReasonCode = reason
     Set status = ##class(Shutter.Util.Json).Str(wr, "http_status")

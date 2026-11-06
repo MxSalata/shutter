@@ -148,17 +148,25 @@ ClassMethod HL7HeaderOfSession(sessionId As %String, Output problem As %String) 
     Quit $GET(header)
 }
 
-/// The failure as the alert's words tell it: a connection that never opened is a failed delivery, a timeout or no answer an
-/// uncertain outcome, a reject, a NACK or an HTTP 4xx a rejection, anything else a failed delivery.
-ClassMethod Classify(text As %String) As %String
+/// The failure as the alert's words tell it: a receiver's AE or AR a rejection, ahead of the words for a connection; a connection
+/// that never opened a failed delivery, as is an HTTP 503; a timeout or no answer an uncertain outcome; any other reject, a NACK or
+/// an HTTP 4xx a rejection. Anything else says nothing about delivery, so it is an uncertain outcome with unread true: words this
+/// method does not know (a site's own class, a queue-wait alert on a message still being tried), and a connection lost after the
+/// frame went, which the receiver may hold. Never "not delivered" on a guess.
+ClassMethod Classify(text As %String, Output unread As %Boolean) As %String
 {
-    Set t = $ZCONVERT(text, "L")
+    Set t = $ZCONVERT(text, "L"), unread = 0
+    If $MATCH(t, ".*\b(ae|ar)\b.*") Quit "rejected"
+    If (t [ "erroutconnectionlost") || (t [ "lost hl7 read connection") Set unread = 1 Quit "uncertain_outcome"
     // A connection that never opened: nothing was sent, so nothing was refused by the receiver.
     If (t [ "connection refused") || (t [ "connect failed") || (t [ "unable to connect") || (t [ "no route") || (t [ "unable to open tcp") || (t [ "connect timeout") || (t [ "errouttconnectexpired") || (t [ "erroutconnectexpired") Quit "delivery_failed"
     If (t [ "timeout") || (t [ "timed out") || (t [ "no response") || (t [ "did not answer") || (t [ "did not respond") || (t [ "uncertain") Quit "uncertain_outcome"
-    If (t [ "reject") || (t [ "refused by") || (t [ "nack") || $MATCH(t, ".*\b(ae|ar)\b.*") Quit "rejected"
-    If $EXTRACT(..HttpStatusIn(text), 1) = "4" Quit "rejected"
-    Quit "delivery_failed"
+    If (t [ "reject") || (t [ "refused by") || (t [ "nack") Quit "rejected"
+    Set status = ..HttpStatusIn(text)
+    If $EXTRACT(status, 1) = "4" Quit "rejected"
+    If status = 503 Quit "delivery_failed"
+    Set unread = 1
+    Quit "uncertain_outcome"
 }
 
 /// The HTTP status the alert's text names ("HTTP 503", "status 503", "HTTP/1.1 503"), else "".
@@ -171,18 +179,18 @@ ClassMethod HttpStatusIn(text As %String) As %String
 }
 
 /// The forward for an alert's message: the header, its service as the route, the alerting item as the receiver, and the
-/// failure from the alert's words, with reason code "alert".
+/// failure from the alert's words, with reason code "alert", or "alert_unread" when Classify did not know them.
 ClassMethod ForwardFromAlert(alert As Ens.AlertRequest, header As Ens.MessageHeader, receiver As %String) As Shutter.Intake.Forward
 {
     Set f = ##class(Shutter.Intake.Forward).%New()
     Set f.HeaderId = header.%Id()
     Set f.Route = header.SourceConfigName
     Set f.Receiver = receiver
-    Set f.FailureKind = ..Classify(alert.AlertText)
+    Set f.FailureKind = ..Classify(alert.AlertText, .unread)
     Set f.FailureOutcome = $CASE(f.FailureKind, "uncertain_outcome": "uncertain", "rejected": "rejected", : "error")
     Set status = ..HttpStatusIn(alert.AlertText)
     If status '= "" Set f.FailureHttpStatus = +status
-    Set f.FailureReasonCode = "alert"
+    Set f.FailureReasonCode = $SELECT(unread: "alert_unread", 1: "alert")
     Set when = ""
     // The engine's AlertTime is a UTC timestamp ("2026-11-02 19:39:34.123"); a $HOROLOG value is read as one too.
     Try { Set when = $SELECT(alert.AlertTime = "": "", alert.AlertTime [ "-": $EXTRACT(alert.AlertTime, 1, 19), 1: $ZDATETIME(alert.AlertTime, 3, 1)) } Catch ex { Set when = "" }

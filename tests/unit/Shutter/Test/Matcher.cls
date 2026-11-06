@@ -15,7 +15,7 @@ ClassMethod Vocabulary() As %DynamicObject
     Quit {
         "event": ["admit", "transfer", "discharge", "update", "merge", "cancel", "other"],
         "delivery": ["failed", "rejected", "uncertain", "unmappable", "withheld", "unreadable"],
-        "receiver_answer": ["unavailable", "timeout", "duplicate", "version_conflict", "refused", "none"],
+        "receiver_answer": ["unavailable", "timeout", "duplicate", "version_conflict", "refused", "unread", "none"],
         "receipt": ["present", "absent", "unreadable", "none"],
         "later_applied": ["none", "transfer", "discharge", "update", "admit", "cancelled", "merge"],
         "later_delivery": ["applied", "sent", "none"],
@@ -125,6 +125,18 @@ Method TestBedConflict()
 Method TestCapabilitiesFreeTextChain()
 {
     Do ..RunRows("other")
+}
+
+/// An alert whose words were not read says nothing about delivery: with everything else E2 asks for, it matches no resend entry, so
+/// no site policy releases a write on it, and known words still do.
+Method TestWordsNotReadMatchNoResend()
+{
+    Set unread = ..Conditions({"case": {"failure_kind": "uncertain_outcome"}, "summary": {"failure": {"reason_code": "alert_unread", "http_status": 0}}})
+    Set match = ##class(Shutter.Catalogue.Matcher).Match(unread)
+    Do $$$AssertEquals(match.decision, "new_pattern", "no entry decides: " _ match.%ToJSON())
+    Do $$$AssertNotEquals(match.outcome, "resend", "and nothing resends")
+    Set known = ..Conditions({"case": {"failure_kind": "uncertain_outcome"}, "summary": {"failure": {"reason_code": "alert", "http_status": 0}}})
+    Do $$$AssertEquals(##class(Shutter.Catalogue.Matcher).Match(known).entry, "E2", "known words still read as a timeout")
 }
 
 /// An alert-only failure (the alert intake's reason code "alert", a 503 read from the alert's words) matches E4 in an
@@ -387,6 +399,7 @@ XData Rows [ MimeType = application/json ]
   {"group": "receiver_answer", "name": "a gateway timeout with no reason", "summary": {"failure": {"reason_code": null, "http_status": 504}}, "expect": {"receiver_answer": "timeout"}},
   {"group": "receiver_answer", "name": "a duplicate", "summary": {"failure": {"reason_code": "duplicate_message", "http_status": 409}}, "expect": {"receiver_answer": "duplicate"}},
   {"group": "receiver_answer", "name": "a version conflict", "summary": {"failure": {"reason_code": "version_conflict", "http_status": 409}}, "expect": {"receiver_answer": "version_conflict"}},
+  {"group": "receiver_answer", "name": "an alert whose words were not read is no answer at all, and not a timeout", "case": {"failure_kind": "uncertain_outcome"}, "summary": {"failure": {"reason_code": "alert_unread", "http_status": 0}}, "expect": {"delivery": "uncertain", "receiver_answer": "unread"}},
   {"group": "receiver_answer", "name": "any other reason is a refusal", "summary": {"failure": {"reason_code": "invalid_transition", "http_status": 422}}, "expect": {"receiver_answer": "refused"}},
   {"group": "receiver_answer", "name": "a 422 with no reason", "summary": {"failure": {"reason_code": null, "http_status": 422}}, "expect": {"receiver_answer": "refused"}},
   {"group": "receiver_answer", "name": "a 409 with no reason", "summary": {"failure": {"reason_code": null, "http_status": 409}}, "expect": {"receiver_answer": "refused"}},

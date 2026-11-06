@@ -28,7 +28,7 @@ Method TestClassify()
     Do $$$AssertEquals($CLASSMETHOD(ap, "Classify", "Response timeout after 15 seconds"), "uncertain_outcome", "a timeout is uncertain")
     Do $$$AssertEquals($CLASSMETHOD(ap, "Classify", "Application reject: AR MSA-1 received"), "rejected", "a reject is a rejection")
     Do $$$AssertEquals($CLASSMETHOD(ap, "Classify", "Received HTTP 422 from the ward system"), "rejected", "a 4xx is a rejection")
-    Do $$$AssertEquals($CLASSMETHOD(ap, "Classify", "Something broke"), "delivery_failed", "anything else is a failed delivery")
+    Do $$$AssertEquals($CLASSMETHOD(ap, "Classify", "Something broke"), "uncertain_outcome", "words it does not know say nothing about delivery: uncertain")
     Do $$$AssertEquals($CLASSMETHOD(ap, "Classify", "ERROR <Ens>ErrOutConnectFailed: HTTP Connect failed for ward:8080 - Connection refused"), "delivery_failed", "a connection refused is no rejection: nothing was sent")
     Do $$$AssertEquals($CLASSMETHOD(ap, "Classify", "Refused by the receiving service: the message does not validate"), "rejected", "refused by the receiver is a rejection")
     Do $$$AssertEquals($CLASSMETHOD(ap, "HttpStatusIn", "Received non-OK status 503 from remote HTTP server: 'HTTP/1.1 503 Service Unavailable'"), "503", "the HTTP status from the text")
@@ -36,6 +36,51 @@ Method TestClassify()
     Do $$$AssertEquals($CLASSMETHOD(ap, "HttpStatusIn", "'HTTP/1.1 503 Service Unavailable'"), "503", "the status line's form")
     Do $$$AssertEquals($CLASSMETHOD(ap, "HttpStatusIn", "status 2026 is not one"), "", "four digits are not a status")
     Do $$$AssertEquals($CLASSMETHOD(ap, "HttpStatusIn", "Lost TCP connection"), "", "none named")
+}
+
+/// Words Classify does not know, and the words that say the receiver may hold the message, are never "not delivered". What it
+/// knows keeps its meaning, and a receiver's answer is read before the words for a connection.
+Method TestClassifyNeverGuessesNotDelivered()
+{
+    Set ap = "Shutter.Intake.AlertProcess"
+    Set unread = $LISTBUILD("Invalid NHS number", "Patient not known", "Invalid location WARD-9", "Zeitlimit beim Warten auf die Antwort", "Peer closed connection after send",
+        "QueueWaitAlert: Message Header Id 12345 has been queued for more than 30 seconds", "ERROR <Ens>ErrOutConnectionLost: Lost HL7 Read connection", "ERROR <Ens>ErrHTTPStatus: Received non-OK status 500 from remote HTTP server", "ERROR <Ens>ErrHTTPStatus: Received non-OK status 502 from remote HTTP server", "")
+    For i = 1:1:$LISTLENGTH(unread) {
+        Set words = $LIST(unread, i), read = ""
+        Do $$$AssertEquals($CLASSMETHOD(ap, "Classify", words, .read), "uncertain_outcome", "uncertain: " _ words)
+        Do $$$AssertEquals(read, 1, "and marked as not read: " _ words)
+    }
+    Set known("ERROR <Ens>ErrOutConnectExpired: TCP Connect timeout") = "delivery_failed"
+    Set known("ERROR <Ens>ErrOutConnectFailed: HTTP Connect failed for ward:8080 - Connection refused") = "delivery_failed"
+    Set known("ERROR <Ens>ErrHTTPStatus: Received non-OK status 503 from remote HTTP server") = "delivery_failed"
+    Set known("ERROR <Ens>ErrTCPTerminatedReadTimeoutExpired") = "uncertain_outcome"
+    Set known("Response timeout after 15 seconds") = "uncertain_outcome"
+    Set known("AE: database connection refused at the application") = "rejected"
+    Set known("Received HTTP 422 from the ward system") = "rejected"
+    Set known("connection refused by ward:8080") = "delivery_failed"
+    Set words = ""
+    For {
+        Set words = $ORDER(known(words), 1, kind) Quit:words=""
+        Set read = ""
+        Do $$$AssertEquals($CLASSMETHOD(ap, "Classify", words, .read), kind, kind _ ": " _ words)
+        Do $$$AssertEquals(read, 0, "words it knows: " _ words)
+    }
+}
+
+/// A forward on words Classify does not know says so in its reason code, which the matcher reads as no answer at all.
+Method TestForwardOnWordsItDoesNotKnow()
+{
+    Set ap = "Shutter.Intake.AlertProcess"
+    Set header = ##class(Ens.MessageHeader).%New()
+    Set header.SourceConfigName = "PAS In"
+    Set alert = ##class(Ens.AlertRequest).%New()
+    Set alert.SourceConfigName = "Downstream Out", alert.AlertText = "QueueWaitAlert: Message Header Id 12345 has been queued for more than 30 seconds", alert.SessionId = 12345
+    Set f = $CLASSMETHOD(ap, "ForwardFromAlert", alert, header, "Downstream Out")
+    Do $$$AssertEquals(f.FailureKind _ "|" _ f.FailureOutcome _ "|" _ f.FailureReasonCode, "uncertain_outcome|uncertain|alert_unread", "uncertain, and not read")
+    Do $$$AssertTrue(f.FailureText [ "QueueWaitAlert", "with the alert's own words")
+    Set alert.AlertText = "Response timeout after 15 seconds"
+    Set f = $CLASSMETHOD(ap, "ForwardFromAlert", alert, header, "Downstream Out")
+    Do $$$AssertEquals(f.FailureReasonCode, "alert", "words it knows keep the reason alert")
 }
 
 Method TestForwardFromAlert()
