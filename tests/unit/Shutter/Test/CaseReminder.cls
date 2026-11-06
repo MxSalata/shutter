@@ -397,6 +397,16 @@ Method TestGatherReadsTheStore()
     Do $$$AssertEquals(mine.reminded.%ToJSON(), "[""team""]", "a new read sees what was sent")
 }
 
+/// The store's times are to the second: a case exactly at the threshold is gathered, as Decide counts it.
+Method TestGatherIncludesACaseExactlyAtTheThreshold()
+{
+    Set s = ##class(Shutter.Util.CaseReminder).Settings({"reminders": {"enabled": true}, "feed": {"time_zone": "UTC"}})
+    Set case = ##class(Shutter.Store.Case).%OpenId(..CaseRowId)
+    Set case.OpenedAt = "2026-11-04T08:00:00Z"
+    Do $$$AssertStatusOK(case.%Save(), "opened exactly four hours before")
+    Do $$$AssertTrue($ISOBJECT(..Gathered(s)), "gathered")
+}
+
 Method Gathered(s As %DynamicObject) As %DynamicObject
 {
     Set it = ##class(Shutter.Util.CaseReminderTask).Gather(s, "2026-11-04T12:00:00Z").%GetIterator()
