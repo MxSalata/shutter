@@ -1877,6 +1877,8 @@ ClassMethod Doctor(refresh As %Boolean = 0) As %String [ SqlProc ]
     // Each watched namespace, read there (v1.42), and the receivers whose connector item a site has yet to add.
     Set r."watched_namespaces" = ##class(Shutter.Util.Onboard).Watched()
     Set r."receivers_without_item" = ##class(Shutter.Util.Onboard).ReceiversWithoutItem()
+    // What each receiver last answered, and whether every watched namespace can be heard; no probe.
+    Do ##class(Shutter.Util.ReceiverHealth).AddTo(r)
     // The hold for a schema not loaded (v1.34, "prevent failures"): the profile's setting and the held cases by category.
     Do r.%Set("prevent_failures", ##class(Shutter.Store.SiteProfile).PreventFailures(), "boolean")
     Set r."held_messages" = ##class(Shutter.Util.Schemas).Held()

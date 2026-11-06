@@ -145,6 +145,7 @@ ClassMethod Read(ns As %String, production As %String = "", credential As %Strin
             If item.Name = "Ens.Alert" {
                 Set a = {"item": (item.Name), "class": (cls), "pass_to": ($GET(s("PassTo"))), "receivers": ($GET(s("Receivers"))), "forwarder_target": ($GET(s("ForwarderTarget"), "Shutter Forwarder"))}
                 Do a.%Set("is_shutter", cls = "Shutter.Intake.AlertProcess", "boolean")
+                Do a.%Set("enabled", ''item.Enabled, "boolean")
                 Set out.alert = a
                 Set out."alert_items" = out.%Get("alert_items") + 1
             }
@@ -1145,6 +1146,25 @@ ClassMethod ReceiversWithoutItem() As %DynamicArray
     Quit out
 }
 
+/// What stops a namespace's failures reaching Shutter though the rest of it looks well: the forwarder or Shutter's intake
+/// disabled, and for a namespace onboarded here, no item named Ens.Alert or another class under that name (a redeploy from
+/// source does this). A namespace a case names but nobody onboarded reports its own way, so no intake there is no fault.
+ClassMethod IntakeProblems(onboarded As %Boolean, production As %String, forwarder As %DynamicObject, alert As %DynamicObject) As %DynamicArray
+{
+    Set out = []
+    If $ISOBJECT(forwarder) && 'forwarder.enabled Do out.%Push("The forwarder " _ forwarder.item _ " is disabled in " _ production _ ": failures there open no case")
+    If $ISOBJECT(alert) && alert."is_shutter" {
+        If 'alert.enabled Do out.%Push("The alert intake Ens.Alert is disabled in " _ production _ ": failures there open no case. Enable it")
+    } ElseIf onboarded {
+        If $ISOBJECT(alert) {
+            Do out.%Push("The item Ens.Alert in " _ production _ " is " _ alert.class _ ", not Shutter's alert intake: failures there open no case. Run the plan and the apply again")
+        } Else {
+            Do out.%Push("No alert intake in " _ production _ ", so failures there open no case. Run the plan and the apply again")
+        }
+    }
+    Quit out
+}
+
 /// The namespaces Shutter watches: those onboarded here, and those a case names as its source. Each with its state and its
 /// problems in words, for the Doctor. {namespace, onboarded, exists, production, production_state, forwarder,
 /// alert_intake, pass_to, classes, credential, last_forward, last_forward_error, last_case, schemas_missing, problems, ok}.
@@ -1204,6 +1224,8 @@ ClassMethod Watched() As %DynamicArray
             // Taken off on purpose: its cases stay, and nothing about it is a problem now.
         } ElseIf read.exists && (read.error = "") {
             If 'w.forwarder Do w.problems.%Push("No forwarder item in " _ read.production)
+            Set intake = ..IntakeProblems(seen(ns) = 1, read.production, f, a), pi = intake.%GetIterator()
+            While pi.%GetNext(, .said) { Do w.problems.%Push(said) }
             If 'w.classes Do w.problems.%Push("The forwarder's classes do not all resolve in " _ ns)
             If w.forwarder && 'w.credential Do w.problems.%Push("No credential " _ read."credential_name" _ " in " _ ns)
             If read.state '= "running" Do w.problems.%Push("The production " _ read.production _ " is " _ read.state)
