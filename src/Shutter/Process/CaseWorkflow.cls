@@ -173,6 +173,7 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     Set case.Receiver = $SELECT(request.Receiver '= "": request.Receiver, 1: ..WardTarget)
     Set case.SourceNamespace = request.SourceNamespace, case.SourceProduction = request.SourceProduction
     Set case.SourceRoute = request.SourceRoute, case.OriginHeaderId = request.OriginHeaderId
+    If request.SignedInUser '= "" Do case.Note("note", "Posted to the intake by " _ request.SignedInUser, "system")
     // The connector's answer, structured, so the matcher never parses it out of the failure text.
     Set wr = ##class(Shutter.Util.Json).Parse(request.WardResultJSON, .wsc)
     If $ISOBJECT(wr) {
@@ -1065,6 +1066,14 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
     Set ..Policy = ##class(Shutter.Store.SiteProfile).Policy(tier, kind)
     // A released item is authorised by its incident (7.3): by site policy, or under the incident's approval.
     If ..Release Set ..Policy = $SELECT(..ReleasePolicy = "incident": "incident", ..ReleasePolicy = "automatic": "automatic", 1: ..Policy)
+    // An automatic release writes with no person, so the case's source must be proved (CONTRACTS 11); otherwise a person approves.
+    If ..Policy = "automatic" {
+        Set unproved = ##class(Shutter.Operation.Origin).Problem(case)
+        If unproved '= "" {
+            Set ..Policy = "approval"
+            Do case.Note("note", "Source not verified: " _ unproved _ ". The site's policy would release this automatically, so a person approves it instead", "system")
+        }
+    }
     // The outcome the matcher settled on: the preferred one, or a site-policy alternative whose when holds for the case's
     // receiver (CONTRACTS 6.3, v1.25); the plan names it as the board would.
     Set ref = $CLASSMETHOD(json, "Str", cat, "outcome_ref", "preferred")
@@ -1488,6 +1497,10 @@ ClassMethod ApprovalTask(case As Shutter.Store.Case, plan As Shutter.Store.Plan,
     Set task.%Subject = "Shutter " _ case.CaseId _ ": approve plan v" _ plan.Version _ " (" _ plan.Disposition _ ")"
     Set task.%Message = case.Headline _ $CHAR(10) _ "Exact action: " _ plan.ActionType _ " " _ plan.OperationKey _ " at receiver version " _ plan.ExpectedVersion _ $CHAR(10) _ "Plan digest: " _ plan.Digest _ $CHAR(10) _ "Snapshot digest: " _ $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.Digest, 1: "") _ $CHAR(10) _ "Rehearsal: would apply (rolled back)."
     Set task.%Message = task.%Message _ $CHAR(10) _ "To approve from the Workflow inbox, paste the plan digest above into the PlanDigest field: an approval with no digest, or another one, binds nothing and blocks the case."
+    Try {
+        Set unproved = ##class(Shutter.Operation.Origin).Problem(case)
+        If unproved '= "" Set task.%Message = task.%Message _ $CHAR(10) _ "Source not verified: " _ unproved _ "."
+    } Catch ex {}
     // What approvers decided before on these conditions at this receiver (6.4, v1.35); a lookup that fails leaves the line out.
     Try {
         Set words = ##class(Shutter.Store.Precedent).Words(##class(Shutter.Store.Precedent).SummaryFor(case))

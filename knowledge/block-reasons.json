@@ -393,6 +393,15 @@
       "text": "An approval by site policy stands only for a plan the policy path produced for its catalogue entry. This plan came from elsewhere, so the automatic release does not cover it."
     },
     {
+      "code": "APPROVAL_ORIGIN_NOT_PROVED",
+      "title": "An automatic release needs a proved source",
+      "prerequisite": "The source namespace holds the message header the case names, its message is the text received, and its session went to this receiver",
+      "next_action": "Have a person read the message in its source and approve or reject the plan.",
+      "owner": "Approver",
+      "reevaluate_when": "A person approves the plan, or the site profile's feed.prove_origin is false",
+      "text": "The intake takes what a holder of the forwarder's sign-in posts, so a write with no person needs the source checked. This one could not be, so the automatic release does not cover it."
+    },
+    {
       "code": "MATCHER_ERROR",
       "title": "The catalogue matcher failed",
       "prerequisite": "A matcher result for the case's conditions",

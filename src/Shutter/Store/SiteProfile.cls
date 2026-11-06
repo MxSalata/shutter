@@ -193,7 +193,12 @@ ClassMethod Validate(p As %DynamicObject) As %String
         If '$ISOBJECT(feed) Quit "feed: must be an object"
         Set fi = feed.%GetIterator()
         While fi.%GetNext(.k, .v) {
-            If '$LISTFIND($LISTBUILD("time_zone", "prevent_failures"), k) Return "feed." _ k _ ": unknown setting"
+            If '$LISTFIND($LISTBUILD("time_zone", "prevent_failures", "prove_origin"), k) Return "feed." _ k _ ": unknown setting"
+            // An automatic release needs a proved source (CONTRACTS 11): true or false.
+            If k = "prove_origin" {
+                If feed.%GetTypeOf(k) '= "boolean" Return "feed.prove_origin: must be true or false"
+                Continue
+            }
             // Hold a message whose schema is not loaded here (v1.34, "prevent failures"): true or false.
             If k = "prevent_failures" {
                 If feed.%GetTypeOf(k) '= "boolean" Return "feed.prevent_failures: must be true or false"
@@ -354,6 +359,16 @@ ClassMethod PreventFailures() As %Boolean
     // the cache was empty: on a fresh install with no demo, and after every save of the profile. The answer needs no cache.
     Try { Set ^Shutter.Config("preventFailures") = ''on } Catch ex { }
     Quit ''on
+}
+
+/// Whether an automatic release needs the case's source proved (Shutter.Operation.Origin; CONTRACTS 6.4 and 11): yes unless the profile
+/// says feed.prove_origin: false, for a forwarder on another instance. The profile given, else the current one.
+ClassMethod ProveOrigin(profile As %DynamicObject = "") As %Boolean
+{
+    If '$ISOBJECT(profile) Set profile = ..Current()
+    Set feed = profile.%Get("feed")
+    If $ISOBJECT(feed) && (feed.%GetTypeOf("prove_origin") = "boolean") Quit ''feed.%Get("prove_origin")
+    Quit 1
 }
 
 /// The demo hospital follows the setting (CONTRACTS 11): when a hospital namespace is recorded here, its PAS In takes

@@ -96,6 +96,7 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     Set intake.Receiver = request.Receiver
     Set intake.SourceNamespace = request.SourceNamespace, intake.SourceProduction = request.SourceProduction
     Set intake.SourceRoute = request.SourceRoute, intake.OriginHeaderId = request.OriginHeaderId
+    Set intake.SignedInUser = request.SignedInUser
     $$$TRACE("Case intake for " _ ##class(Shutter.Util.Json).Str(op, "operation_key") _ " (" _ kind _ ", receiver " _ request.Receiver _ ") sent to " _ ..CaseTarget)
     Set sc = ..SendRequestSync(..CaseTarget, intake, .started, ..WaitSeconds)
     If $$$ISERR(sc) Quit sc

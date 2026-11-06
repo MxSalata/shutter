@@ -46,6 +46,9 @@ Property OriginHeaderId As %String(MAXLEN = 40);
 /// The schema category whose absence held the message (v1.34, kind unreadable), "" otherwise.
 Property HeldSchema As %String(MAXLEN = 128);
 
+/// The user signed in to the intake route: whoever posted it.
+Property SignedInUser As %String(MAXLEN = 160);
+
 Storage Default
 {
 <Data name="CaseIntakeDefaultData">
@@ -91,6 +94,9 @@ Storage Default
 </Value>
 <Value name="14">
 <Value>HeldSchema</Value>
+</Value>
+<Value name="15">
+<Value>SignedInUser</Value>
 </Value>
 </Data>
 <DefaultData>CaseIntakeDefaultData</DefaultData>
