@@ -6,12 +6,14 @@
 # IMAGE is a plain AI Hub Community image: no Shutter on it, because Shutter's install rebuilds the descriptor registry
 # and would hide the first question. The container runs with no network, so no provider can be reached whatever a probe
 # does, and it is removed at the end (KEEP=1 leaves it). Prints one line per probe, starting RESULT, with what the
-# instance answered, and exits 1 only when a probe could not run.
+# instance answered. The lines are the result: exit 0 says only that every probe ran, and exit 1 that one did not, or
+# that the probe class or its namespace failed. A probe subclass that fails to compile is an answer, not a failure.
 #
 # Asked:
 # - does a fresh Config Store take an AI.LLM configuration before %ConfigStore.DescriptorManager.RebuildRegistry(),
 #   in USER and in a namespace made here?
-# - does an agent's %Init() take a provider named @{config:Name}, and does it refuse the bare name?
+# - does an agent's %Init() take a provider named @{config:Name}, what does it do with the bare name, and with each
+#   form of a name that doesn't exist?
 # - what does %AI.Policy.Audit declare for %LogExecution, and does a subclass compile with and without As %Status?
 # - how many arguments does %AI.Agent.Run take, and is IPM in the image?
 set -euo pipefail
@@ -88,18 +90,31 @@ ClassMethod Rebuild() As %String
     Quit answer
 }
 
-ClassMethod Registry(label As %String)
+/// Each namespace is asked this before any namespace rebuilds, as a rebuild in one may reach the other.
+ClassMethod RegistryBefore(label As %String)
 {
-    Write !,"RESULT registry, ",label,", Create before any rebuild: ",..CreateConfig("ProbeBefore")
+    Write !,"RESULT registry, ",label,", Create before any rebuild: ",..CreateConfig("ProbeBefore" _ label)
+}
+
+/// Whether the rebuild in the new namespace reached this one.
+ClassMethod RegistryOther(label As %String)
+{
+    Write !,"RESULT registry, ",label,", Create once another namespace has rebuilt: ",..CreateConfig("ProbeOther" _ label)
+}
+
+ClassMethod RegistryAfter(label As %String)
+{
     Write !,"RESULT registry, ",label,", RebuildRegistry: ",..Rebuild()
-    Write !,"RESULT registry, ",label,", Create after the rebuild: ",..CreateConfig("ProbeAfter")
+    Write !,"RESULT registry, ",label,", Create after its own rebuild: ",..CreateConfig("ProbeAfter" _ label)
 }
 
 ClassMethod InitAgent(class As %String) As %String
 {
     Try {
         Set agent = $CLASSMETHOD(class, "%New")
-        Set answer = ..Text(agent.%Init())
+        Set answer = ..Text(agent.%Init({}))
+        Set provider = agent.Provider
+        Set answer = answer _ ", then Provider " _ $SELECT($ISOBJECT(provider): provider.Name, 1: "[" _ provider _ "]") _ ", Model [" _ agent.Model _ "]"
     } Catch ex {
         Set answer = ..Text(ex)
     }
@@ -115,9 +130,10 @@ ClassMethod Spec(class As %String, method As %String) As %String
 
 ClassMethod Rest()
 {
-    Write !,"RESULT provider, @{config:ProbeAfter}: %Init ",..InitAgent("ZProbe.AgentNamed")
-    Write !,"RESULT provider, bare ProbeAfter: %Init ",..InitAgent("ZProbe.AgentBare")
+    Write !,"RESULT provider, @{config:ProbeAfterUSER}: %Init ",..InitAgent("ZProbe.AgentNamed")
+    Write !,"RESULT provider, bare ProbeAfterUSER: %Init ",..InitAgent("ZProbe.AgentBare")
     Write !,"RESULT provider, @{config:NoSuchName}: %Init ",..InitAgent("ZProbe.AgentMissing")
+    Write !,"RESULT provider, bare NoSuchName: %Init ",..InitAgent("ZProbe.AgentBareMissing")
     Write !,"RESULT %AI.Policy.Audit %LogExecution: ",..Spec("%AI.Policy.Audit", "%LogExecution")
     Write !,"RESULT %AI.Agent Run: ",..Spec("%AI.Agent", "Run")
     Write !,"RESULT IPM in the image: ",$SELECT(##class(%Dictionary.CompiledClass).%ExistsId("%IPM.Main"): "yes", 1: "no")
@@ -138,9 +154,10 @@ Parameter MODEL = "probe-no-model";
 }
 CLS
 }
-agent AgentNamed '@{config:ProbeAfter}'
-agent AgentBare 'ProbeAfter'
+agent AgentNamed '@{config:ProbeAfterUSER}'
+agent AgentBare 'ProbeAfterUSER'
 agent AgentMissing '@{config:NoSuchName}'
+agent AgentBareMissing 'NoSuchName'
 
 audit() {
   put "ZProbe.$1" <<CLS
@@ -166,18 +183,22 @@ load() { # class, namespace, and what to print
 }
 
 load ZProbe.Holds USER
+# USER is asked before the namespace exists and before anything has rebuilt.
+printf '%s\n' 'Do ##class(ZProbe.Holds).RegistryBefore("USER")' 'Write !' 'Halt' | session USER | results
 out=$(printf '%s\n' 'Set sc = ##class(ZProbe.Holds).MakeNamespace("PROBENS") Write !,"RESULT namespace PROBENS: ",##class(ZProbe.Holds).Text(sc),!' 'Halt' | session USER)
 echo "$out" | results
 load ZProbe.Holds PROBENS
 
-# The namespace made here first, then USER: neither has had a rebuild yet.
-printf '%s\n' 'Do ##class(ZProbe.Holds).Registry("a new namespace")' 'Write !' 'Halt' | session PROBENS | results
-printf '%s\n' 'Do ##class(ZProbe.Holds).Registry("USER")' 'Write !' 'Halt' | session USER | results
+# The rebuilds only now, the new namespace first: USER's first line below then says whether its rebuild reached USER.
+printf '%s\n' 'Do ##class(ZProbe.Holds).RegistryBefore("PROBENS")' 'Do ##class(ZProbe.Holds).RegistryAfter("PROBENS")' 'Write !' 'Halt' | session PROBENS | results
+printf '%s\n' 'Do ##class(ZProbe.Holds).RegistryOther("USER")' 'Do ##class(ZProbe.Holds).RegistryAfter("USER")' 'Write !' 'Halt' | session USER | results
 
-for class in AgentNamed AgentBare AgentMissing AuditTyped AuditUntyped; do load "ZProbe.$class" USER; done
+for class in AgentNamed AgentBare AgentMissing AgentBareMissing AuditTyped AuditUntyped; do load "ZProbe.$class" USER; done
 printf '%s\n' 'Do ##class(ZProbe.Holds).Rest()' 'Write !' 'Halt' | session USER | results
 
 want=$(grep -c 'RESULT' /tmp/aihub-holds.$$ || true)
+broken=$(grep -E '^RESULT (compile ZProbe\.Holds|namespace PROBENS): ' /tmp/aihub-holds.$$ | grep -vc ': ok$' || true)
 rm -f /tmp/aihub-holds.$$
 echo "$want answers"
-[ "$want" -ge 20 ] || { echo "some probes did not answer"; exit 1; }
+[ "$broken" = 0 ] || { echo "the probe class or its namespace failed, so the answers mean nothing"; exit 1; }
+[ "$want" -ge 23 ] || { echo "some probes did not answer"; exit 1; }
