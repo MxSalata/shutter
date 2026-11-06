@@ -37,6 +37,32 @@ Method TestTheRoutesAreForTheDemoAlone()
     Do $$$AssertTrue(text '[ "<Setting Target=""Host"" Name=""MessageSchemaCategory"">MYSITE", "no item names the category, so the Doctor reports nothing missing on a fresh install")
 }
 
+/// S14's message has to reach the index under its type, or the index's named paths may read nothing: a version loaded here
+/// types the message, as ADT In's category would, and a schema not loaded leaves it untyped for the hold.
+Method TestARouteTypesWhatIsLoadedHere()
+{
+    Set text = "MSH|^~\&|PAS|HOSP|DOWNSTREAM|HOSP|20261015094500||ADT^A02^ADT_A02|UT1402|P|<v>" _ $CHAR(13) _ "EVN|A02|20261015094500||||20261015094500" _ $CHAR(13) _ "PID|1||MRNUT14^^^HOSP^MR||SYNTH^UT||19910606|F" _ $CHAR(13) _ "PV1|1|I|WARD-C^BAY1^07^HOSP|||WARD-B^BAY2^04^HOSP|||||||||||||ENC-UT14" _ $CHAR(13)
+    Set known = ##class(EnsLib.HL7.Message).ImportFromString($REPLACE(text, "<v>", "2.5.1"), .sc)
+    Do $$$AssertStatusOK(sc, "the message reads")
+    Do $CLASSMETHOD(..#ROUTE, "Typed", known)
+    Do $$$AssertEquals(known.DocTypeCategory, "2.5.1", "a version loaded here types it")
+    Set op = ##class(Shutter.Util.OperationKey).FromHL7(known, .osc)
+    Do $$$AssertStatusOK(osc, "the index's own mapping reads it")
+    Do $$$AssertEquals($SELECT($ISOBJECT(op): op.%Get("encounter_id"), 1: ""), "ENC-UT14", "with its visit number")
+    Do $CLASSMETHOD(..#SITE, "Forget", ..#CATEGORY)
+    Set held = ##class(EnsLib.HL7.Message).ImportFromString($REPLACE(text, "<v>", ..#CATEGORY), .sc)
+    Do $$$AssertStatusOK(sc, "the site's message reads")
+    Do $CLASSMETHOD(..#ROUTE, "Typed", held)
+    Do $$$AssertEquals(held.DocType, "", "a schema not loaded leaves it untyped, for the hold")
+}
+
+/// The index's route setting as a site's production gets it: Shutter.Production's, less the demo's route.
+Method TestASiteIndexIsNotGivenTheDemoRoute()
+{
+    Do $$$AssertEquals(##class(Shutter.Setup).SiteRoutes("ADT In,Case Intake,Other Route In"), "ADT In,Case Intake", "the demo's route goes")
+    Do $$$AssertEquals(##class(Shutter.Setup).SiteRoutes("ADT In,Case Intake"), "ADT In,Case Intake", "a list without it is left alone")
+}
+
 Method TestARouteRefusesWhatItCannotPlay()
 {
     If '##class(%Dictionary.CompiledClass).%ExistsId(..#ROUTE) { Do $$$AssertTrue(0, "no route class") Quit }
