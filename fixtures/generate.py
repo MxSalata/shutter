@@ -393,7 +393,7 @@ def scenarios():
         ],
         "expected": {"disposition": "resend", "write": False, "final_state": "admitted", "final_ward": "WARD-A",
                      "case_by_key": True, "blocked_by": "FURTHER_MOVEMENT", "final_reason": "FURTHER_MOVEMENT",
-                     "failed_operation_key": b[2]["operation_key"], "names": ["ENC-1027", "ENC-2027"],
+                     "failed_operation_key": b[2]["operation_key"], "names": ["ENC-1027", "ENC-2027", "MRN1027"],
                      "modes": ["policy", "rules"]},
     }, [a, b, d]))
 
@@ -461,7 +461,7 @@ def scenarios():
         ],
         "expected": {"disposition": "resend", "write": False, "final_state": "admitted", "final_ward": "WARD-A",
                      "case_by_key": True, "blocked_by": "FURTHER_MOVEMENT", "final_reason": "FURTHER_MOVEMENT",
-                     "failed_operation_key": b[2]["operation_key"], "names": ["cancel_transfer"],
+                     "failed_operation_key": b[2]["operation_key"], "names": ["cancel of the transfer", "MRN1029"],
                      "modes": ["policy", "rules"]},
     }, [a, b, c]))
 

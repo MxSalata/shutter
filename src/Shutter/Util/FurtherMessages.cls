@@ -258,17 +258,24 @@ ClassMethod Line(case As Shutter.Store.Case, item As %DynamicObject) As %String
 {
     Set json = "Shutter.Util.Json"
     Set why = $CLASSMETHOD(json, "Str", item, "why"), visit = $CLASSMETHOD(json, "Str", item, "visit_number")
-    Set word = $CLASSMETHOD(json, "Str", item, "event"), type = $CLASSMETHOD(json, "Str", item, "message_type")
-    Set what = "a " _ word _ $SELECT(type '= "": " (" _ type _ ")", 1: "") _ $SELECT(visit '= "": " on visit " _ visit, 1: " with no visit number")
+    Set type = $CLASSMETHOD(json, "Str", item, "message_type")
+    Set what = ..Word($CLASSMETHOD(json, "Str", item, "event")) _ $SELECT(type '= "": " (" _ type _ ")", 1: "") _ $SELECT(visit '= "": " on visit " _ visit, 1: " with no visit number")
     Set what = what _ " timed " _ $CLASSMETHOD(json, "Str", item, "event_time") _ ", control id " _ $CLASSMETHOD(json, "Str", item, "control_id")
-    Set here = "this case's " _ case.Event _ " on visit " _ case.EncounterId
+    Set here = "this case's " _ $EXTRACT(..Word(case.Event), 3, *) _ " on visit " _ case.EncounterId
     Quit $CASE(why,
-        "other_visit": "Another visit for this patient: " _ what _ ", beside " _ here _ ". Shutter can't say which visit is right",
-        "cancel": "A cancel the receiver has not applied: " _ what _ ". It may withdraw " _ here,
-        "merge": "A merge the receiver has not applied: " _ what _ ", beside " _ here,
-        "discharge": "A discharge the receiver has not applied: " _ what _ ". Sending " _ here _ " alone would admit a patient who has left",
-        "record_changed": "A change to the patient's record: " _ what _ ", beside " _ here,
-        : "Also on file for this patient: " _ what _ ", beside " _ here _ ". It does not stop the resend")
+        "other_visit": "Another visit for patient " _ case.PatientId _ " (" _ case.PatientIdAuthority _ "): " _ what _ ", beside " _ here _ ". Shutter can't say which visit is right",
+        "cancel": "For patient " _ case.PatientId _ " (" _ case.PatientIdAuthority _ "), a cancel the receiver has not applied: " _ what _ ". It may withdraw " _ here,
+        "merge": "For patient " _ case.PatientId _ " (" _ case.PatientIdAuthority _ "), a merge the receiver has not applied: " _ what _ ", beside " _ here,
+        "discharge": "For patient " _ case.PatientId _ " (" _ case.PatientIdAuthority _ "), a discharge the receiver has not applied: " _ what _ ". Sending " _ here _ " alone would admit a patient who has left",
+        "record_changed": "A change to the record of patient " _ case.PatientId _ " (" _ case.PatientIdAuthority _ "): " _ what _ ", beside " _ here,
+        : "Also on file for patient " _ case.PatientId _ " (" _ case.PatientIdAuthority _ "): " _ what _ ", beside " _ here _ ". It does not stop the resend")
+}
+
+/// An event word for a person, with its article.
+ClassMethod Word(event As %String) As %String [ Private ]
+{
+    If $EXTRACT(event, 1, 7) = "cancel_" Quit "a cancel of the " _ ##class(Shutter.Operation.Gate).Reversed(event)
+    Quit $CASE(event, "admit": "an admission", "transfer": "a transfer", "discharge": "a discharge", "register": "a registration", "preadmit": "a pre-admission", "update": "an update", "merge": "a merge", "person_add": "a new person record", "person_update": "a person update", "": "a message", : "a " _ event)
 }
 
 /// What stops the write, for a check's detail or a case's headline: the first row, and how many more.

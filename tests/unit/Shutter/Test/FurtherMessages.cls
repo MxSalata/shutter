@@ -161,11 +161,13 @@ Method TestTheSiteChooses()
 Method TestWords()
 {
     Set case = ##class(Shutter.Store.Case).%New()
-    Set case.EncounterId = "ENC-1", case.Event = "transfer"
+    Set case.EncounterId = "ENC-1", case.Event = "transfer", case.PatientId = "MRN1", case.PatientIdAuthority = "HOSP"
     Set found = ..Weigh([(..Row()), (..Row({"control_id": "M-3", "visit_number": "ENC-3"}))])
     Set text = ##class(Shutter.Util.FurtherMessages).Describe(case, found)
     Do $$$AssertTrue(text [ "visit ENC-2", "names the other visit: " _ text)
     Do $$$AssertTrue(text [ "visit ENC-1", "names this visit")
+    Do $$$AssertTrue(text [ "MRN1 (HOSP)", "names exactly which patient to review")
+    Do $$$AssertTrue(text [ "an admission", "in words a person reads")
     Do $$$AssertTrue(text [ "and 1 more", "counts the rest")
     Do $$$AssertEquals(##class(Shutter.Util.FurtherMessages).Describe(case, ..Weigh([])), "", "nothing to describe")
     Set summary = {"further_messages": (..Weigh([(..Row({"event": "register", "message_type": "ADT_A04", "patient_class": "O"}))])), "ward_state_http_status": 200}

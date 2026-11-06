@@ -347,7 +347,8 @@
       "failed_operation_key": "PAS^HOSP^MRN1027^ENC-1027^transfer^2026-10-15T08:20:00Z",
       "names": [
         "ENC-1027",
-        "ENC-2027"
+        "ENC-2027",
+        "MRN1027"
       ],
       "modes": [
         "policy",
@@ -478,7 +479,8 @@
       "final_reason": "FURTHER_MOVEMENT",
       "failed_operation_key": "PAS^HOSP^MRN1029^ENC-1029^transfer^2026-10-15T08:20:00Z",
       "names": [
-        "cancel_transfer"
+        "cancel of the transfer",
+        "MRN1029"
       ],
       "modes": [
         "policy",
