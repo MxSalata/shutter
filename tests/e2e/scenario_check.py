@@ -37,6 +37,9 @@ encounter ends with (S20: the nurse's own entry still stands). A case blocked on
 asks; expected.waits_on_key is the operation key of the case it waited on (waitsOn), and expected.case_by_key judges the
 case of expected.failed_operation_key rather than the run's newest.
 
+expected.names lists words the plan's view (its preconditions and its gate decisions' details) must show: the other visit a
+person has to read (S9, S27), and expected.person_approves says a person, not the site's policy, approved the write (S30).
+
 A scenario whose message goes to several receivers and fails at more than one (S22) gives its expectations per receiver
 under expected.by_receiver: one case per failed delivery and receiver, each judged by its receiver's own disposition,
 outcome (the catalogue outcome the plan took, such as none or correct_history), write, final state and ward. Each receiver's
@@ -459,6 +462,15 @@ def judge(args, operator, scenario, mode, final, receiver=None):
         differences.append(f"no {expected['blocked_by']} among {sorted(c for c in codes if c) or 'no reason codes'}")
     if expected.get("final_reason") and final_reason != expected["final_reason"]:
         differences.append(f"the case names {final_reason or 'no reason'}, expected {expected['final_reason']}")
+    plan_view = json.dumps(view or {})
+    for word in expected.get("names", []):
+        if word not in plan_view:
+            differences.append(f"the plan's view does not name {word}")
+    if expected.get("person_approves"):
+        _, a = operator.call("GET", f"/cases/{caseid}/approvals")
+        who = [x.get("approver") for x in (a or {}).get("approvals") or []]
+        if not who or "policy" in who:
+            differences.append(f"approved by {who or 'nobody'}, expected a person")
     if expected.get("last_operation_key"):
         history = held.get("history") or []
         last = history[-1].get("operation_key") if history else None
