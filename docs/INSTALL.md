@@ -363,6 +363,10 @@ terminal session on the server). The apply and the removal check `%Admin_Manage`
 resources, got Access Denied. Options are one JSON object: any other text answers `ok: false` with an `error`, in the plan, the apply
 and the removal, and changes nothing. Answers are JSON.
 
+**The same steps in the app.** Settings and costs, then Watched namespaces, shows each namespace's state, reads the plan, applies it, sends the test failure and takes a
+namespace off, through the same helpers. The plan comes first and nothing changes until you apply it, and an apply is refused if the plan has moved since you read it. It needs
+`Shutter_Configure`, and to apply or take off the same user as above. The credential stays a terminal line (9.3), so the password never passes through the app.
+
 **Before you start, for each receiver: know what a green message means there.** A completed message does not always mean the
 message was processed. **A message accepted by a transport ACK and then lost downstream raises nothing in Shutter today.** Section 9.9 says
 which level you get, what was measured on a stock operation, the settings, and how to bring in acknowledgements that arrive on a feed of

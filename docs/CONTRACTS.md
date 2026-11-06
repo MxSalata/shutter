@@ -403,7 +403,7 @@ caller's process passes; the operator and the approver read the watched hospital
 | `Shutter_Approve` | `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's) |
 | `Shutter_Scenarios` | `POST /scenarios/{id}/run` and `/scenarios/reset`, and `Shutter.Setup_PurgeStore` (v1.34: the demo controls; the operator and approver roles hold it, the public demo's role does not) |
 | `Shutter_LiveAgents` | Spending the model budget (v1.34, the judges): `POST /cases/{id}/board` (the board convenes live on a blocked, escalated or failed case, 14.5), `POST /cases/{id}/questions` running live, the agent part of `POST /production-reviews` (13.5, v1.39: skipped without it, never refused) and a reinvestigation's live runs (v1.39: recordings only without it); without it a question is answered from recordings only, and one with no recording is refused `409 no_recorded_answer` at once. Operators, approvers and the role `Shutter_Judge` (the public demo's role plus this) hold it; `Shutter_Demo` does not. Every live run counts against the day's budget and the caller's share (9) |
-| `Shutter_Configure` | `PUT /site-profile`; `PATCH /library/{code}`; `POST /settings/schemas` (section 12); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13) (v1.34: what changes the site; the approver role holds it, the public demo's role does not) |
+| `Shutter_Configure` | `PUT /site-profile`; `PATCH /library/{code}`; `POST /settings/schemas` (section 12); `GET /settings/namespaces` and the routes under it (11.1; an apply and a removal need `%Admin_Manage` as well); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13) (v1.34: what changes the site; the approver role holds it, the public demo's role does not) |
 | `Shutter_Intake` | `POST /intake` (section 11) |
 
 So the person on call (an operator) escalates a case and, once the team that corrects the systems has done so, marks
@@ -1411,6 +1411,25 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   last_case, last_case_at, schemas_missing, operations_unwatched, removed, problems, ok}`; `failure_timeout` in the plan's reading is the effective value: the item's, the default settings', else the class's; a namespace taken off is recorded under `^Shutter.Config("onboardRemoved", namespace)` and reads `removed` with no problems) and `receivers_without_item`; `credentials` tries each onboarded namespace's forwarder credential and each
   connector item's; `hl7_schemas.needed` adds the watched namespaces' missing categories. `AlertProcess.Classify` reads a TCP connect
   timeout (`ErrOutConnectExpired`) as `delivery_failed`: nothing was sent.
+
+### 11.2 The Settings screen for watched namespaces
+
+`Shutter.API.Onboarding`, routes of the REST API that call the same helpers as 11.1 and leave what they do unchanged. All need `Shutter_Configure`; each POST needs
+`X-Requested-With`. The forwarder's password never comes through these routes: `OnboardCredential` stays a terminal command.
+
+- `GET /settings/namespaces` -> `{shutterNamespace, canApply, watched, available}`. `watched` is the Doctor's `watched_namespaces`; `available` is `[{namespace}]`,
+  those with Interoperability enabled, not watched, and neither Shutter's own nor the instance's; `canApply` is whether this user holds `%Admin_Manage`.
+- `POST /settings/namespaces/{ns}/plan` `{options}` -> `{plan, digest}`, and changes nothing. `plan` is 11.1's. `digest` is a SHA-256 of the plan's production, `actions`,
+  `warnings` and `todo` and of the options it was read with. 400 `bad_request` for a body that is not a JSON object, options that are not one, an option 11.1 does not list, or
+  one that is not a plain value, so a slip never runs on the defaults. A namespace that can't be planned answers 200 with `plan.error`.
+- `POST /settings/namespaces/{ns}/apply` `{options, digest}` (`%Admin_Manage`) -> 11.1's apply answer. 400 `bad_request` with no digest. 409 `plan_changed`, with the fresh
+  `{plan, digest}` and nothing changed, when the digest is not the plan's now. The check runs just before the apply and is not one transaction with it; the apply runs that namespace's plan as 11.1 says.
+- `POST /settings/namespaces/{ns}/test` -> 11.1's test answer.
+- `GET /settings/namespaces/{ns}/removal` -> `{namespace, onboarded, production, renamed, items, alertOnError, mappings, drafted}`, read from the record the apply kept, changing
+  nothing. A mapping or a draft listed may still stay; the removal's `kept` then says why.
+- `POST /settings/namespaces/{ns}/remove` `{unmap, credential}` (`%Admin_Manage`) -> 11.1's removal answer. 400 `bad_request` for any other key.
+
+`tests/e2e/onboard_api_check.py` plays these on real productions, and `--record` writes the answers the trial replays (`web/src/mocks/onboarding.json`).
 
 ## 12. The install (v1.15)
 

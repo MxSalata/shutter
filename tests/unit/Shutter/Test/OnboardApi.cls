@@ -40,7 +40,7 @@ Method TestDigestFollowsThePlanAndItsOptions()
     Set api = "Shutter.API.Onboarding"
     Set plan = {"production": "P", "actions": [{"do": "add_forwarder", "says": "Add"}], "warnings": [], "todo": ["Credential"]}
     Set one = $CLASSMETHOD(api, "Digest", plan, {"receivers": "A", "credential": "C"})
-    Do $$$AssertEquals($LENGTH(one), 64, "a SHA-256 in hex")
+    Do $$$AssertEquals($LENGTH(one), 71, "sha256: and its hex")
     Do $$$AssertEquals($CLASSMETHOD(api, "Digest", plan, {"credential": "C", "receivers": "A"}), one, "the options' order does not matter")
     Do $$$AssertNotEquals($CLASSMETHOD(api, "Digest", plan, {"receivers": "A"}), one, "other options do")
     Set other = {"production": "P", "actions": [{"do": "add_forwarder", "says": "Add"}, {"do": "draft_receiver", "says": "Draft"}], "warnings": [], "todo": ["Credential"]}
@@ -58,6 +58,7 @@ Method TestOfferedNamespaces()
     For own = "%SYS", "HSLIB", "HSSYS", "HSCUSTOM", "ENSLIB" {
         Do $$$AssertEquals($CLASSMETHOD(api, "Offerable", own, "SHUTTER"), 0, "not the instance's own: " _ own)
     }
+    Do $$$AssertEquals($CLASSMETHOD(api, "Offerable", "^^/usr/irissys/mgr/enslib/", "SHUTTER"), 0, "not an implied namespace, which ListAll gives on a stock instance")
     Set list = $CLASSMETHOD(api, "Available", [{"namespace": ($NAMESPACE)}])
     Do $$$AssertTrue($ISOBJECT(list) && list.%IsA("%DynamicArray"), "the list is an array")
     Set it = list.%GetIterator(), found = 0
@@ -94,6 +95,30 @@ Method TestRemovalPreviewReadsTheRecord()
     Kill ^Shutter.Config("onboard", ns)
 }
 
+/// UpdateProduction writes its progress to the current device, which on a REST route is the reply: seen on a real apply.
+ClassMethod Noisy(word As %String) As %DynamicObject
+{
+    Write "progress lines", !
+    Quit {"ok": true, "word": (word)}
+}
+
+ClassMethod Throws() As %DynamicObject
+{
+    Set x = 1 / 0
+    Quit {}
+}
+
+Method TestWhatTheEngineWritesStaysOutOfTheReply()
+{
+    Set api = "Shutter.API.Onboarding", io = $IO
+    Set a = $CLASSMETHOD(api, "Quietly", "Shutter.Test.OnboardApi", "Noisy", "x")
+    Do $$$AssertEquals(a.word, "x", "the answer comes back")
+    Do $$$AssertEquals($IO, io, "and the device with it")
+    Set e = $CLASSMETHOD(api, "Quietly", "Shutter.Test.OnboardApi", "Throws")
+    Do $$$AssertTrue('e.ok && (e.error [ "DIVIDE"), "an exception is an answer: " _ e.error)
+    Do $$$AssertEquals($IO, io, "and the device comes back then too")
+}
+
 /// A plan of a namespace that is not there has a digest, and an apply with another is refused with the fresh plan.
 Method TestStaleDigestIsRefusedBeforeAnythingRuns()
 {
@@ -101,7 +126,7 @@ Method TestStaleDigestIsRefusedBeforeAnythingRuns()
     Set stale = $CLASSMETHOD(api, "StalePlan", ..#NS, {}, "not the digest")
     Do $$$AssertTrue($ISOBJECT(stale), "an old digest answers the fresh plan")
     Do $$$AssertEquals(stale.plan.namespace, ..#NS, "of that namespace")
-    Do $$$AssertEquals($LENGTH(stale.digest), 64, "and its digest")
+    Do $$$AssertEquals($LENGTH(stale.digest), 71, "and its digest")
     Do $$$AssertEquals($CLASSMETHOD(api, "StalePlan", ..#NS, {}, stale.digest), "", "the same digest is not old")
 }
 
