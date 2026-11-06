@@ -54,6 +54,7 @@ import {
   type CaseFacts,
 } from './outcome';
 import { proposalCaption, writesCaption, writesDetail } from './receipt';
+import { CorrectionDraft } from './CorrectionDraft';
 import { caseReceiver, correctionStepsOf } from './receiver';
 
 /** The gate's outcome in a word on the badge; the counts are written beside it. */
@@ -501,6 +502,9 @@ export function DecisionCard({
                 {stopped && c.failureKind !== 'withheld' ? <Reinvestigate c={c} /> : null}
               </StoryCard>
             </SimpleGrid>
+            {hasWhy && why && correction ? (
+              <CorrectionDraft caseId={c.caseId} correction={correction} />
+            ) : null}
             <Paper
               className="receipt-band"
               p="sm"

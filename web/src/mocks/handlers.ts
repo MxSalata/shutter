@@ -7,6 +7,7 @@ import type {
   AskQuestion,
   CaseQuestion,
   CaseState,
+  CorrectionSteps,
   Costs,
   Escalation,
   IncidentDetail,
@@ -782,6 +783,30 @@ export const handlers = [
   }),
   http.get(`${BASE}/cases/:id/runs`, ({ params }) => part(String(params.id), (c) => c.runs, 'not_found')),
   http.get(`${BASE}/cases/:id/plan`, ({ params }) => part(String(params.id), (c) => c.plan, 'no_plan')),
+  // The recording holds no message text: a draft read in the trial answers with the plan's own reason, and reads nothing
+  http.get(`${BASE}/cases/:id/correction-draft`, ({ params }) => {
+    const id = String(params.id);
+    const c = caseOf(id);
+    if (!session) return signedOut();
+    if (!c) return error(404, 'not_found', `No case ${id}`);
+    if (!c.plan) return error(404, 'no_plan', `No plan for ${id}`);
+    const inner = (c.plan as { plan?: { plan?: { correction_steps?: CorrectionSteps } } }).plan?.plan;
+    const correction = inner?.correction_steps;
+    if (!correction) return error(409, 'wrong_outcome', "The case's plan is not a history correction");
+    return HttpResponse.json({
+      caseId: id,
+      drawn: false,
+      reason_code: correction.sequence?.reason_code ?? '',
+      reason:
+        correction.sequence?.reason ??
+        'No sequence: this recording holds no message text, so none is drawn here.',
+      header: [],
+      messages: [],
+      cannot_know: [],
+      left_alone: [],
+      never: [],
+    });
+  }),
   http.get(`${BASE}/cases/:id/approvals`, ({ params }) =>
     part(String(params.id), (c) => c.approvals, 'not_found'),
   ),

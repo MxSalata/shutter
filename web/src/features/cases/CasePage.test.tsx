@@ -1288,7 +1288,8 @@ describe('CasePage', () => {
     const items = within(within(steps).getByRole('list')).getAllByRole('listitem');
     expect(items).toHaveLength(8);
     expect(items[0]).toHaveTextContent(/^Hold the case/);
-    expect(items[4]).toHaveTextContent(/as a historic movement at its own time/);
+    // The recording's wording, or the wording since v1.47 once the recording has it
+    expect(items[4]).toHaveTextContent(/as a historic movement at its own time|own records procedure/);
     expect(screen.getByText('Records Out')).toBeInTheDocument();
   });
 
