@@ -209,6 +209,10 @@ Method TestRemoveFileTakesOnlyEscalationFiles()
 
 Method TestPurgeCaseTakesEscalationsAndFiles()
 {
+    // Only what is finished is purged (Shutter.Test.Closure): this one was handled.
+    Set c = ##class(Shutter.Store.Case).%OpenId(..CaseRowId)
+    Set c.State = "resolved"
+    Do $$$AssertStatusOK(c.%Save(), "the case is finished")
     Set path = ..WriteEml(1)
     Do ..Escalation(1, "sent", "file", path)
     Do $$$AssertEquals(##class(Shutter.Store.Case).PurgeClosedBefore("1970-01-02T00:00:00Z"), 1, "the case closed in 1970 is purged")

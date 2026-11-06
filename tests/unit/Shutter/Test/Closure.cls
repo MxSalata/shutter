@@ -234,6 +234,39 @@ Method TestACorrectedBedOnAnOpenCaseStopsIt()
     Do $$$AssertTrue(c.Headline [ "different content", "and says why: " _ c.Headline)
 }
 
+/// Blocked, escalated and failed start the retention clock the moment they reach a person. Only what is
+/// finished goes: resolved, handled by hand or abandoned.
+Method TestPurgeTakesOnlyWhatIsFinished()
+{
+    For state = "escalated", "blocked", "failed", "resolved" { Set ids(state) = ..OldCase(state) }
+    Set ids("abandoned") = ..OldCase("failed", "abandoned")
+    Set ids("handled") = ..OldCase("resolved", "handled_by_hand")
+    Do ##class(Shutter.Store.Case).PurgeClosedBefore("1970-01-02T00:00:00Z")
+    For state = "escalated", "blocked", "failed" { Do $$$AssertTrue(##class(Shutter.Store.Case).%ExistsId(ids(state)), "a case " _ state _ " nobody acted on stays") }
+    For state = "resolved", "abandoned", "handled" { Do $$$AssertNotTrue(##class(Shutter.Store.Case).%ExistsId(ids(state)), "a case " _ state _ " goes") }
+    // A closed incident that still holds a case nobody acted on stays with it.
+    Set i = ##class(Shutter.Store.Incident).%New()
+    Set i.IncidentId = ..#THECASE _ "-I", i.State = "closed", i.ClosedAt = "1970-01-01T00:00:00Z"
+    Do $$$AssertStatusOK(i.%Save(), "a closed incident")
+    Set id = ..OldCase("escalated", "", i)
+    Set iid = i.%Id()
+    Do ##class(Shutter.Store.Case).PurgeClosedBefore("1970-01-02T00:00:00Z")
+    Do $$$AssertTrue(##class(Shutter.Store.Case).%ExistsId(id), "its escalated case stays")
+    Do $$$AssertTrue(##class(Shutter.Store.Incident).%ExistsId(iid), "and so does the incident")
+    Do ##class(Shutter.Store.Case).PurgeCase(id)
+    Do ##class(Shutter.Store.Incident).%DeleteId(iid)
+}
+
+Method OldCase(state As %String, disposition As %String = "", incident As Shutter.Store.Incident = "") As %String
+{
+    Set c = ..SavedCase(..#THECASE _ $EXTRACT(state, 1, 3) _ $EXTRACT(disposition, 1, 3) _ $SELECT($ISOBJECT(incident): "I", 1: ""), state)
+    Set c.ClosedAt = "1970-01-01T00:00:00Z", c.Disposition = disposition
+    Do $$$AssertStatusOK(c.%Save(), "an old case " _ state)
+    Set id = c.%Id()
+    If $ISOBJECT(incident) Do $$$AssertStatusOK(c.SetIncident(incident), "in the incident")
+    Quit id
+}
+
 /// No sign of a write by the last read proves nothing. It escalates as unknown, and the approval it spent stays spent.
 Method TestNoSignOfAWriteIsUnknownAndTheApprovalIsSpent()
 {

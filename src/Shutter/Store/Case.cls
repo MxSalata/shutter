@@ -240,15 +240,17 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
     Quit sc
 }
 
-/// Delete the closed cases whose closing is older than a time, with everything that hangs off them (events, snapshots
+/// Delete the finished cases whose closing is older than a time, with everything that hangs off them (events, snapshots
 /// and their items, plans, approvals, rehearsals, gate decisions, attempts, verifications, agent runs and their tool
 /// calls, chain items, escalation emails and their .eml files), and the closed incidents older than it with their
-/// chains, items, events and the cases they held. Cases an open incident still holds stay. Returns how many cases went.
+/// chains, items, events and the cases they held. Finished means resolved, which covers handled by hand, or abandoned: a
+/// blocked, escalated or failed case is waiting for a person, whatever its age, so it stays, and so does an incident that
+/// holds one. Cases an open incident still holds stay. Returns how many cases went.
 /// Housekeeping only (Shutter.Util.RetentionTask, switched on by a site): the record is the product.
 ClassMethod PurgeClosedBefore(cutoff As %String) As %Integer
 {
     Set n = 0
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE ClosedAt IS NOT NULL AND ClosedAt < ? AND State IN ('resolved', 'blocked', 'escalated', 'failed') AND Incident IS NULL", cutoff)
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE ClosedAt IS NOT NULL AND ClosedAt < ? AND (State = 'resolved' OR (State = 'failed' AND Disposition = 'abandoned')) AND Incident IS NULL", cutoff)
     While rs.%Next() {
         If $$$ISOK(..PurgeCase(rs.%Get("ID"))) Set n = n + 1
     }
@@ -256,7 +258,7 @@ ClassMethod PurgeClosedBefore(cutoff As %String) As %Integer
     While ri.%Next() {
         Set iid = ri.%Get("ID"), ok = 1
         // Only its cases whose own closing is older than the cutoff: a case reopened and closed again later stays.
-        Set rc = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE Incident = ? AND State IN ('resolved', 'blocked', 'escalated', 'failed') AND ClosedAt IS NOT NULL AND ClosedAt < ?", iid, cutoff)
+        Set rc = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE Incident = ? AND (State = 'resolved' OR (State = 'failed' AND Disposition = 'abandoned')) AND ClosedAt IS NOT NULL AND ClosedAt < ?", iid, cutoff)
         While rc.%Next() { If $$$ISOK(..PurgeCase(rc.%Get("ID"))) { Set n = n + 1 } Else { Set ok = 0 } }
         Continue:'ok
         Set open = 0
