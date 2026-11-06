@@ -21,7 +21,7 @@ CONDITIONS = {
     "delivery": {"failed", "rejected", "uncertain", "unmappable", "withheld", "unreadable"},
     "receiver_answer": {"unavailable", "timeout", "duplicate", "version_conflict", "refused", "none"},
     "receipt": {"present", "absent", "unreadable", "none"},
-    "later_applied": {"none", "transfer", "discharge", "update", "admit", "cancelled", "merge"},
+    "later_applied": {"none", "transfer", "discharge", "update", "admit", "cancelled", "cancel_other", "merge"},
     "later_delivery": {"applied", "sent", "none"},
     "event_time": {"plausible", "before_admission", "future", "far_from_recorded", "clock_change", "later_event_future"},
     "encounter_state": {"admitted", "discharged", "not_found", "unknown"},

@@ -166,8 +166,8 @@ ClassMethod Holds(pattern As %DynamicObject, conditions As %DynamicObject) As %B
 }
 
 /// The later events for the encounter (Later: applied ones, and outside a chain a later transfer whose delivery failed
-/// or is uncertain as well), by precedence (CONTRACTS 6.1): cancelled (an applied cancel at or after the failed event's
-/// time, T31), else merge (an applied merge, T31), else discharge, else transfer, else admit (a later admission, T28),
+/// or is uncertain as well), by precedence (CONTRACTS 6.1): cancel_other (an applied cancel at or after the failed event's
+/// time that reverses another movement), else cancelled (an applied cancel of this movement, T31), else merge (an applied merge, T31), else discharge, else transfer, else admit (a later admission, T28),
 /// else update, else none. (A later transfer followed by a later update is a transfer.) A cancel counts from the failed
 /// event's own time, not strictly after it, because a cancel carries the time of the event it reverses; the case's own
 /// operation never counts. Only the events whose time is plausible count.
@@ -176,13 +176,13 @@ ClassMethod LaterApplied(summary As %DynamicObject, case As Shutter.Store.Case, 
     If '$ISOBJECT(later) Set later = ..Later(summary, case)
     // A later admission is its own answer (T28): an encounter admitted again after the failed event is not an update.
     // So are a cancel and a merge (T31); any other word the receiver or the index reports still reads as an update.
-    Set seen("cancelled") = 0, seen("merge") = 0, seen("discharge") = 0, seen("transfer") = 0, seen("update") = 0, seen("admit") = 0
+    Set seen("cancel_other") = 0, seen("cancelled") = 0, seen("merge") = 0, seen("discharge") = 0, seen("transfer") = 0, seen("update") = 0, seen("admit") = 0
     Set iter = later.%GetIterator()
     While iter.%GetNext(.i, .ev) {
         Continue:'ev.plausible
         Set seen(ev.word) = 1
     }
-    Quit $SELECT(seen("cancelled"): "cancelled", seen("merge"): "merge", seen("discharge"): "discharge", seen("transfer"): "transfer", seen("admit"): "admit", seen("update"): "update", 1: "none")
+    Quit $SELECT(seen("cancel_other"): "cancel_other", seen("cancelled"): "cancelled", seen("merge"): "merge", seen("discharge"): "discharge", seen("transfer"): "transfer", seen("admit"): "admit", seen("update"): "update", 1: "none")
 }
 
 /// The events for the encounter that bear on the failed operation's order, from the snapshot's timeline and the
@@ -190,7 +190,7 @@ ClassMethod LaterApplied(summary As %DynamicObject, case As Shutter.Store.Case, 
 /// operation_key, and case_id when a case was opened for that key (v1.21)}. later_applied, the gate's ordering check
 /// (Shutter.Operation.Gate) and the verifier's superseded branch (Shutter.Operation.Verify) all read them, so they agree.
 /// - An applied (or already committed) event whose time is later than the failed event's; a cancel from the failed
-///   event's own time on (T31), never the case's own operation. word is the precedence word (cancelled, merge,
+///   event's own time on (T31), never the case's own operation. word is the precedence word (cancel_other, cancelled, merge,
 ///   discharge, transfer, admit, update).
 /// - Outside a chain, also a later transfer the feed sent whose delivery failed or is uncertain as well (delivered 0):
 ///   it is the PAS's later word on where the patient is, and its own case delivers it, so resending the earlier
@@ -220,7 +220,7 @@ ClassMethod Later(summary As %DynamicObject, case As Shutter.Store.Case, chainKi
             If $EXTRACT(e, 1, 7) = "cancel_" {
                 Continue:'delivered
                 Continue:'..AtOrAfter(t, key, case)
-                Set word = "cancelled"
+                Set word = ..CancelWord(e, t, case)
             } Else {
                 Continue:'$CLASSMETHOD(json, "Bool", ev, "later")
                 If 'delivered {
@@ -245,7 +245,7 @@ ClassMethod Later(summary As %DynamicObject, case As Shutter.Store.Case, chainKi
             Set t = $CLASSMETHOD(json, "Str", h, "event_time"), e = $CLASSMETHOD(json, "Str", h, "event")
             If $EXTRACT(e, 1, 7) = "cancel_" {
                 Continue:'..AtOrAfter(t, $CLASSMETHOD(json, "Str", h, "operation_key"), case)
-                Set word = "cancelled"
+                Set word = ..CancelWord(e, t, case)
             } Else {
                 Continue:'(t ]] case.EventTime)
                 Set word = $SELECT($LISTFIND(words, e): e, 1: "update")
@@ -255,6 +255,15 @@ ClassMethod Later(summary As %DynamicObject, case As Shutter.Store.Case, chainKi
         }
     }
     Quit out
+}
+
+/// The word for a cancel that counts: cancelled only when it reverses this case's own movement, the same kind of event at the
+/// same time, since a cancel carries the time of the event it reverses. Any other cancel is cancel_other, which no catalogue
+/// entry matches, so it reaches the board or a person: a discharge and its cancel put the patient back and say nothing about an
+/// earlier failed transfer.
+ClassMethod CancelWord(event As %String, time As %String, case As Shutter.Store.Case) As %String [ Private ]
+{
+    Quit $SELECT((time = case.EventTime) && ($EXTRACT(event, 8, *) = case.Event): "cancelled", 1: "cancel_other")
 }
 
 ClassMethod LaterEvent(word As %String, event As %String, ward As %String, time As %String, from As %String, delivered As %Boolean, plausible As %Boolean, key As %String = "") As %DynamicObject [ Private ]
@@ -303,7 +312,7 @@ ClassMethod Describe(ev As %DynamicObject, withOrigin As %Boolean = 1) As %Strin
 {
     Set json = "Shutter.Util.Json"
     Set word = $CLASSMETHOD(json, "Str", ev, "word"), ward = $CLASSMETHOD(json, "Str", ev, "ward")
-    Set what = $CASE(word, "cancelled": "cancel of the event", "merge": "merge", "admit": "admission", : word)
+    Set what = $CASE(word, "cancelled": "cancel of the event", "cancel_other": "cancel of another movement", "merge": "merge", "admit": "admission", : word)
     Set text = what _ $SELECT((ward '= "") && ((word = "transfer") || (word = "discharge")): " to " _ ward, 1: "") _ " at " _ $CLASSMETHOD(json, "Str", ev, "event_time")
     If 'withOrigin Quit text
     If $CLASSMETHOD(json, "Str", ev, "from") = "history" Quit text _ " (receiver history)"
@@ -412,12 +421,13 @@ ClassMethod EventTimePlausibility(summary As %DynamicObject, case As Shutter.Sto
 ClassMethod LaterTimeDoubt(summary As %DynamicObject, case As Shutter.Store.Case, later As %DynamicArray) As %String [ Private ]
 {
     Set settled = ..LaterApplied(summary, case, later)
-    Set settledOrder = $LISTFIND($LISTBUILD("cancelled", "discharge", "transfer"), settled) > 0
-    Set rank = $LISTBUILD("update", "admit", "transfer", "discharge", "merge", "cancelled")
+    Set settledOrder = $LISTFIND($LISTBUILD("cancel_other", "cancelled", "discharge", "transfer"), settled) > 0
+    Set rank = $LISTBUILD("update", "admit", "transfer", "discharge", "merge", "cancelled", "cancel_other")
     Set iter = later.%GetIterator()
     While iter.%GetNext(.i, .ev) {
         Continue:(ev.plausible || (ev.word = "update"))
         If settledOrder {
+            If (ev.word = "cancel_other") && (settled '= "cancelled") && (settled '= "cancel_other") Return "later_event_future"
             If (ev.word = "cancelled") && (settled '= "cancelled") Return "later_event_future"
             Continue
         }

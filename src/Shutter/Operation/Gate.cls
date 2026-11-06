@@ -282,7 +282,7 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
             // It says it keeps a history, but this read holds none: nothing here can tell what moved, which is unknown, not "nothing later".
             Do ..Check(checks, "capability", "unknown", "HISTORY_UNREADABLE", "The receiver says it keeps a history, but its read of this encounter holds none, so what moved since is unknown")
         } Else {
-            Do ..Check(checks, "capability", "pass", "CONNECTOR_CAPABLE", "The receiver guarantees conditional writes, receipts and dry runs")
+            Do ..Check(checks, "capability", "pass", "CONNECTOR_CAPABLE", "The receiver guarantees conditional writes, receipts, a readable history and dry runs")
         }
     }
 
@@ -443,7 +443,7 @@ Method Superseding(summary As %DynamicObject, case As Shutter.Store.Case, chainK
 {
     Set found = "", delivered = 1
     Set later = ##class(Shutter.Catalogue.Matcher).Later(summary, case, chainKind)
-    Set words = $SELECT(isWrite: $LISTBUILD("transfer", "discharge", "cancelled", "merge", "admit"), 1: $LISTBUILD("transfer", "discharge"))
+    Set words = $SELECT(isWrite: $LISTBUILD("transfer", "discharge", "cancelled", "cancel_other", "merge", "admit"), 1: $LISTBUILD("transfer", "discharge"))
     For pass = $LISTBUILD("timeline", 1), $LISTBUILD("history", 1), $LISTBUILD("timeline", 0) {
         Set from = $LIST(pass, 1), want = $LIST(pass, 2)
         Set iter = later.%GetIterator()
