@@ -693,7 +693,7 @@ Method ConveneBoard(case As Shutter.Store.Case, summaryJSON As %String, byWhom A
         Do pending.%Push(codes(k))
     }
     Quit:$$$ISERR(sc) sc
-    Set ..PendingJSON = pending.%ToJSON(), convened = 1
+    Set ..PendingJSON = pending.%ToJSON(), ..FailedJSON = "[]", convened = 1
     Do case.Note("note", "Board convened" _ $SELECT(byWhom '= "": " by " _ byWhom, 1: "") _ ": " _ $REPLACE($REPLACE(pending.%ToJSON(), "[", ""), "]", ""), $SELECT(..ForceBoard && (..ConvenedBy '= ""): ..ConvenedBy, 1: "system"))
     Quit $$$OK
 }
@@ -1244,6 +1244,9 @@ Method RulesOnly(case As Shutter.Store.Case) As %Status
 /// Store the plan as the case's current plan and send it to the gate.
 Method AdoptPlan(case As Shutter.Store.Case, plan As %DynamicObject, createdBy As %String) As %Status
 {
+    // The members who gave no usable answer go on the plan, under its digest, so its approver sees a thinner review.
+    Set absent = ..AbsentMembers()
+    If absent.%Size() > 0 Set plan."absent_members" = absent
     Set sc = ##class(Shutter.Store.Plan).Create(case, case.CurrentSnapshot, plan, createdBy, .p)
     Quit:$$$ISERR(sc) sc
     // A case that leads its failure signature (v1.35) has decided: its followers take the plan.
@@ -1260,6 +1263,17 @@ Method AdoptPlan(case As Shutter.Store.Case, plan As %DynamicObject, createdBy A
         If parked || $$$ISERR(sc) Quit sc
     }
     Quit ..SendGate(case, "proposal", "gate:proposal")
+}
+
+/// The names of this round's board members who gave no usable answer.
+Method AbsentMembers() As %DynamicArray
+{
+    Set out = [], iter = ##class(%DynamicArray).%FromJSON(..FailedJSON).%GetIterator()
+    While iter.%GetNext(.i, .code) {
+        Set m = ##class(Shutter.Store.BoardMember).ByCode(code)
+        Do out.%Push($SELECT($ISOBJECT(m): m.Name, 1: code))
+    }
+    Quit out
 }
 
 /// The case's headline: what the plan does, then the start of its summary, cut at a word (the whole summary is on the
@@ -1488,6 +1502,12 @@ ClassMethod ApprovalTask(case As Shutter.Store.Case, plan As Shutter.Store.Plan,
     Set task.%Subject = "Shutter " _ case.CaseId _ ": approve plan v" _ plan.Version _ " (" _ plan.Disposition _ ")"
     Set task.%Message = case.Headline _ $CHAR(10) _ "Exact action: " _ plan.ActionType _ " " _ plan.OperationKey _ " at receiver version " _ plan.ExpectedVersion _ $CHAR(10) _ "Plan digest: " _ plan.Digest _ $CHAR(10) _ "Snapshot digest: " _ $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.Digest, 1: "") _ $CHAR(10) _ "Rehearsal: would apply (rolled back)."
     Set task.%Message = task.%Message _ $CHAR(10) _ "To approve from the Workflow inbox, paste the plan digest above into the PlanDigest field: an approval with no digest, or another one, binds nothing and blocks the case."
+    Set absent = $SELECT(plan.Json '= "": plan.PlanObject().%Get("absent_members"), 1: "")
+    If $ISOBJECT(absent) && (absent.%Size() > 0) {
+        Set names = "", iter = absent.%GetIterator()
+        While iter.%GetNext(.i, .name) { Set names = names _ $SELECT(names = "": "", 1: ", ") _ name }
+        Set task.%Message = task.%Message _ $CHAR(10) _ "Not every board member's review stands behind this plan: " _ names _ " did not answer."
+    }
     // What approvers decided before on these conditions at this receiver (6.4, v1.35); a lookup that fails leaves the line out.
     Try {
         Set words = ##class(Shutter.Store.Precedent).Words(##class(Shutter.Store.Precedent).SummaryFor(case))

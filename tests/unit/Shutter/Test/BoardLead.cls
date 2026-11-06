@@ -173,6 +173,33 @@ Method TestLeaderFailureFinishesTheLead()
     Do $$$AssertEquals(wf.TellFollowers("C-TEST-LEAD-A", after), 0, "nobody was waiting, so nobody is told")
 }
 
+/// A member who did not answer is recorded on the plan the others' findings made and named in the approval task, so the
+/// approver sees a thinner review. Whether such a plan should reach a person at all is a site's decision still to make.
+Method TestAbsentMembersAreOnThePlanAndTheTask()
+{
+    Set c = ..SavedCase("C-TEST-LEAD-P")
+    Set snap = ##class(Shutter.Store.Snapshot).Begin(c)
+    Do $$$AssertStatusOK(snap.%Save(), "a snapshot")
+    Do $$$AssertStatusOK(c.SetSnapshot(snap), "the case's current one")
+    Set wf = ##class(Shutter.Test.QuietWorkflow).%New("Case Workflow")
+    Set wf.CaseId = "C-TEST-LEAD-P", wf.FailedJSON = ["encounter"].%ToJSON()
+    Do $$$AssertStatusOK(wf.AdoptPlan(c, {"disposition": "resend", "action": {"type": "resend", "operation_key": (c.OperationKey), "expected_version": 3}, "summary": "Resend the transfer"}, "run:1"), "the coordinator's plan is adopted")
+    Set plan = ##class(Shutter.Store.Plan).%OpenId(wf.PlanId)
+    Set absent = plan.PlanObject().%Get("absent_members")
+    Do $$$AssertTrue($ISOBJECT(absent) && (absent.%Size() = 1), "the plan records who was absent")
+    If $ISOBJECT(absent) && (absent.%Size() = 1) Do $$$AssertTrue(absent.%Get(0) '= "", "by name: " _ absent.%Get(0))
+    Set task = ##class(Shutter.Process.CaseWorkflow).ApprovalTask(c, plan)
+    Do $$$AssertTrue(task.%Message [ "did not answer", "the task says a member did not answer: " _ task.%Message)
+    If $ISOBJECT(absent) && (absent.%Size() = 1) Do $$$AssertTrue(task.%Message [ absent.%Get(0), "and names them")
+    // A full board: nothing is added.
+    Set wf.FailedJSON = "[]"
+    Do $$$AssertStatusOK(wf.AdoptPlan(c, {"disposition": "resend", "action": {"type": "resend", "operation_key": (c.OperationKey), "expected_version": 3}, "summary": "Resend the transfer"}, "run:2"), "a full board's plan")
+    Set plan = ##class(Shutter.Store.Plan).%OpenId(wf.PlanId)
+    Do $$$AssertNotTrue(plan.PlanObject().%IsDefined("absent_members"), "records nobody")
+    Do $$$AssertNotTrue(##class(Shutter.Process.CaseWorkflow).ApprovalTask(c, plan).%Message [ "did not answer", "and the task says nothing")
+    Do ..Purge("C-TEST-LEAD-P")
+}
+
 /// A case reopened by someone without the live agents, whose board has no recording: it stays with a person and says why,
 /// and no plan is made, since the plain resend would replace the board's stop with a plan nobody on the board looked at.
 Method TestReopenedWithNoLiveAgentsAndNoRecording()

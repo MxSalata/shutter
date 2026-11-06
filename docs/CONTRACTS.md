@@ -751,7 +751,7 @@ catalogue versions in force. An automatic release (approver `policy`) writes non
 evidence collector adds `precedents` to every snapshot summary, `{approved, rejected, lastDecision, lastApprover, lastAt,
 lastCaseId, samePolicy, windowDays, signature}`: the active rows of the last `windowDays` days
 (`^Shutter.Config("precedentDays")`, 1 to 3650, 180 by default; the Doctor's `precedent_days`), and `samePolicy` says
-whether the last decision was taken under the policy and site profile versions in force now. The approval task's text
+whether the last decision was taken under the policy and site profile versions in force now. A board member who gave no usable answer is on the plan as `absent_members`, by name and under the plan's digest, and the approval task's text names them ("Not every board member's review stands behind this plan: ... did not answer."). The approval task's text
 quotes it ("Precedents: approved and verified 2 times, rejected 0 times in the last 180 days; last approved by approver on
 2026-11-02 (case C-000301)", or "Precedents: none; these conditions at this receiver have not reached an approver in the
 last 180 days."), and the case's events note each precedent written. It is for the person and the app: the model view's
