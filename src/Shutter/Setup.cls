@@ -676,6 +676,8 @@ ClassMethod HardenPortal(hospital As %String = "") As %String [ SqlProc ]
             Do ##class(Security.Applications).Get(app, .ap)
             Set a = {}
             Set a.name = app, a."match_roles_were" = $GET(ap("MatchRoles")), a."resource_was" = $GET(ap("Resource"))
+            // What the uninstall puts back (Shutter.Util.Uninstall.TakePortal). A later start finds it hardened already.
+            If $GET(ap("Resource")) '= "Shutter_Portal" Set ^|ns|Shutter.Config("portalWas", app) = $LISTBUILD($GET(ap("MatchRoles")), $GET(ap("Resource")))
             Kill props
             Set props("MatchRoles") = "", props("Resource") = "Shutter_Portal"
             Set sc = ##class(Security.Applications).Modify(app, .props)
