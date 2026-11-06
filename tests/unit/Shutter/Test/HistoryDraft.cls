@@ -571,7 +571,7 @@ Method TestForPatientAndGather()
     Set docId = msg.%Id()
     For row = $LISTBUILD(docId, "HOSP", "ENC-UT1", "UT-GATHER-KEY"), $LISTBUILD(docId + 1000000, "", "ENC-UT2", "UT-GATHER-NOAUTH"), $LISTBUILD(docId + 1000001, "OTHER", "ENC-UT3", "UT-GATHER-OTHER") {
         Set r = ##class(Shutter.Index.Message).%New()
-        Set r.DocId = $LIST(row, 1), r.PatientId = patient, r.PatientIdAuthority = $LIST(row, 2), r.VisitNumber = $LIST(row, 3), r.OperationKey = $LIST(row, 4), r.ControlId = "MSG-UT-G", r.Event = "transfer", r.EventTime = "2026-10-19T09:00:00Z", r.TimeCreated = "2026-11-06 00:00:00"
+        Set r.DocId = $LIST(row, 1), r.PatientId = patient, r.PatientIdAuthority = $LIST(row, 2), r.VisitNumber = $LIST(row, 3), r.OperationKey = $LIST(row, 4), r.ControlId = "MSG-UT-G", r.Event = "transfer", r.EventTime = "2026-10-19T09:00:00Z", r.TimeCreated = $TRANSLATE($PIECE(##class(Shutter.Util.Time).NowUTC(), "Z", 1), "T", " ")
         Set sc = r.%Save()
         Do $$$AssertStatusOK(sc, "an index row saves")
         Set ids = ids _ $LISTBUILD(r.%Id())
