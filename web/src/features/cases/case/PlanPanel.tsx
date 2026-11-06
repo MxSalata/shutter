@@ -32,7 +32,7 @@ const CHECK_QUESTIONS: Record<string, string> = {
   authorization: "Has a person, or the site's written policy, released the write?",
   concurrency: 'Is the receiver still at the version the plan is conditional on?',
   evidence: 'Is the evidence recent enough to act on?',
-  capability: 'Does the receiver take conditional writes and keep receipts?',
+  capability: 'Does the receiver take conditional writes, keep receipts and offer a readable history?',
   catalogue: 'Does an entry of the scenario catalogue match the evidence?',
   rehearsal: "Did the receiver's dry run say this would apply?",
 };

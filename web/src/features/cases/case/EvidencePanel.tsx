@@ -46,7 +46,7 @@ const SCROLL_MARGIN = 'calc(var(--shutter-header-h) + 3.5rem)';
  * The receiver's guarantees as the evidence recorded them from its capability profile: what the gate's capability
  * check reads. When the profile couldn't be read, every guarantee is unknown, never assumed.
  */
-function CapabilityPassport({ data }: { data: Record<string, unknown> }) {
+export function CapabilityPassport({ data }: { data: Record<string, unknown> }) {
   const status = data.capabilities_http_status;
   const unreadable = status !== undefined && Number(status) !== 200;
   const caps: [string, string, string][] = [
@@ -56,6 +56,14 @@ function CapabilityPassport({ data }: { data: Record<string, unknown> }) {
       'A write can name the receiver version it expects, and is refused if it changed',
     ],
     ['receipts', 'Receipts', 'Every committed operation can be looked up by its key'],
+    // A snapshot from before the gate asked about history says nothing about it, which is no statement about the receiver
+    ...(data.history === undefined
+      ? []
+      : ([['history', 'History', 'Every move of the encounter can be read, whoever made it']] as [
+          string,
+          string,
+          string,
+        ][])),
     ['dry_run', 'Dry runs', 'An operation can be rehearsed and rolled back'],
   ];
   return (
