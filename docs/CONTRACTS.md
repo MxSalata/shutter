@@ -1047,7 +1047,7 @@ separate, later tool.
   matcher's `later_applied` count only `applied` and `already_committed`, and outside a chain a later transfer of the
   feed's own whose failure the connector recorded (6.1, v1.16), so it supersedes nothing by itself; the receiver's
   history decides. The board sees it and can say so.
-- A scenario for a later movement on a route Shutter does not own, found only by the index, is planned; it is not in `fixtures/scenarios.json` yet.
+- S14 plays a later movement on a route Shutter does not own, found only by the index: the demo item `Other Route In` (`Shutter.Scenarios.Route`, Rules only and Site policy) sends it to `Case Intake Store`, so its header is walked and nothing reaches the receiver.
 - The index row's `Event` is the key's event word (v1.14: `register`, `preadmit`, `person_add`, `person_update`, the cancel words and `merge` included, 32 characters), so registrations, pre-admissions and person updates show between the movements; its `VisitNumber` is `-` for a mapped message with no PV1-19 (an unmappable message without one keeps an empty visit number), and the timeline and the index answer nothing for an encounter of `-` or empty.
 
 ### 8.3 The API
