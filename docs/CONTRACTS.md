@@ -823,7 +823,7 @@ and the payload digest are its own, and not a word of the leader's text crosses 
 preflight and its dispatch gate, as any case. A follower arriving after the leader decided takes the decision at once. A
 lead whose board ended without a plan (no findings, no coordinator, a timeout, the model view's refusal) is `failed` and
 attracts no followers; a follower waiting on it, or on a leader whose board never ended within twice the board timeout and a
-minute, falls to the rules path with a note. A lead begun before the last scenario reset counts for nothing, as the incident
+minute, falls to the rules path with a note. A lead begun before the last scenario reset, or in the same second as it, counts for nothing, as the incident
 detector's window. A judge's forced board and an incident's released chain items never follow. A lead whose leader fails (a workflow error, or an escalation with no summary when its board slot comes), is abandoned or is closed by hand is finished as failed at once (v1.39), so a case of the signature that arrives afterwards leads itself and every case waiting on it takes the rules path without waiting out the bound. The lead's row keeps how
 many followed; `GET /cases/{id}` shows `followsCase` and `leadSignature`. Approvals stay with the existing mechanisms: an
 incident's one task for its chains (7), else one per case.
