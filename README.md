@@ -2,7 +2,7 @@
 
 **When a hospital's HL7 delivery fails, the usual fix is Resend, and when two systems move a patient at the same moment, that resend writes over the bed manager's ward with every check passed. Shutter's IRIS AI Hub agents decide how to put the failure right; a deterministic gate decides whether anything is written.**
 
-Shutter is about delivery, not diagnosis: it resends a failed message whole and unchanged, or not at all, and shows why.
+Shutter is about delivery, not diagnosis: it resends a failed message whole and unchanged, or not at all, and shows why. Recovery needs a receiver with a state, receipt and conditional-write API; a plain MLLP receiver gets the investigation and a drafted escalation, never a resend.
 
 **Quickest ways in:** the trial, nothing to install; the 4-minute tour; the online demo; or `./install.sh --replay`, with no Early Access file and no API key ([Try it](https://github.com/MxSalata/shutter#try-it)).
 
