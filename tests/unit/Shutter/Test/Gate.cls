@@ -395,7 +395,7 @@ Method NewCase(spec As %DynamicObject) As Shutter.Store.Case
     Set case.SourceSystem = "PAS", case.Ward = $SELECT(case.Event = "transfer": "WARD-B", 1: "")
     Set case.Receiver = $PARAMETER("Shutter.Production", "RECEIVER")
     Set case.OperationKey = "PAS^HOSP^" _ case.PatientId _ "^" _ case.EncounterId _ "^" _ case.Event _ "^" _ case.EventTime
-    Set case.State = "investigating", case.Mode = "rules"
+    Set case.State = "investigating", case.Mode = $CLASSMETHOD(json, "Str", spec, "mode", "rules")
     Set now = ##class(Shutter.Util.Time).NowUTC()
     Set case.OpenedAt = now, case.UpdatedAt = now
     Set sc = case.%Save()
@@ -952,6 +952,30 @@ XData Rows [ MimeType = application/json ]
    "expect": [["catalogue", "block", "NEW_PATTERN"]], "outcome": "block"},
   {"group": "catalogue", "name": "the plan names no entry while several match",
    "summary": {"catalogue": {"decision": "board", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}, {"id": "E9", "preferred": {"outcome": "resend"}}]}},
+   "expect": [["catalogue", "pass", "ENTRY_NOT_NAMED"]]},
+  {"group": "catalogue", "name": "Rules only's plan names no entry on an entry that stops: the demonstration stays",
+   "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+   "expect": [["catalogue", "pass", "ENTRY_NOT_NAMED"]]},
+  {"group": "catalogue", "name": "a board's plan writes and names no entry on an entry that stops",
+   "case": {"mode": "board"}, "plan": {"created_by": "run:1"}, "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+   "expect": [["catalogue", "block", "ENTRY_NOT_NAMED_WRITE"]], "outcome": "block", "contains": [["catalogue", "ENTRY_NOT_NAMED_WRITE", "E7"]]},
+  {"group": "catalogue", "name": "a judge's board on a Rules only case writes and names no entry on an entry that stops",
+   "plan": {"created_by": "run:1"}, "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+   "expect": [["catalogue", "block", "ENTRY_NOT_NAMED_WRITE"]], "outcome": "block"},
+  {"group": "catalogue", "name": "the rules path outside Rules only writes and names no entry on an entry that stops",
+   "case": {"mode": "policy"}, "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+   "expect": [["catalogue", "block", "ENTRY_NOT_NAMED_WRITE"]], "outcome": "block"},
+  {"group": "catalogue", "name": "a follower's plan writes and names no entry when the site chose an outcome with no write",
+   "case": {"mode": "board"}, "plan": {"created_by": "lead:C-1"}, "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "none", "outcome_ref": "alternative:1", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+   "expect": [["catalogue", "block", "ENTRY_NOT_NAMED_WRITE"]], "outcome": "block"},
+  {"group": "catalogue", "name": "a plan writes and names no entry while one of several matches stops",
+   "case": {"mode": "board"}, "plan": {"created_by": "run:1"}, "summary": {"catalogue": {"decision": "board", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}, {"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+   "expect": [["catalogue", "block", "ENTRY_NOT_NAMED_WRITE"]], "outcome": "block", "contains": [["catalogue", "ENTRY_NOT_NAMED_WRITE", "E7"]]},
+  {"group": "catalogue", "name": "a board's plan writes and names no entry on an entry that resends",
+   "case": {"mode": "board"}, "plan": {"created_by": "run:1"}, "summary": {"catalogue": {"decision": "board", "entry": "E9", "outcome": "resend", "matches": [{"id": "E9", "preferred": {"outcome": "resend"}}]}},
+   "expect": [["catalogue", "pass", "ENTRY_NOT_NAMED"]]},
+  {"group": "catalogue", "name": "a plan that names no entry and writes nothing on an entry that stops",
+   "case": {"mode": "board"}, "plan": {"created_by": "run:1", "disposition": "escalate", "action": {"type": "none"}}, "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
    "expect": [["catalogue", "pass", "ENTRY_NOT_NAMED"]]},
   {"group": "catalogue", "name": "the plan follows an entry whose pattern does not hold",
    "plan": {"catalogue_entry": "E2", "outcome": "preferred"}, "summary": {"catalogue": {"decision": "policy", "entry": "E3", "matches": [{"id": "E3", "preferred": {"outcome": "reconcile"}}]}},

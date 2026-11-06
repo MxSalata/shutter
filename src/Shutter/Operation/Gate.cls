@@ -9,7 +9,7 @@ Class Shutter.Operation.Gate Extends Ens.BusinessOperation
 Parameter INVOCATION = "Queue";
 
 /// Bumped whenever a check changes; recorded on every decision and bound by approvals.
-Parameter POLICYVERSION = "2026-11-01.1";
+Parameter POLICYVERSION = "2026-11-06.1";
 
 Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shutter.Msg.GateResult) As %Status
 {
@@ -288,6 +288,10 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         Do ..Check(checks, "catalogue", "unknown", "MATCHER_ERROR", "The matcher failed on this evidence: " _ $EXTRACT(##class(Shutter.Util.Json).Str(cat, "error"), 1, 200))
     } ElseIf decision = "new_pattern" {
         Do ..Check(checks, "catalogue", "block", "NEW_PATTERN", "No catalogue entry matches this evidence: a candidate entry for a reviewer")
+    } ElseIf (plan.CatalogueEntry = "") && isWrite && '((case.Mode = "rules") && (plan.CreatedBy = "rules")) && (..EntriesThatStop(cat) '= "") {
+        // Rules only is the baseline and stays as it is: any other write must name the entry it follows, and the entry the
+        // plan could not name calls for no resend.
+        Do ..Check(checks, "catalogue", "block", "ENTRY_NOT_NAMED_WRITE", "The plan writes and names no catalogue entry, but the evidence matched " _ ..EntriesThatStop(cat) _ ", which calls for no resend")
     } ElseIf plan.CatalogueEntry = "" {
         Do ..Check(checks, "catalogue", "pass", "ENTRY_NOT_NAMED", "The plan names no catalogue entry; the evidence matched " _ $SELECT(##class(Shutter.Util.Json).Str(cat, "entry") '= "": ##class(Shutter.Util.Json).Str(cat, "entry"), 1: "several entries"))
     } Else {
@@ -395,6 +399,22 @@ Method BedConflictCheck(checks As %DynamicArray, case As Shutter.Store.Case, sum
 ClassMethod DispositionFor(outcome As %String) As %String
 {
     Quit $CASE(outcome, "resend": "resend", "resend_chain": "resend", "resend_latest": "resend", "resend_after_occupant": "resend", "reconcile": "reconcile", "none": "superseded", "escalate": "escalate", "resend_unconditional": "escalate", "correct_history": "escalate", : "")
+}
+
+/// The matched entries whose outcome calls for something other than a resend: the one match by the outcome the matcher
+/// chose for it, several by their preferred ones. "" when none does.
+ClassMethod EntriesThatStop(cat As %DynamicObject) As %String
+{
+    Set json = "Shutter.Util.Json"
+    If '$ISOBJECT(cat) || (cat.%GetTypeOf("matches") '= "array") Quit ""
+    Set matches = cat.%Get("matches"), out = "", it = matches.%GetIterator()
+    While it.%GetNext(, .m) {
+        Set outcome = $SELECT(matches.%Size() = 1: $CLASSMETHOD(json, "Str", cat, "outcome"), 1: "")
+        If outcome = "" Set outcome = $CLASSMETHOD(json, "Str", m.%Get("preferred"), "outcome")
+        Set disposition = ..DispositionFor(outcome)
+        If (disposition '= "") && (disposition '= "resend") Set out = out _ $SELECT(out = "": "", 1: ", ") _ $CLASSMETHOD(json, "Str", m, "id")
+    }
+    Quit out
 }
 
 Method OutcomeConsistency(checks As %DynamicArray, plan As Shutter.Store.Plan, outcome As %String) [ Private ]
