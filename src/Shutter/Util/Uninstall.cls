@@ -154,7 +154,8 @@ ClassMethod ForeignItems(ns As %String, here As %String, ownProduction As %Strin
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Production, Name, ClassName FROM Ens_Config.Item WHERE ClassName %STARTSWITH 'Shutter.' OR ClassName %STARTSWITH 'Hospital.' OR ClassName %STARTSWITH 'Downstream.'")
         While rs.%Next() {
             Set production = rs.%GetData(1)
-            If (ns = here) && ((production = "Shutter.Production") || (production = ownProduction)) Continue
+            // Here, the module's own production classes have their definitions too, each with its items.
+            If (ns = here) && ((production = ownProduction) || ..OwnBodyClass(production)) Continue
             If $GET(^|here|Shutter.Config("onboard", ns)) = production Continue
             Set found = found _ $SELECT(found = "": "", 1: "; ") _ rs.%GetData(2) _ " in " _ production _ " (" _ ns _ ")"
         }
@@ -228,10 +229,15 @@ ClassMethod TakeProduction(out As %DynamicObject)
         If $$$ISERR(sc) Do out.errors.%Push("Shutter's items in " _ production _ ": " _ $SYSTEM.Status.GetErrorText(sc)) Quit
         If taken > 0 Do out.removed.%Push(taken _ " items of Shutter's in " _ production _ ", which was updated and not stopped")
     }
-    If ##class(Ens.Config.Production).%ExistsId("Shutter.Production") {
-        Set sc = ##class(Ens.Config.Production).%DeleteId("Shutter.Production")
-        If $$$ISERR(sc) Do out.errors.%Push("The definition of Shutter.Production: " _ $SYSTEM.Status.GetErrorText(sc)) Quit
-        Do out.removed.%Push("The definition of Shutter.Production")
+    // The definitions of the module's own production classes here: Shutter.Production's and the demo hospital's.
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Name FROM Ens_Config.Production WHERE Name %STARTSWITH 'Shutter.' OR Name %STARTSWITH 'Hospital.'")
+    While rs.%Next() { Set own(rs.%GetData(1)) = 1 }
+    Set name = ""
+    For {
+        Set name = $ORDER(own(name)) Quit:name=""
+        Set sc = ##class(Ens.Config.Production).%DeleteId(name)
+        If $$$ISERR(sc) Do out.errors.%Push("The definition of " _ name _ ": " _ $SYSTEM.Status.GetErrorText(sc)) Continue
+        Do out.removed.%Push("The definition of " _ name)
     }
 }
 
