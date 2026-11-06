@@ -4012,6 +4012,11 @@
    "why": "played in policy mode only"
   },
   {
+   "scenario": "S32",
+   "title": "A new admission under a new visit number, while the plan awaits approval",
+   "why": "played in rules mode only"
+  },
+  {
    "scenario": "S28",
    "title": "A day case's admission and discharge both fail",
    "why": "played in policy and rules modes only"

@@ -529,7 +529,7 @@ prove there's no record entered by hand under another number): it waits for a pe
 screen. An incident's release of such an admission keeps its own path. A site chooses with `further_messages` (6.4). **What this
 can't see:** a change made by hand at the receiver; a message on a route Shutter's index doesn't watch, once the index has passed it;
 a further message that lands between the connector's read and the receiver's answer; and a merge of a merge. Nothing holds the feed
-during a correction: a hold or a laboratory route can call `Find` as it stands. Proof: S27 to S31, S9, and `Shutter.Test.FurtherMessages`.
+during a correction: a hold or a laboratory route can call `Find` as it stands. Proof: S27 to S32, S9, and `Shutter.Test.FurtherMessages`.
 
 **The failsafe at the point of the resend** (v1.29; the requirement of 26 Oct 2026). A resend is already a conditional
 write bound to the version the preflight read, so a PAS message applied at the receiver in between is refused as a version

@@ -403,6 +403,54 @@
     }
   },
   {
+    "id": "S32",
+    "title": "A new admission under a new visit number, while the plan awaits approval",
+    "summary": "S27's new admission arrives after the plan went to the approver. The approval doesn't carry it through: the check is read again at dispatch, and the write stops and names both visits.",
+    "steps": [
+      {
+        "file": "S32-01-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S32-02-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      },
+      {
+        "wait_for_state": "awaiting_approval",
+        "timeout": 180
+      },
+      {
+        "file": "S32-03-A01.hl7"
+      }
+    ],
+    "expected": {
+      "disposition": "resend",
+      "write": false,
+      "final_state": "admitted",
+      "final_ward": "WARD-A",
+      "case_by_key": true,
+      "blocked_by": "FURTHER_MOVEMENT",
+      "final_reason": "FURTHER_MOVEMENT",
+      "failed_operation_key": "PAS^HOSP^MRN1032^ENC-1032^transfer^2026-10-15T08:20:00Z",
+      "names": [
+        "ENC-1032",
+        "ENC-2032",
+        "MRN1032"
+      ],
+      "modes": [
+        "rules"
+      ]
+    }
+  },
+  {
     "id": "S28",
     "title": "A day case's admission and discharge both fail",
     "summary": "The 08:00 admission fails, and so does the 16:00 discharge. Resending the admission alone would admit someone who has gone home, so it stops and names the discharge for a person.",

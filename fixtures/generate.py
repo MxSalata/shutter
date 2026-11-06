@@ -59,6 +59,7 @@ PATIENTS = {
     "S29": ("MRN1029", "ENC-1029", "SYNTH^MAE", "19831017", "F"),
     "S30": ("MRN1030", "ENC-1030", "SYNTH^NED", "19710408", "M"),
     "S31": ("MRN1031", "ENC-1031", "SYNTH^OLA", "19890911", "F"),
+    "S32": ("MRN1032", "ENC-1032", "SYNTH^PIP", "19741203", "M"),
     # S11, the outage burst: six patients in one scenario
     "S11-P1": ("MRN1101", "ENC-1101", "SYNTH^KAI", "19880404", "M"),
     "S11-P2": ("MRN1102", "ENC-1102", "SYNTH^LENA", "19790908", "F"),
@@ -418,6 +419,30 @@ def scenarios():
                      "case_by_key": True, "blocked_by": "FURTHER_MOVEMENT", "final_reason": "FURTHER_MOVEMENT",
                      "failed_operation_key": b[2]["operation_key"], "names": ["ENC-1031", "ENC-2031"],
                      "modes": ["policy"]},
+    }, [a, b, d]))
+
+    # S32: the new admission arrives while the plan waits for its approval, so only the read at dispatch can catch it
+    a = message("S32", 1, "A01", "0900", ward="WARD-A")
+    b = message("S32", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
+    d = message("S32", 3, "A01", "0930", ward="WARD-C", admit_time="0930", encounter="ENC-2032")
+    out.append(({
+        "id": "S32",
+        "title": "A new admission under a new visit number, while the plan awaits approval",
+        "summary": "S27's new admission arrives after the plan went to the approver. The approval doesn't carry it through: "
+                   "the check is read again at dispatch, and the write stops and names both visits.",
+        "steps": [
+            {"file": a[0]},
+            {"fault": "fail_before_accept"},
+            {"file": b[0], "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+            {"wait_for_state": "awaiting_approval", "timeout": 180},
+            {"file": d[0]},
+        ],
+        "expected": {"disposition": "resend", "write": False, "final_state": "admitted", "final_ward": "WARD-A",
+                     "case_by_key": True, "blocked_by": "FURTHER_MOVEMENT", "final_reason": "FURTHER_MOVEMENT",
+                     "failed_operation_key": b[2]["operation_key"], "names": ["ENC-1032", "ENC-2032", "MRN1032"],
+                     "modes": ["rules"]},
     }, [a, b, d]))
 
     # S28: a day case. Resending the admission alone would put someone on a closed unit
