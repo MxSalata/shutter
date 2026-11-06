@@ -57,7 +57,7 @@ def by_downstream(**want):
 def scenarios():
     out = []
 
-    # EC-053: a clerk's catch-up. The discharge applied, then the morning's move arrives, recorded hours after it happened.
+    # A clerk's catch-up. The discharge applied, then the morning's move arrives, recorded hours after it happened.
     a = m("S6b", 1, "A01", "0900", ward="WARD-A")
     d = m("S6b", 2, "A03", "1400", ward="WARD-A")
     b = m("S6b", 3, "A02", "0930", recorded="1700", ward="WARD-B", prior="WARD-A")
@@ -75,7 +75,7 @@ def scenarios():
                              "final_state": "discharged", "final_ward": None}}},
         [a, d, b]))
 
-    # EC-059: both failed and both plans wait; edge_rows_check.py approves one and reads the other.
+    # Both failed and both plans wait; edge_rows_check.py approves one and reads the other.
     a = m("S22b", 1, "A01", "0900", ward="WARD-A")
     b = m("S22b", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
     out.append(scenario(
@@ -87,7 +87,7 @@ def scenarios():
          "final_ward": "WARD-B", "disposition": "resend"},
         [a, b]))
 
-    # EC-054: the 14:00 move is keyed at 16:40, after the 15:00 move applied: oldest by event time, newest by arrival.
+    # The 14:00 move is keyed at 16:40, after the 15:00 move applied: oldest by event time, newest by arrival.
     a = m("S22c", 1, "A01", "0900", ward="WARD-A")
     c = m("S22c", 2, "A02", "1500", ward="WARD-C", prior="WARD-A")
     b = m("S22c", 3, "A02", "1400", recorded="1640", ward="WARD-B", prior="WARD-A")
@@ -106,7 +106,7 @@ def scenarios():
                              "final_state": "admitted", "final_ward": "WARD-C"}}},
         [a, c, b]))
 
-    # EC-082, the same key: the sender repeats the move under a new control id while the plan waits, and this one lands.
+    # The same key: the sender repeats the move under a new control id while the plan waits, and this one lands.
     a = m("S3b", 1, "A01", "0900", ward="WARD-A")
     b = m("S3b", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
     again = m("S3b", 3, "A02", "0920", ward="WARD-B", prior="WARD-A")
@@ -123,7 +123,7 @@ def scenarios():
                                       blocked_by="APPROVAL_RECEIVER_CHANGED")},
         [a, b, again]))
 
-    # EC-082, a new time: no EVN-6, so a new EVN-2 makes a new key, read as a later transfer to the same ward.
+    # A new time: no EVN-6, so a new EVN-2 makes a new key, read as a later transfer to the same ward.
     a = m("S1b", 1, "A01", "0900", ward="WARD-A")
     b = m("S1b", 2, "A02", "0920", no_event_time=True, ward="WARD-B", prior="WARD-A")
     again = m("S1b", 3, "A02", "0940", no_event_time=True, ward="WARD-B", prior="WARD-A")
@@ -140,7 +140,7 @@ def scenarios():
                                       blocked_by="APPROVAL_RECEIVER_CHANGED")},
         [a, b, again]))
 
-    # EC-135 and EC-083: the same operation comes again mapped to another ward, while the plan waits.
+    # The same operation comes again mapped to another ward, while the plan waits.
     a = m("S2b", 1, "A01", "0900", ward="WARD-A")
     b = m("S2b", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
     again = m("S2b", 3, "A02", "0920", ward="WARD-C", prior="WARD-A")
@@ -157,7 +157,7 @@ def scenarios():
                                       blocked_by="PAYLOAD_CHANGED", final_reason="PAYLOAD_CHANGED")},
         [a, b, again]))
 
-    # EC-121: a raw CR inside a note, and a second PID. Each fails at the bed manager and comes to a case that can't validate it.
+    # A raw CR inside a note, and a second PID. Each fails at the bed manager and comes to a case that can't validate it.
     def broken(sid, title, summary, raw):
         a = m(sid, 1, "A01", "0900", ward="WARD-A")
         b = m(sid, 2, "A02", "0920", raw=raw, ward="WARD-B", prior="WARD-A")

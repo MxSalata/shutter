@@ -1,5 +1,6 @@
 /// Points the scenario runner at tests/e2e/edge-fixtures and back, for tests/e2e/edge_rows_check.py: scenarios that prove
 /// rows of docs/edge-cases.md, kept out of the demo's own list. <code>SELECT Shutter_Test.EdgeFixtures_Use(1)</code>.
+/// The folder must be in the container: the repository mounted whole, as in CI. The compose demo mounts no tests/.
 Class Shutter.Test.EdgeFixtures
 {
 

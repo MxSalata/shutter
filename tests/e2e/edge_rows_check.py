@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plays the rows of docs/edge-cases.md that need the production, on a running demo instance.
+"""Plays the rows of docs/edge-cases.md that need the production, on an instance with the repository mounted whole.
 
     python3 tests/e2e/edge_rows_check.py --url http://localhost:52773 [--ns SHUTTER] [S22b S2 S11 ...]
 
@@ -13,7 +13,9 @@
        comparison plus the history where the scenario asks for it.
 
 The variants sit apart from fixtures/, so the demo's list stays as it is: the check points the runner at them with
-Shutter_Test.EdgeFixtures_Use, which needs tests/unit loaded, and points it back when it ends. Signs in as the demo users
+Shutter_Test.EdgeFixtures_Use, which needs tests/unit loaded and tests/e2e/edge-fixtures in the container, as in CI (the
+compose demo mounts neither, and the check stops at once there). It points the runner back when it ends, and first, in
+case an earlier run was killed before it could. Signs in as the demo users
 `operator` and `approver` (password from SHUTTER_PASSWORD, default "shutter"). Each run resets the receivers, so don't run it
 on an instance someone else is using. Exit status 1 when a check fails. Standard library only.
 """
@@ -94,7 +96,7 @@ def outcomes_of(operator, case):
 
 
 def conflict_after_commit(args, operator, approver):
-    """EC-093: S2's resend reaches the receiver and commits, and the answer is a 409."""
+    """S2's resend reaches the receiver and commits, and the answer is a 409."""
     print("-- the write lands, and the answer says conflict", flush=True)
     floor = start(operator, "S2", "rules", args.timeout)
 
@@ -141,7 +143,7 @@ class HandFirst:
 
 
 def hand_resend_in_incident(args, operator, approver, listing):
-    """EC-084: S11 until its incident waits for approval, then a person resends one chain's first item by hand."""
+    """S11 until its incident waits for approval, then a person resends one chain's first item by hand."""
     print("-- someone resends by hand while the incident waits", flush=True)
     scenario = copy.deepcopy(listing["S11"])
     encounter = "ENC-1102"
@@ -183,7 +185,7 @@ def hand_resend_in_incident(args, operator, approver, listing):
 
 
 def write_to_one(args, operator, approver):
-    """EC-059: a transfer failed at two receivers; approving one case writes to that receiver alone."""
+    """A transfer failed at two receivers; approving one case writes to that receiver alone."""
     print("-- a write to one of two receivers", flush=True)
     floor = start(operator, "S22b", "rules", args.timeout)
 
@@ -256,6 +258,7 @@ def main():
         return {s["id"]: s for s in (body or {}).get("scenarios", [])}
 
     use = "SELECT Shutter_Test.EdgeFixtures_Use(?) AS r"
+    query(args.url, args.ns, use, (0,))
     try:
         for row, run in (("S2", lambda: conflict_after_commit(args, operator, approver)),
                          ("S11", lambda: hand_resend_in_incident(args, operator, approver, listed()))):
@@ -267,6 +270,8 @@ def main():
         rest = [w for w in wanted if w not in ("S2", "S11")]
         if rest:
             where = query(args.url, args.ns, use, (1,))[0]["r"]
+            if where.startswith("no scenarios.json"):
+                raise SystemExit(f"the variants can't be read: {where}")
             print(f"-- the runner reads {where}", flush=True)
             listing = listed()
             for sid in rest:
