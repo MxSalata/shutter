@@ -1032,6 +1032,15 @@ describe('CasePage', () => {
     expect(step).toHaveTextContent(/nobody: the gate blocked it; earlier approval of plan v1 revoked/);
   });
 
+  it('says no approval was revoked on a later round that had none to revoke', async () => {
+    renderCase('C-000062');
+    const top = await outcome();
+    expect(
+      await within(top).findByText(/^Round 2: the case was investigated again on fresh evidence/),
+    ).toBeInTheDocument();
+    expect(within(top).queryByText(/approval was revoked/)).not.toBeInTheDocument();
+  });
+
   it('moves focus to the approval when the reader asks to review the plan', async () => {
     renderCase('C-000002');
     const top = await outcome();
@@ -1346,8 +1355,10 @@ describe('the case page for both audiences', () => {
       'Replay · claude-opus-5-5 · 14.9 s · 3 steps · 2 tool calls · message 8013',
     );
     expect(coordinator).toHaveTextContent(/Cited 8 evidence sections and catalogue entry.*E7/);
-    // What must still hold waits one click away, its operation keys as codes
-    const holds = within(coordinator).getByRole('button', { name: 'What must still hold before a write' });
+    // What the coordinator wrote must still hold waits one click away, its operation keys as codes
+    const holds = within(coordinator).getByRole('button', {
+      name: 'What the coordinator wrote must still hold',
+    });
     expect(holds).toHaveAttribute('aria-expanded', 'false');
     expect(
       within(coordinator).getByText('BEDMGR^HOSP^MRN1008^ENC-1008^transfer^2026-10-15T08:20:00Z', {

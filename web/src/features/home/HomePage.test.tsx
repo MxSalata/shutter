@@ -77,7 +77,9 @@ describe('HomePage', () => {
     const page = heading.closest('main') ?? document.body;
     // The term's definition sits inside the sentence's text, so the words are read either side of it
     expect(page.textContent).toMatch(/Shutter fixes a failed HL7 transfer/);
-    expect(page.textContent).toMatch(/only when it can show the fix is safe\./);
+    expect(page.textContent).toMatch(
+      /only when its checks pass\. Otherwise it stops and names the patient\./,
+    );
   });
 
   it('starts someone new at the scenarios', async () => {

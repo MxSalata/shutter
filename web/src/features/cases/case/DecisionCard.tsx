@@ -365,7 +365,10 @@ export function DecisionCard({
                 <Text size="sm">{outcomeReason(facts)}</Text>
                 {round > 1 ? (
                   <Text size="sm">
-                    {`Round ${round}: the receiver changed after the approval, so the approval was revoked and the case was planned again on fresh evidence. The audit trail keeps every round.`}
+                    {/* Reinvestigate starts a round too, on a case nobody may have approved */}
+                    {(facts.approvals?.approvals ?? []).some((a) => a.revoked)
+                      ? `Round ${round}: the receiver changed after the approval, so the approval was revoked and the case was planned again on fresh evidence. The audit trail keeps every round.`
+                      : `Round ${round}: the case was investigated again on fresh evidence. The audit trail keeps every round.`}
                   </Text>
                 ) : null}
               </StoryCard>

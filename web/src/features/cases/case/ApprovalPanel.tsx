@@ -222,7 +222,8 @@ export function ApprovalPanel({
           {TRIAL && awaiting ? (
             <Alert color="blue" variant="light" title="Held for you to decide">
               This recorded case waits here for you. Approve it and the recording plays on: the fix goes out
-              and the receiving system confirms it. Reject it and it closes as blocked.
+              and the receiving system confirms it. Reject it and it stops as blocked, for a person to take
+              further.
             </Alert>
           ) : null}
           <KeyValueList
@@ -356,9 +357,9 @@ export function ApprovalPanel({
                       'Go ahead. You will see what happened next in the recording: the fix goes out and the receiving system confirms it. Nothing leaves this browser, and a reload starts the recording afresh.',
                   })
                 : byEnv({
-                    live: `Nothing is sent to ${receiverNoun(c.receiver)}: the case closes as blocked for a person to take further.`,
+                    live: `Nothing is sent to ${receiverNoun(c.receiver)}: the case stops as blocked for a person to take further.`,
                     trial:
-                      'Nothing is sent. The case closes as blocked, in this browser only, until a reload starts the recording afresh.',
+                      'Nothing is sent. The case stops as blocked, in this browser only, until a reload starts the recording afresh.',
                   })}
             </Text>
             {lastDecision === 'approve' ? (
