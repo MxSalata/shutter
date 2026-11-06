@@ -614,7 +614,7 @@ In `policy` mode the matcher's decision is:
 - **A receiver of category `orders_results` (v1.23), in every mode:** no board and no investigator: the workflow adopts an
   escalate plan ("not modelled yet"), and the gate appends `RECEIVER_NOT_MODELLED`.
 - **`correct_history` at a `history_of_record` receiver (v1.23):** the policy path's plan escalates with
-  `correction_steps` (section 10) and the case carries a note "Correcting the history: ...".
+  `correction_steps` (section 10, with the drafted sequence's structure from v1.47) and the case carries a note "Correcting the history: ...".
 - The matches, with every condition's observed value, are stored on the case (`catalogue` in the snapshot summary) and
   shown in the app.
 - Recording keys for replays name the case within its scenario: `scenario:<S>:<encounter>:<event>[:<receiver>]|<member>|<cfg>[|round<n>]`
@@ -1176,15 +1176,62 @@ turns as the gaps between them) from stored rows alone, and the DPI-I-689 querie
 
 ## 10. Escalation by email (v1.11)
 
-**Correcting the history** (v1.23). When a `history_of_record` receiver's case escalates with the outcome
+**Correcting the history** (v1.23, v1.47). When a `history_of_record` receiver's case escalates with the outcome
 `correct_history`, the plan carries `correction_steps`: `{receiver, system, category, encounter, missing: {event, ward,
-event_time, source_message_id, operation_key, after}, later: [{event, ward, event_time}], current: {state, ward, version},
-receipt, steps: [text]}`, built by `Shutter.Util.HistoryCorrection` from the case and the snapshot alone. The eight steps,
-in order: hold the case and never resend the original message; confirm the current placement, reading only; confirm the
-gap and where the movement belongs; have the correction approved and recorded; insert the movement as a historic
-movement through the receiver's own correction route, one write by one person; keep the current placement; read the
-history back and have a second person check it; record it on the case and close the case by hand. The escalation draft
-prints them as a section "CORRECTING THE HISTORY"; the case page shows them from the plan.
+event_time, source_message_id, operation_key, after}, later: [{event, ward, event_time, operation_key, source_message_id,
+ens_header_id}], current: {state, ward, version}, receipt, steps: [text], sequence}`, built by
+`Shutter.Util.HistoryCorrection` from the case and the snapshot. The eight steps, in order: hold the case and never resend
+the original message; confirm the current placement, reading only; confirm the gap and where the movement belongs; have the
+correction approved and recorded; correct the record through the receiver's own records procedure, one write by one person
+(a Z99 historic-movement update can't add a movement the receiver never got, so none is offered); under that procedure keep
+the current placement; read the history back and have a second person check it; record it on the case and close the case by
+hand. The escalation draft prints them as a section "CORRECTING THE HISTORY"; the case page shows them from the plan.
+
+**The drafted sequence** (v1.47). Beside the receiver's own procedure, Shutter may draw the exact cancel-and-replay sequence
+a person could send. It sends nothing: there is no Send button and no write path, and the gate, the verifier and the
+approvals never read it. For k later movements it is 2k + 1 messages: k cancels, newest first (A12 for a transfer, A13 for a
+discharge), then the failed movement, then the later movements, oldest first, because a cancel reaches only what is current
+at that step. A replay is the stored message exactly as IRIS gives it back. A cancel is built by a fixed table from the
+message it cancels: MSH-3 to 6, MSH-11, MSH-12, PID, PV1-1, PV1-2, PV1-19 and PV1-44 copied; on an A12 PV1-3 is the cancelled
+message's PV1-6 (HL7: the location before the original transfer), PV1-6 its PV1-3 (Shutter's choice, as the fixtures do) and
+PV1-45 copied; on an A13 PV1-3 is the discharge message's PV1-3, with PV1-6 and PV1-45 empty; MSH-7, MSH-10, EVN-2 and EVN-6
+are placeholders a person fills (`[SENDER: ...]`, `[SITE: ...]`). MSH-9 is `ADT^A12^ADT_A12` or `ADT^A13^ADT_A01`, the
+structure HL7 2.5.1 gives each.
+
+`correction_steps.sequence` is structure only, with no message text, name or address, because the plan is sent, reduced, to a
+model (section 9): `{drawn, reason_code, reason, k, count, receiver_version, observed_at, cancels_flag (true, false, or null
+when the profile has no entry), resend_timestamp, steps: [{n, kind (cancel, replay), trigger, cancels?: {event, ward,
+event_time, operation_key, source_message_id, ens_header_id}, event?, ward?, event_time?, operation_key?, source_message_id?,
+ens_header_id?, body_digest? (of the stored text as IRIS gives it back), non_ascii, after: {by_source, by_receiver}}],
+left_alone: [{event, event_time, operation_key}], end: {ward, history}, checked_at}`.
+
+Only E1 and E6 are drawn. The first of these that holds draws nothing, with `reason_code` and a line that starts "No
+sequence:", and the eight steps stay: `not_e1_e6` (another entry, or a failed movement that isn't a transfer); `cancels_false`
+(the profile says false, or has no entry for the receiver: the seed says false for both demo receivers, so a shipped S22 draws
+none); `identifier_unreadable`; `merge_seen`; `feed_not_indexed` (a case forwarded from another namespace, or the index behind);
+`pending_message`; `further_message`; `later_undelivered`; `later_not_movement` (a later admission, merge or cancel);
+`history_mismatch` (the receiver's rows and the feed's don't match one for one by operation key); `k_zero`; `time_in_doubt`;
+`body_unreadable`; `pv1_6_empty`; `zbe_present`; `receipt_present`. A message above ASCII doesn't stop it: a replay's text is
+withheld with a line saying to resend it from the message store, and a cancel carrying the copied PID has the same warning.
+
+`further_message` is the patient-level check (`Shutter.Index.Message.ForPatient`, which respects the identifier's authority and
+counts a row with none): any message for this patient since the reset, on any encounter, that the failed movement and the later
+movements don't account for, with an event time at or after the failed one, received after the failed message or after the
+snapshot, or with no readable time. An earlier stay is not a further message. An update (A08) inside the span on the same
+encounter is listed under `left_alone` and doesn't stop the draft. The check can't see a change made by hand at the receiver or
+a message on a route the index doesn't cover; the draft says so.
+
+`GET /cases/{id}/correction-draft` (`Shutter_Approve`, an approver's, because this is raw HL7 with a name and an address; 401
+signed out, 403 `forbidden` naming the resource for an operator) gives the text. 404 `not_found`; 404 `no_plan`; 409
+`wrong_outcome` when the plan has no `correction_steps`. Otherwise 200 `{caseId, drawn, reason_code, reason, header: [line],
+messages: [{n, kind, trigger, label, text (null when withheld), withheld, after, body_digest}], cannot_know: [{what, why, does}],
+left_alone: [line], never: [line], digest, checked_at}`; with `drawn` false the lists are empty. `text` is the message with
+segments ended by a carriage return, as IRIS gives it. Every read runs the checks again on the live index and pending list, so
+`drawn` here wins over the plan's, which is the state at plan time. It never reads the receiver. A read with `drawn` true appends
+a `note` event to the case, "Correction draft read by <user>: <n> messages, digest <digest>", with no message text; a read
+with `drawn` false appends nothing. The email carries one line and none of the text: "A drafted sequence of <n> messages is on
+the case, for an approver to read on the case page; this email carries none of it." or "No message sequence was drafted: <the
+reason>."
 
 A blocked, escalated or failed case can be handed to the people who correct systems by hand. The draft is built from
 the stored case without a model (`Shutter.Util.EscalationDraft`): the hospital number and NHS number, the date of birth,
