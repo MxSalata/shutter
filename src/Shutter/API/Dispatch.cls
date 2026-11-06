@@ -34,6 +34,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/precedents/:id/retire" Method="POST" Call="PrecedentRetire"/>
   <Route Url="/cases/:caseId/attempts" Method="GET" Call="CaseAttempts"/>
   <Route Url="/cases/:caseId/closure" Method="GET" Call="CaseClosure"/>
+  <Route Url="/cases/:caseId/bundle" Method="POST" Call="CaseBundle"/>
   <Route Url="/cases/:caseId/preview-blind-resend" Method="POST" Call="CasePreview"/>
   <Route Url="/cases/:caseId/blocked-reason" Method="GET" Call="CaseBlockedReason"/>
   <Route Url="/cases/:caseId/reinvestigate" Method="POST" Call="CaseReinvestigate"/>
@@ -662,6 +663,27 @@ ClassMethod CaseClosure(caseId As %String) As %Status
     Set case = ..CaseOr404(caseId)
     If '$ISOBJECT(case) Quit $$$OK
     If 'case.IsClosed() Quit ..Fail("404 Not Found", "not_closed", "The case is still " _ case.State)
+    Quit ..Json(..ClosureObject(case))
+}
+
+/// One case's bundle for audit and support handoff (CONTRACTS 5): a file, redacted, and a record on the case.
+ClassMethod CaseBundle(caseId As %String) As %Status
+{
+    If '..Allow("Shutter_Operate", 1) Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set text = ##class(Shutter.API.CaseBundle).Download(case, ..User(), .why)
+    If text = "" Quit ..Fail("409 Conflict", "not_redactable", why)
+    Set %response.ContentType = "application/json"
+    Do %response.SetHeader("Content-Disposition", "attachment; filename=""shutter-case-" _ case.CaseId _ "-redacted.json""")
+    Do %response.SetHeader("Cache-Control", "no-store")
+    Write text
+    Quit $$$OK
+}
+
+/// The closure record of a closed case.
+ClassMethod ClosureObject(case As Shutter.Store.Case) As %DynamicObject
+{
     Set o = {}
     Set o.caseId = case.CaseId, o.state = case.State, o.disposition = case.Disposition, o.outcome = case.Outcome, o.closedAt = case.ClosedAt
     Set vid = "", id = case.%Id()
@@ -689,7 +711,7 @@ ClassMethod CaseClosure(caseId As %String) As %Status
     Set pv = ""
     &sql(SELECT TOP 1 PolicyVersion INTO :pv FROM Shutter_Store.GateDecision WHERE "Case" = :id ORDER BY ID DESC)
     Set o.policyVersion = $GET(pv)
-    Quit ..Json(o)
+    Quit o
 }
 
 ClassMethod CasePreview(caseId As %String) As %Status
