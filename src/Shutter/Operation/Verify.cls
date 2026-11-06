@@ -188,7 +188,11 @@ ClassMethod Judge(ctx As %DynamicObject, Output text As %String, Output detail A
     } ElseIf disposition = "superseded" {
         If estatus = 200 {
             Set later = ..Support(ctx.%Get("later"), "history", .ev)
-            If (later '= "") && ((rstatus = 404) || (rstatus = -1)) {
+            If (later '= "") && ((rstatus = 404) || (rstatus = -1)) && inHistory {
+                // The closure stands, since the later event does, but the stale operation did reach the receiver.
+                Set outcome = "verified", verdict = "committed"
+                Set text = "Nothing was resent; the stale operation is in the receiver's history, and a later event overtook it (" _ later _ "). Current state " _ where
+            } ElseIf (later '= "") && ((rstatus = 404) || (rstatus = -1)) {
                 Set outcome = "verified", verdict = "not_committed"
                 Set text = "Nothing was resent; the receiver's history shows the later event (" _ later _ ") and no receipt for the stale operation. Current state " _ where
             } ElseIf rstatus = 200 {
