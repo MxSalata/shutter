@@ -475,11 +475,12 @@ nothing, so a team's `receivers` must say that. A namespace already wired keeps 
 plan warns if an operation added later takes a name another namespace reports. Through the API, `GET /api/shutter/site-profile`, change the `profile` inside the reply, and
 `PUT` that inner object, all of it, back with the header `X-Requested-With: Shutter`; a part alone, or the outer reply, answers 400. A receiver with no API stays declared as it is, and its failures escalate to its team. `Shutter_Approver` may save the profile, policy included, so `approval` is a setting an approver can change; `GET /api/shutter/site-profile/history` keeps each version and who saved it.
 
-**What a tier decides.** A receiver's tier is read with the profile's `policy`, by the shape of the failure. As shipped: tier 1 writes a
-single failed message or an ordered chain with no approval; tier 2 writes a single failed message with no approval and asks for one on an
-ordered chain; tier 3, a draft's tier, asks for approval on both. An interleaved failure goes to the board at every tier. So giving a
-receiver an API at tier 1 or 2 is what lets a case write to it with no person, through the gate's checks alone. For a person on every
-write, keep it at tier 3 or set that part of `policy` to `approval`.
+**What a tier decides.** A receiver's tier is read with the profile's `policy`, by the shape of the failure. A non-demo install starts
+with no automatic release: the seed's demo receivers are replaced by one draft to fill in, and every `automatic` in its policy reads
+`approval`, so every write waits for a person. The demo's policy, and what you can choose for your own tiers: tier 1 writes a single failed
+message or an ordered chain with no approval; tier 2 writes a single failed message with no approval and asks for one on an ordered chain;
+tier 3, a draft's tier, asks for approval on both. An interleaved failure goes to the board at every tier. So setting a tier's `policy` to
+`automatic` and giving a receiver at that tier an API is what lets a case write to it with no person, through the gate's checks alone.
 
 **Giving a receiver its API.** Only a receiver with state, receipt, capabilities and operations paths can be recovered. Add
 them in the profile, then, since Shutter writes through a connector item of that receiver's name in its own production:

@@ -45,7 +45,58 @@ ClassMethod Current() As %DynamicObject
         Set p = ##class(Shutter.Util.Json).Parse(row.Json, .sc)
         If $ISOBJECT(p) Set p.version = row.Version Quit p
     }
-    Quit ..Default()
+    Quit $SELECT(..DemoInstall(): ..Default(), 1: ..ForSite(..Default()))
+}
+
+/// Whether this instance is the demo. Every install sets the flag before it seeds; a namespace with no flag has had no
+/// install, and keeps the shipped defaults.
+ClassMethod DemoInstall() As %Boolean
+{
+    Quit ''$GET(^Shutter.Config("demo"), 1)
+}
+
+/// What a non-demo install starts from: the seed or the defaults with the demo's receivers taken out and no automatic
+/// release, so nothing is written with no person until the site says so in its own profile. A site item that happened
+/// to share a demo receiver's name would otherwise be written to by policy. A profile needs a receiver, so a list left
+/// empty gets one draft to fill in, and a draft is never written to. Changes p and returns it.
+ClassMethod ForSite(p As %DynamicObject) As %DynamicObject
+{
+    Set demoNames = $LISTBUILD($PARAMETER("Shutter.Production", "RECEIVER"), "Records Out")
+    Set json = "Shutter.Util.Json"
+    Set keep = [], list = p.%Get("receivers")
+    If $ISOBJECT(list) {
+        Set it = list.%GetIterator()
+        While it.%GetNext(, .r) {
+            If '$LISTFIND(demoNames, $CLASSMETHOD(json, "Str", r, "name")) Do keep.%Push(r)
+        }
+    }
+    If keep.%Size() = 0 Do keep.%Push({"name": "Your first receiver", "system": "a placeholder: rename it to the production item that delivers to your system, and fill it in", "tier": 3, "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "merges": false, "features": {"conditional_writes": false, "receipts": false, "history": false, "dry_run": false}, "draft": true})
+    Set p.receivers = keep
+    Set teams = p.%Get("teams")
+    If $ISOBJECT(teams) {
+        Set it = teams.%GetIterator()
+        While it.%GetNext(, .team) {
+            Set names = team.%Get("receivers")
+            Continue:'$ISOBJECT(names)
+            Set kept = [], ni = names.%GetIterator()
+            While ni.%GetNext(, .name) {
+                If '$LISTFIND(demoNames, name) Do kept.%Push(name)
+            }
+            Set team.receivers = kept
+        }
+    }
+    Set policy = p.%Get("policy")
+    If $ISOBJECT(policy) {
+        Set it = policy.%GetIterator()
+        While it.%GetNext(.tier, .row) {
+            Continue:'$ISOBJECT(row)
+            Set ri = row.%GetIterator()
+            While ri.%GetNext(.kind, .value) {
+                If value = "automatic" Do row.%Set(kind, "approval")
+            }
+        }
+    }
+    Quit p
 }
 
 ClassMethod Row() As Shutter.Store.SiteProfile
@@ -304,6 +355,7 @@ ClassMethod SeedFromFile(path As %String) As %Status
     If text = "" Quit $$$OK
     Set p = ##class(Shutter.Util.Json).Parse(text, .sc)
     If '$ISOBJECT(p) || $$$ISERR(sc) Quit $$$ERROR($$$GeneralError, "The seed profile " _ path _ " is not a JSON object")
+    If '..DemoInstall() Set p = ..ForSite(p)
     Set row = ..Row()
     // The seed fills an empty store and follows its own file; a profile a person saved (another source) is theirs and
     // is never overwritten by a reinstall or a restart.
