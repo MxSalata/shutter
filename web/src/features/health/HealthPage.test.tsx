@@ -175,6 +175,59 @@ describe('HealthPage on a live system', () => {
     expect(other).toHaveTextContent('since the demo last reset (every hour)');
     expect(other).not.toHaveTextContent(/today/i);
   });
+
+  it('tells the truth about a dead receiver in the hero, within the budget, with the recorded report behind it', async () => {
+    const dead = {
+      ...fixtures.health,
+      receivers: [
+        {
+          name: 'Downstream Out',
+          has_api: true,
+          state: 'no_answer',
+          at: '2026-11-06T14:02:09Z',
+          http_status: 0,
+          from: 'connector',
+          last_answer_at: '2026-11-06T13:10:00Z',
+          incident: 'I-000002',
+        },
+      ],
+      receivers_ok: false,
+      watched_ok: false,
+      watched_namespaces: [
+        {
+          namespace: 'PAS',
+          ok: false,
+          problems: ['The alert intake Ens.Alert is disabled in PAS.Production: its failures open no case'],
+        },
+      ],
+    };
+    const plain = renderHealth(dead, 'plain');
+    const hero = await screen.findByRole('region', { name: 'Needs a look' });
+    expect(hero).toHaveTextContent(
+      'Running, but a receiver is not answering and a watched namespace has a problem.',
+    );
+    expect(hero).toHaveTextContent('Downstream Out: no answer at 6 Nov 2026, 14:02 UTC.');
+    expect(hero).toHaveTextContent('PAS: The alert intake Ens.Alert is disabled');
+    expect(screen.queryByRole('region', { name: 'Ready' })).not.toBeInTheDocument();
+    await screen.findByText('3 specialist agents and the coordinator agent');
+    expect(layer1Words(plain.container).length).toBeLessThanOrEqual(PLAIN_BUDGET);
+    plain.unmount();
+    const technical = renderHealth(dead, 'technical');
+    await screen.findByRole('region', { name: 'Needs a look' });
+    await screen.findByText('3 specialist agents and the coordinator agent');
+    expect(layer1Words(technical.container).length).toBeLessThanOrEqual(TECHNICAL_BUDGET);
+  });
+
+  it('adds no first-layer words when the receivers answer', async () => {
+    const well = { ...fixtures.health, receivers: [], receivers_ok: true, watched_ok: true };
+    const before = renderHealth(fixtures.health as Record<string, unknown>, 'plain');
+    await screen.findByText('3 specialist agents and the coordinator agent');
+    const without = layer1Words(before.container).length;
+    before.unmount();
+    const after = renderHealth(well, 'plain');
+    await screen.findByText('3 specialist agents and the coordinator agent');
+    expect(layer1Words(after.container).length).toBe(without);
+  });
 });
 
 describe("the trial's chip for a piece the recorded instance did not have", () => {

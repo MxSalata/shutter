@@ -17,6 +17,8 @@ import {
   isLong,
   licenceSentence,
   objectLines,
+  receiverLine,
+  receiverReadings,
   type Group as GroupData,
   type Mark,
   type Report,
@@ -99,6 +101,18 @@ function ValueView({ row, report }: { row: Row; report: Report }) {
                 {` ${c.detail}`}
               </Text>
             ) : null}
+          </Text>
+        ))}
+      </Stack>
+    );
+  }
+  if (key === 'receivers' && Array.isArray(value)) {
+    if (!value.length) return <Text size="sm">None in the site profile</Text>;
+    return (
+      <Stack gap={2}>
+        {receiverReadings(value).map((r) => (
+          <Text key={r.name} size="sm">
+            {receiverLine(r)}
           </Text>
         ))}
       </Stack>
