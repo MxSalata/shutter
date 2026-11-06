@@ -244,6 +244,39 @@ ClassMethod NearBritishClockChange(iso As %String) As %Boolean
     Quit (gap >= -3600) && (gap <= 3600)
 }
 
+/// Whether a UTC time is within an hour of a clock change in a zone, where a local time with no offset may be one that
+/// night holds twice or not at all: London by its own rule, any other IANA zone through Embedded Python's zoneinfo, by
+/// the offsets an hour either side. UTC, a fixed offset, a zone nobody knows and an IRIS without zoneinfo have no change
+/// to be near.
+ClassMethod NearClockChange(zone As %String, iso As %String) As %Boolean
+{
+    Set zone = $ZSTRIP(zone, "<>W")
+    If (zone = "") || $LISTFIND($LISTBUILD("UTC", "Z"), $ZCONVERT(zone, "U")) || $MATCH(zone, "^[+-][0-9]{2}:?[0-9]{2}$") Quit 0
+    If zone = "Europe/London" Quit ..NearBritishClockChange(iso)
+    If '$MATCH(zone, "^[A-Za-z0-9_+/-]{1,64}$") || '$MATCH(iso, "[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z") || '..PythonZones() Quit 0
+    Set near = 0
+    Try {
+        Set near = ..PyNearChange(zone, +$EXTRACT(iso, 1, 4), +$EXTRACT(iso, 6, 7), +$EXTRACT(iso, 9, 10), +$EXTRACT(iso, 12, 13), +$EXTRACT(iso, 15, 16), +$EXTRACT(iso, 18, 19))
+    } Catch {
+        Set near = 0
+    }
+    Quit ''near
+}
+
+/// 1 when a zone's offset differs between an hour before and an hour after a UTC time, else 0, and 0 for a zone or a time
+/// that can't be read.
+ClassMethod PyNearChange(zone As %String, y As %Integer, mo As %Integer, d As %Integer, hh As %Integer, mi As %Integer, ss As %Integer) As %Integer [ Language = python ]
+{
+    try:
+        import datetime, zoneinfo
+        tz = zoneinfo.ZoneInfo(str(zone))
+        at = datetime.datetime(int(y), int(mo), int(d), int(hh), int(mi), int(ss), tzinfo=datetime.timezone.utc)
+        hour = datetime.timedelta(hours=1)
+        return 1 if (at - hour).astimezone(tz).utcoffset() != (at + hour).astimezone(tz).utcoffset() else 0
+    except Exception:
+        return 0
+}
+
 /// The last Sunday of a month, as YYYY-MM-DD.
 ClassMethod LastSunday(year As %Integer, month As %Integer) As %String
 {

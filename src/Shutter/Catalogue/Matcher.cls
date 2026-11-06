@@ -372,9 +372,9 @@ ClassMethod AtOrAfter(time As %String, key As %String, case As Shutter.Store.Cas
 
 /// Whether the failed event's time is plausible (T28): before_admission when it precedes the admission the message
 /// or the receiver's history names (for anything but an admission); future when it is more than five minutes after
-/// the message was sent or the evidence was taken; far_from_recorded when it is more than a day from the time the
-/// event was recorded (EVN-2); clock_change when it came without an offset and lies within an hour of a British clock
-/// change, where the order of two events is not safe; later_event_future when the failed event's own time is sound but
+/// the message was sent, the engine received it or the evidence was taken; far_from_recorded when it is more than a day
+/// from the time the event was recorded (EVN-2); clock_change when it came without an offset and lies within an hour of a
+/// clock change in the feed's zone, where the order of two events is not safe; later_event_future when the failed event's own time is sound but
 /// a later event it would be ordered against (Later) lies in the future by the same five-minute rule and believing it
 /// would change the reading, so a wrong time could make a genuine failure look overtaken; plausible otherwise.
 ClassMethod EventTimePlausibility(summary As %DynamicObject, case As Shutter.Store.Case, later As %DynamicArray = "") As %String
@@ -399,7 +399,7 @@ ClassMethod EventTimePlausibility(summary As %DynamicObject, case As Shutter.Sto
     If (sent '= "") && (t ]] sent) && ($ZABS(##class(Shutter.Util.Time).SecondsBetween(sent, t)) > 300) Quit "future"
     If (observed '= "") && (t ]] observed) && ($ZABS(##class(Shutter.Util.Time).SecondsBetween(observed, t)) > 300) Quit "future"
     If (recorded '= "") && ($ZABS(##class(Shutter.Util.Time).SecondsBetween(recorded, t)) > 86400) Quit "far_from_recorded"
-    If msg.%IsDefined("event_time_had_offset") && '$CLASSMETHOD(json, "Bool", msg, "event_time_had_offset") && ($CLASSMETHOD(json, "Str", msg, "feed_time_zone") = "Europe/London") && ##class(Shutter.Util.Time).NearBritishClockChange(t) Quit "clock_change"
+    If msg.%IsDefined("event_time_had_offset") && '$CLASSMETHOD(json, "Bool", msg, "event_time_had_offset") && ##class(Shutter.Util.Time).NearClockChange($CLASSMETHOD(json, "Str", msg, "feed_time_zone"), t) Quit "clock_change"
     If '$ISOBJECT(later) Set later = ..Later(summary, case)
     Quit ..LaterTimeDoubt(summary, case, later)
 }
