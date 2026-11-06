@@ -1,7 +1,7 @@
 import { MantineProvider } from '@mantine/core';
 import { Notifications, notifications } from '@mantine/notifications';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -502,9 +502,25 @@ describe('IncidentPage', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the release' }));
     expect(
       await within(dialog).findByText(
-        "The incident's plan changed since this page loaded: close this and review it again.",
+        "The incident's plan changed since you opened this: close this and review it again.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it('stops a dialog left open when the plan changes under it, and posts nothing', async () => {
+    served = waiting();
+    renderAt('/incidents/I-000001');
+    const approval = await screen.findByRole('region', { name: 'Approval' });
+    await userEvent.click(within(approval).getByRole('button', { name: /Approve/ }));
+    const dialog = await screen.findByRole('dialog');
+    // The page's next read brings the new digest under the open dialog
+    served = { ...served, planDigest: 'sha256:another' };
+    const confirm = within(dialog).getByRole('button', { name: 'Approve the release' });
+    await waitFor(() => expect(confirm).toBeDisabled(), { timeout: 10_000 });
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      "The incident's plan changed since you opened this: close this and review it again.",
+    );
+    expect(posted).toBeNull();
   });
 
   it('keeps the decision from someone without the approver role', async () => {
