@@ -267,6 +267,66 @@ Method OldCase(state As %String, disposition As %String = "", incident As Shutte
     Quit id
 }
 
+/// A receiver that applied a dry run. The verifier finds the receipt and the history, and the case read as an
+/// approved success with no approval anywhere.
+Method TestAWriteDuringARehearsalNeverResolves()
+{
+    Set c = ..SavedCase(, "rehearsing")
+    Set p = ..ResendPlan(c)
+    Set wf = ##class(Shutter.Test.QuietWorkflow).%New("Case Workflow")
+    Set wf.CaseId = c.CaseId, wf.PlanId = p.%Id(), wf.Mode = "policy"
+    Set sent = ##class(Shutter.Msg.WardOperation).%New()
+    Set sent.OperationKey = c.OperationKey
+    Set result = ##class(Shutter.Msg.WardResult).%New()
+    Set result.Outcome = "applied", result.HttpStatus = 201, result.ResponseJSON = "{}"
+    Do $$$AssertStatusOK(wf.OnRehearsal(c, sent, result), "the rehearsal is taken")
+    Do $$$AssertEquals(c.State, "verifying", "the effect is verified")
+    Set verified = ##class(Shutter.Msg.VerifyResult).%New()
+    Set verified.Outcome = "verified", verified.Summary = "Committed and current", verified.DetailJSON = "{}"
+    Do $$$AssertStatusOK(wf.OnVerify(c, verified), "the verification is taken")
+    Do $$$AssertEquals(c.State, "escalated", "nobody released it, so a person checks")
+    Set id = c.%Id(), text = ""
+    &sql(SELECT TOP 1 Text INTO :text FROM Shutter_Store.CaseEvent WHERE "Case" = :id AND ToState = 'escalated' ORDER BY Seq DESC)
+    Do $$$AssertTrue(text [ "during a rehearsal", "the trail says so: " _ text)
+    Do $$$AssertEquals(##class(Shutter.API.Dispatch).ReasonFromEvent(text, "escalated"), "WRITE_NOT_RELEASED", "the reason it shows")
+    Do $$$AssertTrue(##class(Shutter.API.Dispatch).StoppedAfterTheGate(text), "an earlier round's gate block is not the reason")
+    Do $$$AssertTrue(c.Headline [ "rehearsal", "the headline: " _ c.Headline)
+}
+
+/// The same verified answer on a write somebody released resolves, as it always has.
+Method TestAReleasedWriteStillResolves()
+{
+    Set c = ..SavedCase()
+    Set p = ..ResendPlan(c)
+    Set approval = ##class(Shutter.Store.Approval).%New()
+    Do approval.CaseSetObjectId(c.%Id())
+    Set approval.Plan = p
+    Do $$$AssertStatusOK(approval.%Save(), "an approval")
+    Do $$$AssertStatusOK(##class(Shutter.Store.ExecutionAttempt).Create(c, p, approval, "", 201, "applied", {}, "", .a), "the attempt")
+    Set wf = ##class(Shutter.Test.QuietWorkflow).%New("Case Workflow")
+    Set wf.CaseId = c.CaseId, wf.PlanId = p.%Id(), wf.ApprovalId = approval.%Id(), wf.AttemptId = a.%Id(), wf.Mode = "policy"
+    Set verified = ##class(Shutter.Msg.VerifyResult).%New()
+    Set verified.Outcome = "verified", verified.Summary = "Committed and current", verified.DetailJSON = "{}"
+    Do $$$AssertStatusOK(wf.OnVerify(c, verified), "the verification is taken")
+    Do $$$AssertEquals(c.State, "resolved", "a released write that verifies resolves")
+}
+
+/// The preview needs only the operator's role and passes no gate, so a receiver that writes it has made a write
+/// no plan or person released. It is recorded as an attempt and the case stops for a person.
+Method TestAPreviewThatWroteStopsTheCase()
+{
+    Set c = ..SavedCase(, "awaiting_approval")
+    Set result = ##class(Shutter.Msg.WardResult).%New()
+    Set result.Outcome = "applied", result.HttpStatus = 201, result.ResponseJSON = "{""applied"":true}"
+    Do $$$AssertStatusOK(##class(Shutter.API.Dispatch).PreviewWrote(c, result, "operator"), "the preview's write is recorded")
+    Do $$$AssertEquals(c.State, "blocked", "the case stops for a person")
+    Set id = c.%Id(), n = 0, text = ""
+    &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.ExecutionAttempt WHERE "Case" = :id AND Outcome = 'applied')
+    Do $$$AssertEquals(+n, 1, "with an attempt on the record")
+    &sql(SELECT TOP 1 Text INTO :text FROM Shutter_Store.CaseEvent WHERE "Case" = :id AND ToState = 'blocked' ORDER BY Seq DESC)
+    Do $$$AssertEquals(##class(Shutter.API.Dispatch).ReasonFromEvent(text, "blocked"), "WRITE_NOT_RELEASED", "the reason it shows: " _ text)
+}
+
 /// No sign of a write by the last read proves nothing. It escalates as unknown, and the approval it spent stays spent.
 Method TestNoSignOfAWriteIsUnknownAndTheApprovalIsSpent()
 {

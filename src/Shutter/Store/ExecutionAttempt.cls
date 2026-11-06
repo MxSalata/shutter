@@ -37,11 +37,13 @@ ClassMethod Create(case As Shutter.Store.Case, plan As Shutter.Store.Plan, appro
     Set e = ..%New()
     // By id, not the caller's copy (as Snapshot.Begin does): a save of the attempt never writes the case copy whole.
     Do e.CaseSetObjectId(case.%Id())
-    Set e.Plan = plan
+    If $ISOBJECT(plan) Set e.Plan = plan
     If $ISOBJECT(approval) Set e.Approval = approval
     If $ISOBJECT(rehearsal) Set e.Rehearsal = rehearsal
     Set e.At = ##class(Shutter.Util.Time).NowUTC()
-    Set e.OperationKey = plan.OperationKey, e.ExpectedVersion = plan.ExpectedVersion
+    // No plan: a write nobody planned, a preview the receiver applied, is on the case's own operation, conditional on nothing.
+    Set e.OperationKey = $SELECT($ISOBJECT(plan): plan.OperationKey, 1: case.OperationKey)
+    If $ISOBJECT(plan) Set e.ExpectedVersion = plan.ExpectedVersion
     Set e.HttpStatus = httpStatus, e.Outcome = outcome, e.Error = $EXTRACT(error, 1, 2000)
     Set e.ResponseJSON = ##class(Shutter.Util.Json).Text(response)
     If $ISOBJECT(response) && $ISOBJECT(response.%Get("receipt")) Set e.ReceiptJSON = response.%Get("receipt").%ToJSON()
