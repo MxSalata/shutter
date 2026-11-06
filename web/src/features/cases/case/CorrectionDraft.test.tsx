@@ -184,7 +184,7 @@ describe('the drafted sequence on the case', () => {
     expect(screen.getByRole('button', { name: 'Copy message 3' })).toBeInTheDocument();
   });
 
-  it('shows a cancel carrying the copied PID with the warning, and no Copy beside "Don\'t paste"', async () => {
+  it('never puts a Copy beside a "Don\'t paste" line, even with text on the page', async () => {
     const withheld = "Don't paste this message: the copy here may not match the bytes sent.";
     draftRoute({
       ...DRAWN_DRAFT,

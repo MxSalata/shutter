@@ -1211,8 +1211,11 @@ sequence:", and the eight steps stay: `not_e1_e6` (another entry, or a failed mo
 none); `identifier_unreadable`; `merge_seen`; `feed_not_indexed` (a case forwarded from another namespace, or the index behind);
 `pending_message`; `further_message`; `later_undelivered`; `later_not_movement` (a later admission, merge or cancel);
 `history_mismatch` (the receiver's rows and the feed's don't match one for one by operation key); `k_zero`; `time_in_doubt`;
-`body_unreadable`; `pv1_6_empty`; `zbe_present`; `receipt_present`. A message above ASCII doesn't stop it: a replay's text is
-withheld with a line saying to resend it from the message store, and a cancel carrying the copied PID has the same warning.
+`history_mismatch` again (the receiver's current placement isn't the last movement of its history, so the first cancel wouldn't
+reach what is current); `body_unreadable`; `pv1_6_empty`; `zbe_present`; `cancel_non_ascii` (what a cancel copies holds a
+character above ASCII: the copy may not match the bytes sent, and a cancel isn't in the message store to resend);
+`receipt_present`. A replay above ASCII doesn't stop it: its text is withheld with a line saying to resend it from the message
+store.
 
 `further_message` is the patient-level check (`Shutter.Index.Message.ForPatient`, which respects the identifier's authority and
 counts a row with none): any message for this patient since the reset, on any encounter, that the failed movement and the later

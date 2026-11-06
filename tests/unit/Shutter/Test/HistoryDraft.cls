@@ -37,15 +37,19 @@ ClassMethod Case() As Shutter.Store.Case
 ClassMethod Summary(moves As %DynamicArray) As %DynamicObject
 {
     Set history = [{"event": "admit", "ward": "WARD-A", "event_time": "2026-10-19T08:00:00Z", "operation_key": (..Key("admit", "2026-10-19T08:00:00Z")), "applied_at": "2026-10-19T08:00:01Z"}]
-    Set timeline = [], li = moves.%GetIterator()
+    Set timeline = [], li = moves.%GetIterator(), newest = ""
     While li.%GetNext(, .m) {
+        If '$ISOBJECT(newest) || (##class(Shutter.Util.HistoryDraft).Gap(newest.%Get(2), m.%Get(2)) > 0) Set newest = m
         Set key = ..Key(m.%Get(0), m.%Get(2))
         Do history.%Push({"event": (m.%Get(0)), "ward": (m.%Get(1)), "event_time": (m.%Get(2)), "operation_key": (key), "applied_at": (m.%Get(2))})
         Set row = {"event": (m.%Get(0)), "ward": (m.%Get(1)), "event_time": (m.%Get(2)), "operation_key": (key), "source": "feed", "outcome": "applied", "sent_at": (m.%Get(2)), "source_message_id": ("MSG-" _ m.%Get(1)), "ens_header_id": ("H-" _ m.%Get(1))}
         Do row.%Set("later", 1, "boolean")
         Do timeline.%Push(row)
     }
-    Quit {"observed_at": "2026-10-19T12:00:00Z", "receipt_http_status": 404, "ward_state": {"state": "admitted", "ward": "WARD-C", "version": 3, "history": (history)}, "timeline": (timeline)}
+    // The receiver's placement follows its newest movement, as a real receiver's does.
+    Set gone = $ISOBJECT(newest) && (newest.%Get(0) = "discharge")
+    Set state = $SELECT(gone: "discharged", 1: "admitted"), ward = $SELECT(gone: "", $ISOBJECT(newest): newest.%Get(1), 1: "WARD-A")
+    Quit {"observed_at": "2026-10-19T12:00:00Z", "receipt_http_status": 404, "ward_state": {"state": (state), "ward": (ward), "version": 3, "history": (history)}, "timeline": (timeline)}
 }
 
 /// Facts with cancels taken and everything caught up, and a body for the failed movement and each later one.
@@ -223,6 +227,24 @@ Method TestHistoryRowTheFeedDidNotSend()
     Do ..AssertCode(seq, "history_mismatch", "a history row with no feed row")
 }
 
+/// The receiver's own placement disagrees with its history, as after a change by hand: the first cancel would miss.
+Method TestPlacementDisagreesWithHistory()
+{
+    Set moves = [["transfer", "WARD-C", "2026-10-19T09:30:00Z"], ["transfer", "WARD-D", "2026-10-19T10:00:00Z"]]
+    Set summary = ..Summary(moves), summary."ward_state".ward = "WARD-C"
+    Set seq = ##class(Shutter.Util.HistoryDraft).Decide(..Case(), summary, "E1", ..Facts(moves), 1)
+    Do ..AssertCode(seq, "history_mismatch", "placed at C, history ends at D")
+    Do $$$AssertTrue((seq.reason [ "(WARD-C)") && (seq.reason [ "(WARD-D)"), "the line names both")
+    Set summary = ..Summary(moves), summary."ward_state".state = "discharged", summary."ward_state".ward = ""
+    Do ..AssertCode(##class(Shutter.Util.HistoryDraft).Decide(..Case(), summary, "E1", ..Facts(moves), 1), "history_mismatch", "discharged, history ends in a transfer")
+    Set moves = [["discharge", "WARD-B", "2026-10-19T09:30:00Z"]]
+    Set summary = ..Summary(moves), summary."ward_state".state = "admitted", summary."ward_state".ward = "WARD-B"
+    Do ..AssertCode(##class(Shutter.Util.HistoryDraft).Decide(..Case(), summary, "E6", ..Facts(moves), 1), "history_mismatch", "still placed, history ends in a discharge")
+    Set summary = ..Summary(moves), held = summary."ward_state"
+    Do held.%Remove("state"), held.%Remove("ward")
+    Do ..AssertCode(##class(Shutter.Util.HistoryDraft).Decide(..Case(), summary, "E6", ..Facts(moves), 1), "history_mismatch", "no placement given")
+}
+
 Method TestPending()
 {
     Set facts = ..Facts(..One())
@@ -238,7 +260,7 @@ ClassMethod Row(visit As %String, event As %String, time As %String, sent As %St
     Quit {"visit_number": (visit), "event": (event), "event_time": (time), "sent_at": (sent), "operation_key": (key), "control_id": ("CTL-" _ event), "ens_header_id": "H-77"}
 }
 
-/// A site's case: a new admission on a new visit number for the same patient.
+/// A new admission on a new visit number for the same patient.
 Method TestNewAdmissionOnAnotherVisit()
 {
     Set facts = ..Facts(..One())
@@ -420,6 +442,32 @@ Method TestWithheldAboveAscii()
     Do $$$AssertTrue(row.withheld [ "Don't paste this message", "and says why")
     Do $$$AssertTrue(draft.messages.%Get(2).text '= "", "another message's text is there")
     Do $$$AssertEquals(draft.messages.%Get(2).withheld, "", "with no warning")
+    Do $$$AssertTrue(row.withheld [ "MSG-F", "naming the message that is in the store")
+    Do $$$AssertNotTrue(draft.messages.%Get(0)."text" = "", "the cancel, which copies nothing above ASCII, keeps its text")
+    Do $$$AssertEquals(draft.messages.%Get(0).withheld, "", "and has no warning")
+}
+
+/// A cancel isn't in the message store, so a character above ASCII in what it copies draws nothing, on either trigger.
+Method TestCancelAboveAscii()
+{
+    Set moves = ..One(), facts = ..Facts(moves), key = ..Key("transfer", "2026-10-19T09:30:00Z")
+    Do facts.bodies.%Set(key, {"text": (..Body("MSG-C", "A02", "WARD-C", "WARD-B^BAY2^04^HOSP", "", "SYNTH^REN" _ $CHAR(232))), "control_id": "MSG-C", "ens_header_id": "H-C"})
+    Set seq = ..Decide(..Case(), moves, facts)
+    Do ..AssertCode(seq, "cancel_non_ascii", "a transfer's PID")
+    Do $$$AssertNotTrue(seq.reason [ "MSG-C", "the line for the plan names no message")
+    Set draft = ##class(Shutter.Util.HistoryDraft).Draft(..Case(), ..Summary(moves), "E1", facts)
+    Do $$$AssertNotTrue(draft.drawn, "the read stops too")
+    Do $$$AssertEquals(draft.messages.%Size(), 0, "with no text")
+    Set moves = [["discharge", "WARD-B", "2026-10-19T09:30:00Z"]], facts = ..Facts(moves), key = ..Key("discharge", "2026-10-19T09:30:00Z")
+    Do facts.bodies.%Set(key, {"text": (..Body("MSG-D", "A03", "WARD-B", "", "", "SYNTH^REN" _ $CHAR(232))), "control_id": "MSG-D", "ens_header_id": "H-D"})
+    Do ..AssertCode(..Decide(..Case(), moves, facts, "E6"), "cancel_non_ascii", "a discharge's PID")
+    // Above ASCII only outside what a cancel copies: the cancel is exact, and the replay of that message is withheld.
+    Set moves = ..One(), facts = ..Facts(moves), key = ..Key("transfer", "2026-10-19T09:30:00Z")
+    Do facts.bodies.%Set(key, {"text": (..Body("MSG-C", "A02", "WARD-C", "WARD-B^BAY2^04^HOSP", "NTE|1||CAF" _ $CHAR(233) _ $CHAR(13))), "control_id": "MSG-C", "ens_header_id": "H-C"})
+    Set seq = ..Decide(..Case(), moves, facts)
+    Do $$$AssertTrue(seq.drawn, "a note above ASCII doesn't stop it: " _ seq.reason)
+    Do $$$AssertNotTrue(seq.steps.%Get(0)."non_ascii", "the cancel isn't flagged")
+    Do $$$AssertTrue(seq.steps.%Get(2)."non_ascii", "the replay is")
 }
 
 /// With the placeholders filled, an A12 parses and validates as HL7 2.5.1 in stock IRIS, and so does an A13.

@@ -191,6 +191,12 @@ ClassMethod Decide(case As Shutter.Store.Case, summary As %DynamicObject, entry 
         Set sorted(gap) = key
     }
 
+    // The first cancel reaches only what is current, so the receiver's own placement must be the last movement of its history.
+    Set e = m(sorted($ORDER(sorted(""), -1))), held = summary.%Get("ward_state")
+    Set expected = $SELECT(e.word = "discharge": "discharged", 1: e.ward)
+    Set current = $SELECT($CLASSMETHOD(json, "Str", held, "state") = "discharged": "discharged", 1: $CLASSMETHOD(json, "Str", held, "ward"))
+    If current '= expected Quit ..Stop(out, "history_mismatch", "No sequence: the receiver's current placement (" _ $SELECT(current '= "": current, 1: "none given") _ ") isn't the last movement in its history (" _ expected _ "), so the first cancel would not reach what is current.")
+
     Set bodies = facts.%Get("bodies")
     Set failedKey = case.OperationKey, failedBody = ..Body(bodies, failedKey)
     If failedBody = "" Quit ..Stop(out, "body_unreadable", "No sequence: the stored message " _ case.SourceMessageId _ " can't be read (purged, or on another instance), so nothing can be replayed from it.")
@@ -207,6 +213,11 @@ ClassMethod Decide(case As Shutter.Store.Case, summary As %DynamicObject, entry 
     Set zbe = ..HasSegment(failedBody, "ZBE")
     For i = 1:1:k { Set:..HasSegment(..Body(bodies, keyOf(i)), "ZBE") zbe = 1 }
     If zbe Quit ..Stop(out, "zbe_present", "No sequence: this feed uses IHE movement ids (ZBE), which this draft can't fill.")
+    // A replay above ASCII can be resent from the message store; a cancel isn't in the store, so it has no such route.
+    For i = 1:1:k {
+        Set trigger = $SELECT(m(keyOf(i)).word = "discharge": "A13", 1: "A12")
+        If ..NonAscii(..CancelText(trigger, ..Body(bodies, keyOf(i)))) Return ..Stop(out, "cancel_non_ascii", "No sequence: what a cancel copies from the message it cancels holds a character above ASCII, the patient's name perhaps. The copy here may not match the bytes sent and a cancel can't be resent from the message store, so none is drawn.")
+    }
     If $CLASSMETHOD(json, "Str", summary, "receipt_http_status") = 200 Quit ..Stop(out, "receipt_present", "No sequence: the receiver holds a receipt for the failed key, so it may have applied it after all; reinvestigate.")
 
     // The places: by the source, the failed ward and then each later one; by what this receiver holds, the place before and
@@ -219,10 +230,10 @@ ClassMethod Decide(case As Shutter.Store.Case, summary As %DynamicObject, entry 
     }
     Set steps = [], n = 0
     For i = k:-1:1 {
-        Set key = keyOf(i), e = m(key), n = n + 1, id = bodies.%Get(key), text = id.text
+        Set key = keyOf(i), e = m(key), n = n + 1, id = bodies.%Get(key)
         Set cancels = {"event": (e.event), "ward": (e.ward), "event_time": (e."event_time"), "operation_key": (key), "source_message_id": (id."control_id"), "ens_header_id": (id."ens_header_id")}
         Set step = {"n": (n), "kind": "cancel", "trigger": ($SELECT(e.word = "discharge": "A13", 1: "A12")), "cancels": (cancels), "after": {"by_source": (bySource(i - 1)), "by_receiver": (byReceiver(i - 1))}}
-        Do step.%Set("non_ascii", ..NonAscii(text), "boolean")
+        Do step.%Set("non_ascii", 0, "boolean")
         Do steps.%Push(step)
     }
     Set id = bodies.%Get(failedKey), n = n + 1
@@ -268,7 +279,7 @@ ClassMethod Draft(case As Shutter.Store.Case, summary As %DynamicObject, entry A
             Set row."body_digest" = s."body_digest"
             If s."non_ascii" { Do row.%Set("text", "", "null") } Else { Set row.text = source }
         }
-        Set row.withheld = $SELECT(s."non_ascii": "Don't paste this message: resend it from the message store (control id " _ ..ControlOf(s) _ "), because the copy here may not match the bytes sent.", 1: "")
+        Set row.withheld = $SELECT(s."non_ascii": "Don't paste this message: resend it from the message store (control id " _ s."source_message_id" _ "), because the copy here may not match the bytes sent.", 1: "")
         Do out.messages.%Push(row)
         Set joined = joined _ row.label _ $CHAR(10) _ $CLASSMETHOD("Shutter.Util.Json", "Str", row, "text") _ $CHAR(10)
     }
@@ -363,12 +374,6 @@ ClassMethod Replay(n As %Integer, word As %String, ward As %String, time As %Str
     Do step.%Set("non_ascii", ..NonAscii(text), "boolean")
     Set step.after = {"by_source": (place), "by_receiver": (place)}
     Quit step
-}
-
-ClassMethod ControlOf(step As %DynamicObject) As %String [ Private ]
-{
-    If step.kind = "cancel" Quit step.cancels."source_message_id"
-    Quit step."source_message_id"
 }
 
 ClassMethod LeftAlone(list As %DynamicArray, event As %String, time As %String, key As %String) [ Private ]
