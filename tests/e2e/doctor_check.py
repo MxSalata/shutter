@@ -142,7 +142,7 @@ SITE = r'''Class Site.Production Extends Ens.Production
 {
 XData ProductionDefinition
 {
-<Production Name="Site.Production" LogGeneralTraceEvents="false">
+<Production Name="Site.Production" TestingEnabled="true" LogGeneralTraceEvents="false">
   <ActorPoolSize>1</ActorPoolSize>
   <Item Name="Lab Out" ClassName="EnsLib.HL7.Operation.TCPOperation" PoolSize="1" Enabled="true">
     <Setting Target="Adapter" Name="IPAddress">127.0.0.1</Setting>
@@ -181,6 +181,10 @@ def row():
 
 
 was = row()
+out = session("PATHLAB", r"""Set m=##class(EnsLib.HL7.Message).ImportFromString("MSH|^~\&|PAS|H|LAB|H|20261106000000||ADT^A02^ADT_A02|DOC1|P|2.5.1"_$CHAR(13)_"PID|1||M1^^^H^MR"_$CHAR(13),.sc1)
+Set m.DocType="2.5.1:ADT_A02"
+Set sc=##class(EnsLib.Testing.Service).SendTestRequest("Lab Out",m,.rsp,.sess,1) Write !,"[sent] ",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),!""", timeout=120)
+print("  a message to the dead Lab Out:", out[-200:].strip())
 report = json.loads(value("USER", '##class(Shutter.Util.SiteCheck).Report("PATHLAB,NOSUCH")'))
 print(json.dumps(report, indent=1)[:4000])
 ns = {n["namespace"]: n for n in report["namespaces"]}
@@ -188,6 +192,8 @@ said = " | ".join(c["says"] for c in ns["PATHLAB"]["checks"])
 check("a namespace not there blocks, by name", ns["NOSUCH"]["verdict"] == "blocked" and report["verdict"] == "blocked", report["verdict"])
 check("it reads the running production", ns["PATHLAB"]["production"] == "Site.Production" and ns["PATHLAB"]["production_state"] == "running", ns["PATHLAB"])
 check("names the operation with AlertOnError off", "Lab Out raises no alert" in said, said)
+ops = {o["name"]: o for o in ns["PATHLAB"]["operations"]}
+check("counts the ADT message that failed at Lab Out, and nothing at Bed Out", ops["Lab Out"]["failed"] >= 1 and ops["Lab Out"]["failed_adt"] >= 1 and ops["Bed Out"]["failed"] == 0, ops)
 check("names the one retrying forever", "Bed Out retries forever" in said, said)
 check("says the site's own Ens.Alert is kept", "Site Alerts" in said, said)
 check("says the verdict for the namespace", ns["PATHLAB"]["verdict"] == "changes_needed", ns["PATHLAB"]["verdict"])
