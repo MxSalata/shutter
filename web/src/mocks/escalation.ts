@@ -55,10 +55,24 @@ export function draftEscalation(
   const correction = inner?.correction_steps as Json | undefined;
   const steps = Array.isArray(correction?.steps) ? (correction.steps as string[]) : [];
   const missing = (correction?.missing as Json | undefined) ?? {};
+  // The email's one line on the drafted sequence, as the server words it; the text itself never goes in an email
+  const sequence = correction?.sequence as Json | undefined;
+  const sequenceLine = !sequence
+    ? []
+    : sequence.drawn
+      ? [
+          `  A drafted sequence of ${String(sequence.count)} messages is on the case, for an approver to read on the case page; this email carries none of it.`,
+        ]
+      : [
+          `  No message sequence was drafted: ${str(sequence, 'reason')
+            .replace(/^No sequence: /, '')
+            .replace(/\.$/, '')}.`,
+        ];
   const correcting = steps.length
     ? [
         'CORRECTING THE HISTORY',
         `  the ${str(missing, 'event')}${str(missing, 'ward') ? ` to ${str(missing, 'ward')}` : ''} at ${str(missing, 'event_time')} is missing from the history ${str(correction, 'receiver')} keeps; ${steps.length} steps for its team are on the plan.`,
+        ...sequenceLine,
         ...steps.map((step, i) => `  ${i + 1}. ${step}`),
         '',
       ]
