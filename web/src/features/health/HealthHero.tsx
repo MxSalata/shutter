@@ -6,6 +6,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { toneText } from '@/lib/tone';
 import {
   agentsBadge,
+  HERO_ATTENTION_LINES,
   recordedAt,
   sent,
   utcMinute,
@@ -73,7 +74,7 @@ export function HealthHero({
         ) : null}
         {verdict.attention.length ? (
           <ul className="health-checks" role="list" aria-label="What needs a look">
-            {verdict.attention.map((a) => (
+            {verdict.attention.slice(0, HERO_ATTENTION_LINES).map((a) => (
               <li key={a.line} data-passed="false">
                 <IconAlertTriangle
                   size={16}
@@ -85,6 +86,11 @@ export function HealthHero({
               </li>
             ))}
           </ul>
+        ) : null}
+        {verdict.attention.length > HERO_ATTENTION_LINES ? (
+          <Text size="sm">
+            {`and ${verdict.attention.length - HERO_ATTENTION_LINES} more, in the Other group.`}
+          </Text>
         ) : null}
         {verdict.notSent && verdict.results.length ? (
           <Text size="sm" c="dimmed">

@@ -642,13 +642,59 @@ describe('a receiver that does not answer, and a watched namespace that cannot h
       receiverLine(receiverReadings([{ name: 'R', state, http_status, at: '2026-11-06T14:02:09Z' }])[0]);
     expect(line('server_error', 503)).toBe('R: server error, HTTP 503, at 6 Nov 2026, 14:02 UTC.');
     expect(line('refused', 401)).toBe("R: refused Shutter's sign-in, HTTP 401, at 6 Nov 2026, 14:02 UTC.");
-    expect(line('failing')).toBe('R: deliveries failing since its last answer, at 6 Nov 2026, 14:02 UTC.');
+    expect(line('failing')).toBe('R: deliveries failing since it last answered at 6 Nov 2026, 14:02 UTC.');
     const report = {
       ...RECORDED,
       receivers: [WELL, { name: 'Lab Out', state: 'not_read' }, { name: 'Docs Out', state: 'no_api' }],
       receivers_ok: true,
     };
     expect(attentionOf(report)).toEqual([]);
+  });
+
+  it('says when a receiver last answered once, when deliveries fail after that answer', () => {
+    const [r] = receiverReadings([
+      {
+        name: 'R',
+        state: 'failing',
+        at: '2026-11-06T14:02:09Z',
+        last_answer_at: '2026-11-06T14:02:09Z',
+        incident: 'I-000003',
+      },
+    ]);
+    expect(receiverLine(r)).toBe(
+      'R: deliveries failing since it last answered at 6 Nov 2026, 14:02 UTC. Incident I-000003.',
+    );
+  });
+
+  it('counts the failures of a receiver nothing has read, and claims no answer it never gave', () => {
+    const line = (fields: Record<string, unknown>) =>
+      receiverLine(receiverReadings([{ name: 'Docs Out', state: 'failing', at: '', ...fields }])[0]);
+    const at = '2026-11-06T14:02:09Z';
+    expect(line({ failures_hour: 3, last_failure_at: at })).toBe(
+      'Docs Out: 3 deliveries failed in the last hour, the last at 6 Nov 2026, 14:02 UTC.',
+    );
+    expect(line({ failures_hour: 1, last_failure_at: at })).toBe(
+      'Docs Out: 1 delivery failed in the last hour, at 6 Nov 2026, 14:02 UTC.',
+    );
+    expect(line({ failures_hour: 2 })).toBe('Docs Out: 2 deliveries failed in the last hour.');
+  });
+
+  it('says not answering only of a receiver that gave no answer', () => {
+    const statement = (receivers: Record<string, unknown>[], trial = false) =>
+      verdictStatement(verdictOf({ ...RECORDED, receivers, receivers_ok: false }), trial);
+    const at = '2026-11-06T14:02:09Z';
+    const refused = { name: 'A', state: 'refused', http_status: 401, at };
+    const broken = { name: 'B', state: 'server_error', http_status: 503, at };
+    const failing = { name: 'C', state: 'failing', at: '', failures_hour: 2, last_failure_at: at };
+    for (const r of [refused, broken, failing])
+      expect(statement([r])).toBe('Running, but a receiver needs a look.');
+    expect(statement([DEAD, refused])).toBe('Running, but 2 receivers need a look.');
+    expect(statement([refused], true)).toBe(
+      'The recorded instance was running, but a receiver needed a look.',
+    );
+    expect(statement([DEAD, refused], true)).toBe(
+      'The recorded instance was running, but 2 receivers needed a look.',
+    );
   });
 
   it('a watched namespace with a problem needs a look too, and one taken off does not', () => {
@@ -667,6 +713,15 @@ describe('a receiver that does not answer, and a watched namespace that cannot h
     expect(v.attention.map((a) => a.line)).toEqual([
       'PAS: The alert intake Ens.Alert is disabled (and 1 more).',
     ]);
+  });
+
+  it('clips a long problem in the hero, whose whole text stays in the report', () => {
+    const problem = Array.from({ length: 30 }, (_, i) => `w${i}`).join(' ');
+    const [a] = attentionOf({
+      ...RECORDED,
+      watched_namespaces: [{ namespace: 'PAS', ok: false, problems: [problem, 'Another'] }],
+    });
+    expect(a.line).toBe(`PAS: ${problem.split(' ').slice(0, 20).join(' ')}... (and 1 more).`);
   });
 
   it('both together, past tense in the trial; a failing core check stays Not ready and still lists them', () => {

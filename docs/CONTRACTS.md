@@ -1515,7 +1515,7 @@ and the evidence's newest `ward_state` items (`from`: `connector` or `evidence`;
 nothing has read it), `answering`, `not_read` or `no_api`. `receivers_ok` is false when any is in the first four, true when none is
 and one answered, and null when nothing is known; `receivers_state` is `read` or the reading's error; `watched_ok` is false when a
 watched namespace's `ok` is. `GET /health` carries `receivers_ok` and `watched_ok` in its anonymous answer too, and no receiver's name.
-The Health page keeps Ready out of its hero while either is false ("Needs a look", naming each), and adds nothing to its first
+The Health page keeps Ready out of its hero while either is false ("Needs a look", naming the first two and counting the rest, all of them in its Other group), and adds nothing to its first
 layer otherwise.
 
 **Before an install** (v1.1.0). `Shutter.Util.SiteCheck.Report(namespaces)` (and `Print`, in lines) reads an instance with no Shutter on it,

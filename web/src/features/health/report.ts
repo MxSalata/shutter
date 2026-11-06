@@ -241,6 +241,8 @@ export interface ReceiverReading {
   httpStatus: number | null;
   error: string;
   lastAnswerAt: string;
+  lastFailureAt: string;
+  failuresHour: number;
   incident: string;
 }
 
@@ -257,6 +259,8 @@ export function receiverReadings(value: unknown): ReceiverReading[] {
       httpStatus: typeof r.http_status === 'number' ? r.http_status : null,
       error: str(r.error),
       lastAnswerAt: str(r.last_answer_at),
+      lastFailureAt: str(r.last_failure_at),
+      failuresHour: typeof r.failures_hour === 'number' ? r.failures_hour : 0,
       incident: str(r.incident),
     };
   });
@@ -267,20 +271,46 @@ const TROUBLE: Record<string, (r: ReceiverReading) => string> = {
   no_answer: () => 'no answer',
   server_error: (r) => `server error, HTTP ${r.httpStatus ?? '?'},`,
   refused: (r) => `refused Shutter's sign-in, HTTP ${r.httpStatus ?? '?'},`,
-  failing: () => 'deliveries failing since its last answer,',
+  failing: (r) => (r.at ? failingSinceAnswer(r) : failedLately(r)),
 };
+
+/** Deliveries fail although the receiver's newest reading was an answer. */
+function failingSinceAnswer(r: ReceiverReading): string {
+  return `deliveries failing since it last answered at ${utcMinute(r.lastAnswerAt || r.at)}`;
+}
+
+/** Nothing has read this receiver, so its failures in the last hour are all that is known of it. */
+function failedLately(r: ReceiverReading): string {
+  const count =
+    r.failuresHour === 1 ? '1 delivery' : r.failuresHour ? `${r.failuresHour} deliveries` : 'deliveries';
+  const words = `${count} failed in the last hour`;
+  if (!r.lastFailureAt) return words;
+  return `${words}, ${r.failuresHour === 1 ? 'at' : 'the last at'} ${utcMinute(r.lastFailureAt)}`;
+}
 
 /** A receiver in one line: its state and when, when it last answered, and the incident that holds its failures. */
 export function receiverLine(r: ReceiverReading): string {
   const word = TROUBLE[r.state]?.(r) ?? (r.state === 'answering' ? 'answered' : r.state.replace(/_/g, ' '));
-  const parts = [`${r.name}: ${word}${r.at ? ` at ${utcMinute(r.at)}` : ''}.`];
-  if (r.lastAnswerAt && r.state !== 'answering') parts.push(`Last answered ${utcMinute(r.lastAnswerAt)}.`);
+  // A failing line carries its own times
+  const failing = r.state === 'failing';
+  const parts = [`${r.name}: ${word}${r.at && !failing ? ` at ${utcMinute(r.at)}` : ''}.`];
+  if (r.lastAnswerAt && r.state !== 'answering' && !failing)
+    parts.push(`Last answered ${utcMinute(r.lastAnswerAt)}.`);
   if (r.incident) parts.push(`Incident ${r.incident}.`);
   return parts.join(' ');
 }
 
+/** A problem's words in the hero, with its whole text in the Other group: a refused forward can run to 200 characters. */
+const PROBLEM_WORDS = 20;
+function clipped(problem: string): string {
+  const words = problem.split(/\s+/);
+  return words.length > PROBLEM_WORDS ? `${words.slice(0, PROBLEM_WORDS).join(' ')}...` : problem;
+}
+
 export interface Attention {
   key: 'receivers' | 'watched_namespaces';
+  /** A receiver's state, for the hero's sentence. */
+  state?: string;
   /** The line the hero lists, which names the receiver or the namespace. */
   line: string;
 }
@@ -292,16 +322,22 @@ export interface Attention {
 export function attentionOf(report: Report): Attention[] {
   const out: Attention[] = [];
   for (const r of receiverReadings(report.receivers))
-    if (TROUBLE[r.state]) out.push({ key: 'receivers', line: receiverLine(r) });
+    if (TROUBLE[r.state]) out.push({ key: 'receivers', state: r.state, line: receiverLine(r) });
   if (Array.isArray(report.watched_namespaces))
     for (const v of report.watched_namespaces as Record<string, unknown>[]) {
       const problems = Array.isArray(v?.problems) ? (v.problems as unknown[]).map(String) : [];
       if (v?.ok !== false || !problems.length) continue;
       const more = problems.length > 1 ? ` (and ${problems.length - 1} more)` : '';
-      out.push({ key: 'watched_namespaces', line: `${String(v.namespace)}: ${problems[0]}${more}.` });
+      out.push({
+        key: 'watched_namespaces',
+        line: `${String(v.namespace)}: ${clipped(problems[0])}${more}.`,
+      });
     }
   return out;
 }
+
+/** How many of those the hero lists: a site that is down must not cost more words than the page has. The rest are counted. */
+export const HERO_ATTENTION_LINES = 2;
 
 const groupOf = (key: string) => GROUPS.find((g) => g.keys.includes(key))?.id ?? OTHER.id;
 
@@ -360,6 +396,8 @@ export function verdictOf(report: Report): Verdict {
   };
 }
 
+const needsLook = (trial: boolean, verb: 'needs' | 'need') => `${trial ? 'needed' : verb} a look`;
+
 /**
  * The hero's statement. Live it speaks of this installation; in the trial it is a recording of another one, so it is
  * in the past tense and says which ("The recorded instance was ready").
@@ -377,11 +415,20 @@ export function verdictStatement(v: Verdict, trial: boolean): string {
     return trial ? `The recorded instance was ready: ${engine} (${of}).` : `Ready: ${engine} (${of}).`;
   }
   if (v.kind === 'attention') {
-    const receivers = v.attention.filter((a) => a.key === 'receivers').length;
+    const troubled = v.attention.filter((a) => a.key === 'receivers');
+    const receivers = troubled.length;
     const namespaces = v.attention.length - receivers;
+    // A 401, a 503 or a failed delivery is not silence: only a receiver that gave no answer is said to give none
+    const silent = troubled.every((a) => a.state === 'no_answer');
     const parts: string[] = [];
-    if (receivers === 1) parts.push(`a receiver ${trial ? 'was' : 'is'} not answering`);
-    if (receivers > 1) parts.push(`${receivers} receivers ${trial ? 'were' : 'are'} not answering`);
+    if (receivers === 1)
+      parts.push(
+        `a receiver ${silent ? `${trial ? 'was' : 'is'} not answering` : needsLook(trial, 'needs')}`,
+      );
+    if (receivers > 1)
+      parts.push(
+        `${receivers} receivers ${silent ? `${trial ? 'were' : 'are'} not answering` : needsLook(trial, 'need')}`,
+      );
     if (namespaces === 1) parts.push(`a watched namespace ${trial ? 'had' : 'has'} a problem`);
     if (namespaces > 1) parts.push(`${namespaces} watched namespaces ${trial ? 'had' : 'have'} a problem`);
     return `${trial ? 'The recorded instance was running' : 'Running'}, but ${parts.join(' and ')}.`;

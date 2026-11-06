@@ -218,6 +218,64 @@ describe('HealthPage on a live system', () => {
     expect(layer1Words(technical.container).length).toBeLessThanOrEqual(TECHNICAL_BUDGET);
   });
 
+  it('holds the budget on the night a whole site is down, naming two and counting the rest', async () => {
+    const down = {
+      ...fixtures.health,
+      receivers: ['Downstream', 'Records', 'Pharmacy', 'Radiology', 'Billing'].map((name, i) => ({
+        name: `${name} Out`,
+        has_api: true,
+        state: 'no_answer',
+        at: `2026-11-06T14:0${i}:09Z`,
+        http_status: 0,
+        from: 'connector',
+        last_answer_at: '2026-11-06T13:10:00Z',
+        incident: `I-00000${i + 1}`,
+      })),
+      receivers_ok: false,
+      watched_ok: false,
+      watched_namespaces: ['PAS', 'LAB', 'ORDERS'].map((namespace) => ({
+        namespace,
+        ok: false,
+        problems: [
+          `The alert intake Ens.Alert is disabled in ${namespace}.Production: its failures open no case`,
+        ],
+      })),
+    };
+    const plain = renderHealth(down, 'plain');
+    const hero = await screen.findByRole('region', { name: 'Needs a look' });
+    expect(hero).toHaveTextContent(
+      'Running, but 5 receivers are not answering and 3 watched namespaces have a problem.',
+    );
+    const lines = within(hero).getByRole('list', { name: 'What needs a look' });
+    expect(within(lines).getAllByRole('listitem')).toHaveLength(2);
+    expect(hero).toHaveTextContent('and 6 more, in the Other group.');
+    await screen.findByText('3 specialist agents and the coordinator agent');
+    expect(layer1Words(plain.container).length).toBeLessThanOrEqual(PLAIN_BUDGET);
+    plain.unmount();
+    const technical = renderHealth(down, 'technical');
+    await screen.findByRole('region', { name: 'Needs a look' });
+    await screen.findByText('3 specialist agents and the coordinator agent');
+    expect(layer1Words(technical.container).length).toBeLessThanOrEqual(TECHNICAL_BUDGET);
+  });
+
+  it('holds the budget with the longest problems a watched namespace can report', async () => {
+    const long =
+      '40 forwards refused in the last 72 hours, the last at 2026-11-06T14:02:09Z: those failures have no case. Search the event log for: Shutter did not take';
+    const down = {
+      ...fixtures.health,
+      watched_ok: false,
+      watched_namespaces: ['PAS', 'LAB', 'ORDERS'].map((namespace) => ({
+        namespace,
+        ok: false,
+        problems: [long, 'Another'],
+      })),
+    };
+    const plain = renderHealth(down, 'plain');
+    await screen.findByRole('region', { name: 'Needs a look' });
+    await screen.findByText('3 specialist agents and the coordinator agent');
+    expect(layer1Words(plain.container).length).toBeLessThanOrEqual(PLAIN_BUDGET);
+  });
+
   it('adds no first-layer words when the receivers answer', async () => {
     const well = { ...fixtures.health, receivers: [], receivers_ok: true, watched_ok: true };
     const before = renderHealth(fixtures.health as Record<string, unknown>, 'plain');
