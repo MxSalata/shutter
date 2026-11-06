@@ -288,9 +288,9 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         Do ..Check(checks, "catalogue", "unknown", "MATCHER_ERROR", "The matcher failed on this evidence: " _ $EXTRACT(##class(Shutter.Util.Json).Str(cat, "error"), 1, 200))
     } ElseIf decision = "new_pattern" {
         Do ..Check(checks, "catalogue", "block", "NEW_PATTERN", "No catalogue entry matches this evidence: a candidate entry for a reviewer")
-    } ElseIf (plan.CatalogueEntry = "") && isWrite && '((case.Mode = "rules") && (plan.CreatedBy = "rules")) && (..EntriesThatStop(cat) '= "") {
-        // Rules only is the baseline and stays as it is: any other write must name the entry it follows, and the entry the
-        // plan could not name calls for no resend.
+    } ElseIf (plan.CatalogueEntry = "") && isWrite && '((case.Mode = "rules") && (plan.CreatedBy = "rules") && (case.Scenario '= "")) && (..EntriesThatStop(cat) '= "") {
+        // Rules only in a recorded scenario is the baseline, kept to show what a plain resend does: any other write, a real
+        // case in that mode included, must name the entry it follows, and the entry the plan could not name calls for no resend.
         Do ..Check(checks, "catalogue", "block", "ENTRY_NOT_NAMED_WRITE", "The plan writes and names no catalogue entry, but the evidence matched " _ ..EntriesThatStop(cat) _ ", which calls for no resend")
     } ElseIf plan.CatalogueEntry = "" {
         Do ..Check(checks, "catalogue", "pass", "ENTRY_NOT_NAMED", "The plan names no catalogue entry; the evidence matched " _ $SELECT(##class(Shutter.Util.Json).Str(cat, "entry") '= "": ##class(Shutter.Util.Json).Str(cat, "entry"), 1: "several entries"))

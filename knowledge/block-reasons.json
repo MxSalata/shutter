@@ -597,7 +597,7 @@
       "next_action": "Read the matched entry and decide by hand, or investigate again so the plan follows the entry.",
       "owner": "Operator",
       "reevaluate_when": "The case is investigated again",
-      "text": "The plan would resend and names no catalogue entry, but an entry that matches this case calls for something other than a resend. Only Rules only mode, the baseline, passes this."
+      "text": "The plan would resend and names no catalogue entry, but an entry that matches this case calls for something other than a resend. Only Rules only mode in a recorded scenario, the baseline, passes this."
     },
     {
       "code": "NO_BOARD_ANSWER",

@@ -396,6 +396,7 @@ Method NewCase(spec As %DynamicObject) As Shutter.Store.Case
     Set case.Receiver = $PARAMETER("Shutter.Production", "RECEIVER")
     Set case.OperationKey = "PAS^HOSP^" _ case.PatientId _ "^" _ case.EncounterId _ "^" _ case.Event _ "^" _ case.EventTime
     Set case.State = "investigating", case.Mode = $CLASSMETHOD(json, "Str", spec, "mode", "rules")
+    Set case.Scenario = $CLASSMETHOD(json, "Str", spec, "scenario")
     Set now = ##class(Shutter.Util.Time).NowUTC()
     Set case.OpenedAt = now, case.UpdatedAt = now
     Set sc = case.%Save()
@@ -953,9 +954,12 @@ XData Rows [ MimeType = application/json ]
   {"group": "catalogue", "name": "the plan names no entry while several match",
    "summary": {"catalogue": {"decision": "board", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}, {"id": "E9", "preferred": {"outcome": "resend"}}]}},
    "expect": [["catalogue", "pass", "ENTRY_NOT_NAMED"]]},
-  {"group": "catalogue", "name": "Rules only's plan names no entry on an entry that stops: the demonstration stays",
-   "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+  {"group": "catalogue", "name": "Rules only's plan names no entry on an entry that stops, in a recorded scenario: the demonstration stays",
+   "case": {"scenario": "S8"}, "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
    "expect": [["catalogue", "pass", "ENTRY_NOT_NAMED"]]},
+  {"group": "catalogue", "name": "Rules only on a real case, which no scenario made, gets no exemption",
+   "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+   "expect": [["catalogue", "block", "ENTRY_NOT_NAMED_WRITE"]], "outcome": "block"},
   {"group": "catalogue", "name": "a board's plan writes and names no entry on an entry that stops",
    "case": {"mode": "board"}, "plan": {"created_by": "run:1"}, "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
    "expect": [["catalogue", "block", "ENTRY_NOT_NAMED_WRITE"]], "outcome": "block", "contains": [["catalogue", "ENTRY_NOT_NAMED_WRITE", "E7"]]},
