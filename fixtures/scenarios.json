@@ -707,7 +707,7 @@
       "failed_operation_key": "PAS^HOSP^MRN1014^ENC-1014^transfer^2026-10-15T08:20:00Z",
       "case_by_key": true,
       "index_later": {
-        "route": "Other Route In",
+        "route": "Other Route In -> Case Intake Store",
         "event": "transfer",
         "ward": "WARD-C",
         "operation_key": "PAS^HOSP^MRN1014^ENC-1014^transfer^2026-10-15T08:45:00Z"
@@ -1227,7 +1227,7 @@
   {
     "id": "S26",
     "title": "A schema not loaded here",
-    "summary": "The site prevents failures. Admit to Ward A applied on the usual feed. The 09:20 transfer to Ward B arrives on a new feed whose schema, MYSITE_2.5.1, was never imported here, so IRIS could only read its fields by position. Shutter holds it as a case, sends nothing and names the schema. Once the schema is imported the case is released by itself, the message reads under its schema, and the transfer goes to the receiver.",
+    "summary": "The site prevents failures. Admit to Ward A applied on the usual feed. The 09:20 transfer to Ward B arrives on a new feed whose schema, MYSITE_2.5.1, was never imported here, so IRIS could only read its fields by position. Shutter holds it as a case, sends nothing and names the schema. Once the schema is imported the case is released by itself, the message reads under its schema, and the transfer is resent: at once in Site policy, after approval in Rules only, as every resend is there.",
     "steps": [
       {
         "schema_forget": "MYSITE_2.5.1"
@@ -1251,14 +1251,7 @@
         "schema_import": "schemas/MYSITE_2.5.1.xml"
       },
       {
-        "wait_for_state": "resolved",
-        "timeout": 90
-      },
-      {
         "prevent_failures": false
-      },
-      {
-        "schema_forget": "MYSITE_2.5.1"
       }
     ],
     "expected": {

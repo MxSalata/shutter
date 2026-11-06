@@ -555,7 +555,7 @@ def scenarios():
         ],
         "expected": {"disposition": "resend", "write": True, "final_state": "admitted", "final_ward": "WARD-B",
                      "failed_operation_key": c[2]["operation_key"], "case_by_key": True,
-                     "index_later": {"route": "Other Route In", "event": "transfer", "ward": "WARD-C",
+                     "index_later": {"route": "Other Route In -> Case Intake Store", "event": "transfer", "ward": "WARD-C",
                                      "operation_key": b[2]["operation_key"]},
                      "modes": ["rules", "policy"]},
     }, [a, b, c]))
@@ -872,7 +872,7 @@ def scenarios():
     # S26: "prevent failures" shown. A site's feed whose schema was never imported here: the admission came on the usual
     # feed, and the 09:20 transfer comes on the site's own, whose MSH-12 names MYSITE_2.5.1. With the setting on for this
     # run, it is held as a case and nothing is sent. Importing the schema releases the case, the message reads under it, the
-    # gate passes it and it goes to the receiver. The schema goes again at the end, so the next run starts where this did.
+    # gate passes it and it goes to the receiver. The next run's first step forgets the schema. The run ends once it is imported, so in Rules only the approval comes after it.
     a = message("S26", 1, "A01", "0900", ward="WARD-A")
     b = message("S26", 2, "A02", "0920", ward="WARD-B", prior="WARD-A", extra="ZZZ|1|the site^own", category=SITE_CATEGORY)
     out.append(({
@@ -881,7 +881,8 @@ def scenarios():
         "summary": "The site prevents failures. Admit to Ward A applied on the usual feed. The 09:20 transfer to Ward B arrives "
                    "on a new feed whose schema, MYSITE_2.5.1, was never imported here, so IRIS could only read its fields by "
                    "position. Shutter holds it as a case, sends nothing and names the schema. Once the schema is imported the "
-                   "case is released by itself, the message reads under its schema, and the transfer goes to the receiver.",
+                   "case is released by itself, the message reads under its schema, and the transfer is resent: at once in Site "
+                   "policy, after approval in Rules only, as every resend is there.",
         "steps": [
             {"schema_forget": SITE_CATEGORY},
             {"prevent_failures": True},
@@ -889,9 +890,7 @@ def scenarios():
             {"file": b[0], "item": "Site Feed In", "expect": "held"},
             {"wait_for_state": "blocked", "timeout": 60},
             {"schema_import": SITE_SCHEMA_FILE},
-            {"wait_for_state": "resolved", "timeout": 90},
             {"prevent_failures": False},
-            {"schema_forget": SITE_CATEGORY},
         ],
         "expected": {"disposition": "resend", "write": True, "final_state": "admitted", "final_ward": "WARD-B",
                      "failed_operation_key": b[2]["operation_key"], "case_by_key": True,

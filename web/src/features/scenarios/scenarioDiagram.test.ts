@@ -47,8 +47,8 @@ function refusedSteps(s: Scenario) {
 }
 
 describe('scenarioDiagram', () => {
-  it('covers all 26 scenarios', () => {
-    expect(scenarios).toHaveLength(26);
+  it('covers all 28 scenarios', () => {
+    expect(scenarios).toHaveLength(28);
     for (const s of scenarios) expect(diagram(s.id), s.id).not.toBeNull();
   });
 

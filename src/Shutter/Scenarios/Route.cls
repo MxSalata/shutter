@@ -11,14 +11,14 @@ Property TargetConfigName As %String(MAXLEN = 128);
 
 Parameter SETTINGS = "TargetConfigName:Basic:selector?context={Ens.ContextSearch/ProductionItems?targets=1&productionName=@productionId}";
 
-/// The message goes on to the target, as an inbound HL7 service with no document type set would send it.
+/// The message goes on to the target, as an inbound HL7 service would send it.
 Method OnProcessInput(pInput As %Library.Persistent, Output pOutput As %RegisteredObject) As %Status
 {
     Set pOutput = ""
     Quit ..SendRequestAsync(..TargetConfigName, pInput)
 }
 
-/// An HL7 file's message, untyped; error says what went wrong.
+/// An HL7 file's message, typed by <method>Typed</method>; error says what went wrong.
 ClassMethod Message(path As %String, Output error As %String) As EnsLib.HL7.Message
 {
     Set error = ""
@@ -35,7 +35,18 @@ ClassMethod Message(path As %String, Output error As %String) As EnsLib.HL7.Mess
         Set error = "could not read " _ path _ ": " _ $SYSTEM.Status.GetErrorText(sc)
         Quit ""
     }
+    Do ..Typed(message)
     Quit message
+}
+
+/// Types the message under the category its MSH-12 names, when that is loaded here, as an inbound item's category would:
+/// the index reads by segment name, so S14's movement needs a type. A schema not loaded leaves it untyped, which is S26's hold.
+ClassMethod Typed(message As EnsLib.HL7.Message)
+{
+    Set category = ##class(Shutter.Util.Schemas).CategoryOf(message)
+    Quit:'##class(Shutter.Util.Schemas).Known(category)
+    Set type = ##class(EnsLib.HL7.Schema).ResolveSchemaTypeToDocType(category, message.Name, .sc)
+    If $$$ISOK(sc) && (type '= "") Do message.PokeDocType(type)
 }
 
 /// Plays an HL7 file through the item. Returns an empty string, or what went wrong.
