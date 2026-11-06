@@ -19,7 +19,7 @@ test.describe('Watched namespaces @settings', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Watched namespaces' })).toBeVisible();
     await expect(page.getByText(/Replayed from a recording/)).toBeVisible();
 
-    await page.getByLabel('Namespace').selectOption('PATHOLOGY');
+    await page.getByRole('combobox', { name: 'Namespace' }).selectOption('PATHOLOGY');
     await page.getByRole('button', { name: 'Read the plan' }).click();
     const plan = page.getByRole('region', { name: 'The plan for PATHOLOGY' });
     await expect(plan).toContainText('Nothing has changed yet');
@@ -45,7 +45,7 @@ test.describe('Watched namespaces @settings', () => {
     await page.setViewportSize({ width: 375, height: 800 });
     await signIn(page);
     await go(page, '/settings/namespaces');
-    await page.getByLabel('Namespace').selectOption('PATHOLOGY');
+    await page.getByRole('combobox', { name: 'Namespace' }).selectOption('PATHOLOGY');
     await page.getByRole('button', { name: 'Read the plan' }).click();
     await expect(page.getByRole('region', { name: 'The plan for PATHOLOGY' })).toBeVisible();
     const overflow = await page.evaluate(
