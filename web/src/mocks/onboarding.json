@@ -1,0 +1,700 @@
+{
+  "namespaces": {
+    "PATHOLOGY": {
+      "plan": {
+        "plan": {
+          "namespace": "PATHOLOGY",
+          "shutter_namespace": "SHUTTER",
+          "production": "OnbPath.Production",
+          "production_state": "running",
+          "productions": ["OnbPath.Production", "PATHOLOGYPKG.FoundationProduction"],
+          "services": [
+            {
+              "name": "OrderComms In",
+              "class": "EnsLib.HL7.Service.TCPService",
+              "categories": ["2.5.1"]
+            },
+            {
+              "name": "LIMS Results In",
+              "class": "EnsLib.HL7.Service.TCPService",
+              "categories": ["TRUSTLAB"]
+            }
+          ],
+          "routers": [
+            {
+              "name": "Path Router",
+              "class": "EnsLib.HL7.MsgRouter.RoutingEngine"
+            }
+          ],
+          "operations": [
+            {
+              "name": "LIMS Out",
+              "class": "EnsLib.HL7.Operation.TCPOperation",
+              "reported_as": "LIMS Out",
+              "alert_on_error": true,
+              "in_profile": false,
+              "get_reply": true,
+              "reply_code_actions_from": "engine_default",
+              "reply_code_actions": ":?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C",
+              "proves": "A reply is awaited, and any positive code counts as complete, so an accept or commit ACK reads the same as an application ACK: a completed message proves the receiver's listener answered, not that its application processed the message"
+            },
+            {
+              "name": "Results Out",
+              "class": "EnsLib.HL7.Operation.TCPOperation",
+              "reported_as": "Results Out",
+              "alert_on_error": true,
+              "in_profile": false,
+              "get_reply": true,
+              "reply_code_actions_from": "engine_default",
+              "reply_code_actions": ":?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C",
+              "proves": "A reply is awaited, and any positive code counts as complete, so an accept or commit ACK reads the same as an application ACK: a completed message proves the receiver's listener answered, not that its application processed the message"
+            }
+          ],
+          "other_operations": [],
+          "schemas": [
+            {
+              "category": "2.5.1",
+              "named_by": "OrderComms In",
+              "in_namespace": true,
+              "standard": true,
+              "in_shutter": true,
+              "shutter_name": "2.5.1"
+            },
+            {
+              "category": "TRUSTLAB",
+              "named_by": "LIMS Results In",
+              "in_namespace": true,
+              "standard": false,
+              "in_shutter": false,
+              "shutter_name": "TRUSTLAB",
+              "action": "import"
+            }
+          ],
+          "wired": {
+            "mappings": {},
+            "classes": {
+              "Shutter.Intake.Forwarder": false,
+              "Shutter.Intake.AlertProcess": false,
+              "Shutter.Intake.Forward": false,
+              "Shutter.Util.Json": false,
+              "Shutter.Util.Time": false,
+              "Shutter.Util.Schemas": false
+            },
+            "forwarder": null,
+            "alert": {
+              "item": "Ens.Alert",
+              "class": "OnbSite.AlertLog",
+              "pass_to": "",
+              "receivers": "",
+              "forwarder_target": "Shutter Forwarder",
+              "is_shutter": false
+            },
+            "last_forward": null,
+            "credential": false,
+            "credential_name": "ShutterIntake",
+            "credential_user": ""
+          },
+          "actions": [
+            {
+              "do": "map_package",
+              "package": "Shutter.Intake",
+              "database": "SHUTTER",
+              "says": "Map the package Shutter.Intake into PATHOLOGY from the database SHUTTER"
+            },
+            {
+              "do": "map_package",
+              "package": "Shutter.Util",
+              "database": "SHUTTER",
+              "says": "Map the package Shutter.Util into PATHOLOGY from the database SHUTTER"
+            },
+            {
+              "do": "import_schema",
+              "category": "TRUSTLAB",
+              "as": "TRUSTLAB",
+              "says": "Import the schema TRUSTLAB from PATHOLOGY into SHUTTER"
+            },
+            {
+              "do": "add_forwarder",
+              "item": "Shutter Forwarder",
+              "server": "127.0.0.1",
+              "port": 52773,
+              "ssl": "",
+              "credential": "ShutterIntake",
+              "prefix": "",
+              "says": "Add the item Shutter Forwarder (Shutter.Intake.Forwarder) to OnbPath.Production, posting to 127.0.0.1:52773 with the credential ShutterIntake"
+            },
+            {
+              "do": "rename_alert",
+              "class": "OnbSite.AlertLog",
+              "to": "Site Alerts",
+              "says": "Rename the site's own Ens.Alert (OnbSite.AlertLog) to Site Alerts, where every alert is still passed first"
+            },
+            {
+              "do": "add_alert_intake",
+              "receivers": "LIMS Out,Results Out",
+              "pass_to": "Site Alerts",
+              "target": "Shutter Forwarder",
+              "says": "Add the item Ens.Alert (Shutter.Intake.AlertProcess), passing every alert to Site Alerts, with the receivers LIMS Out,Results Out"
+            },
+            {
+              "do": "draft_receiver",
+              "name": "LIMS Out",
+              "item": "LIMS Out",
+              "says": "Draft a site profile entry for LIMS Out: tier 3, no API, every feature false, so its failures escalate and nothing is resent until a person fills it in"
+            },
+            {
+              "do": "draft_receiver",
+              "name": "Results Out",
+              "item": "Results Out",
+              "says": "Draft a site profile entry for Results Out: tier 3, no API, every feature false, so its failures escalate and nothing is resent until a person fills it in"
+            }
+          ],
+          "todo": [
+            "No credential ShutterIntake in PATHOLOGY: run Do ##class(Shutter.Setup).OnboardCredential(\"PATHOLOGY\") in a terminal, as a user who may manage security; it asks for the password and never prints it",
+            "Review the draft receiver LIMS Out in the site profile: its system, its category, its tier and its team; give it an API only if it has one",
+            "Review the draft receiver Results Out in the site profile: its system, its category, its tier and its team; give it an API only if it has one"
+          ],
+          "warnings": [
+            "LIMS Out retries forever (FailureTimeout -1, whether set on the item or the class's default): a case opens on its first failure, even a short outage, and stays open, and the engine goes on and delivers when the system returns. Check the message trace before anyone corrects by hand"
+          ],
+          "error": "",
+          "onboarded": false,
+          "receiver_prefix": ""
+        },
+        "digest": "sha256:764e9251f869a5dbfd1bedff1a177b2e04144939fb46a931f413c703128a9b8f"
+      },
+      "apply": {
+        "namespace": "PATHOLOGY",
+        "changed": [
+          "Map the package Shutter.Intake into PATHOLOGY from the database SHUTTER",
+          "Map the package Shutter.Util into PATHOLOGY from the database SHUTTER",
+          "Import the schema TRUSTLAB from PATHOLOGY into SHUTTER",
+          "Add the item Shutter Forwarder (Shutter.Intake.Forwarder) to OnbPath.Production, posting to 127.0.0.1:52773 with the credential ShutterIntake",
+          "Rename the site's own Ens.Alert (OnbSite.AlertLog) to Site Alerts, where every alert is still passed first",
+          "Add the item Ens.Alert (Shutter.Intake.AlertProcess), passing every alert to Site Alerts, with the receivers LIMS Out,Results Out",
+          "Updated the running production OnbPath.Production: it was not stopped",
+          "Draft a site profile entry for LIMS Out: tier 3, no API, every feature false, so its failures escalate and nothing is resent until a person fills it in",
+          "Draft a site profile entry for Results Out: tier 3, no API, every feature false, so its failures escalate and nothing is resent until a person fills it in"
+        ],
+        "unchanged": "",
+        "todo": [
+          "No credential ShutterIntake in PATHOLOGY: run Do ##class(Shutter.Setup).OnboardCredential(\"PATHOLOGY\") in a terminal, as a user who may manage security; it asks for the password and never prints it",
+          "Review the draft receiver LIMS Out in the site profile: its system, its category, its tier and its team; give it an API only if it has one",
+          "Review the draft receiver Results Out in the site profile: its system, its category, its tier and its team; give it an API only if it has one"
+        ],
+        "warnings": [
+          "LIMS Out retries forever (FailureTimeout -1, whether set on the item or the class's default): a case opens on its first failure, even a short outage, and stays open, and the engine goes on and delivers when the system returns. Check the message trace before anyone corrects by hand"
+        ],
+        "error": "",
+        "ok": true,
+        "production": "OnbPath.Production"
+      },
+      "planAfter": {
+        "plan": {
+          "namespace": "PATHOLOGY",
+          "shutter_namespace": "SHUTTER",
+          "production": "OnbPath.Production",
+          "production_state": "running",
+          "productions": ["OnbPath.Production", "PATHOLOGYPKG.FoundationProduction"],
+          "services": [
+            {
+              "name": "OrderComms In",
+              "class": "EnsLib.HL7.Service.TCPService",
+              "categories": ["2.5.1"]
+            },
+            {
+              "name": "LIMS Results In",
+              "class": "EnsLib.HL7.Service.TCPService",
+              "categories": ["TRUSTLAB"]
+            }
+          ],
+          "routers": [
+            {
+              "name": "Path Router",
+              "class": "EnsLib.HL7.MsgRouter.RoutingEngine"
+            }
+          ],
+          "operations": [
+            {
+              "name": "LIMS Out",
+              "class": "EnsLib.HL7.Operation.TCPOperation",
+              "reported_as": "LIMS Out",
+              "alert_on_error": true,
+              "in_profile": true,
+              "has_api": false,
+              "draft": true,
+              "get_reply": true,
+              "reply_code_actions_from": "engine_default",
+              "reply_code_actions": ":?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C",
+              "proves": "A reply is awaited, and any positive code counts as complete, so an accept or commit ACK reads the same as an application ACK: a completed message proves the receiver's listener answered, not that its application processed the message"
+            },
+            {
+              "name": "Results Out",
+              "class": "EnsLib.HL7.Operation.TCPOperation",
+              "reported_as": "Results Out",
+              "alert_on_error": true,
+              "in_profile": true,
+              "has_api": false,
+              "draft": true,
+              "get_reply": true,
+              "reply_code_actions_from": "engine_default",
+              "reply_code_actions": ":?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C",
+              "proves": "A reply is awaited, and any positive code counts as complete, so an accept or commit ACK reads the same as an application ACK: a completed message proves the receiver's listener answered, not that its application processed the message"
+            }
+          ],
+          "other_operations": [
+            {
+              "name": "Site Alerts",
+              "class": "OnbSite.AlertLog"
+            }
+          ],
+          "schemas": [
+            {
+              "category": "2.5.1",
+              "named_by": "OrderComms In",
+              "in_namespace": true,
+              "standard": true,
+              "in_shutter": true,
+              "shutter_name": "2.5.1"
+            },
+            {
+              "category": "TRUSTLAB",
+              "named_by": "LIMS Results In",
+              "in_namespace": true,
+              "standard": false,
+              "in_shutter": true,
+              "shutter_name": "TRUSTLAB",
+              "action": "none"
+            }
+          ],
+          "wired": {
+            "mappings": {
+              "Shutter.Intake": "SHUTTER",
+              "Shutter.Util": "SHUTTER"
+            },
+            "classes": {
+              "Shutter.Intake.Forwarder": true,
+              "Shutter.Intake.AlertProcess": true,
+              "Shutter.Intake.Forward": true,
+              "Shutter.Util.Json": true,
+              "Shutter.Util.Time": true,
+              "Shutter.Util.Schemas": true
+            },
+            "forwarder": {
+              "item": "Shutter Forwarder",
+              "server": "127.0.0.1",
+              "port": "52773",
+              "ssl": "",
+              "credential": "ShutterIntake",
+              "path": "/api/shutter/intake",
+              "prefix": "",
+              "enabled": true
+            },
+            "alert": {
+              "item": "Ens.Alert",
+              "class": "Shutter.Intake.AlertProcess",
+              "pass_to": "Site Alerts",
+              "receivers": "LIMS Out,Results Out",
+              "forwarder_target": "Shutter Forwarder",
+              "is_shutter": true
+            },
+            "last_forward": null,
+            "credential": false,
+            "credential_name": "ShutterIntake",
+            "credential_user": ""
+          },
+          "actions": [],
+          "todo": [
+            "No credential ShutterIntake in PATHOLOGY: run Do ##class(Shutter.Setup).OnboardCredential(\"PATHOLOGY\") in a terminal, as a user who may manage security; it asks for the password and never prints it",
+            "Review the draft receiver LIMS Out in the site profile: its system, its category, its tier and its team; give it an API only if it has one",
+            "Review the draft receiver Results Out in the site profile: its system, its category, its tier and its team; give it an API only if it has one"
+          ],
+          "warnings": [
+            "LIMS Out retries forever (FailureTimeout -1, whether set on the item or the class's default): a case opens on its first failure, even a short outage, and stays open, and the engine goes on and delivers when the system returns. Check the message trace before anyone corrects by hand"
+          ],
+          "error": "",
+          "onboarded": true,
+          "receiver_prefix": ""
+        },
+        "digest": "sha256:52ef98cec7d8ca881723bf9d9104a13dfb774394f648a609fde5a0b1f4d0ffca"
+      },
+      "testNoCredential": {
+        "namespace": "PATHOLOGY",
+        "case": "",
+        "http_status": "",
+        "advice": "",
+        "error": "No credential ShutterIntake in PATHOLOGY: run OnboardCredential first",
+        "ok": false
+      },
+      "test": {
+        "namespace": "PATHOLOGY",
+        "case": "C-000004",
+        "http_status": 202,
+        "advice": "",
+        "error": "",
+        "ok": true,
+        "production": "OnbPath.Production",
+        "production_state": "running"
+      },
+      "watched": {
+        "namespace": "PATHOLOGY",
+        "production": "OnbPath.Production",
+        "production_state": "running",
+        "problems": [],
+        "onboarded": true,
+        "exists": true,
+        "forwarder": true,
+        "alert_intake": true,
+        "pass_to": "Site Alerts",
+        "classes": true,
+        "credential": true,
+        "last_forward": "",
+        "last_forward_error": "",
+        "refused_72h": 0,
+        "last_refused": "",
+        "last_case": "C-000004",
+        "last_case_at": "2026-11-06T22:38:27Z",
+        "schemas_missing": [],
+        "operations_unwatched": [],
+        "removed": false,
+        "ok": true
+      },
+      "removal": {
+        "namespace": "PATHOLOGY",
+        "production": "OnbPath.Production",
+        "renamed": "Site Alerts",
+        "items": ["Ens.Alert", "Shutter Forwarder"],
+        "alertOnError": [],
+        "mappings": ["Shutter.Intake", "Shutter.Util"],
+        "drafted": ["LIMS Out", "Results Out"],
+        "onboarded": true
+      },
+      "remove": {
+        "namespace": "PATHOLOGY",
+        "removed": [
+          "The item Ens.Alert of OnbPath.Production",
+          "The item Shutter Forwarder of OnbPath.Production",
+          "The name Site Alerts: the site's item is Ens.Alert again",
+          "Updated the running production OnbPath.Production: it was not stopped",
+          "The draft receiver LIMS Out in the site profile",
+          "The draft receiver Results Out in the site profile",
+          "The mapping of Shutter.Intake",
+          "The mapping of Shutter.Util"
+        ],
+        "kept": [
+          "The credential and the user, unless {\"credential\": true}",
+          "Shutter's cases from PATHOLOGY and the schemas imported from it"
+        ],
+        "error": "",
+        "ok": true
+      }
+    },
+    "DOCUMENTS": {
+      "plan": {
+        "plan": {
+          "namespace": "DOCUMENTS",
+          "shutter_namespace": "SHUTTER",
+          "production": "OnbDocs.Production",
+          "production_state": "running",
+          "productions": ["DOCUMENTSPKG.FoundationProduction", "OnbDocs.Production"],
+          "services": [
+            {
+              "name": "Docs In",
+              "class": "EnsLib.HL7.Service.TCPService",
+              "categories": ["TRUSTLAB"]
+            }
+          ],
+          "routers": [
+            {
+              "name": "Docs Router",
+              "class": "EnsLib.HL7.MsgRouter.RoutingEngine"
+            }
+          ],
+          "operations": [
+            {
+              "name": "Results Out",
+              "class": "EnsLib.HL7.Operation.TCPOperation",
+              "reported_as": "DOCUMENTS Results Out",
+              "alert_on_error": false,
+              "in_profile": false,
+              "get_reply": true,
+              "reply_code_actions_from": "engine_default",
+              "reply_code_actions": ":?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C",
+              "proves": "A reply is awaited, and any positive code counts as complete, so an accept or commit ACK reads the same as an application ACK: a completed message proves the receiver's listener answered, not that its application processed the message"
+            }
+          ],
+          "other_operations": [],
+          "schemas": [
+            {
+              "category": "TRUSTLAB",
+              "named_by": "Docs In",
+              "in_namespace": true,
+              "standard": false,
+              "in_shutter": true,
+              "shutter_name": "DOCUMENTS_TRUSTLAB",
+              "action": "import_as"
+            }
+          ],
+          "wired": {
+            "mappings": {},
+            "classes": {
+              "Shutter.Intake.Forwarder": false,
+              "Shutter.Intake.AlertProcess": false,
+              "Shutter.Intake.Forward": false,
+              "Shutter.Util.Json": false,
+              "Shutter.Util.Time": false,
+              "Shutter.Util.Schemas": false
+            },
+            "forwarder": null,
+            "alert": null,
+            "last_forward": null,
+            "credential": false,
+            "credential_name": "ShutterIntake",
+            "credential_user": ""
+          },
+          "actions": [
+            {
+              "do": "map_package",
+              "package": "Shutter.Intake",
+              "database": "SHUTTER",
+              "says": "Map the package Shutter.Intake into DOCUMENTS from the database SHUTTER"
+            },
+            {
+              "do": "map_package",
+              "package": "Shutter.Util",
+              "database": "SHUTTER",
+              "says": "Map the package Shutter.Util into DOCUMENTS from the database SHUTTER"
+            },
+            {
+              "do": "import_schema",
+              "category": "TRUSTLAB",
+              "as": "DOCUMENTS_TRUSTLAB",
+              "says": "Import the schema TRUSTLAB from DOCUMENTS into SHUTTER as DOCUMENTS_TRUSTLAB: a category of that name is loaded there with other contents, and importing over it would replace it"
+            },
+            {
+              "do": "add_forwarder",
+              "item": "Shutter Forwarder",
+              "server": "127.0.0.1",
+              "port": 52773,
+              "ssl": "",
+              "credential": "ShutterIntake",
+              "prefix": "DOCUMENTS",
+              "says": "Add the item Shutter Forwarder (Shutter.Intake.Forwarder) to OnbDocs.Production, posting to 127.0.0.1:52773 with the credential ShutterIntake, reporting its receivers as \"DOCUMENTS <item>\""
+            },
+            {
+              "do": "add_alert_intake",
+              "receivers": "Results Out",
+              "pass_to": "",
+              "target": "Shutter Forwarder",
+              "says": "Add the item Ens.Alert (Shutter.Intake.AlertProcess) with the receivers Results Out"
+            },
+            {
+              "do": "draft_receiver",
+              "name": "DOCUMENTS Results Out",
+              "item": "Results Out",
+              "says": "Draft a site profile entry for DOCUMENTS Results Out: tier 3, no API, every feature false, so its failures escalate and nothing is resent until a person fills it in"
+            }
+          ],
+          "todo": [
+            "These receivers raise no alert on an error, so the alert intake hears nothing from them: Results Out. Turn AlertOnError on in the Management Portal, or pass {\"alert_on_error\": true} to the apply",
+            "No credential ShutterIntake in DOCUMENTS: run Do ##class(Shutter.Setup).OnboardCredential(\"DOCUMENTS\") in a terminal, as a user who may manage security; it asks for the password and never prints it",
+            "Review the draft receiver DOCUMENTS Results Out in the site profile: its system, its category, its tier and its team; give it an API only if it has one"
+          ],
+          "warnings": [],
+          "error": "",
+          "onboarded": false,
+          "receiver_prefix": "DOCUMENTS"
+        },
+        "digest": "sha256:6e5b690632f8c1cc0657b3428920aa0b4d590d13846446ce77d73c23cc120ecb"
+      },
+      "apply": {
+        "namespace": "DOCUMENTS",
+        "changed": [
+          "Map the package Shutter.Intake into DOCUMENTS from the database SHUTTER",
+          "Map the package Shutter.Util into DOCUMENTS from the database SHUTTER",
+          "Import the schema TRUSTLAB from DOCUMENTS into SHUTTER as DOCUMENTS_TRUSTLAB: a category of that name is loaded there with other contents, and importing over it would replace it",
+          "Add the item Shutter Forwarder (Shutter.Intake.Forwarder) to OnbDocs.Production, posting to 127.0.0.1:52773 with the credential ShutterIntake, reporting its receivers as \"DOCUMENTS <item>\"",
+          "Add the item Ens.Alert (Shutter.Intake.AlertProcess) with the receivers Results Out",
+          "Updated the running production OnbDocs.Production: it was not stopped",
+          "Draft a site profile entry for DOCUMENTS Results Out: tier 3, no API, every feature false, so its failures escalate and nothing is resent until a person fills it in"
+        ],
+        "unchanged": "",
+        "todo": [
+          "These receivers raise no alert on an error, so the alert intake hears nothing from them: Results Out. Turn AlertOnError on in the Management Portal, or pass {\"alert_on_error\": true} to the apply",
+          "No credential ShutterIntake in DOCUMENTS: run Do ##class(Shutter.Setup).OnboardCredential(\"DOCUMENTS\") in a terminal, as a user who may manage security; it asks for the password and never prints it",
+          "Review the draft receiver DOCUMENTS Results Out in the site profile: its system, its category, its tier and its team; give it an API only if it has one"
+        ],
+        "warnings": [],
+        "error": "",
+        "ok": true,
+        "production": "OnbDocs.Production"
+      },
+      "planAfter": {
+        "plan": {
+          "namespace": "DOCUMENTS",
+          "shutter_namespace": "SHUTTER",
+          "production": "OnbDocs.Production",
+          "production_state": "running",
+          "productions": ["DOCUMENTSPKG.FoundationProduction", "OnbDocs.Production"],
+          "services": [
+            {
+              "name": "Docs In",
+              "class": "EnsLib.HL7.Service.TCPService",
+              "categories": ["TRUSTLAB"]
+            }
+          ],
+          "routers": [
+            {
+              "name": "Docs Router",
+              "class": "EnsLib.HL7.MsgRouter.RoutingEngine"
+            }
+          ],
+          "operations": [
+            {
+              "name": "Results Out",
+              "class": "EnsLib.HL7.Operation.TCPOperation",
+              "reported_as": "DOCUMENTS Results Out",
+              "alert_on_error": false,
+              "in_profile": true,
+              "has_api": false,
+              "draft": true,
+              "get_reply": true,
+              "reply_code_actions_from": "engine_default",
+              "reply_code_actions": ":?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C",
+              "proves": "A reply is awaited, and any positive code counts as complete, so an accept or commit ACK reads the same as an application ACK: a completed message proves the receiver's listener answered, not that its application processed the message"
+            }
+          ],
+          "other_operations": [],
+          "schemas": [
+            {
+              "category": "TRUSTLAB",
+              "named_by": "Docs In",
+              "in_namespace": true,
+              "standard": false,
+              "in_shutter": true,
+              "shutter_name": "DOCUMENTS_TRUSTLAB",
+              "action": "none"
+            }
+          ],
+          "wired": {
+            "mappings": {
+              "Shutter.Intake": "SHUTTER",
+              "Shutter.Util": "SHUTTER"
+            },
+            "classes": {
+              "Shutter.Intake.Forwarder": true,
+              "Shutter.Intake.AlertProcess": true,
+              "Shutter.Intake.Forward": true,
+              "Shutter.Util.Json": true,
+              "Shutter.Util.Time": true,
+              "Shutter.Util.Schemas": true
+            },
+            "forwarder": {
+              "item": "Shutter Forwarder",
+              "server": "127.0.0.1",
+              "port": "52773",
+              "ssl": "",
+              "credential": "ShutterIntake",
+              "path": "/api/shutter/intake",
+              "prefix": "DOCUMENTS",
+              "enabled": true
+            },
+            "alert": {
+              "item": "Ens.Alert",
+              "class": "Shutter.Intake.AlertProcess",
+              "pass_to": "",
+              "receivers": "Results Out",
+              "forwarder_target": "Shutter Forwarder",
+              "is_shutter": true
+            },
+            "last_forward": null,
+            "credential": false,
+            "credential_name": "ShutterIntake",
+            "credential_user": ""
+          },
+          "actions": [],
+          "todo": [
+            "These receivers raise no alert on an error, so the alert intake hears nothing from them: Results Out. Turn AlertOnError on in the Management Portal, or pass {\"alert_on_error\": true} to the apply",
+            "No credential ShutterIntake in DOCUMENTS: run Do ##class(Shutter.Setup).OnboardCredential(\"DOCUMENTS\") in a terminal, as a user who may manage security; it asks for the password and never prints it",
+            "Review the draft receiver DOCUMENTS Results Out in the site profile: its system, its category, its tier and its team; give it an API only if it has one"
+          ],
+          "warnings": [],
+          "error": "",
+          "onboarded": true,
+          "receiver_prefix": "DOCUMENTS"
+        },
+        "digest": "sha256:c4f43423b049fd57534c96fa2e6b146939072e38dc8b1fdd9ae09daa9a21dfd1"
+      },
+      "testNoCredential": {
+        "namespace": "DOCUMENTS",
+        "case": "",
+        "http_status": "",
+        "advice": "",
+        "error": "No credential ShutterIntake in DOCUMENTS: run OnboardCredential first",
+        "ok": false
+      },
+      "test": {
+        "namespace": "DOCUMENTS",
+        "case": "C-000005",
+        "http_status": 202,
+        "advice": "",
+        "error": "",
+        "ok": true,
+        "production": "OnbDocs.Production",
+        "production_state": "running"
+      },
+      "watched": {
+        "namespace": "DOCUMENTS",
+        "production": "OnbDocs.Production",
+        "production_state": "running",
+        "problems": [],
+        "onboarded": true,
+        "exists": true,
+        "forwarder": true,
+        "alert_intake": true,
+        "pass_to": "",
+        "classes": true,
+        "credential": true,
+        "last_forward": "",
+        "last_forward_error": "",
+        "refused_72h": 0,
+        "last_refused": "",
+        "last_case": "C-000005",
+        "last_case_at": "2026-11-06T22:38:28Z",
+        "schemas_missing": [],
+        "operations_unwatched": [],
+        "removed": false,
+        "ok": true
+      },
+      "removal": {
+        "namespace": "DOCUMENTS",
+        "production": "OnbDocs.Production",
+        "renamed": "",
+        "items": ["Ens.Alert", "Shutter Forwarder"],
+        "alertOnError": [],
+        "mappings": ["Shutter.Intake", "Shutter.Util"],
+        "drafted": ["DOCUMENTS Results Out"],
+        "onboarded": true
+      },
+      "remove": {
+        "namespace": "DOCUMENTS",
+        "removed": [
+          "The item Ens.Alert of OnbDocs.Production",
+          "The item Shutter Forwarder of OnbDocs.Production",
+          "Updated the running production OnbDocs.Production: it was not stopped",
+          "The draft receiver DOCUMENTS Results Out in the site profile",
+          "The mapping of Shutter.Intake",
+          "The mapping of Shutter.Util"
+        ],
+        "kept": [
+          "The credential and the user, unless {\"credential\": true}",
+          "Shutter's cases from DOCUMENTS and the schemas imported from it"
+        ],
+        "error": "",
+        "ok": true
+      }
+    }
+  },
+  "recordedAt": "2026-11-06T22:38:30Z",
+  "build": "IRIS for UNIX (Ubuntu Server LTS for x86-64 Containers) 2027.1.0AI (Build 109U) Fri Oct 30 2026 16:31:24 EDT"
+}
