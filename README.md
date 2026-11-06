@@ -14,7 +14,7 @@ Shutter is about delivery, not diagnosis: it resends what the failed message ask
 
 **Jump to:** [Try it](https://github.com/MxSalata/shutter#try-it) · [What to look at](https://github.com/MxSalata/shutter#what-to-look-at) · [How it works](https://github.com/MxSalata/shutter#how-it-works) · [AI Hub](https://github.com/MxSalata/shutter#ai-hub-inside-shutter) · [What worked, what was hard](https://github.com/MxSalata/shutter#building-on-ai-hub-and-interoperability-what-worked-what-was-hard) · [Bonuses](https://github.com/MxSalata/shutter#technology-bonuses) · [Testing](https://github.com/MxSalata/shutter#how-it-is-tested) · [Limits](https://github.com/MxSalata/shutter#limits-plainly) · [Run details](https://github.com/MxSalata/shutter#run-details) · [Troubleshooting](https://github.com/MxSalata/shutter#troubleshooting)
 
-**Trial** [link at submission] | **Online demo** [link at submission] | **Video** [link at submission] | **Articles** [link at submission] | **Open Exchange** [link at submission]
+**Trial** [mxsalata.github.io/shutter](https://mxsalata.github.io/shutter/) | **Online demo** [shutter.mxsalata.com](https://shutter.mxsalata.com) | **Video** [link at submission] | **Articles** [link at submission] | **Open Exchange** [link at submission]
 
 *Why I built it:* my background is interoperability with 28 NHS hospitals in the UK, and real testing of an integration only happens in production, where a receiver behaves in a way nobody foresaw, a message arrives out of order, or someone fixes something by hand. Shutter is a safety net for those cases, made for a clinical setting, where a wrong write has a patient on the other end. *Mikolaj Salata ([MxSalata](https://community.intersystems.com/user/mxsalata))*
 
@@ -78,8 +78,8 @@ The three specialists (conformance, encounter and impact) and the coordinator ar
 
 | Way to try it | You need | What you see | Time |
 | --- | --- | --- | --- |
-| **The trial** in the browser [link at submission] | Nothing to install; a PC or a phone | The demo hospital's recorded runs; every action replays the recording, and nothing leaves the browser | The quick tour [link at submission, `?trial=tour`]: 9 steps, about 4 minutes. The engineers' tour [link at submission, `?trial=engineer`]: 6 steps, about 3 minutes, with Detail on Technical |
-| **The online demo** [link at submission] | A browser and the sign-ins below | A live hospital: a new failure every 7 minutes, decided under the site's written policy; any resend waits for you | The four steps below |
+| **The trial** in the browser, [mxsalata.github.io/shutter](https://mxsalata.github.io/shutter/) | Nothing to install; a PC or a phone | The demo hospital's recorded runs; every action replays the recording, and nothing leaves the browser | The quick tour ([start it](https://mxsalata.github.io/shutter/?trial=tour)): 9 steps, about 4 minutes. The engineers' tour [link at submission, `?trial=engineer`]: 6 steps, about 3 minutes, with Detail on Technical |
+| **The online demo**, [shutter.mxsalata.com](https://shutter.mxsalata.com) | A browser and the sign-ins below | A live hospital: a new failure every 7 minutes, decided under the site's written policy; any resend waits for you | The four steps below |
 | **The replay edition** on your machine, `./install.sh --replay` | Docker; no key, no Early Access file | Your own instance, the board replaying its recorded live runs at no cost | Healthy in 2 to 8 min once the 6 GB public image is pulled |
 | **The AI Hub edition** on your machine, `./install.sh --image-file ...` | Docker and the build 109 file from the Early Access portal; `ANTHROPIC_API_KEY` for live agents | Your own instance, with live agents or, without a key, their recorded runs | Healthy in 3 to 15 min on build 109 ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md)) |
 
@@ -221,7 +221,7 @@ What I found building Shutter, measured on build `2026.3.0AI.154.0`; the longer 
 | Community Opportunity idea [DPI-I-689](https://ideas.intersystems.com/ideas/DPI-I-689) | Interoperability as the traceability tool for AI agents: the walk-through below. For a hospital: an integration team audits an agent with the Visual Trace and SQL it already knows |
 | AI Hub bug reports | [#11](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/11): `%AI.Agent.Run()` takes three arguments, not four; [#12](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/12): `Run()` never calls `OnIterationStart` or `OnIterationComplete` |
 | Embedded Python bug reports | [#26](https://github.com/intersystems-community/python-bugreports/issues/26): signal 11 after catching an SQL error in a Python SQL function under dynamic SQL; [#27](https://github.com/intersystems-community/python-bugreports/issues/27): defaults pasted into the Python source |
-| Online demo | The live hospital, [link at submission]: a new failure every 7 minutes, decided under the site's written policy; any resend waits for you; the sign-ins are under [Try it](https://github.com/MxSalata/shutter#try-it). The trial on GitHub Pages is its offline companion, recorded runs only |
+| Online demo | The live hospital, [shutter.mxsalata.com](https://shutter.mxsalata.com): a new failure every 7 minutes, decided under the site's written policy; any resend waits for you; the sign-ins are under [Try it](https://github.com/MxSalata/shutter#try-it). The trial on GitHub Pages is its offline companion, recorded runs only |
 | YouTube video | [link at submission] |
 | Developer Community articles | [link at submission] |
 
