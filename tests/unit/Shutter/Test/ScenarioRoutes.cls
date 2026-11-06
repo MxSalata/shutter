@@ -63,6 +63,17 @@ Method TestASiteIndexIsNotGivenTheDemoRoute()
     Do $$$AssertEquals(##class(Shutter.Setup).SiteRoutes("ADT In,Case Intake"), "ADT In,Case Intake", "a list without it is left alone")
 }
 
+/// A wait may name more than one state, as S26's plan stops at approval in Rules only and goes through in Site policy.
+Method TestAWaitCanNameTwoStates()
+{
+    Set runner = "Shutter.Scenarios.Runner"
+    Do $$$AssertTrue($CLASSMETHOD(runner, "StateIs", "blocked", "blocked"), "one state, as every other scenario names")
+    Do $$$AssertNotTrue($CLASSMETHOD(runner, "StateIs", "blocked", "resolved"), "not another")
+    Do $$$AssertTrue($CLASSMETHOD(runner, "StateIs", "resolved", "awaiting_approval|resolved"), "either of two")
+    Do $$$AssertNotTrue($CLASSMETHOD(runner, "StateIs", "approval", "awaiting_approval|resolved"), "not part of one")
+    Do $$$AssertNotTrue($CLASSMETHOD(runner, "StateIs", "", "awaiting_approval|resolved"), "and no state is none of them")
+}
+
 Method TestARouteRefusesWhatItCannotPlay()
 {
     If '##class(%Dictionary.CompiledClass).%ExistsId(..#ROUTE) { Do $$$AssertTrue(0, "no route class") Quit }
