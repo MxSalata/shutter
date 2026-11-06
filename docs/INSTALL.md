@@ -7,6 +7,18 @@ the productions a hospital already runs; the README's `docker compose up` is the
 
 ## 1. In one page
 
+### What Shutter does at your site
+
+| Your receiver | What a failed message becomes today |
+| --- | --- |
+| An API with state, receipt, capabilities and conditional writes, described in the site profile | ADT: a case, the evidence, a plan and the gate, then a resend once its checks pass. Orders, results and documents: a case and a drafted email |
+| MLLP or TCP with no API | Any message type: a case, the evidence, a diagnosis where the agents can run, and a drafted email. Never a resend |
+| FHIR, or anything else that isn't HL7 | A warning in the event log and no case |
+| Any receiver, a message over 2 MB | A warning in the event log and no case |
+| Any receiver, a transport ACK and then lost downstream | Nothing: Shutter doesn't hear of it (section 10) |
+
+A production review needs none of this configured.
+
 - **The demo install is not a hospital install.** The image loads the `iris-shutter` module with `demo=1`: demo
   users, the demo bed-management system (`Downstream.*`), the scenario player, a namespace-wide message purge, and
   `Shutter.Production` as the auto-start production.
