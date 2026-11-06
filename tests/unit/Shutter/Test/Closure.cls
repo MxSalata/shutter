@@ -234,4 +234,31 @@ Method TestACorrectedBedOnAnOpenCaseStopsIt()
     Do $$$AssertTrue(c.Headline [ "different content", "and says why: " _ c.Headline)
 }
 
+/// No sign of a write by the last read proves nothing. It escalates as unknown, and the approval it spent stays spent.
+Method TestNoSignOfAWriteIsUnknownAndTheApprovalIsSpent()
+{
+    Set c = ..SavedCase()
+    Set p = ..ResendPlan(c)
+    Set approval = ##class(Shutter.Store.Approval).%New()
+    Do approval.CaseSetObjectId(c.%Id())
+    Set approval.Plan = p
+    Do $$$AssertStatusOK(approval.%Save(), "an approval")
+    Do $$$AssertStatusOK(##class(Shutter.Store.ExecutionAttempt).Create(c, p, approval, "", 0, "uncertain", {}, "", .a), "the attempt")
+    Set wf = ##class(Shutter.Test.QuietWorkflow).%New("Case Workflow")
+    Set wf.CaseId = c.CaseId, wf.PlanId = p.%Id(), wf.ApprovalId = approval.%Id(), wf.AttemptId = a.%Id(), wf.Mode = "policy"
+    Set ctx = ##class(Shutter.Test.Verify).Base()
+    Set ctx.attempt.at = "2026-10-19T09:08:50Z", ctx."settle_seconds" = 60
+    Set result = ##class(Shutter.Msg.VerifyResult).%New()
+    Set result.Outcome = ##class(Shutter.Operation.Verify).Judge(ctx, .text, .detail), result.Summary = text, result.DetailJSON = detail.%ToJSON()
+    Do $$$AssertStatusOK(wf.OnVerify(c, result), "the verification is taken")
+    Do $$$AssertEquals(c.State, "escalated", "a person checks")
+    Do $$$AssertEquals(c.Headline, "Escalated: the resend's outcome is unknown", "and the headline claims nothing")
+    Set id = c.%Id(), event = ""
+    &sql(SELECT TOP 1 Text INTO :event FROM Shutter_Store.CaseEvent WHERE "Case" = :id AND ToState = 'escalated' ORDER BY Seq DESC)
+    Do $$$AssertEquals(##class(Shutter.API.Dispatch).ReasonFromEvent(event, "escalated"), "WRITE_OUTCOME_UNKNOWN", "the reason it shows: " _ event)
+    Set again = ##class(Shutter.Store.Approval).%OpenId(approval.%Id())
+    Do again.%Reload()
+    Do $$$AssertTrue(again.Revoked, "the approval authorised one write and it is spent")
+}
+
 }

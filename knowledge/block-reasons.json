@@ -521,11 +521,11 @@
     {
       "code": "WRITE_NOT_COMMITTED",
       "title": "The resend was not committed",
-      "prerequisite": "A receipt for the operation key, or the operation in the downstream system's history, once the receiver has had its settle window after a write whose answer was lost",
+      "prerequisite": "A receipt for the operation key, or the operation in the downstream system's history, after a write whose answer was lost",
       "next_action": "Check the receiver's history and receipts for the operation key; reinvestigate the case when the receiver's state is known. Never resend blind.",
       "owner": "Integration team",
       "reevaluate_when": "The receiver's state for the encounter is known, and a person has decided whether the movement is still due",
-      "text": "The write's answer was lost. Not committed: by the last read, after the settle window, the receiver holds no receipt for the operation and its history does not show it, and the encounter is still at the version the write was conditional on (or moved past it by something else, so the conditional write can no longer apply). Nothing shows it was applied; a slower receiver can still commit it, unless the version has moved. The approval authorised one write and it is spent; a reinvestigation makes a new plan on fresh evidence."
+      "text": "The write's answer was lost. Not committed: the receiver holds no receipt for the operation and its history does not show it, and the encounter moved past the version the write was conditional on by something else, so the conditional write can no longer apply. The approval authorised one write and it is spent; a reinvestigation makes a new plan on fresh evidence."
     },
     {
       "code": "WRITE_OUTCOME_UNKNOWN",
@@ -534,7 +534,7 @@
       "next_action": "Check the receiver's history and receipts for the operation key; reinvestigate the case when the receiver's state is known. Never resend blind.",
       "owner": "Integration team",
       "reevaluate_when": "The receiver can be read again, or its team confirms what it applied",
-      "text": "The write's answer was lost, or the write call itself failed, and nothing since has settled whether the receiver applied it: a lookup failed, the receiver no longer knows the encounter, or the budget of reads ran out. Nothing is established either way, so nothing is resent until a person has checked at the receiver."
+      "text": "The write's answer was lost, or the write call itself failed, and nothing since has settled whether the receiver applied it: a lookup failed, the receiver no longer knows the encounter, the budget of reads ran out, or there was no sign of the write by the last read, when a slower receiver can still commit it. Nothing is established either way, so nothing is resent until a person has checked at the receiver. The approval authorised one write and it is spent."
     },
     {
       "code": "WAITING_FOR_OCCUPANT_CASE",

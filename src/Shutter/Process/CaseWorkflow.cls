@@ -1958,7 +1958,8 @@ Method OnVerify(case As Shutter.Store.Case, result As Shutter.Msg.VerifyResult) 
         Set case.Headline = "Escalated: the resend was not committed"
         Quit case.Transition("escalated", "Not verified (not_committed): " _ result.Summary _ ". The approval is revoked, and nothing is resent without a person: a reinvestigation plans again on fresh evidence", "system", "verification:" _ result.VerificationId)
     }
-    // A write whose outcome the reads could not settle: unknown is the verdict, and a person checks at the receiver.
+    // A write whose outcome the reads could not settle: unknown is the verdict, and a person checks at the receiver. The
+    // approval authorised one write and it is spent, whatever became of it.
     If (result.Outcome = "unresolved") && $ISOBJECT(detail) && ($CLASSMETHOD(json, "Str", detail, "disposition") = "resend") && ($CLASSMETHOD(json, "Str", detail, "verdict") = "unknown") && $ISOBJECT(detail.%Get("attempt")) {
         Set case.Headline = "Escalated: the resend's outcome is unknown"
         Quit case.Transition("escalated", "Not verified (unknown): " _ result.Summary _ ". Whether the receiver applied the resend is unknown; a person must check at the receiver before anything is resent", "system", "verification:" _ result.VerificationId)
@@ -1967,6 +1968,8 @@ Method OnVerify(case As Shutter.Store.Case, result As Shutter.Msg.VerifyResult) 
 }
 
 /// Writes on the later transfer's case that this case was closed as superseded on its account, when the verifier's
+        Set approval = ##class(Shutter.Store.Approval).%OpenId(..ApprovalId)
+        If $ISOBJECT(approval) Do approval.Revoke("system: the write's outcome is unknown, and its one write is spent")
 /// support (detail.superseded_by) was a later transfer the feed sent whose delivery failed or is uncertain and whose
 /// case is known (CONTRACTS 6.1). Never on this case, and never an error for the closure.
 Method NoteSupersededBy(case As Shutter.Store.Case, by As %DynamicObject)

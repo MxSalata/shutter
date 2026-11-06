@@ -1,10 +1,10 @@
 /// The verifier: reads the receiver's committed history and receipts after an attempt, or after
 /// a non-write disposition, and says what holds. It never infers from a timeout or a missing
-/// receipt that nothing was applied: a missing receipt straight after a write whose answer was lost is unknown, not a
-/// verdict, and is read again; not committed is said only once the settle window (UncertainSettleSeconds) has passed
-/// since the attempt with the encounter's version unchanged, or once the version has moved past the one the write was
-/// conditional on, so the conditional write can no longer apply. The verdict is Judge, a pure function of what was read
-/// (Context), so it can be tested without a receiver.
+/// receipt that nothing was applied: a missing receipt after a write whose answer was lost is unknown, not a verdict, and
+/// is read again until the settle window (UncertainSettleSeconds) has passed, when a person checks. Not committed is said
+/// only once the version has moved past the one the write was conditional on, by something other than this write, so the
+/// conditional write can no longer apply. A receipt holding other content than the case's operation closes nothing. The
+/// verdict is Judge, a pure function of what was read (Context), so it can be tested without a receiver.
 Class Shutter.Operation.Verify Extends Ens.BusinessOperation
 {
 
@@ -75,10 +75,10 @@ ClassMethod Context(case As Shutter.Store.Case, plan As Shutter.Store.Plan, atte
     Set ctx.disposition = $SELECT($ISOBJECT(plan): plan.Disposition, 1: case.Disposition)
     Set ctx.event = case.Event, ctx."event_time" = case.EventTime, ctx."operation_key" = case.OperationKey, ctx."encounter_id" = case.EncounterId
     Set ctx."catalogue_entry" = $SELECT($ISOBJECT(plan): plan.CatalogueEntry, 1: "")
-    If $ISOBJECT(attempt) {
-        Set a = {}
     Set ctx.ward = case.Ward, ctx.bed = case.Bed, ctx."payload_digest" = case.PayloadDigest()
     Do ctx.%Set("strict_answers", ##class(Shutter.Store.SiteProfile).StrictAnswers(case.Receiver), "boolean")
+    If $ISOBJECT(attempt) {
+        Set a = {}
         Set a.outcome = attempt.Outcome, a.at = attempt.At, a."expected_version" = attempt.ExpectedVersion, a."http_status" = attempt.HttpStatus
         Set ctx.attempt = a
     } Else {
@@ -106,11 +106,12 @@ ClassMethod Context(case As Shutter.Store.Case, plan As Shutter.Store.Plan, atte
 /// The verdict, from the context alone (Context): the outcome, its text, and the detail the verification records
 /// (everything judged, with verdict, retry, attempt_outcome, seconds_since_attempt and version_moved). The outcomes:
 /// verified (the receiver holds what the plan intends: the operation committed for a resend or a reconcile, the stale
-/// operation absent and overtaken for a superseded closure), not_committed (a write whose answer was lost was not
-/// applied: no receipt and no history entry once the settle window has passed with the version unchanged, or the
-/// version moved past the one the write was conditional on), unresolved (a lookup failed, or nothing is established
-/// yet; retry says whether another read could settle it), failed (the receiver contradicts itself or the plan: a
-/// receipt without the history entry, an acknowledged write without a receipt, a stale operation with a receipt, a
+/// operation absent and overtaken for a superseded closure), not_committed (proven: a write whose answer was lost, with
+/// no receipt and no history entry, and the version moved past the one the write was conditional on by something other
+/// than this write), unresolved (a lookup failed, or nothing is established: no sign of a write by the last read proves
+/// nothing, since a slower receiver can still commit it; retry says whether another read could settle it), failed (the
+/// receiver contradicts itself or the plan: a receipt without the history entry, a receipt or history entry holding
+/// other content than the operation, an acknowledged write without a receipt, a stale operation with a receipt, a
 /// reconcile whose receipt is gone). verdict is what holds of the operation at the receiver: committed, not_committed
 /// or unknown; "not committed" is written only when it is the verdict.
 ClassMethod Judge(ctx As %DynamicObject, Output text As %String, Output detail As %DynamicObject) As %String
@@ -129,11 +130,11 @@ ClassMethod Judge(ctx As %DynamicObject, Output text As %String, Output detail A
     Set inHistory = (estatus = 200) && ..InHistory(encounter, key)
     Set current = $CLASSMETHOD(json, "Str", encounter, "ward"), state = $CLASSMETHOD(json, "Str", encounter, "state")
     Set where = state _ $SELECT(current '= "": " in " _ current, 1: "")
+    // A site may read this receiver on status alone (SiteProfile.StrictAnswers); a context that does not say is checked.
+    Set strict = $SELECT(ctx.%IsDefined("strict_answers"): $CLASSMETHOD(json, "Bool", ctx, "strict_answers"), 1: 1)
     If (estatus = 0) || (rstatus = 0) {
         Set text = "The receiver could not be read; nothing is established", retry = 1
     } ElseIf (disposition = "resend") || (disposition = "reconcile") {
-    // A site may read this receiver on status alone (SiteProfile.StrictAnswers); a context that does not say is checked.
-    Set strict = $SELECT(ctx.%IsDefined("strict_answers"): $CLASSMETHOD(json, "Bool", ctx, "strict_answers"), 1: 1)
         If (estatus '= 200) && (estatus '= 404) {
             Set text = "The receiver's encounter could not be read (HTTP " _ estatus _ "); nothing is established", retry = 1
         } ElseIf rstatus = 200 {
@@ -151,10 +152,10 @@ ClassMethod Judge(ctx As %DynamicObject, Output text As %String, Output detail A
                 } Else {
                     Set text = "Committed and current: receipt " _ $EXTRACT($CLASSMETHOD(json, "Str", receipt, "applied_at"), 1, 19) _ ", version " _ $CLASSMETHOD(json, "Str", receipt, "version_after") _ "; the encounter is " _ where
                 }
+                Set text = text _ ..StoredTimeWords(encounter, key, ctx)
             } Else {
                 Set outcome = "failed"
                 Set text = "A receipt exists but the operation is missing from the committed history; the receiver contradicts itself, and a person must check"
-                Set text = text _ ..StoredTimeWords(encounter, key, ctx)
             }
         } ElseIf (rstatus = 404) || (rstatus = -1) {
             If (rstatus = -1) && inHistory && strict && (..HistoryDiffers(encounter, key, ctx) '= "") {
@@ -186,14 +187,17 @@ ClassMethod Judge(ctx As %DynamicObject, Output text As %String, Output detail A
                     Set text = "The receiver no longer knows the encounter; a person must check"
                 } ElseIf elapsed = "" {
                     Set text = "No receipt yet, and the attempt's time is not recorded; the write may still be in flight, so nothing is established", retry = 1
-                } ElseIf moved {
+                } ElseIf moved && ((rstatus = 404) || ..HistoryNamesKeys(encounter)) {
+                    // The one proof: the version moved, and the receiver can say the move was not this write.
                     Set outcome = "not_committed", verdict = "not_committed"
                     Set text = "Not committed: " _ elapsed _ " s after the write the receiver holds no receipt for the operation and its history does not show it, and the encounter moved from version " _ expected _ " to " _ version _ " by something else, so the conditional write can no longer apply"
+                } ElseIf moved {
+                    Set text = "The encounter moved from version " _ expected _ " to " _ version _ ", and this receiver keeps no receipts and its history names no operation keys, so the move could be this write; a person must check"
                 } ElseIf elapsed < +$CLASSMETHOD(json, "Str", ctx, "settle_seconds") {
                     Set text = "No receipt yet, " _ elapsed _ " s after a write whose answer was lost; the write may still be in flight, so nothing is established", retry = 1
                 } Else {
-                    Set outcome = "not_committed", verdict = "not_committed"
-                    Set text = "Not committed: by the last read, " _ elapsed _ " s after the write, the receiver holds no receipt for the operation, its history does not show it, and the encounter is " _ $SELECT(expected '= "": "still at version " _ expected _ ", the version the write was conditional on", 1: "at version " _ version) _ ". Nothing shows it was applied; a slower receiver can still commit it"
+                    // Time alone proves nothing: this is the last read, so a person checks at the receiver.
+                    Set text = "No sign of the write by the last read, " _ elapsed _ " s after it: the receiver holds no receipt for the operation, its history does not show it, and the encounter is " _ $SELECT(expected '= "": "still at version " _ expected _ ", the version the write was conditional on", 1: "at version " _ version) _ ". Nothing shows it was applied; a slower receiver can still commit it"
                 }
             } Else {
                 Set text = "No attempt is recorded for the resend, and the receiver holds no receipt for the operation; a person must check"
@@ -210,6 +214,9 @@ ClassMethod Judge(ctx As %DynamicObject, Output text As %String, Output detail A
             } ElseIf rstatus = 200 {
                 Set outcome = "failed", verdict = "committed"
                 Set text = "The stale operation has a receipt after all: it was committed"
+            } ElseIf (rstatus '= 404) && (rstatus '= -1) {
+                // A lookup that failed is no statement about the receipt, in any of the closures below.
+                Set text = "The receipt lookup answered HTTP " _ rstatus, retry = 1
             } ElseIf 'inHistory && (..Support(ctx.%Get("later"), "timeline", .ev) '= "") {
                 // The later transfer the feed sent whose delivery failed or is uncertain, which the gate accepted outside a
                 // chain (SUPERSEDED_BY_LATER_EVENT): its own case recovers the patient's location, and is told (OnVerify).
@@ -230,9 +237,6 @@ ClassMethod Judge(ctx As %DynamicObject, Output text As %String, Output detail A
             Set retry = 'patientLevel && (estatus '= 404)
         }
     } Else {
-            } ElseIf (rstatus '= 404) && (rstatus '= -1) {
-                // A lookup that failed is no statement about the receipt, in any of the closures below.
-                Set text = "The receipt lookup answered HTTP " _ rstatus, retry = 1
         Set text = "Disposition " _ disposition _ ": nothing to verify at the receiver"
     }
     Set detail.verdict = verdict
@@ -307,12 +311,6 @@ ClassMethod InHistory(encounter As %DynamicObject, key As %String) As %Boolean
     Quit $ISOBJECT($GET(h)) && (##class(Shutter.Util.Json).Str(h, "operation_key") = key)
 }
 
-/// The latest transfer or discharge in the history after a time, described, or "": what followed a committed write.
-ClassMethod LaterThan(encounter As %DynamicObject, eventTime As %String) As %String
-{
-    Set found = ""
-    Set history = encounter.%Get("history")
-    If '$ISOBJECT(history) Quit ""
 /// How a receipt differs from an operation (an object with payload_digest, ward and bed), in words, or "" when it does not
 /// or there is nothing to compare: a receipt or an operation that names no digest, or no bed, says nothing about it. Bed
 /// sits outside the digest (CONTRACTS 1.6), so a correction of the bed alone shows only here. Read by the gate on a
@@ -384,6 +382,12 @@ ClassMethod HistoryNamesKeys(encounter As %DynamicObject) As %Boolean [ Private 
     Quit 1
 }
 
+/// The latest transfer or discharge in the history after a time, described, or "": what followed a committed write.
+ClassMethod LaterThan(encounter As %DynamicObject, eventTime As %String) As %String
+{
+    Set found = ""
+    Set history = encounter.%Get("history")
+    If '$ISOBJECT(history) Quit ""
     Set iter = history.%GetIterator()
     While iter.%GetNext(.i, .h) {
         Set t = ##class(Shutter.Catalogue.Matcher).HistoryTime(h)
