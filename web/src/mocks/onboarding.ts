@@ -32,7 +32,7 @@ export function onboardingHandlers(
   const refuse = (request?: Request) => (request ? csrf(request) : null) ?? guard('configure');
   const unknown = (ns: string) =>
     HttpResponse.json(
-      { error: 'not_in_trial', detail: `The trial has no recording for ${ns}` },
+      { error: 'not_found', detail: `The trial has no recording for ${ns}` },
       { status: 404 },
     );
   return [
@@ -56,7 +56,7 @@ export function onboardingHandlers(
       const body = (await request.json()) as { options?: Record<string, unknown> };
       if (Object.keys(body.options ?? {}).length)
         return HttpResponse.json(
-          { error: 'not_in_trial', detail: 'The trial replays the plan with no options' },
+          { error: 'bad_request', detail: 'The trial replays the plan with no options' },
           { status: 400 },
         );
       return HttpResponse.json(on.has(ns) ? namespaces[ns].planAfter : namespaces[ns].plan);
