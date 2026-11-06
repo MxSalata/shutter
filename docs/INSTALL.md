@@ -165,10 +165,11 @@ down and answering AE.
 
 **3.5 Security and operations.** Only holders of `Shutter_Forwarder` can open cases; the web application keeps its
 roles. **Give that password an integration credential's care.** A forwarder sign-in can open a case for any receiver,
-whichever namespace it is stored in: the source, the receiver and the failure in `POST /intake` are the caller's own word, and
-nothing looks them up. At a tier that releases by policy (section 9.6), that case can write to the receiver with no approval
-if the gate's checks pass, and those test the message against the receiver's state, not whether the message ever existed. One
-user per namespace does not close this, since nothing ties a user to a namespace. Escalation mail goes through the `Escalation Mail` operation's `SMTPServer` setting; unset, it writes `.eml`
+whichever namespace it is stored in: the source, the receiver and the failure in `POST /intake` are the caller's own word. An automatic release
+(section 9.6) therefore checks them: the named namespace must hold the named header, its message must be the text received and its session must have gone to
+that receiver; otherwise a person approves, and the case says "Source not verified". This does not stop a genuine message being posted again. A forwarder on another
+instance can't be checked: set `feed.prove_origin` to false in the site profile to release its cases by policy anyway, and then a forwarder sign-in can cause a write with no
+approval. One user per namespace does not change this, since nothing ties a user to a namespace. The case's notes name the user who posted. Escalation mail goes through the `Escalation Mail` operation's `SMTPServer` setting; unset, it writes `.eml`
 files under `<mgr>/shutter/out/mail`. The daily task "Shutter retention" removes the text of each escalation email
 and its `.eml` file `SHUTTER_ESCALATION_DAYS` days after the case closed (section 2); the row stays with its digest,
 the recipients and who sent it. A case the workflow left in a working state (after a container killed in the middle of its
@@ -612,8 +613,8 @@ another message of a session that has already handed one to Shutter gets no case
 
 Say these plainly to whoever owns the feed.
 
-- **A forwarder sign-in can cause a write.** It can open a case for any receiver, and at a tier that releases by policy (9.6) that case can
-  write with no approval. A user per namespace does not close this (section 3.5), so that password deserves an integration credential's care.
+- **A forwarder sign-in can open a case for any receiver.** An invented movement goes to a person, as the source can't be proved, but a genuine message posted again passes
+  that check, so at a tier that releases by policy (9.6) it can write with no approval. A user per namespace does not close this (section 3.5), so that password deserves an integration credential's care.
 - **A message accepted by a transport ACK and then lost downstream raises nothing in Shutter today.** The engine completed it, so no alert comes and no case
   opens. The same goes for an operation with `GetReply` off, and for an application ACK that never arrives. A negative ACK on a feed of its own opens a case only with the process in 9.9.
 - **Non-ADT messages have no recovery.** Orders, results and documents open a case and escalate, and a person decides: the case says what the
