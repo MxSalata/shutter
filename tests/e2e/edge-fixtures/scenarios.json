@@ -144,7 +144,7 @@
   {
     "id": "S3b",
     "title": "The sender repeats the move: the same key",
-    "summary": "The 09:20 transfer fails; while its resend waits for approval the sender repeats it under a new control id, and that lands. The approval is void and the case reads the receipt: nothing more is written.",
+    "summary": "The 09:20 transfer fails; while its resend waits for approval the sender repeats it under a new control id, and that lands. The approval is void, and the gate refuses the new plan on the receipt: nothing more is written, and a person decides.",
     "steps": [
       {
         "file": "S3b-01-A01.hl7"
@@ -181,11 +181,12 @@
       "history_once": "PAS^HOSP^MRN1031^ENC-1031^transfer^2026-10-15T08:20:00Z",
       "by_receiver": {
         "Downstream Out": {
-          "disposition": "reconcile",
+          "disposition": "resend",
           "write": false,
           "final_state": "admitted",
           "final_ward": "WARD-B",
-          "blocked_by": "APPROVAL_RECEIVER_CHANGED"
+          "blocked_by": "APPROVAL_RECEIVER_CHANGED",
+          "final_reason": "ALREADY_COMMITTED"
         }
       }
     }
@@ -193,7 +194,7 @@
   {
     "id": "S1b",
     "title": "The sender repeats the move: a new time",
-    "summary": "A sender with no EVN-6 repeats the failed 09:20 transfer stamped 09:40, while the resend waits for approval, and that lands. It reads as a later transfer: the original is closed and not sent over it.",
+    "summary": "A sender with no EVN-6 repeats the failed 09:20 transfer stamped 09:40, while the resend waits for approval, and that lands. It reads as a later transfer: the approval is void, the gate refuses to send the original over it, and a person decides.",
     "steps": [
       {
         "file": "S1b-01-A01.hl7"
@@ -230,11 +231,12 @@
       "history_once": "PAS^HOSP^MRN1011^ENC-1011^transfer^2026-10-15T08:40:00Z",
       "by_receiver": {
         "Downstream Out": {
-          "disposition": "superseded",
+          "disposition": "resend",
           "write": false,
           "final_state": "admitted",
           "final_ward": "WARD-B",
-          "blocked_by": "APPROVAL_RECEIVER_CHANGED"
+          "blocked_by": "APPROVAL_RECEIVER_CHANGED",
+          "final_reason": "SUPERSEDED_BY_LATER_EVENT"
         }
       }
     }
@@ -292,8 +294,7 @@
           "write": false,
           "final_state": "admitted",
           "final_ward": "WARD-A",
-          "blocked_by": "PAYLOAD_CHANGED",
-          "final_reason": "PAYLOAD_CHANGED"
+          "blocked_by": "PAYLOAD_CHANGED"
         }
       }
     }

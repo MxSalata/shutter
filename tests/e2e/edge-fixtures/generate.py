@@ -113,14 +113,14 @@ def scenarios():
     out.append(scenario(
         "S3b", "The sender repeats the move: the same key",
         "The 09:20 transfer fails; while its resend waits for approval the sender repeats it under a new control id, and that "
-        "lands. The approval is void and the case reads the receipt: nothing more is written.",
+        "lands. The approval is void, and the gate refuses the new plan on the receipt: nothing more is written, and a person decides.",
         [{"file": a[0]}, {"fault": "fail_before_accept"}, {"file": b[0], "expect": "delivery_fails"}, {"wait": 5},
          {"fault": "off"}, {"wait_for_state": "awaiting_approval", "timeout": 180}, {"file": again[0]}],
         {"modes": ["rules"], "write": False, "final_state": "admitted", "final_ward": "WARD-B",
          "failed_operation_key": b[2]["operation_key"],
          "history_once": b[2]["operation_key"],
-         "by_receiver": by_downstream(disposition="reconcile", write=False, final_state="admitted", final_ward="WARD-B",
-                                      blocked_by="APPROVAL_RECEIVER_CHANGED")},
+         "by_receiver": by_downstream(disposition="resend", write=False, final_state="admitted", final_ward="WARD-B",
+                                      blocked_by="APPROVAL_RECEIVER_CHANGED", final_reason="ALREADY_COMMITTED")},
         [a, b, again]))
 
     # A new time: no EVN-6, so a new EVN-2 makes a new key, read as a later transfer to the same ward.
@@ -130,14 +130,14 @@ def scenarios():
     out.append(scenario(
         "S1b", "The sender repeats the move: a new time",
         "A sender with no EVN-6 repeats the failed 09:20 transfer stamped 09:40, while the resend waits for approval, and that "
-        "lands. It reads as a later transfer: the original is closed and not sent over it.",
+        "lands. It reads as a later transfer: the approval is void, the gate refuses to send the original over it, and a person decides.",
         [{"file": a[0]}, {"fault": "fail_before_accept"}, {"file": b[0], "expect": "delivery_fails"}, {"wait": 5},
          {"fault": "off"}, {"wait_for_state": "awaiting_approval", "timeout": 180}, {"file": again[0]}],
         {"modes": ["rules"], "write": False, "final_state": "admitted", "final_ward": "WARD-B",
          "failed_operation_key": b[2]["operation_key"],
          "history_once": again[2]["operation_key"],
-         "by_receiver": by_downstream(disposition="superseded", write=False, final_state="admitted", final_ward="WARD-B",
-                                      blocked_by="APPROVAL_RECEIVER_CHANGED")},
+         "by_receiver": by_downstream(disposition="resend", write=False, final_state="admitted", final_ward="WARD-B",
+                                      blocked_by="APPROVAL_RECEIVER_CHANGED", final_reason="SUPERSEDED_BY_LATER_EVENT")},
         [a, b, again]))
 
     # The same operation comes again mapped to another ward, while the plan waits.
@@ -154,7 +154,7 @@ def scenarios():
         {"modes": ["rules"], "write": False, "final_state": "admitted", "final_ward": "WARD-A",
          "failed_operation_key": b[2]["operation_key"],
          "by_receiver": by_downstream(disposition="resend", write=False, final_state="admitted", final_ward="WARD-A",
-                                      blocked_by="PAYLOAD_CHANGED", final_reason="PAYLOAD_CHANGED")},
+                                      blocked_by="PAYLOAD_CHANGED")},
         [a, b, again]))
 
     # A raw CR inside a note, and a second PID. Each fails at the bed manager and comes to a case that can't validate it.

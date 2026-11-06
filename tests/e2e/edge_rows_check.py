@@ -3,8 +3,8 @@
 
     python3 tests/e2e/edge_rows_check.py --url http://localhost:52773 [--ns SHUTTER] [S22b S2 S11 ...]
 
-  S2   The write lands, and the answer says conflict (the demo receiver's commit_then_409): one write, resolved from the
-       receipt.
+  S2   The write lands, and the answer says conflict (the demo receiver's commit_then_409): one write. In site policy the
+       case resolves from the receipt; in rules only it stops for a person, saying the receiver already committed it.
   S11  Someone resends by hand while the incident waits: that chain stops at the sequence rule, nothing more goes to it,
        and the other chains carry on.
   S22b A write to one of two receivers: the other's version doesn't move, and its own plan still waits.
@@ -95,33 +95,50 @@ def outcomes_of(operator, case):
     return [(x.get("attempt") or {}).get("outcome") for x in attempts or []]
 
 
-def conflict_after_commit(args, operator, approver):
-    """S2's resend reaches the receiver and commits, and the answer is a 409."""
-    print("-- the write lands, and the answer says conflict", flush=True)
-    floor = start(operator, "S2", "rules", args.timeout)
+def conflict_after_commit(args, operator, approver, mode):
+    """S2's resend reaches the receiver and commits, and the answer is a 409. In site policy the case then finds the receipt
+    and closes by itself; in rules only, which always plans a resend, the gate refuses that plan and a person decides."""
+    print(f"-- the write lands, and the answer says conflict ({mode})", flush=True)
+    floor = start(operator, "S2", mode, args.timeout)
 
-    def waiting():
+    def opened():
         _, body = operator.call("GET", "/scenarios")
         if ((body or {}).get("run") or {}).get("state") == "running":
             return None
         _, listing = operator.call("GET", "/cases?scenario=S2&limit=5")
-        for c in (listing or {}).get("items", []):
-            if c.get("openedAt", "") >= floor and c.get("state") == "awaiting_approval":
-                return c
-        return None
+        mine = [c for c in (listing or {}).get("items", []) if c.get("openedAt", "") >= floor]
+        return mine[0] if mine else None
 
-    case = wait("S2's plan waiting for approval", waiting, args.timeout)
+    # The scenario's own steps end with the faults off, so this one goes on after them, before the case sends anything
+    case = wait("S2's case", opened, args.timeout, every=1)
     before = downstream_encounter(args.url, args.downstream_user, args.downstream_password, case["encounterId"])
     status, _ = receiver_call(args, "POST", "/faults", {"mode": "commit_then_409", "operation_key": case["operationKey"]})
     check("the receiver takes the fault", status == 200, f"HTTP {status}")
-    approve(approver, operator, case, "edge rows check")
-    final = closed_case(operator, case, args.timeout)
+    approved = set()
+
+    def closed_or_approved():
+        _, c = operator.call("GET", case_path(case))
+        if c["state"] in CLOSED:
+            return c
+        if c["state"] == "awaiting_approval" and c["version"] not in approved:
+            approved.add(c["version"])
+            approve(approver, operator, case, "edge rows check")
+        return None
+
+    final = wait(f"{case['caseId']}: closed", closed_or_approved, args.timeout)
     receiver_call(args, "POST", "/faults", {"mode": "off"})
-    print(f"   {case['caseId']}: {final['state']}, {final.get('disposition')}, attempts {outcomes_of(operator, case)}", flush=True)
-    check("the case resolved", final["state"] == "resolved", f"{final['state']}: {final.get('headline')}")
-    check("from the receiver's receipt", "Committed" in (final.get("outcome") or ""), str(final.get("outcome")))
-    applied = [o for o in outcomes_of(operator, case) if o == "applied"]
-    check("no attempt reads as applied by the answer it got", not applied, str(applied))
+    outcomes = outcomes_of(operator, case)
+    print(f"   {case['caseId']}: {final['state']}, {final.get('disposition')}, attempts {outcomes}", flush=True)
+    check("the write was answered with the conflict", outcomes[:1] == ["version_conflict"], str(outcomes))
+    if mode == "policy":
+        check("the case resolved", final["state"] == "resolved", f"{final['state']}: {final.get('headline')}")
+        check("by reconciling", final.get("disposition") == "reconcile", str(final.get("disposition")))
+        check("from the receiver's receipt", "Committed" in (final.get("outcome") or ""), str(final.get("outcome")))
+    else:
+        _, reason = operator.call("GET", case_path(case) + "/blocked-reason")
+        check("the case stops for a person", final["state"] == "blocked", f"{final['state']}: {final.get('headline')}")
+        check("and says the receiver already committed it", (reason or {}).get("code") == "ALREADY_COMMITTED", str(reason)[:200])
+    check("no attempt reads as applied by the answer it got", "applied" not in outcomes, str(outcomes))
     held = downstream_encounter(args.url, args.downstream_user, args.downstream_password, case["encounterId"])
     entries = [h for h in held.get("history", []) if h.get("operation_key") == case["operationKey"]]
     check("the receiver holds the write exactly once", len(entries) == 1, str(entries)[:300])
@@ -149,7 +166,8 @@ def hand_resend_in_incident(args, operator, approver, listing):
     encounter = "ENC-1102"
     wants = scenario["expected"]["encounters"]
     want = next(w for w in wants if w["encounter"] == encounter)
-    want.update({"writes": 0, "final_state": "admitted", "final_ward": "WARD-B"})
+    # The hand resend's receipt makes the first item E3's, and it stops there; the rest of the chain stays E4's
+    want.update({"entries": ["E3", "E4"], "writes": 0, "final_state": "admitted", "final_ward": "WARD-B"})
     seen = {}
 
     def hand():
@@ -260,7 +278,8 @@ def main():
     use = "SELECT Shutter_Test.EdgeFixtures_Use(?) AS r"
     query(args.url, args.ns, use, (0,))
     try:
-        for row, run in (("S2", lambda: conflict_after_commit(args, operator, approver)),
+        for row, run in (("S2", lambda: (conflict_after_commit(args, operator, approver, "policy"),
+                                         conflict_after_commit(args, operator, approver, "rules"))),
                          ("S11", lambda: hand_resend_in_incident(args, operator, approver, listed()))):
             if row in wanted:
                 try:
