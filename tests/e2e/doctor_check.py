@@ -249,21 +249,40 @@ r = wait_receiver(lambda x: x["state"] == "answering")
 check("the next read clears it", r and r["state"] == "answering" and r["http_status"] > 0, r)
 check("receivers_ok true again", doctor()["receivers_ok"] is True)
 
-step("EC-126: the hospital's alert intake disabled")
-w0 = next((w for w in doctor()["watched_namespaces"] if w["namespace"] == "HOSPITAL"), None)
-check("HOSPITAL reads well first", w0 and w0["ok"], w0)
-TOGGLE = '''Set prod=##class(Ens.Config.Production).%OpenId("Hospital.Production")
-For i=1:1:prod.Items.Count() {{ Set item=prod.Items.GetAt(i) If item.Name="Ens.Alert" {{ Set item.Enabled={v} }} }}
-Set sc=prod.%Save() Write !,"[save] ",sc,!'''
-session("HOSPITAL", TOGGLE.format(v=0))
-d = doctor()
-w1 = next((w for w in d["watched_namespaces"] if w["namespace"] == "HOSPITAL"), None)
-print("  HOSPITAL:", json.dumps(w1.get("problems") if w1 else None))
-check("it reads not ok, and says the intake is disabled", w1 and not w1["ok"] and any("disabled" in p for p in w1["problems"]), w1)
+step("EC-126: the hospital's alert intake disabled, then replaced")
+session("USER", 'Set ^Shutter.Config("onboard","HOSPITAL")="Hospital.Production"')
+
+
+def hospital():
+    d = doctor()
+    return d, next((w for w in d["watched_namespaces"] if w["namespace"] == "HOSPITAL"), None)
+
+
+def intake_problems(w):
+    return [p for p in w["problems"] if "Ens.Alert" in p or "alert intake" in p]
+
+
+TOGGLE = """Set prod=##class(Ens.Config.Production).%OpenId("Hospital.Production")
+For i=1:1:prod.Items.Count() {{ Set item=prod.Items.GetAt(i) If item.Name="Ens.Alert" {{ Set item.Enabled={v},item.ClassName="{c}" }} }}
+Set sc=prod.%Save() Write !,"[save] ",sc,!"""
+_, w0 = hospital()
+print("  HOSPITAL first:", json.dumps(w0))
+check("HOSPITAL's intake is well first", w0 and w0["alert_intake"] and not intake_problems(w0), w0)
+session("HOSPITAL", TOGGLE.format(v=0, c="Shutter.Intake.AlertProcess"))
+d, w1 = hospital()
+print("  disabled:", json.dumps(w1["problems"]))
+check("disabled: it reads not ok, and says so", not w1["ok"] and any("disabled" in p for p in intake_problems(w1)), w1)
 check("watched_ok is false", d["watched_ok"] is False, d["watched_ok"])
-check("anonymous health: watched_ok false, ok true", health().get("watched_ok") is False and health()["ok"] is True, health())
-session("HOSPITAL", TOGGLE.format(v=1))
-check("enabled again, it reads well", next(w for w in doctor()["watched_namespaces"] if w["namespace"] == "HOSPITAL")["ok"])
+h = health()
+check("anonymous health: watched_ok false, ok true", h.get("watched_ok") is False and h["ok"] is True, h)
+session("HOSPITAL", TOGGLE.format(v=1, c="EnsLib.EMail.AlertOperation"))
+_, w2 = hospital()
+print("  replaced:", json.dumps(w2["problems"]))
+check("replaced: it reads not ok, by the class it found", not w2["ok"] and any("EnsLib.EMail.AlertOperation" in p for p in intake_problems(w2)), w2)
+session("HOSPITAL", TOGGLE.format(v=1, c="Shutter.Intake.AlertProcess"))
+_, w3 = hospital()
+check("put back, no intake problem", not intake_problems(w3), w3)
+session("USER", 'Kill ^Shutter.Config("onboard","HOSPITAL")')
 
 print(f"\n{passed} passed, {len(failed)} failed", flush=True)
 for name in failed:
