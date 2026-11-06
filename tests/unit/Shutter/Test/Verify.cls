@@ -381,3 +381,14 @@ XData Rows [ MimeType = application/json ]
 }
 
 }
+  {"group": "superseded", "name": "a catalogue closure with the receipt lookup failing is read again, and says no receipt nowhere",
+   "ctx": {"disposition": "superseded", "attempt": null, "closed_by_catalogue": true, "catalogue_entry": "E6", "receipt_http_status": 503, "receipt": {"error": "unavailable"}},
+   "outcome": "unresolved", "verdict": "unknown", "retry": true, "contains": ["answered HTTP 503"], "not_contains": ["no receipt", "neither a receipt"]},
+  {"group": "superseded", "name": "an undelivered later transfer with the receipt lookup failing is read again",
+   "ctx": {"disposition": "superseded", "attempt": null, "receipt_http_status": 503, "receipt": {"error": "unavailable"},
+           "later": [{"word": "transfer", "event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T10:00:00Z", "from": "timeline", "delivered": false, "plausible": true, "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T10:00:00Z"}]},
+   "outcome": "unresolved", "verdict": "unknown", "retry": true, "contains": ["answered HTTP 503"], "not_contains": ["no receipt"]},
+  {"group": "superseded", "name": "a later transfer in the history with the receipt lookup failing is read again, not told there is no later event",
+   "ctx": {"disposition": "superseded", "attempt": null, "receipt_http_status": 503, "receipt": {"error": "unavailable"},
+           "later": [{"word": "transfer", "event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T10:00:00Z", "from": "history", "delivered": true, "plausible": true}]},
+   "outcome": "unresolved", "verdict": "unknown", "retry": true, "contains": ["answered HTTP 503"], "not_contains": ["No later event"]},

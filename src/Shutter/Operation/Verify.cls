@@ -214,6 +214,9 @@ ClassMethod Judge(ctx As %DynamicObject, Output text As %String, Output detail A
             Set retry = 'patientLevel && (estatus '= 404)
         }
     } Else {
+            } ElseIf (rstatus '= 404) && (rstatus '= -1) {
+                // A lookup that failed is no statement about the receipt, in any of the closures below.
+                Set text = "The receipt lookup answered HTTP " _ rstatus, retry = 1
         Set text = "Disposition " _ disposition _ ": nothing to verify at the receiver"
     }
     Set detail.verdict = verdict
