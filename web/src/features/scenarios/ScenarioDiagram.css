@@ -5,6 +5,8 @@
  * screen too narrow for it.
  */
 .scenario-diagram {
+  /* An SVG can't lay out text, so its marks are sized for one font's widths: Arial's, where the system's own is wider */
+  font-family: Arial, 'Liberation Sans', Helvetica, sans-serif;
   display: block;
   flex: none;
   max-width: 100%;
