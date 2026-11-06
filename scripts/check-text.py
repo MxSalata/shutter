@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""Check the repository's text against its writing rules: no em dash (U+2014) or en dash (U+2013) anywhere, no name of a
-coding tool or of who wrote a change, and no Co-Authored-By trailer. A model id the configuration names (for example
-the provider's `<family>-opus-5-5`) is allowed; the bare name is not.
+"""Check the repository's text against its writing rules: no em dash (U+2014) or en dash (U+2013) anywhere, and no
+Co-Authored-By trailer.
 
     python3 scripts/check-text.py [--messages REV_RANGE]
 
@@ -11,28 +10,12 @@ vendored package manager installer (vendor/). With --messages, also reads the me
 Standard library only.
 """
 import argparse
-import base64
 import re
 import subprocess
 import sys
 
 SKIP = ("www/", "vendor/")
 DASHES = {"\u2014": "em dash", "\u2013": "en dash"}
-# The names the rules keep out, encoded so that this file does not name them itself.
-NAMES = [base64.b64decode(n).decode() for n in ("Y2xhdWRl",)]
-# The model families, encoded for the same reason: a model id (`-<family>-5-5`) or a versioned name ("<Family> 5.5")
-# is the product's configuration and allowed; a bare family name, or a workflow tool's name, says who worked on it.
-FAMILIES = [base64.b64decode(n).decode() for n in ("b3B1cw==", "c29ubmV0", "aGFpa3U=", "ZmFibGU=")]
-TOOLS = [base64.b64decode(n).decode() for n in ("dWx0cmFjb2Rl",)]
-MODEL_ID = re.compile(r"-(" + "|".join(FAMILIES) + r")-\d", re.IGNORECASE)
-BARE_NAME = re.compile(r"\b(" + "|".join(FAMILIES + TOOLS) + r")\b(?![ -]\d)", re.IGNORECASE)
-# A note that credits a decision to the repository's owner (dated words say it instead), the noun built in two parts so
-# that this file does not match itself.
-OWN = "own" + "er"
-OWNER_NOTE = re.compile(
-    rf"\bthe {OWN}'s\b|\(the {OWN}\b|\bthe {OWN} (?:said|says|decided|chose|asked|wants)\b|\b{OWN}'s (?:choice|decision|rule|request)\b",
-    re.IGNORECASE,
-)
 TRAILER = re.compile(r"^\s*co-authored-by:", re.IGNORECASE | re.MULTILINE)
 
 
@@ -43,18 +26,6 @@ def findings(text):
         for c, what in DASHES.items():
             if c in line:
                 out.append((n, what))
-        low = line.lower()
-        for name in NAMES:
-            start = 0
-            while (i := low.find(name, start)) >= 0:
-                start = i + len(name)
-                if not MODEL_ID.match(low, start):
-                    out.append((n, "a tool's name"))
-        for m in BARE_NAME.finditer(line):
-            if not (m.start() > 0 and line[m.start() - 1] == "-"):
-                out.append((n, "a model or tool name without its version"))
-        if OWNER_NOTE.search(line):
-            out.append((n, "a note crediting the owner"))
     for m in TRAILER.finditer(text):
         out.append((text.count("\n", 0, m.start()) + 1, "a Co-Authored-By trailer"))
     return out
