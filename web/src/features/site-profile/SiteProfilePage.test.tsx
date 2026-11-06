@@ -77,7 +77,7 @@ describe('SiteProfilePage', () => {
     const beds = within(cards).getByRole('listitem', { name: 'Downstream Out' });
     expect(within(beds).getByText('Current state')).toBeInTheDocument();
     expect(within(beds).getByText('Tier 2, operations')).toBeInTheDocument();
-    expect(within(beds).getByText("Only today's placement matters.")).toBeInTheDocument();
+    expect(within(beds).getByText('This receiver keeps only the current placement.')).toBeInTheDocument();
     expect(within(beds).getByText('Overtaken failure: closes, no write.')).toBeInTheDocument();
     // The whole sentence the case page reads stays in the card's second layer
     expect(within(beds).getByText(/An overtaken failure closes with no write/)).toBeInTheDocument();

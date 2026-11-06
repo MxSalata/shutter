@@ -24,7 +24,7 @@ export interface CategoryText {
 export const CATEGORY_TEXT: Record<ReceiverCategory, CategoryText> = {
   current_state: {
     label: 'Current state',
-    gist: "Only today's placement matters",
+    gist: 'This receiver keeps only the current placement',
     examples: 'A bed manager, a ward whiteboard, portering',
     overtaken:
       'An overtaken failure closes with no write: a later event already put the patient where they are, so the old movement is never replayed.',
