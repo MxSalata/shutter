@@ -562,6 +562,8 @@ ClassMethod Clean()
 /// The patient-level query respects the authority, and Gather reads a stored message's text through the index.
 Method TestForPatientAndGather()
 {
+    // Rows a run that stopped half-way may have left.
+    Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Index.Message WHERE PatientId = ?", "MRN-UT-FORPATIENT")
     Set patient = "MRN-UT-FORPATIENT", msg = ##class(EnsLib.HL7.Message).ImportFromString(..Body("MSG-UT-G", "A02", "WARD-B", "WARD-A"), .sc)
     Do $$$AssertStatusOK(sc, "a message imports")
     Set sc = msg.%Save()
@@ -582,7 +584,7 @@ Method TestForPatientAndGather()
     Set facts = ##class(Shutter.Util.HistoryDraft).Gather(c)
     Set body = facts.bodies.%Get("UT-GATHER-KEY")
     Do $$$AssertTrue($ISOBJECT(body), "the case's message is gathered")
-    Do $$$AssertTrue(body.text [ "MSG-UT-G", "with its stored text")
+    Do $$$AssertTrue($ISOBJECT(body) && (body.text [ "MSG-UT-G"), "with its stored text")
     Do $$$AssertEquals(##class(Shutter.Util.HistoryDraft).StoredText(docId + 1000000), "", "a message that is gone reads empty")
     For i = 1:1:$LISTLENGTH(ids) { Do ##class(Shutter.Index.Message).%DeleteId($LIST(ids, i)) }
     Do ##class(EnsLib.HL7.Message).%DeleteId(docId)
