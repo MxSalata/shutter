@@ -1156,6 +1156,54 @@ describe('CasePage', () => {
     expect(within(dialog).getByRole('button', { name: 'Approve this plan' })).toBeDisabled();
   });
 
+  it('stops a dialog left open when the plan changes under it, and posts nothing', async () => {
+    let posted = 0;
+    server.use(
+      http.post('/api/shutter/cases/C-000002/approvals', () => {
+        posted += 1;
+        return HttpResponse.json({ approver: 'approver' }, { status: 202 });
+      }),
+    );
+    renderCase('C-000002');
+    const approval = await screen.findByRole('region', { name: 'Approval' });
+    await userEvent.click(await within(approval).findByRole('button', { name: 'Approve plan' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
+    await userEvent.type(within(dialog).getByRole('textbox', { name: /Comment/ }), 'Read plan one');
+    const view = (await (await fetch('/api/shutter/cases/C-000002/plan')).json()) as {
+      plan: Record<string, unknown>;
+    };
+    // Another approver's decision re-plans the case: the page's next read brings plan v2 under the open dialog
+    server.use(
+      http.get('/api/shutter/cases/C-000002/plan', () =>
+        HttpResponse.json({ ...view, plan: { ...view.plan, version: 2, digest: 'sha256:another' } }),
+      ),
+    );
+    const confirm = within(dialog).getByRole('button', { name: 'Approve this plan' });
+    await waitFor(() => expect(confirm).toBeDisabled(), { timeout: 10_000 });
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      /^The plan or the case changed since you opened this, so this decision can't be recorded\. Close this and review the new plan\.$/,
+    );
+    // The dialog still says what the person read, so its words can't sit over a plan they didn't
+    expect(screen.getByRole('dialog', { name: 'Approve plan v1' })).toBeInTheDocument();
+    expect(posted).toBe(0);
+  });
+
+  it('stops a dialog left open when the case version moves, and sends what it opened on', async () => {
+    const detail = (await (await fetch('/api/shutter/cases/C-000002')).json()) as { version: number };
+    renderCase('C-000002');
+    const approval = await screen.findByRole('region', { name: 'Approval' });
+    await userEvent.click(await within(approval).findByRole('button', { name: 'Reject plan' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Reject plan v1' });
+    server.use(
+      http.get('/api/shutter/cases/C-000002', () =>
+        HttpResponse.json({ ...detail, version: detail.version + 1 }),
+      ),
+    );
+    const confirm = within(dialog).getByRole('button', { name: 'Reject this plan' });
+    await waitFor(() => expect(confirm).toBeDisabled(), { timeout: 10_000 });
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(/changed since you opened this/);
+  });
+
   it('closes the held case as blocked when the approver rejects it', async () => {
     renderCase('C-000002');
     const approval = await screen.findByRole('region', { name: 'Approval' });
