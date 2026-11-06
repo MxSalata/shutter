@@ -113,7 +113,8 @@ function patientLine(
   if (c.disposition === 'handled_by_hand') return 'Shutter sent nothing; the team handled it by hand';
   // A run still going may yet write, and nobody decides an abandoned or failed one: only a stopped case waits on a person
   if (c.disposition === 'abandoned' || !before || !WAITS_ON_A_PERSON.includes(c.state)) return '';
-  return `Patient stays in ${before}; a person decides`;
+  // Not that the ward it holds is right: on S8 nobody can tell which movement is current
+  return 'No overwrite; a person decides';
 }
 
 export function compareSide({

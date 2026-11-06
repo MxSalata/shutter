@@ -496,7 +496,7 @@ describe('CasePage', () => {
     expect(within(rules).queryByText('Resolved')).not.toBeInTheDocument();
     const board = screen.getByTestId('compare-board');
     expect(within(board).getByTestId('compare-patient')).toHaveTextContent(
-      'Patient stays in WARD-C; a person decides',
+      'No overwrite; a person decides',
     );
     expect(await within(board).findByText('As expected')).toBeInTheDocument();
   });
@@ -1299,7 +1299,7 @@ describe('CasePage', () => {
     expect(within(receiver).getByText('At Downstream Out')).toBeInTheDocument();
     expect(await within(receiver).findByText('Current state')).toBeInTheDocument();
     expect(within(region).getByTestId('case-receiver-gist')).toHaveTextContent(
-      "Only today's placement matters.",
+      'This receiver keeps only the current placement.',
     );
     expect(within(region).queryByTestId('correction-steps')).not.toBeInTheDocument();
   });
