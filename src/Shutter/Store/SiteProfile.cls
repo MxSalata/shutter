@@ -123,6 +123,9 @@ ClassMethod Validate(p As %DynamicObject) As %String
         Set at = "receivers[" _ i _ "]"
         If '$ISOBJECT(r) Return at _ ": must be an object"
         If $CLASSMETHOD(json, "Str", r, "name") = "" Return at _ ".name: required"
+        // Every reader takes the first entry of a name, so a second one would silently count for nothing.
+        If $DATA(receiverNames($CLASSMETHOD(json, "Str", r, "name"))) Return at _ ".name: must be unique"
+        Set receiverNames($CLASSMETHOD(json, "Str", r, "name")) = ""
         Set tier = r.%Get("tier")
         If (tier '= +tier) || (tier < 1) || (tier > 3) Return at _ ".tier: must be 1, 2 or 3"
         // The receiver's category (v1.23) and its own history policy, which the category derives when absent.

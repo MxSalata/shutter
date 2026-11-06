@@ -57,6 +57,18 @@ Method TestSeedProfileValidates()
 
 /// The receiver's category and history policy (v1.23): the validator's values, the derivation, and the deprecated
 /// site-wide flag as the fallback for an entry with neither.
+/// Two receivers with one name: the first would take every decision and the second's tier and API would be ignored, so the
+/// server refuses it, as the page does.
+Method TestReceiverNamesAreUnique()
+{
+    Set p = ##class(Shutter.Store.SiteProfile).Default()
+    Set name = p.receivers.%Get(0).name
+    Do p.receivers.%Push({"name": (name), "tier": 3})
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "receivers[1].name: must be unique", "a second receiver with the first's name")
+    Set p.receivers.%Get(1).name = name _ " Two"
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "", "another name passes")
+}
+
 Method TestReceiverCategory()
 {
     Set name = $PARAMETER("Shutter.Production", "RECEIVER")
