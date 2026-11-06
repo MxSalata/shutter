@@ -290,7 +290,7 @@ ClassMethod Describe(step As %DynamicObject) As %String
     Quit:step.%IsDefined("schema_import") "importing the schema " _ step."schema_import"
     Quit:step.%IsDefined("fault") "setting the fault to " _ step.fault _ $SELECT(step.%IsDefined("receivers") && $ISOBJECT(step.receivers): " on " _ $REPLACE($REPLACE($REPLACE(step.receivers.%ToJSON(), "[", ""), "]", ""), """", ""), 1: " on the downstream system")
     Quit:step.%IsDefined("wait") "waiting " _ step.wait _ " s"
-    Quit:step.%IsDefined("wait_for_state") "waiting for the case to reach " _ step."wait_for_state"
+    Quit:step.%IsDefined("wait_for_state") "waiting for the case to reach " _ $REPLACE(step."wait_for_state", "|", " or ")
     Quit:step.%IsDefined("capabilities") "changing the downstream system's capabilities"
     If step.%IsDefined("manual") {
         Set entry = step.manual
@@ -341,12 +341,18 @@ ClassMethod WaitForState(scenario As %String, state As %String, timeout As %Inte
             Set problem = rs.%Message
             Return 0
         }
-        If rs.%Next(), rs.%Get("State") = state {
+        If rs.%Next(), ..StateIs(rs.%Get("State"), state) {
             Return 1
         }
         Hang 1
     }
     Quit 0
+}
+
+/// Whether a case's state is the one a wait names, or one of several separated by "|" (S26: awaiting_approval|resolved).
+ClassMethod StateIs(state As %String, wanted As %String) As %Boolean
+{
+    Quit (state '= "") && (("|" _ wanted _ "|") [ ("|" _ state _ "|"))
 }
 
 /// The longest <var>scenario</var>'s steps can take, in seconds: two a file, its waits and each state's timeout.

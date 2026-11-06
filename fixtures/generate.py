@@ -872,7 +872,7 @@ def scenarios():
     # S26: "prevent failures" shown. A site's feed whose schema was never imported here: the admission came on the usual
     # feed, and the 09:20 transfer comes on the site's own, whose MSH-12 names MYSITE_2.5.1. With the setting on for this
     # run, it is held as a case and nothing is sent. Importing the schema releases the case, the message reads under it, the
-    # gate passes it and it goes to the receiver. The next run's first step forgets the schema. The run ends once it is imported, so in Rules only the approval comes after it.
+    # gate passes it and it goes to the receiver. The schema goes again once the plan is made, so the next run starts where this did; in Rules only the approval comes after that.
     a = message("S26", 1, "A01", "0900", ward="WARD-A")
     b = message("S26", 2, "A02", "0920", ward="WARD-B", prior="WARD-A", extra="ZZZ|1|the site^own", category=SITE_CATEGORY)
     out.append(({
@@ -890,7 +890,10 @@ def scenarios():
             {"file": b[0], "item": "Site Feed In", "expect": "held"},
             {"wait_for_state": "blocked", "timeout": 60},
             {"schema_import": SITE_SCHEMA_FILE},
+            # The release is read while the schema is loaded; the next run must start without it, and so must anything after this
+            {"wait_for_state": "awaiting_approval|resolved", "timeout": 90},
             {"prevent_failures": False},
+            {"schema_forget": SITE_CATEGORY},
         ],
         "expected": {"disposition": "resend", "write": True, "final_state": "admitted", "final_ward": "WARD-B",
                      "failed_operation_key": b[2]["operation_key"], "case_by_key": True,

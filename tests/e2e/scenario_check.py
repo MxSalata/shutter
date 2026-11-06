@@ -209,9 +209,6 @@ def settle(args, operator, approver, scenario, case, run_state):
         if scenario["expected"].get("held") and run_state() in ("queued", "running"):
             return None
         _, c = operator.call("GET", f"/cases/{urllib.parse.quote(case['caseId'])}")
-        # And until the Case Releaser's sweep, a few seconds after the run ends, has released it
-        if scenario["expected"].get("held") and c["state"] == "blocked" and c.get("heldSchema"):
-            return None
         if c["state"] == "blocked" and waiting_on_another(operator, case["caseId"]):
             # S23a: the case waits for the case about its bed's occupant, and is released when that one closes. With
             # --approve, that case is approved as this one would be.

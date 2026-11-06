@@ -1251,7 +1251,14 @@
         "schema_import": "schemas/MYSITE_2.5.1.xml"
       },
       {
+        "wait_for_state": "awaiting_approval|resolved",
+        "timeout": 90
+      },
+      {
         "prevent_failures": false
+      },
+      {
+        "schema_forget": "MYSITE_2.5.1"
       }
     ],
     "expected": {
