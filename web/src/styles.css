@@ -2123,11 +2123,11 @@ body {
     height: 36px;
   }
 }
+/* One line, cut at a word: a wide system font loses the last words, never half of one */
 .trial-banner-words {
   min-width: 0;
-  white-space: nowrap;
+  max-height: 1lh;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 .trial-banner-long {
   display: none;
