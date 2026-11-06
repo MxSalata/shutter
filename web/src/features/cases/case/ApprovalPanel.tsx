@@ -380,6 +380,11 @@ export function ApprovalPanel({
             ) : null}
             <KeyValueList
               rows={[
+                ['Case', c.caseId],
+                ['Patient', `${c.patientId}${c.patientIdAuthority ? ` (${c.patientIdAuthority})` : ''}`],
+                ['Event time', <Timestamp key="t" iso={c.eventTime} />],
+                ['Bed', c.bed ?? ''],
+                ['Why it is still due', opened.plan.why || opened.plan.summary],
                 ['Plan digest', <Digest key="p" value={opened.plan.digest} label="plan digest" />],
                 ['Case version', String(opened.version)],
               ]}

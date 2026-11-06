@@ -1204,6 +1204,19 @@ describe('CasePage', () => {
     expect(within(dialog).getByRole('alert')).toHaveTextContent(/changed since you opened this/);
   });
 
+  it('names the case, the patient, the time, the bed and why it is still due in the dialog', async () => {
+    renderCase('C-000002');
+    const approval = await screen.findByRole('region', { name: 'Approval' });
+    await userEvent.click(await within(approval).findByRole('button', { name: 'Approve plan' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
+    const row = (label: string) => within(dialog).getByRole('rowheader', { name: label }).closest('tr')!;
+    expect(row('Case')).toHaveTextContent('C-000002');
+    expect(row('Patient')).toHaveTextContent('MRN1002 (HOSP)');
+    expect(within(row('Event time')).getByRole('time')).toHaveAttribute('datetime', '2026-10-15T08:20:00Z');
+    expect(row('Bed')).toHaveTextContent('BAY2-04');
+    expect(row('Why it is still due')).toHaveTextContent(/the transfer was not committed \(no receipt\)/);
+  });
+
   it('closes the held case as blocked when the approver rejects it', async () => {
     renderCase('C-000002');
     const approval = await screen.findByRole('region', { name: 'Approval' });
