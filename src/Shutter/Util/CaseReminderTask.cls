@@ -76,7 +76,8 @@ ClassMethod Gather(settings As %DynamicObject, now As %String) As %DynamicArray
 {
     Set out = []
     Set back = -(settings."team_hours" * 3600)
-    Set cutoff = ##class(Shutter.Util.Time).PlusMillis(now, back * 1000)
+    // To the second, as the store's times are: with a fraction, a case exactly at the threshold would sort after it.
+    Set cutoff = $PIECE(##class(Shutter.Util.Time).PlusMillis(now, back * 1000), ".", 1) _ "Z"
     Set states = ##class(Shutter.Util.CaseReminder).#NEEDSPERSON
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE State %INLIST ? AND OpenedAt <= ? ORDER BY OpenedAt, ID", $LISTFROMSTRING(states), cutoff)
     While rs.%Next() {
