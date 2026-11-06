@@ -1,7 +1,7 @@
 [
  {
   "id": "E1",
-  "version": 4,
+  "version": 5,
   "title": "Superseded by a later transfer",
   "scenarios": [
    "S1",
@@ -9,11 +9,13 @@
    "S11"
   ],
   "pattern": {
+   "event": "transfer",
    "later_applied": [
     "transfer",
     "cancelled"
    ],
-   "encounter_state": "admitted"
+   "encounter_state": "admitted",
+   "simultaneous_sources": "no"
   },
   "decides": "policy",
   "preferred": {
@@ -31,7 +33,7 @@
    "ordering",
    "effect"
   ],
-  "prose": "# E1 Superseded by a later transfer\n\n## Meaning\n\nThe failed transfer was overtaken: the downstream system has applied another transfer for the same encounter whose event\nhappened later. The patient is where the later transfer put them, and the failed one describes a place they have already\nleft. When the later transfer has not reached the downstream system either (its delivery failed or is uncertain), the\nPAS's later word on the patient's place still stands: its own case recovers it, and this one is closed with nothing to\nsend (later_delivery: sent).\n\n## Telling it apart\n\nCompare event times, not arrival times (WIC-1.2): the later transfer's event time must be strictly later. Equal times\nare E7, not this. A later discharge is E6. A later demographic update is not a later movement (ELS-2.2, E10). A later\ntransfer whose time lies in the future of when it was sent or applied supersedes nothing: that is E13, and a person\nchecks the clock.\n\n## Cite\n\nThe superseding event from the downstream system's history (version, ward, event time), or, when the receiver has not\napplied it, the later message in the timeline (its event time, when it was sent and its outcome) and its case; and the\nfailed operation's event time.",
+  "prose": "# E1 Superseded by a later transfer\n\n## Meaning\n\nThe failed transfer was overtaken: the downstream system has applied another transfer for the same encounter whose event\nhappened later. The patient is where the later transfer put them, and the failed one describes a place they have already\nleft. When the later transfer has not reached the downstream system either (its delivery failed or is uncertain), the\nPAS's later word on the patient's place still stands: its own case recovers it, and this one is closed with nothing to\nsend (later_delivery: sent).\n\n## Telling it apart\n\nCompare event times, not arrival times (WIC-1.2): the later transfer's event time must be strictly later. Another\nsource's movement within the site's `source_skew_seconds` of it is E7, not this, since two systems' clocks can't order it.\nA later discharge is E6. A later demographic update is not a later movement (ELS-2.2, E10). A later transfer whose time\nlies in the future of when it was sent or applied supersedes nothing: that is E13, and a person checks the clock.\n\nOnly a failed transfer is overtaken this way. A later transfer says nothing about a failed discharge, update or\nadmission: the patient may never be discharged at the receiver, and an update's fields aren't carried. No entry matches\nthose, so nothing closes them and a person sees them. A failed discharge with a later cancel of it is the same.\n\n## Cite\n\nThe superseding event from the downstream system's history (version, ward, event time), or, when the receiver has not\napplied it, the later message in the timeline (its event time, when it was sent and its outcome) and its case; and the\nfailed operation's event time.",
   "source": "E1.md"
  },
  {
