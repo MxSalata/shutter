@@ -565,7 +565,8 @@ ClassMethod TakeResources(out As %DynamicObject)
     }
 }
 
-/// The folders under the manager directory. A database still mounted there (an image's data, kept in its volume) stays.
+/// The folders under the manager directory. A database there (a namespace named SHUTTER has its own in this very folder,
+/// and an image keeps its data under it) stays.
 ClassMethod TakeFolders(out As %DynamicObject)
 {
     Set base = ..Folder()
@@ -574,7 +575,7 @@ ClassMethod TakeFolders(out As %DynamicObject)
         Do ##class(%File).RemoveDirectoryTree(##class(%File).NormalizeDirectory(base _ sub))
     }
     If ..HoldsDatabase(base) {
-        Do out.kept.%Push("The folder " _ base _ "db/ holds this namespace's data database, so it stays with the namespace")
+        Do out.kept.%Push("The folder " _ base _ " holds a database (a namespace named SHUTTER keeps its own there), so it stays with that database")
     } Else {
         Do ##class(%File).RemoveDirectoryTree(base)
     }

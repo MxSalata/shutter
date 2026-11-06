@@ -128,14 +128,14 @@ def snapshot(namespaces):
 
 def mention_scan(ns):
     """A line per global that holds the product's name anywhere, in a subscript or a value. No value is written."""
-    return ('Set g="" For { Set g=$ORDER(^$GLOBAL(g)) Quit:g=""  Continue:$EXTRACT(g,1,2)="^%"  Continue:g="^ROUTINE"  Continue:g="^rOBJ"  Continue:g="^rINDEX"  Continue:g="^rMAC"  '
+    return ('Set g="" For { Set g=$ORDER(^$GLOBAL(g)) Quit:g=""  Continue:($EXTRACT(g,1,2)="^%")&&(g'="^%SYS")  Continue:g="^ROUTINE"  Continue:g="^rOBJ"  Continue:g="^rINDEX"  Continue:g="^rMAC"  '
             'Set c=0,k=0,q=g Try { If $DATA(@q)#2,$GET(@q)["Shutter" Set c=1 For { Set q=$QUERY(@q) Quit:q=""  Set k=k+1 Quit:k>400000  If (q["Shutter")||($GET(@q)["Shutter") Set c=c+1 } } Catch e { Set c=-1 } If c Write !,"<<<mentions|' + ns + '|",g,">>>" }')
 
 
 def compare(before, after, allowed_new=(), allowed_gone=()):
     # The engine's own working globals appear wherever a production has run. A row in one that names Shutter is still caught,
     # by the mentions line for that global and by the rows read above.
-    engine = [r"^global\|[^|]*\|\^(Ens\.|IRIS\.Temp|CacheTemp|EnsLib\.)", r"^autostart\|[^|]*\|$"]
+    engine = [r"^global\|[^|]*\|\^(Ens\.|EnsHL7\.Segment|IRIS\.Temp|CacheTemp|EnsLib\.)", r"^autostart\|[^|]*\|$"]
     new = sorted(x for x in after - before if not any(re.search(p, x) for p in list(allowed_new) + engine))
     gone = sorted(x for x in before - after if not any(re.search(p, x) for p in list(allowed_gone) + engine))
     check("nothing of Shutter's is left: nothing is new since before the install", not new, "\n        ".join(new))
@@ -295,6 +295,13 @@ def site_shape():
     check("the case is still there after the plan", value("SHUTTER", '$ORDER(^Shutter.Store.CaseD(""),-1)') == cases, cases)
     check("the item is still there after the plan", "Shutter Forwarder" in jobs("PATHOLOGY"))
 
+    step("The comparison can see Shutter: the same record, while it is installed")
+    during = snapshot(namespaces)
+    check("the record finds the name in Shutter's own globals", "mentions|SHUTTER|^Shutter.Config" in during, sorted(x for x in during if x.startswith("mentions"))[:40])
+    check("and the role, the item and the mapping", {"role|%SYS|Shutter_Operator", "mapping|%SYS|PATHOLOGY/Shutter.Intake", "item|PATHOLOGY|OnbPath.Production/Shutter Forwarder/Shutter.Intake.Forwarder"} <= during, sorted(x for x in during - before)[:60])
+    if args.module == ".":
+        check("and the key in the wallet", "wallet|%SYS|Shutter.Anthropic" in during)
+
     step("The uninstall")
     keep = jobs("PATHOLOGY")
     uninstall("SHUTTER")
@@ -371,6 +378,13 @@ def into_shape():
     step("The install into the production")
     load("PATHOLOGY", " -Ddemo=0 -Dproduction=OnbPath.Production")
     check("Shutter's items are in the running production", "Gate" in jobs("PATHOLOGY"), jobs("PATHOLOGY"))
+
+    step("The comparison can see Shutter: the same record, while it is installed")
+    during = snapshot(namespaces)
+    check("the record finds the name in Shutter's own globals", "mentions|SHUTTER|^Shutter.Config" in during, sorted(x for x in during if x.startswith("mentions"))[:40])
+    check("and the role, the item and the mapping", {"role|%SYS|Shutter_Operator", "mapping|%SYS|PATHOLOGY/Shutter.Intake", "item|PATHOLOGY|OnbPath.Production/Shutter Forwarder/Shutter.Intake.Forwarder"} <= during, sorted(x for x in during - before)[:60])
+    if args.module == ".":
+        check("and the key in the wallet", "wallet|%SYS|Shutter.Anthropic" in during)
 
     step("The uninstall")
     keep = jobs("PATHOLOGY")
