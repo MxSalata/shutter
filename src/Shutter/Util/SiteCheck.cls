@@ -232,11 +232,10 @@ ClassMethod WatchableNamespaces() As %String
     For {
         Set ns = $ORDER(list(ns)) Quit:ns=""
         Continue:$EXTRACT(ns)="%"
-        Continue:(ns = "HSLIB") || (ns = "HSSYS") || (ns = "HSCUSTOM") || (ns = "HSAALIB") || (ns = "ENSLIB") || (ns = "ENSEMBLE") || (ns = "DOCBOOK") || (ns = "SAMPLES")
+        Continue:$LISTFIND($LISTBUILD("HSLIB", "HSSYS", "HSCUSTOM", "HSAALIB", "ENSLIB", "ENSEMBLE", "DOCBOOK", "SAMPLES"), ns)
         Continue:ns["^"
         Try {
-            Continue:'##class(%EnsembleMgr).IsEnsembleNamespace(ns)
-            If ##class(Shutter.Util.Onboard).Read(ns).production '= "" Set out = out _ $SELECT(out = "": "", 1: ",") _ ns
+            If ##class(%EnsembleMgr).IsEnsembleNamespace(ns) && (##class(Shutter.Util.Onboard).Read(ns).production '= "") Set out = out _ $SELECT(out = "": "", 1: ",") _ ns
         } Catch ex {
         }
     }
