@@ -109,6 +109,26 @@ Method TestDigestBindsVersionsAndEpoch()
 }
 
 /// Builds the plan again and returns its digest.
+/// A receiver that is up and refuses a new message every minute keeps the quiet period from ever passing, and every other
+/// failure to it stays grouped. Past the maximum the intake closes, but only while the newest failure is a refusal: a receiver
+/// that answers nothing has nothing to release into, so its incident waits as before.
+Method TestIntakeMaximum()
+{
+    Set d = "Shutter.Store.IncidentDetector"
+    Set inc = ..NewIncident()
+    Set inc.OpenedAt = ##class(Shutter.Util.Time).FromNow(-7200), inc.LastFailureAt = ##class(Shutter.Util.Time).NowUTC(), inc.IntakeClosedAt = "", inc.QuietSeconds = 60
+    Do $$$AssertStatusOK(inc.%Save(), "an incident open for two hours, with a failure just now")
+    Do $$$AssertNotTrue($CLASSMETHOD(d, "QuietFor", inc), "the quiet period has not passed")
+    Set refused = ..NewCase(inc, 9, 1, "ENC-UTI9", "transfer", "2026-10-19T09:20:00Z")
+    Do $$$AssertNotTrue($CLASSMETHOD(d, "IntakeOverdue", inc, 7200 + 600), "inside the maximum it waits")
+    Do $$$AssertNotTrue($CLASSMETHOD(d, "IntakeOverdue", inc, 0), "a maximum of 0 is none")
+    Do $$$AssertNotTrue($CLASSMETHOD(d, "IntakeOverdue", inc, 1800), "past it, with the newest failure a delivery failure, it waits")
+    Set refused.FailureKind = "rejected"
+    Do $$$AssertStatusOK(refused.%Save(), "the newest failure is a refusal")
+    Do $$$AssertTrue($CLASSMETHOD(d, "IntakeOverdue", inc, 1800), "past it, with the newest failure a refusal, the intake closes")
+    Do $$$AssertTrue($CLASSMETHOD(d, "IntakeOverdue", inc), "and the default maximum is passed after two hours")
+}
+
 Method Digest(inc As Shutter.Store.Incident) As %String
 {
     Do $$$AssertStatusOK(inc.BuildPlan(..#POLICY), "the plan is built")

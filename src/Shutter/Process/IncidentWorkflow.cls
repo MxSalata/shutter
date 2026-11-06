@@ -104,7 +104,8 @@ Method OnError(request As %Library.Persistent, ByRef response As %Library.Persis
 /// The quiet period has passed, or a failure came in meanwhile and the wait starts again.
 Method OnQuiet(incident As Shutter.Store.Incident) As %Status
 {
-    If '##class(Shutter.Store.IncidentDetector).QuietFor(incident) {
+    Set quiet = ##class(Shutter.Store.IncidentDetector).QuietFor(incident)
+    If 'quiet && '##class(Shutter.Store.IncidentDetector).IntakeOverdue(incident) {
         Set elapsed = ##class(Shutter.Util.Time).SecondsBetween(incident.LastFailureAt, ##class(Shutter.Util.Time).NowUTC())
         $$$TRACE("Failures still arriving; waiting another " _ (incident.QuietSeconds - elapsed) _ " s")
         Quit ..Alarm(incident.QuietSeconds - elapsed, "quiet")
@@ -112,7 +113,7 @@ Method OnQuiet(incident As Shutter.Store.Incident) As %Status
     Set incident.IntakeClosedAt = ##class(Shutter.Util.Time).NowUTC()
     Set sc = incident.%Save()
     Quit:$$$ISERR(sc) sc
-    Set sc = incident.Note("note", "Intake closed after " _ incident.QuietSeconds _ " s of quiet: " _ incident.CaseCount() _ " cases. New failures to " _ incident.Receiver _ " count towards a new incident", "system")
+    Set sc = incident.Note("note", "Intake closed " _ $SELECT(quiet: "after " _ incident.QuietSeconds _ " s of quiet", 1: "at its maximum time, with the receiver still refusing messages") _ ": " _ incident.CaseCount() _ " cases. New failures to " _ incident.Receiver _ " count towards a new incident", "system")
     Quit:$$$ISERR(sc) sc
     Set ..Phase = "ready"
     Quit ..OnReady(incident)

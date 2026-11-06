@@ -292,8 +292,9 @@ ClassMethod Validate(p As %DynamicObject) As %String
         If '$ISOBJECT(inc) Quit "incident: must be an object"
         Set ii = inc.%GetIterator()
         While ii.%GetNext(.k, .n) {
-            If '$LISTFIND($LISTBUILD("threshold", "window_minutes", "quiet_seconds"), k) Return "incident." _ k _ ": unknown setting"
-            If (n '= +n) || (n < 0) || ((k '= "quiet_seconds") && (n < 1)) Return "incident." _ k _ ": must be a whole number" _ $SELECT(k = "quiet_seconds": "", 1: " of 1 or more")
+            If '$LISTFIND($LISTBUILD("threshold", "window_minutes", "quiet_seconds", "max_intake_seconds"), k) Return "incident." _ k _ ": unknown setting"
+            Set zero = (k = "quiet_seconds") || (k = "max_intake_seconds")
+            If (n '= +n) || (n < 0) || ('zero && (n < 1)) Return "incident." _ k _ ": must be a whole number" _ $SELECT(zero: "", 1: " of 1 or more")
         }
     }
     Quit ""
@@ -566,7 +567,7 @@ ClassMethod Flag(name As %String, default As %String = "") As %String
     Quit ##class(Shutter.Util.Json).Str(..Current(), name, default)
 }
 
-/// An incident setting: threshold, window_minutes, quiet_seconds.
+/// An incident setting: threshold, window_minutes, quiet_seconds, max_intake_seconds.
 ClassMethod IncidentSetting(name As %String, default As %Integer) As %Integer
 {
     Set inc = ..Current().%Get("incident")

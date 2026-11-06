@@ -827,7 +827,12 @@ export interface SiteProfile {
   policy: Record<string, Partial<Record<ChainKind, string>>>;
   /** close_needs_approver: closing a case by hand needs an approver (the two-person rule); off when absent. */
   approvers?: { role?: string; escalation?: string; close_needs_approver?: boolean };
-  incident?: { threshold?: number; window_minutes?: number; quiet_seconds?: number };
+  incident?: {
+    threshold?: number;
+    window_minutes?: number;
+    quiet_seconds?: number;
+    max_intake_seconds?: number;
+  };
   /** Who corrects the systems by hand when Shutter can't, and where their email goes (T29). */
   teams?: SiteTeam[];
   mail?: { from?: string; allowed_domains?: string[] };

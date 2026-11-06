@@ -902,7 +902,10 @@ the framework). The Dockerfile runs it, and a site with Java runs it once by han
 - A case opened while an incident is open for its receiver joins it (case state `grouped`) instead of starting its own
   investigation. When the incident opens, it also adopts the burst's earlier cases for that receiver that are still before
   their proposal gate (settling, collecting or investigating), so the first failures are not left outside it. The
-  incident's intake closes after `quiet_seconds` with no new failure.
+  incident's intake closes after `quiet_seconds` with no new failure, or once it has been open for
+  `max_intake_seconds` (optional, 1800 by default, 0 for none) with the newest failure a refusal: a receiver that is up
+  and steadily refusing new messages would otherwise hold every other failure to it. A receiver that answers nothing
+  keeps the wait, since a release would only block against it.
 - Only failures and refusals to the receiver that no incident holds count towards the threshold. A case joins with its
   evidence still to collect and parks in `grouped` once its snapshot and match are in the store (after the board, when
   the incident adopted it mid-investigation: the plan stays on the case, and the release plans again). Once the intake

@@ -69,6 +69,18 @@ Method TestReceiverNamesAreUnique()
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "", "another name passes")
 }
 
+/// The intake's maximum sits beside the quiet period: a whole number, with 0 for none, and no other setting takes 0.
+Method TestIntakeMaximumSetting()
+{
+    Set p = ##class(Shutter.Store.SiteProfile).Default()
+    Set p.incident."max_intake_seconds" = 900
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "", "a maximum passes")
+    Set p.incident."max_intake_seconds" = 0
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "", "0 means none")
+    Set p.incident."max_intake_seconds" = -1
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "incident.max_intake_seconds: must be a whole number", "a negative one is refused")
+}
+
 Method TestReceiverCategory()
 {
     Set name = $PARAMETER("Shutter.Production", "RECEIVER")
