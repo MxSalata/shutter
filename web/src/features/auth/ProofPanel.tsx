@@ -71,12 +71,12 @@ export function ProofPanel({ figures, proof = PROOF }: { figures: boolean; proof
           {APP_TAGLINE}
         </Text>
         <Text component="h2" id={headline} className="hero-statement" m={0} maw="26em">
-          Shutter fixes a failed <Term term="hl7-transfer">HL7 transfer</Term> only when it can show the fix
-          is safe.
+          Shutter fixes a failed <Term term="hl7-transfer">HL7 transfer</Term> only when its checks pass.
+          Otherwise it stops and names the patient.
         </Text>
         <Text size="lg" m={0} maw="34em">
           When a patient movement fails to reach another system, Shutter finds out why and writes a fix only
-          when it is safe to.
+          once its checks pass.
         </Text>
         <TechDetail label="How it decides" kind="data">
           For HL7 v2 ADT feeds on InterSystems IRIS for Health: a fix is written only when the gate passes and

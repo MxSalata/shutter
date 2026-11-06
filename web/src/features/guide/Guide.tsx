@@ -153,7 +153,7 @@ function Welcome({ initial }: { initial: GuideScope }) {
     <Stack gap="md">
       <Text fz={18}>
         When a patient movement fails to reach another system, Shutter finds out why and writes a fix only
-        when it is safe to.
+        once its checks pass.
       </Text>
       <Text fz={15}>
         {HOSPITAL_NAME}: a demo hospital with made-up patients, recorded. {welcomeActions(can)}: each replays

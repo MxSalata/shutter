@@ -58,7 +58,7 @@ function visible(el: Element | null): string {
 }
 
 /**
- * The first-layer words above the per-scenario table (the page's header, the headline and Why a board), all of them,
+ * The first-layer words above the per-scenario table (the page's header, the headline and How the specialists differed), all of them,
  * and the copy alone: specs/evaluation.md 3 budgets the copy (the lead, the sentences, the captions and the lines),
  * not the headings, the controls' labels and the figures, which `copy` leaves out.
  */
@@ -207,7 +207,9 @@ describe('EvaluationPage', () => {
       'The board chose the expected action in 24 of 24 recorded failures.',
     );
     expect(hero).not.toHaveTextContent('the gate stopped');
-    expect(screen.getByRole('region', { name: 'Why a board' })).not.toHaveTextContent('The gate alone');
+    expect(screen.getByRole('region', { name: 'How the specialists differed' })).not.toHaveTextContent(
+      'The gate alone',
+    );
   });
 
   it('leaves the gate and the build out for an older document that does not record them, never typing them', () => {
@@ -234,7 +236,9 @@ describe('EvaluationPage', () => {
         'From 100 runs recorded with the real agents, 25 Oct to 1 Nov 2026; CI replays them on every push. Nothing on this page was measured on this instance.',
       ),
     ).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Why a board' })).not.toHaveTextContent('The gate alone');
+    expect(screen.getByRole('region', { name: 'How the specialists differed' })).not.toHaveTextContent(
+      'The gate alone',
+    );
     // Rules only's misses are still marked, without saying how they ended
     const s1 = within(table()).getByText('S1').closest('tr')!;
     expect(s1).toHaveTextContent('Rules only: not as expected');
@@ -242,7 +246,7 @@ describe('EvaluationPage', () => {
 
   it('shows who proposed the expected action on one base, and which misses the gate catches alone', async () => {
     renderPage();
-    const why = screen.getByRole('region', { name: 'Why a board' });
+    const why = screen.getByRole('region', { name: 'How the specialists differed' });
     for (const [who, n] of [
       ['The board', 24],
       ['Impact Analysis', 23],
@@ -254,7 +258,7 @@ describe('EvaluationPage', () => {
       within(why).getByText('Who proposed the expected action, of 24 scored passes'),
     ).toBeInTheDocument();
     expect(
-      within(why).getByText('Each specialist answers from its own view; the coordinator weighs all three.'),
+      within(why).getByText('Each specialist answers from its own view. No single-agent run was recorded.'),
     ).toBeInTheDocument();
     expect(why).toHaveTextContent(
       'The gate alone catches S1, S3, S6, S7, S10 and S13. The board catches S8.',

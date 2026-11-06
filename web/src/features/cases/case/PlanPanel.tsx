@@ -182,7 +182,7 @@ export function PlanPanel({
           {preconditions.length ? (
             <Stack gap={2}>
               <Text size="xs" fw={600} c="dimmed">
-                Preconditions the plan states
+                Preconditions as the plan's author wrote them, when it ran
               </Text>
               <List size="sm" spacing={2}>
                 {preconditions.map((x, i) => (

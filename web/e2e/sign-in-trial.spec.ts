@@ -43,7 +43,7 @@ test.describe('the live sign-in page of a demo install, on a laptop', () => {
     await expect(
       page.getByRole('heading', {
         level: 2,
-        name: 'Shutter fixes a failed HL7 transfer only when it can show the fix is safe.',
+        name: 'Shutter fixes a failed HL7 transfer only when its checks pass. Otherwise it stops and names the patient.',
       }),
     ).toBeVisible();
     // The board's own figure, and the comparison on its own base as two bars

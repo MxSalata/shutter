@@ -552,7 +552,10 @@ function CoordinatorCard({
       {/* The disagreements are the dissents kept above; the preconditions are in their own detail below */}
       <ResultLists result={result} omit={['disagreements', 'preconditions']} />
       {preconditions.length ? (
-        <TechDetail kind="data" label="What must still hold before a write">
+        <TechDetail kind="data" label="What the coordinator wrote must still hold">
+          <Text size="sm" c="dimmed">
+            The gate doesn't read these.
+          </Text>
           <List size="sm" spacing={4}>
             {preconditions.map((x, i) => (
               <List.Item key={i}>

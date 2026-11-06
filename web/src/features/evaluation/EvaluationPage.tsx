@@ -671,7 +671,7 @@ function WhyABoard({
       </span>
     ));
   return (
-    <Section id="why-a-board" title="Why a board">
+    <Section id="why-a-board" title="How the specialists differed">
       {b && sp && base ? (
         <ComparisonBars
           bars={[
@@ -684,7 +684,7 @@ function WhyABoard({
           caption={`Who proposed the expected action, of ${base} scored passes`}
         />
       ) : null}
-      <Text size="sm">Each specialist answers from its own view; the coordinator weighs all three.</Text>
+      <Text size="sm">Each specialist answers from its own view. No single-agent run was recorded.</Text>
       {misses && (misses.stopped.length || misses.wrote.length) ? (
         <Text size="sm">
           {misses.stopped.length ? <>The gate alone catches {ids(misses.stopped)}. </> : null}
