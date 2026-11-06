@@ -40,7 +40,8 @@ receiving system's final state with the scenario's expected outcome (`fixtures/s
   write, an event time before the admission), so nothing wrong reaches the receiver, but the case stops for a person.
 - **S8 is the case this gate doesn't catch.** Two systems moved the same patient at the same time, 09:20. No event is
   later than the other, so every mechanical check passes; Rules only resends, the approval goes through, and the
-  write moves the patient to Ward B over the bed manager's placement in Ward C. The board sees that the evidence
+  write moves the patient to Ward B over the bed manager's placement in Ward C. The matcher flags the two sources as
+  catalogue entry E7, with escalation as its preferred outcome, and the board follows it: it sees that the evidence
   can't decide which movement is current and escalates to a person.
 - **Site policy settles 8 of those 11 with no agent.** S1, S2, S3, S5, S6, S9, S10 and S13 ran no agent; S4 and S8 went
   to the board, four runs each; all 10 it plays ended as expected on build 109 (receipt-109.md). S7 has no such mode.
