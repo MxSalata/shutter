@@ -127,8 +127,9 @@ ClassMethod Count() As %Integer
 }
 
 /// The rows for a visit number whose header is not older than a time, event time ascending, as objects. An empty
-/// visit number, or the "-" piece of a message without one, has no rows: it would match every such message.
-ClassMethod ForVisit(visitNumber As %String, since As %String = "") As %DynamicArray
+/// visit number, or the "-" piece of a message without one, has no rows: it would match every such message. With a
+/// patient or an authority, a row naming another one is left out; a row that names none stays.
+ClassMethod ForVisit(visitNumber As %String, since As %String = "", patientId As %String = "", authority As %String = "") As %DynamicArray
 {
     Set out = []
     If (visitNumber = "") || (visitNumber = "-") Quit out
@@ -136,6 +137,8 @@ ClassMethod ForVisit(visitNumber As %String, since As %String = "") As %DynamicA
     While rs.%Next() {
         Set r = ..%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(r)
+        Continue:((patientId '= "") && (r.PatientId '= "") && (r.PatientId '= patientId))
+        Continue:((authority '= "") && (r.PatientIdAuthority '= "") && (r.PatientIdAuthority '= authority))
         Do out.%Push(r.ToObject())
     }
     Quit out

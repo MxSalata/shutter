@@ -1056,6 +1056,10 @@ separate, later tool.
   feed's own whose failure the connector recorded (6.1, v1.16), so it supersedes nothing by itself; the receiver's
   history decides. The board sees it and can say so.
 - A scenario for a later movement on a route Shutter does not own, found only by the index, is planned; it is not in `fixtures/scenarios.json` yet.
+- Both keep to the case's patient and authority: a visit number can be reissued or numbered by two authorities, and another
+  patient's message under it is no word on this patient's place, so it can't close the case. The deliveries (`Deliveries`,
+  a bed's occupant) and the pending messages (6.5) still read the whole visit, so another patient's message in flight holds
+  a write. A patient's later rows under another identifier after a merge the receiver hasn't taken aren't counted either.
 - The index row's `Event` is the key's event word (v1.14: `register`, `preadmit`, `person_add`, `person_update`, the cancel words and `merge` included, 32 characters), so registrations, pre-admissions and person updates show between the movements; its `VisitNumber` is `-` for a mapped message with no PV1-19 (an unmappable message without one keeps an empty visit number), and the timeline and the index answer nothing for an encounter of `-` or empty.
 
 ### 8.3 The API
