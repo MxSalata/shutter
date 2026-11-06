@@ -39,6 +39,7 @@ Method Purge(id As %String)
     Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.ReminderDigest WHERE Recipient LIKE '%@reminder.example.nhs.uk'")
     Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.CaseEvent WHERE ""Case"" = ?", id)
     Do ##class(Shutter.Store.Case).%DeleteId(id)
+    Kill ^Shutter.Reminder
 }
 
 /// One row of the table as a word for the assert: "to: case/threshold case/threshold; to: ...", with the addresses held

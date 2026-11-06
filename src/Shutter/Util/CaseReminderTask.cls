@@ -147,7 +147,7 @@ ClassMethod Status(taskId As %String) As %DynamicObject
     Set task = (taskId '= "") || ''$GET(^Shutter.Config("reminderTask"))
     Set r.warnings = ##class(Shutter.Util.CaseReminder).Warnings(settings, ..MailServer(), ##class(Shutter.Store.SiteProfile).AllowedDomains(), teams, task)
     Set r."patient_detail" = settings."patient_detail", r.zone = settings.zone
-    Set r."last_run" = $GET(^Shutter.Reminder("last_run"))
+    Set r."last_run" = $GET(^Shutter.Reminder("last_run")), r."last_sent" = $GET(^Shutter.Reminder("last_sent"))
     Set e = $GET(^Shutter.Reminder("last_error"))
     If e '= "" Set r."last_error" = $LIST(e, 1) _ ": " _ $LIST(e, 2)
     Quit r

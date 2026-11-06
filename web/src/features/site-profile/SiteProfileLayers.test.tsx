@@ -306,6 +306,7 @@ describe('On this page', () => {
       'Incidents, 8',
       'Escalation, 9',
       'Feed, model, merges, 10 to 13',
+      'Reminders, 14',
       'Versions',
     ]);
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'On this page' }), 'site-approvals');

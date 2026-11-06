@@ -55,6 +55,8 @@ Method MarkSent(result As %String, now As %String = {##class(Shutter.Util.Time).
     Set ..State = "sent", ..Result = $EXTRACT(result, 1, 2000), ..SentAt = now, ..Body = ""
     Set sc = ..%Save()
     Quit:$$$ISERR(sc) sc
+    Set ^Shutter.Reminder("last_sent") = now
+    Kill ^Shutter.Reminder("last_error")
     Set it = ##class(Shutter.Util.Json).Parse(..Items, .psc)
     Quit:'$ISOBJECT(it) $$$OK
     Set iter = it.%GetIterator()

@@ -838,6 +838,20 @@ export interface SiteProfile {
    * feed is held while a message's HL7 schema category is not loaded here ("prevent failures", default false).
    */
   feed?: { time_zone?: string; prevent_failures?: boolean };
+  /** A scheduled mail for cases left open (CONTRACTS 6.4): off unless enabled, in the feed's time zone. */
+  reminders?: {
+    enabled?: boolean;
+    team_hours?: number;
+    officer_hours?: number;
+    officer_name?: string;
+    officer_address?: string;
+    window_start?: string;
+    window_end?: string;
+    days?: string[];
+    /** none, identifiers or identifiers_initial; never a full name, date of birth, address or NHS number. */
+    patient_detail?: string;
+    sign_in_url?: string;
+  };
 }
 
 /** GET /site-profile: the profile in force and its store version, which a PUT sends back as expectedVersion. */

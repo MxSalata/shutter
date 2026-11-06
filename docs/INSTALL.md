@@ -237,7 +237,7 @@ Shape A:
    no domain set no email can go, and a profile that names a team mailbox without one is refused, so replace the
    shipped `example.nhs.uk` with the trust's; a profile saved before this rule that names teams and no domains sends
    nothing until an approver saves the list), the feed's time zone, `merges: forbidden`.
-5. Set the `Escalation Mail` operation's SMTP server.
+5. Set the `Escalation Mail` operation's SMTP server. Reminders for cases left open use the same server, and are off until the site profile's question 14 turns them on (`docs/CONTRACTS.md`, `reminders`).
 6. Onboard each watched namespace (section 9), which adds the forwarder and the alert intake. If your own process delivers
    and you want it to report failures itself, call the forwarder from it on a failed delivery. With the site profile's "prevent failures" on (section
    7): where a routing engine routes the feed, set its `Validation` (`dm`) and its `BadMessageHandler` to the forwarder
