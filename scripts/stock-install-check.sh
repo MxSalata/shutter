@@ -12,7 +12,8 @@
 # (2026.3 or later) or "core" for the core alone (2026.2). --archive loads a package archive instead of the folder, the
 # form the registry serves; --write-archive also writes one with `zpm package`. --no-demo loads with -Ddemo=0, as a site does,
 # and stops after the checks of the install, since the scenarios need the demo. The scenarios default to S2.
-# CTR names the container (default shutter-stock-check); KEEP=1 leaves it running. Run from the repository's root.
+# CTR names the container (default shutter-stock-check), PORT its web port (default: any free one); KEEP=1 leaves it
+# running. Run from the repository's root.
 set -euo pipefail
 
 image=${1:?usage: stock-install-check.sh IMAGE MODULE [--archive FILE] [--write-archive FILE] [--no-demo] [SCENARIO...]}
@@ -37,7 +38,7 @@ cleanup() { [ "${KEEP:-0}" = 1 ] || docker rm -f "$ctr" > /dev/null 2>&1 || true
 trap cleanup EXIT
 
 docker rm -f "$ctr" > /dev/null 2>&1 || true
-docker run -d --name "$ctr" -p 127.0.0.1::52773 "$image" --check-caps false --ISCAgent false > /dev/null
+docker run -d --name "$ctr" -p "127.0.0.1:${PORT:-}:52773" "$image" --check-caps false --ISCAgent false > /dev/null
 port=$(docker port "$ctr" 52773/tcp | head -1 | sed 's/.*://')
 url="http://127.0.0.1:$port"
 

@@ -1221,6 +1221,9 @@ ClassMethod CreateWebApps(ns As %String, root As %String, demo As %Boolean = 1) 
         Set props("Path") = www
         Set props("ServeFiles") = 1
         Set props("Recurse") = 1
+        // A file application has no default page: this class gives /shutter and /shutter/ one, and serves the files.
+        Set props("DispatchClass") = "Shutter.API.WebRoot"
+        Set props("RedirectEmptyPath") = 1
         Set props("UseCookies") = 2
         Set props("CookiePath") = "/shutter/"
         Set props("MatchRoles") = ":Shutter_WebApp"
