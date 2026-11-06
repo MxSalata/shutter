@@ -186,7 +186,7 @@ describe('CasePage', () => {
     // Its confidence is its own report, with the definition on its first use; the board says how it works once
     expect(within(dissent).getByTestId('own-confidence')).toHaveTextContent(/^Its own confidence.*: 80%$/);
     expect(within(dissent).getByText('own confidence')).toHaveAccessibleDescription(
-      "The agent's own report. The gate does not use it.",
+      "The agent's own report, not calibrated. The gate does not use it.",
     );
     expect(
       within(board).getByText(/A confidence is the agent's own report and is not used by the gate/),
