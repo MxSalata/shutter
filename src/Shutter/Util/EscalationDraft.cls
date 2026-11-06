@@ -145,7 +145,7 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     If (case.FailureKind = "withheld") || noEncounter {
         Set b = b _ "  Reply to this email with what was changed, or record it on the case, then mark the case as handled by the team on the case page: Shutter sent nothing for this message and will send nothing, and it cannot verify a merge or a cancellation against " _ receiver _ "." _ nl _ nl
     } Else {
-        Set b = b _ "  Reply to this email with what was changed, or record it on the case, then choose Reinvestigate on the case page: Shutter reads " _ receiver _ " again and verifies the correction." _ nl _ nl
+        Set b = b _ ..WhenCorrected(receiver, 'case.NotModelled() && (##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", case.EncounterId) '= "")) _ nl _ nl
     }
 
     Set b = b _ "REFERENCES" _ nl
@@ -155,6 +155,15 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     Set b = b _ nl _ "This email was drafted by Shutter from its record of the case and reviewed by the person who sent it." _ nl
     Set body = b
     Quit $$$OK
+}
+
+/// What the team does once it has corrected the receiver. Reinvestigate collects fresh evidence and can plan another resend, so
+/// it is never put as a check of the correction. readable says whether Shutter could read the receiver for this message at all.
+ClassMethod WhenCorrected(receiver As %String, readable As %Boolean) As %String
+{
+    Set start = "  Reply to this email with what was changed, or record it on the case, then mark the case as handled by the team on the case page"
+    If 'readable Quit start _ ": Shutter cannot verify a correction against " _ receiver _ "."
+    Quit start _ ". Reinvestigate is for when the message is still due: Shutter collects fresh evidence and may plan another resend, which this site's policy may release with no person."
 }
 
 /// The hospital number (PID-3 typed MR, as the case carries it), the NHS number (PID-3 typed NH) and the date of
