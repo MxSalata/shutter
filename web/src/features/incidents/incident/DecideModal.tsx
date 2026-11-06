@@ -12,6 +12,7 @@ import { byEnv } from '@/env/copy';
 import { describeError, isApiError } from '@/lib/errors';
 import { plural } from '@/lib/format';
 import { ApproveWords } from './ApproveWords';
+import { CoveredOperations } from './CoveredOperations';
 
 export type Decision = 'approve' | 'reject';
 
@@ -91,6 +92,7 @@ export function useDecideDialog(inc: IncidentDetail) {
           rows={[['Chains', covered.map((c) => `${c.seq} (${c.encounterId})`).join(', ')]]}
           labelWidth={120}
         />
+        <CoveredOperations chains={covered} />
         <TechDetail label="What this decision is bound to" kind="data">
           <KeyValueList
             rows={[['Plan digest', <Digest key="p" value={opened} label="incident plan digest" />]]}

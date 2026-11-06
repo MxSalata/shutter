@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, newIdempotencyKey, seg } from './client';
 import { resolveCan } from './can';
 import { isApiError } from '@/lib/errors';
@@ -228,6 +228,16 @@ export function useCase(caseId: string, enabled = true) {
     queryFn: () => api.get<CaseDetail>(`/cases/${seg(caseId)}`),
     refetchInterval: (q) => (isOpen(q.state.data?.state) ? LIVE : false),
     enabled,
+  });
+}
+
+/** Several cases, each read once, for a dialog that names what it covers. */
+export function useCaseDetails(caseIds: string[]) {
+  return useQueries({
+    queries: caseIds.map((caseId) => ({
+      queryKey: keys.case(caseId),
+      queryFn: () => api.get<CaseDetail>(`/cases/${seg(caseId)}`),
+    })),
   });
 }
 

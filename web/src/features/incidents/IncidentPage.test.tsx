@@ -523,6 +523,32 @@ describe('IncidentPage', () => {
     expect(posted).toBeNull();
   });
 
+  it('names each case it covers, the patient, the time, the bed and why it is still due', async () => {
+    served = waiting();
+    server.use(
+      http.get(`${BASE}/cases/C-000004`, () =>
+        HttpResponse.json({
+          caseId: 'C-000004',
+          patientIdAuthority: 'HOSP',
+          ward: 'WARD-B',
+          bed: 'BAY2-04',
+        }),
+      ),
+    );
+    renderAt('/incidents/I-000001');
+    const approval = await screen.findByRole('region', { name: 'Approval' });
+    await userEvent.click(within(approval).getByRole('button', { name: /Approve/ }));
+    const dialog = await screen.findByRole('dialog');
+    const covered = within(dialog).getByRole('list', { name: 'What this decision covers' });
+    const [first, second] = within(covered).getAllByRole('listitem');
+    await waitFor(() => expect(first).toHaveTextContent('Transfer to WARD-B, bed BAY2-04'));
+    expect(first).toHaveTextContent('C-000004');
+    expect(first).toHaveTextContent('Patient MRN1102 (HOSP)');
+    expect(within(first).getByRole('time')).toHaveAttribute('datetime', served.chains[1].items[0].eventTime);
+    expect(first).toHaveTextContent('Resend the transfer to WARD-B unchanged');
+    expect(second).toHaveTextContent('C-000009');
+  });
+
   it('keeps the decision from someone without the approver role', async () => {
     resetMock('operator');
     served = waiting();
