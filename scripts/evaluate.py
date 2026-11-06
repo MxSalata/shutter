@@ -513,7 +513,7 @@ def render(ev):
     w("- **The catalogue reaches the agents.** Each agent's evidence carries the catalogue's matching entry and its "
       f"preferred outcome. The coordinator took that outcome in {t['plans_taking_the_preferred_outcome']} of "
       f"{t['plans_with_a_catalogue_outcome']} recorded plans, S8 included"
-      + (f"; in {', '.join(others)} it took the alternative" if others else "")
+      + (f"; in {', '.join(others)} it took the alternative the matcher had already chosen from the site's policy" if others else "")
       + ". So these runs show agents applying written policy to evidence and keeping their dissent, not reaching the "
       "answer unaided.")
     sm = t["specialist_matches"]
