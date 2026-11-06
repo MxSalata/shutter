@@ -1604,6 +1604,7 @@ ClassMethod EnsureRetentionTasks(ns As %String = "", days As %String = "", purge
     If $$$ISERR(sc) Quit "ERROR: " _ $SYSTEM.Status.GetErrorText(sc)
     // The install's record, for a Doctor report by a caller without access to the Task Manager.
     If made Set ^|ns|Shutter.Config("escalationDays") = escalationDays
+    If $$$ISOK(..EnsureReminderTask(ns)) Set ^|ns|Shutter.Config("reminderTask") = 1
     Quit out _ "; retention " _ $SELECT(made: "created (escalation texts " _ $SELECT(escalationDays > 0: escalationDays _ " days", 1: "kept") _ ")", 1: "exists")
 }
 
@@ -1676,6 +1677,29 @@ ClassMethod EnsureTask(name As %String, ns As %String, class As %String, descrip
     Quit sc
 }
 
+/// The task "Shutter case reminders" (Shutter.Util.CaseReminderTask), every quarter of an hour, made once. It does nothing
+/// until the site profile switches the reminders on.
+ClassMethod EnsureReminderTask(ns As %String) As %Status [ Private ]
+{
+    Set sc = $$$OK
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = "%SYS"
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM %SYS.Task WHERE Name = ?", "Shutter case reminders")
+        If rs.%Next() Quit
+        Set task = ##class(%SYS.Task).%New()
+        Set task.Name = "Shutter case reminders", task.NameSpace = ns, task.TaskClass = "Shutter.Util.CaseReminderTask"
+        Set task.Description = "Shutter: a reminder mail for cases left open, when the site profile switches it on"
+        Set task.TimePeriod = 0, task.TimePeriodEvery = 1, task.DailyFrequency = 1, task.DailyFrequencyTime = 0, task.DailyIncrement = 15
+        Set task.DailyStartTime = 0, task.DailyEndTime = 86399
+        Set task.RunAsUser = $USERNAME
+        Set sc = task.%Save()
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    Quit sc
+}
+
 /// Empty Shutter's own tables (cases and everything attached to them, their escalation emails and the .eml files of
 /// those rows included, the precedents and board leads that name them, recordings excepted) on a demo instance, reset
 /// the counters so the next case is C-000001 again, and stamp ^Shutter.Config("resetAt") with the time of the purge, as a
@@ -1690,7 +1714,7 @@ ClassMethod PurgeStore() As %String [ SqlProc ]
     // another instance's files.
     Set emails = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Seq, Result FROM Shutter_Store.Escalation WHERE Transport = 'file'")
     While emails.%Next() { Do ##class(Shutter.Store.Escalation).RemoveFile(emails.%Get("Result"), emails.%Get("Seq")) }
-    For cls = "Shutter.Store.CaseToken", "Shutter.Store.ChainItem", "Shutter.Store.Chain", "Shutter.Store.IncidentEvent", "Shutter.Store.Incident", "Shutter.Store.Verification", "Shutter.Store.ExecutionAttempt", "Shutter.Store.Approval", "Shutter.Store.Rehearsal", "Shutter.Store.GateDecision", "Shutter.Store.Plan", "Shutter.Store.Finding", "Shutter.Store.CaseQuestion", "Shutter.Store.AgentRun", "Shutter.Store.SnapshotItem", "Shutter.Store.Snapshot", "Shutter.Store.CaseEvent", "Shutter.Store.Escalation", "Shutter.Store.Case", "Shutter.Store.Precedent", "Shutter.Store.BoardLead", "Shutter.Store.ReviewAnnotation", "Shutter.Store.Review", "Shutter.Store.Idempotency", "Shutter.Bridge.ToolCall" {
+    For cls = "Shutter.Store.CaseToken", "Shutter.Store.ChainItem", "Shutter.Store.Chain", "Shutter.Store.IncidentEvent", "Shutter.Store.Incident", "Shutter.Store.Verification", "Shutter.Store.ExecutionAttempt", "Shutter.Store.Approval", "Shutter.Store.Rehearsal", "Shutter.Store.GateDecision", "Shutter.Store.Plan", "Shutter.Store.Finding", "Shutter.Store.CaseQuestion", "Shutter.Store.AgentRun", "Shutter.Store.SnapshotItem", "Shutter.Store.Snapshot", "Shutter.Store.CaseEvent", "Shutter.Store.Escalation", "Shutter.Store.CaseReminder", "Shutter.Store.ReminderDigest", "Shutter.Store.Case", "Shutter.Store.Precedent", "Shutter.Store.BoardLead", "Shutter.Store.ReviewAnnotation", "Shutter.Store.Review", "Shutter.Store.Idempotency", "Shutter.Bridge.ToolCall" {
         Set sc = $CLASSMETHOD(cls, "%KillExtent")
         If $$$ISERR(sc) Quit
         Set n = n + 1
@@ -1834,6 +1858,8 @@ ClassMethod Doctor(refresh As %Boolean = 0) As %String [ SqlProc ]
     // The cases still in a working state, and the quiet minutes after which an approver may abandon one (CONTRACTS 5, 12).
     &sql(SELECT COUNT(*) INTO :working FROM Shutter_Store."Case" WHERE State NOT IN ('resolved', 'blocked', 'escalated', 'failed'))
     Set r."working_cases" = +working, r."abandon_after_minutes" = ##class(Shutter.Store.Case).AbandonAfterMinutes()
+    // The reminder for cases left open: on or off, and what it lacks (CONTRACTS 6.4, reminders).
+    Try { Set r."case_reminders" = ##class(Shutter.Util.CaseReminderTask).Status(..TaskId("Shutter case reminders")) } Catch ex { Set r."case_reminders" = {"error": (ex.DisplayString())} }
     // The stored credentials against the users they name (v1.38): the cache, which the production keeps fresh; a caller
     // that may write may refresh it. Never a reason for the Doctor to fail: a request with no roles only reads.
     Try {

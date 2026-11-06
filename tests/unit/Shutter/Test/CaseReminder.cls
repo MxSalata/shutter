@@ -68,7 +68,7 @@ ClassMethod RowSettings(row As %DynamicObject) As %DynamicObject
     Set over = row.%Get("settings")
     If $ISOBJECT(over) {
         Set it = over.%GetIterator()
-        While it.%GetNext(.k, .v) { Do r.%Set(k, v, over.%GetTypeOf(k)) }
+        While it.%GetNext(.k, .v) { If $ISOBJECT(v) { Do r.%Set(k, v) } Else { Do r.%Set(k, v, over.%GetTypeOf(k)) } }
     }
     Set zone = $SELECT(row.%IsDefined("zone"): row.%Get("zone"), 1: "Europe/London")
     Quit ##class(Shutter.Util.CaseReminder).Settings({"reminders": (r), "feed": {"time_zone": (zone)}})
@@ -142,8 +142,9 @@ XData DecideRows [ MimeType = application/json ]
  {"name": "a site's own days", "now": "2026-11-07T12:00:00Z", "settings": {"days": ["sat"]}, "cases": [{"openedAt": "2026-11-07T08:00:00Z"}], "expect": "team@example.nhs.uk: C-1/team"},
  {"name": "a site's own days leave Wednesday out", "now": "2026-11-04T12:00:00Z", "settings": {"days": ["sat"]}, "cases": [{"openedAt": "2026-11-04T08:00:00Z"}], "expect": ""},
  {"name": "a zone east of UTC: 02:30 UTC is 08:00 there", "now": "2026-11-04T02:30:00Z", "zone": "+05:30", "cases": [{"openedAt": "2026-11-03T22:30:00Z"}], "expect": "team@example.nhs.uk: C-1/team"},
- {"name": "a zone west of UTC: Monday 02:00 UTC is still Sunday there", "now": "2026-11-09T14:00:00Z", "zone": "-05:00", "cases": [{"openedAt": "2026-11-09T10:00:00Z"}], "expect": "team@example.nhs.uk: C-1/team"},
- {"name": "and Saturday 01:00 UTC is Friday 20:00, outside the window", "now": "2026-11-07T01:00:00Z", "zone": "-05:00", "cases": [{"openedAt": "2026-11-06T12:00:00Z"}], "expect": ""},
+ {"name": "a zone far east: Sunday 20:00 UTC is Monday 10:00 there", "now": "2026-11-08T20:00:00Z", "zone": "+14:00", "cases": [{"openedAt": "2026-11-08T16:00:00Z"}], "expect": "team@example.nhs.uk: C-1/team"},
+ {"name": "a zone far west: Saturday 02:00 UTC is Friday 16:00 there", "now": "2026-11-07T02:00:00Z", "zone": "-10:00", "settings": {"officer_address": ""}, "cases": [{"openedAt": "2026-11-06T22:00:00Z"}], "expect": "team@example.nhs.uk: C-1/team"},
+ {"name": "and Friday 20:00 UTC is Saturday 10:00 far east, a weekend", "now": "2026-11-06T20:00:00Z", "zone": "+14:00", "cases": [{"openedAt": "2026-11-06T12:00:00Z"}], "expect": ""},
  {"name": "UTC", "now": "2026-07-01T08:00:00Z", "zone": "UTC", "cases": [{"openedAt": "2026-07-01T04:00:00Z"}], "expect": "team@example.nhs.uk: C-1/team"}
 ]
 }
@@ -400,6 +401,23 @@ Method Gathered(s As %DynamicObject) As %DynamicObject
     Set it = ##class(Shutter.Util.CaseReminderTask).Gather(s, "2026-11-04T12:00:00Z").%GetIterator()
     While it.%GetNext(, .c) { If c.caseId = ..#CASEID Return c }
     Quit ""
+}
+
+/// The first letter comes from the stored message and nothing else of it; a message gone gives none.
+Method TestTheInitialIsReadFromTheMessage()
+{
+    Set msg = ##class(EnsLib.HL7.Message).ImportFromString("MSH|^~\&|PAS|H|B|H|20261015082000||ADT^A02|M1|P|2.4"_$CHAR(13)_"PID|1||MRN9004^^^HOSP^MR||Jones^jane^^^Ms||19700102|F"_$CHAR(13))
+    Do $$$AssertStatusOK(msg.%Save(), "the message")
+    Set header = ##class(Ens.MessageHeader).%New()
+    Set header.MessageBodyClassName = "EnsLib.HL7.Message", header.MessageBodyId = msg.%Id()
+    Do $$$AssertStatusOK(header.%Save(), "its header")
+    Set case = ##class(Shutter.Store.Case).%OpenId(..CaseRowId)
+    Set case.SourceHeaderId = header.%Id()
+    Do $$$AssertStatusOK(case.%Save(), "the case names it")
+    Do $$$AssertEquals(##class(Shutter.Util.CaseReminderTask).Initial(..CaseRowId), "j", "the first letter of the first name")
+    Do ##class(Ens.MessageHeader).%DeleteId(header.%Id())
+    Do ##class(EnsLib.HL7.Message).%DeleteId(msg.%Id())
+    Do $$$AssertEquals(##class(Shutter.Util.CaseReminderTask).Initial(..CaseRowId), "", "none when the message has gone")
 }
 
 /// The Doctor's words: off says nothing; on names what is missing.

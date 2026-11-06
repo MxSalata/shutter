@@ -113,7 +113,7 @@ ClassMethod Validate(p As %DynamicObject) As %String
     If '$ISOBJECT(p) Quit "the profile must be a JSON object"
     Set it = p.%GetIterator()
     While it.%GetNext(.key, .v) {
-        If '$LISTFIND($LISTBUILD("version", "receivers", "history_policy", "authoritative_source", "unconditional_resend", "merges", "policy", "approvers", "incident", "model_content", "teams", "mail", "feed"), key) Return key _ ": unknown field"
+        If '$LISTFIND($LISTBUILD("version", "receivers", "history_policy", "authoritative_source", "unconditional_resend", "merges", "policy", "approvers", "incident", "model_content", "teams", "mail", "feed", "reminders"), key) Return key _ ": unknown field"
     }
     If p.%IsDefined("version") && ((p.%Get("version") '= +p.%Get("version")) || (p.%Get("version") < 0)) Quit "version: must be a whole number"
     Set rcv = p.%Get("receivers")
@@ -283,6 +283,11 @@ ClassMethod Validate(p As %DynamicObject) As %String
                 While si.%GetNext(.j, .m) { If (sl.%GetTypeOf(j) '= "string") || (m = "") Return at _ ".sources[" _ j _ "]: must be a sending application (MSH-3)" }
             }
         }
+    }
+    // The reminder for cases left open: off unless it says so, and its officer's address goes by the mail rules above.
+    If p.%IsDefined("reminders") {
+        Set problem = ##class(Shutter.Util.CaseReminder).ProfileProblem(p.%Get("reminders"), domains)
+        If problem '= "" Quit problem
     }
     If p.%IsDefined("incident") {
         Set inc = p.%Get("incident")
