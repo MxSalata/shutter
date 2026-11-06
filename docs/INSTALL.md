@@ -11,7 +11,7 @@ the productions a hospital already runs; the README's `docker compose up` is the
   users, the demo bed-management system (`Downstream.*`), the scenario player, a namespace-wide message purge, and
   `Shutter.Production` as the auto-start production.
 - **Shape A, recommended: Shutter in its own namespace, the hospital's productions hooked in.** The hospital's
-  productions keep running untouched. A forwarder in each watched production hands Shutter a failed message over
+  productions keep their own processes and routes unchanged. A forwarder in each watched production hands Shutter a failed message over
   HTTP; Shutter stores its own copy, opens the case and records where the original lives.
 - **Shape B: Shutter's items inside a production the hospital already runs**, in that namespace, through
   `Setup.InstallInto`. One production to look at, with Shutter's queues, settings and upgrades beside the hospital's.
