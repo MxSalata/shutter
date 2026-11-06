@@ -88,7 +88,7 @@ The three specialists (conformance, encounter and impact) and the coordinator ar
 **The online demo** is my fictional hospital, live, with made-up patients. The demo runs on AI Hub build `2026.3.0AI.154.0`; on your machine, use `2027.1.0AI.109.0` (below). The board runs live for the judges' account, whose sign-in the organisers pass to the judges, within a model budget of 15 USD a day; everyone can see its recorded runs in the trial. Its sign-ins:
 
 - The web app: `demo` / `shutter`.
-- The Management Portal's Visual Trace, read only, as `demo-trace` / `Shutter-Demo-IRIS-Portal`: the portal's address (`/csp/`) first asks you to sign in with GitHub or an emailed one-time code, then signs you in as that user.
+- The Management Portal's Visual Trace, read only, as `demo-trace` / `Shutter-Demo-IRIS-Portal`: open https://shutter.mxsalata.com/csp/healthshare/shutter/Shutter.Portal.Guide.cls (or "Shutter in IRIS" in the web app); it first asks you to sign in with GitHub or an emailed one-time code, then signs you in as that user.
 
 **On your machine:** Docker, then one command: `install.sh` checks Docker, Compose, memory, disk, the ports and the image and changes nothing until every check passes ([on Windows or Apple silicon](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md#notes-on-the-install)).
 
@@ -351,7 +351,7 @@ curl http://localhost:52773/api/shutter/health
 - **`install.sh` stops at a check.** It prints `[fix]` with what to do for each one, and changes nothing until every check passes. A port in use: `SHUTTER_WEB_PORT` is the web app's, `SHUTTER_SUPERSERVER_PORT` is 1972, IRIS's own; with no `.env` yet, `SHUTTER_SUPERSERVER_PORT=1973 ./install.sh --replay` keeps it in the `.env` it creates, and otherwise set it in `.env`.
 - **Not healthy after 25 minutes.** `install.sh` prints the last 30 lines of the log and the health address; `curl http://localhost:52773/api/shutter/health` is the report to read.
 - **The Doctor.** In the Management Portal's SQL page (namespace `SHUTTER`, as `_SYSTEM`), `SELECT Shutter.Setup_Doctor()`: `missing_items` and `disabled_items` should be `[]`, `production_state` `running`, `board_members` 5 (the board's four and the single investigator), `recordings` more than 0 (174 on build 109: every recording, not only the board's 100 runs) and `second_parser` `probe: ok` ([the values on build 109](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md)).
-- **"License limit exceeded" or "Service Unavailable".** The Community licence's 8 units are used up, usually by calls to the API without a session cookie; restarting the container (`docker compose restart`) frees them.
+- **"License limit exceeded" or "Service Unavailable".** The Community licence's connections are used up, usually by repeated sign-ins: about eight on build 154, and signing out doesn't free them at once. The web app carries on, but new Management Portal sessions and terminals are refused; restarting the container (`docker compose restart`) frees them.
 - **On the first start,** `ERROR #5002 ... Sharding` and "Error trading CSP licenses" come from the IRIS image and are harmless.
 - **`install.sh` says the AI Hub image is too small.** The load was cut short; load the file again (a complete load is about 5.4 GB of content, from the 5.5 GB file).
 
