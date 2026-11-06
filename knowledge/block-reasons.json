@@ -589,6 +589,24 @@
       "owner": "Integration team",
       "reevaluate_when": "The schema category is imported",
       "text": "The message names a schema category that Shutter's namespace does not have, such as a site's own variant of HL7 2.5.1 with extra segments. That is missing evidence, not an invalid message: Shutter cannot validate the message until the schema is imported."
+    },
+    {
+      "code": "ENTRY_NOT_NAMED_WRITE",
+      "title": "A write that doesn't name the catalogue entry that stops it",
+      "prerequisite": "A write names the catalogue entry it follows when an entry the evidence matched calls for no resend",
+      "next_action": "Read the matched entry and decide by hand, or investigate again so the plan follows the entry.",
+      "owner": "Operator",
+      "reevaluate_when": "The case is investigated again",
+      "text": "The plan would resend and names no catalogue entry, but an entry that matches this case calls for something other than a resend. Only Rules only mode, the baseline, passes this."
+    },
+    {
+      "code": "NO_BOARD_ANSWER",
+      "title": "The board has to decide this, and nobody on it could answer",
+      "prerequisite": "A board member who can answer: a recording, a model budget left and a key the provider accepts",
+      "next_action": "Read the matched catalogue entry and the patient's record, then decide how to recover the message by hand, or investigate again when the agents can run.",
+      "owner": "Operator",
+      "reevaluate_when": "The budget resets, the provider accepts the key, or a person reinvestigates",
+      "text": "The scenario catalogue gives this case to the board or to a person, and no board member could answer. Nothing is planned and nothing is sent, because a plain resend would replace that decision with one nobody took."
     }
   ]
 }

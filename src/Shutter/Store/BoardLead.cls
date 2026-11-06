@@ -34,6 +34,9 @@ Property VerdictsJSON As %String(%JSONFIELDNAME = "verdicts", MAXLEN = "");
 /// Why the lead failed, when it did.
 Property Reason As %String(%JSONFIELDNAME = "reason", MAXLEN = 500);
 
+/// Where a done lead's plan came from (the plan's createdBy): "rules" when nobody on the board could answer.
+Property DecidedBy As %String(%JSONFIELDNAME = "decidedBy", MAXLEN = 100);
+
 /// How many cases took this lead's decision.
 Property Followers As %Integer(%JSONFIELDNAME = "followers") [ InitialExpression = 0 ];
 
@@ -84,9 +87,9 @@ ClassMethod Begin(signature As %String, case As Shutter.Store.Case, parts As %Dy
     Quit lead.%Save()
 }
 
-/// The leader's board ended: done with its plan and the members' verdicts, or failed with the reason. Returns the lead,
-/// or "" when the case leads nothing.
-ClassMethod Finish(leaderCaseId As %String, state As %String, plan As %DynamicObject = "", verdicts As %DynamicArray = "", reason As %String = "") As Shutter.Store.BoardLead
+/// The leader's board ended: done with its plan, where the plan came from and the members' verdicts, or failed with the
+/// reason. Returns the lead, or "" when the case leads nothing.
+ClassMethod Finish(leaderCaseId As %String, state As %String, plan As %DynamicObject = "", verdicts As %DynamicArray = "", reason As %String = "", decidedBy As %String = "") As Shutter.Store.BoardLead
 {
     Set lead = ..ForLeader(leaderCaseId)
     If '$ISOBJECT(lead) Quit ""
@@ -94,7 +97,7 @@ ClassMethod Finish(leaderCaseId As %String, state As %String, plan As %DynamicOb
     Set lead.State = $SELECT(state = "done": "done", 1: "failed"), lead.EndedAt = ##class(Shutter.Util.Time).NowUTC()
     If $ISOBJECT(plan) Set lead.PlanJSON = plan.%ToJSON()
     If $ISOBJECT(verdicts) Set lead.VerdictsJSON = verdicts.%ToJSON()
-    Set lead.Reason = $EXTRACT(reason, 1, 500)
+    Set lead.Reason = $EXTRACT(reason, 1, 500), lead.DecidedBy = decidedBy
     Set sc = lead.%Save()
     Quit lead
 }
@@ -177,6 +180,9 @@ Storage Default
 </Value>
 <Value name="12">
 <Value>PartsJSON</Value>
+</Value>
+<Value name="13">
+<Value>DecidedBy</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.BoardLeadD</DataLocation>

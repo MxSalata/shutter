@@ -770,6 +770,7 @@ A new check, `catalogue`, with these reason codes (in `knowledge/block-reasons.j
 - `PATTERN_NOT_MATCHED`: the entry's pattern does not hold on the snapshot (block);
 - `OUTCOME_NOT_ALLOWED`: the chosen alternative's `when` does not hold for this site (block);
 - `NEW_PATTERN`: no entry matches (block; the case escalates as a candidate entry);
+- `ENTRY_NOT_NAMED_WRITE`: a write names no entry while an entry the evidence matched calls for no resend, by the outcome the matcher chose for its one match, or by the preferred outcome of any of several (block). Only explicit Rules only passes it, a `rules` plan on a case in mode `rules`, which is the baseline: every other write with no entry passes as `ENTRY_NOT_NAMED` when all its matches resend;
 - `POLICY_REQUIRES_APPROVAL`: an automatic release where the profile requires an approval (block; an internal guard).
 The plan's `catalogue_entry` and `outcome` are bound by the approval's digest like every other field of the plan. The incident plan's digest binds each item's catalogue entry and outcome the same way (7.2). A receiver the site profile does not describe gets no write (v1.39): when the case names a receiver and the profile has no entry for it, the proposal gate blocks with `RECEIVER_NOT_IN_PROFILE` before any rehearsal, since the connector would otherwise send the write to the production's default receiver; the evidence was read at the default API, and the note says so; the block reason is in `knowledge/block-reasons.json`.
 
@@ -814,16 +815,23 @@ scenario stamp, so a demo's scenarios never coalesce with each other). The first
 signature arriving within the window (`^Shutter.Config("leadWindowSeconds")`, 600 by default, 0 for no coalescing; the
 Doctor's `lead_window_seconds`) **follows**: it convenes no board. While the leader's board runs the follower waits in
 `investigating` with `followsCase` set and a note; when the leader adopts its plan (from its board, or from the rules path
-when nobody could answer) the lead is finished `done` with the plan and the members' verdicts (member, role, disposition,
+when nobody could answer) the lead is finished `done` with the plan, the plan's `createdBy` as `decidedBy` and the members' verdicts (member, role, disposition,
 confidence; no text), and every waiting follower is told (`Shutter.Msg.LeadReady`, a fresh instance as a reinvestigation).
 The follower then takes the decision through its own evidence: the disposition and action type, the catalogue entry and
 outcome when its own match shows that entry, and the verdicts in the plan's `why`; the operation key, the receiver version
 and the payload digest are its own, and not a word of the leader's text crosses (it carries the leader's patient). The plan's
 `createdBy` is `lead:<leader case>`, and the follower keeps its own gate at the proposal, its rehearsal, its approval, its
 preflight and its dispatch gate, as any case. A follower arriving after the leader decided takes the decision at once. A
-lead whose board ended without a plan (no findings, no coordinator, a timeout, the model view's refusal) is `failed` and
-attracts no followers; a follower waiting on it, or on a leader whose board never ended within twice the board timeout and a
-minute, falls to the rules path with a note. A lead begun before the last scenario reset counts for nothing, as the incident
+lead whose plan came from the rules (`decidedBy` `rules`) passes on no decision, since no board took one: the follower has
+no board answer, below. A lead whose board ended without a plan (no findings, no coordinator, a timeout, the model view's
+refusal, a case with no board answer that went to a person) is `failed` and attracts no followers; a follower waiting on it,
+or on a leader whose board never ended within twice the board timeout and a minute, has no board answer. **No board answer**
+(`CaseWorkflow.NoBoard`): when every member refused or has no recording (`budget_exhausted`, `provider_auth`, `no_record`),
+no member can be convened, or the board a case followed decided nothing, a case outside mode `rules` whose catalogue decision
+is `board` or `person` with at least one match goes straight to `escalated`, disposition `escalate`, with no plan and the
+reason `NO_BOARD_ANSWER`: the event and the headline name the entries and why nobody answered, and a leader's lead is
+`failed`. Any other case (a `policy` decision, a new pattern, no catalogue) falls to the rules path with a note, and mode
+`rules` always takes it, so S8's Rules only pass still resends. A lead begun before the last scenario reset counts for nothing, as the incident
 detector's window. A judge's forced board and an incident's released chain items never follow. A lead whose leader fails (a workflow error, or an escalation with no summary when its board slot comes), is abandoned or is closed by hand is finished as failed at once (v1.39), so a case of the signature that arrives afterwards leads itself and every case waiting on it takes the rules path without waiting out the bound. The lead's row keeps how
 many followed; `GET /cases/{id}` shows `followsCase` and `leadSignature`. Approvals stay with the existing mechanisms: an
 incident's one task for its chains (7), else one per case.
@@ -1130,8 +1138,8 @@ that tries to reach past its case leaves a mark, and `Shutter.Bridge.ToolCall.De
 00:00 UTC and the next. Before a run that would call a model, the Agent item asks `Budget.Allows()`, which sums the day's
 `AgentRun` rows' `CostUSD` as `GET /costs` does (a replay or a run the API mimic answered spent nothing); once the spend has
 reached the cap the run is not sent, and the response's status is `budget_exhausted` with an error naming the cap, the spend
-and when it resets. A board whose members all answered so takes the rules path and the gate judges the plain resend, as it
-does when replay mode has no recording (the case's note says which); a question or a review fails with the status. `GET
+and when it resets. A board whose members all answered so has no board answer (6.6), as when replay mode has no recording
+(the case says which); a question or a review fails with the status. `GET
 /settings` and the Doctor carry `budget: {dailyUsd, spentTodayUsd, exhausted, since, resetsAt, perUserUsd}`, and `GET /settings`
 adds the caller's own `spentByMeUsd` and `shareExhausted`. The public demo sets the cap with an API key of its own, so a day of
 visitors spends at most the cap. **Each user's share** (`SHUTTER_JUDGE_BUDGET_USD` into `^Shutter.Config("judgeBudgetUsd")`,
@@ -1144,8 +1152,8 @@ is spent (`until` = `budget.resetsAt`), `provider_auth` when a live run failed w
 deactivated key) within the last 15 minutes (`until` = the next 00:00 UTC, when a key a site deactivates for the day comes
 back; the flag clears on the next live run the provider accepts, and after 15 minutes one run tries again), and null when
 live runs can go; `detail` is the sentence to show. While the provider refuses the key the Agent item refuses runs that would
-call a model with the status `provider_auth` and makes no call (a board whose members were all refused so takes the rules
-path, with a note saying why, as for `budget_exhausted`), `POST /cases/{id}/board` answers `409 live_unavailable` with `live`
+call a model with the status `provider_auth` and makes no call (a board whose members were all refused so has no board
+answer, 6.6, as for `budget_exhausted`), `POST /cases/{id}/board` answers `409 live_unavailable` with `live`
 (the availability object) before the budget is looked at, and a question from a caller with the live agents is answered from
 its recording when it has one and refused `409 live_unavailable` when it has none. **The demo's budget note** (v1.37):
 `SHUTTER_DEMO_BUDGET_USD` and `SHUTTER_DEMO_BUDGET_PERIOD` (`day` or `hour`, day by default), read at the install and at every

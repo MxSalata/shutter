@@ -2,7 +2,8 @@
 /// signature's parts and normalisation, the lead's window, finish, expiry and the reset stamp, and a leader that fails or
 /// is abandoned finishing its lead, so its followers are released. The rows written are deleted at the end. The leader
 /// tests drive an instance of the Case Workflow item outside the production, with no case following the lead, so no
-/// LeadReady goes to the production; that a follower is told is proved by the scenario runs.
+/// LeadReady goes to the production; that a follower is told is proved by the scenario runs. A case no board can answer:
+/// outside Rules only it goes to a person when the catalogue gives it to the board or a person (NoBoard).
 Class Shutter.Test.BoardLead Extends %UnitTest.TestCase
 {
 
@@ -148,7 +149,7 @@ Method Instance() As Shutter.Process.CaseWorkflow
 
 /// A leader whose workflow errors (a member call answered with an error status) finishes its lead as failed before the
 /// case fails, so the signature attracts no new follower, and the cases already following it are told at once and take
-/// the rules path (OnLeadReady on a failed lead) instead of waiting out the bound. A case that follows it is told
+/// what a case with no board answer gets (OnLeadReady on a failed lead) instead of waiting out the bound. A case that follows it is told
 /// through the production, so the proof that it is told is the scenario runs; here nobody follows, and nobody is told.
 Method TestLeaderFailureFinishesTheLead()
 {
@@ -227,6 +228,278 @@ Method TestAbandonedLeaderFinishesTheLead()
     Do wf.LeadLeftBehind(other, "nothing led")
     Do $$$AssertNotTrue($ISOBJECT($CLASSMETHOD(bl, "ForLeader", "C-TEST-LEAD-D")), "a case that leads nothing finishes nothing")
     Do $$$AssertEquals(##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-D").State, "investigating", "and is left as it was")
+}
+
+/// A saved case in the given mode with a sealed snapshot of the summary, and a run per status on that snapshot, as the
+/// members of a board nobody could answer leave them.
+Method NoAnswerCase(caseId As %String, mode As %String, catalogue As %DynamicObject, statuses As %List = "") As Shutter.Store.Case
+{
+    Set c = ..SavedCase(caseId)
+    Set c.Mode = mode
+    Do $$$AssertStatusOK(c.%Save(), "the case's mode")
+    Set snap = ##class(Shutter.Store.Snapshot).Begin(c)
+    Set summary = {"ward_state": {"version": 3}, "operation": {"payload_digest": "sha256:ut"}}
+    Set summary.catalogue = catalogue
+    Do $$$AssertStatusOK(snap.Seal(summary), "the snapshot is sealed")
+    Do $$$AssertStatusOK(c.SetSnapshot(snap), "the case's current one")
+    For i = 1:1:$LISTLENGTH(statuses) {
+        Set run = ##class(Shutter.Store.AgentRun).%New()
+        Do run.CaseSetObjectId(c.%Id())
+        Set run.Snapshot = snap, run.Status = $LIST(statuses, i)
+        Do $$$AssertStatusOK(run.%Save(), "a member's run answered " _ run.Status)
+    }
+    Quit c
+}
+
+/// The catalogue's result for two sources at the same time, the entry whose outcome is to stop.
+ClassMethod E7() As %DynamicObject
+{
+    Quit {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "title": "Two sources at the same time", "decides": "board", "preferred": {"outcome": "escalate", "why": "Neither is later, so a resend would overwrite the other system's placement."}}]}
+}
+
+/// The catalogue's result for an entry the board decides whose preferred outcome is a resend.
+ClassMethod E9() As %DynamicObject
+{
+    Quit {"decision": "board", "entry": "E9", "outcome": "resend", "matches": [{"id": "E9", "title": "The receiver's answer contradicts its records", "decides": "board", "preferred": {"outcome": "resend", "why": "The movement was never committed."}}]}
+}
+
+/// The catalogue's result for an entry that decides by policy.
+ClassMethod E2() As %DynamicObject
+{
+    Quit {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "title": "Not delivered, still current", "decides": "policy", "preferred": {"outcome": "resend", "why": "It is still due."}}]}
+}
+
+/// The rules path's send to the gate has no production under it here: what is asserted is the plan it stored first.
+Method AfterBoardOutside(wf As Shutter.Process.CaseWorkflow, c As Shutter.Store.Case)
+{
+    Try { Do wf.AfterBoard(c) } Catch { }
+}
+
+/// The case stopped for a person: escalated, nothing planned, and the event and the reason name why.
+Method AssertStopped(caseId As %String, what As %String, words As %String)
+{
+    Set after = ##class(Shutter.Store.Case).ByCaseId(caseId)
+    Do $$$AssertEquals(after.State, "escalated", what _ ": it goes to a person")
+    Set id = after.%Id(), n = 1, text = ""
+    &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.Plan WHERE "Case" = :id)
+    Do $$$AssertEquals(+n, 0, what _ ": no plan is made")
+    Do $$$AssertEquals(after.Disposition, "escalate", what _ ": the case reads as escalated")
+    &sql(SELECT TOP 1 Text INTO :text FROM Shutter_Store.CaseEvent WHERE "Case" = :id AND ToState = 'escalated' ORDER BY Seq DESC)
+    Do $$$AssertTrue(text [ words, what _ ": the audit trail says " _ words _ ": " _ text)
+    Do $$$AssertEquals(##class(Shutter.API.Dispatch).ReasonFromEvent(text, "escalated"), "NO_BOARD_ANSWER", what _ ": the reason it shows")
+    Do $$$AssertTrue(##class(Shutter.API.Dispatch).StoppedAfterTheGate(text), what _ ": an earlier round's gate block is not the reason")
+    Do $$$AssertTrue(after.Headline [ "no board member could answer", what _ ": the headline: " _ after.Headline)
+    Do ##class(Shutter.Store.Case).PurgeCase(id)
+}
+
+/// A case the catalogue gives to the board, and every member refused or with no recording: in Site policy and in Board
+/// mode, with each of the three statuses, it goes to a person with no plan, naming the entry and why nobody answered.
+Method TestNoBoardAnswerGoesToAPerson()
+{
+    For mode = "board", "policy", "single" {
+        For status = "budget_exhausted", "provider_auth", "no_record" {
+            Set c = ..NoAnswerCase("C-TEST-LEAD-N", mode, ..E7(), $LISTBUILD(status, status, status))
+            Set wf = ..Instance()
+            Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = mode
+            Do ..AfterBoardOutside(wf, c)
+            Do ..AssertStopped("C-TEST-LEAD-N", mode _ ", " _ status, "E7")
+        }
+    }
+    Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", ..E7(), $LISTBUILD("budget_exhausted"))
+    Set wf = ..Instance()
+    Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board"
+    Do ..AfterBoardOutside(wf, c)
+    Do ..AssertStopped("C-TEST-LEAD-N", "the budget is named", "budget")
+    Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", ..E7(), $LISTBUILD("provider_auth"))
+    Set wf = ..Instance()
+    Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board"
+    Do ..AfterBoardOutside(wf, c)
+    Do ..AssertStopped("C-TEST-LEAD-N", "the provider is named", "refuses the key")
+    Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", ..E7(), $LISTBUILD("no_record"))
+    Set wf = ..Instance()
+    Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board"
+    Do ..AfterBoardOutside(wf, c)
+    Do ..AssertStopped("C-TEST-LEAD-N", "the missing recording is named", "recording")
+}
+
+/// Every case the catalogue gives to the board stops, not only an entry whose outcome is to stop: an entry preferring a
+/// resend, several matches at once, and a person's entry the board was asked to take again.
+Method TestEveryBoardDecisionStops()
+{
+    Set c = ..NoAnswerCase("C-TEST-LEAD-N", "policy", ..E9(), $LISTBUILD("budget_exhausted"))
+    Set wf = ..Instance()
+    Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "policy"
+    Do ..AfterBoardOutside(wf, c)
+    Do ..AssertStopped("C-TEST-LEAD-N", "one entry preferring a resend", "E9")
+    Set several = {"decision": "board", "matches": [{"id": "E2", "title": "One", "preferred": {"outcome": "resend"}}, {"id": "E7", "title": "Two", "preferred": {"outcome": "escalate"}}]}
+    Do several.%Set("entry", "", "null"), several.%Set("outcome", "", "null")
+    Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", several, $LISTBUILD("no_record"))
+    Set wf = ..Instance()
+    Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board"
+    Do ..AfterBoardOutside(wf, c)
+    Do ..AssertStopped("C-TEST-LEAD-N", "several matches", "E2, E7")
+    Set person = {"decision": "person", "entry": "E8", "outcome": "escalate", "matches": [{"id": "E8", "title": "A person decides", "decides": "person", "preferred": {"outcome": "escalate"}}]}
+    Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", person, $LISTBUILD("provider_auth"))
+    Set wf = ..Instance()
+    Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board"
+    Do ..AfterBoardOutside(wf, c)
+    Do ..AssertStopped("C-TEST-LEAD-N", "an entry a person decides", "E8")
+}
+
+/// A leader that stops so finishes its lead as failed with the reason: the signature attracts no follower, and no plan
+/// is there for one to take.
+Method TestALeaderThatStopsFailsItsLead()
+{
+    Set bl = "Shutter.Store.BoardLead"
+    Kill ^Shutter.Config("leadWindowSeconds"), ^Shutter.Config("resetAt")
+    Set sig = "sha256:test-lead-noanswer-" _ $JOB _ "-" _ ($PIECE($ZTIMESTAMP, ",", 2) \ 1)
+    Set ..Sigs(sig) = ""
+    Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", ..E7(), $LISTBUILD("budget_exhausted"))
+    Do $$$AssertStatusOK($CLASSMETHOD(bl, "Begin", sig, c, "", .lead), "the lead begins")
+    Set wf = ..Instance()
+    Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board", wf.LeadSignature = sig
+    Do ..AfterBoardOutside(wf, c)
+    Set after = $CLASSMETHOD(bl, "ForLeader", "C-TEST-LEAD-N")
+    Do $$$AssertEquals(after.State, "failed", "the lead is failed")
+    Do $$$AssertEquals(after.PlanJSON, "", "with no plan for a follower")
+    Do $$$AssertTrue(after.Reason [ "no board member could answer", "with the reason: " _ after.Reason)
+    Do $$$AssertNotTrue($ISOBJECT($CLASSMETHOD(bl, "Current", sig)), "and no case follows it")
+    Do ##class(Shutter.Store.Case).PurgeCase(##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-N").%Id())
+}
+
+/// A follower whose leader decided nothing (told of the failed lead, or the bound on its wait run out, or no lead at
+/// all) goes to a person on a case the catalogue gives to the board, naming the case it followed.
+Method TestFollowerOfAFailedLeadGoesToAPerson()
+{
+    Set bl = "Shutter.Store.BoardLead"
+    Kill ^Shutter.Config("leadWindowSeconds"), ^Shutter.Config("resetAt")
+    Set sig = "sha256:test-lead-follow-" _ $JOB _ "-" _ ($PIECE($ZTIMESTAMP, ",", 2) \ 1)
+    Set ..Sigs(sig) = ""
+    Set leader = ..SavedCase("C-TEST-LEAD-A")
+    Do $$$AssertStatusOK($CLASSMETHOD(bl, "Begin", sig, leader, "", .lead), "the leader's lead begins")
+    // The bound on the wait runs out while the board still runs.
+    Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", ..E7())
+    Set c.FollowsCase = "C-TEST-LEAD-A"
+    Do $$$AssertStatusOK(c.%Save(), "it follows the leader")
+    Set wf = ..Instance()
+    Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board"
+    Do wf.OnLeadTimeout(c)
+    Do ..AssertStopped("C-TEST-LEAD-N", "the wait ran out", "C-TEST-LEAD-A")
+    // Told that the lead failed.
+    Do $CLASSMETHOD(bl, "Finish", "C-TEST-LEAD-A", "failed", "", "", "no board member produced usable findings")
+    Set c = ..NoAnswerCase("C-TEST-LEAD-N", "policy", ..E7())
+    Set c.FollowsCase = "C-TEST-LEAD-A"
+    Do $$$AssertStatusOK(c.%Save(), "it follows the leader")
+    Set msg = ##class(Shutter.Msg.LeadReady).%New()
+    Set msg.CaseId = "C-TEST-LEAD-N", msg.LeaderCaseId = "C-TEST-LEAD-A"
+    Set wf = ..Instance()
+    Do wf.OnLeadReady(msg, .response)
+    Do ..AssertStopped("C-TEST-LEAD-N", "told of the failed lead", "no board member produced usable findings")
+    // A lead nobody recorded.
+    Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", ..E9())
+    Set c.FollowsCase = "C-TEST-NOBODY"
+    Do $$$AssertStatusOK(c.%Save(), "it follows a case that led nothing")
+    Set wf = ..Instance()
+    Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board"
+    Do wf.OnLeadTimeout(c)
+    Do ..AssertStopped("C-TEST-LEAD-N", "no lead recorded", "no lead was recorded")
+}
+
+/// A board with no member to convene is no board either: a case the catalogue gives to the board stops in Board mode.
+Method TestNoMemberToConveneGoesToAPerson()
+{
+    Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", ..E7())
+    Set wf = ..Instance()
+    Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board"
+    Do wf.ConveneBoard(c, c.CurrentSnapshot.Summary, "", "rules", .convened)
+    Do $$$AssertEquals(+$GET(convened), 0, "nothing was convened")
+    Do ..AssertStopped("C-TEST-LEAD-N", "no member", "E7")
+}
+
+/// Explicit Rules only is the demonstration and does not change: the same case in that mode gets the plain resend with
+/// no entry named.
+Method TestRulesOnlyStillProposesTheResend()
+{
+    Set c = ..NoAnswerCase("C-TEST-LEAD-N", "rules", ..E7())
+    Set wf = ..Instance()
+    Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "rules"
+    Try { Do wf.ConveneBoard(c, c.CurrentSnapshot.Summary, "", "", .convened) } Catch { }
+    Set after = ##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-N")
+    Set id = after.%Id(), disposition = "", entry = "x", by = ""
+    &sql(SELECT TOP 1 Disposition, CatalogueEntry, CreatedBy INTO :disposition, :entry, :by FROM Shutter_Store.Plan WHERE "Case" = :id ORDER BY ID DESC)
+    Do $$$AssertEquals(disposition, "resend", "the plain resend")
+    Do $$$AssertEquals(entry, "", "naming no entry")
+    Do $$$AssertEquals(by, "rules", "from the rules")
+    Do ##class(Shutter.Store.Case).PurgeCase(id)
+}
+
+/// A case the catalogue settles by policy keeps the rules path when no member can answer, in Board mode: the gate judges
+/// the plain resend and a person approves it.
+Method TestPolicyDecisionKeepsTheRulesPath()
+{
+    Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", ..E2(), $LISTBUILD("no_record", "no_record"))
+    Set wf = ..Instance()
+    Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board"
+    Do ..AfterBoardOutside(wf, c)
+    Set after = ##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-N")
+    Set id = after.%Id(), disposition = "", by = ""
+    &sql(SELECT TOP 1 Disposition, CreatedBy INTO :disposition, :by FROM Shutter_Store.Plan WHERE "Case" = :id ORDER BY ID DESC)
+    Do $$$AssertEquals(disposition, "resend", "the plain resend")
+    Do $$$AssertEquals(by, "rules", "from the rules")
+    Do ##class(Shutter.Store.Case).PurgeCase(id)
+}
+
+/// The plan's words a follower gets, its createdBy after them.
+Method FollowerPlanOf(lead As Shutter.Store.BoardLead, catalogue As %DynamicObject) As %String
+{
+    Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", catalogue)
+    Set wf = ..Instance()
+    Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board"
+    Try { Do wf.TakeDiagnosis(c, lead) } Catch { }
+    Set id = ##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-N").%Id(), why = "", by = "", summary = ""
+    &sql(SELECT TOP 1 Why, Summary, CreatedBy INTO :why, :summary, :by FROM Shutter_Store.Plan WHERE "Case" = :id ORDER BY ID DESC)
+    Do ##class(Shutter.Store.Case).PurgeCase(id)
+    Quit why _ " | " _ summary _ " | " _ by
+}
+
+/// A lead whose plan came from the rules because nobody on the board could answer: a follower is never told that a board
+/// decided. It takes the rules path itself on its own evidence when its own match allows that, and stops when it does
+/// not. A lead a board really decided still says so.
+Method TestFollowerOfARulesLeadHearsNoBoard()
+{
+    Set bl = "Shutter.Store.BoardLead"
+    Kill ^Shutter.Config("leadWindowSeconds"), ^Shutter.Config("resetAt")
+    Set sig = "sha256:test-lead-rules-" _ $JOB _ "-" _ ($PIECE($ZTIMESTAMP, ",", 2) \ 1)
+    Set ..Sigs(sig) = ""
+    Set leader = ..NoAnswerCase("C-TEST-LEAD-A", "board", ..E2(), $LISTBUILD("no_record"))
+    Do $$$AssertStatusOK($CLASSMETHOD(bl, "Begin", sig, leader, "", .lead), "the lead begins")
+    Set wf = ..Instance()
+    Set wf.CaseId = "C-TEST-LEAD-A", wf.Mode = "board", wf.LeadSignature = sig
+    Do ..AfterBoardOutside(wf, leader)
+    Set lead = $CLASSMETHOD(bl, "ForLeader", "C-TEST-LEAD-A")
+    Do $$$AssertEquals(lead.State, "done", "the leader's rules plan finishes the lead")
+    Set words = ..FollowerPlanOf(lead, ..E2())
+    Do $$$AssertNotTrue(words [ "board", "no word of a board in the follower's plan: " _ words)
+    Do $$$AssertTrue($PIECE(words, " | ", 3) = "rules", "the plan says it came from the rules: " _ words)
+    // Its own match goes to the board: it stops rather than taking a resend nobody decided.
+    Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", ..E7())
+    Set wf = ..Instance()
+    Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board"
+    Do wf.TakeDiagnosis(c, $CLASSMETHOD(bl, "ForLeader", "C-TEST-LEAD-A"))
+    Do ..AssertStopped("C-TEST-LEAD-N", "a rules lead and a board entry", "C-TEST-LEAD-A")
+    // A board's plan: the follower is told so.
+    Set sig2 = sig _ "-b"
+    Set ..Sigs(sig2) = ""
+    Set leader2 = ..NoAnswerCase("C-TEST-LEAD-B", "board", ..E2())
+    Do $$$AssertStatusOK($CLASSMETHOD(bl, "Begin", sig2, leader2, "", .lead2), "the board's lead begins")
+    Set wf = ..Instance()
+    Set wf.CaseId = "C-TEST-LEAD-B", wf.Mode = "board", wf.LeadSignature = sig2
+    Set plan = {"disposition": "resend", "action": {"type": "resend", "operation_key": "k", "expected_version": 3}, "summary": "s", "why": "w"}
+    Try { Do wf.AdoptPlan(leader2, plan, "run:1") } Catch { }
+    Set words = ..FollowerPlanOf($CLASSMETHOD(bl, "ForLeader", "C-TEST-LEAD-B"), ..E2())
+    Do $$$AssertTrue(words [ "The board convened for case C-TEST-LEAD-B decided resend", "the follower is told of the board: " _ words)
+    Do ##class(Shutter.Store.Case).PurgeCase(##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-A").%Id())
+    Do ##class(Shutter.Store.Case).PurgeCase(##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-B").%Id())
 }
 
 }

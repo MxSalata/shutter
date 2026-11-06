@@ -498,7 +498,8 @@ Method OnLeadReady(request As Shutter.Msg.LeadReady, Output response As %Library
     Quit ..TakeDiagnosis(case, lead)
 }
 
-/// The bound on a follower's wait: the lead's decision if it is there by now, else the rules path.
+/// The bound on a follower's wait: the lead's decision if it is there by now, else what a case with no board answer gets
+/// (NoBoard).
 Method OnLeadTimeout(case As Shutter.Store.Case) As %Status
 {
     If (case.State '= "investigating") || (case.FollowsCase = "") { $$$TRACE("The lead wait ended; the case is " _ case.State _ ", so nothing is due") Quit $$$OK }
@@ -507,15 +508,53 @@ Method OnLeadTimeout(case As Shutter.Store.Case) As %Status
     Quit ..LeadFailedFallback(case, lead)
 }
 
-/// The board this case followed ended without a decision, or never ended: the rules path proposes the plain resend and
-/// the gate judges it, as when no board member can answer.
+/// The board this case followed ended without a decision, or never ended: as when no board member can answer (NoBoard).
 Method LeadFailedFallback(case As Shutter.Store.Case, lead As Shutter.Store.BoardLead) As %Status
 {
     Set leader = case.FollowsCase
     Set case.FollowsCase = ""
     Set why = $SELECT('$ISOBJECT(lead): "no lead was recorded for it", lead.State = "running": "its board has not finished within the wait", lead.Reason '= "": lead.Reason, 1: "it ended without a plan")
-    Do case.Note("note", "The board this case followed (case " _ leader _ ") decided nothing: " _ why _ "; the rules path proposes the plain resend and the gate judges it", "system")
-    Quit ..RulesOnly(case)
+    Quit ..NoBoard(case, "the board this case followed (case " _ leader _ ") decided nothing: " _ why)
+}
+
+/// No board can answer this case. Outside Rules only, a case the catalogue gives to the board, or to a person, goes to a
+/// person with the reason and no plan, since the plain resend would replace that decision with one nobody took: the
+/// catalogue's match needs no model. Any other case takes the rules path: the plain resend, which the gate judges.
+Method NoBoard(case As Shutter.Store.Case, why As %String = "") As %Status
+{
+    Set stops = ..CatalogueStops(..Mode, case.CurrentSnapshot, .text)
+    If stops = "" {
+        If why '= "" Do case.Note("note", "No board answered: " _ why _ "; the rules path proposes the plain resend and the gate judges it", "system")
+        Quit ..RulesOnly(case)
+    }
+    If why = "" Set why = "no member of the board is enabled"
+    Do ..LeadFinish(case, "failed", "", "no board member could answer: " _ why)
+    Set case.Disposition = "escalate"
+    Set case.Headline = ##class(Shutter.Util.Json).Clip("Escalated to a person: catalogue " _ stops _ ", and no board member could answer: " _ why, 300)
+    Quit case.Transition("escalated", "Catalogue " _ text _ ", and no board member could answer: " _ why _ ". Nothing is planned and nothing is sent. A person must look, or reinvestigate when the agents can run", "system")
+}
+
+/// The catalogue entries of a snapshot that keep a case with no board answer from the rules path: those of a match that
+/// decides by the board or by a person, outside Rules only; "" for every other case. text says so in words, for the event.
+ClassMethod CatalogueStops(mode As %String, snapshot As Shutter.Store.Snapshot, Output text As %String) As %String
+{
+    Set json = "Shutter.Util.Json", text = ""
+    If (mode = "rules") || '$ISOBJECT(snapshot) Quit ""
+    Set summary = snapshot.SummaryObject()
+    Set cat = $SELECT($ISOBJECT(summary): summary.%Get("catalogue"), 1: "")
+    If '$ISOBJECT(cat) || (cat.%GetTypeOf("matches") '= "array") || (cat.%Get("matches").%Size() = 0) Quit ""
+    Set decision = $CLASSMETHOD(json, "Str", cat, "decision")
+    If (decision '= "board") && (decision '= "person") Quit ""
+    Set matches = cat.%Get("matches"), ids = "", it = matches.%GetIterator()
+    While it.%GetNext(, .m) { Set ids = ids _ $SELECT(ids = "": "", 1: ", ") _ $CLASSMETHOD(json, "Str", m, "id") }
+    Set asks = $SELECT(decision = "person": " asks for a person", 1: " gives this case to the board")
+    If matches.%Size() > 1 {
+        Set text = ids _ " all match, which" _ asks
+        Quit ids
+    }
+    Set m = matches.%Get(0), why = $CLASSMETHOD(json, "Str", m.%Get("preferred"), "why")
+    Set text = ids _ " (" _ $CLASSMETHOD(json, "Str", m, "title") _ ")" _ asks _ $SELECT(why '= "": " (" _ why _ ")", 1: "")
+    Quit ids
 }
 
 /// The leader's decision applied to this case's own evidence: the disposition and action type, the catalogue entry and
@@ -526,6 +565,9 @@ Method TakeDiagnosis(case As Shutter.Store.Case, lead As Shutter.Store.BoardLead
 {
     Set json = "Shutter.Util.Json"
     Set case.FollowsCase = ""
+    // A plan the rules made because nobody on the board could answer is no board's decision to pass on: the case takes
+    // what its own match allows.
+    If lead.DecidedBy = "rules" Quit ..NoBoard(case, "the case this one followed (case " _ lead.LeaderCaseId _ ") had no board answer and took the rules path")
     Set leaderPlan = $CLASSMETHOD(json, "Parse", lead.PlanJSON, .psc)
     If '$ISOBJECT(leaderPlan) Quit ..LeadFailedFallback(case, lead)
     Set snap = case.CurrentSnapshot
@@ -569,10 +611,10 @@ Method TakeDiagnosis(case As Shutter.Store.Case, lead As Shutter.Store.BoardLead
 
 /// The leader's board ended, with a plan or without: the lead is finished for its signature and every follower still
 /// waiting is told (Shutter.Msg.LeadReady to this item), so each carries on at once.
-Method LeadFinish(case As Shutter.Store.Case, state As %String, plan As %DynamicObject = "", reason As %String = "")
+Method LeadFinish(case As Shutter.Store.Case, state As %String, plan As %DynamicObject = "", reason As %String = "", decidedBy As %String = "")
 {
     Quit:(..LeadSignature = "")
-    Set lead = ##class(Shutter.Store.BoardLead).Finish(case.CaseId, state, plan, ##class(Shutter.Store.BoardLead).VerdictsOf(case.CurrentSnapshot), reason)
+    Set lead = ##class(Shutter.Store.BoardLead).Finish(case.CaseId, state, plan, ##class(Shutter.Store.BoardLead).VerdictsOf(case.CurrentSnapshot), reason, decidedBy)
     Set ..LeadSignature = ""
     Quit:'$ISOBJECT(lead)
     Set n = ..TellFollowers(case.CaseId, lead)
@@ -580,7 +622,7 @@ Method LeadFinish(case As Shutter.Store.Case, state As %String, plan As %Dynamic
 }
 
 /// Every case still waiting on a leader's lead is told that it ended (Shutter.Msg.LeadReady to this item), so each
-/// carries on at once: with the leader's decision when the lead is done, on the rules path when it failed. The followers
+/// carries on at once: with the leader's decision when the lead is done, as a case with no board answer when it failed. The followers
 /// are found by the leader's case id, so a fresh instance that never knew the lead (an abandon, a close by hand) can tell
 /// them too. Returns how many were told.
 Method TellFollowers(leaderCaseId As %String, lead As Shutter.Store.BoardLead) As %Integer
@@ -613,8 +655,8 @@ Method LeadLeftBehind(case As Shutter.Store.Case, reason As %String)
 /// The board convened on the evidence (6.6): a request to every member of the mode's board, the pending list kept for the
 /// answers, one slot of the minute taken. Under the per-minute cap (v1.35, BoardsPerMinute; 0 for none) a case that finds
 /// the minute full waits for a slot instead: a note says so, an alarm keyed by the round brings it back (OnBoardDefer), and
-/// convened is 0 (DeferredBy and DeferredMode say who asked and with which members). With no member to convene the rules
-/// path takes over (RulesOnly), convened 0 too. The slot is taken only once every member's request is built.
+/// convened is 0 (DeferredBy and DeferredMode say who asked and with which members). With no member to convene the case
+/// has no board answer (NoBoard), convened 0 too. The slot is taken only once every member's request is built.
 Method ConveneBoard(case As Shutter.Store.Case, summaryJSON As %String, byWhom As %String = "", mode As %String = "", Output convened As %Boolean) As %Status
 {
     Set convened = 0, sc = $$$OK
@@ -622,7 +664,7 @@ Method ConveneBoard(case As Shutter.Store.Case, summaryJSON As %String, byWhom A
     // the case's mode, as it did before the cap.
     If mode = "" Set mode = $SELECT(..Mode = "policy": "board", 1: ..Mode)
     Set members = ##class(Shutter.Store.BoardMember).MembersForMode(mode)
-    If members.%Size() = 0 Quit ..RulesOnly(case)
+    If members.%Size() = 0 Quit ..NoBoard(case)
     // Every request first: the model view may refuse, and no slot is spent on a board that never convenes.
     Set n = 0
     Set iter = members.%GetIterator()
@@ -634,7 +676,7 @@ Method ConveneBoard(case As Shutter.Store.Case, summaryJSON As %String, byWhom A
         Set n = n + 1, reqs(n) = req, items(n) = m.ConfigItem, codes(n) = code
     }
     If $DATA(refused) Quit ..ModelViewFailed(case, refused)
-    If n = 0 Quit ..RulesOnly(case)
+    If n = 0 Quit ..NoBoard(case)
     // The minute's slot, taken atomically (TryTake): a case that finds the minute full waits for the next one instead.
     If '##class(Shutter.Util.BoardSlots).TryTake(..BoardsPerMinute, .count) {
         Set wait = 60 + $RANDOM(30)
@@ -834,12 +876,9 @@ Method AfterBoard(case As Shutter.Store.Case) As %Status
             Set case.Headline = "Escalated: reopened without the live agents, and no recording to replay"
             Quit case.Transition("escalated", "Reopened without the live agents, and no board member has a recording for this case, so nobody has looked at the fresh evidence and nothing is planned. A person must look, or reinvestigate with the live agents when they can run", "system")
         }
-        // In replay mode a case outside the fixtures has no recording for anyone: the rules path plans the plain
-        // resend and the gate judges it, instead of an escalation that says only "no findings" (B10).
-        If ..AllNoRecord(case) {
-            Do case.Note("note", ..UnansweredNote(case), "system")
-            Quit ..RulesOnly(case)
-        }
+        // Replay mode outside the fixtures, the day's budget or the provider's refusal: nobody could look, and the case
+        // says why rather than only "no findings" (B10), through NoBoard.
+        If ..AllNoRecord(case) Quit ..NoBoard(case, ..UnansweredWhy(case))
         Do ..LeadFinish(case, "failed", "", "no board member produced usable findings")
         Quit case.Transition("escalated", "No board member produced usable findings; a person must look", "system")
     }
@@ -891,16 +930,16 @@ Method AllNoRecord(case As Shutter.Store.Case) As %Boolean
     Quit (+n > 0) && (+other = 0)
 }
 
-/// Why nobody on the board answered this snapshot: the day's model budget is spent (Shutter.Util.Budget, v1.34), or replay
-/// mode has no recording for the case (it answers the fixtures only). Either way the rules path proposes the plain resend.
-Method UnansweredNote(case As Shutter.Store.Case) As %String
+/// Why nobody on the board answered this snapshot: the day's model budget is spent (Shutter.Util.Budget, v1.34), the
+/// provider refuses the key, or replay mode has no recording for the case (it answers the fixtures only).
+Method UnansweredWhy(case As Shutter.Store.Case) As %String
 {
     Set cid = case.%Id(), sid = $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.%Id(), 1: ""), n = 0
     &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.AgentRun WHERE "Case" = :cid AND Snapshot = :sid AND Status = 'budget_exhausted')
-    If +n > 0 Quit "No board member could run: the day's model budget is spent (budget_exhausted); the rules path proposes the plain resend and the gate judges it"
+    If +n > 0 Quit "the day's model budget is spent (budget_exhausted)"
     &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.AgentRun WHERE "Case" = :cid AND Snapshot = :sid AND Status = 'provider_auth')
-    If +n > 0 Quit "No board member could run: the model provider refuses the key (provider_auth); the rules path proposes the plain resend and the gate judges it"
-    Quit "No board member has a recording for this case (replay mode answers the fixtures only); the rules path proposes the plain resend and the gate judges it"
+    If +n > 0 Quit "the model provider refuses the key (provider_auth)"
+    Quit "this case has no recording (replay mode answers the fixtures only)"
 }
 
 /// Whether the call being answered was made about a snapshot other than the case's current one.
@@ -1208,7 +1247,7 @@ Method AdoptPlan(case As Shutter.Store.Case, plan As %DynamicObject, createdBy A
     Set sc = ##class(Shutter.Store.Plan).Create(case, case.CurrentSnapshot, plan, createdBy, .p)
     Quit:$$$ISERR(sc) sc
     // A case that leads its failure signature (v1.35) has decided: its followers take the plan.
-    Do ..LeadFinish(case, "done", plan)
+    Do ..LeadFinish(case, "done", plan, "", createdBy)
     Set ..PlanId = p.%Id()
     Set case.CurrentPlan = p
     Set case.Disposition = p.Disposition
