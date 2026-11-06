@@ -141,6 +141,34 @@ ClassMethod ForVisit(visitNumber As %String, since As %String = "") As %DynamicA
     Quit out
 }
 
+/// The rows for a patient identifier whose header is not older than a time, event time ascending, as objects. The caller
+/// reads the assigning authority. An empty identifier has no rows. The time must be given: an empty one matches no row.
+ClassMethod ForPatient(patientId As %String, since As %String) As %DynamicArray
+{
+    Set out = []
+    If (patientId = "") || (patientId = "-") Quit out
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Index.Message WHERE PatientId = ? AND (TimeCreated >= ? OR TimeCreated IS NULL) ORDER BY EventTime, ID", patientId, since)
+    While rs.%Next() {
+        Set r = ..%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(r)
+        Do out.%Push(r.ToObject())
+    }
+    Quit out
+}
+
+/// The merges whose header is not older than a time, as objects: the prior record a merge names is in the message itself.
+ClassMethod MergesSince(since As %String) As %DynamicArray
+{
+    Set out = []
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Index.Message WHERE Event = 'merge' AND (TimeCreated >= ? OR TimeCreated IS NULL) ORDER BY ID", since)
+    While rs.%Next() {
+        Set r = ..%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(r)
+        Do out.%Push(r.ToObject())
+    }
+    Quit out
+}
+
 Method ToObject() As %DynamicObject
 {
     Set o = {}

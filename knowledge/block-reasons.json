@@ -582,6 +582,42 @@
       "text": "While Shutter was about to resend this movement, a newer message for the same patient arrived from the source system and has not yet reached the receiver. Resending first would be pointless at best, and wrong behind a cancellation or a merge, so the resend waits for the newer message."
     },
     {
+      "code": "FURTHER_MOVEMENT",
+      "title": "Something else has happened to this patient",
+      "prerequisite": "No further in-patient movement for the patient on another visit, and no cancel, merge or change to the record the receiver has not applied",
+      "next_action": "Read both visits named here, in the source system and on the receiver's own screen, and put the patient right by hand or close the case. Nothing is sent, and nothing will be until a person decides.",
+      "owner": "Operator",
+      "reevaluate_when": "A person has read both and closed or reinvestigated the case",
+      "text": "After this message failed, a further message arrived for the same patient that Shutter can't weigh by itself: a new admission or ward stay under another visit number, a cancel or discharge the receiver never applied, or a change to the record. Someone may be working round bad history. Shutter can't say which visit is real, so it stops and names both."
+    },
+    {
+      "code": "NO_FURTHER_MOVEMENT",
+      "title": "Nothing else stops this for the patient",
+      "prerequisite": "No further in-patient movement for the patient on another visit",
+      "next_action": "None: a pass. Anything else on file for the patient, such as an out-patient attendance, is on the plan.",
+      "owner": "Operator",
+      "reevaluate_when": "Not applicable",
+      "text": "Shutter read this patient's further messages on every visit it can see and none of them stops the resend. A change made by hand at the receiver can't be seen this way."
+    },
+    {
+      "code": "PATIENT_UNREADABLE",
+      "title": "The patient's identifier could not be read",
+      "prerequisite": "The case names a patient identifier",
+      "next_action": "Find the patient from the message itself and decide by hand.",
+      "owner": "Operator",
+      "reevaluate_when": "The case is investigated again",
+      "text": "With no identifier, Shutter can't tell what else has happened to this patient, so nothing is sent."
+    },
+    {
+      "code": "FURTHER_NOT_READ",
+      "title": "Further messages for the patient could not all be read",
+      "prerequisite": "Shutter's namespace and the namespace the case came from can be read in full since the case's own message",
+      "next_action": "Reinvestigate the case when the feed is quieter, or check the patient in the Message Viewer and decide by hand.",
+      "owner": "Operator",
+      "reevaluate_when": "The case is investigated again",
+      "text": "There were too many new messages to read at the moment of the write, or the source namespace could not be read, so whether something else has happened to this patient is not known. Nothing is sent."
+    },
+    {
       "code": "SCHEMA_UNKNOWN",
       "title": "The message's schema is not loaded here",
       "prerequisite": "The message's schema category (its DocType category) is loaded in Shutter's namespace, so the message can be validated",

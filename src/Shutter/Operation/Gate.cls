@@ -37,7 +37,7 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     } ElseIf case.EncounterId = "-" {
         Do ..Check(checks, "identity", "pass", "NO_ENCOUNTER", "The message names no encounter (a patient-level message): there is no receiver record to compare")
     } ElseIf (wardStatus = 404) && (case.Event = "admit") {
-        Do ..Check(checks, "identity", "pass", "NEW_ENCOUNTER", "The receiver has no encounter yet, as an admission expects")
+        Do ..Check(checks, "identity", "pass", "NEW_ENCOUNTER", "The receiver answers no encounter under this number, as an admission expects. That does not prove it holds no record for this patient")
     } ElseIf wardStatus = 404 {
         Do ..Check(checks, "identity", "block", "UNKNOWN_ENCOUNTER", "The receiver does not know encounter " _ case.EncounterId)
     } Else {
@@ -107,6 +107,18 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     // one of them (v1.34), until they are delivered.
     Set pendingMsgs = summary.%Get("pending_messages")
     If isWrite {
+        // Further messages for the patient, on any visit (Shutter.Util.FurtherMessages): the snapshot's at the proposal, read
+        // again at dispatch, since a snapshot may be hours old by the time a person approves. A hit stops the plan for a person.
+        Set further = $SELECT(request.Stage = "proposal": summary.%Get("further_messages"), 1: ##class(Shutter.Util.FurtherMessages).Find(case))
+        If ##class(Shutter.Util.FurtherMessages).Unreadable(further) {
+            Do ..Check(checks, "ordering", "block", "PATIENT_UNREADABLE", "The case's patient identifier could not be read, so what else has happened to this patient is not known; a person decides")
+        } ElseIf ##class(Shutter.Util.FurtherMessages).Count(further, "stops") > 0 {
+            Do ..Check(checks, "ordering", "block", "FURTHER_MOVEMENT", ##class(Shutter.Util.FurtherMessages).Describe(case, further) _ ". Nothing is sent; a person reads both and decides")
+        } ElseIf ##class(Shutter.Util.FurtherMessages).Unread(further) '= "" {
+            Do ..Check(checks, "ordering", "block", "FURTHER_NOT_READ", "Further messages for this patient could not all be read: " _ ##class(Shutter.Util.FurtherMessages).Unread(further) _ ". Nothing is sent until they can be, or a person decides")
+        } ElseIf $ISOBJECT(further) {
+            Do ..Check(checks, "ordering", "pass", "NO_FURTHER_MOVEMENT", "No further in-patient movement for this patient" _ $SELECT(##class(Shutter.Util.FurtherMessages).Count(further, "shows") > 0: "; " _ ##class(Shutter.Util.FurtherMessages).Count(further, "shows") _ " other message(s) on file, shown on the plan", 1: ""))
+        }
         // The occupied bed (v1.28): a write into a bed another encounter holds waits for them to leave, or never goes.
         Set bedConflict = $SELECT($ISOBJECT(conds): ##class(Shutter.Util.Json).Str(conds, "bed_conflict", "none"), 1: "none")
         If bedConflict '= "none" Do ..BedConflictCheck(checks, case, summary, bedConflict)
@@ -204,6 +216,9 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
                 Set tier = ##class(Shutter.Store.SiteProfile).TierOf(request.Receiver)
                 Set policy = ##class(Shutter.Store.SiteProfile).Policy(tier, $SELECT(request.ChainKind = "": "single", 1: request.ChainKind))
                 If policy '= "automatic" Set why = "policy_requires_approval"
+                // An admission on a 404 is never released by policy alone (a record may have been entered by hand under another
+                // number), unless the site's profile says so. An incident's release has its own path (7.3).
+                If (why = "") && '$ISOBJECT(case.Incident) && ##class(Shutter.Util.FurtherMessages).AdmissionOnNotFound(case, summary) && (##class(Shutter.Store.SiteProfile).AdmissionNotFound() = "person") Set why = "policy_requires_approval"
                 // The plan must have come from the policy path for the entry it names: a board's plan never goes by policy.
                 If (why = "") && ((plan.CatalogueEntry = "") || (plan.CreatedBy '= ("policy:" _ plan.CatalogueEntry))) Set why = "plan_origin"
             }

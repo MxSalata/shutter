@@ -1063,6 +1063,12 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
     Set tier = ##class(Shutter.Store.SiteProfile).TierOf($SELECT(case.Receiver '= "": case.Receiver, 1: ..WardTarget))
     Set kind = $SELECT(..Release: ..ChainKind, 1: $CLASSMETHOD(json, "Str", cat.%Get("conditions"), "chain", "single"))
     Set ..Policy = ##class(Shutter.Store.SiteProfile).Policy(tier, kind)
+    // A receiver's 404 doesn't prove it holds no record for the patient: a lost admission waits for a person, unless the
+    // site's profile says policy may release it.
+    If ('..Release) && (..Policy = "automatic") && ##class(Shutter.Util.FurtherMessages).AdmissionOnNotFound(case, summary) && (##class(Shutter.Store.SiteProfile).AdmissionNotFound() = "person") {
+        Set ..Policy = "approval"
+        Do case.Note("note", "A lost admission on the receiver's 404: a person approves, as the site's profile asks (further_messages.admission_not_found)", "system")
+    }
     // A released item is authorised by its incident (7.3): by site policy, or under the incident's approval.
     If ..Release Set ..Policy = $SELECT(..ReleasePolicy = "incident": "incident", ..ReleasePolicy = "automatic": "automatic", 1: ..Policy)
     // The outcome the matcher settled on: the preferred one, or a site-policy alternative whose when holds for the case's
@@ -1150,6 +1156,12 @@ Method BedWaitOutcome(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
         While ci.%GetNext(, .c) {
             Continue:'$ISOBJECT(c)
             Set rc = ##class(Shutter.Util.Json).Str(c, "reason_code")
+            // Further messages for the patient come first and are no wait: a person reads what the check names.
+            If $LISTFIND($LISTBUILD("FURTHER_MOVEMENT", "PATIENT_UNREADABLE", "FURTHER_NOT_READ"), rc) {
+                Set waited = 1, detail = ##class(Shutter.Util.Json).Str(c, "detail")
+                Set case.Headline = "Stopped for a person: " _ ##class(Shutter.Util.Json).Clip(detail, 200)
+                Return case.Transition("blocked", detail, "gate", "gate:" _ result.DecisionId)
+            }
             If (rc = "WAITING_FOR_OCCUPANT_CASE") || (rc = "OCCUPANT_CASE_FAILED") || (rc = "NEWER_MESSAGE_PENDING") Set code = rc Quit
         }
     }
@@ -1244,7 +1256,19 @@ Method RulesOnly(case As Shutter.Store.Case) As %Status
 /// Store the plan as the case's current plan and send it to the gate.
 Method AdoptPlan(case As Shutter.Store.Case, plan As %DynamicObject, createdBy As %String) As %Status
 {
-    Set sc = ##class(Shutter.Store.Plan).Create(case, case.CurrentSnapshot, plan, createdBy, .p)
+    // What a person should see on a resend's plan (Shutter.Util.FurtherMessages). On this case's plan only: its followers
+    // are other patients, and they read their own.
+    Set stored = plan
+    If ##class(Shutter.Util.Json).Str(plan, "disposition") = "resend" {
+        Set lines = ##class(Shutter.Util.FurtherMessages).PlanLines(case, $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.SummaryObject(), 1: ""))
+        If lines.%Size() > 0 {
+            Set stored = ##class(%DynamicObject).%FromJSON(plan.%ToJSON())
+            If stored.%GetTypeOf("preconditions") '= "array" Set stored.preconditions = []
+            Set li = lines.%GetIterator()
+            While li.%GetNext(, .line) { Do stored.preconditions.%Push(line) }
+        }
+    }
+    Set sc = ##class(Shutter.Store.Plan).Create(case, case.CurrentSnapshot, stored, createdBy, .p)
     Quit:$$$ISERR(sc) sc
     // A case that leads its failure signature (v1.35) has decided: its followers take the plan.
     Do ..LeadFinish(case, "done", plan, "", createdBy)
@@ -1488,6 +1512,12 @@ ClassMethod ApprovalTask(case As Shutter.Store.Case, plan As Shutter.Store.Plan,
     Set task.%Subject = "Shutter " _ case.CaseId _ ": approve plan v" _ plan.Version _ " (" _ plan.Disposition _ ")"
     Set task.%Message = case.Headline _ $CHAR(10) _ "Exact action: " _ plan.ActionType _ " " _ plan.OperationKey _ " at receiver version " _ plan.ExpectedVersion _ $CHAR(10) _ "Plan digest: " _ plan.Digest _ $CHAR(10) _ "Snapshot digest: " _ $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.Digest, 1: "") _ $CHAR(10) _ "Rehearsal: would apply (rolled back)."
     Set task.%Message = task.%Message _ $CHAR(10) _ "To approve from the Workflow inbox, paste the plan digest above into the PlanDigest field: an approval with no digest, or another one, binds nothing and blocks the case."
+    // What the approver should look at first (Shutter.Util.FurtherMessages): the plan's lines for this patient.
+    Try {
+        Set lines = ##class(Shutter.Util.FurtherMessages).PlanLines(case, $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.SummaryObject(), 1: ""))
+        Set li = lines.%GetIterator()
+        While li.%GetNext(, .line) { Set task.%Message = task.%Message _ $CHAR(10) _ line }
+    } Catch ex {}
     // What approvers decided before on these conditions at this receiver (6.4, v1.35); a lookup that fails leaves the line out.
     Try {
         Set words = ##class(Shutter.Store.Precedent).Words(##class(Shutter.Store.Precedent).SummaryFor(case))
@@ -1899,6 +1929,11 @@ Method OnExecute(case As Shutter.Store.Case, result As Shutter.Msg.WardResult) A
         Quit ..StartEvidence(case)
     }
     Set case.Headline = "Dispatch refused: " _ outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "")
+    If result.ReasonCode = "further_movement" {
+        // The connector's last line for further messages for the patient: what it found is in its error.
+        Set case.Headline = "Stopped for a person: " _ ##class(Shutter.Util.Json).Clip(result.Error, 200)
+        Quit case.Transition("blocked", "The connector held the resend (FURTHER_MOVEMENT): " _ result.Error _ ". Nothing was sent; a person reads both and decides", "system", "attempt:" _ attempt.%Id())
+    }
     If result.ReasonCode = "newer_message_pending" {
         // The connector's last-line check (v1.29): the resend waits for the pending message's delivery.
         Set pending = ##class(Shutter.Util.ResendGuard).Pending(case)

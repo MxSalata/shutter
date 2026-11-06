@@ -1,15 +1,15 @@
 ---
 id: shutter-in-plain-words
-version: 1.1
+version: 1.2
 collection: explain
 applies_to: [shutter, hl7-v2-adt]
-effective_from: 2026-11-03
+effective_from: 2026-11-06
 ---
 
 # Shutter in plain words
 
 What Shutter's words mean for a person reading a case: the outcomes, who decides, the gate's checks and the site profile
-settings that change what Shutter does. Version 1.1, in force from 3 November 2026. These words explain; they never
+settings that change what Shutter does. Version 1.2, in force from 6 November 2026. These words explain; they never
 decide anything about a case. The case's own evidence, the gate's checks and the what-if facts do.
 
 ## SPW-1 What a case is
@@ -206,8 +206,16 @@ SPW-5.62. **OCCUPANT_MOVED_OUT: The bed's occupant has left.** The patient who h
 
 SPW-5.63. **NEWER_MESSAGE_PENDING: A newer message for this patient is on its way.** While Shutter was about to resend this movement, a newer message for the same patient arrived from the source system and has not yet reached the receiver. Resending first would be pointless at best, and wrong behind a cancellation or a merge, so the resend waits for the newer message. Next: Nothing to do yet. The case waits for that message; when it is delivered, the case is checked again on fresh evidence, and a newer movement usually means nothing needs resending.
 
-SPW-5.64. **SCHEMA_UNKNOWN: The message's schema is not loaded here.** The message names a schema category that Shutter's namespace does not have, such as a site's own variant of HL7 2.5.1 with extra segments. That is missing evidence, not an invalid message: Shutter cannot validate the message until the schema is imported. Next: Import the site's schema into Shutter's namespace (the Doctor's hl7_schemas check names the category and the command), then reinvestigate the case. Nothing is sent meanwhile.
+SPW-5.64. **FURTHER_MOVEMENT: Something else has happened to this patient.** After this message failed, a further message arrived for the same patient that Shutter can't weigh by itself: a new admission or ward stay under another visit number, a cancel or discharge the receiver never applied, or a change to the record. Someone may be working round bad history. Shutter can't say which visit is real, so it stops and names both. Next: Read both visits named here, in the source system and on the receiver's own screen, and put the patient right by hand or close the case. Nothing is sent, and nothing will be until a person decides.
 
-SPW-5.65. **ENTRY_NOT_NAMED_WRITE: A write that doesn't name the catalogue entry that stops it.** The plan would resend and names no catalogue entry, but an entry that matches this case calls for something other than a resend. Only Rules only mode, the baseline, passes this. Next: Read the matched entry and decide by hand, or investigate again so the plan follows the entry.
+SPW-5.65. **NO_FURTHER_MOVEMENT: Nothing else stops this for the patient.** Shutter read this patient's further messages on every visit it can see and none of them stops the resend. A change made by hand at the receiver can't be seen this way. Next: None: a pass. Anything else on file for the patient, such as an out-patient attendance, is on the plan.
 
-SPW-5.66. **NO_BOARD_ANSWER: The board has to decide this, and nobody on it could answer.** The scenario catalogue gives this case to the board or to a person, and no board member could answer. Nothing is planned and nothing is sent, because a plain resend would replace that decision with one nobody took. Next: Read the matched catalogue entry and the patient's record, then decide how to recover the message by hand, or investigate again when the agents can run.
+SPW-5.66. **PATIENT_UNREADABLE: The patient's identifier could not be read.** With no identifier, Shutter can't tell what else has happened to this patient, so nothing is sent. Next: Find the patient from the message itself and decide by hand.
+
+SPW-5.67. **FURTHER_NOT_READ: Further messages for the patient could not all be read.** There were too many new messages to read at the moment of the write, or the source namespace could not be read, so whether something else has happened to this patient is not known. Nothing is sent. Next: Reinvestigate the case when the feed is quieter, or check the patient in the Message Viewer and decide by hand.
+
+SPW-5.68. **SCHEMA_UNKNOWN: The message's schema is not loaded here.** The message names a schema category that Shutter's namespace does not have, such as a site's own variant of HL7 2.5.1 with extra segments. That is missing evidence, not an invalid message: Shutter cannot validate the message until the schema is imported. Next: Import the site's schema into Shutter's namespace (the Doctor's hl7_schemas check names the category and the command), then reinvestigate the case. Nothing is sent meanwhile.
+
+SPW-5.69. **ENTRY_NOT_NAMED_WRITE: A write that doesn't name the catalogue entry that stops it.** The plan would resend and names no catalogue entry, but an entry that matches this case calls for something other than a resend. Only Rules only mode, the baseline, passes this. Next: Read the matched entry and decide by hand, or investigate again so the plan follows the entry.
+
+SPW-5.70. **NO_BOARD_ANSWER: The board has to decide this, and nobody on it could answer.** The scenario catalogue gives this case to the board or to a person, and no board member could answer. Nothing is planned and nothing is sent, because a plain resend would replace that decision with one nobody took. Next: Read the matched catalogue entry and the patient's record, then decide how to recover the message by hand, or investigate again when the agents can run.

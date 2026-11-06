@@ -787,7 +787,7 @@ ClassMethod StoppedAfterTheGate(text As %String) As %Boolean
 /// that got no usable answer showed nothing about the action, so it is no refusal, whatever the word rehearsal suggests.
 ClassMethod ReasonFromEvent(text As %String, state As %String) As %String
 {
-    Quit $SELECT(text [ "no board member could answer": "NO_BOARD_ANSWER", text [ "Error from the write call": "WRITE_OUTCOME_UNKNOWN", text [ "Rejected by": "REJECTED_BY_APPROVER", text [ "no usable answer": "BLOCKED", text [ "rehearsal": "REHEARSAL_WOULD_NOT_APPLY", text [ "refused": "DISPATCH_REFUSED", text [ "Not committed:": "WRITE_NOT_COMMITTED", (text [ "Not verified (unknown)") || (text [ "outcome of the resend is unknown"): "WRITE_OUTCOME_UNKNOWN", text [ "person": "ESCALATED", state = "escalated": "ESCALATED", 1: "BLOCKED")
+    Quit $SELECT(text [ "FURTHER_MOVEMENT": "FURTHER_MOVEMENT", text [ "no board member could answer": "NO_BOARD_ANSWER", text [ "Error from the write call": "WRITE_OUTCOME_UNKNOWN", text [ "Rejected by": "REJECTED_BY_APPROVER", text [ "no usable answer": "BLOCKED", text [ "rehearsal": "REHEARSAL_WOULD_NOT_APPLY", text [ "refused": "DISPATCH_REFUSED", text [ "Not committed:": "WRITE_NOT_COMMITTED", (text [ "Not verified (unknown)") || (text [ "outcome of the resend is unknown"): "WRITE_OUTCOME_UNKNOWN", text [ "person": "ESCALATED", state = "escalated": "ESCALATED", 1: "BLOCKED")
 }
 
 // ---- library, settings, costs ----

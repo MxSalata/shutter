@@ -8,7 +8,7 @@ Property Seq As %Integer(%JSONFIELDNAME = "seq") [ Required ];
 
 Index SnapshotSeqIdx On (Snapshot, Seq) [ Unique ];
 
-Property Kind As %String(%JSONFIELDNAME = "kind", MAXLEN = 32, VALUELIST = ",operation,message,validation,ward_state,receipt,later_event,route,error,note,source,bed_conflict,pending_messages");
+Property Kind As %String(%JSONFIELDNAME = "kind", MAXLEN = 32, VALUELIST = ",operation,message,validation,ward_state,receipt,later_event,route,error,note,source,bed_conflict,pending_messages,further_messages");
 
 /// Where it came from: message_store, ward_api, production, validator.
 Property Source As %String(%JSONFIELDNAME = "source", MAXLEN = 32);

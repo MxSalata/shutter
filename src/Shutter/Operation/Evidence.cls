@@ -141,6 +141,11 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     Do pendingItem.%Set("count", pending.%Size(), "number")
     Do snap.AddItem("pending_messages", "message_store", now, pendingItem) Set count = count + 1
 
+    // 6c. Further messages for the patient, on any visit (Shutter.Util.FurtherMessages): the gate stops a write on them, and
+    // the plan shows the ones that don't stop it.
+    Set further = ##class(Shutter.Util.FurtherMessages).Find(case)
+    Do snap.AddItem("further_messages", "message_store", now, further) Set count = count + 1
+
     // 7. The route, with the receiver's own capability profile (its capabilities endpoint): the gate's capability
     // check reads this, never an assumption. A receiver without such an endpoint is described by the site profile's
     // declared features, and the route says so.
@@ -163,6 +168,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     Set summary.timeline = timeline
     Set summary."later_events" = laterCount
     Set summary."pending_messages" = pending
+    Set summary."further_messages" = further
     Set summary.route = route
     If $ISOBJECT(source) Set summary.source = source
     Set summary.epoch = ##class(Shutter.Util.Json).Str(wardState, "epoch", ##class(Shutter.Util.Json).Str(route, "epoch"))
