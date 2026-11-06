@@ -117,6 +117,10 @@ Method TestFirstLineSaysItIsRedacted()
     Do $$$AssertTrue(o.%IsDefined("receipt"), "the receipt's place is there")
     Do $$$AssertEquals(o.case.caseId, "UT-BUNDLE", "the case is named")
     Do $$$AssertEquals(o.evidence.%Get(0).items.%Size(), 2, "with the evidence's items")
+    Set action = o.plans.%Get(0).plan.action
+    Do $$$AssertEquals(action.type, "resend", "a plan's action keeps its type")
+    Do $$$AssertEquals(action."expected_version", 3, "and its expected version")
+    Do $$$AssertEquals(action."operation_key", "PAS^HOSP^MRN-T1^ENC-T1^transfer^2026-10-15T08:20:00Z", "and its key, in tokens")
 }
 
 /// Nothing the model view removes is anywhere in the file: identifiers, name parts, birth date, demographics, the

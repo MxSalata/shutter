@@ -48,6 +48,7 @@ ClassMethod Text(case As Shutter.Store.Case, user As %String, Output why As %Str
     For part = "evidence", "plans", "gateDecisions", "approvals", "attempts", "verifications" {
         Do out.%Set(part, $CLASSMETHOD(mv, "Reduce", case, parts.%Get(part)))
     }
+    Do ..KeepActionFields(out.plans, parts.plans)
     If parts.%GetTypeOf("receipt") = "object" { Set out.receipt = ..Receipt(case, parts.receipt) } Else { Do out.%Set("receipt", "", "null") }
     Set out.notIncluded = ["the map from tokens to values", "note text", "comments and reasons people typed", "the case's event log", "the agents' runs", "escalation emails"]
     Do ..DropNoteText(out)
@@ -131,6 +132,22 @@ ClassMethod Receipt(case As Shutter.Store.Case, receipt As %DynamicObject) As %D
     Set out = ##class(Shutter.Util.ModelView).Reduce(case, receipt)
     Set out.state = state
     Quit out
+}
+
+/// A plan's action keeps its type and expected version, which the view's allowlist for an operation drops. Neither is
+/// an identifier, and an auditor needs what the plan set out to do.
+ClassMethod KeepActionFields(reduced As %DynamicArray, stored As %DynamicArray) [ Private ]
+{
+    Set iter = stored.%GetIterator()
+    While iter.%GetNext(.i, .row) {
+        Set from = $SELECT($ISOBJECT(row.plan): row.plan.%Get("action"), 1: "")
+        Continue:'$ISOBJECT(from)
+        Set to = reduced.%Get(i).plan.%Get("action")
+        Continue:'$ISOBJECT(to)
+        For key = "type", "expected_version" {
+            If from.%IsDefined(key) Do to.%Set(key, from.%Get(key), from.%GetTypeOf(key))
+        }
+    }
 }
 
 /// Note text out of a reduced object: the site's switch lets its model read notes, which says nothing of a file.
