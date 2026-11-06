@@ -85,7 +85,8 @@ for (const [width, height] of [
       await expect(evidence).toHaveAttribute('aria-selected', 'true');
       await expect(page.getByRole('tabpanel', { name: 'Evidence' })).toBeVisible();
       await atRest(page);
-      expect(await barTop(page), 'the tab bar has not moved').toBe(before);
+      // Within a pixel: a font's fractional line height can settle the sticky bar a fraction away
+      expect(Math.abs((await barTop(page)) - before), 'the tab bar has not moved').toBeLessThan(1);
       expect(await highest(page), 'the page never went to its top').toBeGreaterThan(0);
       const gap = await page.evaluate(() => {
         const bar = document.querySelector('.sticky-tabs')!.getBoundingClientRect();
@@ -95,7 +96,7 @@ for (const [width, height] of [
       expect(Math.abs(gap), 'the new tab starts under the bar, not partway down itself').toBeLessThan(2);
       await page.getByRole('tab', { name: 'Summary' }).click();
       await atRest(page);
-      expect(await barTop(page), 'and going back moves nothing either').toBe(before);
+      expect(Math.abs((await barTop(page)) - before), 'and going back moves nothing either').toBeLessThan(1);
     });
   });
 }
