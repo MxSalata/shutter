@@ -135,7 +135,9 @@ def mention_scan(ns):
 def compare(before, after, allowed_new=(), allowed_gone=()):
     # The engine's own working globals appear wherever a production has run. A row in one that names Shutter is still caught,
     # by the mentions line for that global and by the rows read above.
-    engine = [r"^global\|[^|]*\|\^(Ens\.|EnsHL7\.Segment|IRIS\.Temp|CacheTemp|EnsLib\.)", r"^autostart\|[^|]*\|$"]
+    engine = [r"^global\|[^|]*\|\^(Ens\.|EnsHL7\.Segment|IRIS\.Temp|IRIS\.Metrics\.|CacheTemp|EnsLib\.)", r"^autostart\|[^|]*\|$"]
+    # IRIS for Health sets these up once, the first time a namespace is enabled for Interoperability. They are the engine's.
+    engine += [r"^(database|namespace)\|%SYS\|FHIR_Validation_Server$", r"^resource\|%SYS\|%HS(Admin_|_BFC_|_FHIRServer_)", r"^role\|%SYS\|%HS_BFC_", r"^task\|%SYS\|FHIR Purge "]
     new = sorted(x for x in after - before if not any(re.search(p, x) for p in list(allowed_new) + engine))
     gone = sorted(x for x in before - after if not any(re.search(p, x) for p in list(allowed_gone) + engine))
     check("nothing of Shutter's is left: nothing is new since before the install", not new, "\n        ".join(new))

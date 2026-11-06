@@ -338,6 +338,10 @@ ClassMethod DropNamespace(ns As %String) As %String
         For { Set map = $ORDER(maps(map)) Quit:map=""  Do ##class(Config.MapPackages).Delete(ns, map) }
         Set sc = ##class(Config.Namespaces).Delete(ns)
         If $$$ISERR(sc) Set problem = $SYSTEM.Status.GetErrorText(sc) Quit
+        // The two roles the engine gives a namespace when Interoperability is enabled there.
+        For role = "%EnsRole_ProdPrivs_" _ ns, "%HS_DB_" _ ns {
+            If ##class(Security.Roles).Exists(role) Do ##class(Security.Roles).Delete(role)
+        }
         For i = 1:1:$LISTLENGTH(dbs) {
             Set name = $LIST(dbs, i)
             Continue:name=""
