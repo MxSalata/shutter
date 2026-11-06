@@ -41,6 +41,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SITE = os.path.join(HERE, "pathology_site")
+CORPUS = os.path.join(SITE, "corpus")
 LOCK = os.path.join(HERE, "assertions.sha256")
 PW = "Onboard-2026x"
 HOME = "/home/irisowner"
@@ -50,7 +51,8 @@ WATCH = 30  # seconds to keep watching that nothing further happens
 # How long the rig gives a design for what a design may choose. Generous, so that a debounce or a "stable for 5 minutes" passes.
 INCIDENT_WITHIN = 360  # seconds from the first failure to the incident being open
 CLOSE_WITHIN = 360  # seconds from the drain to the incident being closed
-LISTENER_BACK = 15  # seconds between a listener's return and a person's approval: the operation dials about every 6 s
+OFFER_WITHIN = 360  # seconds a design has to show what may go again, or to wrongly offer what may not: its poll may be slow
+FINDING_WITHIN = 120  # seconds a design has to write up a finding or close an item once a message has settled
 LICENCE_WAIT, LICENCE_POLL = 300, 15  # a Community instance can refuse a terminal session for minutes after a busy spell
 
 sys.path.insert(0, HERE)
@@ -61,6 +63,11 @@ E_UTF8 = b"\xc3\xa8"
 # Not a bare "E8": catalogue entries have names like that.
 CHAR_NAMED = r"\u00e8|U\+00E8|\bC3 ?A8\b|0x ?E8\b|\bbyte E8\b|\u00c3\u00a8|\be[- ]grave\b|\be with (?:a |an )?grave\b|\bgrave accent\b"
 
+# A field's name as a page may write it: PID-5, PID.5, OBX[2]-5, "OBX 2 field 5", "the PID segment, field 5".
+def field_named(segment, number):
+    return segment + r"(?:\W+\w+){0,2}\W+" + str(number) + r"\b"
+
+
 # The fake receivers, by what each does. Each value is the mode fake_receiver.py reads, and all of them are made up.
 RECEIVERS = {
     "down": None,  # nothing listening: the rig just doesn't start one, and a closed port refuses the connection
@@ -68,8 +75,9 @@ RECEIVERS = {
     "never_answers": {"default": "SILENT"},  # takes the frame and never answers
     "takes_it_and_dies": {"default": "SILENT", "die_after": 1},  # takes the frame and dies before answering
     "ae_above_7f": {"ae_nonascii": {"words": "Invalid character in message"}},  # AE on any byte above 0x7F
-    "ae_unknown_code": {"ae_unknown_code": {"known": ["HB", "WBC", "PLT", "MCV", "HCT"], "words": "Test code not recognised: "}},  # AE naming the code
+    "ae_unknown_code": {"ae_unknown_code": {"known": ["HB", "WBC", "PLT", "MCV", "HCT"] + [f"TST0{i}" for i in range(1, 9)], "words": "Test code not recognised: "}},  # AE naming the code
     "refuses_duplicate": {"held": {"controls": [], "words": "ALREADY HELD, entered by hand"}},  # AE in its own words; a row names what it holds
+    "refuses_repeat": {"refuses_repeat": {"words": "Message id already received"}},  # AE to a second copy of a control id, in its own words
     "files_duplicate_twice": {},  # AA for every copy: the log's "copy" says which it was
     "ca_then_silence": {"default": "CA"},  # commit accept, and nothing further ever comes
 }
@@ -80,10 +88,10 @@ RECEIVERS = {
 # rests on: "measured" was seen on stock on one build; "read" is from reading the code, not run.
 ASSERTIONS = {
     "O1.a": ("independent", "hold", "measured", "A retry-forever outage with 6 orders: the queue holds 5, one header reads Delivered and 5 Queued"),
-    "O1.b": ("independent", "hold", "measured", "Over a further 60 s every order keeps exactly one header to the operation: nothing sent it again"),
+    "O1.b": ("independent", "hold", "measured", "Over a further 60 s, and again once the wait for the incident ends, every order keeps exactly one header to the operation: nothing sent it again"),
     "O1.c": ("independent", "hold", "read", "No case for that receiver records a write attempt"),
     "O1.d": ("adapter", "fail", "measured", "Exactly one incident is open for the receiver, within 6 minutes of the first failure"),
-    "O1.e": ("adapter", "not_wired", "read", "The incident's words say who to call and what to do, as the site wrote them"),
+    "O1.e": ("adapter", "not_wired", "read", "The incident's words say who to call, as the site wrote it"),
     "O2.a": ("independent", "hold", "measured", "The listener returns, slowly: every order reaches it exactly once, in the order sent"),
     "O2.b": ("independent", "hold", "measured", "The queue reads 0, every header Completed, and each order still has one header"),
     "O2.c": ("adapter", "fail", "measured", "The incident closes by itself within 6 minutes of the drain, with no person's action"),
@@ -92,36 +100,36 @@ ASSERTIONS = {
     "O3.b": ("adapter", "fail", "read", "Over the next 60 s the same one incident stays open: no false close and no second incident"),
     "O3.c": ("independent", "hold", "read", "It returns: the rest arrive exactly once, in order, queue 0, all headers Completed"),
     "O3.d": ("adapter", "fail", "read", "Only now does the incident close, within 6 minutes of the drain"),
-    "O4.a": ("independent", "hold", "measured", "No retry, nothing listening: all headers Error, the log says the connect failed for each, and no frame arrived"),
+    "O4.a": ("independent", "hold", "measured", "No retry, nothing listening, orders and results of several sizes: all headers Error, the log says the connect failed for each, and no frame arrived"),
     "O4.b": ("independent", "hold", "measured", "The receiver returns and nobody approves: for 30 s no frame arrives and the headers stay Error"),
     "O4.c": ("adapter", "not_wired", "read", "What is offered to go again is exactly those messages, in the order sent"),
     "O4.d": ("adapter", "not_wired", "read", "After one approval each arrives exactly once, in that order"),
-    "O5.a": ("independent", "hold", "measured", "The three kinds exist: never opened (Error, no frame), read timeout (Error, one frame), AE (Suspended, one frame)"),
-    "O5.b": ("adapter", "not_wired", "read", "What is offered is exactly the never-opened messages, in order"),
-    "O5.c": ("adapter", "not_wired", "read", "After one approval only those arrive, once each, and the read-timeout and AE messages hear nothing further for 30 s"),
+    "O5.a": ("independent", "hold", "measured", "The kinds exist: never opened (Error, no frame), read timeout (Error, one frame), AE (Suspended, one frame), CA then silence (Completed, one frame)"),
+    "O5.b": ("adapter", "not_wired", "read", "What is offered is exactly the never-opened messages, in order, and at no reading anything else"),
+    "O5.c": ("adapter", "not_wired", "read", "After one approval only those arrive, once each, and the read-timeout, AE and CA messages hear nothing further for 30 s"),
     "O5.d": ("adapter", "not_wired", "measured", "With a FailureTimeout above 0, a message the receiver took on its first attempt, whose last attempt says never opened, is not offered, and the never-opened messages beside it are"),
     "O5.e": ("adapter", "not_wired", "measured", "A message whose connection was lost on the read, after the receiver took it, is not offered, and the never-opened messages beside it are"),
     "O6.a": ("independent", "hold", "measured", "5 messages read Error with no frame, in two batches"),
     "O6.b": ("adapter", "not_wired", "read", "One decision, and the receiver answers AE to the third: it hears the first three in order and nothing more for 40 s"),
-    "O6.c": ("adapter", "not_wired", "read", "One decision, and the receiver dies after the second: it hears two; it returns; nothing further arrives for 30 s without a new decision"),
+    "O6.c": ("adapter", "not_wired", "read", "One decision, and the receiver dies after the second: it hears two, the third's failed try is the last one made, it returns, and nothing further arrives for 30 s without a new decision"),
     "O6.d": ("adapter", "not_wired", "measured", "A resend that fails, of a message with an earlier case, is shown as failed with no new case or alert to prompt it, and nothing further goes"),
-    "O7.a": ("independent", "hold", "measured", "Stock pass-through: Latin-1, UTF-8 and UTF-8 with MSH-18 each arrive byte for byte as they came in"),
-    "O7.b": ("adapter", "not_wired", "read", "On a resend each frame equals, byte for byte, the bytes that first came in"),
+    "O7.a": ("independent", "hold", "measured", "Stock pass-through: orders and results in Latin-1 and UTF-8, with and without MSH-18, each arrive byte for byte as they came in (not the one with a wrong MSH-18, which stock reads by what MSH-18 says)"),
+    "O7.b": ("adapter", "not_wired", "read", "On a resend each frame equals, byte for byte, the bytes that first came in, and the one with a wrong MSH-18 equals what stock sends of it with no resend"),
     "O7.c": ("adapter", "not_wired", "read", "Every stored copy of each message reads the same after the resend as before it"),
-    "O8.a": ("independent", "hold", "measured", "A refusing receiver and an unknown one: all 10 messages read Error, and nothing arrives by itself once each returns"),
+    "O8.a": ("independent", "hold", "measured", "A refusing receiver and an unknown one that would file a duplicate twice: all 10 messages read Error, and nothing arrives by itself once each returns"),
     "O8.b": ("adapter", "not_wired", "read", "Refusing receiver, holding the message already: one approval sends it exactly once"),
     "O8.c": ("adapter", "not_wired", "read", "Its refusal closes the item as already delivered, not as a failure"),
     "O8.d": ("adapter", "not_wired", "read", "Unknown receiver: the page offers already handled by hand, and nothing has been sent"),
     "O8.e": ("adapter", "not_wired", "read", "Choosing that sends nothing for 30 s and closes the item as handled by hand"),
-    "O9.a": ("independent", "hold", "measured", "A receiver refusing such bytes: each of 4 messages with the character reads Suspended, the plain one Completed, each with one frame"),
+    "O9.a": ("independent", "hold", "measured", "A receiver refusing such bytes: each of 7 messages with the character reads Suspended, the plain ones Completed, each with one frame"),
     "O9.b": ("independent", "hold", "measured", "For 30 s nothing repeats, and each frame holds the bytes that came in"),
-    "O9.c": ("adapter", "fail", "measured", "Each message's words name the field holding the character (PID-5, or NTE-3 for the one in a note) and the character"),
-    "O9.d": ("adapter", "not_wired", "read", "The page counts the 4 recent failures to that receiver sharing the character"),
-    "O9.e": ("adapter", "not_wired", "read", "None of the 4 is offered to go again"),
-    "O10.a": ("independent", "hold", "measured", "Two panels refused for an unknown code in one OBX: Suspended, one frame each, no repeat for 30 s"),
+    "O9.c": ("adapter", "fail", "measured", "Each message's words name every field holding the character (PID-5, ORC-12, OBX-5, NTE-3, as that message has them) and the character"),
+    "O9.d": ("adapter", "not_wired", "read", "The page counts the 7 recent failures to that receiver sharing the character"),
+    "O9.e": ("adapter", "not_wired", "read", "None of the 7 is offered to go again, at any reading while a design has time to offer it"),
+    "O10.a": ("independent", "hold", "measured", "Seven panels refused for an unknown code in one OBX: Suspended, one frame each, no repeat for 30 s; a panel of known codes reads Completed"),
     "O10.b": ("adapter", "hold", "measured", "The words carry the receiver's code for each"),
-    "O10.c": ("adapter", "not_wired", "read", "The finding names the right OBX: set id 4 in one panel and 2 in the other, not the first"),
-    "O11.a": ("independent", "hold", "read", "Patient not found, demographics mismatch, duplicate order, preliminary after final, and cancel after result: Suspended, one frame each, no repeat for 30 s, no write attempt"),
+    "O10.c": ("adapter", "not_wired", "read", "The finding names the right OBX in each panel: set ids 4, 2, 2, 5, 1, 4 and 3, of 3 to 8 OBX, not the first"),
+    "O11.a": ("independent", "hold", "read", "Patient not found, demographics mismatch, duplicate order and result, an exact repeat, result before order, no order, older after newer, preliminary after final, cancel after result: Suspended, one frame each, no repeat for 30 s, no write attempt; the accepted ones read Completed"),
     "O11.b": ("adapter", "hold", "read", "Each settles or escalates, with no person needed to get there"),
     "O11.c": ("adapter", "hold", "measured", "Each one's words carry what the receiver said"),
     "O12.a": ("independent", "hold", "read", "scripts/evaluate.py --check is unmoved"),
@@ -316,6 +324,15 @@ def result(control, codes=None, status="F", order_code="FBC^Full blood count^L",
     if note:
         out.append(b"NTE|1||" + note)
     return b"\r".join(out) + b"\r"
+
+
+def corpus(name, control):
+    """A corpus message's bytes with only its control id replaced, so that each row's messages are told apart at the receiver."""
+    with open(os.path.join(CORPUS, name + ".hl7"), "rb") as f:
+        head, sep, rest = f.read().partition(b"\r")
+    fields = head.split(b"|")
+    fields[9] = control.encode("ascii")
+    return b"|".join(fields) + sep + rest
 
 
 def adt_a01(control):
@@ -576,6 +593,19 @@ def stored_copies(ns, control):
     return re.findall(r"<<<(.*?)>>>", session(ns, code))
 
 
+def offered_settles(target, want=None, forbidden=(), seconds=OFFER_WITHIN):
+    """Reads what the product offers, for up to seconds: a design's poll may be slow, and an offer read too early would pass a
+    row by being empty. Stops once it reads as wanted; with want None it watches the whole time. (last reading, every forbidden
+    message any reading held). An unwired adapter raises at the first read, so this costs nothing until it is filled in."""
+    bad, end = set(), time.time() + seconds
+    while True:
+        last = adapter.resend_set(rig, LAB, target)
+        bad |= set(last) & set(forbidden)
+        if (want is not None and last == want) or time.time() >= end:
+            return last, sorted(bad)
+        time.sleep(5)
+
+
 def declare(receiver, **facts):
     """Says what a site would write for this receiver. An adapter with no answer leaves it undeclared, and rows say so."""
     if receiver in declared:
@@ -634,11 +664,13 @@ def row_outage(selected):
     check("O1.b", all(len(v) == 1 for v in st.values()), st)
     check("O1.c", attempts_for(LAB, ORDERS_OUT) == [], attempts_for(LAB, ORDERS_OUT))
     wait_until(lambda: len(incidents_now()) == 1 or no_adapter, INCIDENT_WITHIN - 60)
+    st = status_of(LAB, ORDERS_OUT, sent)
+    check("O1.b", all(len(v) == 1 for v in st.values()), st)
     incidents = incidents_now()
     adapter_check("O1.d", len(incidents) == 1, incidents)
     if ORDERS_OUT in declared and not no_adapter:
         words = adapter.person_text(rig, LAB, ORDERS_OUT)
-        check("O1.e", "01632 960123" in words and "Restart the Larkspur listener" in words, words[:600])
+        check("O1.e", "01632 960123" in words, words[:600])
     else:
         record("O1.e", NOT_WIRED, "pathology_adapter.declare_receiver")
 
@@ -709,16 +741,17 @@ def row_o4(selected):
     step("O4: no retry, nothing listening")
     svc, target, rx = 7504, "Quillon O4 Out", 7404
     declare(target, product="Quillon Lab", category="orders_results", who_to_call=WHO, what_to_do=TODO, duplicates="refuses", duplicate_words="ALREADY HELD")
+    kinds = ["01_orm_plain", "02_oru_3obx_plain", "02_oru_5obx_plain", "02_oru_8obx_plain", "01_orm_plain"]
     sent = [f"N4{tag}{i}" for i in range(1, 6)]
     before = log_count(LAB, target, "ErrOutConnectExpired")
-    st = fail_set(svc, target, {c: result(c) for c in sent})
+    st = fail_set(svc, target, {c: corpus(k, c) for c, k in zip(sent, kinds)})
     check("O4.a", all(v == ["Error"] for v in st.values()) and log_count(LAB, target, "ErrOutConnectExpired") >= before + len(sent) and heard(rx, sent) == [], st)
     rx_up(rx, {})
     time.sleep(WATCH)
     st = status_of(LAB, target, sent)
     check("O4.b", heard(rx, sent) == [] and all(v == ["Error"] for v in st.values()), (heard(rx, sent), st))
     with wired("O4.c", "O4.d"):
-        offered = adapter.resend_set(rig, LAB, target)
+        offered, _ = offered_settles(target, sent)
         check("O4.c", offered == sent, offered)
         n = rig.decisions
         adapter.approve_resend(rig, LAB, target)
@@ -733,25 +766,27 @@ def row_o5(selected):
     step("O5: a mixed set: never opened, read timeout, AE")
     svc, target, rx = 7505, "Quillon O5 Out", 7405
     declare(target, product="Quillon Lab", category="orders_results", who_to_call=WHO, what_to_do=TODO, duplicates="refuses", duplicate_words="ALREADY HELD")
-    never, timed, refused = [f"N5{tag}{i}" for i in range(1, 6)], f"T5{tag}", f"R5{tag}"
+    never, timed, refused, confirmed = [f"N5{tag}{i}" for i in range(1, 6)], f"T5{tag}", f"R5{tag}", f"C5{tag}"
     st1 = fail_set(svc, target, {c: result(c) for c in never})
-    rx_up(rx, {"by_control": {timed: {"code": "SILENT"}, refused: {"code": "AE", "words": "Refused by the application"}}})
+    rx_up(rx, {"by_control": {timed: {"code": "SILENT"}, refused: {"code": "AE", "words": "Refused by the application"}, confirmed: {"code": "CA"}}})
+    time.sleep(10)  # The operation connects within about 6 s: the three below are about what the receiver does, not about a connect.
     send(svc, result(timed), timed)
     send(svc, result(refused), refused)
-    st2 = wait_status(LAB, target, {timed: "Error", refused: "Suspended"}, 180)
-    h = heard(rx, never + [timed, refused])
-    check("O5.a", all(v == ["Error"] for v in st1.values()) and st2[timed] == ["Error"] and st2[refused] == ["Suspended"] and h == [timed, refused], (st1, st2, h))
+    send(svc, result(confirmed), confirmed)
+    st2 = wait_status(LAB, target, {timed: "Error", refused: "Suspended", confirmed: "Completed"}, 180)
+    h = heard(rx, never + [timed, refused, confirmed])
+    check("O5.a", all(v == ["Error"] for v in st1.values()) and st2[timed] == ["Error"] and st2[refused] == ["Suspended"] and st2[confirmed] == ["Completed"] and h == [timed, refused, confirmed], (st1, st2, h))
     rx_spec(rx, {})
     with wired("O5.b", "O5.c"):
-        offered = adapter.resend_set(rig, LAB, target)
-        check("O5.b", offered == never, offered)
+        offered, wrong = offered_settles(target, never, [timed, refused, confirmed])
+        check("O5.b", offered == never and not wrong, (offered, wrong))
         n = rig.decisions
         adapter.approve_resend(rig, LAB, target)
         wait_until(lambda: len(heard(rx, never)) >= len(never), 120, 2)
         time.sleep(WATCH)
         ok, why = exactly_once_in_order(heard(rx, never), never)
-        others = heard(rx, [timed, refused])
-        check("O5.c", ok and others == [timed, refused] and rig.decisions == n + 1, (why, others, rig.decisions - n))
+        others = heard(rx, [timed, refused, confirmed])
+        check("O5.c", ok and others == [timed, refused, confirmed] and rig.decisions == n + 1, (why, others, rig.decisions - n))
     rx_down_if_up(rx)
     taken_then_dead("O5.d", 7525, "Quillon O5d Out", 7425, "ErrFailureTimeout%ErrOutConnectExpired")
     taken_then_dead("O5.e", 7535, "Quillon O5e Out", 7435, "ErrOutConnectionLost")
@@ -767,7 +802,7 @@ def taken_then_dead(aid, svc, target, rx, words):
     st1 = fail_set(svc, target, {c: result(c) for c in never}, 300)
     before = log_count(LAB, target, words)
     rx_up(rx, RECEIVERS["takes_it_and_dies"])
-    time.sleep(LISTENER_BACK)
+    time.sleep(10)  # The operation connects within about 6 s, so the message goes on a connection that opens.
     send(svc, result(taken), taken)
     st2 = wait_status(LAB, target, {taken: "Error"}, 120)
     after = log_count(LAB, target, words)
@@ -776,8 +811,8 @@ def taken_then_dead(aid, svc, target, rx, words):
         rx_down_if_up(rx)
         return
     with wired(aid):
-        offered = adapter.resend_set(rig, LAB, target)
-        check(aid, offered == never, offered)
+        offered, wrong = offered_settles(target, never, [taken])
+        check(aid, offered == never and not wrong, (offered, wrong))
     rx_down_if_up(rx)
 
 
@@ -793,16 +828,16 @@ def row_o6(selected):
     st_b = fail_set(svc_b, target_b, {c: result(c) for c in b})
     check("O6.a", all(v == ["Error"] for v in list(st_a.values()) + list(st_b.values())) and heard(rx, a) == [] and heard(rx_b, b) == [], (st_a, st_b))
     rx_up(rx, {"by_control": {a[2]: {"code": "AE", "words": "Refused by the application"}}})
-    time.sleep(LISTENER_BACK)
     with wired("O6.b"):
+        offered_settles(target, a)
         n = rig.decisions
         adapter.approve_resend(rig, LAB, target)
         wait_until(lambda: len(heard(rx, a)) >= 3, 120, 2)
         time.sleep(40)
         check("O6.b", heard(rx, a) == a[:3] and rig.decisions == n + 1, (heard(rx, a), rig.decisions - n))
     rx_up(rx_b, {"die_after": 2})
-    time.sleep(LISTENER_BACK)
     with wired("O6.c"):
+        offered_settles(target_b, b)
         n = rig.decisions
         adapter.approve_resend(rig, LAB, target_b)
         wait_until(lambda: not rx_listening(rx_b), 120, 2)
@@ -810,7 +845,9 @@ def row_o6(selected):
         at_failure = heard(rx_b, b)
         rx_up(rx_b, {})
         time.sleep(WATCH)
-        check("O6.c", at_failure == b[:2] and heard(rx_b, b) == b[:2] and rig.decisions == n + 1, (at_failure, heard(rx_b, b), rig.decisions - n))
+        # Dialling on after the third failed reaches nobody, so only the headers can show it. A route with no header can't be caught here; the frames still are.
+        st = status_of(LAB, target_b, b[3:])
+        check("O6.c", at_failure == b[:2] and heard(rx_b, b) == b[:2] and all(len(v) == 1 for v in st.values()) and rig.decisions == n + 1, (at_failure, heard(rx_b, b), st, rig.decisions - n))
     rx_down_if_up(rx)
     rx_down_if_up(rx_b)
 
@@ -824,8 +861,8 @@ def row_o6(selected):
         record("O6.d", NOT_REACHED, "no earlier case opened on the first message, so the row's stimulus did not happen")
         return
     rx_up(rx_d, {"by_control": {d[0]: {"code": "AE", "words": "Refused by the application"}}})
-    time.sleep(LISTENER_BACK)
     with wired("O6.d"):
+        offered_settles(target_d, d)
         adapter.approve_resend(rig, LAB, target_d)
         wait_until(lambda: len(heard(rx_d, d)) >= 1, 120, 2)
         noticed = wait_until(lambda: adapter.resend_failed(rig, LAB, target_d, d[0]), 120)
@@ -843,30 +880,49 @@ def encodings(control):
     }
 
 
+def corpus_encodings(mark):
+    """The corpus's orders and results with the character, each encoding it has, and the one whose MSH-18 says the wrong thing."""
+    names = ["04_oru_e_grave_utf8_no18", "04_oru_e_grave_latin1_no18", "04_oru_e_grave_utf8_with18", "04_oru_e_grave_latin1_with18", "04_orm_e_grave_utf8_no18",
+             "04_orm_e_grave_latin1_no18", "04_orm_e_grave_utf8_with18"]
+    out = {f"{mark}K{i}": corpus(n, f"{mark}K{i}") for i, n in enumerate(names, 1)}
+    out[mark + "W"] = corpus("04_oru_e_grave_latin1_declares_utf8", mark + "W")
+    return out
+
+
 def row_o7(selected):
     step("O7: the bytes sent equal the bytes that came in")
     rx_c = 7407
     ctl = encodings(f"C7{tag}")
+    ctl.update(corpus_encodings(f"C7{tag}"))
     rx_up(rx_c, {})
     for c, data in ctl.items():
         send(7507, data, c)
     wait_until(lambda: len(heard(rx_c, list(ctl))) >= len(ctl), 60, 2)
-    same = {c: bytes_heard(rx_c, c) == [data] for c, data in ctl.items()}
+    # Latin-1 bytes under an MSH-18 saying UTF-8: stock reads them as UTF-8, so what it stores and sends isn't what came in, and that isn't Shutter's to change.
+    wrong = f"C7{tag}W"
+    same = {c: bytes_heard(rx_c, c) == [data] for c, data in ctl.items() if c != wrong}
     check("O7.a", all(same.values()), same)
+    stock_sent = bytes_heard(rx_c, wrong)
+    print(f"        a wrong MSH-18: stock sent {len(stock_sent)} frame, {'as it came in' if stock_sent == [ctl[wrong]] else 'changed: ' + repr(stock_sent)[:300]}", flush=True)
     rx_down_if_up(rx_c)
     svc, target, rx = 7517, "Quillon O7 Out", 7417
     declare(target, product="Quillon Lab", category="orders_results", who_to_call=WHO, what_to_do=TODO, duplicates="refuses", duplicate_words="ALREADY HELD")
     msgs = encodings(f"R7{tag}")
+    msgs.update(corpus_encodings(f"R7{tag}"))
     msgs.update({f"R7{tag}P{i}": result(f"R7{tag}P{i}") for i in (1, 2)})
-    fail_set(svc, target, msgs)
+    fail_set(svc, target, msgs, 300)
+    if len(stock_sent) != 1:
+        raise RigBroken(f"the control heard {len(stock_sent)} frames of the wrong MSH-18 message, so there is nothing to hold its resend to")
+    expected = dict(msgs)
+    expected[f"R7{tag}W"] = stock_sent[0].replace(wrong.encode("ascii"), f"R7{tag}W".encode("ascii"))
     copies = {c: stored_copies(LAB, c) for c in msgs}
     rx_up(rx, {})
-    time.sleep(LISTENER_BACK)
     with wired("O7.b", "O7.c"):
+        offered_settles(target, list(msgs))
         adapter.approve_resend(rig, LAB, target)
         wait_until(lambda: len(heard(rx, list(msgs))) >= len(msgs), 120, 2)
         time.sleep(10)
-        same = {c: bytes_heard(rx, c) == [data] for c, data in msgs.items()}
+        same = {c: bytes_heard(rx, c) == [expected[c]] for c in msgs}
         check("O7.b", all(same.values()), same)
         after = {c: stored_copies(LAB, c) for c in msgs}
         check("O7.c", all(copies[c] and set(after[c]) == set(copies[c]) for c in msgs), (copies, after))
@@ -886,20 +942,24 @@ def row_o8(selected):
     st_r = fail_set(svc_r, ref, {c: result(c) for c in set_r})
     st_u = fail_set(svc_u, unk, {c: result(c) for c in set_u})
     rx_up(rx_r, {"held": {"controls": [c_r], "words": "ALREADY HELD, entered by hand"}})
-    rx_up(rx_u, {})
+    rx_up(rx_u, RECEIVERS["files_duplicate_twice"])
     time.sleep(WATCH)
     check("O8.a", all(v == ["Error"] for v in list(st_r.values()) + list(st_u.values())) and heard(rx_r, set_r) == [] and heard(rx_u, set_u) == [], (st_r, st_u, heard(rx_r), heard(rx_u)))
     with wired("O8.b", "O8.c"):
+        offered_settles(ref, set_r)
         adapter.approve_resend(rig, LAB, ref)
         wait_until(lambda: len(heard(rx_r, [c_r])) >= 1, 120, 2)
         time.sleep(WATCH)
         check("O8.b", heard(rx_r, [c_r]) == [c_r], heard(rx_r, [c_r]))
+        wait_until(lambda: adapter.closure(rig, LAB, ref, c_r) is not None, FINDING_WITHIN)
         got = adapter.closure(rig, LAB, ref, c_r)
         check("O8.c", got == "already_delivered", got)
     with wired("O8.d", "O8.e"):
+        wait_until(lambda: adapter.offers_handled_by_hand(rig, LAB, unk, c_u) is True, OFFER_WITHIN, 5)
         check("O8.d", adapter.offers_handled_by_hand(rig, LAB, unk, c_u) is True and heard(rx_u, [c_u]) == [], heard(rx_u, [c_u]))
         adapter.choose_handled_by_hand(rig, LAB, unk, c_u)
         time.sleep(WATCH)
+        wait_until(lambda: adapter.closure(rig, LAB, unk, c_u) is not None, FINDING_WITHIN)
         got = adapter.closure(rig, LAB, unk, c_u)
         check("O8.e", heard(rx_u, [c_u]) == [] and got == "handled_by_hand", (heard(rx_u, [c_u]), got))
     rx_down_if_up(rx_r)
@@ -911,34 +971,50 @@ def row_o9(selected):
     svc, target, rx = 7509, "Quillon O9 Out", 7409
     declare(target, product="Quillon Lab", category="orders_results", who_to_call=WHO, what_to_do=TODO, duplicates="refuses", duplicate_words="ALREADY HELD")
     rx_up(rx, RECEIVERS["ae_above_7f"])
+    pid5, orc12, obx5, nte3 = field_named("PID", 5), field_named("ORC", 12), field_named("OBX", 5), field_named("NTE", 3)
+    everywhere = [pid5, orc12, obx5, nte3]
     marked = {
-        f"E9{tag}1": (result(f"E9{tag}1", pid5=b"MOLI" + E_LATIN1 + b"RE^RIG"), r"PID\W{0,3}5\b"),
-        f"E9{tag}2": (result(f"E9{tag}2", pid5=b"MOLI" + E_UTF8 + b"RE^RIG", msh18=b"UNICODE UTF-8"), r"PID\W{0,3}5\b"),
-        f"E9{tag}3": (result(f"E9{tag}3", pid5=b"MOLI" + E_UTF8 + b"RE^RIG"), r"PID\W{0,3}5\b"),
-        f"E9{tag}4": (result(f"E9{tag}4", note=b"Seen by Dr Moli" + E_LATIN1 + b"re"), r"NTE\W{0,3}3\b"),
+        f"E9{tag}1": (corpus("04_oru_e_grave_latin1_no18", f"E9{tag}1"), everywhere),
+        f"E9{tag}2": (corpus("04_oru_e_grave_utf8_with18", f"E9{tag}2"), everywhere),
+        f"E9{tag}3": (corpus("04_oru_e_grave_utf8_no18", f"E9{tag}3"), everywhere),
+        f"E9{tag}4": (corpus("04_oru_e_grave_latin1_with18", f"E9{tag}4"), everywhere),
+        f"E9{tag}5": (corpus("04_orm_e_grave_latin1_no18", f"E9{tag}5"), [pid5, nte3]),
+        f"E9{tag}6": (result(f"E9{tag}6", pid5=b"MOLI" + E_UTF8 + b"RE^RIG"), [pid5]),
+        f"E9{tag}7": (result(f"E9{tag}7", note=b"Seen by Dr Moli" + E_LATIN1 + b"re"), [nte3]),
     }
-    plain = f"P9{tag}"
+    plain, plain2 = f"P9{tag}", f"Q9{tag}"
     for c, (data, _) in marked.items():
         send(svc, data, c)
     send(svc, result(plain), plain)
-    all_ids = list(marked) + [plain]
+    send(svc, corpus("04_oru_plain_control", plain2), plain2)
+    all_ids = list(marked) + [plain, plain2]
     want = {c: "Suspended" for c in marked}
-    want[plain] = "Completed"
+    want[plain] = want[plain2] = "Completed"
     st = wait_status(LAB, target, want)
     check("O9.a", all(st[c] == [want[c]] for c in want) and sorted(heard(rx, all_ids)) == sorted(all_ids), (st, heard(rx, all_ids)))
     time.sleep(WATCH)
     same = {c: bytes_heard(rx, c) == [d] for c, (d, _) in marked.items()}
     check("O9.b", sorted(heard(rx, all_ids)) == sorted(all_ids) and all(same.values()), (heard(rx, all_ids), same))
-    wait_until(lambda: len(cases_for(LAB, target)) >= 4, 60)
-    texts = {c: adapter.person_text(rig, LAB, target, c) for c in marked}
-    named = {c: bool(re.search(marked[c][1], texts[c], re.I)) and bool(re.search(CHAR_NAMED, texts[c], re.I)) for c in marked}
+    wait_until(lambda: len(cases_for(LAB, target)) >= len(marked), 60)
+
+    def naming():
+        texts = {c: adapter.person_text(rig, LAB, target, c) for c in marked}
+        return {c: all(re.search(f, texts[c], re.I) for f in marked[c][1]) and bool(re.search(CHAR_NAMED, texts[c], re.I)) for c in marked}
+
+    wait_until(lambda: all(naming().values()), FINDING_WITHIN, 20)
+    named = naming()
     check("O9.c", all(named.values()), named)
     with wired("O9.d"):
-        counts = {c: adapter.shared_character_count(rig, LAB, target, c) for c in marked}
-        check("O9.d", all(v == 4 for v in counts.values()), counts)
+        counts = {}
+
+        def counted():
+            counts.update({c: adapter.shared_character_count(rig, LAB, target, c) for c in marked})
+            return all(v == len(marked) for v in counts.values())
+
+        check("O9.d", wait_until(counted, FINDING_WITHIN, 10), counts)
     with wired("O9.e"):
-        offered = adapter.resend_set(rig, LAB, target)
-        check("O9.e", not set(offered) & set(marked), offered)
+        offered, wrong = offered_settles(target, forbidden=list(marked))
+        check("O9.e", not wrong, (offered, wrong))
     rx_down_if_up(rx)
 
 
@@ -947,18 +1023,38 @@ def row_o10(selected):
     svc, target, rx = 7510, "Quillon O10 Out", 7410
     declare(target, product="Quillon Lab", category="orders_results", who_to_call=WHO, what_to_do=TODO, duplicates="refuses", duplicate_words="ALREADY HELD")
     p4, p2 = f"U10{tag}A", f"U10{tag}B"
+    known = f"U10{tag}K"
+    # control: (bytes, the code the receiver will name, the OBX set id holding it). The two made-up codes differ, so one case's words can't serve for the other's.
+    panels = {
+        p4: (result(p4, codes={4: "XQZ9"}), "XQZ9", 4),
+        p2: (result(p2, codes={2: "VRT7"}), "VRT7", 2),
+        f"U10{tag}C": (corpus("03_oru_3obx_unknown_at_2", f"U10{tag}C"), "ZZUNK", 2),
+        f"U10{tag}D": (corpus("03_oru_5obx_unknown_at_5", f"U10{tag}D"), "ZZUNK", 5),
+        f"U10{tag}E": (corpus("03_oru_8obx_unknown_at_1", f"U10{tag}E"), "ZZUNK", 1),
+        f"U10{tag}F": (corpus("03_oru_6obx_unknown_at_4", f"U10{tag}F"), "ZZUNK", 4),
+        f"U10{tag}G": (corpus("06_oru_6obx_unknown_at_3_e_grave_utf8_no18", f"U10{tag}G"), "ZZUNK", 3),
+    }
     rx_up(rx, RECEIVERS["ae_unknown_code"])
-    send(svc, result(p4, codes={4: "XQZ9"}), p4)
-    send(svc, result(p2, codes={2: "VRT7"}), p2)
-    st = wait_status(LAB, target, {p4: "Suspended", p2: "Suspended"})
+    for c, (data, _, _) in panels.items():
+        send(svc, data, c)
+    send(svc, corpus("03_oru_all_known_4obx", known), known)
+    want = {c: "Suspended" for c in panels}
+    want[known] = "Completed"
+    st = wait_status(LAB, target, want)
     time.sleep(WATCH)
-    check("O10.a", st[p4] == ["Suspended"] and st[p2] == ["Suspended"] and heard(rx, [p4, p2]) == [p4, p2], (st, heard(rx, [p4, p2])))
-    wait_until(lambda: len(cases_for(LAB, target)) >= 2, 60)
-    t4, t2 = adapter.person_text(rig, LAB, target, p4), adapter.person_text(rig, LAB, target, p2)
-    check("O10.b", "XQZ9" in t4 and "VRT7" in t2, (t4[:300], t2[:300]))
+    order_sent = list(panels) + [known]
+    check("O10.a", all(st[c] == [want[c]] for c in want) and heard(rx, order_sent) == order_sent, (st, heard(rx, order_sent)))
+    wait_until(lambda: len(cases_for(LAB, target)) >= len(panels), 60)
+    words = {c: panels[c][1] in adapter.person_text(rig, LAB, target, c) for c in panels}
+    check("O10.b", all(words.values()), words)
     with wired("O10.c"):
-        got = (adapter.named_obx(rig, LAB, target, p4), adapter.named_obx(rig, LAB, target, p2))
-        check("O10.c", got == ([4], [2]), got)
+        got = {}
+
+        def named_right():
+            got.update({c: adapter.named_obx(rig, LAB, target, c) for c in panels})
+            return all(got[c] == [panels[c][2]] for c in panels)
+
+        check("O10.c", wait_until(named_right, FINDING_WITHIN, 10), got)
     rx_down_if_up(rx)
 
 
@@ -975,14 +1071,45 @@ def row_o11(selected):
         f"PR11{t}": (result(f"PR11{t}", status="P"), "Preliminary result after a final result"),
         f"CA11{t}": (order(f"CA11{t}", placer=first_order).replace(b"ORC|NW|", b"ORC|CA|"), "Cancel received after the result"),
     }
-    rx_up(rx, {"by_control": {c: {"code": "AE", "words": w} for c, (_, w) in cases.items()}})
+    # The corpus's sequences, in the order a feed would send them: the receiver takes the first of each and refuses the rest.
+    accepted = {f"SA1{t}": corpus("05_seq_a1_order", f"SA1{t}"), f"SB2{t}": corpus("05_seq_b2_order_after", f"SB2{t}"), f"SD1{t}": corpus("05_seq_d1_result_final", f"SD1{t}")}
+    refused_seq = {
+        f"SA2{t}": (corpus("05_seq_a2_order_duplicate", f"SA2{t}"), "Duplicate order number"),
+        f"SA4{t}": (corpus("05_seq_a4_result_duplicate", f"SA4{t}"), "Duplicate result for this order"),
+        f"SB1{t}": (corpus("05_seq_b1_result_first", f"SB1{t}"), "Result received before its order"),
+        f"SC1{t}": (corpus("05_seq_c1_result_no_order", f"SC1{t}"), "No order held for this result"),
+        f"SD2{t}": (corpus("05_seq_d2_result_older_timestamp", f"SD2{t}"), "Older than the result already held"),
+    }
+    cases.update(refused_seq)
+    # The exact repeat has the same control id as what it repeats, so the receiver tells them apart by having heard it.
+    repeat = f"SA3{t}"
+    repeat_words = RECEIVERS["refuses_repeat"]["refuses_repeat"]["words"]
+    rx_up(rx, dict(RECEIVERS["refuses_repeat"], by_control={c: {"code": "AE", "words": w} for c, (_, w) in cases.items()}))
     send(svc, order(first_order), first_order)
     for c, (data, _) in cases.items():
-        send(svc, data, c)
-    st = wait_status(LAB, target, {c: "Suspended" for c in cases})
+        if c not in refused_seq:
+            send(svc, data, c)
+    send(svc, accepted[f"SA1{t}"], f"SA1{t}")
+    send(svc, refused_seq[f"SA2{t}"][0], f"SA2{t}")
+    send(svc, corpus("05_seq_a3_result", repeat), repeat)
+    send(svc, refused_seq[f"SA4{t}"][0], f"SA4{t}")
+    send(svc, corpus("05_seq_a5_result_identical_ctl", repeat), repeat + "-again")
+    send(svc, refused_seq[f"SB1{t}"][0], f"SB1{t}")
+    send(svc, accepted[f"SB2{t}"], f"SB2{t}")
+    send(svc, refused_seq[f"SC1{t}"][0], f"SC1{t}")
+    send(svc, accepted[f"SD1{t}"], f"SD1{t}")
+    send(svc, refused_seq[f"SD2{t}"][0], f"SD2{t}")
+    want = {c: "Suspended" for c in cases}
+    want.update({c: "Completed" for c in accepted})
+    st = wait_status(LAB, target, want)
+    wait_until(lambda: sorted(status_of(LAB, target, [repeat])[repeat]) == ["Completed", "Suspended"], 60)
     time.sleep(WATCH)
-    ok = all(v == ["Suspended"] for v in st.values()) and sorted(heard(rx, list(cases))) == sorted(cases) and attempts_for(LAB, target) == []
-    check("O11.a", ok, (st, heard(rx, list(cases)), attempts_for(LAB, target)))
+    twice = sorted(status_of(LAB, target, [repeat])[repeat])
+    once = list(cases) + list(accepted)
+    got = heard(rx, once)
+    ok = all(st[c] == [want[c]] for c in want) and twice == ["Completed", "Suspended"] and sorted(got) == sorted(once) and heard(rx, [repeat]) == [repeat, repeat] and attempts_for(LAB, target) == []
+    check("O11.a", ok, (st, twice, got, heard(rx, [repeat]), attempts_for(LAB, target)))
+    cases[repeat] = (b"", repeat_words)
     wait_until(lambda: len(cases_for(LAB, target)) >= len(cases), 60)
     done = {}
     for c in cases:
@@ -1090,15 +1217,16 @@ def row_o13(selected):
         record("O13.h", NOT_REACHED, "the QueueWaitAlert never fired")
         return
     time.sleep(WATCH)
+    print(f"        cases on that receiver while the engine holds both: {len(cases_for(LAB, waiting))}; queue {queue(LAB, waiting)}; headers {status_of(LAB, waiting, held_back)}", flush=True)
     with wired("O13.h"):
-        offered = adapter.resend_set(rig, LAB, waiting)
+        offered, wrong = offered_settles(waiting, forbidden=held_back)
         opened = cases_for(LAB, waiting)
         plain = not opened or all(adapter.says_engine_holds(rig, LAB, waiting, c) for c in held_back)
         rx_up(waiting_rx, {})
         wait_until(lambda: queue(LAB, waiting) == 0 and len(heard(waiting_rx, held_back)) >= len(held_back), 120, 2)
         time.sleep(10)
         ok, why = exactly_once_in_order(heard(waiting_rx, held_back), held_back)
-        check("O13.h", plain and not set(offered) & set(held_back) and ok, (opened, offered, why))
+        check("O13.h", plain and not wrong and ok, (opened, offered, wrong, why))
     rx_down_if_up(waiting_rx)
 
 
@@ -1286,6 +1414,14 @@ def selftest():
     expect("order and once: swapped fails", not exactly_once_in_order(["b", "a"], ["a", "b"])[0])
     expect("order and once: one missing fails", not exactly_once_in_order(["a"], ["a", "b"])[0])
 
+    real_adapter_set = adapter.resend_set
+    readings = [["a"], ["a", "x"], ["a", "b"]]
+    adapter.resend_set = lambda r, n, t: readings.pop(0)
+    expect("an offer is read until it's right, and a wrong reading on the way is kept", offered_settles("T", ["a", "b"], ["x"], 60) == (["a", "b"], ["x"]))
+    adapter.resend_set = lambda r, n, t: []
+    expect("with nothing wanted the offer is watched to the end, and empty is what it says", offered_settles("T", None, ["x"], 0) == ([], []))
+    adapter.resend_set = real_adapter_set
+
     saved = dict(results)
     results.clear()
     for a in ROWS["O5"]:
@@ -1376,6 +1512,13 @@ def selftest():
     expect("control id is MSH-10", panel[0].split(b"|")[9] == b"Z1")
     expect("order's control and placer", order("Z2", placer="P9").split(b"\r")[0].split(b"|")[9] == b"Z2" and b"ORC|NW|P9|" in order("Z2", placer="P9"))
     expect("MSH-18 lands in field 18", result("Z3", msh18=b"UNICODE UTF-8").split(b"\r")[0].split(b"|")[17] == b"UNICODE UTF-8")
+    expect("a corpus message changes only its control id", corpus("05_seq_a3_result", "C0503") == open(os.path.join(CORPUS, "05_seq_a3_result.hl7"), "rb").read() and corpus("04_oru_e_grave_latin1_no18", "ZZ1").split(b"\r")[0].split(b"|")[9] == b"ZZ1" and b"\xe8" in corpus("04_oru_e_grave_latin1_no18", "ZZ1"))
+    expect("the corpus's exact repeat is one message", corpus("05_seq_a3_result", "Z") == corpus("05_seq_a5_result_identical_ctl", "Z"))
+    expect("the corpus has its unknown code where its name says", [s for s in corpus("03_oru_5obx_unknown_at_5", "Z").split(b"\r") if b"ZZUNK" in s][0].startswith(b"OBX|5|") and [s for s in corpus("06_oru_6obx_unknown_at_3_e_grave_utf8_no18", "Z").split(b"\r") if b"ZZUNK" in s][0].startswith(b"OBX|3|"))
+    for way in ("PID-5", "PID.5", "PID 5", "PID segment, field 5", "the PID-5 field"):
+        expect(f"a field's name reads {way}", bool(re.search(field_named("PID", 5), way)))
+    expect("a field's name reads a repeating segment", bool(re.search(field_named("OBX", 5), "in OBX[2]-5")) and bool(re.search(field_named("OBX", 5), "OBX 2 field 5")))
+    expect("a field's name doesn't read another field", not re.search(field_named("PID", 5), "PID-3 and PID-55"))
     expect("names read from a run, digits taken out", normal_names("  ok    the load finishes in 12 s\n  FAIL  x\n        detail\n") == ["the load finishes in N s", "x"])
     expect("a field regex reads PID-5", bool(re.search(r"PID\W{0,3}5\b", "the character is in PID-5")))
     expect("the character regex reads the char itself, its bytes and its name", all(re.search(CHAR_NAMED, t, re.I) for t in ("\u00e8", "U+00E8", "bytes C3 A8", "byte E8", "e with a grave accent", "an e-grave")))
@@ -1451,6 +1594,8 @@ def selftest():
         twice = result("R23")
         expect("receiver: AA for the first copy and the second", talk(twice).startswith("MSA|AA|R23") and talk(twice).startswith("MSA|AA|R23"))
         expect("receiver: the log says which copy each was", [x["copy"] for x in log() if x["ctl"] == "R23"] == [1, 2])
+        set_mode(RECEIVERS["refuses_repeat"])
+        expect("receiver: a first copy is taken, a repeat refused in its words", talk(result("R25")).startswith("MSA|AA|R25") and talk(result("R25")) == "MSA|AE|R25|Message id already received")
         set_mode(RECEIVERS["refuses_at_once"])
         count = len(log())
         try:

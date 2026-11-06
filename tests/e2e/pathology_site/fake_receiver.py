@@ -11,6 +11,7 @@
 #   ae_unknown_code  {"known": [...], "words": ...}: AE for a frame with an OBX-3 code not in known; MSA-3 is words then that code.
 #   reset_on_connect  true: accepts a connection and resets it before reading, so no frame is ever heard.
 #   held         {"controls": [...], "words": ...}: this receiver already holds these messages and refuses them.
+#   refuses_repeat  {"words": ...}: AE, in those words, to a second copy of a control id it has already heard.
 #   delay        seconds to wait before each answer, so a drain takes a while.
 #   die_after    close everything and exit once this many frames have come in since it started.
 # It stops when WORKDIR/stop-PORT exists or after SECONDS.
@@ -47,10 +48,12 @@ def unknown_code(known, frame):
     return ""
 
 
-def answer_for(mode, ctl, frame):
+def answer_for(mode, ctl, frame, seen=0):
     by = (mode.get("by_control") or {}).get(ctl)
     if by:
         return by.get("code", "AA"), by.get("words", "")
+    if mode.get("refuses_repeat") and seen:
+        return "AE", mode["refuses_repeat"].get("words", "")
     held = mode.get("held") or {}
     if ctl in (held.get("controls") or []):
         return "AE", held.get("words", "")
@@ -118,7 +121,7 @@ def main():
                     frame = raw[raw.find(b"\x0b") + 1:]
                     ctl = frame.split(b"\r")[0].decode("latin-1").split("|")[9]
                     mode = spec()
-                    code, words = answer_for(mode, ctl, frame)
+                    code, words = answer_for(mode, ctl, frame, copies.get(ctl, 0))
                     copies[ctl] = copies.get(ctl, 0) + 1
                     log.write(json.dumps({"t": round(time.time(), 3), "conn": p[2], "ctl": ctl, "hex": frame.hex(), "copy": copies[ctl], "answer": code}) + "\n")
                     heard += 1

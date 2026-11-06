@@ -9,7 +9,7 @@ Method OnProcessInput(pInput As %RegisteredObject, Output pOutput As %Registered
 {
     If $GET(^OraSite.Say) > 0 {
         Set ^OraSite.Say = ^OraSite.Say - 1
-        $$$LOGALERT("Rig housekeeping alert, about no message")
+        Do ..SendAlert(##class(Ens.AlertRequest).%New($LISTBUILD(..%ConfigName, "Rig housekeeping alert, about no message")))
     }
     Quit $$$OK
 }

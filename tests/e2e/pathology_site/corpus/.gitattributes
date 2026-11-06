@@ -1,0 +1,2 @@
+# These messages are fixtures in the encodings they name, some of them not UTF-8: git keeps their bytes and shows no text diff of them.
+*.hl7 binary
