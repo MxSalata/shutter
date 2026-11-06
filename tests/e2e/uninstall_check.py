@@ -262,8 +262,8 @@ def site_shape():
     check("the site's approver joins the Workflow role", "[wf] 1" in out, out[-300:])
     r = obj("SHUTTER", '##class(Shutter.Setup).OnboardApply("PATHOLOGY","")')
     check("PATHOLOGY is onboarded", r.get("ok") is True, r)
-    r = obj("SHUTTER", f'##class(Shutter.Setup).OnboardCredential("PATHOLOGY","shutter-fwd","{PW}")')
-    check("its credential is stored", r.get("ok") is not False, r)
+    out = session("SHUTTER", f'Do ##class(Shutter.Setup).OnboardCredential("PATHOLOGY","shutter-fwd","{PW}")')
+    check("its credential is stored", '"ok":true' in out, out[-500:])
     time.sleep(3)
     r = obj("SHUTTER", '##class(Shutter.Setup).OnboardTest("PATHOLOGY")')
     check("a marked test failure opens a case", r.get("ok") is True, r)
@@ -274,8 +274,11 @@ def site_shape():
         check("a provider is configured (a placeholder: nothing is called)", "[p] ok" in out, out[-300:])
     cases = value("SHUTTER", '$ORDER(^Shutter.Store.CaseD(""),-1)')
 
-    step("A reload over a live install: the uninstall must not run")
+    step("A reload over a live install, then an upgrade to a higher version: the uninstall must not run")
     load("SHUTTER", " -Ddemo=0")
+    subprocess.run(["docker", "exec", CTR, "sh", "-c", f"sed -i 's|<Version>[0-9.]*</Version>|<Version>99.0.0</Version>|' {TARGET}/module.xml"], check=True)
+    load("SHUTTER", " -Ddemo=0")
+    subprocess.run(["docker", "exec", CTR, "sh", "-c", f"sed -i 's|<Version>99.0.0</Version>|<Version>1.0.0</Version>|' {TARGET}/module.xml"], check=True)
     check("the case is still there", value("SHUTTER", '$ORDER(^Shutter.Store.CaseD(""),-1)') == cases, cases)
     check("PATHOLOGY is still wired", value("PATHOLOGY", '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Intake.Forwarder")') == "1")
 
