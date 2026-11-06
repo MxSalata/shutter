@@ -159,7 +159,7 @@ such as a plain MLLP receiver, declare its `features` all false and leave `api` 
 receipt lookup and no resend: the gate blocks any write, and the case holds the evidence and the reason nothing was
 sent. Nothing goes out by itself: a person reads the case on the Cases page, and its page drafts the email for the team
 that owns the system. A receiver you do give an API needs a connector of its name in Shutter's production and the credential
-it signs in with (section 9, "Giving a receiver its API"). On a site install a receiver the profile does not name at all
+it signs in with (section 9, "Giving a receiver its API"). Shutter checks that receiver's answers against the interface contract: a 200 or 404 on a read counts only with the contract's own fields, a 200 on a write only with its receipt, and a receipt closes a case only if it holds the message's own digest, ward and bed. If your receiver answers another way, cases stop for a person saying the receiver could not be read; look at what it sends, then set `"strict_answers": false` on its entry, and its answers are read on their status alone. On a site install a receiver the profile does not name at all
 reads as one with no API: nothing is resent to it. `tests/e2e/plain_receiver_check.py` plays this on a stock `EnsLib.HL7.Operation.TCPOperation`,
 down and answering AE.
 

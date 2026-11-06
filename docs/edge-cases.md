@@ -6,12 +6,12 @@ Everything is played against the demo receiver or a stub listener; what a real r
 
 | What goes wrong | What Shutter does | Proof | Not covered |
 | --- | --- | --- | --- |
-| A transfer never reached the receiver | **Handled.** One conditional write once released, checked against receipt and history | S2 in CI | Verified compares the operation's key, not its ward or bed |
-| The receiver took it, but its answer was lost | **Handled.** Reads the receipt, finds it, resends nothing | S3 in CI | A receipt under the same key with different content reads as the same |
+| A transfer never reached the receiver | **Handled.** One conditional write once released, checked against receipt and history | S2 in CI | A receiver whose receipt names no digest or bed has nothing to compare |
+| The receiver took it, but its answer was lost | **Handled.** Reads the receipt, finds it, resends nothing | S3 in CI | A receipt under the same key with other content stops for a person. A receipt with no digest passes as it is |
 | *Seen in practice.* The receiver changes while a resend waits for approval | **Handled.** That approval is void, nothing is written on it, the case is planned afresh | S7, S20 in CI, [boundary](../tests/e2e/boundary_check.py) | A change that doesn't move the version; a fix made before the case; a hand entry recorded as an update, or timed before the failed event: the new plan can propose the resend again |
 | *Seen in practice.* A later move overtook the failed one, but history is owed | **Handled.** Per receiver: closed, or correction steps for a person | S22 in CI | Wards aren't compared. A failed update or discharge followed by a later transfer closes the same way today. A receiver with no declared category counts as current state |
 | A transfer timed in the hour the clocks go back | **Stops and flags.** The case goes to a person | S21 in CI | Europe/London only. In an outage, one such item sends its whole chain to a person (read, not played) |
-| *Seen in practice.* Refused as "duplicate", but nothing filed | **Handled.** That refusal closes nothing; receipt and history decide | S4 in CI, [Verify](../tests/unit/Shutter/Test/Verify.cls) | A receipt written before filing. A 200 saying already committed, on a first delivery, counts as delivered and opens no case. A receiver that still says duplicate to the resend hasn't been played |
+| *Seen in practice.* Refused as "duplicate", but nothing filed | **Handled.** That refusal closes nothing; receipt and history decide | S4 in CI, [Verify](../tests/unit/Shutter/Test/Verify.cls) | A receipt written before filing. A receiver that still says duplicate to the resend hasn't been played |
 | A newer message on its way | **Stops and flags.** Held at gate and connector, named | S24 in CI | The same visit only; the wait has no limit |
 | A merge, perhaps undone since | **Stops and flags.** Never sent automatically | S15 in CI | Later activity and the merge's age aren't shown |
 | AE at a plain MLLP receiver. *Seen in practice:* a listener allowing one connection | **Stops and flags.** Case with evidence, no resend, no MLLP connection of Shutter's own | [plain receiver](../tests/e2e/plain_receiver_check.py) in CI | Needs AlertOnError; every one costs a person. The test counts messages, not connections; the connection claim rests on reading the code |
@@ -25,7 +25,7 @@ Everything is played against the demo receiver or a stub listener; what a real r
 - It compares one visit at a time, not a patient's other visits or merged records.
 - It doesn't read death or restriction fields.
 - It sends an operation, not the message, so a failed A08 isn't recovered.
-- Verified means this operation was in the receipt and history when read. Ward and bed aren't compared, and closed cases aren't read again.
+- Verified means this operation was in the receipt and history when read, with the digest, ward and bed they name. A closed case isn't read again.
 - It takes times as stated: two sources a second apart aren't simultaneous, and a slow clock isn't noticed.
 - It trusts the receiver's API: an ignored condition, a gateway's page or a partial history isn't detected.
 - On the alert route it reads the alert's words and the session's first HL7 message, and doesn't see a hand resend.
