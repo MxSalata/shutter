@@ -230,6 +230,14 @@ Method TestAbandonedLeaderFinishesTheLead()
     Do $$$AssertEquals(##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-D").State, "investigating", "and is left as it was")
 }
 
+/// An instance whose send to the gate does nothing, for a path that plans: what is asserted is the plan it stored.
+Method QuietInstance() As Shutter.Process.CaseWorkflow
+{
+    Set wf = ##class(Shutter.Test.QuietWorkflow).%New("Case Workflow")
+    Do $$$AssertTrue($ISOBJECT(wf), "an instance of the Case Workflow item")
+    Quit wf
+}
+
 /// A saved case in the given mode with a sealed snapshot of the summary, and a run per status on that snapshot, as the
 /// members of a board nobody could answer leave them.
 Method NoAnswerCase(caseId As %String, mode As %String, catalogue As %DynamicObject, statuses As %List = "") As Shutter.Store.Case
@@ -269,12 +277,6 @@ ClassMethod E2() As %DynamicObject
     Quit {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "title": "Not delivered, still current", "decides": "policy", "preferred": {"outcome": "resend", "why": "It is still due."}}]}
 }
 
-/// The rules path's send to the gate has no production under it here: what is asserted is the plan it stored first.
-Method AfterBoardOutside(wf As Shutter.Process.CaseWorkflow, c As Shutter.Store.Case)
-{
-    Try { Do wf.AfterBoard(c) } Catch { }
-}
-
 /// The case stopped for a person: escalated, nothing planned, and the event and the reason name why.
 Method AssertStopped(caseId As %String, what As %String, words As %String)
 {
@@ -301,24 +303,24 @@ Method TestNoBoardAnswerGoesToAPerson()
             Set c = ..NoAnswerCase("C-TEST-LEAD-N", mode, ..E7(), $LISTBUILD(status, status, status))
             Set wf = ..Instance()
             Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = mode
-            Do ..AfterBoardOutside(wf, c)
+            Do wf.AfterBoard(c)
             Do ..AssertStopped("C-TEST-LEAD-N", mode _ ", " _ status, "E7")
         }
     }
     Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", ..E7(), $LISTBUILD("budget_exhausted"))
     Set wf = ..Instance()
     Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board"
-    Do ..AfterBoardOutside(wf, c)
+    Do wf.AfterBoard(c)
     Do ..AssertStopped("C-TEST-LEAD-N", "the budget is named", "budget")
     Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", ..E7(), $LISTBUILD("provider_auth"))
     Set wf = ..Instance()
     Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board"
-    Do ..AfterBoardOutside(wf, c)
+    Do wf.AfterBoard(c)
     Do ..AssertStopped("C-TEST-LEAD-N", "the provider is named", "refuses the key")
     Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", ..E7(), $LISTBUILD("no_record"))
     Set wf = ..Instance()
     Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board"
-    Do ..AfterBoardOutside(wf, c)
+    Do wf.AfterBoard(c)
     Do ..AssertStopped("C-TEST-LEAD-N", "the missing recording is named", "recording")
 }
 
@@ -329,20 +331,20 @@ Method TestEveryBoardDecisionStops()
     Set c = ..NoAnswerCase("C-TEST-LEAD-N", "policy", ..E9(), $LISTBUILD("budget_exhausted"))
     Set wf = ..Instance()
     Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "policy"
-    Do ..AfterBoardOutside(wf, c)
+    Do wf.AfterBoard(c)
     Do ..AssertStopped("C-TEST-LEAD-N", "one entry preferring a resend", "E9")
     Set several = {"decision": "board", "matches": [{"id": "E2", "title": "One", "preferred": {"outcome": "resend"}}, {"id": "E7", "title": "Two", "preferred": {"outcome": "escalate"}}]}
     Do several.%Set("entry", "", "null"), several.%Set("outcome", "", "null")
     Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", several, $LISTBUILD("no_record"))
     Set wf = ..Instance()
     Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board"
-    Do ..AfterBoardOutside(wf, c)
+    Do wf.AfterBoard(c)
     Do ..AssertStopped("C-TEST-LEAD-N", "several matches", "E2, E7")
     Set person = {"decision": "person", "entry": "E8", "outcome": "escalate", "matches": [{"id": "E8", "title": "A person decides", "decides": "person", "preferred": {"outcome": "escalate"}}]}
     Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", person, $LISTBUILD("provider_auth"))
     Set wf = ..Instance()
     Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board"
-    Do ..AfterBoardOutside(wf, c)
+    Do wf.AfterBoard(c)
     Do ..AssertStopped("C-TEST-LEAD-N", "an entry a person decides", "E8")
 }
 
@@ -358,7 +360,7 @@ Method TestALeaderThatStopsFailsItsLead()
     Do $$$AssertStatusOK($CLASSMETHOD(bl, "Begin", sig, c, "", .lead), "the lead begins")
     Set wf = ..Instance()
     Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board", wf.LeadSignature = sig
-    Do ..AfterBoardOutside(wf, c)
+    Do wf.AfterBoard(c)
     Set after = $CLASSMETHOD(bl, "ForLeader", "C-TEST-LEAD-N")
     Do $$$AssertEquals(after.State, "failed", "the lead is failed")
     Do $$$AssertEquals(after.PlanJSON, "", "with no plan for a follower")
@@ -421,9 +423,9 @@ Method TestNoMemberToConveneGoesToAPerson()
 Method TestRulesOnlyStillProposesTheResend()
 {
     Set c = ..NoAnswerCase("C-TEST-LEAD-N", "rules", ..E7())
-    Set wf = ..Instance()
+    Set wf = ..QuietInstance()
     Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "rules"
-    Try { Do wf.ConveneBoard(c, c.CurrentSnapshot.Summary, "", "", .convened) } Catch { }
+    Do $$$AssertStatusOK(wf.ConveneBoard(c, c.CurrentSnapshot.Summary, "", "", .convened), "the rules path plans")
     Set after = ##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-N")
     Set id = after.%Id(), disposition = "", entry = "x", by = ""
     &sql(SELECT TOP 1 Disposition, CatalogueEntry, CreatedBy INTO :disposition, :entry, :by FROM Shutter_Store.Plan WHERE "Case" = :id ORDER BY ID DESC)
@@ -438,9 +440,9 @@ Method TestRulesOnlyStillProposesTheResend()
 Method TestPolicyDecisionKeepsTheRulesPath()
 {
     Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", ..E2(), $LISTBUILD("no_record", "no_record"))
-    Set wf = ..Instance()
+    Set wf = ..QuietInstance()
     Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board"
-    Do ..AfterBoardOutside(wf, c)
+    Do wf.AfterBoard(c)
     Set after = ##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-N")
     Set id = after.%Id(), disposition = "", by = ""
     &sql(SELECT TOP 1 Disposition, CreatedBy INTO :disposition, :by FROM Shutter_Store.Plan WHERE "Case" = :id ORDER BY ID DESC)
@@ -453,9 +455,9 @@ Method TestPolicyDecisionKeepsTheRulesPath()
 Method FollowerPlanOf(lead As Shutter.Store.BoardLead, catalogue As %DynamicObject) As %String
 {
     Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", catalogue)
-    Set wf = ..Instance()
+    Set wf = ..QuietInstance()
     Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board"
-    Try { Do wf.TakeDiagnosis(c, lead) } Catch { }
+    Do $$$AssertStatusOK(wf.TakeDiagnosis(c, lead), "the follower plans")
     Set id = ##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-N").%Id(), why = "", by = "", summary = ""
     &sql(SELECT TOP 1 Why, Summary, CreatedBy INTO :why, :summary, :by FROM Shutter_Store.Plan WHERE "Case" = :id ORDER BY ID DESC)
     Do ##class(Shutter.Store.Case).PurgeCase(id)
@@ -473,9 +475,9 @@ Method TestFollowerOfARulesLeadHearsNoBoard()
     Set ..Sigs(sig) = ""
     Set leader = ..NoAnswerCase("C-TEST-LEAD-A", "board", ..E2(), $LISTBUILD("no_record"))
     Do $$$AssertStatusOK($CLASSMETHOD(bl, "Begin", sig, leader, "", .lead), "the lead begins")
-    Set wf = ..Instance()
+    Set wf = ..QuietInstance()
     Set wf.CaseId = "C-TEST-LEAD-A", wf.Mode = "board", wf.LeadSignature = sig
-    Do ..AfterBoardOutside(wf, leader)
+    Do wf.AfterBoard(leader)
     Set lead = $CLASSMETHOD(bl, "ForLeader", "C-TEST-LEAD-A")
     Do $$$AssertEquals(lead.State, "done", "the leader's rules plan finishes the lead")
     Set words = ..FollowerPlanOf(lead, ..E2())
@@ -492,10 +494,10 @@ Method TestFollowerOfARulesLeadHearsNoBoard()
     Set ..Sigs(sig2) = ""
     Set leader2 = ..NoAnswerCase("C-TEST-LEAD-B", "board", ..E2())
     Do $$$AssertStatusOK($CLASSMETHOD(bl, "Begin", sig2, leader2, "", .lead2), "the board's lead begins")
-    Set wf = ..Instance()
+    Set wf = ..QuietInstance()
     Set wf.CaseId = "C-TEST-LEAD-B", wf.Mode = "board", wf.LeadSignature = sig2
     Set plan = {"disposition": "resend", "action": {"type": "resend", "operation_key": "k", "expected_version": 3}, "summary": "s", "why": "w"}
-    Try { Do wf.AdoptPlan(leader2, plan, "run:1") } Catch { }
+    Do $$$AssertStatusOK(wf.AdoptPlan(leader2, plan, "run:1"), "the board's plan is adopted")
     Set words = ..FollowerPlanOf($CLASSMETHOD(bl, "ForLeader", "C-TEST-LEAD-B"), ..E2())
     Do $$$AssertTrue(words [ "The board convened for case C-TEST-LEAD-B decided resend", "the follower is told of the board: " _ words)
     Do ##class(Shutter.Store.Case).PurgeCase(##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-A").%Id())
