@@ -128,7 +128,7 @@ def snapshot(namespaces):
 
 def mention_scan(ns):
     """A line per global that holds the product's name anywhere, in a subscript or a value. No value is written."""
-    return ('Set g="" For { Set g=$ORDER(^$GLOBAL(g)) Quit:g=""  Continue:($EXTRACT(g,1,2)="^%")&&(g'="^%SYS")  Continue:g="^ROUTINE"  Continue:g="^rOBJ"  Continue:g="^rINDEX"  Continue:g="^rMAC"  '
+    return ('Set g="" For { Set g=$ORDER(^$GLOBAL(g)) Quit:g=""  Continue:($EXTRACT(g,1,2)="^%")&&(g\'="^%SYS")  Continue:g="^ROUTINE"  Continue:g="^rOBJ"  Continue:g="^rINDEX"  Continue:g="^rMAC"  '
             'Set c=0,k=0,q=g Try { If $DATA(@q)#2,$GET(@q)["Shutter" Set c=1 For { Set q=$QUERY(@q) Quit:q=""  Set k=k+1 Quit:k>400000  If (q["Shutter")||($GET(@q)["Shutter") Set c=c+1 } } Catch e { Set c=-1 } If c Write !,"<<<mentions|' + ns + '|",g,">>>" }')
 
 
