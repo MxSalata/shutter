@@ -78,6 +78,9 @@ ClassMethod FromHL7(message As EnsLib.HL7.Message, Output sc As %Status) As %Dyn
         // A registration, a person update or a merge may carry no visit number: the piece is "-", never empty.
         If encounterId = "" Set encounterId = "-"
         Set isoTime = ##class(Shutter.Util.Time).FromHL7(eventTime)
+        // Digits that make no date or time read as no time at all. An operation with an empty time would read every other
+        // row as later than it and close as overtaken, so this is a message a person looks at.
+        If isoTime = "" Set sc = $$$ERROR($$$GeneralError, "Missing field for the operation key: EVN-6 or EVN-2 event time (unreadable)") Quit
         Set op = {}
         Set op."operation_key" = ..FromParts(sourceSystem, authority, patientId, encounterId, event, isoTime)
         Set op."encounter_id" = encounterId

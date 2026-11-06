@@ -117,6 +117,20 @@ Method TestMergeWithoutVisitAndWithTwoGroups()
     Do $$$AssertEquals(op."merge_groups", 2, "two groups counted")
 }
 
+/// An event time that makes no date or time is not an empty time: every other row would read as later than it, and the
+/// case would close as overtaken. The message doesn't map, and the error says the time couldn't be read.
+Method TestUnreadableEventTimeDoesNotMap()
+{
+    Set msh = "MSH|^~\&|PAS|HOSP|DOWNSTREAM|HOSP|20261019100000||ADT^A02^ADT_A02|UTA02|P|2.5.1"
+    For time = "202610", "20261345120000", "20260230120000", "soon" {
+        Set op = ..Op(msh _ "<CR>EVN|A02|" _ time _ "||||" _ time _ "<CR>" _ ..#PID _ "<CR>" _ ..PV1("I", "WARD-A", "ENC-9001"))
+        Do $$$AssertTrue(op.%IsDefined("error"), time _ " does not map")
+        Do $$$AssertTrue(op.error [ "unreadable", time _ ": the error says so: " _ op.error)
+    }
+    Set op = ..Op(msh _ "<CR>EVN|A02|20261019100000||||20261019100000<CR>" _ ..#PID _ "<CR>" _ ..PV1("I", "WARD-A", "ENC-9001"))
+    Do $$$AssertNotTrue(op.%IsDefined("error"), "a time that reads still maps")
+}
+
 Method TestUnmappedTriggerSaysSo()
 {
     Set op = ..Op(..Message("A17", "ADT_A17", ..#PID _ "<CR>" _ ..PV1("I", "WARD-A", "ENC-9001")))
