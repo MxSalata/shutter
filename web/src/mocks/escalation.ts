@@ -63,11 +63,15 @@ export function draftEscalation(
       ? [
           `  A drafted sequence of ${String(sequence.count)} messages is on the case, for an approver to read on the case page; this email carries none of it.`,
         ]
-      : [
-          `  No message sequence was drafted: ${str(sequence, 'reason')
-            .replace(/^No sequence: /, '')
-            .replace(/\.$/, '')}.`,
-        ];
+      : sequence.reason_code === 'feed_not_indexed'
+        ? [
+            "  No message sequence has been drafted yet: the index hadn't caught up with the feed when the plan was made. An approver can read it on the case page, which checks again on every read; this email carries none of it.",
+          ]
+        : [
+            `  No message sequence was drafted: ${str(sequence, 'reason')
+              .replace(/^No sequence: /, '')
+              .replace(/\.$/, '')}.`,
+          ];
   const correcting = steps.length
     ? [
         'CORRECTING THE HISTORY',

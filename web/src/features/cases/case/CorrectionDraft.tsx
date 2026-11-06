@@ -37,9 +37,9 @@ export function CorrectionDraft({ caseId, correction }: { caseId: string; correc
         <Title order={3} id="correction-draft-title">
           Drafted message sequence
         </Title>
-        {sequence.drawn ? (
+        {sequence.drawn || notYet(sequence.reason_code) ? (
           // A new plan is another draft: what was read of the last one goes with it
-          <Drawn
+          <Readable
             key={`${sequence.observed_at}|${sequence.checked_at}`}
             caseId={caseId}
             receiver={correction.receiver}
@@ -55,7 +55,11 @@ export function CorrectionDraft({ caseId, correction }: { caseId: string; correc
   );
 }
 
-function Drawn({
+/** The index was behind when this was checked: not yet, not no, because every read checks again. */
+const notYet = (code?: string) => code === 'feed_not_indexed';
+
+/** A sequence an approver can ask for: one drawn at plan time, or one the index was still behind on then. */
+function Readable({
   caseId,
   receiver,
   sequence,
@@ -69,7 +73,15 @@ function Drawn({
   const draft = read.data;
   return (
     <>
-      {draft ? <Read draft={draft} /> : <Structure receiver={receiver} sequence={sequence} />}
+      {draft ? (
+        <Read draft={draft} planDrawn={sequence.drawn} />
+      ) : sequence.drawn ? (
+        <Structure receiver={receiver} sequence={sequence} />
+      ) : (
+        <Text size="sm" data-testid="correction-draft-none">
+          {sequence.reason}
+        </Text>
+      )}
       {read.isError ? <ErrorAlert error={read.error} title="The draft could not be read" /> : null}
       {can.approve ? (
         <Group gap="sm" align="center">
@@ -77,9 +89,11 @@ function Drawn({
             {draft ? 'Read it again' : 'Read the messages'}
           </Button>
           <Text size="sm" c="dimmed">
-            {draft
+            {draft?.drawn
               ? 'Before each message. Each read is recorded on the case.'
-              : 'Each read is recorded on the case.'}
+              : draft || !sequence.drawn
+                ? 'Each read checks again, and one that draws the messages is recorded on the case.'
+                : 'Each read is recorded on the case.'}
           </Text>
         </Group>
       ) : (
@@ -153,14 +167,16 @@ function StepLine({ step }: { step: CorrectionSequenceStep }) {
 }
 
 /** What the draft route answered: the words and the text are the server's, redrawn on this read. */
-function Read({ draft }: { draft: CorrectionDraftView }) {
+function Read({ draft, planDrawn }: { draft: CorrectionDraftView; planDrawn: boolean }) {
   // The live check wins over the plan: a further message since then leaves no text on the page
   if (!draft.drawn)
     return (
       <Stack gap={4} data-testid="correction-draft-stopped">
-        <Text size="sm" fw={600}>
-          This draft no longer stands.
-        </Text>
+        {planDrawn && !notYet(draft.reason_code) ? (
+          <Text size="sm" fw={600}>
+            This draft no longer stands.
+          </Text>
+        ) : null}
         <Text size="sm">{draft.reason || 'No sequence.'}</Text>
         {draft.checked_at ? <Text size="sm" c="dimmed">{`Checked at ${draft.checked_at}.`}</Text> : null}
       </Stack>

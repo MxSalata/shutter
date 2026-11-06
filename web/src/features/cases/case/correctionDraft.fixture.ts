@@ -187,6 +187,11 @@ export const DRAWN_DRAFT: CorrectionDraftView = {
       does: 'The version line, and the redraw on every read.',
     },
     {
+      what: 'A message under another identifier',
+      why: "Further messages are looked for under every identifier in the failed message's PID-3. A message the index keeps under an identifier the failed message doesn't hold can't be matched, and Shutter doesn't match on a name or a date of birth, because a different patient must not match.",
+      does: "Says so here. The line about checking the receiver's own screen covers it.",
+    },
+    {
       what: 'A change made by hand at the receiver',
       why: "It is invisible over HL7, and a message on a route the index doesn't cover is invisible too.",
       does: "The line about checking the receiver's own screen.",
@@ -207,6 +212,34 @@ export const DRAWN_DRAFT: CorrectionDraftView = {
     'Never call this verified: the case is closed by hand, as step 8 says.',
   ],
   digest: 'sha256:3333333333333333333333333333333333333333333333333333333333333333',
+  checked_at: '2026-10-16T10:05:00Z',
+};
+
+/** The index was behind when the plan was made: not yet, not no, so an approver can read again. */
+export const NOT_YET: CorrectionSequence = {
+  drawn: false,
+  reason_code: 'feed_not_indexed',
+  reason:
+    "No sequence yet: the index hadn't caught up with the feed when this was checked, so further messages for this patient can't be ruled out yet. Every read checks again.",
+  k: 0,
+  count: 0,
+  steps: [],
+  left_alone: [],
+  checked_at: '2026-10-16T10:00:00Z',
+};
+
+/** The same answer from the draft route: no text, and nothing recorded. */
+export const NOT_YET_DRAFT: CorrectionDraftView = {
+  caseId: 'C-000055',
+  drawn: false,
+  reason_code: 'feed_not_indexed',
+  reason: NOT_YET.reason,
+  header: [],
+  messages: [],
+  cannot_know: [],
+  left_alone: [],
+  never: [],
+  digest: '',
   checked_at: '2026-10-16T10:05:00Z',
 };
 

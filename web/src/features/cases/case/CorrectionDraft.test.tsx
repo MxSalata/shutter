@@ -14,6 +14,8 @@ import {
   CANCELS_FALSE,
   DRAWN_DRAFT,
   DRAWN_SEQUENCE,
+  NOT_YET,
+  NOT_YET_DRAFT,
   REPLAY_B_TEXT,
   STOPPED_DRAFT,
 } from './correctionDraft.fixture';
@@ -122,7 +124,7 @@ describe('the drafted sequence on the case', () => {
       expect(message.querySelector('pre')).toHaveTextContent('MSH|');
     }
     expect(screen.getByRole('table')).toBeInTheDocument();
-    expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(11);
+    expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(12);
     expect(screen.getByText(/^Never use Z99/)).toBeInTheDocument();
     // The structure gives way to the text, and the one way to send anything stays a person's own
     expect(screen.queryByTestId('correction-draft-structure')).not.toBeInTheDocument();
@@ -220,6 +222,70 @@ describe('the drafted sequence on the case', () => {
     expect(screen.queryByTestId('correction-draft-header')).not.toBeInTheDocument();
   });
 
+  it('offers an approver the read when the index was only behind at plan time, and draws from it', async () => {
+    const route = draftRoute(DRAWN_DRAFT);
+    renderBlock(NOT_YET);
+    expect(screen.getByTestId('correction-draft-none')).toHaveTextContent(/^No sequence yet: /);
+    await userEvent.click(await readButton());
+    expect(await screen.findByTestId('correction-draft-header')).toBeInTheDocument();
+    expect(screen.getByTestId('correction-message-1').querySelector('pre')).toHaveTextContent('MSH|');
+    expect(screen.queryByTestId('correction-draft-none')).not.toBeInTheDocument();
+    expect(route.reads).toBe(1);
+  });
+
+  it('reads nothing in that state until asked, and says a read checks again', async () => {
+    const route = draftRoute(DRAWN_DRAFT);
+    renderBlock(NOT_YET);
+    expect(await readButton()).toBeEnabled();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(route.reads).toBe(0);
+    expect(screen.getByTestId('correction-draft')).toHaveTextContent('Each read checks again');
+  });
+
+  it('keeps the way open, and calls nothing ended, while the index is still behind', async () => {
+    const route = draftRoute(NOT_YET_DRAFT, DRAWN_DRAFT);
+    renderBlock(NOT_YET);
+    await userEvent.click(await readButton());
+    const answer = await screen.findByTestId('correction-draft-stopped');
+    expect(answer).toHaveTextContent(/^No sequence yet: /);
+    expect(answer).not.toHaveTextContent('no longer stands');
+    expect(screen.getByTestId('correction-draft')).toHaveTextContent('Each read checks again');
+    await userEvent.click(screen.getByRole('button', { name: 'Read it again' }));
+    expect(await screen.findByTestId('correction-draft-header')).toBeInTheDocument();
+    expect(route.reads).toBe(2);
+  });
+
+  it('takes the text away and says not yet, not ended, when a drawn draft meets an index behind', async () => {
+    draftRoute(DRAWN_DRAFT, NOT_YET_DRAFT);
+    renderBlock(DRAWN_SEQUENCE);
+    await userEvent.click(await readButton());
+    await screen.findByTestId('correction-message-1');
+    await userEvent.click(screen.getByRole('button', { name: 'Read it again' }));
+    const answer = await screen.findByTestId('correction-draft-stopped');
+    expect(answer).toHaveTextContent(/^No sequence yet: /);
+    expect(answer).not.toHaveTextContent('no longer stands');
+    expect(screen.getByTestId('correction-draft')).not.toHaveTextContent('MSH|');
+  });
+
+  it('says what a read found when the plan was not yet and the answer is a lasting no', async () => {
+    draftRoute(STOPPED_DRAFT);
+    renderBlock(NOT_YET);
+    await userEvent.click(await readButton());
+    const answer = await screen.findByTestId('correction-draft-stopped');
+    expect(answer).toHaveTextContent('admit on encounter ENC-2044');
+    expect(answer).not.toHaveTextContent('no longer stands');
+    expect(screen.getByTestId('correction-draft')).not.toHaveTextContent('Each read is recorded');
+  });
+
+  it('tells an operator in that state to ask an approver, and gives no way to read', async () => {
+    resetMock('operator');
+    const route = draftRoute(DRAWN_DRAFT);
+    renderBlock(NOT_YET);
+    expect(await screen.findByTestId('correction-draft-ask')).toHaveTextContent('ask one');
+    expect(screen.queryByRole('button', { name: /Read/ })).not.toBeInTheDocument();
+    expect(route.reads).toBe(0);
+  });
+
   it("shows the server's refusal and no text", async () => {
     draftRoute({ status: 403, body: { error: 'forbidden', detail: 'This needs Shutter_Approve' } });
     renderBlock(DRAWN_SEQUENCE);
@@ -236,6 +302,10 @@ describe('the drafted sequence on the case', () => {
     const none = renderBlock(CANCELS_FALSE);
     expect(layer1Words(none.container).length).toBeLessThanOrEqual(35);
     none.unmount();
+    const notYet = renderBlock(NOT_YET);
+    await screen.findByTestId('correction-draft-ask');
+    expect(layer1Words(notYet.container).length).toBeLessThanOrEqual(50);
+    notYet.unmount();
     const drawn = renderBlock(DRAWN_SEQUENCE);
     await screen.findByTestId('correction-draft-ask');
     expect(layer1Words(drawn.container).length).toBeLessThanOrEqual(190);
