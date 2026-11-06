@@ -354,13 +354,21 @@ Method TestMerge()
     Do ..AssertCode(..Decide(..Case(), ..One(), facts), "merge_seen", "a merge case with this patient as its prior")
 }
 
+/// A forwarded case stays as it is on every read, so it says no. An index behind passes in seconds, so it says not yet.
 Method TestFeedNotIndexed()
 {
     Set c = ..Case(), c.SourceNamespace = "UTOTHERNS"
-    Do ..AssertCode(..Decide(c, ..One()), "feed_not_indexed", "a forwarded case")
+    Do ..AssertCode(..Decide(c, ..One()), "forwarded_case", "a forwarded case")
     Set facts = ..Facts(..One())
     Do facts.%Set("caught_up", 0, "boolean")
-    Do ..AssertCode(..Decide(..Case(), ..One(), facts), "feed_not_indexed", "an index behind")
+    Set seq = ..Decide(..Case(), ..One(), facts)
+    Do $$$AssertEquals(seq."reason_code", "feed_not_indexed", "an index behind: " _ seq.reason)
+    Do $$$AssertNotTrue(seq.drawn, "nothing is drawn")
+    Do $$$AssertEquals(seq.steps.%Size(), 0, "no steps")
+    Do $$$AssertEquals($EXTRACT(seq.reason, 1, 17), "No sequence yet: ", "the line says not yet")
+    Do $$$AssertTrue(seq.reason [ "Every read checks again", "and that a read checks again")
+    Do facts.%Set("caught_up", 1, "boolean")
+    Do $$$AssertTrue(..Decide(..Case(), ..One(), facts).drawn, "and once caught up it draws")
 }
 
 Method TestReceipt()
@@ -557,6 +565,54 @@ Method TestEmailLine()
     Do $$$AssertTrue($EXTRACT(line, 1, 34) = "No message sequence was drafted: t", "not drawn: " _ line)
     Do $$$AssertNotTrue(line [ "No sequence:", "with no doubled opening")
     Do $$$AssertEquals(##class(Shutter.Util.HistoryDraft).EmailLine({}), "", "a plan from before the sequence adds nothing")
+    Set facts = ..Facts(..One())
+    Do facts.%Set("caught_up", 0, "boolean")
+    Set line = ##class(Shutter.Util.HistoryDraft).EmailLine({"sequence": (..Decide(..Case(), ..One(), facts))})
+    Do $$$AssertTrue($EXTRACT(line, 1, 42) = "No message sequence has been drafted yet: ", "not yet: " _ line)
+    Do $$$AssertTrue(line [ "checks again on every read", "says a read checks again")
+    Do $$$AssertTrue(line [ "this email carries none of it", "and carries none of it")
+    Do $$$AssertNotTrue(line [ "was drafted", "and doesn't say no")
+    Set c = ..Case(), c.SourceNamespace = "UTOTHERNS"
+    Set line = ##class(Shutter.Util.HistoryDraft).EmailLine({"sequence": (..Decide(c, ..One()))})
+    Do $$$AssertTrue($EXTRACT(line, 1, 33) = "No message sequence was drafted: ", "a forwarded case says no: " _ line)
+}
+
+/// What the draft says it can't see: a message under an identifier the failed message doesn't hold.
+Method TestCannotKnowAnotherIdentifier()
+{
+    Set moves = ..One(), out = ##class(Shutter.Util.HistoryDraft).Draft(..Case(), ..Summary(moves), "E1", ..Facts(moves))
+    Do $$$AssertTrue(out.drawn, "drawn: " _ out.reason)
+    Do $$$AssertEquals(out."cannot_know".%Size(), 11, "every line")
+    Set found = "", ci = out."cannot_know".%GetIterator()
+    While ci.%GetNext(, .row) { Set:(row.what = "A message under another identifier") found = row }
+    Do $$$AssertTrue($ISOBJECT(found), "the line is there")
+    Do $$$AssertTrue($ISOBJECT(found) && (found.why [ "doesn't hold can't be matched"), "says it can't be matched")
+    Do $$$AssertTrue($ISOBJECT(found) && (found.why [ "a different patient must not match"), "and why there is no match on a name")
+}
+
+/// Every identifier in a PID-3, each with its authority, whatever the repetition's type; none empty.
+Method TestIdentifiers()
+{
+    Set draft = "Shutter.Util.HistoryDraft"
+    Set one = $CLASSMETHOD(draft, "Identifiers", ..WithPid("MRN-1^^^HOSP^MR"))
+    Do $$$AssertEquals(one.%Size(), 1, "one repetition")
+    Do $$$AssertEquals(one.%Get(0).id, "MRN-1", "its number")
+    Do $$$AssertEquals(one.%Get(0).authority, "HOSP", "its authority")
+    Set two = $CLASSMETHOD(draft, "Identifiers", ..WithPid("MRN-1^^^HOSP^MR~999^^^NHS&2.16&ISO^NH~^^^EMPTY^XX~888^^^^PI"))
+    Do $$$AssertEquals(two.%Size(), 3, "an empty repetition isn't one")
+    Do $$$AssertEquals(two.%Get(1).id, "999", "the second number")
+    Do $$$AssertEquals(two.%Get(1).authority, "NHS", "the authority's first part, as the operation key reads it")
+    Do $$$AssertEquals(two.%Get(2).authority, "", "no authority stays empty")
+    Do $$$AssertEquals($CLASSMETHOD(draft, "Identifiers", "").%Size(), 0, "no message, no identifiers")
+    Set other = $CLASSMETHOD(draft, "Identifiers", "MSH#*!\&#PAS"_$CHAR(13)_"PID#1##MRN-1***HOSP*MR!999***NHS*NH"_$CHAR(13))
+    Do $$$AssertEquals(other.%Size(), 2, "the message's own separators")
+    Do $$$AssertEquals(other.%Get(1).id, "999", "the second number by them")
+}
+
+/// A body with the given PID-3.
+ClassMethod WithPid(pid3 As %String) As %String
+{
+    Quit $REPLACE(..Body("MSG-UT-P", "A02", "WARD-B", "WARD-A"), "MRN-UT1^^^HOSP^MR", pid3)
 }
 
 // ---- the store ----
@@ -634,6 +690,51 @@ Method TestForPatientAndGather()
     Do $$$AssertTrue($ISOBJECT(body), "the case's message is gathered")
     Do $$$AssertTrue($ISOBJECT(body) && (body.text [ "MSG-UT-G"), "with its stored text")
     Do $$$AssertEquals(##class(Shutter.Util.HistoryDraft).StoredText(docId + 1000000), "", "a message that is gone reads empty")
+    For i = 1:1:$LISTLENGTH(ids) { Do ##class(Shutter.Index.Message).%DeleteId($LIST(ids, i)) }
+    Do ##class(EnsLib.HL7.Message).%DeleteId(docId)
+}
+
+/// The failed message holds a hospital number and an NHS number, so a message under either is this patient's. Another
+/// number, or the same number under another authority, is not. A merge naming either as its prior side touches this patient.
+Method TestGatherAsksEveryIdentifier()
+{
+    Do ..Clean()
+    Set mrn = "MRN-UT-EVERY", nhs = "NHS-UT-EVERY", other = "NHS-UT-OTHER"
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Index.Message WHERE PatientId IN (?, ?, ?)", mrn, nhs, other)
+    Set msg = ##class(EnsLib.HL7.Message).ImportFromString(..WithPid(mrn _ "^^^HOSP^MR~" _ nhs _ "^^^NHS^NH"), .sc)
+    Do $$$AssertStatusOK(sc, "a message imports")
+    Set sc = msg.%Save()
+    Do $$$AssertStatusOK(sc, "and saves")
+    Set docId = msg.%Id(), moves = ..One(), c = ..Case()
+    Set c.PatientId = mrn, c.OperationKey = "UT-EVERY-FAILED"
+    Set ids = "", now = $TRANSLATE($PIECE(##class(Shutter.Util.Time).NowUTC(), "Z", 1), "T", " ")
+    Set rows = $LISTBUILD($LISTBUILD(docId, mrn, "HOSP", "ENC-UT1", "UT-EVERY-FAILED", "transfer"), $LISTBUILD(docId + 2000001, nhs, "NHS", "ENC-UT9", "UT-EVERY-NHS", "admit"), $LISTBUILD(docId + 2000002, other, "NHS", "ENC-UT8", "UT-EVERY-OTHER", "admit"), $LISTBUILD(docId + 2000003, nhs, "ELSEWHERE", "ENC-UT7", "UT-EVERY-ELSEWHERE", "admit"))
+    For i = 1:1:$LISTLENGTH(rows) {
+        Set row = $LIST(rows, i), r = ##class(Shutter.Index.Message).%New()
+        Set r.DocId = $LIST(row, 1), r.PatientId = $LIST(row, 2), r.PatientIdAuthority = $LIST(row, 3), r.VisitNumber = $LIST(row, 4), r.OperationKey = $LIST(row, 5), r.Event = $LIST(row, 6), r.ControlId = "CTL-" _ i, r.EventTime = "2026-10-19T09:40:00Z", r.TimeCreated = now
+        Set sc = r.%Save()
+        Do $$$AssertStatusOK(sc, "an index row saves")
+        Set ids = ids _ $LISTBUILD(r.%Id())
+    }
+    Set facts = ##class(Shutter.Util.HistoryDraft).Gather(c), seen = "", ri = facts."patient_rows".%GetIterator()
+    While ri.%GetNext(, .row) { Set seen = seen _ row."operation_key" _ " " }
+    Do $$$AssertTrue(seen [ "UT-EVERY-FAILED", "its own number: " _ seen)
+    Do $$$AssertTrue(seen [ "UT-EVERY-NHS", "the NHS number the failed message holds")
+    Do $$$AssertNotTrue(seen [ "UT-EVERY-OTHER", "not another number")
+    Do $$$AssertNotTrue(seen [ "UT-EVERY-ELSEWHERE", "and not that number under another authority")
+    Do $$$AssertNotTrue(facts."merge_case", "no merge yet")
+    // The decision on those rows: the NHS row is a further message.
+    Set given = ..Facts(moves), given."patient_rows" = facts."patient_rows"
+    Set seq = ##class(Shutter.Util.HistoryDraft).Decide(c, ..Summary(moves), "E1", given, 1)
+    Do ..AssertCode(seq, "further_message", "the message under the NHS number stops it")
+    Do $$$AssertTrue(seq.reason [ "ENC-UT9", "and is named: " _ seq.reason)
+    Set merge = ..Case(), merge.PatientId = "MRN-UT-SURVIVOR", merge.PriorPatientId = nhs
+    Set sc = merge.%Save()
+    Do $$$AssertStatusOK(sc, "a merge case saves")
+    Do $$$AssertTrue(##class(Shutter.Util.HistoryDraft).Gather(c)."merge_case", "a merge naming the NHS number touches this patient")
+    Do ..Clean()
+    Set rowsBack = ##class(Shutter.Index.Message).ForPatient(nhs, "")
+    Do $$$AssertEquals(rowsBack.%Size(), 2, "a repetition with no authority can't be told apart, so it asks for every authority")
     For i = 1:1:$LISTLENGTH(ids) { Do ##class(Shutter.Index.Message).%DeleteId($LIST(ids, i)) }
     Do ##class(EnsLib.HL7.Message).%DeleteId(docId)
 }
