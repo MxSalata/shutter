@@ -36,6 +36,9 @@ Property PollSeconds As %Integer [ InitialExpression = 3 ];
 /// How long to wait for every case to park (evidence collected) before the chains form without the laggards.
 Property ReadyTimeoutSeconds As %Integer [ InitialExpression = 180 ];
 
+/// How long after an error raising a task the workflow tries again.
+Parameter RAISEAGAINSECONDS = 300;
+
 Parameter SETTINGS = "CaseTarget:Targets,ApprovalTarget:Targets,PollSeconds:Timing,ReadyTimeoutSeconds:Timing";
 
 Method OnRequest(request As %Library.Persistent, Output response As %Library.Persistent) As %Status
@@ -71,6 +74,7 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
         If completionkey = "poll" { Set sc = ..OnPoll(incident) Quit }
         If completionkey = "approval" { Set sc = ..OnApproval(incident, "", callresponse) Quit }
         If $EXTRACT(completionkey, 1, 9) = "approval:" { Set sc = ..OnApproval(incident, $EXTRACT(completionkey, 10, *), callresponse) Quit }
+        If $PIECE(completionkey, ":", 1) = "raise" { Set sc = ..OnRaiseAgain(incident, $PIECE(completionkey, ":", 2)) Quit }
         $$$LOGWARNING("Unexpected completion key " _ completionkey)
     } Catch ex {
         Set sc = ex.AsStatus()
@@ -93,6 +97,11 @@ Method OnError(request As %Library.Persistent, ByRef response As %Library.Persis
 {
     Try {
         Set incident = ##class(Shutter.Store.Incident).ByIncidentId(..IncidentId)
+        If $ISOBJECT(incident) && (incident.State '= "closed") && ($PIECE(pCompletionKey, ":", 1) = "approval") {
+            Set ..PendingTasks = ..PendingTasks - 1
+            Do ..TaskNotRaised(incident, $PIECE(pCompletionKey, ":", 2), pErrorStatus)
+            Quit
+        }
         If $ISOBJECT(incident) && (incident.State '= "closed") Do incident.Abandon("an error from the call " _ pCompletionKey _ ": " _ $EXTRACT($SYSTEM.Status.GetErrorText(pErrorStatus), 1, 300), "system")
     } Catch {
     }
@@ -204,8 +213,46 @@ Method BuildPlan(incident As Shutter.Store.Incident) As %Status
     Quit incident.BuildPlan(##class(Shutter.Operation.Gate).#POLICYVERSION)
 }
 
+/// The task for the chains, or a stop for a person when it cannot be raised: an error here never closes the incident,
+/// because its chains are approved by a person and nothing has gone yet.
+Method AskApproval(incident As Shutter.Store.Incident, chains As %ListOfObjects, seq As %String, again As %Boolean = 0) As %Status
+{
+    Try {
+        Set sc = ..RaiseTask(incident, chains, seq)
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    Quit:$$$ISOK(sc) $$$OK
+    Quit ..TaskNotRaised(incident, seq, sc, again)
+}
+
+/// No task: the incident's timeline and an alert tell a person, once, naming the incident; the chains keep waiting, and
+/// the workflow tries again.
+Method TaskNotRaised(incident As Shutter.Store.Incident, seq As %String, error As %Status, again As %Boolean = 0) As %Status
+{
+    If 'again {
+        Set text = ##class(Shutter.Process.IncidentTaskText).NotRaised(incident.IncidentId, seq, $SYSTEM.Status.GetErrorText(error))
+        Do incident.Note("error", text, "system")
+        Do ..SendAlert(##class(Ens.AlertRequest).%New($LISTBUILD(..%ConfigName, text)))
+        If incident.State = "classified" Do incident.Transition("awaiting_approval", "Waiting for a person: no approval task is open", "system")
+    }
+    Set sc = ..Alarm(..#RAISEAGAINSECONDS, "raise" _ $SELECT(seq '= "": ":" _ seq, 1: ""))
+    If $$$ISERR(sc) $$$LOGERROR("Incident " _ incident.IncidentId _ " will not try its approval task again: " _ $SYSTEM.Status.GetErrorText(sc))
+    Quit $$$OK
+}
+
+/// The next try at a task that could not be raised; once it goes, the incident's state says it waits for the answer.
+Method OnRaiseAgain(incident As Shutter.Store.Incident, seq As %String) As %Status
+{
+    Set pending = ..PendingTasks
+    Set sc = ..AskApproval(incident, incident.ChainList(), seq, 1)
+    Quit:$$$ISERR(sc) sc
+    Quit:(..PendingTasks = pending) $$$OK
+    Quit ..Advance(incident)
+}
+
 /// One Workflow task for the incident's policy chains under a shared approval (seq ""), or for one chain (7.3).
-Method AskApproval(incident As Shutter.Store.Incident, chains As %ListOfObjects, seq As %String) As %Status
+Method RaiseTask(incident As Shutter.Store.Incident, chains As %ListOfObjects, seq As %String) As %Status
 {
     Set lines = "", count = 0
     For i = 1:1:chains.Count() {
@@ -224,7 +271,9 @@ Method AskApproval(incident As Shutter.Store.Incident, chains As %ListOfObjects,
     Set sc = ..SendRequestAsync(..ApprovalTarget, task, 1, $SELECT(seq = "": "approval", 1: "approval:" _ seq))
     Quit:$$$ISERR(sc) sc
     Set ..PendingTasks = ..PendingTasks + 1
-    Quit incident.Note("note", "Approval task raised: " _ task.%Subject, "system")
+    // The task is out: a note that fails must not raise it again.
+    Do incident.Note("note", "Approval task raised: " _ task.%Subject, "system")
+    Quit $$$OK
 }
 
 /// The approval task for the incident's policy chains (seq ""), or for one chain (7.3), over the text AskApproval
@@ -236,11 +285,7 @@ ClassMethod ApprovalTask(incident As Shutter.Store.Incident, seq As %String, cou
     Set task = ##class(EnsLib.Workflow.TaskRequest).%New()
     Set task.%Actions = "Approve,Reject"
     Set task.%Subject = "Shutter " _ incident.IncidentId _ $SELECT(seq '= "": "/" _ seq, 1: "") _ ": approve the release of " _ count _ " chain(s) to " _ incident.Receiver
-    Set msg = "Incident " _ incident.IncidentId _ ": " _ failures _ " failures to " _ incident.Receiver _ " since " _ incident.OpenedAt _ "." _ lines _ $CHAR(10) _ $CHAR(10)
-    Set msg = msg _ "Approving binds: resend these, in this order. Each one is rehearsed, gated and verified just before it goes; items after the first go at exactly the version the previous item's verified receipt reports; each operation goes only under the catalogue entry and outcome listed for it, and one whose fresh evidence reads differently stops its chain; the chain stops at the first surprise, and the rest comes back to you." _ $CHAR(10)
-    Set msg = msg _ "Plan digest: " _ incident.PlanDigest _ $CHAR(10) _ "Catalogue " _ incident.CatalogueVersion _ ", site profile v" _ incident.ProfileVersion _ ", gate policy " _ incident.PolicyVersion _ $CHAR(10)
-    Set msg = msg _ "To approve from the Workflow inbox, paste the plan digest above into the PlanDigest field: an approval with no digest, or another one, binds nothing and rejects these chains."
-    Set task.%Message = msg
+    Set task.%Message = ##class(Shutter.Process.IncidentTaskText).Message(incident, count, failures, lines)
     Set task.%Priority = 1
     Set task.%FormFields = "PlanDigest,Comment"
     Quit task
@@ -254,7 +299,7 @@ Method OnApproval(incident As Shutter.Store.Incident, seq As %String, result As 
     Set action = $ZCONVERT(result.%Action, "L"), user = result.%UserName
     Set comment = result.%FormValues.GetAt("Comment"), digest = result.%FormValues.GetAt("PlanDigest"), taskId = result.%Id()
     Set ok = (action = "approve") && (digest '= "") && (digest = incident.PlanDigest)
-    Set why = $SELECT(action '= "approve": "rejected by " _ user _ $SELECT(comment '= "": ": " _ comment, 1: ""), digest = "": "the approval carried no plan digest, so it binds nothing", 1: "the approval named another plan digest (" _ $EXTRACT(digest, 1, 19) _ ")")
+    Set why = $SELECT(action '= "approve": "rejected by " _ user _ $SELECT(comment '= "": ": " _ $EXTRACT(comment, 1, ##class(Shutter.Process.IncidentTaskText).#COMMENTWORDS), 1: ""), digest = "": "the approval carried no plan digest, so it binds nothing", 1: "the approval named another plan digest (" _ $EXTRACT(digest, 1, 19) _ ")")
     Set chains = incident.ChainList(), now = ##class(Shutter.Util.Time).NowUTC()
     If seq = "" {
         Set incident.ApprovedBy = user, incident.ApprovedAt = now, incident.ApprovalDecision = $SELECT(ok: "approved", 1: "rejected")

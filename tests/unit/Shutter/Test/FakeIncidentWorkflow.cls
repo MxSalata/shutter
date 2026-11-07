@@ -17,7 +17,7 @@ Property Refuse As %String(MAXLEN = 200);
 /// The last task accepted.
 Property LastTask As EnsLib.Workflow.TaskRequest(XMLPROJECTION = "none") [ Transient ];
 
-Method SendRequestAsync(pTargetDispatchName As %String, pRequest As %Library.Persistent, pResponseRequired As %Boolean = 1, pCompletionKey As %String = "", pDescription As %String = "") As %Status
+Method SendRequestAsync(pTargetDispatchName As %String, pRequest As Ens.Request, pResponseRequired As %Boolean = 1, pCompletionKey As %String = "", pDescription As %String = "") As %Status
 {
     If pRequest.%IsA("EnsLib.Workflow.TaskRequest") {
         If ..Refuse '= "" Quit $$$ERROR($$$GeneralError, ..Refuse)

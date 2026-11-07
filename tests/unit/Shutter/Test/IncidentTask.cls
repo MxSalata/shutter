@@ -117,6 +117,7 @@ Method TestOneLongChainSaysHowManyMore()
     Do $$$AssertTrue(task.%Message [ ($CHAR(10) _ "  1. transfer"), "with its first item")
     Do $$$AssertNotTrue(task.%Message [ ($CHAR(10) _ "  70. transfer"), "not its last")
     Do $$$AssertTrue(task.%Message [ "of 70 operations", "and it says how many")
+    Do $$$AssertTrue(task.%Message [ "part of the first chain", "that it is only part of the chain")
     Do $$$AssertTrue(task.%Message [ "/shutter/incidents/I-000009", "the page has them all")
 }
 
