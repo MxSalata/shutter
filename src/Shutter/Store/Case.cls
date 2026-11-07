@@ -151,6 +151,10 @@ Property CandidateEntry As %Boolean(%JSONFIELDNAME = "candidateEntry") [ Initial
 /// One line for the queue: what happened and what was decided.
 Property Headline As %String(%JSONFIELDNAME = "headline", MAXLEN = 500);
 
+/// The document block of a document case (CONTRACTS 11.2, Shutter.Util.DocumentCase): metadata only. Not projected: the API
+/// gives it by the reader's right.
+Property DocumentJSON As %String(%JSONINCLUDE = "none", MAXLEN = "");
+
 /// The closing summary.
 Property Outcome As %String(%JSONFIELDNAME = "outcome", MAXLEN = 4000);
 
@@ -218,6 +222,7 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
     Set case.EventTime = op."event_time"
     Set case.EnsSessionId = ensSessionId
     Set case.SourceHeaderId = sourceHeaderId
+    If op.%IsDefined("document_stage") Set case.DocumentJSON = ##class(Shutter.Util.DocumentCase).Unstage(op."document_stage")
     Set case.Mode = $SELECT(mode = "": "board", 1: mode)
     Set case.Scenario = $GET(^Shutter.Config("scenario"))
     Set now = ##class(Shutter.Util.Time).NowUTC()
@@ -929,6 +934,9 @@ Storage Default
 </Value>
 <Value name="50">
 <Value>LeadSignature</Value>
+</Value>
+<Value name="51">
+<Value>DocumentJSON</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>

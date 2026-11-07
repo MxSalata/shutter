@@ -395,6 +395,8 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
     }
     // Every investigation starts clean: a policy from an earlier round never carries over to a plan the board makes.
     Set ..Policy = "", ..CatalogueEntry = "", ..CatalogueOutcome = ""
+    // A document case (CONTRACTS 11.2) has one answer in every mode: a person, with no agent and no catalogue.
+    If case.DocumentJSON '= "" Quit ..DocumentToPerson(case)
     // A withheld operation (T31) has one answer in every mode: nothing is sent and a person decides. The gate blocks
     // every plan on it, so a board run would only cost: a burst of merges or cancels would buy one run per message.
     If case.FailureKind = "withheld" {
@@ -1155,6 +1157,20 @@ Method NotModelledToPerson(case As Shutter.Store.Case) As %Status
     Set plan.summary = "Receiver category orders_results: not modelled yet, a person handles the failure"
     Set plan.preconditions = [], plan."evidence_refs" = ["route"], plan.disagreements = []
     Quit ..AdoptPlan(case, plan, "policy:not_modelled")
+}
+
+/// A document case goes to a person with a plan of no action. It does not pass the gate, whose checks ask of an ADT operation and
+/// a receiver's API what a metadata record cannot answer: there is nothing here for it to let through.
+Method DocumentToPerson(case As Shutter.Store.Case) As %Status
+{
+    Set ..Policy = "person"
+    Set sc = ##class(Shutter.Store.Plan).Create(case, case.CurrentSnapshot, ##class(Shutter.Util.DocumentCase).Plan(case), "policy:document", .p)
+    Quit:$$$ISERR(sc) sc
+    Set ..PlanId = p.%Id()
+    Set case.CurrentPlan = p, case.Disposition = p.Disposition
+    Set block = ##class(Shutter.Util.Json).Parse(case.DocumentJSON, .psc)
+    Set case.Headline = $SELECT($ISOBJECT(block): block.headline, 1: "Document delivery needs review. Shutter has sent nothing.")
+    Quit case.Transition("escalated", "A document delivery: a person decides. Shutter has sent nothing", "system", "plan:" _ p.%Id())
 }
 
 /// The connector a case's reads, rehearsals and writes go to (v1.25): the case's receiver when the site profile names it

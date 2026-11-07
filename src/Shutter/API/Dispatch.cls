@@ -423,6 +423,7 @@ ClassMethod CaseGet(caseId As %String) As %Status
     Set case = ..CaseOr404(caseId)
     If '$ISOBJECT(case) Quit $$$OK
     Set o = ..Project(case)
+    If case.DocumentJSON '= "" Set o.document = ##class(Shutter.Util.DocumentCase).View(case)
     If $ISOBJECT(case.CurrentPlan) Set o.planCreatedBy = case.CurrentPlan.CreatedBy
     // The case's place in its incident (CONTRACTS 7.5), when one holds it.
     If $ISOBJECT(case.Incident) Set o.incidentId = case.Incident.IncidentId, o.incident = ##class(Shutter.Store.ChainItem).IncidentContext(case)
@@ -1117,6 +1118,7 @@ ClassMethod Intake() As %Status
     Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
     If '$ISOBJECT(body) || $$$ISERR(psc) Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with message, failure, source and receiver")
     If $CLASSNAME(body) '= "%Library.DynamicObject" Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with message, failure, source and receiver")
+    If ##class(Shutter.API.DocumentIntake).Takes(body) Quit ##class(Shutter.API.DocumentIntake).Post(body, bodyText)
     Set message = ""
     If body.%GetTypeOf("message") = "string" Set message = body.%Get("message")
     If $ZSTRIP(message, "<>WC") = "" Quit ..Fail("400 Bad Request", "bad_request", "message is required: the HL7 message's text, segments separated by carriage returns")

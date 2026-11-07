@@ -46,7 +46,14 @@ Property HeldReceiver As %String(MAXLEN = 128);
 /// sets it when a name is taken. Empty: the item's own name.
 Property ReceiverPrefix As %String(MAXLEN = 64);
 
-Parameter SETTINGS = "IntakePath:Shutter,SourceProduction:Shutter,SourceNamespace:Shutter,SchemaCategory:Shutter,HeldReceiver:Shutter,ReceiverPrefix:Shutter";
+/// The receivers (comma-separated item names) whose documents go as metadata only (CONTRACTS 11.2): an MDM T01 to T11 to one
+/// of them is read here, and its text never leaves this namespace. Empty, the default: every message goes as before.
+Property DocumentReceivers As %String(MAXLEN = 1000);
+
+/// Messages read for a document's chain at most, when the forwarder reads it. Shutter reads again where it can.
+Property DocumentChainLimit As %Integer [ InitialExpression = {##class(Shutter.Util.DocumentChain).#LIMIT} ];
+
+Parameter SETTINGS = "IntakePath:Shutter,SourceProduction:Shutter,SourceNamespace:Shutter,SchemaCategory:Shutter,HeldReceiver:Shutter,ReceiverPrefix:Shutter,DocumentReceivers:Shutter,DocumentChainLimit:Shutter";
 
 Method OnForward(request As Shutter.Intake.Forward, Output response As Shutter.Intake.Forwarded) As %Status
 {
@@ -91,8 +98,9 @@ ClassMethod ForwardFor(msg As EnsLib.HL7.Message, header As Ens.MessageHeader, r
 }
 
 /// The forward itself: the message's text and where it lives, posted to Shutter's intake; the answer into the response.
-Method Send(request As Shutter.Intake.Forward, msg As EnsLib.HL7.Message, header As Ens.MessageHeader, response As Shutter.Intake.Forwarded) As %Status [ Private ]
+Method Send(request As Shutter.Intake.Forward, msg As EnsLib.HL7.Message, header As Ens.MessageHeader, response As Shutter.Intake.Forwarded, ordinary As %Boolean = 0) As %Status [ Private ]
 {
+    If 'ordinary && ..Takes(request.Receiver) && ##class(Shutter.Util.DocumentFacts).IsDocument(msg) Quit ..SendDocument(request, msg, header, response)
     Set osc = $$$OK
     Set text = msg.OutputToString(, , .osc)
     If $$$ISERR(osc) Quit ..Refused(response, "The HL7 message " _ header.MessageBodyId _ " could not be written out: " _ $SYSTEM.Status.GetErrorText(osc))
@@ -126,6 +134,54 @@ Method Send(request As Shutter.Intake.Forward, msg As EnsLib.HL7.Message, header
         Set response.State = ##class(Shutter.Util.Json).Str(parsed, "state")
         Set response.Opened = ##class(Shutter.Util.Json).Bool(parsed, "opened")
         $$$TRACE("Shutter case " _ response.CaseId _ $SELECT(response.Opened: " opened", 1: " updated") _ ", state " _ response.State)
+        Quit $$$OK
+    }
+    Quit ..Refused(response, ..RefusalWords(status, sc, answer, ..IntakePath))
+}
+
+/// Whether this receiver's documents go as metadata only.
+Method Takes(receiver As %String) As %Boolean [ Private ]
+{
+    If (receiver = "") || (..DocumentReceivers = "") Quit 0
+    For i = 1:1:$LENGTH(..DocumentReceivers, ",") { If $ZSTRIP($PIECE(..DocumentReceivers, ",", i), "<>W") = receiver Return 1 }
+    Quit 0
+}
+
+/// A document's forward (CONTRACTS 11.2): the delivery's metadata and the chain read here, with no text of the message, whatever
+/// its size. A receiver with no document profile at Shutter answers 409 documents_off, and the message then goes the ordinary way.
+Method SendDocument(request As Shutter.Intake.Forward, msg As EnsLib.HL7.Message, header As Ens.MessageHeader, response As Shutter.Intake.Forwarded) As %Status [ Private ]
+{
+    Set delivery = ##class(Shutter.Util.DocumentFacts).DeliveryHeader(header.SessionId, request.Receiver, .ambiguous)
+    If $ISOBJECT(delivery) {
+        Set bodyMsg = ##class(EnsLib.HL7.Message).%OpenId(delivery.MessageBodyId)
+        If $ISOBJECT(bodyMsg) Set msg = bodyMsg, header = delivery
+    }
+    Set facts = ##class(Shutter.Util.DocumentFacts).FromMessage(msg, .fsc)
+    If '$ISOBJECT(facts) Quit ..Refused(response, "The document message " _ header.MessageBodyId _ " could not be read: " _ $SYSTEM.Status.GetErrorText(fsc))
+    Set route = request.Route
+    If route = "" Set route = header.SourceConfigName
+    Set body = ##class(Shutter.Util.DocumentChain).Envelope(request, facts, header, ..ReportedNamespace(), ..ReportedProduction(), route, ..ReportedReceiver(request.Receiver, ..ReceiverPrefix), ambiguous, ..DocumentChainLimit)
+    Set http = ##class(%Net.HttpRequest).%New()
+    Set http.ContentType = "application/json"
+    Do http.SetHeader("X-Requested-With", "Shutter")
+    Do http.EntityBody.Write(body.%ToJSON())
+    Set sc = ..Adapter.SendFormDataArray(.httpResponse, "POST", http, "", "", ..IntakePath)
+    Set ..Retry = 0
+    Set status = "", answer = ""
+    If $ISOBJECT($GET(httpResponse)) {
+        Set status = +httpResponse.StatusCode
+        If $ISOBJECT(httpResponse.Data) {
+            Do httpResponse.Data.Rewind()
+            While 'httpResponse.Data.AtEnd { Set answer = answer _ httpResponse.Data.Read(32000) }
+        }
+    }
+    If (status = 409) && (answer [ "documents_off") Quit ..Send(request, msg, header, response, 1)
+    Set parsed = ##class(Shutter.Util.Json).Parse(answer, .psc)
+    If '$ISOBJECT(parsed) || $$$ISERR(psc) || 'parsed.%IsA("%DynamicObject") Set parsed = {}
+    If status = 202 {
+        Set response.CaseId = ##class(Shutter.Util.Json).Str(parsed, "caseId")
+        Set response.State = ##class(Shutter.Util.Json).Str(parsed, "state")
+        Set response.Opened = ##class(Shutter.Util.Json).Bool(parsed, "opened")
         Quit $$$OK
     }
     Quit ..Refused(response, ..RefusalWords(status, sc, answer, ..IntakePath))

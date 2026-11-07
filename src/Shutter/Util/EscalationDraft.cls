@@ -37,6 +37,7 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
 {
     Set subject = "", body = ""
     If '$ISOBJECT(case) Quit $$$ERROR($$$GeneralError, "No case")
+    If case.DocumentJSON '= "" Quit ##class(Shutter.Util.DocumentCase).Draft(case, team, .subject, .body)
     Set json = "Shutter.Util.Json", nl = $CHAR(13, 10)
     Set summary = $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.SummaryObject(), 1: "")
     If '$ISOBJECT(summary) Set summary = {}
