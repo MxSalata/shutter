@@ -307,6 +307,71 @@ ClassMethod Describe(case As Shutter.Store.Case, found As %DynamicObject) As %St
     Quit ..Line(case, stops.%Get(0)) _ $SELECT(stops.%Size() > 1: ", and " _ (stops.%Size() - 1) _ " more", 1: "")
 }
 
+/// Whether a person may release this stop: the identifier read, every namespace read in full, and each row a movement on
+/// another visit. Not a cancel, a merge, a discharge or a change to the record: those may withdraw the write itself.
+ClassMethod Releasable(found) As %Boolean
+{
+    Quit ..NotReleasable(found) = ""
+}
+
+/// Why a person can't release this stop, for a person, or "" when they can.
+ClassMethod NotReleasable(found) As %String
+{
+    If '$ISOBJECT(found) Quit "Nothing has been read for this patient."
+    If ..Unreadable(found) Quit "The patient's identifier could not be read, so what else has happened to them is not known."
+    If ..Unread(found) '= "" Quit "Further messages could not all be read: " _ ..Unread(found) _ "."
+    If ..Count(found, "stops") = 0 Quit "Nothing stops this write now."
+    Set it = found.%Get("stops").%GetIterator()
+    While it.%GetNext(, .item) {
+        If ##class(Shutter.Util.Json).Str(item, "why") '= "other_visit" Return "One of these isn't only another visit's movement (" _ ##class(Shutter.Util.Json).Str(item, "why") _ "): it may withdraw this write, so it needs correcting by hand."
+    }
+    Quit ""
+}
+
+/// The digest of the rows that stop the write, the same from whichever store a row was read: its visit, control id, event
+/// and why. A further message that stops the write changes it.
+ClassMethod RowsDigest(found) As %String
+{
+    If ..Count(found, "stops") = 0 Quit ""
+    Set json = "Shutter.Util.Json", it = found.%Get("stops").%GetIterator()
+    While it.%GetNext(, .item) {
+        Set sorted($CLASSMETHOD(json, "Str", item, "visit_number") _ "|" _ $CLASSMETHOD(json, "Str", item, "control_id") _ "|" _ $CLASSMETHOD(json, "Str", item, "event") _ "|" _ $CLASSMETHOD(json, "Str", item, "why")) = ""
+    }
+    Set rows = [], key = ""
+    For {
+        Set key = $ORDER(sorted(key))
+        Quit:key=""
+        Do rows.%Push(key)
+    }
+    Quit ##class(Shutter.Util.Digest).OfObject({"rows": (rows)})
+}
+
+/// Whether a person's release of this case stands against this read: the same rows, and nothing the release can't cover.
+ClassMethod Released(case As Shutter.Store.Case, found) As %Boolean
+{
+    If case.FurtherReleaseJSON = "" Quit 0
+    If '..Releasable(found) Quit 0
+    Set release = ##class(Shutter.Util.Json).Parse(case.FurtherReleaseJSON, .psc)
+    Quit $ISOBJECT(release) && (##class(Shutter.Util.Json).Str(release, "digest") = ..RowsDigest(found))
+}
+
+/// A person with Shutter_Approve releases the stop on the rows they read: refused with a code and words unless a fresh read
+/// gives the digest they name. It records who, when and why on the case, and releases nothing else: every other check still
+/// runs, and the write still needs its approval.
+ClassMethod Release(case As Shutter.Store.Case, digest As %String, reason As %String, user As %String, Output code As %String, Output words As %String) As %Boolean
+{
+    Set code = "", words = ""
+    Set found = ..Find(case), why = ..NotReleasable(found)
+    If why '= "" Set code = "not_releasable", words = why Quit 0
+    If digest '= ..RowsDigest(found) Set code = "rows_changed", words = "The rows you read are not the rows on file now: read them again." Quit 0
+    Set record = {"digest": (digest), "by": (user), "at": (##class(Shutter.Util.Time).NowUTC()), "reason": ($EXTRACT(reason, 1, 2000))}
+    Set case.FurtherReleaseJSON = record.%ToJSON()
+    Set sc = case.%Save()
+    If $$$ISERR(sc) Set code = "not_saved", words = $SYSTEM.Status.GetErrorText(sc) Quit 0
+    Do case.Note("approval", user _ " released the stop on further messages, for " _ ..Count(found, "stops") _ " message(s) they read (rows " _ $EXTRACT(digest, 1, 19) _ "): " _ record.reason, user)
+    Quit 1
+}
+
 /// The lines a resend's plan and approval carry: what is on file for the patient, and for an admission on a receiver's 404
 /// that the 404 proves nothing about a record entered by hand.
 ClassMethod PlanLines(case As Shutter.Store.Case, summary As %DynamicObject) As %DynamicArray

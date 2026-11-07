@@ -323,6 +323,83 @@ Method TestEveryReasonCodeHasARow()
     Do $$$AssertEquals(missing, "", "every reason code is asserted by a row" _ $SELECT(missing = "": "", 1: "; missing: " _ missing))
 }
 
+/// A person's release at the dispatch gate and at the connector, each on its own fresh read: the same rows pass, and another
+/// relevant message voids the release at both. Release is the route's step: it refuses a digest that isn't the fresh read's.
+Method TestAReleaseHoldsOnlyForTheRowsRead()
+{
+    Set row = ..IndexRow("UT-GATE-REL-1", "ENC-UT-NEW", "UT-NEW")
+    Set more = ""
+    Try {
+        Set case = ..NewCase({})
+        Set found = ##class(Shutter.Util.FurtherMessages).Find(case)
+        Set digest = ##class(Shutter.Util.FurtherMessages).RowsDigest(found)
+        Do $$$AssertNotTrue(##class(Shutter.Util.FurtherMessages).Release(case, "sha256:other", "I read them", "user:ut", .code, .words), "a wrong digest is refused")
+        Do $$$AssertEquals(code, "rows_changed", "and says so: " _ words)
+        Do $$$AssertEquals(case.FurtherReleaseJSON, "", "and nothing is recorded")
+        Do $$$AssertTrue(##class(Shutter.Util.FurtherMessages).Release(case, digest, "A separate day case; I read both visits", "user:ut", .code, .words), "the digest of the rows read is taken")
+        Do $$$AssertTrue(case.FurtherReleaseJSON [ "A separate day case", "the reason is recorded on the case")
+        Do $$$AssertTrue(case.FurtherReleaseJSON [ "user:ut", "with who gave it")
+        Do $$$AssertTrue(..NotedOn(case, "A separate day case"), "and on its timeline")
+        Do $$$AssertTrue(##class(Shutter.Util.FurtherMessages).Released(case, ##class(Shutter.Util.FurtherMessages).Find(case)), "it stands on a fresh read")
+        Set response = ..AtConnector(case)
+        Do $$$AssertNotEquals(response.ReasonCode, "further_movement", "the connector lets the released rows through")
+        Set more = ..IndexRow("UT-GATE-REL-2", "ENC-UT-NEWER", "UT-NEWER")
+        Do $$$AssertNotTrue(##class(Shutter.Util.FurtherMessages).Released(case, ##class(Shutter.Util.FurtherMessages).Find(case)), "another relevant message voids it")
+        Set response = ..AtConnector(case)
+        Do $$$AssertEquals(response.ReasonCode, "further_movement", "at the connector too")
+        Do $$$AssertTrue(response.Error [ "ENC-UT", "which says what it found: " _ response.Error)
+    } Catch ex {
+        Do $$$AssertTrue(0, "no error: " _ ex.DisplayString())
+    }
+    Do ##class(Shutter.Index.Message).%DeleteId(row.%Id())
+    If $ISOBJECT(more) Do ##class(Shutter.Index.Message).%DeleteId(more.%Id())
+}
+
+/// What a release can't cover is refused at the route's step, and the words say why: an unreadable identifier, and a cancel of
+/// this visit, whatever digest is named.
+Method TestAReleaseIsRefusedForWhatItCannotCover()
+{
+    Set case = ..NewCase({})
+    Set case.PatientId = ""
+    Do $$$AssertNotTrue(##class(Shutter.Util.FurtherMessages).Release(case, "sha256:any", "reason", "user:ut", .code, .words), "an unreadable identifier is refused")
+    Do $$$AssertEquals(code, "not_releasable", "as not releasable: " _ words)
+    Do $$$AssertEquals(case.FurtherReleaseJSON, "", "nothing recorded")
+    Set further = {"identifier": "read", "stops": [{"why": "cancel", "event": "cancel_transfer", "visit_number": "ENC-UT1", "control_id": "MSG-9"}], "shows": [], "unread": ""}
+    Do $$$AssertTrue(##class(Shutter.Util.FurtherMessages).NotReleasable(further) [ "cancel", "a cancel of this visit isn't another visit's movement")
+    Set further = {"identifier": "read", "stops": [{"why": "other_visit", "event": "admit", "visit_number": "ENC-2", "control_id": "MSG-9"}], "shows": [], "unread": "the read ran out"}
+    Do $$$AssertTrue(##class(Shutter.Util.FurtherMessages).NotReleasable(further) [ "could not all be read", "nor is a read that didn't finish")
+    Set further = {"identifier": "read", "stops": [], "shows": [], "unread": ""}
+    Do $$$AssertTrue(##class(Shutter.Util.FurtherMessages).NotReleasable(further) '= "", "nor is a read with nothing to release")
+    Set one = {"identifier": "read", "stops": [{"why": "other_visit", "event": "admit", "visit_number": "ENC-2", "control_id": "MSG-9", "where": "received", "location": "WARD-C"}], "shows": [], "unread": ""}
+    Set same = {"identifier": "read", "stops": [{"why": "other_visit", "event": "admit", "visit_number": "ENC-2", "control_id": "MSG-9", "where": "received in HOSPITAL"}], "shows": [], "unread": ""}
+    Do $$$AssertEquals(##class(Shutter.Util.FurtherMessages).RowsDigest(one), ##class(Shutter.Util.FurtherMessages).RowsDigest(same), "the same message from another store gives the same digest")
+}
+
+Method IndexRow(doc As %String, visit As %String, control As %String) As Shutter.Index.Message
+{
+    Set row = ##class(Shutter.Index.Message).%New()
+    Set row.DocId = doc, row.PatientId = "MRN-UT1", row.PatientIdAuthority = "HOSP", row.VisitNumber = visit, row.Event = "admit", row.MessageType = "ADT_A01"
+    Set row.ControlId = control, row.EventTime = "2026-10-20T09:00:00Z", row.TimeCreated = "2099-01-01 00:00:00"
+    Do $$$AssertStatusOK(row.%Save(), "the index's row " _ doc _ " is saved")
+    Quit row
+}
+
+Method AtConnector(case As Shutter.Store.Case) As Shutter.Msg.WardResult
+{
+    Set request = ##class(Shutter.Msg.WardOperation).%New()
+    Set request.Purpose = "recovery", request.CaseId = case.CaseId, request.OperationKey = case.OperationKey
+    Set ward = ##class(Shutter.Operation.Ward).%New("UT Ward")
+    Do ward.OnWardOperation(request, .response)
+    Quit response
+}
+
+Method NotedOn(case As Shutter.Store.Case, text As %String) As %Boolean
+{
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT Text FROM Shutter_Store.CaseEvent WHERE ""Case"" = ?", case.%Id())
+    While rs.%Next() { If rs.%Get("Text") [ text Return 1 }
+    Quit 0
+}
+
 /// Runs the rows of one group and asserts each one's expectations.
 Method RunRows(group As %String)
 {
@@ -393,6 +470,12 @@ Method Run(row As %DynamicObject) As %DynamicObject
     If row.%IsDefined("summary") Do ..Merge(summary, ..Fill(##class(%DynamicAbstractObject).%FromJSON($REPLACE(row.summary.%ToJSON(), "{other}", otherId)), key))
     Set fresh = 300
     If row.%IsDefined("snapshot") Set fresh = +row.snapshot."fresh_seconds"
+    // A person's release of a further-movement stop: of the rows the summary holds, or of the digest the row names.
+    If row.%IsDefined("release") {
+        Set digest = $SELECT(row.release = "the rows": ##class(Shutter.Util.FurtherMessages).RowsDigest(summary.%Get("further_messages")), 1: row.release)
+        Set case.FurtherReleaseJSON = {"digest": (digest), "by": "user:ut", "at": "2026-10-19T10:00:00Z", "reason": "unit test"}.%ToJSON()
+        Do $$$AssertStatusOK(case.%Save(), row.name _ ": the release is recorded")
+    }
     Set snap = ##class(Shutter.Store.Snapshot).Begin(case, fresh)
     Set sc = snap.Seal(summary)
     Do $$$AssertStatusOK(sc, row.name _ ": the snapshot is sealed")
@@ -1024,6 +1107,28 @@ XData Rows [ MimeType = application/json ]
    "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
    "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend"},
    "expect": [["authorization", "block", "APPROVAL_POLICY_CHANGED"]], "outcome": "block"},
+  {"group": "ordering", "name": "another visit's movement a person released, the rows the same",
+   "release": "the rows", "summary": {"further_messages": {"identifier": "read", "stops": [{"why": "other_visit", "event": "admit", "message_type": "ADT_A01", "visit_number": "ENC-OTHER", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9"}], "shows": [], "unread": ""}},
+   "expect": [["ordering", "pass", "FURTHER_MOVEMENT_RELEASED"]]},
+  {"group": "ordering", "name": "another visit's movement released for other rows: a further message voids it",
+   "release": "sha256:rows-read-earlier", "summary": {"further_messages": {"identifier": "read", "stops": [{"why": "other_visit", "event": "admit", "message_type": "ADT_A01", "visit_number": "ENC-OTHER", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9"}], "shows": [], "unread": ""}},
+   "expect": [["ordering", "block", "FURTHER_MOVEMENT"]], "outcome": "block"},
+  {"group": "ordering", "name": "a release doesn't cover a cancel of this visit",
+   "release": "the rows", "summary": {"further_messages": {"identifier": "read", "stops": [{"why": "cancel", "event": "cancel_transfer", "visit_number": "ENC-UT1", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9"}], "shows": [], "unread": ""}},
+   "expect": [["ordering", "block", "FURTHER_MOVEMENT"]], "outcome": "block"},
+  {"group": "ordering", "name": "a release doesn't cover a merge beside another visit's movement",
+   "release": "the rows", "summary": {"further_messages": {"identifier": "read", "stops": [{"why": "other_visit", "event": "admit", "message_type": "ADT_A01", "visit_number": "ENC-OTHER", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9"}, {"why": "merge", "event": "merge", "visit_number": "ENC-OTHER", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-10"}], "shows": [], "unread": ""}},
+   "expect": [["ordering", "block", "FURTHER_MOVEMENT"]], "outcome": "block"},
+  {"group": "ordering", "name": "a release doesn't cover a read that didn't finish",
+   "release": "the rows", "summary": {"further_messages": {"identifier": "read", "stops": [{"why": "other_visit", "event": "admit", "message_type": "ADT_A01", "visit_number": "ENC-OTHER", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9"}], "shows": [], "unread": "the read of HOSPITAL ran out of its 30 seconds with messages left"}},
+   "expect": [["ordering", "block", "FURTHER_MOVEMENT"]], "outcome": "block"},
+  {"group": "ordering", "name": "a release doesn't cover an unreadable identifier",
+   "release": "sha256:anything", "summary": {"further_messages": {"identifier": "unreadable", "stops": [], "shows": [], "unread": ""}},
+   "expect": [["ordering", "block", "PATIENT_UNREADABLE"]], "outcome": "block"},
+  {"group": "authorization", "name": "a released stop's write still needs a person: policy doesn't release it",
+   "release": "sha256:anything", "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"}, "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
+   "profile": {"policy": {"2": {"single": "automatic"}}},
+   "expect": [["authorization", "block", "POLICY_REQUIRES_APPROVAL"]], "outcome": "block"},
   {"group": "authorization", "name": "an automatic release of a case whose source cannot be proved",
    "case": {"source_namespace": "UTNOSUCHNAMESPACE", "origin_header_id": "1"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"}, "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
    "profile": {"policy": {"2": {"single": "automatic"}}},

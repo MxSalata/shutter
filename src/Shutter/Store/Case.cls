@@ -88,6 +88,10 @@ Property WaitsOnMessage As %String(%JSONFIELDNAME = "waitsOnMessage", MAXLEN = 2
 
 Index WaitsMsgIdx On WaitsOnMessage;
 
+/// A person's release of a stop on another visit's movement (POST /cases/{id}/further-release, CONTRACTS 6.5), as JSON:
+/// {digest, by, at, reason}. It holds only while a fresh read gives the same digest (Shutter.Util.FurtherMessages.Released).
+Property FurtherReleaseJSON As %String(%JSONINCLUDE = "none", MAXLEN = 4000);
+
 /// The case whose board this one follows (v1.35, one board per failure signature) while that board runs; "" otherwise.
 Property FollowsCase As %String(%JSONFIELDNAME = "followsCase", MAXLEN = 32);
 
@@ -951,6 +955,9 @@ Storage Default
 </Value>
 <Value name="52">
 <Value>ScenarioRecorded</Value>
+</Value>
+<Value name="53">
+<Value>FurtherReleaseJSON</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>
