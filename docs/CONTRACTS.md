@@ -1412,6 +1412,63 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   connector item's; `hl7_schemas.needed` adds the watched namespaces' missing categories. `AlertProcess.Classify` reads a TCP connect
   timeout (`ErrOutConnectExpired`) as `delivery_failed`: nothing was sent.
 
+### 11.2 Document exceptions (v1.46)
+
+A failed MDM T01 to T11 at a receiver with a document profile becomes the ordinary case with its no-recovery path and a document block. Nothing is resent, no catalogue entry matches it, no agent is convened, and no copy of the document is kept in Shutter. A receiver with no profile behaves exactly as before. The HL7 version pinned is v2.5.1, chapter 9.
+
+**Switching it on takes both ends.** The receiver's entry in the site profile (6.4) gets `documents`, and the forwarder's `DocumentReceivers` setting names the item. The forwarder reads the delivery there and posts metadata only. With the forwarder not naming it, a whole message posted for such a receiver is read by the route and its text dropped; one over 2 MB is still refused 413. With the profile off, the route answers an envelope `409 documents_off` and the forwarder sends the message the ordinary way.
+
+**`documents` in a receiver's entry.** Every key is named, so a misspelt switch is refused.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `false` | The switch |
+| `recovery` | `"none"` | The only value this version accepts |
+| `source_namespaces`, `supported_versions` | `[]` | For a later sender. Nothing reads them yet |
+| `ack_level` | `"connection"` | `connection` or `application`. For a later sender |
+| `owner_accepts_acknowledged_recovery` | `false` | For a later sender |
+| `duplicates` | `"unknown"` | `unknown`, `rejects_exact`, `rejects_number`, `replaces` or `files_again`: what the receiver's owner declares |
+| `allowed_completion`, `allowed_confidentiality`, `allowed_availability` | `[]` | An empty list allows nothing. For a later sender |
+| `missing_status_policy` | `"stop"` | The only value |
+| `max_recovery_bytes`, `approval_minutes` | `0`, `15` | For a later sender |
+| `email_details` | `"minimal"` | `minimal`, or `identifiers` to add the hospital number and the document number to the email of a document that isn't restricted |
+| `readback` | `"disabled"` | The only value |
+| `chain_read_limit` | `5000` | Messages to the receiver read for a chain |
+
+**`POST /intake` with `kind: "document_failure"`** (`Shutter_Intake`): `source` (`namespace`, `production`, `route`, `header_id`, `item`), `receiver`, `failure` as in section 11, `delivery`, `facts` and `chain`, with no text of the message. 202 `{caseId, state, opened}`; 400 `bad_request` naming the field; 409 `documents_off`.
+
+**What is read, by position, from the delivery body:** MSH-3 to -7, -9, -10, -12; every PID-3 repetition; PV1-19; TXA-12, -13, -17, -18, -19. Read from the header of the session's request to the receiver's item, not the session's first message, so a transformation on the route shows what the operation was given. The walk stops at TXA, so no OBX, NTE, name, title, file name or type is read; a large value is never in memory. The size comes from the engine's own chunk count, and the two digests from a sink the engine writes into piece by piece, which keeps nothing.
+
+**The operation key** is `mdm-v1:` and a hash of the receiver, the source namespace, the delivery header, TXA-12, TXA-13, the trigger, the patient binding and the body's digest. It binds one stored delivery. It carries no identifier and is not a document version: a new transmission under a new header is a new case. A missing TXA-12 leaves the identity empty, and nothing stands in for it. The standard lets a sender put a file name in TXA-16 when it has no number; Shutter doesn't use it.
+
+**`GET /cases/{id}` adds `document`,** by the reader's right: `headline`, `trigger`, `document` (`id`, `parent`, `completion`, `confidentiality`, `availability`), `patient.keys`, `size`, `delivery`, `refusal`, `reasons`, `chain`, `sent_nothing`, `body_stored_in_shutter` and `source_verified`. The receiver's own words (`refusal.text`) and a restricted document's identity need `Shutter_Approve`. Without it the answer has `refusal.text_withheld` and, for a restricted document, `identity_withheld`, with the identity gone.
+
+**Restricted** means TXA-18 is V, R or a value the standard doesn't list, on the message or any message of its chain. The case's own columns then carry no patient, and the snapshot and email carry no identity. An absent TXA-18 isn't restricted, since the field is optional, and it does stop a sender.
+
+**The chain** is read live from the source's message store: the requests to the receiver's item, newest first, up to the limit, by the forwarder when it forwards and again by the evidence where this instance has that namespace. There is no index, so no lag. `chain.complete` is false, and the case says why, when the limit is reached, a body can't be read, there are over 50 linked messages, the document has no number, or the namespace isn't here. A complete read still covers only what was read, back to its `since`, on that item.
+
+**The reason table.** No catalogue entry; deterministic, from the block.
+
+| Code | Shown | When |
+| --- | --- | --- |
+| `DOC_ID_MISSING` | yes | No usable TXA-12 |
+| `DOC_RESTRICTED` | yes | As above |
+| `DOC_CHAIN_INCOMPLETE` | yes | `chain.complete` false |
+| `DOC_CANCELLED` | yes | A T11 names it, or TXA-19 is CA |
+| `DOC_REPLACED_OR_EDITED` | yes | A T07 or T08 on it, a T09 or T10 naming it as parent, or TXA-19 OB |
+| `DOC_VERSION_CONFLICT` | yes | Its number or control id on other content |
+| `DOC_PARENT_UNPROVEN` | yes | A T05, T06, T09 or T10: the parent is absent, or only known to be in the source's store |
+| `DOC_PATIENT_CHANGED` | yes | Its number on other patient identifiers |
+| `DOC_STATUS_UNPROVEN` | yes | TXA-17 missing, a status outside the standard's tables, or TXA-18 and -19 both absent |
+| `DOC_ENGINE_OWNS_DELIVERY` | yes | The header is Created, Queued, Delivered or Deferred |
+| `DOC_DELIVERY_UNCERTAIN` | yes | An uncertain outcome |
+| `DOC_BODY_UNAVAILABLE` | yes | The source no longer holds the message |
+| `DOC_DUPLICATE_UNDECLARED`, `DOC_RECOVERY_OFF`, `DOC_NOT_ORIGINAL_T02` | no | A sender's check only |
+
+**`Shutter.Util.DocumentEligibility.Check(block, settings, delivery)`** is the one question a later sender must ask, before every send. It answers a code. With `recovery` `none`, it answers `DOC_RECOVERY_OFF`; with no `delivery` object from an engine reader, `DOC_DELIVERY_UNCERTAIN`. Only with every check passing does it answer the code that lets a sender go on, which appears on no screen, email or API answer. Merges and identifier changes aren't read here: the sender's `delivery` must say they were checked and clear.
+
+**Where the document stays:** in the source's message store, under its retention. A receiver's words and a restricted identity are in `Case.DocumentJSON`, which goes with the case's own purge. The snapshot, the events, the email and the model's view hold neither.
+
 ## 12. The install (v1.15)
 
 **A namespace running another production refuses the install** (v1.42): with no `production` named, `InstallStatus` fails at

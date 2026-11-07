@@ -608,6 +608,24 @@ what the service received (section 10). Only ACKs on an HL7 service were tried, 
 
 **Not there: waiting for an ACK that never comes.** Nothing times out a message whose application ACK has not arrived. This is planned, not built.
 
+### 9.10 Document exceptions
+
+By default a failed MDM gets the ordinary case below, with its document kept whole in the case's snapshot, and one over 2 MB gets no case. To have a receiver's documents open metadata-only cases instead, at any size and with no copy in Shutter:
+
+1. In the site profile, on the receiver's entry, add this. Saving it needs `Shutter_Configure`.
+
+```json
+"documents": {"enabled": true}
+```
+
+2. In the production's Portal page, on the **Shutter Forwarder** item, set **DocumentReceivers** to the operation's item name. The production picks it up on Update.
+
+Then a failed MDM T01 to T11 there opens a case that shows the document number, the parent, every PID-3 identifier, the statuses and the delivery, and says what the message store holds for that document. **Nothing is resent, and no model is involved.** The email is a notice with a link. A restricted document (TXA-18 V or R) shows its identity only to a holder of `Shutter_Approve`, as does the receiver's own wording of a refusal.
+
+**What it can't tell you.** Whether the receiver filed the document, whether it holds another copy, or whether the identifiers name the right patient. Merges and identifier changes aren't read. A chain covers the messages to that one item back to the time the case states, so a retention purge or another route is outside it. A chain's messages are read one by one: a receiver with many messages a day may need a higher `chain_read_limit`, at the cost of a longer read.
+
+The document itself stays in the source's message store, subject to that store's retention. If it's purged, the case stays and says so. Fields and codes: `docs/CONTRACTS.md`, section 11.2.
+
 ## 10. What a watched namespace does not get
 
 Say these plainly to whoever owns the feed.
@@ -634,7 +652,7 @@ Say these plainly to whoever owns the feed.
   service's: with a DTL on the route, the case holds what the service received, not what the operation sent.
 - **Nothing over 2 MB, and nothing that is not HL7.** The intake answers 413 or 400, so a large MDM with its document inline, or a FHIR
   body, is a warning in the event log and no case. A smaller MDM's document is kept whole in the case's snapshot: a governance
-  question for the trust.
+  question for the trust. A receiver with a document profile (section 9.10) avoids both for MDM.
 - **The prevent-failures route (section 7) through a stock routing engine** can name the wrong reason: the engine holds the message, but
   the case reads as a schema failure of the standard the message itself names, because the header's source is the router. Use
   it through a process that checks the category, as the demo hospital's does, or test it first with your feed.
