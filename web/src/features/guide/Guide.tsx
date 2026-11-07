@@ -710,7 +710,7 @@ function StepHost({ pos }: { pos: GuidePosition }) {
       setHost(null);
       setTarget(null);
     };
-  }, [arrived, pos.step.target]);
+  }, [arrived, pos.step.target, pos.step.nearTry]);
 
   // While the card is on the page, Ask about this case opens as a sheet beside it, offering the dock it moves into
   const dock = useGuideDock();
