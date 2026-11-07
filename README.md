@@ -8,6 +8,12 @@ Shutter is about delivery, not diagnosis: it resends what the failed message ask
 
 **What can go wrong when you resend:** a nurse moves the patient while a resend waits, the receiver refuses it as "duplicate" with nothing filed, the clocks go back, a merge has since been undone by hand. [The list](https://github.com/MxSalata/shutter/blob/main/docs/edge-cases.md) says what Shutter does about each, links the test that shows it, and says what it doesn't cover yet. Stopping for a person is a right answer, and is marked as one.
 
+**For judges, in about three minutes, with nothing to install:**
+1. Open the [trial](https://mxsalata.github.io/shutter/) and press **Explore on my own**.
+2. In **Scenarios**, choose **Rules only**, press **Run** on S8, then open its case: "Wrote WARD-B over the bed manager's WARD-C", with every check passed.
+3. Choose **Board**, run S8 again and open C-000008: escalated, **0 writes**, and the patient named for a person to review.
+4. On that case, under **In IRIS:**, press **Message trace (screenshot)**. To see the real thing, [the demo's IRIS](https://shutter.mxsalata.com/csp/healthshare/shutter/Shutter.Portal.Guide.cls) is read only, after a sign-in ([details](https://github.com/MxSalata/shutter#try-it)).
+
 **Quickest ways in:** the trial, nothing to install; the 4-minute tour; the online demo; or `./install.sh --replay`, with no Early Access file and no API key ([Try it](https://github.com/MxSalata/shutter#try-it)).
 
 [![CI](https://github.com/MxSalata/shutter/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MxSalata/shutter/actions/workflows/ci.yml) [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](https://github.com/MxSalata/shutter/blob/main/LICENSE)
