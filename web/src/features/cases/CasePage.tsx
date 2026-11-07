@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router';
 import {
+  beforeEvidence,
   isOpen,
   keys,
   useCase,
@@ -418,6 +419,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
               caseId={c.caseId}
               receiver={c.receiver}
               open={open}
+              notYet={beforeEvidence(c.state)}
               focus={focus}
               onFocused={clearFocus}
             />

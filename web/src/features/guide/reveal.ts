@@ -103,7 +103,9 @@ export function landOn(el: HTMLElement, reduced: boolean): () => void {
     if (aimMoved || movedAway || (off && y === lastY)) {
       goal = wanted;
       arrived = false;
-      window.scrollTo({ top: wanted, behavior: reduced ? 'auto' : 'smooth' });
+      // A long glide over a page still settling leaves a blank band above the sticky header: more than a screen jumps
+      const far = Math.abs(wanted - y) > window.innerHeight;
+      window.scrollTo({ top: wanted, behavior: reduced || far ? 'auto' : 'smooth' });
     } else if (!off) arrived = true;
     lastY = y;
   };

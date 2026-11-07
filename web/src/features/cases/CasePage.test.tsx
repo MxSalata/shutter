@@ -501,6 +501,22 @@ describe('CasePage', () => {
     expect(await within(board).findByText('As expected')).toBeInTheDocument();
   });
 
+  it('asks for no plan or snapshot while the case is Detected, so the console logs no 404', async () => {
+    const { detail } = fixtures.cases['C-000002'];
+    server.use(
+      http.get('/api/shutter/cases/C-000002', () => HttpResponse.json({ ...detail, state: 'detected' })),
+    );
+    const asked: string[] = [];
+    const listen = ({ request }: { request: Request }) => void asked.push(new URL(request.url).pathname);
+    server.events.on('request:start', listen);
+    renderCase('C-000002');
+    await screen.findByRole('heading', { level: 1 });
+    await waitFor(() => expect(asked).toContain('/api/shutter/cases/C-000002/approvals'));
+    expect(asked).not.toContain('/api/shutter/cases/C-000002/plan');
+    expect(asked).not.toContain('/api/shutter/cases/C-000002/snapshot');
+    server.events.removeListener('request:start', listen);
+  });
+
   it("doesn't mark the board's run wrong once a person has closed it, or while it is running", async () => {
     const { detail } = fixtures.cases['C-000008'];
     const asIf = (change: Record<string, string>) =>

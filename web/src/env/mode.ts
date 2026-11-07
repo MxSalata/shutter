@@ -19,7 +19,7 @@ export interface Env {
   canLeave: boolean;
   /** The trial's user at start: `?as=operator|approver|demo|judge`, else the approver. */
   role: TrialRole;
-  /** `?trial=tour` opens the guide's quick tour on arrival, `?trial=engineer` the integration engineers' tour. */
+  /** `?trial=tour` starts the guide's quick tour on arrival, `?trial=engineer` the integration engineers' tour. */
   openGuide: 'quick' | 'engineer' | false;
   /** `?detail=technical` (or `plain`) sets the Detail switch at start; null when the address says nothing. */
   detail: DetailLevel | null;
@@ -91,8 +91,8 @@ export const ENV: Env = pageEnv(typeof window === 'undefined' ? '' : window.loca
 export const TRIAL = ENV.trial;
 
 /**
- * The address after start: `?trial=tour` and `?trial=engineer` become `?trial`, so a reload does not open the tour's
- * welcome again; the rest of the address, and React Router's own history state, are kept.
+ * The address after start: `?trial=tour` and `?trial=engineer` become `?trial`, so a reload does not start the tour
+ * again; the rest of the address, and React Router's own history state, are kept.
  */
 export function normalisedSearch(search: string): string {
   return search.replace(/([?&])trial=(tour|engineer)(?=&|$)/, '$1trial');

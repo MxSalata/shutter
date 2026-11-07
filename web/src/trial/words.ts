@@ -20,3 +20,7 @@ export function journalLine(c: JournalCounts): string {
   const refused = c.refused ? ` Calls to IRIS blocked by the trial's guard: ${c.refused}.` : '';
   return `Answered in this browser: ${plural(c.reads, 'read', 'reads')}, ${plural(c.actions, 'action', 'actions')}. Sent to IRIS: none. Network calls blocked by the page's security policy: ${c.violations}.${refused}`;
 }
+
+/** After a page load that lost what the tab did: the recording starts afresh, so a case approved here waits again. */
+export const TRIAL_RELOADED_WORDS =
+  'The page loaded afresh, so the recording started again: what you approved or ran here is undone. Nothing left this browser.';

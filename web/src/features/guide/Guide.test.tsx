@@ -18,7 +18,8 @@ import { INITIAL, type GuideProgress } from './controller';
 import { APPROVED_FOR_YOU, Guide, REPLAY_DONE } from './Guide';
 import { TrialHelpMenu } from './HelpMenu';
 import { welcomeActions } from './registry';
-import { forgetProgress, GUIDE_KEY, saveProgress } from './storage';
+import { forgetProgress, GUIDE_KEY, loadSnoozed, saveProgress, saveSnoozed } from './storage';
+import { ENV } from '@/env/mode';
 import { useGuide } from './store';
 
 beforeAll(() => {
@@ -106,6 +107,8 @@ describe('the guide', () => {
   beforeEach(() => {
     resetMock('approver');
     localStorage.clear();
+    sessionStorage.clear();
+    ENV.openGuide = false;
     forgetProgress();
     useGuide.setState({
       progress: INITIAL,
@@ -152,6 +155,51 @@ describe('the guide', () => {
     await userEvent.click(within(await welcome()).getByRole('button', { name: "Don't show again" }));
     await noDialog();
     expect(stored()).toMatchObject({ version: 2, dismissed: true, at: null });
+  });
+
+  it('keeps Explore on my own for a full page load in the tab, and sign-out forgets it', () => {
+    act(() => useGuide.getState().notNow());
+    expect(loadSnoozed()).toBe(true);
+    act(() => useGuide.getState().reset());
+    expect(loadSnoozed()).toBe(false);
+    expect(useGuide.getState().snoozed).toBe(false);
+  });
+
+  it('does not welcome a page load after Explore on my own', async () => {
+    saveSnoozed();
+    useGuide.setState({ snoozed: loadSnoozed() });
+    renderApp();
+    expect(await screen.findByRole('heading', { name: 'Start', level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('starts the tour an address asked for, with no welcome in the way', async () => {
+    ENV.openGuide = 'quick';
+    const router = renderApp();
+    const guide = await card();
+    expect(guide).toHaveTextContent('Step 1 of 9');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/scenarios');
+    expect(bannerForm.get()).toBe('compact');
+  });
+
+  it("starts the engineers' tour from its address, with Technical on", async () => {
+    ENV.openGuide = 'engineer';
+    renderApp();
+    const guide = await card();
+    expect(guide).toHaveTextContent('Step 1 of 6');
+    expect(useGuide.getState().progress.scope).toBe('engineer');
+    expect(useAppearance.getState().detail).toBe('technical');
+  });
+
+  it('sits just above Approve plan on the step that invites the press', async () => {
+    at('s2/decision');
+    renderApp('/start');
+    const guide = await card();
+    const control = await screen.findByRole('button', { name: 'Approve plan' });
+    const host = guide.closest<HTMLElement>('[data-guide-host]')!;
+    await waitFor(() => expect(host.nextElementSibling).toContainElement(control));
+    expect(host.dataset.guideNear).toBe('true');
   });
 
   it('does not welcome a visit after the tour was dismissed', async () => {

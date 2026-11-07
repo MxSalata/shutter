@@ -654,7 +654,9 @@ In `policy` mode the matcher's decision is:
 ### 6.4 The site profile and the policy path
 
 The questionnaire's answers are the site profile (`knowledge/site/profile.json`, versioned; defaults shipped). The core
-reads it through `Shutter.Store.SiteProfile`.
+reads it through `Shutter.Store.SiteProfile`. A non-demo install takes the file through `SiteProfile.ForSite`: the demo's
+receivers (`Downstream Out`, `Records Out`) leave it, a list left empty gets one draft to fill in, and every `automatic`
+in its policy reads `approval`, so it starts with no automatic release. A profile a person saved is never changed.
 
 ```json
 {

@@ -511,18 +511,21 @@ export function EvidencePanel({
   focus,
   onFocused,
   receiver,
+  notYet = false,
 }: {
   caseId: string;
   /** The case's receiver (its production item), named in its own observations' labels. */
   receiver?: string;
   open: boolean;
+  /** The case is too young to have a snapshot or a plan, so neither is asked for. */
+  notYet?: boolean;
   /** Evidence a citation asked to see: its kind, and when it was asked, so a second click on it acts again. */
   focus?: { kind: string; at: number };
   /** Called once the request is acted on, so a later visit to the tab does not act on it again. */
   onFocused?: () => void;
 }) {
-  const snap = useSnapshot(caseId, open);
-  const plan = usePlan(caseId, open).data?.plan;
+  const snap = useSnapshot(caseId, open, notYet);
+  const plan = usePlan(caseId, open, notYet).data?.plan;
   // The investigation's runs alone: a question's runs (Ask about this case) sit on the case too
   const runs = investigationRuns(useRuns(caseId, open).data);
   const s = snap.data;

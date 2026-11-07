@@ -88,7 +88,7 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         Set exact = (plan.OperationKey = case.OperationKey)
         Set op = summary.%Get("operation")
         Set digestOk = (plan.PayloadDigest = "") || (plan.PayloadDigest = ##class(Shutter.Util.Json).Str(op, "payload_digest"))
-        Do ..Check(checks, "intent", $SELECT(exact && digestOk: "pass", 1: "block"), $SELECT(exact && digestOk: "EXACT_OPERATION", 'exact: "DIFFERENT_OPERATION", 1: "PAYLOAD_CHANGED"), $SELECT(exact && digestOk: "The plan resends the case's own operation, unchanged", 1: "The plan's action is not the case's operation unchanged"))
+        Do ..Check(checks, "intent", $SELECT(exact && digestOk: "pass", 1: "block"), $SELECT(exact && digestOk: "EXACT_OPERATION", 'exact: "DIFFERENT_OPERATION", 1: "PAYLOAD_CHANGED"), $SELECT('exact || 'digestOk: "The plan's action is not the case's operation unchanged", plan.PayloadDigest = "": "The plan resends the case's own operation, but names no payload digest, so none was compared; the write takes the payload from the case's evidence", 1: "The plan resends the case's own operation, unchanged"))
     } Else {
         Do ..Check(checks, "intent", "pass", "NO_WRITE", "The plan writes nothing to the receiver")
     }

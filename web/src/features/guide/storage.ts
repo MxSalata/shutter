@@ -35,3 +35,33 @@ export function saveProgress(progress: GuideProgress): void {
 export function forgetProgress(): void {
   memory = null;
 }
+
+/**
+ * Explore on my own, for this tab: a full page load in it (a reload, a link that enters the trial again) does not bring
+ * the welcome back, and a new tab may. Storage refused: it lasts for the page.
+ */
+export const GUIDE_SNOOZE_KEY = 'shutter:guide:snoozed';
+
+export function loadSnoozed(): boolean {
+  try {
+    return window.sessionStorage.getItem(GUIDE_SNOOZE_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+export function saveSnoozed(): void {
+  try {
+    window.sessionStorage.setItem(GUIDE_SNOOZE_KEY, '1');
+  } catch {
+    // Storage refused: the store's own copy lasts for the page
+  }
+}
+
+export function forgetSnoozed(): void {
+  try {
+    window.sessionStorage.removeItem(GUIDE_SNOOZE_KEY);
+  } catch {
+    // Storage refused: nothing was kept
+  }
+}

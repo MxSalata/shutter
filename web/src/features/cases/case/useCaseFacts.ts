@@ -1,4 +1,5 @@
 import {
+  beforeEvidence,
   useApprovals,
   useAttempts,
   useBlockedReason,
@@ -17,11 +18,12 @@ import { investigationRuns } from './runClock';
 export function useCaseFacts(c: CaseDetail, open: boolean): CaseFacts {
   const stopped = c.state === 'blocked' || c.state === 'escalated';
   const handled = c.state === 'resolved' && c.disposition === 'handled_by_hand';
-  const plan = usePlan(c.caseId, open);
+  const notYet = beforeEvidence(c.state);
+  const plan = usePlan(c.caseId, open, notYet);
   const approvals = useApprovals(c.caseId, open);
   const attempts = useAttempts(c.caseId, open);
   const closure = useClosure(c.caseId, !open);
-  const snapshot = useSnapshot(c.caseId, open);
+  const snapshot = useSnapshot(c.caseId, open, notYet);
   const blocked = useBlockedReason(c.caseId, stopped);
   const escalations = useEscalations(c.caseId, stopped || handled);
   const runs = useRuns(c.caseId, open);
