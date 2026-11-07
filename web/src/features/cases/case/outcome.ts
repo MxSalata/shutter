@@ -15,6 +15,7 @@ import { APPROVALS, caseState, gateOutcome, PROVENANCE, type OutcomeCase } from 
 import type { Status } from '@/lib/tone';
 import { checksOf, failureKindInWords } from './derive';
 import { approvalsByPlan, WRITE_OUTCOMES, type SafetyReceipt } from './receipt';
+import { NOT_CHECKED, notCheckedAtReceiver } from './receiver';
 import { investigationRuns } from './runClock';
 import { encounterTimeline } from './timeline';
 
@@ -232,7 +233,9 @@ export function outcomeReason(f: CaseFacts): string {
         : gate && gate.outcome !== 'pass'
           ? `the gate's result on the latest plan at ${gate.stage} was ${gateOutcome(gate.outcome, checksOf(gate)).label.toLowerCase()}`
           : '',
-      'Shutter did not verify the correction',
+      notCheckedAtReceiver(c, f.snapshot, f.attempts)
+        ? lowerFirst(NOT_CHECKED)
+        : 'Shutter did not verify the correction',
     ]);
   }
   switch (c.state) {
@@ -533,6 +536,8 @@ export function writtenSummary(f: CaseFacts): string {
 
 /** What the verifier found, or why there is nothing to verify. */
 export function verifiedSummary(f: CaseFacts): string {
+  const notChecked = notCheckedAtReceiver(f.c, f.snapshot, f.attempts);
+  if (notChecked) return sentence([NOT_CHECKED, notChecked.accepted]);
   const r = f.receipt;
   if (!r.verification) return CLOSED.includes(f.c.state) ? 'Unknown.' : 'Nothing to verify yet.';
   return sentence([r.verification]);

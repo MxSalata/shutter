@@ -5,6 +5,7 @@ import type { Tone } from '@/lib/tone';
 import { notModelled } from './derive';
 import { evidenceOf } from './message';
 import { SYSTEMS } from './outcome';
+import { deliveredByEngine, deliveredByEngineWords } from './receiver';
 
 const str = (v: unknown) => (v === undefined || v === null ? '' : String(v));
 
@@ -35,7 +36,10 @@ export interface FailureMap {
     /** For the engineer: the production item and the receiver's API, as the route recorded them. */
     item: string;
     api: string;
-    /** What the receiver holds now, when Shutter's resend was verified there; empty otherwise. */
+    /**
+     * What the receiver holds now, when Shutter's resend was verified there; that it was not checked, when the engine
+     * delivered the message; empty otherwise.
+     */
     now: string;
   };
   /**
@@ -88,6 +92,9 @@ function answerOf(c: CaseDetail): string {
 
 /** The hop to the receiver, by how the delivery failed. */
 function hopOf(c: CaseDetail): FailureMap['hop'] {
+  // Whatever first went wrong, the engine got it there in the end; what that shows is the outcome's and the receiver's
+  if (deliveredByEngine(c))
+    return { label: 'Delivered by the engine', answer: '', code: '', tone: 'neutral', broken: false };
   const answer = answerOf(c);
   const code = str(c.failureReasonCode);
   // An order, a result or a document: "Not sent" would be false when the receiver refused it or never answered
@@ -175,11 +182,12 @@ export function failureMapOf(
   const item = c.receiver || str(route?.connector) || 'Downstream Out';
   // In a sentence: "the bed-management system", or the item's own name, which keeps its capitals
   const noun = described.name ? `the ${lowerFirst(described.name)}` : item;
+  const engineWords = delivered ? '' : deliveredByEngineWords(c, snapshot);
   const receiver = {
     name: described.name || item,
     item: described.name ? item : '',
     api: described.api,
-    now: delivered ? `Has the ${event.toLowerCase()} now: Shutter's resend, verified there` : '',
+    now: delivered ? `Has the ${event.toLowerCase()} now: Shutter's resend, verified there` : engineWords,
   };
   const hop = hopOf(c);
   const via = forwarded ? " from the hospital's production" : '';
@@ -202,11 +210,11 @@ export function failureMapOf(
     ? `in IRIS, ${lowerFirst(iris.trouble)}; ${lowerFirst(hop.label)}${answered}`
     : `${lowerFirst(hop.label)}${answered}`;
   const now = `now ${lowerFirst(outcome.label)}`;
-  const sentence = `${from} ${through} to ${noun}: ${happened}. ${shutter.picked}; ${now}.${receiver.now ? ` The receiver ${lowerFirst(receiver.now)}.` : ''}`;
+  const sentence = `${from} ${through} to ${noun}: ${happened}. ${shutter.picked}; ${now}.${delivered ? ` The receiver ${lowerFirst(receiver.now)}.` : engineWords ? ` ${engineWords}.` : ''}`;
   const steps = [
     sender ? `Sender: ${sender.name}${sender.gloss ? `, the ${sender.gloss},` : ''} sent the ${what}.` : '',
     `IRIS, ${lowerFirst(iris.role)}${iris.trouble ? `: ${lowerFirst(iris.trouble)}` : ''}.`,
-    `Receiver: ${noun}, ${lowerFirst(hop.label)}${answered}.${receiver.now ? ` It ${lowerFirst(receiver.now)}.` : ''}`,
+    `Receiver: ${noun}, ${lowerFirst(hop.label)}${answered}.${delivered ? ` It ${lowerFirst(receiver.now)}.` : engineWords ? ` ${engineWords}.` : ''}`,
     `${shutter.picked}; ${now}.`,
   ].filter(Boolean);
   return { sender, message, iris, receiver, hop, shutter, sentence, steps };

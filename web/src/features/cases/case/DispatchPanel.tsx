@@ -9,9 +9,10 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
 import { attempt, caseState, verification } from '@/lib/status';
 import { asObject } from '@/lib/json';
+import { NotCheckedWords } from './NotCheckedWords';
 import { STOPPED_STATES, WRITE_OUTCOMES } from './receipt';
 import { NotYet, Section } from './Section';
-import { receiverNoun } from './receiver';
+import { AT_THE_RECEIVER, receiverNoun, type NotChecked } from './receiver';
 
 function AttemptCard({ a }: { a: Attempt }) {
   const s = attempt(a.outcome);
@@ -118,25 +119,31 @@ interface Props {
   state: string;
   /** The case's receiver (its production item). */
   receiver?: string;
+  /** Set on a case with no receipt: what it reads in place of a verification. */
+  notChecked?: NotChecked | null;
 }
 
 /** The writes Shutter sent: each attempt and what the receiver answered. */
-export function DispatchPanel({ caseId, open, write, planned, byHand, state, receiver }: Props) {
+export function DispatchPanel({ caseId, open, write, planned, byHand, state, receiver, notChecked }: Props) {
   const attempts = useAttempts(caseId, open);
   const list = (attempts.data ?? []).filter((x) => x.attempt);
   return (
     <Section
       id="dispatch"
       title="Dispatch"
-      note={`The conditional write, sent only after the release, a fresh read of the receiver and the gate at dispatch. An acknowledgement only says ${receiverNoun(receiver)} answered.`}
+      note={
+        notChecked
+          ? `What Shutter itself sent to ${receiverNoun(receiver)}. A delivery by the engine is not a write of Shutter's.`
+          : `The conditional write, sent only after the release, a fresh read of the receiver and the gate at dispatch. An acknowledgement only says ${receiverNoun(receiver)} answered.`
+      }
     >
       {attempts.isError ? <ErrorAlert error={attempts.error} title="The attempts could not be read" /> : null}
       {attempts.isSuccess && list.length === 0 ? (
-        write && !byHand && !STOPPED_STATES.includes(state) ? (
+        write && !byHand && !STOPPED_STATES.includes(state) && !notChecked ? (
           <NotYet>Nothing dispatched yet.</NotYet>
         ) : (
           <Text size="sm" c="dimmed">
-            {planned || byHand || STOPPED_STATES.includes(state)
+            {planned || byHand || notChecked || STOPPED_STATES.includes(state)
               ? 'Nothing was sent: Shutter made no write.'
               : 'Nothing to send yet: there is no plan.'}
           </Text>
@@ -151,8 +158,11 @@ export function DispatchPanel({ caseId, open, write, planned, byHand, state, rec
   );
 }
 
-/** What the verifier found at the receiver after each write, or why there is nothing of Shutter's to verify. */
-export function VerificationPanel({ caseId, open, write, planned, byHand, state }: Props) {
+/**
+ * What the verifier found at the receiver after each write, or why there is nothing of Shutter's to verify; on a case
+ * with no receipt, its outcome and that nobody checked the receiver.
+ */
+export function VerificationPanel({ caseId, open, write, planned, byHand, state, notChecked }: Props) {
   const attempts = useAttempts(caseId, open);
   const list = (attempts.data ?? []).filter((x) => x.verification);
   const sent = (attempts.data ?? []).some((x) => x.attempt);
@@ -160,6 +170,12 @@ export function VerificationPanel({ caseId, open, write, planned, byHand, state 
   const unverified =
     STOPPED_STATES.includes(state) &&
     (attempts.data ?? []).some((x) => WRITE_OUTCOMES.includes(String(x.attempt?.outcome)));
+  if (notChecked)
+    return (
+      <Section id="verification" title={AT_THE_RECEIVER}>
+        <NotCheckedWords outcome={notChecked.outcome} accepted={notChecked.accepted} />
+      </Section>
+    );
   return (
     <Section
       id="verification"

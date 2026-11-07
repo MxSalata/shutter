@@ -40,6 +40,7 @@ import { usePrefersReducedMotion } from '@/lib/motion';
 import { TONE_COLOURS, TONE_ICONS, toneText, type Tone } from '@/lib/tone';
 import { Reinvestigate } from './Closure';
 import { checksOf } from './derive';
+import { NotCheckedWords } from './NotCheckedWords';
 import { NextActionPrecedents } from './Precedents';
 import { bandKind, bandStartsOpen, rememberBand } from './outcomeBand';
 import {
@@ -54,7 +55,7 @@ import {
   type CaseFacts,
 } from './outcome';
 import { proposalCaption, writesCaption, writesDetail } from './receipt';
-import { caseReceiver, correctionStepsOf } from './receiver';
+import { AT_THE_RECEIVER, caseReceiver, correctionStepsOf, notCheckedAtReceiver } from './receiver';
 
 /** The gate's outcome in a word on the badge; the counts are written beside it. */
 const GATE_LABELS: Record<string, string> = { pass: 'Passed', block: 'Blocked', unknown: 'Unknown' };
@@ -271,6 +272,7 @@ export function DecisionCard({
   const marked = next.kind !== 'none';
   const caption = writesCaption(r);
   const verifierSummary = VERIFIER_OUTCOMES.includes(r.verificationState) ? r.verification : '';
+  const notChecked = notCheckedAtReceiver(c, facts.snapshot, facts.attempts);
   const proposal = proposalCaption(r);
   return (
     <Paper
@@ -579,8 +581,10 @@ export function DecisionCard({
                       </>
                     )}
                   </Fact>
-                  <Fact label="Verification">
-                    {r.verificationState ? (
+                  <Fact label={notChecked ? AT_THE_RECEIVER : 'Verification'}>
+                    {notChecked ? (
+                      <NotCheckedWords accepted={notChecked.accepted} />
+                    ) : r.verificationState ? (
                       <StatusBadge {...verification(r.verificationState)} size="md" w="fit-content" />
                     ) : (
                       // No verification state yet: the words stand alone, so the fact is never empty
