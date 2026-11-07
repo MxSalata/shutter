@@ -239,8 +239,9 @@ ClassMethod CaseLine(c As %DynamicObject, detail As %String) As %String
     Set line = ..Line(c.caseId)
     If detail = "none" Quit line
     Set id = ..Line(c.patientId), authority = ..Line(c.patientIdAuthority)
+    Set nhs = $ZCONVERT(authority, "U") [ "NHS"
     If '$MATCH(authority, "^[A-Za-z0-9._-]{1,40}$") Set authority = ""
-    If (id '= "") && ('..Identifier(id) || ($ZCONVERT(authority, "U") [ "NHS")) {
+    If (id '= "") && ('..Identifier(id) || nhs) {
         Set line = line _ ", hospital number not shown"
     } ElseIf id '= "" {
         Set line = line _ ", hospital number " _ id _ $SELECT(authority '= "": " (" _ authority _ ")", 1: "")

@@ -81,9 +81,7 @@ export function reminderPreview(r: Reminders | undefined): { subject: string; bo
     const age = `open ${hours(c.hours)}`;
     if (detail === 'none') return `${c.caseId}, ${age}`;
     const ids = `${c.caseId}, hospital number ${c.id} (DEMO), visit ${c.visit}`;
-    return detail === 'identifiers_initial'
-      ? `${ids}, first name ${c.initial}, ${age}`
-      : `${ids}, ${age}`;
+    return detail === 'identifiers_initial' ? `${ids}, first name ${c.initial}, ${age}` : `${ids}, ${age}`;
   };
   const groups = new Map<string, number>();
   for (const c of SAMPLE) {
