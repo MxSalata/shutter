@@ -46,8 +46,8 @@ Property HeldReceiver As %String(MAXLEN = 128);
 /// sets it when a name is taken. Empty: the item's own name.
 Property ReceiverPrefix As %String(MAXLEN = 64);
 
-/// The receivers (comma-separated item names) whose documents go as metadata only (CONTRACTS 11.2): an MDM T01 to T11 to one
-/// of them is read here, and its text never leaves this namespace. Empty, the default: every message goes as before.
+/// The receivers (comma-separated item names) whose documents go as metadata only (CONTRACTS 11.2): an MDM T01 to T11, or an ORU
+/// with an attachment, to one of them is read here, and its text never leaves this namespace. Empty, the default: every message goes as before.
 Property DocumentReceivers As %String(MAXLEN = 1000);
 
 /// Messages read for a document's chain at most, when the forwarder reads it. Shutter reads again where it can.
@@ -100,7 +100,7 @@ ClassMethod ForwardFor(msg As EnsLib.HL7.Message, header As Ens.MessageHeader, r
 /// The forward itself: the message's text and where it lives, posted to Shutter's intake; the answer into the response.
 Method Send(request As Shutter.Intake.Forward, msg As EnsLib.HL7.Message, header As Ens.MessageHeader, response As Shutter.Intake.Forwarded, ordinary As %Boolean = 0) As %Status [ Private ]
 {
-    If 'ordinary && ..Takes(request.Receiver) && ##class(Shutter.Util.DocumentFacts).IsDocument(msg) Quit ..SendDocument(request, msg, header, response)
+    If 'ordinary && ..Takes(request.Receiver) && (##class(Shutter.Util.DocumentFacts).IsDocument(msg) || ##class(Shutter.Util.DocumentFacts).IsReportMessage(msg)) Quit ..SendDocument(request, msg, header, response)
     Set osc = $$$OK
     Set text = msg.OutputToString(, , .osc)
     If $$$ISERR(osc) Quit ..Refused(response, "The HL7 message " _ header.MessageBodyId _ " could not be written out: " _ $SYSTEM.Status.GetErrorText(osc))
@@ -151,6 +151,7 @@ Method Takes(receiver As %String) As %Boolean [ Private ]
 /// its size. A receiver with no document profile at Shutter answers 409 documents_off, and the message then goes the ordinary way.
 Method SendDocument(request As Shutter.Intake.Forward, msg As EnsLib.HL7.Message, header As Ens.MessageHeader, response As Shutter.Intake.Forwarded) As %Status [ Private ]
 {
+    Set firstMsg = msg, firstHeader = header
     Set delivery = ##class(Shutter.Util.DocumentFacts).DeliveryHeader(header.SessionId, request.Receiver, .ambiguous)
     If $ISOBJECT(delivery) {
         Set bodyMsg = ##class(EnsLib.HL7.Message).%OpenId(delivery.MessageBodyId)
@@ -158,6 +159,8 @@ Method SendDocument(request As Shutter.Intake.Forward, msg As EnsLib.HL7.Message
     }
     Set facts = ##class(Shutter.Util.DocumentFacts).FromMessage(msg, .fsc)
     If '$ISOBJECT(facts) Quit ..Refused(response, "The document message " _ header.MessageBodyId _ " could not be read: " _ $SYSTEM.Status.GetErrorText(fsc))
+    // An ORU of numbers or text is no report here: it goes as it always has.
+    If (facts.kind = "report") && (facts.report.attachment = "") Quit ..Send(request, firstMsg, firstHeader, response, 1)
     Set route = request.Route
     If route = "" Set route = header.SourceConfigName
     Set body = ##class(Shutter.Util.DocumentChain).Envelope(request, facts, header, ..ReportedNamespace(), ..ReportedProduction(), route, ..ReportedReceiver(request.Receiver, ..ReceiverPrefix), ambiguous, ..DocumentChainLimit)

@@ -1,5 +1,5 @@
-/// The document block of a case (docs/CONTRACTS.md 11.2): how a failed MDM delivery at a receiver with a document profile
-/// becomes the ordinary case with its no-recovery path, with no copy of the document. The block in Case.DocumentJSON holds
+/// The document block of a case (docs/CONTRACTS.md 11.2): how a failed MDM delivery, or an ORU carrying a report as an attachment,
+/// at a receiver with a document profile becomes the ordinary case with its no-recovery path, with no copy of the document. The block in Case.DocumentJSON holds
 /// metadata only: the identity, the parent, the patient, the delivery, the receiver's refusal and the chain. It is not
 /// projected with the case: View gives it to the API by the reader's right, and a restricted document's identity and a
 /// receiver's own words only to a holder of Shutter_Approve. The snapshot, the email, the events and the model's view never
@@ -10,7 +10,7 @@ Class Shutter.Util.DocumentCase
 /// The defaults of a receiver's documents setting: off, and every question of recovery unanswered.
 ClassMethod DefaultSettings() As %DynamicObject
 {
-    Set d = {"recovery": "none", "source_namespaces": [], "supported_versions": [], "ack_level": "connection", "duplicates": "unknown", "allowed_completion": [], "allowed_confidentiality": [], "allowed_availability": [], "missing_status_policy": "stop", "max_recovery_bytes": 0, "approval_minutes": 15, "email_details": "minimal", "readback": "disabled"}
+    Set d = {"report_structures": ["ORU^R01"], "recovery": "none", "source_namespaces": [], "supported_versions": [], "ack_level": "connection", "duplicates": "unknown", "allowed_completion": [], "allowed_confidentiality": [], "allowed_availability": [], "missing_status_policy": "stop", "max_recovery_bytes": 0, "approval_minutes": 15, "email_details": "minimal", "readback": "disabled"}
     Do d.%Set("enabled", 0, "boolean")
     Do d.%Set("owner_accepts_acknowledged_recovery", 0, "boolean")
     Do d.%Set("chain_read_limit", ##class(Shutter.Util.DocumentChain).#LIMIT, "number")
@@ -41,6 +41,28 @@ ClassMethod Enabled(receiver As %String) As %Boolean
     Quit ##class(Shutter.Util.Json).Bool(..Settings(receiver), "enabled", 0)
 }
 
+/// Whether a list of structures names a message type.
+ClassMethod Counts(list As %DynamicArray, type As %String) As %Boolean
+{
+    If '$ISOBJECT(list) Quit 0
+    Set it = list.%GetIterator()
+    While it.%GetNext(, .v) { If v = type Return 1 }
+    Quit 0
+}
+
+/// Whether a receiver's profile takes this type of report.
+ClassMethod TakesReport(receiver As %String, type As %String) As %Boolean
+{
+    Set s = ..Settings(receiver)
+    Quit ##class(Shutter.Util.Json).Bool(s, "enabled", 0) && ..Counts(s.%Get("report_structures"), type)
+}
+
+/// What a person calls this delivery.
+ClassMethod Noun(block As %DynamicObject) As %String
+{
+    Quit $SELECT($ISOBJECT(block) && (block.kind = "report"): "report", 1: "document")
+}
+
 /// What is wrong with a receiver's documents entry, or "": every key named, so a misspelt switch cannot pass as off.
 ClassMethod SettingsProblem(d) As %String
 {
@@ -49,6 +71,10 @@ ClassMethod SettingsProblem(d) As %String
     While it.%GetNext(.k, .v) {
         If 'known.%IsDefined(k) Return "." _ k _ ": unknown setting"
         If d.%GetTypeOf(k) '= known.%GetTypeOf(k) Return "." _ k _ ": must be " _ $CASE(known.%GetTypeOf(k), "boolean": "true or false", "array": "an array", "number": "a number", : "a string")
+    }
+    If d.%IsDefined("report_structures") {
+        Set it = d.%Get("report_structures").%GetIterator()
+        While it.%GetNext(, .v) { If v'?1"ORU^"1.AN Return ".report_structures: each must be an ORU message type, such as ORU^R01" }
     }
     // The sender is another piece of work: until it exists, no setting can ask for it.
     If d.%IsDefined("recovery") && (d.%Get("recovery") '= "none") Quit ".recovery: must be none: this version resends no document"
@@ -76,9 +102,10 @@ ClassMethod IsRestricted(status As %String) As %Boolean
 ClassMethod Operation(block As %DynamicObject) As %DynamicObject
 {
     Set src = block.source, doc = block.document, json = "Shutter.Util.Json"
-    Set canon = $LISTTOSTRING($LISTBUILD(block.receiver, src.namespace, src."header_id", doc.id, doc.parent, block.trigger, block.patient.binding, block.digests.body), "|")
+    Set report = block.kind = "report"
+    Set canon = $LISTTOSTRING($LISTBUILD(block.receiver, src.namespace, src."header_id", doc.id, $SELECT(report: block.report.placer, 1: doc.parent), block.trigger, block.patient.binding, block.digests.body), "|")
     Set op = {}
-    Set op."operation_key" = "mdm-v1:" _ ##class(Shutter.Util.Digest).SHA256Hex(canon)
+    Set op."operation_key" = $SELECT(report: "oru-v1:", 1: "mdm-v1:") _ ##class(Shutter.Util.Digest).SHA256Hex(canon)
     Set op."encounter_id" = "-"
     Set restricted = ''block.restricted
     Set op."patient_id" = "", op."patient_id_authority" = ""
@@ -99,9 +126,9 @@ ClassMethod Operation(block As %DynamicObject) As %DynamicObject
 
 /// The words a document case's failure carries: the ones every message Shutter does not model carries (Case.NotModelled), with
 /// nothing the source reported after them, since a receiver's words stay in the block.
-ClassMethod FailureWords() As %String
+ClassMethod FailureWords(block As %DynamicObject = "") As %String
 {
-    Quit "This message is MDM, not ADT: Shutter resends only ADT, so it sends nothing and a person decides"
+    Quit "This message is " _ $SELECT(..Noun(block) = "report": "ORU", 1: "MDM") _ ", not ADT: Shutter resends only ADT, so it sends nothing and a person decides"
 }
 
 /// The refusal from what the forward reported: the code by itself, and the receiver's words for whoever may read them.
@@ -169,7 +196,7 @@ ClassMethod Collect(case As Shutter.Store.Case, snap As Shutter.Store.Snapshot, 
     Set summary = {}
     Set summary."case_id" = case.CaseId, summary.scenario = case.Scenario
     Set summary.operation = op, summary.failure = failure, summary.source = source, summary.document = open
-    Set summary.message = {"message_type": ("MDM^" _ case.Event), "message_control_id": (case.SourceMessageId), "note": "Metadata only: Shutter holds no copy of this document"}
+    Set summary.message = {"message_type": ($SELECT(..Noun(block) = "report": "ORU^", 1: "MDM^") _ case.Event), "message_control_id": (case.SourceMessageId), "note": "Metadata only: Shutter holds no copy of this document"}
     Set summary.validation = {"note": "Not validated by Shutter: it holds no copy of this document"}
     Set summary.timeline = [], summary."pending_messages" = []
     Do summary.%Set("later_events", 0, "number")
@@ -224,7 +251,11 @@ ClassMethod Refresh(block As %DynamicObject, receiver As %String) [ Private ]
             Set block.delivery."time_created" = header.TimeCreated, block.delivery."time_processed" = header.TimeProcessed
         }
         If item '= "" {
-            Set block.chain = ##class(Shutter.Util.DocumentChain).Read(item, doc.id, doc.parent, limit)
+            If block.kind = "report" {
+                Set block.chain = ##class(Shutter.Util.DocumentChain).ReadReports(item, block.report.placer, block.report.filler, limit)
+            } Else {
+                Set block.chain = ##class(Shutter.Util.DocumentChain).Read(item, doc.id, doc.parent, limit)
+            }
         } Else {
             Set block.chain = {"note": "The source did not name its item, so the chain was not read", "rows": []}
             Do block.chain.%Set("complete", 0, "boolean")
@@ -250,6 +281,10 @@ ClassMethod Conclude(block As %DynamicObject)
 ClassMethod Headline(block As %DynamicObject) As %String
 {
     If block.restricted Quit "Restricted document delivery requires an authorised reviewer. No document content is shown or sent by email."
+    If ..Noun(block) = "report" {
+        If block.document.id = "" Quit "The message has no usable order or report number. Shutter cannot establish its chain and will not resend it."
+        Quit "Report delivery needs review. Shutter has sent nothing."
+    }
     If block.document.id = "" Quit "The message has no usable document identifier. Shutter cannot establish its document chain and will not resend it."
     Quit "Document delivery needs review. Shutter has sent nothing."
 }
@@ -302,8 +337,9 @@ ClassMethod Plan(case As Shutter.Store.Case) As %DynamicObject
     Set block = ##class(Shutter.Util.Json).Parse(case.DocumentJSON, .psc)
     Set plan = {}
     Set plan.disposition = "escalate", plan.action = {"type": "none"}
-    Set plan.why = "A document delivery: Shutter recognises it and resends nothing, so a person handles it"
-    Set plan.summary = "Document delivery: Shutter has sent nothing, and a person decides"
+    Set noun = ..Noun(block)
+    Set plan.why = "A " _ noun _ " delivery: Shutter recognises it and resends nothing, so a person handles it"
+    Set plan.summary = $ZCONVERT($EXTRACT(noun), "U") _ $EXTRACT(noun, 2, *) _ " delivery: Shutter has sent nothing, and a person decides"
     Set plan.preconditions = [], plan."evidence_refs" = ["document"], plan.disagreements = []
     Quit plan
 }
@@ -319,12 +355,13 @@ ClassMethod Draft(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     Set receiver = $SELECT(case.Receiver '= "": case.Receiver, 1: "the receiver")
     Set label = ##class(Shutter.Store.SiteProfile).ReceiverLabel(receiver)
     Set teamName = $SELECT($ISOBJECT(team): $CLASSMETHOD(json, "Str", team, "name"), 1: "")
-    Set subject = "Shutter " _ case.CaseId _ ": document delivery needs review, " _ receiver
+    Set noun = ..Noun(block), refused = (case.FailureOutcome = "rejected") || ($ISOBJECT(block.%Get("refusal")) && (block.refusal."ack_code" '= ""))
+    Set subject = "Shutter " _ case.CaseId _ ": " _ noun _ " delivery needs review, " _ receiver
     Set b = "To " _ $SELECT(teamName '= "": teamName, 1: "the team") _ "," _ nl _ nl
     If block.restricted {
         Set b = b _ "Restricted document delivery requires an authorised reviewer. No document content is shown or sent by email." _ nl _ nl
     } Else {
-        Set b = b _ "A document delivery to " _ label _ " needs review. Shutter has sent nothing for it, and resends no document. Before anyone re-enters it, check the source's Message Viewer: an operation that retries delivers it by itself once the receiver is back." _ nl _ nl
+        Set b = b _ "A " _ noun _ " delivery to " _ label _ " needs review. Shutter has sent nothing for it, and resends no " _ noun _ ". Before anyone re-enters it, check the source's Message Viewer" _ $SELECT(refused: ".", 1: ": an operation that retries delivers it by itself once the receiver is back.") _ nl _ nl
         Set b = b _ "WHY IT NEEDS A PERSON" _ nl
         Set it = block.reasons.%GetIterator(), any = 0
         While it.%GetNext(, .r) { Set b = b _ "  " _ r.words _ " (" _ r.code _ ")" _ nl, any = 1 }
@@ -334,7 +371,7 @@ ClassMethod Draft(case As Shutter.Store.Case, team As %DynamicObject, Output sub
         If $CLASSMETHOD(json, "Str", settings, "email_details") = "identifiers" {
             Set b = b _ "IDENTIFIERS (this receiver's setting)" _ nl
             Set b = b _ "  Hospital number: " _ case.PatientId _ $SELECT(case.PatientIdAuthority '= "": " (" _ case.PatientIdAuthority _ ")", 1: "") _ nl
-            Set b = b _ "  Document: " _ block.document.id _ nl _ nl
+            Set b = b _ "  " _ $SELECT(noun = "report": "Report", 1: "Document") _ ": " _ block.document.id _ nl _ nl
         }
     }
     Set b = b _ "WHEN IT IS HANDLED" _ nl

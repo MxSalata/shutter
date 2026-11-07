@@ -71,6 +71,46 @@ ClassMethod Read(item As %String, documentId As %String, parentId As %String, li
     Quit out
 }
 
+/// A report's chain: the ORU messages to one receiver, newest first, up to a limit, that name its order or its report in any OBR,
+/// with or without an attachment of their own. Rows carry the numbers and the result status, and no digest: an ORU's one rule
+/// is another result status (DocumentEligibility.ReportFindings).
+ClassMethod ReadReports(item As %String, placer As %String, filler As %String, limit As %Integer = "") As %DynamicObject
+{
+    If +limit < 1 Set limit = ..#LIMIT
+    Set out = {"namespace": ($NAMESPACE), "item": (item), "read_at": ($ZDATETIME($ZTIMESTAMP, 3, 1, 3))}
+    Do out.%Set("limit", +limit, "number")
+    Set rows = [], read = 0, unreadable = 0, since = "", capped = 0
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP " _ (+limit) _ " ID, MessageBodyId, MessageBodyClassName, Status, TimeCreated FROM Ens.MessageHeader WHERE TargetConfigName = ? AND Type = 1 ORDER BY ID DESC", item)
+    While rs.%Next() {
+        Set read = read + 1, since = rs.%Get("TimeCreated"), cls = rs.%Get("MessageBodyClassName")
+        Continue:cls=""
+        Set isHL7 = 0
+        Try { Set isHL7 = $CLASSMETHOD(cls, "%Extends", "EnsLib.HL7.Message") } Catch inner { Set isHL7 = 0 }
+        Continue:'isHL7
+        Set msg = $CLASSMETHOD(cls, "%OpenId", rs.%Get("MessageBodyId"))
+        If '$ISOBJECT(msg) Set unreadable = unreadable + 1 Continue
+        Continue:'##class(Shutter.Util.DocumentFacts).IsReportMessage(msg)
+        Set f = ##class(Shutter.Util.DocumentFacts).FromMessage(msg, .fsc, 0)
+        If '$ISOBJECT(f) Set unreadable = unreadable + 1 Continue
+        Set it = f."all_orders".%GetIterator(), hit = ""
+        While (hit = "") && it.%GetNext(, .o) {
+            If ((placer '= "") && (o.placer = placer)) || ((filler '= "") && (o.filler = filler)) Set hit = o
+        }
+        Continue:'$ISOBJECT(hit)
+        If rows.%Size() >= ..#ROWS Set capped = 1 Quit
+        Set row = {"header_id": (rs.%Get("ID")), "trigger": (f.trigger), "control_id": (f."control_id"), "placer": (hit.placer), "filler": (hit.filler), "result_status": (hit."result_status"), "time_created": (rs.%Get("TimeCreated"))}
+        Set row.status = ##class(Ens.DataType.MessageStatus).LogicalToDisplay(rs.%Get("Status"))
+        Do rows.%Push(row)
+    }
+    Do out.%Set("read", read, "number")
+    Do out.%Set("unreadable", unreadable, "number")
+    Set out.since = since, out.rows = rows
+    Do out.%Set("limit_reached", read >= limit, "boolean")
+    Do out.%Set("rows_capped", capped, "boolean")
+    Do out.%Set("complete", (read < limit) && (unreadable = 0) && 'capped, "boolean")
+    Quit out
+}
+
 /// The envelope the forwarder posts: no text of the message, whatever its size. Named fields only.
 ClassMethod Envelope(request As Shutter.Intake.Forward, facts As %DynamicObject, header As Ens.MessageHeader, namespace As %String, production As %String, route As %String, receiver As %String, ambiguous As %Boolean, limit As %Integer) As %DynamicObject
 {
@@ -81,7 +121,11 @@ ClassMethod Envelope(request As Shutter.Intake.Forward, facts As %DynamicObject,
     Set body.delivery = {"header_id": (header.%Id()), "status": (##class(Shutter.Util.DocumentFacts).StatusWords(header)), "time_created": (header.TimeCreated), "time_processed": (header.TimeProcessed)}
     Do body.delivery.%Set("ambiguous", ''ambiguous, "boolean")
     Set body.facts = facts
-    Set body.chain = ..Read(request.Receiver, facts.document.id, facts.document.parent, limit)
+    If facts.kind = "report" {
+        Set body.chain = ..ReadReports(request.Receiver, facts.report.placer, facts.report.filler, limit)
+    } Else {
+        Set body.chain = ..Read(request.Receiver, facts.document.id, facts.document.parent, limit)
+    }
     Quit body
 }
 

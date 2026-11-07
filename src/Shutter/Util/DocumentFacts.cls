@@ -1,11 +1,22 @@
+Include EnsHL7
+
 /// What Shutter reads of a document message (docs/CONTRACTS.md 11.2): MDM T01 to T11, by position, needing no schema, from the
-/// delivery body. MSH, every PID-3 repetition, PV1-19 and TXA-12, -13, -17, -18, -19, and nothing else: no OBX, no NTE, no
+/// delivery body. A report carried as an attachment, an ORU, has its own walk below. MSH, every PID-3 repetition, PV1-19 and TXA-12, -13, -17, -18, -19, and nothing else: no OBX, no NTE, no
 /// name, no title, no file name. The walk stops at TXA, which comes before the OBX segments in every MDM structure, so a large
 /// document's value is not read for the fields. A message with no TXA reads each later segment's first stored piece for its name
 /// and no further (a piece is at most the longest string IRIS holds, about 3.6 MB). The size and the digests go through the stored
 /// pieces one at a time and keep none. Runs in the watched namespace (the package is mapped there) and in Shutter's, so it reads no Shutter store.
 Class Shutter.Util.DocumentFacts
 {
+
+/// Characters of a stored OBX read for the rule: past OBX-2 and into OBX-5, and no further.
+Parameter OBXREAD = 2048;
+
+/// Characters of another stored segment of an ORU read for its fields.
+Parameter SEGREAD = 32000;
+
+/// The unbroken base64 characters that make an OBX-5 an attachment, whatever OBX-2 says: no number or sentence has them.
+Parameter BASE64RUN = 256;
 
 /// The triggers of HL7 v2.5.1 chapter 9. T12 is a query, and no failed delivery of a document.
 ClassMethod IsTrigger(trigger As %String) As %Boolean
@@ -35,11 +46,115 @@ ClassMethod IsDocumentText(text As %String) As %Boolean
     Quit ($PIECE(type, cs, 1) = "MDM") && ..IsTrigger($PIECE(type, cs, 2))
 }
 
+/// Whether an HL7 message is an ORU of any trigger, from its MSH alone. Whether it carries an attachment takes the walk.
+ClassMethod IsReportMessage(msg As EnsLib.HL7.Message) As %Boolean
+{
+    If '$ISOBJECT(msg) Quit 0
+    Set seg = msg.GetSegmentAt(1)
+    If '$ISOBJECT(seg) Quit 0
+    Quit $PIECE(seg.GetValueAt(9), seg.CS, 1) = "ORU"
+}
+
+/// The rule for a report carried as an attachment, one OBX at a time: OBX-2 says ED or RP, or OBX-5 has an unbroken run of base64
+/// in the part read. Answers what made it one (ED, RP or base64), or "" for a number, a sentence or anything else.
+ClassMethod Attachment(type As %String, value As %String) As %String
+{
+    Set type = $ZCONVERT(type, "U")
+    If (type = "ED") || (type = "RP") Quit type
+    Quit $SELECT($LOCATE($EXTRACT(value, 1, ..#OBXREAD), "[A-Za-z0-9+/]{" _ ..#BASE64RUN _ "}"): "base64", 1: "")
+}
+
+/// Whether a message's text is an ORU with an attachment, and its message type.
+ClassMethod IsReportText(text As %String, Output type As %String) As %Boolean
+{
+    Set facts = ..FromText(text, .sc, 0), type = ""
+    If '$ISOBJECT(facts) || (facts.kind '= "report") Quit 0
+    Set type = facts."message_type"
+    Quit facts.report.attachment '= ""
+}
+
+/// One segment of an ORU into what the walk keeps. PID, PV1 and OBR stand until the first attachment, so the identity is that
+/// attachment's own. Later segments only count, and every OBR is kept as a pair and a status for the chain's match. An OBX gives
+/// its type and the rule's answer, and nothing else of it is held.
+ClassMethod ReportLine(name As %String, line As %String, fs As %String, cs As %String, ByRef raw) [ Private ]
+{
+    If (name = "MSH") {
+        For f = 3, 4, 5, 6, 7, 9, 10, 12 { Set raw("MSH", f) = $PIECE(line, fs, f) }
+        Set raw("MSH") = 1
+    } ElseIf name = "OBX" {
+        If '$DATA(raw("at")) {
+            Set how = ..Attachment($PIECE(line, fs, 3), $PIECE(line, fs, 6))
+            If how '= "" Set raw("at") = how
+        }
+    } ElseIf (name = "OBR") {
+        Set n = $GET(raw("orders")) + 1, raw("orders") = n
+        Set placer = ..EI($PIECE(line, fs, 3), cs), filler = ..EI($PIECE(line, fs, 4), cs), status = $PIECE(line, fs, 26)
+        Set raw("orders", n) = $LISTBUILD(placer, filler, status)
+        If '$DATA(raw("at")) Set raw("OBR") = $LISTBUILD(placer, filler, status)
+    } ElseIf '$DATA(raw("at")) {
+        If name = "PID" Set raw("PID", 3) = $PIECE(line, fs, 4), raw("PID") = 1 Kill raw("PV1")
+        If name = "PV1" Set raw("PV1", 19) = $PIECE(line, fs, 20), raw("PV1") = 1
+    }
+}
+
+/// The facts of an ORU from the walk: Build's, with its own identity on them. Its number is the report's, else the order's.
+ClassMethod ReportFacts(ByRef raw, rs As %String, cs As %String, ss As %String) As %DynamicObject [ Private ]
+{
+    // With no attachment, the first OBR stands for the message.
+    Set own = $GET(raw("OBR"), $GET(raw("orders", 1), $LISTBUILD("", "", "")))
+    Set o = ..Build(.raw, rs, cs, ss), o.kind = "report"
+    Do o.document.%Remove("txa_present")
+    Set o.document.id = $SELECT($LIST(own, 2) '= "": $LIST(own, 2), 1: $LIST(own, 1))
+    Set r = {"placer": ($LIST(own, 1)), "filler": ($LIST(own, 2)), "result_status": ($LIST(own, 3)), "attachment": ($GET(raw("at")))}
+    Do r.%Set("orders", +$GET(raw("orders")), "number")
+    Set o.report = r
+    Quit o
+}
+
+/// A stored ORU, walked by the engine's own segment ids: each segment's start is read straight from where it is stored, and an
+/// OBX's only as far as the rule needs, so a value of any size is never held. withDigests as in FromMessage.
+ClassMethod ReportFromMessage(msg As EnsLib.HL7.Message, Output sc As %Status, withDigests As %Boolean = 1) As %DynamicObject [ Private ]
+{
+    Set sc = $$$OK, out = ""
+    Try {
+        Set first = msg.GetSegmentAt(1)
+        Set fs = first.FS, cs = first.CS, rs = first.RS, ss = first.SS
+        For i = 1:1:msg.SegCount {
+            Set id = msg.getSegmentIdByIndex(i)
+            Continue:id=""
+            Set head = $SELECT(id [ ",": $EXTRACT($$$vaSegment(id), 6, 13), 1: $EXTRACT($$$vaSegmentGbl(id), 6, 13))
+            Set name = $PIECE(head, fs, 1), last = 5 + $SELECT(name = "OBX": ..#OBXREAD, 1: ..#SEGREAD)
+            Do ..ReportLine(name, $SELECT(id [ ",": $EXTRACT($$$vaSegment(id), 6, last), 1: $EXTRACT($$$vaSegmentGbl(id), 6, last)), fs, cs, .raw)
+        }
+        Set out = ..ReportFacts(.raw, rs, cs, ss)
+        If 'withDigests {
+            // The chain's pass: every OBR, to match against. This stays off a case's block.
+            Set list = []
+            For i = 1:1:+$GET(raw("orders")) { Do list.%Push({"placer": ($LIST(raw("orders", i), 1)), "filler": ($LIST(raw("orders", i), 2)), "result_status": ($LIST(raw("orders", i), 3))}) }
+            Set out."all_orders" = list
+        } Else {
+            Set out.size = ..Size(##class(EnsLib.HL7.Message).GetFullSize(msg.%Id()))
+            Set d = ##class(Shutter.Util.DocumentDigest).%New()
+            Set osc = msg.OutputToIOStream(d)
+            If $$$ISERR(osc) {
+                Set out.digests = {"body": "", "content": ""}
+            } Else {
+                Set body = d.Finish(.content)
+                Set out.digests = {"body": (body), "content": (content)}
+            }
+        }
+    } Catch ex {
+        Set sc = ex.AsStatus(), out = ""
+    }
+    Quit out
+}
+
 /// The facts of a stored message, with its size and digests, or "" with the status said. withDigests 0 reads the fields only
 /// (the chain's first pass over many messages).
 ClassMethod FromMessage(msg As EnsLib.HL7.Message, Output sc As %Status, withDigests As %Boolean = 1) As %DynamicObject
 {
     Set sc = $$$OK, out = ""
+    If ..IsReportMessage(msg) Quit ..ReportFromMessage(msg, .sc, withDigests)
     Try {
         Set index = "", seen = 0
         For {
@@ -76,7 +191,7 @@ ClassMethod FromMessage(msg As EnsLib.HL7.Message, Output sc As %Status, withDig
 }
 
 /// The facts of a message's text, for the intake's whole-text path: the same fields, by the same positions.
-ClassMethod FromText(text As %String, Output sc As %Status) As %DynamicObject
+ClassMethod FromText(text As %String, Output sc As %Status, withDigests As %Boolean = 1) As %DynamicObject
 {
     Set sc = $$$OK, out = ""
     Try {
@@ -87,9 +202,14 @@ ClassMethod FromText(text As %String, Output sc As %Status) As %DynamicObject
         If 'start Set sc = $$$ERROR($$$GeneralError, "The message has no MSH") Quit
         Set text = $EXTRACT(text, start - 3, *)
         Set fs = $EXTRACT(text, 4), cs = $EXTRACT(text, 5), rs = $EXTRACT(text, 6), ss = $EXTRACT(text, 8)
+        Set report = $PIECE($PIECE($PIECE(text, $CHAR(13), 1), fs, 9), cs, 1) = "ORU"
         For i = 1:1:$LENGTH(text, $CHAR(13)) {
             Set line = $PIECE(text, $CHAR(13), i)
             Set name = $PIECE(line, fs, 1)
+            If report {
+                Do ..ReportLine(name, $EXTRACT(line, 1, $SELECT(name = "OBX": ..#OBXREAD, 1: ..#SEGREAD)), fs, cs, .raw)
+                Continue
+            }
             If $CASE(name, "MSH": 1, "PID": 1, "PV1": 1, "TXA": 1, : 0) && '$DATA(raw(name)) {
                 Set fields = ..Fields(name)
                 For j = 1:1:$LISTLENGTH(fields) { Set raw(name, $LIST(fields, j)) = $PIECE(line, fs, $LIST(fields, j) + $SELECT(name = "MSH": 0, 1: 1)) }
@@ -97,7 +217,8 @@ ClassMethod FromText(text As %String, Output sc As %Status) As %DynamicObject
             }
             Quit:name="TXA"
         }
-        Set out = ..Build(.raw, rs, cs, ss)
+        Set out = $SELECT(report: ..ReportFacts(.raw, rs, cs, ss), 1: ..Build(.raw, rs, cs, ss))
+        Quit:'withDigests
         Set out.size = ..Size($LENGTH(text))
         Set body = ##class(Shutter.Util.DocumentDigest).OfText(text, .content)
         Set out.digests = {"body": (body), "content": (content), "basis": "posted_text"}

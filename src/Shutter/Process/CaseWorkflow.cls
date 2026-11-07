@@ -1170,7 +1170,7 @@ Method DocumentToPerson(case As Shutter.Store.Case) As %Status
     Set case.CurrentPlan = p, case.Disposition = p.Disposition
     Set block = ##class(Shutter.Util.Json).Parse(case.DocumentJSON, .psc)
     Set case.Headline = $SELECT($ISOBJECT(block): block.headline, 1: "Document delivery needs review. Shutter has sent nothing.")
-    Quit case.Transition("escalated", "A document delivery: a person decides. Shutter has sent nothing", "system", "plan:" _ p.%Id())
+    Quit case.Transition("escalated", "A " _ ##class(Shutter.Util.DocumentCase).Noun(block) _ " delivery: a person decides. Shutter has sent nothing", "system", "plan:" _ p.%Id())
 }
 
 /// The connector a case's reads, rehearsals and writes go to (v1.25): the case's receiver when the site profile names it

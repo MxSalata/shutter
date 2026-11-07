@@ -13,7 +13,7 @@ ClassMethod Words(code As %String) As %String
         "DOC_ID_MISSING": "The message has no usable document identifier",
         "DOC_RESTRICTED": "The document's confidentiality status is restricted, or one Shutter cannot read as usual control",
         "DOC_CHAIN_INCOMPLETE": "Chain coverage is incomplete, so this cannot say no other message exists for this document",
-        "DOC_CANCELLED": "A cancellation names this document, or its availability status says cancelled",
+        "DOC_CANCELLED": "A cancellation names this document, or its availability status says deleted",
         "DOC_REPLACED_OR_EDITED": "A later edit or replacement exists for this document, or its availability status says obsolete",
         "DOC_VERSION_CONFLICT": "The same document number or control id appears with different content",
         "DOC_PARENT_UNPROVEN": "This message depends on a parent document, and nothing here shows the receiver holds it",
@@ -22,7 +22,23 @@ ClassMethod Words(code As %String) As %String
         "DOC_ENGINE_OWNS_DELIVERY": "The engine still owns this delivery, and may deliver it by itself",
         "DOC_DELIVERY_UNCERTAIN": "The receiver may hold this document already",
         "DOC_BODY_UNAVAILABLE": "The source no longer holds this message, or its source could not be checked",
+        "DOC_RESULT_STATUS_CHANGED": "A further message for this order or report has another result status",
         : "")
+}
+
+/// The same words for a report: its own for its number, and "this report" for the rest.
+ClassMethod ReportWords(code As %String) As %String [ Private ]
+{
+    If code = "DOC_ID_MISSING" Quit "The message has no usable order or report number"
+    Quit $REPLACE(..Words(code), "this document", "this report")
+}
+
+/// A result status in the standard's words (HL7 v2.5.1 table 0123), with its code beside them.
+ClassMethod ResultStatusWords(code As %String) As %String
+{
+    If code = "" Quit "no result status"
+    Set word = $CASE(code, "O": "Order received", "I": "No results yet, procedure incomplete", "S": "No results yet, procedure scheduled", "A": "Some results available", "P": "Preliminary", "C": "Correction to results", "R": "Stored, not yet verified", "F": "Final results", "X": "No results, order cancelled", "Y": "No order on record", "Z": "No record of this patient", : "")
+    Quit $SELECT(word = "": code _ ", not a value the standard lists", 1: word _ " (" _ code _ ")")
 }
 
 ClassMethod Reason(code As %String) As %DynamicObject [ Private ]
@@ -33,6 +49,7 @@ ClassMethod Reason(code As %String) As %DynamicObject [ Private ]
 /// The chain's findings and its sentences, onto the block.
 ClassMethod Findings(block As %DynamicObject)
 {
+    If block.kind = "report" Do ..ReportFindings(block) Quit
     Set doc = block.document, self = doc.id, parent = doc.parent, myHeader = block.source."header_id"
     If '$ISOBJECT(block.%Get("chain")) {
         Set block.chain = {"rows": []}
@@ -116,6 +133,58 @@ ClassMethod Findings(block As %DynamicObject)
     Set chain.says = says, chain.findings = f
 }
 
+/// A report's one chain rule: a further message for the same order or report under another result status, said plainly. It says
+/// what the store holds and nothing of which message stands, and no MDM rule applies.
+ClassMethod ReportFindings(block As %DynamicObject) [ Private ]
+{
+    If '$ISOBJECT(block.%Get("chain")) {
+        Set block.chain = {"rows": []}
+        Do block.chain.%Set("complete", 0, "boolean")
+    }
+    Set chain = block.chain, says = [], f = {"status_changes": []}, r = block.report, mine = r."result_status"
+    Set delivered = $SELECT($ISOBJECT(block.%Get("delivery")): block.delivery."session_header", 1: ""), rows = chain.%Get("rows")
+    If $ISOBJECT(rows) {
+        Set it = rows.%GetIterator()
+        While it.%GetNext(, .row) {
+            Continue:..IsOwnRow(row, block.source."header_id", delivered, block."control_id")
+            Continue:row."result_status"=mine
+            Set sameReport = (r.filler '= "") && (row.filler = r.filler), sameOrder = (r.placer '= "") && (row.placer = r.placer)
+            Continue:'sameReport&&'sameOrder
+            Do f."status_changes".%Push(row.trigger _ " at header " _ row."header_id" _ ", " _ row.status)
+            Do says.%Push("A further message for this " _ $SELECT(sameReport: "report", 1: "order") _ " (" _ row.trigger _ " at header " _ row."header_id" _ ", " _ row.status _ ") has " _ ..ResultStatusWords(row."result_status") _ "; this one has " _ ..ResultStatusWords(mine) _ ".")
+        }
+    }
+    If +r.orders > 1 Do says.%Push("This message has " _ r.orders _ " orders. The case follows the one with the first attachment.")
+    If block.document.id = "" {
+        Do chain.%Set("complete", 0, "boolean")
+        Do says.%Push("With no order or report number, Shutter cannot establish a chain.")
+    } ElseIf chain.complete {
+        If f."status_changes".%Size() = 0 Do says.%Push("No further message for this order or report under another result status among the " _ chain.read _ " messages to " _ chain.item _ " read back to " _ $EXTRACT(chain.since, 1, 16) _ ". Older messages and other routes are not covered.")
+        If f."status_changes".%Size() > 0 Do says.%Push("Read: " _ chain.read _ " messages to " _ chain.item _ " back to " _ $EXTRACT(chain.since, 1, 16) _ ".")
+    } Else {
+        Set why = $SELECT(chain.%IsDefined("note"): chain.note, 1: "")
+        If +chain.%Get("unreadable") > 0 Set why = why _ $SELECT(why = "": "", 1: "; ") _ chain.unreadable _ " message(s) could not be read"
+        If chain."limit_reached" Set why = why _ $SELECT(why = "": "", 1: "; ") _ "the limit of " _ chain.limit _ " messages was reached"
+        If chain."rows_capped" Set why = why _ $SELECT(why = "": "", 1: "; ") _ "more linked messages than a chain holds"
+        Do says.%Push("Chain coverage is incomplete" _ $SELECT(why = "": ".", 1: ": " _ why _ "."))
+    }
+    Set chain.says = says, chain.findings = f
+}
+
+/// What a person reads of a report: its own number, the chain, the one rule and the delivery's codes.
+ClassMethod ReportReasons(block As %DynamicObject) As %DynamicArray [ Private ]
+{
+    Set out = [], codes = "", delivery = block.%Get("delivery")
+    If block.document.id = "" Set codes = codes _ $LISTBUILD("DOC_ID_MISSING")
+    If (block.document.id '= "") && 'block.chain.complete Set codes = codes _ $LISTBUILD("DOC_CHAIN_INCOMPLETE")
+    If block.chain.findings."status_changes".%Size() > 0 Set codes = codes _ $LISTBUILD("DOC_RESULT_STATUS_CHANGED")
+    If $ISOBJECT(delivery) && $CASE(delivery.status, "Created": 1, "Queued": 1, "Delivered": 1, "Deferred": 1, : 0) Set codes = codes _ $LISTBUILD("DOC_ENGINE_OWNS_DELIVERY")
+    If ($ISOBJECT(block.%Get("refusal")) && (block.refusal.kind = "uncertain_outcome")) || ($ISOBJECT(delivery) && delivery.ambiguous) Set codes = codes _ $LISTBUILD("DOC_DELIVERY_UNCERTAIN")
+    If block.%IsDefined("source_body_available") && 'block."source_body_available" Set codes = codes _ $LISTBUILD("DOC_BODY_UNAVAILABLE")
+    For i = 1:1:$LISTLENGTH(codes) { Do out.%Push({"code": ($LIST(codes, i)), "words": (..ReportWords($LIST(codes, i)))}) }
+    Quit out
+}
+
 /// Whether a chain row is the delivery itself: the header the case names, or the session's delivery under the same control id.
 ClassMethod IsOwnRow(row As %DynamicObject, myHeader As %String, delivered As %String, myControl As %String) As %Boolean [ Private ]
 {
@@ -126,6 +195,7 @@ ClassMethod IsOwnRow(row As %DynamicObject, myHeader As %String, delivered As %S
 /// What a person reads: the codes that hold now, most serious first. The sender's own codes are not here.
 ClassMethod Reasons(block As %DynamicObject) As %DynamicArray
 {
+    If block.kind = "report" Quit ..ReportReasons(block)
     Set out = [], doc = block.document, f = block.chain.findings, delivery = block.%Get("delivery")
     If doc.id = "" Do out.%Push(..Reason("DOC_ID_MISSING"))
     If block.restricted Do out.%Push(..Reason("DOC_RESTRICTED"))

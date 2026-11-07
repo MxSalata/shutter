@@ -1,6 +1,6 @@
 /// The intake's document path (docs/CONTRACTS.md 11.2), which the route takes before anything else reads the body: a forwarder's
-/// metadata envelope, or a whole MDM T01 to T11 posted for a receiver with a document profile, whose text is read here and
-/// dropped. Either way the case opens through the case workflow with no HL7 copy in this namespace and no text in the messages
+/// metadata envelope, or a whole MDM T01 to T11, or ORU with an attachment, posted for a receiver with a document profile, whose
+/// text is read here and dropped. Either way the case opens through the case workflow with no HL7 copy in this namespace and no text in the messages
 /// stored for it. A receiver with no document profile gets the ordinary path: an envelope is answered 409 documents_off, and the
 /// forwarder then sends the message as it always has.
 Class Shutter.API.DocumentIntake
@@ -11,8 +11,10 @@ ClassMethod Takes(body As %DynamicObject) As %Boolean
 {
     If ##class(Shutter.Util.Json).Str(body, "kind") = "document_failure" Quit 1
     If body.%GetTypeOf("message") '= "string" Quit 0
-    If '##class(Shutter.Util.DocumentFacts).IsDocumentText(body.%Get("message")) Quit 0
-    Quit ##class(Shutter.Util.DocumentCase).Enabled(##class(Shutter.Util.Json).Str(body, "receiver"))
+    Set receiver = ##class(Shutter.Util.Json).Str(body, "receiver"), text = body.%Get("message")
+    If ##class(Shutter.Util.DocumentFacts).IsDocumentText(text) Quit ##class(Shutter.Util.DocumentCase).Enabled(receiver)
+    If '##class(Shutter.Util.DocumentCase).Enabled(receiver) Quit 0
+    Quit ##class(Shutter.Util.DocumentFacts).IsReportText(text, .type) && ##class(Shutter.Util.DocumentCase).TakesReport(receiver, type)
 }
 
 /// The route's work: 202 {caseId, state, opened}, as the ordinary intake answers.
@@ -26,6 +28,8 @@ ClassMethod Post(body As %DynamicObject, bodyText As %String) As %Status
     If '$ISOBJECT(failure) Quit $CLASSMETHOD(d, "Fail", "400 Bad Request", "bad_request", "failure is required: an object with kind")
     Set kind = $CLASSMETHOD(json, "Str", failure, "kind")
     If '$LISTFIND($LISTBUILD("delivery_failed", "rejected", "uncertain_outcome", "unmappable", "unreadable"), kind) Quit $CLASSMETHOD(d, "Fail", "400 Bad Request", "bad_request", "failure.kind must be delivery_failed, rejected, uncertain_outcome, unmappable or unreadable")
+    // A report the profile doesn't take goes the ordinary way, as a receiver with no profile does.
+    If (body.%GetTypeOf("facts") = "object") && ($CLASSMETHOD(json, "Str", body.facts, "kind") = "report") && '##class(Shutter.Util.DocumentCase).TakesReport(receiver, $CLASSMETHOD(json, "Str", body.facts, "message_type")) Quit $CLASSMETHOD(d, "Fail", "409 Conflict", "documents_off", "The receiver " _ receiver _ "'s document profile does not take " _ $CLASSMETHOD(json, "Str", body.facts, "message_type") _ ", so it takes the ordinary intake")
     Set source = $SELECT(body.%GetTypeOf("source") = "object": body.source, 1: {})
     Set block = ..BlockFrom(body, receiver, source, .problem)
     If problem '= "" Quit $CLASSMETHOD(d, "Fail", "400 Bad Request", "bad_request", problem)
@@ -41,7 +45,7 @@ ClassMethod Post(body As %DynamicObject, bodyText As %String) As %Status
     Set intake = ##class(Shutter.Msg.CaseIntake).%New()
     Set intake.OperationJSON = op.%ToJSON()
     Set intake.FailureKind = "unmappable"
-    Set intake.FailureText = ##class(Shutter.Util.DocumentCase).FailureWords()
+    Set intake.FailureText = ##class(Shutter.Util.DocumentCase).FailureWords(block)
     Set intake.FailureReasonCode = reason
     If (outcome '= "") || (reason '= "") || (+status > 0) {
         Set w = {"outcome": (outcome), "reason_code": (reason)}
@@ -84,7 +88,8 @@ ClassMethod BlockFrom(body As %DynamicObject, receiver As %String, source As %Dy
         If '$ISOBJECT(facts) Set problem = "facts is required: an object" Quit ""
         If body.%GetTypeOf("chain") = "object" Set chain = body.chain
     }
-    If '##class(Shutter.Util.DocumentFacts).IsTrigger($CLASSMETHOD(json, "Str", facts, "trigger")) Set problem = "facts.trigger must be T01 to T11" Quit ""
+    If (facts.kind = "report") && (facts.%GetTypeOf("report") '= "object") Set problem = "facts.report is required: an object" Quit ""
+    If (facts.kind '= "report") && '##class(Shutter.Util.DocumentFacts).IsTrigger($CLASSMETHOD(json, "Str", facts, "trigger")) Set problem = "facts.trigger must be T01 to T11" Quit ""
     If facts.%GetTypeOf("document") '= "object" Set problem = "facts.document is required: an object" Quit ""
     If facts.%GetTypeOf("patient") '= "object" Set facts.patient = {"keys": [], "binding": ""}
     If facts.%GetTypeOf("digests") '= "object" Set facts.digests = {"body": "", "content": ""}
