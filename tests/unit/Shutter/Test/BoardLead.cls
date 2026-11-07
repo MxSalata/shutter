@@ -195,7 +195,7 @@ Method TestLeaderFailureFinishesTheLead()
 }
 
 /// A member who did not answer is recorded on the plan the others' findings made and named in the approval task, so the
-/// approver sees a thinner review. Whether such a plan should reach a person at all is a site's decision still to make.
+/// approver sees a thinner review.
 Method TestAbsentMembersAreOnThePlanAndTheTask()
 {
     Set c = ..SavedCase("C-TEST-LEAD-P")

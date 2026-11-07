@@ -403,7 +403,7 @@ caller's process passes; the operator and the approver read the watched hospital
 | none | `POST` and `DELETE /session`; `GET /health` (its summary; the full report needs `Shutter_Operate`) |
 | signed in | `GET /me`, which answers `{username, operator, approver, can: {operate, approve, configure, scenarios, liveAgents}}` from the resources the user holds (`can` since v1.34: the app shows only what the user may do; `liveAgents` is `Shutter_LiveAgents`, below) |
 | `Shutter_Operate` | every other `GET`; `POST /cases/{id}/bundle`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` (v1.39: the reopened case's agent runs count against the requester's share, and without `Shutter_LiveAgents`, or while the provider refuses the key, they answer from recordings only, `ModeOverride` `replay` as a question's do in 14, and a board with no recording leaves the case escalated for a person, with the reason, and plans nothing; the 202 `{caseId, state: "reopening", requestedBy, liveAgents}` says which) and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send`; `GET /production-reviews`, `GET /production-reviews/targets` and `GET /production-reviews/{id}`; `POST /production-reviews` (section 13: the review reads only; its agent part takes `Shutter_LiveAgents`, below, and is skipped without it); `GET /cases/{id}/whatif`, `GET /cases/{id}/questions`, `GET /cases/{id}/questions/suggested`, `GET /cases/{id}/questions/{qid}` and `POST /cases/{id}/questions` (section 14: a question reads only, and a live run spends model credit); `GET /settings/schemas` (section 12) |
-| `Shutter_Approve` | `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's) |
+| `Shutter_Approve` | `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's); `POST /cases/{id}/further-release` (6.5) |
 | `Shutter_Scenarios` | `POST /scenarios/{id}/run` and `/scenarios/reset`, and `Shutter.Setup_PurgeStore` (v1.34: the demo controls; the operator and approver roles hold it, the public demo's role does not) |
 | `Shutter_LiveAgents` | Spending the model budget (v1.34, the judges): `POST /cases/{id}/board` (the board convenes live on a blocked, escalated or failed case, 14.5), `POST /cases/{id}/questions` running live, the agent part of `POST /production-reviews` (13.5, v1.39: skipped without it, never refused) and a reinvestigation's live runs (v1.39: recordings only without it); without it a question is answered from recordings only, and one with no recording is refused `409 no_recorded_answer` at once. Operators, approvers and the role `Shutter_Judge` (the public demo's role plus this) hold it; `Shutter_Demo` does not. Every live run counts against the day's budget and the caller's share (9) |
 | `Shutter_Configure` | `PUT /site-profile`; `PATCH /library/{code}`; `POST /settings/schemas` (section 12); `GET /settings/namespaces` and the routes under it (11.1; an apply and a removal need `%Admin_Manage` as well); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13) (v1.34: what changes the site; the approver role holds it, the public demo's role does not) |
@@ -560,10 +560,23 @@ blocks for a person at once, with no wait. Any other ADT message for the patient
 at the proposal and reads again at dispatch, and the connector reads once more at the moment of the write, answering `refused`
 with reason `further_movement`. An admission the receiver answers 404 for isn't released by the site's policy (a 404 doesn't
 prove there's no record entered by hand under another number): it waits for a person, and the plan says to check the system's own
-screen. An incident's release of such an admission keeps its own path. A site chooses with `further_messages` (6.4). **What this
+screen. Inside an incident too (policy version 2026-11-07.1): the chain goes under the incident's one approval (7.3), whose task asks the same, and a release that still finds a 404 asks a person for that case. A site chooses with `further_messages` (6.4). **What this
 can't see:** a change made by hand at the receiver; a message on a route Shutter's index doesn't watch, once the index has passed it;
 a further message that lands between the connector's read and the receiver's answer; and a merge of a merge. Nothing holds the feed
 during a correction: a hold or a laboratory route can call `Find` as it stands. Proof: S27 to S32, S9, and `Shutter.Test.FurtherMessages`.
+
+**A person releases another visit's stop** (policy version 2026-11-07.1). `GET /cases/{id}/further-stop` (signed in) reads the patient
+afresh: `{rows: [{line, visit}], digest, releasable, whyNot, release}`, with `release` `{digest, by, at, reason, stands}` or null. `POST
+/cases/{id}/further-release` (`Shutter_Approve`, `X-Requested-With`; body `{digest, reason}`, both required, else 400 `bad_request` with
+`field`) takes the digest of the rows the person read and why. It answers 409 `wrong_state` unless the case is blocked, `not_releasable`
+unless every row is another visit's movement (`why: other_visit`) with the identifier read and every namespace read in full, and
+`rows_changed` when a fresh read gives another digest; otherwise it records who, when and why on the case and sends the case through fresh
+evidence (202). The digest is SHA-256 over each stopping row's visit, control id, event and why, sorted, so the same message read from another store
+gives the same digest. Each read before the write, the proposal's snapshot, the dispatch gate's and the connector's, passes the stop
+(`FURTHER_MOVEMENT_RELEASED`) only when it gives that digest: another relevant message voids the release, and the case stops again with
+both rows to read. It covers no unreadable identifier, `FURTHER_NOT_READ`, cancel, merge or change to the record, and releases nothing else:
+every other check runs, and the write needs a person's approval even where the site's policy would release it. The approver may be the
+person who released. Proof: `Shutter.Test.Gate` and `tests/e2e/further_release_check.py`.
 
 **The failsafe at the point of the resend** (v1.29; the requirement of 26 Oct 2026). A resend is already a conditional
 write bound to the version the preflight read, so a PAS message applied at the receiver in between is refused as a version
@@ -821,7 +834,7 @@ catalogue versions in force. An automatic release (approver `policy`) writes non
 evidence collector adds `precedents` to every snapshot summary, `{approved, rejected, lastDecision, lastApprover, lastAt,
 lastCaseId, samePolicy, windowDays, signature}`: the active rows of the last `windowDays` days
 (`^Shutter.Config("precedentDays")`, 1 to 3650, 180 by default; the Doctor's `precedent_days`), and `samePolicy` says
-whether the last decision was taken under the policy and site profile versions in force now. A board member who gave no usable answer is on the plan as `absent_members`, by name and under the plan's digest, and the approval task's text names them ("Not every board member's review stands behind this plan: ... did not answer."). The approval task's text
+whether the last decision was taken under the policy and site profile versions in force now. A board member who gave no usable answer is on the plan as `absent_members`, by name and under the plan's digest (a follower's plan carries its leader's); such a plan that writes nothing goes to a person (escalated) and doesn't close (policy version 2026-11-07.1), and one that writes goes on as built, and the approval task's text names them ("Not every board member's review stands behind this plan: ... did not answer."). The approval task's text
 quotes it ("Precedents: approved and verified 2 times, rejected 0 times in the last 180 days; last approved by approver on
 2026-11-02 (case C-000301)", or "Precedents: none; these conditions at this receiver have not reached an approver in the
 last 180 days."), and the case's events note each precedent written. It is for the person and the app: the model view's
@@ -1013,12 +1026,21 @@ the framework). The Dockerfile runs it, and a site with Java runs it once by han
 
 - The site's policy per tier and chain kind decides: `automatic` (no task), `approval` (one Workflow task for the
   incident's policy chains), `per_chain` (one task per chain). Board chains are approved as single cases are today.
+  A chain holding a lost admission, one the receiver answers 404 for, is never `automatic` (policy version 2026-11-07.1;
+  6.5): it goes under the one task, on that item's line the question of a record entered by hand, unless the site's
+  `further_messages.admission_not_found` says `policy`. An outage of lost admissions asks one person once.
 - The task says what is bound and what is not: "resend these, in this order; each one is rehearsed, gated and verified
   just before it goes; the chain stops at the first surprise, and the rest comes back to you".
 - The incident's approval binds the plan's digest: for every item, the case, the operation and its payload, the
   catalogue entry and outcome the approver read, and the receiver version it goes at; and the rule for later items:
   each item after the first goes at exactly the version the previous item's verified receipt reports. The task says
   so, and that each operation goes only under the catalogue entry and outcome listed for it.
+- The approval also binds the catalogue, site profile and gate policy versions on the plan (policy version 2026-11-07.1): if
+  any has changed at a dispatch, the gate answers `APPROVAL_CATALOGUE_CHANGED`, `APPROVAL_SITE_PROFILE_CHANGED` or
+  `APPROVAL_POLICY_CHANGED`, that item blocks, nothing is sent, and its chain's rest comes back to a person. So an upgrade
+  during an open incident stops each chain still to be released at its next write: writes already verified stand, an item that
+  writes nothing still closes, and each stopped case can be reinvestigated under the versions now in force. A chain with no
+  person's approval has no approval to void: the new versions decide it on fresh evidence.
 - Task subjects: `Shutter I-nnnnnn: approve the release of N chain(s) to <receiver>` for the shared approval, and
   `Shutter I-nnnnnn/<seq>: ...` per chain; both carry the `PlanDigest` and `Comment` form fields, `PlanDigest` empty
   until the decider fills it (v1.21; before, it was pre-filled with the plan's digest, so an inbox approval always
@@ -1097,7 +1119,7 @@ Eight failures for six patients to the downstream system, in one burst (the faul
 the fault off): P1 one failed A02 (E2, single); P2 A02 and A03 failed (E4, ordered); P3 A02 failed, A08 applied, a later
 A02 applied, A03 failed (E5, interleaved, board); P4 A02 failed, then a later A02 applied (E1, superseded); P5 A02
 failed after an applied A03 (E6); P6 a failed A01 (E2, single, admit). Expected: the policy chains resolved without the
-board at tier 2 (automatic single, approval ordered), P3 by the board, and the downstream system's final state per
+board at tier 2 (automatic single, approval ordered, and P6 approval, since policy never releases a lost admission), P3 by the board, and the downstream system's final state per
 patient listed in `fixtures/scenarios.json`. Its recordings are hand-written until a key is available.
 
 ## 8. The exact index (v1.9)
