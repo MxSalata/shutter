@@ -240,6 +240,33 @@ Method TestReversed()
 
 /// Every reason code the gate can give has a row in the table: the codes written in the gate's source, and the
 /// approval's reasons (Shutter.Store.Approval.InvalidReason) as the gate words them.
+/// A further message that reached the index after the snapshot: the dispatch gate reads again and stops the approved write, and
+/// the connector, reading once more at the moment of the write, refuses it with nothing sent.
+Method TestFurtherMessagesAreReadAgainBeforeTheWrite()
+{
+    Set row = ##class(Shutter.Index.Message).%New()
+    Set row.DocId = "UT-GATE-FURTHER", row.PatientId = "MRN-UT1", row.PatientIdAuthority = "HOSP", row.VisitNumber = "ENC-UT-NEW", row.Event = "admit", row.MessageType = "ADT_A01"
+    Set row.ControlId = "UT-NEW", row.EventTime = "2026-10-20T09:00:00Z", row.TimeCreated = "2099-01-01 00:00:00"
+    Do $$$AssertStatusOK(row.%Save(), "the index's row is saved")
+    Try {
+        Set run = ..Run({"name": "the dispatch gate reads again", "approval": {}})
+        Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT"), "block", "the dispatch gate stops the write")
+        Do $$$AssertTrue(..Detail(run.checks, "ordering", "FURTHER_MOVEMENT") [ "ENC-UT-NEW", "and names the new visit")
+        Set case = ..NewCase({})
+        Set request = ##class(Shutter.Msg.WardOperation).%New()
+        Set request.Purpose = "recovery", request.CaseId = case.CaseId, request.OperationKey = case.OperationKey
+        Set ward = ##class(Shutter.Operation.Ward).%New("UT Ward")
+        Do $$$AssertStatusOK(ward.OnWardOperation(request, .response), "the connector answers")
+        Do $$$AssertEquals(response.Outcome, "refused", "the connector refuses the write")
+        Do $$$AssertEquals(response.ReasonCode, "further_movement", "for this reason")
+        Do $$$AssertTrue(response.Error [ "ENC-UT-NEW", "and says what it found: " _ response.Error)
+        Do $$$AssertEquals(response.HttpStatus, "", "nothing was sent")
+    } Catch ex {
+        Do $$$AssertTrue(0, "no error: " _ ex.DisplayString())
+    }
+    Do ##class(Shutter.Index.Message).%DeleteId(row.%Id())
+}
+
 Method TestEveryReasonCodeHasARow()
 {
     Set asserted = ""

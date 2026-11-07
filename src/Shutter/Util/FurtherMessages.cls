@@ -103,7 +103,8 @@ ClassMethod ReadSource(case As Shutter.Store.Case, since As %String, rows As %Dy
             &sql(SELECT TimeCreated INTO :t FROM Ens.MessageHeader WHERE ID = :hid)
             If (SQLCODE = 0) && (t '= "") Set from = t
         }
-        Set more = ..Scan(case, 0, from, .full)
+        // Header ids only grow, so the walk starts at the case's own and never reads the namespace's history.
+        Set more = ..Scan(case, +hid, from, .full)
         Set mi = more.%GetIterator()
         While mi.%GetNext(, .r) { Set r.namespace = case.SourceNamespace, r.where = "received in " _ case.SourceNamespace Do rows.%Push(r) }
         If 'full Set out = "more than " _ ..#SCANLIMIT _ " new messages in " _ case.SourceNamespace
