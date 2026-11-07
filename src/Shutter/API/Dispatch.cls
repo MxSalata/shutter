@@ -74,6 +74,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/production-reviews/annotations/:annotationId" Method="DELETE" Call="ProductionReviewAnnotationDelete"/>
   <Route Url="/production-reviews/:id" Method="GET" Call="ProductionReviewGet"/>
   <Route Url="/production-reviews/:id/annotations" Method="POST" Call="ProductionReviewAnnotate"/>
+  <Map Prefix="/failure-census" Forward="Shutter.API.FailureCensus"/>
 </Routes>
 }
 

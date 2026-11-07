@@ -7,20 +7,21 @@ Class Shutter.Test.FailureCensus Extends %UnitTest.TestCase
 
 Parameter ITEM = "UT Census Out";
 
-Parameter OTHER = "UT Census Other";
-
-/// What a test made: ids of headers, cases and runs, taken away after the class.
-Property Made As %String(MAXLEN = "");
-
 Method OnAfterAllTests() As %Status
 {
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Ens.MessageHeader WHERE TargetConfigName IN (?, ?) OR SourceConfigName = ?", ..#ITEM, ..#OTHER, "UT Census Source")
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Ens.MessageHeader WHERE SourceConfigName = ?", "UT Census Source")
     While rs.%Next() { Do ##class(Ens.MessageHeader).%DeleteId(rs.%Get("ID")) }
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Shutter_Store.""Case"" WHERE Receiver IN (?, ?)", ..#ITEM, ..#OTHER)
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Shutter_Store.""Case"" WHERE Receiver %STARTSWITH ?", ..#ITEM)
     While rs.%Next() { Do ##class(Shutter.Store.Case).PurgeCase(rs.%Get("ID")) }
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT RunId FROM Shutter_Store.CensusRun WHERE Item IN (?, ?)", ..#ITEM, ..#OTHER)
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT RunId FROM Shutter_Store.CensusRun WHERE Item %STARTSWITH ?", ..#ITEM)
     While rs.%Next() { Do ##class(Shutter.Store.CensusRun).Remove(rs.%Get("RunId")) }
     Quit $$$OK
+}
+
+/// An item name no other test has used, so that one test's rows stay out of another's window.
+Method Fresh() As %String
+{
+    Quit ..#ITEM _ " " _ $INCREMENT(^||censusItem)
 }
 
 /// A real header: a delivery to the item (or a header of the session when type says so).
@@ -30,6 +31,7 @@ Method Header(target As %String, session As %Integer, status As %Integer, body A
     Set h.Type = type, h.SessionId = session, h.Status = status, h.IsError = isError
     Set h.SourceConfigName = "UT Census Source", h.TargetConfigName = target
     Set h.MessageBodyClassName = bodyClass, h.MessageBodyId = body, h.Description = description
+    Set h.TimeCreated = $ZDATETIME($ZTIMESTAMP, 3, 1, 3)
     Do $$$AssertStatusOK(h.%Save(), "a header to " _ target)
     Quit h.%Id()
 }
@@ -116,7 +118,7 @@ Method TestTheLinkRule()
     Set r = $CLASSMETHOD(util, "Link", "200", "8", 1, cands, origins)
     Do $$$AssertEquals(r.quality _ "|" _ r.code, "none|no_case", "another session: no link")
     Do $$$AssertEquals(r.cases.%Size(), 0, "and no case")
-    Set r = $CLASSMETHOD(util, "Link", "101", "7", 1, [{"origin": "100", "caseId": "C-1"}, {"origin": "101", "caseId": "C-2"}], origins)
+    Set r = $CLASSMETHOD(util, "Link", "102", "7", 1, [{"origin": "100", "caseId": "C-1"}, {"origin": "101", "caseId": "C-2"}], origins)
     Do $$$AssertEquals(r.cases.%Size(), 2, "two cases for one delivery are both named")
     Set r = $CLASSMETHOD(util, "Link", "101", "7", 1, [{"origin": "300", "caseId": "C-3"}], origins)
     Do $$$AssertEquals(r.quality, "none", "an origin that is gone ties to nothing")
@@ -125,7 +127,7 @@ Method TestTheLinkRule()
 /// The fixture: ten deliveries, four failures, two exactly linked, one never forwarded, one ambiguous; a real run.
 Method TestTheFixtureGivesItsExactCategories()
 {
-    Set item = ..#ITEM
+    Set item = ..Fresh(), other = item _ " Other"
     Set from = ##class(Shutter.Util.Time).FromNow(-2)
     // Six that completed; one shares its session with the ambiguous failure.
     For i = 1:1:5 { Do ..Header(item, ..Session(), 9, ..Body("C" _ i)) }
@@ -141,8 +143,8 @@ Method TestTheFixtureGivesItsExactCategories()
     Set s4 = ..Session(), first4 = ..Header("UT Router", s4, 9, ..Body("A0")), ok4 = ..Header(item, s4, 9, ..Body("A1")), f4 = ..Header(item, s4, 8, ..Body("A2"), , 1)
     Set c4 = ..Case(item, first4, "FC4" _ s4)
     // The same control id at another receiver: its failure and case do not touch this receiver's count.
-    Set s5 = ..Session(), o1 = ..Header(..#OTHER, s5, 8, ..Body("N1"), , 1)
-    Set c5 = ..Case(..#OTHER, o1, "FC5" _ s5)
+    Set s5 = ..Session(), o1 = ..Header(other, s5, 8, ..Body("N1"), , 1)
+    Set c5 = ..Case(other, o1, "FC5" _ s5)
     Set before = ..Counts()
     Set sc = ##class(Shutter.Util.FailureCensus).RunScope(item, $NAMESPACE, item, from, ##class(Shutter.Util.Time).FromNow(2), "ut", ..Settings(), .run)
     If '$$$AssertStatusOK(sc, "the run") Quit
@@ -208,7 +210,7 @@ Method TestAnUnreadableSourceIsUnknownNotZero()
 /// A cap hit is an incomplete census, however good the part read looks.
 Method TestACapHitIsIncomplete()
 {
-    Set item = ..#ITEM, from = ##class(Shutter.Util.Time).FromNow(-2)
+    Set item = ..Fresh(), from = ##class(Shutter.Util.Time).FromNow(-2)
     For i = 1:1:4 { Do ..Header(item, ..Session(), 9, ..Body("K" _ i)) }
     Set sc = ##class(Shutter.Util.FailureCensus).RunScope(item, $NAMESPACE, item, from, ##class(Shutter.Util.Time).FromNow(2), "ut", ..Settings(3), .run)
     If '$$$AssertStatusOK(sc, "the run") Quit
@@ -224,7 +226,7 @@ Method TestACapHitIsIncomplete()
 /// A header deleted from the store is an evidence gap, and so is a case whose origin is gone.
 Method TestAPurgedHeaderIsAnEvidenceGap()
 {
-    Set item = ..#ITEM, from = ##class(Shutter.Util.Time).FromNow(-2), to = ##class(Shutter.Util.Time).FromNow(2)
+    Set item = ..Fresh(), from = ##class(Shutter.Util.Time).FromNow(-2), to = ##class(Shutter.Util.Time).FromNow(2)
     Set s = ..Session(), a = ..Header(item, s, 8, ..Body("P1"), , 1), b = ..Header(item, ..Session(), 8, ..Body("P2"), , 1), c = ..Header(item, ..Session(), 9, ..Body("P3"))
     Set caseB = ..Case(item, b, "FCP" _ s)
     Do ##class(Shutter.Util.FailureCensus).RunScope(item, $NAMESPACE, item, from, to, "ut", ..Settings(), .before)
@@ -248,7 +250,7 @@ Method TestAPurgedHeaderIsAnEvidenceGap()
 /// may still be on its way; a body that is gone is unassessable.
 Method TestWhatCountsAndWhatDoesNot()
 {
-    Set item = ..#ITEM, from = ##class(Shutter.Util.Time).FromNow(-2)
+    Set item = ..Fresh(), from = ##class(Shutter.Util.Time).FromNow(-2)
     Set comp = ..Header(item, ..Session(), 9, ..Body("W1"))
     Set flagged = ..Header(item, ..Session(), 9, ..Body("W2"), , 1)
     Set sus = ..Header(item, ..Session(), 5, ..Body("W3"))

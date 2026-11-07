@@ -113,9 +113,11 @@ ClassMethod Validate(p As %DynamicObject) As %String
     If '$ISOBJECT(p) Quit "the profile must be a JSON object"
     Set it = p.%GetIterator()
     While it.%GetNext(.key, .v) {
-        If '$LISTFIND($LISTBUILD("version", "receivers", "history_policy", "authoritative_source", "unconditional_resend", "merges", "policy", "approvers", "incident", "model_content", "teams", "mail", "feed"), key) Return key _ ": unknown field"
+        If '$LISTFIND($LISTBUILD("version", "receivers", "history_policy", "authoritative_source", "unconditional_resend", "merges", "policy", "approvers", "incident", "model_content", "teams", "mail", "feed", "failure_census"), key) Return key _ ": unknown field"
     }
     If p.%IsDefined("version") && ((p.%Get("version") '= +p.%Get("version")) || (p.%Get("version") < 0)) Quit "version: must be a whole number"
+    Set census = ##class(Shutter.Util.FailureCensus).ProfileProblem(p)
+    If census '= "" Quit census
     Set rcv = p.%Get("receivers")
     If '$ISOBJECT(rcv) || (rcv.%Size() = 0) Quit "receivers: must be a non-empty array"
     Set it = rcv.%GetIterator()
