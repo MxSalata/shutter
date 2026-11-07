@@ -19,7 +19,7 @@ import sys
 CONDITIONS = {
     "event": {"admit", "transfer", "discharge", "update", "merge", "cancel", "other"},
     "delivery": {"failed", "rejected", "uncertain", "unmappable", "withheld", "unreadable"},
-    "receiver_answer": {"unavailable", "timeout", "duplicate", "version_conflict", "refused", "none"},
+    "receiver_answer": {"unavailable", "timeout", "duplicate", "version_conflict", "refused", "unread", "none"},
     "receipt": {"present", "absent", "unreadable", "none"},
     "later_applied": {"none", "transfer", "discharge", "update", "admit", "cancelled", "cancel_other", "merge"},
     "later_delivery": {"applied", "sent", "none"},

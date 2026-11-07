@@ -165,10 +165,11 @@ down and answering AE.
 
 **3.5 Security and operations.** Only holders of `Shutter_Forwarder` can open cases; the web application keeps its
 roles. **Give that password an integration credential's care.** A forwarder sign-in can open a case for any receiver,
-whichever namespace it is stored in: the source, the receiver and the failure in `POST /intake` are the caller's own word, and
-nothing looks them up. At a tier that releases by policy (section 9.6), that case can write to the receiver with no approval
-if the gate's checks pass, and those test the message against the receiver's state, not whether the message ever existed. One
-user per namespace does not close this, since nothing ties a user to a namespace. Escalation mail goes through the `Escalation Mail` operation's `SMTPServer` setting; unset, it writes `.eml`
+whichever namespace it is stored in: the source, the receiver and the failure in `POST /intake` are the caller's own word. An automatic release
+(section 9.6) therefore checks them: the named namespace must hold the named header, its message must be the text received and its session must have gone to
+that receiver; otherwise a person approves, and the case says "Source not verified". This does not stop a genuine message being posted again. A forwarder on another
+instance can't be checked: set `feed.prove_origin` to false in the site profile to release its cases by policy anyway, and then a forwarder sign-in can cause a write with no
+approval. One user per namespace does not change this, since nothing ties a user to a namespace. The case's notes name the user who posted. Escalation mail goes through the `Escalation Mail` operation's `SMTPServer` setting; unset, it writes `.eml`
 files under `<mgr>/shutter/out/mail`. The daily task "Shutter retention" removes the text of each escalation email
 and its `.eml` file `SHUTTER_ESCALATION_DAYS` days after the case closed (section 2); the row stays with its digest,
 the recipients and who sent it. A case the workflow left in a working state (after a container killed in the middle of its
@@ -597,14 +598,14 @@ Measured, on a namespace onboarded as above, with a listener answering CA and an
 | --- | --- |
 | Nothing at all | The message reads Completed. No case |
 | AA or CA | The process takes it and does nothing |
-| AE | A case on the receiver, with the service as its route, `originHeaderId` the header of the message the AE answered, and the text "The receiver's acknowledgement feed answered AE to the message ... sent to ...", with the receiver's words. An ORM escalates, as section 10 says |
+| AE | A case on the receiver, holding the message the AE answered, with the service as its route, `originHeaderId` that message's header, and the text "The receiver's acknowledgement feed answered AE to the message ... sent to ...", with the receiver's words. An ORM escalates, as section 10 says |
 | AR for an ADT | A case of kind `rejected`, reason `ack_AR`. A draft receiver blocks any write |
 | The same AE again, or one for a message an AE on the connection already reported | No second case |
 | AR naming a control id not found | No case, and an alert to your consumer naming the control id |
 
 Limits of this route: it matches MSA-2 to the MSH-10 of what the operation sent, among the last 5000 messages to that item, newest first (`lookback`; IRIS has no index on it, so a
-larger one costs a read of each), so a receiver that answers with another id gets the alert above. A DTL on the route is fine for the match, and the case still holds
-what the service received (section 10). Only ACKs on an HL7 service were tried, and only on stock TCP services.
+larger one costs a read of each), so a receiver that answers with another id gets the alert above. A DTL on the route is fine for the match, and the case holds what the operation sent (section 10). A negative code for
+another message of a session that has already handed one to Shutter gets no case, and an alert naming that message. Only ACKs on an HL7 service were tried, and only on stock TCP services.
 
 **Not there: waiting for an ACK that never comes.** Nothing times out a message whose application ACK has not arrived. This is planned, not built.
 
@@ -617,8 +618,8 @@ Say these plainly to whoever owns the feed.
   at the receiver, or a message on a route the index doesn't watch once the index has passed it. In a watched namespace it reads at
   most 2,000 new messages at a write, and more than that blocks the write (`FURTHER_NOT_READ`). Nothing holds the feed during a
   correction, and a person who reinvestigates a stopped case meets the same stop until they close it by hand.
-- **A forwarder sign-in can cause a write.** It can open a case for any receiver, and at a tier that releases by policy (9.6) that case can
-  write with no approval. A user per namespace does not close this (section 3.5), so that password deserves an integration credential's care.
+- **A forwarder sign-in can open a case for any receiver.** An invented movement goes to a person, as the source can't be proved, but a genuine message posted again passes
+  that check, so at a tier that releases by policy (9.6) it can write with no approval. A user per namespace does not close this (section 3.5), so that password deserves an integration credential's care.
 - **A message accepted by a transport ACK and then lost downstream raises nothing in Shutter today.** The engine completed it, so no alert comes and no case
   opens. The same goes for an operation with `GetReply` off, and for an application ACK that never arrives. A negative ACK on a feed of its own opens a case only with the process in 9.9.
 - **Non-ADT messages have no recovery.** Orders, results and documents open a case and escalate, and a person decides: the case says what the
@@ -629,14 +630,24 @@ Say these plainly to whoever owns the feed.
   escalated and shows no later messages. Read the message trace before anyone re-enters an order by hand. At a receiver that also has an API, Shutter's own approved resend can duplicate it: the API write, then the engine's delivery when the listener returns (measured on 109, on ADT). Keep `FailureTimeout` 0 on such a receiver.
 - **`QueueCountAlert` reaches your own alert consumer but opens no case,** and a router's validation refusal, with `AlertOnError` off on
   the router, is only logged: no alert, no case, and its header reads Completed.
-- **A forward is never retried.** While `Shutter.Production` is stopped, or on a wrong password, a failure that reaches the forwarder
-  is a warning in that namespace's event log, an alert to the site's own consumer, and `refused_72h` in the Doctor, and no case.
-  Restoring the service does not bring it back.
+- **A forward is retried only while nobody answers.** While `Shutter.Production` is stopped (or a gateway answers 502, 503 or 504, or nothing does), a
+  forward waits in the forwarder's own queue and is tried again for the item's `FailureTimeout`: 300 seconds as onboarding sets it, 0 tries once (a namespace onboarded
+  before v1.1.0 still reads 0: change it on the item), -1 never gives up.
+  The feed does not wait. When that time runs out, or on a wrong password, an over-long body or any other refusal, it is a warning in that namespace's
+  event log, an alert to the site's own consumer and `refused_72h` in the Doctor, and no case. A 202 that names no case, from a proxy or a wrong `IntakePath`,
+  counts as a refusal too. Restoring the service after that does not bring it back.
 - **A hard dependency on Shutter's database.** After the apply the production needs it. With that database dismounted, a failing
   operation's job terminated with `<PROTECT>`, the site's alert consumer received nothing, and the production would not start until it
   was mounted again. Before a failover, a restore or moving it, take the namespace off or plan for it.
-- **A message sent to two receivers** gives one forward per receiver that fails, each quoting the session's first HL7 message, the
-  service's: with a DTL on the route, the case holds what the service received, not what the operation sent.
+- **A message sent to two receivers** gives one forward per receiver that fails, each carrying the message that operation was sent, so a DTL's change
+  stays in the case and in any resend. An item that takes no HL7 (a connector taking its own message class) gets the session's first HL7 message, the service's.
+- **A session that sends one item several different messages opens no case from an alert.** An alert does not say which message of its session failed, so a
+  splitting DTL, a process sending two, or a batch service keeping one session gets a warning and an alert to your consumer naming each message by control id
+  and header, once, and no case: read their status in the trace. The same goes for an item that takes no HL7 when the session's messages name more than one
+  patient. On the acknowledgement feed the control id does name the message, so the first negative code gets its case, and one for another message of that
+  session gets the alert in section 9.9.
+- **Alert words Shutter does not know are not read as "not delivered".** A site's own class's words, a `QueueWaitAlert` on a message still being tried, or a
+  connection lost after the frame went (`ErrOutConnectionLost`) open a case with an uncertain outcome that matches no entry that resends, so it goes to the board or a person.
 - **Nothing over 2 MB, and nothing that is not HL7.** The intake answers 413 or 400, so a large MDM with its document inline, or a FHIR
   body, is a warning in the event log and no case. A smaller MDM's document is kept whole in the case's snapshot: a governance
   question for the trust.

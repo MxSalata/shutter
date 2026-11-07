@@ -588,7 +588,7 @@ ClassMethod EditProduction(ns As %String, production As %String, actions As %Dyn
                 Set new = ##class(Ens.Config.Item).%New()
                 Set new.Name = a.item, new.ClassName = "Shutter.Intake.Forwarder", new.PoolSize = 1, new.Enabled = 1, new.Production = prod
                 Set new.Comment = "Hands a failed delivery to Shutter"
-                For set = $LISTBUILD("Adapter", "HTTPServer", a.server), $LISTBUILD("Adapter", "HTTPPort", a.port), $LISTBUILD("Adapter", "Credentials", a.credential), $LISTBUILD("Adapter", "SSLConfig", a.ssl), $LISTBUILD("Adapter", "ResponseTimeout", "15"), $LISTBUILD("Adapter", "ConnectTimeout", "5"), $LISTBUILD("Host", "FailureTimeout", "0"), $LISTBUILD("Host", "ReceiverPrefix", a.prefix) {
+                For set = $LISTBUILD("Adapter", "HTTPServer", a.server), $LISTBUILD("Adapter", "HTTPPort", a.port), $LISTBUILD("Adapter", "Credentials", a.credential), $LISTBUILD("Adapter", "SSLConfig", a.ssl), $LISTBUILD("Adapter", "ResponseTimeout", "15"), $LISTBUILD("Adapter", "ConnectTimeout", "5"), $LISTBUILD("Host", "FailureTimeout", "300"), $LISTBUILD("Host", "ReceiverPrefix", a.prefix) {
                     Continue:($LIST(set, 3) = "")
                     Set s = ##class(Ens.Config.Setting).%New(), s.Target = $LIST(set, 1), s.Name = $LIST(set, 2), s.Value = $LIST(set, 3)
                     Do new.Settings.Insert(s)
@@ -726,9 +726,10 @@ ClassMethod StoreCredential(ns As %String, credential As %String, user As %Strin
 }
 
 /// What an answer from the intake means, for the person running the test.
-ClassMethod TestAdvice(status As %String, credential As %String = "", user As %String = "") As %String
+ClassMethod TestAdvice(status As %String, credential As %String = "", user As %String = "", caseId As %String = "") As %String
 {
-    If status = 202 Quit ""
+    If (status = 202) && (caseId '= "") Quit ""
+    If status = 202 Quit "HTTP 202 with no case id, so something other than Shutter's intake answered: check the forwarder's HTTPServer, HTTPPort and IntakePath, and any proxy in between"
     If status = 404 Quit "HTTP 404: IRIS answers a sign-in it refuses this way on a REST application. Check the password of " _ user _ " and the credential " _ credential _ ", or that the address is this instance's"
     If status = 401 Quit "HTTP 401: the credential " _ credential _ " did not sign in as " _ user
     If status = 403 Quit "HTTP 403: " _ user _ " signed in but does not hold Shutter_Forwarder"
@@ -776,10 +777,12 @@ ClassMethod Test(ns As %String) As %DynamicObject
             If $ISOBJECT(http.HttpResponse.Data) { Do http.HttpResponse.Data.Rewind() Set answer = http.HttpResponse.Data.Read(4000) } Else { Set answer = http.HttpResponse.Data }
         }
         Set out."http_status" = status
-        Set out.advice = ..TestAdvice(status, credential, user)
-        If status = 202 {
-            Set parsed = ##class(Shutter.Util.Json).Parse(answer, .psc)
-            If $ISOBJECT(parsed) Set out.case = ##class(Shutter.Util.Json).Str(parsed, "caseId")
+        Set caseId = $SELECT(status = 202: ##class(Shutter.Intake.Forwarder).CaseIdIn(answer), 1: "")
+        Set out.advice = ..TestAdvice(status, credential, user, caseId)
+        If (status = 202) && (caseId = "") {
+            Set out.error = out.advice
+        } ElseIf status = 202 {
+            Set out.case = caseId
             Do out.%Set("ok", 1, "boolean")
             Set ^Shutter.Config("onboard", ns, "lastTest") = $LISTBUILD(##class(Shutter.Util.Time).NowUTC(), out.case)
         } ElseIf status = "" {

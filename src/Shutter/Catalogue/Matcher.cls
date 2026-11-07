@@ -26,9 +26,9 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     Set status = $SELECT($ISOBJECT(error): $CLASSMETHOD(json, "Str", error, "http_status"), 1: "")
     // An alert's reason code (Shutter.Intake.AlertProcess forwards an alert's failure with "alert") names no answer of the
     // receiver's, so the status and the outcome decide: a 503 reads unavailable, no status reads none, or timeout for an
-    // uncertain alert.
+    // uncertain alert. Words the alert intake could not read ("alert_unread") say nothing at all, so no entry that resends matches them.
     If reason = "alert" Set reason = ""
-    Set c."receiver_answer" = $SELECT(reason [ "unavailable": "unavailable", (reason [ "timeout") || (status = 504): "timeout", reason [ "duplicate": "duplicate", reason [ "version": "version_conflict", (reason '= "") || (status = 422) || (status = 409): "refused", status = 503: "unavailable", 1: "none")
+    Set c."receiver_answer" = $SELECT(reason = "alert_unread": "unread", reason [ "unavailable": "unavailable", (reason [ "timeout") || (status = 504): "timeout", reason [ "duplicate": "duplicate", reason [ "version": "version_conflict", (reason '= "") || (status = 422) || (status = 409): "refused", status = 503: "unavailable", 1: "none")
     If (c."receiver_answer" = "none") && (c.delivery = "uncertain") Set c."receiver_answer" = "timeout"
     // A withheld operation was never sent, so no receiver answered (T31); nor was a held message (v1.34), whose reason code
     // (schema_unknown) is the feed's, not a receiver's.

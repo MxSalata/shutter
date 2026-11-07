@@ -173,6 +173,7 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     Set case.Receiver = $SELECT(request.Receiver '= "": request.Receiver, 1: ..WardTarget)
     Set case.SourceNamespace = request.SourceNamespace, case.SourceProduction = request.SourceProduction
     Set case.SourceRoute = request.SourceRoute, case.OriginHeaderId = request.OriginHeaderId
+    If request.SignedInUser '= "" Do case.Note("note", "Posted to the intake by " _ request.SignedInUser, "system")
     // The connector's answer, structured, so the matcher never parses it out of the failure text.
     Set wr = ##class(Shutter.Util.Json).Parse(request.WardResultJSON, .wsc)
     If $ISOBJECT(wr) {
@@ -899,19 +900,19 @@ Method AfterBoard(case As Shutter.Store.Case) As %Status
     Quit ..ArmTimeout("coordinator:timeout")
 }
 
-/// A case the alert intake opened (CONTRACTS 11: FailureReasonCode "alert", the failure read from the alert's words) takes
+/// A case the alert intake opened (CONTRACTS 11: FailureReasonCode "alert" or "alert_unread", the failure read from the alert's words) takes
 /// the production's own report of the same failure when that arrives second and the case is still detected or
 /// collecting (v1.38): the kind, text, outcome, reason code, HTTP status and Retry-After the connector answered, and the
 /// headline from them. After the evidence is collected the case keeps what its snapshot was built on. Returns 1 when the
 /// fields were taken.
 ClassMethod TakeReport(case As Shutter.Store.Case, request As Shutter.Msg.CaseIntake) As %Boolean
 {
-    If '$ISOBJECT(case) || (case.FailureReasonCode '= "alert") Quit 0
+    If '$ISOBJECT(case) || '$LISTFIND($LISTBUILD("alert", "alert_unread"), case.FailureReasonCode) Quit 0
     If '$LISTFIND($LISTBUILD("detected", "collecting"), case.State) Quit 0
     Set wr = ##class(Shutter.Util.Json).Parse(request.WardResultJSON, .wsc)
     If '$ISOBJECT(wr) Quit 0
     Set reason = ##class(Shutter.Util.Json).Str(wr, "reason_code")
-    If (reason = "") || (reason = "alert") Quit 0
+    If (reason = "") || (reason = "alert") || (reason = "alert_unread") Quit 0
     Set case.FailureKind = request.FailureKind, case.FailureText = $EXTRACT(request.FailureText, 1, 2000)
     Set case.FailureOutcome = ##class(Shutter.Util.Json).Str(wr, "outcome"), case.FailureReasonCode = reason
     Set status = ##class(Shutter.Util.Json).Str(wr, "http_status")
@@ -1074,6 +1075,14 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
     }
     // A released item is authorised by its incident (7.3): by site policy, or under the incident's approval.
     If ..Release Set ..Policy = $SELECT(..ReleasePolicy = "incident": "incident", ..ReleasePolicy = "automatic": "automatic", 1: ..Policy)
+    // An automatic release writes with no person, so the case's source must be proved (CONTRACTS 11); otherwise a person approves.
+    If ..Policy = "automatic" {
+        Set unproved = ##class(Shutter.Operation.Origin).Problem(case)
+        If unproved '= "" {
+            Set ..Policy = "approval"
+            Do case.Note("note", "Source not verified: " _ unproved _ ". The site's policy would release this automatically, so a person approves it instead", "system")
+        }
+    }
     // The outcome the matcher settled on: the preferred one, or a site-policy alternative whose when holds for the case's
     // receiver (CONTRACTS 6.3, v1.25); the plan names it as the board would.
     Set ref = $CLASSMETHOD(json, "Str", cat, "outcome_ref", "preferred")
@@ -1540,6 +1549,10 @@ ClassMethod ApprovalTask(case As Shutter.Store.Case, plan As Shutter.Store.Plan,
         Set lines = ##class(Shutter.Util.FurtherMessages).PlanLines(case, $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.SummaryObject(), 1: ""))
         Set li = lines.%GetIterator()
         While li.%GetNext(, .line) { Set task.%Message = task.%Message _ $CHAR(10) _ line }
+    } Catch ex {}
+    Try {
+        Set unproved = ##class(Shutter.Operation.Origin).Problem(case)
+        If unproved '= "" Set task.%Message = task.%Message _ $CHAR(10) _ "Source not verified: " _ unproved _ "."
     } Catch ex {}
     // What approvers decided before on these conditions at this receiver (6.4, v1.35); a lookup that fails leaves the line out.
     Try {

@@ -41,6 +41,9 @@ Property SchemaCategory As %String(MAXLEN = 32);
 /// The investigation mode requested (board, single, rules, policy); empty takes the configured default.
 Property Mode As %String(MAXLEN = 16);
 
+/// The user signed in to the intake route: whoever posted it.
+Property SignedInUser As %String(MAXLEN = 160);
+
 Storage Default
 {
 <Data name="ExternalIntakeDefaultData">
@@ -83,6 +86,9 @@ Storage Default
 </Value>
 <Value name="13">
 <Value>Mode</Value>
+</Value>
+<Value name="14">
+<Value>SignedInUser</Value>
 </Value>
 </Data>
 <DefaultData>ExternalIntakeDefaultData</DefaultData>

@@ -312,7 +312,7 @@ Method TestEveryReasonCodeHasARow()
     Set m = ##class(%Regex.Matcher).%New("Quit ""([a-z_]+)""", ..Source("Shutter.Store.Approval", "InvalidReason"))
     While m.Locate() { Set codes("APPROVAL_" _ $ZCONVERT(m.Group(1), "U")) = "" }
     // The two reasons the gate itself gives an automatic release.
-    Set codes("POLICY_REQUIRES_APPROVAL") = "", codes("APPROVAL_PLAN_ORIGIN") = ""
+    Set codes("POLICY_REQUIRES_APPROVAL") = "", codes("APPROVAL_PLAN_ORIGIN") = "", codes("APPROVAL_ORIGIN_NOT_PROVED") = ""
     Do $$$AssertTrue($DATA(codes("EXACT_OPERATION")) && $DATA(codes("APPROVAL_EXPIRED")), "the codes were read from the source")
     Set code = "", missing = ""
     For {
@@ -453,6 +453,7 @@ Method NewCase(spec As %DynamicObject) As Shutter.Store.Case
     Set case.OperationKey = "PAS^HOSP^" _ case.PatientId _ "^" _ case.EncounterId _ "^" _ case.Event _ "^" _ case.EventTime
     Set case.State = "investigating", case.Mode = $CLASSMETHOD(json, "Str", spec, "mode", "rules")
     Set case.Scenario = $CLASSMETHOD(json, "Str", spec, "scenario")
+    Set case.SourceNamespace = $CLASSMETHOD(json, "Str", spec, "source_namespace"), case.OriginHeaderId = $CLASSMETHOD(json, "Str", spec, "origin_header_id")
     Set now = ##class(Shutter.Util.Time).NowUTC()
     Set case.OpenedAt = now, case.UpdatedAt = now
     Set sc = case.%Save()
@@ -980,6 +981,13 @@ XData Rows [ MimeType = application/json ]
    "case": {"event": "admit"}, "summary": {"ward_state_http_status": 404, "ward_state": null},
    "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2", "action": {"expected_version": 0}}, "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
    "profile": {"policy": {"2": {"single": "automatic"}}, "further_messages": {"admission_not_found": "policy"}},
+   "expect": [["authorization", "pass", "APPROVAL_VALID"]]},
+  {"group": "authorization", "name": "an automatic release of a case whose source cannot be proved",
+   "case": {"source_namespace": "UTNOSUCHNAMESPACE", "origin_header_id": "1"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"}, "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
+   "profile": {"policy": {"2": {"single": "automatic"}}},
+   "expect": [["authorization", "block", "APPROVAL_ORIGIN_NOT_PROVED"]]},
+  {"group": "authorization", "name": "a person's approval of a case whose source cannot be proved",
+   "case": {"source_namespace": "UTNOSUCHNAMESPACE", "origin_header_id": "1"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"}, "approval": {},
    "expect": [["authorization", "pass", "APPROVAL_VALID"]]},
   {"group": "authorization", "name": "an automatic release of a board's plan",
    "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "run:1"}, "approval": {"approver": "policy"},

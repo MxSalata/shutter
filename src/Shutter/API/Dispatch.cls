@@ -1160,6 +1160,7 @@ ClassMethod Intake() As %Status
     Set msg.MessageText = message
     Set msg.SchemaCategory = $EXTRACT(##class(Shutter.Util.Json).Str(body, "schema_category", "2.5.1"), 1, 32)
     Set msg.Mode = mode
+    Set msg.SignedInUser = $USERNAME
     Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
     If $$$ISERR(sc) || '$ISOBJECT($GET(service)) Quit ..Fail("503 Service Unavailable", "no_service", "The API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
     Set service.Target = "Case Intake", service.Async = 0

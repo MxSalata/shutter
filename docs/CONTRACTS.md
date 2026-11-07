@@ -482,7 +482,7 @@ conditions that matter; an unlisted condition is a wildcard. A listed condition 
 | Condition | Values | Computed from |
 | --- | --- | --- |
 | `delivery` | `failed`, `rejected`, `uncertain`, `unmappable`, `withheld`, `unreadable` | the case's failure kind (1.1: 503 and connection failures are `failed`; 409 and 422 are `rejected`; 504 is `uncertain`; a message Shutter could not map to an operation is `unmappable`, v1.9); a merge or a cancel the feed withheld under the site profile or the receiver's entry is `withheld` (v1.14, section 2); a message held because its schema category was not loaded where it was read is `unreadable` (never sent, `receiver_answer: none`), before and after the schema is loaded: the catalogue's entry for a held message proposes the resend, which the gate blocks `SCHEMA_UNKNOWN` until the schema is there (v1.34, section 12) |
-| `receiver_answer` | `unavailable`, `timeout`, `duplicate`, `version_conflict`, `refused`, `none` | the error item's reason code, else its HTTP status (504 `timeout`, 409 and 422 `refused`, 503 `unavailable`); an uncertain delivery with no code reads `timeout`; the alert intake's code `alert` (11) names no answer of the receiver's, so the status and the outcome decide (v1.39) |
+| `receiver_answer` | `unavailable`, `timeout`, `duplicate`, `version_conflict`, `refused`, `unread`, `none` | the error item's reason code, else its HTTP status (504 `timeout`, 409 and 422 `refused`, 503 `unavailable`); an uncertain delivery with no code reads `timeout`; the alert intake's code `alert` (11) names no answer of the receiver's, so the status and the outcome decide (v1.39); its code `alert_unread`, for words the intake does not know, reads `unread`, which no entry names |
 | `event` | `admit`, `transfer`, `discharge`, `update`, `merge`, `cancel`, `other` | the case's event word (v1.14): the three cancel words fold to `cancel`; an unmapped trigger is `other` (no case carries `register`: a registration is indexed only, or is an `admit`). A withheld case reads `delivery: withheld` and `receiver_answer: none` (no receiver was asked) |
 | `receipt` | `present`, `absent`, `unreadable`, `none` | the receipt lookup: 200, 404, anything else (1.9); `none` when the receiver has no receipt endpoint (6.4), which is a fact about the receiver, not a failed lookup |
 | `later_applied` | `none`, `cancel_other`, `cancelled`, `merge`, `transfer`, `discharge`, `admit`, `update` | among the applied events for the encounter whose event time is later than the failed operation's (the downstream system's history and the timeline), by precedence: `cancel_other` when a `cancel_*` was applied at or after the failed event's time that reverses another movement (policy version 2026-11-06.1: another kind of event, or another time; no catalogue entry matches it, so it reaches the board or a person), else `cancelled` when the `cancel_*` of this event was applied at its time (v1.14: a cancel carries the time of the event it reverses, and the case's own operation never counts), else `merge` when a merge was applied later, else `discharge` if any was applied later, else `transfer`, else `admit` (a later admission, v1.11), else `update` (an A08), else `none`. Since v1.16 a later transfer the feed sent whose delivery failed or is uncertain as well (a failure the connector recorded, not an indexed message or one in flight) counts as later too, for any failed operation but an admission and only when the case is not in an ordered or interleaved chain (the incident sends a chain's failures in event order); a later discharge that failed does not (the encounter is still admitted at the receiver, and the discharge's own case follows a resend of the earlier movement); and an event whose time is not plausible (the `event_time` rule below) counts for nothing. `Shutter.Catalogue.Matcher.Later` lists these events; the gate's ordering check reads the same list. Each event it lists carries `operation_key` and, when a case was opened for that key, `case_id` (v1.21). The gate's ordering detail and the verifier's closure describe an event in one voice (`Shutter.Catalogue.Matcher.Describe`): `transfer to WARD-C at <time>` or `discharge at <time>`, with ` (receiver history)` when it comes from the receiver, and for a later transfer the feed sent whose delivery failed or is uncertain `transfer to WARD-C at <time>, sent as <key> (its delivery failed or is uncertain; its case C-0000NN recovers it)`, or `its own case recovers it` when no case is known for the key |
@@ -725,6 +725,7 @@ reads it through `Shutter.Store.SiteProfile`.
   movement on another visit through with a line on the plan; a cancel, merge or discharge the receiver didn't apply on this visit
   stops either way. `admission_not_found`: `person`, or `policy` to let the tier's own policy release a lost admission on a 404.
   Absent means `stop` and `person`, which are the safe defaults, and the shipped profile leaves it out.
+- `feed.prove_origin`: `true` or `false`, `true` when absent and in the shipped profile: an automatic release needs the case's source proved (section 11). A site whose forwarder reports from another instance turns it off.
 - `feed.prevent_failures` (v1.34; "prevent failures", decided on 1 Nov 2026, section 12): `true` or `false`, `false` when
   absent and in the shipped profile. On, the feed holds a message whose HL7 schema category is not loaded here as a case of
   kind `unreadable` instead of delivering what it read by position, and the demo hospital's `PAS In` validates and hands a
@@ -802,6 +803,7 @@ A new check, `catalogue`, with these reason codes (in `knowledge/block-reasons.j
 - `NEW_PATTERN`: no entry matches (block; the case escalates as a candidate entry);
 - `ENTRY_NOT_NAMED_WRITE`: a write names no entry while an entry the evidence matched calls for no resend, by the outcome the matcher chose for its one match, or by the preferred outcome of any of several (block). Only explicit Rules only in a recorded scenario passes it, a `rules` plan on a case in mode `rules` that a scenario made (`case.scenario`), which is the baseline kept to show what a plain resend does; a real case in that mode is blocked: every other write with no entry passes as `ENTRY_NOT_NAMED` when all its matches resend;
 - `POLICY_REQUIRES_APPROVAL`: an automatic release where the profile requires an approval (block; an internal guard).
+- `APPROVAL_ORIGIN_NOT_PROVED`: an automatic release of a case whose source is not proved (block; section 11; an internal guard, since the policy path has asked a person by then).
 The plan's `catalogue_entry` and `outcome` are bound by the approval's digest like every other field of the plan. The incident plan's digest binds each item's catalogue entry and outcome the same way (7.2). A receiver the site profile does not describe gets no write (v1.39): when the case names a receiver and the profile has no entry for it, the proposal gate blocks with `RECEIVER_NOT_IN_PROFILE` before any rehearsal, since the connector would otherwise send the write to the production's default receiver; the evidence was read at the default API, and the note says so; the block reason is in `knowledge/block-reasons.json`.
 
 Two `intent` checks for withheld cases (v1.14, policy version 2026-10-19.3), appended for every plan on a case of kind `withheld` as `UNMAPPABLE` is, and as guards on any write of a merge or a cancel: `MERGE_WITHHELD` (the case's event is `merge` and the site profile does not allow merges, or the receiver does not take them) and `CANCEL_UNSUPPORTED` (a `cancel_*` event to a receiver whose entry says `cancels: false`). The identity check answers `NO_ENCOUNTER` (pass) for a case whose encounter piece is `-`, and the state-transition and concurrency checks answer `PATIENT_LEVEL_WRITE` (block) for a write on such a case: there is no encounter state or version to check, so a person decides, and nothing is retried.
@@ -1312,7 +1314,7 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   2 MB (v1.35); 401; 403; 503 `no_service` or `not_queued`.
 - Inside the production: the API service sends `Shutter.Msg.ExternalIntake` (the body's fields as properties:
   `SourceNamespace`, `SourceProduction`, `SourceRoute`, `OriginHeaderId`, `Receiver`, `FailureKind`, `FailureText`,
-  `FailureOutcome`, `FailureHttpStatus`, `FailureReasonCode`, `MessageText`, `SchemaCategory`, `Mode`) synchronously to
+  `FailureOutcome`, `FailureHttpStatus`, `FailureReasonCode`, `MessageText`, `SchemaCategory`, `Mode`, and `SignedInUser`, the user signed in to the route, which the case records in a note) synchronously to
   the item **Case Intake** (`Shutter.Process.Intake`), which parses the text (`EnsLib.HL7.Message.ImportFromString`, the
   DocType resolved from the category, 2.5.1 when none), sends the message to **Case Intake Store**
   (`Shutter.Operation.IntakeStore`, an adapterless operation that only answers) so that the copy has an
@@ -1333,12 +1335,19 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   API from the site profile's entry, the matcher, the board, the gate, approvals, the escalation) is as for the feed's
   own cases; a resend goes through Shutter's connector item, so a forwarded case's receiver is normally the name of
   that item (`Downstream Out` in the demo).
+- **An automatic release needs a proved source** (`Shutter.Operation.Origin`). The route takes what a holder of `Shutter_Intake` posts, so before the policy
+  path releases a case with no person, and again at the dispatch gate (`APPROVAL_ORIGIN_NOT_PROVED`, 6.5): `sourceNamespace` must be readable and hold the header `originHeaderId`
+  names, that header's HL7 message must be the text received (line ends aside), and its session must have sent something to the receiver (with or without the forwarder's
+  prefix on the name; a held message of kind `unreadable` went to the forwarder, so that part is not asked). Otherwise the case goes to a person, with "Source not verified" and the reason in its notes and the
+  approval task. A case the feed opened itself has nothing to prove; the route with no source namespace does not prove. It does not stop a genuine message being posted again. The site profile's
+  `feed.prove_origin` false turns it off, for a forwarder that reports from another instance.
 - **The forwarder.** `Shutter.Intake.Forwarder` is the item a watched production adds: a business operation on
   `EnsLib.HTTP.OutboundAdapter` (queue). Request `Shutter.Intake.Forward`: `HeaderId` (the failed HL7 message's header
   in the sending namespace), `Receiver`, `FailureKind`, `FailureText`, `FailureOutcome`, `FailureHttpStatus`,
   `FailureReasonCode`, `Route` (empty takes the header's `SourceConfigName`). Response `Shutter.Intake.Forwarded`:
-  `CaseId`, `State`, `Opened`, `Error` (empty on 202; otherwise the HTTP status and body, or the connection error; no
-  retry). Settings: `IntakePath` (default `/api/shutter/intake`), `SourceProduction` (default the running production's
+  `CaseId`, `State`, `Opened`, `Error` (empty on a 202 naming a case; otherwise the HTTP status and body, or the connection error; a 202 with no case id is a
+  refusal). A forward nobody answered, or answered 502, 503 or 504, stays in the item's queue and is tried again until `FailureTimeout` (300 s on this class; 0 tries
+  once; -1 never gives up), quietly, and only then refused; any other answer is refused at once. Settings: `IntakePath` (default `/api/shutter/intake`), `SourceProduction` (default the running production's
   name), `SourceNamespace` (default the namespace), `SchemaCategory` (default the message's own category, else 2.5.1);
   the adapter's server, port, credentials (HTTP Basic as the forwarder's user) and SSL configuration are the site's.
   `ReceiverPrefix` (v1.42; default empty) goes in front of every receiver's name in the body, so that a namespace's item of
@@ -1373,12 +1382,15 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   consumer raised itself is not, or its failure would alert it without end;
   with `PassTo` empty the alert ends here, as it would with no `Ens.Alert` item at all. Then, for an alert from one of its
   `Receivers` (the connector items, comma-separated; empty takes any item) whose session holds an HL7 message, it finds
-  that message (the session's first header with an `EnsLib.HL7.Message` body: the receiving service's) and sends the
-  forwarder (`ForwarderTarget`, default `Shutter Forwarder`) a `Forward` for it: `HeaderId`, `Route` the header's service,
-  `Receiver` the alerting item, `FailureKind` from the alert's words (`uncertain_outcome` for a timeout, no response or
-  an uncertain answer; `rejected` for a reject, a refusal, a NACK or an HTTP 4xx; else `delivery_failed`),
+  that message (the header the alerting item was sent, so a DTL's change is kept; for an item that takes no HL7, the session's first header with an `EnsLib.HL7.Message` body, the
+  receiving service's) and sends the
+  forwarder (`ForwarderTarget`, default `Shutter Forwarder`) a `Forward` for it: `HeaderId`, `Route` the session's service,
+  `Receiver` the alerting item, `FailureKind` from the alert's words (`rejected` for an AE or AR, a reject, a refusal, a NACK or an HTTP 4xx; `delivery_failed` for a connection that
+  never opened or an HTTP 503; `uncertain_outcome` for a timeout, no response or
+  an uncertain answer, and for anything else),
   `FailureOutcome` to match (`uncertain`, `rejected`, `error`), `FailureHttpStatus` when the text names one ("HTTP 503"),
-  `FailureReasonCode` `alert`, `FailureText` "Alert from <item> at <time> UTC: <text>". One forward per session and alerting item (v1.39; the item since onboarding, so a message routed to two receivers that both fail gives two): the pair is pending while the forward is out (`^Shutter.AlertIntake("pending", session, item)`, ten minutes at most) and seen (`^Shutter.AlertIntake("seen", session, item)`, kept a day) only once Shutter has taken the message, so a connector's retries alert the site each time but reach Shutter once, while a forward Shutter refused or that failed is built again from that item's next alert.
+  `FailureReasonCode` `alert`, or `alert_unread` for words it does not know and a connection lost after the frame went (the matcher reads that as `receiver_answer: unread`, 6.1, so no entry that resends matches), `FailureText` "Alert from <item> at <time> UTC: <text>". One forward per session and alerting item (v1.39; the item since onboarding, so a message routed to two receivers that both fail gives two): the pair is pending while the forward is out (`^Shutter.AlertIntake("pending", session, item)`, ten minutes at most) and seen (`^Shutter.AlertIntake("seen", session, item)`, kept a day) only once Shutter has taken the message, so a connector's retries alert the site each time but reach Shutter once, while a forward Shutter refused or that failed is built again from that item's next alert.
+  An alert does not name its message, so a session that sent the item several different HL7 messages, or, for an item that takes no HL7, whose messages name more than one patient, opens no case: a warning and an alert to `PassTo` name the messages by control id and header, once per session and item (`^Shutter.AlertIntake("several", session, item)`, kept a day).
   An alert whose session has no HL7 message, from an item outside `Receivers`, or from the forwarder itself is passed on only; both sends are
   asynchronous, so the feed never waits. The forwarder's refusal is a warning in the event log, as for the sending
   process, and an `Ens.AlertRequest` to the production's `Ens.Alert`, so the site's own consumer hears of a failure that has no case. The demo hospital's production carries the item with `Receivers` `Downstream Out`, and its connector raises an alert
@@ -1391,7 +1403,7 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   by a site's process on the feed (`tests/e2e/onboard_site/OnbAck.AckProcess.cls`; the service needs `IgnoreInboundAck` 0 and `AckMode`
   `Never`), reads MSA-1, MSA-2 and MSA-3 (else ERR-8) by position. AA and CA give no forward. AE, AR, CE and CR look among the last
   `lookback` messages (default 5000) whose header targets `receiver` for the newest with that MSH-10 (`FindSent`), and give a `Forward`:
-  `HeaderId` and `Route` the session's first HL7 header's, `Receiver`, `FailureKind` and `FailureOutcome` `rejected`, `FailureReasonCode`
+  `HeaderId` the header found, `Route` the session's service, `Receiver`, `FailureKind` and `FailureOutcome` `rejected`, `FailureReasonCode`
   `ack_<code>`, `FailureText` the code, the control id, the receiver and the words. It shares the alert intake's pending and seen marks,
   so one message at one receiver reaches Shutter once by either route (the process passes `session` as the completion key and calls
   `AlertProcess.ForwardAnswered`). `problem` says why a code that needed a forward has none; the process raises it. Nothing waits for an
