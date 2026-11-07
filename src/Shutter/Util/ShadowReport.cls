@@ -102,7 +102,7 @@ ClassMethod Summary(rows As %DynamicArray, truncated As %Boolean = 0) As %Dynami
     Set o.proposed = proposed, o.proposalGate = gate, o.candidatesForRehearsal = candidates
     Set o.recoveryCallsSent = calls, o.notificationDeliveries = mails
     Do o.%Set("truncated", ''truncated, "boolean")
-    Set o.limits = "Failures that never became a case are not counted. A candidate for rehearsal is a resend proposal whose proposal gate passed: neither a rehearsal nor a dispatch was tested. Nobody has reviewed these proposals here, so this says nothing about whether they were right. This report authorises nothing."
+    Set o.limits = "Failures that never became a case are not counted. A candidate for rehearsal is a resend proposal whose proposal gate passed: neither a rehearsal nor a dispatch was tested. Nobody has reviewed these proposals here, so this says nothing about whether they were right. A patient reference links one patient's rows and can't be turned back into the patient here, so a person who needs the patient behind a row keeps that link, within the run, from the row's case_id. This report authorises nothing."
     Quit o
 }
 
